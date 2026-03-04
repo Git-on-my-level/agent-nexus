@@ -12,6 +12,17 @@ function appendQuery(path, query = {}) {
       return;
     }
 
+    if (Array.isArray(value)) {
+      value
+        .filter(
+          (entry) => entry !== undefined && entry !== null && entry !== "",
+        )
+        .forEach((entry) => {
+          params.append(key, String(entry));
+        });
+      return;
+    }
+
     params.set(key, String(value));
   });
 

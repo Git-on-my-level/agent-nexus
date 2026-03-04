@@ -1,4 +1,44 @@
 const actors = [];
+const now = Date.now();
+
+const threads = [
+  {
+    id: "thread-onboarding",
+    type: "process",
+    title: "Customer Onboarding Workflow",
+    status: "active",
+    priority: "p1",
+    tags: ["ops", "customer", "compliance"],
+    cadence: "weekly",
+    current_summary:
+      "Cross-functional onboarding handoff is delayed by policy review.",
+    next_actions: ["Confirm legal signer", "Publish revised checklist"],
+    next_check_in_at: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date(now - 6 * 60 * 60 * 1000).toISOString(),
+    updated_by: "actor-policy-owner",
+    provenance: {
+      sources: ["actor_statement:event-1001", "receipt:artifact-334"],
+    },
+  },
+  {
+    id: "thread-incident-42",
+    type: "incident",
+    title: "Incident Follow-up",
+    status: "paused",
+    priority: "p0",
+    tags: ["incident", "infra"],
+    cadence: "daily",
+    current_summary: "Postmortem incomplete due to missing external logs.",
+    next_actions: ["Collect provider logs", "Draft postmortem"],
+    next_check_in_at: new Date(now + 1 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date(now - 1 * 60 * 60 * 1000).toISOString(),
+    updated_by: "actor-integrations",
+    provenance: {
+      sources: ["inferred"],
+      notes: "Thread status inferred from unresolved commitments.",
+    },
+  },
+];
 
 const inboxItems = [
   {
@@ -97,4 +137,83 @@ export function listMockTimelineEvents(threadId) {
   return events
     .filter((event) => event.thread_id === threadId)
     .sort((a, b) => String(b.ts).localeCompare(String(a.ts)));
+}
+
+function isThreadStale(thread) {
+  if (!thread.next_check_in_at) {
+    return false;
+  }
+
+  return Date.parse(String(thread.next_check_in_at)) < Date.now();
+}
+
+function normalizeTagFilters(tag) {
+  if (tag === undefined || tag === null || tag === "") {
+    return [];
+  }
+
+  if (Array.isArray(tag)) {
+    return tag.map((value) => String(value));
+  }
+
+  return String(tag)
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+export function listMockThreads(filters = {}) {
+  const tagFilters = normalizeTagFilters(filters.tag);
+  const staleFilter =
+    filters.stale === undefined ? undefined : String(filters.stale) === "true";
+
+  return threads.filter((thread) => {
+    if (filters.status && String(thread.status) !== String(filters.status)) {
+      return false;
+    }
+
+    if (
+      filters.priority &&
+      String(thread.priority) !== String(filters.priority)
+    ) {
+      return false;
+    }
+
+    if (filters.cadence && String(thread.cadence) !== String(filters.cadence)) {
+      return false;
+    }
+
+    if (tagFilters.length > 0) {
+      const hasTagMatch = tagFilters.every((tag) => thread.tags?.includes(tag));
+      if (!hasTagMatch) {
+        return false;
+      }
+    }
+
+    if (staleFilter !== undefined && isThreadStale(thread) !== staleFilter) {
+      return false;
+    }
+
+    return true;
+  });
+}
+
+export function createMockThread({ actor_id, thread }) {
+  const created = {
+    id: `thread-${Math.random().toString(36).slice(2, 10)}`,
+    updated_at: new Date().toISOString(),
+    updated_by: actor_id,
+    provenance: {
+      sources: ["actor_statement:ui"],
+    },
+    ...thread,
+    tags: Array.isArray(thread.tags) ? thread.tags : [],
+  };
+
+  threads.unshift(created);
+  return created;
+}
+
+export function getMockThread(threadId) {
+  return threads.find((thread) => thread.id === threadId) ?? null;
 }
