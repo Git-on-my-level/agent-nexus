@@ -313,6 +313,14 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleAckInboxItem(w, r, opts)
 	})
 
+	mux.HandleFunc("/derived/rebuild", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+			return
+		}
+		handleRebuildDerived(w, r, opts)
+	})
+
 	mux.HandleFunc("/snapshots/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")

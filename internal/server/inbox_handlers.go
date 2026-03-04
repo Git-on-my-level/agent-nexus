@@ -62,6 +62,34 @@ func handleGetInbox(w http.ResponseWriter, r *http.Request, opts handlerOptions)
 	})
 }
 
+func handleRebuildDerived(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+
+	var req struct {
+		ActorID string `json:"actor_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+		return
+	}
+
+	actorID, ok := requireRegisteredActorID(w, r, opts.actorRegistry, req.ActorID)
+	if !ok {
+		return
+	}
+
+	now := time.Now().UTC()
+	if err := emitStaleThreadExceptions(r.Context(), opts, now, actorID); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to rebuild derived views")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
 func handleAckInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
@@ -125,14 +153,19 @@ func handleAckInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOpti
 }
 
 func deriveInboxItems(ctx context.Context, opts handlerOptions, now time.Time, riskHorizon time.Duration) ([]derivedInboxItem, error) {
+	if err := emitStaleThreadExceptions(ctx, opts, now, ""); err != nil {
+		return nil, err
+	}
+
 	events, err := opts.primitiveStore.ListEvents(ctx, primitives.EventListFilter{
-		Types: []string{"decision_needed", "exception_raised", "inbox_item_acknowledged"},
+		Types: []string{"decision_needed", "exception_raised", "inbox_item_acknowledged", "receipt_added", "decision_made"},
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	ackedAt := latestInboxAcknowledgments(events)
+	latestActivity := latestThreadActivityFromEvents(events)
 	items := make([]derivedInboxItem, 0)
 
 	for _, event := range events {
@@ -142,6 +175,12 @@ func deriveInboxItems(ctx context.Context, opts handlerOptions, now time.Time, r
 			item, ok := deriveEventBackedInboxItem(event)
 			if !ok {
 				continue
+			}
+			if eventType == "exception_raised" && isStaleThreadException(event) {
+				threadID, _ := event["thread_id"].(string)
+				if activityAt, exists := latestActivity[threadID]; exists && activityAt.After(item.TriggerAt) {
+					continue
+				}
 			}
 			if isSuppressedByAck(item, ackedAt) {
 				continue
@@ -168,6 +207,12 @@ func deriveInboxItems(ctx context.Context, opts handlerOptions, now time.Time, r
 
 	sortInboxItems(items)
 	return items, nil
+}
+
+func isStaleThreadException(event map[string]any) bool {
+	payload, _ := event["payload"].(map[string]any)
+	subtype, _ := payload["subtype"].(string)
+	return subtype == "stale_thread"
 }
 
 func latestInboxAcknowledgments(events []map[string]any) map[string]time.Time {
