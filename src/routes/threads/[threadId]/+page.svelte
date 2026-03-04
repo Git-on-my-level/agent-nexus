@@ -22,6 +22,7 @@
     parseListInput,
     serializeListInput,
   } from "$lib/threadPatch";
+  import { validateReceiptDraft } from "$lib/receiptUtils";
   import { toTimelineView } from "$lib/timelineUtils";
   import { validateWorkOrderDraft } from "$lib/workOrderUtils";
 
@@ -77,6 +78,15 @@
   let workOrderErrors = [];
   let workOrderNotice = "";
   let createdWorkOrder = null;
+  let workOrderArtifacts = [];
+  let workOrdersLoading = false;
+  let workOrdersError = "";
+
+  let receiptDraft = null;
+  let creatingReceipt = false;
+  let receiptErrors = [];
+  let receiptNotice = "";
+  let createdReceipt = null;
 
   let messageText = "";
   let replyToEventId = "";
@@ -94,6 +104,7 @@
     await ensureActorRegistry();
     createCommitmentDraft = blankCreateCommitmentDraft();
     workOrderDraft = blankWorkOrderDraft();
+    receiptDraft = blankReceiptDraft();
     await loadThreadDetail(threadId);
   });
 
@@ -135,6 +146,20 @@
 
   function generateWorkOrderId() {
     return `artifact-work-order-${Math.random().toString(36).slice(2, 10)}`;
+  }
+
+  function generateReceiptId() {
+    return `artifact-receipt-${Math.random().toString(36).slice(2, 10)}`;
+  }
+
+  function blankReceiptDraft() {
+    return {
+      workOrderId: workOrderArtifacts[0]?.id ?? "",
+      outputsInput: "",
+      verificationEvidenceInput: "",
+      changesSummary: "",
+      knownGapsInput: "",
+    };
   }
 
   function toEditDraft(thread) {
@@ -274,6 +299,31 @@
     }
   }
 
+  async function loadWorkOrders(targetThreadId) {
+    workOrdersLoading = true;
+    workOrdersError = "";
+
+    try {
+      const response = await coreClient.listArtifacts({
+        kind: "work_order",
+        thread_id: targetThreadId,
+      });
+      workOrderArtifacts = response.artifacts ?? [];
+      if (receiptDraft && !receiptDraft.workOrderId && workOrderArtifacts[0]) {
+        receiptDraft = {
+          ...receiptDraft,
+          workOrderId: workOrderArtifacts[0].id,
+        };
+      }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      workOrdersError = `Failed to load work orders: ${reason}`;
+      workOrderArtifacts = [];
+    } finally {
+      workOrdersLoading = false;
+    }
+  }
+
   async function saveEdit() {
     if (!snapshot || !editDraft) {
       return;
@@ -339,6 +389,7 @@
     await Promise.all([
       loadTimeline(targetThreadId),
       loadOpenCommitments(loadedSnapshot?.open_commitments ?? []),
+      loadWorkOrders(targetThreadId),
       ensureActorRegistry(),
     ]);
   }
@@ -608,12 +659,64 @@
       createdWorkOrder = response.artifact ?? null;
       workOrderNotice = "Work order created.";
       workOrderDraft = blankWorkOrderDraft();
-      await loadTimeline(threadId);
+      await Promise.all([loadTimeline(threadId), loadWorkOrders(threadId)]);
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       workOrderErrors = [`Failed to create work order: ${reason}`];
     } finally {
       creatingWorkOrder = false;
+    }
+  }
+
+  async function submitReceipt() {
+    if (!receiptDraft || !snapshot) {
+      return;
+    }
+
+    creatingReceipt = true;
+    receiptErrors = [];
+    receiptNotice = "";
+
+    const validation = validateReceiptDraft(receiptDraft, { threadId });
+    if (!validation.valid) {
+      receiptErrors = validation.errors;
+      creatingReceipt = false;
+      return;
+    }
+
+    const receiptId = generateReceiptId();
+    try {
+      const response = await coreClient.createReceipt({
+        artifact: {
+          id: receiptId,
+          kind: "receipt",
+          thread_id: threadId,
+          summary: validation.normalized.changes_summary.slice(0, 120),
+          refs: [
+            `thread:${threadId}`,
+            `artifact:${validation.normalized.work_order_id}`,
+          ],
+        },
+        packet: {
+          receipt_id: receiptId,
+          work_order_id: validation.normalized.work_order_id,
+          thread_id: threadId,
+          outputs: validation.normalized.outputs,
+          verification_evidence: validation.normalized.verification_evidence,
+          changes_summary: validation.normalized.changes_summary,
+          known_gaps: validation.normalized.known_gaps,
+        },
+      });
+
+      createdReceipt = response.artifact ?? null;
+      receiptNotice = "Receipt submitted.";
+      receiptDraft = blankReceiptDraft();
+      await Promise.all([loadTimeline(threadId), loadWorkOrders(threadId)]);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      receiptErrors = [`Failed to submit receipt: ${reason}`];
+    } finally {
+      creatingReceipt = false;
     }
   }
 </script>
@@ -1453,6 +1556,162 @@
           <UnknownObjectPanel
             objectData={createdWorkOrder}
             title="Raw Work Order Artifact JSON"
+          />
+        </div>
+      </div>
+    {/if}
+  </section>
+{/if}
+
+{#if snapshot}
+  <section
+    class="mt-6 rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+  >
+    <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-500">
+      Add Receipt
+    </h2>
+    <p class="mt-1 text-xs text-slate-600">
+      Submit a manual receipt packet tied to an existing work order.
+    </p>
+
+    {#if workOrdersLoading}
+      <p class="mt-3 text-xs text-slate-600">
+        Loading available work orders...
+      </p>
+    {/if}
+
+    {#if workOrdersError}
+      <p
+        class="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
+      >
+        {workOrdersError}
+      </p>
+    {/if}
+
+    {#if receiptErrors.length > 0}
+      <ul
+        class="mt-3 list-disc space-y-1 rounded-md border border-rose-200 bg-rose-50 px-4 py-2 text-xs text-rose-800"
+      >
+        {#each receiptErrors as errorLine}
+          <li>{errorLine}</li>
+        {/each}
+      </ul>
+    {/if}
+
+    {#if receiptNotice}
+      <p
+        class="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800"
+      >
+        {receiptNotice}
+      </p>
+    {/if}
+
+    {#if receiptDraft}
+      <form
+        class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3"
+        on:submit|preventDefault={submitReceipt}
+      >
+        <div class="grid gap-3">
+          <label
+            class="text-xs font-semibold uppercase tracking-wide text-slate-600"
+          >
+            Work order id
+            <select
+              bind:value={receiptDraft.workOrderId}
+              class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+              required
+            >
+              <option value="">Select work order</option>
+              {#each workOrderArtifacts as workOrder}
+                <option value={workOrder.id}>
+                  {workOrder.id} — {workOrder.summary || "work order"}
+                </option>
+              {/each}
+            </select>
+          </label>
+
+          <label
+            class="text-xs font-semibold uppercase tracking-wide text-slate-600"
+          >
+            Receipt outputs (typed refs, comma/newline separated)
+            <textarea
+              bind:value={receiptDraft.outputsInput}
+              class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+              rows="3"
+            ></textarea>
+          </label>
+
+          <label
+            class="text-xs font-semibold uppercase tracking-wide text-slate-600"
+          >
+            Receipt verification evidence (typed refs, comma/newline separated)
+            <textarea
+              bind:value={receiptDraft.verificationEvidenceInput}
+              class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+              rows="3"
+            ></textarea>
+          </label>
+
+          <label
+            class="text-xs font-semibold uppercase tracking-wide text-slate-600"
+          >
+            Receipt changes summary
+            <textarea
+              bind:value={receiptDraft.changesSummary}
+              class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+              rows="3"
+            ></textarea>
+          </label>
+
+          <label
+            class="text-xs font-semibold uppercase tracking-wide text-slate-600"
+          >
+            Receipt known gaps (comma/newline separated)
+            <textarea
+              bind:value={receiptDraft.knownGapsInput}
+              class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+              rows="3"
+            ></textarea>
+          </label>
+        </div>
+
+        <div class="mt-3">
+          <button
+            class="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={creatingReceipt || workOrderArtifacts.length === 0}
+            type="submit"
+          >
+            {creatingReceipt ? "Submitting..." : "Submit receipt"}
+          </button>
+        </div>
+      </form>
+    {/if}
+
+    {#if createdReceipt}
+      <div class="mt-4 rounded-md border border-slate-200 bg-white p-3">
+        <p class="text-xs font-semibold uppercase tracking-wide text-slate-600">
+          Latest submitted receipt
+        </p>
+        <p class="mt-1 text-sm text-slate-800">
+          artifact id:
+          <a
+            class="underline decoration-slate-300 underline-offset-2 hover:text-slate-700"
+            href={`/artifacts/${createdReceipt.id}`}
+          >
+            {createdReceipt.id}
+          </a>
+        </p>
+        <div class="mt-2 flex flex-wrap gap-2 text-xs">
+          {#each createdReceipt.refs ?? [] as refValue}
+            <span class="rounded bg-slate-100 px-2 py-1">
+              <RefLink {refValue} {threadId} />
+            </span>
+          {/each}
+        </div>
+        <div class="mt-2">
+          <UnknownObjectPanel
+            objectData={createdReceipt}
+            title="Raw Receipt Artifact JSON"
           />
         </div>
       </div>
