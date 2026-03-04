@@ -123,6 +123,45 @@ const events = [
   },
 ];
 
+const commitments = [
+  {
+    id: "commitment-onboard-1",
+    thread_id: "thread-onboarding",
+    title: "Finalize onboarding policy exceptions",
+    owner: "actor-policy-owner",
+    due_at: "2026-03-10T00:00:00.000Z",
+    status: "open",
+    definition_of_done: [
+      "Policy exception flow approved",
+      "Escalation path documented",
+    ],
+    links: ["thread:thread-onboarding", "artifact:artifact-policy-draft"],
+    updated_at: "2026-03-03T13:00:00.000Z",
+    updated_by: "actor-policy-owner",
+    provenance: {
+      sources: ["actor_statement:event-1001"],
+    },
+  },
+  {
+    id: "commitment-sla-42",
+    thread_id: "thread-incident-42",
+    title: "Restore incident SLA compliance",
+    owner: "actor-integrations",
+    due_at: "2026-03-08T00:00:00.000Z",
+    status: "blocked",
+    definition_of_done: ["Provider logs attached", "Postmortem published"],
+    links: ["thread:thread-incident-42"],
+    updated_at: "2026-03-03T15:00:00.000Z",
+    updated_by: "actor-integrations",
+    provenance: {
+      sources: ["inferred"],
+      by_field: {
+        status: ["inferred"],
+      },
+    },
+  },
+];
+
 export function listMockActors() {
   return actors;
 }
@@ -159,6 +198,35 @@ export function listMockTimelineEvents(threadId) {
   return events
     .filter((event) => event.thread_id === threadId)
     .sort((a, b) => String(b.ts).localeCompare(String(a.ts)));
+}
+
+function isOpenCommitmentStatus(status) {
+  const normalized = String(status ?? "").trim();
+  return normalized !== "done" && normalized !== "canceled";
+}
+
+function normalizeRefList(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.map((item) => String(item).trim()).filter(Boolean);
+}
+
+function commitmentHasRequiredStatusRef(status, refs) {
+  const prefixes = normalizeRefList(refs).map(
+    (ref) => String(ref).split(":")[0],
+  );
+
+  if (status === "done") {
+    return prefixes.includes("artifact") || prefixes.includes("event");
+  }
+
+  if (status === "canceled") {
+    return prefixes.includes("event");
+  }
+
+  return true;
 }
 
 function isThreadStale(thread) {
@@ -247,6 +315,29 @@ export function getMockThread(threadId) {
   return threads.find((thread) => thread.id === threadId) ?? null;
 }
 
+function updateThreadOpenCommitments({ thread_id, commitment_id, status }) {
+  const thread = getMockThread(thread_id);
+  if (!thread) {
+    return;
+  }
+
+  const openCommitments = Array.isArray(thread.open_commitments)
+    ? [...thread.open_commitments]
+    : [];
+  const existingIndex = openCommitments.findIndex((id) => id === commitment_id);
+  const shouldBeOpen = isOpenCommitmentStatus(status);
+
+  if (shouldBeOpen && existingIndex === -1) {
+    openCommitments.push(commitment_id);
+  }
+
+  if (!shouldBeOpen && existingIndex >= 0) {
+    openCommitments.splice(existingIndex, 1);
+  }
+
+  thread.open_commitments = openCommitments;
+}
+
 export function updateMockThread({
   actor_id,
   thread_id,
@@ -293,4 +384,162 @@ export function updateMockThread({
   threads[index] = next;
 
   return { thread: next };
+}
+
+export function listMockCommitments(filters = {}) {
+  return commitments.filter((commitment) => {
+    if (
+      filters.thread_id &&
+      String(commitment.thread_id) !== String(filters.thread_id)
+    ) {
+      return false;
+    }
+
+    if (filters.owner && String(commitment.owner) !== String(filters.owner)) {
+      return false;
+    }
+
+    if (
+      filters.status &&
+      String(commitment.status) !== String(filters.status)
+    ) {
+      return false;
+    }
+
+    if (
+      filters.due_before &&
+      Date.parse(String(commitment.due_at)) >
+        Date.parse(String(filters.due_before))
+    ) {
+      return false;
+    }
+
+    if (
+      filters.due_after &&
+      Date.parse(String(commitment.due_at)) <
+        Date.parse(String(filters.due_after))
+    ) {
+      return false;
+    }
+
+    return true;
+  });
+}
+
+export function getMockCommitment(commitmentId) {
+  return (
+    commitments.find((commitment) => commitment.id === commitmentId) ?? null
+  );
+}
+
+export function createMockCommitment({ actor_id, commitment }) {
+  const created = {
+    id: `commitment-${Math.random().toString(36).slice(2, 10)}`,
+    thread_id: commitment.thread_id,
+    title: commitment.title,
+    owner: commitment.owner,
+    due_at: commitment.due_at,
+    status: commitment.status ?? "open",
+    definition_of_done: Array.isArray(commitment.definition_of_done)
+      ? commitment.definition_of_done
+          .map((item) => String(item).trim())
+          .filter(Boolean)
+      : [],
+    links: normalizeRefList(commitment.links),
+    updated_at: new Date().toISOString(),
+    updated_by: actor_id,
+    provenance: commitment.provenance ?? {
+      sources: ["actor_statement:ui"],
+    },
+  };
+
+  commitments.unshift(created);
+  updateThreadOpenCommitments({
+    thread_id: created.thread_id,
+    commitment_id: created.id,
+    status: created.status,
+  });
+
+  return created;
+}
+
+export function updateMockCommitment({
+  actor_id,
+  commitment_id,
+  patch = {},
+  refs = [],
+  if_updated_at,
+}) {
+  const commitment = getMockCommitment(commitment_id);
+  if (!commitment) {
+    return { error: "not_found" };
+  }
+
+  if (
+    if_updated_at &&
+    String(if_updated_at) !== String(commitment.updated_at ?? "")
+  ) {
+    return { error: "conflict", current: commitment };
+  }
+
+  const next = { ...commitment };
+
+  for (const [field, value] of Object.entries(patch)) {
+    if (field === "definition_of_done" || field === "links") {
+      next[field] = Array.isArray(value)
+        ? value.map((item) => String(item).trim()).filter(Boolean)
+        : [];
+      continue;
+    }
+
+    next[field] = value;
+  }
+
+  const statusChanged =
+    Object.prototype.hasOwnProperty.call(patch, "status") &&
+    String(next.status) !== String(commitment.status);
+
+  if (
+    statusChanged &&
+    (String(next.status) === "done" || String(next.status) === "canceled") &&
+    !commitmentHasRequiredStatusRef(String(next.status), refs)
+  ) {
+    return {
+      error: "invalid_transition",
+      message:
+        String(next.status) === "done"
+          ? "status=done requires artifact:<receipt_id> or event:<decision_event_id> in refs."
+          : "status=canceled requires event:<decision_event_id> in refs.",
+    };
+  }
+
+  if (
+    statusChanged &&
+    (String(next.status) === "done" || String(next.status) === "canceled")
+  ) {
+    const statusRefs = normalizeRefList(refs);
+    next.provenance = {
+      ...(next.provenance ?? { sources: [] }),
+      by_field: {
+        ...((next.provenance ?? {}).by_field ?? {}),
+        status: statusRefs,
+      },
+    };
+  }
+
+  next.updated_at = new Date().toISOString();
+  next.updated_by = actor_id;
+
+  const index = commitments.findIndex(
+    (candidate) => candidate.id === commitment_id,
+  );
+  commitments[index] = next;
+
+  updateThreadOpenCommitments({
+    thread_id: next.thread_id,
+    commitment_id: next.id,
+    status: next.status,
+  });
+
+  return { commitment: next };
 }

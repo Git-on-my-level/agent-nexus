@@ -118,6 +118,17 @@ export function createOarCoreClient(options = {}) {
     listThreadTimeline: (threadId) =>
       request("GET", `/threads/${encodePathSegment(threadId)}/timeline`),
 
+    createCommitment: (payload) =>
+      request("POST", "/commitments", { body: withActorId(payload) }),
+    listCommitments: (filters) =>
+      request("GET", "/commitments", { query: filters }),
+    getCommitment: (commitmentId) =>
+      request("GET", `/commitments/${encodePathSegment(commitmentId)}`),
+    updateCommitment: (commitmentId, payload) =>
+      request("PATCH", `/commitments/${encodePathSegment(commitmentId)}`, {
+        body: withActorId(payload),
+      }),
+
     createArtifact: (payload) =>
       request("POST", "/artifacts", { body: withActorId(payload) }),
     listArtifacts: (filters) =>

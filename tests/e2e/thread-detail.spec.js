@@ -223,7 +223,7 @@ test("thread detail handles snapshot update conflict and retries after reload", 
   ).toBeVisible();
 
   await page.getByRole("button", { name: "Edit snapshot" }).click();
-  await page.getByLabel("Title").fill("Edited after conflict");
+  await page.getByLabel("Title", { exact: true }).fill("Edited after conflict");
   await page.getByRole("button", { name: "Save snapshot changes" }).click();
 
   await expect(
@@ -234,7 +234,7 @@ test("thread detail handles snapshot update conflict and retries after reload", 
   ).toBeVisible();
 
   await page.getByRole("button", { name: "Edit snapshot" }).click();
-  await page.getByLabel("Title").fill("Final merged title");
+  await page.getByLabel("Title", { exact: true }).fill("Final merged title");
   await page.getByRole("button", { name: "Save snapshot changes" }).click();
 
   await expect(
