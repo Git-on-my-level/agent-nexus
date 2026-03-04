@@ -1,0 +1,432 @@
+# oar-schema.yaml  —  v0.2.2
+#
+# Shared contract for OAR (Organization Autorunner).
+# OAR is a shared workspace where agents and humans self-organize.
+# It owns institutional state and evidence. It has no opinion on how
+# agents are instantiated, orchestrated, or upgraded.
+#
+# Rules:
+#   - Additive evolution only.
+#   - Unknown fields MUST be preserved and round-tripped.
+#   - Unknown event types and artifact kinds MUST be stored and retrievable.
+#   - Enums are either STRICT (rejects unknown values) or OPEN (stores unknown
+#     values gracefully). See enum_policy on each enum.
+#   - Snapshot updates use patch/merge semantics: specified fields are updated,
+#     unspecified fields (including unknown fields) are preserved. List-valued
+#     fields are replaced wholesale when present; absence means no change.
+
+version: "0.2.2"
+
+# ---------------------------------------------------------------------------
+# Enums
+# ---------------------------------------------------------------------------
+enums:
+
+  # --- Strict enums (unknown values rejected) ---
+
+  thread_type:
+    enum_policy: strict
+    values: [case, process, relationship, initiative, incident, other]
+
+  thread_status:
+    enum_policy: strict
+    values: [active, paused, closed]
+
+  priority:
+    enum_policy: strict
+    values: [p0, p1, p2, p3]
+
+  cadence:
+    enum_policy: strict
+    values: [reactive, daily, weekly, monthly, custom]
+
+  commitment_status:
+    enum_policy: strict
+    values: [open, blocked, done, canceled]
+
+  review_outcome:
+    enum_policy: strict
+    values: [accept, revise, escalate]
+
+  inbox_category:
+    enum_policy: strict
+    values: [decision_needed, exception, commitment_risk]
+
+  # --- Open enums (unknown values stored and round-tripped) ---
+
+  event_type:
+    enum_policy: open
+    description: >
+      Initial known values. The system MUST accept and store unknown types.
+      UI MUST render unknown types gracefully.
+    values:
+      - message_posted
+      - work_order_created
+      - receipt_added
+      - review_completed
+      - decision_needed
+      - decision_made
+      - snapshot_updated
+      - commitment_created
+      - commitment_status_changed
+      - exception_raised
+      - inbox_item_acknowledged
+
+  artifact_kind:
+    enum_policy: open
+    description: >
+      Initial known values. The system MUST accept and store unknown kinds.
+      UI MUST render unknown kinds gracefully.
+    values:
+      - work_order
+      - receipt
+      - review
+      - doc
+      - evidence
+      - log
+
+  provenance_source:
+    enum_policy: open
+    description: "Discrete label. Never a numeric confidence score."
+    examples:
+      - "receipt:<artifact_id>"
+      - "decision:<event_id>"
+      - "actor_statement:<event_id>"
+      - "inferred"
+
+# ---------------------------------------------------------------------------
+# Typed reference strings
+# ---------------------------------------------------------------------------
+ref_format:
+  description: >
+    All strings in `refs` fields (on events, artifacts, and packets) MUST use
+    typed prefixes so consumers can unambiguously parse reference targets.
+  prefixes:
+    "artifact:<id>":  "References an artifact by ID"
+    "snapshot:<id>":  "References a snapshot by ID"
+    "event:<id>":     "References an event by ID"
+    "thread:<id>":    "References a thread (snapshot) by ID — convenience alias for snapshot:<id> where type=thread"
+    "url:<url>":      "References an external URL"
+  rules:
+    - "All ref strings MUST begin with a known prefix followed by a colon and the value."
+    - "Consumers MUST parse the prefix to determine ref type; MUST NOT guess from the value alone."
+    - "Unknown prefixes MUST be preserved and round-tripped (not rejected)."
+
+# ---------------------------------------------------------------------------
+# Provenance shape
+# ---------------------------------------------------------------------------
+provenance:
+  description: >
+    Standardized provenance object. Used on snapshots, events, and restricted
+    fields. UI relies on this shape to render "evidence-backed vs inferred"
+    consistently.
+  fields:
+    sources:
+      type: "list<string>"
+      required: true
+      description: "Provenance source labels (see provenance_source enum)"
+    notes:
+      type: string
+      required: false
+      description: "Free-text explanation"
+    by_field:
+      type: "map<string, list<string>>"
+      required: false
+      description: >
+        Per-field provenance for restricted fields. Key is field name
+        (e.g. "status"), value is list of provenance source labels.
+        Required when a restricted field is updated.
+
+# ---------------------------------------------------------------------------
+# Actor identity (separate registry, not an enum)
+# ---------------------------------------------------------------------------
+actor:
+  description: >
+    Actors are opaque IDs. OAR does not distinguish between humans and agents
+    at the schema level. Identity metadata lives in a lightweight registry.
+  registry_fields:
+    id:            { type: string, required: true, description: "Globally unique actor ID" }
+    display_name:  { type: string, required: true }
+    tags:          { type: "list<string>", required: false, description: "e.g. human, agent, ceo, engineer — evolves freely" }
+    created_at:    { type: datetime, required: true }
+
+# ---------------------------------------------------------------------------
+# Canonical primitives
+# ---------------------------------------------------------------------------
+primitives:
+
+  event:
+    description: "Append-only. Never edited or deleted. Corrections are new events."
+    fields:
+      id:          { type: string, required: true }
+      ts:          { type: datetime, required: true }
+      type:        { type: string, required: true, ref: enums.event_type }
+      actor_id:    { type: string, required: true, description: "References actor registry" }
+      thread_id:   { type: string, required: false }
+      refs:        { type: "list<typed_ref>", required: true, description: "Typed references (see ref_format)" }
+      summary:     { type: string, required: true, description: "One-line human-readable description" }
+      payload:     { type: object, required: false, description: "Small structured data. Large content → artifacts." }
+      provenance:  { type: object, required: true, ref: provenance }
+
+  snapshot:
+    description: >
+      Mutable current-best-known state. Every edit MUST emit a snapshot_updated event.
+      Updates use patch/merge semantics: specified fields are updated, unspecified
+      fields are preserved (including unknown fields). List-valued fields are
+      replaced wholesale when present in a patch; absence means no change.
+    fields:
+      id:          { type: string, required: true }
+      type:        { type: string, required: true }
+      updated_at:  { type: datetime, required: true }
+      updated_by:  { type: string, required: true, description: "Actor ID" }
+      provenance:  { type: object, required: true, ref: provenance }
+
+  artifact:
+    description: >
+      Immutable blob. New versions are new artifacts with refs to predecessors.
+      Artifact content is generally opaque to oar-core, EXCEPT for packet kinds
+      (work_order, receipt, review) which are schema-validated structured content.
+    fields:
+      id:            { type: string, required: true }
+      created_at:    { type: datetime, required: true }
+      created_by:    { type: string, required: true, description: "Actor ID" }
+      kind:          { type: string, required: true, ref: enums.artifact_kind }
+      content_type:  { type: string, required: true, description: "text | binary | structured" }
+      content_path:  { type: string, required: true, description: "Filesystem path to artifact content" }
+      refs:          { type: "list<typed_ref>", required: true, description: "Typed references (see ref_format)" }
+      summary:       { type: string, required: false }
+
+# ---------------------------------------------------------------------------
+# Typed conventions (v0: threads and commitments only)
+# ---------------------------------------------------------------------------
+snapshots:
+
+  thread:
+    extends: primitives.snapshot
+    fields:
+      title:             { type: string, required: true }
+      type:              { type: string, required: true, ref: enums.thread_type }
+      status:            { type: string, required: true, ref: enums.thread_status }
+      priority:          { type: string, required: true, ref: enums.priority }
+      tags:              { type: "list<string>", required: true }
+      cadence:           { type: string, required: true, ref: enums.cadence }
+      next_check_in_at:  { type: datetime, required: false }
+      current_summary:   { type: string, required: true, grounding: interpretive }
+      next_actions:      { type: "list<string>", required: true, grounding: interpretive }
+      open_commitments:
+        type: "list<string>"
+        required: true
+        description: >
+          Commitment IDs. Core-maintained: oar-core updates this field automatically
+          when commitments are created, change status, or are deleted.
+          Clients MUST NOT write this field directly.
+      key_artifacts:     { type: "list<typed_ref>", required: true, description: "Typed artifact references" }
+      provenance:        { type: object, required: true, ref: provenance }
+
+  commitment:
+    extends: primitives.snapshot
+    fields:
+      thread_id:          { type: string, required: true }
+      title:              { type: string, required: true }
+      owner:              { type: string, required: true, description: "Actor ID" }
+      due_at:             { type: datetime, required: true }
+      status:             { type: string, required: true, ref: enums.commitment_status }
+      definition_of_done: { type: "list<string>", required: true }
+      links:              { type: "list<typed_ref>", required: true, description: "Typed references to artifacts and/or external URLs" }
+      provenance:         { type: object, required: true, ref: provenance }
+    restricted_transitions:
+      - field: status
+        to: done
+        requires: "ref to receipt artifact OR decision event"
+      - field: status
+        to: canceled
+        requires: "ref to decision event"
+
+# ---------------------------------------------------------------------------
+# Artifact packet conventions (v0: work orders, receipts, reviews)
+# ---------------------------------------------------------------------------
+packets:
+
+  _id_rule: >
+    Packet content ID fields (work_order_id, receipt_id, review_id) MUST equal
+    the enclosing artifact's id. oar-core MUST reject mismatches on write.
+
+  _validation_rule: >
+    Packet kinds (work_order, receipt, review) are schema-validated structured
+    content. oar-core MUST validate required fields and constraints on write.
+
+  work_order:
+    stored_as: artifact
+    kind: work_order
+    description: >
+      Coordination artifact: "here's what needs doing and how to verify it's done."
+      Any actor (human or agent) may create or pick up a work order.
+    fields:
+      work_order_id:       { type: string, required: true, description: "MUST equal enclosing artifact.id" }
+      thread_id:           { type: string, required: true }
+      objective:           { type: string, required: true }
+      constraints:         { type: "list<string>", required: true }
+      context_refs:        { type: "list<typed_ref>", required: true, description: "Typed references to artifacts, external URLs" }
+      acceptance_criteria: { type: "list<string>", required: true }
+      definition_of_done:  { type: "list<string>", required: true }
+
+  receipt:
+    stored_as: artifact
+    kind: receipt
+    validation: >
+      Receipts that are primarily prose with no evidence MUST be rejected.
+      outputs and verification_evidence MUST each contain at least one reference.
+    fields:
+      receipt_id:            { type: string, required: true, description: "MUST equal enclosing artifact.id" }
+      work_order_id:         { type: string, required: true }
+      thread_id:             { type: string, required: true }
+      outputs:               { type: "list<typed_ref>", required: true, min_items: 1, description: "Typed references to deliverables" }
+      verification_evidence: { type: "list<typed_ref>", required: true, min_items: 1, description: "Typed references to test outputs, logs, metrics, etc." }
+      changes_summary:       { type: string, required: true }
+      known_gaps:            { type: "list<string>", required: true }
+
+  review:
+    stored_as: artifact
+    kind: review
+    description: "Lightweight v0 review: outcome + notes + evidence. No per-criterion rubric."
+    fields:
+      review_id:       { type: string, required: true, description: "MUST equal enclosing artifact.id" }
+      work_order_id:   { type: string, required: true }
+      receipt_id:      { type: string, required: true }
+      outcome:         { type: string, required: true, ref: enums.review_outcome }
+      notes:           { type: string, required: true }
+      evidence_refs:   { type: "list<typed_ref>", required: true }
+
+# ---------------------------------------------------------------------------
+# Reference conventions
+# ---------------------------------------------------------------------------
+reference_conventions:
+  description: >
+    Required refs per event type and artifact kind. All ref values use typed
+    ref strings (see ref_format). These conventions ensure core and UI agree
+    on linking semantics so navigation is deterministic.
+
+  event_refs:
+    _rule: "All thread-scoped events MUST set thread_id."
+
+    work_order_created:
+      thread_id: required
+      refs_must_include: ["artifact:<work_order_artifact_id>"]
+
+    receipt_added:
+      thread_id: required
+      refs_must_include: ["artifact:<receipt_artifact_id>", "artifact:<work_order_artifact_id>"]
+
+    review_completed:
+      thread_id: required
+      refs_must_include: ["artifact:<review_artifact_id>", "artifact:<receipt_artifact_id>", "artifact:<work_order_artifact_id>"]
+
+    commitment_created:
+      thread_id: required
+      refs_must_include: ["snapshot:<commitment_id>"]
+
+    commitment_status_changed:
+      thread_id: required
+      refs_must_include: ["snapshot:<commitment_id>"]
+      refs_conditional: >
+        If status → done: MUST include artifact:<receipt_artifact_id> OR event:<decision_event_id>.
+        If status → canceled: MUST include event:<decision_event_id>.
+
+    decision_needed:
+      thread_id: required
+      refs_optional: ["artifact:<related_id>", "snapshot:<commitment_id>"]
+
+    decision_made:
+      thread_id: required
+      refs_optional: ["artifact:<decision_artifact_id>", "snapshot:<commitment_id>"]
+
+    snapshot_updated:
+      thread_id: "required if snapshot is thread-scoped"
+      refs_must_include: ["snapshot:<snapshot_id>"]
+      payload_should_include: ["changed_fields: list of field names that changed"]
+
+    exception_raised:
+      thread_id: required
+      payload_must_include: ["subtype (e.g. stale_thread)"]
+
+    message_posted:
+      thread_id: required
+      refs_optional: ["event:<parent_event_id> (for replies)", "artifact:<mentioned_artifact_id>"]
+
+    inbox_item_acknowledged:
+      thread_id: required
+      refs_must_include: ["inbox:<inbox_item_id>"]
+
+  artifact_refs:
+    _rule: "All packet artifacts MUST include thread:<thread_id> in artifact.refs."
+    work_order: { refs_must_include: ["thread:<thread_id>"] }
+    receipt:    { refs_must_include: ["thread:<thread_id>", "artifact:<work_order_artifact_id>"] }
+    review:     { refs_must_include: ["thread:<thread_id>", "artifact:<receipt_artifact_id>", "artifact:<work_order_artifact_id>"] }
+
+# ---------------------------------------------------------------------------
+# Derived views (v0: simple inbox)
+# ---------------------------------------------------------------------------
+derived:
+
+  inbox_item:
+    description: >
+      Derived from events, commitments, and thread states. Regenerable.
+      v0: grouped by category, sorted by time/due date. No ranking engine.
+    fields:
+      id:
+        type: string
+        required: true
+        description: >
+          Deterministic ID: MUST be stable across inbox rebuilds given the same
+          canonical inputs. Generated as: "inbox:" + category + ":" + thread_id
+          + ":" + commitment_id (or "none") + ":" + source_event_id (or "none").
+      category:           { type: string, required: true, ref: enums.inbox_category }
+      source_event_id:    { type: string, required: false }
+      thread_id:          { type: string, required: true }
+      commitment_id:      { type: string, required: false }
+      title:              { type: string, required: true }
+      recommended_action: { type: string, required: true }
+
+  inbox_derivation_rules:
+    acknowledgment: >
+      When an inbox_item_acknowledged event exists referencing an inbox item
+      (via inbox:<inbox_item_id>), that item is suppressed from the inbox
+      UNLESS a new triggering event (receipt, exception, commitment change)
+      has occurred after the acknowledgment timestamp. Deterministic IDs
+      ensure ack events survive inbox rebuilds.
+
+# ---------------------------------------------------------------------------
+# Grounding rules
+# ---------------------------------------------------------------------------
+grounding_rules:
+
+  restricted_fields:
+    description: "MUST NOT be updated without referencing a receipt or decision event."
+    fields:
+      - "commitment.status -> done"
+      - "commitment.status -> canceled"
+      - "any 'metric improved' claim"
+      - "any 'shipped/sent/deployed' assertion"
+
+  interpretive_fields:
+    description: "MAY be updated without receipts."
+    fields:
+      - "thread.current_summary"
+      - "thread.next_actions"
+
+# ---------------------------------------------------------------------------
+# Staleness rules
+# ---------------------------------------------------------------------------
+staleness:
+  rule: >
+    A thread is stale when now > next_check_in_at AND no receipt or decision
+    event has occurred since the last check-in window.
+  on_stale:
+    - "Emit exception_raised event with subtype stale_thread"
+    - "Surface as inbox item"
+  cadence_semantics:
+    reactive: "No scheduled check-ins. Wakes on inbound events only."
+    daily:    "Check-in expected every day."
+    weekly:   "Check-in expected every week."
+    monthly:  "Check-in expected every month."
+    custom:   "Defined by next_check_in_at."
