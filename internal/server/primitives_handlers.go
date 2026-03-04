@@ -162,6 +162,25 @@ func handleCreateArtifact(w http.ResponseWriter, r *http.Request, opts handlerOp
 		writeError(w, http.StatusBadRequest, "invalid_request", "content_type is required")
 		return
 	}
+	if packetSchema, isPacketKind := opts.contract.Packets[kind]; isPacketKind {
+		if packetSchema.Kind != "" && packetSchema.Kind != kind {
+			writeError(w, http.StatusBadRequest, "invalid_request", "artifact.kind does not match packet schema")
+			return
+		}
+		if req.ContentType != "structured" {
+			writeError(w, http.StatusBadRequest, "invalid_request", "packet artifacts must use content_type=structured")
+			return
+		}
+		packet, ok := req.Content.(map[string]any)
+		if !ok {
+			writeError(w, http.StatusBadRequest, "invalid_request", "packet artifacts must provide content as a JSON object")
+			return
+		}
+		if _, err := validatePacketArtifactAndContent(opts.contract, kind, req.Artifact, packet); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+	}
 
 	artifact, err := opts.primitiveStore.CreateArtifact(r.Context(), actorID, req.Artifact, req.Content, req.ContentType)
 	if err != nil {

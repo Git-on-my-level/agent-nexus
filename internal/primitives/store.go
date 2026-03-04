@@ -202,11 +202,16 @@ func (s *Store) CreateArtifact(ctx context.Context, actorID string, artifact map
 	}
 
 	metadata := cloneMap(artifact)
-	metadata["id"] = uuid.NewString()
+	artifactID, _ := metadata["id"].(string)
+	artifactID = strings.TrimSpace(artifactID)
+	if artifactID == "" {
+		artifactID = uuid.NewString()
+	}
+	metadata["id"] = artifactID
 	metadata["created_at"] = time.Now().UTC().Format(time.RFC3339Nano)
 	metadata["created_by"] = actorID
 	metadata["content_type"] = contentType
-	metadata["content_path"] = filepath.Join(s.artifactContentDir, metadata["id"].(string))
+	metadata["content_path"] = filepath.Join(s.artifactContentDir, artifactID)
 
 	contentPath := metadata["content_path"].(string)
 	file, err := os.OpenFile(contentPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)

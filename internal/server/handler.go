@@ -265,6 +265,30 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleGetArtifact(w, r, opts, remainder)
 	})
 
+	mux.HandleFunc("/work_orders", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+			return
+		}
+		handleCreateWorkOrder(w, r, opts)
+	})
+
+	mux.HandleFunc("/receipts", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+			return
+		}
+		handleCreateReceipt(w, r, opts)
+	})
+
+	mux.HandleFunc("/reviews", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+			return
+		}
+		handleCreateReview(w, r, opts)
+	})
+
 	mux.HandleFunc("/snapshots/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")

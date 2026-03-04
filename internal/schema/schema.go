@@ -51,6 +51,7 @@ type Contract struct {
 	Provenance       ProvenanceSpec
 	Snapshots        map[string]SnapshotSchema
 	Packets          map[string]PacketSchema
+	ArtifactRefRules map[string][]string
 }
 
 func (c *Contract) HasKnownTypedRefPrefix(prefix string) bool {
@@ -59,12 +60,13 @@ func (c *Contract) HasKnownTypedRefPrefix(prefix string) bool {
 }
 
 type contractFile struct {
-	Version    string `yaml:"version"`
-	Enums      map[string]rawEnum
-	RefFormat  rawRefFormat `yaml:"ref_format"`
-	Provenance rawProvenance
-	Snapshots  rawSnapshots
-	Packets    rawPackets
+	Version              string `yaml:"version"`
+	Enums                map[string]rawEnum
+	RefFormat            rawRefFormat `yaml:"ref_format"`
+	Provenance           rawProvenance
+	Snapshots            rawSnapshots
+	Packets              rawPackets
+	ReferenceConventions rawReferenceConventions `yaml:"reference_conventions"`
 }
 
 type rawEnum struct {
@@ -84,6 +86,20 @@ type rawPackets struct {
 	WorkOrder rawPacketSchema `yaml:"work_order"`
 	Receipt   rawPacketSchema `yaml:"receipt"`
 	Review    rawPacketSchema `yaml:"review"`
+}
+
+type rawReferenceConventions struct {
+	ArtifactRefs rawArtifactRefConventions `yaml:"artifact_refs"`
+}
+
+type rawArtifactRefConventions struct {
+	WorkOrder rawArtifactRefRule `yaml:"work_order"`
+	Receipt   rawArtifactRefRule `yaml:"receipt"`
+	Review    rawArtifactRefRule `yaml:"review"`
+}
+
+type rawArtifactRefRule struct {
+	RefsMustInclude []string `yaml:"refs_must_include"`
 }
 
 type rawSnapshots struct {
@@ -127,6 +143,11 @@ func Load(path string) (*Contract, error) {
 		},
 		Snapshots: make(map[string]SnapshotSchema, 2),
 		Packets:   make(map[string]PacketSchema, 3),
+		ArtifactRefRules: map[string][]string{
+			"work_order": append([]string(nil), file.ReferenceConventions.ArtifactRefs.WorkOrder.RefsMustInclude...),
+			"receipt":    append([]string(nil), file.ReferenceConventions.ArtifactRefs.Receipt.RefsMustInclude...),
+			"review":     append([]string(nil), file.ReferenceConventions.ArtifactRefs.Review.RefsMustInclude...),
+		},
 	}
 
 	if contract.Version == "" {

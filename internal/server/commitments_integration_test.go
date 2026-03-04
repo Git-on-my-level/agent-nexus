@@ -95,15 +95,43 @@ func TestCommitmentsCreateAndRestrictedTransitions(t *testing.T) {
 	}`, http.StatusBadRequest)
 	defer rejectDoneResp.Body.Close()
 
-	receiptResp := postJSONExpectStatus(t, h.baseURL+"/artifacts", `{
+	workOrderID := "work-order-for-commitment"
+	workOrderResp := postJSONExpectStatus(t, h.baseURL+"/work_orders", `{
 		"actor_id":"actor-1",
 		"artifact":{
-			"kind":"receipt",
+			"id":"`+workOrderID+`",
 			"refs":["thread:`+threadID+`"],
+			"summary":"work order"
+		},
+		"packet":{
+			"work_order_id":"`+workOrderID+`",
+			"thread_id":"`+threadID+`",
+			"objective":"fix issue",
+			"constraints":["none"],
+			"context_refs":["url:https://example.com/context"],
+			"acceptance_criteria":["issue fixed"],
+			"definition_of_done":["receipt created"]
+		}
+	}`, http.StatusCreated)
+	defer workOrderResp.Body.Close()
+
+	receiptID := "receipt-for-commitment"
+	receiptResp := postJSONExpectStatus(t, h.baseURL+"/receipts", `{
+		"actor_id":"actor-1",
+		"artifact":{
+			"id":"`+receiptID+`",
+			"refs":["thread:`+threadID+`","artifact:`+workOrderID+`"],
 			"summary":"receipt"
 		},
-		"content":{"ok":true},
-		"content_type":"structured"
+		"packet":{
+			"receipt_id":"`+receiptID+`",
+			"work_order_id":"`+workOrderID+`",
+			"thread_id":"`+threadID+`",
+			"outputs":["artifact:deliverable-1"],
+			"verification_evidence":["url:https://example.com/evidence"],
+			"changes_summary":"summary",
+			"known_gaps":[]
+		}
 	}`, http.StatusCreated)
 	defer receiptResp.Body.Close()
 
@@ -113,15 +141,15 @@ func TestCommitmentsCreateAndRestrictedTransitions(t *testing.T) {
 	if err := json.NewDecoder(receiptResp.Body).Decode(&receiptPayload); err != nil {
 		t.Fatalf("decode receipt artifact: %v", err)
 	}
-	receiptID, _ := receiptPayload.Artifact["id"].(string)
-	if receiptID == "" {
+	createdReceiptID, _ := receiptPayload.Artifact["id"].(string)
+	if createdReceiptID == "" {
 		t.Fatal("expected receipt id")
 	}
 
 	doneResp := patchJSONExpectStatus(t, h.baseURL+"/commitments/"+commitmentID, `{
 		"actor_id":"actor-1",
 		"patch":{"status":"done"},
-		"refs":["artifact:`+receiptID+`"]
+		"refs":["artifact:`+createdReceiptID+`"]
 	}`, http.StatusOK)
 	defer doneResp.Body.Close()
 
@@ -140,7 +168,7 @@ func TestCommitmentsCreateAndRestrictedTransitions(t *testing.T) {
 		t.Fatalf("expected provenance.by_field, got %#v", provenance["by_field"])
 	}
 	statusSources := sortedStringList(byField["status"])
-	if !reflect.DeepEqual(statusSources, []string{"receipt:" + receiptID}) {
+	if !reflect.DeepEqual(statusSources, []string{"receipt:" + createdReceiptID}) {
 		t.Fatalf("unexpected status provenance labels: %#v", byField["status"])
 	}
 

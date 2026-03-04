@@ -67,6 +67,10 @@ func TestLoadExtractsCoreSchemaRules(t *testing.T) {
 	if verification.MinItems == nil || *verification.MinItems != 1 {
 		t.Fatalf("expected receipt.verification_evidence min_items=1, got %#v", verification.MinItems)
 	}
+	artifactRefRule := contract.ArtifactRefRules["receipt"]
+	if len(artifactRefRule) != 2 {
+		t.Fatalf("expected 2 receipt artifact ref rules, got %#v", artifactRefRule)
+	}
 
 	threadSnapshot, ok := contract.Snapshots["thread"]
 	if !ok {
