@@ -13,6 +13,7 @@ const threads = [
     current_summary:
       "Cross-functional onboarding handoff is delayed by policy review.",
     next_actions: ["Confirm legal signer", "Publish revised checklist"],
+    open_commitments: ["commitment-onboard-1"],
     next_check_in_at: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString(),
     updated_at: new Date(now - 6 * 60 * 60 * 1000).toISOString(),
     updated_by: "actor-policy-owner",
@@ -30,6 +31,7 @@ const threads = [
     cadence: "daily",
     current_summary: "Postmortem incomplete due to missing external logs.",
     next_actions: ["Collect provider logs", "Draft postmortem"],
+    open_commitments: ["commitment-sla-42"],
     next_check_in_at: new Date(now + 1 * 24 * 60 * 60 * 1000).toISOString(),
     updated_at: new Date(now - 1 * 60 * 60 * 1000).toISOString(),
     updated_by: "actor-integrations",
@@ -98,6 +100,24 @@ const events = [
     summary: "Future event type should still render.",
     payload: { score: 9 },
     provenance: { sources: ["inferred"] },
+  },
+  {
+    id: "evt-1003",
+    ts: "2026-03-03T11:20:00.000Z",
+    type: "snapshot_updated",
+    actor_id: "actor-policy-owner",
+    thread_id: "thread-onboarding",
+    refs: ["thread:thread-onboarding"],
+    summary: "Updated thread status and summary.",
+    payload: {
+      changed_fields: ["status", "current_summary"],
+    },
+    provenance: {
+      sources: ["actor_statement:event-1003"],
+      by_field: {
+        status: ["receipt:artifact-334"],
+      },
+    },
   },
 ];
 
