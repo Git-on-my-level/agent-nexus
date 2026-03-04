@@ -1,16 +1,19 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"net"
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"organization-autorunner-core/internal/schema"
 	"organization-autorunner-core/internal/server"
+	"organization-autorunner-core/internal/storage"
 )
 
 const (
@@ -21,21 +24,27 @@ const (
 )
 
 func main() {
-	var host string
-	var port int
-	var schemaPath string
-	var workspaceRoot string
+	var (
+		host          = envString("OAR_HOST", defaultHost)
+		port          = envInt("OAR_PORT", defaultPort)
+		listenAddress = envString("OAR_LISTEN_ADDR", "")
+		schemaPath    = envString("OAR_SCHEMA_PATH", defaultSchemaPath)
+		workspaceRoot = envString("OAR_WORKSPACE_ROOT", defaultWorkspaceRoot)
+	)
 
-	flag.StringVar(&host, "host", defaultHost, "host interface to bind")
-	flag.IntVar(&port, "port", defaultPort, "port to listen on")
-	flag.StringVar(&schemaPath, "schema-path", defaultSchemaPath, "path to contracts/oar-schema.yaml")
-	flag.StringVar(&workspaceRoot, "workspace-root", defaultWorkspaceRoot, "root directory for sqlite/filesystem workspace")
+	flag.StringVar(&host, "host", host, "host interface to bind")
+	flag.IntVar(&port, "port", port, "port to listen on")
+	flag.StringVar(&listenAddress, "listen-addr", listenAddress, "full listen address host:port; overrides --host/--port")
+	flag.StringVar(&schemaPath, "schema-path", schemaPath, "path to contracts/oar-schema.yaml")
+	flag.StringVar(&workspaceRoot, "workspace-root", workspaceRoot, "root directory for sqlite/filesystem workspace")
 	flag.Parse()
 
-	if err := os.MkdirAll(workspaceRoot, 0o755); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to ensure workspace root: %v\n", err)
+	workspace, err := storage.InitializeWorkspace(context.Background(), workspaceRoot)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to initialize workspace storage: %v\n", err)
 		os.Exit(1)
 	}
+	defer workspace.Close()
 
 	schemaVersion, err := schema.ReadVersion(schemaPath)
 	if err != nil {
@@ -43,8 +52,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	addr := net.JoinHostPort(host, strconv.Itoa(port))
-	handler := server.NewHandler(schemaVersion)
+	addr := listenAddress
+	if addr == "" {
+		addr = net.JoinHostPort(host, strconv.Itoa(port))
+	}
+
+	handler := server.NewHandler(schemaVersion, server.WithHealthCheck(workspace.Ping))
 	httpServer := &http.Server{
 		Addr:              addr,
 		Handler:           handler,
@@ -56,4 +69,26 @@ func main() {
 		fmt.Fprintf(os.Stderr, "server error: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func envString(name string, fallback string) string {
+	value := strings.TrimSpace(os.Getenv(name))
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func envInt(name string, fallback int) int {
+	value := strings.TrimSpace(os.Getenv(name))
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "invalid integer value for %s: %q\n", name, value)
+		os.Exit(1)
+	}
+	return parsed
 }

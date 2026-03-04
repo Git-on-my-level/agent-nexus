@@ -1,11 +1,31 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 )
 
-func NewHandler(schemaVersion string) http.Handler {
+type HealthCheckFunc func(ctx context.Context) error
+
+type HandlerOption func(*handlerOptions)
+
+type handlerOptions struct {
+	healthCheck HealthCheckFunc
+}
+
+func WithHealthCheck(healthCheck HealthCheckFunc) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.healthCheck = healthCheck
+	}
+}
+
+func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
+	opts := handlerOptions{}
+	for _, option := range options {
+		option(&opts)
+	}
+
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -13,6 +33,20 @@ func NewHandler(schemaVersion string) http.Handler {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
 			return
 		}
+
+		if opts.healthCheck != nil {
+			if err := opts.healthCheck(r.Context()); err != nil {
+				writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+					"ok": false,
+					"error": map[string]string{
+						"code":    "storage_unavailable",
+						"message": "storage health check failed",
+					},
+				})
+				return
+			}
+		}
+
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 	})
 

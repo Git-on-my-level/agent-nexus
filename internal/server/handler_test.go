@@ -1,7 +1,9 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -62,5 +64,29 @@ func TestMethodNotAllowed(t *testing.T) {
 
 	if rr.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("unexpected status: got %d", rr.Code)
+	}
+}
+
+func TestHealthEndpointStorageError(t *testing.T) {
+	t.Parallel()
+
+	handler := NewHandler("0.2.2", WithHealthCheck(func(context.Context) error {
+		return errors.New("database unavailable")
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("unexpected status: got %d", rr.Code)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode body: %v", err)
+	}
+	if payload["ok"] != false {
+		t.Fatalf("expected ok=false, got %#v", payload["ok"])
 	}
 }
