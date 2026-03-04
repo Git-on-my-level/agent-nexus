@@ -3,20 +3,38 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
+	"strings"
+	"time"
+
+	"organization-autorunner-core/internal/actors"
 )
 
 type HealthCheckFunc func(ctx context.Context) error
 
+type ActorRegistry interface {
+	Register(ctx context.Context, actor actors.Actor) (actors.Actor, error)
+	List(ctx context.Context) ([]actors.Actor, error)
+	Exists(ctx context.Context, actorID string) (bool, error)
+}
+
 type HandlerOption func(*handlerOptions)
 
 type handlerOptions struct {
-	healthCheck HealthCheckFunc
+	healthCheck   HealthCheckFunc
+	actorRegistry ActorRegistry
 }
 
 func WithHealthCheck(healthCheck HealthCheckFunc) HandlerOption {
 	return func(opts *handlerOptions) {
 		opts.healthCheck = healthCheck
+	}
+}
+
+func WithActorRegistry(actorRegistry ActorRegistry) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.actorRegistry = actorRegistry
 	}
 }
 
@@ -58,11 +76,133 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		writeJSON(w, http.StatusOK, map[string]any{"schema_version": schemaVersion})
 	})
 
+	mux.HandleFunc("/actors", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			handleRegisterActor(w, r, opts.actorRegistry)
+		case http.MethodGet:
+			handleListActors(w, r, opts.actorRegistry)
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST and GET are supported")
+		}
+	})
+
+	mux.HandleFunc("/threads", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+			return
+		}
+
+		if opts.actorRegistry == nil {
+			writeError(w, http.StatusServiceUnavailable, "actor_registry_unavailable", "actor registry is not configured")
+			return
+		}
+
+		var req struct {
+			ActorID string `json:"actor_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+			return
+		}
+		req.ActorID = strings.TrimSpace(req.ActorID)
+		if req.ActorID == "" {
+			writeError(w, http.StatusBadRequest, "invalid_request", "actor_id is required")
+			return
+		}
+
+		exists, err := opts.actorRegistry.Exists(r.Context(), req.ActorID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "internal_error", "failed to validate actor_id")
+			return
+		}
+		if !exists {
+			writeError(w, http.StatusBadRequest, "unknown_actor_id", "actor_id is not registered")
+			return
+		}
+
+		writeError(w, http.StatusNotImplemented, "not_implemented", "thread creation is not implemented in this stage")
+	})
+
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
 	})
 
 	return mux
+}
+
+func handleRegisterActor(w http.ResponseWriter, r *http.Request, actorRegistry ActorRegistry) {
+	if actorRegistry == nil {
+		writeError(w, http.StatusServiceUnavailable, "actor_registry_unavailable", "actor registry is not configured")
+		return
+	}
+
+	var req struct {
+		Actor struct {
+			ID          string   `json:"id"`
+			DisplayName string   `json:"display_name"`
+			Tags        []string `json:"tags"`
+			CreatedAt   string   `json:"created_at"`
+		} `json:"actor"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+		return
+	}
+
+	req.Actor.ID = strings.TrimSpace(req.Actor.ID)
+	req.Actor.DisplayName = strings.TrimSpace(req.Actor.DisplayName)
+	req.Actor.CreatedAt = strings.TrimSpace(req.Actor.CreatedAt)
+
+	if req.Actor.ID == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "actor.id is required")
+		return
+	}
+	if req.Actor.DisplayName == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "actor.display_name is required")
+		return
+	}
+	if req.Actor.CreatedAt == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "actor.created_at is required")
+		return
+	}
+	if _, err := time.Parse(time.RFC3339, req.Actor.CreatedAt); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "actor.created_at must be an RFC3339 timestamp")
+		return
+	}
+
+	registered, err := actorRegistry.Register(r.Context(), actors.Actor{
+		ID:          req.Actor.ID,
+		DisplayName: req.Actor.DisplayName,
+		Tags:        req.Actor.Tags,
+		CreatedAt:   req.Actor.CreatedAt,
+	})
+	if err != nil {
+		if errors.Is(err, actors.ErrAlreadyExists) {
+			writeError(w, http.StatusConflict, "actor_exists", "actor with this id already exists")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to register actor")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]any{"actor": registered})
+}
+
+func handleListActors(w http.ResponseWriter, r *http.Request, actorRegistry ActorRegistry) {
+	if actorRegistry == nil {
+		writeError(w, http.StatusServiceUnavailable, "actor_registry_unavailable", "actor registry is not configured")
+		return
+	}
+
+	listed, err := actorRegistry.List(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list actors")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"actors": listed})
 }
 
 func writeError(w http.ResponseWriter, status int, code string, message string) {

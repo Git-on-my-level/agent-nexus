@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"organization-autorunner-core/internal/actors"
 	"organization-autorunner-core/internal/schema"
 	"organization-autorunner-core/internal/server"
 	"organization-autorunner-core/internal/storage"
@@ -57,7 +58,12 @@ func main() {
 		addr = net.JoinHostPort(host, strconv.Itoa(port))
 	}
 
-	handler := server.NewHandler(contract.Version, server.WithHealthCheck(workspace.Ping))
+	actorRegistry := actors.NewStore(workspace.DB())
+	handler := server.NewHandler(
+		contract.Version,
+		server.WithHealthCheck(workspace.Ping),
+		server.WithActorRegistry(actorRegistry),
+	)
 	httpServer := &http.Server{
 		Addr:              addr,
 		Handler:           handler,
