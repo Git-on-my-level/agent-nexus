@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"organization-autorunner-core/internal/actors"
+	"organization-autorunner-core/internal/primitives"
+	"organization-autorunner-core/internal/schema"
 )
 
 type HealthCheckFunc func(ctx context.Context) error
@@ -19,11 +21,23 @@ type ActorRegistry interface {
 	Exists(ctx context.Context, actorID string) (bool, error)
 }
 
+type PrimitiveStore interface {
+	AppendEvent(ctx context.Context, actorID string, event map[string]any) (map[string]any, error)
+	GetEvent(ctx context.Context, id string) (map[string]any, error)
+	CreateArtifact(ctx context.Context, actorID string, artifact map[string]any, content any, contentType string) (map[string]any, error)
+	GetArtifact(ctx context.Context, id string) (map[string]any, error)
+	GetArtifactContent(ctx context.Context, id string) ([]byte, string, error)
+	ListArtifacts(ctx context.Context, filter primitives.ArtifactListFilter) ([]map[string]any, error)
+	GetSnapshot(ctx context.Context, id string) (map[string]any, error)
+}
+
 type HandlerOption func(*handlerOptions)
 
 type handlerOptions struct {
-	healthCheck   HealthCheckFunc
-	actorRegistry ActorRegistry
+	healthCheck    HealthCheckFunc
+	actorRegistry  ActorRegistry
+	primitiveStore PrimitiveStore
+	contract       *schema.Contract
 }
 
 func WithHealthCheck(healthCheck HealthCheckFunc) HandlerOption {
@@ -35,6 +49,18 @@ func WithHealthCheck(healthCheck HealthCheckFunc) HandlerOption {
 func WithActorRegistry(actorRegistry ActorRegistry) HandlerOption {
 	return func(opts *handlerOptions) {
 		opts.actorRegistry = actorRegistry
+	}
+}
+
+func WithPrimitiveStore(primitiveStore PrimitiveStore) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.primitiveStore = primitiveStore
+	}
+}
+
+func WithSchemaContract(contract *schema.Contract) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.contract = contract
 	}
 }
 
@@ -122,6 +148,87 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 
 		writeError(w, http.StatusNotImplemented, "not_implemented", "thread creation is not implemented in this stage")
+	})
+
+	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+			return
+		}
+
+		handleAppendEvent(w, r, opts)
+	})
+
+	mux.HandleFunc("/events/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+			return
+		}
+
+		eventID := strings.TrimPrefix(r.URL.Path, "/events/")
+		if eventID == "" || strings.Contains(eventID, "/") {
+			writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+			return
+		}
+
+		handleGetEvent(w, r, opts, eventID)
+	})
+
+	mux.HandleFunc("/artifacts", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			handleCreateArtifact(w, r, opts)
+		case http.MethodGet:
+			handleListArtifacts(w, r, opts)
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST and GET are supported")
+		}
+	})
+
+	mux.HandleFunc("/artifacts/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+			return
+		}
+
+		remainder := strings.TrimPrefix(r.URL.Path, "/artifacts/")
+		if remainder == "" {
+			writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+			return
+		}
+
+		if strings.HasSuffix(remainder, "/content") {
+			artifactID := strings.TrimSuffix(remainder, "/content")
+			artifactID = strings.TrimSuffix(artifactID, "/")
+			if artifactID == "" || strings.Contains(artifactID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			handleGetArtifactContent(w, r, opts, artifactID)
+			return
+		}
+
+		if strings.Contains(remainder, "/") {
+			writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+			return
+		}
+
+		handleGetArtifact(w, r, opts, remainder)
+	})
+
+	mux.HandleFunc("/snapshots/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+			return
+		}
+
+		snapshotID := strings.TrimPrefix(r.URL.Path, "/snapshots/")
+		if snapshotID == "" || strings.Contains(snapshotID, "/") {
+			writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+			return
+		}
+
+		handleGetSnapshot(w, r, opts, snapshotID)
 	})
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {

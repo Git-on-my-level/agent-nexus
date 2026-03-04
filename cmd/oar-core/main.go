@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"organization-autorunner-core/internal/actors"
+	"organization-autorunner-core/internal/primitives"
 	"organization-autorunner-core/internal/schema"
 	"organization-autorunner-core/internal/server"
 	"organization-autorunner-core/internal/storage"
@@ -59,10 +60,13 @@ func main() {
 	}
 
 	actorRegistry := actors.NewStore(workspace.DB())
+	primitiveStore := primitives.NewStore(workspace.DB(), workspace.Layout().ArtifactContentDir)
 	handler := server.NewHandler(
 		contract.Version,
 		server.WithHealthCheck(workspace.Ping),
 		server.WithActorRegistry(actorRegistry),
+		server.WithPrimitiveStore(primitiveStore),
+		server.WithSchemaContract(contract),
 	)
 	httpServer := &http.Server{
 		Addr:              addr,

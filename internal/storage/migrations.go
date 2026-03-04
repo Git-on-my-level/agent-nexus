@@ -69,6 +69,13 @@ var migrations = []migration{
 			`CREATE INDEX IF NOT EXISTS idx_derived_views_type ON derived_views (view_type);`,
 		},
 	},
+	{
+		Version: 2,
+		Statements: []string{
+			`ALTER TABLE events ADD COLUMN body_json TEXT NOT NULL DEFAULT '{}'`,
+			`ALTER TABLE artifacts ADD COLUMN content_type TEXT NOT NULL DEFAULT 'application/octet-stream'`,
+		},
+	},
 }
 
 func applyMigrations(ctx context.Context, db *sql.DB) error {
