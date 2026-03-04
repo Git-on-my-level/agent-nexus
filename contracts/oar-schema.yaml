@@ -106,9 +106,10 @@ ref_format:
     "snapshot:<id>":  "References a snapshot by ID"
     "event:<id>":     "References an event by ID"
     "thread:<id>":    "References a thread (snapshot) by ID — convenience alias for snapshot:<id> where type=thread"
+    "inbox:<id>":     "References a derived inbox item by ID"
     "url:<url>":      "References an external URL"
   rules:
-    - "All ref strings MUST begin with a known prefix followed by a colon and the value."
+    - "All ref strings MUST begin with a typed prefix followed by a colon and the value."
     - "Consumers MUST parse the prefix to determine ref type; MUST NOT guess from the value alone."
     - "Unknown prefixes MUST be preserved and round-tripped (not rejected)."
 
@@ -429,4 +430,4 @@ staleness:
     daily:    "Check-in expected every day."
     weekly:   "Check-in expected every week."
     monthly:  "Check-in expected every month."
-    custom:   "Defined by next_check_in_at."
+    custom:   "Uses next_check_in_at as the staleness threshold; the active window is implementation-defined and must be documented."
