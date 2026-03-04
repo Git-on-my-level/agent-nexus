@@ -109,6 +109,7 @@
           next_actions: [
             threadDraft.summary.trim() || "Review and define next steps.",
           ],
+          key_artifacts: [],
           provenance: {
             sources: ["actor_statement:ui"],
           },

@@ -1,3 +1,5 @@
+import { env } from "$env/dynamic/public";
+
 export const EXPECTED_SCHEMA_VERSION = "0.2.2";
 
 export function normalizeBaseUrl(value) {
@@ -8,6 +10,4 @@ export function normalizeBaseUrl(value) {
   return String(value).trim().replace(/\/+$/, "");
 }
 
-export const oarCoreBaseUrl = normalizeBaseUrl(
-  import.meta.env.PUBLIC_OAR_CORE_BASE_URL,
-);
+export const oarCoreBaseUrl = normalizeBaseUrl(env.PUBLIC_OAR_CORE_BASE_URL);
