@@ -12,6 +12,11 @@ Intended use: unzip into an empty `oar-ui` git repo, then run CAR.
 - `PUBLIC_OAR_CORE_BASE_URL`: base URL for the oar-core HTTP API.
   - Example: `PUBLIC_OAR_CORE_BASE_URL=http://127.0.0.1:8000`
   - If omitted, the UI uses same-origin requests.
+- `OAR_CORE_BASE_URL`: server-side proxy target used by the SvelteKit runtime.
+  - Recommended for local/dev and integration runs to avoid browser CORS setup.
+
+See `docs/runbook.md` for full packaging, serving, endpoint, and troubleshooting
+guidance.
 
 On startup, the UI calls `GET /version` and requires
 `schema_version === "0.2.2"`. If it does not match, boot fails with a clear
