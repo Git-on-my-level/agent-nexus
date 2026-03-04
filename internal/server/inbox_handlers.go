@@ -86,6 +86,14 @@ func handleRebuildDerived(w http.ResponseWriter, r *http.Request, opts handlerOp
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to rebuild derived views")
 		return
 	}
+	horizon := opts.inboxRiskHorizon
+	if horizon <= 0 {
+		horizon = defaultInboxRiskHorizon
+	}
+	if _, err := deriveInboxItemsNoStaleEmission(r.Context(), opts, now, horizon); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to rebuild derived views")
+		return
+	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
@@ -156,7 +164,10 @@ func deriveInboxItems(ctx context.Context, opts handlerOptions, now time.Time, r
 	if err := emitStaleThreadExceptions(ctx, opts, now, ""); err != nil {
 		return nil, err
 	}
+	return deriveInboxItemsNoStaleEmission(ctx, opts, now, riskHorizon)
+}
 
+func deriveInboxItemsNoStaleEmission(ctx context.Context, opts handlerOptions, now time.Time, riskHorizon time.Duration) ([]derivedInboxItem, error) {
 	events, err := opts.primitiveStore.ListEvents(ctx, primitives.EventListFilter{
 		Types: []string{"decision_needed", "exception_raised", "inbox_item_acknowledged", "receipt_added", "decision_made"},
 	})
