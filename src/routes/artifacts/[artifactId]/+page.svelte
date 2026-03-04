@@ -8,6 +8,12 @@
   import { buildReviewPayload } from "$lib/reviewUtils";
   import { toTimelineView } from "$lib/timelineUtils";
 
+  const KNOWN_PACKET_ARTIFACT_KINDS = new Set([
+    "work_order",
+    "receipt",
+    "review",
+  ]);
+
   $: artifactId = $page.params.artifactId;
   let artifact = null;
   let artifactContent = null;
@@ -58,6 +64,9 @@
     typeof artifactContent === "string"
       ? artifactContent
       : "";
+  $: isKnownPacketArtifactKind = KNOWN_PACKET_ARTIFACT_KINDS.has(
+    String(artifact?.kind ?? ""),
+  );
   $: timelineView = toTimelineView(threadTimeline, {
     threadId: artifact?.thread_id ?? "",
   });
@@ -231,6 +240,15 @@
     <div class="mt-3">
       <ProvenanceBadge provenance={artifact.provenance ?? { sources: [] }} />
     </div>
+
+    {#if !isKnownPacketArtifactKind}
+      <p
+        class="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
+      >
+        Unknown artifact kind: <span class="font-mono">{artifact.kind}</span>.
+        Rendering raw metadata/content below.
+      </p>
+    {/if}
 
     {#if workOrderPacket}
       <div class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
@@ -655,4 +673,8 @@
       />
     </div>
   </section>
+{:else}
+  <p class="mt-4 rounded-md bg-white p-3 text-sm text-slate-700 shadow-sm">
+    Artifact not found.
+  </p>
 {/if}

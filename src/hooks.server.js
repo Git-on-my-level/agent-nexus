@@ -47,7 +47,27 @@ async function proxyToCore(event, coreBaseUrl) {
     requestInit.duplex = "half";
   }
 
-  const upstreamResponse = await fetch(targetUrl, requestInit);
+  let upstreamResponse;
+  try {
+    upstreamResponse = await fetch(targetUrl, requestInit);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    return new Response(
+      JSON.stringify({
+        error: {
+          code: "core_unreachable",
+          message: `Unable to reach oar-core at ${coreBaseUrl}. Start backend with ../organization-autorunner-core/./scripts/dev and retry.`,
+          reason,
+        },
+      }),
+      {
+        status: 503,
+        headers: {
+          "content-type": "application/json",
+        },
+      },
+    );
+  }
   const responseHeaders = new Headers(upstreamResponse.headers);
   responseHeaders.delete("content-encoding");
   responseHeaders.delete("content-length");

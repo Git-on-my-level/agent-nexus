@@ -24,6 +24,7 @@
   } from "$lib/threadPatch";
   import { validateReceiptDraft } from "$lib/receiptUtils";
   import { toTimelineView } from "$lib/timelineUtils";
+  import { parseRef } from "$lib/typedRefs";
   import { validateWorkOrderDraft } from "$lib/workOrderUtils";
 
   $: threadId = $page.params.threadId;
@@ -67,6 +68,7 @@
   let editCommitmentDraft = null;
   let editCommitmentError = "";
   let editCommitmentNotice = "";
+  let commitmentConflictWarning = "";
   let savingCommitmentEdit = false;
 
   let timeline = [];
@@ -236,6 +238,20 @@
     };
   }
 
+  function normalizeKeyArtifactRef(rawValue) {
+    const normalized = String(rawValue ?? "").trim();
+    if (!normalized) {
+      return "";
+    }
+
+    const parsed = parseRef(normalized);
+    if (parsed.prefix && parsed.value) {
+      return normalized;
+    }
+
+    return `artifact:${normalized}`;
+  }
+
   function toCommitmentEditDraft(commitment) {
     return {
       title: commitment.title ?? "",
@@ -360,6 +376,17 @@
     editNotice = "";
 
     try {
+      const keyArtifactRefs = parseListInput(editDraft.keyArtifactsInput);
+      const invalidKeyArtifactRefs = keyArtifactRefs.filter((refValue) => {
+        const parsed = parseRef(normalizeKeyArtifactRef(refValue));
+        return !parsed.prefix || !parsed.value;
+      });
+
+      if (invalidKeyArtifactRefs.length > 0) {
+        editError = `Key artifacts must be typed refs (<prefix>:<value>). Invalid: ${invalidKeyArtifactRefs.join(", ")}`;
+        return;
+      }
+
       const draftSnapshot = buildDraftSnapshotFromEdit();
       const patch = buildThreadPatch(snapshot, draftSnapshot);
 
@@ -494,6 +521,7 @@
     createCommitmentNotice = "";
     editCommitmentNotice = "";
     editCommitmentError = "";
+    commitmentConflictWarning = "";
     editingCommitmentId = commitment.id;
     editCommitmentDraft = toCommitmentEditDraft(commitment);
   }
@@ -513,6 +541,7 @@
     savingCommitmentEdit = true;
     editCommitmentError = "";
     editCommitmentNotice = "";
+    commitmentConflictWarning = "";
 
     try {
       const draftSnapshot = {
@@ -564,11 +593,12 @@
       await coreClient.updateCommitment(commitmentId, payload);
       editCommitmentNotice = "Commitment updated.";
       cancelCommitmentEdit();
+      commitmentConflictWarning = "";
       await reloadSnapshotAndCommitments();
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       if (error?.status === 409) {
-        editCommitmentError =
+        commitmentConflictWarning =
           "Commitment was updated elsewhere. Reloaded latest snapshot, please reapply changes.";
         cancelCommitmentEdit();
         await reloadSnapshotAndCommitments();
@@ -876,7 +906,10 @@
         {:else}
           {#each snapshot.key_artifacts ?? [] as artifactId}
             <li>
-              <RefLink refValue={`artifact:${artifactId}`} />
+              <RefLink
+                refValue={normalizeKeyArtifactRef(artifactId)}
+                {threadId}
+              />
             </li>
           {/each}
         {/if}
@@ -1067,7 +1100,7 @@
           <label
             class="text-xs font-semibold uppercase tracking-wide text-slate-600 md:col-span-2"
           >
-            Key artifacts (comma/newline separated IDs)
+            Key artifacts (typed refs, comma/newline separated)
             <textarea
               bind:value={editDraft.keyArtifactsInput}
               class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
@@ -1212,6 +1245,14 @@
         </button>
       </div>
     </form>
+
+    {#if commitmentConflictWarning}
+      <p
+        class="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
+      >
+        {commitmentConflictWarning}
+      </p>
+    {/if}
 
     <div class="mt-4 space-y-3">
       {#if openCommitments.length === 0}

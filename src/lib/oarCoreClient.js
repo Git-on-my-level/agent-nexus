@@ -38,10 +38,37 @@ function toAbsoluteUrl(baseUrl, pathWithQuery) {
   return new URL(pathWithQuery, `${baseUrl}/`).toString();
 }
 
+function extractErrorMessage(detailsText) {
+  const raw = String(detailsText ?? "").trim();
+  if (!raw) {
+    return "";
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (typeof parsed?.error === "string") {
+      return parsed.error;
+    }
+
+    if (typeof parsed?.error?.message === "string") {
+      return parsed.error.message;
+    }
+
+    if (typeof parsed?.message === "string") {
+      return parsed.message;
+    }
+  } catch {
+    // Keep raw response text when payload is non-JSON.
+  }
+
+  return raw;
+}
+
 export function createOarCoreClient(options = {}) {
   const baseUrl = options.baseUrl ?? oarCoreBaseUrl;
   const fetchFn = options.fetchFn ?? fetch;
   const actorIdProvider = options.actorIdProvider;
+  const target = baseUrl || "same-origin";
 
   async function request(method, path, config = {}) {
     const pathWithQuery = appendQuery(path, config.query);
@@ -58,13 +85,26 @@ export function createOarCoreClient(options = {}) {
       headers["content-type"] = "application/json";
     }
 
-    const response = await fetchFn(url, { method, headers, body });
+    let response;
+    try {
+      response = await fetchFn(url, { method, headers, body });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Unable to reach oar-core at ${target} for ${method} ${path}. Check that oar-core is running and OAR_CORE_BASE_URL is correct. ${reason}`,
+      );
+    }
 
     if (!response.ok) {
-      const details = await response.text().catch(() => "");
+      const rawDetails = await response.text().catch(() => "");
+      const details = extractErrorMessage(rawDetails);
       const detailSuffix = details ? ` - ${details}` : "";
+      const guidanceSuffix =
+        response.status >= 500
+          ? " oar-core may be unavailable; verify backend startup and base URL."
+          : "";
       const requestError = new Error(
-        `oar-core request failed: ${method} ${path} (${response.status} ${response.statusText})${detailSuffix}`,
+        `oar-core request failed at ${target}: ${method} ${path} (${response.status} ${response.statusText})${detailSuffix}${guidanceSuffix}`,
       );
       requestError.status = response.status;
       requestError.details = details;
