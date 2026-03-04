@@ -1,0 +1,258 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+
+PORT="${PORT:-18081}"
+LISTEN_ADDR="127.0.0.1:${PORT}"
+BASE_URL="http://${LISTEN_ADDR}"
+
+TMP_DIR="$(mktemp -d)"
+WORKSPACE_ROOT="$TMP_DIR/workspace"
+SERVER_LOG="$TMP_DIR/server.log"
+
+ACTOR_ID="smoke-actor"
+WORK_ORDER_ID="wo-smoke"
+RECEIPT_ID="receipt-smoke"
+REVIEW_ID="review-smoke"
+DUE_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+cleanup() {
+  if [[ -n "${SERVER_PID:-}" ]] && kill -0 "$SERVER_PID" 2>/dev/null; then
+    kill "$SERVER_PID" 2>/dev/null || true
+    wait "$SERVER_PID" 2>/dev/null || true
+  fi
+  rm -rf "$TMP_DIR"
+}
+trap cleanup EXIT
+
+post_json() {
+  local path="$1"
+  local body="$2"
+  curl -fsS \
+    -H "Content-Type: application/json" \
+    -d "$body" \
+    "${BASE_URL}${path}"
+}
+
+get_json() {
+  local path="$1"
+  curl -fsS "${BASE_URL}${path}"
+}
+
+count_matches() {
+  local text="$1"
+  local pattern="$2"
+  local count
+  count="$(printf '%s' "$text" | rg -o "$pattern" | wc -l | tr -d ' ' || true)"
+  if [[ -z "$count" ]]; then
+    count="0"
+  fi
+  printf '%s' "$count"
+}
+
+extract_first_field() {
+  local json="$1"
+  local field="$2"
+  printf '%s' "$json" \
+    | rg -o "\"${field}\":\"[^\"]+\"" \
+    | head -n 1 \
+    | sed -E "s/\"${field}\":\"([^\"]+)\"/\\1/"
+}
+
+echo "starting oar-core on ${BASE_URL}"
+go run ./cmd/oar-core \
+  --listen-addr "$LISTEN_ADDR" \
+  --workspace-root "$WORKSPACE_ROOT" \
+  --schema-path "$ROOT_DIR/contracts/oar-schema.yaml" \
+  >"$SERVER_LOG" 2>&1 &
+SERVER_PID=$!
+
+for _ in $(seq 1 80); do
+  if curl -fsS "${BASE_URL}/health" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 0.1
+done
+
+if ! curl -fsS "${BASE_URL}/health" >/dev/null 2>&1; then
+  echo "server did not become healthy; log follows:" >&2
+  cat "$SERVER_LOG" >&2
+  exit 1
+fi
+
+VERSION_JSON="$(get_json "/version")"
+echo "version: ${VERSION_JSON}"
+
+echo "registering actor"
+post_json "/actors" "$(cat <<JSON
+{
+  "actor": {
+    "id": "${ACTOR_ID}",
+    "display_name": "Smoke Actor",
+    "tags": ["smoke"],
+    "created_at": "2026-03-04T10:00:00Z"
+  }
+}
+JSON
+)" >/dev/null
+
+echo "creating thread"
+THREAD_RESP="$(post_json "/threads" "$(cat <<JSON
+{
+  "actor_id": "${ACTOR_ID}",
+  "thread": {
+    "title": "Smoke thread",
+    "type": "incident",
+    "status": "active",
+    "priority": "p1",
+    "tags": ["smoke", "ops"],
+    "cadence": "daily",
+    "next_check_in_at": "2030-01-01T00:00:00Z",
+    "current_summary": "Smoke workflow in progress",
+    "next_actions": ["verify workflow"],
+    "key_artifacts": [],
+    "provenance": {"sources": ["inferred"]}
+  }
+}
+JSON
+)")"
+THREAD_ID="$(extract_first_field "$THREAD_RESP" "id")"
+if [[ -z "$THREAD_ID" ]]; then
+  echo "failed to parse thread id from response: $THREAD_RESP" >&2
+  exit 1
+fi
+
+echo "creating commitment"
+COMMITMENT_RESP="$(post_json "/commitments" "$(cat <<JSON
+{
+  "actor_id": "${ACTOR_ID}",
+  "commitment": {
+    "thread_id": "${THREAD_ID}",
+    "title": "Smoke commitment",
+    "owner": "${ACTOR_ID}",
+    "due_at": "${DUE_AT}",
+    "status": "open",
+    "definition_of_done": ["review submitted"],
+    "links": ["url:https://example.com/smoke-commitment"],
+    "provenance": {"sources": ["inferred"]}
+  }
+}
+JSON
+)")"
+COMMITMENT_ID="$(extract_first_field "$COMMITMENT_RESP" "id")"
+if [[ -z "$COMMITMENT_ID" ]]; then
+  echo "failed to parse commitment id from response: $COMMITMENT_RESP" >&2
+  exit 1
+fi
+
+echo "creating work order"
+post_json "/work_orders" "$(cat <<JSON
+{
+  "actor_id": "${ACTOR_ID}",
+  "artifact": {
+    "id": "${WORK_ORDER_ID}",
+    "refs": ["thread:${THREAD_ID}"],
+    "summary": "Smoke work order"
+  },
+  "packet": {
+    "work_order_id": "${WORK_ORDER_ID}",
+    "thread_id": "${THREAD_ID}",
+    "objective": "Exercise end-to-end smoke flow",
+    "constraints": ["headless only"],
+    "context_refs": ["url:https://example.com/smoke-context"],
+    "acceptance_criteria": ["workflow finishes"],
+    "definition_of_done": ["receipt and review created"]
+  }
+}
+JSON
+)" >/dev/null
+
+echo "submitting receipt"
+post_json "/receipts" "$(cat <<JSON
+{
+  "actor_id": "${ACTOR_ID}",
+  "artifact": {
+    "id": "${RECEIPT_ID}",
+    "refs": ["thread:${THREAD_ID}", "artifact:${WORK_ORDER_ID}"],
+    "summary": "Smoke receipt"
+  },
+  "packet": {
+    "receipt_id": "${RECEIPT_ID}",
+    "work_order_id": "${WORK_ORDER_ID}",
+    "thread_id": "${THREAD_ID}",
+    "outputs": ["artifact:smoke-output"],
+    "verification_evidence": ["url:https://example.com/smoke-evidence"],
+    "changes_summary": "Smoke flow completed",
+    "known_gaps": []
+  }
+}
+JSON
+)" >/dev/null
+
+echo "submitting review"
+post_json "/reviews" "$(cat <<JSON
+{
+  "actor_id": "${ACTOR_ID}",
+  "artifact": {
+    "id": "${REVIEW_ID}",
+    "refs": ["thread:${THREAD_ID}", "artifact:${RECEIPT_ID}", "artifact:${WORK_ORDER_ID}"],
+    "summary": "Smoke review"
+  },
+  "packet": {
+    "review_id": "${REVIEW_ID}",
+    "work_order_id": "${WORK_ORDER_ID}",
+    "receipt_id": "${RECEIPT_ID}",
+    "outcome": "accept",
+    "notes": "Smoke review accepted",
+    "evidence_refs": ["artifact:${RECEIPT_ID}"]
+  }
+}
+JSON
+)" >/dev/null
+
+TIMELINE_JSON="$(get_json "/threads/${THREAD_ID}/timeline")"
+INBOX_BEFORE_ACK="$(get_json "/inbox")"
+
+INBOX_ITEM_ID="$(printf '%s' "$INBOX_BEFORE_ACK" \
+  | rg -o '"id":"inbox:[^"]+"' \
+  | head -n 1 \
+  | sed -E 's/"id":"([^"]+)"/\1/' || true)"
+
+if [[ -n "$INBOX_ITEM_ID" ]]; then
+  echo "acknowledging inbox item ${INBOX_ITEM_ID}"
+  post_json "/inbox/ack" "$(cat <<JSON
+{
+  "actor_id": "${ACTOR_ID}",
+  "thread_id": "${THREAD_ID}",
+  "inbox_item_id": "${INBOX_ITEM_ID}"
+}
+JSON
+)" >/dev/null
+fi
+
+INBOX_AFTER_ACK="$(get_json "/inbox")"
+
+TIMELINE_EVENT_COUNT="$(count_matches "$TIMELINE_JSON" '"type":"')"
+INBOX_BEFORE_COUNT="$(count_matches "$INBOX_BEFORE_ACK" '"category":"')"
+INBOX_AFTER_COUNT="$(count_matches "$INBOX_AFTER_ACK" '"category":"')"
+CATEGORY_SUMMARY="$(printf '%s' "$INBOX_BEFORE_ACK" \
+  | rg -o '"category":"[^"]+"' \
+  | sed -E 's/"category":"([^"]+)"/\1/' \
+  | sort -u \
+  | paste -sd ',' - || true)"
+if [[ -z "$CATEGORY_SUMMARY" ]]; then
+  CATEGORY_SUMMARY="none"
+fi
+
+echo "smoke summary:"
+echo "  thread_id: ${THREAD_ID}"
+echo "  commitment_id: ${COMMITMENT_ID}"
+echo "  work_order_id: ${WORK_ORDER_ID}"
+echo "  receipt_id: ${RECEIPT_ID}"
+echo "  review_id: ${REVIEW_ID}"
+echo "  timeline_events: ${TIMELINE_EVENT_COUNT}"
+echo "  inbox_items_before_ack: ${INBOX_BEFORE_COUNT}"
+echo "  inbox_items_after_ack: ${INBOX_AFTER_COUNT}"
+echo "  inbox_categories_before_ack: ${CATEGORY_SUMMARY}"
