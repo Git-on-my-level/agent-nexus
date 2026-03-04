@@ -1,21 +1,18 @@
 <script>
+  import {
+    getProvenancePresentation,
+    getProvenanceSources,
+  } from "$lib/provenanceUtils";
+
   export let provenance = { sources: [] };
 
-  $: sources = provenance?.sources ?? [];
-  $: hasInferred = sources.some((source) =>
-    String(source).includes("inferred"),
-  );
+  $: sources = getProvenanceSources(provenance);
+  $: presentation = getProvenancePresentation(provenance);
 </script>
 
-<div
-  class={`rounded-md border px-3 py-2 text-xs ${
-    hasInferred
-      ? "border-amber-300 bg-amber-50 text-amber-900"
-      : "border-emerald-300 bg-emerald-50 text-emerald-900"
-  }`}
->
+<div class={`rounded-md border px-3 py-2 text-xs ${presentation.toneClass}`}>
   <p class="font-semibold">
-    {hasInferred ? "Inferred provenance" : "Evidence-backed provenance"}
+    {presentation.title}
   </p>
   <p class="mt-1">sources: {sources.join(", ") || "none"}</p>
 
