@@ -229,7 +229,8 @@ func TestCommitmentOpenCommitmentsMaintenance(t *testing.T) {
 		t.Fatalf("get thread after commitments create: %v", err)
 	}
 	openAfterCreate := toSortedStrings(threadAfterCreate["open_commitments"])
-	if !reflect.DeepEqual(openAfterCreate, []string{firstCommitmentID, secondCommitmentID}) {
+	expectedOpenAfterCreate := toSortedStrings([]string{firstCommitmentID, secondCommitmentID})
+	if !reflect.DeepEqual(openAfterCreate, expectedOpenAfterCreate) {
 		t.Fatalf("unexpected open commitments after create: %#v", threadAfterCreate["open_commitments"])
 	}
 

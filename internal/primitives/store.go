@@ -34,6 +34,10 @@ type ThreadListFilter struct {
 	Now      time.Time
 }
 
+type EventListFilter struct {
+	Types []string
+}
+
 type CommitmentListFilter struct {
 	ThreadID  string
 	Owner     string
@@ -725,6 +729,86 @@ func (s *Store) ListEventsByThread(ctx context.Context, threadID string) ([]map[
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate thread events: %w", err)
+	}
+
+	return events, nil
+}
+
+func (s *Store) ListEvents(ctx context.Context, filter EventListFilter) ([]map[string]any, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("primitives store database is not initialized")
+	}
+
+	query := `SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json, body_json
+		FROM events
+		WHERE 1=1`
+	args := make([]any, 0)
+
+	if len(filter.Types) > 0 {
+		placeholders := make([]string, 0, len(filter.Types))
+		for _, eventType := range filter.Types {
+			placeholders = append(placeholders, "?")
+			args = append(args, eventType)
+		}
+		query += ` AND type IN (` + strings.Join(placeholders, ",") + `)`
+	}
+	query += ` ORDER BY ts DESC, id ASC`
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query events: %w", err)
+	}
+	defer rows.Close()
+
+	events := make([]map[string]any, 0)
+	for rows.Next() {
+		var (
+			eventID     string
+			typeValue   string
+			ts          string
+			actorID     string
+			thread      sql.NullString
+			refsJSON    string
+			payloadJSON string
+			bodyJSON    sql.NullString
+		)
+		if err := rows.Scan(&eventID, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON, &bodyJSON); err != nil {
+			return nil, fmt.Errorf("scan event: %w", err)
+		}
+
+		if bodyJSON.Valid && strings.TrimSpace(bodyJSON.String) != "" && bodyJSON.String != "{}" {
+			body := map[string]any{}
+			if err := json.Unmarshal([]byte(bodyJSON.String), &body); err != nil {
+				return nil, fmt.Errorf("decode event body: %w", err)
+			}
+			events = append(events, body)
+			continue
+		}
+
+		refs := make([]string, 0)
+		if err := json.Unmarshal([]byte(refsJSON), &refs); err != nil {
+			return nil, fmt.Errorf("decode event refs: %w", err)
+		}
+		payload := map[string]any{}
+		if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
+			return nil, fmt.Errorf("decode event payload: %w", err)
+		}
+
+		event := map[string]any{
+			"id":       eventID,
+			"type":     typeValue,
+			"ts":       ts,
+			"actor_id": actorID,
+			"refs":     refs,
+			"payload":  payload,
+		}
+		if thread.Valid {
+			event["thread_id"] = thread.String
+		}
+		events = append(events, event)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate events: %w", err)
 	}
 
 	return events, nil

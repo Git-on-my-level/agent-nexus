@@ -1,0 +1,225 @@
+package server
+
+import (
+	"encoding/json"
+	"net/http"
+	"testing"
+	"time"
+)
+
+func TestInboxDerivationAndAcknowledgmentSuppression(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	threadResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
+		"actor_id":"actor-1",
+		"thread":{
+			"title":"Inbox thread",
+			"type":"incident",
+			"status":"active",
+			"priority":"p1",
+			"tags":["ops"],
+			"cadence":"daily",
+			"next_check_in_at":"2026-03-05T00:00:00Z",
+			"current_summary":"summary",
+			"next_actions":["do x"],
+			"key_artifacts":[],
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated)
+	defer threadResp.Body.Close()
+
+	var createdThread struct {
+		Thread map[string]any `json:"thread"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&createdThread); err != nil {
+		t.Fatalf("decode thread response: %v", err)
+	}
+	threadID, _ := createdThread.Thread["id"].(string)
+	if threadID == "" {
+		t.Fatal("expected thread id")
+	}
+
+	decisionResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
+		"actor_id":"actor-1",
+		"event":{
+			"type":"decision_needed",
+			"thread_id":"`+threadID+`",
+			"refs":["thread:`+threadID+`"],
+			"summary":"Need a decision",
+			"payload":{},
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated)
+	defer decisionResp.Body.Close()
+	var createdDecision struct {
+		Event map[string]any `json:"event"`
+	}
+	if err := json.NewDecoder(decisionResp.Body).Decode(&createdDecision); err != nil {
+		t.Fatalf("decode decision event response: %v", err)
+	}
+	firstDecisionEventID, _ := createdDecision.Event["id"].(string)
+
+	items := getInboxItems(t, h.baseURL)
+	decisionItem, ok := findInboxItem(items, func(item map[string]any) bool {
+		return asString(item["category"]) == "decision_needed" && asString(item["source_event_id"]) == firstDecisionEventID
+	})
+	if !ok {
+		t.Fatalf("expected decision_needed inbox item for source_event_id=%s, got %#v", firstDecisionEventID, items)
+	}
+	firstDecisionItemID := asString(decisionItem["id"])
+	if firstDecisionItemID == "" {
+		t.Fatal("expected decision inbox item id")
+	}
+
+	ackResp := postJSONExpectStatus(t, h.baseURL+"/inbox/ack", `{
+		"actor_id":"actor-1",
+		"thread_id":"`+threadID+`",
+		"inbox_item_id":"`+firstDecisionItemID+`"
+	}`, http.StatusCreated)
+	ackResp.Body.Close()
+
+	itemsAfterAck := getInboxItems(t, h.baseURL)
+	if _, stillThere := findInboxItem(itemsAfterAck, func(item map[string]any) bool {
+		return asString(item["id"]) == firstDecisionItemID
+	}); stillThere {
+		t.Fatalf("expected acknowledged decision item to be suppressed, got %#v", itemsAfterAck)
+	}
+
+	secondDecisionResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
+		"actor_id":"actor-1",
+		"event":{
+			"type":"decision_needed",
+			"thread_id":"`+threadID+`",
+			"refs":["thread:`+threadID+`"],
+			"summary":"Need another decision",
+			"payload":{},
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated)
+	defer secondDecisionResp.Body.Close()
+	var secondDecision struct {
+		Event map[string]any `json:"event"`
+	}
+	if err := json.NewDecoder(secondDecisionResp.Body).Decode(&secondDecision); err != nil {
+		t.Fatalf("decode second decision response: %v", err)
+	}
+	secondDecisionEventID, _ := secondDecision.Event["id"].(string)
+
+	itemsAfterNewDecision := getInboxItems(t, h.baseURL)
+	secondDecisionItem, ok := findInboxItem(itemsAfterNewDecision, func(item map[string]any) bool {
+		return asString(item["category"]) == "decision_needed" && asString(item["source_event_id"]) == secondDecisionEventID
+	})
+	if !ok {
+		t.Fatalf("expected new decision item after retrigger, got %#v", itemsAfterNewDecision)
+	}
+
+	// Clear decision item so commitment-risk assertions are isolated.
+	secondDecisionItemID := asString(secondDecisionItem["id"])
+	postJSONExpectStatus(t, h.baseURL+"/inbox/ack", `{
+		"actor_id":"actor-1",
+		"thread_id":"`+threadID+`",
+		"inbox_item_id":"`+secondDecisionItemID+`"
+	}`, http.StatusCreated).Body.Close()
+
+	dueSoon := time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339)
+	commitmentResp := postJSONExpectStatus(t, h.baseURL+"/commitments", `{
+		"actor_id":"actor-1",
+		"commitment":{
+			"thread_id":"`+threadID+`",
+			"title":"At-risk commitment",
+			"owner":"actor-1",
+			"due_at":"`+dueSoon+`",
+			"status":"open",
+			"definition_of_done":["done"],
+			"links":["url:https://example.com/task"],
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated)
+	defer commitmentResp.Body.Close()
+	var createdCommitment struct {
+		Commitment map[string]any `json:"commitment"`
+	}
+	if err := json.NewDecoder(commitmentResp.Body).Decode(&createdCommitment); err != nil {
+		t.Fatalf("decode commitment response: %v", err)
+	}
+	commitmentID := asString(createdCommitment.Commitment["id"])
+	if commitmentID == "" {
+		t.Fatal("expected commitment id")
+	}
+
+	itemsWithRisk := getInboxItems(t, h.baseURL)
+	riskItem, ok := findInboxItem(itemsWithRisk, func(item map[string]any) bool {
+		return asString(item["category"]) == "commitment_risk" && asString(item["commitment_id"]) == commitmentID
+	})
+	if !ok {
+		t.Fatalf("expected commitment_risk inbox item, got %#v", itemsWithRisk)
+	}
+	riskItemID := asString(riskItem["id"])
+
+	postJSONExpectStatus(t, h.baseURL+"/inbox/ack", `{
+		"actor_id":"actor-1",
+		"thread_id":"`+threadID+`",
+		"inbox_item_id":"`+riskItemID+`"
+	}`, http.StatusCreated).Body.Close()
+
+	itemsAfterRiskAck := getInboxItems(t, h.baseURL)
+	if _, exists := findInboxItem(itemsAfterRiskAck, func(item map[string]any) bool {
+		return asString(item["id"]) == riskItemID
+	}); exists {
+		t.Fatalf("expected acknowledged commitment_risk item to be suppressed, got %#v", itemsAfterRiskAck)
+	}
+
+	patchResp := patchJSONExpectStatus(t, h.baseURL+"/commitments/"+commitmentID, `{
+		"actor_id":"actor-1",
+		"patch":{"status":"blocked"}
+	}`, http.StatusOK)
+	patchResp.Body.Close()
+
+	itemsAfterStatusChange := getInboxItems(t, h.baseURL)
+	reappearedRisk, ok := findInboxItem(itemsAfterStatusChange, func(item map[string]any) bool {
+		return asString(item["id"]) == riskItemID
+	})
+	if !ok {
+		t.Fatalf("expected commitment_risk item to reappear after new trigger, got %#v", itemsAfterStatusChange)
+	}
+	if asString(reappearedRisk["category"]) != "commitment_risk" {
+		t.Fatalf("unexpected reappeared risk item: %#v", reappearedRisk)
+	}
+}
+
+func getInboxItems(t *testing.T, baseURL string) []map[string]any {
+	t.Helper()
+	resp, err := http.Get(baseURL + "/inbox")
+	if err != nil {
+		t.Fatalf("GET /inbox: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected GET /inbox status: %d", resp.StatusCode)
+	}
+
+	var payload struct {
+		Items []map[string]any `json:"items"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode /inbox response: %v", err)
+	}
+	return payload.Items
+}
+
+func findInboxItem(items []map[string]any, predicate func(map[string]any) bool) (map[string]any, bool) {
+	for _, item := range items {
+		if predicate(item) {
+			return item, true
+		}
+	}
+	return nil, false
+}
+
+func asString(raw any) string {
+	text, _ := raw.(string)
+	return text
+}

@@ -38,15 +38,17 @@ type PrimitiveStore interface {
 	PatchCommitment(ctx context.Context, actorID string, id string, patch map[string]any, refs []string) (primitives.PatchSnapshotResult, error)
 	ListCommitments(ctx context.Context, filter primitives.CommitmentListFilter) ([]map[string]any, error)
 	ListEventsByThread(ctx context.Context, threadID string) ([]map[string]any, error)
+	ListEvents(ctx context.Context, filter primitives.EventListFilter) ([]map[string]any, error)
 }
 
 type HandlerOption func(*handlerOptions)
 
 type handlerOptions struct {
-	healthCheck    HealthCheckFunc
-	actorRegistry  ActorRegistry
-	primitiveStore PrimitiveStore
-	contract       *schema.Contract
+	healthCheck      HealthCheckFunc
+	actorRegistry    ActorRegistry
+	primitiveStore   PrimitiveStore
+	contract         *schema.Contract
+	inboxRiskHorizon time.Duration
 }
 
 func WithHealthCheck(healthCheck HealthCheckFunc) HandlerOption {
@@ -70,6 +72,12 @@ func WithPrimitiveStore(primitiveStore PrimitiveStore) HandlerOption {
 func WithSchemaContract(contract *schema.Contract) HandlerOption {
 	return func(opts *handlerOptions) {
 		opts.contract = contract
+	}
+}
+
+func WithInboxRiskHorizon(horizon time.Duration) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.inboxRiskHorizon = horizon
 	}
 }
 
@@ -287,6 +295,22 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			return
 		}
 		handleCreateReview(w, r, opts)
+	})
+
+	mux.HandleFunc("/inbox", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+			return
+		}
+		handleGetInbox(w, r, opts)
+	})
+
+	mux.HandleFunc("/inbox/ack", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+			return
+		}
+		handleAckInboxItem(w, r, opts)
 	})
 
 	mux.HandleFunc("/snapshots/", func(w http.ResponseWriter, r *http.Request) {
