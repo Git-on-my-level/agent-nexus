@@ -6,10 +6,12 @@ cd "$ROOT_DIR"
 
 HOST="${HOST:-127.0.0.1}"
 PORT="${PORT:-8000}"
+WORKSPACE_ROOT="${WORKSPACE_ROOT:-$ROOT_DIR/.oar-workspace}"
 
 export PYTHONPATH="$ROOT_DIR/src${PYTHONPATH:+:$PYTHONPATH}"
 
 exec python3 -m oar_core.server \
   --host "$HOST" \
   --port "$PORT" \
-  --schema-path "$ROOT_DIR/contracts/oar-schema.yaml"
+  --schema-path "$ROOT_DIR/contracts/oar-schema.yaml" \
+  --workspace-root "$WORKSPACE_ROOT"
