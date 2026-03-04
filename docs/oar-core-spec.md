@@ -37,6 +37,10 @@ oar-core does **not**:
 ### 1.4 Actor-agnostic
 - oar-core treats all actors as opaque IDs. It does not distinguish between humans and agents at the API or storage level. Identity metadata (display name, tags) lives in a lightweight actor registry.
 
+### 1.5 Implementation baseline (v0)
+- The reference backend implementation is Go-first.
+- Language choice MUST NOT change the external contract: HTTP/JSON API + SQLite/filesystem storage remain the system boundary.
+
 ---
 
 ## 2. Storage model

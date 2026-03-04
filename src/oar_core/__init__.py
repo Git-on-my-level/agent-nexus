@@ -1,1 +1,0 @@
-"""oar-core package."""

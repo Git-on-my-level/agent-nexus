@@ -1,24 +1,14 @@
 # macOS
 .DS_Store
 
-# Python
-__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-.python-version
+# Runtime workspace
+.oar-workspace/
 
-# Virtual environments
-.venv/
-venv/
+# Go build/test artifacts
+bin/
+*.test
+*.out
+coverage.out
+
+# Optional local env
 .env
-
-# Tool caches
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-
-# Build artifacts
-build/
-dist/
-*.egg-info/
