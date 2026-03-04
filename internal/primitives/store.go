@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"strings"
 	"time"
 
@@ -26,6 +28,11 @@ type ArtifactListFilter struct {
 type Store struct {
 	db                 *sql.DB
 	artifactContentDir string
+}
+
+type PatchSnapshotResult struct {
+	Snapshot map[string]any
+	Event    map[string]any
 }
 
 func NewStore(db *sql.DB, artifactContentDir string) *Store {
@@ -391,6 +398,113 @@ func (s *Store) GetSnapshot(ctx context.Context, id string) (map[string]any, err
 	body["provenance"] = provenance
 
 	return body, nil
+}
+
+func (s *Store) PatchSnapshot(ctx context.Context, actorID string, id string, patch map[string]any) (PatchSnapshotResult, error) {
+	if s == nil || s.db == nil {
+		return PatchSnapshotResult{}, fmt.Errorf("primitives store database is not initialized")
+	}
+	if strings.TrimSpace(actorID) == "" {
+		return PatchSnapshotResult{}, fmt.Errorf("actorID is required")
+	}
+	if patch == nil {
+		return PatchSnapshotResult{}, fmt.Errorf("snapshot patch is required")
+	}
+
+	var (
+		snapshotID     string
+		typeValue      string
+		threadID       sql.NullString
+		provenanceJSON string
+		bodyJSON       string
+	)
+	err := s.db.QueryRowContext(
+		ctx,
+		`SELECT id, kind, thread_id, provenance_json, body_json FROM snapshots WHERE id = ?`,
+		id,
+	).Scan(&snapshotID, &typeValue, &threadID, &provenanceJSON, &bodyJSON)
+	if errors.Is(err, sql.ErrNoRows) {
+		return PatchSnapshotResult{}, ErrNotFound
+	}
+	if err != nil {
+		return PatchSnapshotResult{}, fmt.Errorf("query snapshot before patch: %w", err)
+	}
+
+	current := map[string]any{}
+	if strings.TrimSpace(bodyJSON) != "" {
+		if err := json.Unmarshal([]byte(bodyJSON), &current); err != nil {
+			return PatchSnapshotResult{}, fmt.Errorf("decode current snapshot body: %w", err)
+		}
+	}
+
+	changedFields := make([]string, 0, len(patch))
+	for key, incoming := range patch {
+		existing, exists := current[key]
+		if !exists || !reflect.DeepEqual(existing, incoming) {
+			changedFields = append(changedFields, key)
+		}
+		current[key] = incoming
+	}
+	sort.Strings(changedFields)
+
+	updatedAt := time.Now().UTC().Format(time.RFC3339Nano)
+
+	updatedBodyJSON, err := json.Marshal(current)
+	if err != nil {
+		return PatchSnapshotResult{}, fmt.Errorf("encode patched snapshot body: %w", err)
+	}
+
+	_, err = s.db.ExecContext(
+		ctx,
+		`UPDATE snapshots SET body_json = ?, updated_at = ?, updated_by = ? WHERE id = ?`,
+		string(updatedBodyJSON),
+		updatedAt,
+		actorID,
+		snapshotID,
+	)
+	if err != nil {
+		return PatchSnapshotResult{}, fmt.Errorf("update snapshot: %w", err)
+	}
+
+	eventPayload := map[string]any{
+		"changed_fields": changedFields,
+	}
+	event := map[string]any{
+		"type":       "snapshot_updated",
+		"refs":       []string{"snapshot:" + snapshotID},
+		"summary":    "snapshot updated",
+		"payload":    eventPayload,
+		"provenance": map[string]any{"sources": []string{"inferred"}},
+	}
+	if threadID.Valid {
+		event["thread_id"] = threadID.String
+	}
+
+	emittedEvent, err := s.AppendEvent(ctx, actorID, event)
+	if err != nil {
+		return PatchSnapshotResult{}, fmt.Errorf("emit snapshot_updated event: %w", err)
+	}
+
+	provenance := map[string]any{}
+	if strings.TrimSpace(provenanceJSON) != "" {
+		if err := json.Unmarshal([]byte(provenanceJSON), &provenance); err != nil {
+			return PatchSnapshotResult{}, fmt.Errorf("decode snapshot provenance: %w", err)
+		}
+	}
+
+	current["id"] = snapshotID
+	current["type"] = typeValue
+	current["updated_at"] = updatedAt
+	current["updated_by"] = actorID
+	if threadID.Valid {
+		current["thread_id"] = threadID.String
+	}
+	current["provenance"] = provenance
+
+	return PatchSnapshotResult{
+		Snapshot: current,
+		Event:    emittedEvent,
+	}, nil
 }
 
 func encodeContent(content any) ([]byte, error) {
