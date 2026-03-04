@@ -46,9 +46,9 @@ func main() {
 	}
 	defer workspace.Close()
 
-	schemaVersion, err := schema.ReadVersion(schemaPath)
+	contract, err := schema.Load(schemaPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to read schema version: %v\n", err)
+		fmt.Fprintf(os.Stderr, "failed to load schema: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -57,7 +57,7 @@ func main() {
 		addr = net.JoinHostPort(host, strconv.Itoa(port))
 	}
 
-	handler := server.NewHandler(schemaVersion, server.WithHealthCheck(workspace.Ping))
+	handler := server.NewHandler(contract.Version, server.WithHealthCheck(workspace.Ping))
 	httpServer := &http.Server{
 		Addr:              addr,
 		Handler:           handler,
