@@ -27,7 +27,7 @@ oar-ui does **not**:
 - oar-ui MUST handle unknown fields on any object gracefully — preserve them on round-trip and do not hide them from display.
 
 ### 1.3 Typed references
-- All ref strings use typed prefixes as defined in `oar-schema.yaml` → `ref_format` (e.g., `artifact:<id>`, `snapshot:<id>`, `event:<id>`, `thread:<id>`, `url:<url>`).
+- All ref strings use typed prefixes as defined in `oar-schema.yaml` → `ref_format` (e.g., `artifact:<id>`, `snapshot:<id>`, `event:<id>`, `thread:<id>`, `inbox:<id>`, `url:<url>`).
 - oar-ui MUST parse ref prefixes to determine link targets and render appropriate navigation (e.g., `artifact:` links navigate to artifact detail, `url:` links open externally, `event:` links scroll to timeline entry).
 - Unknown ref prefixes MUST be rendered as raw text, not hidden or discarded.
 

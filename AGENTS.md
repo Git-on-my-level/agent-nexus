@@ -5,7 +5,8 @@ organization-autorunner-ui is the frontend/client application for the Organizati
 
 ## Primary spec
 - Repo spec: `docs/oar-ui-spec.md`
-- Contextspace spec: `.codex-autorunner/contextspace/spec.md`
+- HTTP contract: `docs/http-api.md`
+- Shared schema: `contracts/oar-schema.yaml`
 
 ## Maintenance guidance
 Treat this file as a timeless index for the codebase.
