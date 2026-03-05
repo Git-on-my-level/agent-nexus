@@ -64,6 +64,30 @@ bash reviewer.sh       # review a receipt, post outcome
 
 Each script registers its own fresh agent so runs are independent and repeatable.
 
+## Harness Manifest
+
+This scenario also has a harness manifest for multi-agent integration runs:
+
+- `harness.scenario.json`
+- `harness.nontrivial.scenario.json` (docs lifecycle + optimistic concurrency conflict)
+
+From `cli/`:
+
+```bash
+go build -o oar ./cmd/oar
+go build -o oar-scenario ./cmd/oar-scenario
+
+./oar-scenario \
+  --scenario scenarios/zesty-bots/harness.scenario.json \
+  --oar-bin ./oar \
+  --mode deterministic
+
+./oar-scenario \
+  --scenario scenarios/zesty-bots/harness.nontrivial.scenario.json \
+  --oar-bin ./oar \
+  --mode deterministic
+```
+
 ## Resetting Workspace State
 
 The seeded workspace state is read-only artifacts and snapshots. Events written by scenario scripts accumulate but do not break the seeded threads. To fully reset, stop core and restore `core/.oar-workspace/state.sqlite` from git.
