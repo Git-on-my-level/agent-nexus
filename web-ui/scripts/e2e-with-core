@@ -7,17 +7,27 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 CORE_BASE_URL="${OAR_CORE_BASE_URL:-http://127.0.0.1:8000}"
 CORE_BASE_URL="${CORE_BASE_URL%/}"
 VERSION_URL="${CORE_BASE_URL}/version"
+HANDSHAKE_URL="${CORE_BASE_URL}/meta/handshake"
 HEALTHCHECK_TIMEOUT_SECONDS="${OAR_CORE_HEALTHCHECK_TIMEOUT_SECONDS:-5}"
 
-echo "Checking oar-core availability at ${VERSION_URL} ..."
+echo "Checking oar-core availability at ${HANDSHAKE_URL} ..."
 if ! version_payload="$(
   curl \
     --silent \
     --show-error \
     --fail \
     --max-time "${HEALTHCHECK_TIMEOUT_SECONDS}" \
-    "${VERSION_URL}"
+    "${HANDSHAKE_URL}"
 )"; then
+  echo "Handshake check failed, falling back to ${VERSION_URL} ..."
+  if ! version_payload="$(
+    curl \
+      --silent \
+      --show-error \
+      --fail \
+      --max-time "${HEALTHCHECK_TIMEOUT_SECONDS}" \
+      "${VERSION_URL}"
+  )"; then
   cat >&2 <<EOF
 ERROR: Unable to reach oar-core at ${CORE_BASE_URL}.
 Start backend first, then rerun this command.
@@ -31,11 +41,12 @@ UI terminal:
   OAR_CORE_BASE_URL=http://127.0.0.1:8000 ./scripts/e2e-with-core
 EOF
   exit 1
+  fi
 fi
 
 if [[ "${version_payload}" != *'"schema_version"'* ]]; then
   cat >&2 <<EOF
-ERROR: ${VERSION_URL} responded but did not return a schema_version payload.
+ERROR: core compatibility endpoint responded but did not return a schema_version payload.
 Response body:
 ${version_payload}
 EOF

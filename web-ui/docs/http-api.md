@@ -2,7 +2,7 @@
 
 This document defines the **concrete HTTP/JSON surface** used for integration between **oar-core** and clients (including **oar-ui** and agents).
 
-The schema of objects is defined by `../contracts/oar-schema.yaml`.
+The schema of objects is defined by `/contracts/oar-schema.yaml`.
 
 ## Conventions
 

@@ -19,14 +19,16 @@ This runbook covers production-like build/serve usage and local integration with
    - This value is compiled into the frontend bundle at build time.
    - Browser sends requests directly to the core origin (CORS must be allowed).
 
-If neither variable is set, UI requests are same-origin (`/version`, `/threads`,
-etc.) and require an upstream reverse proxy that routes those paths to oar-core.
+If neither variable is set, UI requests are same-origin (`/meta/handshake`,
+`/threads`, etc.) and require an upstream reverse proxy that routes those paths
+to oar-core.
 
 ### Required oar-core endpoints
 
 The UI expects these HTTP endpoints (see `docs/http-api.md` for full contract):
 
-- `GET /version`
+- `GET /meta/handshake` (preferred startup compatibility check)
+- `GET /version` (backward-compatible fallback)
 - `POST /actors`, `GET /actors`
 - `POST /threads`, `GET /threads`, `GET /threads/{thread_id}`,
   `PATCH /threads/{thread_id}`, `GET /threads/{thread_id}/timeline`
@@ -109,16 +111,16 @@ This project currently uses SvelteKit with `@sveltejs/adapter-auto`.
 
 Symptoms:
 
-- Startup/version checks fail.
+- Startup compatibility checks fail.
 - UI shows `core_unreachable` or network errors.
-- Integration script fails fast on `${OAR_CORE_BASE_URL}/version`.
+- Integration script fails fast on `${OAR_CORE_BASE_URL}/meta/handshake`.
 
 Actions:
 
 1. Confirm backend is running:
    `cd ../core && ./scripts/dev`
 2. Verify the exact URL:
-   `curl -fsS http://127.0.0.1:8000/version`
+   `curl -fsS http://127.0.0.1:8000/meta/handshake`
 3. Re-run UI with matching base URL:
    `OAR_CORE_BASE_URL=http://127.0.0.1:8000 ./scripts/dev`
 
@@ -133,7 +135,7 @@ Actions:
 
 1. Remove trailing typo/path segments (use bare origin, e.g.
    `http://127.0.0.1:8000`).
-2. Ensure UI and backend schema versions match (`/version` should report
-   `schema_version: "0.2.2"`).
+2. Ensure UI and backend schema versions match (`/meta/handshake` should
+   report `schema_version: "0.2.2"`).
 3. If using `PUBLIC_OAR_CORE_BASE_URL`, rebuild after env changes:
    `./scripts/build`.

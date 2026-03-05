@@ -3,7 +3,8 @@
 This folder contains:
 
 - `docs/`: the finalized spec and the concrete HTTP API contract for clients
-- `../contracts/oar-schema.yaml`: shared schema contract (v0.2.2)
+- `/contracts/oar-schema.yaml`: shared schema contract (v0.2.2)
+- `/contracts/gen/ts/client.ts`: generated TS API client used by `web-ui`
 
 Intended use: unzip into an empty `oar-ui` git repo, then run CAR.
 
@@ -18,9 +19,10 @@ Intended use: unzip into an empty `oar-ui` git repo, then run CAR.
 See `docs/runbook.md` for full packaging, serving, endpoint, and troubleshooting
 guidance.
 
-On startup, the UI calls `GET /version` and requires
-`schema_version === "0.2.2"`. If it does not match, boot fails with a clear
-error so incompatible core/UI versions are surfaced immediately.
+On startup, the UI calls `GET /meta/handshake` (falling back to `GET /version`
+for compatibility) and requires `schema_version === "0.2.2"`. If it does not
+match, boot fails with a clear error so incompatible core/UI versions are
+surfaced immediately.
 
 ## Proxy/Env smoke check
 
@@ -36,12 +38,13 @@ env | rg '^(OAR_CORE_BASE_URL|PUBLIC_OAR_CORE_BASE_URL)='
 Then confirm the UI can reach core through the configured path:
 
 ```bash
-curl -fsS http://127.0.0.1:8000/version
-curl -fsS http://127.0.0.1:5173/version
+curl -fsS http://127.0.0.1:8000/meta/handshake
+curl -fsS http://127.0.0.1:5173/meta/handshake
 ```
 
 The first command checks core directly; the second checks the UI route (proxied
-when `OAR_CORE_BASE_URL` is set).
+when `OAR_CORE_BASE_URL` is set). `GET /version` remains available as a
+fallback compatibility endpoint.
 
 ## Integration E2E with real oar-core
 
@@ -53,7 +56,7 @@ Behavior:
 - Uses `OAR_CORE_BASE_URL` (default: `http://127.0.0.1:8000`)
 - Proxies same-origin UI API routes to `OAR_CORE_BASE_URL` during the run
   (no browser CORS configuration required)
-- Fails fast with a clear message if `${OAR_CORE_BASE_URL}/version` is
+- Fails fast with a clear message if `${OAR_CORE_BASE_URL}/meta/handshake` is
   unreachable
 - Runs Playwright integration spec in headless mode
 - Stores failure artifacts under `test-results/e2e-with-core/`
