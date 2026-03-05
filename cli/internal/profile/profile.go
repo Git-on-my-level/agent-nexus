@@ -21,6 +21,7 @@ type Profile struct {
 	Version              int    `json:"version"`
 	Agent                string `json:"agent"`
 	BaseURL              string `json:"base_url"`
+	JSON                 *bool  `json:"json,omitempty"`
 	Username             string `json:"username,omitempty"`
 	AgentID              string `json:"agent_id,omitempty"`
 	ActorID              string `json:"actor_id,omitempty"`
@@ -46,6 +47,10 @@ func ProfilesDir(homeDir string) string {
 
 func KeysDir(homeDir string) string {
 	return filepath.Join(RootDir(homeDir), "keys")
+}
+
+func DraftsDir(homeDir string) string {
+	return filepath.Join(RootDir(homeDir), "drafts")
 }
 
 func ProfilePath(homeDir string, agent string) string {

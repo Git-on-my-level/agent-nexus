@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 type Kind string
@@ -17,11 +18,13 @@ const (
 )
 
 type Error struct {
-	Kind    Kind
-	Code    string
-	Message string
-	Details any
-	Cause   error
+	Kind        Kind
+	Code        string
+	Message     string
+	Recoverable *bool
+	Hint        string
+	Details     any
+	Cause       error
 }
 
 func (e *Error) Error() string {
@@ -99,14 +102,17 @@ func Normalize(err error) *Error {
 		if typed.Message == "" {
 			typed.Message = typed.Error()
 		}
+		applyErrorMetadata(typed)
 		return typed
 	}
-	return &Error{
+	normalized := &Error{
 		Kind:    KindInternal,
 		Code:    "internal_error",
 		Message: err.Error(),
 		Cause:   err,
 	}
+	applyErrorMetadata(normalized)
+	return normalized
 }
 
 func FromHTTPFailure(status int, body []byte) *Error {
@@ -127,14 +133,101 @@ func FromHTTPFailure(status int, body []byte) *Error {
 			if v, ok := errObj["message"].(string); ok && v != "" {
 				message = v
 			}
+			if v, ok := errObj["recoverable"].(bool); ok {
+				recoverable := v
+				payload["recoverable"] = recoverable
+			}
+			if v, ok := errObj["hint"].(string); ok && strings.TrimSpace(v) != "" {
+				payload["hint"] = strings.TrimSpace(v)
+			}
 		}
 		payload["parsed"] = parsed
 	}
-
-	return &Error{
+	out := &Error{
 		Kind:    KindRemote,
 		Code:    code,
 		Message: message,
 		Details: payload,
 	}
+	if rawRecoverable, ok := payload["recoverable"].(bool); ok {
+		recoverable := rawRecoverable
+		out.Recoverable = &recoverable
+	}
+	if rawHint, ok := payload["hint"].(string); ok {
+		out.Hint = strings.TrimSpace(rawHint)
+	}
+	applyErrorMetadata(out)
+	return out
+}
+
+type Metadata struct {
+	Recoverable bool
+	Hint        string
+}
+
+var defaultMetadataByCode = map[string]Metadata{
+	"actor_exists":               {Recoverable: true, Hint: "Use a different actor id or load the existing actor with `oar actors list`."},
+	"agent_revoked":              {Recoverable: false, Hint: "Create/register a new agent profile; revoked agents cannot be reactivated."},
+	"auth_required":              {Recoverable: true, Hint: "Run `oar --agent <agent> auth whoami` to refresh credentials, then retry."},
+	"cli_outdated":               {Recoverable: true, Hint: "Upgrade the CLI to the minimum compatible version from `/meta/handshake`."},
+	"conflict":                   {Recoverable: true, Hint: "Reload current state and retry with a fresh `if_updated_at` value."},
+	"draft_exists":               {Recoverable: true, Hint: "Use a different draft id or discard the existing draft first."},
+	"draft_not_found":            {Recoverable: true, Hint: "Run `oar draft list` to discover valid draft ids."},
+	"draft_validation_failed":    {Recoverable: true, Hint: "Fix the validation errors in the payload, then run `oar draft create` again."},
+	"file_read_failed":           {Recoverable: true, Hint: "Verify the file path and permissions, then retry."},
+	"invalid_flags":              {Recoverable: true, Hint: "Run `oar help` for supported flags and usage."},
+	"invalid_header":             {Recoverable: true, Hint: "Use `--header key:value` with a non-empty key."},
+	"invalid_json":               {Recoverable: true, Hint: "Provide valid JSON input and retry."},
+	"invalid_request":            {Recoverable: true, Hint: "Review required fields and request shape, then retry."},
+	"invalid_token":              {Recoverable: true, Hint: "Run `oar --agent <agent> auth token-status` then `oar --agent <agent> auth rotate` if needed."},
+	"key_mismatch":               {Recoverable: true, Hint: "Rotate the agent key (`oar --agent <agent> auth rotate`) and retry token minting."},
+	"method_not_allowed":         {Recoverable: true, Hint: "Use the HTTP method documented for this endpoint."},
+	"network_error":              {Recoverable: true, Hint: "Check network/core availability and retry with backoff."},
+	"not_found":                  {Recoverable: true, Hint: "Verify the target id/path exists and retry."},
+	"profile_not_found":          {Recoverable: true, Hint: "Run `oar --agent <agent> auth register --username <username>` to create a profile."},
+	"request_failed":             {Recoverable: true, Hint: "Check connectivity and credentials, then retry."},
+	"stream_connect_failed":      {Recoverable: true, Hint: "Retry with `--follow` after verifying stream endpoint availability."},
+	"stream_read_failed":         {Recoverable: true, Hint: "Retry with `--follow` or use `--last-event-id` to resume."},
+	"timeout_exceeded":           {Recoverable: true, Hint: "Increase `--timeout` or reduce request scope."},
+	"unknown_actor_id":           {Recoverable: true, Hint: "Register/select a valid actor id before issuing writes."},
+	"unknown_command":            {Recoverable: true, Hint: "Run `oar help` to list available commands."},
+	"username_taken":             {Recoverable: true, Hint: "Choose a different username and retry."},
+	"internal_error":             {Recoverable: false, Hint: "Retry once; if it persists, escalate with logs and request details."},
+	"schema_unavailable":         {Recoverable: false, Hint: "Core schema subsystem is unavailable; retry later or escalate to operator."},
+	"primitives_unavailable":     {Recoverable: false, Hint: "Core storage subsystem is unavailable; retry later or escalate to operator."},
+	"actor_registry_unavailable": {Recoverable: false, Hint: "Actor registry is unavailable on core; retry later or escalate."},
+	"meta_unavailable":           {Recoverable: false, Hint: "Generated metadata is unavailable on core; retry later or escalate."},
+	"storage_unavailable":        {Recoverable: true, Hint: "Retry with backoff while core storage recovers."},
+}
+
+func MetadataForCode(code string) Metadata {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return Metadata{Recoverable: false, Hint: "Review the error details and command help, then retry if appropriate."}
+	}
+	if metadata, ok := defaultMetadataByCode[code]; ok {
+		return metadata
+	}
+	return Metadata{Recoverable: false, Hint: "Review the error details and command help, then retry if appropriate."}
+}
+
+func applyErrorMetadata(err *Error) {
+	if err == nil {
+		return
+	}
+	metadata := MetadataForCode(err.Code)
+	if err.Recoverable == nil {
+		recoverable := metadata.Recoverable
+		err.Recoverable = &recoverable
+	}
+	if strings.TrimSpace(err.Hint) == "" {
+		err.Hint = metadata.Hint
+	}
+}
+
+func RecoverableValue(err *Error) bool {
+	if err == nil || err.Recoverable == nil {
+		return false
+	}
+	return *err.Recoverable
 }

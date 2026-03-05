@@ -160,7 +160,7 @@ func TestEventsTailReconnect(t *testing.T) {
 
 	home := t.TempDir()
 	env := map[string]string{}
-	raw := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "events", "tail", "--reconnect", "--max-events", "2"})
+	raw := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "events", "tail", "--max-events", "2"})
 
 	decoder := json.NewDecoder(strings.NewReader(raw))
 	events := make([]map[string]any, 0, 2)
@@ -220,6 +220,32 @@ func TestInboxTailReconnect(t *testing.T) {
 	raw := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "inbox", "tail", "--max-events", "2"})
 	if !strings.Contains(raw, `"id": "inbox:1@a1"`) || !strings.Contains(raw, `"id": "inbox:2@b2"`) {
 		t.Fatalf("unexpected inbox stream output: %s", raw)
+	}
+}
+
+func TestEventsStreamDefaultNoFollow(t *testing.T) {
+	t.Parallel()
+
+	var calls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/events/stream" {
+			http.NotFound(w, r)
+			return
+		}
+		calls++
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, "id: e-1\nevent: event\ndata: {\"event\":{\"id\":\"e-1\"}}\n\n")
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	env := map[string]string{}
+	raw := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "events", "stream"})
+	if calls != 1 {
+		t.Fatalf("expected single stream request without --follow, got %d", calls)
+	}
+	if !strings.Contains(raw, `"id": "e-1"`) {
+		t.Fatalf("unexpected stream output: %s", raw)
 	}
 }
 

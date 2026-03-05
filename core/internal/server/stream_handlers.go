@@ -329,11 +329,9 @@ func writeSSEEvent(w http.ResponseWriter, eventID string, eventName string, payl
 }
 
 func writeSSEErrorEvent(w http.ResponseWriter, flusher http.Flusher, code string, message string) {
+	errorObj := errorPayload(code, message)
 	_ = writeSSEEvent(w, "", "error", map[string]any{
-		"error": map[string]any{
-			"code":    code,
-			"message": message,
-		},
+		"error": errorObj,
 	})
 	flusher.Flush()
 }

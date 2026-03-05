@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -39,6 +40,46 @@ func TestRunVersionJSON(t *testing.T) {
 	}
 	if payload["command"] != "version" {
 		t.Fatalf("unexpected command: %#v", payload["command"])
+	}
+}
+
+func TestRunVersionUsesProfileJSONDefault(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	profilesDir := filepath.Join(home, ".config", "oar", "profiles")
+	if err := os.MkdirAll(profilesDir, 0o700); err != nil {
+		t.Fatalf("mkdir profiles dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(profilesDir, "agent-a.json"), []byte(`{"base_url":"http://profile:8000","json":true}`), 0o600); err != nil {
+		t.Fatalf("write profile: %v", err)
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	cli := New()
+	cli.Stdout = stdout
+	cli.Stderr = stderr
+	cli.Stdin = strings.NewReader("")
+	cli.StdinIsTTY = func() bool { return true }
+	cli.UserHomeDir = func() (string, error) { return home, nil }
+	cli.ReadFile = os.ReadFile
+
+	exitCode := cli.Run([]string{"--agent", "agent-a", "version"})
+	if exitCode != 0 {
+		t.Fatalf("unexpected exit code: %d stderr=%s", exitCode, stderr.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("decode stdout json: %v", err)
+	}
+	if payload["ok"] != true {
+		t.Fatalf("expected ok=true payload=%#v", payload)
+	}
+	data, _ := payload["data"].(map[string]any)
+	if data == nil || data["base_url"] != "http://profile:8000" {
+		t.Fatalf("unexpected version payload: %#v", payload)
 	}
 }
 
@@ -138,6 +179,53 @@ func TestRunAPICallJSONWithStdinBody(t *testing.T) {
 	data, _ := payload["data"].(map[string]any)
 	if int(data["status_code"].(float64)) != http.StatusCreated {
 		t.Fatalf("unexpected status code payload: %#v", data)
+	}
+}
+
+func TestRunAPICallJSONWithFromFileBody(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/echo" {
+			http.NotFound(w, r)
+			return
+		}
+		if r.Method != http.MethodPost {
+			t.Fatalf("unexpected method: %s", r.Method)
+		}
+		body, _ := io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"received":` + string(body) + `}`))
+	}))
+	defer server.Close()
+
+	requestFile := filepath.Join(t.TempDir(), "body.json")
+	if err := os.WriteFile(requestFile, []byte(`{"hello":"file"}`), 0o600); err != nil {
+		t.Fatalf("write request file: %v", err)
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	cli := New()
+	cli.Stdout = stdout
+	cli.Stderr = stderr
+	cli.Stdin = strings.NewReader("")
+	cli.StdinIsTTY = func() bool { return true }
+	cli.UserHomeDir = func() (string, error) { return "/home/tester", nil }
+	cli.ReadFile = os.ReadFile
+
+	exitCode := cli.Run([]string{"--json", "--base-url", server.URL, "api", "call", "--method", "POST", "--path", "/echo", "--from-file", requestFile})
+	if exitCode != 0 {
+		t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("decode api call json: %v", err)
+	}
+	if payload["ok"] != true {
+		t.Fatalf("unexpected payload: %#v", payload)
 	}
 }
 

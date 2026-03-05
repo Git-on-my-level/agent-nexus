@@ -192,11 +192,8 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		if opts.healthCheck != nil {
 			if err := opts.healthCheck(r.Context()); err != nil {
 				writeJSON(w, http.StatusServiceUnavailable, map[string]any{
-					"ok": false,
-					"error": map[string]string{
-						"code":    "storage_unavailable",
-						"message": "storage health check failed",
-					},
+					"ok":    false,
+					"error": errorPayload("storage_unavailable", "storage health check failed"),
 				})
 				return
 			}
@@ -636,10 +633,7 @@ func handleListActors(w http.ResponseWriter, r *http.Request, actorRegistry Acto
 
 func writeError(w http.ResponseWriter, status int, code string, message string) {
 	writeJSON(w, status, map[string]any{
-		"error": map[string]string{
-			"code":    code,
-			"message": message,
-		},
+		"error": errorPayload(code, message),
 	})
 }
 
@@ -647,7 +641,7 @@ func writeJSON(w http.ResponseWriter, status int, payload map[string]any) {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte(`{"error":{"code":"internal_error","message":"failed to encode response"}}`))
+		_, _ = w.Write([]byte(`{"error":{"code":"internal_error","message":"failed to encode response","recoverable":false,"hint":"Retry once; if it persists, escalate with logs and request context."}}`))
 		return
 	}
 
@@ -670,10 +664,7 @@ func setVersionHeaders(w http.ResponseWriter, opts handlerOptions, schemaVersion
 
 func writeCLIOutdated(w http.ResponseWriter, opts handlerOptions) {
 	payload := map[string]any{
-		"error": map[string]any{
-			"code":    "cli_outdated",
-			"message": "CLI version is below the minimum compatible version for this core instance",
-		},
+		"error": errorPayload("cli_outdated", "CLI version is below the minimum compatible version for this core instance"),
 		"upgrade": map[string]any{
 			"min_cli_version":         strings.TrimSpace(opts.minCLIVersion),
 			"recommended_cli_version": strings.TrimSpace(opts.recommendedCLIVersion),

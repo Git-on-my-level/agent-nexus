@@ -65,6 +65,21 @@ func TestMethodNotAllowed(t *testing.T) {
 	if rr.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("unexpected status: got %d", rr.Code)
 	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode body: %v", err)
+	}
+	errObj, _ := payload["error"].(map[string]any)
+	if errObj == nil {
+		t.Fatalf("expected error object, payload=%#v", payload)
+	}
+	if _, ok := errObj["recoverable"].(bool); !ok {
+		t.Fatalf("expected recoverable boolean, payload=%#v", errObj)
+	}
+	if hint, _ := errObj["hint"].(string); hint == "" {
+		t.Fatalf("expected non-empty hint, payload=%#v", errObj)
+	}
 }
 
 func TestHealthEndpointStorageError(t *testing.T) {
@@ -88,5 +103,15 @@ func TestHealthEndpointStorageError(t *testing.T) {
 	}
 	if payload["ok"] != false {
 		t.Fatalf("expected ok=false, got %#v", payload["ok"])
+	}
+	errObj, _ := payload["error"].(map[string]any)
+	if errObj == nil {
+		t.Fatalf("expected error object, payload=%#v", payload)
+	}
+	if _, ok := errObj["recoverable"].(bool); !ok {
+		t.Fatalf("expected recoverable boolean, payload=%#v", errObj)
+	}
+	if hint, _ := errObj["hint"].(string); hint == "" {
+		t.Fatalf("expected non-empty hint, payload=%#v", errObj)
 	}
 }

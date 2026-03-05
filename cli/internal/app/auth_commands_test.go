@@ -149,6 +149,50 @@ func TestAuthWhoAmIAutoRefreshesExpiredAccessToken(t *testing.T) {
 	}
 }
 
+func TestAuthRegisterPersistsProfileDefaults(t *testing.T) {
+	t.Parallel()
+
+	core := newFakeAuthCore(t)
+	server := httptest.NewServer(http.HandlerFunc(core.handle))
+	defer server.Close()
+
+	home := t.TempDir()
+	env := map[string]string{}
+
+	_ = runCLIForTest(t, home, env, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"--agent", "agent-profile-defaults",
+		"auth", "register",
+		"--username", "agent.defaults",
+	})
+
+	profilePath := filepath.Join(home, ".config", "oar", "profiles", "agent-profile-defaults.json")
+	storedProfile, ok, err := profile.Load(profilePath)
+	if err != nil || !ok {
+		t.Fatalf("load profile: ok=%t err=%v", ok, err)
+	}
+	if storedProfile.JSON == nil || !*storedProfile.JSON {
+		t.Fatalf("expected profile json=true, profile=%#v", storedProfile)
+	}
+	if storedProfile.BaseURL != server.URL {
+		t.Fatalf("expected profile base_url=%s, got %s", server.URL, storedProfile.BaseURL)
+	}
+
+	versionRaw := runCLIForTest(t, home, env, nil, []string{"--agent", "agent-profile-defaults", "version"})
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(versionRaw), &payload); err != nil {
+		t.Fatalf("expected JSON output from profile json default, err=%v raw=%s", err, versionRaw)
+	}
+	if payload["ok"] != true {
+		t.Fatalf("unexpected version payload: %#v", payload)
+	}
+	data, _ := payload["data"].(map[string]any)
+	if data == nil || strings.TrimSpace(anyStr(data["base_url"])) != server.URL {
+		t.Fatalf("unexpected version payload data: %#v", payload)
+	}
+}
+
 func runCLIForTest(t *testing.T, home string, env map[string]string, stdin io.Reader, args []string) string {
 	t.Helper()
 	if stdin == nil {

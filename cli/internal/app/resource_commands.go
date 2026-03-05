@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -231,7 +233,7 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 
 func (a *App) runEventsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
 	if len(args) == 0 {
-		return nil, "events", errnorm.Usage("subcommand_required", "expected one of: get, create, tail")
+		return nil, "events", errnorm.Usage("subcommand_required", "expected one of: get, create, stream")
 	}
 	sub := strings.TrimSpace(args[0])
 	switch sub {
@@ -249,8 +251,11 @@ func (a *App) runEventsCommand(ctx context.Context, args []string, cfg config.Re
 		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "events create", "events.create", nil, nil, body)
 		return result, "events create", callErr
+	case "stream":
+		result, err := a.runEventsStream(ctx, args[1:], cfg, "events stream", false)
+		return result, "events stream", err
 	case "tail":
-		result, err := a.runEventsTail(ctx, args[1:], cfg)
+		result, err := a.runEventsStream(ctx, args[1:], cfg, "events tail", true)
 		return result, "events tail", err
 	default:
 		return nil, "events", errnorm.Usage("unknown_subcommand", fmt.Sprintf("unknown events subcommand %q", sub))
@@ -259,7 +264,7 @@ func (a *App) runEventsCommand(ctx context.Context, args []string, cfg config.Re
 
 func (a *App) runInboxCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
 	if len(args) == 0 {
-		return nil, "inbox", errnorm.Usage("subcommand_required", "expected one of: list, ack, tail")
+		return nil, "inbox", errnorm.Usage("subcommand_required", "expected one of: list, ack, stream")
 	}
 	sub := strings.TrimSpace(args[0])
 	switch sub {
@@ -273,8 +278,11 @@ func (a *App) runInboxCommand(ctx context.Context, args []string, cfg config.Res
 		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "inbox ack", "inbox.ack", nil, nil, body)
 		return result, "inbox ack", callErr
+	case "stream":
+		result, err := a.runInboxStream(ctx, args[1:], cfg, "inbox stream", false)
+		return result, "inbox stream", err
 	case "tail":
-		result, err := a.runInboxTail(ctx, args[1:], cfg)
+		result, err := a.runInboxStream(ctx, args[1:], cfg, "inbox tail", true)
 		return result, "inbox tail", err
 	default:
 		return nil, "inbox", errnorm.Usage("unknown_subcommand", fmt.Sprintf("unknown inbox subcommand %q", sub))
@@ -311,24 +319,26 @@ func (a *App) runDerivedCommand(ctx context.Context, args []string, cfg config.R
 	return result, "derived rebuild", callErr
 }
 
-func (a *App) runEventsTail(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
-	fs := newSilentFlagSet("events tail")
+func (a *App) runEventsStream(ctx context.Context, args []string, cfg config.Resolved, commandName string, defaultFollow bool) (*commandResult, error) {
+	fs := newSilentFlagSet(commandName)
 	var threadIDFlag, typesCSVFlag, lastEventIDFlag, cursorFlag trackedString
+	var followFlag trackedBool
 	var reconnectFlag trackedBool
 	var maxEventsFlag trackedInt
 	var typeFlags trackedStrings
 	fs.Var(&threadIDFlag, "thread-id", "Stream events for one thread id")
 	fs.Var(&typeFlags, "type", "Filter by event type (repeatable)")
 	fs.Var(&typesCSVFlag, "types", "Comma-separated event types")
+	fs.Var(&followFlag, "follow", "Keep stream open and reconnect when it drops")
 	fs.Var(&lastEventIDFlag, "last-event-id", "Resume stream after this event id")
 	fs.Var(&cursorFlag, "cursor", "Alias of --last-event-id")
-	fs.Var(&reconnectFlag, "reconnect", "Reconnect automatically when the stream drops (default true)")
+	fs.Var(&reconnectFlag, "reconnect", "Deprecated alias for --follow (default false)")
 	fs.Var(&maxEventsFlag, "max-events", "Exit after receiving N events (0 means unlimited)")
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	if len(fs.Args()) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar events tail`")
+		return nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `oar %s`", commandName))
 	}
 
 	query := make([]queryParam, 0, 4)
@@ -336,29 +346,35 @@ func (a *App) runEventsTail(ctx context.Context, args []string, cfg config.Resol
 	addMultiQuery(&query, "type", typeFlags.values)
 	addSingleQuery(&query, "types", typesCSVFlag.value)
 	lastEventID := firstNonEmpty(lastEventIDFlag.value, cursorFlag.value)
-	reconnect := true
-	if reconnectFlag.set {
-		reconnect = reconnectFlag.value
+	follow := defaultFollow
+	if followFlag.set {
+		follow = followFlag.value
 	}
-	return a.runTailStream(ctx, cfg, "events tail", "events.stream", query, lastEventID, reconnect, maxEventsFlag.value)
+	if reconnectFlag.set {
+		follow = reconnectFlag.value
+	}
+	reconnect := follow
+	return a.runTailStream(ctx, cfg, commandName, "events.stream", query, lastEventID, follow, reconnect, maxEventsFlag.value)
 }
 
-func (a *App) runInboxTail(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
-	fs := newSilentFlagSet("inbox tail")
+func (a *App) runInboxStream(ctx context.Context, args []string, cfg config.Resolved, commandName string, defaultFollow bool) (*commandResult, error) {
+	fs := newSilentFlagSet(commandName)
 	var riskHorizonFlag trackedInt
 	var lastEventIDFlag, cursorFlag trackedString
+	var followFlag trackedBool
 	var reconnectFlag trackedBool
 	var maxEventsFlag trackedInt
 	fs.Var(&riskHorizonFlag, "risk-horizon-days", "Derived inbox risk horizon days")
+	fs.Var(&followFlag, "follow", "Keep stream open and reconnect when it drops")
 	fs.Var(&lastEventIDFlag, "last-event-id", "Resume stream after this event id")
 	fs.Var(&cursorFlag, "cursor", "Alias of --last-event-id")
-	fs.Var(&reconnectFlag, "reconnect", "Reconnect automatically when the stream drops (default true)")
+	fs.Var(&reconnectFlag, "reconnect", "Deprecated alias for --follow (default false)")
 	fs.Var(&maxEventsFlag, "max-events", "Exit after receiving N events (0 means unlimited)")
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	if len(fs.Args()) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar inbox tail`")
+		return nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `oar %s`", commandName))
 	}
 
 	query := make([]queryParam, 0, 2)
@@ -366,14 +382,18 @@ func (a *App) runInboxTail(ctx context.Context, args []string, cfg config.Resolv
 		addSingleQuery(&query, "risk_horizon_days", fmt.Sprintf("%d", riskHorizonFlag.value))
 	}
 	lastEventID := firstNonEmpty(lastEventIDFlag.value, cursorFlag.value)
-	reconnect := true
-	if reconnectFlag.set {
-		reconnect = reconnectFlag.value
+	follow := defaultFollow
+	if followFlag.set {
+		follow = followFlag.value
 	}
-	return a.runTailStream(ctx, cfg, "inbox tail", "inbox.stream", query, lastEventID, reconnect, maxEventsFlag.value)
+	if reconnectFlag.set {
+		follow = reconnectFlag.value
+	}
+	reconnect := follow
+	return a.runTailStream(ctx, cfg, commandName, "inbox.stream", query, lastEventID, follow, reconnect, maxEventsFlag.value)
 }
 
-func (a *App) runTailStream(ctx context.Context, cfg config.Resolved, commandName string, commandID string, query []queryParam, lastEventID string, reconnect bool, maxEvents int) (*commandResult, error) {
+func (a *App) runTailStream(ctx context.Context, cfg config.Resolved, commandName string, commandID string, query []queryParam, lastEventID string, follow bool, reconnect bool, maxEvents int) (*commandResult, error) {
 	if maxEvents < 0 {
 		return nil, errnorm.Usage("invalid_request", "--max-events must be >= 0")
 	}
@@ -399,7 +419,7 @@ func (a *App) runTailStream(ctx context.Context, cfg config.Resolved, commandNam
 		requestPath := streamPathForCommand(commandID, query, cursor)
 		resp, streamErr := client.OpenStream(callCtx, httpclient.RawRequest{Method: http.MethodGet, Path: requestPath, Headers: headers})
 		if streamErr != nil {
-			if !reconnect {
+			if !follow || !reconnect {
 				return nil, errnorm.Wrap(errnorm.KindNetwork, "stream_connect_failed", "failed to connect stream", streamErr)
 			}
 			time.Sleep(250 * time.Millisecond)
@@ -421,8 +441,12 @@ func (a *App) runTailStream(ctx context.Context, cfg config.Resolved, commandNam
 					dropped = true
 					break
 				}
+				if !follow && isStreamReadTimeout(readErr) {
+					dropped = false
+					break
+				}
 				_ = resp.Body.Close()
-				if !reconnect {
+				if !follow || !reconnect {
 					return nil, errnorm.Wrap(errnorm.KindNetwork, "stream_read_failed", "failed to read stream", readErr)
 				}
 				dropped = true
@@ -442,7 +466,7 @@ func (a *App) runTailStream(ctx context.Context, cfg config.Resolved, commandNam
 			}
 		}
 		_ = resp.Body.Close()
-		if !reconnect || !dropped {
+		if !follow || !reconnect || !dropped {
 			return &commandResult{RawWritten: true}, nil
 		}
 		time.Sleep(250 * time.Millisecond)
@@ -771,7 +795,11 @@ func (a *App) parseAckBodyInput(args []string) (any, error) {
 
 func (a *App) readBodyInput(fromFile string) ([]byte, error) {
 	if fromFile != "" {
-		content, err := os.ReadFile(fromFile)
+		readFile := a.ReadFile
+		if readFile == nil {
+			readFile = os.ReadFile
+		}
+		content, err := readFile(fromFile)
 		if err != nil {
 			return nil, errnorm.Wrap(errnorm.KindLocal, "file_read_failed", fmt.Sprintf("failed to read file %s", fromFile), err)
 		}
@@ -848,4 +876,16 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func isStreamReadTimeout(err error) bool {
+	if err == nil {
+		return false
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+	text := strings.ToLower(err.Error())
+	return strings.Contains(text, "context deadline exceeded") || strings.Contains(text, "client.timeout")
 }

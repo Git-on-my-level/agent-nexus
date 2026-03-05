@@ -99,7 +99,7 @@ func TestPostThreadsRejectsUnknownActorID(t *testing.T) {
 	resp := postJSON(t, server.URL+"/threads", `{"actor_id":"missing-actor","thread":{"title":"thread"}}`, http.StatusBadRequest)
 	defer resp.Body.Close()
 
-	var payload map[string]map[string]string
+	var payload map[string]map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode error payload: %v", err)
 	}
