@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "command": "threads update",
+  "command": "threads patch",
   "data": {
     "body": {
       "thread": {

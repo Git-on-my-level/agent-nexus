@@ -47,7 +47,10 @@ func (a *App) runDraft(ctx context.Context, args []string, cfg config.Resolved) 
 		return result, "draft list", err
 	case "commit":
 		result, err := a.runDraftCommit(ctx, args[1:], cfg)
-		return result, "draft commit", err
+		if err != nil {
+			return nil, "draft commit", err
+		}
+		return result, "draft commit", nil
 	case "discard":
 		result, err := a.runDraftDiscard(args[1:], cfg)
 		return result, "draft discard", err
@@ -447,46 +450,693 @@ func validateDraftBody(commandID string, body map[string]any) []string {
 		return []string{fmt.Sprintf("command %q requires path parameters and is not yet supported by draft create", commandID)}
 	}
 
-	required := map[string][]string{
-		"threads.create":             {"thread"},
-		"threads.patch":              {"patch"},
-		"commitments.create":         {"commitment"},
-		"commitments.patch":          {"patch"},
-		"events.create":              {"event"},
-		"artifacts.create":           {"artifact"},
-		"inbox.ack":                  {"thread_id", "inbox_item_id"},
-		"packets.work-orders.create": {"artifact", "packet"},
-		"packets.receipts.create":    {"artifact", "packet"},
-		"packets.reviews.create":     {"artifact", "packet"},
-		"derived.rebuild":            {},
+	validators := map[string]func(map[string]any) []string{
+		"threads.create":             validateDraftThreadCreate,
+		"threads.patch":              validateDraftThreadPatch,
+		"commitments.create":         validateDraftCommitmentCreate,
+		"commitments.patch":          validateDraftCommitmentPatch,
+		"events.create":              validateDraftEventCreate,
+		"artifacts.create":           validateDraftArtifactCreate,
+		"inbox.ack":                  validateDraftInboxAck,
+		"packets.work-orders.create": validateDraftWorkOrderCreate,
+		"packets.receipts.create":    validateDraftReceiptCreate,
+		"packets.reviews.create":     validateDraftReviewCreate,
+		"derived.rebuild":            validateDraftDerivedRebuild,
 	}
-	fields, exists := required[commandID]
+	validate, exists := validators[commandID]
 	if !exists {
 		return []string{fmt.Sprintf("command %q is not yet supported by draft create", commandID)}
 	}
+	return validate(body)
+}
+
+func validateDraftThreadCreate(body map[string]any) []string {
 	out := make([]string, 0)
-	for _, field := range fields {
-		value, ok := body[field]
-		if !ok {
-			out = append(out, fmt.Sprintf("missing required field %q", field))
-			continue
-		}
-		if field == "thread_id" || field == "inbox_item_id" || field == "actor_id" {
-			if strings.TrimSpace(anyToString(value)) == "" {
-				out = append(out, fmt.Sprintf("field %q must be a non-empty string", field))
-			}
-			continue
-		}
-		if _, ok := value.(map[string]any); !ok {
-			out = append(out, fmt.Sprintf("field %q must be a JSON object", field))
+	validateOptionalNonEmptyString(body, "actor_id", "actor_id", &out)
+	thread, ok := requiredObjectField(body, "thread", "thread", &out)
+	if !ok {
+		return out
+	}
+	if _, exists := thread["open_commitments"]; exists {
+		out = append(out, "thread.open_commitments is core-maintained and cannot be set")
+	}
+	requiredFields := []string{
+		"title",
+		"type",
+		"status",
+		"priority",
+		"tags",
+		"cadence",
+		"current_summary",
+		"next_actions",
+		"key_artifacts",
+		"provenance",
+	}
+	for _, field := range requiredFields {
+		if _, exists := thread[field]; !exists {
+			out = append(out, fmt.Sprintf("thread.%s is required", field))
 		}
 	}
-	if commandID == "derived.rebuild" {
-		if value, ok := body["actor_id"]; ok && strings.TrimSpace(anyToString(value)) == "" {
-			out = append(out, `field "actor_id" must be a non-empty string`)
+	validateThreadFields(thread, true, "thread", &out)
+	return out
+}
+
+func validateDraftThreadPatch(body map[string]any) []string {
+	out := make([]string, 0)
+	validateOptionalNonEmptyString(body, "actor_id", "actor_id", &out)
+	validateOptionalRFC3339(body, "if_updated_at", "if_updated_at", &out)
+	patch, ok := requiredObjectField(body, "patch", "patch", &out)
+	if !ok {
+		return out
+	}
+	if len(patch) == 0 {
+		out = append(out, "patch is required")
+		return out
+	}
+	if _, exists := patch["open_commitments"]; exists {
+		out = append(out, "thread.open_commitments is core-maintained and cannot be patched")
+	}
+	validateThreadFields(patch, false, "patch", &out)
+	return out
+}
+
+func validateThreadFields(thread map[string]any, createMode bool, path string, out *[]string) {
+	stringFields := map[string]bool{
+		"title":           true,
+		"type":            true,
+		"status":          true,
+		"priority":        true,
+		"cadence":         true,
+		"current_summary": true,
+	}
+	datetimeFields := map[string]bool{
+		"next_check_in_at": true,
+	}
+	stringListFields := map[string]bool{
+		"tags":             true,
+		"next_actions":     true,
+		"open_commitments": true,
+	}
+	typedRefListFields := map[string]bool{
+		"key_artifacts": true,
+	}
+
+	for field, raw := range thread {
+		full := path + "." + field
+		switch {
+		case stringFields[field]:
+			text, ok := raw.(string)
+			if !ok {
+				*out = append(*out, full+" must be a string")
+				continue
+			}
+			if createMode && strings.TrimSpace(text) == "" {
+				*out = append(*out, full+" must be non-empty")
+			}
+		case datetimeFields[field]:
+			if raw == nil {
+				continue
+			}
+			text, ok := raw.(string)
+			if !ok {
+				*out = append(*out, full+" must be an RFC3339 datetime string")
+				continue
+			}
+			if _, err := time.Parse(time.RFC3339, text); err != nil {
+				*out = append(*out, full+" must be an RFC3339 datetime string")
+			}
+		case stringListFields[field]:
+			if _, ok := asStringList(raw); !ok {
+				*out = append(*out, full+" must be a list of strings")
+			}
+		case typedRefListFields[field]:
+			values, ok := asStringList(raw)
+			if !ok {
+				*out = append(*out, full+" must be a list of strings")
+				continue
+			}
+			validateTypedRefs(values, full, out)
+		case field == "provenance":
+			provenance, ok := raw.(map[string]any)
+			if !ok {
+				*out = append(*out, full+" must be an object")
+				continue
+			}
+			validateProvenance(provenance, full, out)
+		}
+	}
+}
+
+func validateDraftCommitmentCreate(body map[string]any) []string {
+	out := make([]string, 0)
+	validateOptionalNonEmptyString(body, "actor_id", "actor_id", &out)
+	commitment, ok := requiredObjectField(body, "commitment", "commitment", &out)
+	if !ok {
+		return out
+	}
+	requiredFields := []string{
+		"thread_id",
+		"title",
+		"owner",
+		"due_at",
+		"status",
+		"definition_of_done",
+		"links",
+		"provenance",
+	}
+	for _, field := range requiredFields {
+		if _, exists := commitment[field]; !exists {
+			out = append(out, fmt.Sprintf("commitment.%s is required", field))
+		}
+	}
+	validateCommitmentFields(commitment, true, "commitment", &out)
+	return out
+}
+
+func validateDraftCommitmentPatch(body map[string]any) []string {
+	out := make([]string, 0)
+	validateOptionalNonEmptyString(body, "actor_id", "actor_id", &out)
+	validateOptionalRFC3339(body, "if_updated_at", "if_updated_at", &out)
+	patch, ok := requiredObjectField(body, "patch", "patch", &out)
+	if !ok {
+		return out
+	}
+	if len(patch) == 0 {
+		out = append(out, "patch is required")
+		return out
+	}
+	if _, exists := patch["thread_id"]; exists {
+		out = append(out, "commitment.thread_id cannot be patched")
+	}
+	validateCommitmentFields(patch, false, "patch", &out)
+	if refs, exists := body["refs"]; exists {
+		values, ok := asStringList(refs)
+		if !ok {
+			out = append(out, "refs must be a list of strings")
+		} else {
+			validateTypedRefs(values, "refs", &out)
 		}
 	}
 	return out
+}
+
+func validateCommitmentFields(commitment map[string]any, createMode bool, path string, out *[]string) {
+	stringFields := map[string]bool{
+		"thread_id": true,
+		"title":     true,
+		"owner":     true,
+		"status":    true,
+	}
+	for field, raw := range commitment {
+		full := path + "." + field
+		switch field {
+		case "due_at":
+			text, ok := raw.(string)
+			if !ok {
+				*out = append(*out, full+" must be an RFC3339 datetime string")
+				continue
+			}
+			if _, err := time.Parse(time.RFC3339, text); err != nil {
+				*out = append(*out, full+" must be an RFC3339 datetime string")
+			}
+		case "definition_of_done":
+			if _, ok := asStringList(raw); !ok {
+				*out = append(*out, full+" must be a list of strings")
+			}
+		case "links":
+			values, ok := asStringList(raw)
+			if !ok {
+				*out = append(*out, full+" must be a list of strings")
+				continue
+			}
+			validateTypedRefs(values, full, out)
+		case "provenance":
+			provenance, ok := raw.(map[string]any)
+			if !ok {
+				*out = append(*out, full+" must be an object")
+				continue
+			}
+			validateProvenance(provenance, full, out)
+		default:
+			if !stringFields[field] {
+				continue
+			}
+			text, ok := raw.(string)
+			if !ok {
+				*out = append(*out, full+" must be a string")
+				continue
+			}
+			if createMode && strings.TrimSpace(text) == "" {
+				*out = append(*out, full+" must be non-empty")
+			}
+		}
+	}
+}
+
+func validateDraftEventCreate(body map[string]any) []string {
+	out := make([]string, 0)
+	validateOptionalNonEmptyString(body, "actor_id", "actor_id", &out)
+	event, ok := requiredObjectField(body, "event", "event", &out)
+	if !ok {
+		return out
+	}
+	requiredStringField(event, "type", "event.type", true, &out)
+	requiredStringField(event, "summary", "event.summary", false, &out)
+	refs, ok := requiredStringListField(event, "refs", "event.refs", 0, &out)
+	if ok {
+		validateTypedRefs(refs, "event.refs", &out)
+	}
+	provenance, ok := requiredObjectField(event, "provenance", "event.provenance", &out)
+	if ok {
+		validateProvenance(provenance, "event.provenance", &out)
+	}
+	if raw, exists := event["thread_id"]; exists {
+		validateNonEmptyString(raw, "event.thread_id", &out)
+	}
+	if raw, exists := event["payload"]; exists && raw != nil {
+		if _, ok := raw.(map[string]any); !ok {
+			out = append(out, "event.payload must be an object")
+		}
+	}
+	return out
+}
+
+func validateDraftArtifactCreate(body map[string]any) []string {
+	out := make([]string, 0)
+	validateOptionalNonEmptyString(body, "actor_id", "actor_id", &out)
+	artifact, ok := requiredObjectField(body, "artifact", "artifact", &out)
+	if !ok {
+		return out
+	}
+	kind, hasKind := artifact["kind"].(string)
+	if !hasKind || strings.TrimSpace(kind) == "" {
+		out = append(out, "artifact.kind is required")
+	}
+	refs, ok := requiredStringListField(artifact, "refs", "artifact.refs", 0, &out)
+	if ok {
+		validateTypedRefs(refs, "artifact.refs", &out)
+	}
+	contentType := ""
+	rawContentType, exists := body["content_type"]
+	if !exists {
+		out = append(out, "content_type is required")
+	} else {
+		raw, ok := rawContentType.(string)
+		if !ok || strings.TrimSpace(raw) == "" {
+			out = append(out, "content_type is required")
+		} else {
+			contentType = strings.TrimSpace(raw)
+		}
+	}
+	content, hasContent := body["content"]
+	if !hasContent || content == nil {
+		out = append(out, "content is required")
+	}
+
+	kind = strings.TrimSpace(kind)
+	if !isPacketKind(kind) {
+		return out
+	}
+	if contentType != "structured" {
+		out = append(out, "packet artifacts must use content_type=structured")
+		return out
+	}
+	packet, ok := content.(map[string]any)
+	if !ok {
+		out = append(out, "packet artifacts must provide content as a JSON object")
+		return out
+	}
+	validatePacketForKind(kind, artifact, packet, "content", &out)
+	return out
+}
+
+func validateDraftInboxAck(body map[string]any) []string {
+	out := make([]string, 0)
+	validateOptionalNonEmptyString(body, "actor_id", "actor_id", &out)
+	requiredStringField(body, "thread_id", "thread_id", true, &out)
+	requiredStringField(body, "inbox_item_id", "inbox_item_id", true, &out)
+	return out
+}
+
+func validateDraftWorkOrderCreate(body map[string]any) []string {
+	return validateDraftPacketCreate(body, "work_order")
+}
+
+func validateDraftReceiptCreate(body map[string]any) []string {
+	return validateDraftPacketCreate(body, "receipt")
+}
+
+func validateDraftReviewCreate(body map[string]any) []string {
+	return validateDraftPacketCreate(body, "review")
+}
+
+func validateDraftPacketCreate(body map[string]any, packetKind string) []string {
+	out := make([]string, 0)
+	validateOptionalNonEmptyString(body, "actor_id", "actor_id", &out)
+	artifact, ok := requiredObjectField(body, "artifact", "artifact", &out)
+	if !ok {
+		return out
+	}
+	packet, ok := requiredObjectField(body, "packet", "packet", &out)
+	if !ok {
+		return out
+	}
+
+	if rawKind, hasKind := artifact["kind"]; hasKind {
+		text, ok := rawKind.(string)
+		if !ok {
+			out = append(out, "artifact.kind must be a string")
+		} else if strings.TrimSpace(text) != packetKind {
+			out = append(out, "artifact.kind must be "+packetKind)
+		}
+	}
+	refs, ok := requiredStringListField(artifact, "refs", "artifact.refs", 0, &out)
+	if ok {
+		validateTypedRefs(refs, "artifact.refs", &out)
+	}
+	validatePacketForKind(packetKind, artifact, packet, "packet", &out)
+	return out
+}
+
+func validatePacketForKind(kind string, artifact map[string]any, packet map[string]any, path string, out *[]string) {
+	rules := map[string]map[string]string{
+		"work_order": {
+			"work_order_id":       "string",
+			"thread_id":           "string",
+			"objective":           "string",
+			"constraints":         "list<string>",
+			"context_refs":        "list<typed_ref>",
+			"acceptance_criteria": "list<string>",
+			"definition_of_done":  "list<string>",
+		},
+		"receipt": {
+			"receipt_id":            "string",
+			"work_order_id":         "string",
+			"thread_id":             "string",
+			"outputs":               "list<typed_ref+>",
+			"verification_evidence": "list<typed_ref+>",
+			"changes_summary":       "string",
+			"known_gaps":            "list<string>",
+		},
+		"review": {
+			"review_id":     "string",
+			"work_order_id": "string",
+			"receipt_id":    "string",
+			"outcome":       "string",
+			"notes":         "string",
+			"evidence_refs": "list<typed_ref>",
+		},
+	}
+	fields, ok := rules[kind]
+	if !ok {
+		*out = append(*out, fmt.Sprintf("unsupported packet kind %q", kind))
+		return
+	}
+
+	fieldOrder := []string{}
+	switch kind {
+	case "work_order":
+		fieldOrder = []string{"work_order_id", "thread_id", "objective", "constraints", "context_refs", "acceptance_criteria", "definition_of_done"}
+	case "receipt":
+		fieldOrder = []string{"receipt_id", "work_order_id", "thread_id", "outputs", "verification_evidence", "changes_summary", "known_gaps"}
+	case "review":
+		fieldOrder = []string{"review_id", "work_order_id", "receipt_id", "outcome", "notes", "evidence_refs"}
+	}
+	for _, name := range fieldOrder {
+		kindSpec := fields[name]
+		full := path + "." + name
+		value, exists := packet[name]
+		if !exists {
+			*out = append(*out, full+" is required")
+			continue
+		}
+		switch kindSpec {
+		case "string":
+			validateNonEmptyString(value, full, out)
+		case "list<string>":
+			if _, ok := asStringList(value); !ok {
+				*out = append(*out, full+" must be a list of strings")
+			}
+		case "list<typed_ref>", "list<typed_ref+>":
+			values, ok := asStringList(value)
+			if !ok {
+				*out = append(*out, full+" must be a list of strings")
+				continue
+			}
+			if kindSpec == "list<typed_ref+>" && len(values) == 0 {
+				*out = append(*out, full+" must include at least 1 item")
+			}
+			validateTypedRefs(values, full, out)
+		}
+	}
+
+	if kind == "review" {
+		if outcomeRaw, exists := packet["outcome"]; exists {
+			outcome, ok := outcomeRaw.(string)
+			if ok {
+				switch strings.TrimSpace(outcome) {
+				case "accept", "revise", "escalate":
+				default:
+					*out = append(*out, "packet.outcome must be one of: accept, revise, escalate")
+				}
+			}
+		}
+	}
+
+	idField := map[string]string{
+		"work_order": "work_order_id",
+		"receipt":    "receipt_id",
+		"review":     "review_id",
+	}[kind]
+	packetID, _ := packet[idField].(string)
+	packetID = strings.TrimSpace(packetID)
+	if packetID != "" {
+		if artifactID, hasArtifactID := artifact["id"].(string); hasArtifactID {
+			artifactID = strings.TrimSpace(artifactID)
+			if artifactID != "" && artifactID != packetID {
+				*out = append(*out, fmt.Sprintf("packet.%s must equal artifact.id", idField))
+			}
+		}
+	}
+
+	artifactRefs, refsOK := asStringList(artifact["refs"])
+	if !refsOK {
+		return
+	}
+	threadID, _ := packet["thread_id"].(string)
+	threadID = strings.TrimSpace(threadID)
+	if threadID != "" && !containsRef(artifactRefs, "thread:"+threadID) {
+		*out = append(*out, fmt.Sprintf("artifact.refs must include %q", "thread:"+threadID))
+	}
+	switch kind {
+	case "receipt":
+		workOrderID, _ := packet["work_order_id"].(string)
+		workOrderID = strings.TrimSpace(workOrderID)
+		if workOrderID != "" && !containsRef(artifactRefs, "artifact:"+workOrderID) {
+			*out = append(*out, fmt.Sprintf("artifact.refs must include %q", "artifact:"+workOrderID))
+		}
+	case "review":
+		workOrderID, _ := packet["work_order_id"].(string)
+		workOrderID = strings.TrimSpace(workOrderID)
+		if workOrderID != "" && !containsRef(artifactRefs, "artifact:"+workOrderID) {
+			*out = append(*out, fmt.Sprintf("artifact.refs must include %q", "artifact:"+workOrderID))
+		}
+		receiptID, _ := packet["receipt_id"].(string)
+		receiptID = strings.TrimSpace(receiptID)
+		if receiptID != "" && !containsRef(artifactRefs, "artifact:"+receiptID) {
+			*out = append(*out, fmt.Sprintf("artifact.refs must include %q", "artifact:"+receiptID))
+		}
+	}
+}
+
+func validateDraftDerivedRebuild(body map[string]any) []string {
+	out := make([]string, 0)
+	validateOptionalNonEmptyString(body, "actor_id", "actor_id", &out)
+	return out
+}
+
+func requiredObjectField(body map[string]any, key string, path string, out *[]string) (map[string]any, bool) {
+	raw, exists := body[key]
+	if !exists || raw == nil {
+		*out = append(*out, path+" is required")
+		return nil, false
+	}
+	obj, ok := raw.(map[string]any)
+	if !ok {
+		*out = append(*out, path+" must be an object")
+		return nil, false
+	}
+	return obj, true
+}
+
+func requiredStringField(body map[string]any, key string, path string, nonEmpty bool, out *[]string) {
+	raw, exists := body[key]
+	if !exists {
+		*out = append(*out, path+" is required")
+		return
+	}
+	text, ok := raw.(string)
+	if !ok {
+		*out = append(*out, path+" must be a string")
+		return
+	}
+	if nonEmpty && strings.TrimSpace(text) == "" {
+		*out = append(*out, path+" must be non-empty")
+	}
+}
+
+func requiredStringListField(body map[string]any, key string, path string, minItems int, out *[]string) ([]string, bool) {
+	raw, exists := body[key]
+	if !exists {
+		*out = append(*out, path+" is required")
+		return nil, false
+	}
+	values, ok := asStringList(raw)
+	if !ok {
+		*out = append(*out, path+" must be a list of strings")
+		return nil, false
+	}
+	if len(values) < minItems {
+		*out = append(*out, fmt.Sprintf("%s must include at least %d item", path, minItems))
+		return nil, false
+	}
+	return values, true
+}
+
+func validateOptionalNonEmptyString(body map[string]any, key string, path string, out *[]string) {
+	raw, exists := body[key]
+	if !exists {
+		return
+	}
+	validateNonEmptyString(raw, path, out)
+}
+
+func validateNonEmptyString(raw any, path string, out *[]string) {
+	text, ok := raw.(string)
+	if !ok {
+		*out = append(*out, path+" must be a string")
+		return
+	}
+	if strings.TrimSpace(text) == "" {
+		*out = append(*out, path+" must be non-empty")
+	}
+}
+
+func validateOptionalRFC3339(body map[string]any, key string, path string, out *[]string) {
+	raw, exists := body[key]
+	if !exists || raw == nil {
+		return
+	}
+	text, ok := raw.(string)
+	if !ok {
+		*out = append(*out, path+" must be an RFC3339 datetime string")
+		return
+	}
+	if _, err := time.Parse(time.RFC3339, text); err != nil {
+		*out = append(*out, path+" must be an RFC3339 datetime string")
+	}
+}
+
+func validateProvenance(provenance map[string]any, path string, out *[]string) {
+	sources, ok := requiredStringListField(provenance, "sources", path+".sources", 0, out)
+	if ok {
+		for idx, source := range sources {
+			if strings.TrimSpace(source) == "" {
+				*out = append(*out, fmt.Sprintf("%s[%d] must be non-empty", path+".sources", idx))
+			}
+		}
+	}
+	if rawNotes, exists := provenance["notes"]; exists {
+		if _, ok := rawNotes.(string); !ok {
+			*out = append(*out, path+".notes must be a string")
+		}
+	}
+	if rawByField, exists := provenance["by_field"]; exists {
+		asMap, ok := rawByField.(map[string]any)
+		if !ok {
+			*out = append(*out, path+".by_field must be a map of string to list<string>")
+			return
+		}
+		for key, rawValues := range asMap {
+			if strings.TrimSpace(key) == "" {
+				*out = append(*out, path+".by_field field keys must be non-empty")
+				continue
+			}
+			values, ok := asStringList(rawValues)
+			if !ok {
+				*out = append(*out, fmt.Sprintf("%s.by_field.%s must be a list of strings", path, key))
+				continue
+			}
+			for idx, value := range values {
+				if strings.TrimSpace(value) == "" {
+					*out = append(*out, fmt.Sprintf("%s.by_field.%s[%d] must be non-empty", path, key, idx))
+				}
+			}
+		}
+	}
+}
+
+func asStringList(raw any) ([]string, bool) {
+	switch values := raw.(type) {
+	case []string:
+		out := make([]string, 0, len(values))
+		for _, value := range values {
+			out = append(out, value)
+		}
+		return out, true
+	case []any:
+		out := make([]string, 0, len(values))
+		for _, rawValue := range values {
+			value, ok := rawValue.(string)
+			if !ok {
+				return nil, false
+			}
+			out = append(out, value)
+		}
+		return out, true
+	default:
+		return nil, false
+	}
+}
+
+func validateTypedRefs(refs []string, path string, out *[]string) {
+	for idx, ref := range refs {
+		if err := validateTypedRef(ref); err != nil {
+			*out = append(*out, fmt.Sprintf("%s[%d]: %s", path, idx, err.Error()))
+		}
+	}
+}
+
+func validateTypedRef(ref string) error {
+	ref = strings.TrimSpace(ref)
+	idx := strings.Index(ref, ":")
+	if idx <= 0 || idx >= len(ref)-1 {
+		return fmt.Errorf("typed ref %q must be in \"<prefix>:<value>\" form", ref)
+	}
+	prefix := strings.TrimSpace(ref[:idx])
+	value := strings.TrimSpace(ref[idx+1:])
+	if prefix == "" || value == "" {
+		return fmt.Errorf("typed ref %q must be in \"<prefix>:<value>\" form", ref)
+	}
+	return nil
+}
+
+func containsRef(refs []string, expected string) bool {
+	for _, ref := range refs {
+		if strings.TrimSpace(ref) == expected {
+			return true
+		}
+	}
+	return false
+}
+
+func isPacketKind(kind string) bool {
+	switch strings.TrimSpace(kind) {
+	case "work_order", "receipt", "review":
+		return true
+	default:
+		return false
+	}
 }
 
 func validateDraftID(id string) error {
@@ -527,11 +1177,6 @@ func ensureDraftTargetMatchesConfig(draft persistedDraft, cfg config.Resolved) e
 		"draft_base_url":  draftBaseURL,
 		"active_base_url": currentBaseURL,
 	})
-}
-
-func anyToString(raw any) string {
-	s, _ := raw.(string)
-	return strings.TrimSpace(s)
 }
 
 func draftUsageText() string {
