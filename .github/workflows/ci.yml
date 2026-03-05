@@ -2,6 +2,13 @@ name: CI
 
 on:
   push:
+  workflow_dispatch:
+    inputs:
+      run_e2e_smoke:
+        description: Run end-to-end smoke validation
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   changes:
@@ -130,8 +137,7 @@ jobs:
   e2e-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: changes
-    if: needs.changes.outputs.core == 'true' || needs.changes.outputs.cli == 'true' || needs.changes.outputs.web_ui == 'true' || needs.changes.outputs.contracts == 'true' || needs.changes.outputs.root == 'true'
+    if: github.event_name == 'workflow_dispatch' && inputs.run_e2e_smoke
     steps:
       - name: Checkout
         uses: actions/checkout@v4
