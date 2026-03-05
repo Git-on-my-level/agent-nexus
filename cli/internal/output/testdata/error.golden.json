@@ -1,0 +1,11 @@
+{
+  "ok": false,
+  "command": "api call",
+  "error": {
+    "code": "invalid_request",
+    "message": "path is required",
+    "details": {
+      "flag": "--path"
+    }
+  }
+}
