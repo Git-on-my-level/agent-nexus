@@ -77,6 +77,7 @@ export declare class OarClient {
     packetsReviewsCreate(options?: RequestOptions): Promise<InvokeResult>;
     packetsWorkOrdersCreate(options?: RequestOptions): Promise<InvokeResult>;
     snapshotsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    threadsContext(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     threadsCreate(options?: RequestOptions): Promise<InvokeResult>;
     threadsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     threadsList(options?: RequestOptions): Promise<InvokeResult>;

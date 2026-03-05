@@ -112,6 +112,40 @@ func TestTypedWorkflowCommands(t *testing.T) {
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "inbox", "ack", "--thread-id", "thread_flow_1", "--inbox-item-id", "inbox:1"}))
 }
 
+func TestThreadsContextCommand(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/threads/thread_1/context" {
+			http.NotFound(w, r)
+			return
+		}
+		if got := r.URL.Query().Get("max_events"); got != "2" {
+			t.Fatalf("expected max_events=2, got %q", got)
+		}
+		if got := r.URL.Query().Get("include_artifact_content"); got != "true" {
+			t.Fatalf("expected include_artifact_content=true, got %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"thread":{"id":"thread_1"},"recent_events":[],"key_artifacts":[],"open_commitments":[]}`))
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"threads", "context",
+		"--thread-id", "thread_1",
+		"--max-events", "2",
+		"--include-artifact-content",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	if got := anyStringValue(payload["command"]); got != "threads context" {
+		t.Fatalf("unexpected command label: %#v", payload)
+	}
+}
+
 func TestInboxAckActorIDMeAliasFromProfile(t *testing.T) {
 	t.Parallel()
 
@@ -145,6 +179,48 @@ func TestInboxAckActorIDMeAliasFromProfile(t *testing.T) {
 		"--thread-id", "thread_1",
 		"--inbox-item-id", "inbox:1",
 		"--actor-id", "me",
+	})
+	assertEnvelopeOK(t, raw)
+}
+
+func TestInboxAckPositionalInboxItemIDResolvesThreadFromInboxList(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"items":[{"id":"inbox:decision_needed:thread_42:none:event_1","thread_id":"thread_42"}],"generated_at":"2026-03-05T00:00:00Z"}`))
+			return
+		case r.Method == http.MethodPost && r.URL.Path == "/inbox/ack":
+			body, _ := io.ReadAll(r.Body)
+			var payload map[string]any
+			if err := json.Unmarshal(body, &payload); err != nil {
+				t.Fatalf("decode inbox ack body: %v body=%s", err, string(body))
+			}
+			if got := strings.TrimSpace(anyStringValue(payload["thread_id"])); got != "thread_42" {
+				t.Fatalf("expected resolved thread_id thread_42, got %q body=%s", got, string(body))
+			}
+			if got := strings.TrimSpace(anyStringValue(payload["inbox_item_id"])); got != "inbox:decision_needed:thread_42:none:event_1" {
+				t.Fatalf("unexpected inbox_item_id %q body=%s", got, string(body))
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"event":{"id":"event_ack_positional"}}`))
+			return
+		default:
+			http.NotFound(w, r)
+			return
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"inbox", "ack",
+		"inbox:decision_needed:thread_42:none:event_1",
 	})
 	assertEnvelopeOK(t, raw)
 }

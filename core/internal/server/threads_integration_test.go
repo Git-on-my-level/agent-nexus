@@ -769,6 +769,199 @@ func TestThreadTimelineIncludesReferencedObjectsAndOmitsMissingRefs(t *testing.T
 	}
 }
 
+func TestThreadContextBundlesRecentEventsArtifactsAndOpenCommitments(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	createThreadResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
+		"actor_id":"actor-1",
+		"thread":{
+			"title":"Context bundle thread",
+			"type":"incident",
+			"status":"active",
+			"priority":"p1",
+			"tags":["ops","context"],
+			"cadence":"daily",
+			"next_check_in_at":"2026-03-05T00:00:00Z",
+			"current_summary":"summary",
+			"next_actions":["triage"],
+			"key_artifacts":["artifact:ctx-artifact-1"],
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated)
+	defer createThreadResp.Body.Close()
+
+	var createdThread struct {
+		Thread map[string]any `json:"thread"`
+	}
+	if err := json.NewDecoder(createThreadResp.Body).Decode(&createdThread); err != nil {
+		t.Fatalf("decode create thread response: %v", err)
+	}
+	threadID, _ := createdThread.Thread["id"].(string)
+	if threadID == "" {
+		t.Fatal("expected created thread id")
+	}
+
+	contentBody := strings.Repeat("A", 620)
+	createArtifactResp := postJSONExpectStatus(t, h.baseURL+"/artifacts", `{
+		"actor_id":"actor-1",
+		"artifact":{
+			"id":"ctx-artifact-1",
+			"kind":"doc",
+			"refs":["thread:`+threadID+`"],
+			"summary":"context artifact"
+		},
+		"content":"`+contentBody+`",
+		"content_type":"text"
+	}`, http.StatusCreated)
+	createArtifactResp.Body.Close()
+
+	createCommitmentResp := postJSONExpectStatus(t, h.baseURL+"/commitments", `{
+		"actor_id":"actor-1",
+		"commitment":{
+			"thread_id":"`+threadID+`",
+			"title":"Context commitment",
+			"owner":"actor-1",
+			"due_at":"2026-03-08T00:00:00Z",
+			"status":"open",
+			"definition_of_done":["done"],
+			"links":["url:https://example.com/work"],
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated)
+	defer createCommitmentResp.Body.Close()
+
+	var createdCommitment struct {
+		Commitment map[string]any `json:"commitment"`
+	}
+	if err := json.NewDecoder(createCommitmentResp.Body).Decode(&createdCommitment); err != nil {
+		t.Fatalf("decode create commitment response: %v", err)
+	}
+	commitmentID, _ := createdCommitment.Commitment["id"].(string)
+	if commitmentID == "" {
+		t.Fatal("expected created commitment id")
+	}
+
+	postJSONExpectStatus(t, h.baseURL+"/events", `{
+		"actor_id":"actor-1",
+		"event":{
+			"type":"context_probe_1",
+			"thread_id":"`+threadID+`",
+			"refs":["thread:`+threadID+`"],
+			"summary":"context probe 1",
+			"payload":{},
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated).Body.Close()
+
+	postJSONExpectStatus(t, h.baseURL+"/events", `{
+		"actor_id":"actor-1",
+		"event":{
+			"type":"context_probe_2",
+			"thread_id":"`+threadID+`",
+			"refs":["thread:`+threadID+`"],
+			"summary":"context probe 2",
+			"payload":{},
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated).Body.Close()
+
+	contextResp, err := http.Get(h.baseURL + "/threads/" + threadID + "/context?max_events=2&include_artifact_content=true")
+	if err != nil {
+		t.Fatalf("GET /threads/{id}/context: %v", err)
+	}
+	defer contextResp.Body.Close()
+	if contextResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected context status: got %d", contextResp.StatusCode)
+	}
+
+	var payload struct {
+		Thread          map[string]any   `json:"thread"`
+		RecentEvents    []map[string]any `json:"recent_events"`
+		KeyArtifacts    []map[string]any `json:"key_artifacts"`
+		OpenCommitments []map[string]any `json:"open_commitments"`
+	}
+	if err := json.NewDecoder(contextResp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode context response: %v", err)
+	}
+
+	if payload.Thread["id"] != threadID {
+		t.Fatalf("unexpected thread payload: %#v", payload.Thread["id"])
+	}
+	if len(payload.RecentEvents) != 2 {
+		t.Fatalf("expected 2 recent events, got %d", len(payload.RecentEvents))
+	}
+	if asString(payload.RecentEvents[0]["type"]) != "context_probe_1" || asString(payload.RecentEvents[1]["type"]) != "context_probe_2" {
+		t.Fatalf("unexpected recent event types: %#v", payload.RecentEvents)
+	}
+
+	if len(payload.KeyArtifacts) != 1 {
+		t.Fatalf("expected 1 key artifact, got %d", len(payload.KeyArtifacts))
+	}
+	if asString(payload.KeyArtifacts[0]["ref"]) != "artifact:ctx-artifact-1" {
+		t.Fatalf("unexpected key artifact ref: %#v", payload.KeyArtifacts[0])
+	}
+	artifactObj, _ := payload.KeyArtifacts[0]["artifact"].(map[string]any)
+	if asString(artifactObj["id"]) != "ctx-artifact-1" {
+		t.Fatalf("unexpected key artifact payload: %#v", payload.KeyArtifacts[0]["artifact"])
+	}
+	preview := asString(payload.KeyArtifacts[0]["content_preview"])
+	if len(preview) != 500 {
+		t.Fatalf("expected preview length 500, got %d", len(preview))
+	}
+
+	if len(payload.OpenCommitments) != 1 || asString(payload.OpenCommitments[0]["id"]) != commitmentID {
+		t.Fatalf("unexpected open commitments payload: %#v", payload.OpenCommitments)
+	}
+
+	contextNoContentResp, err := http.Get(h.baseURL + "/threads/" + threadID + "/context?max_events=1")
+	if err != nil {
+		t.Fatalf("GET /threads/{id}/context without include_artifact_content: %v", err)
+	}
+	defer contextNoContentResp.Body.Close()
+	if contextNoContentResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected context status (no content): got %d", contextNoContentResp.StatusCode)
+	}
+
+	var payloadNoContent struct {
+		KeyArtifacts []map[string]any `json:"key_artifacts"`
+	}
+	if err := json.NewDecoder(contextNoContentResp.Body).Decode(&payloadNoContent); err != nil {
+		t.Fatalf("decode context no content response: %v", err)
+	}
+	if len(payloadNoContent.KeyArtifacts) != 1 {
+		t.Fatalf("expected 1 key artifact in no-content context, got %d", len(payloadNoContent.KeyArtifacts))
+	}
+	if _, exists := payloadNoContent.KeyArtifacts[0]["content_preview"]; exists {
+		t.Fatalf("did not expect content_preview when include_artifact_content=false: %#v", payloadNoContent.KeyArtifacts[0])
+	}
+}
+
+func TestThreadContextRejectsInvalidQueryParams(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	resp, err := http.Get(h.baseURL + "/threads/thread-1/context?max_events=abc")
+	if err != nil {
+		t.Fatalf("GET /threads/{id}/context with invalid max_events: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 for invalid max_events, got %d", resp.StatusCode)
+	}
+
+	resp, err = http.Get(h.baseURL + "/threads/thread-1/context?include_artifact_content=maybe")
+	if err != nil {
+		t.Fatalf("GET /threads/{id}/context with invalid include_artifact_content: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 for invalid include_artifact_content, got %d", resp.StatusCode)
+	}
+}
+
 func mapKeysMapAny(values map[string]map[string]any) []string {
 	keys := make([]string, 0, len(values))
 	for key := range values {

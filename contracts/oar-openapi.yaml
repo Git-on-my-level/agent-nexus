@@ -678,6 +678,46 @@ paths:
         '404':
           $ref: '#/components/responses/ErrorResponse'
 
+  /threads/{thread_id}/context:
+    get:
+      operationId: getThreadContext
+      summary: Get bundled thread context for agent callers
+      tags: [threads]
+      x-oar-command-id: "threads.context"
+      x-oar-cli-path: "threads context"
+      x-oar-why: "Load thread state, recent events, key artifacts, and open commitments in a single round-trip."
+      x-oar-examples:
+        - title: Context with defaults
+          command: oar threads context --thread-id thread_123 --json
+        - title: Context with artifact previews
+          command: oar threads context --thread-id thread_123 --include-artifact-content --max-events 50 --json
+      x-oar-input-mode: "none"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ thread, recent_events, key_artifacts, open_commitments }`."
+      x-oar-error-codes: [invalid_request, not_found]
+      x-oar-concepts: [threads, events, artifacts, commitments]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Use include_artifact_content for prompt-ready previews; default mode keeps payloads lighter."
+      parameters:
+        - $ref: '#/components/parameters/ThreadID'
+        - in: query
+          name: max_events
+          schema: { type: integer }
+        - in: query
+          name: include_artifact_content
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: Thread context payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadContextResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
   /snapshots/{snapshot_id}:
     get:
       operationId: getSnapshot
@@ -1292,6 +1332,8 @@ paths:
       x-oar-examples:
         - title: Ack inbox item
           command: oar inbox ack --thread-id thread_123 --inbox-item-id inbox:item-1 --json
+        - title: Ack inbox item by id
+          command: oar inbox ack inbox:decision_needed:thread_123:none:event_1 --json
       x-oar-input-mode: "json-body"
       x-oar-streaming: { mode: none }
       x-oar-output-envelope: "Returns `{ event }` representing acknowledgment."
@@ -1749,6 +1791,34 @@ components:
           additionalProperties:
             $ref: '#/components/schemas/Artifact'
       required: [events, snapshots, artifacts]
+
+    ThreadContextArtifact:
+      type: object
+      properties:
+        ref: { type: string }
+        artifact:
+          $ref: '#/components/schemas/Artifact'
+        content_preview: { type: string }
+      required: [ref, artifact]
+
+    ThreadContextResponse:
+      type: object
+      properties:
+        thread:
+          $ref: '#/components/schemas/Thread'
+        recent_events:
+          type: array
+          items:
+            $ref: '#/components/schemas/Event'
+        key_artifacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ThreadContextArtifact'
+        open_commitments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Commitment'
+      required: [thread, recent_events, key_artifacts, open_commitments]
 
     SnapshotResponse:
       type: object

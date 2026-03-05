@@ -848,6 +848,10 @@ export const commandRegistry: CommandSpec[] = [
       {
         "title": "Ack inbox item",
         "command": "oar inbox ack --thread-id thread_123 --inbox-item-id inbox:item-1 --json"
+      },
+      {
+        "title": "Ack inbox item by id",
+        "command": "oar inbox ack inbox:decision_needed:thread_123:none:event_1 --json"
       }
     ],
     "adjacent_commands": [
@@ -1369,6 +1373,55 @@ export const commandRegistry: CommandSpec[] = [
     "ts_method": "snapshotsGet"
   },
   {
+    "command_id": "threads.context",
+    "cli_path": "threads context",
+    "group": "threads",
+    "method": "GET",
+    "path": "/threads/{thread_id}/context",
+    "operation_id": "getThreadContext",
+    "summary": "Get bundled thread context for agent callers",
+    "why": "Load thread state, recent events, key artifacts, and open commitments in a single round-trip.",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ thread, recent_events, key_artifacts, open_commitments }`.",
+    "error_codes": [
+      "invalid_request",
+      "not_found"
+    ],
+    "concepts": [
+      "threads",
+      "events",
+      "artifacts",
+      "commitments"
+    ],
+    "stability": "beta",
+    "agent_notes": "Use include_artifact_content for prompt-ready previews; default mode keeps payloads lighter.",
+    "examples": [
+      {
+        "title": "Context with defaults",
+        "command": "oar threads context --thread-id thread_123 --json"
+      },
+      {
+        "title": "Context with artifact previews",
+        "command": "oar threads context --thread-id thread_123 --include-artifact-content --max-events 50 --json"
+      }
+    ],
+    "path_params": [
+      "thread_id"
+    ],
+    "adjacent_commands": [
+      "threads.create",
+      "threads.get",
+      "threads.list",
+      "threads.patch",
+      "threads.timeline"
+    ],
+    "go_method": "ThreadsContext",
+    "ts_method": "threadsContext"
+  },
+  {
     "command_id": "threads.create",
     "cli_path": "threads create",
     "group": "threads",
@@ -1400,6 +1453,7 @@ export const commandRegistry: CommandSpec[] = [
       }
     ],
     "adjacent_commands": [
+      "threads.context",
       "threads.get",
       "threads.list",
       "threads.patch",
@@ -1440,6 +1494,7 @@ export const commandRegistry: CommandSpec[] = [
       "thread_id"
     ],
     "adjacent_commands": [
+      "threads.context",
       "threads.create",
       "threads.list",
       "threads.patch",
@@ -1478,6 +1533,7 @@ export const commandRegistry: CommandSpec[] = [
       }
     ],
     "adjacent_commands": [
+      "threads.context",
       "threads.create",
       "threads.get",
       "threads.patch",
@@ -1523,6 +1579,7 @@ export const commandRegistry: CommandSpec[] = [
       "thread_id"
     ],
     "adjacent_commands": [
+      "threads.context",
       "threads.create",
       "threads.get",
       "threads.list",
@@ -1565,6 +1622,7 @@ export const commandRegistry: CommandSpec[] = [
       "thread_id"
     ],
     "adjacent_commands": [
+      "threads.context",
       "threads.create",
       "threads.get",
       "threads.list",
@@ -1779,6 +1837,10 @@ export class OarClient {
 
   snapshotsGet(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("snapshots.get", pathParams, options);
+  }
+
+  threadsContext(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("threads.context", pathParams, options);
   }
 
   threadsCreate(options: RequestOptions = {}): Promise<InvokeResult> {

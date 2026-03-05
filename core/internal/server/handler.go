@@ -29,6 +29,7 @@ type PrimitiveStore interface {
 	AppendEvent(ctx context.Context, actorID string, event map[string]any) (map[string]any, error)
 	GetEvent(ctx context.Context, id string) (map[string]any, error)
 	CreateArtifact(ctx context.Context, actorID string, artifact map[string]any, content any, contentType string) (map[string]any, error)
+	CreateArtifactAndEvent(ctx context.Context, actorID string, artifact map[string]any, content any, contentType string, event map[string]any) (map[string]any, map[string]any, error)
 	GetArtifact(ctx context.Context, id string) (map[string]any, error)
 	GetArtifactContent(ctx context.Context, id string) ([]byte, string, error)
 	ListArtifacts(ctx context.Context, filter primitives.ArtifactListFilter) ([]map[string]any, error)
@@ -347,6 +348,22 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				return
 			}
 			handleThreadTimeline(w, r, opts, threadID)
+			return
+		}
+
+		if strings.HasSuffix(remainder, "/context") {
+			if r.Method != http.MethodGet {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+				return
+			}
+
+			threadID := strings.TrimSuffix(remainder, "/context")
+			threadID = strings.TrimSuffix(threadID, "/")
+			if threadID == "" || strings.Contains(threadID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			handleThreadContext(w, r, opts, threadID)
 			return
 		}
 

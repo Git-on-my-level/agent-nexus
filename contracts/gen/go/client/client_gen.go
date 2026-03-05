@@ -399,6 +399,10 @@ var CommandRegistry = []CommandSpec{
 				Title:   "Ack inbox item",
 				Command: "oar inbox ack --thread-id thread_123 --inbox-item-id inbox:item-1 --json",
 			},
+			{
+				Title:   "Ack inbox item by id",
+				Command: "oar inbox ack inbox:decision_needed:thread_123:none:event_1 --json",
+			},
 		},
 	},
 	{
@@ -629,6 +633,28 @@ var CommandRegistry = []CommandSpec{
 		},
 	},
 	{
+		CommandID:  "threads.context",
+		CLIPath:    "threads context",
+		Group:      "threads",
+		Method:     "GET",
+		Path:       "/threads/{thread_id}/context",
+		PathParams: []string{"thread_id"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"threads", "events", "artifacts", "commitments"},
+		Adjacent:   []string{"threads.create", "threads.get", "threads.list", "threads.patch", "threads.timeline"},
+		Examples: []Example{
+			{
+				Title:   "Context with defaults",
+				Command: "oar threads context --thread-id thread_123 --json",
+			},
+			{
+				Title:   "Context with artifact previews",
+				Command: "oar threads context --thread-id thread_123 --include-artifact-content --max-events 50 --json",
+			},
+		},
+	},
+	{
 		CommandID: "threads.create",
 		CLIPath:   "threads create",
 		Group:     "threads",
@@ -637,7 +663,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "stable",
 		Concepts:  []string{"threads", "snapshots"},
-		Adjacent:  []string{"threads.get", "threads.list", "threads.patch", "threads.timeline"},
+		Adjacent:  []string{"threads.context", "threads.get", "threads.list", "threads.patch", "threads.timeline"},
 		Examples: []Example{
 			{
 				Title:   "Create thread",
@@ -655,7 +681,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "stable",
 		Concepts:   []string{"threads"},
-		Adjacent:   []string{"threads.create", "threads.list", "threads.patch", "threads.timeline"},
+		Adjacent:   []string{"threads.context", "threads.create", "threads.list", "threads.patch", "threads.timeline"},
 		Examples: []Example{
 			{
 				Title:   "Read thread",
@@ -672,7 +698,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "stable",
 		Concepts:  []string{"threads", "filtering"},
-		Adjacent:  []string{"threads.create", "threads.get", "threads.patch", "threads.timeline"},
+		Adjacent:  []string{"threads.context", "threads.create", "threads.get", "threads.patch", "threads.timeline"},
 		Examples: []Example{
 			{
 				Title:   "List active p1 threads",
@@ -690,7 +716,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "stable",
 		Concepts:   []string{"threads", "patch"},
-		Adjacent:   []string{"threads.create", "threads.get", "threads.list", "threads.timeline"},
+		Adjacent:   []string{"threads.context", "threads.create", "threads.get", "threads.list", "threads.timeline"},
 		Examples: []Example{
 			{
 				Title:   "Patch thread",
@@ -708,7 +734,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "stable",
 		Concepts:   []string{"threads", "events", "provenance"},
-		Adjacent:   []string{"threads.create", "threads.get", "threads.list", "threads.patch"},
+		Adjacent:   []string{"threads.context", "threads.create", "threads.get", "threads.list", "threads.patch"},
 		Examples: []Example{
 			{
 				Title:   "Timeline",
@@ -968,6 +994,10 @@ func (c *Client) PacketsWorkOrdersCreate(ctx context.Context, opts RequestOption
 
 func (c *Client) SnapshotsGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "snapshots.get", pathParams, opts)
+}
+
+func (c *Client) ThreadsContext(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "threads.context", pathParams, opts)
 }
 
 func (c *Client) ThreadsCreate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {

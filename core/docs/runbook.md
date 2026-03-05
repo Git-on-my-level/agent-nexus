@@ -78,6 +78,13 @@ curl -fsS http://127.0.0.1:8000/version
 3. Stop and restart server with the same workspace root.
 4. Confirm object still exists (data persisted in `state.sqlite` / artifact files).
 
+## Packet Convenience Atomicity
+
+`POST /work_orders`, `POST /receipts`, and `POST /reviews` persist packet artifact data and the emitted event atomically.
+
+- Core writes artifact metadata/content and the corresponding event in a single transactional operation.
+- On failure, core does not commit a partial convenience write (no artifact/event split state from a failed request).
+
 ## Container run
 
 Build image:

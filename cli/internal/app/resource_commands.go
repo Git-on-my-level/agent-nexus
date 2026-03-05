@@ -72,7 +72,7 @@ func (a *App) runTypedResource(ctx context.Context, resource string, args []stri
 
 func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
 	if len(args) == 0 {
-		return nil, "threads", errnorm.Usage("subcommand_required", "expected one of: list, get, create, patch, timeline")
+		return nil, "threads", errnorm.Usage("subcommand_required", "expected one of: list, get, create, patch, timeline, context")
 	}
 	sub := strings.TrimSpace(args[0])
 	switch sub {
@@ -127,6 +127,43 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "threads timeline", "threads.timeline", map[string]string{"thread_id": id}, nil, nil)
 		return result, "threads timeline", callErr
+	case "context":
+		fs := newSilentFlagSet("threads context")
+		var threadIDFlag trackedString
+		var maxEventsFlag trackedInt
+		var includeArtifactContentFlag trackedBool
+		fs.Var(&threadIDFlag, "thread-id", "Thread id")
+		fs.Var(&maxEventsFlag, "max-events", "Maximum recent events to include")
+		fs.Var(&includeArtifactContentFlag, "include-artifact-content", "Include key artifact content previews")
+		if err := fs.Parse(args[1:]); err != nil {
+			return nil, "threads context", errnorm.Usage("invalid_flags", err.Error())
+		}
+		positionals := fs.Args()
+		threadID := strings.TrimSpace(threadIDFlag.value)
+		if threadID == "" && len(positionals) > 0 {
+			threadID = strings.TrimSpace(positionals[0])
+			positionals = positionals[1:]
+		}
+		if err := validateID(threadID, "thread id"); err != nil {
+			return nil, "threads context", err
+		}
+		if len(positionals) > 0 {
+			return nil, "threads context", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar threads context`")
+		}
+		if maxEventsFlag.set && maxEventsFlag.value < 0 {
+			return nil, "threads context", errnorm.Usage("invalid_request", "--max-events must be >= 0")
+		}
+
+		query := make([]queryParam, 0, 2)
+		if maxEventsFlag.set {
+			addSingleQuery(&query, "max_events", fmt.Sprintf("%d", maxEventsFlag.value))
+		}
+		if includeArtifactContentFlag.set && includeArtifactContentFlag.value {
+			addSingleQuery(&query, "include_artifact_content", "true")
+		}
+
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "threads context", "threads.context", map[string]string{"thread_id": threadID}, query, nil)
+		return result, "threads context", callErr
 	default:
 		return nil, "threads", errnorm.Usage("unknown_subcommand", fmt.Sprintf("unknown threads subcommand %q", sub))
 	}
@@ -279,7 +316,7 @@ func (a *App) runInboxCommand(ctx context.Context, args []string, cfg config.Res
 		result, err := a.invokeTypedJSON(ctx, cfg, "inbox list", "inbox.list", nil, nil, nil)
 		return result, "inbox list", err
 	case "ack":
-		body, err := a.parseAckBodyInput(args[1:], cfg)
+		body, err := a.parseAckBodyInput(ctx, args[1:], cfg)
 		if err != nil {
 			return nil, "inbox ack", err
 		}
@@ -804,7 +841,7 @@ func (a *App) parseDerivedRebuildBodyInput(args []string, cfg config.Resolved) (
 	return body, nil
 }
 
-func (a *App) parseAckBodyInput(args []string, cfg config.Resolved) (any, error) {
+func (a *App) parseAckBodyInput(ctx context.Context, args []string, cfg config.Resolved) (any, error) {
 	fs := newSilentFlagSet("inbox ack")
 	var fromFileFlag, threadIDFlag, inboxItemIDFlag, actorIDFlag trackedString
 	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
@@ -814,36 +851,89 @@ func (a *App) parseAckBodyInput(args []string, cfg config.Resolved) (any, error)
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
-	if len(fs.Args()) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar inbox ack`")
-	}
+	positionals := fs.Args()
 
 	payload, err := a.readBodyInput(strings.TrimSpace(fromFileFlag.value))
 	if err != nil {
 		return nil, err
 	}
 	if len(payload) > 0 {
+		if len(positionals) > 0 {
+			return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar inbox ack`")
+		}
 		return decodeJSONPayload(payload)
 	}
 
-	if err := validateID(threadIDFlag.value, "thread id"); err != nil {
+	threadID := strings.TrimSpace(threadIDFlag.value)
+	inboxItemID := strings.TrimSpace(inboxItemIDFlag.value)
+	if inboxItemID == "" && len(positionals) > 0 {
+		if threadID == "" && len(positionals) > 1 {
+			threadID = strings.TrimSpace(positionals[0])
+			inboxItemID = strings.TrimSpace(positionals[1])
+			positionals = positionals[2:]
+		} else {
+			inboxItemID = strings.TrimSpace(positionals[0])
+			positionals = positionals[1:]
+		}
+	}
+	if len(positionals) > 0 {
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar inbox ack`")
+	}
+	if err := validateID(inboxItemID, "inbox item id"); err != nil {
 		return nil, err
 	}
-	if err := validateID(inboxItemIDFlag.value, "inbox item id"); err != nil {
+
+	if threadID == "" {
+		resolvedThreadID, err := a.resolveInboxThreadID(ctx, cfg, inboxItemID)
+		if err != nil {
+			return nil, err
+		}
+		threadID = resolvedThreadID
+	}
+	if err := validateID(threadID, "thread id"); err != nil {
 		return nil, err
 	}
+
 	actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
 	if err != nil {
 		return nil, err
 	}
 	body := map[string]any{
-		"thread_id":     strings.TrimSpace(threadIDFlag.value),
-		"inbox_item_id": strings.TrimSpace(inboxItemIDFlag.value),
+		"thread_id":     threadID,
+		"inbox_item_id": inboxItemID,
 	}
 	if actorID != "" {
 		body["actor_id"] = actorID
 	}
 	return body, nil
+}
+
+func (a *App) resolveInboxThreadID(ctx context.Context, cfg config.Resolved, inboxItemID string) (string, error) {
+	result, err := a.invokeTypedJSON(ctx, cfg, "inbox list", "inbox.list", nil, nil, nil)
+	if err != nil {
+		return "", err
+	}
+	data, _ := result.Data.(map[string]any)
+	body, _ := data["body"].(map[string]any)
+	rawItems, _ := body["items"].([]any)
+	for _, rawItem := range rawItems {
+		item, _ := rawItem.(map[string]any)
+		if item == nil {
+			continue
+		}
+		if strings.TrimSpace(anyString(item["id"])) != inboxItemID {
+			continue
+		}
+		threadID := strings.TrimSpace(anyString(item["thread_id"]))
+		if threadID != "" {
+			return threadID, nil
+		}
+		break
+	}
+	return "", errnorm.Usage(
+		"invalid_request",
+		fmt.Sprintf("thread_id is required for inbox item %q (provide --thread-id or ensure it is present in `oar inbox list`)", inboxItemID),
+	)
 }
 
 func resolveActorIDAlias(raw string, cfg config.Resolved) (string, error) {

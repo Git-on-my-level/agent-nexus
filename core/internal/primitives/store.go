@@ -276,6 +276,162 @@ func (s *Store) CreateArtifact(ctx context.Context, actorID string, artifact map
 	return metadata, nil
 }
 
+func (s *Store) CreateArtifactAndEvent(ctx context.Context, actorID string, artifact map[string]any, content any, contentType string, event map[string]any) (map[string]any, map[string]any, error) {
+	if s == nil || s.db == nil {
+		return nil, nil, fmt.Errorf("primitives store database is not initialized")
+	}
+	if strings.TrimSpace(s.artifactContentDir) == "" {
+		return nil, nil, fmt.Errorf("artifact content directory is not configured")
+	}
+
+	kind, ok := artifact["kind"].(string)
+	if !ok || strings.TrimSpace(kind) == "" {
+		return nil, nil, fmt.Errorf("artifact.kind is required")
+	}
+
+	artifactRefs, err := normalizeStringSlice(artifact["refs"])
+	if err != nil {
+		return nil, nil, fmt.Errorf("artifact.refs: %w", err)
+	}
+
+	encodedContent, err := encodeContent(content)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	metadata := cloneMap(artifact)
+	artifactID, _ := metadata["id"].(string)
+	artifactID = strings.TrimSpace(artifactID)
+	if artifactID == "" {
+		artifactID = uuid.NewString()
+	} else if err := validateArtifactID(artifactID); err != nil {
+		return nil, nil, fmt.Errorf("%w: %v", ErrInvalidArtifactID, err)
+	}
+	metadata["id"] = artifactID
+	metadata["created_at"] = time.Now().UTC().Format(time.RFC3339Nano)
+	metadata["created_by"] = actorID
+	metadata["content_type"] = contentType
+	metadata["content_path"] = filepath.Join(s.artifactContentDir, artifactID)
+
+	contentPath := metadata["content_path"].(string)
+	file, err := os.OpenFile(contentPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create artifact content file: %w", err)
+	}
+
+	if _, err := file.Write(encodedContent); err != nil {
+		_ = file.Close()
+		_ = os.Remove(contentPath)
+		return nil, nil, fmt.Errorf("write artifact content: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		_ = os.Remove(contentPath)
+		return nil, nil, fmt.Errorf("close artifact content file: %w", err)
+	}
+
+	artifactRefsJSON, err := json.Marshal(artifactRefs)
+	if err != nil {
+		_ = os.Remove(contentPath)
+		return nil, nil, fmt.Errorf("marshal artifact refs: %w", err)
+	}
+	artifactMetadataJSON, err := json.Marshal(metadata)
+	if err != nil {
+		_ = os.Remove(contentPath)
+		return nil, nil, fmt.Errorf("marshal artifact metadata: %w", err)
+	}
+
+	eventBody := cloneMap(event)
+	eventID := uuid.NewString()
+	eventBody["id"] = eventID
+	eventBody["ts"] = time.Now().UTC().Format(time.RFC3339Nano)
+	eventBody["actor_id"] = actorID
+	replaceActorStatementProvenancePlaceholder(eventBody, eventID)
+
+	eventType, _ := eventBody["type"].(string)
+	threadID, _ := eventBody["thread_id"].(string)
+	eventRefs, err := normalizeStringSlice(eventBody["refs"])
+	if err != nil {
+		_ = os.Remove(contentPath)
+		return nil, nil, fmt.Errorf("event.refs: %w", err)
+	}
+	eventRefsJSON, err := json.Marshal(eventRefs)
+	if err != nil {
+		_ = os.Remove(contentPath)
+		return nil, nil, fmt.Errorf("marshal event refs: %w", err)
+	}
+
+	eventPayload := map[string]any{}
+	if rawPayload, ok := eventBody["payload"]; ok && rawPayload != nil {
+		switch payload := rawPayload.(type) {
+		case map[string]any:
+			eventPayload = payload
+		default:
+			_ = os.Remove(contentPath)
+			return nil, nil, fmt.Errorf("event.payload must be an object when provided")
+		}
+	}
+	eventPayloadJSON, err := json.Marshal(eventPayload)
+	if err != nil {
+		_ = os.Remove(contentPath)
+		return nil, nil, fmt.Errorf("marshal event payload: %w", err)
+	}
+	eventBodyJSON, err := json.Marshal(eventBody)
+	if err != nil {
+		_ = os.Remove(contentPath)
+		return nil, nil, fmt.Errorf("marshal event body: %w", err)
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		_ = os.Remove(contentPath)
+		return nil, nil, fmt.Errorf("begin transaction: %w", err)
+	}
+
+	if _, err := tx.ExecContext(
+		ctx,
+		`INSERT INTO artifacts(id, kind, created_at, created_by, content_type, content_path, refs_json, metadata_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		metadata["id"],
+		kind,
+		metadata["created_at"],
+		actorID,
+		contentType,
+		contentPath,
+		string(artifactRefsJSON),
+		string(artifactMetadataJSON),
+	); err != nil {
+		_ = tx.Rollback()
+		_ = os.Remove(contentPath)
+		return nil, nil, fmt.Errorf("insert artifact: %w", err)
+	}
+
+	if _, err := tx.ExecContext(
+		ctx,
+		`INSERT INTO events(id, type, ts, actor_id, thread_id, refs_json, payload_json, body_json, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+		eventBody["id"],
+		eventType,
+		eventBody["ts"],
+		actorID,
+		threadID,
+		string(eventRefsJSON),
+		string(eventPayloadJSON),
+		string(eventBodyJSON),
+	); err != nil {
+		_ = tx.Rollback()
+		_ = os.Remove(contentPath)
+		return nil, nil, fmt.Errorf("insert event: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		_ = tx.Rollback()
+		_ = os.Remove(contentPath)
+		return nil, nil, fmt.Errorf("commit transaction: %w", err)
+	}
+
+	return metadata, eventBody, nil
+}
+
 func (s *Store) GetArtifact(ctx context.Context, id string) (map[string]any, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("primitives store database is not initialized")

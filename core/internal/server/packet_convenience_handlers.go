@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"organization-autorunner-core/internal/primitives"
 )
 
@@ -116,36 +118,37 @@ func createPacketArtifactAndEvent(w http.ResponseWriter, r *http.Request, opts h
 		return
 	}
 
-	artifact, err := opts.primitiveStore.CreateArtifact(r.Context(), actorID, req.Artifact, req.Packet, "structured")
-	if err != nil {
-		if errors.Is(err, primitives.ErrInvalidArtifactID) {
-			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to create artifact")
-		return
+	artifactID, _ := req.Artifact["id"].(string)
+	artifactID = strings.TrimSpace(artifactID)
+	if artifactID == "" {
+		artifactID = uuid.NewString()
+		req.Artifact["id"] = artifactID
 	}
-	artifactID, _ := artifact["id"].(string)
-
 	eventRefs := request.EventRefs(artifactID, threadID, req.Packet)
 	eventRefs = uniqueStringRefs(eventRefs)
 
-	event, err := opts.primitiveStore.AppendEvent(r.Context(), actorID, map[string]any{
+	event := map[string]any{
 		"type":       request.EventType,
 		"thread_id":  threadID,
 		"refs":       eventRefs,
 		"summary":    request.Summary,
 		"payload":    map[string]any{},
 		"provenance": actorStatementProvenance(),
-	})
+	}
+
+	artifact, storedEvent, err := opts.primitiveStore.CreateArtifactAndEvent(r.Context(), actorID, req.Artifact, req.Packet, "structured", event)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to append event")
+		if errors.Is(err, primitives.ErrInvalidArtifactID) {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to create packet artifact and event")
 		return
 	}
 
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"artifact": artifact,
-		"event":    event,
+		"event":    storedEvent,
 	})
 }
 

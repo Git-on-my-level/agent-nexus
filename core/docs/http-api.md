@@ -144,6 +144,17 @@ The schema of objects is defined by `../contracts/oar-schema.yaml`.
     - `artifacts` includes metadata objects referenced by `artifact:<id>` refs in returned events when they exist.
     - Missing referenced IDs are omitted from `snapshots`/`artifacts` (events still keep their original refs).
 
+- `GET /threads/{thread_id}/context`
+  - Query (optional):
+    - `max_events` (non-negative integer, default `20`)
+    - `include_artifact_content` (`true|false`, default `false`)
+  - Response:
+    - `{ "thread": <thread_snapshot>, "recent_events": [<event>...], "key_artifacts": [ { "ref": "artifact:<id>", "artifact": <artifact_metadata>, "content_preview"?: "<string>" } ... ], "open_commitments": [<commitment_snapshot>...] }`
+    - `recent_events` contains at most `max_events` newest events for the thread.
+    - `key_artifacts` preserves `thread.key_artifacts` order and omits missing refs.
+    - `content_preview` is included only when `include_artifact_content=true`.
+    - `open_commitments` expands `thread.open_commitments` IDs into full commitment snapshots (missing IDs are omitted).
+
 ### Commitments (commitment snapshots)
 
 - `POST /commitments`
@@ -211,6 +222,10 @@ The schema of objects is defined by `../contracts/oar-schema.yaml`.
 - `POST /reviews`
   - Body: `{ "actor_id": "...", "artifact": <artifact_metadata>, "packet": <review_packet> }`
   - Response: `{ "artifact": <artifact_metadata>, "event": <event> }`
+
+- Atomicity guarantee:
+  - Packet convenience writes persist artifact metadata/content and emitted event in one transactional operation.
+  - If either artifact or event persistence fails, no partial packet convenience write is committed.
 
 ### Inbox and derived views
 
