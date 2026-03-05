@@ -263,6 +263,64 @@ func TestDraftCreateAcceptsCLIPathCommand(t *testing.T) {
 	}
 }
 
+func TestDraftCreateHelpWithCommandShowsTargetSchema(t *testing.T) {
+	t.Parallel()
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	cli := New()
+	cli.Stdout = stdout
+	cli.Stderr = stderr
+	cli.Stdin = strings.NewReader("")
+	cli.StdinIsTTY = func() bool { return true }
+	cli.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	cli.ReadFile = func(path string) ([]byte, error) {
+		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
+	}
+
+	exitCode := cli.Run([]string{"draft", "create", "--command", "events.create", "--help"})
+	if exitCode != 0 {
+		t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
+	}
+	output := stdout.String()
+	if !strings.Contains(output, "Target command: events.create") {
+		t.Fatalf("expected target command help output=%s", output)
+	}
+	if !strings.Contains(output, "Body schema:") {
+		t.Fatalf("expected body schema in draft create help output=%s", output)
+	}
+	if !strings.Contains(output, "work_order_claimed") {
+		t.Fatalf("expected enum values in draft create help output=%s", output)
+	}
+}
+
+func TestDraftCreateTreatsHelpAsFlagValue(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	env := map[string]string{}
+
+	fromFile := filepath.Join(t.TempDir(), "help")
+	body := `{"thread":{"title":"Alpha","type":"incident","status":"active","priority":"p2","tags":[],"cadence":"reactive","current_summary":"seed","next_actions":[],"key_artifacts":[],"provenance":{"sources":["actor_statement:event_seed"]}}}`
+	if err := os.WriteFile(fromFile, []byte(body), 0o600); err != nil {
+		t.Fatalf("write from-file body: %v", err)
+	}
+
+	raw := runCLIForTest(t, home, env, nil, []string{
+		"--json",
+		"--agent", "agent-a",
+		"draft", "create",
+		"--command", "threads.create",
+		"--from-file", fromFile,
+		"--draft-id", "help",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+	if strings.TrimSpace(anyStringValue(data["draft_id"])) != "help" {
+		t.Fatalf("expected draft id=help payload=%#v", payload)
+	}
+}
+
 func anyStringValue(raw any) string {
 	text, _ := raw.(string)
 	return strings.TrimSpace(text)

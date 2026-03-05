@@ -206,3 +206,34 @@ func TestRunOnboardingHelpTopic(t *testing.T) {
 		t.Fatalf("expected fifth mental model sentence output=%s", output)
 	}
 }
+
+func TestGeneratedCommandHelpIncludesBodySchemaAndEnums(t *testing.T) {
+	t.Parallel()
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	cli := New()
+	cli.Stdout = stdout
+	cli.Stderr = stderr
+	cli.Stdin = strings.NewReader("")
+	cli.StdinIsTTY = func() bool { return true }
+	cli.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	cli.ReadFile = func(path string) ([]byte, error) {
+		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
+	}
+
+	exitCode := cli.Run([]string{"help", "events", "create"})
+	if exitCode != 0 {
+		t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
+	}
+	output := stdout.String()
+	if !strings.Contains(output, "Body schema:") {
+		t.Fatalf("expected body schema block output=%s", output)
+	}
+	if !strings.Contains(output, "event.type (string)") {
+		t.Fatalf("expected event.type body field output=%s", output)
+	}
+	if !strings.Contains(output, "work_order_claimed") {
+		t.Fatalf("expected enum discoverability for work_order_claimed output=%s", output)
+	}
+}

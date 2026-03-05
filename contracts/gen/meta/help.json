@@ -183,6 +183,14 @@
           "command": "oar actors register --id bot-1 --display-name \"Bot 1\" --created-at 2026-03-04T10:00:00Z --json"
         }
       ],
+      "body_schema": {
+        "required": [
+          {
+            "name": "actor",
+            "type": "object"
+          }
+        ]
+      },
       "adjacent_commands": [
         "actors.list"
       ],
@@ -260,6 +268,14 @@
           "command": "oar agents me keys rotate --public-key \u003cbase64-ed25519-pubkey\u003e --json"
         }
       ],
+      "body_schema": {
+        "required": [
+          {
+            "name": "public_key",
+            "type": "string"
+          }
+        ]
+      },
       "adjacent_commands": [
         "agents.me.get",
         "agents.me.patch",
@@ -301,6 +317,14 @@
           "command": "oar agents me patch --username renamed_agent --json"
         }
       ],
+      "body_schema": {
+        "required": [
+          {
+            "name": "username",
+            "type": "string"
+          }
+        ]
+      },
       "adjacent_commands": [
         "agents.me.get",
         "agents.me.keys.rotate",
@@ -419,6 +443,28 @@
           "command": "oar artifacts create --from-file artifact-create.json --json"
         }
       ],
+      "body_schema": {
+        "required": [
+          {
+            "name": "artifact",
+            "type": "object"
+          },
+          {
+            "name": "content",
+            "type": "object|string"
+          },
+          {
+            "name": "content_type",
+            "type": "string"
+          }
+        ],
+        "optional": [
+          {
+            "name": "actor_id",
+            "type": "string"
+          }
+        ]
+      },
       "adjacent_commands": [
         "artifacts.content.get",
         "artifacts.get",
@@ -534,6 +580,18 @@
           "command": "oar auth agents register --username agent.one --public-key \u003cbase64-ed25519-pubkey\u003e --json"
         }
       ],
+      "body_schema": {
+        "required": [
+          {
+            "name": "public_key",
+            "type": "string"
+          },
+          {
+            "name": "username",
+            "type": "string"
+          }
+        ]
+      },
       "adjacent_commands": [
         "auth.token"
       ],
@@ -577,6 +635,36 @@
           "command": "oar auth token --grant-type assertion --agent-id \u003cid\u003e --key-id \u003cid\u003e --signed-at \u003crfc3339\u003e --signature \u003cbase64\u003e --json"
         }
       ],
+      "body_schema": {
+        "required": [
+          {
+            "name": "grant_type",
+            "type": "string"
+          }
+        ],
+        "optional": [
+          {
+            "name": "agent_id",
+            "type": "string"
+          },
+          {
+            "name": "key_id",
+            "type": "string"
+          },
+          {
+            "name": "refresh_token",
+            "type": "string"
+          },
+          {
+            "name": "signature",
+            "type": "string"
+          },
+          {
+            "name": "signed_at",
+            "type": "datetime"
+          }
+        ]
+      },
       "adjacent_commands": [
         "auth.agents.register"
       ],
@@ -613,6 +701,63 @@
           "command": "oar commitments create --from-file commitment.json --json"
         }
       ],
+      "body_schema": {
+        "required": [
+          {
+            "name": "commitment.definition_of_done",
+            "type": "list\u003cstring\u003e"
+          },
+          {
+            "name": "commitment.due_at",
+            "type": "datetime"
+          },
+          {
+            "name": "commitment.links",
+            "type": "list\u003ctyped_ref\u003e"
+          },
+          {
+            "name": "commitment.owner",
+            "type": "string"
+          },
+          {
+            "name": "commitment.provenance.sources",
+            "type": "list\u003cstring\u003e"
+          },
+          {
+            "name": "commitment.status",
+            "type": "string",
+            "enum_values": [
+              "blocked",
+              "canceled",
+              "done",
+              "open"
+            ],
+            "enum_policy": "strict"
+          },
+          {
+            "name": "commitment.thread_id",
+            "type": "string"
+          },
+          {
+            "name": "commitment.title",
+            "type": "string"
+          }
+        ],
+        "optional": [
+          {
+            "name": "actor_id",
+            "type": "string"
+          },
+          {
+            "name": "commitment.provenance.by_field",
+            "type": "map\u003cstring, list\u003cstring\u003e\u003e"
+          },
+          {
+            "name": "commitment.provenance.notes",
+            "type": "string"
+          }
+        ]
+      },
       "adjacent_commands": [
         "commitments.get",
         "commitments.list",
@@ -731,6 +876,65 @@
           "command": "oar commitments patch --commitment-id commitment_123 --from-file commitment-patch.json --json"
         }
       ],
+      "body_schema": {
+        "optional": [
+          {
+            "name": "actor_id",
+            "type": "string"
+          },
+          {
+            "name": "if_updated_at",
+            "type": "datetime"
+          },
+          {
+            "name": "patch.definition_of_done",
+            "type": "list\u003cstring\u003e"
+          },
+          {
+            "name": "patch.due_at",
+            "type": "datetime"
+          },
+          {
+            "name": "patch.links",
+            "type": "list\u003ctyped_ref\u003e"
+          },
+          {
+            "name": "patch.owner",
+            "type": "string"
+          },
+          {
+            "name": "patch.provenance.by_field",
+            "type": "map\u003cstring, list\u003cstring\u003e\u003e"
+          },
+          {
+            "name": "patch.provenance.notes",
+            "type": "string"
+          },
+          {
+            "name": "patch.provenance.sources",
+            "type": "list\u003cstring\u003e"
+          },
+          {
+            "name": "patch.status",
+            "type": "string",
+            "enum_values": [
+              "blocked",
+              "canceled",
+              "done",
+              "open"
+            ],
+            "enum_policy": "strict"
+          },
+          {
+            "name": "patch.title",
+            "type": "string"
+          },
+          {
+            "name": "refs",
+            "type": "list\u003cstring\u003e"
+          }
+        ]
+      },
       "path_params": [
         "commitment_id"
       ],
@@ -773,6 +977,14 @@
           "command": "oar derived rebuild --actor-id system --json"
         }
       ],
+      "body_schema": {
+        "optional": [
+          {
+            "name": "actor_id",
+            "type": "string"
+          }
+        ]
+      },
       "go_method": "DerivedRebuild",
       "ts_method": "derivedRebuild"
     },
@@ -807,6 +1019,67 @@
           "command": "oar events create --from-file event.json --json"
         }
       ],
+      "body_schema": {
+        "required": [
+          {
+            "name": "event.provenance.sources",
+            "type": "list\u003cstring\u003e"
+          },
+          {
+            "name": "event.refs",
+            "type": "list\u003ctyped_ref\u003e"
+          },
+          {
+            "name": "event.summary",
+            "type": "string"
+          },
+          {
+            "name": "event.type",
+            "type": "string",
+            "enum_values": [
+              "commitment_created",
+              "commitment_status_changed",
+              "decision_made",
+              "decision_needed",
+              "exception_raised",
+              "inbox_item_acknowledged",
+              "message_posted",
+              "receipt_added",
+              "review_completed",
+              "snapshot_updated",
+              "work_order_claimed",
+              "work_order_created"
+            ],
+            "enum_policy": "open"
+          }
+        ],
+        "optional": [
+          {
+            "name": "actor_id",
+            "type": "string"
+          },
+          {
+            "name": "event.actor_id",
+            "type": "string"
+          },
+          {
+            "name": "event.payload",
+            "type": "object"
+          },
+          {
+            "name": "event.provenance.by_field",
+            "type": "map\u003cstring, list\u003cstring\u003e\u003e"
+          },
+          {
+            "name": "event.provenance.notes",
+            "type": "string"
+          },
+          {
+            "name": "event.thread_id",
+            "type": "string"
+          }
+        ]
+      },
       "adjacent_commands": [
         "events.get",
         "events.stream"
@@ -930,6 +1203,24 @@
           "command": "oar inbox ack inbox:decision_needed:thread_123:none:event_1 --json"
         }
       ],
+      "body_schema": {
+        "required": [
+          {
+            "name": "inbox_item_id",
+            "type": "string"
+          },
+          {
+            "name": "thread_id",
+            "type": "string"
+          }
+        ],
+        "optional": [
+          {
+            "name": "actor_id",
+            "type": "string"
+          }
+        ]
+      },
       "adjacent_commands": [
         "inbox.list",
         "inbox.stream"
@@ -1331,6 +1622,48 @@
           "command": "oar packets receipts create --from-file receipt.json --json"
         }
       ],
+      "body_schema": {
+        "required": [
+          {
+            "name": "artifact",
+            "type": "object"
+          },
+          {
+            "name": "packet.changes_summary",
+            "type": "string"
+          },
+          {
+            "name": "packet.known_gaps",
+            "type": "list\u003cstring\u003e"
+          },
+          {
+            "name": "packet.outputs",
+            "type": "list\u003ctyped_ref\u003e"
+          },
+          {
+            "name": "packet.receipt_id",
+            "type": "string"
+          },
+          {
+            "name": "packet.thread_id",
+            "type": "string"
+          },
+          {
+            "name": "packet.verification_evidence",
+            "type": "list\u003ctyped_ref\u003e"
+          },
+          {
+            "name": "packet.work_order_id",
+            "type": "string"
+          }
+        ],
+        "optional": [
+          {
+            "name": "actor_id",
+            "type": "string"
+          }
+        ]
+      },
       "adjacent_commands": [
         "packets.reviews.create",
         "packets.work-orders.create"
@@ -1369,6 +1702,50 @@
           "command": "oar packets reviews create --from-file review.json --json"
         }
       ],
+      "body_schema": {
+        "required": [
+          {
+            "name": "artifact",
+            "type": "object"
+          },
+          {
+            "name": "packet.evidence_refs",
+            "type": "list\u003ctyped_ref\u003e"
+          },
+          {
+            "name": "packet.notes",
+            "type": "string"
+          },
+          {
+            "name": "packet.outcome",
+            "type": "string",
+            "enum_values": [
+              "accept",
+              "escalate",
+              "revise"
+            ],
+            "enum_policy": "strict"
+          },
+          {
+            "name": "packet.receipt_id",
+            "type": "string"
+          },
+          {
+            "name": "packet.review_id",
+            "type": "string"
+          },
+          {
+            "name": "packet.work_order_id",
+            "type": "string"
+          }
+        ],
+        "optional": [
+          {
+            "name": "actor_id",
+            "type": "string"
+          }
+        ]
+      },
       "adjacent_commands": [
         "packets.receipts.create",
         "packets.work-orders.create"
@@ -1407,6 +1784,48 @@
           "command": "oar packets work-orders create --from-file work-order.json --json"
         }
       ],
+      "body_schema": {
+        "required": [
+          {
+            "name": "artifact",
+            "type": "object"
+          },
+          {
+            "name": "packet.acceptance_criteria",
+            "type": "list\u003cstring\u003e"
+          },
+          {
+            "name": "packet.constraints",
+            "type": "list\u003cstring\u003e"
+          },
+          {
+            "name": "packet.context_refs",
+            "type": "list\u003ctyped_ref\u003e"
+          },
+          {
+            "name": "packet.definition_of_done",
+            "type": "list\u003cstring\u003e"
+          },
+          {
+            "name": "packet.objective",
+            "type": "string"
+          },
+          {
+            "name": "packet.thread_id",
+            "type": "string"
+          },
+          {
+            "name": "packet.work_order_id",
+            "type": "string"
+          }
+        ],
+        "optional": [
+          {
+            "name": "actor_id",
+            "type": "string"
+          }
+        ]
+      },
       "adjacent_commands": [
         "packets.receipts.create",
         "packets.reviews.create"
@@ -1528,6 +1947,90 @@
           "command": "oar threads create --from-file thread.json --json"
         }
       ],
+      "body_schema": {
+        "required": [
+          {
+            "name": "thread.cadence",
+            "type": "string"
+          },
+          {
+            "name": "thread.current_summary",
+            "type": "string"
+          },
+          {
+            "name": "thread.key_artifacts",
+            "type": "list\u003ctyped_ref\u003e"
+          },
+          {
+            "name": "thread.next_actions",
+            "type": "list\u003cstring\u003e"
+          },
+          {
+            "name": "thread.priority",
+            "type": "string",
+            "enum_values": [
+              "p0",
+              "p1",
+              "p2",
+              "p3"
+            ],
+            "enum_policy": "strict"
+          },
+          {
+            "name": "thread.provenance.sources",
+            "type": "list\u003cstring\u003e"
+          },
+          {
+            "name": "thread.status",
+            "type": "string",
+            "enum_values": [
+              "active",
+              "closed",
+              "paused"
+            ],
+            "enum_policy": "strict"
+          },
+          {
+            "name": "thread.tags",
+            "type": "list\u003cstring\u003e"
+          },
+          {
+            "name": "thread.title",
+            "type": "string"
+          },
+          {
+            "name": "thread.type",
+            "type": "string",
+            "enum_values": [
+              "case",
+              "incident",
+              "initiative",
+              "other",
+              "process",
+              "relationship"
+            ],
+            "enum_policy": "strict"
+          }
+        ],
+        "optional": [
+          {
+            "name": "actor_id",
+            "type": "string"
+          },
+          {
+            "name": "thread.next_check_in_at",
+            "type": "datetime"
+          },
+          {
+            "name": "thread.provenance.by_field",
+            "type": "map\u003cstring, list\u003cstring\u003e\u003e"
+          },
+          {
+            "name": "thread.provenance.notes",
+            "type": "string"
+          }
+        ]
+      },
       "adjacent_commands": [
         "threads.context",
         "threads.get",
@@ -1651,6 +2154,92 @@
           "command": "oar threads patch --thread-id thread_123 --from-file patch.json --json"
         }
       ],
+      "body_schema": {
+        "optional": [
+          {
+            "name": "actor_id",
+            "type": "string"
+          },
+          {
+            "name": "if_updated_at",
+            "type": "datetime"
+          },
+          {
+            "name": "patch.cadence",
+            "type": "string"
+          },
+          {
+            "name": "patch.current_summary",
+            "type": "string"
+          },
+          {
+            "name": "patch.key_artifacts",
+            "type": "list\u003ctyped_ref\u003e"
+          },
+          {
+            "name": "patch.next_actions",
+            "type": "list\u003cstring\u003e"
+          },
+          {
+            "name": "patch.next_check_in_at",
+            "type": "datetime"
+          },
+          {
+            "name": "patch.priority",
+            "type": "string",
+            "enum_values": [
+              "p0",
+              "p1",
+              "p2",
+              "p3"
+            ],
+            "enum_policy": "strict"
+          },
+          {
+            "name": "patch.provenance.by_field",
+            "type": "map\u003cstring, list\u003cstring\u003e\u003e"
+          },
+          {
+            "name": "patch.provenance.notes",
+            "type": "string"
+          },
+          {
+            "name": "patch.provenance.sources",
+            "type": "list\u003cstring\u003e"
+          },
+          {
+            "name": "patch.status",
+            "type": "string",
+            "enum_values": [
+              "active",
+              "closed",
+              "paused"
+            ],
+            "enum_policy": "strict"
+          },
+          {
+            "name": "patch.tags",
+            "type": "list\u003cstring\u003e"
+          },
+          {
+            "name": "patch.title",
+            "type": "string"
+          },
+          {
+            "name": "patch.type",
+            "type": "string",
+            "enum_values": [
+              "case",
+              "incident",
+              "initiative",
+              "other",
+              "process",
+              "relationship"
+            ],
+            "enum_policy": "strict"
+          }
+        ]
+      },
       "path_params": [
         "thread_id"
       ],

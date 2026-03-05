@@ -211,7 +211,89 @@ func formatGeneratedCommandHelp(topic string, cmd registry.Command) string {
 			b.WriteString(fmt.Sprintf("  - %s: `%s`\n", title, runtimeCommandFromRegistryCommand(example.Command)))
 		}
 	}
+	if schemaBlock := formatBodySchemaBlock(cmd.BodySchema); strings.TrimSpace(schemaBlock) != "" {
+		b.WriteString("\n")
+		b.WriteString(schemaBlock)
+	}
 	return strings.TrimSpace(b.String())
+}
+
+func formatBodySchemaBlock(schema *registry.BodySchema) string {
+	if schema == nil {
+		return ""
+	}
+	required := formatBodyFieldList(schema.Required)
+	optional := formatBodyFieldList(schema.Optional)
+	if required == "" && optional == "" {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("Body schema:\n")
+	if required == "" {
+		b.WriteString("  Required: none\n")
+	} else {
+		b.WriteString("  Required: " + required + "\n")
+	}
+	if optional == "" {
+		b.WriteString("  Optional: none\n")
+	} else {
+		b.WriteString("  Optional: " + optional + "\n")
+	}
+	if enumLine := formatEnumFieldList(schema.Required, schema.Optional); enumLine != "" {
+		b.WriteString("  Enum values: " + enumLine + "\n")
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func formatBodyFieldList(fields []registry.BodyField) string {
+	if len(fields) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(fields))
+	for _, field := range fields {
+		name := strings.TrimSpace(field.Name)
+		fieldType := strings.TrimSpace(field.Type)
+		if name == "" {
+			continue
+		}
+		if fieldType == "" {
+			fieldType = "any"
+		}
+		parts = append(parts, fmt.Sprintf("%s (%s)", name, fieldType))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, ", ")
+}
+
+func formatEnumFieldList(required []registry.BodyField, optional []registry.BodyField) string {
+	joined := append([]registry.BodyField{}, required...)
+	joined = append(joined, optional...)
+	parts := make([]string, 0, len(joined))
+	seen := map[string]struct{}{}
+	for _, field := range joined {
+		name := strings.TrimSpace(field.Name)
+		if name == "" || len(field.EnumValues) == 0 {
+			continue
+		}
+		if _, exists := seen[name]; exists {
+			continue
+		}
+		seen[name] = struct{}{}
+		enumValues := strings.Join(field.EnumValues, ", ")
+		policy := strings.TrimSpace(field.EnumPolicy)
+		if policy != "" {
+			parts = append(parts, fmt.Sprintf("%s (%s): %s", name, policy, enumValues))
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%s: %s", name, enumValues))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	sort.Strings(parts)
+	return strings.Join(parts, "; ")
 }
 
 func commandByCLIPath(commands []registry.Command, path string) (registry.Command, bool) {
@@ -363,15 +445,19 @@ func runtimePathFromRegistryPath(path string) string {
 }
 
 func commandIDToCLIPath(commandID string) string {
-	meta, err := registry.LoadEmbedded()
-	if err != nil {
-		return strings.TrimSpace(commandID)
-	}
-	cmd, ok := meta.CommandByID(commandID)
+	cmd, ok := generatedCommandByID(commandID)
 	if !ok {
 		return strings.TrimSpace(commandID)
 	}
 	return strings.TrimSpace(cmd.CLIPath)
+}
+
+func generatedCommandByID(commandID string) (registry.Command, bool) {
+	meta, err := registry.LoadEmbedded()
+	if err != nil {
+		return registry.Command{}, false
+	}
+	return meta.CommandByID(commandID)
 }
 
 func runtimeCommandFromRegistryCommand(command string) string {

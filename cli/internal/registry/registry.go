@@ -26,6 +26,18 @@ type Example struct {
 	Description string `json:"description,omitempty"`
 }
 
+type BodyField struct {
+	Name       string   `json:"name"`
+	Type       string   `json:"type"`
+	EnumValues []string `json:"enum_values,omitempty"`
+	EnumPolicy string   `json:"enum_policy,omitempty"`
+}
+
+type BodySchema struct {
+	Required []BodyField `json:"required,omitempty"`
+	Optional []BodyField `json:"optional,omitempty"`
+}
+
 type Command struct {
 	CommandID      string            `json:"command_id"`
 	CLIPath        string            `json:"cli_path"`
@@ -44,6 +56,7 @@ type Command struct {
 	Stability      string            `json:"stability,omitempty"`
 	AgentNotes     string            `json:"agent_notes,omitempty"`
 	Examples       []Example         `json:"examples,omitempty"`
+	BodySchema     *BodySchema       `json:"body_schema,omitempty"`
 	PathParams     []string          `json:"path_params,omitempty"`
 	Adjacent       []string          `json:"adjacent_commands,omitempty"`
 	GoMethod       string            `json:"go_method,omitempty"`

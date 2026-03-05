@@ -60,6 +60,11 @@ func (a *App) runDraft(ctx context.Context, args []string, cfg config.Resolved) 
 }
 
 func (a *App) runDraftCreate(args []string, cfg config.Resolved) (*commandResult, error) {
+	filteredArgs, helpRequested := stripDraftCreateHelpFlags(args)
+	if helpRequested {
+		return &commandResult{Text: draftCreateHelpText(filteredArgs)}, nil
+	}
+
 	fs := newSilentFlagSet("draft create")
 	var commandFlag trackedString
 	var fromFileFlag trackedString
@@ -67,7 +72,7 @@ func (a *App) runDraftCreate(args []string, cfg config.Resolved) (*commandResult
 	fs.Var(&commandFlag, "command", "Command ID or CLI path (for example, threads.create)")
 	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
 	fs.Var(&draftIDFlag, "draft-id", "Optional deterministic draft id")
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(filteredArgs); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	if len(fs.Args()) > 0 {
@@ -1193,4 +1198,95 @@ Examples:
   cat payload.json | oar draft create --command threads.create
   oar draft commit draft-20260305T103000-a1b2c3d4e5f6
 `) + "\n"
+}
+
+func draftCreateHelpText(args []string) string {
+	var b strings.Builder
+	b.WriteString(strings.TrimSpace(`
+Draft create stages a write request locally for later commit.
+
+Usage:
+  oar draft create --command <command-id> [--from-file <path>] [--draft-id <id>]
+
+Flags:
+  --command <id|path>   Command ID or CLI path (for example, events.create)
+  --from-file <path>    Read JSON body from file instead of stdin
+  --draft-id <id>       Optional deterministic draft ID
+
+Examples:
+  cat payload.json | oar draft create --command events.create
+  oar draft create --command threads.create --from-file thread.json
+`))
+
+	commandValue := draftCreateHelpCommandValue(args)
+	if strings.TrimSpace(commandValue) == "" {
+		return b.String() + "\n"
+	}
+	commandID, err := resolveDraftCommandID(commandValue)
+	if err != nil {
+		b.WriteString("\n\nTarget command hint: " + strings.TrimSpace(commandValue) + " (unrecognized)")
+		return b.String() + "\n"
+	}
+	cmd, ok := generatedCommandByID(commandID)
+	if !ok {
+		b.WriteString("\n\nTarget command hint: " + commandID + " (metadata unavailable)")
+		return b.String() + "\n"
+	}
+	b.WriteString("\n\nTarget command: " + commandID)
+	if path := strings.TrimSpace(runtimePathFromRegistryPath(cmd.CLIPath)); path != "" {
+		b.WriteString(" (`" + path + "`)")
+	}
+	if schemaBlock := formatBodySchemaBlock(cmd.BodySchema); strings.TrimSpace(schemaBlock) != "" {
+		b.WriteString("\n\n")
+		b.WriteString(schemaBlock)
+	}
+	return b.String() + "\n"
+}
+
+func draftCreateHelpCommandValue(args []string) string {
+	value := ""
+	for idx := 0; idx < len(args); idx++ {
+		arg := strings.TrimSpace(args[idx])
+		switch {
+		case arg == "--command" && idx+1 < len(args):
+			value = strings.TrimSpace(args[idx+1])
+			idx++
+		case strings.HasPrefix(arg, "--command="):
+			value = strings.TrimSpace(strings.TrimPrefix(arg, "--command="))
+		}
+	}
+	return value
+}
+
+func stripDraftCreateHelpFlags(args []string) ([]string, bool) {
+	filtered := make([]string, 0, len(args))
+	helpRequested := false
+	expectsValue := false
+	for _, arg := range args {
+		trimmed := strings.TrimSpace(arg)
+		if expectsValue {
+			filtered = append(filtered, arg)
+			expectsValue = false
+			continue
+		}
+		switch trimmed {
+		case "--command", "--from-file", "--draft-id":
+			expectsValue = true
+			filtered = append(filtered, arg)
+			continue
+		case "-h", "--help":
+			helpRequested = true
+			continue
+		}
+		if strings.HasPrefix(trimmed, "--help=") || strings.HasPrefix(trimmed, "-h=") {
+			value := strings.TrimSpace(strings.SplitN(trimmed, "=", 2)[1])
+			switch strings.ToLower(value) {
+			case "1", "t", "true", "y", "yes", "on":
+				helpRequested = true
+			}
+			continue
+		}
+		filtered = append(filtered, arg)
+	}
+	return filtered, helpRequested
 }
