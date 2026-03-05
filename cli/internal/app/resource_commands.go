@@ -381,6 +381,9 @@ func (a *App) runEventsCommand(ctx context.Context, args []string, cfg config.Re
 		if err != nil {
 			return nil, "events create", err
 		}
+		if err := validateEventsCreateBody(body); err != nil {
+			return nil, "events create", err
+		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "events create", "events.create", nil, nil, body)
 		return result, "events create", callErr
 	case "stream":
@@ -1070,6 +1073,49 @@ func decodeJSONPayload(payload []byte) (any, error) {
 		return nil, errnorm.Usage("invalid_json", "input body must be valid JSON")
 	}
 	return parsed, nil
+}
+
+func validateEventsCreateBody(body any) error {
+	payload, ok := body.(map[string]any)
+	if !ok {
+		return nil
+	}
+	rawEvent, hasEvent := payload["event"]
+	if !hasEvent {
+		return nil
+	}
+	event, ok := rawEvent.(map[string]any)
+	if !ok {
+		return nil
+	}
+	if anyString(event["type"]) != "review_completed" {
+		return nil
+	}
+	rawRefs, hasRefs := event["refs"]
+	if !hasRefs {
+		return invalidReviewCompletedRefsError()
+	}
+	refs, ok := asStringList(rawRefs)
+	if !ok {
+		return invalidReviewCompletedRefsError()
+	}
+	artifactRefs := 0
+	for _, ref := range refs {
+		if strings.HasPrefix(strings.TrimSpace(ref), "artifact:") {
+			artifactRefs++
+		}
+	}
+	if artifactRefs < 3 {
+		return invalidReviewCompletedRefsError()
+	}
+	return nil
+}
+
+func invalidReviewCompletedRefsError() error {
+	return errnorm.Usage(
+		"invalid_request",
+		`event.type "review_completed" requires event.refs to include at least 3 refs prefixed with "artifact:" (for example: "artifact:work_order_1", "artifact:receipt_1", "artifact:review_1")`,
+	)
 }
 
 func addSingleQuery(out *[]queryParam, name string, value string) {
