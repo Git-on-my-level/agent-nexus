@@ -16,6 +16,8 @@
   import { coreClient } from "$lib/coreClient";
   import { navigationItems } from "$lib/navigation";
 
+  let { children } = $props();
+
   let actorError = $state("");
   let loadingActors = $state(false);
   let creatingActor = $state(false);
@@ -250,7 +252,7 @@
 
     <main class="flex-1 overflow-y-auto px-8 py-6">
       <div class="mx-auto max-w-4xl">
-        <slot />
+        {@render children?.()}
       </div>
     </main>
   {/if}
