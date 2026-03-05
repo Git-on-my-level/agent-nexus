@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+
+GO_FILES="$(find . -type f -name '*.go' \
+  -not -path './.git/*' \
+  -not -path './.codex-autorunner/*')"
+
+if [[ -n "${GO_FILES}" ]]; then
+  UNFORMATTED="$(printf '%s\n' "${GO_FILES}" | xargs gofmt -l)"
+  if [[ -n "$UNFORMATTED" ]]; then
+    echo "gofmt found unformatted files:" >&2
+    echo "$UNFORMATTED" >&2
+    exit 1
+  fi
+fi
+
+go vet ./...

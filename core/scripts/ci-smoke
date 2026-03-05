@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+
+TMP_DIR="$(mktemp -d)"
+PORT="${PORT:-18080}"
+LISTEN_ADDR="127.0.0.1:${PORT}"
+WORKSPACE_ROOT="$TMP_DIR/workspace"
+SCHEMA_PATH="$ROOT_DIR/contracts/oar-schema.yaml"
+
+cleanup() {
+  if [[ -n "${SERVER_PID:-}" ]] && kill -0 "$SERVER_PID" 2>/dev/null; then
+    kill "$SERVER_PID" 2>/dev/null || true
+    wait "$SERVER_PID" 2>/dev/null || true
+  fi
+  rm -rf "$TMP_DIR"
+}
+trap cleanup EXIT
+
+go run ./cmd/oar-core \
+  --listen-addr "$LISTEN_ADDR" \
+  --schema-path "$SCHEMA_PATH" \
+  --workspace-root "$WORKSPACE_ROOT" \
+  >"$TMP_DIR/server.log" 2>&1 &
+SERVER_PID=$!
+
+for _ in $(seq 1 50); do
+  if curl -fsS "http://$LISTEN_ADDR/health" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 0.1
+done
+
+curl -fsS "http://$LISTEN_ADDR/health" >/dev/null
+VERSION_JSON="$(curl -fsS "http://$LISTEN_ADDR/version")"
+printf '%s' "$VERSION_JSON" | grep -q '"schema_version"'
+
+kill "$SERVER_PID"
+wait "$SERVER_PID" 2>/dev/null || true
+SERVER_PID=""

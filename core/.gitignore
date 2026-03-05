@@ -1,0 +1,14 @@
+# macOS
+.DS_Store
+
+# Runtime workspace
+.oar-workspace/
+
+# Go build/test artifacts
+bin/
+*.test
+*.out
+coverage.out
+
+# Optional local env
+.env
