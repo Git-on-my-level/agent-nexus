@@ -369,12 +369,11 @@ func handleThreadContext(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		return
 	}
 
-	events, err := opts.primitiveStore.ListEventsByThread(r.Context(), threadID)
+	recentEvents, err := opts.primitiveStore.ListRecentEventsByThread(r.Context(), threadID, maxEvents)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load thread events")
 		return
 	}
-	recentEvents := recentThreadEvents(events, maxEvents)
 
 	keyArtifacts, err := buildThreadContextArtifacts(r.Context(), opts, thread, includeArtifactContent)
 	if err != nil {
@@ -394,16 +393,6 @@ func handleThreadContext(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		"key_artifacts":    keyArtifacts,
 		"open_commitments": openCommitments,
 	})
-}
-
-func recentThreadEvents(events []map[string]any, maxEvents int) []map[string]any {
-	if maxEvents <= 0 || len(events) == 0 {
-		return []map[string]any{}
-	}
-	if len(events) <= maxEvents {
-		return append([]map[string]any(nil), events...)
-	}
-	return append([]map[string]any(nil), events[len(events)-maxEvents:]...)
 }
 
 func buildThreadContextArtifacts(ctx context.Context, opts handlerOptions, thread map[string]any, includeArtifactContent bool) ([]map[string]any, error) {

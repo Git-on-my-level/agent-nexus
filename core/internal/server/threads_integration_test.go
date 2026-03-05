@@ -937,6 +937,25 @@ func TestThreadContextBundlesRecentEventsArtifactsAndOpenCommitments(t *testing.
 	if _, exists := payloadNoContent.KeyArtifacts[0]["content_preview"]; exists {
 		t.Fatalf("did not expect content_preview when include_artifact_content=false: %#v", payloadNoContent.KeyArtifacts[0])
 	}
+
+	contextZeroEventsResp, err := http.Get(h.baseURL + "/threads/" + threadID + "/context?max_events=0")
+	if err != nil {
+		t.Fatalf("GET /threads/{id}/context with max_events=0: %v", err)
+	}
+	defer contextZeroEventsResp.Body.Close()
+	if contextZeroEventsResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected context status (max_events=0): got %d", contextZeroEventsResp.StatusCode)
+	}
+
+	var payloadZeroEvents struct {
+		RecentEvents []map[string]any `json:"recent_events"`
+	}
+	if err := json.NewDecoder(contextZeroEventsResp.Body).Decode(&payloadZeroEvents); err != nil {
+		t.Fatalf("decode context max_events=0 response: %v", err)
+	}
+	if len(payloadZeroEvents.RecentEvents) != 0 {
+		t.Fatalf("expected 0 recent events when max_events=0, got %d", len(payloadZeroEvents.RecentEvents))
+	}
 }
 
 func TestThreadContextRejectsInvalidQueryParams(t *testing.T) {

@@ -946,6 +946,93 @@ func (s *Store) ListEventsByThread(ctx context.Context, threadID string) ([]map[
 	return events, nil
 }
 
+func (s *Store) ListRecentEventsByThread(ctx context.Context, threadID string, limit int) ([]map[string]any, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("primitives store database is not initialized")
+	}
+	if limit <= 0 {
+		return []map[string]any{}, nil
+	}
+
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json, body_json
+		 FROM events
+		 WHERE thread_id = ?
+		 ORDER BY ts DESC, id DESC
+		 LIMIT ?`,
+		threadID,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query recent thread events: %w", err)
+	}
+	defer rows.Close()
+
+	recentDescending := make([]map[string]any, 0, limit)
+	for rows.Next() {
+		var (
+			eventID     string
+			typeValue   string
+			ts          string
+			actorID     string
+			thread      sql.NullString
+			refsJSON    string
+			payloadJSON string
+			bodyJSON    sql.NullString
+		)
+		if err := rows.Scan(&eventID, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON, &bodyJSON); err != nil {
+			return nil, fmt.Errorf("scan recent thread event: %w", err)
+		}
+
+		if bodyJSON.Valid && strings.TrimSpace(bodyJSON.String) != "" && bodyJSON.String != "{}" {
+			body := map[string]any{}
+			if err := json.Unmarshal([]byte(bodyJSON.String), &body); err != nil {
+				return nil, fmt.Errorf("decode recent thread event body: %w", err)
+			}
+			recentDescending = append(recentDescending, body)
+			continue
+		}
+
+		refs := make([]string, 0)
+		if err := json.Unmarshal([]byte(refsJSON), &refs); err != nil {
+			return nil, fmt.Errorf("decode recent thread event refs: %w", err)
+		}
+		payload := map[string]any{}
+		if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
+			return nil, fmt.Errorf("decode recent thread event payload: %w", err)
+		}
+
+		event := map[string]any{
+			"id":       eventID,
+			"type":     typeValue,
+			"ts":       ts,
+			"actor_id": actorID,
+			"refs":     refs,
+			"payload":  payload,
+		}
+		if thread.Valid {
+			event["thread_id"] = thread.String
+		}
+		recentDescending = append(recentDescending, event)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate recent thread events: %w", err)
+	}
+
+	return reverseEvents(recentDescending), nil
+}
+
+func reverseEvents(events []map[string]any) []map[string]any {
+	if len(events) <= 1 {
+		return events
+	}
+	for left, right := 0, len(events)-1; left < right; left, right = left+1, right-1 {
+		events[left], events[right] = events[right], events[left]
+	}
+	return events
+}
+
 func (s *Store) ListEvents(ctx context.Context, filter EventListFilter) ([]map[string]any, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("primitives store database is not initialized")

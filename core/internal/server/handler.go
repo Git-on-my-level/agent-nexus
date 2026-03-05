@@ -43,6 +43,7 @@ type PrimitiveStore interface {
 	PatchCommitment(ctx context.Context, actorID string, id string, patch map[string]any, refs []string, ifUpdatedAt *string) (primitives.PatchSnapshotResult, error)
 	ListCommitments(ctx context.Context, filter primitives.CommitmentListFilter) ([]map[string]any, error)
 	ListEventsByThread(ctx context.Context, threadID string) ([]map[string]any, error)
+	ListRecentEventsByThread(ctx context.Context, threadID string, limit int) ([]map[string]any, error)
 	ListEvents(ctx context.Context, filter primitives.EventListFilter) ([]map[string]any, error)
 }
 
