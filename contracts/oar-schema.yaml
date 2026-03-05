@@ -58,6 +58,7 @@ enums:
     values:
       - message_posted
       - work_order_created
+      - work_order_claimed
       - receipt_added
       - review_completed
       - decision_needed

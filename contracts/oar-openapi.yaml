@@ -1801,6 +1801,10 @@ components:
         actor_id: { type: string }
         event:
           $ref: '#/components/schemas/AnyObject'
+      description: >
+        Conventional event payloads are additive guidance for orchestrators.
+        For `event.type="work_order_claimed"`, `event.payload` should include:
+        `{ "work_order_id": "<artifact_id>", "actor_id": "<claiming_actor_id>" }`.
       required: [event]
 
     EventResponse:
