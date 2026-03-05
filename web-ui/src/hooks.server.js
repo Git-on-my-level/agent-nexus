@@ -8,6 +8,7 @@ function normalizeBaseUrl(value) {
 
 function shouldProxyToCore(pathname) {
   return (
+    pathname.startsWith("/meta/") ||
     pathname === "/version" ||
     pathname === "/actors" ||
     pathname === "/threads" ||

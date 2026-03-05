@@ -6,19 +6,19 @@ organization-autorunner-ui is the frontend/client application for the Organizati
 ## Primary spec
 - Repo spec: `docs/oar-ui-spec.md`
 - HTTP contract: `docs/http-api.md`
-- Shared schema: `contracts/oar-schema.yaml`
+- Shared schema: `../contracts/oar-schema.yaml`
 - Spec compliance matrix: `docs/spec-compliance.md`
 - Build/serve/integration runbook: `docs/runbook.md`
 
 ## Architecture at a glance
 - Framework/runtime: SvelteKit app (`src/routes`, `src/lib`, `src/hooks.server.js`).
-- Core API client: `src/lib/oarCoreClient.js` (HTTP contract wrapper, actor injection, error normalization).
+- Core API client: `src/lib/oarCoreClient.js` (generated-contract client wrapper, actor injection, error normalization).
 - App-level client binding: `src/lib/coreClient.js` (injects selected actor ID from session store).
 - Connectivity modes:
   - Browser-direct via `PUBLIC_OAR_CORE_BASE_URL` (`src/lib/config.js`).
   - Server-side proxy via `OAR_CORE_BASE_URL` in `src/hooks.server.js`.
   - Same-origin mock routes when no proxy/base URL is set (`src/routes/**/+server.js` + `src/lib/mockCoreData.js`).
-- Startup guard: schema version is verified in `src/routes/+layout.js` via `verifyCoreSchemaVersion(...)`.
+- Startup guard: schema version is verified in `src/routes/+layout.js` via `verifyCoreSchemaVersion(...)` using `/meta/handshake` (with `/version` fallback).
 - Actor gate: enforced in `src/routes/+layout.svelte`, state managed in `src/lib/actorSession.js`.
 
 ## UI surface map
@@ -49,7 +49,7 @@ organization-autorunner-ui is the frontend/client application for the Organizati
 - Mutating calls require `actor_id`; client injects this automatically via selected actor (`createOarCoreClient` + `withActorId`).
 - Mock API handlers under `src/routes/**/+server.js` mirror core endpoints and delegate state to `src/lib/mockCoreData.js`.
 - Proxy allowlist for core paths is explicit in `shouldProxyToCore(...)` in `src/hooks.server.js`.
-- `src/routes/version/+server.js` reports expected schema version used by startup checks.
+- `src/routes/meta/handshake/+server.js` and `src/routes/version/+server.js` provide mock compatibility endpoints used by startup checks.
 
 ## Testing and quality gates
 - Unit tests: `tests/unit/**/*.test.js` (pure module behavior).
@@ -83,7 +83,7 @@ organization-autorunner-ui is the frontend/client application for the Organizati
   - Ensure timeline UI has safe fallback behavior and add e2e coverage.
 - If schema version changes:
   - Update `EXPECTED_SCHEMA_VERSION` in `src/lib/config.js`.
-  - Confirm `/version` behavior and startup check in `src/routes/+layout.js`.
+  - Confirm `/meta/handshake` behavior (and `/version` fallback) in `src/routes/+layout.js`.
   - Align docs (`README.md`, `docs/*`) and integration tests.
 - If actor/session behavior changes:
   - Update `src/lib/actorSession.js`, actor gate in `+layout.svelte`, and actor-related tests.

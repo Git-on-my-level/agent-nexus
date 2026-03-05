@@ -1,34 +1,17 @@
-import { EXPECTED_SCHEMA_VERSION, oarCoreBaseUrl } from "./config.js";
+import {
+  OarClient,
+  commandRegistry,
+} from "../../../contracts/gen/ts/dist/client.js";
 
-function encodePathSegment(value) {
-  return encodeURIComponent(String(value));
-}
+import {
+  EXPECTED_SCHEMA_VERSION,
+  normalizeBaseUrl,
+  oarCoreBaseUrl,
+} from "./config.js";
 
-function appendQuery(path, query = {}) {
-  const params = new URLSearchParams();
-
-  Object.entries(query).forEach(([key, value]) => {
-    if (value === undefined || value === null || value === "") {
-      return;
-    }
-
-    if (Array.isArray(value)) {
-      value
-        .filter(
-          (entry) => entry !== undefined && entry !== null && entry !== "",
-        )
-        .forEach((entry) => {
-          params.append(key, String(entry));
-        });
-      return;
-    }
-
-    params.set(key, String(value));
-  });
-
-  const serialized = params.toString();
-  return serialized ? `${path}?${serialized}` : path;
-}
+const commandRegistryByID = new Map(
+  commandRegistry.map((command) => [command.command_id, command]),
+);
 
 function toAbsoluteUrl(baseUrl, pathWithQuery) {
   if (!baseUrl) {
@@ -64,58 +47,194 @@ function extractErrorMessage(detailsText) {
   return raw;
 }
 
-export function createOarCoreClient(options = {}) {
-  const baseUrl = options.baseUrl ?? oarCoreBaseUrl;
-  const fetchFn = options.fetchFn ?? fetch;
-  const actorIdProvider = options.actorIdProvider;
-  const target = baseUrl || "same-origin";
+function parseJsonBody(body, commandId) {
+  const raw = String(body ?? "").trim();
+  if (!raw) {
+    return {};
+  }
 
-  async function request(method, path, config = {}) {
-    const pathWithQuery = appendQuery(path, config.query);
-    const url = toAbsoluteUrl(baseUrl, pathWithQuery);
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new Error(`oar-core returned invalid JSON for ${commandId}.`);
+  }
+}
 
-    const headers = {
-      accept: "application/json",
-      ...config.headers,
-    };
-
-    let body;
-    if (config.body !== undefined) {
-      body = JSON.stringify(config.body);
-      headers["content-type"] = "application/json";
+function renderPath(pathTemplate, pathParams = {}) {
+  return String(pathTemplate).replace(/\{([^{}]+)\}/g, (_match, name) => {
+    const value = pathParams[name];
+    if (value === undefined || value === null || value === "") {
+      throw new Error(`missing path param ${name}`);
     }
+    return encodeURIComponent(String(value));
+  });
+}
+
+function firstStructuredPayloadIndex(value) {
+  const objectIndex = value.indexOf("{");
+  const arrayIndex = value.indexOf("[");
+  const indexes = [objectIndex, arrayIndex].filter((index) => index >= 0);
+  return indexes.length > 0 ? Math.min(...indexes) : -1;
+}
+
+function parseGeneratedFailure(error, commandId) {
+  if (!(error instanceof Error)) {
+    return null;
+  }
+
+  const prefix = `request failed for ${commandId}:`;
+  if (!error.message.startsWith(prefix)) {
+    return null;
+  }
+
+  const rest = error.message.slice(prefix.length).trim();
+  const statusMatch = rest.match(/^(\d+)\s+(.*)$/);
+  if (!statusMatch) {
+    return {
+      status: undefined,
+      details: extractErrorMessage(rest),
+    };
+  }
+
+  const status = Number.parseInt(statusMatch[1], 10);
+  const remainder = statusMatch[2];
+  const payloadStart = firstStructuredPayloadIndex(remainder);
+  const payloadText =
+    payloadStart >= 0 ? remainder.slice(payloadStart) : remainder;
+  const details =
+    extractErrorMessage(payloadText) || extractErrorMessage(remainder);
+
+  return {
+    status: Number.isFinite(status) ? status : undefined,
+    details,
+  };
+}
+
+function normalizeRequestError(error, { target, commandId, method, path }) {
+  const generatedFailure = parseGeneratedFailure(error, commandId);
+
+  if (generatedFailure) {
+    const detailSuffix = generatedFailure.details
+      ? ` - ${generatedFailure.details}`
+      : "";
+    const guidanceSuffix =
+      generatedFailure.status >= 500
+        ? " oar-core may be unavailable; verify backend startup and base URL."
+        : "";
+
+    const requestError = new Error(
+      `oar-core request failed at ${target}: ${method} ${path} (${generatedFailure.status ?? "unknown"})${detailSuffix}${guidanceSuffix}`,
+    );
+    requestError.status = generatedFailure.status;
+    requestError.details = generatedFailure.details;
+    return requestError;
+  }
+
+  const reason = error instanceof Error ? error.message : String(error);
+  return new Error(
+    `Unable to reach oar-core at ${target} for ${method} ${path}. Check that oar-core is running and OAR_CORE_BASE_URL is correct. ${reason}`,
+  );
+}
+
+async function parseRawErrorResponse(response, fallbackStatusText) {
+  const rawDetails = await response.text().catch(() => "");
+  const details = extractErrorMessage(rawDetails);
+  const detailSuffix = details ? ` - ${details}` : "";
+  const guidanceSuffix =
+    response.status >= 500
+      ? " oar-core may be unavailable; verify backend startup and base URL."
+      : "";
+
+  const requestError = new Error(
+    `oar-core request failed: (${response.status} ${fallbackStatusText})${detailSuffix}${guidanceSuffix}`,
+  );
+  requestError.status = response.status;
+  requestError.details = details;
+  throw requestError;
+}
+
+export function createOarCoreClient(options = {}) {
+  const resolvedBaseUrl = normalizeBaseUrl(options.baseUrl ?? oarCoreBaseUrl);
+  const baseFetchFn = options.fetchFn ?? fetch;
+  const actorIdProvider = options.actorIdProvider;
+  const target = resolvedBaseUrl || "same-origin";
+  const sameOriginProxyBaseUrl = "http://oar.local";
+  const generatedBaseUrl = resolvedBaseUrl || sameOriginProxyBaseUrl;
+
+  const fetchFn =
+    resolvedBaseUrl.length > 0
+      ? baseFetchFn
+      : (input, init) => {
+          const parsedUrl = new URL(String(input), sameOriginProxyBaseUrl);
+          const relativeUrl = `${parsedUrl.pathname}${parsedUrl.search}`;
+          return baseFetchFn(relativeUrl, init);
+        };
+
+  const generated = new OarClient(generatedBaseUrl, fetchFn);
+
+  function commandInfo(commandId) {
+    const command = commandRegistryByID.get(commandId);
+    if (!command) {
+      throw new Error(`Unknown generated command id: ${commandId}`);
+    }
+    return command;
+  }
+
+  async function invokeJSON(commandId, invokeFn) {
+    const command = commandInfo(commandId);
+
+    try {
+      const result = await invokeFn();
+      return parseJsonBody(result.body, commandId);
+    } catch (error) {
+      throw normalizeRequestError(error, {
+        target,
+        commandId,
+        method: command.method,
+        path: command.path,
+      });
+    }
+  }
+
+  async function invokeRaw(commandId, pathParams = {}) {
+    const command = commandInfo(commandId);
+    const resolvedPath = renderPath(command.path, pathParams);
+    const url = toAbsoluteUrl(resolvedBaseUrl, resolvedPath);
 
     let response;
     try {
-      response = await fetchFn(url, { method, headers, body });
+      response = await fetchFn(url, {
+        method: command.method,
+        headers: {
+          accept: "*/*",
+        },
+      });
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      throw new Error(
-        `Unable to reach oar-core at ${target} for ${method} ${path}. Check that oar-core is running and OAR_CORE_BASE_URL is correct. ${reason}`,
-      );
+      throw normalizeRequestError(error, {
+        target,
+        commandId,
+        method: command.method,
+        path: command.path,
+      });
     }
 
     if (!response.ok) {
-      const rawDetails = await response.text().catch(() => "");
-      const details = extractErrorMessage(rawDetails);
-      const detailSuffix = details ? ` - ${details}` : "";
-      const guidanceSuffix =
-        response.status >= 500
-          ? " oar-core may be unavailable; verify backend startup and base URL."
-          : "";
-      const requestError = new Error(
-        `oar-core request failed at ${target}: ${method} ${path} (${response.status} ${response.statusText})${detailSuffix}${guidanceSuffix}`,
-      );
-      requestError.status = response.status;
-      requestError.details = details;
-      throw requestError;
+      try {
+        await parseRawErrorResponse(response, response.statusText);
+      } catch (error) {
+        if (error instanceof Error) {
+          const wrapped = new Error(
+            `oar-core request failed at ${target}: ${command.method} ${command.path} (${response.status})${error.details ? ` - ${error.details}` : ""}${response.status >= 500 ? " oar-core may be unavailable; verify backend startup and base URL." : ""}`,
+          );
+          wrapped.status = response.status;
+          wrapped.details = error.details;
+          throw wrapped;
+        }
+        throw error;
+      }
     }
 
-    if (config.responseType === "raw") {
-      return response;
-    }
-
-    return response.json();
+    return response;
   }
 
   function requireActorId() {
@@ -140,49 +259,81 @@ export function createOarCoreClient(options = {}) {
   }
 
   return {
-    baseUrl,
-    getVersion: () => request("GET", "/version"),
+    baseUrl: resolvedBaseUrl,
+    getVersion: () => invokeJSON("meta.version", () => generated.metaVersion()),
+    getHandshake: () =>
+      invokeJSON("meta.handshake", () => generated.metaHandshake()),
 
-    createActor: (payload) => request("POST", "/actors", { body: payload }),
-    listActors: () => request("GET", "/actors"),
+    createActor: (payload) =>
+      invokeJSON("actors.register", () =>
+        generated.actorsRegister({ body: payload }),
+      ),
+    listActors: () => invokeJSON("actors.list", () => generated.actorsList()),
 
     createThread: (payload) =>
-      request("POST", "/threads", { body: withActorId(payload) }),
-    listThreads: (filters) => request("GET", "/threads", { query: filters }),
+      invokeJSON("threads.create", () =>
+        generated.threadsCreate({ body: withActorId(payload) }),
+      ),
+    listThreads: (filters) =>
+      invokeJSON("threads.list", () =>
+        generated.threadsList({ query: filters }),
+      ),
     getThread: (threadId) =>
-      request("GET", `/threads/${encodePathSegment(threadId)}`),
+      invokeJSON("threads.get", () =>
+        generated.threadsGet({ thread_id: String(threadId) }),
+      ),
     updateThread: (threadId, payload) =>
-      request("PATCH", `/threads/${encodePathSegment(threadId)}`, {
-        body: withActorId(payload),
-      }),
+      invokeJSON("threads.patch", () =>
+        generated.threadsPatch(
+          { thread_id: String(threadId) },
+          { body: withActorId(payload) },
+        ),
+      ),
     listThreadTimeline: (threadId) =>
-      request("GET", `/threads/${encodePathSegment(threadId)}/timeline`),
+      invokeJSON("threads.timeline", () =>
+        generated.threadsTimeline({ thread_id: String(threadId) }),
+      ),
     getSnapshot: (snapshotId) =>
-      request("GET", `/snapshots/${encodePathSegment(snapshotId)}`),
+      invokeJSON("snapshots.get", () =>
+        generated.snapshotsGet({ snapshot_id: String(snapshotId) }),
+      ),
 
     createCommitment: (payload) =>
-      request("POST", "/commitments", { body: withActorId(payload) }),
+      invokeJSON("commitments.create", () =>
+        generated.commitmentsCreate({ body: withActorId(payload) }),
+      ),
     listCommitments: (filters) =>
-      request("GET", "/commitments", { query: filters }),
+      invokeJSON("commitments.list", () =>
+        generated.commitmentsList({ query: filters }),
+      ),
     getCommitment: (commitmentId) =>
-      request("GET", `/commitments/${encodePathSegment(commitmentId)}`),
+      invokeJSON("commitments.get", () =>
+        generated.commitmentsGet({ commitment_id: String(commitmentId) }),
+      ),
     updateCommitment: (commitmentId, payload) =>
-      request("PATCH", `/commitments/${encodePathSegment(commitmentId)}`, {
-        body: withActorId(payload),
-      }),
+      invokeJSON("commitments.patch", () =>
+        generated.commitmentsPatch(
+          { commitment_id: String(commitmentId) },
+          { body: withActorId(payload) },
+        ),
+      ),
 
     createArtifact: (payload) =>
-      request("POST", "/artifacts", { body: withActorId(payload) }),
+      invokeJSON("artifacts.create", () =>
+        generated.artifactsCreate({ body: withActorId(payload) }),
+      ),
     listArtifacts: (filters) =>
-      request("GET", "/artifacts", { query: filters }),
+      invokeJSON("artifacts.list", () =>
+        generated.artifactsList({ query: filters }),
+      ),
     getArtifact: (artifactId) =>
-      request("GET", `/artifacts/${encodePathSegment(artifactId)}`),
+      invokeJSON("artifacts.get", () =>
+        generated.artifactsGet({ artifact_id: String(artifactId) }),
+      ),
     getArtifactContent: async (artifactId) => {
-      const response = await request(
-        "GET",
-        `/artifacts/${encodePathSegment(artifactId)}/content`,
-        { responseType: "raw" },
-      );
+      const response = await invokeRaw("artifacts.content.get", {
+        artifact_id: String(artifactId),
+      });
 
       const contentType = response.headers.get("content-type") ?? "";
 
@@ -198,20 +349,33 @@ export function createOarCoreClient(options = {}) {
     },
 
     createEvent: (payload) =>
-      request("POST", "/events", { body: withActorId(payload) }),
+      invokeJSON("events.create", () =>
+        generated.eventsCreate({ body: withActorId(payload) }),
+      ),
     getEvent: (eventId) =>
-      request("GET", `/events/${encodePathSegment(eventId)}`),
+      invokeJSON("events.get", () =>
+        generated.eventsGet({ event_id: String(eventId) }),
+      ),
 
     createWorkOrder: (payload) =>
-      request("POST", "/work_orders", { body: withActorId(payload) }),
+      invokeJSON("packets.work-orders.create", () =>
+        generated.packetsWorkOrdersCreate({ body: withActorId(payload) }),
+      ),
     createReceipt: (payload) =>
-      request("POST", "/receipts", { body: withActorId(payload) }),
+      invokeJSON("packets.receipts.create", () =>
+        generated.packetsReceiptsCreate({ body: withActorId(payload) }),
+      ),
     createReview: (payload) =>
-      request("POST", "/reviews", { body: withActorId(payload) }),
+      invokeJSON("packets.reviews.create", () =>
+        generated.packetsReviewsCreate({ body: withActorId(payload) }),
+      ),
 
-    listInboxItems: (filters) => request("GET", "/inbox", { query: filters }),
+    listInboxItems: (filters) =>
+      invokeJSON("inbox.list", () => generated.inboxList({ query: filters })),
     ackInboxItem: (payload) =>
-      request("POST", "/inbox/ack", { body: withActorId(payload) }),
+      invokeJSON("inbox.ack", () =>
+        generated.inboxAck({ body: withActorId(payload) }),
+      ),
   };
 }
 
@@ -223,12 +387,26 @@ export async function verifyCoreSchemaVersion(
 
   let version;
   try {
-    version = await client.getVersion();
+    version = await client.getHandshake();
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    throw new Error(
-      `Unable to verify oar-core schema version at ${target}: ${reason}`,
-    );
+    if (error?.status === 404) {
+      try {
+        version = await client.getVersion();
+      } catch (fallbackError) {
+        const reason =
+          fallbackError instanceof Error
+            ? fallbackError.message
+            : String(fallbackError);
+        throw new Error(
+          `Unable to verify oar-core schema version at ${target}: ${reason}`,
+        );
+      }
+    } else {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Unable to verify oar-core schema version at ${target}: ${reason}`,
+      );
+    }
   }
 
   if (version?.schema_version !== expectedSchemaVersion) {
@@ -236,4 +414,6 @@ export async function verifyCoreSchemaVersion(
       `oar-core schema mismatch at ${target}: expected ${expectedSchemaVersion}, received ${version?.schema_version ?? "unknown"}.`,
     );
   }
+
+  return version;
 }

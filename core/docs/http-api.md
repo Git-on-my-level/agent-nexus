@@ -2,14 +2,32 @@
 
 This document defines the **concrete HTTP/JSON surface** used for integration between **oar-core** and clients (including **oar-ui** and agents).
 
-The schema of objects is defined by `contracts/oar-schema.yaml`.
+The schema of objects is defined by `../contracts/oar-schema.yaml`.
 
 ## Conventions
 
-- All requests that mutate state MUST include `actor_id`.
+- Mutating requests require caller identity:
+  - Unauthenticated callers MUST provide `actor_id`.
+  - Authenticated callers MAY omit `actor_id`; core infers it from the bearer token principal.
+  - If authenticated callers provide `actor_id`, it MUST match the authenticated principal mapping.
 - All timestamps are ISO-8601 strings.
 - Objects MUST preserve unknown fields (additive evolution).
 - `refs` values MUST be typed ref strings per `ref_format`.
+
+### Agent auth conventions
+
+- Access tokens are passed as `Authorization: Bearer <access_token>`.
+- Registration is open in v0 via `POST /auth/agents/register`.
+- `POST /auth/token` supports:
+  - `grant_type=assertion` using an Ed25519 key assertion
+  - `grant_type=refresh_token` using a refresh token
+- Refresh tokens are rotated on successful refresh.
+- Stable auth error codes include:
+  - `username_taken`
+  - `auth_required`
+  - `invalid_token`
+  - `agent_revoked`
+  - `key_mismatch`
 
 ## Endpoints
 
@@ -17,6 +35,36 @@ The schema of objects is defined by `contracts/oar-schema.yaml`.
 
 - `GET /version`
   - Response: `{ "schema_version": "0.2.2" }`
+
+- `GET /meta/handshake`
+  - Response: `{ "core_version", "api_version", "schema_version", "min_cli_version", "recommended_cli_version", "cli_download_url", "core_instance_id" }`
+
+- Compatibility headers emitted on all responses:
+  - `X-OAR-Core-Version`
+  - `X-OAR-API-Version`
+  - `X-OAR-Schema-Version`
+  - `X-OAR-Min-CLI-Version`
+  - `X-OAR-Recommended-CLI-Version`
+
+- CLI version gate:
+  - Clients MAY send `X-OAR-CLI-Version`.
+  - When provided and below minimum compatibility (except on `/health`, `/version`, `/meta/handshake`, `/auth/agents/register`, `/auth/token`), response is:
+    - HTTP `426 Upgrade Required`
+    - `{ "error": { "code": "cli_outdated", ... }, "upgrade": { "min_cli_version", "recommended_cli_version", "cli_download_url" } }`
+
+### Generated meta discovery
+
+- `GET /meta/commands`
+  - Response: generated command registry metadata from `contracts/gen/meta/commands.json`.
+
+- `GET /meta/commands/{command_id}`
+  - Response: `{ "command": <generated_command_metadata> }`
+
+- `GET /meta/concepts`
+  - Response: `{ "concepts": [ { "name", "command_count", "command_ids" } ... ] }`
+
+- `GET /meta/concepts/{concept_name}`
+  - Response: `{ "concept": { "name", "command_count", "command_ids", "commands" } }`
 
 ### Actors
 
@@ -26,6 +74,35 @@ The schema of objects is defined by `contracts/oar-schema.yaml`.
 
 - `GET /actors`
   - Response: `{ "actors": [<actor>...] }`
+
+### Agent auth and self-management
+
+- `POST /auth/agents/register`
+  - Body: `{ "username": "...", "public_key": "<base64-ed25519-public-key>" }`
+  - Response: `{ "agent": <agent_profile>, "key": <agent_key>, "tokens": <token_bundle> }`
+
+- `POST /auth/token`
+  - Assertion grant body: `{ "grant_type": "assertion", "agent_id": "...", "key_id": "...", "signed_at": "<rfc3339>", "signature": "<base64-ed25519-signature>" }`
+  - Refresh grant body: `{ "grant_type": "refresh_token", "refresh_token": "<token>" }`
+  - Response: `{ "tokens": <token_bundle> }`
+
+- `GET /agents/me`
+  - Auth: bearer token required
+  - Response: `{ "agent": <agent_profile>, "keys": [<agent_key>...] }`
+
+- `PATCH /agents/me`
+  - Auth: bearer token required
+  - Body: `{ "username": "..." }`
+  - Response: `{ "agent": <agent_profile> }`
+
+- `POST /agents/me/keys/rotate`
+  - Auth: bearer token required
+  - Body: `{ "public_key": "<base64-ed25519-public-key>" }`
+  - Response: `{ "key": <agent_key> }`
+
+- `POST /agents/me/revoke`
+  - Auth: bearer token required
+  - Response: `{ "ok": true }`
 
 ### Threads (thread snapshots)
 
@@ -109,6 +186,13 @@ The schema of objects is defined by `contracts/oar-schema.yaml`.
   - Body: `{ "actor_id": "...", "event": <event_fields_without_id_ts_actor_id> }`
   - Response: `{ "event": <event> }`
 
+- `GET /events/stream`
+  - Content type: `text/event-stream`
+  - SSE event type: `event`
+  - SSE data envelope: `{ "event": <event> }`
+  - Optional query: `thread_id`, repeated `type`, `types` (comma-separated), `last_event_id`
+  - Resume supported via `Last-Event-ID` header or `last_event_id` query.
+
 - `GET /events/{event_id}`
   - Response: `{ "event": <event> }`
 
@@ -130,6 +214,13 @@ The schema of objects is defined by `contracts/oar-schema.yaml`.
 
 - `GET /inbox`
   - Response: `{ "items": [<inbox_item>...], "generated_at": "..." }`
+
+- `GET /inbox/stream`
+  - Content type: `text/event-stream`
+  - SSE event type: `inbox_item`
+  - SSE data envelope: `{ "item": <inbox_item> }`
+  - Optional query: `risk_horizon_days`, `last_event_id`
+  - Resume supported via `Last-Event-ID` header or `last_event_id` query.
 
 - `POST /inbox/ack`
   - Body: `{ "actor_id": "...", "thread_id": "...", "inbox_item_id": "..." }`

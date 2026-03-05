@@ -1,0 +1,317 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ARTIFACT_DIR="${SMOKE_ARTIFACT_DIR:-$ROOT_DIR/.tmp/e2e-smoke}"
+CORE_PORT="${CORE_PORT:-18080}"
+UI_PORT="${UI_PORT:-4179}"
+CORE_HOST="127.0.0.1"
+UI_HOST="127.0.0.1"
+CORE_BASE_URL="http://${CORE_HOST}:${CORE_PORT}"
+UI_BASE_URL="http://${UI_HOST}:${UI_PORT}"
+SMOKE_TIMEOUT_SECONDS="${SMOKE_TIMEOUT_SECONDS:-25}"
+
+mkdir -p "$ARTIFACT_DIR"
+TMP_DIR="$(mktemp -d "$ARTIFACT_DIR/run.XXXXXX")"
+CORE_LOG="$TMP_DIR/core.log"
+UI_LOG="$TMP_DIR/web-ui.log"
+EVENTS_TAIL_OUT="$TMP_DIR/events-tail.jsonl"
+INBOX_TAIL_OUT="$TMP_DIR/inbox-tail.jsonl"
+
+HOME_DIR="$TMP_DIR/home"
+mkdir -p "$HOME_DIR"
+CLI_BIN="$TMP_DIR/oar"
+AGENT_NAME="smoke-agent"
+USERNAME="smoke.agent"
+
+cleanup() {
+  local code=$?
+  if [[ -n "${UI_PID:-}" ]] && kill -0 "$UI_PID" >/dev/null 2>&1; then
+    kill "$UI_PID" >/dev/null 2>&1 || true
+    wait "$UI_PID" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "${CORE_PID:-}" ]] && kill -0 "$CORE_PID" >/dev/null 2>&1; then
+    kill "$CORE_PID" >/dev/null 2>&1 || true
+    wait "$CORE_PID" >/dev/null 2>&1 || true
+  fi
+
+  if [[ $code -ne 0 ]]; then
+    echo "smoke failed; artifacts kept at: $TMP_DIR" >&2
+    echo "core log: $CORE_LOG" >&2
+    echo "web-ui log: $UI_LOG" >&2
+  else
+    echo "smoke artifacts: $TMP_DIR"
+  fi
+}
+trap cleanup EXIT INT TERM
+
+require_cmd() {
+  local cmd="$1"
+  command -v "$cmd" >/dev/null 2>&1 || {
+    echo "required command not found: $cmd" >&2
+    exit 1
+  }
+}
+
+wait_for_url() {
+  local url="$1"
+  local attempts="${2:-120}"
+  local sleep_seconds="${3:-0.25}"
+
+  for _ in $(seq 1 "$attempts"); do
+    if curl -fsS "$url" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep "$sleep_seconds"
+  done
+  return 1
+}
+
+json_get() {
+  local file="$1"
+  local path="$2"
+  node -e '
+const fs = require("fs");
+const file = process.argv[1];
+const path = process.argv[2].split(".");
+const input = fs.readFileSync(file, "utf8").trim();
+if (!input) process.exit(2);
+const json = JSON.parse(input);
+let cur = json;
+for (const key of path) {
+  if (key === "") continue;
+  if (cur === null || cur === undefined) {
+    cur = undefined;
+    break;
+  }
+  if (/^\d+$/.test(key)) {
+    cur = cur[Number(key)];
+  } else {
+    cur = cur[key];
+  }
+}
+if (cur === undefined || cur === null) process.exit(3);
+if (typeof cur === "object") {
+  process.stdout.write(JSON.stringify(cur));
+} else {
+  process.stdout.write(String(cur));
+}
+' "$file" "$path"
+}
+
+assert_contains() {
+  local file="$1"
+  local pattern="$2"
+  if ! rg -q "$pattern" "$file"; then
+    echo "assertion failed: expected pattern '$pattern' in $file" >&2
+    exit 1
+  fi
+}
+
+wait_for_pid() {
+  local pid="$1"
+  local timeout_seconds="$2"
+  local started
+  started="$(date +%s)"
+
+  while kill -0 "$pid" >/dev/null 2>&1; do
+    local now
+    now="$(date +%s)"
+    if (( now - started >= timeout_seconds )); then
+      return 1
+    fi
+    sleep 0.2
+  done
+
+  wait "$pid"
+}
+
+run_cli_json() {
+  local outfile="$1"
+  shift
+  HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" "$@" >"$outfile"
+}
+
+require_cmd curl
+require_cmd go
+require_cmd node
+require_cmd pnpm
+require_cmd rg
+
+# Build CLI binary once for deterministic smoke steps.
+(
+  cd "$ROOT_DIR/cli"
+  go build -o "$CLI_BIN" ./cmd/oar
+)
+
+# Start core.
+(
+  cd "$ROOT_DIR/core"
+  go run ./cmd/oar-core \
+    --listen-addr "${CORE_HOST}:${CORE_PORT}" \
+    --workspace-root "$TMP_DIR/workspace" \
+    --schema-path "$ROOT_DIR/contracts/oar-schema.yaml" \
+    >"$CORE_LOG" 2>&1
+) &
+CORE_PID=$!
+
+if ! wait_for_url "$CORE_BASE_URL/health" 160 0.15; then
+  echo "core did not become healthy" >&2
+  cat "$CORE_LOG" >&2 || true
+  exit 1
+fi
+
+# Start web-ui against core and verify startup handshake route.
+(
+  cd "$ROOT_DIR"
+  OAR_CORE_BASE_URL="$CORE_BASE_URL" pnpm -C web-ui exec vite dev --host "$UI_HOST" --port "$UI_PORT" >"$UI_LOG" 2>&1
+) &
+UI_PID=$!
+
+if ! wait_for_url "$UI_BASE_URL/meta/handshake" 180 0.2; then
+  echo "web-ui did not become ready on /meta/handshake" >&2
+  cat "$UI_LOG" >&2 || true
+  exit 1
+fi
+
+# Verify UI serves shell too.
+curl -fsS "$UI_BASE_URL/" >/dev/null
+
+# Handshake/version checks.
+curl -fsS "$CORE_BASE_URL/meta/handshake" >"$TMP_DIR/core-handshake.json"
+curl -fsS "$CORE_BASE_URL/version" >"$TMP_DIR/core-version.json"
+assert_contains "$TMP_DIR/core-handshake.json" '"schema_version"'
+assert_contains "$TMP_DIR/core-version.json" '"schema_version"'
+
+# Register + whoami.
+run_cli_json "$TMP_DIR/register.json" auth register --username "$USERNAME"
+run_cli_json "$TMP_DIR/whoami.json" auth whoami
+
+# Explicit refresh token grant (API fallback) to exercise token lifecycle endpoint.
+PROFILE_PATH="$HOME_DIR/.config/oar/profiles/${AGENT_NAME}.json"
+REFRESH_TOKEN="$(node -e 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(String(p.refresh_token||""));' "$PROFILE_PATH")"
+if [[ -z "$REFRESH_TOKEN" ]]; then
+  echo "missing refresh token in profile: $PROFILE_PATH" >&2
+  exit 1
+fi
+printf '{"grant_type":"refresh_token","refresh_token":"%s"}\n' "$REFRESH_TOKEN" | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" api call --method POST --path /auth/token >"$TMP_DIR/token-refresh-explicit.json"
+assert_contains "$TMP_DIR/token-refresh-explicit.json" '"access_token"'
+
+# Force automatic refresh path by expiring local access token.
+node -e '
+const fs = require("fs");
+const file = process.argv[1];
+const profile = JSON.parse(fs.readFileSync(file, "utf8"));
+profile.access_token_expires_at = "2000-01-01T00:00:00Z";
+fs.writeFileSync(file, JSON.stringify(profile, null, 2) + "\n");
+' "$PROFILE_PATH"
+
+run_cli_json "$TMP_DIR/token-status-before.json" auth token-status
+run_cli_json "$TMP_DIR/threads-list-before.json" threads list
+run_cli_json "$TMP_DIR/token-status-after.json" auth token-status
+
+NEEDS_REFRESH_BEFORE="$(json_get "$TMP_DIR/token-status-before.json" 'data.needs_refresh' || true)"
+NEEDS_REFRESH_AFTER="$(json_get "$TMP_DIR/token-status-after.json" 'data.needs_refresh' || true)"
+if [[ "$NEEDS_REFRESH_BEFORE" != "true" ]]; then
+  echo "expected needs_refresh=true before auto-refresh, got: ${NEEDS_REFRESH_BEFORE:-<missing>}" >&2
+  exit 1
+fi
+if [[ "$NEEDS_REFRESH_AFTER" != "false" ]]; then
+  echo "expected needs_refresh=false after auto-refresh, got: ${NEEDS_REFRESH_AFTER:-<missing>}" >&2
+  exit 1
+fi
+
+# Typed command flow: thread -> commitment -> packets.
+printf '{"thread":{"title":"Smoke thread","type":"incident","status":"active","priority":"p1","tags":["smoke","cli"],"cadence":"daily","current_summary":"smoke in progress","next_actions":["verify"],"key_artifacts":[],"provenance":{"sources":["actor_statement:smoke"]}}}\n' \
+  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" threads create >"$TMP_DIR/thread-create.json"
+THREAD_ID="$(json_get "$TMP_DIR/thread-create.json" 'data.body.thread.id')"
+if [[ -z "$THREAD_ID" ]]; then
+  echo "failed to parse thread id" >&2
+  cat "$TMP_DIR/thread-create.json" >&2 || true
+  exit 1
+fi
+
+printf '{"patch":{"current_summary":"smoke updated"}}\n' \
+  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" threads update --thread-id "$THREAD_ID" >"$TMP_DIR/thread-update.json"
+
+NOW_RFC3339="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+printf '{"commitment":{"thread_id":"%s","title":"Smoke commitment","owner":"%s","due_at":"%s","status":"open","definition_of_done":["smoke complete"],"links":["url:https://example.com/smoke"],"provenance":{"sources":["actor_statement:smoke"]}}}\n' "$THREAD_ID" "$AGENT_NAME" "$NOW_RFC3339" \
+  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" commitments create >"$TMP_DIR/commitment-create.json"
+
+WORK_ORDER_ID="artifact-work-order-smoke"
+RECEIPT_ID="artifact-receipt-smoke"
+REVIEW_ID="artifact-review-smoke"
+
+printf '{"artifact":{"id":"%s","refs":["thread:%s"],"summary":"Smoke work order"},"packet":{"work_order_id":"%s","thread_id":"%s","objective":"Exercise e2e smoke","constraints":["headless"],"context_refs":["thread:%s"],"acceptance_criteria":["all checks pass"],"definition_of_done":["receipt and review"]}}\n' "$WORK_ORDER_ID" "$THREAD_ID" "$WORK_ORDER_ID" "$THREAD_ID" "$THREAD_ID" \
+  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" work-orders create >"$TMP_DIR/work-order-create.json"
+
+printf '{"artifact":{"id":"%s","refs":["thread:%s","artifact:%s"],"summary":"Smoke receipt"},"packet":{"receipt_id":"%s","work_order_id":"%s","thread_id":"%s","outputs":["artifact:smoke-output"],"verification_evidence":["url:https://example.com/evidence"],"changes_summary":"smoke complete","known_gaps":[]}}\n' "$RECEIPT_ID" "$THREAD_ID" "$WORK_ORDER_ID" "$RECEIPT_ID" "$WORK_ORDER_ID" "$THREAD_ID" \
+  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" receipts create >"$TMP_DIR/receipt-create.json"
+
+printf '{"artifact":{"id":"%s","refs":["thread:%s","artifact:%s","artifact:%s"],"summary":"Smoke review"},"packet":{"review_id":"%s","work_order_id":"%s","receipt_id":"%s","outcome":"accept","notes":"accepted","evidence_refs":["artifact:%s"]}}\n' "$REVIEW_ID" "$THREAD_ID" "$WORK_ORDER_ID" "$RECEIPT_ID" "$REVIEW_ID" "$WORK_ORDER_ID" "$RECEIPT_ID" "$RECEIPT_ID" \
+  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" reviews create >"$TMP_DIR/review-create.json"
+
+# Event stream smoke: tail one event and then emit an event.
+HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" events tail --thread-id "$THREAD_ID" --max-events 1 --reconnect=false >"$EVENTS_TAIL_OUT" 2>&1 &
+EVENTS_TAIL_PID=$!
+sleep 0.8
+printf '{"event":{"type":"message_posted","thread_id":"%s","summary":"smoke stream event","refs":["thread:%s"],"payload":{"body":"hello"},"provenance":{"sources":["actor_statement:smoke"]}}}\n' "$THREAD_ID" "$THREAD_ID" \
+  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" events create >"$TMP_DIR/event-create.json"
+
+if ! wait_for_pid "$EVENTS_TAIL_PID" "$SMOKE_TIMEOUT_SECONDS"; then
+  kill "$EVENTS_TAIL_PID" >/dev/null 2>&1 || true
+  wait "$EVENTS_TAIL_PID" >/dev/null 2>&1 || true
+  echo "events tail did not complete in time" >&2
+  exit 1
+fi
+assert_contains "$EVENTS_TAIL_OUT" '"command"[[:space:]]*:[[:space:]]*"events tail"'
+
+# Ensure inbox has at least one item before stream tail.
+for _ in $(seq 1 40); do
+  run_cli_json "$TMP_DIR/inbox-list.json" inbox list
+  INBOX_COUNT="$(node -e 'const fs=require("fs"); const j=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); const n=(j?.data?.body?.items||[]).length; process.stdout.write(String(n));' "$TMP_DIR/inbox-list.json")"
+  if [[ "$INBOX_COUNT" -gt 0 ]]; then
+    break
+  fi
+  sleep 0.3
+done
+if [[ "${INBOX_COUNT:-0}" -le 0 ]]; then
+  echo "expected inbox items for stream smoke, found none" >&2
+  cat "$TMP_DIR/inbox-list.json" >&2 || true
+  exit 1
+fi
+
+LAST_INBOX_EVENT_ID="$(node -e '
+const fs=require("fs");
+const j=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+const item=(j?.data?.body?.items||[])[0];
+if (!item || !item.id) process.exit(1);
+const base=String(item.id);
+process.stdout.write(base+"@bootstrap");
+' "$TMP_DIR/inbox-list.json" 2>/dev/null || true)"
+
+HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" inbox tail --max-events 1 --reconnect=false >"$INBOX_TAIL_OUT" 2>&1 &
+INBOX_TAIL_PID=$!
+if ! wait_for_pid "$INBOX_TAIL_PID" "$SMOKE_TIMEOUT_SECONDS"; then
+  kill "$INBOX_TAIL_PID" >/dev/null 2>&1 || true
+  wait "$INBOX_TAIL_PID" >/dev/null 2>&1 || true
+  echo "inbox tail did not complete in time" >&2
+  exit 1
+fi
+assert_contains "$INBOX_TAIL_OUT" '"command"[[:space:]]*:[[:space:]]*"inbox tail"'
+
+# Basic UI compatibility check after typed flow.
+curl -fsS "$UI_BASE_URL/meta/handshake" >"$TMP_DIR/ui-handshake.json"
+assert_contains "$TMP_DIR/ui-handshake.json" '"schema_version"'
+
+cat >"$TMP_DIR/summary.txt" <<SUMMARY
+core_base_url=${CORE_BASE_URL}
+ui_base_url=${UI_BASE_URL}
+thread_id=${THREAD_ID}
+agent=${AGENT_NAME}
+profile_path=${PROFILE_PATH}
+artifacts_dir=${TMP_DIR}
+SUMMARY
+
+echo "e2e smoke completed successfully"
+cat "$TMP_DIR/summary.txt"

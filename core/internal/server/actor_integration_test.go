@@ -26,7 +26,7 @@ func TestActorEndpointsRegisterAndListStableOrder(t *testing.T) {
 	defer workspace.Close()
 
 	registry := actors.NewStore(workspace.DB())
-	contractPath := filepath.Join("..", "..", "contracts", "oar-schema.yaml")
+	contractPath := filepath.Join("..", "..", "..", "contracts", "oar-schema.yaml")
 	contract, err := schema.Load(contractPath)
 	if err != nil {
 		t.Fatalf("load schema contract: %v", err)
@@ -80,7 +80,7 @@ func TestPostThreadsRejectsUnknownActorID(t *testing.T) {
 	defer workspace.Close()
 
 	registry := actors.NewStore(workspace.DB())
-	contractPath := filepath.Join("..", "..", "contracts", "oar-schema.yaml")
+	contractPath := filepath.Join("..", "..", "..", "contracts", "oar-schema.yaml")
 	contract, err := schema.Load(contractPath)
 	if err != nil {
 		t.Fatalf("load schema contract: %v", err)

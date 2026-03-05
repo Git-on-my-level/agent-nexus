@@ -1,0 +1,21 @@
+{
+  "ok": true,
+  "command": "threads list",
+  "data": {
+    "body": {
+      "threads": [
+        {
+          "id": "thread_1",
+          "status": "active",
+          "title": "Alpha"
+        }
+      ]
+    },
+    "headers": {
+      "Content-Type": [
+        "application/json"
+      ]
+    },
+    "status_code": 200
+  }
+}

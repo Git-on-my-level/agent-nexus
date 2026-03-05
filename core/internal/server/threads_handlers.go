@@ -43,7 +43,7 @@ func handleCreateThread(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		return
 	}
 
-	actorID, ok := requireRegisteredActorID(w, r, opts.actorRegistry, req.ActorID)
+	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
 	if !ok {
 		return
 	}
@@ -118,7 +118,7 @@ func handlePatchThread(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		return
 	}
 
-	actorID, ok := requireRegisteredActorID(w, r, opts.actorRegistry, req.ActorID)
+	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
 	if !ok {
 		return
 	}

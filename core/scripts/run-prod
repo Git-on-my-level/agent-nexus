@@ -8,7 +8,7 @@ BIN_DIR="${BIN_DIR:-$ROOT_DIR/.bin}"
 BIN_PATH="$BIN_DIR/oar-core"
 
 WORKSPACE_ROOT="${WORKSPACE_ROOT:-${OAR_WORKSPACE_ROOT:-$ROOT_DIR/.oar-workspace}}"
-SCHEMA_PATH="${SCHEMA_PATH:-${OAR_SCHEMA_PATH:-$ROOT_DIR/contracts/oar-schema.yaml}}"
+SCHEMA_PATH="${SCHEMA_PATH:-${OAR_SCHEMA_PATH:-$ROOT_DIR/../contracts/oar-schema.yaml}}"
 LISTEN_ADDR="${LISTEN_ADDR:-${OAR_LISTEN_ADDR:-0.0.0.0:${PORT:-8000}}}"
 
 mkdir -p "$BIN_DIR"

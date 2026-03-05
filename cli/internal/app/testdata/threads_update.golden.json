@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "command": "threads update",
+  "data": {
+    "body": {
+      "thread": {
+        "id": "thread_1",
+        "status": "resolved",
+        "title": "Alpha"
+      }
+    },
+    "headers": {
+      "Content-Type": [
+        "application/json"
+      ]
+    },
+    "status_code": 200
+  }
+}

@@ -4,7 +4,12 @@
   "packageManager": "pnpm@10.17.1",
   "scripts": {
     "check": "make check",
-    "serve": "make serve"
+    "serve": "make serve",
+    "contract:gen": "./scripts/contract-gen",
+    "contract:check": "./scripts/contract-check"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

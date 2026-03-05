@@ -65,7 +65,7 @@ echo "starting oar-core on ${BASE_URL}"
 go run ./cmd/oar-core \
   --listen-addr "$LISTEN_ADDR" \
   --workspace-root "$WORKSPACE_ROOT" \
-  --schema-path "$ROOT_DIR/contracts/oar-schema.yaml" \
+  --schema-path "$ROOT_DIR/../contracts/oar-schema.yaml" \
   >"$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 

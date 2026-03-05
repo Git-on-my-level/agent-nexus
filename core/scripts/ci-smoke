@@ -8,7 +8,7 @@ TMP_DIR="$(mktemp -d)"
 PORT="${PORT:-18080}"
 LISTEN_ADDR="127.0.0.1:${PORT}"
 WORKSPACE_ROOT="$TMP_DIR/workspace"
-SCHEMA_PATH="$ROOT_DIR/contracts/oar-schema.yaml"
+SCHEMA_PATH="$ROOT_DIR/../contracts/oar-schema.yaml"
 
 cleanup() {
   if [[ -n "${SERVER_PID:-}" ]] && kill -0 "$SERVER_PID" 2>/dev/null; then

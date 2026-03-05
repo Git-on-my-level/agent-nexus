@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR/core"
+
+go run ./cmd/contract-gen \
+  --openapi "../contracts/oar-openapi.yaml" \
+  --schema "../contracts/oar-schema.yaml" \
+  --out "../contracts/gen"
+
+cd "$ROOT_DIR"
+
+mkdir -p cli/internal/registry
+cp contracts/gen/meta/commands.json cli/internal/registry/commands.json
+cp contracts/gen/meta/concepts.json cli/internal/registry/concepts.json
+cp contracts/gen/meta/help.json cli/internal/registry/help.json
+
+mkdir -p cli/docs/generated
+cp contracts/gen/docs/commands.md cli/docs/generated/commands.md
+cp contracts/gen/docs/command-groups.md cli/docs/generated/command-groups.md
+cp contracts/gen/docs/concepts.md cli/docs/generated/concepts.md
+cp contracts/gen/docs/x-oar-authoring.md cli/docs/generated/x-oar-authoring.md

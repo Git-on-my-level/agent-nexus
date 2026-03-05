@@ -3,7 +3,7 @@
 HOST ?= 127.0.0.1
 PORT ?= 8000
 WORKSPACE_ROOT ?= $(CURDIR)/.oar-workspace
-SCHEMA_PATH ?= $(CURDIR)/contracts/oar-schema.yaml
+SCHEMA_PATH ?= $(CURDIR)/../contracts/oar-schema.yaml
 
 help:
 	@echo "Common targets:"

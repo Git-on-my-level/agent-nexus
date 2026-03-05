@@ -6,7 +6,7 @@ organization-autorunner-core is the core backend/domain implementation for the O
 ## Canonical references
 - System spec: `docs/oar-core-spec.md`
 - HTTP contract: `docs/http-api.md`
-- Shared schema contract: `contracts/oar-schema.yaml`
+- Shared schema contract: `../contracts/oar-schema.yaml`
 - Spec implementation matrix and known gaps: `docs/spec-compliance.md`
 - Runtime and deployment runbook: `docs/runbook.md`
 
@@ -49,7 +49,7 @@ organization-autorunner-core is the core backend/domain implementation for the O
 
 ## Change guide (where to edit)
 - For schema fields/enums/ref conventions, update:
-- `contracts/oar-schema.yaml`
+- `../contracts/oar-schema.yaml`
 - `internal/schema/schema.go` (loader normalization)
 - `internal/schema/validator.go` (validation behavior)
 - corresponding handler/store validations in `internal/server/*.go` and `internal/primitives/store.go`
@@ -63,7 +63,7 @@ organization-autorunner-core is the core backend/domain implementation for the O
 - `internal/storage/migrations.go` for schema migration
 - integration tests in `internal/server/*_integration_test.go`
 - For packet convention changes, update:
-- `contracts/oar-schema.yaml` packet + reference conventions
+- `../contracts/oar-schema.yaml` packet + reference conventions
 - `internal/server/packet_validation.go`
 - `internal/server/packet_convenience_handlers.go` (if convenience endpoint is needed)
 - packet integration tests
@@ -100,5 +100,5 @@ organization-autorunner-core is the core backend/domain implementation for the O
 - Prefer pointers to stable modules/runbooks over transient task notes.
 - When behavior changes, update this file alongside:
 - relevant docs in `docs/`
-- schema contract in `contracts/oar-schema.yaml` (if shape/rules changed)
+- schema contract in `../contracts/oar-schema.yaml` (if shape/rules changed)
 - tests that enforce the changed behavior

@@ -1,11 +1,12 @@
 FROM golang:1.24-bookworm AS builder
 
-WORKDIR /src
+WORKDIR /src/core
 
-COPY go.mod go.sum ./
+COPY core/go.mod core/go.sum ./
 RUN go mod download
 
-COPY . .
+COPY core/ ./
+COPY contracts/oar-schema.yaml /src/contracts/oar-schema.yaml
 
 RUN go build -trimpath -ldflags='-s -w' -o /out/oar-core ./cmd/oar-core
 
@@ -20,7 +21,7 @@ RUN useradd --create-home --home-dir /app --shell /usr/sbin/nologin oar
 WORKDIR /app
 
 COPY --from=builder /out/oar-core /usr/local/bin/oar-core
-COPY contracts/oar-schema.yaml /app/contracts/oar-schema.yaml
+COPY --from=builder /src/contracts/oar-schema.yaml /app/contracts/oar-schema.yaml
 
 ENV OAR_WORKSPACE_ROOT=/var/lib/oar/workspace
 ENV OAR_SCHEMA_PATH=/app/contracts/oar-schema.yaml

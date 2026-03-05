@@ -4,11 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"organization-autorunner-core/internal/actors"
+	"organization-autorunner-core/internal/auth"
 	"organization-autorunner-core/internal/primitives"
 	"organization-autorunner-core/internal/schema"
 )
@@ -44,11 +48,20 @@ type PrimitiveStore interface {
 type HandlerOption func(*handlerOptions)
 
 type handlerOptions struct {
-	healthCheck      HealthCheckFunc
-	actorRegistry    ActorRegistry
-	primitiveStore   PrimitiveStore
-	contract         *schema.Contract
-	inboxRiskHorizon time.Duration
+	healthCheck           HealthCheckFunc
+	actorRegistry         ActorRegistry
+	authStore             *auth.Store
+	primitiveStore        PrimitiveStore
+	contract              *schema.Contract
+	inboxRiskHorizon      time.Duration
+	coreVersion           string
+	apiVersion            string
+	minCLIVersion         string
+	recommendedCLIVersion string
+	cliDownloadURL        string
+	coreInstanceID        string
+	metaCommandsPath      string
+	streamPollInterval    time.Duration
 }
 
 func WithHealthCheck(healthCheck HealthCheckFunc) HandlerOption {
@@ -60,6 +73,12 @@ func WithHealthCheck(healthCheck HealthCheckFunc) HandlerOption {
 func WithActorRegistry(actorRegistry ActorRegistry) HandlerOption {
 	return func(opts *handlerOptions) {
 		opts.actorRegistry = actorRegistry
+	}
+}
+
+func WithAuthStore(authStore *auth.Store) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.authStore = authStore
 	}
 }
 
@@ -81,10 +100,85 @@ func WithInboxRiskHorizon(horizon time.Duration) HandlerOption {
 	}
 }
 
+func WithCoreVersion(version string) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.coreVersion = strings.TrimSpace(version)
+	}
+}
+
+func WithAPIVersion(version string) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.apiVersion = strings.TrimSpace(version)
+	}
+}
+
+func WithMinCLIVersion(version string) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.minCLIVersion = strings.TrimSpace(version)
+	}
+}
+
+func WithRecommendedCLIVersion(version string) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.recommendedCLIVersion = strings.TrimSpace(version)
+	}
+}
+
+func WithCLIDownloadURL(downloadURL string) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.cliDownloadURL = strings.TrimSpace(downloadURL)
+	}
+}
+
+func WithCoreInstanceID(instanceID string) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.coreInstanceID = strings.TrimSpace(instanceID)
+	}
+}
+
+func WithMetaCommandsPath(path string) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.metaCommandsPath = strings.TrimSpace(path)
+	}
+}
+
+func WithStreamPollInterval(interval time.Duration) HandlerOption {
+	return func(opts *handlerOptions) {
+		if interval > 0 {
+			opts.streamPollInterval = interval
+		}
+	}
+}
+
 func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
-	opts := handlerOptions{}
+	opts := handlerOptions{
+		coreVersion:           strings.TrimSpace(schemaVersion),
+		apiVersion:            "v0",
+		minCLIVersion:         "0.1.0",
+		recommendedCLIVersion: "0.1.0",
+		coreInstanceID:        "core-local",
+		streamPollInterval:    time.Second,
+	}
 	for _, option := range options {
 		option(&opts)
+	}
+	if opts.coreVersion == "" {
+		opts.coreVersion = strings.TrimSpace(schemaVersion)
+	}
+	if opts.apiVersion == "" {
+		opts.apiVersion = "v0"
+	}
+	if opts.minCLIVersion == "" {
+		opts.minCLIVersion = "0.1.0"
+	}
+	if opts.recommendedCLIVersion == "" {
+		opts.recommendedCLIVersion = opts.minCLIVersion
+	}
+	if opts.coreInstanceID == "" {
+		opts.coreInstanceID = "core-local"
+	}
+	if opts.streamPollInterval <= 0 {
+		opts.streamPollInterval = time.Second
 	}
 
 	mux := http.NewServeMux()
@@ -119,6 +213,58 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		writeJSON(w, http.StatusOK, map[string]any{"schema_version": schemaVersion})
 	})
 
+	mux.HandleFunc("/meta/handshake", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+			return
+		}
+		handleMetaHandshake(w, r, opts, schemaVersion)
+	})
+
+	mux.HandleFunc("/meta/commands", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+			return
+		}
+		handleMetaCommands(w, r, opts)
+	})
+
+	mux.HandleFunc("/meta/commands/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+			return
+		}
+		commandID := strings.TrimPrefix(r.URL.Path, "/meta/commands/")
+		commandID = strings.TrimSpace(commandID)
+		if commandID == "" || strings.Contains(commandID, "/") {
+			writeError(w, http.StatusNotFound, "not_found", "command metadata not found")
+			return
+		}
+		handleMetaCommandByID(w, r, opts, commandID)
+	})
+
+	mux.HandleFunc("/meta/concepts", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+			return
+		}
+		handleMetaConcepts(w, r, opts)
+	})
+
+	mux.HandleFunc("/meta/concepts/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+			return
+		}
+		conceptName := strings.TrimPrefix(r.URL.Path, "/meta/concepts/")
+		conceptName = strings.TrimSpace(conceptName)
+		if conceptName == "" || strings.Contains(conceptName, "/") {
+			writeError(w, http.StatusNotFound, "not_found", "concept metadata not found")
+			return
+		}
+		handleMetaConceptByName(w, r, opts, conceptName)
+	})
+
 	mux.HandleFunc("/actors", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodPost:
@@ -128,6 +274,49 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST and GET are supported")
 		}
+	})
+
+	mux.HandleFunc("/auth/agents/register", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+			return
+		}
+		handleRegisterAgent(w, r, opts)
+	})
+
+	mux.HandleFunc("/auth/token", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+			return
+		}
+		handleIssueAuthToken(w, r, opts)
+	})
+
+	mux.HandleFunc("/agents/me", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			handleGetCurrentAgent(w, r, opts)
+		case http.MethodPatch:
+			handlePatchCurrentAgent(w, r, opts)
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET and PATCH are supported")
+		}
+	})
+
+	mux.HandleFunc("/agents/me/keys/rotate", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+			return
+		}
+		handleRotateCurrentAgentKey(w, r, opts)
+	})
+
+	mux.HandleFunc("/agents/me/revoke", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+			return
+		}
+		handleRevokeCurrentAgent(w, r, opts)
 	})
 
 	mux.HandleFunc("/threads", func(w http.ResponseWriter, r *http.Request) {
@@ -214,6 +403,14 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 
 		handleAppendEvent(w, r, opts)
+	})
+
+	mux.HandleFunc("/events/stream", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+			return
+		}
+		handleEventsStream(w, r, opts)
 	})
 
 	mux.HandleFunc("/events/", func(w http.ResponseWriter, r *http.Request) {
@@ -305,6 +502,14 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleGetInbox(w, r, opts)
 	})
 
+	mux.HandleFunc("/inbox/stream", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+			return
+		}
+		handleInboxStream(w, r, opts)
+	})
+
 	mux.HandleFunc("/inbox/ack", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
@@ -340,7 +545,19 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
 	})
 
-	return mux
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		setVersionHeaders(w, opts, schemaVersion)
+		if shouldEnforceCLIVersion(r.URL.Path) {
+			if clientVersion := strings.TrimSpace(r.Header.Get("X-OAR-CLI-Version")); clientVersion != "" {
+				outdated, compareErr := isCLIVersionOutdated(clientVersion, opts.minCLIVersion)
+				if compareErr == nil && outdated {
+					writeCLIOutdated(w, opts)
+					return
+				}
+			}
+		}
+		mux.ServeHTTP(w, r)
+	})
 }
 
 func handleRegisterActor(w http.ResponseWriter, r *http.Request, actorRegistry ActorRegistry) {
@@ -437,4 +654,106 @@ func writeJSON(w http.ResponseWriter, status int, payload map[string]any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_, _ = w.Write(body)
+}
+
+func setVersionHeaders(w http.ResponseWriter, opts handlerOptions, schemaVersion string) {
+	w.Header().Set("X-OAR-Core-Version", strings.TrimSpace(opts.coreVersion))
+	w.Header().Set("X-OAR-API-Version", strings.TrimSpace(opts.apiVersion))
+	w.Header().Set("X-OAR-Schema-Version", strings.TrimSpace(schemaVersion))
+	if strings.TrimSpace(opts.minCLIVersion) != "" {
+		w.Header().Set("X-OAR-Min-CLI-Version", strings.TrimSpace(opts.minCLIVersion))
+	}
+	if strings.TrimSpace(opts.recommendedCLIVersion) != "" {
+		w.Header().Set("X-OAR-Recommended-CLI-Version", strings.TrimSpace(opts.recommendedCLIVersion))
+	}
+}
+
+func writeCLIOutdated(w http.ResponseWriter, opts handlerOptions) {
+	payload := map[string]any{
+		"error": map[string]any{
+			"code":    "cli_outdated",
+			"message": "CLI version is below the minimum compatible version for this core instance",
+		},
+		"upgrade": map[string]any{
+			"min_cli_version":         strings.TrimSpace(opts.minCLIVersion),
+			"recommended_cli_version": strings.TrimSpace(opts.recommendedCLIVersion),
+			"cli_download_url":        strings.TrimSpace(opts.cliDownloadURL),
+		},
+	}
+	writeJSON(w, http.StatusUpgradeRequired, payload)
+}
+
+func shouldEnforceCLIVersion(path string) bool {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return false
+	}
+	switch path {
+	case "/health", "/version", "/meta/handshake", "/auth/token", "/auth/agents/register":
+		return false
+	}
+	return true
+}
+
+func isCLIVersionOutdated(clientVersion string, minVersion string) (bool, error) {
+	clientParts, err := parseSemanticVersion(clientVersion)
+	if err != nil {
+		return false, err
+	}
+	minParts, err := parseSemanticVersion(minVersion)
+	if err != nil {
+		return false, err
+	}
+	for i := 0; i < 3; i++ {
+		if clientParts[i] < minParts[i] {
+			return true, nil
+		}
+		if clientParts[i] > minParts[i] {
+			return false, nil
+		}
+	}
+	return false, nil
+}
+
+func parseSemanticVersion(raw string) ([3]int, error) {
+	var out [3]int
+	raw = strings.TrimSpace(raw)
+	raw = strings.TrimPrefix(raw, "v")
+	if raw == "" {
+		return out, fmt.Errorf("empty version")
+	}
+	if idx := strings.IndexAny(raw, "-+"); idx >= 0 {
+		raw = raw[:idx]
+	}
+	parts := strings.Split(raw, ".")
+	if len(parts) < 1 || len(parts) > 3 {
+		return out, fmt.Errorf("invalid semantic version: %s", raw)
+	}
+	for i := 0; i < 3; i++ {
+		if i >= len(parts) {
+			out[i] = 0
+			continue
+		}
+		segment := strings.TrimSpace(parts[i])
+		if segment == "" {
+			return out, fmt.Errorf("invalid semantic version segment")
+		}
+		value, err := strconv.Atoi(segment)
+		if err != nil {
+			return out, err
+		}
+		if value < 0 {
+			return out, fmt.Errorf("invalid negative segment")
+		}
+		out[i] = value
+	}
+	return out, nil
+}
+
+func defaultMetaCommandsPathCandidates() []string {
+	return []string{
+		"../contracts/gen/meta/commands.json",
+		filepath.Join("..", "..", "..", "contracts", "gen", "meta", "commands.json"),
+		filepath.Join("contracts", "gen", "meta", "commands.json"),
+	}
 }

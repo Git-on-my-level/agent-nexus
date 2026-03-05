@@ -7,7 +7,7 @@ cd "$ROOT_DIR"
 HOST="${HOST:-127.0.0.1}"
 PORT="${PORT:-8000}"
 WORKSPACE_ROOT="${WORKSPACE_ROOT:-$ROOT_DIR/.oar-workspace}"
-SCHEMA_PATH="${SCHEMA_PATH:-$ROOT_DIR/contracts/oar-schema.yaml}"
+SCHEMA_PATH="${SCHEMA_PATH:-$ROOT_DIR/../contracts/oar-schema.yaml}"
 
 exec go run ./cmd/oar-core \
   --host "$HOST" \

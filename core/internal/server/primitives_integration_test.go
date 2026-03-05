@@ -253,7 +253,7 @@ func newPrimitivesTestServer(t *testing.T) primitivesTestHarness {
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
-	contractPath := filepath.Join("..", "..", "contracts", "oar-schema.yaml")
+	contractPath := filepath.Join("..", "..", "..", "contracts", "oar-schema.yaml")
 	contract, err := schema.Load(contractPath)
 	if err != nil {
 		_ = workspace.Close()

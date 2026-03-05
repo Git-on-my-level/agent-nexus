@@ -1,10 +1,10 @@
 # oar-core Spec Compliance (v0.2.2)
 
-Last updated: 2026-03-04
+Last updated: 2026-03-05
 
 This checklist maps key requirements from:
 - `docs/oar-core-spec.md`
-- `contracts/oar-schema.yaml`
+- `../contracts/oar-schema.yaml`
 
 For each item, it points to implementation code, validating tests, and any known gap.
 
@@ -19,11 +19,16 @@ For each item, it points to implementation code, validating tests, and any known
 |---|---|---|---|---|
 | Workspace init creates SQLite + filesystem layout and is idempotent | Spec §2.1 | `internal/storage/workspace.go`, `internal/storage/migrations.go` | `internal/storage/workspace_test.go` | Implemented |
 | Health/version endpoints expose local readiness + schema version | Spec §7, §11 | `internal/server/handler.go`, `cmd/oar-core/main.go` | `internal/server/handler_test.go`, `internal/storage/workspace_test.go` | Implemented |
+| Compatibility handshake + version headers + generated metadata discovery endpoints (`/meta/handshake`, `/meta/commands*`, `/meta/concepts*`) | CLI spec draft §2.1–§2.4 | `internal/server/handler.go`, `internal/server/meta_handlers.go`, `cmd/oar-core/main.go` | `internal/server/meta_stream_integration_test.go` | Implemented |
+| SSE streaming endpoints (`/events/stream`, `/inbox/stream`) with `Last-Event-ID` resume | CLI spec draft §1.1, §2.4 | `internal/server/handler.go`, `internal/server/stream_handlers.go` | `internal/server/meta_stream_integration_test.go` | Implemented |
+| CLI compatibility rejection path returns stable `cli_outdated` payload with upgrade hints | CLI spec draft §0, §1.1 | `internal/server/handler.go` | `internal/server/meta_stream_integration_test.go` | Implemented |
 | Schema contract loader exposes version, enums, typed-ref prefixes, provenance, packet + reference conventions | Spec §2.2, schema root | `internal/schema/schema.go`, `internal/schema/version.go` | `internal/schema/contract_test.go`, `internal/schema/version_test.go` | Implemented |
 | Strict enums reject unknown values; open enums accept unknown values | Spec §2.2, schema `enums.*.enum_policy` | `internal/schema/validator.go`, write handlers in `internal/server/*.go` | `internal/schema/validator_test.go`, `internal/server/primitives_integration_test.go` | Implemented |
 | Typed refs must be `<prefix>:<value>`; unknown prefixes preserved | Spec §3.1, §10; schema `ref_format.rules` | `internal/schema/validator.go`, write handlers in `internal/server/*.go` | `internal/schema/validator_test.go`, `internal/server/primitives_integration_test.go` | Implemented |
 | Provenance shape enforced (`sources`, optional `notes`, optional `by_field`) | Spec §8.1; schema `provenance.fields` | `internal/schema/validator.go`, thread/commitment/event handlers | `internal/schema/validator_test.go` | Implemented |
-| Actor registry exists; mutating endpoints reject unknown `actor_id` | Spec §6 | `internal/actors/store.go`, `internal/server/primitives_handlers.go` (`requireRegisteredActorID`) | `internal/server/actor_integration_test.go`, broader integration tests in `internal/server/*_integration_test.go` | Implemented |
+| Actor registry exists; mutating endpoints reject unknown `actor_id` for unauthenticated callers | Spec §6 | `internal/actors/store.go`, `internal/server/primitives_handlers.go` (`requireRegisteredActorID`) | `internal/server/actor_integration_test.go`, broader integration tests in `internal/server/*_integration_test.go` | Implemented |
+| Agent auth lifecycle (register, assertion login, refresh rotation, key rotation, self-revoke) | Spec draft auth ticket scope | `internal/auth/store.go`, `internal/server/auth_handlers.go`, `internal/storage/migrations.go` | `internal/server/auth_integration_test.go` | Implemented |
+| Authenticated principal maps to actor identity and can omit `actor_id` on writes; mismatches are rejected | Spec draft auth ticket scope | `internal/server/auth_handlers.go` (`resolveWriteActorID`), write handlers in `internal/server/*.go` | `internal/server/auth_integration_test.go` | Implemented |
 | Events are append-only; unknown event types accepted and stored | Spec §3.1, §11 | `internal/primitives/store.go` (`AppendEvent`), `internal/server/primitives_handlers.go` | `internal/server/primitives_integration_test.go`, `internal/server/event_reference_conventions_integration_test.go` | Implemented |
 | Snapshot patch/merge preserves unknown fields; list fields replace wholesale when present | Spec §2.3 | `internal/primitives/store.go` (`PatchSnapshot`, `PatchThread`, `PatchCommitment`) | `internal/server/threads_integration_test.go`, `internal/server/api_comprehensive_integration_test.go` | Implemented |
 | Snapshot mutation emits `snapshot_updated` with `snapshot:<id>` and `changed_fields` | Spec §3.2, §10 | `internal/primitives/store.go` (`PatchSnapshot`, thread/commitment flows) | `internal/server/threads_integration_test.go`, `internal/server/api_comprehensive_integration_test.go` | Implemented |

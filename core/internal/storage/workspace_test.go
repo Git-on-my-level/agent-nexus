@@ -44,6 +44,11 @@ func TestWorkspaceInitializationAndRestart(t *testing.T) {
 		"artifacts",
 		"actors",
 		"derived_views",
+		"agents",
+		"agent_keys",
+		"auth_refresh_sessions",
+		"auth_access_tokens",
+		"auth_used_assertions",
 	}
 	assertTablesExist(t, first.DB(), requiredTables)
 	assertHealthOK(t, first)

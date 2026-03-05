@@ -9,7 +9,7 @@ import (
 func TestReadVersionSuccess(t *testing.T) {
 	t.Parallel()
 
-	path := filepath.Join("..", "..", "contracts", "oar-schema.yaml")
+	path := filepath.Join("..", "..", "..", "contracts", "oar-schema.yaml")
 	version, err := ReadVersion(path)
 	if err != nil {
 		t.Fatalf("ReadVersion returned error: %v", err)

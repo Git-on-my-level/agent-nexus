@@ -34,7 +34,7 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		return
 	}
 
-	actorID, ok := requireRegisteredActorID(w, r, opts.actorRegistry, req.ActorID)
+	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
 	if !ok {
 		return
 	}
@@ -136,7 +136,7 @@ func handleCreateArtifact(w http.ResponseWriter, r *http.Request, opts handlerOp
 		return
 	}
 
-	actorID, ok := requireRegisteredActorID(w, r, opts.actorRegistry, req.ActorID)
+	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
 	if !ok {
 		return
 	}

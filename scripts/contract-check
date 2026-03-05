@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+
+./scripts/contract-gen
+
+git diff --exit-code -- contracts/gen
+git diff --exit-code -- cli/internal/registry/commands.json cli/internal/registry/concepts.json cli/internal/registry/help.json
+git diff --exit-code -- cli/docs/generated/commands.md cli/docs/generated/command-groups.md cli/docs/generated/concepts.md cli/docs/generated/x-oar-authoring.md
+
+(
+  cd contracts/gen/go
+  go test ./...
+)
+
+pnpm exec tsc --project contracts/gen/ts/tsconfig.json --pretty false

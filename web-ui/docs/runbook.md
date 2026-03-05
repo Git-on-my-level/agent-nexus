@@ -19,14 +19,16 @@ This runbook covers production-like build/serve usage and local integration with
    - This value is compiled into the frontend bundle at build time.
    - Browser sends requests directly to the core origin (CORS must be allowed).
 
-If neither variable is set, UI requests are same-origin (`/version`, `/threads`,
-etc.) and require an upstream reverse proxy that routes those paths to oar-core.
+If neither variable is set, UI requests are same-origin (`/meta/handshake`,
+`/threads`, etc.) and require an upstream reverse proxy that routes those paths
+to oar-core.
 
 ### Required oar-core endpoints
 
 The UI expects these HTTP endpoints (see `docs/http-api.md` for full contract):
 
-- `GET /version`
+- `GET /meta/handshake` (preferred startup compatibility check)
+- `GET /version` (backward-compatible fallback)
 - `POST /actors`, `GET /actors`
 - `POST /threads`, `GET /threads`, `GET /threads/{thread_id}`,
   `PATCH /threads/{thread_id}`, `GET /threads/{thread_id}/timeline`
@@ -109,16 +111,16 @@ This project currently uses SvelteKit with `@sveltejs/adapter-auto`.
 
 Symptoms:
 
-- Startup/version checks fail.
+- Startup compatibility checks fail.
 - UI shows `core_unreachable` or network errors.
-- Integration script fails fast on `${OAR_CORE_BASE_URL}/version`.
+- Integration script fails fast on `${OAR_CORE_BASE_URL}/meta/handshake`.
 
 Actions:
 
 1. Confirm backend is running:
    `cd ../core && ./scripts/dev`
 2. Verify the exact URL:
-   `curl -fsS http://127.0.0.1:8000/version`
+   `curl -fsS http://127.0.0.1:8000/meta/handshake`
 3. Re-run UI with matching base URL:
    `OAR_CORE_BASE_URL=http://127.0.0.1:8000 ./scripts/dev`
 
@@ -133,7 +135,41 @@ Actions:
 
 1. Remove trailing typo/path segments (use bare origin, e.g.
    `http://127.0.0.1:8000`).
-2. Ensure UI and backend schema versions match (`/version` should report
-   `schema_version: "0.2.2"`).
+2. Ensure UI and backend schema versions match (`/meta/handshake` should
+   report `schema_version: "0.2.2"`).
 3. If using `PUBLIC_OAR_CORE_BASE_URL`, rebuild after env changes:
    `./scripts/build`.
+
+### Version mismatch / outdated clients
+
+Symptoms:
+
+- UI shell fails startup compatibility check
+- Core responds with compatibility errors for client traffic
+
+Actions:
+
+1. Inspect core handshake fields:
+   `curl -fsS http://127.0.0.1:8000/meta/handshake`
+2. Confirm `schema_version` matches UI expectation and review:
+   - `min_cli_version`
+   - `recommended_cli_version`
+   - `cli_download_url`
+3. Upgrade CLI/UI artifacts when compatibility floors advance.
+
+### SSE troubleshooting (core-backed streams)
+
+UI v0 relies primarily on request/response APIs, but stream diagnostics are useful when live updates are suspected.
+
+Checks:
+
+```bash
+curl -N -H 'Accept: text/event-stream' http://127.0.0.1:8000/events/stream
+curl -N -H 'Accept: text/event-stream' http://127.0.0.1:8000/inbox/stream
+```
+
+If streams fail:
+
+1. Verify reverse proxy buffering is disabled for SSE responses.
+2. Verify `Last-Event-ID` / `last_event_id` resume values when reconnecting.
+3. Confirm core is healthy and not blocked on storage (`/health`).

@@ -1,6 +1,7 @@
 SHELL := /usr/bin/env bash
 
 CORE_DIR := core
+CLI_DIR := cli
 WEB_UI_DIR := web-ui
 
 CORE_HOST ?= 127.0.0.1
@@ -12,7 +13,7 @@ FORCE_SEED ?= 0
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install check serve lint test format core-% web-ui-%
+.PHONY: help install check serve lint test format contract-gen contract-check e2e-smoke cli-check cli-test cli-build core-% web-ui-%
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z0-9_.-]+:.*##/ {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -21,7 +22,9 @@ install: ## Install workspace dependencies
 	pnpm install
 
 check: ## Run checks in both core and web-ui
+	$(MAKE) contract-check
 	$(MAKE) -C $(CORE_DIR) check
+	$(MAKE) cli-check
 	$(MAKE) -C $(WEB_UI_DIR) check
 
 lint: ## Run lint checks in both core and web-ui
@@ -30,11 +33,30 @@ lint: ## Run lint checks in both core and web-ui
 
 test: ## Run tests in both core and web-ui
 	$(MAKE) -C $(CORE_DIR) test
+	$(MAKE) cli-test
 	$(MAKE) -C $(WEB_UI_DIR) test
 
 format: ## Apply formatting in both core and web-ui
 	$(MAKE) -C $(CORE_DIR) fmt
 	$(MAKE) -C $(WEB_UI_DIR) format
+
+contract-gen: ## Regenerate OpenAPI-derived contract artifacts
+	./scripts/contract-gen
+
+contract-check: ## Verify generated contract artifacts are committed
+	./scripts/contract-check
+
+cli-check: ## Run CLI checks
+	cd $(CLI_DIR) && go test ./...
+
+cli-test: ## Run CLI tests
+	cd $(CLI_DIR) && go test ./...
+
+cli-build: ## Build CLI binary
+	cd $(CLI_DIR) && go build ./cmd/oar
+
+e2e-smoke: ## Run end-to-end core + CLI + web-ui smoke flow
+	./scripts/e2e-smoke
 
 serve: ## Start core, seed mock dataset into core, then start web-ui
 	@set -euo pipefail; \

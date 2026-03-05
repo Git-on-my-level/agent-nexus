@@ -76,6 +76,61 @@ var migrations = []migration{
 			`ALTER TABLE artifacts ADD COLUMN content_type TEXT NOT NULL DEFAULT 'application/octet-stream'`,
 		},
 	},
+	{
+		Version: 3,
+		Statements: []string{
+			`CREATE TABLE IF NOT EXISTS agents (
+				id TEXT PRIMARY KEY,
+				username TEXT NOT NULL UNIQUE,
+				actor_id TEXT NOT NULL UNIQUE,
+				created_at TEXT NOT NULL,
+				updated_at TEXT NOT NULL,
+				revoked_at TEXT,
+				metadata_json TEXT NOT NULL DEFAULT '{}'
+			);`,
+			`CREATE TABLE IF NOT EXISTS agent_keys (
+				id TEXT PRIMARY KEY,
+				agent_id TEXT NOT NULL,
+				public_key TEXT NOT NULL,
+				algorithm TEXT NOT NULL,
+				created_at TEXT NOT NULL,
+				revoked_at TEXT,
+				FOREIGN KEY(agent_id) REFERENCES agents(id)
+			);`,
+			`CREATE INDEX IF NOT EXISTS idx_agent_keys_agent_id ON agent_keys (agent_id);`,
+			`CREATE TABLE IF NOT EXISTS auth_refresh_sessions (
+				id TEXT PRIMARY KEY,
+				agent_id TEXT NOT NULL,
+				token_hash TEXT NOT NULL UNIQUE,
+				created_at TEXT NOT NULL,
+				expires_at TEXT NOT NULL,
+				revoked_at TEXT,
+				replaced_by_session_id TEXT,
+				FOREIGN KEY(agent_id) REFERENCES agents(id)
+			);`,
+			`CREATE INDEX IF NOT EXISTS idx_auth_refresh_sessions_agent_id ON auth_refresh_sessions (agent_id);`,
+			`CREATE TABLE IF NOT EXISTS auth_access_tokens (
+				id TEXT PRIMARY KEY,
+				agent_id TEXT NOT NULL,
+				token_hash TEXT NOT NULL UNIQUE,
+				created_at TEXT NOT NULL,
+				expires_at TEXT NOT NULL,
+				revoked_at TEXT,
+				FOREIGN KEY(agent_id) REFERENCES agents(id)
+			);`,
+			`CREATE INDEX IF NOT EXISTS idx_auth_access_tokens_agent_id ON auth_access_tokens (agent_id);`,
+		},
+	},
+	{
+		Version: 4,
+		Statements: []string{
+			`CREATE TABLE IF NOT EXISTS auth_used_assertions (
+				assertion_hash TEXT PRIMARY KEY,
+				used_at TEXT NOT NULL
+			);`,
+			`CREATE INDEX IF NOT EXISTS idx_auth_used_assertions_used_at ON auth_used_assertions (used_at);`,
+		},
+	},
 }
 
 func applyMigrations(ctx context.Context, db *sql.DB) error {
