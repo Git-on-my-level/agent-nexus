@@ -4,7 +4,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.2.2`
-- Commands: `26`
+- Commands: `32`
 
 ## `actors.list`
 
@@ -33,6 +33,62 @@ Generated from `contracts/oar-openapi.yaml`.
 - Agent notes: Not idempotent by default; repeated creates with same id return conflict.
 - Examples:
   - Register actor: `oar actors register --id bot-1 --display-name "Bot 1" --created-at 2026-03-04T10:00:00Z --json`
+
+## `agents.me.get`
+
+- CLI path: `agents me get`
+- HTTP: `GET /agents/me`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Inspect current principal metadata and active/revoked keys.
+- Concepts: `auth`, `identity`
+- Error codes: `auth_required`, `invalid_token`, `agent_revoked`
+- Output: Returns `{ agent, keys }`.
+- Agent notes: Requires Bearer access token.
+- Examples:
+  - Get current profile: `oar agents me get --json`
+
+## `agents.me.keys.rotate`
+
+- CLI path: `agents me keys rotate`
+- HTTP: `POST /agents/me/keys/rotate`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Replace the assertion key and invalidate the old key path.
+- Concepts: `auth`, `key-management`
+- Error codes: `auth_required`, `invalid_token`, `agent_revoked`, `invalid_request`
+- Output: Returns `{ key }` for the new active key.
+- Agent notes: Old keys are marked revoked and cannot mint assertion tokens.
+- Examples:
+  - Rotate key: `oar agents me keys rotate --public-key <base64-ed25519-pubkey> --json`
+
+## `agents.me.patch`
+
+- CLI path: `agents me patch`
+- HTTP: `PATCH /agents/me`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Rename the authenticated agent without re-registration.
+- Concepts: `auth`, `identity`
+- Error codes: `auth_required`, `invalid_token`, `agent_revoked`, `invalid_request`, `username_taken`
+- Output: Returns `{ agent }`.
+- Agent notes: Requires Bearer access token.
+- Examples:
+  - Rename current agent: `oar agents me patch --username renamed_agent --json`
+
+## `agents.me.revoke`
+
+- CLI path: `agents me revoke`
+- HTTP: `POST /agents/me/revoke`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Permanently revoke the authenticated agent so future mint/refresh calls fail.
+- Concepts: `auth`, `revocation`
+- Error codes: `auth_required`, `invalid_token`, `agent_revoked`
+- Output: Returns `{ ok: true }` on first successful revoke.
+- Agent notes: Requires Bearer access token.
+- Examples:
+  - Revoke self: `oar agents me revoke --json`
 
 ## `artifacts.content.get`
 
@@ -89,6 +145,35 @@ Generated from `contracts/oar-openapi.yaml`.
 - Agent notes: Safe and idempotent.
 - Examples:
   - List work orders for a thread: `oar artifacts list --kind work_order --thread-id thread_123 --json`
+
+## `auth.agents.register`
+
+- CLI path: `auth agents register`
+- HTTP: `POST /auth/agents/register`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Bootstrap an authenticated agent identity and obtain initial access + refresh tokens.
+- Concepts: `auth`, `identity`
+- Error codes: `invalid_json`, `invalid_request`, `username_taken`
+- Output: Returns `{ agent, key, tokens }`.
+- Agent notes: Registration is open in v0; future invite/secret gating can wrap this endpoint.
+- Examples:
+  - Register agent: `oar auth agents register --username agent.one --public-key <base64-ed25519-pubkey> --json`
+
+## `auth.token`
+
+- CLI path: `auth token`
+- HTTP: `POST /auth/token`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Exchange a refresh token or key assertion for a fresh token bundle.
+- Concepts: `auth`, `token-lifecycle`
+- Error codes: `invalid_json`, `invalid_request`, `invalid_token`, `key_mismatch`, `agent_revoked`
+- Output: Returns `{ tokens }`.
+- Agent notes: Refresh tokens are one-time use and rotated on successful exchange.
+- Examples:
+  - Refresh token grant: `oar auth token --grant-type refresh_token --refresh-token <token> --json`
+  - Assertion grant: `oar auth token --grant-type assertion --agent-id <id> --key-id <id> --signed-at <rfc3339> --signature <base64> --json`
 
 ## `commitments.create`
 

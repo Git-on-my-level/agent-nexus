@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"organization-autorunner-core/internal/actors"
+	"organization-autorunner-core/internal/auth"
 	"organization-autorunner-core/internal/primitives"
 	"organization-autorunner-core/internal/schema"
 )
@@ -46,6 +47,7 @@ type HandlerOption func(*handlerOptions)
 type handlerOptions struct {
 	healthCheck      HealthCheckFunc
 	actorRegistry    ActorRegistry
+	authStore        *auth.Store
 	primitiveStore   PrimitiveStore
 	contract         *schema.Contract
 	inboxRiskHorizon time.Duration
@@ -60,6 +62,12 @@ func WithHealthCheck(healthCheck HealthCheckFunc) HandlerOption {
 func WithActorRegistry(actorRegistry ActorRegistry) HandlerOption {
 	return func(opts *handlerOptions) {
 		opts.actorRegistry = actorRegistry
+	}
+}
+
+func WithAuthStore(authStore *auth.Store) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.authStore = authStore
 	}
 }
 
@@ -128,6 +136,49 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST and GET are supported")
 		}
+	})
+
+	mux.HandleFunc("/auth/agents/register", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+			return
+		}
+		handleRegisterAgent(w, r, opts)
+	})
+
+	mux.HandleFunc("/auth/token", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+			return
+		}
+		handleIssueAuthToken(w, r, opts)
+	})
+
+	mux.HandleFunc("/agents/me", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			handleGetCurrentAgent(w, r, opts)
+		case http.MethodPatch:
+			handlePatchCurrentAgent(w, r, opts)
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET and PATCH are supported")
+		}
+	})
+
+	mux.HandleFunc("/agents/me/keys/rotate", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+			return
+		}
+		handleRotateCurrentAgentKey(w, r, opts)
+	})
+
+	mux.HandleFunc("/agents/me/revoke", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+			return
+		}
+		handleRevokeCurrentAgent(w, r, opts)
 	})
 
 	mux.HandleFunc("/threads", func(w http.ResponseWriter, r *http.Request) {

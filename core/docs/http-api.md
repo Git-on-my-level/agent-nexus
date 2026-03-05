@@ -6,10 +6,28 @@ The schema of objects is defined by `../contracts/oar-schema.yaml`.
 
 ## Conventions
 
-- All requests that mutate state MUST include `actor_id`.
+- Mutating requests require caller identity:
+  - Unauthenticated callers MUST provide `actor_id`.
+  - Authenticated callers MAY omit `actor_id`; core infers it from the bearer token principal.
+  - If authenticated callers provide `actor_id`, it MUST match the authenticated principal mapping.
 - All timestamps are ISO-8601 strings.
 - Objects MUST preserve unknown fields (additive evolution).
 - `refs` values MUST be typed ref strings per `ref_format`.
+
+### Agent auth conventions
+
+- Access tokens are passed as `Authorization: Bearer <access_token>`.
+- Registration is open in v0 via `POST /auth/agents/register`.
+- `POST /auth/token` supports:
+  - `grant_type=assertion` using an Ed25519 key assertion
+  - `grant_type=refresh_token` using a refresh token
+- Refresh tokens are rotated on successful refresh.
+- Stable auth error codes include:
+  - `username_taken`
+  - `auth_required`
+  - `invalid_token`
+  - `agent_revoked`
+  - `key_mismatch`
 
 ## Endpoints
 
@@ -26,6 +44,35 @@ The schema of objects is defined by `../contracts/oar-schema.yaml`.
 
 - `GET /actors`
   - Response: `{ "actors": [<actor>...] }`
+
+### Agent auth and self-management
+
+- `POST /auth/agents/register`
+  - Body: `{ "username": "...", "public_key": "<base64-ed25519-public-key>" }`
+  - Response: `{ "agent": <agent_profile>, "key": <agent_key>, "tokens": <token_bundle> }`
+
+- `POST /auth/token`
+  - Assertion grant body: `{ "grant_type": "assertion", "agent_id": "...", "key_id": "...", "signed_at": "<rfc3339>", "signature": "<base64-ed25519-signature>" }`
+  - Refresh grant body: `{ "grant_type": "refresh_token", "refresh_token": "<token>" }`
+  - Response: `{ "tokens": <token_bundle> }`
+
+- `GET /agents/me`
+  - Auth: bearer token required
+  - Response: `{ "agent": <agent_profile>, "keys": [<agent_key>...] }`
+
+- `PATCH /agents/me`
+  - Auth: bearer token required
+  - Body: `{ "username": "..." }`
+  - Response: `{ "agent": <agent_profile> }`
+
+- `POST /agents/me/keys/rotate`
+  - Auth: bearer token required
+  - Body: `{ "public_key": "<base64-ed25519-public-key>" }`
+  - Response: `{ "key": <agent_key> }`
+
+- `POST /agents/me/revoke`
+  - Auth: bearer token required
+  - Response: `{ "ok": true }`
 
 ### Threads (thread snapshots)
 

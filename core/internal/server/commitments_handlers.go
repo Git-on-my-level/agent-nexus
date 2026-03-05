@@ -37,7 +37,7 @@ func handleCreateCommitment(w http.ResponseWriter, r *http.Request, opts handler
 		return
 	}
 
-	actorID, ok := requireRegisteredActorID(w, r, opts.actorRegistry, req.ActorID)
+	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
 	if !ok {
 		return
 	}
@@ -117,7 +117,7 @@ func handlePatchCommitment(w http.ResponseWriter, r *http.Request, opts handlerO
 		return
 	}
 
-	actorID, ok := requireRegisteredActorID(w, r, opts.actorRegistry, req.ActorID)
+	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
 	if !ok {
 		return
 	}

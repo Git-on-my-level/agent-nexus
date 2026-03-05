@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"organization-autorunner-core/internal/actors"
+	"organization-autorunner-core/internal/auth"
 	"organization-autorunner-core/internal/primitives"
 	"organization-autorunner-core/internal/schema"
 	"organization-autorunner-core/internal/server"
@@ -64,11 +65,13 @@ func main() {
 		fmt.Fprintf(os.Stderr, "failed to seed system actor: %v\n", err)
 		os.Exit(1)
 	}
+	authStore := auth.NewStore(workspace.DB())
 	primitiveStore := primitives.NewStore(workspace.DB(), workspace.Layout().ArtifactContentDir)
 	handler := server.NewHandler(
 		contract.Version,
 		server.WithHealthCheck(workspace.Ping),
 		server.WithActorRegistry(actorRegistry),
+		server.WithAuthStore(authStore),
 		server.WithPrimitiveStore(primitiveStore),
 		server.WithSchemaContract(contract),
 	)

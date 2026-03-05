@@ -61,6 +61,66 @@ var CommandRegistry = []CommandSpec{
 		},
 	},
 	{
+		CommandID: "agents.me.get",
+		CLIPath:   "agents me get",
+		Method:    "GET",
+		Path:      "/agents/me",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"auth", "identity"},
+		Examples: []Example{
+			{
+				Title:   "Get current profile",
+				Command: "oar agents me get --json",
+			},
+		},
+	},
+	{
+		CommandID: "agents.me.keys.rotate",
+		CLIPath:   "agents me keys rotate",
+		Method:    "POST",
+		Path:      "/agents/me/keys/rotate",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"auth", "key-management"},
+		Examples: []Example{
+			{
+				Title:   "Rotate key",
+				Command: "oar agents me keys rotate --public-key <base64-ed25519-pubkey> --json",
+			},
+		},
+	},
+	{
+		CommandID: "agents.me.patch",
+		CLIPath:   "agents me patch",
+		Method:    "PATCH",
+		Path:      "/agents/me",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"auth", "identity"},
+		Examples: []Example{
+			{
+				Title:   "Rename current agent",
+				Command: "oar agents me patch --username renamed_agent --json",
+			},
+		},
+	},
+	{
+		CommandID: "agents.me.revoke",
+		CLIPath:   "agents me revoke",
+		Method:    "POST",
+		Path:      "/agents/me/revoke",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"auth", "revocation"},
+		Examples: []Example{
+			{
+				Title:   "Revoke self",
+				Command: "oar agents me revoke --json",
+			},
+		},
+	},
+	{
 		CommandID:  "artifacts.content.get",
 		CLIPath:    "artifacts content get",
 		Method:     "GET",
@@ -119,6 +179,40 @@ var CommandRegistry = []CommandSpec{
 			{
 				Title:   "List work orders for a thread",
 				Command: "oar artifacts list --kind work_order --thread-id thread_123 --json",
+			},
+		},
+	},
+	{
+		CommandID: "auth.agents.register",
+		CLIPath:   "auth agents register",
+		Method:    "POST",
+		Path:      "/auth/agents/register",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"auth", "identity"},
+		Examples: []Example{
+			{
+				Title:   "Register agent",
+				Command: "oar auth agents register --username agent.one --public-key <base64-ed25519-pubkey> --json",
+			},
+		},
+	},
+	{
+		CommandID: "auth.token",
+		CLIPath:   "auth token",
+		Method:    "POST",
+		Path:      "/auth/token",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"auth", "token-lifecycle"},
+		Examples: []Example{
+			{
+				Title:   "Refresh token grant",
+				Command: "oar auth token --grant-type refresh_token --refresh-token <token> --json",
+			},
+			{
+				Title:   "Assertion grant",
+				Command: "oar auth token --grant-type assertion --agent-id <id> --key-id <id> --signed-at <rfc3339> --signature <base64> --json",
 			},
 		},
 	},
@@ -555,6 +649,22 @@ func (c *Client) ActorsRegister(ctx context.Context, opts RequestOptions) (*http
 	return c.Invoke(ctx, "actors.register", nil, opts)
 }
 
+func (c *Client) AgentsMeGet(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "agents.me.get", nil, opts)
+}
+
+func (c *Client) AgentsMeKeysRotate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "agents.me.keys.rotate", nil, opts)
+}
+
+func (c *Client) AgentsMePatch(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "agents.me.patch", nil, opts)
+}
+
+func (c *Client) AgentsMeRevoke(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "agents.me.revoke", nil, opts)
+}
+
 func (c *Client) ArtifactsContentGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "artifacts.content.get", pathParams, opts)
 }
@@ -569,6 +679,14 @@ func (c *Client) ArtifactsGet(ctx context.Context, pathParams map[string]string,
 
 func (c *Client) ArtifactsList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "artifacts.list", nil, opts)
+}
+
+func (c *Client) AuthAgentsRegister(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "auth.agents.register", nil, opts)
+}
+
+func (c *Client) AuthToken(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "auth.token", nil, opts)
 }
 
 func (c *Client) CommitmentsCreate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {

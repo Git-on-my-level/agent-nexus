@@ -43,10 +43,16 @@ export declare class OarClient {
     invoke(commandId: string, pathParams?: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     actorsList(options?: RequestOptions): Promise<InvokeResult>;
     actorsRegister(options?: RequestOptions): Promise<InvokeResult>;
+    agentsMeGet(options?: RequestOptions): Promise<InvokeResult>;
+    agentsMeKeysRotate(options?: RequestOptions): Promise<InvokeResult>;
+    agentsMePatch(options?: RequestOptions): Promise<InvokeResult>;
+    agentsMeRevoke(options?: RequestOptions): Promise<InvokeResult>;
     artifactsContentGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     artifactsCreate(options?: RequestOptions): Promise<InvokeResult>;
     artifactsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     artifactsList(options?: RequestOptions): Promise<InvokeResult>;
+    authAgentsRegister(options?: RequestOptions): Promise<InvokeResult>;
+    authToken(options?: RequestOptions): Promise<InvokeResult>;
     commitmentsCreate(options?: RequestOptions): Promise<InvokeResult>;
     commitmentsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     commitmentsList(options?: RequestOptions): Promise<InvokeResult>;

@@ -92,7 +92,7 @@ func createPacketArtifactAndEvent(w http.ResponseWriter, r *http.Request, opts h
 		return
 	}
 
-	actorID, ok := requireRegisteredActorID(w, r, opts.actorRegistry, req.ActorID)
+	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
 	if !ok {
 		return
 	}

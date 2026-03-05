@@ -104,6 +104,141 @@ export const commandRegistry: CommandSpec[] = [
     "ts_method": "actorsRegister"
   },
   {
+    "command_id": "agents.me.get",
+    "cli_path": "agents me get",
+    "method": "GET",
+    "path": "/agents/me",
+    "operation_id": "getCurrentAgent",
+    "summary": "Read authenticated agent profile",
+    "why": "Inspect current principal metadata and active/revoked keys.",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ agent, keys }`.",
+    "error_codes": [
+      "auth_required",
+      "invalid_token",
+      "agent_revoked"
+    ],
+    "concepts": [
+      "auth",
+      "identity"
+    ],
+    "stability": "beta",
+    "agent_notes": "Requires Bearer access token.",
+    "examples": [
+      {
+        "title": "Get current profile",
+        "command": "oar agents me get --json"
+      }
+    ],
+    "go_method": "AgentsMeGet",
+    "ts_method": "agentsMeGet"
+  },
+  {
+    "command_id": "agents.me.keys.rotate",
+    "cli_path": "agents me keys rotate",
+    "method": "POST",
+    "path": "/agents/me/keys/rotate",
+    "operation_id": "rotateCurrentAgentKey",
+    "summary": "Rotate authenticated agent key",
+    "why": "Replace the assertion key and invalidate the old key path.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ key }` for the new active key.",
+    "error_codes": [
+      "auth_required",
+      "invalid_token",
+      "agent_revoked",
+      "invalid_request"
+    ],
+    "concepts": [
+      "auth",
+      "key-management"
+    ],
+    "stability": "beta",
+    "agent_notes": "Old keys are marked revoked and cannot mint assertion tokens.",
+    "examples": [
+      {
+        "title": "Rotate key",
+        "command": "oar agents me keys rotate --public-key \u003cbase64-ed25519-pubkey\u003e --json"
+      }
+    ],
+    "go_method": "AgentsMeKeysRotate",
+    "ts_method": "agentsMeKeysRotate"
+  },
+  {
+    "command_id": "agents.me.patch",
+    "cli_path": "agents me patch",
+    "method": "PATCH",
+    "path": "/agents/me",
+    "operation_id": "patchCurrentAgent",
+    "summary": "Update authenticated agent profile",
+    "why": "Rename the authenticated agent without re-registration.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ agent }`.",
+    "error_codes": [
+      "auth_required",
+      "invalid_token",
+      "agent_revoked",
+      "invalid_request",
+      "username_taken"
+    ],
+    "concepts": [
+      "auth",
+      "identity"
+    ],
+    "stability": "beta",
+    "agent_notes": "Requires Bearer access token.",
+    "examples": [
+      {
+        "title": "Rename current agent",
+        "command": "oar agents me patch --username renamed_agent --json"
+      }
+    ],
+    "go_method": "AgentsMePatch",
+    "ts_method": "agentsMePatch"
+  },
+  {
+    "command_id": "agents.me.revoke",
+    "cli_path": "agents me revoke",
+    "method": "POST",
+    "path": "/agents/me/revoke",
+    "operation_id": "revokeCurrentAgent",
+    "summary": "Self-revoke current agent principal",
+    "why": "Permanently revoke the authenticated agent so future mint/refresh calls fail.",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ ok: true }` on first successful revoke.",
+    "error_codes": [
+      "auth_required",
+      "invalid_token",
+      "agent_revoked"
+    ],
+    "concepts": [
+      "auth",
+      "revocation"
+    ],
+    "stability": "beta",
+    "agent_notes": "Requires Bearer access token.",
+    "examples": [
+      {
+        "title": "Revoke self",
+        "command": "oar agents me revoke --json"
+      }
+    ],
+    "go_method": "AgentsMeRevoke",
+    "ts_method": "agentsMeRevoke"
+  },
+  {
     "command_id": "artifacts.content.get",
     "cli_path": "artifacts content get",
     "method": "GET",
@@ -233,6 +368,78 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "go_method": "ArtifactsList",
     "ts_method": "artifactsList"
+  },
+  {
+    "command_id": "auth.agents.register",
+    "cli_path": "auth agents register",
+    "method": "POST",
+    "path": "/auth/agents/register",
+    "operation_id": "registerAgent",
+    "summary": "Register agent principal and initial key",
+    "why": "Bootstrap an authenticated agent identity and obtain initial access + refresh tokens.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ agent, key, tokens }`.",
+    "error_codes": [
+      "invalid_json",
+      "invalid_request",
+      "username_taken"
+    ],
+    "concepts": [
+      "auth",
+      "identity"
+    ],
+    "stability": "beta",
+    "agent_notes": "Registration is open in v0; future invite/secret gating can wrap this endpoint.",
+    "examples": [
+      {
+        "title": "Register agent",
+        "command": "oar auth agents register --username agent.one --public-key \u003cbase64-ed25519-pubkey\u003e --json"
+      }
+    ],
+    "go_method": "AuthAgentsRegister",
+    "ts_method": "authAgentsRegister"
+  },
+  {
+    "command_id": "auth.token",
+    "cli_path": "auth token",
+    "method": "POST",
+    "path": "/auth/token",
+    "operation_id": "issueAuthToken",
+    "summary": "Mint or refresh token bundle",
+    "why": "Exchange a refresh token or key assertion for a fresh token bundle.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ tokens }`.",
+    "error_codes": [
+      "invalid_json",
+      "invalid_request",
+      "invalid_token",
+      "key_mismatch",
+      "agent_revoked"
+    ],
+    "concepts": [
+      "auth",
+      "token-lifecycle"
+    ],
+    "stability": "beta",
+    "agent_notes": "Refresh tokens are one-time use and rotated on successful exchange.",
+    "examples": [
+      {
+        "title": "Refresh token grant",
+        "command": "oar auth token --grant-type refresh_token --refresh-token \u003ctoken\u003e --json"
+      },
+      {
+        "title": "Assertion grant",
+        "command": "oar auth token --grant-type assertion --agent-id \u003cid\u003e --key-id \u003cid\u003e --signed-at \u003crfc3339\u003e --signature \u003cbase64\u003e --json"
+      }
+    ],
+    "go_method": "AuthToken",
+    "ts_method": "authToken"
   },
   {
     "command_id": "commitments.create",
@@ -970,6 +1177,22 @@ export class OarClient {
     return this.invoke("actors.register", {}, options);
   }
 
+  agentsMeGet(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("agents.me.get", {}, options);
+  }
+
+  agentsMeKeysRotate(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("agents.me.keys.rotate", {}, options);
+  }
+
+  agentsMePatch(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("agents.me.patch", {}, options);
+  }
+
+  agentsMeRevoke(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("agents.me.revoke", {}, options);
+  }
+
   artifactsContentGet(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("artifacts.content.get", pathParams, options);
   }
@@ -984,6 +1207,14 @@ export class OarClient {
 
   artifactsList(options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("artifacts.list", {}, options);
+  }
+
+  authAgentsRegister(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("auth.agents.register", {}, options);
+  }
+
+  authToken(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("auth.token", {}, options);
   }
 
   commitmentsCreate(options: RequestOptions = {}): Promise<InvokeResult> {

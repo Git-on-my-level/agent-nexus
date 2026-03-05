@@ -136,6 +136,218 @@ paths:
               schema:
                 $ref: '#/components/schemas/ActorsResponse'
 
+  /auth/agents/register:
+    post:
+      operationId: registerAgent
+      summary: Register agent principal and initial key
+      tags: [auth]
+      x-oar-command-id: "auth.agents.register"
+      x-oar-cli-path: "auth agents register"
+      x-oar-why: "Bootstrap an authenticated agent identity and obtain initial access + refresh tokens."
+      x-oar-examples:
+        - title: Register agent
+          command: oar auth agents register --username agent.one --public-key <base64-ed25519-pubkey> --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ agent, key, tokens }`."
+      x-oar-error-codes: [invalid_json, invalid_request, username_taken]
+      x-oar-concepts: [auth, identity]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Registration is open in v0; future invite/secret gating can wrap this endpoint."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterAgentRequest'
+      responses:
+        '201':
+          description: Agent created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterAgentResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/token:
+    post:
+      operationId: issueAuthToken
+      summary: Mint or refresh token bundle
+      tags: [auth]
+      x-oar-command-id: "auth.token"
+      x-oar-cli-path: "auth token"
+      x-oar-why: "Exchange a refresh token or key assertion for a fresh token bundle."
+      x-oar-examples:
+        - title: Refresh token grant
+          command: oar auth token --grant-type refresh_token --refresh-token <token> --json
+        - title: Assertion grant
+          command: oar auth token --grant-type assertion --agent-id <id> --key-id <id> --signed-at <rfc3339> --signature <base64> --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ tokens }`."
+      x-oar-error-codes: [invalid_json, invalid_request, invalid_token, key_mismatch, agent_revoked]
+      x-oar-concepts: [auth, token-lifecycle]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Refresh tokens are one-time use and rotated on successful exchange."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthTokenRequest'
+      responses:
+        '200':
+          description: Tokens issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /agents/me:
+    get:
+      operationId: getCurrentAgent
+      summary: Read authenticated agent profile
+      tags: [auth]
+      x-oar-command-id: "agents.me.get"
+      x-oar-cli-path: "agents me get"
+      x-oar-why: "Inspect current principal metadata and active/revoked keys."
+      x-oar-examples:
+        - title: Get current profile
+          command: oar agents me get --json
+      x-oar-input-mode: "none"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ agent, keys }`."
+      x-oar-error-codes: [auth_required, invalid_token, agent_revoked]
+      x-oar-concepts: [auth, identity]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Requires Bearer access token."
+      responses:
+        '200':
+          description: Current agent profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentAgentResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+    patch:
+      operationId: patchCurrentAgent
+      summary: Update authenticated agent profile
+      tags: [auth]
+      x-oar-command-id: "agents.me.patch"
+      x-oar-cli-path: "agents me patch"
+      x-oar-why: "Rename the authenticated agent without re-registration."
+      x-oar-examples:
+        - title: Rename current agent
+          command: oar agents me patch --username renamed_agent --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ agent }`."
+      x-oar-error-codes: [auth_required, invalid_token, agent_revoked, invalid_request, username_taken]
+      x-oar-concepts: [auth, identity]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Requires Bearer access token."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchCurrentAgentRequest'
+      responses:
+        '200':
+          description: Agent updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentAgentPatchResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /agents/me/keys/rotate:
+    post:
+      operationId: rotateCurrentAgentKey
+      summary: Rotate authenticated agent key
+      tags: [auth]
+      x-oar-command-id: "agents.me.keys.rotate"
+      x-oar-cli-path: "agents me keys rotate"
+      x-oar-why: "Replace the assertion key and invalidate the old key path."
+      x-oar-examples:
+        - title: Rotate key
+          command: oar agents me keys rotate --public-key <base64-ed25519-pubkey> --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ key }` for the new active key."
+      x-oar-error-codes: [auth_required, invalid_token, agent_revoked, invalid_request]
+      x-oar-concepts: [auth, key-management]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Old keys are marked revoked and cannot mint assertion tokens."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RotateKeyRequest'
+      responses:
+        '200':
+          description: Key rotated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RotateKeyResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /agents/me/revoke:
+    post:
+      operationId: revokeCurrentAgent
+      summary: Self-revoke current agent principal
+      tags: [auth]
+      x-oar-command-id: "agents.me.revoke"
+      x-oar-cli-path: "agents me revoke"
+      x-oar-why: "Permanently revoke the authenticated agent so future mint/refresh calls fail."
+      x-oar-examples:
+        - title: Revoke self
+          command: oar agents me revoke --json
+      x-oar-input-mode: "none"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ ok: true }` on first successful revoke."
+      x-oar-error-codes: [auth_required, invalid_token, agent_revoked]
+      x-oar-concepts: [auth, revocation]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Requires Bearer access token."
+      responses:
+        '200':
+          description: Agent revoked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OKResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+
   /threads:
     post:
       operationId: createThread
@@ -998,11 +1210,114 @@ components:
             $ref: '#/components/schemas/Actor'
       required: [actors]
 
+    Agent:
+      type: object
+      properties:
+        agent_id: { type: string }
+        username: { type: string }
+        actor_id: { type: string }
+        revoked: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+      required: [agent_id, username, actor_id, revoked, created_at, updated_at]
+
+    AgentKey:
+      type: object
+      properties:
+        key_id: { type: string }
+        agent_id: { type: string }
+        algorithm: { type: string }
+        public_key: { type: string }
+        created_at: { type: string, format: date-time }
+        revoked_at: { type: string, format: date-time }
+      required: [key_id, agent_id, algorithm, public_key, created_at]
+
+    TokenBundle:
+      type: object
+      properties:
+        access_token: { type: string }
+        refresh_token: { type: string }
+        token_type: { type: string }
+        expires_in: { type: integer, format: int64 }
+      required: [access_token, refresh_token, token_type, expires_in]
+
+    RegisterAgentRequest:
+      type: object
+      properties:
+        username: { type: string }
+        public_key: { type: string }
+      required: [username, public_key]
+
+    RegisterAgentResponse:
+      type: object
+      properties:
+        agent:
+          $ref: '#/components/schemas/Agent'
+        key:
+          $ref: '#/components/schemas/AgentKey'
+        tokens:
+          $ref: '#/components/schemas/TokenBundle'
+      required: [agent, key, tokens]
+
+    AuthTokenRequest:
+      type: object
+      properties:
+        grant_type: { type: string }
+        refresh_token: { type: string }
+        agent_id: { type: string }
+        key_id: { type: string }
+        signed_at: { type: string, format: date-time }
+        signature: { type: string }
+      required: [grant_type]
+
+    AuthTokenResponse:
+      type: object
+      properties:
+        tokens:
+          $ref: '#/components/schemas/TokenBundle'
+      required: [tokens]
+
+    CurrentAgentResponse:
+      type: object
+      properties:
+        agent:
+          $ref: '#/components/schemas/Agent'
+        keys:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentKey'
+      required: [agent, keys]
+
+    PatchCurrentAgentRequest:
+      type: object
+      properties:
+        username: { type: string }
+      required: [username]
+
+    CurrentAgentPatchResponse:
+      type: object
+      properties:
+        agent:
+          $ref: '#/components/schemas/Agent'
+      required: [agent]
+
+    RotateKeyRequest:
+      type: object
+      properties:
+        public_key: { type: string }
+      required: [public_key]
+
+    RotateKeyResponse:
+      type: object
+      properties:
+        key:
+          $ref: '#/components/schemas/AgentKey'
+      required: [key]
+
     ActorOnlyRequest:
       type: object
       properties:
         actor_id: { type: string }
-      required: [actor_id]
 
     CreateThreadRequest:
       type: object
@@ -1010,7 +1325,7 @@ components:
         actor_id: { type: string }
         thread:
           $ref: '#/components/schemas/AnyObject'
-      required: [actor_id, thread]
+      required: [thread]
 
     PatchThreadRequest:
       type: object
@@ -1021,7 +1336,7 @@ components:
         if_updated_at:
           type: string
           format: date-time
-      required: [actor_id, patch]
+      required: [patch]
 
     ThreadResponse:
       type: object
@@ -1069,7 +1384,7 @@ components:
         actor_id: { type: string }
         commitment:
           $ref: '#/components/schemas/AnyObject'
-      required: [actor_id, commitment]
+      required: [commitment]
 
     PatchCommitmentRequest:
       type: object
@@ -1083,7 +1398,7 @@ components:
         if_updated_at:
           type: string
           format: date-time
-      required: [actor_id, patch]
+      required: [patch]
 
     CommitmentResponse:
       type: object
@@ -1107,7 +1422,7 @@ components:
         actor_id: { type: string }
         event:
           $ref: '#/components/schemas/AnyObject'
-      required: [actor_id, event]
+      required: [event]
 
     EventResponse:
       type: object
@@ -1129,7 +1444,7 @@ components:
               additionalProperties: true
         content_type:
           type: string
-      required: [actor_id, artifact, content, content_type]
+      required: [artifact, content, content_type]
 
     ArtifactResponse:
       type: object
@@ -1155,7 +1470,7 @@ components:
           $ref: '#/components/schemas/AnyObject'
         packet:
           $ref: '#/components/schemas/AnyObject'
-      required: [actor_id, artifact, packet]
+      required: [artifact, packet]
 
     CreateReceiptRequest:
       type: object
@@ -1165,7 +1480,7 @@ components:
           $ref: '#/components/schemas/AnyObject'
         packet:
           $ref: '#/components/schemas/AnyObject'
-      required: [actor_id, artifact, packet]
+      required: [artifact, packet]
 
     CreateReviewRequest:
       type: object
@@ -1175,7 +1490,7 @@ components:
           $ref: '#/components/schemas/AnyObject'
         packet:
           $ref: '#/components/schemas/AnyObject'
-      required: [actor_id, artifact, packet]
+      required: [artifact, packet]
 
     PacketCreateResponse:
       type: object
@@ -1204,7 +1519,7 @@ components:
         actor_id: { type: string }
         thread_id: { type: string }
         inbox_item_id: { type: string }
-      required: [actor_id, thread_id, inbox_item_id]
+      required: [thread_id, inbox_item_id]
 
     OKResponse:
       type: object
