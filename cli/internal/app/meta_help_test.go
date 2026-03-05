@@ -142,3 +142,67 @@ func TestRunSubcommandHelpToken(t *testing.T) {
 		t.Fatalf("expected generated threads help output=%s", stdout.String())
 	}
 }
+
+func TestRunRootHelpMentionsOnboardingTopic(t *testing.T) {
+	t.Parallel()
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	cli := New()
+	cli.Stdout = stdout
+	cli.Stderr = stderr
+	cli.Stdin = strings.NewReader("")
+	cli.StdinIsTTY = func() bool { return true }
+	cli.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	cli.ReadFile = func(path string) ([]byte, error) {
+		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
+	}
+
+	exitCode := cli.Run([]string{"help"})
+	if exitCode != 0 {
+		t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "`oar help onboarding`") {
+		t.Fatalf("expected onboarding hint output=%s", stdout.String())
+	}
+}
+
+func TestRunOnboardingHelpTopic(t *testing.T) {
+	t.Parallel()
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	cli := New()
+	cli.Stdout = stdout
+	cli.Stderr = stderr
+	cli.Stdin = strings.NewReader("")
+	cli.StdinIsTTY = func() bool { return true }
+	cli.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	cli.ReadFile = func(path string) ([]byte, error) {
+		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
+	}
+
+	exitCode := cli.Run([]string{"help", "onboarding"})
+	if exitCode != 0 {
+		t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
+	}
+	output := stdout.String()
+	if !strings.Contains(output, "Onboarding: mental model") {
+		t.Fatalf("expected onboarding header output=%s", output)
+	}
+	if !strings.Contains(output, "Work-order loop") {
+		t.Fatalf("expected work-order section output=%s", output)
+	}
+	if !strings.Contains(output, "First 5 commands to run") {
+		t.Fatalf("expected first-commands section output=%s", output)
+	}
+	if !strings.Contains(output, "cli/docs/runbook.md") {
+		t.Fatalf("expected offline runbook link output=%s", output)
+	}
+	if !strings.Contains(output, "1. `oar` is a non-interactive CLI") {
+		t.Fatalf("expected mental model sentence output=%s", output)
+	}
+	if !strings.Contains(output, "5. The fastest way to stay aligned") {
+		t.Fatalf("expected fifth mental model sentence output=%s", output)
+	}
+}

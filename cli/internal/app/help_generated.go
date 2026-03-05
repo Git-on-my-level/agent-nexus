@@ -49,7 +49,7 @@ Core Commands:
   auth          Manage agent registration, profile auth, and token lifecycle
   draft         Stage write requests locally and commit them later
   api call      Perform an arbitrary HTTP API request
-  help [topic]  Show generated help for a command group or command path
+  help [topic]  Show onboarding help or generated command help
 `)+"\n")
 
 	meta, err := registry.LoadEmbedded()
@@ -66,6 +66,9 @@ Core Commands:
 
 	_, _ = io.WriteString(a.Stdout, strings.TrimSpace(`
 
+Onboarding:
+  `+"`oar help onboarding`"+` for the offline quick-start topic.
+
 Global Flags:
   --json
   --base-url <url>
@@ -79,6 +82,10 @@ func (a *App) printHelpTopic(topic string) bool {
 	topic = strings.TrimSpace(topic)
 	if topic == "draft" {
 		_, _ = io.WriteString(a.Stdout, draftUsageText())
+		return true
+	}
+	if topic == "onboarding" {
+		_, _ = io.WriteString(a.Stdout, onboardingHelpText())
 		return true
 	}
 	text, ok := generatedHelpText(topic)
@@ -265,6 +272,36 @@ func runtimeSupportedCommandIDs() map[string]struct{} {
 		"meta.concepts.list":         {},
 		"meta.concepts.get":          {},
 	}
+}
+
+func onboardingHelpText() string {
+	return strings.TrimSpace(`Onboarding: mental model
+
+1. ` + "`oar`" + ` is a non-interactive CLI that maps stable command paths to core HTTP endpoints and emits plain text or a single JSON envelope.
+2. Each command should be safe for automation, so defaults, errors, and output shapes are designed for scripts first.
+3. Profiles (` + "`--agent`" + `) hold reusable auth and base URL settings so repeated commands stay short and consistent.
+4. Typed commands (` + "`threads`" + `, ` + "`events`" + `, ` + "`inbox`" + `, and packet creators) are the primary surface, while ` + "`api call`" + ` is the escape hatch.
+5. The fastest way to stay aligned is to run health/auth checks first, then execute the work-order loop one step at a time.
+
+Work-order loop
+
+1. Inspect inbound work and context: ` + "`oar inbox list`" + ` or ` + "`oar inbox stream --max-events 1`" + `.
+2. Read current state before mutating it: ` + "`oar threads get <thread-id>`" + ` and related list/get commands.
+3. Stage a mutation as a draft when you need reviewable intent: ` + "`oar draft create --command <command-id>`" + `.
+4. Commit the draft (or send a direct typed create/patch command) and capture returned IDs.
+5. Confirm outcomes in timeline/events and ack inbox items to close the loop.
+
+First 5 commands to run
+
+  oar --base-url http://127.0.0.1:8000 --agent <agent> doctor
+  oar --base-url http://127.0.0.1:8000 --agent <agent> auth register --username <username>
+  oar --agent <agent> auth whoami
+  oar --agent <agent> threads list
+  oar --agent <agent> inbox stream --max-events 1
+
+Optional full runbook (local, offline)
+
+  cli/docs/runbook.md`)
 }
 
 func mapRuntimePathToRegistryPath(path string) string {
