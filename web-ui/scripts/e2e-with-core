@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+CORE_BASE_URL="${OAR_CORE_BASE_URL:-http://127.0.0.1:8000}"
+CORE_BASE_URL="${CORE_BASE_URL%/}"
+VERSION_URL="${CORE_BASE_URL}/version"
+HEALTHCHECK_TIMEOUT_SECONDS="${OAR_CORE_HEALTHCHECK_TIMEOUT_SECONDS:-5}"
+
+echo "Checking oar-core availability at ${VERSION_URL} ..."
+if ! version_payload="$(
+  curl \
+    --silent \
+    --show-error \
+    --fail \
+    --max-time "${HEALTHCHECK_TIMEOUT_SECONDS}" \
+    "${VERSION_URL}"
+)"; then
+  cat >&2 <<EOF
+ERROR: Unable to reach oar-core at ${CORE_BASE_URL}.
+Start backend first, then rerun this command.
+
+Backend terminal:
+  cd ../organization-autorunner-core
+  ./scripts/dev
+
+UI terminal:
+  cd ../organization-autorunner-ui
+  OAR_CORE_BASE_URL=http://127.0.0.1:8000 ./scripts/e2e-with-core
+EOF
+  exit 1
+fi
+
+if [[ "${version_payload}" != *'"schema_version"'* ]]; then
+  cat >&2 <<EOF
+ERROR: ${VERSION_URL} responded but did not return a schema_version payload.
+Response body:
+${version_payload}
+EOF
+  exit 1
+fi
+
+echo "oar-core /version response: ${version_payload}"
+
+cd "${REPO_ROOT}"
+pnpm install --frozen-lockfile
+pnpm exec playwright install chromium
+
+export OAR_CORE_BASE_URL="${CORE_BASE_URL}"
+unset PUBLIC_OAR_CORE_BASE_URL
+
+exec pnpm exec playwright test --config playwright.integration.config.js "$@"
