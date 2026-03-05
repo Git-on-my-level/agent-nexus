@@ -1,0 +1,51 @@
+{
+  "name": "zesty-bots-team-fuzz",
+  "base_url": "http://127.0.0.1:8000",
+  "agents": [
+    {
+      "name": "coordinator",
+      "username_prefix": "coord-fuzz",
+      "llm": {
+        "objective": "Act as a coordinator. Explore live operational state, create or update at least one active thread, and log at least one usability feedback item using action=feedback.",
+        "profile_path": "cli/scenarios/profiles/coordinator.md",
+        "max_turns": 3,
+        "min_successful_runs": 1
+      },
+      "deterministic_steps": []
+    },
+    {
+      "name": "orchestrator",
+      "username_prefix": "orch-fuzz",
+      "llm": {
+        "objective": "Act as an orchestrator. Inspect events/threads/inbox surfaces, identify one potential risk or dispatch opportunity, and record at least one feedback note via action=feedback.",
+        "profile_path": "cli/scenarios/profiles/orchestrator.md",
+        "max_turns": 3,
+        "min_successful_runs": 1
+      },
+      "deterministic_steps": []
+    },
+    {
+      "name": "worker",
+      "username_prefix": "worker-fuzz",
+      "llm": {
+        "objective": "Act as a worker. Pick an active thread, gather context, and post at least one actor_statement or message_posted event with clear provenance.",
+        "profile_path": "cli/scenarios/profiles/worker.md",
+        "max_turns": 3,
+        "min_successful_runs": 1
+      },
+      "deterministic_steps": []
+    },
+    {
+      "name": "reviewer",
+      "username_prefix": "review-fuzz",
+      "llm": {
+        "objective": "Act as a reviewer. Audit recent activity, inspect artifacts/events, and publish one review-style event or recommendation; include one feedback action if UX friction appears.",
+        "profile_path": "cli/scenarios/profiles/reviewer.md",
+        "max_turns": 3,
+        "min_successful_runs": 1
+      },
+      "deterministic_steps": []
+    }
+  ],
+  "assertions": []
+}

@@ -70,6 +70,7 @@ This scenario also has a harness manifest for multi-agent integration runs:
 
 - `harness.scenario.json`
 - `harness.nontrivial.scenario.json` (docs lifecycle + optimistic concurrency conflict)
+- `harness.team-fuzz.scenario.json` (non-deterministic multi-role LLM roleplay + feedback capture)
 
 From `cli/`:
 
@@ -89,6 +90,13 @@ go run ./cmd/oar-scenario --scenario scenarios/zesty-bots/harness.scenario.json 
   --scenario scenarios/zesty-bots/harness.nontrivial.scenario.json \
   --oar-bin ./oar \
   --mode deterministic
+
+./oar-scenario \
+  --scenario scenarios/zesty-bots/harness.team-fuzz.scenario.json \
+  --mode llm \
+  --llm-api-key-file .secrets/zai_api_key \
+  --report .tmp/team-fuzz-report.json
+jq '.feedback' .tmp/team-fuzz-report.json
 
 export OAR_LLM_API_KEY="<your-provider-key>"
 ./oar-scenario \

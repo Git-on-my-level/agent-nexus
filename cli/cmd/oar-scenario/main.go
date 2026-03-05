@@ -45,6 +45,7 @@ func main() {
 		llmTemp       float64
 		llmMaxTokens  int
 		llmTimeoutSec int
+		llmRetries    int
 		verbose       bool
 	)
 	var llmArgs repeatedStringFlag
@@ -64,6 +65,7 @@ func main() {
 	fs.Float64Var(&llmTemp, "llm-temperature", 0.0, "Sampling temperature for built-in OpenAI-compatible LLM mode")
 	fs.IntVar(&llmMaxTokens, "llm-max-tokens", 2000, "Max completion tokens for built-in OpenAI-compatible LLM mode")
 	fs.IntVar(&llmTimeoutSec, "llm-timeout-seconds", firstNonZeroInt(parseEnvInt("OAR_LLM_TIMEOUT_SECONDS"), 180), "HTTP timeout in seconds for built-in OpenAI-compatible LLM requests")
+	fs.IntVar(&llmRetries, "llm-retries", firstNonZeroInt(parseEnvInt("OAR_LLM_RETRIES"), 3), "Max retry attempts for transient built-in LLM request failures")
 	fs.BoolVar(&verbose, "verbose", false, "Print executed commands to stderr")
 
 	if err := fs.Parse(os.Args[1:]); err != nil {
@@ -115,6 +117,7 @@ func main() {
 		LLMTemperature:    llmTemp,
 		LLMMaxTokens:      llmMaxTokens,
 		LLMTimeoutSeconds: llmTimeoutSec,
+		LLMRetryAttempts:  llmRetries,
 		Verbose:           verbose,
 		WorkingDirectory:  workingDir,
 	}

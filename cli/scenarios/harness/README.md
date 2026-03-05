@@ -9,6 +9,11 @@ Goals:
 
 This package is intentionally thin: orchestration state machine + command execution + assertion checks.
 
+LLM actions:
+- `run`: execute one CLI command turn
+- `stop`: end turns for the current agent
+- `feedback`: record UX/product feedback in report output without running a CLI command
+
 ## Error Expectations
 
 Use `expect_error` on a step when a command is expected to fail in a specific way.

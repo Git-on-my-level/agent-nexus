@@ -27,9 +27,10 @@ type AgentSpec struct {
 }
 
 type LLMSpec struct {
-	Objective   string `json:"objective"`
-	ProfilePath string `json:"profile_path"`
-	MaxTurns    int    `json:"max_turns"`
+	Objective         string `json:"objective"`
+	ProfilePath       string `json:"profile_path"`
+	MaxTurns          int    `json:"max_turns"`
+	MinSuccessfulRuns int    `json:"min_successful_runs,omitempty"`
 }
 
 type Step struct {
@@ -70,6 +71,7 @@ type Config struct {
 	LLMTemperature    float64
 	LLMMaxTokens      int
 	LLMTimeoutSeconds int
+	LLMRetryAttempts  int
 	Verbose           bool
 	WorkingDirectory  string
 }
@@ -82,10 +84,19 @@ type Report struct {
 	CompletedAt   time.Time                 `json:"completed_at"`
 	BaseURL       string                    `json:"base_url"`
 	Agents        []AgentReport             `json:"agents"`
+	Feedback      []FeedbackEntry           `json:"feedback,omitempty"`
 	Assertions    []AssertionResult         `json:"assertions"`
 	Captures      map[string]map[string]any `json:"captures"`
 	Failed        bool                      `json:"failed"`
 	FailureReason string                    `json:"failure_reason,omitempty"`
+}
+
+type FeedbackEntry struct {
+	Agent      string         `json:"agent"`
+	Turn       int            `json:"turn"`
+	Summary    string         `json:"summary"`
+	Details    map[string]any `json:"details,omitempty"`
+	RecordedAt time.Time      `json:"recorded_at"`
 }
 
 type AgentReport struct {

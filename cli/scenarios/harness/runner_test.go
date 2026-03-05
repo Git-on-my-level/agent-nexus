@@ -273,6 +273,161 @@ printf '{"ok":true,"data":{"body":{"command":"%s"}}}\n' "$*"
 	}
 }
 
+func TestRunLLMModeFeedbackActionIsCaptured(t *testing.T) {
+	t.Parallel()
+
+	tmp := t.TempDir()
+	oarPath := filepath.Join(tmp, "fake-oar.sh")
+	driverPath := filepath.Join(tmp, "fake-driver.py")
+	scenarioPath := filepath.Join(tmp, "scenario.json")
+
+	writeExecutable(t, oarPath, `#!/usr/bin/env bash
+set -euo pipefail
+cat >/dev/null || true
+cat <<'JSON'
+{"ok":true,"command":"ok"}
+JSON
+`)
+
+	writeExecutable(t, driverPath, `#!/usr/bin/env python3
+import json, sys
+req = json.load(sys.stdin)
+turn = int(req.get("turn", 1))
+if turn == 1:
+    print(json.dumps({"action":"feedback","reason":"CLI help was unclear","stdin":{"severity":"medium","surface":"threads"}}))
+elif turn == 2:
+    print(json.dumps({"action":"run","name":"list threads","args":["threads","list"]}))
+else:
+    print(json.dumps({"action":"stop","reason":"done"}))
+`)
+
+	scenarioJSON := `{
+  "name": "llm-feedback-test",
+  "base_url": "http://127.0.0.1:8000",
+  "agents": [
+    {
+      "name": "coordinator",
+      "username_prefix": "coord",
+      "llm": {
+        "objective": "Emit feedback then run one command.",
+        "profile_path": "",
+        "max_turns": 4
+      },
+      "deterministic_steps": []
+    }
+  ],
+  "assertions": []
+}`
+	if err := os.WriteFile(scenarioPath, []byte(scenarioJSON), 0o644); err != nil {
+		t.Fatalf("write scenario file: %v", err)
+	}
+
+	report, err := Run(context.Background(), Config{
+		ScenarioPath:     scenarioPath,
+		OARBinary:        oarPath,
+		Mode:             ModeLLM,
+		LLMDriverBin:     driverPath,
+		BaseURLOverride:  "http://127.0.0.1:8000",
+		WorkingDirectory: tmp,
+	})
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if report.Failed {
+		t.Fatalf("expected successful report, got failed report: %#v", report)
+	}
+	if len(report.Feedback) != 1 {
+		t.Fatalf("expected one feedback entry, got %d", len(report.Feedback))
+	}
+	if got := report.Feedback[0].Summary; got != "CLI help was unclear" {
+		t.Fatalf("unexpected feedback summary: %q", got)
+	}
+	if got := anyString(report.Feedback[0].Details["severity"]); got != "medium" {
+		t.Fatalf("unexpected feedback severity: %q", got)
+	}
+	if len(report.Agents) != 1 {
+		t.Fatalf("expected one agent report, got %d", len(report.Agents))
+	}
+	if got := len(report.Agents[0].Steps); got != 4 {
+		t.Fatalf("expected 4 steps (register + feedback + run + stop), got %d", got)
+	}
+	if !strings.Contains(strings.ToLower(report.Agents[0].Steps[1].Name), "feedback") {
+		t.Fatalf("expected feedback step, got %q", report.Agents[0].Steps[1].Name)
+	}
+}
+
+func TestRunLLMModeMinSuccessfulRunsEnforced(t *testing.T) {
+	t.Parallel()
+
+	tmp := t.TempDir()
+	oarPath := filepath.Join(tmp, "fake-oar.sh")
+	driverPath := filepath.Join(tmp, "fake-driver.py")
+	scenarioPath := filepath.Join(tmp, "scenario.json")
+
+	writeExecutable(t, oarPath, `#!/usr/bin/env bash
+set -euo pipefail
+cat >/dev/null || true
+cat <<'JSON'
+{"ok":true,"command":"ok"}
+JSON
+`)
+
+	writeExecutable(t, driverPath, `#!/usr/bin/env python3
+import json
+print(json.dumps({"action":"stop","reason":"no-op"}))
+`)
+
+	scenarioJSON := `{
+  "name": "llm-min-success-test",
+  "base_url": "http://127.0.0.1:8000",
+  "agents": [
+    {
+      "name": "worker",
+      "llm": {
+        "objective": "Stop immediately",
+        "profile_path": "",
+        "max_turns": 2,
+        "min_successful_runs": 1
+      },
+      "deterministic_steps": []
+    }
+  ],
+  "assertions": []
+}`
+	if err := os.WriteFile(scenarioPath, []byte(scenarioJSON), 0o644); err != nil {
+		t.Fatalf("write scenario file: %v", err)
+	}
+
+	report, err := Run(context.Background(), Config{
+		ScenarioPath:     scenarioPath,
+		OARBinary:        oarPath,
+		Mode:             ModeLLM,
+		LLMDriverBin:     driverPath,
+		BaseURLOverride:  "http://127.0.0.1:8000",
+		WorkingDirectory: tmp,
+	})
+	if err == nil {
+		t.Fatalf("expected Run to fail for unmet min_successful_runs")
+	}
+	if !report.Failed {
+		t.Fatalf("expected failed report")
+	}
+	if !strings.Contains(report.FailureReason, "min 1") {
+		t.Fatalf("unexpected failure reason: %s", report.FailureReason)
+	}
+}
+
+func TestSanitizeRunArgs(t *testing.T) {
+	t.Parallel()
+
+	input := []string{"oar", "--json", "--base-url", "http://127.0.0.1:8000", "--agent", "a1", "--", "threads", "list", "--status", "active"}
+	got := sanitizeRunArgs(input)
+	want := []string{"threads", "list", "--status", "active"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Fatalf("sanitizeRunArgs mismatch: got=%v want=%v", got, want)
+	}
+}
+
 func writeExecutable(t *testing.T, path string, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o755); err != nil {

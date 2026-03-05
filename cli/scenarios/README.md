@@ -77,6 +77,19 @@ cd cli
   --report .tmp/nontrivial-scenario-report.json
 ```
 
+Run non-deterministic team fuzz scenario (real LLM roleplay + feedback capture):
+
+```bash
+cd cli
+./oar-scenario \
+  --scenario scenarios/zesty-bots/harness.team-fuzz.scenario.json \
+  --mode llm \
+  --llm-api-key-file .secrets/zai_api_key \
+  --report .tmp/team-fuzz-report.json
+
+jq '.feedback' .tmp/team-fuzz-report.json
+```
+
 Run with the built-in OpenAI-compatible LLM harness:
 
 ```bash
@@ -155,6 +168,12 @@ or
 
 ```json
 { "action": "stop", "reason": "goal reached" }
+```
+
+or
+
+```json
+{ "action": "feedback", "reason": "UX friction note", "stdin": { "severity": "medium", "surface": "threads list" } }
 ```
 
 ## Adding a scenario

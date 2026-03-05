@@ -78,6 +78,7 @@ func Run(ctx context.Context, cfg Config) (Report, error) {
 		StartedAt: time.Now().UTC(),
 		BaseURL:   baseURL,
 		Agents:    make([]AgentReport, 0, len(scenario.Agents)),
+		Feedback:  make([]FeedbackEntry, 0, 8),
 		Captures:  make(map[string]map[string]any, len(scenario.Agents)+1),
 	}
 	report.Captures["run"] = map[string]any{"id": runID}
@@ -153,6 +154,28 @@ func Run(ctx context.Context, cfg Config) (Report, error) {
 					history[agentName] = append(history[agentName], stopRes)
 					break
 				}
+				if strings.EqualFold(strings.TrimSpace(action.Action), "feedback") {
+					feedback := FeedbackEntry{
+						Agent:      agentName,
+						Turn:       turn,
+						Summary:    strings.TrimSpace(firstNonEmpty(action.Reason, action.Name)),
+						Details:    cloneAnyMap(action.Stdin),
+						RecordedAt: time.Now().UTC(),
+					}
+					report.Feedback = append(report.Feedback, feedback)
+					feedbackBytes, _ := json.Marshal(feedback.Details)
+					feedbackRes := CommandResult{
+						Name:      fmt.Sprintf("llm feedback (turn %d)", turn),
+						Agent:     agentName,
+						Args:      []string{},
+						ExitCode:  0,
+						Succeeded: true,
+						Stdout:    strings.TrimSpace(firstNonEmpty(feedback.Summary, string(feedbackBytes))),
+					}
+					aReport.Steps = append(aReport.Steps, feedbackRes)
+					history[agentName] = append(history[agentName], feedbackRes)
+					continue
+				}
 
 				step := Step{
 					Name:         firstNonEmpty(strings.TrimSpace(action.Name), fmt.Sprintf("llm turn %d", turn)),
@@ -176,6 +199,13 @@ func Run(ctx context.Context, cfg Config) (Report, error) {
 					continue
 				}
 				consecutiveFailures = 0
+			}
+		}
+		if mode == ModeLLM && agent.LLM.MinSuccessfulRuns > 0 {
+			successfulRuns := countSuccessfulLLMRuns(aReport.Steps)
+			if successfulRuns < agent.LLM.MinSuccessfulRuns {
+				report.Agents = append(report.Agents, aReport)
+				return failReport(report, fmt.Sprintf("agent %s completed only %d successful llm run steps (min %d)", agentName, successfulRuns, agent.LLM.MinSuccessfulRuns))
 			}
 		}
 
@@ -793,7 +823,7 @@ func nextOpenAICompatibleAction(ctx context.Context, cfg Config, req DriverReque
 
 	systemPrompt := "You are controlling an OAR CLI agent in a scenario harness. " +
 		"Return exactly one JSON object with either {\"action\":\"run\",\"name\":\"...\",\"args\":[...],\"stdin\":{...}} " +
-		"or {\"action\":\"stop\",\"reason\":\"...\"}. " +
+		"or {\"action\":\"stop\",\"reason\":\"...\"} or {\"action\":\"feedback\",\"reason\":\"...\",\"stdin\":{...}}. " +
 		"Do not include markdown, code fences, or extra keys. " +
 		"For action=run, args must be a non-empty array of OAR subcommand tokens, excluding global flags. " +
 		"When reference_steps are provided, prefer those command forms and spellings exactly."
@@ -828,7 +858,10 @@ func nextOpenAICompatibleAction(ctx context.Context, cfg Config, req DriverReque
 		timeout = 180 * time.Second
 	}
 	httpClient := &http.Client{Timeout: timeout}
-	maxAttempts := 3
+	maxAttempts := cfg.LLMRetryAttempts
+	if maxAttempts <= 0 {
+		maxAttempts = 3
+	}
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 		if err != nil {
@@ -919,7 +952,15 @@ func nextOpenAICompatibleAction(ctx context.Context, cfg Config, req DriverReque
 				}
 				return fallback, nil
 			}
-			return DriverAction{}, fmt.Errorf("decode llm action: %w", firstNonNilError(decodeErr, fmt.Errorf("empty model content")))
+			err := firstNonNilError(decodeErr, fmt.Errorf("empty model content"))
+			return DriverAction{
+				Action: "feedback",
+				Reason: "unparseable model action",
+				Stdin: map[string]any{
+					"error":        err.Error(),
+					"raw_response": truncateForError(strings.TrimSpace(firstNonEmpty(candidates...)), 400),
+				},
+			}, nil
 		}
 		if err := validateDriverAction(&action); err != nil {
 			if fallback, ok := fallbackActionFromReference(req); ok {
@@ -928,10 +969,16 @@ func nextOpenAICompatibleAction(ctx context.Context, cfg Config, req DriverReque
 				}
 				return fallback, nil
 			}
-			if cfg.Verbose {
-				fmt.Fprintf(os.Stderr, "[harness] llm decoded action candidate: %s\n", truncateForError(fmt.Sprintf("%+v", action), 400))
-			}
-			return DriverAction{}, err
+			return DriverAction{
+				Action: "feedback",
+				Reason: "invalid model action",
+				Stdin: map[string]any{
+					"error":      err.Error(),
+					"candidate":  truncateForError(fmt.Sprintf("%+v", action), 400),
+					"turn":       req.Turn,
+					"agent_name": req.Agent,
+				},
+			}, nil
 		}
 		if expected, ok := fallbackActionFromReference(req); ok && shouldOverrideWithReference(action, expected) {
 			if cfg.Verbose {
@@ -1237,6 +1284,23 @@ func sleepWithContext(ctx context.Context, duration time.Duration) error {
 	}
 }
 
+func countSuccessfulLLMRuns(steps []CommandResult) int {
+	count := 0
+	for _, step := range steps {
+		if !step.Succeeded {
+			continue
+		}
+		name := strings.ToLower(strings.TrimSpace(step.Name))
+		if strings.HasPrefix(name, "auth register") ||
+			strings.HasPrefix(name, "llm stop") ||
+			strings.HasPrefix(name, "llm feedback") {
+			continue
+		}
+		count++
+	}
+	return count
+}
+
 func firstNonNilError(values ...error) error {
 	for _, value := range values {
 		if value != nil {
@@ -1251,13 +1315,59 @@ func validateDriverAction(action *DriverAction) error {
 	if action.Action == "" {
 		return fmt.Errorf("driver action is required")
 	}
-	if action.Action != "run" && action.Action != "stop" {
+	if action.Action != "run" && action.Action != "stop" && action.Action != "feedback" {
 		return fmt.Errorf("unsupported driver action %q", action.Action)
 	}
-	if action.Action == "run" && len(action.Args) == 0 {
-		return fmt.Errorf("driver action run requires args")
+	if action.Action == "run" {
+		action.Args = sanitizeRunArgs(action.Args)
+		if len(action.Args) == 0 {
+			return fmt.Errorf("driver action run requires args")
+		}
+	}
+	if action.Action == "feedback" && strings.TrimSpace(action.Reason) == "" && len(action.Stdin) == 0 {
+		return fmt.Errorf("driver action feedback requires reason or stdin")
 	}
 	return nil
+}
+
+func sanitizeRunArgs(args []string) []string {
+	if len(args) == 0 {
+		return nil
+	}
+	clean := make([]string, 0, len(args))
+	for _, arg := range args {
+		arg = strings.TrimSpace(arg)
+		if arg == "" {
+			continue
+		}
+		clean = append(clean, arg)
+	}
+	if len(clean) == 0 {
+		return nil
+	}
+	if strings.EqualFold(clean[0], "oar") {
+		clean = clean[1:]
+	}
+	for idx, value := range clean {
+		if value == "--" && idx < len(clean)-1 {
+			clean = clean[idx+1:]
+			break
+		}
+	}
+	out := make([]string, 0, len(clean))
+	for idx := 0; idx < len(clean); idx++ {
+		value := clean[idx]
+		switch value {
+		case "--json":
+			continue
+		case "--base-url", "--agent":
+			idx++
+			continue
+		default:
+			out = append(out, value)
+		}
+	}
+	return out
 }
 
 func failReport(report Report, reason string) (Report, error) {
