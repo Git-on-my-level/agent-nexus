@@ -60,8 +60,15 @@ export declare class OarClient {
     derivedRebuild(options?: RequestOptions): Promise<InvokeResult>;
     eventsCreate(options?: RequestOptions): Promise<InvokeResult>;
     eventsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    eventsStream(options?: RequestOptions): Promise<InvokeResult>;
     inboxAck(options?: RequestOptions): Promise<InvokeResult>;
     inboxList(options?: RequestOptions): Promise<InvokeResult>;
+    inboxStream(options?: RequestOptions): Promise<InvokeResult>;
+    metaCommandsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    metaCommandsList(options?: RequestOptions): Promise<InvokeResult>;
+    metaConceptsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    metaConceptsList(options?: RequestOptions): Promise<InvokeResult>;
+    metaHandshake(options?: RequestOptions): Promise<InvokeResult>;
     metaHealth(options?: RequestOptions): Promise<InvokeResult>;
     metaVersion(options?: RequestOptions): Promise<InvokeResult>;
     packetsReceiptsCreate(options?: RequestOptions): Promise<InvokeResult>;

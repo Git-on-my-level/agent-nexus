@@ -36,6 +36,36 @@ The schema of objects is defined by `../contracts/oar-schema.yaml`.
 - `GET /version`
   - Response: `{ "schema_version": "0.2.2" }`
 
+- `GET /meta/handshake`
+  - Response: `{ "core_version", "api_version", "schema_version", "min_cli_version", "recommended_cli_version", "cli_download_url", "core_instance_id" }`
+
+- Compatibility headers emitted on all responses:
+  - `X-OAR-Core-Version`
+  - `X-OAR-API-Version`
+  - `X-OAR-Schema-Version`
+  - `X-OAR-Min-CLI-Version`
+  - `X-OAR-Recommended-CLI-Version`
+
+- CLI version gate:
+  - Clients MAY send `X-OAR-CLI-Version`.
+  - When provided and below minimum compatibility (except on `/health`, `/version`, `/meta/handshake`, `/auth/agents/register`, `/auth/token`), response is:
+    - HTTP `426 Upgrade Required`
+    - `{ "error": { "code": "cli_outdated", ... }, "upgrade": { "min_cli_version", "recommended_cli_version", "cli_download_url" } }`
+
+### Generated meta discovery
+
+- `GET /meta/commands`
+  - Response: generated command registry metadata from `contracts/gen/meta/commands.json`.
+
+- `GET /meta/commands/{command_id}`
+  - Response: `{ "command": <generated_command_metadata> }`
+
+- `GET /meta/concepts`
+  - Response: `{ "concepts": [ { "name", "command_count", "command_ids" } ... ] }`
+
+- `GET /meta/concepts/{concept_name}`
+  - Response: `{ "concept": { "name", "command_count", "command_ids", "commands" } }`
+
 ### Actors
 
 - `POST /actors`
@@ -156,6 +186,13 @@ The schema of objects is defined by `../contracts/oar-schema.yaml`.
   - Body: `{ "actor_id": "...", "event": <event_fields_without_id_ts_actor_id> }`
   - Response: `{ "event": <event> }`
 
+- `GET /events/stream`
+  - Content type: `text/event-stream`
+  - SSE event type: `event`
+  - SSE data envelope: `{ "event": <event> }`
+  - Optional query: `thread_id`, repeated `type`, `types` (comma-separated), `last_event_id`
+  - Resume supported via `Last-Event-ID` header or `last_event_id` query.
+
 - `GET /events/{event_id}`
   - Response: `{ "event": <event> }`
 
@@ -177,6 +214,13 @@ The schema of objects is defined by `../contracts/oar-schema.yaml`.
 
 - `GET /inbox`
   - Response: `{ "items": [<inbox_item>...], "generated_at": "..." }`
+
+- `GET /inbox/stream`
+  - Content type: `text/event-stream`
+  - SSE event type: `inbox_item`
+  - SSE data envelope: `{ "item": <inbox_item> }`
+  - Optional query: `risk_horizon_days`, `last_event_id`
+  - Resume supported via `Last-Event-ID` header or `last_event_id` query.
 
 - `POST /inbox/ack`
   - Body: `{ "actor_id": "...", "thread_id": "...", "inbox_item_id": "..." }`

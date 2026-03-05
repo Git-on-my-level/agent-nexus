@@ -1,0 +1,462 @@
+package server
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"organization-autorunner-core/internal/actors"
+	"organization-autorunner-core/internal/auth"
+	"organization-autorunner-core/internal/primitives"
+	"organization-autorunner-core/internal/schema"
+	"organization-autorunner-core/internal/storage"
+)
+
+func TestMetaHandshakeAndGeneratedMetaEndpoints(t *testing.T) {
+	t.Parallel()
+
+	h := newMetaStreamTestHarness(t,
+		WithCoreVersion("1.2.3"),
+		WithAPIVersion("v0"),
+		WithMinCLIVersion("0.9.0"),
+		WithRecommendedCLIVersion("1.1.0"),
+		WithCLIDownloadURL("https://example.com/oar-cli"),
+		WithCoreInstanceID("instance-test-1"),
+		WithMetaCommandsPath(filepath.Join("..", "..", "..", "contracts", "gen", "meta", "commands.json")),
+	)
+
+	handshakeResp, err := http.Get(h.baseURL + "/meta/handshake")
+	if err != nil {
+		t.Fatalf("GET /meta/handshake: %v", err)
+	}
+	defer handshakeResp.Body.Close()
+	if handshakeResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected /meta/handshake status: %d", handshakeResp.StatusCode)
+	}
+
+	var handshake map[string]string
+	if err := json.NewDecoder(handshakeResp.Body).Decode(&handshake); err != nil {
+		t.Fatalf("decode /meta/handshake response: %v", err)
+	}
+	if handshake["core_version"] != "1.2.3" {
+		t.Fatalf("unexpected core_version: %#v", handshake)
+	}
+	if handshake["min_cli_version"] != "0.9.0" || handshake["recommended_cli_version"] != "1.1.0" {
+		t.Fatalf("unexpected cli version metadata: %#v", handshake)
+	}
+	if handshake["cli_download_url"] != "https://example.com/oar-cli" || handshake["core_instance_id"] != "instance-test-1" {
+		t.Fatalf("unexpected handshake values: %#v", handshake)
+	}
+
+	commandsResp, err := http.Get(h.baseURL + "/meta/commands")
+	if err != nil {
+		t.Fatalf("GET /meta/commands: %v", err)
+	}
+	defer commandsResp.Body.Close()
+	if commandsResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected /meta/commands status: %d", commandsResp.StatusCode)
+	}
+	var commandsPayload map[string]any
+	if err := json.NewDecoder(commandsResp.Body).Decode(&commandsPayload); err != nil {
+		t.Fatalf("decode /meta/commands response: %v", err)
+	}
+	commandCount, _ := commandsPayload["command_count"].(float64)
+	if commandCount < 1 {
+		t.Fatalf("expected non-empty command metadata, got %#v", commandsPayload)
+	}
+
+	commandResp, err := http.Get(h.baseURL + "/meta/commands/meta.version")
+	if err != nil {
+		t.Fatalf("GET /meta/commands/{id}: %v", err)
+	}
+	defer commandResp.Body.Close()
+	if commandResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected /meta/commands/{id} status: %d", commandResp.StatusCode)
+	}
+	var commandPayload map[string]map[string]any
+	if err := json.NewDecoder(commandResp.Body).Decode(&commandPayload); err != nil {
+		t.Fatalf("decode /meta/commands/{id} response: %v", err)
+	}
+	if asString(commandPayload["command"]["command_id"]) != "meta.version" {
+		t.Fatalf("unexpected command lookup payload: %#v", commandPayload)
+	}
+
+	conceptsResp, err := http.Get(h.baseURL + "/meta/concepts")
+	if err != nil {
+		t.Fatalf("GET /meta/concepts: %v", err)
+	}
+	defer conceptsResp.Body.Close()
+	if conceptsResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected /meta/concepts status: %d", conceptsResp.StatusCode)
+	}
+	var conceptsPayload map[string][]map[string]any
+	if err := json.NewDecoder(conceptsResp.Body).Decode(&conceptsPayload); err != nil {
+		t.Fatalf("decode /meta/concepts response: %v", err)
+	}
+	if len(conceptsPayload["concepts"]) == 0 {
+		t.Fatalf("expected non-empty concepts payload, got %#v", conceptsPayload)
+	}
+
+	conceptResp, err := http.Get(h.baseURL + "/meta/concepts/compatibility")
+	if err != nil {
+		t.Fatalf("GET /meta/concepts/{name}: %v", err)
+	}
+	defer conceptResp.Body.Close()
+	if conceptResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected /meta/concepts/{name} status: %d", conceptResp.StatusCode)
+	}
+	var conceptPayload map[string]map[string]any
+	if err := json.NewDecoder(conceptResp.Body).Decode(&conceptPayload); err != nil {
+		t.Fatalf("decode /meta/concepts/{name} response: %v", err)
+	}
+	if asString(conceptPayload["concept"]["name"]) != "compatibility" {
+		t.Fatalf("unexpected concept lookup payload: %#v", conceptPayload)
+	}
+}
+
+func TestVersionHeadersAndCLIOutdatedResponse(t *testing.T) {
+	t.Parallel()
+
+	h := newMetaStreamTestHarness(t,
+		WithCoreVersion("2.0.0"),
+		WithAPIVersion("v0"),
+		WithMinCLIVersion("1.5.0"),
+		WithRecommendedCLIVersion("1.7.0"),
+		WithCLIDownloadURL("https://example.com/oar-cli"),
+	)
+
+	healthResp, err := http.Get(h.baseURL + "/health")
+	if err != nil {
+		t.Fatalf("GET /health: %v", err)
+	}
+	defer healthResp.Body.Close()
+	if healthResp.Header.Get("X-OAR-Core-Version") != "2.0.0" {
+		t.Fatalf("missing core version header: %#v", healthResp.Header)
+	}
+	if healthResp.Header.Get("X-OAR-Min-CLI-Version") != "1.5.0" {
+		t.Fatalf("missing min cli version header: %#v", healthResp.Header)
+	}
+
+	versionReq, err := http.NewRequest(http.MethodGet, h.baseURL+"/version", nil)
+	if err != nil {
+		t.Fatalf("build /version request: %v", err)
+	}
+	versionReq.Header.Set("X-OAR-CLI-Version", "0.1.0")
+	versionResp, err := http.DefaultClient.Do(versionReq)
+	if err != nil {
+		t.Fatalf("GET /version with old cli header: %v", err)
+	}
+	defer versionResp.Body.Close()
+	if versionResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected /version to remain compatible, got %d", versionResp.StatusCode)
+	}
+
+	listThreadsReq, err := http.NewRequest(http.MethodGet, h.baseURL+"/threads", nil)
+	if err != nil {
+		t.Fatalf("build /threads request: %v", err)
+	}
+	listThreadsReq.Header.Set("X-OAR-CLI-Version", "1.4.9")
+	listThreadsResp, err := http.DefaultClient.Do(listThreadsReq)
+	if err != nil {
+		t.Fatalf("GET /threads with old cli header: %v", err)
+	}
+	defer listThreadsResp.Body.Close()
+	if listThreadsResp.StatusCode != http.StatusUpgradeRequired {
+		t.Fatalf("expected 426 for outdated cli, got %d", listThreadsResp.StatusCode)
+	}
+	var outdatedPayload map[string]any
+	if err := json.NewDecoder(listThreadsResp.Body).Decode(&outdatedPayload); err != nil {
+		t.Fatalf("decode outdated payload: %v", err)
+	}
+	errorPayload, _ := outdatedPayload["error"].(map[string]any)
+	if asString(errorPayload["code"]) != "cli_outdated" {
+		t.Fatalf("unexpected outdated error payload: %#v", outdatedPayload)
+	}
+	upgradePayload, _ := outdatedPayload["upgrade"].(map[string]any)
+	if asString(upgradePayload["min_cli_version"]) != "1.5.0" || asString(upgradePayload["recommended_cli_version"]) != "1.7.0" {
+		t.Fatalf("unexpected upgrade payload: %#v", outdatedPayload)
+	}
+}
+
+func TestEventsStreamResumesFromLastEventID(t *testing.T) {
+	t.Parallel()
+
+	h := newMetaStreamTestHarness(t, WithStreamPollInterval(20*time.Millisecond))
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-05T10:00:00Z"}}`, http.StatusCreated).Body.Close()
+
+	firstEventID := appendEventForTest(t, h.baseURL, "actor-1", "thread-stream-1", "event one")
+	secondEventID := appendEventForTest(t, h.baseURL, "actor-1", "thread-stream-1", "event two")
+
+	resp := openSSEStream(t, h.baseURL+"/events/stream?thread_id=thread-stream-1", "")
+	reader, stop := startSSEReader(resp.Body)
+	defer stop()
+
+	first := awaitSSEEvent(t, reader, 2*time.Second)
+	second := awaitSSEEvent(t, reader, 2*time.Second)
+	if first.ID != firstEventID || second.ID != secondEventID {
+		t.Fatalf("unexpected initial stream order: first=%q second=%q expected=(%q,%q)", first.ID, second.ID, firstEventID, secondEventID)
+	}
+
+	resumeResp := openSSEStream(t, h.baseURL+"/events/stream?thread_id=thread-stream-1", firstEventID)
+	resumeReader, resumeStop := startSSEReader(resumeResp.Body)
+	defer resumeStop()
+
+	resumed := awaitSSEEvent(t, resumeReader, 2*time.Second)
+	if resumed.ID != secondEventID {
+		t.Fatalf("expected resumed stream to continue after last event id, got %q want %q", resumed.ID, secondEventID)
+	}
+
+	select {
+	case duplicate := <-resumeReader:
+		t.Fatalf("unexpected duplicate event after resume with no new writes: %#v", duplicate)
+	case <-time.After(300 * time.Millisecond):
+	}
+}
+
+func TestInboxStreamSuppressesDuplicateItems(t *testing.T) {
+	t.Parallel()
+
+	h := newMetaStreamTestHarness(t, WithStreamPollInterval(20*time.Millisecond))
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-05T10:00:00Z"}}`, http.StatusCreated).Body.Close()
+
+	threadResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
+		"actor_id":"actor-1",
+		"thread":{
+			"title":"Inbox stream thread",
+			"type":"incident",
+			"status":"active",
+			"priority":"p1",
+			"tags":["ops"],
+			"cadence":"daily",
+			"next_check_in_at":"2030-01-01T00:00:00Z",
+			"current_summary":"summary",
+			"next_actions":["action"],
+			"key_artifacts":[],
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated)
+	defer threadResp.Body.Close()
+
+	var threadPayload struct {
+		Thread map[string]any `json:"thread"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&threadPayload); err != nil {
+		t.Fatalf("decode thread response: %v", err)
+	}
+	threadID := asString(threadPayload.Thread["id"])
+	if threadID == "" {
+		t.Fatal("expected created thread id")
+	}
+
+	dueSoon := time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339)
+	commitmentResp := postJSONExpectStatus(t, h.baseURL+"/commitments", `{
+		"actor_id":"actor-1",
+		"commitment":{
+			"thread_id":"`+threadID+`",
+			"title":"At risk commitment",
+			"owner":"actor-1",
+			"due_at":"`+dueSoon+`",
+			"status":"open",
+			"definition_of_done":["done"],
+			"links":["url:https://example.com/task"],
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated)
+	defer commitmentResp.Body.Close()
+
+	resp := openSSEStream(t, h.baseURL+"/inbox/stream", "")
+	reader, stop := startSSEReader(resp.Body)
+	defer stop()
+
+	first := awaitSSEEvent(t, reader, 2*time.Second)
+	if first.Event != "inbox_item" {
+		t.Fatalf("unexpected inbox event type: %#v", first)
+	}
+
+	select {
+	case duplicate := <-reader:
+		t.Fatalf("unexpected duplicate inbox item event without any state change: %#v", duplicate)
+	case <-time.After(300 * time.Millisecond):
+	}
+}
+
+type metaStreamTestHarness struct {
+	baseURL string
+}
+
+func newMetaStreamTestHarness(t *testing.T, options ...HandlerOption) metaStreamTestHarness {
+	t.Helper()
+
+	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+
+	contractPath := filepath.Join("..", "..", "..", "contracts", "oar-schema.yaml")
+	contract, err := schema.Load(contractPath)
+	if err != nil {
+		_ = workspace.Close()
+		t.Fatalf("load schema contract: %v", err)
+	}
+
+	registry := actors.NewStore(workspace.DB())
+	if _, err := registry.EnsureSystemActor(context.Background(), time.Now().UTC()); err != nil {
+		_ = workspace.Close()
+		t.Fatalf("ensure system actor: %v", err)
+	}
+
+	baseOptions := []HandlerOption{
+		WithHealthCheck(workspace.Ping),
+		WithActorRegistry(registry),
+		WithAuthStore(auth.NewStore(workspace.DB())),
+		WithPrimitiveStore(primitives.NewStore(workspace.DB(), workspace.Layout().ArtifactContentDir)),
+		WithSchemaContract(contract),
+	}
+	baseOptions = append(baseOptions, options...)
+
+	server := httptest.NewServer(NewHandler(contract.Version, baseOptions...))
+	t.Cleanup(func() {
+		server.Close()
+		_ = workspace.Close()
+	})
+
+	return metaStreamTestHarness{baseURL: server.URL}
+}
+
+func appendEventForTest(t *testing.T, baseURL string, actorID string, threadID string, summary string) string {
+	t.Helper()
+
+	response := postJSONExpectStatus(t, baseURL+"/events", fmt.Sprintf(`{
+		"actor_id":"%s",
+		"event":{
+			"type":"my_custom_event",
+			"thread_id":"%s",
+			"refs":["thread:%s"],
+			"summary":%q,
+			"payload":{},
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, actorID, threadID, threadID, summary), http.StatusCreated)
+	defer response.Body.Close()
+
+	var payload struct {
+		Event map[string]any `json:"event"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode append event response: %v", err)
+	}
+	eventID := asString(payload.Event["id"])
+	if eventID == "" {
+		t.Fatalf("missing event id in payload: %#v", payload)
+	}
+	return eventID
+}
+
+func openSSEStream(t *testing.T, url string, lastEventID string) *http.Response {
+	t.Helper()
+
+	request, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatalf("build stream request: %v", err)
+	}
+	if strings.TrimSpace(lastEventID) != "" {
+		request.Header.Set("Last-Event-ID", lastEventID)
+	}
+
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("open stream request: %v", err)
+	}
+	if response.StatusCode != http.StatusOK {
+		defer response.Body.Close()
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("unexpected stream status: got %d body=%s", response.StatusCode, string(body))
+	}
+	return response
+}
+
+type sseEvent struct {
+	ID    string
+	Event string
+	Data  map[string]any
+}
+
+func startSSEReader(body io.ReadCloser) (<-chan sseEvent, func()) {
+	events := make(chan sseEvent, 16)
+
+	go func() {
+		defer close(events)
+		scanner := bufio.NewScanner(body)
+		var (
+			currentID    string
+			currentEvent string
+			dataLines    []string
+		)
+		emit := func() {
+			if len(dataLines) == 0 {
+				currentID = ""
+				currentEvent = ""
+				dataLines = nil
+				return
+			}
+			var payload map[string]any
+			if err := json.Unmarshal([]byte(strings.Join(dataLines, "\n")), &payload); err == nil {
+				events <- sseEvent{
+					ID:    currentID,
+					Event: currentEvent,
+					Data:  payload,
+				}
+			}
+			currentID = ""
+			currentEvent = ""
+			dataLines = nil
+		}
+
+		for scanner.Scan() {
+			line := scanner.Text()
+			if line == "" {
+				emit()
+				continue
+			}
+			if strings.HasPrefix(line, ":") {
+				continue
+			}
+			switch {
+			case strings.HasPrefix(line, "id:"):
+				currentID = strings.TrimSpace(strings.TrimPrefix(line, "id:"))
+			case strings.HasPrefix(line, "event:"):
+				currentEvent = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
+			case strings.HasPrefix(line, "data:"):
+				dataLines = append(dataLines, strings.TrimSpace(strings.TrimPrefix(line, "data:")))
+			}
+		}
+		emit()
+	}()
+
+	stop := func() {
+		_ = body.Close()
+	}
+	return events, stop
+}
+
+func awaitSSEEvent(t *testing.T, events <-chan sseEvent, timeout time.Duration) sseEvent {
+	t.Helper()
+	select {
+	case event, ok := <-events:
+		if !ok {
+			t.Fatal("sse stream closed before receiving event")
+		}
+		return event
+	case <-time.After(timeout):
+		t.Fatalf("timed out waiting for sse event after %s", timeout)
+	}
+	return sseEvent{}
+}

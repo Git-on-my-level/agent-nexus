@@ -676,6 +676,44 @@ export const commandRegistry: CommandSpec[] = [
     "ts_method": "eventsGet"
   },
   {
+    "command_id": "events.stream",
+    "cli_path": "events stream",
+    "method": "GET",
+    "path": "/events/stream",
+    "operation_id": "streamEvents",
+    "summary": "Stream events via Server-Sent Events (SSE)",
+    "why": "Follow live event updates with resumable SSE semantics.",
+    "input_mode": "none",
+    "streaming": {
+      "event_type": "event",
+      "mode": "sse",
+      "resumable": true
+    },
+    "output_envelope": "SSE stream where each event carries `{ event }` and uses event id for resume.",
+    "error_codes": [
+      "internal_error",
+      "cli_outdated"
+    ],
+    "concepts": [
+      "events",
+      "streaming"
+    ],
+    "stability": "beta",
+    "agent_notes": "Supports `Last-Event-ID` header or `last_event_id` query for resumable reads.",
+    "examples": [
+      {
+        "title": "Stream all events",
+        "command": "oar events stream --json"
+      },
+      {
+        "title": "Resume by id",
+        "command": "oar events stream --last-event-id \u003cevent_id\u003e --json"
+      }
+    ],
+    "go_method": "EventsStream",
+    "ts_method": "eventsStream"
+  },
+  {
     "command_id": "inbox.ack",
     "cli_path": "inbox ack",
     "method": "POST",
@@ -735,6 +773,209 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "go_method": "InboxList",
     "ts_method": "inboxList"
+  },
+  {
+    "command_id": "inbox.stream",
+    "cli_path": "inbox stream",
+    "method": "GET",
+    "path": "/inbox/stream",
+    "operation_id": "streamInbox",
+    "summary": "Stream derived inbox items via SSE",
+    "why": "Follow live derived inbox updates without repeated polling.",
+    "input_mode": "none",
+    "streaming": {
+      "event_type": "inbox_item",
+      "mode": "sse",
+      "resumable": true
+    },
+    "output_envelope": "SSE stream where each event carries `{ item }` derived inbox metadata.",
+    "error_codes": [
+      "internal_error",
+      "cli_outdated"
+    ],
+    "concepts": [
+      "inbox",
+      "derived-views",
+      "streaming"
+    ],
+    "stability": "beta",
+    "agent_notes": "Supports `Last-Event-ID` header or `last_event_id` query for resumable reads.",
+    "examples": [
+      {
+        "title": "Stream inbox updates",
+        "command": "oar inbox stream --json"
+      },
+      {
+        "title": "Resume inbox stream",
+        "command": "oar inbox stream --last-event-id \u003cid\u003e --json"
+      }
+    ],
+    "go_method": "InboxStream",
+    "ts_method": "inboxStream"
+  },
+  {
+    "command_id": "meta.commands.get",
+    "cli_path": "meta commands get",
+    "method": "GET",
+    "path": "/meta/commands/{command_id}",
+    "operation_id": "getMetaCommand",
+    "summary": "Get generated metadata for a command id",
+    "why": "Resolve a stable command id to full generated metadata and guidance.",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ command }` metadata for the requested command id.",
+    "error_codes": [
+      "not_found",
+      "meta_unavailable",
+      "cli_outdated"
+    ],
+    "concepts": [
+      "meta",
+      "introspection"
+    ],
+    "stability": "beta",
+    "agent_notes": "Safe and idempotent.",
+    "examples": [
+      {
+        "title": "Read command metadata",
+        "command": "oar meta commands get --command-id threads.list --json"
+      }
+    ],
+    "path_params": [
+      "command_id"
+    ],
+    "go_method": "MetaCommandsGet",
+    "ts_method": "metaCommandsGet"
+  },
+  {
+    "command_id": "meta.commands.list",
+    "cli_path": "meta commands list",
+    "method": "GET",
+    "path": "/meta/commands",
+    "operation_id": "listMetaCommands",
+    "summary": "List generated command metadata",
+    "why": "Load generated command metadata used for help, docs, and agent introspection.",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns generated command registry metadata from the canonical contract.",
+    "error_codes": [
+      "meta_unavailable",
+      "cli_outdated"
+    ],
+    "concepts": [
+      "meta",
+      "introspection"
+    ],
+    "stability": "beta",
+    "agent_notes": "Safe and idempotent. Response shape matches committed generated artifacts.",
+    "examples": [
+      {
+        "title": "List command metadata",
+        "command": "oar meta commands list --json"
+      }
+    ],
+    "go_method": "MetaCommandsList",
+    "ts_method": "metaCommandsList"
+  },
+  {
+    "command_id": "meta.concepts.get",
+    "cli_path": "meta concepts get",
+    "method": "GET",
+    "path": "/meta/concepts/{concept_name}",
+    "operation_id": "getMetaConcept",
+    "summary": "Get generated metadata for one concept",
+    "why": "Resolve one concept tag to the commands that implement that concept.",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ concept }` including matched command ids and command metadata.",
+    "error_codes": [
+      "not_found",
+      "meta_unavailable",
+      "cli_outdated"
+    ],
+    "concepts": [
+      "meta",
+      "concepts"
+    ],
+    "stability": "beta",
+    "agent_notes": "Safe and idempotent.",
+    "examples": [
+      {
+        "title": "Read one concept",
+        "command": "oar meta concepts get --concept-name compatibility --json"
+      }
+    ],
+    "path_params": [
+      "concept_name"
+    ],
+    "go_method": "MetaConceptsGet",
+    "ts_method": "metaConceptsGet"
+  },
+  {
+    "command_id": "meta.concepts.list",
+    "cli_path": "meta concepts list",
+    "method": "GET",
+    "path": "/meta/concepts",
+    "operation_id": "listMetaConcepts",
+    "summary": "List generated concept metadata",
+    "why": "Discover conceptual groupings of commands generated from contract metadata.",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ concepts }` summary metadata for all known concepts.",
+    "error_codes": [
+      "meta_unavailable",
+      "cli_outdated"
+    ],
+    "concepts": [
+      "meta",
+      "concepts"
+    ],
+    "stability": "beta",
+    "agent_notes": "Safe and idempotent.",
+    "examples": [
+      {
+        "title": "List concepts",
+        "command": "oar meta concepts list --json"
+      }
+    ],
+    "go_method": "MetaConceptsList",
+    "ts_method": "metaConceptsList"
+  },
+  {
+    "command_id": "meta.handshake",
+    "cli_path": "meta handshake",
+    "method": "GET",
+    "path": "/meta/handshake",
+    "operation_id": "getMetaHandshake",
+    "summary": "Get compatibility handshake metadata",
+    "why": "Discover compatibility, upgrade, and instance identity metadata before command execution.",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns compatibility fields including minimum supported CLI version.",
+    "concepts": [
+      "compatibility",
+      "handshake"
+    ],
+    "stability": "beta",
+    "agent_notes": "Safe and idempotent. Use this endpoint to proactively gate incompatible CLI versions.",
+    "examples": [
+      {
+        "title": "Read handshake metadata",
+        "command": "oar meta handshake --json"
+      }
+    ],
+    "go_method": "MetaHandshake",
+    "ts_method": "metaHandshake"
   },
   {
     "command_id": "meta.health",
@@ -1245,12 +1486,40 @@ export class OarClient {
     return this.invoke("events.get", pathParams, options);
   }
 
+  eventsStream(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("events.stream", {}, options);
+  }
+
   inboxAck(options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("inbox.ack", {}, options);
   }
 
   inboxList(options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("inbox.list", {}, options);
+  }
+
+  inboxStream(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("inbox.stream", {}, options);
+  }
+
+  metaCommandsGet(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("meta.commands.get", pathParams, options);
+  }
+
+  metaCommandsList(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("meta.commands.list", {}, options);
+  }
+
+  metaConceptsGet(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("meta.concepts.get", pathParams, options);
+  }
+
+  metaConceptsList(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("meta.concepts.list", {}, options);
+  }
+
+  metaHandshake(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("meta.handshake", {}, options);
   }
 
   metaHealth(options: RequestOptions = {}): Promise<InvokeResult> {

@@ -4,7 +4,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.2.2`
-- Commands: `32`
+- Commands: `39`
 
 ## `actors.list`
 
@@ -273,6 +273,21 @@ Generated from `contracts/oar-openapi.yaml`.
 - Examples:
   - Get event: `oar events get --event-id event_123 --json`
 
+## `events.stream`
+
+- CLI path: `events stream`
+- HTTP: `GET /events/stream`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Follow live event updates with resumable SSE semantics.
+- Concepts: `events`, `streaming`
+- Error codes: `internal_error`, `cli_outdated`
+- Output: SSE stream where each event carries `{ event }` and uses event id for resume.
+- Agent notes: Supports `Last-Event-ID` header or `last_event_id` query for resumable reads.
+- Examples:
+  - Stream all events: `oar events stream --json`
+  - Resume by id: `oar events stream --last-event-id <event_id> --json`
+
 ## `inbox.ack`
 
 - CLI path: `inbox ack`
@@ -299,6 +314,90 @@ Generated from `contracts/oar-openapi.yaml`.
 - Agent notes: Safe and idempotent.
 - Examples:
   - List inbox: `oar inbox list --json`
+
+## `inbox.stream`
+
+- CLI path: `inbox stream`
+- HTTP: `GET /inbox/stream`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Follow live derived inbox updates without repeated polling.
+- Concepts: `inbox`, `derived-views`, `streaming`
+- Error codes: `internal_error`, `cli_outdated`
+- Output: SSE stream where each event carries `{ item }` derived inbox metadata.
+- Agent notes: Supports `Last-Event-ID` header or `last_event_id` query for resumable reads.
+- Examples:
+  - Stream inbox updates: `oar inbox stream --json`
+  - Resume inbox stream: `oar inbox stream --last-event-id <id> --json`
+
+## `meta.commands.get`
+
+- CLI path: `meta commands get`
+- HTTP: `GET /meta/commands/{command_id}`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Resolve a stable command id to full generated metadata and guidance.
+- Concepts: `meta`, `introspection`
+- Error codes: `not_found`, `meta_unavailable`, `cli_outdated`
+- Output: Returns `{ command }` metadata for the requested command id.
+- Agent notes: Safe and idempotent.
+- Examples:
+  - Read command metadata: `oar meta commands get --command-id threads.list --json`
+
+## `meta.commands.list`
+
+- CLI path: `meta commands list`
+- HTTP: `GET /meta/commands`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Load generated command metadata used for help, docs, and agent introspection.
+- Concepts: `meta`, `introspection`
+- Error codes: `meta_unavailable`, `cli_outdated`
+- Output: Returns generated command registry metadata from the canonical contract.
+- Agent notes: Safe and idempotent. Response shape matches committed generated artifacts.
+- Examples:
+  - List command metadata: `oar meta commands list --json`
+
+## `meta.concepts.get`
+
+- CLI path: `meta concepts get`
+- HTTP: `GET /meta/concepts/{concept_name}`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Resolve one concept tag to the commands that implement that concept.
+- Concepts: `meta`, `concepts`
+- Error codes: `not_found`, `meta_unavailable`, `cli_outdated`
+- Output: Returns `{ concept }` including matched command ids and command metadata.
+- Agent notes: Safe and idempotent.
+- Examples:
+  - Read one concept: `oar meta concepts get --concept-name compatibility --json`
+
+## `meta.concepts.list`
+
+- CLI path: `meta concepts list`
+- HTTP: `GET /meta/concepts`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Discover conceptual groupings of commands generated from contract metadata.
+- Concepts: `meta`, `concepts`
+- Error codes: `meta_unavailable`, `cli_outdated`
+- Output: Returns `{ concepts }` summary metadata for all known concepts.
+- Agent notes: Safe and idempotent.
+- Examples:
+  - List concepts: `oar meta concepts list --json`
+
+## `meta.handshake`
+
+- CLI path: `meta handshake`
+- HTTP: `GET /meta/handshake`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Discover compatibility, upgrade, and instance identity metadata before command execution.
+- Concepts: `compatibility`, `handshake`
+- Output: Returns compatibility fields including minimum supported CLI version.
+- Agent notes: Safe and idempotent. Use this endpoint to proactively gate incompatible CLI versions.
+- Examples:
+  - Read handshake metadata: `oar meta handshake --json`
 
 ## `meta.health`
 

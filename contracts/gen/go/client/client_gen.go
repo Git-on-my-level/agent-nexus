@@ -325,6 +325,25 @@ var CommandRegistry = []CommandSpec{
 		},
 	},
 	{
+		CommandID: "events.stream",
+		CLIPath:   "events stream",
+		Method:    "GET",
+		Path:      "/events/stream",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"events", "streaming"},
+		Examples: []Example{
+			{
+				Title:   "Stream all events",
+				Command: "oar events stream --json",
+			},
+			{
+				Title:   "Resume by id",
+				Command: "oar events stream --last-event-id <event_id> --json",
+			},
+		},
+	},
+	{
 		CommandID: "inbox.ack",
 		CLIPath:   "inbox ack",
 		Method:    "POST",
@@ -351,6 +370,102 @@ var CommandRegistry = []CommandSpec{
 			{
 				Title:   "List inbox",
 				Command: "oar inbox list --json",
+			},
+		},
+	},
+	{
+		CommandID: "inbox.stream",
+		CLIPath:   "inbox stream",
+		Method:    "GET",
+		Path:      "/inbox/stream",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"inbox", "derived-views", "streaming"},
+		Examples: []Example{
+			{
+				Title:   "Stream inbox updates",
+				Command: "oar inbox stream --json",
+			},
+			{
+				Title:   "Resume inbox stream",
+				Command: "oar inbox stream --last-event-id <id> --json",
+			},
+		},
+	},
+	{
+		CommandID:  "meta.commands.get",
+		CLIPath:    "meta commands get",
+		Method:     "GET",
+		Path:       "/meta/commands/{command_id}",
+		PathParams: []string{"command_id"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"meta", "introspection"},
+		Examples: []Example{
+			{
+				Title:   "Read command metadata",
+				Command: "oar meta commands get --command-id threads.list --json",
+			},
+		},
+	},
+	{
+		CommandID: "meta.commands.list",
+		CLIPath:   "meta commands list",
+		Method:    "GET",
+		Path:      "/meta/commands",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"meta", "introspection"},
+		Examples: []Example{
+			{
+				Title:   "List command metadata",
+				Command: "oar meta commands list --json",
+			},
+		},
+	},
+	{
+		CommandID:  "meta.concepts.get",
+		CLIPath:    "meta concepts get",
+		Method:     "GET",
+		Path:       "/meta/concepts/{concept_name}",
+		PathParams: []string{"concept_name"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"meta", "concepts"},
+		Examples: []Example{
+			{
+				Title:   "Read one concept",
+				Command: "oar meta concepts get --concept-name compatibility --json",
+			},
+		},
+	},
+	{
+		CommandID: "meta.concepts.list",
+		CLIPath:   "meta concepts list",
+		Method:    "GET",
+		Path:      "/meta/concepts",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"meta", "concepts"},
+		Examples: []Example{
+			{
+				Title:   "List concepts",
+				Command: "oar meta concepts list --json",
+			},
+		},
+	},
+	{
+		CommandID: "meta.handshake",
+		CLIPath:   "meta handshake",
+		Method:    "GET",
+		Path:      "/meta/handshake",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"compatibility", "handshake"},
+		Examples: []Example{
+			{
+				Title:   "Read handshake metadata",
+				Command: "oar meta handshake --json",
 			},
 		},
 	},
@@ -717,12 +832,40 @@ func (c *Client) EventsGet(ctx context.Context, pathParams map[string]string, op
 	return c.Invoke(ctx, "events.get", pathParams, opts)
 }
 
+func (c *Client) EventsStream(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "events.stream", nil, opts)
+}
+
 func (c *Client) InboxAck(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "inbox.ack", nil, opts)
 }
 
 func (c *Client) InboxList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "inbox.list", nil, opts)
+}
+
+func (c *Client) InboxStream(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "inbox.stream", nil, opts)
+}
+
+func (c *Client) MetaCommandsGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "meta.commands.get", pathParams, opts)
+}
+
+func (c *Client) MetaCommandsList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "meta.commands.list", nil, opts)
+}
+
+func (c *Client) MetaConceptsGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "meta.concepts.get", pathParams, opts)
+}
+
+func (c *Client) MetaConceptsList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "meta.concepts.list", nil, opts)
+}
+
+func (c *Client) MetaHandshake(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "meta.handshake", nil, opts)
 }
 
 func (c *Client) MetaHealth(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
