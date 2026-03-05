@@ -108,6 +108,15 @@ func TestRunGeneratedHelpTopic(t *testing.T) {
 	if !strings.Contains(output, "threads create") {
 		t.Fatalf("expected generated command listing output=%s", output)
 	}
+	if !strings.Contains(output, "threads patch") {
+		t.Fatalf("expected patch subcommand in generated help output=%s", output)
+	}
+	if !strings.Contains(output, "threads timeline") {
+		t.Fatalf("expected timeline subcommand in generated help output=%s", output)
+	}
+	if strings.Contains(output, "threads update") {
+		t.Fatalf("unexpected legacy update subcommand in generated help output=%s", output)
+	}
 }
 
 func TestRunSubcommandHelpToken(t *testing.T) {

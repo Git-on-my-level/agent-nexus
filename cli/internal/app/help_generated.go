@@ -241,6 +241,7 @@ func runtimeSupportedCommandIDs() map[string]struct{} {
 		"threads.get":                {},
 		"threads.create":             {},
 		"threads.patch":              {},
+		"threads.timeline":           {},
 		"commitments.list":           {},
 		"commitments.get":            {},
 		"commitments.create":         {},
@@ -312,7 +313,6 @@ func runtimePathFromRegistryPath(path string) string {
 	}
 	path = strings.Join(parts, " ")
 	rewrites := map[string]string{
-		"threads patch":      "threads update",
 		"commitments patch":  "commitments update",
 		"meta commands list": "meta commands",
 		"meta commands get":  "meta command",

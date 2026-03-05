@@ -72,7 +72,7 @@ func (a *App) runTypedResource(ctx context.Context, resource string, args []stri
 
 func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
 	if len(args) == 0 {
-		return nil, "threads", errnorm.Usage("subcommand_required", "expected one of: list, get, create, update")
+		return nil, "threads", errnorm.Usage("subcommand_required", "expected one of: list, get, create, patch, timeline")
 	}
 	sub := strings.TrimSpace(args[0])
 	switch sub {
@@ -113,13 +113,20 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "threads create", "threads.create", nil, nil, body)
 		return result, "threads create", callErr
-	case "update":
-		id, body, err := a.parseIDAndBodyInput(args[1:], "thread-id", "thread id", "threads update")
+	case "patch", "update":
+		id, body, err := a.parseIDAndBodyInput(args[1:], "thread-id", "thread id", "threads patch")
 		if err != nil {
-			return nil, "threads update", err
+			return nil, "threads patch", err
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "threads update", "threads.patch", map[string]string{"thread_id": id}, nil, body)
-		return result, "threads update", callErr
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "threads patch", "threads.patch", map[string]string{"thread_id": id}, nil, body)
+		return result, "threads patch", callErr
+	case "timeline":
+		id, err := parseIDArg(args[1:], "thread-id", "thread id")
+		if err != nil {
+			return nil, "threads timeline", err
+		}
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "threads timeline", "threads.timeline", map[string]string{"thread_id": id}, nil, nil)
+		return result, "threads timeline", callErr
 	default:
 		return nil, "threads", errnorm.Usage("unknown_subcommand", fmt.Sprintf("unknown threads subcommand %q", sub))
 	}

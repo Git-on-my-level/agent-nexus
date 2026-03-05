@@ -38,6 +38,8 @@ func TestTypedThreadCommandsGolden(t *testing.T) {
 				t.Fatalf("unexpected update body: %s", string(body))
 			}
 			_, _ = w.Write([]byte(`{"thread":{"id":"thread_1","title":"Alpha","status":"resolved"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_1/timeline":
+			_, _ = w.Write([]byte(`{"events":[],"snapshots":{},"artifacts":{}}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -53,8 +55,14 @@ func TestTypedThreadCommandsGolden(t *testing.T) {
 	createOut := runCLIForTest(t, home, env, strings.NewReader(`{"thread":{"title":"Alpha"}}`), []string{"--json", "--base-url", server.URL, "threads", "create"})
 	assertGolden(t, "threads_create.golden.json", createOut)
 
-	updateOut := runCLIForTest(t, home, env, strings.NewReader(`{"thread":{"status":"resolved"}}`), []string{"--json", "--base-url", server.URL, "threads", "update", "--thread-id", "thread_1"})
-	assertGolden(t, "threads_update.golden.json", updateOut)
+	patchOut := runCLIForTest(t, home, env, strings.NewReader(`{"thread":{"status":"resolved"}}`), []string{"--json", "--base-url", server.URL, "threads", "patch", "--thread-id", "thread_1"})
+	assertGolden(t, "threads_patch.golden.json", patchOut)
+
+	timelineOut := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "threads", "timeline", "--thread-id", "thread_1"})
+	timelinePayload := assertEnvelopeOK(t, timelineOut)
+	if got := timelinePayload["command"]; got != "threads timeline" {
+		t.Fatalf("expected threads timeline command label, got %#v", got)
+	}
 }
 
 func TestTypedWorkflowCommands(t *testing.T) {
@@ -95,7 +103,7 @@ func TestTypedWorkflowCommands(t *testing.T) {
 	env := map[string]string{}
 
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"thread":{"title":"Flow Thread"}}`), []string{"--json", "--base-url", server.URL, "threads", "create"}))
-	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"thread":{"status":"resolved"}}`), []string{"--json", "--base-url", server.URL, "threads", "update", "thread_flow_1"}))
+	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"thread":{"status":"resolved"}}`), []string{"--json", "--base-url", server.URL, "threads", "patch", "thread_flow_1"}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"commitment":{"thread_id":"thread_flow_1","title":"Do work"}}`), []string{"--json", "--base-url", server.URL, "commitments", "create"}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"work_order":{"thread_id":"thread_flow_1"}}`), []string{"--json", "--base-url", server.URL, "work-orders", "create"}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"receipt":{"thread_id":"thread_flow_1"}}`), []string{"--json", "--base-url", server.URL, "receipts", "create"}))
@@ -264,7 +272,7 @@ func TestTypedCommandUsageFailures(t *testing.T) {
 		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
 	}
 
-	exitCode := cli.Run([]string{"--json", "threads", "update", "--thread-id", "thread_1"})
+	exitCode := cli.Run([]string{"--json", "threads", "patch", "--thread-id", "thread_1"})
 	if exitCode != 2 {
 		t.Fatalf("expected exit code 2, got %d stdout=%s stderr=%s", exitCode, stdout.String(), stderr.String())
 	}
