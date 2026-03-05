@@ -2,7 +2,7 @@
   "openapi_version": "3.1.0",
   "contract_version": "0.2.2",
   "generated_by": "core/cmd/contract-gen",
-  "concept_count": 32,
+  "concept_count": 36,
   "concepts": [
     {
       "name": "append-only",
@@ -1180,6 +1180,96 @@
       ]
     },
     {
+      "name": "concurrency",
+      "command_count": 1,
+      "command_ids": [
+        "docs.update"
+      ],
+      "commands": [
+        {
+          "command_id": "docs.update",
+          "cli_path": "docs update",
+          "group": "docs",
+          "method": "PATCH",
+          "path": "/docs/{document_id}",
+          "operation_id": "updateDocument",
+          "summary": "Create a new immutable revision for an existing document",
+          "why": "Append a revision and atomically advance document head with optimistic concurrency.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ document, revision }` for the newly-created head revision.",
+          "error_codes": [
+            "invalid_json",
+            "invalid_request",
+            "unknown_actor_id",
+            "conflict",
+            "not_found"
+          ],
+          "concepts": [
+            "docs",
+            "revisions",
+            "concurrency"
+          ],
+          "stability": "beta",
+          "agent_notes": "Set `if_base_revision` from `docs.get` to prevent lost updates.",
+          "examples": [
+            {
+              "title": "Update document",
+              "command": "oar docs update --document-id product-constitution --from-file doc-update.json --json"
+            }
+          ],
+          "body_schema": {
+            "required": [
+              {
+                "name": "content",
+                "type": "object|string"
+              },
+              {
+                "name": "content_type",
+                "type": "string",
+                "enum_values": [
+                  "binary",
+                  "structured",
+                  "text"
+                ]
+              },
+              {
+                "name": "if_base_revision",
+                "type": "string"
+              }
+            ],
+            "optional": [
+              {
+                "name": "actor_id",
+                "type": "string"
+              },
+              {
+                "name": "document",
+                "type": "object"
+              },
+              {
+                "name": "refs",
+                "type": "list\u003cstring\u003e"
+              }
+            ]
+          },
+          "path_params": [
+            "document_id"
+          ],
+          "adjacent_commands": [
+            "docs.create",
+            "docs.get",
+            "docs.history",
+            "docs.revision.get"
+          ],
+          "go_method": "DocsUpdate",
+          "ts_method": "docsUpdate"
+        }
+      ]
+    },
+    {
       "name": "content",
       "command_count": 1,
       "command_ids": [
@@ -1355,6 +1445,300 @@
           ],
           "go_method": "InboxStream",
           "ts_method": "inboxStream"
+        }
+      ]
+    },
+    {
+      "name": "docs",
+      "command_count": 5,
+      "command_ids": [
+        "docs.create",
+        "docs.get",
+        "docs.history",
+        "docs.revision.get",
+        "docs.update"
+      ],
+      "commands": [
+        {
+          "command_id": "docs.create",
+          "cli_path": "docs create",
+          "group": "docs",
+          "method": "POST",
+          "path": "/docs",
+          "operation_id": "createDocument",
+          "summary": "Create document with initial immutable revision",
+          "why": "Bootstrap a first-class document identity and initial revision without manual head-pointer management.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ document, revision }` where `revision` is the new head.",
+          "error_codes": [
+            "invalid_json",
+            "invalid_request",
+            "unknown_actor_id",
+            "conflict"
+          ],
+          "concepts": [
+            "docs",
+            "revisions"
+          ],
+          "stability": "beta",
+          "agent_notes": "Non-idempotent unless caller provides a deterministic document id and dedupes retries.",
+          "examples": [
+            {
+              "title": "Create document",
+              "command": "oar docs create --from-file doc-create.json --json"
+            }
+          ],
+          "body_schema": {
+            "required": [
+              {
+                "name": "content",
+                "type": "object|string"
+              },
+              {
+                "name": "content_type",
+                "type": "string",
+                "enum_values": [
+                  "binary",
+                  "structured",
+                  "text"
+                ]
+              },
+              {
+                "name": "document",
+                "type": "object"
+              }
+            ],
+            "optional": [
+              {
+                "name": "actor_id",
+                "type": "string"
+              },
+              {
+                "name": "refs",
+                "type": "list\u003cstring\u003e"
+              }
+            ]
+          },
+          "adjacent_commands": [
+            "docs.get",
+            "docs.history",
+            "docs.revision.get",
+            "docs.update"
+          ],
+          "go_method": "DocsCreate",
+          "ts_method": "docsCreate"
+        },
+        {
+          "command_id": "docs.get",
+          "cli_path": "docs get",
+          "group": "docs",
+          "method": "GET",
+          "path": "/docs/{document_id}",
+          "operation_id": "getDocument",
+          "summary": "Get document and authoritative head revision",
+          "why": "Resolve the current authoritative document head without client-side lineage traversal.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ document, revision }` where `revision` is the current head.",
+          "error_codes": [
+            "invalid_request",
+            "not_found"
+          ],
+          "concepts": [
+            "docs",
+            "revisions"
+          ],
+          "stability": "beta",
+          "agent_notes": "Safe and idempotent.",
+          "examples": [
+            {
+              "title": "Get document head",
+              "command": "oar docs get --document-id product-constitution --json"
+            }
+          ],
+          "path_params": [
+            "document_id"
+          ],
+          "adjacent_commands": [
+            "docs.create",
+            "docs.history",
+            "docs.revision.get",
+            "docs.update"
+          ],
+          "go_method": "DocsGet",
+          "ts_method": "docsGet"
+        },
+        {
+          "command_id": "docs.history",
+          "cli_path": "docs history",
+          "group": "docs",
+          "method": "GET",
+          "path": "/docs/{document_id}/history",
+          "operation_id": "listDocumentHistory",
+          "summary": "List ordered immutable revisions for a document",
+          "why": "Traverse full document lineage in canonical revision-number order.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ document_id, revisions }` ordered by ascending `revision_number`.",
+          "error_codes": [
+            "invalid_request",
+            "not_found"
+          ],
+          "concepts": [
+            "docs",
+            "revisions",
+            "lineage"
+          ],
+          "stability": "beta",
+          "agent_notes": "Safe and idempotent.",
+          "examples": [
+            {
+              "title": "List document history",
+              "command": "oar docs history --document-id product-constitution --json"
+            }
+          ],
+          "path_params": [
+            "document_id"
+          ],
+          "adjacent_commands": [
+            "docs.create",
+            "docs.get",
+            "docs.revision.get",
+            "docs.update"
+          ],
+          "go_method": "DocsHistory",
+          "ts_method": "docsHistory"
+        },
+        {
+          "command_id": "docs.revision.get",
+          "cli_path": "docs revision get",
+          "group": "docs",
+          "method": "GET",
+          "path": "/docs/{document_id}/revisions/{revision_id}",
+          "operation_id": "getDocumentRevision",
+          "summary": "Get one immutable document revision",
+          "why": "Read a specific historical revision payload without mutating document head.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ revision }` including metadata and revision content.",
+          "error_codes": [
+            "invalid_request",
+            "not_found"
+          ],
+          "concepts": [
+            "docs",
+            "revisions"
+          ],
+          "stability": "beta",
+          "agent_notes": "Safe and idempotent.",
+          "examples": [
+            {
+              "title": "Get revision",
+              "command": "oar docs revision get --document-id product-constitution --revision-id 019f... --json"
+            }
+          ],
+          "path_params": [
+            "document_id",
+            "revision_id"
+          ],
+          "adjacent_commands": [
+            "docs.create",
+            "docs.get",
+            "docs.history",
+            "docs.update"
+          ],
+          "go_method": "DocsRevisionGet",
+          "ts_method": "docsRevisionGet"
+        },
+        {
+          "command_id": "docs.update",
+          "cli_path": "docs update",
+          "group": "docs",
+          "method": "PATCH",
+          "path": "/docs/{document_id}",
+          "operation_id": "updateDocument",
+          "summary": "Create a new immutable revision for an existing document",
+          "why": "Append a revision and atomically advance document head with optimistic concurrency.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ document, revision }` for the newly-created head revision.",
+          "error_codes": [
+            "invalid_json",
+            "invalid_request",
+            "unknown_actor_id",
+            "conflict",
+            "not_found"
+          ],
+          "concepts": [
+            "docs",
+            "revisions",
+            "concurrency"
+          ],
+          "stability": "beta",
+          "agent_notes": "Set `if_base_revision` from `docs.get` to prevent lost updates.",
+          "examples": [
+            {
+              "title": "Update document",
+              "command": "oar docs update --document-id product-constitution --from-file doc-update.json --json"
+            }
+          ],
+          "body_schema": {
+            "required": [
+              {
+                "name": "content",
+                "type": "object|string"
+              },
+              {
+                "name": "content_type",
+                "type": "string",
+                "enum_values": [
+                  "binary",
+                  "structured",
+                  "text"
+                ]
+              },
+              {
+                "name": "if_base_revision",
+                "type": "string"
+              }
+            ],
+            "optional": [
+              {
+                "name": "actor_id",
+                "type": "string"
+              },
+              {
+                "name": "document",
+                "type": "object"
+              },
+              {
+                "name": "refs",
+                "type": "list\u003cstring\u003e"
+              }
+            ]
+          },
+          "path_params": [
+            "document_id"
+          ],
+          "adjacent_commands": [
+            "docs.create",
+            "docs.get",
+            "docs.history",
+            "docs.revision.get"
+          ],
+          "go_method": "DocsUpdate",
+          "ts_method": "docsUpdate"
         }
       ]
     },
@@ -2523,6 +2907,58 @@
       ]
     },
     {
+      "name": "lineage",
+      "command_count": 1,
+      "command_ids": [
+        "docs.history"
+      ],
+      "commands": [
+        {
+          "command_id": "docs.history",
+          "cli_path": "docs history",
+          "group": "docs",
+          "method": "GET",
+          "path": "/docs/{document_id}/history",
+          "operation_id": "listDocumentHistory",
+          "summary": "List ordered immutable revisions for a document",
+          "why": "Traverse full document lineage in canonical revision-number order.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ document_id, revisions }` ordered by ascending `revision_number`.",
+          "error_codes": [
+            "invalid_request",
+            "not_found"
+          ],
+          "concepts": [
+            "docs",
+            "revisions",
+            "lineage"
+          ],
+          "stability": "beta",
+          "agent_notes": "Safe and idempotent.",
+          "examples": [
+            {
+              "title": "List document history",
+              "command": "oar docs history --document-id product-constitution --json"
+            }
+          ],
+          "path_params": [
+            "document_id"
+          ],
+          "adjacent_commands": [
+            "docs.create",
+            "docs.get",
+            "docs.revision.get",
+            "docs.update"
+          ],
+          "go_method": "DocsHistory",
+          "ts_method": "docsHistory"
+        }
+      ]
+    },
+    {
       "name": "maintenance",
       "command_count": 1,
       "command_ids": [
@@ -3639,6 +4075,300 @@
           ],
           "go_method": "PacketsReviewsCreate",
           "ts_method": "packetsReviewsCreate"
+        }
+      ]
+    },
+    {
+      "name": "revisions",
+      "command_count": 5,
+      "command_ids": [
+        "docs.create",
+        "docs.get",
+        "docs.history",
+        "docs.revision.get",
+        "docs.update"
+      ],
+      "commands": [
+        {
+          "command_id": "docs.create",
+          "cli_path": "docs create",
+          "group": "docs",
+          "method": "POST",
+          "path": "/docs",
+          "operation_id": "createDocument",
+          "summary": "Create document with initial immutable revision",
+          "why": "Bootstrap a first-class document identity and initial revision without manual head-pointer management.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ document, revision }` where `revision` is the new head.",
+          "error_codes": [
+            "invalid_json",
+            "invalid_request",
+            "unknown_actor_id",
+            "conflict"
+          ],
+          "concepts": [
+            "docs",
+            "revisions"
+          ],
+          "stability": "beta",
+          "agent_notes": "Non-idempotent unless caller provides a deterministic document id and dedupes retries.",
+          "examples": [
+            {
+              "title": "Create document",
+              "command": "oar docs create --from-file doc-create.json --json"
+            }
+          ],
+          "body_schema": {
+            "required": [
+              {
+                "name": "content",
+                "type": "object|string"
+              },
+              {
+                "name": "content_type",
+                "type": "string",
+                "enum_values": [
+                  "binary",
+                  "structured",
+                  "text"
+                ]
+              },
+              {
+                "name": "document",
+                "type": "object"
+              }
+            ],
+            "optional": [
+              {
+                "name": "actor_id",
+                "type": "string"
+              },
+              {
+                "name": "refs",
+                "type": "list\u003cstring\u003e"
+              }
+            ]
+          },
+          "adjacent_commands": [
+            "docs.get",
+            "docs.history",
+            "docs.revision.get",
+            "docs.update"
+          ],
+          "go_method": "DocsCreate",
+          "ts_method": "docsCreate"
+        },
+        {
+          "command_id": "docs.get",
+          "cli_path": "docs get",
+          "group": "docs",
+          "method": "GET",
+          "path": "/docs/{document_id}",
+          "operation_id": "getDocument",
+          "summary": "Get document and authoritative head revision",
+          "why": "Resolve the current authoritative document head without client-side lineage traversal.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ document, revision }` where `revision` is the current head.",
+          "error_codes": [
+            "invalid_request",
+            "not_found"
+          ],
+          "concepts": [
+            "docs",
+            "revisions"
+          ],
+          "stability": "beta",
+          "agent_notes": "Safe and idempotent.",
+          "examples": [
+            {
+              "title": "Get document head",
+              "command": "oar docs get --document-id product-constitution --json"
+            }
+          ],
+          "path_params": [
+            "document_id"
+          ],
+          "adjacent_commands": [
+            "docs.create",
+            "docs.history",
+            "docs.revision.get",
+            "docs.update"
+          ],
+          "go_method": "DocsGet",
+          "ts_method": "docsGet"
+        },
+        {
+          "command_id": "docs.history",
+          "cli_path": "docs history",
+          "group": "docs",
+          "method": "GET",
+          "path": "/docs/{document_id}/history",
+          "operation_id": "listDocumentHistory",
+          "summary": "List ordered immutable revisions for a document",
+          "why": "Traverse full document lineage in canonical revision-number order.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ document_id, revisions }` ordered by ascending `revision_number`.",
+          "error_codes": [
+            "invalid_request",
+            "not_found"
+          ],
+          "concepts": [
+            "docs",
+            "revisions",
+            "lineage"
+          ],
+          "stability": "beta",
+          "agent_notes": "Safe and idempotent.",
+          "examples": [
+            {
+              "title": "List document history",
+              "command": "oar docs history --document-id product-constitution --json"
+            }
+          ],
+          "path_params": [
+            "document_id"
+          ],
+          "adjacent_commands": [
+            "docs.create",
+            "docs.get",
+            "docs.revision.get",
+            "docs.update"
+          ],
+          "go_method": "DocsHistory",
+          "ts_method": "docsHistory"
+        },
+        {
+          "command_id": "docs.revision.get",
+          "cli_path": "docs revision get",
+          "group": "docs",
+          "method": "GET",
+          "path": "/docs/{document_id}/revisions/{revision_id}",
+          "operation_id": "getDocumentRevision",
+          "summary": "Get one immutable document revision",
+          "why": "Read a specific historical revision payload without mutating document head.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ revision }` including metadata and revision content.",
+          "error_codes": [
+            "invalid_request",
+            "not_found"
+          ],
+          "concepts": [
+            "docs",
+            "revisions"
+          ],
+          "stability": "beta",
+          "agent_notes": "Safe and idempotent.",
+          "examples": [
+            {
+              "title": "Get revision",
+              "command": "oar docs revision get --document-id product-constitution --revision-id 019f... --json"
+            }
+          ],
+          "path_params": [
+            "document_id",
+            "revision_id"
+          ],
+          "adjacent_commands": [
+            "docs.create",
+            "docs.get",
+            "docs.history",
+            "docs.update"
+          ],
+          "go_method": "DocsRevisionGet",
+          "ts_method": "docsRevisionGet"
+        },
+        {
+          "command_id": "docs.update",
+          "cli_path": "docs update",
+          "group": "docs",
+          "method": "PATCH",
+          "path": "/docs/{document_id}",
+          "operation_id": "updateDocument",
+          "summary": "Create a new immutable revision for an existing document",
+          "why": "Append a revision and atomically advance document head with optimistic concurrency.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ document, revision }` for the newly-created head revision.",
+          "error_codes": [
+            "invalid_json",
+            "invalid_request",
+            "unknown_actor_id",
+            "conflict",
+            "not_found"
+          ],
+          "concepts": [
+            "docs",
+            "revisions",
+            "concurrency"
+          ],
+          "stability": "beta",
+          "agent_notes": "Set `if_base_revision` from `docs.get` to prevent lost updates.",
+          "examples": [
+            {
+              "title": "Update document",
+              "command": "oar docs update --document-id product-constitution --from-file doc-update.json --json"
+            }
+          ],
+          "body_schema": {
+            "required": [
+              {
+                "name": "content",
+                "type": "object|string"
+              },
+              {
+                "name": "content_type",
+                "type": "string",
+                "enum_values": [
+                  "binary",
+                  "structured",
+                  "text"
+                ]
+              },
+              {
+                "name": "if_base_revision",
+                "type": "string"
+              }
+            ],
+            "optional": [
+              {
+                "name": "actor_id",
+                "type": "string"
+              },
+              {
+                "name": "document",
+                "type": "object"
+              },
+              {
+                "name": "refs",
+                "type": "list\u003cstring\u003e"
+              }
+            ]
+          },
+          "path_params": [
+            "document_id"
+          ],
+          "adjacent_commands": [
+            "docs.create",
+            "docs.get",
+            "docs.history",
+            "docs.revision.get"
+          ],
+          "go_method": "DocsUpdate",
+          "ts_method": "docsUpdate"
         }
       ]
     },

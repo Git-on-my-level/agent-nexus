@@ -4,7 +4,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.2.2`
-- Commands: `40`
+- Commands: `45`
 
 ## `actors.list`
 
@@ -244,6 +244,76 @@ Generated from `contracts/oar-openapi.yaml`.
 - Agent notes: Mutating admin command; serialize with other writes.
 - Examples:
   - Rebuild derived: `oar derived rebuild --actor-id system --json`
+
+## `docs.create`
+
+- CLI path: `docs create`
+- HTTP: `POST /docs`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Bootstrap a first-class document identity and initial revision without manual head-pointer management.
+- Concepts: `docs`, `revisions`
+- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`
+- Output: Returns `{ document, revision }` where `revision` is the new head.
+- Agent notes: Non-idempotent unless caller provides a deterministic document id and dedupes retries.
+- Examples:
+  - Create document: `oar docs create --from-file doc-create.json --json`
+
+## `docs.get`
+
+- CLI path: `docs get`
+- HTTP: `GET /docs/{document_id}`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Resolve the current authoritative document head without client-side lineage traversal.
+- Concepts: `docs`, `revisions`
+- Error codes: `invalid_request`, `not_found`
+- Output: Returns `{ document, revision }` where `revision` is the current head.
+- Agent notes: Safe and idempotent.
+- Examples:
+  - Get document head: `oar docs get --document-id product-constitution --json`
+
+## `docs.history`
+
+- CLI path: `docs history`
+- HTTP: `GET /docs/{document_id}/history`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Traverse full document lineage in canonical revision-number order.
+- Concepts: `docs`, `revisions`, `lineage`
+- Error codes: `invalid_request`, `not_found`
+- Output: Returns `{ document_id, revisions }` ordered by ascending `revision_number`.
+- Agent notes: Safe and idempotent.
+- Examples:
+  - List document history: `oar docs history --document-id product-constitution --json`
+
+## `docs.revision.get`
+
+- CLI path: `docs revision get`
+- HTTP: `GET /docs/{document_id}/revisions/{revision_id}`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Read a specific historical revision payload without mutating document head.
+- Concepts: `docs`, `revisions`
+- Error codes: `invalid_request`, `not_found`
+- Output: Returns `{ revision }` including metadata and revision content.
+- Agent notes: Safe and idempotent.
+- Examples:
+  - Get revision: `oar docs revision get --document-id product-constitution --revision-id 019f... --json`
+
+## `docs.update`
+
+- CLI path: `docs update`
+- HTTP: `PATCH /docs/{document_id}`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Append a revision and atomically advance document head with optimistic concurrency.
+- Concepts: `docs`, `revisions`, `concurrency`
+- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`, `not_found`
+- Output: Returns `{ document, revision }` for the newly-created head revision.
+- Agent notes: Set `if_base_revision` from `docs.get` to prevent lost updates.
+- Examples:
+  - Update document: `oar docs update --document-id product-constitution --from-file doc-update.json --json`
 
 ## `events.create`
 

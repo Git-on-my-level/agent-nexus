@@ -4,7 +4,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.2.2`
-- Concepts: `32`
+- Concepts: `36`
 
 ## `append-only`
 
@@ -57,6 +57,12 @@ Generated from `contracts/oar-openapi.yaml`.
   - `meta.concepts.get`
   - `meta.concepts.list`
 
+## `concurrency`
+
+- Commands: `1`
+- Command IDs:
+  - `docs.update`
+
 ## `content`
 
 - Commands: `1`
@@ -70,6 +76,16 @@ Generated from `contracts/oar-openapi.yaml`.
   - `derived.rebuild`
   - `inbox.list`
   - `inbox.stream`
+
+## `docs`
+
+- Commands: `5`
+- Command IDs:
+  - `docs.create`
+  - `docs.get`
+  - `docs.history`
+  - `docs.revision.get`
+  - `docs.update`
 
 ## `events`
 
@@ -139,6 +155,12 @@ Generated from `contracts/oar-openapi.yaml`.
 - Command IDs:
   - `agents.me.keys.rotate`
 
+## `lineage`
+
+- Commands: `1`
+- Command IDs:
+  - `docs.history`
+
 ## `maintenance`
 
 - Commands: `1`
@@ -193,6 +215,16 @@ Generated from `contracts/oar-openapi.yaml`.
 - Commands: `1`
 - Command IDs:
   - `packets.reviews.create`
+
+## `revisions`
+
+- Commands: `5`
+- Command IDs:
+  - `docs.create`
+  - `docs.get`
+  - `docs.history`
+  - `docs.revision.get`
+  - `docs.update`
 
 ## `revocation`
 

@@ -329,6 +329,95 @@ var CommandRegistry = []CommandSpec{
 		},
 	},
 	{
+		CommandID: "docs.create",
+		CLIPath:   "docs create",
+		Group:     "docs",
+		Method:    "POST",
+		Path:      "/docs",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"docs", "revisions"},
+		Adjacent:  []string{"docs.get", "docs.history", "docs.revision.get", "docs.update"},
+		Examples: []Example{
+			{
+				Title:   "Create document",
+				Command: "oar docs create --from-file doc-create.json --json",
+			},
+		},
+	},
+	{
+		CommandID:  "docs.get",
+		CLIPath:    "docs get",
+		Group:      "docs",
+		Method:     "GET",
+		Path:       "/docs/{document_id}",
+		PathParams: []string{"document_id"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"docs", "revisions"},
+		Adjacent:   []string{"docs.create", "docs.history", "docs.revision.get", "docs.update"},
+		Examples: []Example{
+			{
+				Title:   "Get document head",
+				Command: "oar docs get --document-id product-constitution --json",
+			},
+		},
+	},
+	{
+		CommandID:  "docs.history",
+		CLIPath:    "docs history",
+		Group:      "docs",
+		Method:     "GET",
+		Path:       "/docs/{document_id}/history",
+		PathParams: []string{"document_id"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"docs", "revisions", "lineage"},
+		Adjacent:   []string{"docs.create", "docs.get", "docs.revision.get", "docs.update"},
+		Examples: []Example{
+			{
+				Title:   "List document history",
+				Command: "oar docs history --document-id product-constitution --json",
+			},
+		},
+	},
+	{
+		CommandID:  "docs.revision.get",
+		CLIPath:    "docs revision get",
+		Group:      "docs",
+		Method:     "GET",
+		Path:       "/docs/{document_id}/revisions/{revision_id}",
+		PathParams: []string{"document_id", "revision_id"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"docs", "revisions"},
+		Adjacent:   []string{"docs.create", "docs.get", "docs.history", "docs.update"},
+		Examples: []Example{
+			{
+				Title:   "Get revision",
+				Command: "oar docs revision get --document-id product-constitution --revision-id 019f... --json",
+			},
+		},
+	},
+	{
+		CommandID:  "docs.update",
+		CLIPath:    "docs update",
+		Group:      "docs",
+		Method:     "PATCH",
+		Path:       "/docs/{document_id}",
+		PathParams: []string{"document_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"docs", "revisions", "concurrency"},
+		Adjacent:   []string{"docs.create", "docs.get", "docs.history", "docs.revision.get"},
+		Examples: []Example{
+			{
+				Title:   "Update document",
+				Command: "oar docs update --document-id product-constitution --from-file doc-update.json --json",
+			},
+		},
+	},
+	{
 		CommandID: "events.create",
 		CLIPath:   "events create",
 		Group:     "events",
@@ -926,6 +1015,26 @@ func (c *Client) CommitmentsPatch(ctx context.Context, pathParams map[string]str
 
 func (c *Client) DerivedRebuild(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "derived.rebuild", nil, opts)
+}
+
+func (c *Client) DocsCreate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "docs.create", nil, opts)
+}
+
+func (c *Client) DocsGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "docs.get", pathParams, opts)
+}
+
+func (c *Client) DocsHistory(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "docs.history", pathParams, opts)
+}
+
+func (c *Client) DocsRevisionGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "docs.revision.get", pathParams, opts)
+}
+
+func (c *Client) DocsUpdate(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "docs.update", pathParams, opts)
 }
 
 func (c *Client) EventsCreate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {

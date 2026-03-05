@@ -60,6 +60,11 @@ export declare class OarClient {
     commitmentsList(options?: RequestOptions): Promise<InvokeResult>;
     commitmentsPatch(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     derivedRebuild(options?: RequestOptions): Promise<InvokeResult>;
+    docsCreate(options?: RequestOptions): Promise<InvokeResult>;
+    docsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    docsHistory(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    docsRevisionGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    docsUpdate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     eventsCreate(options?: RequestOptions): Promise<InvokeResult>;
     eventsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     eventsStream(options?: RequestOptions): Promise<InvokeResult>;
