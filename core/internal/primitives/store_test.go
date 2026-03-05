@@ -767,6 +767,62 @@ func TestPatchCommitmentRestrictedTransitionRequiresEvidence(t *testing.T) {
 	}
 }
 
+func TestListRecentEventsByThreadLimitAndOrder(t *testing.T) {
+	t.Parallel()
+
+	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	store := primitives.NewStore(workspace.DB(), workspace.Layout().ArtifactContentDir)
+	threadID := "thread-limit-order"
+
+	insert := func(id string, ts string, eventType string) {
+		t.Helper()
+		_, err := workspace.DB().ExecContext(
+			context.Background(),
+			`INSERT INTO events(id, type, ts, actor_id, thread_id, refs_json, payload_json, body_json, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+			id,
+			eventType,
+			ts,
+			"actor-1",
+			threadID,
+			`["thread:`+threadID+`"]`,
+			`{}`,
+			`{}`,
+		)
+		if err != nil {
+			t.Fatalf("insert event %s: %v", id, err)
+		}
+	}
+
+	insert("evt-1", "2026-03-05T12:00:00Z", "context_probe_1")
+	insert("evt-2", "2026-03-05T12:00:01Z", "context_probe_2")
+	insert("evt-3", "2026-03-05T12:00:02Z", "context_probe_3")
+
+	recentTwo, err := store.ListRecentEventsByThread(context.Background(), threadID, 2)
+	if err != nil {
+		t.Fatalf("list recent thread events with limit=2: %v", err)
+	}
+	if len(recentTwo) != 2 {
+		t.Fatalf("expected 2 events, got %d", len(recentTwo))
+	}
+	if recentTwo[0]["id"] != "evt-2" || recentTwo[1]["id"] != "evt-3" {
+		t.Fatalf("unexpected order/content for recent events: %#v", recentTwo)
+	}
+
+	recentZero, err := store.ListRecentEventsByThread(context.Background(), threadID, 0)
+	if err != nil {
+		t.Fatalf("list recent thread events with limit=0: %v", err)
+	}
+	if len(recentZero) != 0 {
+		t.Fatalf("expected 0 events for limit=0, got %d", len(recentZero))
+	}
+}
+
 func toSortedStrings(raw any) []string {
 	switch values := raw.(type) {
 	case []string:

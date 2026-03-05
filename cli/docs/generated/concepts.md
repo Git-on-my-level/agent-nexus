@@ -14,12 +14,13 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `artifacts`
 
-- Commands: `4`
+- Commands: `5`
 - Command IDs:
   - `artifacts.content.get`
   - `artifacts.create`
   - `artifacts.get`
   - `artifacts.list`
+  - `threads.context`
 
 ## `auth`
 
@@ -34,12 +35,13 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `commitments`
 
-- Commands: `4`
+- Commands: `5`
 - Command IDs:
   - `commitments.create`
   - `commitments.get`
   - `commitments.list`
   - `commitments.patch`
+  - `threads.context`
 
 ## `compatibility`
 
@@ -71,12 +73,13 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `events`
 
-- Commands: `5`
+- Commands: `6`
 - Command IDs:
   - `events.create`
   - `events.get`
   - `events.stream`
   - `inbox.ack`
+  - `threads.context`
   - `threads.timeline`
 
 ## `evidence`
@@ -219,8 +222,9 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `threads`
 
-- Commands: `5`
+- Commands: `6`
 - Command IDs:
+  - `threads.context`
   - `threads.create`
   - `threads.get`
   - `threads.list`

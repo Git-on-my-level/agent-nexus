@@ -4,7 +4,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.2.2`
-- Commands: `39`
+- Commands: `40`
 
 ## `actors.list`
 
@@ -301,6 +301,7 @@ Generated from `contracts/oar-openapi.yaml`.
 - Agent notes: Idempotent at semantic level; repeated acks should not duplicate active inbox items.
 - Examples:
   - Ack inbox item: `oar inbox ack --thread-id thread_123 --inbox-item-id inbox:item-1 --json`
+  - Ack inbox item by id: `oar inbox ack inbox:decision_needed:thread_123:none:event_1 --json`
 
 ## `inbox.list`
 
@@ -481,6 +482,21 @@ Generated from `contracts/oar-openapi.yaml`.
 - Agent notes: Safe and idempotent.
 - Examples:
   - Get snapshot: `oar snapshots get --snapshot-id snapshot_123 --json`
+
+## `threads.context`
+
+- CLI path: `threads context`
+- HTTP: `GET /threads/{thread_id}/context`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Load thread state, recent events, key artifacts, and open commitments in a single round-trip.
+- Concepts: `threads`, `events`, `artifacts`, `commitments`
+- Error codes: `invalid_request`, `not_found`
+- Output: Returns `{ thread, recent_events, key_artifacts, open_commitments }`.
+- Agent notes: Use include_artifact_content for prompt-ready previews; default mode keeps payloads lighter.
+- Examples:
+  - Context with defaults: `oar threads context --thread-id thread_123 --json`
+  - Context with artifact previews: `oar threads context --thread-id thread_123 --include-artifact-content --max-events 50 --json`
 
 ## `threads.create`
 

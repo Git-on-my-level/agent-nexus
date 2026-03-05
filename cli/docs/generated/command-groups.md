@@ -97,8 +97,9 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `threads`
 
-- Commands: `5`
+- Commands: `6`
 - Command IDs:
+  - `threads.context` (`threads context`)
   - `threads.create` (`threads create`)
   - `threads.get` (`threads get`)
   - `threads.list` (`threads list`)

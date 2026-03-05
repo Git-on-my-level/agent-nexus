@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,10 +10,16 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"organization-autorunner-core/internal/primitives"
 	"organization-autorunner-core/internal/schedule"
 	"organization-autorunner-core/internal/schema"
+)
+
+const (
+	defaultThreadContextMaxEvents    = 20
+	threadContextContentPreviewChars = 500
 )
 
 func handleCreateThread(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
@@ -324,6 +331,172 @@ func handleThreadTimeline(w http.ResponseWriter, r *http.Request, opts handlerOp
 		"snapshots": snapshots,
 		"artifacts": artifacts,
 	})
+}
+
+func handleThreadContext(w http.ResponseWriter, r *http.Request, opts handlerOptions, threadID string) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+
+	maxEvents := defaultThreadContextMaxEvents
+	if rawMaxEvents := strings.TrimSpace(r.URL.Query().Get("max_events")); rawMaxEvents != "" {
+		parsed, err := strconv.Atoi(rawMaxEvents)
+		if err != nil || parsed < 0 {
+			writeError(w, http.StatusBadRequest, "invalid_request", "max_events must be a non-negative integer")
+			return
+		}
+		maxEvents = parsed
+	}
+
+	includeArtifactContent := false
+	if rawInclude := strings.TrimSpace(r.URL.Query().Get("include_artifact_content")); rawInclude != "" {
+		parsed, err := strconv.ParseBool(rawInclude)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", "include_artifact_content must be true or false")
+			return
+		}
+		includeArtifactContent = parsed
+	}
+
+	thread, err := opts.primitiveStore.GetThread(r.Context(), threadID)
+	if err != nil {
+		if errors.Is(err, primitives.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "thread not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load thread")
+		return
+	}
+
+	recentEvents, err := opts.primitiveStore.ListRecentEventsByThread(r.Context(), threadID, maxEvents)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load thread events")
+		return
+	}
+
+	keyArtifacts, err := buildThreadContextArtifacts(r.Context(), opts, thread, includeArtifactContent)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load key artifacts")
+		return
+	}
+
+	openCommitments, err := buildThreadContextOpenCommitments(r.Context(), opts, threadID, thread)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load open commitments")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"thread":           thread,
+		"recent_events":    recentEvents,
+		"key_artifacts":    keyArtifacts,
+		"open_commitments": openCommitments,
+	})
+}
+
+func buildThreadContextArtifacts(ctx context.Context, opts handlerOptions, thread map[string]any, includeArtifactContent bool) ([]map[string]any, error) {
+	rawRefs, exists := thread["key_artifacts"]
+	if !exists || rawRefs == nil {
+		return []map[string]any{}, nil
+	}
+	refs, err := extractStringSlice(rawRefs)
+	if err != nil {
+		return nil, fmt.Errorf("thread.key_artifacts: %w", err)
+	}
+	if len(refs) == 0 {
+		return []map[string]any{}, nil
+	}
+
+	artifacts := make([]map[string]any, 0, len(refs))
+	for _, ref := range refs {
+		prefix, artifactID, err := schema.SplitTypedRef(ref)
+		if err != nil || prefix != "artifact" {
+			continue
+		}
+
+		artifact, err := opts.primitiveStore.GetArtifact(ctx, artifactID)
+		if err != nil {
+			if errors.Is(err, primitives.ErrNotFound) {
+				continue
+			}
+			return nil, err
+		}
+
+		item := map[string]any{
+			"ref":      ref,
+			"artifact": artifact,
+		}
+
+		if includeArtifactContent {
+			content, _, err := opts.primitiveStore.GetArtifactContent(ctx, artifactID)
+			if err != nil {
+				if !errors.Is(err, primitives.ErrNotFound) {
+					return nil, err
+				}
+			} else if preview := artifactContentPreview(content); preview != "" {
+				item["content_preview"] = preview
+			}
+		}
+
+		artifacts = append(artifacts, item)
+	}
+	return artifacts, nil
+}
+
+func buildThreadContextOpenCommitments(ctx context.Context, opts handlerOptions, threadID string, thread map[string]any) ([]map[string]any, error) {
+	rawOpenCommitments, exists := thread["open_commitments"]
+	if !exists || rawOpenCommitments == nil {
+		return []map[string]any{}, nil
+	}
+	openCommitmentIDs, err := extractStringSlice(rawOpenCommitments)
+	if err != nil {
+		return nil, fmt.Errorf("thread.open_commitments: %w", err)
+	}
+	if len(openCommitmentIDs) == 0 {
+		return []map[string]any{}, nil
+	}
+
+	commitments, err := opts.primitiveStore.ListCommitments(ctx, primitives.CommitmentListFilter{ThreadID: threadID})
+	if err != nil {
+		return nil, err
+	}
+
+	commitmentsByID := make(map[string]map[string]any, len(commitments))
+	for _, commitment := range commitments {
+		commitmentID, _ := commitment["id"].(string)
+		commitmentID = strings.TrimSpace(commitmentID)
+		if commitmentID == "" {
+			continue
+		}
+		commitmentsByID[commitmentID] = commitment
+	}
+
+	ordered := make([]map[string]any, 0, len(openCommitmentIDs))
+	for _, commitmentID := range openCommitmentIDs {
+		commitmentID = strings.TrimSpace(commitmentID)
+		if commitmentID == "" {
+			continue
+		}
+		commitment, ok := commitmentsByID[commitmentID]
+		if !ok {
+			continue
+		}
+		ordered = append(ordered, commitment)
+	}
+	return ordered, nil
+}
+
+func artifactContentPreview(content []byte) string {
+	text := string(content)
+	if strings.TrimSpace(text) == "" {
+		return ""
+	}
+	if utf8.RuneCountInString(text) <= threadContextContentPreviewChars {
+		return text
+	}
+	runes := []rune(text)
+	return string(runes[:threadContextContentPreviewChars])
 }
 
 func collectTimelineReferencedObjectIDs(events []map[string]any) ([]string, []string) {
