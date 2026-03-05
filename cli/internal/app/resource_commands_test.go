@@ -112,6 +112,47 @@ func TestTypedWorkflowCommands(t *testing.T) {
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "inbox", "ack", "--thread-id", "thread_flow_1", "--inbox-item-id", "inbox:1"}))
 }
 
+func TestDocsCommands(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/docs":
+			body, _ := io.ReadAll(r.Body)
+			if !bytes.Contains(body, []byte(`"document"`)) {
+				t.Fatalf("unexpected docs create body: %s", string(body))
+			}
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"document":{"id":"doc_1","head_revision_id":"rev_1"},"revision":{"revision_id":"rev_1","revision_number":1}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/docs/doc_1":
+			_, _ = w.Write([]byte(`{"document":{"id":"doc_1","head_revision_id":"rev_2"},"revision":{"revision_id":"rev_2","revision_number":2}}`))
+		case r.Method == http.MethodPatch && r.URL.Path == "/docs/doc_1":
+			body, _ := io.ReadAll(r.Body)
+			if !bytes.Contains(body, []byte(`"if_base_revision":"rev_1"`)) {
+				t.Fatalf("unexpected docs update body: %s", string(body))
+			}
+			_, _ = w.Write([]byte(`{"document":{"id":"doc_1","head_revision_id":"rev_2"},"revision":{"revision_id":"rev_2","revision_number":2}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/docs/doc_1/history":
+			_, _ = w.Write([]byte(`{"document_id":"doc_1","revisions":[{"revision_id":"rev_1"},{"revision_id":"rev_2"}]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/docs/doc_1/revisions/rev_1":
+			_, _ = w.Write([]byte(`{"revision":{"revision_id":"rev_1","content":"initial"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	env := map[string]string{}
+
+	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"document":{"id":"doc_1"},"content":"initial","content_type":"text"}`), []string{"--json", "--base-url", server.URL, "docs", "create"}))
+	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "get", "--document-id", "doc_1"}))
+	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"if_base_revision":"rev_1","content":"next","content_type":"text"}`), []string{"--json", "--base-url", server.URL, "docs", "update", "--document-id", "doc_1"}))
+	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "history", "--document-id", "doc_1"}))
+	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "revision", "get", "--document-id", "doc_1", "--revision-id", "rev_1"}))
+}
+
 func TestThreadsContextCommand(t *testing.T) {
 	t.Parallel()
 

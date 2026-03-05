@@ -53,6 +53,8 @@ func (a *App) runTypedResource(ctx context.Context, resource string, args []stri
 		return a.runCommitmentsCommand(ctx, args, cfg)
 	case "artifacts":
 		return a.runArtifactsCommand(ctx, args, cfg)
+	case "docs":
+		return a.runDocsCommand(ctx, args, cfg)
 	case "events":
 		return a.runEventsCommand(ctx, args, cfg)
 	case "inbox":
@@ -272,6 +274,92 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 		return result, "artifacts content", callErr
 	default:
 		return nil, "artifacts", errnorm.Usage("unknown_subcommand", fmt.Sprintf("unknown artifacts subcommand %q", sub))
+	}
+}
+
+func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
+	if len(args) == 0 {
+		return nil, "docs", errnorm.Usage("subcommand_required", "expected one of: create, get, update, history, revision")
+	}
+	sub := strings.TrimSpace(args[0])
+	switch sub {
+	case "create":
+		body, err := a.parseJSONBodyInput(args[1:], "docs create")
+		if err != nil {
+			return nil, "docs create", err
+		}
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "docs create", "docs.create", nil, nil, body)
+		return result, "docs create", callErr
+	case "get":
+		id, err := parseIDArg(args[1:], "document-id", "document id")
+		if err != nil {
+			return nil, "docs get", err
+		}
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "docs get", "docs.get", map[string]string{"document_id": id}, nil, nil)
+		return result, "docs get", callErr
+	case "update":
+		id, body, err := a.parseIDAndBodyInput(args[1:], "document-id", "document id", "docs update")
+		if err != nil {
+			return nil, "docs update", err
+		}
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "docs update", "docs.update", map[string]string{"document_id": id}, nil, body)
+		return result, "docs update", callErr
+	case "history":
+		id, err := parseIDArg(args[1:], "document-id", "document id")
+		if err != nil {
+			return nil, "docs history", err
+		}
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "docs history", "docs.history", map[string]string{"document_id": id}, nil, nil)
+		return result, "docs history", callErr
+	case "revision":
+		if len(args) < 2 {
+			return nil, "docs revision", errnorm.Usage("subcommand_required", "expected `oar docs revision get`")
+		}
+		if strings.TrimSpace(args[1]) != "get" {
+			return nil, "docs revision", errnorm.Usage("unknown_subcommand", fmt.Sprintf("unknown docs revision subcommand %q", strings.TrimSpace(args[1])))
+		}
+		fs := newSilentFlagSet("docs revision get")
+		var documentIDFlag trackedString
+		var revisionIDFlag trackedString
+		fs.Var(&documentIDFlag, "document-id", "Document id")
+		fs.Var(&revisionIDFlag, "revision-id", "Revision id")
+		if err := fs.Parse(args[2:]); err != nil {
+			return nil, "docs revision get", errnorm.Usage("invalid_flags", err.Error())
+		}
+		positionals := fs.Args()
+
+		documentID := strings.TrimSpace(documentIDFlag.value)
+		revisionID := strings.TrimSpace(revisionIDFlag.value)
+		if documentID == "" && len(positionals) > 0 {
+			documentID = strings.TrimSpace(positionals[0])
+			positionals = positionals[1:]
+		}
+		if revisionID == "" && len(positionals) > 0 {
+			revisionID = strings.TrimSpace(positionals[0])
+			positionals = positionals[1:]
+		}
+		if err := validateID(documentID, "document id"); err != nil {
+			return nil, "docs revision get", err
+		}
+		if err := validateID(revisionID, "revision id"); err != nil {
+			return nil, "docs revision get", err
+		}
+		if len(positionals) > 0 {
+			return nil, "docs revision get", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar docs revision get`")
+		}
+
+		result, callErr := a.invokeTypedJSON(
+			ctx,
+			cfg,
+			"docs revision get",
+			"docs.revision.get",
+			map[string]string{"document_id": documentID, "revision_id": revisionID},
+			nil,
+			nil,
+		)
+		return result, "docs revision get", callErr
+	default:
+		return nil, "docs", errnorm.Usage("unknown_subcommand", fmt.Sprintf("unknown docs subcommand %q", sub))
 	}
 }
 

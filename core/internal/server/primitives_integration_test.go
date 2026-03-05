@@ -140,6 +140,148 @@ func TestPrimitivesCRUDRoundTrip(t *testing.T) {
 	}
 }
 
+func TestDocumentsLifecycleRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	createResp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
+		"actor_id":"actor-1",
+		"document":{"id":"doc-1","title":"Constitution","labels":["governance"]},
+		"refs":["thread:thread-1"],
+		"content":"initial text",
+		"content_type":"text"
+	}`, http.StatusCreated)
+	defer createResp.Body.Close()
+
+	var created map[string]map[string]any
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create doc response: %v", err)
+	}
+	if created["document"]["id"] != "doc-1" {
+		t.Fatalf("unexpected document id: %#v", created["document"]["id"])
+	}
+	headRevisionID, _ := created["revision"]["revision_id"].(string)
+	if headRevisionID == "" {
+		t.Fatal("expected created revision id")
+	}
+
+	getResp, err := http.Get(h.baseURL + "/docs/doc-1")
+	if err != nil {
+		t.Fatalf("GET /docs/{document_id}: %v", err)
+	}
+	defer getResp.Body.Close()
+	if getResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected GET /docs/{document_id} status: got %d", getResp.StatusCode)
+	}
+
+	updateResp := requestJSONExpectStatus(t, http.MethodPatch, h.baseURL+"/docs/doc-1", `{
+		"actor_id":"actor-1",
+		"document":{"title":"Constitution v2"},
+		"if_base_revision":"`+headRevisionID+`",
+		"content":"second text",
+		"content_type":"text"
+	}`, http.StatusOK)
+	defer updateResp.Body.Close()
+
+	var updated map[string]map[string]any
+	if err := json.NewDecoder(updateResp.Body).Decode(&updated); err != nil {
+		t.Fatalf("decode update doc response: %v", err)
+	}
+	if updated["document"]["head_revision_number"] != float64(2) {
+		t.Fatalf("unexpected head revision number: %#v", updated["document"]["head_revision_number"])
+	}
+	newHeadRevisionID, _ := updated["revision"]["revision_id"].(string)
+	if newHeadRevisionID == "" || newHeadRevisionID == headRevisionID {
+		t.Fatalf("unexpected new revision id: old=%q new=%q", headRevisionID, newHeadRevisionID)
+	}
+
+	staleResp := requestJSONExpectStatus(t, http.MethodPatch, h.baseURL+"/docs/doc-1", `{
+		"actor_id":"actor-1",
+		"if_base_revision":"`+headRevisionID+`",
+		"content":"stale write",
+		"content_type":"text"
+	}`, http.StatusConflict)
+	defer staleResp.Body.Close()
+
+	historyResp, err := http.Get(h.baseURL + "/docs/doc-1/history")
+	if err != nil {
+		t.Fatalf("GET /docs/{document_id}/history: %v", err)
+	}
+	defer historyResp.Body.Close()
+	if historyResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected history status: got %d", historyResp.StatusCode)
+	}
+	var historyPayload map[string]any
+	if err := json.NewDecoder(historyResp.Body).Decode(&historyPayload); err != nil {
+		t.Fatalf("decode history response: %v", err)
+	}
+	revisions, _ := historyPayload["revisions"].([]any)
+	if len(revisions) != 2 {
+		t.Fatalf("expected two revisions in history, got %d payload=%#v", len(revisions), historyPayload)
+	}
+
+	revisionResp, err := http.Get(h.baseURL + "/docs/doc-1/revisions/" + headRevisionID)
+	if err != nil {
+		t.Fatalf("GET /docs/{document_id}/revisions/{revision_id}: %v", err)
+	}
+	defer revisionResp.Body.Close()
+	if revisionResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected revision status: got %d", revisionResp.StatusCode)
+	}
+	var revisionPayload map[string]map[string]any
+	if err := json.NewDecoder(revisionResp.Body).Decode(&revisionPayload); err != nil {
+		t.Fatalf("decode revision response: %v", err)
+	}
+	if revisionPayload["revision"]["content"] != "initial text" {
+		t.Fatalf("unexpected revision content: %#v", revisionPayload["revision"]["content"])
+	}
+}
+
+func TestDocumentsInvalidInputReturnsInvalidRequest(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	createInvalidResp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
+		"actor_id":"actor-1",
+		"document":{"id":"doc-invalid-create","labels":["ok",1]},
+		"content":"invalid",
+		"content_type":"text"
+	}`, http.StatusBadRequest)
+	defer createInvalidResp.Body.Close()
+	assertErrorCode(t, createInvalidResp, "invalid_request")
+
+	createResp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
+		"actor_id":"actor-1",
+		"document":{"id":"doc-invalid-update"},
+		"content":"initial",
+		"content_type":"text"
+	}`, http.StatusCreated)
+	defer createResp.Body.Close()
+
+	var created map[string]map[string]any
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	baseRevision, _ := created["revision"]["revision_id"].(string)
+	if strings.TrimSpace(baseRevision) == "" {
+		t.Fatalf("expected revision_id in create response: %#v", created)
+	}
+
+	updateInvalidResp := requestJSONExpectStatus(t, http.MethodPatch, h.baseURL+"/docs/doc-invalid-update", `{
+		"actor_id":"actor-1",
+		"if_base_revision":"`+baseRevision+`",
+		"document":{"id":"should-not-be-allowed"},
+		"content":"next",
+		"content_type":"text"
+	}`, http.StatusBadRequest)
+	defer updateInvalidResp.Body.Close()
+	assertErrorCode(t, updateInvalidResp, "invalid_request")
+}
+
 func TestInvalidTypedRefsRejectedForEventsAndArtifacts(t *testing.T) {
 	t.Parallel()
 
@@ -289,6 +431,27 @@ func postJSONExpectStatus(t *testing.T, url string, body string, expectedStatus 
 		defer resp.Body.Close()
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		t.Fatalf("POST %s unexpected status: got %d want %d body=%s", url, resp.StatusCode, expectedStatus, string(bodyBytes))
+	}
+	return resp
+}
+
+func requestJSONExpectStatus(t *testing.T, method string, url string, body string, expectedStatus int) *http.Response {
+	t.Helper()
+
+	req, err := http.NewRequest(method, url, strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("%s %s create request: %v", method, url, err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("%s %s failed: %v", method, url, err)
+	}
+	if resp.StatusCode != expectedStatus {
+		defer resp.Body.Close()
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		t.Fatalf("%s %s unexpected status: got %d want %d body=%s", method, url, resp.StatusCode, expectedStatus, string(bodyBytes))
 	}
 	return resp
 }

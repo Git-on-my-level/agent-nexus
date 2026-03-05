@@ -4,7 +4,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.2.2`
-- Groups: `12`
+- Groups: `13`
 
 ## `actors`
 
@@ -52,6 +52,16 @@ Generated from `contracts/oar-openapi.yaml`.
 - Commands: `1`
 - Command IDs:
   - `derived.rebuild` (`derived rebuild`)
+
+## `docs`
+
+- Commands: `5`
+- Command IDs:
+  - `docs.create` (`docs create`)
+  - `docs.get` (`docs get`)
+  - `docs.history` (`docs history`)
+  - `docs.revision.get` (`docs revision get`)
+  - `docs.update` (`docs update`)
 
 ## `events`
 

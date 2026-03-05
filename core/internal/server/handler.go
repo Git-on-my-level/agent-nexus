@@ -33,6 +33,11 @@ type PrimitiveStore interface {
 	GetArtifact(ctx context.Context, id string) (map[string]any, error)
 	GetArtifactContent(ctx context.Context, id string) ([]byte, string, error)
 	ListArtifacts(ctx context.Context, filter primitives.ArtifactListFilter) ([]map[string]any, error)
+	CreateDocument(ctx context.Context, actorID string, document map[string]any, content any, contentType string, refs []string) (map[string]any, map[string]any, error)
+	GetDocument(ctx context.Context, documentID string) (map[string]any, map[string]any, error)
+	UpdateDocument(ctx context.Context, actorID string, documentID string, documentPatch map[string]any, ifBaseRevision string, content any, contentType string, refs []string) (map[string]any, map[string]any, error)
+	ListDocumentHistory(ctx context.Context, documentID string) ([]map[string]any, error)
+	GetDocumentRevision(ctx context.Context, documentID string, revisionID string) (map[string]any, error)
 	GetSnapshot(ctx context.Context, id string) (map[string]any, error)
 	CreateThread(ctx context.Context, actorID string, thread map[string]any) (primitives.PatchSnapshotResult, error)
 	GetThread(ctx context.Context, id string) (map[string]any, error)
@@ -406,6 +411,68 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			handleGetCommitment(w, r, opts, commitmentID)
 		case http.MethodPatch:
 			handlePatchCommitment(w, r, opts, commitmentID)
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET and PATCH are supported")
+		}
+	})
+
+	mux.HandleFunc("/docs", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			handleCreateDocument(w, r, opts)
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+		}
+	})
+
+	mux.HandleFunc("/docs/", func(w http.ResponseWriter, r *http.Request) {
+		remainder := strings.TrimPrefix(r.URL.Path, "/docs/")
+		if remainder == "" {
+			writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+			return
+		}
+
+		if strings.HasSuffix(remainder, "/history") {
+			if r.Method != http.MethodGet {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+				return
+			}
+			documentID := strings.TrimSuffix(remainder, "/history")
+			documentID = strings.TrimSuffix(documentID, "/")
+			if documentID == "" || strings.Contains(documentID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			handleListDocumentHistory(w, r, opts, documentID)
+			return
+		}
+
+		revisionSuffix := "/revisions/"
+		if idx := strings.Index(remainder, revisionSuffix); idx > 0 {
+			if r.Method != http.MethodGet {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+				return
+			}
+			documentID := strings.TrimSpace(remainder[:idx])
+			revisionID := strings.TrimSpace(remainder[idx+len(revisionSuffix):])
+			if documentID == "" || revisionID == "" || strings.Contains(documentID, "/") || strings.Contains(revisionID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			handleGetDocumentRevision(w, r, opts, documentID, revisionID)
+			return
+		}
+
+		if strings.Contains(remainder, "/") {
+			writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+			return
+		}
+
+		switch r.Method {
+		case http.MethodGet:
+			handleGetDocument(w, r, opts, remainder)
+		case http.MethodPatch:
+			handleUpdateDocument(w, r, opts, remainder)
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET and PATCH are supported")
 		}

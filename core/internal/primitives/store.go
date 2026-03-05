@@ -22,6 +22,7 @@ var ErrNotFound = errors.New("not found")
 var ErrConflict = errors.New("conflict")
 var ErrInvalidCommitmentTransition = errors.New("invalid commitment transition")
 var ErrInvalidArtifactID = errors.New("invalid artifact id")
+var ErrInvalidDocumentRequest = errors.New("invalid document request")
 
 const actorStatementEventIDPlaceholder = "<event_id>"
 

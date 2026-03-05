@@ -890,6 +890,177 @@ paths:
         '409':
           $ref: '#/components/responses/ErrorResponse'
 
+  /docs:
+    post:
+      operationId: createDocument
+      summary: Create document with initial immutable revision
+      tags: [docs]
+      x-oar-command-id: "docs.create"
+      x-oar-cli-path: "docs create"
+      x-oar-why: "Bootstrap a first-class document identity and initial revision without manual head-pointer management."
+      x-oar-examples:
+        - title: Create document
+          command: oar docs create --from-file doc-create.json --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ document, revision }` where `revision` is the new head."
+      x-oar-error-codes: [invalid_json, invalid_request, unknown_actor_id, conflict]
+      x-oar-concepts: [docs, revisions]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Non-idempotent unless caller provides a deterministic document id and dedupes retries."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDocumentRequest'
+      responses:
+        '201':
+          description: Document created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentWithRevisionResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /docs/{document_id}:
+    get:
+      operationId: getDocument
+      summary: Get document and authoritative head revision
+      tags: [docs]
+      x-oar-command-id: "docs.get"
+      x-oar-cli-path: "docs get"
+      x-oar-why: "Resolve the current authoritative document head without client-side lineage traversal."
+      x-oar-examples:
+        - title: Get document head
+          command: oar docs get --document-id product-constitution --json
+      x-oar-input-mode: "none"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ document, revision }` where `revision` is the current head."
+      x-oar-error-codes: [invalid_request, not_found]
+      x-oar-concepts: [docs, revisions]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Safe and idempotent."
+      parameters:
+        - $ref: '#/components/parameters/DocumentID'
+      responses:
+        '200':
+          description: Document and head revision
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentWithRevisionResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+    patch:
+      operationId: updateDocument
+      summary: Create a new immutable revision for an existing document
+      tags: [docs]
+      x-oar-command-id: "docs.update"
+      x-oar-cli-path: "docs update"
+      x-oar-why: "Append a revision and atomically advance document head with optimistic concurrency."
+      x-oar-examples:
+        - title: Update document
+          command: oar docs update --document-id product-constitution --from-file doc-update.json --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ document, revision }` for the newly-created head revision."
+      x-oar-error-codes: [invalid_json, invalid_request, unknown_actor_id, conflict, not_found]
+      x-oar-concepts: [docs, revisions, concurrency]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Set `if_base_revision` from `docs.get` to prevent lost updates."
+      parameters:
+        - $ref: '#/components/parameters/DocumentID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDocumentRequest'
+      responses:
+        '200':
+          description: Document updated with new revision
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentWithRevisionResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /docs/{document_id}/history:
+    get:
+      operationId: listDocumentHistory
+      summary: List ordered immutable revisions for a document
+      tags: [docs]
+      x-oar-command-id: "docs.history"
+      x-oar-cli-path: "docs history"
+      x-oar-why: "Traverse full document lineage in canonical revision-number order."
+      x-oar-examples:
+        - title: List document history
+          command: oar docs history --document-id product-constitution --json
+      x-oar-input-mode: "none"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ document_id, revisions }` ordered by ascending `revision_number`."
+      x-oar-error-codes: [invalid_request, not_found]
+      x-oar-concepts: [docs, revisions, lineage]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Safe and idempotent."
+      parameters:
+        - $ref: '#/components/parameters/DocumentID'
+      responses:
+        '200':
+          description: Document revision history
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentHistoryResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /docs/{document_id}/revisions/{revision_id}:
+    get:
+      operationId: getDocumentRevision
+      summary: Get one immutable document revision
+      tags: [docs]
+      x-oar-command-id: "docs.revision.get"
+      x-oar-cli-path: "docs revision get"
+      x-oar-why: "Read a specific historical revision payload without mutating document head."
+      x-oar-examples:
+        - title: Get revision
+          command: oar docs revision get --document-id product-constitution --revision-id 019f... --json
+      x-oar-input-mode: "none"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ revision }` including metadata and revision content."
+      x-oar-error-codes: [invalid_request, not_found]
+      x-oar-concepts: [docs, revisions]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Safe and idempotent."
+      parameters:
+        - $ref: '#/components/parameters/DocumentID'
+        - $ref: '#/components/parameters/RevisionID'
+      responses:
+        '200':
+          description: Document revision payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentRevisionResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
   /events:
     post:
       operationId: createEvent
@@ -1418,6 +1589,16 @@ components:
       name: artifact_id
       required: true
       schema: { type: string }
+    DocumentID:
+      in: path
+      name: document_id
+      required: true
+      schema: { type: string }
+    RevisionID:
+      in: path
+      name: revision_id
+      required: true
+      schema: { type: string }
     CommandID:
       in: path
       name: command_id
@@ -1601,6 +1782,14 @@ components:
       additionalProperties: true
 
     Artifact:
+      type: object
+      additionalProperties: true
+
+    Document:
+      type: object
+      additionalProperties: true
+
+    DocumentRevision:
       type: object
       additionalProperties: true
 
@@ -1864,6 +2053,71 @@ components:
           items:
             $ref: '#/components/schemas/Commitment'
       required: [commitments]
+
+    CreateDocumentRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+        document:
+          $ref: '#/components/schemas/AnyObject'
+        refs:
+          type: array
+          items: { type: string }
+        content:
+          oneOf:
+            - type: string
+            - type: object
+              additionalProperties: true
+        content_type:
+          type: string
+          enum: [text, structured, binary]
+      required: [document, content, content_type]
+
+    UpdateDocumentRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+        document:
+          $ref: '#/components/schemas/AnyObject'
+        if_base_revision: { type: string }
+        refs:
+          type: array
+          items: { type: string }
+        content:
+          oneOf:
+            - type: string
+            - type: object
+              additionalProperties: true
+        content_type:
+          type: string
+          enum: [text, structured, binary]
+      required: [if_base_revision, content, content_type]
+
+    DocumentWithRevisionResponse:
+      type: object
+      properties:
+        document:
+          $ref: '#/components/schemas/Document'
+        revision:
+          $ref: '#/components/schemas/DocumentRevision'
+      required: [document, revision]
+
+    DocumentHistoryResponse:
+      type: object
+      properties:
+        document_id: { type: string }
+        revisions:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentRevision'
+      required: [document_id, revisions]
+
+    DocumentRevisionResponse:
+      type: object
+      properties:
+        revision:
+          $ref: '#/components/schemas/DocumentRevision'
+      required: [revision]
 
     CreateEventRequest:
       type: object
