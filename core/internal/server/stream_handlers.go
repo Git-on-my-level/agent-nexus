@@ -30,8 +30,7 @@ func handleEventsStream(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		return
 	}
 
-	sent := map[string]struct{}{}
-	firstPoll := true
+	cursorEventID := lastEventID
 	ticker := time.NewTicker(opts.streamPollInterval)
 	defer ticker.Stop()
 
@@ -42,14 +41,7 @@ func handleEventsStream(w http.ResponseWriter, r *http.Request, opts handlerOpti
 			return
 		}
 
-		if firstPoll {
-			afterEvents, resumeSeen := eventsAfterIDWithSeen(events, lastEventID)
-			for seenID := range resumeSeen {
-				sent[seenID] = struct{}{}
-			}
-			events = afterEvents
-			firstPoll = false
-		}
+		events = eventsAfterID(events, cursorEventID)
 
 		sentAny := false
 		for _, event := range events {
@@ -57,13 +49,10 @@ func handleEventsStream(w http.ResponseWriter, r *http.Request, opts handlerOpti
 			if eventID == "" {
 				continue
 			}
-			if _, alreadySent := sent[eventID]; alreadySent {
-				continue
-			}
 			if err := writeSSEEvent(w, eventID, "event", map[string]any{"event": event}); err != nil {
 				return
 			}
-			sent[eventID] = struct{}{}
+			cursorEventID = eventID
 			sentAny = true
 		}
 
@@ -279,28 +268,20 @@ func sortEventsAscending(events []map[string]any) {
 	})
 }
 
-func eventsAfterIDWithSeen(events []map[string]any, lastEventID string) ([]map[string]any, map[string]struct{}) {
-	seen := map[string]struct{}{}
+func eventsAfterID(events []map[string]any, lastEventID string) []map[string]any {
 	lastEventID = strings.TrimSpace(lastEventID)
 	if lastEventID == "" {
-		return events, seen
+		return events
 	}
 	for index, event := range events {
 		if strings.TrimSpace(anyString(event["id"])) == lastEventID {
-			for i := 0; i <= index; i++ {
-				eventID := strings.TrimSpace(anyString(events[i]["id"]))
-				if eventID == "" {
-					continue
-				}
-				seen[eventID] = struct{}{}
-			}
 			if index+1 >= len(events) {
-				return []map[string]any{}, seen
+				return []map[string]any{}
 			}
-			return events[index+1:], seen
+			return events[index+1:]
 		}
 	}
-	return events, seen
+	return events
 }
 
 func resolveLastEventID(r *http.Request) string {

@@ -238,7 +238,8 @@ func (s *Store) IssueTokenFromAssertion(ctx context.Context, input AssertionInpu
 	if err != nil {
 		return TokenBundle{}, ErrKeyMismatch
 	}
-	if time.Since(signedTime) > s.maxAssertionSkew || signedTime.Sub(time.Now().UTC()) > s.maxAssertionSkew {
+	now := time.Now().UTC()
+	if now.Sub(signedTime) > s.maxAssertionSkew || signedTime.Sub(now) > s.maxAssertionSkew {
 		return TokenBundle{}, ErrKeyMismatch
 	}
 
@@ -300,8 +301,15 @@ func (s *Store) IssueTokenFromAssertion(ctx context.Context, input AssertionInpu
 		_ = tx.Rollback()
 		return TokenBundle{}, ErrKeyMismatch
 	}
+	if err := s.recordAssertionUseTx(ctx, tx, message, signature, now); err != nil {
+		_ = tx.Rollback()
+		if errors.Is(err, ErrKeyMismatch) {
+			return TokenBundle{}, ErrKeyMismatch
+		}
+		return TokenBundle{}, err
+	}
 
-	tokens, _, err := s.issueTokenBundleTx(ctx, tx, storedAgentID, time.Now().UTC())
+	tokens, _, err := s.issueTokenBundleTx(ctx, tx, storedAgentID, now)
 	if err != nil {
 		_ = tx.Rollback()
 		return TokenBundle{}, err
@@ -312,6 +320,32 @@ func (s *Store) IssueTokenFromAssertion(ctx context.Context, input AssertionInpu
 	}
 
 	return tokens, nil
+}
+
+func (s *Store) recordAssertionUseTx(ctx context.Context, tx *sql.Tx, message string, signature string, now time.Time) error {
+	if _, err := tx.ExecContext(
+		ctx,
+		`DELETE FROM auth_used_assertions WHERE used_at < ?`,
+		now.Add(-s.maxAssertionSkew).Format(time.RFC3339Nano),
+	); err != nil {
+		return fmt.Errorf("cleanup used assertions: %w", err)
+	}
+
+	_, err := tx.ExecContext(
+		ctx,
+		`INSERT INTO auth_used_assertions(assertion_hash, used_at)
+		 VALUES (?, ?)`,
+		hashAssertionReplay(message, signature),
+		now.Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "unique") {
+			return ErrKeyMismatch
+		}
+		return fmt.Errorf("record used assertion: %w", err)
+	}
+
+	return nil
 }
 
 func (s *Store) IssueTokenFromRefresh(ctx context.Context, refreshToken string) (TokenBundle, error) {
@@ -868,5 +902,10 @@ func generateOpaqueToken(length int) (string, error) {
 
 func hashToken(raw string) string {
 	sum := sha256.Sum256([]byte(raw))
+	return hex.EncodeToString(sum[:])
+}
+
+func hashAssertionReplay(message string, signature string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(message) + "|" + strings.TrimSpace(signature)))
 	return hex.EncodeToString(sum[:])
 }

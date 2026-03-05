@@ -206,6 +206,15 @@ func TestAgentAuthLifecycleAndActorCompatibility(t *testing.T) {
 	if err := json.NewDecoder(assertionResp.Body).Decode(&assertionPayload); err != nil {
 		t.Fatalf("decode assertion response: %v", err)
 	}
+	replayResp := postJSONExpectStatusWithAuth(t, server.URL+"/auth/token", map[string]any{
+		"grant_type": "assertion",
+		"agent_id":   registerPayload.Agent.AgentID,
+		"key_id":     registerPayload.Key.KeyID,
+		"signed_at":  assertionSignedAt,
+		"signature":  assertionSig,
+	}, "", http.StatusUnauthorized)
+	defer replayResp.Body.Close()
+	assertErrorCode(t, replayResp, "key_mismatch")
 
 	publicKey2, privateKey2 := generateKeyPair(t)
 	rotateResp := postJSONExpectStatusWithAuth(t, server.URL+"/agents/me/keys/rotate", map[string]any{
