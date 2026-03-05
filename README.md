@@ -6,6 +6,7 @@ Monorepo for Organization Autorunner.
 
 - `contracts/`: canonical OpenAPI + schema contracts and generated artifacts
 - `core/`: Go backend (`oar-core`)
+- `cli/`: Go CLI (`oar`)
 - `web-ui/`: SvelteKit frontend (`oar-ui`)
 
 ## Quickstart
@@ -14,6 +15,7 @@ Monorepo for Organization Autorunner.
 pnpm install
 make check
 make serve
+make e2e-smoke
 ```
 
 Regenerate contract artifacts from the canonical OpenAPI contract:
@@ -32,8 +34,17 @@ make contract-gen
 
 - `make check`: run checks for both projects
 - `make contract-check`: verify generated contract artifacts are up to date
+- `make cli-check`: run CLI tests
+- `make e2e-smoke`: run live core + CLI + web-ui smoke verification
 - `make core-<target>`: pass through to `core/Makefile`
 - `make web-ui-<target>`: pass through to `web-ui/Makefile`
+
+Release/operations docs:
+
+- `runbooks/release.md`
+- `core/docs/runbook.md`
+- `cli/docs/runbook.md`
+- `web-ui/docs/runbook.md`
 
 Useful `make serve` toggles:
 

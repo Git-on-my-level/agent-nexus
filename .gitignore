@@ -1,5 +1,6 @@
 node_modules/
 .pnpm-store/
+.tmp/
 
 _src_core/
 _src_ui/

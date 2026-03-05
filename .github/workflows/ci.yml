@@ -8,6 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       core: ${{ steps.filter.outputs.core }}
+      cli: ${{ steps.filter.outputs.cli }}
       web_ui: ${{ steps.filter.outputs.web_ui }}
       root: ${{ steps.filter.outputs.root }}
       contracts: ${{ steps.filter.outputs.contracts }}
@@ -32,8 +33,12 @@ jobs:
               - 'core/cmd/contract-gen/**'
             core:
               - 'core/**'
+            cli:
+              - 'cli/**'
             web_ui:
               - 'web-ui/**'
+            e2e:
+              - 'scripts/e2e-smoke'
 
   contracts-check:
     runs-on: ubuntu-latest
@@ -79,6 +84,22 @@ jobs:
       - name: Run core check
         run: make -C core check
 
+  cli-checks:
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.cli == 'true' || needs.changes.outputs.root == 'true' || needs.changes.outputs.contracts == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+
+      - name: Run CLI check
+        run: make cli-check
+
   web-ui-checks:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -102,3 +123,45 @@ jobs:
 
       - name: Run web-ui check
         run: make -C web-ui check
+
+      - name: Build web-ui
+        run: pnpm -C web-ui run build
+
+  e2e-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: changes
+    if: needs.changes.outputs.core == 'true' || needs.changes.outputs.cli == 'true' || needs.changes.outputs.web_ui == 'true' || needs.changes.outputs.contracts == 'true' || needs.changes.outputs.root == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: core/go.mod
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run end-to-end smoke
+        env:
+          SMOKE_ARTIFACT_DIR: ${{ github.workspace }}/.tmp/e2e-smoke
+        run: make e2e-smoke
+
+      - name: Upload smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-smoke-artifacts
+          path: .tmp/e2e-smoke/**
+          if-no-files-found: ignore

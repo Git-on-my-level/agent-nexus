@@ -112,3 +112,37 @@ Run the headless smoke script:
 ```
 
 It starts a server in a temporary workspace, checks `/health` and `/version`, then shuts down cleanly.
+
+## Compatibility troubleshooting
+
+### Version mismatch / outdated clients
+
+Use handshake metadata to debug CLI/UI compatibility:
+
+```bash
+curl -fsS http://127.0.0.1:8000/meta/handshake
+```
+
+Check:
+
+- `schema_version`
+- `min_cli_version`
+- `recommended_cli_version`
+- `cli_download_url`
+
+If clients receive `cli_outdated`, upgrade client binaries and retry.
+
+## SSE troubleshooting
+
+Validate stream endpoints directly:
+
+```bash
+curl -N -H 'Accept: text/event-stream' http://127.0.0.1:8000/events/stream
+curl -N -H 'Accept: text/event-stream' http://127.0.0.1:8000/inbox/stream
+```
+
+Resume semantics:
+
+- use `Last-Event-ID` header or `last_event_id` query
+- ensure reverse proxies do not buffer SSE responses
+- verify `X-Accel-Buffering: no` is preserved

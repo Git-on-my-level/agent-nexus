@@ -1,27 +1,31 @@
-# oar-cli Runbook (bootstrap)
+# oar-cli Runbook
 
-## Build
+This runbook covers local development, end-to-end smoke usage, release steps, and common troubleshooting for `oar`.
+
+## Local development
+
+Build and test:
 
 ```bash
 cd cli
 go build ./cmd/oar
-```
-
-## Test
-
-```bash
-cd cli
 go test ./...
 ```
 
-## Global flag precedence
+Run against local core:
 
-Resolution order is:
+```bash
+cd cli
+go run ./cmd/oar --json --base-url http://127.0.0.1:8000 --agent local version
+go run ./cmd/oar --json --base-url http://127.0.0.1:8000 --agent local doctor
+```
+
+Global config precedence:
 
 1. command-line flags
 2. environment variables
-3. profile file (`~/.config/oar/profiles/<agent>.json` by default)
-4. built-in defaults
+3. profile file (`~/.config/oar/profiles/<agent>.json`)
+4. defaults
 
 Supported env vars:
 
@@ -32,73 +36,140 @@ Supported env vars:
 - `OAR_TIMEOUT`
 - `OAR_PROFILE_PATH`
 - `OAR_ACCESS_TOKEN`
+- `OAR_USERNAME`
 
-## Baseline commands
+## Auth/profile lifecycle
 
-- `oar version`
-- `oar doctor`
-- `oar api call`
-- `oar auth register`
-- `oar auth whoami`
-- `oar auth update-username`
-- `oar auth rotate`
-- `oar auth revoke`
-- `oar auth token-status`
-- `oar meta commands`
-- `oar meta command <id>`
-- `oar meta concepts`
-- `oar meta concept <name>`
-
-## Typed resource commands (v0)
-
-- `oar threads list|get|create|update`
-- `oar commitments list|get|create|update`
-- `oar artifacts list|get|create|content`
-- `oar events get|create|tail`
-- `oar inbox list|ack|tail`
-- `oar work-orders create`
-- `oar receipts create`
-- `oar reviews create`
-- `oar derived rebuild`
-
-### `oar api call` examples
-
-```bash
-oar api call --path /version
-printf '{"thread":{"title":"t"}}' | oar api call --method POST --path /threads --json
-oar api call --raw --path /health
-```
-
-## Auth lifecycle examples
+Registration and profile bootstrap:
 
 ```bash
 oar --json --base-url http://127.0.0.1:8000 --agent agent-a auth register --username agent.a
 oar --json --base-url http://127.0.0.1:8000 --agent agent-a auth whoami
+oar --json --base-url http://127.0.0.1:8000 --agent agent-a auth token-status
+```
+
+Rotation/update/revoke:
+
+```bash
 oar --json --base-url http://127.0.0.1:8000 --agent agent-a auth update-username --username agent.a.renamed
 oar --json --base-url http://127.0.0.1:8000 --agent agent-a auth rotate
-oar --json --base-url http://127.0.0.1:8000 --agent agent-a auth token-status
 oar --json --base-url http://127.0.0.1:8000 --agent agent-a auth revoke
 ```
 
-Notes:
-- `auth register` and `auth update-username` also accept `OAR_USERNAME`.
-- Profile and key material are written with strict local permissions (`0700` directories, `0600` files).
-- Access tokens refresh automatically for authenticated commands when near expiry.
+Profile material paths:
 
-## Typed command examples
+- profile: `~/.config/oar/profiles/<agent>.json`
+- private key: `~/.config/oar/keys/<agent>.ed25519`
+
+Permissions are enforced by CLI runtime (`0700` dirs, `0600` files).
+
+## Typed command smoke
 
 ```bash
-oar --json threads list --status active
-printf '{"thread":{"title":"Incident #42"}}' | oar --json threads create
-printf '{"thread":{"status":"resolved"}}' | oar --json threads update --thread-id thread_123
+printf '{"thread":{"title":"Incident #42"}}\n' | oar --json --base-url http://127.0.0.1:8000 --agent agent-a threads create
+oar --json --base-url http://127.0.0.1:8000 --agent agent-a threads list --status active
 
-printf '{"commitment":{"thread_id":"thread_123","title":"Ship fix"}}' | oar --json commitments create
-
-oar --json events tail --thread-id thread_123 --last-event-id event_100
-oar --json inbox tail --cursor inbox:item-1@abcd
-
-oar artifacts content --artifact-id artifact_123 > artifact.bin
-oar --json meta commands
-oar --json meta command threads.list
-oar help threads
+oar --json --base-url http://127.0.0.1:8000 --agent agent-a events tail --max-events 1 --reconnect=false
+oar --json --base-url http://127.0.0.1:8000 --agent agent-a inbox tail --max-events 1 --reconnect=false
 ```
+
+The raw fallback remains available:
+
+```bash
+oar --json --base-url http://127.0.0.1:8000 --agent agent-a api call --path /meta/handshake
+```
+
+## Release process
+
+CLI release artifacts are produced by GitHub workflow:
+
+- workflow: `.github/workflows/release-cli.yml`
+- trigger: push tag `v*` or `oar-cli-v*`
+- outputs:
+  - static binaries for linux/darwin/windows on amd64/arm64
+  - release archives (`.tar.gz`/`.zip`)
+  - `checksums.txt` (SHA256)
+
+Maintainer checklist:
+
+1. Ensure `make check` and `make e2e-smoke` pass on `main`.
+2. Create and push a release tag (for example `v0.2.0`).
+3. Verify release assets and `checksums.txt` on the GitHub release page.
+4. Verify handshake compatibility with a live core:
+   - `oar --json meta command meta.handshake`
+   - `oar --json --base-url <core> --agent <agent> api call --path /meta/handshake`
+
+## Troubleshooting
+
+### Auth/profile failures
+
+Symptoms:
+
+- `profile_not_found`
+- `key_mismatch`
+- `invalid_token`
+- `agent_revoked`
+
+Actions:
+
+1. Check selected agent/profile:
+
+```bash
+oar --json --agent <agent> auth token-status
+```
+
+2. Verify profile file exists and is readable (`~/.config/oar/profiles/<agent>.json`).
+3. If key mismatch after key/manual edits, run `auth rotate` (if possible) or `auth register` with a new agent profile.
+4. If revoked, create/register a new agent profile; revoked profiles cannot recover tokens.
+
+### Version mismatch
+
+Symptoms:
+
+- server returns `cli_outdated`
+- commands fail before mutation with compatibility errors
+
+Actions:
+
+1. Inspect handshake metadata:
+
+```bash
+oar --json --base-url <core> --agent <agent> api call --path /meta/handshake
+```
+
+2. Compare current CLI version against:
+
+- `min_cli_version`
+- `recommended_cli_version`
+- `cli_download_url`
+
+3. Upgrade CLI binary and re-run `oar version` + `oar doctor`.
+
+### SSE tail issues (`events tail` / `inbox tail`)
+
+Symptoms:
+
+- no events received
+- reconnect loops
+- dropped stream behavior
+
+Actions:
+
+1. Validate core stream endpoints directly:
+
+```bash
+curl -N -H 'Accept: text/event-stream' http://127.0.0.1:8000/events/stream
+curl -N -H 'Accept: text/event-stream' http://127.0.0.1:8000/inbox/stream
+```
+
+2. Use explicit cursor controls:
+
+- `--last-event-id <id>`
+- `--cursor <id>` (alias)
+
+3. For deterministic scripts use bounded tails:
+
+- `--max-events <n>`
+- `--reconnect=false`
+
+4. Verify server-side poll cadence and stream health in core logs.

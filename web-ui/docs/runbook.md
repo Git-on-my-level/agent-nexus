@@ -139,3 +139,37 @@ Actions:
    report `schema_version: "0.2.2"`).
 3. If using `PUBLIC_OAR_CORE_BASE_URL`, rebuild after env changes:
    `./scripts/build`.
+
+### Version mismatch / outdated clients
+
+Symptoms:
+
+- UI shell fails startup compatibility check
+- Core responds with compatibility errors for client traffic
+
+Actions:
+
+1. Inspect core handshake fields:
+   `curl -fsS http://127.0.0.1:8000/meta/handshake`
+2. Confirm `schema_version` matches UI expectation and review:
+   - `min_cli_version`
+   - `recommended_cli_version`
+   - `cli_download_url`
+3. Upgrade CLI/UI artifacts when compatibility floors advance.
+
+### SSE troubleshooting (core-backed streams)
+
+UI v0 relies primarily on request/response APIs, but stream diagnostics are useful when live updates are suspected.
+
+Checks:
+
+```bash
+curl -N -H 'Accept: text/event-stream' http://127.0.0.1:8000/events/stream
+curl -N -H 'Accept: text/event-stream' http://127.0.0.1:8000/inbox/stream
+```
+
+If streams fail:
+
+1. Verify reverse proxy buffering is disabled for SSE responses.
+2. Verify `Last-Event-ID` / `last_event_id` resume values when reconnecting.
+3. Confirm core is healthy and not blocked on storage (`/health`).
