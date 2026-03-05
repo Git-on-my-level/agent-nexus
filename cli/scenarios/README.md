@@ -85,10 +85,14 @@ cd cli
   --scenario scenarios/zesty-bots/harness.team-fuzz.scenario.json \
   --mode llm \
   --llm-api-key-file .secrets/zai_api_key \
+  --llm-timeout-seconds 60 \
+  --llm-retries 2 \
   --report .tmp/team-fuzz-report.json
 
 jq '.feedback' .tmp/team-fuzz-report.json
 ```
+
+`feedback` contains both explicit model `action=feedback` notes and auto-captured command-failure feedback emitted by the harness.
 
 Run with the built-in OpenAI-compatible LLM harness:
 

@@ -428,6 +428,111 @@ func TestSanitizeRunArgs(t *testing.T) {
 	}
 }
 
+func TestSanitizeRunArgsMapsSingularRootCommands(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		in   []string
+		want []string
+	}{
+		{in: []string{"oar", "thread", "list"}, want: []string{"threads", "list"}},
+		{in: []string{"event", "get", "--event-id", "e1"}, want: []string{"events", "get", "--event-id", "e1"}},
+		{in: []string{"artifact", "get", "--artifact-id", "a1"}, want: []string{"artifacts", "get", "--artifact-id", "a1"}},
+	}
+	for _, tc := range cases {
+		got := sanitizeRunArgs(tc.in)
+		if strings.Join(got, " ") != strings.Join(tc.want, " ") {
+			t.Fatalf("sanitizeRunArgs mismatch: in=%v got=%v want=%v", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestSanitizeRunArgsKeepsCommandAfterMalformedGlobalFlag(t *testing.T) {
+	t.Parallel()
+
+	input := []string{"--agent", "threads", "list"}
+	got := sanitizeRunArgs(input)
+	want := []string{"threads", "list"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Fatalf("sanitizeRunArgs mismatch: got=%v want=%v", got, want)
+	}
+}
+
+func TestRunLLMModeFailedRunCreatesFeedbackEntry(t *testing.T) {
+	t.Parallel()
+
+	tmp := t.TempDir()
+	oarPath := filepath.Join(tmp, "fake-oar.sh")
+	driverPath := filepath.Join(tmp, "fake-driver.py")
+	scenarioPath := filepath.Join(tmp, "scenario.json")
+
+	writeExecutable(t, oarPath, `#!/usr/bin/env bash
+set -euo pipefail
+if [[ " $* " == *" threads list "* ]]; then
+  cat >/dev/null || true
+  cat <<'JSON'
+{"ok":false,"error":{"code":"unknown_subcommand","message":"bad command"}}
+JSON
+  exit 1
+fi
+cat >/dev/null || true
+cat <<'JSON'
+{"ok":true,"command":"ok"}
+JSON
+`)
+
+	writeExecutable(t, driverPath, `#!/usr/bin/env python3
+import json, sys
+req = json.load(sys.stdin)
+turn = int(req.get("turn", 1))
+if turn == 1:
+    print(json.dumps({"action":"run","name":"bad command","args":["threads","list"]}))
+else:
+    print(json.dumps({"action":"stop","reason":"done"}))
+`)
+
+	scenarioJSON := `{
+  "name": "llm-failure-feedback-test",
+  "base_url": "http://127.0.0.1:8000",
+  "agents": [
+    {
+      "name": "coordinator",
+      "llm": {
+        "objective": "Try one bad command then stop",
+        "profile_path": "",
+        "max_turns": 2
+      },
+      "deterministic_steps": []
+    }
+  ],
+  "assertions": []
+}`
+	if err := os.WriteFile(scenarioPath, []byte(scenarioJSON), 0o644); err != nil {
+		t.Fatalf("write scenario file: %v", err)
+	}
+
+	report, err := Run(context.Background(), Config{
+		ScenarioPath:     scenarioPath,
+		OARBinary:        oarPath,
+		Mode:             ModeLLM,
+		LLMDriverBin:     driverPath,
+		BaseURLOverride:  "http://127.0.0.1:8000",
+		WorkingDirectory: tmp,
+	})
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if report.Failed {
+		t.Fatalf("expected successful report, got failed report: %#v", report)
+	}
+	if len(report.Feedback) == 0 {
+		t.Fatalf("expected feedback entry for failed llm run step")
+	}
+	if got := strings.ToLower(report.Feedback[0].Summary); !strings.Contains(got, "command failed") {
+		t.Fatalf("unexpected feedback summary: %q", report.Feedback[0].Summary)
+	}
+}
+
 func writeExecutable(t *testing.T, path string, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o755); err != nil {

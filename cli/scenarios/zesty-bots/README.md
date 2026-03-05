@@ -95,6 +95,8 @@ go run ./cmd/oar-scenario --scenario scenarios/zesty-bots/harness.scenario.json 
   --scenario scenarios/zesty-bots/harness.team-fuzz.scenario.json \
   --mode llm \
   --llm-api-key-file .secrets/zai_api_key \
+  --llm-timeout-seconds 60 \
+  --llm-retries 2 \
   --report .tmp/team-fuzz-report.json
 jq '.feedback' .tmp/team-fuzz-report.json
 

@@ -14,6 +14,8 @@ LLM actions:
 - `stop`: end turns for the current agent
 - `feedback`: record UX/product feedback in report output without running a CLI command
 
+When `run` fails in LLM mode, the harness also appends a structured `feedback` entry automatically (command, exit code, error excerpt) so fuzz runs preserve actionable UX friction even if the model does not explicitly emit `action=feedback`.
+
 ## Error Expectations
 
 Use `expect_error` on a step when a command is expected to fail in a specific way.

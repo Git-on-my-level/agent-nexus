@@ -188,6 +188,7 @@ func Run(ctx context.Context, cfg Config) (Report, error) {
 				aReport.Steps = append(aReport.Steps, res)
 				history[agentName] = append(history[agentName], res)
 				if stepErr != nil {
+					report.Feedback = append(report.Feedback, feedbackFromFailedRun(agentName, turn, action, res, stepErr))
 					consecutiveFailures++
 					if cfg.Verbose {
 						fmt.Fprintf(os.Stderr, "[harness] %s llm step failed (%d/%d): %v\n", agentName, consecutiveFailures, maxTurns, stepErr)
@@ -826,7 +827,10 @@ func nextOpenAICompatibleAction(ctx context.Context, cfg Config, req DriverReque
 		"or {\"action\":\"stop\",\"reason\":\"...\"} or {\"action\":\"feedback\",\"reason\":\"...\",\"stdin\":{...}}. " +
 		"Do not include markdown, code fences, or extra keys. " +
 		"For action=run, args must be a non-empty array of OAR subcommand tokens, excluding global flags. " +
-		"When reference_steps are provided, prefer those command forms and spellings exactly."
+		"When reference_steps are provided, prefer those command forms and spellings exactly. " +
+		"OAR command reminders: threads has create/get/list/patch/timeline; events has create/get/stream (no events list); " +
+		"inbox has list/ack/stream; artifacts has list/get/get-content; docs has list/get/create/update/history. " +
+		"If recent history includes failed commands, emit action=feedback before retrying."
 	userPrompt := "Decide the single next action for this turn.\n\n" +
 		"Context JSON:\n" + string(contextJSON)
 
@@ -1355,19 +1359,90 @@ func sanitizeRunArgs(args []string) []string {
 		}
 	}
 	out := make([]string, 0, len(clean))
+	parsingGlobalFlags := true
 	for idx := 0; idx < len(clean); idx++ {
 		value := clean[idx]
-		switch value {
-		case "--json":
-			continue
-		case "--base-url", "--agent":
-			idx++
-			continue
-		default:
-			out = append(out, value)
+		if parsingGlobalFlags {
+			switch value {
+			case "--json", "--no-color":
+				continue
+			case "--base-url", "--agent", "--timeout":
+				if idx < len(clean)-1 &&
+					!strings.HasPrefix(strings.TrimSpace(clean[idx+1]), "-") &&
+					!isLikelyCommandRoot(clean[idx+1]) {
+					idx++
+				}
+				continue
+			}
+			if strings.HasPrefix(value, "-") {
+				continue
+			}
+			parsingGlobalFlags = false
+		}
+		out = append(out, value)
+	}
+	if len(out) > 0 {
+		switch strings.ToLower(strings.TrimSpace(out[0])) {
+		case "thread":
+			out[0] = "threads"
+		case "event":
+			out[0] = "events"
+		case "artifact":
+			out[0] = "artifacts"
+		case "commitment":
+			out[0] = "commitments"
+		case "review":
+			out[0] = "reviews"
+		case "receipt":
+			out[0] = "receipts"
+		case "work-order":
+			out[0] = "work-orders"
+		case "doc":
+			out[0] = "docs"
 		}
 	}
 	return out
+}
+
+func isLikelyCommandRoot(token string) bool {
+	token = strings.ToLower(strings.TrimSpace(token))
+	switch token {
+	case "auth", "help", "threads", "thread", "events", "event", "inbox",
+		"artifacts", "artifact", "docs", "doc", "commitments", "commitment",
+		"work-orders", "work-order", "receipts", "receipt", "reviews", "review",
+		"draft", "api", "doctor", "version", "meta", "derived":
+		return true
+	default:
+		return false
+	}
+}
+
+func feedbackFromFailedRun(agentName string, turn int, action DriverAction, result CommandResult, stepErr error) FeedbackEntry {
+	summaryArgs := strings.Join(action.Args, " ")
+	if strings.TrimSpace(summaryArgs) == "" {
+		summaryArgs = strings.TrimSpace(result.Name)
+	}
+	details := map[string]any{
+		"command":       summaryArgs,
+		"exit_code":     result.ExitCode,
+		"failure_error": strings.TrimSpace(stepErr.Error()),
+	}
+	if strings.TrimSpace(action.Reason) != "" {
+		details["model_reason"] = strings.TrimSpace(action.Reason)
+	}
+	if strings.TrimSpace(result.Stderr) != "" {
+		details["stderr_excerpt"] = truncateForError(result.Stderr, 400)
+	}
+	if strings.TrimSpace(result.Stdout) != "" {
+		details["stdout_excerpt"] = truncateForError(result.Stdout, 400)
+	}
+	return FeedbackEntry{
+		Agent:      agentName,
+		Turn:       turn,
+		Summary:    "command failed: " + summaryArgs,
+		Details:    details,
+		RecordedAt: time.Now().UTC(),
+	}
 }
 
 func failReport(report Report, reason string) (Report, error) {
