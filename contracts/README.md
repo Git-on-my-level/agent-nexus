@@ -22,6 +22,14 @@ This writes deterministic outputs under:
 - `contracts/gen/ts/`
 - `contracts/gen/meta/`
 - `contracts/gen/docs/`
+- `cli/internal/registry/` (embedded generated metadata for CLI runtime)
+- `cli/docs/generated/` (generated command/concept docs)
+
+## x-oar Authoring
+
+`x-oar-*` extension authoring rules are generated at:
+
+- `contracts/gen/docs/x-oar-authoring.md`
 
 ## Drift Check
 

@@ -20,12 +20,14 @@ type Example struct {
 type CommandSpec struct {
 	CommandID  string    `json:"command_id"`
 	CLIPath    string    `json:"cli_path"`
+	Group      string    `json:"group,omitempty"`
 	Method     string    `json:"method"`
 	Path       string    `json:"path"`
 	PathParams []string  `json:"path_params,omitempty"`
 	InputMode  string    `json:"input_mode,omitempty"`
 	Stability  string    `json:"stability,omitempty"`
 	Concepts   []string  `json:"concepts,omitempty"`
+	Adjacent   []string  `json:"adjacent_commands,omitempty"`
 	Examples   []Example `json:"examples,omitempty"`
 }
 
@@ -33,11 +35,13 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID: "actors.list",
 		CLIPath:   "actors list",
+		Group:     "actors",
 		Method:    "GET",
 		Path:      "/actors",
 		InputMode: "none",
 		Stability: "stable",
 		Concepts:  []string{"identity"},
+		Adjacent:  []string{"actors.register"},
 		Examples: []Example{
 			{
 				Title:   "List actors",
@@ -48,11 +52,13 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID: "actors.register",
 		CLIPath:   "actors register",
+		Group:     "actors",
 		Method:    "POST",
 		Path:      "/actors",
 		InputMode: "json-body",
 		Stability: "stable",
 		Concepts:  []string{"identity"},
+		Adjacent:  []string{"actors.list"},
 		Examples: []Example{
 			{
 				Title:   "Register actor",
@@ -63,11 +69,13 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID: "agents.me.get",
 		CLIPath:   "agents me get",
+		Group:     "agents",
 		Method:    "GET",
 		Path:      "/agents/me",
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"auth", "identity"},
+		Adjacent:  []string{"agents.me.keys.rotate", "agents.me.patch", "agents.me.revoke"},
 		Examples: []Example{
 			{
 				Title:   "Get current profile",
@@ -78,11 +86,13 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID: "agents.me.keys.rotate",
 		CLIPath:   "agents me keys rotate",
+		Group:     "agents",
 		Method:    "POST",
 		Path:      "/agents/me/keys/rotate",
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"auth", "key-management"},
+		Adjacent:  []string{"agents.me.get", "agents.me.patch", "agents.me.revoke"},
 		Examples: []Example{
 			{
 				Title:   "Rotate key",
@@ -93,11 +103,13 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID: "agents.me.patch",
 		CLIPath:   "agents me patch",
+		Group:     "agents",
 		Method:    "PATCH",
 		Path:      "/agents/me",
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"auth", "identity"},
+		Adjacent:  []string{"agents.me.get", "agents.me.keys.rotate", "agents.me.revoke"},
 		Examples: []Example{
 			{
 				Title:   "Rename current agent",
@@ -108,11 +120,13 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID: "agents.me.revoke",
 		CLIPath:   "agents me revoke",
+		Group:     "agents",
 		Method:    "POST",
 		Path:      "/agents/me/revoke",
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"auth", "revocation"},
+		Adjacent:  []string{"agents.me.get", "agents.me.keys.rotate", "agents.me.patch"},
 		Examples: []Example{
 			{
 				Title:   "Revoke self",
@@ -123,12 +137,14 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID:  "artifacts.content.get",
 		CLIPath:    "artifacts content get",
+		Group:      "artifacts",
 		Method:     "GET",
 		Path:       "/artifacts/{artifact_id}/content",
 		PathParams: []string{"artifact_id"},
 		InputMode:  "none",
 		Stability:  "stable",
 		Concepts:   []string{"artifacts", "content"},
+		Adjacent:   []string{"artifacts.create", "artifacts.get", "artifacts.list"},
 		Examples: []Example{
 			{
 				Title:   "Download content",
@@ -139,11 +155,13 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID: "artifacts.create",
 		CLIPath:   "artifacts create",
+		Group:     "artifacts",
 		Method:    "POST",
 		Path:      "/artifacts",
 		InputMode: "file-and-body",
 		Stability: "stable",
 		Concepts:  []string{"artifacts", "evidence"},
+		Adjacent:  []string{"artifacts.content.get", "artifacts.get", "artifacts.list"},
 		Examples: []Example{
 			{
 				Title:   "Create structured artifact",
@@ -154,12 +172,14 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID:  "artifacts.get",
 		CLIPath:    "artifacts get",
+		Group:      "artifacts",
 		Method:     "GET",
 		Path:       "/artifacts/{artifact_id}",
 		PathParams: []string{"artifact_id"},
 		InputMode:  "none",
 		Stability:  "stable",
 		Concepts:   []string{"artifacts"},
+		Adjacent:   []string{"artifacts.content.get", "artifacts.create", "artifacts.list"},
 		Examples: []Example{
 			{
 				Title:   "Get artifact",
@@ -170,11 +190,13 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID: "artifacts.list",
 		CLIPath:   "artifacts list",
+		Group:     "artifacts",
 		Method:    "GET",
 		Path:      "/artifacts",
 		InputMode: "none",
 		Stability: "stable",
 		Concepts:  []string{"artifacts", "filtering"},
+		Adjacent:  []string{"artifacts.content.get", "artifacts.create", "artifacts.get"},
 		Examples: []Example{
 			{
 				Title:   "List work orders for a thread",
@@ -185,11 +207,13 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID: "auth.agents.register",
 		CLIPath:   "auth agents register",
+		Group:     "auth",
 		Method:    "POST",
 		Path:      "/auth/agents/register",
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"auth", "identity"},
+		Adjacent:  []string{"auth.token"},
 		Examples: []Example{
 			{
 				Title:   "Register agent",
@@ -200,11 +224,13 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID: "auth.token",
 		CLIPath:   "auth token",
+		Group:     "auth",
 		Method:    "POST",
 		Path:      "/auth/token",
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"auth", "token-lifecycle"},
+		Adjacent:  []string{"auth.agents.register"},
 		Examples: []Example{
 			{
 				Title:   "Refresh token grant",
@@ -219,11 +245,13 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID: "commitments.create",
 		CLIPath:   "commitments create",
+		Group:     "commitments",
 		Method:    "POST",
 		Path:      "/commitments",
 		InputMode: "json-body",
 		Stability: "stable",
 		Concepts:  []string{"commitments"},
+		Adjacent:  []string{"commitments.get", "commitments.list", "commitments.patch"},
 		Examples: []Example{
 			{
 				Title:   "Create commitment",
@@ -234,12 +262,14 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID:  "commitments.get",
 		CLIPath:    "commitments get",
+		Group:      "commitments",
 		Method:     "GET",
 		Path:       "/commitments/{commitment_id}",
 		PathParams: []string{"commitment_id"},
 		InputMode:  "none",
 		Stability:  "stable",
 		Concepts:   []string{"commitments"},
+		Adjacent:   []string{"commitments.create", "commitments.list", "commitments.patch"},
 		Examples: []Example{
 			{
 				Title:   "Get commitment",
@@ -250,11 +280,13 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID: "commitments.list",
 		CLIPath:   "commitments list",
+		Group:     "commitments",
 		Method:    "GET",
 		Path:      "/commitments",
 		InputMode: "none",
 		Stability: "stable",
 		Concepts:  []string{"commitments", "filtering"},
+		Adjacent:  []string{"commitments.create", "commitments.get", "commitments.patch"},
 		Examples: []Example{
 			{
 				Title:   "List open commitments for a thread",
@@ -265,12 +297,14 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID:  "commitments.patch",
 		CLIPath:    "commitments patch",
+		Group:      "commitments",
 		Method:     "PATCH",
 		Path:       "/commitments/{commitment_id}",
 		PathParams: []string{"commitment_id"},
 		InputMode:  "json-body",
 		Stability:  "stable",
 		Concepts:   []string{"commitments", "patch", "provenance"},
+		Adjacent:   []string{"commitments.create", "commitments.get", "commitments.list"},
 		Examples: []Example{
 			{
 				Title:   "Mark commitment done",
@@ -281,6 +315,7 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID: "derived.rebuild",
 		CLIPath:   "derived rebuild",
+		Group:     "derived",
 		Method:    "POST",
 		Path:      "/derived/rebuild",
 		InputMode: "json-body",
@@ -296,11 +331,13 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID: "events.create",
 		CLIPath:   "events create",
+		Group:     "events",
 		Method:    "POST",
 		Path:      "/events",
 		InputMode: "json-body",
 		Stability: "stable",
 		Concepts:  []string{"events", "append-only"},
+		Adjacent:  []string{"events.get", "events.stream"},
 		Examples: []Example{
 			{
 				Title:   "Append event",
@@ -311,12 +348,14 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID:  "events.get",
 		CLIPath:    "events get",
+		Group:      "events",
 		Method:     "GET",
 		Path:       "/events/{event_id}",
 		PathParams: []string{"event_id"},
 		InputMode:  "none",
 		Stability:  "stable",
 		Concepts:   []string{"events"},
+		Adjacent:   []string{"events.create", "events.stream"},
 		Examples: []Example{
 			{
 				Title:   "Get event",
@@ -327,11 +366,13 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID: "events.stream",
 		CLIPath:   "events stream",
+		Group:     "events",
 		Method:    "GET",
 		Path:      "/events/stream",
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"events", "streaming"},
+		Adjacent:  []string{"events.create", "events.get"},
 		Examples: []Example{
 			{
 				Title:   "Stream all events",
@@ -346,11 +387,13 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID: "inbox.ack",
 		CLIPath:   "inbox ack",
+		Group:     "inbox",
 		Method:    "POST",
 		Path:      "/inbox/ack",
 		InputMode: "json-body",
 		Stability: "stable",
 		Concepts:  []string{"inbox", "events"},
+		Adjacent:  []string{"inbox.list", "inbox.stream"},
 		Examples: []Example{
 			{
 				Title:   "Ack inbox item",
@@ -361,11 +404,13 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID: "inbox.list",
 		CLIPath:   "inbox list",
+		Group:     "inbox",
 		Method:    "GET",
 		Path:      "/inbox",
 		InputMode: "none",
 		Stability: "stable",
 		Concepts:  []string{"inbox", "derived-views"},
+		Adjacent:  []string{"inbox.ack", "inbox.stream"},
 		Examples: []Example{
 			{
 				Title:   "List inbox",
@@ -376,11 +421,13 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID: "inbox.stream",
 		CLIPath:   "inbox stream",
+		Group:     "inbox",
 		Method:    "GET",
 		Path:      "/inbox/stream",
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"inbox", "derived-views", "streaming"},
+		Adjacent:  []string{"inbox.ack", "inbox.list"},
 		Examples: []Example{
 			{
 				Title:   "Stream inbox updates",
@@ -395,12 +442,14 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID:  "meta.commands.get",
 		CLIPath:    "meta commands get",
+		Group:      "meta",
 		Method:     "GET",
 		Path:       "/meta/commands/{command_id}",
 		PathParams: []string{"command_id"},
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"meta", "introspection"},
+		Adjacent:   []string{"meta.commands.list", "meta.concepts.get", "meta.concepts.list", "meta.handshake", "meta.health", "meta.version"},
 		Examples: []Example{
 			{
 				Title:   "Read command metadata",
@@ -411,11 +460,13 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID: "meta.commands.list",
 		CLIPath:   "meta commands list",
+		Group:     "meta",
 		Method:    "GET",
 		Path:      "/meta/commands",
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"meta", "introspection"},
+		Adjacent:  []string{"meta.commands.get", "meta.concepts.get", "meta.concepts.list", "meta.handshake", "meta.health", "meta.version"},
 		Examples: []Example{
 			{
 				Title:   "List command metadata",
@@ -426,12 +477,14 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID:  "meta.concepts.get",
 		CLIPath:    "meta concepts get",
+		Group:      "meta",
 		Method:     "GET",
 		Path:       "/meta/concepts/{concept_name}",
 		PathParams: []string{"concept_name"},
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"meta", "concepts"},
+		Adjacent:   []string{"meta.commands.get", "meta.commands.list", "meta.concepts.list", "meta.handshake", "meta.health", "meta.version"},
 		Examples: []Example{
 			{
 				Title:   "Read one concept",
@@ -442,11 +495,13 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID: "meta.concepts.list",
 		CLIPath:   "meta concepts list",
+		Group:     "meta",
 		Method:    "GET",
 		Path:      "/meta/concepts",
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"meta", "concepts"},
+		Adjacent:  []string{"meta.commands.get", "meta.commands.list", "meta.concepts.get", "meta.handshake", "meta.health", "meta.version"},
 		Examples: []Example{
 			{
 				Title:   "List concepts",
@@ -457,11 +512,13 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID: "meta.handshake",
 		CLIPath:   "meta handshake",
+		Group:     "meta",
 		Method:    "GET",
 		Path:      "/meta/handshake",
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"compatibility", "handshake"},
+		Adjacent:  []string{"meta.commands.get", "meta.commands.list", "meta.concepts.get", "meta.concepts.list", "meta.health", "meta.version"},
 		Examples: []Example{
 			{
 				Title:   "Read handshake metadata",
@@ -472,11 +529,13 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID: "meta.health",
 		CLIPath:   "meta health",
+		Group:     "meta",
 		Method:    "GET",
 		Path:      "/health",
 		InputMode: "none",
 		Stability: "stable",
 		Concepts:  []string{"health", "readiness"},
+		Adjacent:  []string{"meta.commands.get", "meta.commands.list", "meta.concepts.get", "meta.concepts.list", "meta.handshake", "meta.version"},
 		Examples: []Example{
 			{
 				Title:   "Health check",
@@ -487,11 +546,13 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID: "meta.version",
 		CLIPath:   "meta version",
+		Group:     "meta",
 		Method:    "GET",
 		Path:      "/version",
 		InputMode: "none",
 		Stability: "stable",
 		Concepts:  []string{"compatibility", "schema"},
+		Adjacent:  []string{"meta.commands.get", "meta.commands.list", "meta.concepts.get", "meta.concepts.list", "meta.handshake", "meta.health"},
 		Examples: []Example{
 			{
 				Title:   "Read version",
@@ -502,11 +563,13 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID: "packets.receipts.create",
 		CLIPath:   "packets receipts create",
+		Group:     "packets",
 		Method:    "POST",
 		Path:      "/receipts",
 		InputMode: "json-body",
 		Stability: "stable",
 		Concepts:  []string{"packets", "receipts"},
+		Adjacent:  []string{"packets.reviews.create", "packets.work-orders.create"},
 		Examples: []Example{
 			{
 				Title:   "Create receipt",
@@ -517,11 +580,13 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID: "packets.reviews.create",
 		CLIPath:   "packets reviews create",
+		Group:     "packets",
 		Method:    "POST",
 		Path:      "/reviews",
 		InputMode: "json-body",
 		Stability: "stable",
 		Concepts:  []string{"packets", "reviews"},
+		Adjacent:  []string{"packets.receipts.create", "packets.work-orders.create"},
 		Examples: []Example{
 			{
 				Title:   "Create review",
@@ -532,11 +597,13 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID: "packets.work-orders.create",
 		CLIPath:   "packets work-orders create",
+		Group:     "packets",
 		Method:    "POST",
 		Path:      "/work_orders",
 		InputMode: "json-body",
 		Stability: "stable",
 		Concepts:  []string{"packets", "work-orders"},
+		Adjacent:  []string{"packets.receipts.create", "packets.reviews.create"},
 		Examples: []Example{
 			{
 				Title:   "Create work order",
@@ -547,6 +614,7 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID:  "snapshots.get",
 		CLIPath:    "snapshots get",
+		Group:      "snapshots",
 		Method:     "GET",
 		Path:       "/snapshots/{snapshot_id}",
 		PathParams: []string{"snapshot_id"},
@@ -563,11 +631,13 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID: "threads.create",
 		CLIPath:   "threads create",
+		Group:     "threads",
 		Method:    "POST",
 		Path:      "/threads",
 		InputMode: "json-body",
 		Stability: "stable",
 		Concepts:  []string{"threads", "snapshots"},
+		Adjacent:  []string{"threads.get", "threads.list", "threads.patch", "threads.timeline"},
 		Examples: []Example{
 			{
 				Title:   "Create thread",
@@ -578,12 +648,14 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID:  "threads.get",
 		CLIPath:    "threads get",
+		Group:      "threads",
 		Method:     "GET",
 		Path:       "/threads/{thread_id}",
 		PathParams: []string{"thread_id"},
 		InputMode:  "none",
 		Stability:  "stable",
 		Concepts:   []string{"threads"},
+		Adjacent:   []string{"threads.create", "threads.list", "threads.patch", "threads.timeline"},
 		Examples: []Example{
 			{
 				Title:   "Read thread",
@@ -594,11 +666,13 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID: "threads.list",
 		CLIPath:   "threads list",
+		Group:     "threads",
 		Method:    "GET",
 		Path:      "/threads",
 		InputMode: "none",
 		Stability: "stable",
 		Concepts:  []string{"threads", "filtering"},
+		Adjacent:  []string{"threads.create", "threads.get", "threads.patch", "threads.timeline"},
 		Examples: []Example{
 			{
 				Title:   "List active p1 threads",
@@ -609,12 +683,14 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID:  "threads.patch",
 		CLIPath:    "threads patch",
+		Group:      "threads",
 		Method:     "PATCH",
 		Path:       "/threads/{thread_id}",
 		PathParams: []string{"thread_id"},
 		InputMode:  "json-body",
 		Stability:  "stable",
 		Concepts:   []string{"threads", "patch"},
+		Adjacent:   []string{"threads.create", "threads.get", "threads.list", "threads.timeline"},
 		Examples: []Example{
 			{
 				Title:   "Patch thread",
@@ -625,12 +701,14 @@ var CommandRegistry = []CommandSpec{
 	{
 		CommandID:  "threads.timeline",
 		CLIPath:    "threads timeline",
+		Group:      "threads",
 		Method:     "GET",
 		Path:       "/threads/{thread_id}/timeline",
 		PathParams: []string{"thread_id"},
 		InputMode:  "none",
 		Stability:  "stable",
 		Concepts:   []string{"threads", "events", "provenance"},
+		Adjacent:   []string{"threads.create", "threads.get", "threads.list", "threads.patch"},
 		Examples: []Example{
 			{
 				Title:   "Timeline",

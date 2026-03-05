@@ -2,7 +2,120 @@
   "openapi_version": "3.1.0",
   "contract_version": "0.2.2",
   "generated_by": "core/cmd/contract-gen",
-  "extension_prefix": "x-oar-",
+  "group_count": 12,
+  "groups": [
+    {
+      "name": "actors",
+      "command_count": 2,
+      "command_ids": [
+        "actors.list",
+        "actors.register"
+      ]
+    },
+    {
+      "name": "agents",
+      "command_count": 4,
+      "command_ids": [
+        "agents.me.get",
+        "agents.me.keys.rotate",
+        "agents.me.patch",
+        "agents.me.revoke"
+      ]
+    },
+    {
+      "name": "artifacts",
+      "command_count": 4,
+      "command_ids": [
+        "artifacts.content.get",
+        "artifacts.create",
+        "artifacts.get",
+        "artifacts.list"
+      ]
+    },
+    {
+      "name": "auth",
+      "command_count": 2,
+      "command_ids": [
+        "auth.agents.register",
+        "auth.token"
+      ]
+    },
+    {
+      "name": "commitments",
+      "command_count": 4,
+      "command_ids": [
+        "commitments.create",
+        "commitments.get",
+        "commitments.list",
+        "commitments.patch"
+      ]
+    },
+    {
+      "name": "derived",
+      "command_count": 1,
+      "command_ids": [
+        "derived.rebuild"
+      ]
+    },
+    {
+      "name": "events",
+      "command_count": 3,
+      "command_ids": [
+        "events.create",
+        "events.get",
+        "events.stream"
+      ]
+    },
+    {
+      "name": "inbox",
+      "command_count": 3,
+      "command_ids": [
+        "inbox.ack",
+        "inbox.list",
+        "inbox.stream"
+      ]
+    },
+    {
+      "name": "meta",
+      "command_count": 7,
+      "command_ids": [
+        "meta.commands.get",
+        "meta.commands.list",
+        "meta.concepts.get",
+        "meta.concepts.list",
+        "meta.handshake",
+        "meta.health",
+        "meta.version"
+      ]
+    },
+    {
+      "name": "packets",
+      "command_count": 3,
+      "command_ids": [
+        "packets.receipts.create",
+        "packets.reviews.create",
+        "packets.work-orders.create"
+      ]
+    },
+    {
+      "name": "snapshots",
+      "command_count": 1,
+      "command_ids": [
+        "snapshots.get"
+      ]
+    },
+    {
+      "name": "threads",
+      "command_count": 5,
+      "command_ids": [
+        "threads.create",
+        "threads.get",
+        "threads.list",
+        "threads.patch",
+        "threads.timeline"
+      ]
+    }
+  ],
   "command_count": 39,
   "commands": [
     {

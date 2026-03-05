@@ -1,0 +1,135 @@
+package app
+
+import (
+	"bytes"
+	"encoding/json"
+	"os"
+	"strings"
+	"testing"
+)
+
+func TestRunMetaCommandsJSON(t *testing.T) {
+	t.Parallel()
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	cli := New()
+	cli.Stdout = stdout
+	cli.Stderr = stderr
+	cli.Stdin = strings.NewReader("")
+	cli.StdinIsTTY = func() bool { return true }
+	cli.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	cli.ReadFile = func(path string) ([]byte, error) {
+		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
+	}
+
+	exitCode := cli.Run([]string{"--json", "meta", "commands"})
+	if exitCode != 0 {
+		t.Fatalf("unexpected exit code: %d stderr=%s", exitCode, stderr.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("decode stdout json: %v", err)
+	}
+	if payload["ok"] != true {
+		t.Fatalf("expected ok=true payload=%#v", payload)
+	}
+	data, _ := payload["data"].(map[string]any)
+	if data == nil {
+		t.Fatalf("expected object data payload=%#v", payload)
+	}
+	if data["source"] != "embedded-generated-registry" {
+		t.Fatalf("unexpected source payload=%#v", data)
+	}
+	if int(data["command_count"].(float64)) <= 0 {
+		t.Fatalf("expected non-empty commands payload=%#v", data)
+	}
+}
+
+func TestRunMetaCommandIncludesWhyAndExample(t *testing.T) {
+	t.Parallel()
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	cli := New()
+	cli.Stdout = stdout
+	cli.Stderr = stderr
+	cli.Stdin = strings.NewReader("")
+	cli.StdinIsTTY = func() bool { return true }
+	cli.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	cli.ReadFile = func(path string) ([]byte, error) {
+		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
+	}
+
+	exitCode := cli.Run([]string{"--json", "meta", "command", "threads.list"})
+	if exitCode != 0 {
+		t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("decode stdout json: %v", err)
+	}
+	data, _ := payload["data"].(map[string]any)
+	commandObj, _ := data["command"].(map[string]any)
+	if strings.TrimSpace(commandObj["why"].(string)) == "" {
+		t.Fatalf("expected non-empty why payload=%#v", payload)
+	}
+	examples, _ := commandObj["examples"].([]any)
+	if len(examples) == 0 {
+		t.Fatalf("expected at least one example payload=%#v", payload)
+	}
+}
+
+func TestRunGeneratedHelpTopic(t *testing.T) {
+	t.Parallel()
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	cli := New()
+	cli.Stdout = stdout
+	cli.Stderr = stderr
+	cli.Stdin = strings.NewReader("")
+	cli.StdinIsTTY = func() bool { return true }
+	cli.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	cli.ReadFile = func(path string) ([]byte, error) {
+		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
+	}
+
+	exitCode := cli.Run([]string{"help", "threads"})
+	if exitCode != 0 {
+		t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
+	}
+	output := stdout.String()
+	if !strings.Contains(output, "Generated Help: threads") {
+		t.Fatalf("expected generated help header output=%s", output)
+	}
+	if !strings.Contains(output, "threads create") {
+		t.Fatalf("expected generated command listing output=%s", output)
+	}
+}
+
+func TestRunSubcommandHelpToken(t *testing.T) {
+	t.Parallel()
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	cli := New()
+	cli.Stdout = stdout
+	cli.Stderr = stderr
+	cli.Stdin = strings.NewReader("")
+	cli.StdinIsTTY = func() bool { return true }
+	cli.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	cli.ReadFile = func(path string) ([]byte, error) {
+		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
+	}
+
+	exitCode := cli.Run([]string{"threads", "--help"})
+	if exitCode != 0 {
+		t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "Generated Help: threads") {
+		t.Fatalf("expected generated threads help output=%s", stdout.String())
+	}
+}

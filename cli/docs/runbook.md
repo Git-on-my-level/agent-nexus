@@ -44,6 +44,10 @@ Supported env vars:
 - `oar auth rotate`
 - `oar auth revoke`
 - `oar auth token-status`
+- `oar meta commands`
+- `oar meta command <id>`
+- `oar meta concepts`
+- `oar meta concept <name>`
 
 ## Typed resource commands (v0)
 
@@ -94,4 +98,7 @@ oar --json events tail --thread-id thread_123 --last-event-id event_100
 oar --json inbox tail --cursor inbox:item-1@abcd
 
 oar artifacts content --artifact-id artifact_123 > artifact.bin
+oar --json meta commands
+oar --json meta command threads.list
+oar help threads
 ```

@@ -23,6 +23,16 @@ func (a *App) runCommand(ctx context.Context, args []string, cfg config.Resolved
 	if len(args) == 0 {
 		return "root", nil, errnorm.Usage("command_required", "a command is required")
 	}
+	if len(args) >= 2 && isHelpToken(args[1]) {
+		if a.printHelpTopic(args[0]) {
+			return "help", &commandResult{}, nil
+		}
+	}
+	if len(args) >= 3 && isHelpToken(args[2]) {
+		if a.printHelpTopic(args[0] + " " + args[1]) {
+			return "help", &commandResult{}, nil
+		}
+	}
 	switch args[0] {
 	case "version":
 		result, err := a.runVersion(cfg)
@@ -32,6 +42,9 @@ func (a *App) runCommand(ctx context.Context, args []string, cfg config.Resolved
 		return "doctor", result, err
 	case "auth":
 		result, name, err := a.runAuth(ctx, args[1:], cfg)
+		return name, result, err
+	case "meta":
+		result, name, err := a.runMeta(ctx, args[1:], cfg)
 		return name, result, err
 	case "threads", "commitments", "artifacts", "events", "inbox", "work-orders", "receipts", "reviews", "derived":
 		result, name, err := a.runTypedResource(ctx, args[0], args[1:], cfg)
@@ -46,6 +59,12 @@ func (a *App) runCommand(ctx context.Context, args []string, cfg config.Resolved
 		result, err := a.runAPICall(ctx, args[2:], cfg)
 		return "api call", result, err
 	case "help", "--help", "-h":
+		if len(args) > 1 {
+			if a.printHelpTopic(strings.Join(args[1:], " ")) {
+				return "help", &commandResult{}, nil
+			}
+			return "help", nil, errnorm.Usage("unknown_command", fmt.Sprintf("unknown help topic %q", strings.Join(args[1:], " ")))
+		}
 		a.printRootUsage()
 		return "help", &commandResult{}, nil
 	default:

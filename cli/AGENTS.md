@@ -17,6 +17,7 @@ This directory hosts the `oar` CLI module.
 - `internal/httpclient`: raw HTTP transport and generated-client wiring.
 - `internal/output`: stable JSON output envelope.
 - `internal/registry`: embedded command metadata and generated registry adapters.
+- `internal/registry`: embedded command/help/concept metadata generated from OpenAPI `x-oar-*`.
 - `internal/authcli`: non-interactive register/whoami/update/rotate/revoke/token lifecycle service.
 - `internal/profile`: profile + key persistence with strict filesystem permissions.
 - `internal/streaming`: SSE event frame parser used by `events tail` and `inbox tail`.

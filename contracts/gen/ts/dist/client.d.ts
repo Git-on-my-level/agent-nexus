@@ -13,6 +13,7 @@ export interface CommandSpec {
     summary?: string;
     description?: string;
     why?: string;
+    group?: string;
     path_params?: string[];
     input_mode?: string;
     streaming?: unknown;
@@ -21,6 +22,7 @@ export interface CommandSpec {
     stability?: string;
     agent_notes?: string;
     concepts?: string[];
+    adjacent_commands?: string[];
     examples?: Example[];
     go_method: string;
     ts_method: string;

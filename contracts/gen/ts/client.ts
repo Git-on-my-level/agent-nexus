@@ -15,6 +15,7 @@ export interface CommandSpec {
   summary?: string;
   description?: string;
   why?: string;
+  group?: string;
   path_params?: string[];
   input_mode?: string;
   streaming?: unknown;
@@ -23,6 +24,7 @@ export interface CommandSpec {
   stability?: string;
   agent_notes?: string;
   concepts?: string[];
+  adjacent_commands?: string[];
   examples?: Example[];
   go_method: string;
   ts_method: string;
@@ -44,6 +46,7 @@ export const commandRegistry: CommandSpec[] = [
   {
     "command_id": "actors.list",
     "cli_path": "actors list",
+    "group": "actors",
     "method": "GET",
     "path": "/actors",
     "operation_id": "listActors",
@@ -68,12 +71,16 @@ export const commandRegistry: CommandSpec[] = [
         "command": "oar actors list --json"
       }
     ],
+    "adjacent_commands": [
+      "actors.register"
+    ],
     "go_method": "ActorsList",
     "ts_method": "actorsList"
   },
   {
     "command_id": "actors.register",
     "cli_path": "actors register",
+    "group": "actors",
     "method": "POST",
     "path": "/actors",
     "operation_id": "registerActor",
@@ -100,12 +107,16 @@ export const commandRegistry: CommandSpec[] = [
         "command": "oar actors register --id bot-1 --display-name \"Bot 1\" --created-at 2026-03-04T10:00:00Z --json"
       }
     ],
+    "adjacent_commands": [
+      "actors.list"
+    ],
     "go_method": "ActorsRegister",
     "ts_method": "actorsRegister"
   },
   {
     "command_id": "agents.me.get",
     "cli_path": "agents me get",
+    "group": "agents",
     "method": "GET",
     "path": "/agents/me",
     "operation_id": "getCurrentAgent",
@@ -133,12 +144,18 @@ export const commandRegistry: CommandSpec[] = [
         "command": "oar agents me get --json"
       }
     ],
+    "adjacent_commands": [
+      "agents.me.keys.rotate",
+      "agents.me.patch",
+      "agents.me.revoke"
+    ],
     "go_method": "AgentsMeGet",
     "ts_method": "agentsMeGet"
   },
   {
     "command_id": "agents.me.keys.rotate",
     "cli_path": "agents me keys rotate",
+    "group": "agents",
     "method": "POST",
     "path": "/agents/me/keys/rotate",
     "operation_id": "rotateCurrentAgentKey",
@@ -167,12 +184,18 @@ export const commandRegistry: CommandSpec[] = [
         "command": "oar agents me keys rotate --public-key \u003cbase64-ed25519-pubkey\u003e --json"
       }
     ],
+    "adjacent_commands": [
+      "agents.me.get",
+      "agents.me.patch",
+      "agents.me.revoke"
+    ],
     "go_method": "AgentsMeKeysRotate",
     "ts_method": "agentsMeKeysRotate"
   },
   {
     "command_id": "agents.me.patch",
     "cli_path": "agents me patch",
+    "group": "agents",
     "method": "PATCH",
     "path": "/agents/me",
     "operation_id": "patchCurrentAgent",
@@ -202,12 +225,18 @@ export const commandRegistry: CommandSpec[] = [
         "command": "oar agents me patch --username renamed_agent --json"
       }
     ],
+    "adjacent_commands": [
+      "agents.me.get",
+      "agents.me.keys.rotate",
+      "agents.me.revoke"
+    ],
     "go_method": "AgentsMePatch",
     "ts_method": "agentsMePatch"
   },
   {
     "command_id": "agents.me.revoke",
     "cli_path": "agents me revoke",
+    "group": "agents",
     "method": "POST",
     "path": "/agents/me/revoke",
     "operation_id": "revokeCurrentAgent",
@@ -235,12 +264,18 @@ export const commandRegistry: CommandSpec[] = [
         "command": "oar agents me revoke --json"
       }
     ],
+    "adjacent_commands": [
+      "agents.me.get",
+      "agents.me.keys.rotate",
+      "agents.me.patch"
+    ],
     "go_method": "AgentsMeRevoke",
     "ts_method": "agentsMeRevoke"
   },
   {
     "command_id": "artifacts.content.get",
     "cli_path": "artifacts content get",
+    "group": "artifacts",
     "method": "GET",
     "path": "/artifacts/{artifact_id}/content",
     "operation_id": "getArtifactContent",
@@ -269,12 +304,18 @@ export const commandRegistry: CommandSpec[] = [
     "path_params": [
       "artifact_id"
     ],
+    "adjacent_commands": [
+      "artifacts.create",
+      "artifacts.get",
+      "artifacts.list"
+    ],
     "go_method": "ArtifactsContentGet",
     "ts_method": "artifactsContentGet"
   },
   {
     "command_id": "artifacts.create",
     "cli_path": "artifacts create",
+    "group": "artifacts",
     "method": "POST",
     "path": "/artifacts",
     "operation_id": "createArtifact",
@@ -302,12 +343,18 @@ export const commandRegistry: CommandSpec[] = [
         "command": "oar artifacts create --from-file artifact-create.json --json"
       }
     ],
+    "adjacent_commands": [
+      "artifacts.content.get",
+      "artifacts.get",
+      "artifacts.list"
+    ],
     "go_method": "ArtifactsCreate",
     "ts_method": "artifactsCreate"
   },
   {
     "command_id": "artifacts.get",
     "cli_path": "artifacts get",
+    "group": "artifacts",
     "method": "GET",
     "path": "/artifacts/{artifact_id}",
     "operation_id": "getArtifact",
@@ -335,12 +382,18 @@ export const commandRegistry: CommandSpec[] = [
     "path_params": [
       "artifact_id"
     ],
+    "adjacent_commands": [
+      "artifacts.content.get",
+      "artifacts.create",
+      "artifacts.list"
+    ],
     "go_method": "ArtifactsGet",
     "ts_method": "artifactsGet"
   },
   {
     "command_id": "artifacts.list",
     "cli_path": "artifacts list",
+    "group": "artifacts",
     "method": "GET",
     "path": "/artifacts",
     "operation_id": "listArtifacts",
@@ -366,12 +419,18 @@ export const commandRegistry: CommandSpec[] = [
         "command": "oar artifacts list --kind work_order --thread-id thread_123 --json"
       }
     ],
+    "adjacent_commands": [
+      "artifacts.content.get",
+      "artifacts.create",
+      "artifacts.get"
+    ],
     "go_method": "ArtifactsList",
     "ts_method": "artifactsList"
   },
   {
     "command_id": "auth.agents.register",
     "cli_path": "auth agents register",
+    "group": "auth",
     "method": "POST",
     "path": "/auth/agents/register",
     "operation_id": "registerAgent",
@@ -399,12 +458,16 @@ export const commandRegistry: CommandSpec[] = [
         "command": "oar auth agents register --username agent.one --public-key \u003cbase64-ed25519-pubkey\u003e --json"
       }
     ],
+    "adjacent_commands": [
+      "auth.token"
+    ],
     "go_method": "AuthAgentsRegister",
     "ts_method": "authAgentsRegister"
   },
   {
     "command_id": "auth.token",
     "cli_path": "auth token",
+    "group": "auth",
     "method": "POST",
     "path": "/auth/token",
     "operation_id": "issueAuthToken",
@@ -438,12 +501,16 @@ export const commandRegistry: CommandSpec[] = [
         "command": "oar auth token --grant-type assertion --agent-id \u003cid\u003e --key-id \u003cid\u003e --signed-at \u003crfc3339\u003e --signature \u003cbase64\u003e --json"
       }
     ],
+    "adjacent_commands": [
+      "auth.agents.register"
+    ],
     "go_method": "AuthToken",
     "ts_method": "authToken"
   },
   {
     "command_id": "commitments.create",
     "cli_path": "commitments create",
+    "group": "commitments",
     "method": "POST",
     "path": "/commitments",
     "operation_id": "createCommitment",
@@ -470,12 +537,18 @@ export const commandRegistry: CommandSpec[] = [
         "command": "oar commitments create --from-file commitment.json --json"
       }
     ],
+    "adjacent_commands": [
+      "commitments.get",
+      "commitments.list",
+      "commitments.patch"
+    ],
     "go_method": "CommitmentsCreate",
     "ts_method": "commitmentsCreate"
   },
   {
     "command_id": "commitments.get",
     "cli_path": "commitments get",
+    "group": "commitments",
     "method": "GET",
     "path": "/commitments/{commitment_id}",
     "operation_id": "getCommitment",
@@ -503,12 +576,18 @@ export const commandRegistry: CommandSpec[] = [
     "path_params": [
       "commitment_id"
     ],
+    "adjacent_commands": [
+      "commitments.create",
+      "commitments.list",
+      "commitments.patch"
+    ],
     "go_method": "CommitmentsGet",
     "ts_method": "commitmentsGet"
   },
   {
     "command_id": "commitments.list",
     "cli_path": "commitments list",
+    "group": "commitments",
     "method": "GET",
     "path": "/commitments",
     "operation_id": "listCommitments",
@@ -534,12 +613,18 @@ export const commandRegistry: CommandSpec[] = [
         "command": "oar commitments list --thread-id thread_123 --status open --json"
       }
     ],
+    "adjacent_commands": [
+      "commitments.create",
+      "commitments.get",
+      "commitments.patch"
+    ],
     "go_method": "CommitmentsList",
     "ts_method": "commitmentsList"
   },
   {
     "command_id": "commitments.patch",
     "cli_path": "commitments patch",
+    "group": "commitments",
     "method": "PATCH",
     "path": "/commitments/{commitment_id}",
     "operation_id": "patchCommitment",
@@ -573,12 +658,18 @@ export const commandRegistry: CommandSpec[] = [
     "path_params": [
       "commitment_id"
     ],
+    "adjacent_commands": [
+      "commitments.create",
+      "commitments.get",
+      "commitments.list"
+    ],
     "go_method": "CommitmentsPatch",
     "ts_method": "commitmentsPatch"
   },
   {
     "command_id": "derived.rebuild",
     "cli_path": "derived rebuild",
+    "group": "derived",
     "method": "POST",
     "path": "/derived/rebuild",
     "operation_id": "rebuildDerivedViews",
@@ -612,6 +703,7 @@ export const commandRegistry: CommandSpec[] = [
   {
     "command_id": "events.create",
     "cli_path": "events create",
+    "group": "events",
     "method": "POST",
     "path": "/events",
     "operation_id": "createEvent",
@@ -639,12 +731,17 @@ export const commandRegistry: CommandSpec[] = [
         "command": "oar events create --from-file event.json --json"
       }
     ],
+    "adjacent_commands": [
+      "events.get",
+      "events.stream"
+    ],
     "go_method": "EventsCreate",
     "ts_method": "eventsCreate"
   },
   {
     "command_id": "events.get",
     "cli_path": "events get",
+    "group": "events",
     "method": "GET",
     "path": "/events/{event_id}",
     "operation_id": "getEvent",
@@ -672,12 +769,17 @@ export const commandRegistry: CommandSpec[] = [
     "path_params": [
       "event_id"
     ],
+    "adjacent_commands": [
+      "events.create",
+      "events.stream"
+    ],
     "go_method": "EventsGet",
     "ts_method": "eventsGet"
   },
   {
     "command_id": "events.stream",
     "cli_path": "events stream",
+    "group": "events",
     "method": "GET",
     "path": "/events/stream",
     "operation_id": "streamEvents",
@@ -710,12 +812,17 @@ export const commandRegistry: CommandSpec[] = [
         "command": "oar events stream --last-event-id \u003cevent_id\u003e --json"
       }
     ],
+    "adjacent_commands": [
+      "events.create",
+      "events.get"
+    ],
     "go_method": "EventsStream",
     "ts_method": "eventsStream"
   },
   {
     "command_id": "inbox.ack",
     "cli_path": "inbox ack",
+    "group": "inbox",
     "method": "POST",
     "path": "/inbox/ack",
     "operation_id": "ackInboxItem",
@@ -743,12 +850,17 @@ export const commandRegistry: CommandSpec[] = [
         "command": "oar inbox ack --thread-id thread_123 --inbox-item-id inbox:item-1 --json"
       }
     ],
+    "adjacent_commands": [
+      "inbox.list",
+      "inbox.stream"
+    ],
     "go_method": "InboxAck",
     "ts_method": "inboxAck"
   },
   {
     "command_id": "inbox.list",
     "cli_path": "inbox list",
+    "group": "inbox",
     "method": "GET",
     "path": "/inbox",
     "operation_id": "listInbox",
@@ -771,12 +883,17 @@ export const commandRegistry: CommandSpec[] = [
         "command": "oar inbox list --json"
       }
     ],
+    "adjacent_commands": [
+      "inbox.ack",
+      "inbox.stream"
+    ],
     "go_method": "InboxList",
     "ts_method": "inboxList"
   },
   {
     "command_id": "inbox.stream",
     "cli_path": "inbox stream",
+    "group": "inbox",
     "method": "GET",
     "path": "/inbox/stream",
     "operation_id": "streamInbox",
@@ -810,12 +927,17 @@ export const commandRegistry: CommandSpec[] = [
         "command": "oar inbox stream --last-event-id \u003cid\u003e --json"
       }
     ],
+    "adjacent_commands": [
+      "inbox.ack",
+      "inbox.list"
+    ],
     "go_method": "InboxStream",
     "ts_method": "inboxStream"
   },
   {
     "command_id": "meta.commands.get",
     "cli_path": "meta commands get",
+    "group": "meta",
     "method": "GET",
     "path": "/meta/commands/{command_id}",
     "operation_id": "getMetaCommand",
@@ -846,12 +968,21 @@ export const commandRegistry: CommandSpec[] = [
     "path_params": [
       "command_id"
     ],
+    "adjacent_commands": [
+      "meta.commands.list",
+      "meta.concepts.get",
+      "meta.concepts.list",
+      "meta.handshake",
+      "meta.health",
+      "meta.version"
+    ],
     "go_method": "MetaCommandsGet",
     "ts_method": "metaCommandsGet"
   },
   {
     "command_id": "meta.commands.list",
     "cli_path": "meta commands list",
+    "group": "meta",
     "method": "GET",
     "path": "/meta/commands",
     "operation_id": "listMetaCommands",
@@ -878,12 +1009,21 @@ export const commandRegistry: CommandSpec[] = [
         "command": "oar meta commands list --json"
       }
     ],
+    "adjacent_commands": [
+      "meta.commands.get",
+      "meta.concepts.get",
+      "meta.concepts.list",
+      "meta.handshake",
+      "meta.health",
+      "meta.version"
+    ],
     "go_method": "MetaCommandsList",
     "ts_method": "metaCommandsList"
   },
   {
     "command_id": "meta.concepts.get",
     "cli_path": "meta concepts get",
+    "group": "meta",
     "method": "GET",
     "path": "/meta/concepts/{concept_name}",
     "operation_id": "getMetaConcept",
@@ -914,12 +1054,21 @@ export const commandRegistry: CommandSpec[] = [
     "path_params": [
       "concept_name"
     ],
+    "adjacent_commands": [
+      "meta.commands.get",
+      "meta.commands.list",
+      "meta.concepts.list",
+      "meta.handshake",
+      "meta.health",
+      "meta.version"
+    ],
     "go_method": "MetaConceptsGet",
     "ts_method": "metaConceptsGet"
   },
   {
     "command_id": "meta.concepts.list",
     "cli_path": "meta concepts list",
+    "group": "meta",
     "method": "GET",
     "path": "/meta/concepts",
     "operation_id": "listMetaConcepts",
@@ -946,12 +1095,21 @@ export const commandRegistry: CommandSpec[] = [
         "command": "oar meta concepts list --json"
       }
     ],
+    "adjacent_commands": [
+      "meta.commands.get",
+      "meta.commands.list",
+      "meta.concepts.get",
+      "meta.handshake",
+      "meta.health",
+      "meta.version"
+    ],
     "go_method": "MetaConceptsList",
     "ts_method": "metaConceptsList"
   },
   {
     "command_id": "meta.handshake",
     "cli_path": "meta handshake",
+    "group": "meta",
     "method": "GET",
     "path": "/meta/handshake",
     "operation_id": "getMetaHandshake",
@@ -974,12 +1132,21 @@ export const commandRegistry: CommandSpec[] = [
         "command": "oar meta handshake --json"
       }
     ],
+    "adjacent_commands": [
+      "meta.commands.get",
+      "meta.commands.list",
+      "meta.concepts.get",
+      "meta.concepts.list",
+      "meta.health",
+      "meta.version"
+    ],
     "go_method": "MetaHandshake",
     "ts_method": "metaHandshake"
   },
   {
     "command_id": "meta.health",
     "cli_path": "meta health",
+    "group": "meta",
     "method": "GET",
     "path": "/health",
     "operation_id": "healthCheck",
@@ -1005,12 +1172,21 @@ export const commandRegistry: CommandSpec[] = [
         "command": "oar meta health --json"
       }
     ],
+    "adjacent_commands": [
+      "meta.commands.get",
+      "meta.commands.list",
+      "meta.concepts.get",
+      "meta.concepts.list",
+      "meta.handshake",
+      "meta.version"
+    ],
     "go_method": "MetaHealth",
     "ts_method": "metaHealth"
   },
   {
     "command_id": "meta.version",
     "cli_path": "meta version",
+    "group": "meta",
     "method": "GET",
     "path": "/version",
     "operation_id": "getVersion",
@@ -1033,12 +1209,21 @@ export const commandRegistry: CommandSpec[] = [
         "command": "oar meta version --json"
       }
     ],
+    "adjacent_commands": [
+      "meta.commands.get",
+      "meta.commands.list",
+      "meta.concepts.get",
+      "meta.concepts.list",
+      "meta.handshake",
+      "meta.health"
+    ],
     "go_method": "MetaVersion",
     "ts_method": "metaVersion"
   },
   {
     "command_id": "packets.receipts.create",
     "cli_path": "packets receipts create",
+    "group": "packets",
     "method": "POST",
     "path": "/receipts",
     "operation_id": "createReceipt",
@@ -1066,12 +1251,17 @@ export const commandRegistry: CommandSpec[] = [
         "command": "oar packets receipts create --from-file receipt.json --json"
       }
     ],
+    "adjacent_commands": [
+      "packets.reviews.create",
+      "packets.work-orders.create"
+    ],
     "go_method": "PacketsReceiptsCreate",
     "ts_method": "packetsReceiptsCreate"
   },
   {
     "command_id": "packets.reviews.create",
     "cli_path": "packets reviews create",
+    "group": "packets",
     "method": "POST",
     "path": "/reviews",
     "operation_id": "createReview",
@@ -1099,12 +1289,17 @@ export const commandRegistry: CommandSpec[] = [
         "command": "oar packets reviews create --from-file review.json --json"
       }
     ],
+    "adjacent_commands": [
+      "packets.receipts.create",
+      "packets.work-orders.create"
+    ],
     "go_method": "PacketsReviewsCreate",
     "ts_method": "packetsReviewsCreate"
   },
   {
     "command_id": "packets.work-orders.create",
     "cli_path": "packets work-orders create",
+    "group": "packets",
     "method": "POST",
     "path": "/work_orders",
     "operation_id": "createWorkOrder",
@@ -1132,12 +1327,17 @@ export const commandRegistry: CommandSpec[] = [
         "command": "oar packets work-orders create --from-file work-order.json --json"
       }
     ],
+    "adjacent_commands": [
+      "packets.receipts.create",
+      "packets.reviews.create"
+    ],
     "go_method": "PacketsWorkOrdersCreate",
     "ts_method": "packetsWorkOrdersCreate"
   },
   {
     "command_id": "snapshots.get",
     "cli_path": "snapshots get",
+    "group": "snapshots",
     "method": "GET",
     "path": "/snapshots/{snapshot_id}",
     "operation_id": "getSnapshot",
@@ -1171,6 +1371,7 @@ export const commandRegistry: CommandSpec[] = [
   {
     "command_id": "threads.create",
     "cli_path": "threads create",
+    "group": "threads",
     "method": "POST",
     "path": "/threads",
     "operation_id": "createThread",
@@ -1198,12 +1399,19 @@ export const commandRegistry: CommandSpec[] = [
         "command": "oar threads create --from-file thread.json --json"
       }
     ],
+    "adjacent_commands": [
+      "threads.get",
+      "threads.list",
+      "threads.patch",
+      "threads.timeline"
+    ],
     "go_method": "ThreadsCreate",
     "ts_method": "threadsCreate"
   },
   {
     "command_id": "threads.get",
     "cli_path": "threads get",
+    "group": "threads",
     "method": "GET",
     "path": "/threads/{thread_id}",
     "operation_id": "getThread",
@@ -1231,12 +1439,19 @@ export const commandRegistry: CommandSpec[] = [
     "path_params": [
       "thread_id"
     ],
+    "adjacent_commands": [
+      "threads.create",
+      "threads.list",
+      "threads.patch",
+      "threads.timeline"
+    ],
     "go_method": "ThreadsGet",
     "ts_method": "threadsGet"
   },
   {
     "command_id": "threads.list",
     "cli_path": "threads list",
+    "group": "threads",
     "method": "GET",
     "path": "/threads",
     "operation_id": "listThreads",
@@ -1262,12 +1477,19 @@ export const commandRegistry: CommandSpec[] = [
         "command": "oar threads list --status active --priority p1 --json"
       }
     ],
+    "adjacent_commands": [
+      "threads.create",
+      "threads.get",
+      "threads.patch",
+      "threads.timeline"
+    ],
     "go_method": "ThreadsList",
     "ts_method": "threadsList"
   },
   {
     "command_id": "threads.patch",
     "cli_path": "threads patch",
+    "group": "threads",
     "method": "PATCH",
     "path": "/threads/{thread_id}",
     "operation_id": "patchThread",
@@ -1300,12 +1522,19 @@ export const commandRegistry: CommandSpec[] = [
     "path_params": [
       "thread_id"
     ],
+    "adjacent_commands": [
+      "threads.create",
+      "threads.get",
+      "threads.list",
+      "threads.timeline"
+    ],
     "go_method": "ThreadsPatch",
     "ts_method": "threadsPatch"
   },
   {
     "command_id": "threads.timeline",
     "cli_path": "threads timeline",
+    "group": "threads",
     "method": "GET",
     "path": "/threads/{thread_id}/timeline",
     "operation_id": "getThreadTimeline",
@@ -1334,6 +1563,12 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "path_params": [
       "thread_id"
+    ],
+    "adjacent_commands": [
+      "threads.create",
+      "threads.get",
+      "threads.list",
+      "threads.patch"
     ],
     "go_method": "ThreadsTimeline",
     "ts_method": "threadsTimeline"

@@ -33,6 +33,17 @@ type queryParam struct {
 }
 
 func (a *App) runTypedResource(ctx context.Context, resource string, args []string, cfg config.Resolved) (*commandResult, string, error) {
+	if len(args) == 0 || (len(args) > 0 && isHelpToken(args[0])) {
+		if text, ok := generatedHelpText(resource); ok {
+			return &commandResult{Text: text}, resource, nil
+		}
+	}
+	if len(args) > 1 && isHelpToken(args[1]) {
+		if text, ok := generatedHelpText(resource + " " + strings.TrimSpace(args[0])); ok {
+			return &commandResult{Text: text}, resource + " " + strings.TrimSpace(args[0]), nil
+		}
+	}
+
 	switch resource {
 	case "threads":
 		return a.runThreadsCommand(ctx, args, cfg)

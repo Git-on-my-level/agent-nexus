@@ -59,6 +59,7 @@ type oarExample struct {
 type command struct {
 	CommandID   string       `json:"command_id"`
 	CLIPath     string       `json:"cli_path"`
+	Group       string       `json:"group,omitempty"`
 	Method      string       `json:"method"`
 	Path        string       `json:"path"`
 	OperationID string       `json:"operation_id"`
@@ -74,8 +75,40 @@ type command struct {
 	AgentNotes  string       `json:"agent_notes,omitempty"`
 	Examples    []oarExample `json:"examples,omitempty"`
 	PathParams  []string     `json:"path_params,omitempty"`
+	Adjacent    []string     `json:"adjacent_commands,omitempty"`
 	GoMethod    string       `json:"go_method"`
 	TSMethod    string       `json:"ts_method"`
+}
+
+type conceptMeta struct {
+	Name         string    `json:"name"`
+	CommandCount int       `json:"command_count"`
+	CommandIDs   []string  `json:"command_ids"`
+	Commands     []command `json:"commands"`
+}
+
+type conceptsOutput struct {
+	OpenAPIVersion  string        `json:"openapi_version"`
+	ContractVersion string        `json:"contract_version"`
+	GeneratedBy     string        `json:"generated_by"`
+	ConceptCount    int           `json:"concept_count"`
+	Concepts        []conceptMeta `json:"concepts"`
+}
+
+type groupMeta struct {
+	Name         string   `json:"name"`
+	CommandCount int      `json:"command_count"`
+	CommandIDs   []string `json:"command_ids"`
+}
+
+type helpOutput struct {
+	OpenAPIVersion  string      `json:"openapi_version"`
+	ContractVersion string      `json:"contract_version"`
+	GeneratedBy     string      `json:"generated_by"`
+	GroupCount      int         `json:"group_count"`
+	Groups          []groupMeta `json:"groups"`
+	CommandCount    int         `json:"command_count"`
+	Commands        []command   `json:"commands"`
 }
 
 type metaOutput struct {
@@ -156,6 +189,7 @@ func collectCommands(doc openAPIDocument) []command {
 			cmd := command{
 				CommandID:   commandID,
 				CLIPath:     strings.TrimSpace(pair.op.CLIPath),
+				Group:       commandGroup(strings.TrimSpace(pair.op.CLIPath)),
 				Method:      pair.method,
 				Path:        path,
 				OperationID: strings.TrimSpace(pair.op.OperationID),
@@ -196,6 +230,39 @@ func collectCommands(doc openAPIDocument) []command {
 		seen[cmd.CommandID] = struct{}{}
 	}
 
+	commandsByGroup := map[string][]int{}
+	for i := range commands {
+		group := strings.TrimSpace(commands[i].Group)
+		if group == "" {
+			continue
+		}
+		commandsByGroup[group] = append(commandsByGroup[group], i)
+	}
+	for _, indexes := range commandsByGroup {
+		sort.Slice(indexes, func(i, j int) bool {
+			left := commands[indexes[i]]
+			right := commands[indexes[j]]
+			if left.CLIPath != right.CLIPath {
+				return left.CLIPath < right.CLIPath
+			}
+			return left.CommandID < right.CommandID
+		})
+		groupCommandIDs := make([]string, 0, len(indexes))
+		for _, index := range indexes {
+			groupCommandIDs = append(groupCommandIDs, commands[index].CommandID)
+		}
+		for _, index := range indexes {
+			adjacent := make([]string, 0, len(groupCommandIDs)-1)
+			for _, commandID := range groupCommandIDs {
+				if commandID == commands[index].CommandID {
+					continue
+				}
+				adjacent = append(adjacent, commandID)
+			}
+			commands[index].Adjacent = adjacent
+		}
+	}
+
 	return commands
 }
 
@@ -207,7 +274,22 @@ func generateAll(outDir string, doc openAPIDocument, commands []command) error {
 	if err := writeMeta(filepath.Join(outDir, "meta", "commands.json"), doc, commands); err != nil {
 		return err
 	}
+	if err := writeConceptsMeta(filepath.Join(outDir, "meta", "concepts.json"), doc, commands); err != nil {
+		return err
+	}
+	if err := writeHelpMeta(filepath.Join(outDir, "meta", "help.json"), doc, commands); err != nil {
+		return err
+	}
 	if err := writeMarkdown(filepath.Join(outDir, "docs", "commands.md"), doc, commands); err != nil {
+		return err
+	}
+	if err := writeGroupsMarkdown(filepath.Join(outDir, "docs", "command-groups.md"), doc, commands); err != nil {
+		return err
+	}
+	if err := writeConceptsMarkdown(filepath.Join(outDir, "docs", "concepts.md"), doc, commands); err != nil {
+		return err
+	}
+	if err := writeXOARAuthoringMarkdown(filepath.Join(outDir, "docs", "x-oar-authoring.md")); err != nil {
 		return err
 	}
 	if err := writeGoClient(filepath.Join(outDir, "go"), commands); err != nil {
@@ -234,6 +316,48 @@ func writeMeta(path string, doc openAPIDocument, commands []command) error {
 		Commands:        commands,
 	}
 
+	b, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return err
+	}
+	b = append(b, '\n')
+	return os.WriteFile(path, b, 0o644)
+}
+
+func writeConceptsMeta(path string, doc openAPIDocument, commands []command) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	concepts := deriveConcepts(commands)
+	payload := conceptsOutput{
+		OpenAPIVersion:  doc.OpenAPI,
+		ContractVersion: strings.TrimSpace(doc.Info.Version),
+		GeneratedBy:     "core/cmd/contract-gen",
+		ConceptCount:    len(concepts),
+		Concepts:        concepts,
+	}
+	b, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return err
+	}
+	b = append(b, '\n')
+	return os.WriteFile(path, b, 0o644)
+}
+
+func writeHelpMeta(path string, doc openAPIDocument, commands []command) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	groups := deriveGroups(commands)
+	payload := helpOutput{
+		OpenAPIVersion:  doc.OpenAPI,
+		ContractVersion: strings.TrimSpace(doc.Info.Version),
+		GeneratedBy:     "core/cmd/contract-gen",
+		GroupCount:      len(groups),
+		Groups:          groups,
+		CommandCount:    len(commands),
+		Commands:        commands,
+	}
 	b, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
 		return err
@@ -298,6 +422,94 @@ func writeMarkdown(path string, doc openAPIDocument, commands []command) error {
 	return os.WriteFile(path, []byte(b.String()), 0o644)
 }
 
+func writeGroupsMarkdown(path string, doc openAPIDocument, commands []command) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	groups := deriveGroups(commands)
+	commandByID := make(map[string]command, len(commands))
+	for _, cmd := range commands {
+		commandByID[cmd.CommandID] = cmd
+	}
+
+	var b strings.Builder
+	b.WriteString("# OAR Command Groups\n\n")
+	b.WriteString("Generated from `contracts/oar-openapi.yaml`.\n\n")
+	b.WriteString(fmt.Sprintf("- OpenAPI version: `%s`\n", doc.OpenAPI))
+	b.WriteString(fmt.Sprintf("- Contract version: `%s`\n", strings.TrimSpace(doc.Info.Version)))
+	b.WriteString(fmt.Sprintf("- Groups: `%d`\n\n", len(groups)))
+
+	for _, group := range groups {
+		b.WriteString(fmt.Sprintf("## `%s`\n\n", group.Name))
+		b.WriteString(fmt.Sprintf("- Commands: `%d`\n", group.CommandCount))
+		b.WriteString("- Command IDs:\n")
+		for _, commandID := range group.CommandIDs {
+			cmd := commandByID[commandID]
+			b.WriteString(fmt.Sprintf("  - `%s` (`%s`)\n", commandID, cmd.CLIPath))
+		}
+		b.WriteString("\n")
+	}
+
+	return os.WriteFile(path, []byte(b.String()), 0o644)
+}
+
+func writeConceptsMarkdown(path string, doc openAPIDocument, commands []command) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	concepts := deriveConcepts(commands)
+
+	var b strings.Builder
+	b.WriteString("# OAR Concepts\n\n")
+	b.WriteString("Generated from `contracts/oar-openapi.yaml`.\n\n")
+	b.WriteString(fmt.Sprintf("- OpenAPI version: `%s`\n", doc.OpenAPI))
+	b.WriteString(fmt.Sprintf("- Contract version: `%s`\n", strings.TrimSpace(doc.Info.Version)))
+	b.WriteString(fmt.Sprintf("- Concepts: `%d`\n\n", len(concepts)))
+
+	for _, concept := range concepts {
+		b.WriteString(fmt.Sprintf("## `%s`\n\n", concept.Name))
+		b.WriteString(fmt.Sprintf("- Commands: `%d`\n", concept.CommandCount))
+		b.WriteString("- Command IDs:\n")
+		for _, commandID := range concept.CommandIDs {
+			b.WriteString(fmt.Sprintf("  - `%s`\n", commandID))
+		}
+		b.WriteString("\n")
+	}
+
+	return os.WriteFile(path, []byte(b.String()), 0o644)
+}
+
+func writeXOARAuthoringMarkdown(path string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	content := strings.TrimSpace(`
+# x-oar Authoring Rules
+
+The OpenAPI contract uses `+"`x-oar-*`"+` extensions as the single source for CLI/help/meta/doc generation.
+
+Required for every command operation:
+
+- `+"`x-oar-command-id`"+`: stable id (for example `+"`threads.list`"+`)
+- `+"`x-oar-cli-path`"+`: CLI path (for example `+"`threads list`"+`)
+- `+"`x-oar-why`"+`: non-empty purpose/decision boundary
+- `+"`x-oar-input-mode`"+`: one of `+"`none|json-body|raw-stream|file-and-body`"+`
+- `+"`x-oar-streaming`"+`: streaming metadata object
+- `+"`x-oar-output-envelope`"+`: output notes for CLI consumers
+- `+"`x-oar-error-codes`"+`: stable semantic error code list
+- `+"`x-oar-concepts`"+`: related concept tags
+- `+"`x-oar-stability`"+`: one of `+"`experimental|beta|stable`"+`
+- `+"`x-oar-agent-notes`"+`: idempotency/retry caveats
+
+Recommended:
+
+- include at least one `+"`x-oar-examples`"+` command per operation
+- keep `+"`x-oar-command-id`"+` immutable once published
+- keep concept labels lower-case and dash-separated
+`) + "\n"
+	return os.WriteFile(path, []byte(content), 0o644)
+}
+
 func writeGoClient(goOutDir string, commands []command) error {
 	clientDir := filepath.Join(goOutDir, "client")
 	if err := os.MkdirAll(clientDir, 0o755); err != nil {
@@ -335,12 +547,14 @@ func writeGoClient(goOutDir string, commands []command) error {
 	src.WriteString("type CommandSpec struct {\n")
 	src.WriteString("\tCommandID  string   `json:\"command_id\"`\n")
 	src.WriteString("\tCLIPath    string   `json:\"cli_path\"`\n")
+	src.WriteString("\tGroup      string   `json:\"group,omitempty\"`\n")
 	src.WriteString("\tMethod     string   `json:\"method\"`\n")
 	src.WriteString("\tPath       string   `json:\"path\"`\n")
 	src.WriteString("\tPathParams []string `json:\"path_params,omitempty\"`\n")
 	src.WriteString("\tInputMode  string   `json:\"input_mode,omitempty\"`\n")
 	src.WriteString("\tStability  string   `json:\"stability,omitempty\"`\n")
 	src.WriteString("\tConcepts   []string `json:\"concepts,omitempty\"`\n")
+	src.WriteString("\tAdjacent   []string `json:\"adjacent_commands,omitempty\"`\n")
 	src.WriteString("\tExamples   []Example `json:\"examples,omitempty\"`\n")
 	src.WriteString("}\n\n")
 
@@ -349,6 +563,9 @@ func writeGoClient(goOutDir string, commands []command) error {
 		src.WriteString("\t{\n")
 		src.WriteString(fmt.Sprintf("\t\tCommandID: %q,\n", cmd.CommandID))
 		src.WriteString(fmt.Sprintf("\t\tCLIPath: %q,\n", cmd.CLIPath))
+		if cmd.Group != "" {
+			src.WriteString(fmt.Sprintf("\t\tGroup: %q,\n", cmd.Group))
+		}
 		src.WriteString(fmt.Sprintf("\t\tMethod: %q,\n", cmd.Method))
 		src.WriteString(fmt.Sprintf("\t\tPath: %q,\n", cmd.Path))
 		if len(cmd.PathParams) > 0 {
@@ -374,6 +591,16 @@ func writeGoClient(goOutDir string, commands []command) error {
 					src.WriteString(", ")
 				}
 				src.WriteString(fmt.Sprintf("%q", c))
+			}
+			src.WriteString("},\n")
+		}
+		if len(cmd.Adjacent) > 0 {
+			src.WriteString("\t\tAdjacent: []string{")
+			for i, adjacent := range cmd.Adjacent {
+				if i > 0 {
+					src.WriteString(", ")
+				}
+				src.WriteString(fmt.Sprintf("%q", adjacent))
 			}
 			src.WriteString("},\n")
 		}
@@ -556,6 +783,7 @@ func writeTSClient(tsOutDir string, commands []command) error {
 	b.WriteString("  summary?: string;\n")
 	b.WriteString("  description?: string;\n")
 	b.WriteString("  why?: string;\n")
+	b.WriteString("  group?: string;\n")
 	b.WriteString("  path_params?: string[];\n")
 	b.WriteString("  input_mode?: string;\n")
 	b.WriteString("  streaming?: unknown;\n")
@@ -564,6 +792,7 @@ func writeTSClient(tsOutDir string, commands []command) error {
 	b.WriteString("  stability?: string;\n")
 	b.WriteString("  agent_notes?: string;\n")
 	b.WriteString("  concepts?: string[];\n")
+	b.WriteString("  adjacent_commands?: string[];\n")
 	b.WriteString("  examples?: Example[];\n")
 	b.WriteString("  go_method: string;\n")
 	b.WriteString("  ts_method: string;\n")
@@ -741,6 +970,81 @@ func compactExamples(values []oarExample) []oarExample {
 		return nil
 	}
 	return out
+}
+
+func commandGroup(cliPath string) string {
+	parts := strings.Fields(strings.TrimSpace(cliPath))
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(parts[0])
+}
+
+func deriveGroups(commands []command) []groupMeta {
+	commandSetByGroup := map[string]map[string]struct{}{}
+	for _, cmd := range commands {
+		group := strings.TrimSpace(cmd.Group)
+		if group == "" {
+			group = commandGroup(cmd.CLIPath)
+		}
+		if group == "" {
+			continue
+		}
+		existing, ok := commandSetByGroup[group]
+		if !ok {
+			existing = map[string]struct{}{}
+			commandSetByGroup[group] = existing
+		}
+		existing[cmd.CommandID] = struct{}{}
+	}
+
+	groups := make([]groupMeta, 0, len(commandSetByGroup))
+	for groupName, commandSet := range commandSetByGroup {
+		commandIDs := make([]string, 0, len(commandSet))
+		for commandID := range commandSet {
+			commandIDs = append(commandIDs, commandID)
+		}
+		sort.Strings(commandIDs)
+		groups = append(groups, groupMeta{
+			Name:         groupName,
+			CommandCount: len(commandIDs),
+			CommandIDs:   commandIDs,
+		})
+	}
+	sort.Slice(groups, func(i, j int) bool { return groups[i].Name < groups[j].Name })
+	return groups
+}
+
+func deriveConcepts(commands []command) []conceptMeta {
+	commandsByConcept := map[string][]command{}
+	for _, cmd := range commands {
+		for _, concept := range cmd.Concepts {
+			concept = strings.ToLower(strings.TrimSpace(concept))
+			if concept == "" {
+				continue
+			}
+			commandsByConcept[concept] = append(commandsByConcept[concept], cmd)
+		}
+	}
+
+	concepts := make([]conceptMeta, 0, len(commandsByConcept))
+	for conceptName, conceptCommands := range commandsByConcept {
+		sort.Slice(conceptCommands, func(i, j int) bool {
+			return conceptCommands[i].CommandID < conceptCommands[j].CommandID
+		})
+		commandIDs := make([]string, 0, len(conceptCommands))
+		for _, cmd := range conceptCommands {
+			commandIDs = append(commandIDs, cmd.CommandID)
+		}
+		concepts = append(concepts, conceptMeta{
+			Name:         conceptName,
+			CommandCount: len(commandIDs),
+			CommandIDs:   commandIDs,
+			Commands:     conceptCommands,
+		})
+	}
+	sort.Slice(concepts, func(i, j int) bool { return concepts[i].Name < concepts[j].Name })
+	return concepts
 }
 
 func extractPathParams(path string) []string {
