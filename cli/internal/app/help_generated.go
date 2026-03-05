@@ -18,8 +18,8 @@ var runtimeGeneratedTopics = []runtimeHelpTopic{
 	{Path: "threads", Description: "Manage thread resources"},
 	{Path: "commitments", Description: "Manage commitment resources"},
 	{Path: "artifacts", Description: "Manage artifact resources and content"},
-	{Path: "events", Description: "Manage events and stream tails"},
-	{Path: "inbox", Description: "List/ack/tail inbox items"},
+	{Path: "events", Description: "Manage events and event streams"},
+	{Path: "inbox", Description: "List/ack/stream inbox items"},
 	{Path: "work-orders", Description: "Create work-order packets"},
 	{Path: "receipts", Description: "Create receipt packets"},
 	{Path: "reviews", Description: "Create review packets"},
@@ -47,6 +47,7 @@ Core Commands:
   version       Print CLI/runtime version details
   doctor        Validate local and network preconditions
   auth          Manage agent registration, profile auth, and token lifecycle
+  draft         Stage write requests locally and commit them later
   api call      Perform an arbitrary HTTP API request
   help [topic]  Show generated help for a command group or command path
 `)+"\n")
@@ -75,6 +76,11 @@ Global Flags:
 }
 
 func (a *App) printHelpTopic(topic string) bool {
+	topic = strings.TrimSpace(topic)
+	if topic == "draft" {
+		_, _ = io.WriteString(a.Stdout, draftUsageText())
+		return true
+	}
 	text, ok := generatedHelpText(topic)
 	if !ok {
 		return false
@@ -308,8 +314,6 @@ func runtimePathFromRegistryPath(path string) string {
 	rewrites := map[string]string{
 		"threads patch":      "threads update",
 		"commitments patch":  "commitments update",
-		"events stream":      "events tail",
-		"inbox stream":       "inbox tail",
 		"meta commands list": "meta commands",
 		"meta commands get":  "meta command",
 		"meta concepts list": "meta concepts",

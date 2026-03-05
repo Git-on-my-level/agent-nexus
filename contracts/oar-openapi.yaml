@@ -1445,7 +1445,9 @@ components:
           properties:
             code: { type: string }
             message: { type: string }
-          required: [code, message]
+            recoverable: { type: boolean }
+            hint: { type: string }
+          required: [code, message, recoverable, hint]
       required: [error]
 
     CLIOutdatedErrorEnvelope:
@@ -1459,7 +1461,9 @@ components:
               enum: [cli_outdated]
             message:
               type: string
-          required: [code, message]
+            recoverable: { type: boolean }
+            hint: { type: string }
+          required: [code, message, recoverable, hint]
         upgrade:
           type: object
           properties:

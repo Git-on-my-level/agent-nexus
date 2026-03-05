@@ -112,9 +112,11 @@ func (a *App) renderError(command string, jsonMode bool, err error) int {
 			OK:      false,
 			Command: command,
 			Error: &output.ErrorPayload{
-				Code:    normalized.Code,
-				Message: normalized.Message,
-				Details: normalized.Details,
+				Code:        normalized.Code,
+				Message:     normalized.Message,
+				Recoverable: errnorm.RecoverableValue(normalized),
+				Hint:        normalized.Hint,
+				Details:     normalized.Details,
 			},
 		}
 		_ = output.WriteEnvelopeJSON(a.Stdout, envelope)

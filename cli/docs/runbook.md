@@ -18,6 +18,8 @@ Run against local core:
 cd cli
 go run ./cmd/oar --json --base-url http://127.0.0.1:8000 --agent local version
 go run ./cmd/oar --json --base-url http://127.0.0.1:8000 --agent local doctor
+go run ./cmd/oar --json --base-url http://127.0.0.1:8000 --agent local auth register --username local.agent
+go run ./cmd/oar --agent local version
 ```
 
 Global config precedence:
@@ -44,16 +46,16 @@ Registration and profile bootstrap:
 
 ```bash
 oar --json --base-url http://127.0.0.1:8000 --agent agent-a auth register --username agent.a
-oar --json --base-url http://127.0.0.1:8000 --agent agent-a auth whoami
-oar --json --base-url http://127.0.0.1:8000 --agent agent-a auth token-status
+oar --agent agent-a auth whoami
+oar --agent agent-a auth token-status
 ```
 
 Rotation/update/revoke:
 
 ```bash
-oar --json --base-url http://127.0.0.1:8000 --agent agent-a auth update-username --username agent.a.renamed
-oar --json --base-url http://127.0.0.1:8000 --agent agent-a auth rotate
-oar --json --base-url http://127.0.0.1:8000 --agent agent-a auth revoke
+oar --agent agent-a auth update-username --username agent.a.renamed
+oar --agent agent-a auth rotate
+oar --agent agent-a auth revoke
 ```
 
 Profile material paths:
@@ -66,11 +68,21 @@ Permissions are enforced by CLI runtime (`0700` dirs, `0600` files).
 ## Typed command smoke
 
 ```bash
-printf '{"thread":{"title":"Incident #42"}}\n' | oar --json --base-url http://127.0.0.1:8000 --agent agent-a threads create
-oar --json --base-url http://127.0.0.1:8000 --agent agent-a threads list --status active
+printf '{"thread":{"title":"Incident #42"}}\n' | oar --agent agent-a threads create
+oar --agent agent-a threads list --status active
 
-oar --json --base-url http://127.0.0.1:8000 --agent agent-a events tail --max-events 1 --reconnect=false
-oar --json --base-url http://127.0.0.1:8000 --agent agent-a inbox tail --max-events 1 --reconnect=false
+oar --agent agent-a events stream --max-events 1
+oar --agent agent-a inbox stream --max-events 1
+oar --agent agent-a events stream --follow
+```
+
+Draft/commit flow:
+
+```bash
+cat payload.json | oar --agent agent-a draft create --command threads.create
+oar --agent agent-a draft list
+oar --agent agent-a draft commit <draft-id>
+oar --agent agent-a draft discard <draft-id>
 ```
 
 The raw fallback remains available:
@@ -145,7 +157,7 @@ oar --json --base-url <core> --agent <agent> api call --path /meta/handshake
 
 3. Upgrade CLI binary and re-run `oar version` + `oar doctor`.
 
-### SSE tail issues (`events tail` / `inbox tail`)
+### SSE stream issues (`events stream` / `inbox stream`)
 
 Symptoms:
 
@@ -167,9 +179,9 @@ curl -N -H 'Accept: text/event-stream' http://127.0.0.1:8000/inbox/stream
 - `--last-event-id <id>`
 - `--cursor <id>` (alias)
 
-3. For deterministic scripts use bounded tails:
+3. For deterministic scripts use bounded streams:
 
 - `--max-events <n>`
-- `--reconnect=false`
+- omit `--follow` (default drains and exits)
 
 4. Verify server-side poll cadence and stream health in core logs.

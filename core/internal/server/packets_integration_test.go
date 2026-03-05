@@ -426,12 +426,12 @@ func assertErrorMessageContains(t *testing.T, resp *http.Response, want string) 
 		t.Fatalf("read error response: %v", err)
 	}
 
-	var payload map[string]map[string]string
+	var payload map[string]map[string]any
 	if err := json.Unmarshal(body, &payload); err != nil {
 		t.Fatalf("decode error response: %v body=%s", err, string(body))
 	}
 
-	message := payload["error"]["message"]
+	message, _ := payload["error"]["message"].(string)
 	if !strings.Contains(message, want) {
 		t.Fatalf("expected error message to contain %q, got %q", want, message)
 	}

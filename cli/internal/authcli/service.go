@@ -119,6 +119,7 @@ func (s *Service) Register(ctx context.Context, username string) (RegisterResult
 		Version:              profile.ProfileVersion,
 		Agent:                s.cfg.Agent,
 		BaseURL:              s.cfg.BaseURL,
+		JSON:                 boolPtr(s.cfg.JSON),
 		Username:             firstNonEmpty(serverUsername, username),
 		AgentID:              agentID,
 		ActorID:              actorID,
@@ -519,6 +520,10 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func boolPtr(v bool) *bool {
+	return &v
 }
 
 func isTokenInvalid(status int, body []byte) bool {

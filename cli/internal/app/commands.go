@@ -46,6 +46,9 @@ func (a *App) runCommand(ctx context.Context, args []string, cfg config.Resolved
 	case "meta":
 		result, name, err := a.runMeta(ctx, args[1:], cfg)
 		return name, result, err
+	case "draft":
+		result, name, err := a.runDraft(ctx, args[1:], cfg)
+		return name, result, err
 	case "threads", "commitments", "artifacts", "events", "inbox", "work-orders", "receipts", "reviews", "derived":
 		result, name, err := a.runTypedResource(ctx, args[0], args[1:], cfg)
 		return name, result, err
@@ -212,11 +215,13 @@ func (a *App) runAPICall(ctx context.Context, args []string, cfg config.Resolved
 	var (
 		methodFlag trackedString
 		pathFlag   trackedString
+		fromFile   trackedString
 		rawFlag    trackedBool
 		headers    headerList
 	)
 	fs.Var(&methodFlag, "method", "HTTP method")
 	fs.Var(&pathFlag, "path", "Request path or absolute URL")
+	fs.Var(&fromFile, "from-file", "Load request body from file path")
 	fs.Var(&rawFlag, "raw", "Write raw response body to stdout")
 	fs.Var(&headers, "header", "Request header in key:value form (repeatable)")
 
@@ -265,9 +270,9 @@ func (a *App) runAPICall(ctx context.Context, args []string, cfg config.Resolved
 			}
 		}
 	}
-	requestBody, err := a.readStdinBody()
+	requestBody, err := a.readBodyInput(strings.TrimSpace(fromFile.value))
 	if err != nil {
-		return nil, errnorm.Wrap(errnorm.KindLocal, "stdin_read_failed", "failed to read stdin body", err)
+		return nil, err
 	}
 
 	client, err := httpclient.New(cfg)

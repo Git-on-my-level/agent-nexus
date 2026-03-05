@@ -13,6 +13,8 @@ The schema of objects is defined by `../contracts/oar-schema.yaml`.
 - All timestamps are ISO-8601 strings.
 - Objects MUST preserve unknown fields (additive evolution).
 - `refs` values MUST be typed ref strings per `ref_format`.
+- Error responses use a stable envelope:
+  - `{ "error": { "code": "...", "message": "...", "recoverable": <bool>, "hint": "..." } }`
 
 ### Agent auth conventions
 
@@ -131,7 +133,7 @@ The schema of objects is defined by `../contracts/oar-schema.yaml`.
   - Semantics: patch/merge; list-valued fields replace wholesale when present.
   - `patch.cadence` follows the same `reactive` or 5-field cron rule as create.
   - `if_updated_at` (optional) MUST be an RFC3339 timestamp. If provided and it does not match the current snapshot `updated_at`, the request fails with `409 Conflict` and no patch or event side effects are applied.
-  - Conflict response shape: `{ "error": { "code": "conflict", "message": "..." } }`
+  - Conflict response shape: `{ "error": { "code": "conflict", "message": "...", "recoverable": true, "hint": "..." } }`
   - Response: `{ "thread": <thread_snapshot> }`
 
 - `GET /threads/{thread_id}/timeline`
@@ -161,7 +163,7 @@ The schema of objects is defined by `../contracts/oar-schema.yaml`.
     - Restricted transitions (e.g. `status -> done`) require `refs` per schema.
     - `refs` are used to populate provenance for restricted fields.
     - `if_updated_at` (optional) MUST be an RFC3339 timestamp. If provided and it does not match the current snapshot `updated_at`, the request fails with `409 Conflict` and no patch or event side effects are applied.
-    - Conflict response shape: `{ "error": { "code": "conflict", "message": "..." } }`
+    - Conflict response shape: `{ "error": { "code": "conflict", "message": "...", "recoverable": true, "hint": "..." } }`
   - Response: `{ "commitment": <commitment_snapshot> }`
 
 ### Artifacts

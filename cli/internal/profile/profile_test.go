@@ -14,7 +14,8 @@ func TestSaveLoadAndListProfiles(t *testing.T) {
 		t.Fatalf("ensure dirs: %v", err)
 	}
 	path := ProfilePath(home, "agent-one")
-	if err := Save(path, Profile{Agent: "agent-one", BaseURL: "http://127.0.0.1:8000"}); err != nil {
+	jsonMode := true
+	if err := Save(path, Profile{Agent: "agent-one", BaseURL: "http://127.0.0.1:8000", JSON: &jsonMode}); err != nil {
 		t.Fatalf("save profile: %v", err)
 	}
 
@@ -27,6 +28,9 @@ func TestSaveLoadAndListProfiles(t *testing.T) {
 	}
 	if loaded.Agent != "agent-one" || loaded.BaseURL != "http://127.0.0.1:8000" {
 		t.Fatalf("unexpected profile payload: %#v", loaded)
+	}
+	if loaded.JSON == nil || !*loaded.JSON {
+		t.Fatalf("expected persisted json mode in profile, got %#v", loaded.JSON)
 	}
 	if loaded.Version != ProfileVersion {
 		t.Fatalf("unexpected profile version: %d", loaded.Version)

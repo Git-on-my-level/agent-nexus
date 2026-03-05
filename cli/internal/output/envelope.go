@@ -7,9 +7,11 @@ import (
 )
 
 type ErrorPayload struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-	Details any    `json:"details,omitempty"`
+	Code        string `json:"code"`
+	Message     string `json:"message"`
+	Recoverable bool   `json:"recoverable"`
+	Hint        string `json:"hint"`
+	Details     any    `json:"details,omitempty"`
 }
 
 type Envelope struct {
