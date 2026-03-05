@@ -4,14 +4,18 @@
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
   import {
-    THREAD_CADENCES,
+    THREAD_SCHEDULE_PRESETS,
+    THREAD_SCHEDULE_PRESET_LABELS,
     THREAD_PRIORITIES,
     THREAD_PRIORITY_LABELS,
     THREAD_STATUSES,
     buildThreadFilterRequestQuery,
+    cadenceToRequestValue,
     computeStaleness,
+    formatCadenceLabel,
     getPriorityLabel,
     parseTagFilterInput,
+    validateCadenceSelection,
   } from "$lib/threadFilters";
 
   const defaultFilters = {
@@ -36,7 +40,8 @@
     summary: "",
     status: "active",
     priority: "p2",
-    cadence: "weekly",
+    cadencePreset: "weekly",
+    cadenceCron: "",
     tagsInput: "",
   });
 
@@ -84,7 +89,8 @@
       summary: "",
       status: "active",
       priority: "p2",
-      cadence: "weekly",
+      cadencePreset: "weekly",
+      cadenceCron: "",
       tagsInput: "",
     };
   }
@@ -94,11 +100,23 @@
       createError = "Thread title is required.";
       return;
     }
+    const cadenceError = validateCadenceSelection({
+      preset: threadDraft.cadencePreset,
+      customCron: threadDraft.cadenceCron,
+    });
+    if (cadenceError) {
+      createError = cadenceError;
+      return;
+    }
 
     creatingThread = true;
     createError = "";
 
     try {
+      const cadence = cadenceToRequestValue({
+        preset: threadDraft.cadencePreset,
+        customCron: threadDraft.cadenceCron,
+      });
       await coreClient.createThread({
         thread: {
           title: threadDraft.title.trim(),
@@ -106,7 +124,7 @@
           status: threadDraft.status,
           priority: threadDraft.priority,
           tags: parseTagFilterInput(threadDraft.tagsInput),
-          cadence: threadDraft.cadence,
+          cadence,
           current_summary: threadDraft.summary.trim() || "No summary provided.",
           next_actions: [
             threadDraft.summary.trim() || "Review and define next steps.",
@@ -212,8 +230,8 @@
           class="mt-1 w-full rounded border border-gray-200 px-2 py-1 text-sm"
         >
           <option value="">All</option>
-          {#each THREAD_CADENCES as cadence}<option value={cadence}
-              >{cadence}</option
+          {#each THREAD_SCHEDULE_PRESETS as cadence}<option value={cadence}
+              >{THREAD_SCHEDULE_PRESET_LABELS[cadence]}</option
             >{/each}
         </select>
       </label>
@@ -302,16 +320,30 @@
         </select>
       </label>
       <label class="text-xs font-medium text-gray-600">
-        Cadence
+        Schedule
         <select
-          bind:value={threadDraft.cadence}
+          bind:value={threadDraft.cadencePreset}
           class="mt-1 w-full rounded border border-gray-200 px-2 py-1.5 text-sm"
         >
-          {#each THREAD_CADENCES as cadence}<option value={cadence}
-              >{cadence}</option
+          {#each THREAD_SCHEDULE_PRESETS as cadence}<option value={cadence}
+              >{THREAD_SCHEDULE_PRESET_LABELS[cadence]}</option
             >{/each}
         </select>
       </label>
+      {#if threadDraft.cadencePreset === "custom"}
+        <label class="text-xs font-medium text-gray-600">
+          Cron expression
+          <input
+            bind:value={threadDraft.cadenceCron}
+            class="mt-1 w-full rounded border border-gray-200 px-2.5 py-1.5 text-sm"
+            placeholder="0 9 * * *"
+            type="text"
+          />
+          <span class="mt-1 block text-[11px] text-gray-400">
+            Use five cron fields in server timezone.
+          </span>
+        </label>
+      {/if}
       <label class="text-xs font-medium text-gray-600">
         Tags
         <input
@@ -374,6 +406,12 @@
         <div class="flex shrink-0 items-center gap-3 text-xs">
           <span class="capitalize {statusColor(thread.status)}"
             >{thread.status}</span
+          >
+          <span
+            class="hidden rounded bg-gray-100 px-1.5 py-0.5 text-gray-500 sm:inline"
+            >{formatCadenceLabel(thread.cadence, {
+              includeExpression: false,
+            })}</span
           >
           {#if (thread.tags ?? []).length > 0}
             <span

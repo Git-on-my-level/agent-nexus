@@ -1,3 +1,5 @@
+import { cadenceMatchesFilter } from "./threadFilters";
+
 // ─── Zesty Bots Lemonade Co. ──────────────────────────────────────────────────
 // A fully-automated lemonade stand operated by AI agents and robots.
 // This seed data represents a realistic mid-week snapshot of operations.
@@ -1596,7 +1598,7 @@ export function listMockThreads(filters = {}) {
       return false;
     }
 
-    if (filters.cadence && String(thread.cadence) !== String(filters.cadence)) {
+    if (!cadenceMatchesFilter(thread.cadence, filters.cadence)) {
       return false;
     }
 

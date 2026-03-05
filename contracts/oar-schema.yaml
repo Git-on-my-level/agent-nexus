@@ -36,10 +36,6 @@ enums:
     enum_policy: strict
     values: [p0, p1, p2, p3]
 
-  cadence:
-    enum_policy: strict
-    values: [reactive, daily, weekly, monthly, custom]
-
   commitment_status:
     enum_policy: strict
     values: [open, blocked, done, canceled]
@@ -210,7 +206,14 @@ snapshots:
       status:            { type: string, required: true, ref: enums.thread_status }
       priority:          { type: string, required: true, ref: enums.priority }
       tags:              { type: "list<string>", required: true }
-      cadence:           { type: string, required: true, ref: enums.cadence }
+      cadence:
+        type: string
+        required: true
+        description: >
+          Schedule string. MUST be either literal "reactive" or a 5-field cron
+          expression. During migration, legacy values "daily", "weekly",
+          "monthly", and "custom" MAY appear and MUST be interpreted as preset
+          schedule labels for backward compatibility.
       next_check_in_at:  { type: datetime, required: false }
       current_summary:   { type: string, required: true, grounding: interpretive }
       next_actions:      { type: "list<string>", required: true, grounding: interpretive }
@@ -427,7 +430,9 @@ staleness:
     - "Surface as inbox item"
   cadence_semantics:
     reactive: "No scheduled check-ins. Wakes on inbound events only."
-    daily:    "Check-in expected every day."
-    weekly:   "Check-in expected every week."
-    monthly:  "Check-in expected every month."
-    custom:   "Uses next_check_in_at as the staleness threshold; the active window is implementation-defined and must be documented."
+    cron:     "5-field cron schedule interpreted in server timezone. Staleness window is computed from the previous expected run."
+    legacy:
+      daily:   "Compatibility alias for a canonical daily cron schedule."
+      weekly:  "Compatibility alias for a canonical weekly cron schedule."
+      monthly: "Compatibility alias for a canonical monthly cron schedule."
+      custom:  "Compatibility alias for a non-preset cron schedule."

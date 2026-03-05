@@ -26,7 +26,16 @@
     parseListInput,
     serializeListInput,
   } from "$lib/threadPatch";
-  import { getPriorityLabel } from "$lib/threadFilters";
+  import {
+    THREAD_SCHEDULE_PRESETS,
+    THREAD_SCHEDULE_PRESET_LABELS,
+    cadencePresetFromValue,
+    cadenceToRequestValue,
+    formatCadenceLabel,
+    getPriorityLabel,
+    isLikelyCronExpression,
+    validateCadenceSelection,
+  } from "$lib/threadFilters";
   import { validateReceiptDraft } from "$lib/receiptUtils";
   import { toTimelineView } from "$lib/timelineUtils";
   import { parseRef } from "$lib/typedRefs";
@@ -203,12 +212,18 @@
   }
 
   function toEditDraft(thread) {
+    const cadenceValue = thread.cadence ?? "reactive";
+    const cadencePreset = cadencePresetFromValue(cadenceValue);
     return {
       title: thread.title ?? "",
       type: thread.type ?? "case",
       status: thread.status ?? "active",
       priority: thread.priority ?? "p2",
-      cadence: thread.cadence ?? "weekly",
+      cadencePreset,
+      cadenceCron:
+        cadencePreset === "custom" && isLikelyCronExpression(cadenceValue)
+          ? cadenceValue
+          : "",
       next_check_in_at: isoToDatetimeLocal(thread.next_check_in_at ?? ""),
       current_summary: thread.current_summary ?? "",
       tagsInput: serializeListInput(thread.tags ?? []),
@@ -237,7 +252,11 @@
       type: editDraft.type,
       status: editDraft.status,
       priority: editDraft.priority,
-      cadence: editDraft.cadence,
+      cadence: cadenceToRequestValue({
+        preset: editDraft.cadencePreset,
+        customCron: editDraft.cadenceCron,
+        fallbackCadence: snapshot?.cadence ?? "",
+      }),
       next_check_in_at: editDraft.next_check_in_at
         ? datetimeLocalToIso(editDraft.next_check_in_at)
         : null,
@@ -336,6 +355,16 @@
     editError = "";
     editNotice = "";
     try {
+      const cadenceError = validateCadenceSelection({
+        preset: editDraft.cadencePreset,
+        customCron: editDraft.cadenceCron,
+        fallbackCadence: snapshot.cadence,
+        allowLegacyCustom: true,
+      });
+      if (cadenceError) {
+        editError = cadenceError;
+        return;
+      }
       const keyArtifactRefs = parseListInput(editDraft.keyArtifactsInput);
       const invalidRefs = keyArtifactRefs.filter((r) => {
         const p = parseRef(normalizeKeyArtifactRef(r));
@@ -744,7 +773,7 @@
         </div>
         <div>
           <p class="text-xs text-gray-400">Cadence</p>
-          <p class="capitalize text-gray-900">{snapshot.cadence}</p>
+          <p class="text-gray-900">{formatCadenceLabel(snapshot.cadence)}</p>
         </div>
         <div>
           <p class="text-xs text-gray-400">Next check-in</p>
@@ -881,16 +910,28 @@
             ></label
           >
           <label class="text-xs font-medium text-gray-600"
-            >Cadence <select
-              bind:value={editDraft.cadence}
+            >Schedule <select
+              bind:value={editDraft.cadencePreset}
               class="mt-1 w-full rounded border border-gray-200 px-2 py-1.5 text-sm"
-              ><option value="reactive">reactive</option><option value="daily"
-                >daily</option
-              ><option value="weekly">weekly</option><option value="monthly"
-                >monthly</option
-              ><option value="custom">custom</option></select
+              >{#each THREAD_SCHEDULE_PRESETS as cadence}
+                <option value={cadence}
+                  >{THREAD_SCHEDULE_PRESET_LABELS[cadence]}</option
+                >
+              {/each}</select
             ></label
           >
+          {#if editDraft.cadencePreset === "custom"}
+            <label class="text-xs font-medium text-gray-600"
+              >Cron expression <input
+                bind:value={editDraft.cadenceCron}
+                class="mt-1 w-full rounded border border-gray-200 px-2.5 py-1.5 text-sm"
+                placeholder="0 9 * * *"
+                type="text"
+              /><span class="mt-1 block text-[11px] text-gray-400"
+                >Use five cron fields in server timezone.</span
+              ></label
+            >
+          {/if}
           <label class="text-xs font-medium text-gray-600"
             >Next check-in <input
               bind:value={editDraft.next_check_in_at}

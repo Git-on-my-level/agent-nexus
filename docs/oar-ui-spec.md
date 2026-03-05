@@ -62,7 +62,7 @@ The primary navigation unit is the **thread**. All other objects (events, commit
 ### 2.2 Thread detail: snapshot + timeline
 A thread detail view presents two complementary layers:
 
-**Snapshot (current state):** The thread's `current_summary`, `next_actions`, status, priority, cadence, and linked commitments. This is the "what's true right now" view. Editable in place (except core-maintained fields like `open_commitments`, which are read-only in the UI).
+**Snapshot (current state):** The thread's `current_summary`, `next_actions`, status, priority, schedule (`cadence`), and linked commitments. This is the "what's true right now" view. Editable in place (except core-maintained fields like `open_commitments`, which are read-only in the UI).
 
 **Timeline (audit trail):** A time-ordered, append-only sequence of all events associated with the thread. Each timeline entry shows type, timestamp, actor, summary, and refs (rendered as navigable typed-ref links). The timeline includes messages, work order creation, receipt submission, reviews, decisions, exceptions, acknowledgments, and snapshot updates.
 
@@ -97,7 +97,10 @@ A dedicated surface showing items that need human attention.
 ### 3.2 Thread list
 A filterable list of all threads.
 
-**Filters:** status, priority, tags, cadence/staleness.
+**Filters:** status, priority, tags, cadence preset/staleness.
+
+Cadence filter presets are `Reactive`, `Daily`, `Weekly`, `Monthly`, and `Custom`.
+Storage is `reactive` or cron; preset filters map cron values to these categories.
 
 Each row shows: title, status, priority, cadence indicator, staleness indicator, last activity timestamp.
 
@@ -105,7 +108,7 @@ Each row shows: title, status, priority, cadence indicator, staleness indicator,
 The primary working surface. Combines the snapshot view and timeline described in §2.
 
 **Must support:**
-- Viewing and editing thread snapshot fields: title, status, priority, type, cadence, next check-in, tags, current summary, next actions. (`open_commitments` is displayed but not directly editable.)
+- Viewing and editing thread snapshot fields: title, status, priority, type, cadence schedule (preset or custom cron), next check-in, tags, current summary, next actions. (`open_commitments` is displayed but not directly editable.)
 - Viewing open commitments. Creating and editing commitments (with restricted transition enforcement — see §4).
 - Viewing the full timeline with navigable typed-ref links.
 - Linking artifacts to the thread (adds typed refs to `key_artifacts`).

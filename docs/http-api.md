@@ -31,10 +31,16 @@ The schema of objects is defined by `contracts/oar-schema.yaml`.
 
 - `POST /threads`
   - Body: `{ "actor_id": "...", "thread": <thread_snapshot_fields_without_id> }`
+  - `thread.cadence`:
+    - MUST be either literal `reactive` or a 5-field cron expression.
+    - Legacy values `daily`, `weekly`, `monthly`, `custom` MAY be accepted for backward compatibility.
   - Response: `{ "thread": <thread_snapshot> }`
 
 - `GET /threads`
   - Query (optional): `status`, `priority`, `tag`, `cadence`, `stale` (boolean)
+  - `cadence` filter semantics:
+    - Preset-based values: `reactive`, `daily`, `weekly`, `monthly`, `custom`.
+    - If a thread stores cron cadence directly, canonical daily/weekly/monthly cron expressions are matched to those presets; non-preset cron values are matched as `custom`.
   - Response: `{ "threads": [<thread_snapshot>...] }`
 
 - `GET /threads/{thread_id}`
@@ -43,6 +49,7 @@ The schema of objects is defined by `contracts/oar-schema.yaml`.
 - `PATCH /threads/{thread_id}`
   - Body: `{ "actor_id": "...", "patch": { <fields...> } , "if_updated_at"?: "..." }`
   - Semantics: patch/merge; list-valued fields replace wholesale when present.
+  - `patch.cadence` follows the same `reactive` or 5-field cron rule as create.
   - Response: `{ "thread": <thread_snapshot> }`
 
 - `GET /threads/{thread_id}/timeline`
