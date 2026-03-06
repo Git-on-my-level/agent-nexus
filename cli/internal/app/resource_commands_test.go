@@ -314,7 +314,7 @@ func TestEventsUnknownSubcommandGuidance(t *testing.T) {
 	if !strings.Contains(message, "did you mean `oar events stream`?") {
 		t.Fatalf("expected stream correction, got %q", message)
 	}
-	if !strings.Contains(message, "`oar events list --thread-id <thread-id> --type actor_statement`") || !strings.Contains(message, "`oar events tail --max-events 20`") {
+	if !strings.Contains(message, "`oar events list --thread-id <thread-id> --type actor_statement --mine --full-id`") || !strings.Contains(message, "`oar events tail --max-events 20`") {
 		t.Fatalf("expected list/tail examples, got %q", message)
 	}
 }
@@ -385,6 +385,162 @@ func TestEventsListCommandFiltersAndLimits(t *testing.T) {
 	})
 	if !strings.Contains(human, "types:") || !strings.Contains(human, "- actor_statement") {
 		t.Fatalf("expected human output to include selected filter types, got:\n%s", human)
+	}
+}
+
+func TestEventsListCommandSupportsMineActorFilterAndFullID(t *testing.T) {
+	t.Parallel()
+
+	const mineEventID = "event_1234567890abcdef"
+	const mineActorID = "actor-profile-1"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/threads/thread_1/timeline" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"events":[
+				{"id":"` + mineEventID + `","thread_id":"thread_1","type":"actor_statement","actor_id":"` + mineActorID + `","payload":{"recommendation":"Ship Friday rescue scope"}},
+				{"id":"event_other_actor","thread_id":"thread_1","type":"actor_statement","actor_id":"actor-other","summary":"other recommendation"}
+			],
+			"snapshots":{},
+			"artifacts":{}
+		}`))
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","actor_id":"`+mineActorID+`","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"--agent", "agent-a",
+		"events", "list",
+		"--thread-id", "thread_1",
+		"--type", "actor_statement",
+		"--mine",
+		"--full-id",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+	body, _ := data["body"].(map[string]any)
+	if got := anyStringValue(body["actor_id"]); got != mineActorID {
+		t.Fatalf("expected actor_id filter %q, got %#v", mineActorID, body)
+	}
+	if fullID, _ := body["full_id"].(bool); !fullID {
+		t.Fatalf("expected full_id=true, got %#v", body)
+	}
+	events, _ := body["events"].([]any)
+	if len(events) != 1 {
+		t.Fatalf("expected one filtered event, got %#v", body)
+	}
+	event, _ := events[0].(map[string]any)
+	if got := anyStringValue(event["id"]); got != mineEventID {
+		t.Fatalf("unexpected event id after mine filter: %#v", body)
+	}
+	if got := anyStringValue(event["summary_preview"]); !strings.Contains(got, "Ship Friday rescue scope") {
+		t.Fatalf("expected payload preview summary, got %#v", event)
+	}
+
+	humanFull := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--base-url", server.URL,
+		"--agent", "agent-a",
+		"events", "list",
+		"--thread-id", "thread_1",
+		"--type", "actor_statement",
+		"--mine",
+		"--full-id",
+	})
+	if !strings.Contains(humanFull, mineEventID) || !strings.Contains(humanFull, "Ship Friday rescue scope") {
+		t.Fatalf("expected full id + preview in human output, got:\n%s", humanFull)
+	}
+
+	humanShort := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--base-url", server.URL,
+		"--agent", "agent-a",
+		"events", "list",
+		"--thread-id", "thread_1",
+		"--type", "actor_statement",
+		"--mine",
+	})
+	if strings.Contains(humanShort, mineEventID) {
+		t.Fatalf("expected default short-id rendering without --full-id, got:\n%s", humanShort)
+	}
+	if !strings.Contains(humanShort, mineEventID[:12]) {
+		t.Fatalf("expected short id rendering by default, got:\n%s", humanShort)
+	}
+}
+
+func TestEventsListCommandSupportsMultipleThreadIDs(t *testing.T) {
+	t.Parallel()
+
+	var mu sync.Mutex
+	requested := make([]string, 0, 2)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || !strings.HasSuffix(r.URL.Path, "/timeline") {
+			http.NotFound(w, r)
+			return
+		}
+		mu.Lock()
+		requested = append(requested, r.URL.Path)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/threads/thread_1/timeline":
+			_, _ = w.Write([]byte(`{"thread_id":"thread_1","events":[
+				{"id":"event_1","thread_id":"thread_1","type":"actor_statement","summary":"first","created_at":"2026-03-06T12:00:00Z"},
+				{"id":"event_2","thread_id":"thread_1","type":"actor_statement","summary":"second","created_at":"2026-03-06T12:05:00Z"}
+			],"snapshots":{},"artifacts":{}}`))
+		case "/threads/thread_2/timeline":
+			_, _ = w.Write([]byte(`{"thread_id":"thread_2","events":[
+				{"id":"event_3","thread_id":"thread_2","type":"actor_statement","summary":"third","created_at":"2026-03-06T12:06:00Z"},
+				{"id":"event_4","thread_id":"thread_2","type":"actor_statement","summary":"fourth","created_at":"2026-03-06T12:07:00Z"}
+			],"snapshots":{},"artifacts":{}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"events", "list",
+		"--thread-id", "thread_1",
+		"--thread-id", "thread_2",
+		"--type", "actor_statement",
+		"--max-events", "2",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+	body, _ := data["body"].(map[string]any)
+	totalEvents, _ := body["total_events"].(float64)
+	if int(totalEvents) != 4 {
+		t.Fatalf("expected total_events=4, got %#v", body)
+	}
+	threadIDs := stringList(body["thread_ids"])
+	if len(threadIDs) != 2 || threadIDs[0] != "thread_1" || threadIDs[1] != "thread_2" {
+		t.Fatalf("expected thread_ids [thread_1 thread_2], got %#v", body)
+	}
+	events, _ := body["events"].([]any)
+	if len(events) != 2 {
+		t.Fatalf("expected max_events to cap result set, got %#v", body)
+	}
+	first, _ := events[0].(map[string]any)
+	second, _ := events[1].(map[string]any)
+	if anyStringValue(first["id"]) != "event_3" || anyStringValue(second["id"]) != "event_4" {
+		t.Fatalf("expected most recent cross-thread events, got %#v", body)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(requested) != 2 {
+		t.Fatalf("expected one timeline request per thread id, got %d (%v)", len(requested), requested)
 	}
 }
 
@@ -926,6 +1082,75 @@ func TestThreadsContextCommand(t *testing.T) {
 	payload := assertEnvelopeOK(t, raw)
 	if got := anyStringValue(payload["command"]); got != "threads context" {
 		t.Fatalf("unexpected command label: %#v", payload)
+	}
+	data, _ := payload["data"].(map[string]any)
+	body, _ := data["body"].(map[string]any)
+	collaboration, _ := body["collaboration_summary"].(map[string]any)
+	if collaboration == nil {
+		t.Fatalf("expected collaboration_summary in context payload, got %#v", body)
+	}
+}
+
+func TestThreadsContextIncludesCollaborationSummarySections(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/threads/thread_1/context" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"thread":{"id":"thread_1","title":"Pilot Rescue"},
+			"recent_events":[
+				{"id":"event_actor_1","type":"actor_statement","summary":"support recommends Friday launch"},
+				{"id":"event_need_1","type":"decision_needed","summary":"pick launch day"},
+				{"id":"event_done_1","type":"decision_made","summary":"launch Friday"}
+			],
+			"key_artifacts":[
+				{"ref":"artifact:brief_1","artifact":{"id":"artifact_1","kind":"gtm-brief","summary":"Pilot rescue brief"}}
+			],
+			"open_commitments":[
+				{"id":"commitment_1","status":"open","title":"Publish launch brief"}
+			]
+		}`))
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"threads", "context",
+		"--thread-id", "thread_1",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+	body, _ := data["body"].(map[string]any)
+	collaboration, _ := body["collaboration_summary"].(map[string]any)
+	if collaboration == nil {
+		t.Fatalf("expected collaboration_summary, got %#v", body)
+	}
+	recommendationCount, _ := collaboration["recommendation_count"].(float64)
+	if got := int(recommendationCount); got != 1 {
+		t.Fatalf("expected recommendation_count=1, got %#v", collaboration)
+	}
+	decisionRequestCount, _ := collaboration["decision_request_count"].(float64)
+	if got := int(decisionRequestCount); got != 1 {
+		t.Fatalf("expected decision_request_count=1, got %#v", collaboration)
+	}
+	decisionCount, _ := collaboration["decision_count"].(float64)
+	if got := int(decisionCount); got != 1 {
+		t.Fatalf("expected decision_count=1, got %#v", collaboration)
+	}
+
+	human := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--base-url", server.URL,
+		"threads", "context",
+		"--thread-id", "thread_1",
+	})
+	if !strings.Contains(human, "recommendations (1):") || !strings.Contains(human, "decision_requests (1):") || !strings.Contains(human, "decisions (1):") {
+		t.Fatalf("expected collaboration sections in human output, got:\n%s", human)
 	}
 }
 

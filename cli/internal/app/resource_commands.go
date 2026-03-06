@@ -357,6 +357,24 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 			query,
 			nil,
 		)
+		if callErr != nil {
+			return result, "threads context", callErr
+		}
+		data := asMap(result.Data)
+		body := asMap(data["body"])
+		if body != nil {
+			addThreadContextCollaborationSummary(body)
+			data["body"] = body
+			result.Data = data
+			result.Text = formatTypedCommandText(
+				"threads.context",
+				intValue(data["status_code"]),
+				headerValues(data["headers"]),
+				body,
+				cfg.Verbose,
+				cfg.Headers,
+			)
+		}
 		return result, "threads context", callErr
 	default:
 		return nil, "threads", threadsSubcommandSpec.unknownError(args[0])
@@ -787,82 +805,141 @@ func (a *App) runDocsContentCommand(ctx context.Context, args []string, cfg conf
 
 func (a *App) runEventsListCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
 	fs := newSilentFlagSet("events list")
-	var threadIDFlag trackedString
+	var threadIDFlags trackedStrings
 	var typesCSVFlag trackedString
+	var actorIDFlag trackedString
 	var maxEventsFlag trackedInt
+	var mineFlag trackedBool
+	var fullIDFlag trackedBool
 	var typeFlags trackedStrings
-	fs.Var(&threadIDFlag, "thread-id", "Thread id")
+	fs.Var(&threadIDFlags, "thread-id", "Thread id (repeatable)")
 	fs.Var(&typeFlags, "type", "Filter by event type (repeatable)")
 	fs.Var(&typesCSVFlag, "types", "Comma-separated event types")
+	fs.Var(&actorIDFlag, "actor-id", "Filter by actor id")
+	fs.Var(&mineFlag, "mine", "Filter to events authored by active profile actor_id")
+	fs.Var(&fullIDFlag, "full-id", "Render full IDs in human output")
 	fs.Var(&maxEventsFlag, "max-events", "Return at most N most-recent matching events (0 means unlimited)")
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 
-	positionals := fs.Args()
-	threadID := strings.TrimSpace(threadIDFlag.value)
-	if threadID == "" && len(positionals) > 0 {
-		threadID = strings.TrimSpace(positionals[0])
-		positionals = positionals[1:]
+	positionals := append([]string(nil), fs.Args()...)
+	threadIDs := make([]string, 0, len(threadIDFlags.values)+len(positionals))
+	threadIDs = append(threadIDs, threadIDFlags.values...)
+	threadIDs = append(threadIDs, positionals...)
+	threadIDs = normalizeIDFilters(threadIDs)
+	if len(threadIDs) == 0 {
+		return nil, errnorm.Usage("invalid_request", "thread id is required (provide --thread-id <thread-id>)")
 	}
-	if err := validateID(threadID, "thread id"); err != nil {
-		return nil, err
-	}
-	if len(positionals) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar events list`")
+	for _, threadID := range threadIDs {
+		if err := validateID(threadID, "thread id"); err != nil {
+			return nil, err
+		}
 	}
 	if maxEventsFlag.set && maxEventsFlag.value < 0 {
 		return nil, errnorm.Usage("invalid_request", "--max-events must be >= 0")
 	}
-
-	typeFilters := normalizeEventTypeFilters(typeFlags.values, typesCSVFlag.value)
-	timelineResult, callErr := a.invokeTypedJSONWithIDResolution(
-		ctx,
-		cfg,
-		"events list",
-		"threads.timeline",
-		"thread_id",
-		threadID,
-		threadIDLookupSpec,
-		nil,
-		nil,
-	)
-	if callErr != nil {
-		return nil, callErr
+	if mineFlag.set && mineFlag.value && strings.TrimSpace(actorIDFlag.value) != "" && strings.TrimSpace(actorIDFlag.value) != "me" {
+		return nil, errnorm.Usage("invalid_request", "--mine cannot be combined with --actor-id unless --actor-id=me")
 	}
 
-	data := asMap(timelineResult.Data)
-	body := asMap(data["body"])
-	allEvents := asSlice(body["events"])
-	matching := filterEventsByType(allEvents, typeFilters)
+	typeFilters := normalizeEventTypeFilters(typeFlags.values, typesCSVFlag.value)
+	actorFilter := strings.TrimSpace(actorIDFlag.value)
+	if mineFlag.set && mineFlag.value {
+		actorFilter = "me"
+	}
+	resolvedActorID, err := resolveActorIDAlias(actorFilter, cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	resolvedThreadIDs := make([]string, 0, len(threadIDs))
+	allEvents := make([]any, 0, 32)
+	matching := make([]any, 0, 32)
+	statusCode := http.StatusOK
+	headers := map[string][]string{"Content-Type": {"application/json"}}
+	capturedResponse := false
+	for _, threadID := range threadIDs {
+		timelineResult, callErr := a.invokeTypedJSONWithIDResolution(
+			ctx,
+			cfg,
+			"events list",
+			"threads.timeline",
+			"thread_id",
+			threadID,
+			threadIDLookupSpec,
+			nil,
+			nil,
+		)
+		if callErr != nil {
+			return nil, callErr
+		}
+		data := asMap(timelineResult.Data)
+		body := asMap(data["body"])
+		if !capturedResponse {
+			capturedResponse = true
+			if code := intValue(data["status_code"]); code > 0 {
+				statusCode = code
+			}
+			if responseHeaders := headerValues(data["headers"]); len(responseHeaders) > 0 {
+				headers = responseHeaders
+			}
+		}
+		threadEvents := asSlice(body["events"])
+		allEvents = append(allEvents, threadEvents...)
+		filtered := filterEventsByType(threadEvents, typeFilters)
+		filtered = filterEventsByActorID(filtered, resolvedActorID)
+		matching = append(matching, filtered...)
+		resolvedThreadID := firstNonEmpty(anyString(body["thread_id"]), eventThreadIDFromList(threadEvents), threadID)
+		if resolvedThreadID != "" {
+			resolvedThreadIDs = append(resolvedThreadIDs, resolvedThreadID)
+		}
+	}
+	resolvedThreadIDs = normalizeIDFilters(resolvedThreadIDs)
+	if len(resolvedThreadIDs) > 1 {
+		sortEventsByCreatedAt(matching)
+	}
 	if maxEventsFlag.set && maxEventsFlag.value > 0 && len(matching) > maxEventsFlag.value {
 		matching = matching[len(matching)-maxEventsFlag.value:]
 	}
+	matching = enrichEventsForList(matching)
 
 	listBody := map[string]any{
-		"thread_id":       firstNonEmpty(anyString(body["thread_id"]), eventThreadIDFromList(matching), eventThreadIDFromList(allEvents), threadID),
+		"thread_id":       firstNonEmpty(eventThreadIDFromList(matching), eventThreadIDFromList(allEvents)),
+		"thread_ids":      resolvedThreadIDs,
+		"full_id":         fullIDFlag.set && fullIDFlag.value,
 		"events":          matching,
 		"total_events":    len(allEvents),
 		"returned_events": len(matching),
 	}
+	if len(resolvedThreadIDs) == 1 {
+		listBody["thread_id"] = resolvedThreadIDs[0]
+	}
 	if len(typeFilters) > 0 {
 		listBody["types"] = typeFilters
+	}
+	if resolvedActorID != "" {
+		listBody["actor_id"] = resolvedActorID
 	}
 	if maxEventsFlag.set {
 		listBody["max_events"] = maxEventsFlag.value
 	}
 
-	data["body"] = listBody
-	timelineResult.Data = data
-	timelineResult.Text = formatTypedCommandText(
+	resultData := map[string]any{
+		"status_code": statusCode,
+		"headers":     headers,
+		"body":        listBody,
+	}
+	result := &commandResult{Data: resultData}
+	result.Text = formatTypedCommandText(
 		"events.list",
-		intValue(data["status_code"]),
-		headerValues(data["headers"]),
+		intValue(resultData["status_code"]),
+		headerValues(resultData["headers"]),
 		listBody,
 		cfg.Verbose,
 		cfg.Headers,
 	)
-	return timelineResult, nil
+	return result, nil
 }
 
 func (a *App) runEventsExplainCommand(args []string) (*commandResult, error) {
@@ -2233,7 +2310,7 @@ func normalizeEventTypeFilters(explicit []string, csv string) []string {
 
 func filterEventsByType(events []any, types []string) []any {
 	if len(events) == 0 {
-		return nil
+		return []any{}
 	}
 	if len(types) == 0 {
 		return append([]any(nil), events...)
@@ -2276,6 +2353,211 @@ func eventThreadIDFromList(events []any) string {
 		}
 	}
 	return ""
+}
+
+func normalizeIDFilters(rawIDs []string) []string {
+	if len(rawIDs) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(rawIDs))
+	seen := make(map[string]struct{}, len(rawIDs))
+	for _, raw := range rawIDs {
+		id := strings.TrimSpace(raw)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
+}
+
+func filterEventsByActorID(events []any, actorID string) []any {
+	actorID = strings.TrimSpace(actorID)
+	if len(events) == 0 {
+		return []any{}
+	}
+	if actorID == "" {
+		return append([]any(nil), events...)
+	}
+	filtered := make([]any, 0, len(events))
+	for _, raw := range events {
+		event := asMap(raw)
+		if event == nil {
+			continue
+		}
+		if strings.TrimSpace(anyString(event["actor_id"])) != actorID {
+			continue
+		}
+		filtered = append(filtered, event)
+	}
+	return filtered
+}
+
+func sortEventsByCreatedAt(events []any) {
+	if len(events) <= 1 {
+		return
+	}
+	sort.SliceStable(events, func(i int, j int) bool {
+		left := asMap(events[i])
+		right := asMap(events[j])
+		if left == nil || right == nil {
+			return false
+		}
+		leftTS, leftOK := eventCreatedAt(left)
+		rightTS, rightOK := eventCreatedAt(right)
+		if leftOK && rightOK {
+			return leftTS.Before(rightTS)
+		}
+		if leftOK != rightOK {
+			return !leftOK
+		}
+		return false
+	})
+}
+
+func eventCreatedAt(event map[string]any) (time.Time, bool) {
+	raw := strings.TrimSpace(anyString(event["created_at"]))
+	if raw == "" {
+		return time.Time{}, false
+	}
+	if ts, err := time.Parse(time.RFC3339Nano, raw); err == nil {
+		return ts, true
+	}
+	if ts, err := time.Parse(time.RFC3339, raw); err == nil {
+		return ts, true
+	}
+	return time.Time{}, false
+}
+
+func enrichEventsForList(events []any) []any {
+	if len(events) == 0 {
+		return []any{}
+	}
+	out := make([]any, 0, len(events))
+	for _, raw := range events {
+		event := asMap(raw)
+		if event == nil {
+			continue
+		}
+		copy := cloneMap(event)
+		id := strings.TrimSpace(anyString(copy["id"]))
+		if id != "" && strings.TrimSpace(anyString(copy["short_id"])) == "" {
+			copy["short_id"] = shortID(id)
+		}
+		if preview := eventSummaryPreview(copy); preview != "" {
+			copy["summary_preview"] = preview
+		}
+		out = append(out, copy)
+	}
+	return out
+}
+
+func cloneMap(in map[string]any) map[string]any {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]any, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
+}
+
+func eventSummaryPreview(event map[string]any) string {
+	preview := strings.TrimSpace(anyString(event["summary"]))
+	if preview != "" {
+		return truncatePreview(preview)
+	}
+	payload := asMap(event["payload"])
+	if payload != nil {
+		for _, key := range []string{"recommendation", "decision", "summary", "statement", "message", "title", "content", "text"} {
+			if value := compactPreviewValue(payload[key]); value != "" {
+				return truncatePreview(value)
+			}
+		}
+		if encoded, err := json.Marshal(payload); err == nil {
+			if value := strings.TrimSpace(string(encoded)); value != "" && value != "{}" {
+				return truncatePreview(value)
+			}
+		}
+	}
+	refs := stringList(event["refs"])
+	if len(refs) > 0 {
+		return truncatePreview(strings.Join(refs, ", "))
+	}
+	return truncatePreview(strings.TrimSpace(anyString(event["created_at"])))
+}
+
+func compactPreviewValue(raw any) string {
+	switch typed := raw.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	case []string:
+		return strings.TrimSpace(strings.Join(typed, "; "))
+	case []any:
+		parts := make([]string, 0, len(typed))
+		for _, item := range typed {
+			text := strings.TrimSpace(anyString(item))
+			if text == "" {
+				continue
+			}
+			parts = append(parts, text)
+			if len(parts) >= 3 {
+				break
+			}
+		}
+		return strings.TrimSpace(strings.Join(parts, "; "))
+	default:
+		if raw == nil {
+			return ""
+		}
+		encoded, err := json.Marshal(raw)
+		if err != nil {
+			return strings.TrimSpace(fmt.Sprintf("%v", raw))
+		}
+		return strings.TrimSpace(string(encoded))
+	}
+}
+
+func truncatePreview(raw string) string {
+	const maxRunes = 120
+	normalized := strings.Join(strings.Fields(strings.TrimSpace(raw)), " ")
+	if normalized == "" {
+		return ""
+	}
+	runes := []rune(normalized)
+	if len(runes) <= maxRunes {
+		return normalized
+	}
+	return strings.TrimSpace(string(runes[:maxRunes])) + "..."
+}
+
+func addThreadContextCollaborationSummary(body map[string]any) bool {
+	if body == nil {
+		return false
+	}
+	recentEvents := enrichEventsForList(asSlice(body["recent_events"]))
+	body["recent_events"] = recentEvents
+
+	collaboration := map[string]any{
+		"recommendations":   filterEventsByType(recentEvents, []string{"actor_statement"}),
+		"decision_requests": filterEventsByType(recentEvents, []string{"decision_needed"}),
+		"decisions":         filterEventsByType(recentEvents, []string{"decision_made"}),
+		"key_artifacts":     asSlice(body["key_artifacts"]),
+		"open_commitments":  asSlice(body["open_commitments"]),
+	}
+	collaboration["recommendation_count"] = len(asSlice(collaboration["recommendations"]))
+	collaboration["decision_request_count"] = len(asSlice(collaboration["decision_requests"]))
+	collaboration["decision_count"] = len(asSlice(collaboration["decisions"]))
+	collaboration["artifact_count"] = len(asSlice(collaboration["key_artifacts"]))
+	collaboration["open_commitment_count"] = len(asSlice(collaboration["open_commitments"]))
+
+	body["collaboration_summary"] = collaboration
+	return true
 }
 
 func (a *App) applyContentFileOverride(body any, contentFile string, commandName string) (any, error) {

@@ -84,6 +84,12 @@ func formatThreadContext(body any) string {
 	thread := extractNestedMap(root, "thread")
 	lines := make([]string, 0, 24)
 	lines = append(lines, formatThreadRecord(thread))
+	collaboration := extractNestedMap(root, "collaboration_summary")
+	if collaboration != nil {
+		lines = appendListSection(lines, "recommendations", asSlice(collaboration["recommendations"]), renderEventListItem)
+		lines = appendListSection(lines, "decision_requests", asSlice(collaboration["decision_requests"]), renderEventListItem)
+		lines = appendListSection(lines, "decisions", asSlice(collaboration["decisions"]), renderEventListItem)
+	}
 	lines = appendListSection(lines, "recent_events", asSlice(root["recent_events"]), renderEventListItem)
 	lines = appendListSection(lines, "key_artifacts", asSlice(root["key_artifacts"]), renderArtifactListItem)
 	lines = appendListSection(lines, "open_commitments", asSlice(root["open_commitments"]), renderCommitmentListItem)
@@ -107,10 +113,17 @@ func formatEventsList(body any) string {
 	if threadID := strings.TrimSpace(anyString(root["thread_id"])); threadID != "" {
 		lines = append(lines, "Thread "+threadID)
 	}
+	threadIDs := stringList(root["thread_ids"])
+	if len(threadIDs) > 1 {
+		lines = appendStringList(lines, "thread_ids", threadIDs)
+	}
 	lines = appendScalar(lines, "total_events", root, "total_events")
 	lines = appendScalar(lines, "returned_events", root, "returned_events")
 	lines = appendStringList(lines, "types", stringList(root["types"]))
-	lines = appendListSection(lines, "events", asSlice(root["events"]), renderEventListItem)
+	if actorID := strings.TrimSpace(anyString(root["actor_id"])); actorID != "" {
+		lines = append(lines, "actor_id: "+actorID)
+	}
+	lines = appendEventListSection(lines, "events", asSlice(root["events"]), asBool(root["full_id"]))
 	return strings.Join(lines, "\n")
 }
 
@@ -268,11 +281,23 @@ func renderCommitmentListItem(item map[string]any) string {
 }
 
 func renderArtifactListItem(item map[string]any) string {
-	return compactSummary(displayID(item), anyString(item["kind"]), firstNonEmpty(anyString(item["summary"]), anyString(item["title"])))
+	artifact := item
+	if nested := asMap(item["artifact"]); nested != nil {
+		artifact = nested
+	}
+	summary := firstNonEmpty(anyString(artifact["summary"]), anyString(artifact["title"]))
+	if summary == "" {
+		summary = anyString(item["content_preview"])
+	}
+	ref := strings.TrimSpace(anyString(item["ref"]))
+	if ref != "" {
+		summary = firstNonEmpty(summary, "ref="+ref)
+	}
+	return compactSummary(displayID(artifact), anyString(artifact["kind"]), summary)
 }
 
 func renderEventListItem(item map[string]any) string {
-	return compactSummary(displayID(item), anyString(item["type"]), firstNonEmpty(anyString(item["summary"]), anyString(item["created_at"])))
+	return renderEventListItemWithMode(item, false)
 }
 
 func renderInboxItem(item map[string]any) string {
@@ -310,6 +335,18 @@ func appendListSection(lines []string, label string, items []any, render func(ma
 			continue
 		}
 		lines = append(lines, "- "+render(item))
+	}
+	return lines
+}
+
+func appendEventListSection(lines []string, label string, items []any, fullID bool) []string {
+	lines = append(lines, fmt.Sprintf("%s (%d):", label, len(items)))
+	for _, raw := range items {
+		item := asMap(raw)
+		if item == nil {
+			continue
+		}
+		lines = append(lines, "- "+renderEventListItemWithMode(item, fullID))
 	}
 	return lines
 }
@@ -410,6 +447,41 @@ func displayID(item map[string]any) string {
 		return short + " (id=" + id + ")"
 	}
 	return firstNonEmpty(id, short)
+}
+
+func renderEventListItemWithMode(item map[string]any, fullID bool) string {
+	summary := firstNonEmpty(anyString(item["summary_preview"]), anyString(item["summary"]), anyString(item["created_at"]))
+	return compactSummary(displayEventID(item, fullID), anyString(item["type"]), summary)
+}
+
+func displayEventID(item map[string]any, fullID bool) string {
+	if item == nil {
+		return ""
+	}
+	id := strings.TrimSpace(anyString(item["id"]))
+	short := strings.TrimSpace(anyString(item["short_id"]))
+	if short == "" && id != "" {
+		short = shortID(id)
+	}
+	if fullID && id != "" {
+		return id
+	}
+	if short != "" {
+		return short
+	}
+	return displayID(item)
+}
+
+func asBool(raw any) bool {
+	switch typed := raw.(type) {
+	case bool:
+		return typed
+	case string:
+		parsed, err := strconvParseBool(typed)
+		return err == nil && parsed
+	default:
+		return false
+	}
 }
 
 func extractNestedMap(body any, key string) map[string]any {

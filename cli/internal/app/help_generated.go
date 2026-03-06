@@ -179,9 +179,10 @@ func localGroupHelpSupplement(topic string) string {
 	switch strings.TrimSpace(topic) {
 	case "events":
 		return strings.TrimSpace(`Local inspection helpers:
-  events list              List thread timeline events with optional type filters and max window.
+  events list              List timeline events with thread/type/actor filters, id mode, and preview summaries.
   events explain           Explain known event-type conventions and local validation constraints.
   events validate          Validate an events.create payload from stdin/--from-file without sending a request.
+  Tip: use ` + "`--mine`" + ` or ` + "`--actor-id <id>`" + ` to audit one actor; add ` + "`--full-id`" + ` for copy/paste IDs.
   For details: ` + "`oar events explain <event-type>`")
 	case "artifacts":
 		return strings.TrimSpace(`Local inspection helper:
