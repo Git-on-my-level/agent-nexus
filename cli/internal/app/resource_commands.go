@@ -29,6 +29,44 @@ import (
 
 var idPattern = regexp.MustCompile(`^[A-Za-z0-9._:@/-]+$`)
 
+const shortIDLength = 12
+
+type resourceIDLookupSpec struct {
+	idLabel        string
+	resource       string
+	resourcePlural string
+	listCommand    string
+	listCommandID  string
+	listField      string
+}
+
+var (
+	threadIDLookupSpec = resourceIDLookupSpec{
+		idLabel:        "thread id",
+		resource:       "thread",
+		resourcePlural: "threads",
+		listCommand:    "threads list",
+		listCommandID:  "threads.list",
+		listField:      "threads",
+	}
+	commitmentIDLookupSpec = resourceIDLookupSpec{
+		idLabel:        "commitment id",
+		resource:       "commitment",
+		resourcePlural: "commitments",
+		listCommand:    "commitments list",
+		listCommandID:  "commitments.list",
+		listField:      "commitments",
+	}
+	artifactIDLookupSpec = resourceIDLookupSpec{
+		idLabel:        "artifact id",
+		resource:       "artifact",
+		resourcePlural: "artifacts",
+		listCommand:    "artifacts list",
+		listCommandID:  "artifacts.list",
+		listField:      "artifacts",
+	}
+)
+
 type queryParam struct {
 	name   string
 	values []string
@@ -213,7 +251,17 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 		if err != nil {
 			return nil, "threads get", err
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "threads get", "threads.get", map[string]string{"thread_id": id}, nil, nil)
+		result, callErr := a.invokeTypedJSONWithIDResolution(
+			ctx,
+			cfg,
+			"threads get",
+			"threads.get",
+			"thread_id",
+			id,
+			threadIDLookupSpec,
+			nil,
+			nil,
+		)
 		return result, "threads get", callErr
 	case "create":
 		body, err := a.parseJSONBodyInput(args[1:], "threads create")
@@ -227,14 +275,34 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 		if err != nil {
 			return nil, "threads patch", err
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "threads patch", "threads.patch", map[string]string{"thread_id": id}, nil, body)
+		result, callErr := a.invokeTypedJSONWithIDResolution(
+			ctx,
+			cfg,
+			"threads patch",
+			"threads.patch",
+			"thread_id",
+			id,
+			threadIDLookupSpec,
+			nil,
+			body,
+		)
 		return result, "threads patch", callErr
 	case "timeline":
 		id, err := parseIDArg(args[1:], "thread-id", "thread id")
 		if err != nil {
 			return nil, "threads timeline", err
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "threads timeline", "threads.timeline", map[string]string{"thread_id": id}, nil, nil)
+		result, callErr := a.invokeTypedJSONWithIDResolution(
+			ctx,
+			cfg,
+			"threads timeline",
+			"threads.timeline",
+			"thread_id",
+			id,
+			threadIDLookupSpec,
+			nil,
+			nil,
+		)
 		return result, "threads timeline", callErr
 	case "context":
 		fs := newSilentFlagSet("threads context")
@@ -271,7 +339,17 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 			addSingleQuery(&query, "include_artifact_content", "true")
 		}
 
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "threads context", "threads.context", map[string]string{"thread_id": threadID}, query, nil)
+		result, callErr := a.invokeTypedJSONWithIDResolution(
+			ctx,
+			cfg,
+			"threads context",
+			"threads.context",
+			"thread_id",
+			threadID,
+			threadIDLookupSpec,
+			query,
+			nil,
+		)
 		return result, "threads context", callErr
 	default:
 		return nil, "threads", errnorm.Usage("unknown_subcommand", fmt.Sprintf("unknown threads subcommand %q", sub))
@@ -311,7 +389,17 @@ func (a *App) runCommitmentsCommand(ctx context.Context, args []string, cfg conf
 		if err != nil {
 			return nil, "commitments get", err
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "commitments get", "commitments.get", map[string]string{"commitment_id": id}, nil, nil)
+		result, callErr := a.invokeTypedJSONWithIDResolution(
+			ctx,
+			cfg,
+			"commitments get",
+			"commitments.get",
+			"commitment_id",
+			id,
+			commitmentIDLookupSpec,
+			nil,
+			nil,
+		)
 		return result, "commitments get", callErr
 	case "create":
 		body, err := a.parseJSONBodyInput(args[1:], "commitments create")
@@ -325,7 +413,17 @@ func (a *App) runCommitmentsCommand(ctx context.Context, args []string, cfg conf
 		if err != nil {
 			return nil, "commitments update", err
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "commitments update", "commitments.patch", map[string]string{"commitment_id": id}, nil, body)
+		result, callErr := a.invokeTypedJSONWithIDResolution(
+			ctx,
+			cfg,
+			"commitments update",
+			"commitments.patch",
+			"commitment_id",
+			id,
+			commitmentIDLookupSpec,
+			nil,
+			body,
+		)
 		return result, "commitments update", callErr
 	default:
 		return nil, "commitments", errnorm.Usage("unknown_subcommand", fmt.Sprintf("unknown commitments subcommand %q", sub))
@@ -363,7 +461,17 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 		if err != nil {
 			return nil, "artifacts get", err
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "artifacts get", "artifacts.get", map[string]string{"artifact_id": id}, nil, nil)
+		result, callErr := a.invokeTypedJSONWithIDResolution(
+			ctx,
+			cfg,
+			"artifacts get",
+			"artifacts.get",
+			"artifact_id",
+			id,
+			artifactIDLookupSpec,
+			nil,
+			nil,
+		)
 		return result, "artifacts get", callErr
 	case "create":
 		body, err := a.parseJSONBodyInput(args[1:], "artifacts create")
@@ -377,7 +485,14 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 		if err != nil {
 			return nil, "artifacts content", err
 		}
-		result, callErr := a.invokeArtifactContent(ctx, cfg, "artifacts content", map[string]string{"artifact_id": id})
+		result, callErr := a.invokeArtifactContentWithIDResolution(
+			ctx,
+			cfg,
+			"artifacts content",
+			"artifact_id",
+			id,
+			artifactIDLookupSpec,
+		)
 		return result, "artifacts content", callErr
 	default:
 		return nil, "artifacts", errnorm.Usage("unknown_subcommand", fmt.Sprintf("unknown artifacts subcommand %q", sub))
@@ -878,13 +993,75 @@ func (a *App) invokeTypedJSON(ctx context.Context, cfg config.Resolved, commandN
 	}
 
 	headersSorted := normalizedHeaders(resp.Header)
+	parsedBody := parseResponseBody(responseBody)
+	parsedBody, enriched := enrichListBodyWithShortIDs(commandID, parsedBody)
+	if enriched {
+		if encoded, marshalErr := json.Marshal(parsedBody); marshalErr == nil {
+			responseBody = encoded
+		}
+	}
 	data := map[string]any{
 		"status_code": resp.StatusCode,
 		"headers":     headersSorted,
-		"body":        parseResponseBody(responseBody),
+		"body":        parsedBody,
 	}
 	text := formatAPICallText(strings.ToUpper(resolveCommandMethod(commandID)), resolveCommandPath(commandID, pathParams, queryValues), resp.StatusCode, headersSorted, responseBody)
 	return &commandResult{Text: text, Data: data}, nil
+}
+
+func (a *App) invokeTypedJSONWithIDResolution(
+	ctx context.Context,
+	cfg config.Resolved,
+	commandName string,
+	commandID string,
+	pathParamName string,
+	rawID string,
+	lookupSpec resourceIDLookupSpec,
+	query []queryParam,
+	body any,
+) (*commandResult, error) {
+	pathParams := map[string]string{pathParamName: rawID}
+	result, err := a.invokeTypedJSON(ctx, cfg, commandName, commandID, pathParams, query, body)
+	if err == nil {
+		return result, nil
+	}
+	if !isNotFoundError(err) {
+		return nil, err
+	}
+
+	resolvedID, resolveErr := a.resolveResourceIDFromList(ctx, cfg, rawID, lookupSpec)
+	if resolveErr != nil {
+		return nil, resolveErr
+	}
+	if resolvedID == rawID {
+		return nil, missingResourceIDError(rawID, lookupSpec)
+	}
+	return a.invokeTypedJSON(ctx, cfg, commandName, commandID, map[string]string{pathParamName: resolvedID}, query, body)
+}
+
+func (a *App) invokeArtifactContentWithIDResolution(
+	ctx context.Context,
+	cfg config.Resolved,
+	commandName string,
+	pathParamName string,
+	rawID string,
+	lookupSpec resourceIDLookupSpec,
+) (*commandResult, error) {
+	result, err := a.invokeArtifactContent(ctx, cfg, commandName, map[string]string{pathParamName: rawID})
+	if err == nil {
+		return result, nil
+	}
+	if !isNotFoundError(err) {
+		return nil, err
+	}
+	resolvedID, resolveErr := a.resolveResourceIDFromList(ctx, cfg, rawID, lookupSpec)
+	if resolveErr != nil {
+		return nil, resolveErr
+	}
+	if resolvedID == rawID {
+		return nil, missingResourceIDError(rawID, lookupSpec)
+	}
+	return a.invokeArtifactContent(ctx, cfg, commandName, map[string]string{pathParamName: resolvedID})
 }
 
 func (a *App) cfgWithResolvedAuthToken(ctx context.Context, cfg config.Resolved) (config.Resolved, error) {
@@ -1213,6 +1390,165 @@ func resolveActorIDAlias(raw string, cfg config.Resolved) (string, error) {
 		"invalid_request",
 		fmt.Sprintf("--actor-id me requires actor_id in active profile (%s)", strings.TrimSpace(cfg.ProfilePath)),
 	)
+}
+
+func (a *App) resolveResourceIDFromList(ctx context.Context, cfg config.Resolved, rawID string, spec resourceIDLookupSpec) (string, error) {
+	result, err := a.invokeTypedJSON(ctx, cfg, spec.listCommand, spec.listCommandID, nil, nil, nil)
+	if err != nil {
+		return "", err
+	}
+	ids := listResourceIDs(result, spec)
+	if len(ids) == 0 {
+		return "", missingResourceIDError(rawID, spec)
+	}
+
+	rawID = strings.TrimSpace(rawID)
+	for _, id := range ids {
+		if id == rawID {
+			return id, nil
+		}
+	}
+
+	matches := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if strings.HasPrefix(id, rawID) {
+			matches = append(matches, id)
+		}
+	}
+	if len(matches) == 1 {
+		return matches[0], nil
+	}
+	if len(matches) > 1 {
+		sort.Strings(matches)
+		return "", ambiguousResourceIDError(rawID, spec, matches)
+	}
+	return "", missingResourceIDError(rawID, spec)
+}
+
+func listResourceIDs(result *commandResult, spec resourceIDLookupSpec) []string {
+	if result == nil {
+		return nil
+	}
+	data, _ := result.Data.(map[string]any)
+	body, _ := data["body"].(map[string]any)
+	if body == nil {
+		return nil
+	}
+	rawItems, _ := body[spec.listField].([]any)
+	if len(rawItems) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(rawItems))
+	out := make([]string, 0, len(rawItems))
+	for _, rawItem := range rawItems {
+		item, _ := rawItem.(map[string]any)
+		if item == nil {
+			continue
+		}
+		id := strings.TrimSpace(anyString(item["id"]))
+		if id == "" {
+			continue
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
+}
+
+func isNotFoundError(err error) bool {
+	normalized := errnorm.Normalize(err)
+	return normalized != nil && normalized.Kind == errnorm.KindRemote && normalized.Code == "not_found"
+}
+
+func ambiguousResourceIDError(rawID string, spec resourceIDLookupSpec, matches []string) error {
+	samples := make([]string, 0, minInt(3, len(matches)))
+	for idx, match := range matches {
+		if idx >= 3 {
+			break
+		}
+		samples = append(samples, fmt.Sprintf("%s (short_id=%s)", match, shortID(match)))
+	}
+	message := fmt.Sprintf(
+		"%s %q is ambiguous: %d %s ids share that prefix. Use a longer prefix or the canonical id. Matches: %s",
+		spec.idLabel,
+		rawID,
+		len(matches),
+		spec.resource,
+		strings.Join(samples, ", "),
+	)
+	return errnorm.Usage("invalid_request", message)
+}
+
+func missingResourceIDError(rawID string, spec resourceIDLookupSpec) error {
+	message := fmt.Sprintf(
+		"%s %q is missing: no canonical %s id or unique prefix match was found. If this value was truncated, run `oar %s` and retry with a unique short_id or canonical id.",
+		spec.idLabel,
+		rawID,
+		spec.resource,
+		spec.listCommand,
+	)
+	return errnorm.Usage("invalid_request", message)
+}
+
+func enrichListBodyWithShortIDs(commandID string, body any) (any, bool) {
+	typedBody, _ := body.(map[string]any)
+	if typedBody == nil {
+		return body, false
+	}
+	switch strings.TrimSpace(commandID) {
+	case "threads.list":
+		return body, addShortIDToListField(typedBody, "threads")
+	case "commitments.list":
+		return body, addShortIDToListField(typedBody, "commitments")
+	case "artifacts.list":
+		return body, addShortIDToListField(typedBody, "artifacts")
+	default:
+		return body, false
+	}
+}
+
+func addShortIDToListField(body map[string]any, field string) bool {
+	items, _ := body[field].([]any)
+	if len(items) == 0 {
+		return false
+	}
+	changed := false
+	for _, rawItem := range items {
+		item, _ := rawItem.(map[string]any)
+		if item == nil {
+			continue
+		}
+		id := strings.TrimSpace(anyString(item["id"]))
+		if id == "" {
+			continue
+		}
+		currentShortID := strings.TrimSpace(anyString(item["short_id"]))
+		expectedShortID := shortID(id)
+		if currentShortID == expectedShortID {
+			continue
+		}
+		item["short_id"] = expectedShortID
+		changed = true
+	}
+	return changed
+}
+
+func shortID(id string) string {
+	id = strings.TrimSpace(id)
+	if len(id) <= shortIDLength {
+		return id
+	}
+	return id[:shortIDLength]
+}
+
+func minInt(a int, b int) int {
+	if a <= b {
+		return a
+	}
+	return b
 }
 
 func (a *App) readBodyInput(fromFile string) ([]byte, error) {

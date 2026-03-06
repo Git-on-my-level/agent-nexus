@@ -331,6 +331,152 @@ func TestThreadsContextCommand(t *testing.T) {
 	}
 }
 
+func TestThreadsContextCommandResolvesUniquePrefix(t *testing.T) {
+	t.Parallel()
+
+	const canonicalID = "fff63e25-084b-4598-af8f-b6d0a4fbf001"
+	const shortPrefix = "fff63e25-084b-4598-af8f"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/"+shortPrefix+"/context":
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"code":"not_found","message":"thread not found"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/threads":
+			_, _ = w.Write([]byte(`{"threads":[{"id":"` + canonicalID + `"},{"id":"thread_2"}]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/"+canonicalID+"/context":
+			_, _ = w.Write([]byte(`{"thread":{"id":"` + canonicalID + `"},"recent_events":[],"key_artifacts":[],"open_commitments":[]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"threads", "context",
+		"--thread-id", shortPrefix,
+	})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+	body, _ := data["body"].(map[string]any)
+	thread, _ := body["thread"].(map[string]any)
+	if got := anyStringValue(thread["id"]); got != canonicalID {
+		t.Fatalf("expected canonical thread id %q, got %q payload=%#v", canonicalID, got, payload)
+	}
+}
+
+func TestThreadsContextCommandAmbiguousPrefixShowsGuidance(t *testing.T) {
+	t.Parallel()
+
+	const ambiguousPrefix = "fff63e25"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/"+ambiguousPrefix+"/context":
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"code":"not_found","message":"thread not found"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/threads":
+			_, _ = w.Write([]byte(`{"threads":[{"id":"fff63e25-084b-4598-af8f-b6d0a4fbf001"},{"id":"fff63e25-9999-4598-af8f-b6d0a4fbf002"}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"threads", "context",
+		"--thread-id", ambiguousPrefix,
+	})
+	payload := assertEnvelopeError(t, raw)
+	errObj, _ := payload["error"].(map[string]any)
+	if errObj == nil || anyStringValue(errObj["code"]) != "invalid_request" {
+		t.Fatalf("unexpected error payload: %#v", payload)
+	}
+	message := anyStringValue(errObj["message"])
+	if !strings.Contains(message, "ambiguous") || !strings.Contains(message, "short_id=") {
+		t.Fatalf("expected ambiguity guidance message, got %q payload=%#v", message, payload)
+	}
+}
+
+func TestThreadsContextCommandMissingIDShowsGuidance(t *testing.T) {
+	t.Parallel()
+
+	const missingID = "does-not-exist"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/"+missingID+"/context":
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"code":"not_found","message":"thread not found"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/threads":
+			_, _ = w.Write([]byte(`{"threads":[{"id":"fff63e25-084b-4598-af8f-b6d0a4fbf001"}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"threads", "context",
+		"--thread-id", missingID,
+	})
+	payload := assertEnvelopeError(t, raw)
+	errObj, _ := payload["error"].(map[string]any)
+	if errObj == nil || anyStringValue(errObj["code"]) != "invalid_request" {
+		t.Fatalf("unexpected error payload: %#v", payload)
+	}
+	message := anyStringValue(errObj["message"])
+	if !strings.Contains(message, "is missing") || !strings.Contains(message, "truncated") {
+		t.Fatalf("expected missing-id guidance message, got %q payload=%#v", message, payload)
+	}
+}
+
+func TestThreadsListIncludesShortID(t *testing.T) {
+	t.Parallel()
+
+	const canonicalID = "fff63e25-084b-4598-af8f-b6d0a4fbf001"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/threads" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"threads":[{"id":"` + canonicalID + `","title":"Alpha","status":"active"}]}`))
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"threads", "list",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+	body, _ := data["body"].(map[string]any)
+	threads, _ := body["threads"].([]any)
+	if len(threads) != 1 {
+		t.Fatalf("expected one thread in list payload, got %#v", payload)
+	}
+	thread, _ := threads[0].(map[string]any)
+	if got := anyStringValue(thread["short_id"]); got != canonicalID[:12] {
+		t.Fatalf("expected short_id %q, got %q payload=%#v", canonicalID[:12], got, payload)
+	}
+}
+
 func TestInboxAckActorIDMeAliasFromProfile(t *testing.T) {
 	t.Parallel()
 
