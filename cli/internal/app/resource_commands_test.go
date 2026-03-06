@@ -396,6 +396,107 @@ func TestThreadsContextCommand(t *testing.T) {
 	}
 }
 
+func TestThreadsContextHumanOutputIsPayloadFirst(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/threads/thread_1/context" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"thread":{"id":"thread_1","title":"Pilot Rescue","status":"active","priority":"p1","current_summary":"Need a launch decision today."},
+			"recent_events":[
+				{"id":"event_1","type":"decision_needed","summary":"Need support and delivery recommendations"},
+				{"id":"event_2","type":"decision_made","summary":"Ship the Friday rescue scope"}
+			],
+			"key_artifacts":[
+				{"id":"artifact_1","kind":"gtm-brief","summary":"NorthWave pilot rescue brief"}
+			],
+			"open_commitments":[
+				{"id":"commitment_1","status":"open","title":"Publish rescue brief"}
+			]
+		}`))
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	out := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--base-url", server.URL,
+		"threads", "context",
+		"--thread-id", "thread_1",
+	})
+
+	if !strings.Contains(out, "Thread thread_1") || !strings.Contains(out, "recent_events (2):") {
+		t.Fatalf("expected thread context summary, got:\n%s", out)
+	}
+	if !strings.Contains(out, "decision_needed") || !strings.Contains(out, "gtm-brief") || !strings.Contains(out, "Publish rescue brief") {
+		t.Fatalf("expected actionable summary sections, got:\n%s", out)
+	}
+	if strings.Contains(out, "status: 200") || strings.Contains(out, "header Content-Type:") || strings.Contains(out, `"thread":`) {
+		t.Fatalf("expected payload-first output without transport framing, got:\n%s", out)
+	}
+}
+
+func TestThreadsContextVerboseShowsFullBodyWithoutHeaders(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/threads/thread_1/context" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"thread":{"id":"thread_1"},"recent_events":[],"key_artifacts":[],"open_commitments":[]}`))
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	out := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--base-url", server.URL,
+		"--verbose",
+		"threads", "context",
+		"--thread-id", "thread_1",
+	})
+
+	if !strings.Contains(out, `"thread": {`) || !strings.Contains(out, `"recent_events": []`) {
+		t.Fatalf("expected verbose JSON body, got:\n%s", out)
+	}
+	if strings.Contains(out, "status: 200") || strings.Contains(out, "header Content-Type:") {
+		t.Fatalf("expected verbose output without transport headers, got:\n%s", out)
+	}
+}
+
+func TestThreadsContextHeadersShowTransportMetadataOnOptIn(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/threads/thread_1/context" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"thread":{"id":"thread_1","title":"Pilot Rescue"},"recent_events":[],"key_artifacts":[],"open_commitments":[]}`))
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	out := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--base-url", server.URL,
+		"--headers",
+		"threads", "context",
+		"--thread-id", "thread_1",
+	})
+
+	if !strings.Contains(out, "status: 200") || !strings.Contains(out, "header Content-Type: application/json") {
+		t.Fatalf("expected transport metadata with --headers, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Thread thread_1") {
+		t.Fatalf("expected payload summary to remain visible, got:\n%s", out)
+	}
+}
+
 func TestThreadsContextCommandResolvesUniquePrefix(t *testing.T) {
 	t.Parallel()
 

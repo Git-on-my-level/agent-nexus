@@ -961,6 +961,10 @@ func (a *App) invokeArtifactContent(ctx context.Context, cfg config.Resolved, co
 	if utf8Body := strings.TrimSpace(string(body)); utf8Body != "" {
 		data["body_text"] = utf8Body
 	}
+	if authCfg.Headers || authCfg.Verbose {
+		text := formatArtifactContentText(resp.StatusCode, normalizedHeaders(resp.Header), body, authCfg.Verbose, authCfg.Headers)
+		return &commandResult{Text: text, Data: data}, nil
+	}
 	text := fmt.Sprintf("%s status: %d\nbytes: %d", commandName, resp.StatusCode, len(body))
 	return &commandResult{Text: text, Data: data}, nil
 }
@@ -1010,7 +1014,7 @@ func (a *App) invokeTypedJSON(ctx context.Context, cfg config.Resolved, commandN
 		"headers":     headersSorted,
 		"body":        parsedBody,
 	}
-	text := formatAPICallText(strings.ToUpper(resolveCommandMethod(commandID)), resolveCommandPath(commandID, pathParams, queryValues), resp.StatusCode, headersSorted, responseBody)
+	text := formatTypedCommandText(commandID, resp.StatusCode, headersSorted, parsedBody, authCfg.Verbose, authCfg.Headers)
 	return &commandResult{Text: text, Data: data}, nil
 }
 

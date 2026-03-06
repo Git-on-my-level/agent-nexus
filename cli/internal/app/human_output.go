@@ -1,0 +1,428 @@
+package app
+
+import (
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"sort"
+	"strings"
+	"unicode/utf8"
+)
+
+func formatTypedCommandText(commandID string, statusCode int, headers map[string][]string, body any, verbose bool, includeHeaders bool) string {
+	bodyText := ""
+	if verbose {
+		bodyText = formatPrettyBody(body)
+	} else {
+		bodyText = formatCommandSummary(commandID, body)
+	}
+	if !includeHeaders {
+		return bodyText
+	}
+	return formatBodyWithHeaders(statusCode, headers, bodyText)
+}
+
+func formatArtifactContentText(statusCode int, headers map[string][]string, body []byte, verbose bool, includeHeaders bool) string {
+	lines := make([]string, 0, 8)
+	if includeHeaders {
+		lines = append(lines, headerLines(statusCode, headers)...)
+	}
+	lines = append(lines, fmt.Sprintf("bytes: %d", len(body)))
+	if verbose && len(body) > 0 {
+		lines = append(lines, "")
+		if text, ok := textualBody(body); ok {
+			lines = append(lines, text)
+		} else {
+			lines = append(lines, "body_base64:")
+			lines = append(lines, base64.StdEncoding.EncodeToString(body))
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatCommandSummary(commandID string, body any) string {
+	switch strings.TrimSpace(commandID) {
+	case "threads.list":
+		return formatNamedList(body, "threads", "Threads", renderThreadListItem)
+	case "commitments.list":
+		return formatNamedList(body, "commitments", "Commitments", renderCommitmentListItem)
+	case "artifacts.list":
+		return formatNamedList(body, "artifacts", "Artifacts", renderArtifactListItem)
+	case "inbox.list":
+		return formatNamedList(body, "items", "Inbox", renderInboxItem)
+	case "docs.history":
+		return formatNamedList(body, "revisions", "Revisions", renderRevisionListItem)
+	case "threads.get", "threads.create", "threads.patch":
+		return formatThreadRecord(extractNestedMap(body, "thread"))
+	case "threads.context":
+		return formatThreadContext(body)
+	case "threads.timeline":
+		return formatThreadTimeline(body)
+	case "commitments.get", "commitments.create", "commitments.patch":
+		return formatCommitmentRecord(extractNestedMap(body, "commitment"))
+	case "artifacts.get", "artifacts.create":
+		return formatArtifactRecord(extractNestedMap(body, "artifact"))
+	case "events.get", "events.create":
+		return formatEventRecord(extractNestedMap(body, "event"))
+	case "docs.get", "docs.create", "docs.update":
+		return formatDocumentRecord(body)
+	case "docs.revision.get":
+		return formatRevisionRecord(extractNestedMap(body, "revision"))
+	default:
+		return formatPrettyBody(body)
+	}
+}
+
+func formatThreadContext(body any) string {
+	root := asMap(body)
+	thread := extractNestedMap(root, "thread")
+	lines := make([]string, 0, 24)
+	lines = append(lines, formatThreadRecord(thread))
+	lines = appendListSection(lines, "recent_events", asSlice(root["recent_events"]), renderEventListItem)
+	lines = appendListSection(lines, "key_artifacts", asSlice(root["key_artifacts"]), renderArtifactListItem)
+	lines = appendListSection(lines, "open_commitments", asSlice(root["open_commitments"]), renderCommitmentListItem)
+	return strings.Join(lines, "\n")
+}
+
+func formatThreadTimeline(body any) string {
+	root := asMap(body)
+	lines := []string{
+		fmt.Sprintf("Timeline events: %d", len(asSlice(root["events"]))),
+		fmt.Sprintf("Referenced snapshots: %d", len(asMap(root["snapshots"]))),
+		fmt.Sprintf("Referenced artifacts: %d", len(asMap(root["artifacts"]))),
+	}
+	lines = appendListSection(lines, "events", asSlice(root["events"]), renderEventListItem)
+	return strings.Join(lines, "\n")
+}
+
+func formatThreadRecord(thread map[string]any) string {
+	if thread == nil {
+		return formatPrettyBody(thread)
+	}
+	lines := []string{"Thread " + displayID(thread)}
+	lines = appendScalar(lines, "title", thread, "title")
+	lines = appendScalar(lines, "status", thread, "status")
+	lines = appendScalar(lines, "type", thread, "type")
+	lines = appendScalar(lines, "priority", thread, "priority")
+	lines = appendScalar(lines, "owner", thread, "owner")
+	lines = appendScalar(lines, "cadence", thread, "cadence")
+	lines = appendScalar(lines, "stale", thread, "stale")
+	lines = appendScalar(lines, "updated_at", thread, "updated_at")
+	lines = appendScalar(lines, "summary", thread, "current_summary")
+	lines = appendStringList(lines, "tags", stringList(thread["tags"]))
+	lines = appendStringList(lines, "next_actions", stringList(thread["next_actions"]))
+	lines = appendStringList(lines, "key_artifacts", stringList(thread["key_artifacts"]))
+	lines = appendStringList(lines, "open_commitments", stringList(thread["open_commitments"]))
+	return strings.Join(lines, "\n")
+}
+
+func formatCommitmentRecord(commitment map[string]any) string {
+	if commitment == nil {
+		return formatPrettyBody(commitment)
+	}
+	lines := []string{"Commitment " + displayID(commitment)}
+	lines = appendScalar(lines, "title", commitment, "title")
+	lines = appendScalar(lines, "status", commitment, "status")
+	lines = appendScalar(lines, "thread_id", commitment, "thread_id")
+	lines = appendScalar(lines, "owner", commitment, "owner")
+	lines = appendScalar(lines, "due_at", commitment, "due_at", "due_on")
+	lines = appendScalar(lines, "summary", commitment, "summary")
+	lines = appendStringList(lines, "refs", stringList(commitment["refs"]))
+	return strings.Join(lines, "\n")
+}
+
+func formatArtifactRecord(artifact map[string]any) string {
+	if artifact == nil {
+		return formatPrettyBody(artifact)
+	}
+	lines := []string{"Artifact " + displayID(artifact)}
+	lines = appendScalar(lines, "kind", artifact, "kind")
+	lines = appendScalar(lines, "thread_id", artifact, "thread_id")
+	lines = appendScalar(lines, "content_type", artifact, "content_type")
+	lines = appendScalar(lines, "created_at", artifact, "created_at")
+	lines = appendScalar(lines, "summary", artifact, "summary", "title")
+	lines = appendStringList(lines, "refs", stringList(artifact["refs"]))
+	return strings.Join(lines, "\n")
+}
+
+func formatEventRecord(event map[string]any) string {
+	if event == nil {
+		return formatPrettyBody(event)
+	}
+	lines := []string{"Event " + displayID(event)}
+	lines = appendScalar(lines, "type", event, "type")
+	lines = appendScalar(lines, "thread_id", event, "thread_id")
+	lines = appendScalar(lines, "actor_id", event, "actor_id")
+	lines = appendScalar(lines, "created_at", event, "created_at")
+	lines = appendScalar(lines, "summary", event, "summary")
+	lines = appendStringList(lines, "refs", stringList(event["refs"]))
+	if payload := asMap(event["payload"]); len(payload) > 0 {
+		lines = append(lines, "payload:")
+		lines = append(lines, indentBlock(formatPrettyBody(payload))...)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatDocumentRecord(body any) string {
+	root := asMap(body)
+	document := extractNestedMap(root, "document")
+	revision := extractNestedMap(root, "revision")
+	lines := []string{"Document " + displayID(document)}
+	lines = appendScalar(lines, "title", document, "title")
+	lines = appendScalar(lines, "kind", document, "kind")
+	lines = appendScalar(lines, "head_revision_id", document, "head_revision_id")
+	lines = appendScalar(lines, "revision_id", revision, "revision_id")
+	lines = appendScalar(lines, "revision_number", revision, "revision_number")
+	lines = appendScalar(lines, "content_type", revision, "content_type")
+	return strings.Join(lines, "\n")
+}
+
+func formatRevisionRecord(revision map[string]any) string {
+	if revision == nil {
+		return formatPrettyBody(revision)
+	}
+	lines := []string{"Revision " + displayID(revision)}
+	lines = appendScalar(lines, "revision_number", revision, "revision_number")
+	lines = appendScalar(lines, "content_type", revision, "content_type")
+	if content := firstNonEmpty(anyString(revision["content"]), anyString(revision["body_text"])); content != "" {
+		lines = append(lines, "content:")
+		lines = append(lines, indentBlock(strings.TrimSpace(content))...)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatNamedList(body any, field string, label string, render func(map[string]any) string) string {
+	root := asMap(body)
+	items := asSlice(root[field])
+	lines := []string{fmt.Sprintf("%s (%d):", label, len(items))}
+	for _, raw := range items {
+		item := asMap(raw)
+		if item == nil {
+			continue
+		}
+		lines = append(lines, "- "+render(item))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func renderThreadListItem(item map[string]any) string {
+	return compactSummary(displayID(item), firstNonEmpty(anyString(item["status"]), anyString(item["priority"])), firstNonEmpty(anyString(item["title"]), anyString(item["current_summary"])))
+}
+
+func renderCommitmentListItem(item map[string]any) string {
+	return compactSummary(displayID(item), firstNonEmpty(anyString(item["status"]), anyString(item["owner"])), firstNonEmpty(anyString(item["title"]), anyString(item["summary"])))
+}
+
+func renderArtifactListItem(item map[string]any) string {
+	return compactSummary(displayID(item), anyString(item["kind"]), firstNonEmpty(anyString(item["summary"]), anyString(item["title"])))
+}
+
+func renderEventListItem(item map[string]any) string {
+	return compactSummary(displayID(item), anyString(item["type"]), firstNonEmpty(anyString(item["summary"]), anyString(item["created_at"])))
+}
+
+func renderInboxItem(item map[string]any) string {
+	return compactSummary(
+		displayID(item),
+		firstNonEmpty(anyString(item["category"]), anyString(item["kind"]), anyString(item["type"])),
+		firstNonEmpty(anyString(item["title"]), anyString(item["summary"]), anyString(item["thread_id"])),
+	)
+}
+
+func renderRevisionListItem(item map[string]any) string {
+	return compactSummary(displayID(item), anyString(item["revision_number"]), anyString(item["created_at"]))
+}
+
+func compactSummary(parts ...string) string {
+	clean := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		clean = append(clean, part)
+	}
+	if len(clean) == 0 {
+		return "(empty)"
+	}
+	return strings.Join(clean, " :: ")
+}
+
+func appendListSection(lines []string, label string, items []any, render func(map[string]any) string) []string {
+	lines = append(lines, fmt.Sprintf("%s (%d):", label, len(items)))
+	for _, raw := range items {
+		item := asMap(raw)
+		if item == nil {
+			continue
+		}
+		lines = append(lines, "- "+render(item))
+	}
+	return lines
+}
+
+func appendScalar(lines []string, label string, values map[string]any, keys ...string) []string {
+	if values == nil {
+		return lines
+	}
+	for _, key := range keys {
+		value := formatScalar(values[key])
+		if value == "" {
+			continue
+		}
+		return append(lines, label+": "+value)
+	}
+	return lines
+}
+
+func appendStringList(lines []string, label string, values []string) []string {
+	if len(values) == 0 {
+		return lines
+	}
+	lines = append(lines, label+":")
+	for _, value := range values {
+		lines = append(lines, "- "+value)
+	}
+	return lines
+}
+
+func formatBodyWithHeaders(statusCode int, headers map[string][]string, bodyText string) string {
+	lines := headerLines(statusCode, headers)
+	if strings.TrimSpace(bodyText) != "" {
+		lines = append(lines, "")
+		lines = append(lines, bodyText)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func headerLines(statusCode int, headers map[string][]string) []string {
+	lines := []string{fmt.Sprintf("status: %d", statusCode)}
+	keys := make([]string, 0, len(headers))
+	for key := range headers {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		lines = append(lines, fmt.Sprintf("header %s: %s", key, strings.Join(headers[key], ", ")))
+	}
+	return lines
+}
+
+func formatPrettyBody(body any) string {
+	switch typed := body.(type) {
+	case nil:
+		return "null"
+	case string:
+		typed = strings.TrimSpace(typed)
+		if typed == "" {
+			return ""
+		}
+		return typed
+	default:
+		encoded, err := json.MarshalIndent(body, "", "  ")
+		if err != nil {
+			return fmt.Sprintf("%v", body)
+		}
+		return string(encoded)
+	}
+}
+
+func textualBody(body []byte) (string, bool) {
+	if len(body) == 0 || !utf8.Valid(body) {
+		return "", false
+	}
+	text := strings.TrimSpace(string(body))
+	if text == "" {
+		return "", false
+	}
+	if strings.ContainsRune(text, rune(0)) {
+		return "", false
+	}
+	return text, true
+}
+
+func displayID(item map[string]any) string {
+	if item == nil {
+		return ""
+	}
+	id := strings.TrimSpace(anyString(item["id"]))
+	if id == "" {
+		id = strings.TrimSpace(anyString(item["revision_id"]))
+	}
+	short := strings.TrimSpace(anyString(item["short_id"]))
+	if short == "" && id != "" {
+		short = shortID(id)
+	}
+	if short != "" && id != "" && short != id {
+		return short + " (id=" + id + ")"
+	}
+	return firstNonEmpty(id, short)
+}
+
+func extractNestedMap(body any, key string) map[string]any {
+	root := asMap(body)
+	if root == nil {
+		return nil
+	}
+	return asMap(root[key])
+}
+
+func asMap(raw any) map[string]any {
+	typed, _ := raw.(map[string]any)
+	return typed
+}
+
+func asSlice(raw any) []any {
+	typed, _ := raw.([]any)
+	return typed
+}
+
+func stringList(raw any) []string {
+	items, _ := raw.([]any)
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		value := strings.TrimSpace(anyString(item))
+		if value == "" {
+			continue
+		}
+		out = append(out, value)
+	}
+	return out
+}
+
+func formatScalar(raw any) string {
+	switch typed := raw.(type) {
+	case nil:
+		return ""
+	case string:
+		return strings.TrimSpace(typed)
+	case fmt.Stringer:
+		return strings.TrimSpace(typed.String())
+	case bool:
+		if typed {
+			return "true"
+		}
+		return "false"
+	case float64:
+		if typed == float64(int64(typed)) {
+			return fmt.Sprintf("%d", int64(typed))
+		}
+		return fmt.Sprintf("%v", typed)
+	default:
+		return strings.TrimSpace(anyString(raw))
+	}
+}
+
+func indentBlock(text string) []string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return nil
+	}
+	lines := strings.Split(text, "\n")
+	for idx := range lines {
+		lines[idx] = "  " + lines[idx]
+	}
+	return lines
+}

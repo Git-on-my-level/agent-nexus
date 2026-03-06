@@ -133,12 +133,16 @@ func parseGlobalFlags(args []string) (config.Overrides, []string, bool, error) {
 		baseURLFlag trackedString
 		agentFlag   trackedString
 		noColorFlag trackedBool
+		verboseFlag trackedBool
+		headersFlag trackedBool
 		timeoutFlag trackedDuration
 	)
 	fs.Var(&jsonFlag, "json", "Emit JSON envelope output")
 	fs.Var(&baseURLFlag, "base-url", "Core base URL")
 	fs.Var(&agentFlag, "agent", "Agent profile name")
 	fs.Var(&noColorFlag, "no-color", "Disable colorized output")
+	fs.Var(&verboseFlag, "verbose", "Show the full response payload for human-readable commands")
+	fs.Var(&headersFlag, "headers", "Include response status and headers in human-readable output")
 	fs.Var(&timeoutFlag, "timeout", "HTTP timeout duration")
 
 	if err := fs.Parse(args); err != nil {
@@ -159,6 +163,12 @@ func parseGlobalFlags(args []string) (config.Overrides, []string, bool, error) {
 	}
 	if noColorFlag.set {
 		overrides.NoColor = &noColorFlag.value
+	}
+	if verboseFlag.set {
+		overrides.Verbose = &verboseFlag.value
+	}
+	if headersFlag.set {
+		overrides.Headers = &headersFlag.value
 	}
 	if timeoutFlag.set {
 		overrides.Timeout = &timeoutFlag.value

@@ -75,6 +75,8 @@ Global Flags:
   --base-url <url>
   --agent <name>
   --no-color
+  --verbose
+  --headers
   --timeout <duration>
 `)+"\n")
 }

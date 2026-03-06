@@ -20,4 +20,6 @@ go run ./cmd/oar help threads
 
 Generated command/concept docs are under `docs/generated/`.
 
+Human-readable inspection commands now default to payload-first summaries. Use `--verbose` to print the full response body and `--headers` to opt into response status/header framing when debugging.
+
 See `docs/runbook.md` for command, integration-test, and Pi dogfood details.

@@ -22,6 +22,8 @@ type Overrides struct {
 	BaseURL *string
 	Agent   *string
 	NoColor *bool
+	Verbose *bool
+	Headers *bool
 	Timeout *time.Duration
 }
 
@@ -48,6 +50,8 @@ type Resolved struct {
 	BaseURL              string
 	Agent                string
 	NoColor              bool
+	Verbose              bool
+	Headers              bool
 	Timeout              time.Duration
 	AccessToken          string
 	RefreshToken         string
@@ -89,12 +93,16 @@ func Resolve(overrides Overrides, env Environment) (Resolved, error) {
 		BaseURL: DefaultBaseURL,
 		Agent:   DefaultAgent,
 		NoColor: false,
+		Verbose: false,
+		Headers: false,
 		Timeout: DefaultTimeout,
 		Sources: map[string]string{
 			"json":     "default",
 			"base_url": "default",
 			"agent":    "default",
 			"no_color": "default",
+			"verbose":  "default",
+			"headers":  "default",
 			"timeout":  "default",
 		},
 	}
@@ -217,6 +225,14 @@ func Resolve(overrides Overrides, env Environment) (Resolved, error) {
 	if overrides.NoColor != nil {
 		resolved.NoColor = *overrides.NoColor
 		resolved.Sources["no_color"] = "flag:--no-color"
+	}
+	if overrides.Verbose != nil {
+		resolved.Verbose = *overrides.Verbose
+		resolved.Sources["verbose"] = "flag:--verbose"
+	}
+	if overrides.Headers != nil {
+		resolved.Headers = *overrides.Headers
+		resolved.Sources["headers"] = "flag:--headers"
 	}
 	if overrides.JSON != nil {
 		resolved.JSON = *overrides.JSON
