@@ -3,8 +3,9 @@ package app
 import "strings"
 
 type commandShapeCompatibilityAlias struct {
-	from []string
-	to   []string
+	from                []string
+	to                  []string
+	requireTrailingArgs bool
 }
 
 var commandShapeCompatibilityAliases = []commandShapeCompatibilityAlias{
@@ -21,8 +22,9 @@ var commandShapeCompatibilityAliases = []commandShapeCompatibilityAlias{
 		to:   []string{"work-orders", "create"},
 	},
 	{
-		from: []string{"artifacts", "content", "get"},
-		to:   []string{"artifacts", "content"},
+		from:                []string{"artifacts", "content", "get"},
+		to:                  []string{"artifacts", "content"},
+		requireTrailingArgs: true,
 	},
 	{
 		from: []string{"threads", "update"},
@@ -33,6 +35,9 @@ var commandShapeCompatibilityAliases = []commandShapeCompatibilityAlias{
 func applyCommandShapeCompatibilityAlias(args []string) ([]string, bool) {
 	for _, alias := range commandShapeCompatibilityAliases {
 		if !hasExactTokenPrefix(args, alias.from) {
+			continue
+		}
+		if alias.requireTrailingArgs && len(args) == len(alias.from) {
 			continue
 		}
 		rewritten := make([]string, 0, len(alias.to)+len(args)-len(alias.from))

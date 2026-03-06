@@ -103,6 +103,13 @@ func TestCommandShapeCompatibilityAliasesResolveToCanonicalHandlers(t *testing.T
 			wantCommand: "artifacts content",
 		},
 		{
+			name:        "artifacts content positional get id",
+			args:        []string{"artifacts", "content", "get"},
+			wantMethod:  http.MethodGet,
+			wantPath:    "/artifacts/get/content",
+			wantCommand: "artifacts content",
+		},
+		{
 			name:        "threads update",
 			args:        []string{"threads", "update", "--thread-id", "thread_1"},
 			stdin:       `{"thread":{"status":"resolved"}}`,
@@ -151,6 +158,19 @@ func TestCommandShapeCompatibilityAliasesResolveToCanonicalHandlers(t *testing.T
 				t.Fatalf("expected canonical handler request %s %s", tt.wantMethod, tt.wantPath)
 			}
 		})
+	}
+}
+
+func TestApplyCommandShapeCompatibilityAliasPreservesArtifactsContentPositionalGetID(t *testing.T) {
+	t.Parallel()
+
+	args := []string{"artifacts", "content", "get"}
+	got, ok := applyCommandShapeCompatibilityAlias(args)
+	if ok {
+		t.Fatalf("expected no alias match for positional artifact id `get`, got rewritten args %#v", got)
+	}
+	if !reflect.DeepEqual(got, args) {
+		t.Fatalf("expected args to remain unchanged, got %#v", got)
 	}
 }
 
