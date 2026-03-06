@@ -517,6 +517,9 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 		if err != nil {
 			return nil, "docs create", err
 		}
+		if err := validateDocsCreateBody(body, "docs create"); err != nil {
+			return nil, "docs create", err
+		}
 		if dryRun {
 			return dryRunResult("docs create", "docs.create", nil, nil, body), "docs create", nil
 		}
@@ -1807,6 +1810,44 @@ func validateEventsCreateInput(body any, commandName string) error {
 	return validateEventsCreateBody(body)
 }
 
+func validateDocsCreateBody(body any, commandName string) error {
+	payload, ok := body.(map[string]any)
+	if !ok {
+		return errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `oar %s` must be an object", commandName))
+	}
+
+	issues := make([]string, 0, 8)
+	rawDocument, hasDocument := payload["document"]
+	if !hasDocument || rawDocument == nil {
+		issues = append(issues, "document is required")
+	} else {
+		if _, ok := rawDocument.(map[string]any); !ok {
+			issues = append(issues, "document must be an object")
+		}
+	}
+
+	rawContent, hasContent := payload["content"]
+	if !hasContent || rawContent == nil {
+		issues = append(issues, "content is required")
+	}
+
+	rawContentType, hasContentType := payload["content_type"]
+	contentType := strings.TrimSpace(anyString(rawContentType))
+	if !hasContentType {
+		issues = append(issues, "content_type is required")
+	} else if contentType == "" {
+		issues = append(issues, "content_type must be a non-empty string")
+	} else if contentType != "text" && contentType != "structured" && contentType != "binary" {
+		issues = append(issues, fmt.Sprintf("content_type %q must be one of: text, structured, binary", contentType))
+	}
+
+	appendDocsCommonValidationIssues(payload, &issues)
+	if len(issues) > 0 {
+		return errnorm.Usage("invalid_request", fmt.Sprintf("docs create payload failed local validation: %s", strings.Join(issues, "; ")))
+	}
+	return nil
+}
+
 func validateDocsUpdateBody(body any, commandName string) error {
 	payload, ok := body.(map[string]any)
 	if !ok {
@@ -1814,7 +1855,8 @@ func validateDocsUpdateBody(body any, commandName string) error {
 	}
 
 	issues := make([]string, 0, 8)
-	if _, exists := payload["content"]; !exists {
+	rawContent, hasContent := payload["content"]
+	if !hasContent || rawContent == nil {
 		issues = append(issues, "content is required")
 	}
 
@@ -1836,35 +1878,38 @@ func validateDocsUpdateBody(body any, commandName string) error {
 		issues = append(issues, "if_base_revision must be a non-empty string")
 	}
 
+	appendDocsCommonValidationIssues(payload, &issues)
+	if len(issues) > 0 {
+		return errnorm.Usage("invalid_request", fmt.Sprintf("docs update payload failed local validation: %s", strings.Join(issues, "; ")))
+	}
+	return nil
+}
+
+func appendDocsCommonValidationIssues(payload map[string]any, issues *[]string) {
 	if rawDocument, hasDocument := payload["document"]; hasDocument {
 		if _, ok := rawDocument.(map[string]any); !ok {
-			issues = append(issues, "document must be an object when provided")
+			*issues = append(*issues, "document must be an object when provided")
 		}
 	}
 
 	if rawActorID, hasActorID := payload["actor_id"]; hasActorID {
 		if strings.TrimSpace(anyString(rawActorID)) == "" {
-			issues = append(issues, "actor_id must be a non-empty string when provided")
+			*issues = append(*issues, "actor_id must be a non-empty string when provided")
 		}
 	}
 
 	if rawRefs, hasRefs := payload["refs"]; hasRefs {
 		refs, ok := asStringList(rawRefs)
 		if !ok {
-			issues = append(issues, "refs must be an array of strings when provided")
+			*issues = append(*issues, "refs must be an array of strings when provided")
 		} else {
 			for _, ref := range refs {
 				if err := validateTypedRef(ref); err != nil {
-					issues = append(issues, fmt.Sprintf("refs contains invalid typed ref %q", ref))
+					*issues = append(*issues, fmt.Sprintf("refs contains invalid typed ref %q", ref))
 				}
 			}
 		}
 	}
-
-	if len(issues) > 0 {
-		return errnorm.Usage("invalid_request", fmt.Sprintf("docs update payload failed local validation: %s", strings.Join(issues, "; ")))
-	}
-	return nil
 }
 
 func validateEventsCreateBody(body any) error {

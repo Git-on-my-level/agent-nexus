@@ -237,6 +237,44 @@ func TestDocsValidateUpdateRequiresBaseRevision(t *testing.T) {
 	}
 }
 
+func TestDocsCreateDryRunValidatesPayloadBeforeSuccess(t *testing.T) {
+	t.Parallel()
+
+	var mu sync.Mutex
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		requestCount++
+		mu.Unlock()
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{}`), []string{
+		"--json",
+		"--base-url", server.URL,
+		"docs", "create",
+		"--dry-run",
+	})
+	payload := assertEnvelopeError(t, raw)
+	errObj, _ := payload["error"].(map[string]any)
+	if errObj == nil || anyStringValue(errObj["code"]) != "invalid_request" {
+		t.Fatalf("unexpected error payload: %#v", payload)
+	}
+	message := anyStringValue(errObj["message"])
+	if !strings.Contains(message, "document is required") || !strings.Contains(message, "content is required") || !strings.Contains(message, "content_type") {
+		t.Fatalf("expected docs create validation guidance, got %q payload=%#v", message, payload)
+	}
+
+	mu.Lock()
+	gotRequests := requestCount
+	mu.Unlock()
+	if gotRequests != 0 {
+		t.Fatalf("expected no HTTP request for invalid dry-run payload, got %d", gotRequests)
+	}
+}
+
 func TestDocsValidateUpdateWithContentFile(t *testing.T) {
 	t.Parallel()
 
@@ -266,6 +304,63 @@ func TestDocsValidateUpdateWithContentFile(t *testing.T) {
 	body, _ := data["body"].(map[string]any)
 	if got := anyStringValue(body["content"]); got != strings.TrimSpace(content) {
 		t.Fatalf("expected content from file in validation payload, got %q payload=%#v", got, payload)
+	}
+}
+
+func TestDocsValidateUpdateRejectsNullContent(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{"if_base_revision":"rev_1","content":null,"content_type":"text"}`), []string{
+		"--json",
+		"docs", "validate-update",
+		"--document-id", "doc_1",
+	})
+	payload := assertEnvelopeError(t, raw)
+	errObj, _ := payload["error"].(map[string]any)
+	if errObj == nil || anyStringValue(errObj["code"]) != "invalid_request" {
+		t.Fatalf("unexpected error payload: %#v", payload)
+	}
+	if message := anyStringValue(errObj["message"]); !strings.Contains(message, "content is required") {
+		t.Fatalf("expected content validation guidance, got %q payload=%#v", message, payload)
+	}
+}
+
+func TestDocsUpdateDryRunRejectsNullContentBeforeHTTP(t *testing.T) {
+	t.Parallel()
+
+	var mu sync.Mutex
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		requestCount++
+		mu.Unlock()
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{"if_base_revision":"rev_1","content":null,"content_type":"text"}`), []string{
+		"--json",
+		"--base-url", server.URL,
+		"docs", "update",
+		"--document-id", "doc_1",
+		"--dry-run",
+	})
+	payload := assertEnvelopeError(t, raw)
+	errObj, _ := payload["error"].(map[string]any)
+	if errObj == nil || anyStringValue(errObj["code"]) != "invalid_request" {
+		t.Fatalf("unexpected error payload: %#v", payload)
+	}
+	if message := anyStringValue(errObj["message"]); !strings.Contains(message, "content is required") {
+		t.Fatalf("expected content validation guidance, got %q payload=%#v", message, payload)
+	}
+
+	mu.Lock()
+	gotRequests := requestCount
+	mu.Unlock()
+	if gotRequests != 0 {
+		t.Fatalf("expected no HTTP request for invalid dry-run payload, got %d", gotRequests)
 	}
 }
 
