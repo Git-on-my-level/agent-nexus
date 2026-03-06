@@ -37,7 +37,7 @@ func (a *App) runDraft(ctx context.Context, args []string, cfg config.Resolved) 
 	if len(args) == 0 || isHelpToken(args[0]) {
 		return &commandResult{Text: draftUsageText()}, "draft", nil
 	}
-	sub := strings.TrimSpace(args[0])
+	sub := draftSubcommandSpec.normalize(args[0])
 	switch sub {
 	case "create":
 		result, err := a.runDraftCreate(args[1:], cfg)
@@ -55,7 +55,7 @@ func (a *App) runDraft(ctx context.Context, args []string, cfg config.Resolved) 
 		result, err := a.runDraftDiscard(args[1:], cfg)
 		return result, "draft discard", err
 	default:
-		return nil, "draft", errnorm.Usage("unknown_subcommand", fmt.Sprintf("unknown draft subcommand %q", sub))
+		return nil, "draft", draftSubcommandSpec.unknownError(args[0])
 	}
 }
 

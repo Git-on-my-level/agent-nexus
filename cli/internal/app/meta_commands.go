@@ -15,9 +15,9 @@ func (a *App) runMeta(_ context.Context, args []string, _ config.Resolved) (*com
 		if text, ok := generatedHelpText("meta"); ok {
 			return &commandResult{Text: text}, "meta", nil
 		}
-		return nil, "meta", errnorm.Usage("subcommand_required", "expected one of: commands, command, concepts, concept")
+		return nil, "meta", metaSubcommandSpec.requiredError()
 	}
-	sub := strings.TrimSpace(args[0])
+	sub := metaSubcommandSpec.normalize(args[0])
 	switch sub {
 	case "commands":
 		result, err := a.runMetaCommands(args[1:])
@@ -32,7 +32,7 @@ func (a *App) runMeta(_ context.Context, args []string, _ config.Resolved) (*com
 		result, err := a.runMetaConcept(args[1:])
 		return result, "meta concept", err
 	default:
-		return nil, "meta", errnorm.Usage("unknown_subcommand", fmt.Sprintf("unknown meta subcommand %q", sub))
+		return nil, "meta", metaSubcommandSpec.unknownError(args[0])
 	}
 }
 

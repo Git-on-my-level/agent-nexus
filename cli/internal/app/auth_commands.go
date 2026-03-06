@@ -12,10 +12,10 @@ import (
 
 func (a *App) runAuth(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
 	if len(args) == 0 {
-		return nil, "auth", errnorm.Usage("subcommand_required", "expected one of: register, whoami, update-username, rotate, revoke, token-status")
+		return nil, "auth", authSubcommandSpec.requiredError()
 	}
 	service := authcli.New(cfg)
-	subcommand := strings.TrimSpace(args[0])
+	subcommand := authSubcommandSpec.normalize(args[0])
 	switch subcommand {
 	case "register":
 		result, err := a.runAuthRegister(ctx, service, args[1:])
@@ -36,7 +36,7 @@ func (a *App) runAuth(ctx context.Context, args []string, cfg config.Resolved) (
 		result, err := a.runAuthTokenStatus(ctx, service)
 		return result, "auth token-status", err
 	default:
-		return nil, "auth", errnorm.Usage("unknown_subcommand", fmt.Sprintf("unknown auth subcommand %q", subcommand))
+		return nil, "auth", authSubcommandSpec.unknownError(args[0])
 	}
 }
 
