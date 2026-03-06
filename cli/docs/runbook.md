@@ -10,6 +10,7 @@ Build and test:
 cd cli
 go build ./cmd/oar
 go test ./...
+go test -tags=integration ./integration/...
 ```
 
 Run against local core:
@@ -65,7 +66,45 @@ Profile material paths:
 
 Permissions are enforced by CLI runtime (`0700` dirs, `0600` files).
 
-## Typed command smoke
+## Integration Scenarios
+
+Deterministic multi-step CLI regression coverage lives under `cli/integration/` and is intentionally excluded from cheap default test runs.
+
+Run the suite against live `oar-core` processes spun up by the tests:
+
+```bash
+cd cli
+go test -tags=integration ./integration/...
+```
+
+These tests:
+- build the real `oar` and `oar-core` binaries
+- copy the repo's workspace snapshot into a temp directory
+- run multi-step thread/event and docs/conflict flows through the real CLI
+
+## Pi Dogfood
+
+The supported manual dogfood path is the Pi-based runner under `cli/dogfood/pi/`.
+
+Install and run Pi dogfood:
+
+```bash
+pnpm install --filter @organization-autorunner/pi-dogfood...
+
+pnpm --dir cli/dogfood/pi run pilot-rescue -- \
+  --api-key-file ../../.secrets/zai_api_key \
+  --provider zai \
+  --model glm-5
+```
+
+The runner:
+- builds `oar` and `oar-core`
+- starts a managed temporary core on a random local port
+- seeds that core from CLI-owned dogfood data under `cli/dogfood/pi/seed/`
+- runs Pi against the isolated seeded environment
+- writes artifacts under `cli/.tmp/pi-dogfood/`
+
+## Typed Command Smoke
 
 ```bash
 printf '{"thread":{"title":"Incident #42"}}\n' | oar --agent agent-a threads create

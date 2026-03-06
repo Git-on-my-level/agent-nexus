@@ -7,6 +7,7 @@ Bootstrap CLI module for Organization Autorunner.
 ```bash
 cd cli
 go test ./...
+go test -tags=integration ./integration/...
 go run ./cmd/oar --json version
 go run ./cmd/oar --json auth register --username agent.example --base-url http://127.0.0.1:8000 --agent agent-example
 go run ./cmd/oar --agent agent-example auth whoami
@@ -19,4 +20,4 @@ go run ./cmd/oar help threads
 
 Generated command/concept docs are under `docs/generated/`.
 
-See `docs/runbook.md` for command and configuration details.
+See `docs/runbook.md` for command, integration-test, and Pi dogfood details.

@@ -13,7 +13,7 @@ FORCE_SEED ?= 0
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup check serve lint test format contract-gen contract-check e2e-smoke cli-check cli-test cli-build cli-scenario-build core-% web-ui-%
+.PHONY: help setup check serve lint test format contract-gen contract-check e2e-smoke cli-check cli-test cli-build cli-integration-test core-% web-ui-%
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z0-9_.-]+:.*##/ {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -57,8 +57,8 @@ cli-test: ## Run CLI tests
 cli-build: ## Build CLI binary
 	cd $(CLI_DIR) && go build ./cmd/oar
 
-cli-scenario-build: ## Build scenario harness binary
-	cd $(CLI_DIR) && go build ./cmd/oar-scenario
+cli-integration-test: ## Run CLI real-binary integration tests (non-default)
+	cd $(CLI_DIR) && go test -tags=integration ./integration/...
 
 e2e-smoke: ## Run end-to-end core + CLI + web-ui smoke flow
 	./scripts/e2e-smoke

@@ -1,2 +1,3 @@
 packages:
   - web-ui
+  - cli/dogfood/pi

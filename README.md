@@ -35,6 +35,7 @@ make contract-gen
 - `make check`: run checks for both projects
 - `make contract-check`: verify generated contract artifacts are up to date
 - `make cli-check`: run CLI tests
+- `make cli-integration-test`: run CLI real-binary integration tests (non-default)
 - `make e2e-smoke`: run live core + CLI + web-ui smoke verification
 - `make core-<target>`: pass through to `core/Makefile`
 - `make web-ui-<target>`: pass through to `web-ui/Makefile`

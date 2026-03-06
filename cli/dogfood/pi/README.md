@@ -1,0 +1,61 @@
+# Pi Dogfood
+
+Manual OAR CLI dogfood runs using a real Pi agent with bash and filesystem tools.
+
+Goals:
+- exercise the real `oar` binary against a managed seeded `oar-core`
+- keep deterministic regression coverage separate in Go integration tests
+- capture Pi JSON event logs and a final written findings artifact
+
+This package is the only supported dogfood lane for CLI agent ergonomics.
+
+## Prerequisites
+
+Install the Pi dogfood package:
+
+```bash
+pnpm install --filter @organization-autorunner/pi-dogfood...
+```
+
+## Run
+
+From the repo root:
+
+```bash
+pnpm --dir cli/dogfood/pi run pilot-rescue -- \
+  --api-key-file ../../.secrets/zai_api_key \
+  --provider zai \
+  --model glm-5
+```
+
+Concurrent team run:
+
+```bash
+pnpm --dir cli/dogfood/pi run pilot-rescue -- \
+  --api-key-file ../../.secrets/zai_api_key \
+  --provider zai \
+  --model glm-5 \
+  --agent-count 4
+```
+
+Artifacts are written under `cli/.tmp/pi-dogfood/<run-id>/`:
+
+- `events.jsonl` or `events-agent-*.jsonl`: Pi JSON event stream
+- `result.md` or `workspace/agent-*/result.md`: agent-written findings summary
+- `run-metadata.json`: runner metadata
+- `core.log`: managed core stdout/stderr
+- `AGENTS.md`: local run instructions injected into the Pi workspace
+- `SCENARIO.md`: scenario brief copied into the run workspace
+- `TARGETS.md`: resolved thread/artifact/commitment ids for the scenario
+
+The runner also:
+- builds temporary `oar` and `oar-core` binaries
+- starts a managed `oar-core` on a random local port
+- seeds the core from CLI-owned scenario data under `cli/dogfood/pi/seed/`
+- points Pi at that isolated core via `OAR_BASE_URL`
+
+Constraints enforced by the run workspace:
+- use `oar` on `PATH` for OAR interactions
+- do not edit repo source files
+- work inside the temporary run directory
+- in team mode, each agent gets its own profile/home/workspace but shares the same managed core
