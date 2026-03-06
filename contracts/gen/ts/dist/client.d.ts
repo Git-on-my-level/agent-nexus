@@ -69,6 +69,7 @@ export declare class OarClient {
     eventsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     eventsStream(options?: RequestOptions): Promise<InvokeResult>;
     inboxAck(options?: RequestOptions): Promise<InvokeResult>;
+    inboxGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     inboxList(options?: RequestOptions): Promise<InvokeResult>;
     inboxStream(options?: RequestOptions): Promise<InvokeResult>;
     metaCommandsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;

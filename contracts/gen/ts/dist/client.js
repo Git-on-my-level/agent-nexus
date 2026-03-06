@@ -1383,11 +1383,56 @@ export const commandRegistry = [
             ]
         },
         "adjacent_commands": [
+            "inbox.get",
             "inbox.list",
             "inbox.stream"
         ],
         "go_method": "InboxAck",
         "ts_method": "inboxAck"
+    },
+    {
+        "command_id": "inbox.get",
+        "cli_path": "inbox get",
+        "group": "inbox",
+        "method": "GET",
+        "path": "/inbox/{inbox_item_id}",
+        "operation_id": "getInboxItem",
+        "summary": "Get derived inbox item detail",
+        "why": "Inspect one inbox item in detail before acting on it.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ item, generated_at }` for the requested inbox item.",
+        "error_codes": [
+            "not_found"
+        ],
+        "concepts": [
+            "inbox",
+            "derived-views"
+        ],
+        "stability": "stable",
+        "agent_notes": "CLI supports canonical ids, aliases, and unique prefixes.",
+        "examples": [
+            {
+                "title": "Get inbox item by canonical id",
+                "command": "oar inbox get --id inbox:decision_needed:thread_123:none:event_123 --json"
+            },
+            {
+                "title": "Get inbox item by alias",
+                "command": "oar inbox get --id ibx_abcd1234ef56 --json"
+            }
+        ],
+        "path_params": [
+            "inbox_item_id"
+        ],
+        "adjacent_commands": [
+            "inbox.ack",
+            "inbox.list",
+            "inbox.stream"
+        ],
+        "go_method": "InboxGet",
+        "ts_method": "inboxGet"
     },
     {
         "command_id": "inbox.list",
@@ -1417,6 +1462,7 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "inbox.ack",
+            "inbox.get",
             "inbox.stream"
         ],
         "go_method": "InboxList",
@@ -1461,6 +1507,7 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "inbox.ack",
+            "inbox.get",
             "inbox.list"
         ],
         "go_method": "InboxStream",
@@ -2597,6 +2644,9 @@ export class OarClient {
     }
     inboxAck(options = {}) {
         return this.invoke("inbox.ack", {}, options);
+    }
+    inboxGet(pathParams, options = {}) {
+        return this.invoke("inbox.get", pathParams, options);
     }
     inboxList(options = {}) {
         return this.invoke("inbox.list", {}, options);
