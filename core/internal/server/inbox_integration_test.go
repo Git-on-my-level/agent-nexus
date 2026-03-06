@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 )
@@ -194,6 +195,96 @@ func TestInboxDerivationAndAcknowledgmentSuppression(t *testing.T) {
 	}
 	if asString(reappearedRisk["category"]) != "commitment_risk" {
 		t.Fatalf("unexpected reappeared risk item: %#v", reappearedRisk)
+	}
+}
+
+func TestGetInboxItemDetailByID(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	threadResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
+		"actor_id":"actor-1",
+		"thread":{
+			"title":"Inbox detail thread",
+			"type":"incident",
+			"status":"active",
+			"priority":"p1",
+			"tags":["ops"],
+			"cadence":"daily",
+			"next_check_in_at":"2026-03-05T00:00:00Z",
+			"current_summary":"summary",
+			"next_actions":["do x"],
+			"key_artifacts":[],
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated)
+	defer threadResp.Body.Close()
+
+	var createdThread struct {
+		Thread map[string]any `json:"thread"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&createdThread); err != nil {
+		t.Fatalf("decode thread response: %v", err)
+	}
+	threadID := asString(createdThread.Thread["id"])
+	if threadID == "" {
+		t.Fatal("expected thread id")
+	}
+
+	eventResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
+		"actor_id":"actor-1",
+		"event":{
+			"type":"decision_needed",
+			"thread_id":"`+threadID+`",
+			"refs":["thread:`+threadID+`"],
+			"summary":"Need a decision",
+			"payload":{},
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated)
+	defer eventResp.Body.Close()
+
+	items := getInboxItems(t, h.baseURL)
+	if len(items) == 0 {
+		t.Fatalf("expected inbox items, got %#v", items)
+	}
+	inboxItemID := asString(items[0]["id"])
+	if inboxItemID == "" {
+		t.Fatalf("expected inbox item id, got %#v", items[0])
+	}
+
+	resp, err := http.Get(h.baseURL + "/inbox/" + url.PathEscape(inboxItemID))
+	if err != nil {
+		t.Fatalf("GET /inbox/{id}: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected GET /inbox/{id} status: %d", resp.StatusCode)
+	}
+
+	var payload struct {
+		Item        map[string]any `json:"item"`
+		GeneratedAt string         `json:"generated_at"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode /inbox/{id} response: %v", err)
+	}
+	if got := asString(payload.Item["id"]); got != inboxItemID {
+		t.Fatalf("expected inbox item id %q, got %q payload=%#v", inboxItemID, got, payload)
+	}
+	if payload.GeneratedAt == "" {
+		t.Fatalf("expected generated_at in response payload=%#v", payload)
+	}
+
+	missingResp, err := http.Get(h.baseURL + "/inbox/" + url.PathEscape("inbox:missing:item"))
+	if err != nil {
+		t.Fatalf("GET /inbox/{id} missing: %v", err)
+	}
+	defer missingResp.Body.Close()
+	if missingResp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404 for missing inbox item, got %d", missingResp.StatusCode)
 	}
 }
 

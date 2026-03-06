@@ -31,18 +31,9 @@ func handleGetInbox(w http.ResponseWriter, r *http.Request, opts handlerOptions)
 	}
 
 	now := time.Now().UTC()
-	horizon := opts.inboxRiskHorizon
-	if horizon <= 0 {
-		horizon = defaultInboxRiskHorizon
-	}
-
-	if rawDays := strings.TrimSpace(r.URL.Query().Get("risk_horizon_days")); rawDays != "" {
-		days, err := strconv.Atoi(rawDays)
-		if err != nil || days < 0 {
-			writeError(w, http.StatusBadRequest, "invalid_request", "risk_horizon_days must be a non-negative integer")
-			return
-		}
-		horizon = time.Duration(days) * 24 * time.Hour
+	horizon, ok := resolveInboxRiskHorizon(w, r, opts)
+	if !ok {
+		return
 	}
 
 	items, err := deriveInboxItems(r.Context(), opts, now, horizon)
@@ -60,6 +51,44 @@ func handleGetInbox(w http.ResponseWriter, r *http.Request, opts handlerOptions)
 		"items":        payloadItems,
 		"generated_at": now.Format(time.RFC3339Nano),
 	})
+}
+
+func handleGetInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOptions, inboxItemID string) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+
+	inboxItemID = strings.TrimSpace(inboxItemID)
+	if inboxItemID == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "inbox_item_id is required")
+		return
+	}
+
+	now := time.Now().UTC()
+	horizon, ok := resolveInboxRiskHorizon(w, r, opts)
+	if !ok {
+		return
+	}
+
+	items, err := deriveInboxItems(r.Context(), opts, now, horizon)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to derive inbox items")
+		return
+	}
+
+	for _, item := range items {
+		if strings.TrimSpace(item.ID) != inboxItemID {
+			continue
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"item":         item.Data,
+			"generated_at": now.Format(time.RFC3339Nano),
+		})
+		return
+	}
+
+	writeError(w, http.StatusNotFound, "not_found", "inbox item not found")
 }
 
 func handleRebuildDerived(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
@@ -165,6 +194,23 @@ func deriveInboxItems(ctx context.Context, opts handlerOptions, now time.Time, r
 		return nil, err
 	}
 	return deriveInboxItemsNoStaleEmission(ctx, opts, now, riskHorizon)
+}
+
+func resolveInboxRiskHorizon(w http.ResponseWriter, r *http.Request, opts handlerOptions) (time.Duration, bool) {
+	horizon := opts.inboxRiskHorizon
+	if horizon <= 0 {
+		horizon = defaultInboxRiskHorizon
+	}
+
+	if rawDays := strings.TrimSpace(r.URL.Query().Get("risk_horizon_days")); rawDays != "" {
+		days, err := strconv.Atoi(rawDays)
+		if err != nil || days < 0 {
+			writeError(w, http.StatusBadRequest, "invalid_request", "risk_horizon_days must be a non-negative integer")
+			return 0, false
+		}
+		horizon = time.Duration(days) * 24 * time.Hour
+	}
+	return horizon, true
 }
 
 func deriveInboxItemsNoStaleEmission(ctx context.Context, opts handlerOptions, now time.Time, riskHorizon time.Duration) ([]derivedInboxItem, error) {

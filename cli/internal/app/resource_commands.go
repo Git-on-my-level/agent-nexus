@@ -1061,30 +1061,36 @@ func (a *App) runInboxGet(ctx context.Context, args []string, cfg config.Resolve
 		addSingleQuery(&query, "risk_horizon_days", fmt.Sprintf("%d", riskHorizonFlag.value))
 	}
 
-	listResult, err := a.invokeTypedJSON(ctx, cfg, "inbox list", "inbox.list", nil, query, nil)
-	if err != nil {
-		return nil, "inbox get", err
-	}
 	if rawID == "" {
+		listResult, err := a.invokeTypedJSON(ctx, cfg, "inbox list", "inbox.list", nil, query, nil)
+		if err != nil {
+			return nil, "inbox get", err
+		}
 		return listResult, "inbox list", nil
 	}
 	if err := validateID(rawID, "inbox item id"); err != nil {
 		return nil, "inbox get", err
 	}
 
+	listResult, err := a.invokeTypedJSON(ctx, cfg, "inbox list", "inbox.list", nil, query, nil)
+	if err != nil {
+		return nil, "inbox get", err
+	}
 	match, err := resolveInboxItemFromListResult(listResult, rawID)
 	if err != nil {
 		return nil, "inbox get", err
 	}
-	data, _ := listResult.Data.(map[string]any)
-	if data == nil {
-		data = map[string]any{}
-	}
-	data["body"] = map[string]any{"item": match.Item}
-	return &commandResult{
-		Text: fmt.Sprintf("inbox item %s (alias=%s)", match.ID, match.Alias),
-		Data: data,
-	}, "inbox get", nil
+
+	result, callErr := a.invokeTypedJSON(
+		ctx,
+		cfg,
+		"inbox get",
+		"inbox.get",
+		map[string]string{"inbox_item_id": match.ID},
+		query,
+		nil,
+	)
+	return result, "inbox get", callErr
 }
 
 func (a *App) runPacketsCreateCommand(ctx context.Context, resource string, commandID string, args []string, cfg config.Resolved) (*commandResult, string, error) {
@@ -2108,6 +2114,8 @@ func enrichListBodyWithShortIDs(commandID string, body any) (any, bool) {
 		return body, addShortIDToListField(typedBody, "artifacts")
 	case "inbox.list":
 		return body, addInboxAliasesToListField(typedBody, "items")
+	case "inbox.get":
+		return body, addInboxAliasToItemField(typedBody, "item")
 	default:
 		return body, false
 	}
@@ -2174,39 +2182,64 @@ func addInboxAliasesToListField(body map[string]any, field string) bool {
 		if id == "" {
 			continue
 		}
+		if applyInboxIdentifiers(item, aliasByID[id]) {
+			changed = true
+		}
+	}
+	return changed
+}
+
+func addInboxAliasToItemField(body map[string]any, field string) bool {
+	item, _ := body[field].(map[string]any)
+	if item == nil {
+		return false
+	}
+	id := strings.TrimSpace(anyString(item["id"]))
+	if id == "" {
+		return false
+	}
+	alias := inboxAliasByID([]string{id})[id]
+	return applyInboxIdentifiers(item, alias)
+}
+
+func applyInboxIdentifiers(item map[string]any, alias string) bool {
+	changed := false
+	id := strings.TrimSpace(anyString(item["id"]))
+	if id != "" {
 		expectedShortID := shortID(id)
 		if currentShortID := strings.TrimSpace(anyString(item["short_id"])); currentShortID != expectedShortID {
 			item["short_id"] = expectedShortID
 			changed = true
 		}
-		expectedAlias := aliasByID[id]
-		if currentAlias := strings.TrimSpace(anyString(item["alias"])); currentAlias != expectedAlias {
-			item["alias"] = expectedAlias
+	}
+	if alias != "" {
+		if currentAlias := strings.TrimSpace(anyString(item["alias"])); currentAlias != alias {
+			item["alias"] = alias
 			changed = true
 		}
-		threadID := strings.TrimSpace(anyString(item["thread_id"]))
-		if threadID != "" {
-			threadShortID := shortID(threadID)
-			if current := strings.TrimSpace(anyString(item["thread_short_id"])); current != threadShortID {
-				item["thread_short_id"] = threadShortID
-				changed = true
-			}
+	}
+	threadID := strings.TrimSpace(anyString(item["thread_id"]))
+	if threadID != "" {
+		threadShortID := shortID(threadID)
+		if current := strings.TrimSpace(anyString(item["thread_short_id"])); current != threadShortID {
+			item["thread_short_id"] = threadShortID
+			changed = true
 		}
-		sourceEventID := strings.TrimSpace(anyString(item["source_event_id"]))
-		if sourceEventID != "" {
-			sourceShortID := shortID(sourceEventID)
-			if current := strings.TrimSpace(anyString(item["source_event_short_id"])); current != sourceShortID {
-				item["source_event_short_id"] = sourceShortID
-				changed = true
-			}
+	}
+	sourceEventID := strings.TrimSpace(anyString(item["source_event_id"]))
+	if sourceEventID != "" {
+		sourceShortID := shortID(sourceEventID)
+		if current := strings.TrimSpace(anyString(item["source_event_short_id"])); current != sourceShortID {
+			item["source_event_short_id"] = sourceShortID
+			changed = true
 		}
-		commitmentID := strings.TrimSpace(anyString(item["commitment_id"]))
-		if commitmentID != "" {
-			commitmentShortID := shortID(commitmentID)
-			if current := strings.TrimSpace(anyString(item["commitment_short_id"])); current != commitmentShortID {
-				item["commitment_short_id"] = commitmentShortID
-				changed = true
-			}
+	}
+	commitmentID := strings.TrimSpace(anyString(item["commitment_id"]))
+	if commitmentID != "" {
+		commitmentShortID := shortID(commitmentID)
+		if current := strings.TrimSpace(anyString(item["commitment_short_id"])); current != commitmentShortID {
+			item["commitment_short_id"] = commitmentShortID
+			changed = true
 		}
 	}
 	return changed

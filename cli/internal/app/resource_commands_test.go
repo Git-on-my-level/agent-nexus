@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -224,12 +225,19 @@ func TestInboxGetByAliasTargetsSingleItem(t *testing.T) {
 	alias := inboxAliasByID([]string{firstID, secondID})[secondID]
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || r.URL.Path != "/inbox" {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"items":[{"id":"` + firstID + `","thread_id":"thread_aaa"},{"id":"` + secondID + `","thread_id":"thread_bbb"}]}`))
+			return
+		case r.Method == http.MethodGet && r.URL.Path == "/inbox/"+url.PathEscape(secondID):
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"item":{"id":"` + secondID + `","thread_id":"thread_bbb"},"generated_at":"2026-03-06T00:00:00Z"}`))
+			return
+		default:
 			http.NotFound(w, r)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"items":[{"id":"` + firstID + `","thread_id":"thread_aaa"},{"id":"` + secondID + `","thread_id":"thread_bbb"}]}`))
 	}))
 	defer server.Close()
 
@@ -249,6 +257,9 @@ func TestInboxGetByAliasTargetsSingleItem(t *testing.T) {
 	item, _ := body["item"].(map[string]any)
 	if got := anyStringValue(item["id"]); got != secondID {
 		t.Fatalf("expected inbox item %q, got %q payload=%#v", secondID, got, payload)
+	}
+	if got := anyStringValue(item["alias"]); got != alias {
+		t.Fatalf("expected inbox alias %q, got %q payload=%#v", alias, got, payload)
 	}
 }
 

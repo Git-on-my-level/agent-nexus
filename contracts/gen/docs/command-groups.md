@@ -73,9 +73,10 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `inbox`
 
-- Commands: `3`
+- Commands: `4`
 - Command IDs:
   - `inbox.ack` (`inbox ack`)
+  - `inbox.get` (`inbox get`)
   - `inbox.list` (`inbox list`)
   - `inbox.stream` (`inbox stream`)
 

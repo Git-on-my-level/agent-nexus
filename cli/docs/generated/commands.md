@@ -4,7 +4,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.2.2`
-- Commands: `45`
+- Commands: `46`
 
 ## `actors.list`
 
@@ -372,6 +372,21 @@ Generated from `contracts/oar-openapi.yaml`.
 - Examples:
   - Ack inbox item: `oar inbox ack --thread-id thread_123 --inbox-item-id inbox:item-1 --json`
   - Ack inbox item by id: `oar inbox ack inbox:decision_needed:thread_123:none:event_1 --json`
+
+## `inbox.get`
+
+- CLI path: `inbox get`
+- HTTP: `GET /inbox/{inbox_item_id}`
+- Stability: `stable`
+- Input mode: `none`
+- Why: Inspect one inbox item in detail before acting on it.
+- Concepts: `inbox`, `derived-views`
+- Error codes: `not_found`
+- Output: Returns `{ item, generated_at }` for the requested inbox item.
+- Agent notes: CLI supports canonical ids, aliases, and unique prefixes.
+- Examples:
+  - Get inbox item by canonical id: `oar inbox get --id inbox:decision_needed:thread_123:none:event_123 --json`
+  - Get inbox item by alias: `oar inbox get --id ibx_abcd1234ef56 --json`
 
 ## `inbox.list`
 

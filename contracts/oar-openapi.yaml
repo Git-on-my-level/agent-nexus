@@ -1437,6 +1437,10 @@ paths:
       x-oar-concepts: [inbox, derived-views]
       x-oar-stability: "stable"
       x-oar-agent-notes: "Safe and idempotent."
+      parameters:
+        - in: query
+          name: risk_horizon_days
+          schema: { type: integer }
       responses:
         '200':
           description: Inbox items
@@ -1444,6 +1448,44 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/InboxResponse'
+
+  /inbox/{inbox_item_id}:
+    get:
+      operationId: getInboxItem
+      summary: Get derived inbox item detail
+      tags: [inbox]
+      x-oar-command-id: "inbox.get"
+      x-oar-cli-path: "inbox get"
+      x-oar-why: "Inspect one inbox item in detail before acting on it."
+      x-oar-examples:
+        - title: Get inbox item by canonical id
+          command: oar inbox get --id inbox:decision_needed:thread_123:none:event_123 --json
+        - title: Get inbox item by alias
+          command: oar inbox get --id ibx_abcd1234ef56 --json
+      x-oar-input-mode: "none"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ item, generated_at }` for the requested inbox item."
+      x-oar-error-codes: [not_found]
+      x-oar-concepts: [inbox, derived-views]
+      x-oar-stability: "stable"
+      x-oar-agent-notes: "CLI supports canonical ids, aliases, and unique prefixes."
+      parameters:
+        - in: path
+          name: inbox_item_id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: risk_horizon_days
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Inbox item detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InboxItemResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
 
   /inbox/stream:
     get:
@@ -2219,6 +2261,16 @@ components:
           type: string
           format: date-time
       required: [items, generated_at]
+
+    InboxItemResponse:
+      type: object
+      properties:
+        item:
+          $ref: '#/components/schemas/InboxItem'
+        generated_at:
+          type: string
+          format: date-time
+      required: [item, generated_at]
 
     AckInboxRequest:
       type: object

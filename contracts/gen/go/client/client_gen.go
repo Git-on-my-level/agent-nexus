@@ -482,7 +482,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "stable",
 		Concepts:  []string{"inbox", "events"},
-		Adjacent:  []string{"inbox.list", "inbox.stream"},
+		Adjacent:  []string{"inbox.get", "inbox.list", "inbox.stream"},
 		Examples: []Example{
 			{
 				Title:   "Ack inbox item",
@@ -495,6 +495,28 @@ var CommandRegistry = []CommandSpec{
 		},
 	},
 	{
+		CommandID:  "inbox.get",
+		CLIPath:    "inbox get",
+		Group:      "inbox",
+		Method:     "GET",
+		Path:       "/inbox/{inbox_item_id}",
+		PathParams: []string{"inbox_item_id"},
+		InputMode:  "none",
+		Stability:  "stable",
+		Concepts:   []string{"inbox", "derived-views"},
+		Adjacent:   []string{"inbox.ack", "inbox.list", "inbox.stream"},
+		Examples: []Example{
+			{
+				Title:   "Get inbox item by canonical id",
+				Command: "oar inbox get --id inbox:decision_needed:thread_123:none:event_123 --json",
+			},
+			{
+				Title:   "Get inbox item by alias",
+				Command: "oar inbox get --id ibx_abcd1234ef56 --json",
+			},
+		},
+	},
+	{
 		CommandID: "inbox.list",
 		CLIPath:   "inbox list",
 		Group:     "inbox",
@@ -503,7 +525,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "stable",
 		Concepts:  []string{"inbox", "derived-views"},
-		Adjacent:  []string{"inbox.ack", "inbox.stream"},
+		Adjacent:  []string{"inbox.ack", "inbox.get", "inbox.stream"},
 		Examples: []Example{
 			{
 				Title:   "List inbox",
@@ -520,7 +542,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"inbox", "derived-views", "streaming"},
-		Adjacent:  []string{"inbox.ack", "inbox.list"},
+		Adjacent:  []string{"inbox.ack", "inbox.get", "inbox.list"},
 		Examples: []Example{
 			{
 				Title:   "Stream inbox updates",
@@ -1051,6 +1073,10 @@ func (c *Client) EventsStream(ctx context.Context, opts RequestOptions) (*http.R
 
 func (c *Client) InboxAck(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "inbox.ack", nil, opts)
+}
+
+func (c *Client) InboxGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "inbox.get", pathParams, opts)
 }
 
 func (c *Client) InboxList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {

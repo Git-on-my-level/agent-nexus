@@ -584,6 +584,19 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleGetInbox(w, r, opts)
 	})
 
+	mux.HandleFunc("/inbox/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+			return
+		}
+		inboxItemID := strings.TrimPrefix(r.URL.Path, "/inbox/")
+		if inboxItemID == "" || strings.Contains(inboxItemID, "/") {
+			writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+			return
+		}
+		handleGetInboxItem(w, r, opts, inboxItemID)
+	})
+
 	mux.HandleFunc("/inbox/stream", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")

@@ -71,9 +71,10 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `derived-views`
 
-- Commands: `3`
+- Commands: `4`
 - Command IDs:
   - `derived.rebuild`
+  - `inbox.get`
   - `inbox.list`
   - `inbox.stream`
 
@@ -136,9 +137,10 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `inbox`
 
-- Commands: `3`
+- Commands: `4`
 - Command IDs:
   - `inbox.ack`
+  - `inbox.get`
   - `inbox.list`
   - `inbox.stream`
 

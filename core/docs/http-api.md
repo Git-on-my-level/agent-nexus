@@ -231,6 +231,11 @@ The schema of objects is defined by `../contracts/oar-schema.yaml`.
 
 - `GET /inbox`
   - Response: `{ "items": [<inbox_item>...], "generated_at": "..." }`
+  - Optional query: `risk_horizon_days`
+
+- `GET /inbox/{inbox_item_id}`
+  - Response: `{ "item": <inbox_item>, "generated_at": "..." }`
+  - Optional query: `risk_horizon_days`
 
 - `GET /inbox/stream`
   - Content type: `text/event-stream`
