@@ -27,10 +27,12 @@ type AgentSpec struct {
 }
 
 type LLMSpec struct {
-	Objective         string `json:"objective"`
-	ProfilePath       string `json:"profile_path"`
-	MaxTurns          int    `json:"max_turns"`
-	MinSuccessfulRuns int    `json:"min_successful_runs,omitempty"`
+	Objective            string `json:"objective"`
+	ProfilePath          string `json:"profile_path"`
+	MaxTurns             int    `json:"max_turns"`
+	MinSuccessfulRuns    int    `json:"min_successful_runs,omitempty"`
+	CollectFinalFeedback bool   `json:"collect_final_feedback,omitempty"`
+	FinalFeedbackPrompt  string `json:"final_feedback_prompt,omitempty"`
 }
 
 type Step struct {
@@ -85,6 +87,7 @@ type Report struct {
 	BaseURL       string                    `json:"base_url"`
 	Agents        []AgentReport             `json:"agents"`
 	Feedback      []FeedbackEntry           `json:"feedback,omitempty"`
+	FinalFeedback []FeedbackEntry           `json:"final_feedback,omitempty"`
 	Assertions    []AssertionResult         `json:"assertions"`
 	Captures      map[string]map[string]any `json:"captures"`
 	Failed        bool                      `json:"failed"`
@@ -94,6 +97,7 @@ type Report struct {
 type FeedbackEntry struct {
 	Agent      string         `json:"agent"`
 	Turn       int            `json:"turn"`
+	Source     string         `json:"source,omitempty"`
 	Summary    string         `json:"summary"`
 	Details    map[string]any `json:"details,omitempty"`
 	RecordedAt time.Time      `json:"recorded_at"`
@@ -126,6 +130,7 @@ type CommandResult struct {
 }
 
 type DriverRequest struct {
+	RequestKind    string                    `json:"request_kind,omitempty"`
 	Scenario       string                    `json:"scenario"`
 	RunID          string                    `json:"run_id"`
 	Agent          string                    `json:"agent"`

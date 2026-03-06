@@ -1,4 +1,6 @@
+# Local build outputs
 /oar
 /oar-scenario
 
+.tmp/
 .secrets/

@@ -8,7 +8,8 @@
       "llm": {
         "objective": "Wake up as the coordinator for this run. Use valid OAR commands to inspect inbox and active threads, take one coordination action, and emit action=feedback when you hit UX friction.",
         "profile_path": "cli/scenarios/profiles/coordinator.md",
-        "max_turns": 4
+        "max_turns": 4,
+        "collect_final_feedback": true
       },
       "deterministic_steps": []
     },
@@ -18,7 +19,8 @@
       "llm": {
         "objective": "Wake up as the orchestrator for this run. Use valid OAR commands to inspect events/threads/inbox surfaces, identify one dispatch or risk signal, and emit action=feedback when command ergonomics get in your way.",
         "profile_path": "cli/scenarios/profiles/orchestrator.md",
-        "max_turns": 4
+        "max_turns": 4,
+        "collect_final_feedback": true
       },
       "deterministic_steps": []
     },
@@ -28,7 +30,8 @@
       "llm": {
         "objective": "Wake up as a worker for this run. Use valid OAR commands to pick one active thread, gather context, and post at least one actor_statement or another useful event with clear provenance.",
         "profile_path": "cli/scenarios/profiles/worker.md",
-        "max_turns": 4
+        "max_turns": 4,
+        "collect_final_feedback": true
       },
       "deterministic_steps": []
     },
@@ -38,7 +41,8 @@
       "llm": {
         "objective": "Wake up as a reviewer for this run. Use valid OAR commands to audit recent activity, inspect artifacts/events, and publish one review-style recommendation; emit action=feedback for tooling friction.",
         "profile_path": "cli/scenarios/profiles/reviewer.md",
-        "max_turns": 4
+        "max_turns": 4,
+        "collect_final_feedback": true
       },
       "deterministic_steps": []
     }

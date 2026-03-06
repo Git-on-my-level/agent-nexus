@@ -72,14 +72,15 @@ func Run(ctx context.Context, cfg Config) (Report, error) {
 
 	runID := time.Now().UTC().Format("20060102T150405.000000000")
 	report := Report{
-		Scenario:  scenario.Name,
-		Mode:      mode,
-		RunID:     runID,
-		StartedAt: time.Now().UTC(),
-		BaseURL:   baseURL,
-		Agents:    make([]AgentReport, 0, len(scenario.Agents)),
-		Feedback:  make([]FeedbackEntry, 0, 8),
-		Captures:  make(map[string]map[string]any, len(scenario.Agents)+1),
+		Scenario:      scenario.Name,
+		Mode:          mode,
+		RunID:         runID,
+		StartedAt:     time.Now().UTC(),
+		BaseURL:       baseURL,
+		Agents:        make([]AgentReport, 0, len(scenario.Agents)),
+		Feedback:      make([]FeedbackEntry, 0, 8),
+		FinalFeedback: make([]FeedbackEntry, 0, len(scenario.Agents)),
+		Captures:      make(map[string]map[string]any, len(scenario.Agents)+1),
 	}
 	report.Captures["run"] = map[string]any{"id": runID}
 
@@ -158,6 +159,7 @@ func Run(ctx context.Context, cfg Config) (Report, error) {
 					feedback := FeedbackEntry{
 						Agent:      agentName,
 						Turn:       turn,
+						Source:     "agent_feedback",
 						Summary:    strings.TrimSpace(firstNonEmpty(action.Reason, action.Name)),
 						Details:    cloneAnyMap(action.Stdin),
 						RecordedAt: time.Now().UTC(),
@@ -200,6 +202,20 @@ func Run(ctx context.Context, cfg Config) (Report, error) {
 					continue
 				}
 				consecutiveFailures = 0
+			}
+			if shouldCollectFinalFeedback(agent.LLM) {
+				finalFeedback, feedbackStep, feedbackErr := collectFinalFeedback(ctx, cfg, scenario, agent, captures, history[agentName], maxTurns, baseURL)
+				if feedbackErr != nil {
+					report.Agents = append(report.Agents, aReport)
+					return failReport(report, fmt.Sprintf("agent %s final feedback failed: %v", agentName, feedbackErr))
+				}
+				if feedbackStep.Name != "" {
+					aReport.Steps = append(aReport.Steps, feedbackStep)
+					history[agentName] = append(history[agentName], feedbackStep)
+				}
+				if strings.TrimSpace(finalFeedback.Summary) != "" || len(finalFeedback.Details) > 0 {
+					report.FinalFeedback = append(report.FinalFeedback, finalFeedback)
+				}
 			}
 		}
 		if mode == ModeLLM && agent.LLM.MinSuccessfulRuns > 0 {
@@ -699,7 +715,7 @@ func navigatePath(value any, key string) (any, bool) {
 }
 
 func nextLLMAction(ctx context.Context, cfg Config, scenario Scenario, agent AgentSpec, captures map[string]map[string]any, history []CommandResult, turn int, maxTurns int, baseURL string) (DriverAction, error) {
-	req, err := buildDriverRequest(cfg, scenario, agent, captures, history, turn, maxTurns, baseURL)
+	req, err := buildActionDriverRequest(cfg, scenario, agent, captures, history, turn, maxTurns, baseURL)
 	if err != nil {
 		return DriverAction{}, err
 	}
@@ -709,7 +725,19 @@ func nextLLMAction(ctx context.Context, cfg Config, scenario Scenario, agent Age
 	return nextOpenAICompatibleAction(ctx, cfg, req)
 }
 
-func buildDriverRequest(cfg Config, scenario Scenario, agent AgentSpec, captures map[string]map[string]any, history []CommandResult, turn int, maxTurns int, baseURL string) (DriverRequest, error) {
+func buildActionDriverRequest(cfg Config, scenario Scenario, agent AgentSpec, captures map[string]map[string]any, history []CommandResult, turn int, maxTurns int, baseURL string) (DriverRequest, error) {
+	return buildDriverRequest("next_action", cfg, scenario, agent, captures, history, turn, maxTurns, baseURL, strings.TrimSpace(agent.LLM.Objective))
+}
+
+func buildFinalFeedbackDriverRequest(cfg Config, scenario Scenario, agent AgentSpec, captures map[string]map[string]any, history []CommandResult, turn int, maxTurns int, baseURL string) (DriverRequest, error) {
+	objective := strings.TrimSpace(agent.LLM.FinalFeedbackPrompt)
+	if objective == "" {
+		objective = "Provide final feedback for this scenario run. Summarize progress made, UX friction, missing affordances, and one concrete improvement. Do not run more commands."
+	}
+	return buildDriverRequest("final_feedback", cfg, scenario, agent, captures, history, turn, maxTurns, baseURL, objective)
+}
+
+func buildDriverRequest(requestKind string, cfg Config, scenario Scenario, agent AgentSpec, captures map[string]map[string]any, history []CommandResult, turn int, maxTurns int, baseURL string, objective string) (DriverRequest, error) {
 	profileText := ""
 	if strings.TrimSpace(agent.LLM.ProfilePath) != "" {
 		profilePath := strings.TrimSpace(agent.LLM.ProfilePath)
@@ -722,10 +750,11 @@ func buildDriverRequest(cfg Config, scenario Scenario, agent AgentSpec, captures
 	}
 
 	return DriverRequest{
+		RequestKind:    strings.TrimSpace(requestKind),
 		Scenario:       scenario.Name,
 		RunID:          fmt.Sprint(captures["run"]["id"]),
 		Agent:          agent.Name,
-		Objective:      strings.TrimSpace(agent.LLM.Objective),
+		Objective:      strings.TrimSpace(objective),
 		Profile:        profileText,
 		Turn:           turn,
 		MaxTurns:       maxTurns,
@@ -734,6 +763,61 @@ func buildDriverRequest(cfg Config, scenario Scenario, agent AgentSpec, captures
 		BaseURL:        baseURL,
 		ReferenceSteps: append([]Step(nil), agent.DeterministicSteps...),
 	}, nil
+}
+
+func collectFinalFeedback(ctx context.Context, cfg Config, scenario Scenario, agent AgentSpec, captures map[string]map[string]any, history []CommandResult, maxTurns int, baseURL string) (FeedbackEntry, CommandResult, error) {
+	req, err := buildFinalFeedbackDriverRequest(cfg, scenario, agent, captures, history, maxTurns+1, maxTurns, baseURL)
+	if err != nil {
+		return FeedbackEntry{}, CommandResult{}, err
+	}
+
+	var action DriverAction
+	if strings.TrimSpace(cfg.LLMDriverBin) != "" {
+		action, err = nextExternalDriverAction(ctx, cfg, req)
+	} else {
+		action, err = nextOpenAICompatibleAction(ctx, cfg, req)
+	}
+	if err != nil {
+		return FeedbackEntry{}, CommandResult{}, err
+	}
+
+	now := time.Now().UTC()
+	switch strings.TrimSpace(action.Action) {
+	case "feedback":
+		feedback := FeedbackEntry{
+			Agent:      agent.Name,
+			Turn:       req.Turn,
+			Source:     "final_reflection",
+			Summary:    strings.TrimSpace(firstNonEmpty(action.Reason, action.Name)),
+			Details:    cloneAnyMap(action.Stdin),
+			RecordedAt: now,
+		}
+		return feedback, CommandResult{
+			Name:      "llm final feedback",
+			Agent:     agent.Name,
+			ExitCode:  0,
+			Succeeded: true,
+			Stdout:    strings.TrimSpace(firstNonEmpty(feedback.Summary, fmt.Sprintf("%v", feedback.Details))),
+		}, nil
+	case "stop":
+		summary := strings.TrimSpace(action.Reason)
+		feedback := FeedbackEntry{
+			Agent:      agent.Name,
+			Turn:       req.Turn,
+			Source:     "final_reflection",
+			Summary:    summary,
+			RecordedAt: now,
+		}
+		return feedback, CommandResult{
+			Name:      "llm final stop",
+			Agent:     agent.Name,
+			ExitCode:  0,
+			Succeeded: true,
+			Stdout:    summary,
+		}, nil
+	default:
+		return FeedbackEntry{}, CommandResult{}, fmt.Errorf("final feedback request returned unsupported action %q", action.Action)
+	}
 }
 
 func nextExternalDriverAction(ctx context.Context, cfg Config, req DriverRequest) (DriverAction, error) {
@@ -823,16 +907,23 @@ func nextOpenAICompatibleAction(ctx context.Context, cfg Config, req DriverReque
 	}
 
 	systemPrompt := "You are controlling an OAR CLI agent in a scenario harness. " +
-		"Return exactly one JSON object with either {\"action\":\"run\",\"name\":\"...\",\"args\":[...],\"stdin\":{...}} " +
-		"or {\"action\":\"stop\",\"reason\":\"...\"} or {\"action\":\"feedback\",\"reason\":\"...\",\"stdin\":{...}}. " +
-		"Do not include markdown, code fences, or extra keys. " +
-		"For action=run, args must be a non-empty array of OAR subcommand tokens, excluding global flags. " +
-		"When reference_steps are provided, prefer those command forms and spellings exactly. " +
-		"OAR command reminders: threads has create/get/list/patch/timeline; events has create/get/stream (no events list); " +
-		"inbox has list/ack/stream; artifacts has list/get/get-content; docs has list/get/create/update/history. " +
-		"If recent history includes failed commands, emit action=feedback before retrying."
+		"Return exactly one JSON object. Do not include markdown, code fences, or extra keys. " +
+		"OAR command reminders: threads has create/get/list/context/patch/timeline; events has create/get/stream (no events list); " +
+		"inbox has list/ack/stream; artifacts has list/get/get-content; docs has list/get/create/update/history. "
 	userPrompt := "Decide the single next action for this turn.\n\n" +
 		"Context JSON:\n" + string(contextJSON)
+	if req.RequestKind == "final_feedback" {
+		systemPrompt += "For final feedback, return either {\"action\":\"feedback\",\"reason\":\"...\",\"stdin\":{...}} " +
+			"or {\"action\":\"stop\",\"reason\":\"...\"}. Do not return action=run. " +
+			"Summarize progress, friction, missing affordances, and concrete improvements."
+		userPrompt = "Provide final scenario feedback now.\n\nContext JSON:\n" + string(contextJSON)
+	} else {
+		systemPrompt += "Return exactly one JSON object with either {\"action\":\"run\",\"name\":\"...\",\"args\":[...],\"stdin\":{...}} " +
+			"or {\"action\":\"stop\",\"reason\":\"...\"} or {\"action\":\"feedback\",\"reason\":\"...\",\"stdin\":{...}}. " +
+			"For action=run, args must be a non-empty array of OAR subcommand tokens, excluding global flags. " +
+			"When reference_steps are provided, prefer those command forms and spellings exactly. " +
+			"If recent history includes failed commands, emit action=feedback before retrying."
+	}
 
 	request := openAIChatCompletionsRequest{
 		Model: model,
@@ -1192,6 +1283,9 @@ func equalStringSlices(left []string, right []string) bool {
 }
 
 func fallbackActionFromReference(req DriverRequest) (DriverAction, bool) {
+	if req.RequestKind != "" && req.RequestKind != "next_action" {
+		return DriverAction{}, false
+	}
 	if len(req.ReferenceSteps) == 0 {
 		return DriverAction{}, false
 	}
@@ -1297,7 +1391,8 @@ func countSuccessfulLLMRuns(steps []CommandResult) int {
 		name := strings.ToLower(strings.TrimSpace(step.Name))
 		if strings.HasPrefix(name, "auth register") ||
 			strings.HasPrefix(name, "llm stop") ||
-			strings.HasPrefix(name, "llm feedback") {
+			strings.HasPrefix(name, "llm feedback") ||
+			strings.HasPrefix(name, "llm final") {
 			continue
 		}
 		count++
@@ -1417,6 +1512,10 @@ func isLikelyCommandRoot(token string) bool {
 	}
 }
 
+func shouldCollectFinalFeedback(spec LLMSpec) bool {
+	return spec.CollectFinalFeedback
+}
+
 func feedbackFromFailedRun(agentName string, turn int, action DriverAction, result CommandResult, stepErr error) FeedbackEntry {
 	summaryArgs := strings.Join(action.Args, " ")
 	if strings.TrimSpace(summaryArgs) == "" {
@@ -1439,6 +1538,7 @@ func feedbackFromFailedRun(agentName string, turn int, action DriverAction, resu
 	return FeedbackEntry{
 		Agent:      agentName,
 		Turn:       turn,
+		Source:     "command_failure",
 		Summary:    "command failed: " + summaryArgs,
 		Details:    details,
 		RecordedAt: time.Now().UTC(),

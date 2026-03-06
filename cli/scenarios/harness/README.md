@@ -6,6 +6,7 @@ Goals:
 - provide deterministic, CI-friendly multi-agent scenario tests
 - support a built-in OpenAI-compatible LLM loop (plus pluggable external drivers)
 - capture scenario run reports in machine-readable JSON
+- separate in-run feedback from post-run agent reflections for later analysis
 
 This package is intentionally thin: orchestration state machine + command execution + assertion checks.
 
@@ -15,6 +16,8 @@ LLM actions:
 - `feedback`: record UX/product feedback in report output without running a CLI command
 
 When `run` fails in LLM mode, the harness also appends a structured `feedback` entry automatically (command, exit code, error excerpt) so fuzz runs preserve actionable UX friction even if the model does not explicitly emit `action=feedback`.
+
+When `collect_final_feedback` is enabled for an agent, the harness makes one additional LLM call after the turn loop and stores the result in `report.final_feedback`. This keeps post-run reflections separate from mid-run feedback and automatic command-failure capture.
 
 ## Error Expectations
 

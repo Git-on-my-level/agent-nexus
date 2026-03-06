@@ -1,6 +1,6 @@
 # OAR Agent Scenarios
 
-Scenario-based UX testing for OAR agent callers. Each scenario runs real agents against a live core instance to discover ergonomic gaps, missing primitives, and onboarding friction.
+Scenario-based UX testing for OAR agent callers. Scenarios run real CLI agents against a live core instance to discover ergonomic gaps, missing primitives, and onboarding friction.
 
 ## Structure
 
@@ -8,7 +8,7 @@ Scenario-based UX testing for OAR agent callers. Each scenario runs real agents 
 scenarios/
   harness/          In-repo harness runtime + pluggable agent driver interfaces
   profiles/         Agent archetype definitions + LLM prompt templates
-  zesty-bots/       Scenario: Zesty Bots Lemonade Co.
+  zesty-bots/       Scenario manifests and workspace notes for Zesty Bots Lemonade Co.
 ```
 
 ## Agent Profiles
@@ -19,24 +19,6 @@ scenarios/
 | [worker](profiles/worker.md) | Executes work orders, submits receipts | threads context, artifacts, draft/commit |
 | [orchestrator](profiles/orchestrator.md) | Watches event stream, dispatches workers, handles stalls | events stream, work orders |
 | [reviewer](profiles/reviewer.md) | Reviews receipts, posts accept/revise/escalate | artifacts, draft/commit |
-
-## Running a scenario
-
-```bash
-# Prerequisites: core running at http://127.0.0.1:8000
-# From repo root: cd core && go run ./cmd/oar-core ...
-
-cd cli
-go build ./cmd/oar
-
-cd scenarios/zesty-bots
-bash coordinator.sh
-bash worker.sh
-bash orchestrator.sh
-bash reviewer.sh
-```
-
-Each script self-registers a fresh agent, walks its profile's happy path against the seeded workspace, and prints annotated output. UX gaps surface as friction in the script — note them and file issues.
 
 ## Harness-based runs
 
@@ -90,9 +72,11 @@ cd cli
   --report .tmp/team-fuzz-report.json
 
 jq '.feedback' .tmp/team-fuzz-report.json
+jq '.final_feedback' .tmp/team-fuzz-report.json
 ```
 
 `feedback` contains both explicit model `action=feedback` notes and auto-captured command-failure feedback emitted by the harness.
+`final_feedback` contains the separate post-run reflection collected after an agent stops making CLI moves.
 
 Run with the built-in OpenAI-compatible LLM harness:
 
@@ -149,6 +133,7 @@ Input shape:
 
 ```json
 {
+  "request_kind": "next_action",
   "scenario": "zesty-bots-harness-smoke",
   "run_id": "20260305T201234.123456789",
   "agent": "coordinator",
@@ -161,6 +146,8 @@ Input shape:
   "base_url": "http://127.0.0.1:8000"
 }
 ```
+
+For post-run reflection collection, the harness sends the same envelope with `"request_kind": "final_feedback"` and expects either `action=feedback` or `action=stop`.
 
 Output shape:
 
@@ -183,5 +170,5 @@ or
 ## Adding a scenario
 
 1. Create `scenarios/<scenario-name>/README.md` describing the workspace state and seed instructions
-2. Add a walkthrough script per relevant profile
+2. Add one or more manifest JSON files for deterministic and/or `llm` runs
 3. Reference real artifact/thread IDs from the seeded workspace

@@ -12,13 +12,12 @@ Dispatched with a `work_order_id` (artifact ID) by an Orchestrator or human afte
 
 | Command | Purpose |
 |---|---|
-| `threads context --thread-id <id>` | Load full thread context before starting (see issue #8) |
+| `threads context --thread-id <id>` | Load full thread context before starting |
 | `threads get --thread-id <id>` | Fallback if context endpoint unavailable |
 | `artifacts get --artifact-id <id>` | Read work order content |
 | `artifacts get-content --artifact-id <id>` | Read referenced artifact content |
-| `draft create --command events.create` | Stage work_order_claimed event |
-| `draft create --command artifacts.create` | Stage receipt artifact |
-| `draft commit <id>` | Commit to server |
+| `events create` | Post claim, progress, or exception events |
+| `receipts create` | Submit a receipt and corresponding event atomically |
 
 ## Entry Conditions
 
@@ -37,9 +36,9 @@ Dispatched with a `work_order_id` (artifact ID) by an Orchestrator or human afte
 
 ## Failure Modes to Watch For
 
-- Context loading requires multiple round-trips (issue #8)
-- Two-step artifact+event receipt creation has no atomic wrapper (issue #8)
-- `work_order_claimed` event type may not be in schema yet (issue #6)
+- Context loading requires multiple round-trips
+- Thread and artifact identifiers can be hard to discover from partial context
+- If a command or affordance is unclear, emit `action=feedback`
 
 ---
 
@@ -63,6 +62,7 @@ Rules:
 - Every receipt must include at least one typed ref in outputs and verification_evidence
 - If you cannot complete the work order, post an exception_raised event explaining why
 - Do not invent verification evidence — only reference artifacts and events that exist
+- If the CLI surface blocks progress, emit `action=feedback` with the missing affordance
 
 Your work order ID: <work_order_id>
 Your thread ID: <thread_id>

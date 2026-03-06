@@ -14,8 +14,11 @@ Continuous process. Wakes on each event received from `events stream --follow`.
 |---|---|
 | `events stream --follow` | Main loop: watch for work_order_created events |
 | `events stream --max-events N` | Drain recent events on startup to catch up |
+| `threads list --status active` | Survey currently active threads for dispatch opportunities |
 | `threads get --thread-id <id>` | Check thread state for a new work order |
+| `threads context --thread-id <id>` | Load richer context before dispatching |
 | `artifacts get --artifact-id <id>` | Read work order content to determine which Worker to dispatch |
+| `events create` | Log dispatch, stall, or escalation decisions |
 
 ## Logic
 
@@ -42,9 +45,9 @@ A work order is stalled if:
 
 ## Failure Modes to Watch For
 
-- `work_order_claimed` event type may not be in schema yet (issue #6)
 - No built-in timeout/stall primitive in OAR — orchestrator must implement this externally
 - `events stream --follow` must handle reconnects gracefully for long-running orchestrators
+- If query or stream ergonomics get in the way, record it with `action=feedback`
 
 ---
 

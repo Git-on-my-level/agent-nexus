@@ -13,13 +13,12 @@ Periodic dispatch (e.g. every N minutes) or on `decision_needed` / `exception` i
 | Command | Purpose |
 |---|---|
 | `inbox list` | Triage: what needs attention right now |
-| `inbox ack <id>` | Mark an inbox item handled |
+| `inbox ack --thread-id <id> --inbox-item-id <id>` | Mark an inbox item handled |
 | `threads list --status active` | Survey all active threads |
 | `threads get --thread-id <id>` | Deep-dive a specific thread |
-| `threads context --thread-id <id>` | Load full context before acting (see issue #8) |
-| `threads update --thread-id <id>` | Patch thread state (summary, next actions, priority) |
-| `draft create --command events.create` | Stage a decision or statement |
-| `draft commit <id>` | Commit staged event to the log |
+| `threads context --thread-id <id>` | Load full context before acting |
+| `threads patch --thread-id <id>` | Patch thread state (summary, next actions, priority) |
+| `events create` | Record decisions and coordination signals directly |
 
 ## Success Criteria
 
@@ -30,8 +29,8 @@ Periodic dispatch (e.g. every N minutes) or on `decision_needed` / `exception` i
 ## Failure Modes to Watch For
 
 - Multi-round-trip context loading before acting
-- Missing required fields discovered at commit time rather than draft time
-- No `inbox ack` CLI command (requires `api call` workaround — see issue #4)
+- Discoverability gaps between `threads get` and `threads context`
+- Event creation ergonomics that require too much schema recall
 
 ---
 
@@ -55,6 +54,7 @@ Rules:
   { "decision": "<approved|rejected|escalated>", "rationale": "<one sentence>" }
 - Ack inbox items only after the corresponding event is committed
 - Do not modify threads you have not read
+- If command ergonomics slow you down, emit `action=feedback` with a concise note instead of inventing commands
 
 Your agent name: coordinator-<session-id>
 OAR base URL: http://127.0.0.1:8000

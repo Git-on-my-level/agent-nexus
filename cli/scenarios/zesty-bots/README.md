@@ -46,23 +46,9 @@ go run ./cmd/oar-core \
   --schema-path ../contracts/oar-schema.yaml \
   --workspace-root .oar-workspace
 
-# Terminal 2: build CLI
+# Terminal 2: run scenarios from the CLI module
 cd cli
-go build ./cmd/oar
 ```
-
-## Running the Walkthroughs
-
-```bash
-cd cli/scenarios/zesty-bots
-
-bash coordinator.sh    # triage inbox, make a decision
-bash worker.sh         # execute a work order, submit receipt
-bash orchestrator.sh   # scan stream, detect work orders
-bash reviewer.sh       # review a receipt, post outcome
-```
-
-Each script registers its own fresh agent so runs are independent and repeatable.
 
 ## Harness Manifest
 
@@ -99,6 +85,7 @@ go run ./cmd/oar-scenario --scenario scenarios/zesty-bots/harness.scenario.json 
   --llm-retries 2 \
   --report .tmp/team-fuzz-report.json
 jq '.feedback' .tmp/team-fuzz-report.json
+jq '.final_feedback' .tmp/team-fuzz-report.json
 
 export OAR_LLM_API_KEY="<your-provider-key>"
 ./oar-scenario \
@@ -118,6 +105,9 @@ chmod 600 .secrets/zai_api_key
   --llm-api-key-file .secrets/zai_api_key
 ```
 
+`feedback` captures explicit `action=feedback` notes and automatic command-failure capture.
+`final_feedback` captures one end-of-run reflection per participating agent when `collect_final_feedback` is enabled.
+
 ## Resetting Workspace State
 
-The seeded workspace state is read-only artifacts and snapshots. Events written by scenario scripts accumulate but do not break the seeded threads. To fully reset, stop core and restore `core/.oar-workspace/state.sqlite` from git.
+The seeded workspace state is read-only artifacts and snapshots. Events written by harness runs accumulate but do not break the seeded threads. To fully reset, stop core and restore `core/.oar-workspace/state.sqlite` from git.

@@ -15,8 +15,8 @@ Dispatched by an Orchestrator or human when a `receipt_added` event is detected 
 | `artifacts get --artifact-id <work_order_id>` | Read work order (objective, acceptance criteria, definition of done) |
 | `artifacts get --artifact-id <receipt_id>` | Read receipt (outputs, evidence, gaps) |
 | `artifacts get-content --artifact-id <id>` | Read referenced artifact content for evidence |
-| `draft create --command artifacts.create` | Stage review artifact |
-| `draft commit <id>` | Submit review |
+| `reviews create` | Submit a review artifact and corresponding event atomically |
+| `events get --event-id <id>` | Inspect recent activity referenced by the receipt |
 
 ## Review Criteria
 
@@ -38,7 +38,8 @@ Check receipt against work order:
 
 - Fetching all referenced evidence artifacts requires multiple round-trips
 - No `review_requested` event type exists — reviewer must poll or be dispatched externally
-- Review artifact creation requires knowing the enclosing artifact ID upfront (`review_id` must equal `artifact.id`)
+- Correlating evidence back to the right thread or receipt can be awkward
+- If the review path is clumsy, emit `action=feedback`
 
 ---
 
@@ -63,6 +64,7 @@ Outcome guidance:
 - accept: all criteria met, evidence is real and sufficient
 - revise: criteria not fully met but fixable — describe what's missing in notes
 - escalate: blocker requires human judgment — describe the blocker clearly
+- If the CLI surface blocks a solid review, emit `action=feedback` with the missing capability
 
 Your receipt ID: <receipt_id>
 Your work order ID: <work_order_id>

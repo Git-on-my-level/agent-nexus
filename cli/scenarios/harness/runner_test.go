@@ -342,6 +342,9 @@ else:
 	if got := report.Feedback[0].Summary; got != "CLI help was unclear" {
 		t.Fatalf("unexpected feedback summary: %q", got)
 	}
+	if got := report.Feedback[0].Source; got != "agent_feedback" {
+		t.Fatalf("unexpected feedback source: %q", got)
+	}
 	if got := anyString(report.Feedback[0].Details["severity"]); got != "medium" {
 		t.Fatalf("unexpected feedback severity: %q", got)
 	}
@@ -414,6 +417,72 @@ print(json.dumps({"action":"stop","reason":"no-op"}))
 	}
 	if !strings.Contains(report.FailureReason, "min 1") {
 		t.Fatalf("unexpected failure reason: %s", report.FailureReason)
+	}
+}
+
+func TestRunLLMModeMinSuccessfulRunsIgnoresFinalFeedback(t *testing.T) {
+	t.Parallel()
+
+	tmp := t.TempDir()
+	oarPath := filepath.Join(tmp, "fake-oar.sh")
+	driverPath := filepath.Join(tmp, "fake-driver.py")
+	scenarioPath := filepath.Join(tmp, "scenario.json")
+
+	writeExecutable(t, oarPath, `#!/usr/bin/env bash
+set -euo pipefail
+cat >/dev/null || true
+cat <<'JSON'
+{"ok":true,"command":"ok"}
+JSON
+`)
+
+	writeExecutable(t, driverPath, `#!/usr/bin/env python3
+import json, sys
+req = json.load(sys.stdin)
+if req.get("request_kind") == "final_feedback":
+    print(json.dumps({"action":"feedback","reason":"reflection"}))
+else:
+    print(json.dumps({"action":"stop","reason":"no-op"}))
+`)
+
+	scenarioJSON := `{
+  "name": "llm-min-success-final-feedback-test",
+  "base_url": "http://127.0.0.1:8000",
+  "agents": [
+    {
+      "name": "worker",
+      "llm": {
+        "objective": "Stop immediately",
+        "profile_path": "",
+        "max_turns": 2,
+        "min_successful_runs": 1,
+        "collect_final_feedback": true
+      },
+      "deterministic_steps": []
+    }
+  ],
+  "assertions": []
+}`
+	if err := os.WriteFile(scenarioPath, []byte(scenarioJSON), 0o644); err != nil {
+		t.Fatalf("write scenario file: %v", err)
+	}
+
+	report, err := Run(context.Background(), Config{
+		ScenarioPath:     scenarioPath,
+		OARBinary:        oarPath,
+		Mode:             ModeLLM,
+		LLMDriverBin:     driverPath,
+		BaseURLOverride:  "http://127.0.0.1:8000",
+		WorkingDirectory: tmp,
+	})
+	if err == nil {
+		t.Fatalf("expected Run to fail for unmet min_successful_runs")
+	}
+	if !report.Failed {
+		t.Fatalf("expected failed report")
+	}
+	if got := len(report.FinalFeedback); got != 1 {
+		t.Fatalf("expected one final feedback entry, got %d", got)
 	}
 }
 
@@ -530,6 +599,101 @@ else:
 	}
 	if got := strings.ToLower(report.Feedback[0].Summary); !strings.Contains(got, "command failed") {
 		t.Fatalf("unexpected feedback summary: %q", report.Feedback[0].Summary)
+	}
+	if got := report.Feedback[0].Source; got != "command_failure" {
+		t.Fatalf("unexpected feedback source: %q", got)
+	}
+}
+
+func TestRunLLMModeCollectsFinalFeedbackSeparately(t *testing.T) {
+	t.Parallel()
+
+	tmp := t.TempDir()
+	oarPath := filepath.Join(tmp, "fake-oar.sh")
+	driverPath := filepath.Join(tmp, "fake-driver.py")
+	scenarioPath := filepath.Join(tmp, "scenario.json")
+
+	writeExecutable(t, oarPath, `#!/usr/bin/env bash
+set -euo pipefail
+cat >/dev/null || true
+cat <<'JSON'
+{"ok":true,"command":"ok"}
+JSON
+`)
+
+	writeExecutable(t, driverPath, `#!/usr/bin/env python3
+import json, sys
+req = json.load(sys.stdin)
+kind = req.get("request_kind", "next_action")
+turn = int(req.get("turn", 1))
+if kind == "final_feedback":
+    print(json.dumps({
+        "action":"feedback",
+        "reason":"Final reflection",
+        "stdin":{"progress":"inspected one thread","improvement":"surface next likely command"}
+    }))
+elif turn == 1:
+    print(json.dumps({"action":"run","name":"list threads","args":["threads","list","--status","active"]}))
+else:
+    print(json.dumps({"action":"stop","reason":"done"}))
+`)
+
+	scenarioJSON := `{
+  "name": "llm-final-feedback-test",
+  "base_url": "http://127.0.0.1:8000",
+  "agents": [
+    {
+      "name": "coordinator",
+      "username_prefix": "coord",
+      "llm": {
+        "objective": "Run one command then stop.",
+        "profile_path": "",
+        "max_turns": 3,
+        "collect_final_feedback": true
+      },
+      "deterministic_steps": []
+    }
+  ],
+  "assertions": []
+}`
+	if err := os.WriteFile(scenarioPath, []byte(scenarioJSON), 0o644); err != nil {
+		t.Fatalf("write scenario file: %v", err)
+	}
+
+	report, err := Run(context.Background(), Config{
+		ScenarioPath:     scenarioPath,
+		OARBinary:        oarPath,
+		Mode:             ModeLLM,
+		LLMDriverBin:     driverPath,
+		BaseURLOverride:  "http://127.0.0.1:8000",
+		WorkingDirectory: tmp,
+	})
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if report.Failed {
+		t.Fatalf("expected successful report, got failed report: %#v", report)
+	}
+	if len(report.Feedback) != 0 {
+		t.Fatalf("expected no regular feedback entries, got %d", len(report.Feedback))
+	}
+	if len(report.FinalFeedback) != 1 {
+		t.Fatalf("expected one final feedback entry, got %d", len(report.FinalFeedback))
+	}
+	if got := report.FinalFeedback[0].Source; got != "final_reflection" {
+		t.Fatalf("unexpected final feedback source: %q", got)
+	}
+	if got := report.FinalFeedback[0].Summary; got != "Final reflection" {
+		t.Fatalf("unexpected final feedback summary: %q", got)
+	}
+	if got := anyString(report.FinalFeedback[0].Details["improvement"]); got != "surface next likely command" {
+		t.Fatalf("unexpected final feedback improvement: %q", got)
+	}
+	if got := len(report.Agents[0].Steps); got != 4 {
+		t.Fatalf("expected 4 steps (register + run + stop + final feedback), got %d", got)
+	}
+	if got := strings.ToLower(report.Agents[0].Steps[3].Name); got != "llm final feedback" {
+		t.Fatalf("unexpected final feedback step name: %q", report.Agents[0].Steps[3].Name)
 	}
 }
 
