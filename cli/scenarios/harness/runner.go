@@ -1419,8 +1419,12 @@ func validateDriverAction(action *DriverAction) error {
 	}
 	if action.Action == "run" {
 		action.Args = sanitizeRunArgs(action.Args)
+		action.Args = maybePrefixRootFromName(action.Name, action.Args)
 		if len(action.Args) == 0 {
 			return fmt.Errorf("driver action run requires args")
+		}
+		if err := validateNonInteractiveRunArgs(action.Args); err != nil {
+			return err
 		}
 	}
 	if action.Action == "feedback" && strings.TrimSpace(action.Reason) == "" && len(action.Stdin) == 0 {
@@ -1477,26 +1481,67 @@ func sanitizeRunArgs(args []string) []string {
 		out = append(out, value)
 	}
 	if len(out) > 0 {
-		switch strings.ToLower(strings.TrimSpace(out[0])) {
-		case "thread":
-			out[0] = "threads"
-		case "event":
-			out[0] = "events"
-		case "artifact":
-			out[0] = "artifacts"
-		case "commitment":
-			out[0] = "commitments"
-		case "review":
-			out[0] = "reviews"
-		case "receipt":
-			out[0] = "receipts"
-		case "work-order":
-			out[0] = "work-orders"
-		case "doc":
-			out[0] = "docs"
-		}
+		out[0] = canonicalizeRoot(out[0])
 	}
 	return out
+}
+
+func maybePrefixRootFromName(name string, args []string) []string {
+	if len(args) == 0 {
+		return args
+	}
+	if isLikelyCommandRoot(args[0]) {
+		return args
+	}
+	root := inferRootFromName(name)
+	if root == "" {
+		return args
+	}
+	return append([]string{root}, args...)
+}
+
+func inferRootFromName(name string) string {
+	fields := strings.Fields(strings.ToLower(strings.TrimSpace(name)))
+	if len(fields) == 0 {
+		return ""
+	}
+	if !isLikelyCommandRoot(fields[0]) {
+		return ""
+	}
+	return canonicalizeRoot(fields[0])
+}
+
+func validateNonInteractiveRunArgs(args []string) error {
+	if len(args) < 2 {
+		return nil
+	}
+	root := strings.ToLower(strings.TrimSpace(args[0]))
+	subcommand := strings.ToLower(strings.TrimSpace(args[1]))
+	if subcommand != "stream" {
+		return nil
+	}
+	for _, arg := range args[2:] {
+		if strings.EqualFold(strings.TrimSpace(arg), "--follow") {
+			return fmt.Errorf("driver action run must stay bounded; %s stream --follow is not allowed in the harness", root)
+		}
+	}
+	if !hasFlagToken(args[2:], "--max-events") {
+		return fmt.Errorf("driver action run must bound stream commands with --max-events")
+	}
+	return nil
+}
+
+func hasFlagToken(args []string, name string) bool {
+	for idx := 0; idx < len(args); idx++ {
+		value := strings.TrimSpace(args[idx])
+		if value == name {
+			return true
+		}
+		if strings.HasPrefix(value, name+"=") {
+			return true
+		}
+	}
+	return false
 }
 
 func isLikelyCommandRoot(token string) bool {
@@ -1509,6 +1554,29 @@ func isLikelyCommandRoot(token string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func canonicalizeRoot(token string) string {
+	switch strings.ToLower(strings.TrimSpace(token)) {
+	case "thread":
+		return "threads"
+	case "event":
+		return "events"
+	case "artifact":
+		return "artifacts"
+	case "commitment":
+		return "commitments"
+	case "review":
+		return "reviews"
+	case "receipt":
+		return "receipts"
+	case "work-order":
+		return "work-orders"
+	case "doc":
+		return "docs"
+	default:
+		return strings.ToLower(strings.TrimSpace(token))
 	}
 }
 

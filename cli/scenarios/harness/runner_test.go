@@ -527,6 +527,84 @@ func TestSanitizeRunArgsKeepsCommandAfterMalformedGlobalFlag(t *testing.T) {
 	}
 }
 
+func TestValidateDriverActionPrefixesRootFromName(t *testing.T) {
+	t.Parallel()
+
+	action := DriverAction{
+		Action: "run",
+		Name:   "threads",
+		Args:   []string{"list"},
+	}
+	if err := validateDriverAction(&action); err != nil {
+		t.Fatalf("expected validateDriverAction success, got %v", err)
+	}
+	want := []string{"threads", "list"}
+	if strings.Join(action.Args, " ") != strings.Join(want, " ") {
+		t.Fatalf("unexpected args after validation: got=%v want=%v", action.Args, want)
+	}
+}
+
+func TestValidateDriverActionPrefixesCanonicalRootFromName(t *testing.T) {
+	t.Parallel()
+
+	action := DriverAction{
+		Action: "run",
+		Name:   "thread get",
+		Args:   []string{"get", "--thread-id", "t1"},
+	}
+	if err := validateDriverAction(&action); err != nil {
+		t.Fatalf("expected validateDriverAction success, got %v", err)
+	}
+	want := []string{"threads", "get", "--thread-id", "t1"}
+	if strings.Join(action.Args, " ") != strings.Join(want, " ") {
+		t.Fatalf("unexpected args after validation: got=%v want=%v", action.Args, want)
+	}
+}
+
+func TestValidateDriverActionRejectsFollowStream(t *testing.T) {
+	t.Parallel()
+
+	action := DriverAction{
+		Action: "run",
+		Args:   []string{"events", "stream", "--follow"},
+	}
+	err := validateDriverAction(&action)
+	if err == nil {
+		t.Fatalf("expected validateDriverAction to reject --follow stream")
+	}
+	if !strings.Contains(err.Error(), "--follow") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateDriverActionRejectsUnboundedStream(t *testing.T) {
+	t.Parallel()
+
+	action := DriverAction{
+		Action: "run",
+		Args:   []string{"inbox", "stream"},
+	}
+	err := validateDriverAction(&action)
+	if err == nil {
+		t.Fatalf("expected validateDriverAction to reject unbounded stream")
+	}
+	if !strings.Contains(err.Error(), "--max-events") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateDriverActionAllowsBoundedStream(t *testing.T) {
+	t.Parallel()
+
+	action := DriverAction{
+		Action: "run",
+		Args:   []string{"events", "stream", "--max-events", "10"},
+	}
+	if err := validateDriverAction(&action); err != nil {
+		t.Fatalf("expected bounded stream to validate, got %v", err)
+	}
+}
+
 func TestRunLLMModeFailedRunCreatesFeedbackEntry(t *testing.T) {
 	t.Parallel()
 
