@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -80,10 +81,10 @@ func (s *Service) Register(ctx context.Context, username string) (RegisterResult
 	}
 	resp, err := client.RawCall(ctx, httpclient.RawRequest{Method: http.MethodPost, Path: "/auth/agents/register", Body: body})
 	if err != nil {
-		return RegisterResult{}, errnorm.Wrap(errnorm.KindNetwork, "request_failed", "register request failed", err)
+		return RegisterResult{}, classifyRegisterTransportError(err)
 	}
 	if resp.StatusCode >= http.StatusBadRequest {
-		return RegisterResult{}, errnorm.FromHTTPFailure(resp.StatusCode, resp.Body)
+		return RegisterResult{}, classifyRegisterHTTPFailure(resp.StatusCode, resp.Body)
 	}
 
 	var payload struct {
@@ -520,6 +521,53 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func classifyRegisterTransportError(cause error) error {
+	if cause == nil {
+		return errnorm.Network("request_failed", "register request failed")
+	}
+	if errors.Is(cause, context.DeadlineExceeded) {
+		return errnorm.Wrap(
+			errnorm.KindNetwork,
+			"auth_registration_unavailable",
+			"auth registration failed because core is not reachable yet",
+			cause,
+		)
+	}
+	return errnorm.Wrap(errnorm.KindNetwork, "request_failed", "register request failed", cause)
+}
+
+func classifyRegisterHTTPFailure(statusCode int, responseBody []byte) error {
+	failure := errnorm.FromHTTPFailure(statusCode, responseBody)
+	normalized := errnorm.Normalize(failure)
+	if normalized == nil {
+		return failure
+	}
+
+	if statusCode == http.StatusServiceUnavailable || statusCode >= http.StatusInternalServerError {
+		return errnorm.WithDetails(
+			errnorm.Wrap(
+				errnorm.KindRemote,
+				"auth_registration_unavailable",
+				"auth registration is temporarily unavailable; core may still be starting, retry shortly",
+				failure,
+			),
+			normalized.Details,
+		)
+	}
+	if normalized.Code == "internal_error" || normalized.Code == "auth_unavailable" {
+		return errnorm.WithDetails(
+			errnorm.Wrap(
+				errnorm.KindRemote,
+				"auth_registration_unavailable",
+				"auth registration is temporarily unavailable; core may still be starting, retry shortly",
+				failure,
+			),
+			normalized.Details,
+		)
+	}
+	return failure
 }
 
 func boolPtr(v bool) *bool {

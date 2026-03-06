@@ -555,6 +555,10 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 		if dryRun {
 			return dryRunResult("docs update", "docs.update", map[string]string{"document_id": id}, nil, body), "docs update", nil
 		}
+		body, err = ensureDocsUpdateActorIdentity(body, cfg)
+		if err != nil {
+			return nil, "docs update", err
+		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "docs update", "docs.update", map[string]string{"document_id": id}, nil, body)
 		return result, "docs update", callErr
 	case "validate-update":
@@ -2501,6 +2505,26 @@ func appendDocsCommonValidationIssues(payload map[string]any, issues *[]string) 
 			}
 		}
 	}
+}
+
+func ensureDocsUpdateActorIdentity(body any, cfg config.Resolved) (any, error) {
+	payload, ok := body.(map[string]any)
+	if !ok {
+		return nil, errnorm.Usage("invalid_request", "JSON body for `oar docs update` must be an object")
+	}
+
+	if actorID := strings.TrimSpace(anyString(payload["actor_id"])); actorID != "" {
+		return payload, nil
+	}
+	if actorID := strings.TrimSpace(cfg.ActorID); actorID != "" {
+		payload["actor_id"] = actorID
+		return payload, nil
+	}
+
+	return nil, errnorm.Usage(
+		"invalid_request",
+		"No active actor identity. Run: oar auth register --username <name> or oar auth whoami to inspect current profile.",
+	)
 }
 
 func validateEventsCreateBody(body any) error {

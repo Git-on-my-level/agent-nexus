@@ -193,6 +193,49 @@ func TestAuthRegisterPersistsProfileDefaults(t *testing.T) {
 	}
 }
 
+func TestAuthRegisterInternalErrorIsActionable(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/auth/agents/register" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error": map[string]any{
+				"code":    "internal_error",
+				"message": "failed to register agent",
+			},
+		})
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"--agent", "agent-register-failure",
+		"auth", "register",
+		"--username", "agent.failure",
+	})
+	payload := assertEnvelopeError(t, raw)
+	errObj, _ := payload["error"].(map[string]any)
+	if errObj == nil || strings.TrimSpace(anyStr(errObj["code"])) != "auth_registration_unavailable" {
+		t.Fatalf("unexpected auth register error payload: %#v", payload)
+	}
+	if message := strings.TrimSpace(anyStr(errObj["message"])); !strings.Contains(message, "temporarily unavailable") {
+		t.Fatalf("expected actionable register error message, got %q payload=%#v", message, payload)
+	}
+	if hint := strings.TrimSpace(anyStr(errObj["hint"])); !strings.Contains(hint, "oar meta health") {
+		t.Fatalf("expected readiness hint, got %q payload=%#v", hint, payload)
+	}
+	if recoverable, _ := errObj["recoverable"].(bool); !recoverable {
+		t.Fatalf("expected recoverable=true, payload=%#v", payload)
+	}
+}
+
 func runCLIForTest(t *testing.T, home string, env map[string]string, stdin io.Reader, args []string) string {
 	t.Helper()
 	if stdin == nil {

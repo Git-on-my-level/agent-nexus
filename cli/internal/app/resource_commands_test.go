@@ -424,9 +424,164 @@ func TestDocsCommands(t *testing.T) {
 
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"document":{"id":"doc_1"},"content":"initial","content_type":"text"}`), []string{"--json", "--base-url", server.URL, "docs", "create"}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "get", "--document-id", "doc_1"}))
-	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"if_base_revision":"rev_1","content":"next","content_type":"text"}`), []string{"--json", "--base-url", server.URL, "docs", "update", "--document-id", "doc_1"}))
+	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"actor_id":"actor_test","if_base_revision":"rev_1","content":"next","content_type":"text"}`), []string{"--json", "--base-url", server.URL, "docs", "update", "--document-id", "doc_1"}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "history", "--document-id", "doc_1"}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "revision", "get", "--document-id", "doc_1", "--revision-id", "rev_1"}))
+}
+
+func TestDocsUpdateInjectsActorIDFromProfile(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPatch || r.URL.Path != "/docs/doc_1" {
+			http.NotFound(w, r)
+			return
+		}
+		body, _ := io.ReadAll(r.Body)
+		var payload map[string]any
+		if err := json.Unmarshal(body, &payload); err != nil {
+			t.Fatalf("decode docs update body: %v body=%s", err, string(body))
+		}
+		if got := strings.TrimSpace(anyStringValue(payload["actor_id"])); got != "actor-profile-docs" {
+			t.Fatalf("expected actor_id from profile, got %q body=%s", got, string(body))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"document":{"id":"doc_1","head_revision_id":"rev_2"},"revision":{"revision_id":"rev_2","revision_number":2}}`))
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-docs", `{"agent":"agent-docs","actor_id":"actor-profile-docs","access_token":"token-docs","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+
+	raw := runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{"if_base_revision":"rev_1","content":"next","content_type":"text"}`), []string{
+		"--json",
+		"--base-url", server.URL,
+		"--agent", "agent-docs",
+		"docs", "update",
+		"--document-id", "doc_1",
+	})
+	assertEnvelopeOK(t, raw)
+}
+
+func TestDocsUpdateRequiresActiveActorIdentity(t *testing.T) {
+	t.Parallel()
+
+	var mu sync.Mutex
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		requestCount++
+		mu.Unlock()
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{"if_base_revision":"rev_1","content":"next","content_type":"text"}`), []string{
+		"--json",
+		"--base-url", server.URL,
+		"docs", "update",
+		"--document-id", "doc_1",
+	})
+	payload := assertEnvelopeError(t, raw)
+	errObj, _ := payload["error"].(map[string]any)
+	if errObj == nil || anyStringValue(errObj["code"]) != "invalid_request" {
+		t.Fatalf("unexpected error payload: %#v", payload)
+	}
+	message := anyStringValue(errObj["message"])
+	if !strings.Contains(message, "No active actor identity") {
+		t.Fatalf("expected missing actor identity guidance, got %q payload=%#v", message, payload)
+	}
+	if !strings.Contains(message, "oar auth register --username <name>") || !strings.Contains(message, "oar auth whoami") {
+		t.Fatalf("expected actionable auth guidance, got %q payload=%#v", message, payload)
+	}
+
+	mu.Lock()
+	gotRequests := requestCount
+	mu.Unlock()
+	if gotRequests != 0 {
+		t.Fatalf("expected no HTTP requests when actor identity is missing, got %d", gotRequests)
+	}
+}
+
+func TestProductManagerFlowRegisterThenDocsUpdate(t *testing.T) {
+	t.Parallel()
+
+	var mu sync.Mutex
+	docsUpdateCalls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/meta/handshake":
+			_, _ = w.Write([]byte(`{"core_instance_id":"fake-core","min_cli_version":"0.1.0"}`))
+			return
+		case r.Method == http.MethodPost && r.URL.Path == "/auth/agents/register":
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"agent": map[string]any{
+					"agent_id": "agent-product-manager",
+					"actor_id": "actor-product-manager",
+					"username": "pi-dogfood-agent-product-manager",
+				},
+				"key": map[string]any{
+					"key_id": "key-product-manager",
+				},
+				"tokens": map[string]any{
+					"access_token":  "token-product-manager",
+					"refresh_token": "refresh-product-manager",
+					"token_type":    "Bearer",
+					"expires_in":    300,
+				},
+			})
+			return
+		case r.Method == http.MethodPatch && r.URL.Path == "/docs/northwave-pilot-rescue-brief":
+			if gotAuth := strings.TrimSpace(r.Header.Get("Authorization")); gotAuth != "Bearer token-product-manager" {
+				t.Fatalf("expected auth bearer token, got %q", gotAuth)
+			}
+			body, _ := io.ReadAll(r.Body)
+			var payload map[string]any
+			if err := json.Unmarshal(body, &payload); err != nil {
+				t.Fatalf("decode docs update body: %v body=%s", err, string(body))
+			}
+			if got := strings.TrimSpace(anyStringValue(payload["actor_id"])); got != "actor-product-manager" {
+				t.Fatalf("expected actor_id from registered profile, got %q body=%s", got, string(body))
+			}
+			mu.Lock()
+			docsUpdateCalls++
+			mu.Unlock()
+			_, _ = w.Write([]byte(`{"document":{"id":"northwave-pilot-rescue-brief","head_revision_id":"rev_2"},"revision":{"revision_id":"rev_2","revision_number":2}}`))
+			return
+		default:
+			http.NotFound(w, r)
+			return
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	env := map[string]string{}
+
+	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"--agent", "agent-product-manager",
+		"auth", "register",
+		"--username", "pi-dogfood-agent-product-manager",
+	}))
+	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"if_base_revision":"rev_1","content":"updated brief","content_type":"text"}`), []string{
+		"--json",
+		"--base-url", server.URL,
+		"--agent", "agent-product-manager",
+		"docs", "update",
+		"--document-id", "northwave-pilot-rescue-brief",
+	}))
+
+	mu.Lock()
+	gotCalls := docsUpdateCalls
+	mu.Unlock()
+	if gotCalls != 1 {
+		t.Fatalf("expected one docs update request, got %d", gotCalls)
+	}
 }
 
 func TestDocsContentCommand(t *testing.T) {
