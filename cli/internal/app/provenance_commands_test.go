@@ -169,6 +169,86 @@ func TestProvenanceWalkIncludeEventChainAddsThreadEdge(t *testing.T) {
 	}
 }
 
+func TestProvenanceWalkPreservesAllMissingRefContexts(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/events/event_root":
+			_, _ = w.Write([]byte(`{"event":{"id":"event_root","refs":["artifact:artifact_missing"],"links":["artifact:artifact_missing"]}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/artifacts/artifact_missing":
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"code":"not_found","message":"artifact not found"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"provenance", "walk",
+		"--from", "event:event_root",
+		"--depth", "1",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+
+	edges := asSlice(data["edges"])
+	if !provenanceHasEdge(edges, "event:event_root", "artifact:artifact_missing", "refs") {
+		t.Fatalf("expected refs edge to missing artifact, got %#v", edges)
+	}
+	if !provenanceHasEdge(edges, "event:event_root", "artifact:artifact_missing", "links") {
+		t.Fatalf("expected links edge to missing artifact, got %#v", edges)
+	}
+
+	missing := asSlice(data["missing_refs"])
+	if got := provenanceMissingCount(missing, "artifact:artifact_missing", "event:event_root", "refs", "not_found"); got != 1 {
+		t.Fatalf("expected one refs missing context, got %d payload=%#v", got, payload)
+	}
+	if got := provenanceMissingCount(missing, "artifact:artifact_missing", "event:event_root", "links", "not_found"); got != 1 {
+		t.Fatalf("expected one links missing context, got %d payload=%#v", got, payload)
+	}
+}
+
+func TestProvenanceWalkTreatsInvalidDescendantIDAsMissingRef(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/events/event_root":
+			_, _ = w.Write([]byte(`{"event":{"id":"event_root","refs":["artifact:bad id"]}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"provenance", "walk",
+		"--from", "event:event_root",
+		"--depth", "1",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+
+	edges := asSlice(data["edges"])
+	if !provenanceHasEdge(edges, "event:event_root", "artifact:bad id", "refs") {
+		t.Fatalf("expected edge to invalid descendant id, got %#v", edges)
+	}
+	missing := asSlice(data["missing_refs"])
+	if got := provenanceMissingCount(missing, "artifact:bad id", "event:event_root", "refs", "invalid_ref_id"); got != 1 {
+		t.Fatalf("expected invalid_ref_id missing context, got %d payload=%#v", got, payload)
+	}
+}
+
 func TestProvenanceWalkRequiresFromFlag(t *testing.T) {
 	t.Parallel()
 
@@ -297,4 +377,28 @@ func provenanceHasEdge(edges []any, from string, to string, relation string) boo
 		return true
 	}
 	return false
+}
+
+func provenanceMissingCount(items []any, ref string, from string, relation string, reason string) int {
+	count := 0
+	for _, raw := range items {
+		item, _ := raw.(map[string]any)
+		if item == nil {
+			continue
+		}
+		if strings.TrimSpace(anyStringValue(item["ref"])) != ref {
+			continue
+		}
+		if strings.TrimSpace(anyStringValue(item["from"])) != from {
+			continue
+		}
+		if strings.TrimSpace(anyStringValue(item["relation"])) != relation {
+			continue
+		}
+		if strings.TrimSpace(anyStringValue(item["reason"])) != reason {
+			continue
+		}
+		count++
+	}
+	return count
 }

@@ -46,11 +46,14 @@ type provenanceDiscoveredRef struct {
 	Relation string
 }
 
-type provenanceQueueItem struct {
-	Ref      string
-	Hop      int
+type provenanceQueueContext struct {
 	From     string
 	Relation string
+}
+
+type provenanceQueueItem struct {
+	Ref string
+	Hop int
 }
 
 var provenanceResolverByPrefix = map[string]provenanceResolverSpec{
@@ -133,14 +136,18 @@ func (a *App) runProvenanceWalk(ctx context.Context, args []string, cfg config.R
 
 	queue := []provenanceQueueItem{{Ref: canonicalStartRef, Hop: 0}}
 	scheduledHop := map[string]int{canonicalStartRef: 0}
+	queueContexts := map[string][]provenanceQueueContext{}
 	visited := map[string]struct{}{}
+	unresolvedByRef := map[string]provenanceMissingRef{}
 	nodesByRef := map[string]provenanceNodeRecord{}
 	edgesByKey := map[string]provenanceEdgeRecord{}
-	missingByRef := map[string]provenanceMissingRef{}
+	missingByKey := map[string]provenanceMissingRef{}
 
 	for len(queue) > 0 {
 		item := queue[0]
 		queue = queue[1:]
+		contexts := queueContexts[item.Ref]
+		delete(queueContexts, item.Ref)
 		if _, seen := visited[item.Ref]; seen {
 			continue
 		}
@@ -154,13 +161,25 @@ func (a *App) runProvenanceWalk(ctx context.Context, args []string, cfg config.R
 				return nil, resolveErr
 			}
 			if notFound {
-				missingByRef[item.Ref] = provenanceMissingRef{
+				unresolved := provenanceMissingRef{
 					Ref:          item.Ref,
-					From:         item.From,
-					Relation:     item.Relation,
 					Reason:       "not_found",
 					ErrorCode:    normalized.Code,
 					ErrorMessage: normalized.Message,
+				}
+				unresolvedByRef[item.Ref] = unresolved
+				if len(contexts) == 0 {
+					addProvenanceMissing(missingByKey, unresolved)
+				}
+				for _, contextItem := range contexts {
+					addProvenanceMissing(missingByKey, provenanceMissingRef{
+						Ref:          unresolved.Ref,
+						From:         contextItem.From,
+						Relation:     contextItem.Relation,
+						Reason:       unresolved.Reason,
+						ErrorCode:    unresolved.ErrorCode,
+						ErrorMessage: unresolved.ErrorMessage,
+					})
 				}
 				continue
 			}
@@ -175,7 +194,7 @@ func (a *App) runProvenanceWalk(ctx context.Context, args []string, cfg config.R
 		discovered := extractProvenanceRefs(node.ResourceType, node.Payload, includeEventChain.set && includeEventChain.value)
 		for _, next := range discovered {
 			nextRef := next.Ref
-			kind, _, canonicalNextRef, parseErr := parseTypedRef(next.Ref)
+			kind, resourceID, canonicalNextRef, parseErr := parseTypedRef(next.Ref)
 			if parseErr == nil {
 				nextRef = canonicalNextRef
 			}
@@ -183,36 +202,62 @@ func (a *App) runProvenanceWalk(ctx context.Context, args []string, cfg config.R
 				return nil, addErr
 			}
 			if parseErr != nil {
-				missingByRef[next.Ref] = provenanceMissingRef{
+				addProvenanceMissing(missingByKey, provenanceMissingRef{
 					Ref:      next.Ref,
 					From:     item.Ref,
 					Relation: next.Relation,
 					Reason:   "invalid_typed_ref",
-				}
+				})
 				continue
 			}
-			if _, ok := provenanceResolverByPrefix[kind]; !ok {
-				missingByRef[canonicalNextRef] = provenanceMissingRef{
+			spec, ok := provenanceResolverByPrefix[kind]
+			if !ok {
+				addProvenanceMissing(missingByKey, provenanceMissingRef{
 					Ref:      canonicalNextRef,
 					From:     item.Ref,
 					Relation: next.Relation,
 					Reason:   "unsupported_ref_type",
+				})
+				continue
+			}
+			if validateErr := validateID(resourceID, spec.resourceType+" id"); validateErr != nil {
+				normalized := errnorm.Normalize(validateErr)
+				missing := provenanceMissingRef{
+					Ref:      canonicalNextRef,
+					From:     item.Ref,
+					Relation: next.Relation,
+					Reason:   "invalid_ref_id",
 				}
+				if normalized != nil {
+					missing.ErrorCode = normalized.Code
+					missing.ErrorMessage = normalized.Message
+				}
+				addProvenanceMissing(missingByKey, missing)
+				continue
+			}
+			if unresolved, ok := unresolvedByRef[canonicalNextRef]; ok {
+				addProvenanceMissing(missingByKey, provenanceMissingRef{
+					Ref:          unresolved.Ref,
+					From:         item.Ref,
+					Relation:     next.Relation,
+					Reason:       unresolved.Reason,
+					ErrorCode:    unresolved.ErrorCode,
+					ErrorMessage: unresolved.ErrorMessage,
+				})
 				continue
 			}
 			if _, seen := visited[canonicalNextRef]; seen {
 				continue
 			}
 			nextHop := item.Hop + 1
+			addProvenanceQueueContext(queueContexts, canonicalNextRef, item.Ref, next.Relation)
 			if scheduled, exists := scheduledHop[canonicalNextRef]; exists && scheduled <= nextHop {
 				continue
 			}
 			scheduledHop[canonicalNextRef] = nextHop
 			queue = append(queue, provenanceQueueItem{
-				Ref:      canonicalNextRef,
-				Hop:      nextHop,
-				From:     item.Ref,
-				Relation: next.Relation,
+				Ref: canonicalNextRef,
+				Hop: nextHop,
 			})
 		}
 	}
@@ -259,8 +304,8 @@ func (a *App) runProvenanceWalk(ctx context.Context, args []string, cfg config.R
 		return anyString(edges[i]["relation"]) < anyString(edges[j]["relation"])
 	})
 
-	missing := make([]map[string]any, 0, len(missingByRef))
-	for _, item := range missingByRef {
+	missing := make([]map[string]any, 0, len(missingByKey))
+	for _, item := range missingByKey {
 		row := map[string]any{
 			"ref":      item.Ref,
 			"from":     item.From,
@@ -286,7 +331,22 @@ func (a *App) runProvenanceWalk(ctx context.Context, args []string, cfg config.R
 		if leftFrom != rightFrom {
 			return leftFrom < rightFrom
 		}
-		return anyString(missing[i]["relation"]) < anyString(missing[j]["relation"])
+		leftRelation := anyString(missing[i]["relation"])
+		rightRelation := anyString(missing[j]["relation"])
+		if leftRelation != rightRelation {
+			return leftRelation < rightRelation
+		}
+		leftReason := anyString(missing[i]["reason"])
+		rightReason := anyString(missing[j]["reason"])
+		if leftReason != rightReason {
+			return leftReason < rightReason
+		}
+		leftCode := anyString(missing[i]["error_code"])
+		rightCode := anyString(missing[j]["error_code"])
+		if leftCode != rightCode {
+			return leftCode < rightCode
+		}
+		return anyString(missing[i]["error_message"]) < anyString(missing[j]["error_message"])
 	})
 
 	graph := map[string]any{
@@ -479,6 +539,42 @@ func addProvenanceEdge(edges map[string]provenanceEdgeRecord, from string, to st
 		Relation: relation,
 	}
 	return nil
+}
+
+func addProvenanceMissing(missing map[string]provenanceMissingRef, item provenanceMissingRef) {
+	item.Ref = strings.TrimSpace(item.Ref)
+	item.From = strings.TrimSpace(item.From)
+	item.Relation = strings.TrimSpace(item.Relation)
+	item.Reason = strings.TrimSpace(item.Reason)
+	item.ErrorCode = strings.TrimSpace(item.ErrorCode)
+	item.ErrorMessage = strings.TrimSpace(item.ErrorMessage)
+	if item.Ref == "" || item.Reason == "" {
+		return
+	}
+	key := item.Ref + "|" + item.From + "|" + item.Relation + "|" + item.Reason + "|" + item.ErrorCode + "|" + item.ErrorMessage
+	if _, exists := missing[key]; exists {
+		return
+	}
+	missing[key] = item
+}
+
+func addProvenanceQueueContext(contexts map[string][]provenanceQueueContext, ref string, from string, relation string) {
+	ref = strings.TrimSpace(ref)
+	from = strings.TrimSpace(from)
+	relation = strings.TrimSpace(relation)
+	if ref == "" || from == "" || relation == "" {
+		return
+	}
+	list := contexts[ref]
+	for _, entry := range list {
+		if entry.From == from && entry.Relation == relation {
+			return
+		}
+	}
+	contexts[ref] = append(list, provenanceQueueContext{
+		From:     from,
+		Relation: relation,
+	})
 }
 
 func formatProvenanceWalkSummary(graph map[string]any) string {
