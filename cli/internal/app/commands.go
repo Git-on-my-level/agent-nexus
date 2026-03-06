@@ -54,10 +54,10 @@ func (a *App) runCommand(ctx context.Context, args []string, cfg config.Resolved
 		return name, result, err
 	case "api":
 		if len(args) < 2 {
-			return "api", nil, errnorm.Usage("subcommand_required", "expected `oar api call`")
+			return "api", nil, apiSubcommandSpec.requiredError()
 		}
-		if args[1] != "call" {
-			return "api", nil, errnorm.Usage("unknown_subcommand", "expected `oar api call`")
+		if apiSubcommandSpec.normalize(args[1]) != "call" {
+			return "api", nil, apiSubcommandSpec.unknownError(args[1])
 		}
 		result, err := a.runAPICall(ctx, args[2:], cfg)
 		return "api call", result, err

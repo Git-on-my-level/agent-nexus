@@ -112,6 +112,71 @@ func TestTypedWorkflowCommands(t *testing.T) {
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "inbox", "ack", "--thread-id", "thread_flow_1", "--inbox-item-id", "inbox:1"}))
 }
 
+func TestInboxUnknownSubcommandGuidance(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "inbox", "10"})
+	payload := assertEnvelopeError(t, raw)
+	errObj, _ := payload["error"].(map[string]any)
+	if errObj == nil || anyStringValue(errObj["code"]) != "unknown_subcommand" {
+		t.Fatalf("unexpected error payload: %#v", payload)
+	}
+	message := anyStringValue(errObj["message"])
+	if !strings.Contains(message, "valid subcommands: list, ack, stream, tail") {
+		t.Fatalf("expected valid-subcommands guidance, got %q", message)
+	}
+	if !strings.Contains(message, "`oar inbox list`") || !strings.Contains(message, "`oar inbox ack --thread-id <thread-id> --inbox-item-id <inbox-item-id>`") {
+		t.Fatalf("expected concrete inbox examples, got %q", message)
+	}
+	if !strings.Contains(message, "did you mean `oar inbox ack --thread-id <thread-id> --inbox-item-id <inbox-item-id>`?") {
+		t.Fatalf("expected corrective suggestion, got %q", message)
+	}
+}
+
+func TestInboxGetAliasMapsToList(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/inbox" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items":[{"id":"inbox:1","thread_id":"thread_1"}]}`))
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "--base-url", server.URL, "inbox", "get"})
+	payload := assertEnvelopeOK(t, raw)
+	if got := anyStringValue(payload["command"]); got != "inbox list" {
+		t.Fatalf("expected alias to resolve to inbox list, got %q payload=%#v", got, payload)
+	}
+}
+
+func TestEventsUnknownSubcommandGuidance(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "events", "streem"})
+	payload := assertEnvelopeError(t, raw)
+	errObj, _ := payload["error"].(map[string]any)
+	if errObj == nil || anyStringValue(errObj["code"]) != "unknown_subcommand" {
+		t.Fatalf("unexpected error payload: %#v", payload)
+	}
+	message := anyStringValue(errObj["message"])
+	if !strings.Contains(message, "valid subcommands: get, create, stream, tail, explain") {
+		t.Fatalf("expected valid subcommands in message, got %q", message)
+	}
+	if !strings.Contains(message, "did you mean `oar events stream`?") {
+		t.Fatalf("expected stream correction, got %q", message)
+	}
+	if !strings.Contains(message, "`oar events stream --thread-id <thread-id> --follow`") || !strings.Contains(message, "`oar events tail --max-events 20`") {
+		t.Fatalf("expected stream/tail examples, got %q", message)
+	}
+}
+
 func TestDocsCommands(t *testing.T) {
 	t.Parallel()
 
@@ -835,6 +900,25 @@ func TestTypedCommandUsageFailures(t *testing.T) {
 	exitCode := cli.Run([]string{"--json", "threads", "patch", "--thread-id", "thread_1"})
 	if exitCode != 2 {
 		t.Fatalf("expected exit code 2, got %d stdout=%s stderr=%s", exitCode, stdout.String(), stderr.String())
+	}
+}
+
+func TestDocsRevisionSubcommandRequiredGuidance(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "docs", "revision"})
+	payload := assertEnvelopeError(t, raw)
+	errObj, _ := payload["error"].(map[string]any)
+	if errObj == nil || anyStringValue(errObj["code"]) != "subcommand_required" {
+		t.Fatalf("unexpected error payload: %#v", payload)
+	}
+	message := anyStringValue(errObj["message"])
+	if !strings.Contains(message, "expected one of: get") {
+		t.Fatalf("expected valid subcommands in required message, got %q", message)
+	}
+	if !strings.Contains(message, "`oar docs revision get --document-id <document-id> --revision-id <revision-id>`") {
+		t.Fatalf("expected usage examples in required message, got %q", message)
 	}
 }
 

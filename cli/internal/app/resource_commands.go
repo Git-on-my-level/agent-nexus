@@ -223,9 +223,9 @@ func (a *App) runTypedResource(ctx context.Context, resource string, args []stri
 
 func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
 	if len(args) == 0 {
-		return nil, "threads", errnorm.Usage("subcommand_required", "expected one of: list, get, create, patch, timeline, context")
+		return nil, "threads", threadsSubcommandSpec.requiredError()
 	}
-	sub := strings.TrimSpace(args[0])
+	sub := threadsSubcommandSpec.normalize(args[0])
 	switch sub {
 	case "list":
 		fs := newSilentFlagSet("threads list")
@@ -274,7 +274,7 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "threads create", "threads.create", nil, nil, body)
 		return result, "threads create", callErr
-	case "patch", "update":
+	case "patch":
 		id, body, err := a.parseIDAndBodyInput(args[1:], "thread-id", "thread id", "threads patch")
 		if err != nil {
 			return nil, "threads patch", err
@@ -356,15 +356,15 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 		)
 		return result, "threads context", callErr
 	default:
-		return nil, "threads", errnorm.Usage("unknown_subcommand", fmt.Sprintf("unknown threads subcommand %q", sub))
+		return nil, "threads", threadsSubcommandSpec.unknownError(args[0])
 	}
 }
 
 func (a *App) runCommitmentsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
 	if len(args) == 0 {
-		return nil, "commitments", errnorm.Usage("subcommand_required", "expected one of: list, get, create, update")
+		return nil, "commitments", commitmentsSubcommandSpec.requiredError()
 	}
-	sub := strings.TrimSpace(args[0])
+	sub := commitmentsSubcommandSpec.normalize(args[0])
 	switch sub {
 	case "list":
 		fs := newSilentFlagSet("commitments list")
@@ -430,15 +430,15 @@ func (a *App) runCommitmentsCommand(ctx context.Context, args []string, cfg conf
 		)
 		return result, "commitments update", callErr
 	default:
-		return nil, "commitments", errnorm.Usage("unknown_subcommand", fmt.Sprintf("unknown commitments subcommand %q", sub))
+		return nil, "commitments", commitmentsSubcommandSpec.unknownError(args[0])
 	}
 }
 
 func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
 	if len(args) == 0 {
-		return nil, "artifacts", errnorm.Usage("subcommand_required", "expected one of: list, get, create, content")
+		return nil, "artifacts", artifactsSubcommandSpec.requiredError()
 	}
-	sub := strings.TrimSpace(args[0])
+	sub := artifactsSubcommandSpec.normalize(args[0])
 	switch sub {
 	case "list":
 		fs := newSilentFlagSet("artifacts list")
@@ -499,15 +499,15 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 		)
 		return result, "artifacts content", callErr
 	default:
-		return nil, "artifacts", errnorm.Usage("unknown_subcommand", fmt.Sprintf("unknown artifacts subcommand %q", sub))
+		return nil, "artifacts", artifactsSubcommandSpec.unknownError(args[0])
 	}
 }
 
 func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
 	if len(args) == 0 {
-		return nil, "docs", errnorm.Usage("subcommand_required", "expected one of: create, get, update, history, revision")
+		return nil, "docs", docsSubcommandSpec.requiredError()
 	}
-	sub := strings.TrimSpace(args[0])
+	sub := docsSubcommandSpec.normalize(args[0])
 	switch sub {
 	case "create":
 		body, err := a.parseJSONBodyInput(args[1:], "docs create")
@@ -539,10 +539,10 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 		return result, "docs history", callErr
 	case "revision":
 		if len(args) < 2 {
-			return nil, "docs revision", errnorm.Usage("subcommand_required", "expected `oar docs revision get`")
+			return nil, "docs revision", docsRevisionSubcommandSpec.requiredError()
 		}
-		if strings.TrimSpace(args[1]) != "get" {
-			return nil, "docs revision", errnorm.Usage("unknown_subcommand", fmt.Sprintf("unknown docs revision subcommand %q", strings.TrimSpace(args[1])))
+		if docsRevisionSubcommandSpec.normalize(args[1]) != "get" {
+			return nil, "docs revision", docsRevisionSubcommandSpec.unknownError(args[1])
 		}
 		fs := newSilentFlagSet("docs revision get")
 		var documentIDFlag trackedString
@@ -585,15 +585,15 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 		)
 		return result, "docs revision get", callErr
 	default:
-		return nil, "docs", errnorm.Usage("unknown_subcommand", fmt.Sprintf("unknown docs subcommand %q", sub))
+		return nil, "docs", docsSubcommandSpec.unknownError(args[0])
 	}
 }
 
 func (a *App) runEventsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
 	if len(args) == 0 {
-		return nil, "events", errnorm.Usage("subcommand_required", "expected one of: get, create, stream, tail, explain")
+		return nil, "events", eventsSubcommandSpec.requiredError()
 	}
-	sub := strings.TrimSpace(args[0])
+	sub := eventsSubcommandSpec.normalize(args[0])
 	switch sub {
 	case "get":
 		id, err := parseIDArg(args[1:], "event-id", "event id")
@@ -622,7 +622,7 @@ func (a *App) runEventsCommand(ctx context.Context, args []string, cfg config.Re
 		result, err := a.runEventsExplainCommand(args[1:])
 		return result, "events explain", err
 	default:
-		return nil, "events", errnorm.Usage("unknown_subcommand", fmt.Sprintf("unknown events subcommand %q", sub))
+		return nil, "events", eventsSubcommandSpec.unknownError(args[0])
 	}
 }
 
@@ -688,9 +688,9 @@ func (a *App) runEventsExplainCommand(args []string) (*commandResult, error) {
 
 func (a *App) runInboxCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
 	if len(args) == 0 {
-		return nil, "inbox", errnorm.Usage("subcommand_required", "expected one of: list, ack, stream")
+		return nil, "inbox", inboxSubcommandSpec.requiredError()
 	}
-	sub := strings.TrimSpace(args[0])
+	sub := inboxSubcommandSpec.normalize(args[0])
 	switch sub {
 	case "list":
 		result, err := a.invokeTypedJSON(ctx, cfg, "inbox list", "inbox.list", nil, nil, nil)
@@ -709,16 +709,17 @@ func (a *App) runInboxCommand(ctx context.Context, args []string, cfg config.Res
 		result, err := a.runInboxStream(ctx, args[1:], cfg, "inbox tail", true)
 		return result, "inbox tail", err
 	default:
-		return nil, "inbox", errnorm.Usage("unknown_subcommand", fmt.Sprintf("unknown inbox subcommand %q", sub))
+		return nil, "inbox", inboxSubcommandSpec.unknownError(args[0])
 	}
 }
 
 func (a *App) runPacketsCreateCommand(ctx context.Context, resource string, commandID string, args []string, cfg config.Resolved) (*commandResult, string, error) {
+	spec := packetCreateSubcommandSpec(resource)
 	if len(args) == 0 {
-		return nil, resource, errnorm.Usage("subcommand_required", fmt.Sprintf("expected `%s create`", resource))
+		return nil, resource, spec.requiredError()
 	}
-	if strings.TrimSpace(args[0]) != "create" {
-		return nil, resource, errnorm.Usage("unknown_subcommand", fmt.Sprintf("unknown %s subcommand %q", resource, strings.TrimSpace(args[0])))
+	if spec.normalize(args[0]) != "create" {
+		return nil, resource, spec.unknownError(args[0])
 	}
 	body, err := a.parseJSONBodyInput(args[1:], resource+" create")
 	if err != nil {
@@ -730,10 +731,10 @@ func (a *App) runPacketsCreateCommand(ctx context.Context, resource string, comm
 
 func (a *App) runDerivedCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
 	if len(args) == 0 {
-		return nil, "derived", errnorm.Usage("subcommand_required", "expected `derived rebuild`")
+		return nil, "derived", derivedSubcommandSpec.requiredError()
 	}
-	if strings.TrimSpace(args[0]) != "rebuild" {
-		return nil, "derived", errnorm.Usage("unknown_subcommand", fmt.Sprintf("unknown derived subcommand %q", strings.TrimSpace(args[0])))
+	if derivedSubcommandSpec.normalize(args[0]) != "rebuild" {
+		return nil, "derived", derivedSubcommandSpec.unknownError(args[0])
 	}
 	body, err := a.parseDerivedRebuildBodyInput(args[1:], cfg)
 	if err != nil {
