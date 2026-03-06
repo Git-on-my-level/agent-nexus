@@ -176,12 +176,19 @@ func formatGeneratedGroupHelp(topic string, commands []registry.Command) string 
 }
 
 func localGroupHelpSupplement(topic string) string {
-	if strings.TrimSpace(topic) != "events" {
+	switch strings.TrimSpace(topic) {
+	case "events":
+		return strings.TrimSpace(`Local-only helpers:
+  events explain           Explain known event-type conventions and local validation constraints.
+  events validate          Validate an events.create payload from stdin/--from-file without sending a request.
+  For details: ` + "`oar events explain <event-type>`")
+	case "docs":
+		return strings.TrimSpace(`Local-only helper:
+  docs validate-update     Validate a docs.update payload from stdin/--from-file.
+  Tip: add ` + "`--content-file <path>`" + ` to avoid hand-escaping multiline content.`)
+	default:
 		return ""
 	}
-	return strings.TrimSpace(`Local-only helper:
-  events explain           Explain known event-type conventions and local validation constraints.
-  For details: ` + "`oar events explain <event-type>`")
 }
 
 func formatGeneratedCommandHelp(topic string, cmd registry.Command) string {

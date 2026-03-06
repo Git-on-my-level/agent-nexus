@@ -72,7 +72,7 @@ var artifactsSubcommandSpec = subcommandSpec{
 
 var docsSubcommandSpec = subcommandSpec{
 	command:  "docs",
-	valid:    []string{"create", "get", "update", "history", "revision"},
+	valid:    []string{"create", "get", "update", "validate-update", "history", "revision"},
 	examples: []string{"oar docs get --document-id <document-id>", "oar docs revision get --document-id <document-id> --revision-id <revision-id>"},
 }
 
@@ -84,7 +84,7 @@ var docsRevisionSubcommandSpec = subcommandSpec{
 
 var eventsSubcommandSpec = subcommandSpec{
 	command:  "events",
-	valid:    []string{"get", "create", "stream", "tail", "explain"},
+	valid:    []string{"get", "create", "validate", "stream", "tail", "explain"},
 	examples: []string{"oar events stream --thread-id <thread-id> --follow", "oar events tail --max-events 20"},
 	aliases: map[string]string{
 		"watch": "stream",

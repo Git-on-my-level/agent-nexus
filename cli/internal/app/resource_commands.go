@@ -513,9 +513,18 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 	sub := docsSubcommandSpec.normalize(args[0])
 	switch sub {
 	case "create":
-		body, err := a.parseJSONBodyInput(args[1:], "docs create")
+		body, dryRun, err := a.parseJSONBodyInputWithOptions(args[1:], "docs create", jsonBodyInputOptions{
+			allowContentFile: true,
+			allowDryRun:      true,
+		})
 		if err != nil {
 			return nil, "docs create", err
+		}
+		if err := validateDocsCreateBody(body, "docs create"); err != nil {
+			return nil, "docs create", err
+		}
+		if dryRun {
+			return dryRunResult("docs create", "docs.create", nil, nil, body), "docs create", nil
 		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "docs create", "docs.create", nil, nil, body)
 		return result, "docs create", callErr
@@ -527,12 +536,32 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "docs get", "docs.get", map[string]string{"document_id": id}, nil, nil)
 		return result, "docs get", callErr
 	case "update":
-		id, body, err := a.parseIDAndBodyInput(args[1:], "document-id", "document id", "docs update")
+		id, body, dryRun, err := a.parseIDAndBodyInputWithOptions(args[1:], "document-id", "document id", "docs update", jsonBodyInputOptions{
+			allowContentFile: true,
+			allowDryRun:      true,
+		})
 		if err != nil {
 			return nil, "docs update", err
 		}
+		if err := validateDocsUpdateBody(body, "docs update"); err != nil {
+			return nil, "docs update", err
+		}
+		if dryRun {
+			return dryRunResult("docs update", "docs.update", map[string]string{"document_id": id}, nil, body), "docs update", nil
+		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "docs update", "docs.update", map[string]string{"document_id": id}, nil, body)
 		return result, "docs update", callErr
+	case "validate-update":
+		id, body, _, err := a.parseIDAndBodyInputWithOptions(args[1:], "document-id", "document id", "docs validate-update", jsonBodyInputOptions{
+			allowContentFile: true,
+		})
+		if err != nil {
+			return nil, "docs validate-update", err
+		}
+		if err := validateDocsUpdateBody(body, "docs validate-update"); err != nil {
+			return nil, "docs validate-update", err
+		}
+		return validationResult("docs validate-update", "docs.update", map[string]string{"document_id": id}, nil, body), "docs validate-update", nil
 	case "history":
 		id, err := parseIDArg(args[1:], "document-id", "document id")
 		if err != nil {
@@ -606,15 +635,29 @@ func (a *App) runEventsCommand(ctx context.Context, args []string, cfg config.Re
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "events get", "events.get", map[string]string{"event_id": id}, nil, nil)
 		return result, "events get", callErr
 	case "create":
-		body, err := a.parseJSONBodyInput(args[1:], "events create")
+		body, dryRun, err := a.parseJSONBodyInputWithOptions(args[1:], "events create", jsonBodyInputOptions{
+			allowDryRun: true,
+		})
 		if err != nil {
 			return nil, "events create", err
 		}
-		if err := validateEventsCreateBody(body); err != nil {
+		if err := validateEventsCreateInput(body, "events create"); err != nil {
 			return nil, "events create", err
+		}
+		if dryRun {
+			return dryRunResult("events create", "events.create", nil, nil, body), "events create", nil
 		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "events create", "events.create", nil, nil, body)
 		return result, "events create", callErr
+	case "validate":
+		body, _, err := a.parseJSONBodyInputWithOptions(args[1:], "events validate", jsonBodyInputOptions{})
+		if err != nil {
+			return nil, "events validate", err
+		}
+		if err := validateEventsCreateInput(body, "events validate"); err != nil {
+			return nil, "events validate", err
+		}
+		return validationResult("events validate", "events.create", nil, nil, body), "events validate", nil
 	case "stream":
 		result, err := a.runEventsStream(ctx, args[1:], cfg, "events stream", false)
 		return result, "events stream", err
@@ -1036,13 +1079,7 @@ func (a *App) invokeTypedJSON(ctx context.Context, cfg config.Resolved, commandN
 		return nil, errnorm.Wrap(errnorm.KindLocal, "http_client_init_failed", "failed to initialize HTTP client", err)
 	}
 
-	queryValues := make(map[string][]string, len(query))
-	for _, param := range query {
-		if len(param.values) == 0 {
-			continue
-		}
-		queryValues[param.name] = append([]string(nil), param.values...)
-	}
+	queryValues := queryValuesFromParams(query)
 
 	callCtx, cancel := httpclient.WithTimeout(ctx, authCfg.Timeout)
 	defer cancel()
@@ -1073,6 +1110,43 @@ func (a *App) invokeTypedJSON(ctx context.Context, cfg config.Resolved, commandN
 	}
 	text := formatTypedCommandText(commandID, resp.StatusCode, headersSorted, parsedBody, authCfg.Verbose, authCfg.Headers)
 	return &commandResult{Text: text, Data: data}, nil
+}
+
+func validationResult(commandName string, commandID string, pathParams map[string]string, query []queryParam, body any) *commandResult {
+	queryValues := queryValuesFromParams(query)
+	method := strings.ToUpper(resolveCommandMethod(commandID))
+	path := resolveCommandPath(commandID, pathParams, queryValues)
+
+	data := map[string]any{
+		"validated":  true,
+		"command_id": commandID,
+		"method":     method,
+		"path":       path,
+	}
+	if len(pathParams) > 0 {
+		data["path_params"] = pathParams
+	}
+	if len(queryValues) > 0 {
+		data["query"] = queryValues
+	}
+	if body != nil {
+		data["body"] = body
+	}
+	text := fmt.Sprintf("Validation passed for `oar %s` (%s %s).", commandName, method, path)
+	return &commandResult{Text: text, Data: data}
+}
+
+func dryRunResult(commandName string, commandID string, pathParams map[string]string, query []queryParam, body any) *commandResult {
+	result := validationResult(commandName, commandID, pathParams, query, body)
+	if result == nil {
+		return nil
+	}
+	data, _ := result.Data.(map[string]any)
+	if data != nil {
+		data["dry_run"] = true
+	}
+	result.Text = result.Text + " No request was sent."
+	return result
 }
 
 func (a *App) invokeTypedJSONWithIDResolution(
@@ -1216,33 +1290,72 @@ func resolveCommandPath(commandID string, pathParams map[string]string, query ma
 	return u.String()
 }
 
+type jsonBodyInputOptions struct {
+	allowDryRun      bool
+	allowContentFile bool
+}
+
 func (a *App) parseJSONBodyInput(args []string, commandName string) (any, error) {
+	body, _, err := a.parseJSONBodyInputWithOptions(args, commandName, jsonBodyInputOptions{})
+	return body, err
+}
+
+func (a *App) parseJSONBodyInputWithOptions(args []string, commandName string, options jsonBodyInputOptions) (any, bool, error) {
 	fs := newSilentFlagSet(commandName)
-	var fromFileFlag trackedString
+	var fromFileFlag, contentFileFlag trackedString
+	var dryRunFlag trackedBool
 	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
+	if options.allowContentFile {
+		fs.Var(&contentFileFlag, "content-file", "Load request content field from file path")
+	}
+	if options.allowDryRun {
+		fs.Var(&dryRunFlag, "dry-run", "Validate and render request without sending the mutation")
+	}
 	if err := fs.Parse(args); err != nil {
-		return nil, errnorm.Usage("invalid_flags", err.Error())
+		return nil, false, errnorm.Usage("invalid_flags", err.Error())
 	}
 	if len(fs.Args()) > 0 {
-		return nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `oar %s`", commandName))
+		return nil, false, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `oar %s`", commandName))
 	}
 	payload, err := a.readBodyInput(strings.TrimSpace(fromFileFlag.value))
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if len(payload) == 0 {
-		return nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body is required for `oar %s` (provide stdin or --from-file)", commandName))
+		return nil, false, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body is required for `oar %s` (provide stdin or --from-file)", commandName))
 	}
-	return decodeJSONPayload(payload)
+	body, err := decodeJSONPayload(payload)
+	if err != nil {
+		return nil, false, err
+	}
+	if options.allowContentFile {
+		body, err = a.applyContentFileOverride(body, strings.TrimSpace(contentFileFlag.value), commandName)
+		if err != nil {
+			return nil, false, err
+		}
+	}
+	return body, dryRunFlag.set && dryRunFlag.value, nil
 }
 
 func (a *App) parseIDAndBodyInput(args []string, idFlag string, idLabel string, commandName string) (string, any, error) {
+	id, body, _, err := a.parseIDAndBodyInputWithOptions(args, idFlag, idLabel, commandName, jsonBodyInputOptions{})
+	return id, body, err
+}
+
+func (a *App) parseIDAndBodyInputWithOptions(args []string, idFlag string, idLabel string, commandName string, options jsonBodyInputOptions) (string, any, bool, error) {
 	fs := newSilentFlagSet(commandName)
-	var idArgFlag, fromFileFlag trackedString
+	var idArgFlag, fromFileFlag, contentFileFlag trackedString
+	var dryRunFlag trackedBool
 	fs.Var(&idArgFlag, idFlag, idLabel)
 	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
+	if options.allowContentFile {
+		fs.Var(&contentFileFlag, "content-file", "Load request content field from file path")
+	}
+	if options.allowDryRun {
+		fs.Var(&dryRunFlag, "dry-run", "Validate and render request without sending the mutation")
+	}
 	if err := fs.Parse(args); err != nil {
-		return "", nil, errnorm.Usage("invalid_flags", err.Error())
+		return "", nil, false, errnorm.Usage("invalid_flags", err.Error())
 	}
 	positionals := fs.Args()
 	id := strings.TrimSpace(idArgFlag.value)
@@ -1251,23 +1364,29 @@ func (a *App) parseIDAndBodyInput(args []string, idFlag string, idLabel string, 
 		positionals = positionals[1:]
 	}
 	if err := validateID(id, idLabel); err != nil {
-		return "", nil, err
+		return "", nil, false, err
 	}
 	if len(positionals) > 0 {
-		return "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `oar %s`", commandName))
+		return "", nil, false, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `oar %s`", commandName))
 	}
 	payload, err := a.readBodyInput(strings.TrimSpace(fromFileFlag.value))
 	if err != nil {
-		return "", nil, err
+		return "", nil, false, err
 	}
 	if len(payload) == 0 {
-		return "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body is required for `oar %s` (provide stdin or --from-file)", commandName))
+		return "", nil, false, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body is required for `oar %s` (provide stdin or --from-file)", commandName))
 	}
 	body, err := decodeJSONPayload(payload)
 	if err != nil {
-		return "", nil, err
+		return "", nil, false, err
 	}
-	return id, body, nil
+	if options.allowContentFile {
+		body, err = a.applyContentFileOverride(body, strings.TrimSpace(contentFileFlag.value), commandName)
+		if err != nil {
+			return "", nil, false, err
+		}
+	}
+	return id, body, dryRunFlag.set && dryRunFlag.value, nil
 }
 
 func parseIDArg(args []string, idFlag string, idLabel string) (string, error) {
@@ -1855,6 +1974,36 @@ func minInt(a int, b int) int {
 	return b
 }
 
+func (a *App) applyContentFileOverride(body any, contentFile string, commandName string) (any, error) {
+	contentFile = strings.TrimSpace(contentFile)
+	if contentFile == "" {
+		return body, nil
+	}
+	content, err := a.readRawFile(contentFile)
+	if err != nil {
+		return nil, err
+	}
+
+	payload, ok := body.(map[string]any)
+	if !ok {
+		return nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `oar %s` must be an object when --content-file is provided", commandName))
+	}
+	payload["content"] = string(content)
+	return payload, nil
+}
+
+func (a *App) readRawFile(path string) ([]byte, error) {
+	readFile := a.ReadFile
+	if readFile == nil {
+		readFile = os.ReadFile
+	}
+	content, err := readFile(path)
+	if err != nil {
+		return nil, errnorm.Wrap(errnorm.KindLocal, "file_read_failed", fmt.Sprintf("failed to read file %s", path), err)
+	}
+	return content, nil
+}
+
 func (a *App) readBodyInput(fromFile string) ([]byte, error) {
 	if fromFile != "" {
 		readFile := a.ReadFile
@@ -1880,9 +2029,174 @@ func (a *App) readBodyInput(fromFile string) ([]byte, error) {
 func decodeJSONPayload(payload []byte) (any, error) {
 	var parsed any
 	if err := json.Unmarshal(payload, &parsed); err != nil {
-		return nil, errnorm.Usage("invalid_json", "input body must be valid JSON")
+		return nil, detailedJSONDecodeError(payload, err)
 	}
 	return parsed, nil
+}
+
+func detailedJSONDecodeError(payload []byte, decodeErr error) error {
+	parseDetail := strings.TrimSpace(decodeErr.Error())
+	if parseDetail == "" {
+		parseDetail = "unknown parse error"
+	}
+	line, column := jsonErrorLineColumn(payload, decodeErr)
+	if line > 0 && column > 0 {
+		return errnorm.Usage("invalid_json", fmt.Sprintf("input body must be valid JSON (line %d, column %d): %s", line, column, parseDetail))
+	}
+	return errnorm.Usage("invalid_json", fmt.Sprintf("input body must be valid JSON: %s", parseDetail))
+}
+
+func jsonErrorLineColumn(payload []byte, decodeErr error) (int, int) {
+	var syntaxErr *json.SyntaxError
+	if errors.As(decodeErr, &syntaxErr) {
+		return lineColumnFromOffset(payload, syntaxErr.Offset)
+	}
+
+	var typeErr *json.UnmarshalTypeError
+	if errors.As(decodeErr, &typeErr) {
+		return lineColumnFromOffset(payload, typeErr.Offset)
+	}
+
+	if errors.Is(decodeErr, io.ErrUnexpectedEOF) {
+		return lineColumnFromOffset(payload, int64(len(payload)))
+	}
+	return 0, 0
+}
+
+func lineColumnFromOffset(payload []byte, offset int64) (int, int) {
+	if offset <= 0 {
+		return 1, 1
+	}
+	if offset > int64(len(payload)) {
+		offset = int64(len(payload))
+	}
+	line := 1
+	column := 1
+	limit := offset - 1
+	for idx := int64(0); idx < limit && idx < int64(len(payload)); idx++ {
+		if payload[idx] == '\n' {
+			line++
+			column = 1
+			continue
+		}
+		column++
+	}
+	return line, column
+}
+
+func validateEventsCreateInput(body any, commandName string) error {
+	payload, ok := body.(map[string]any)
+	if !ok {
+		return errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `oar %s` must be an object", commandName))
+	}
+
+	issues := validateDraftBody("events.create", payload)
+	if len(issues) > 0 {
+		return errnorm.Usage("invalid_request", fmt.Sprintf("events payload failed local validation: %s", strings.Join(issues, "; ")))
+	}
+	return validateEventsCreateBody(body)
+}
+
+func validateDocsCreateBody(body any, commandName string) error {
+	payload, ok := body.(map[string]any)
+	if !ok {
+		return errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `oar %s` must be an object", commandName))
+	}
+
+	issues := make([]string, 0, 8)
+	rawDocument, hasDocument := payload["document"]
+	if !hasDocument || rawDocument == nil {
+		issues = append(issues, "document is required")
+	} else {
+		if _, ok := rawDocument.(map[string]any); !ok {
+			issues = append(issues, "document must be an object")
+		}
+	}
+
+	rawContent, hasContent := payload["content"]
+	if !hasContent || rawContent == nil {
+		issues = append(issues, "content is required")
+	}
+
+	rawContentType, hasContentType := payload["content_type"]
+	contentType := strings.TrimSpace(anyString(rawContentType))
+	if !hasContentType {
+		issues = append(issues, "content_type is required")
+	} else if contentType == "" {
+		issues = append(issues, "content_type must be a non-empty string")
+	} else if contentType != "text" && contentType != "structured" && contentType != "binary" {
+		issues = append(issues, fmt.Sprintf("content_type %q must be one of: text, structured, binary", contentType))
+	}
+
+	appendDocsCommonValidationIssues(payload, &issues)
+	if len(issues) > 0 {
+		return errnorm.Usage("invalid_request", fmt.Sprintf("docs create payload failed local validation: %s", strings.Join(issues, "; ")))
+	}
+	return nil
+}
+
+func validateDocsUpdateBody(body any, commandName string) error {
+	payload, ok := body.(map[string]any)
+	if !ok {
+		return errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `oar %s` must be an object", commandName))
+	}
+
+	issues := make([]string, 0, 8)
+	rawContent, hasContent := payload["content"]
+	if !hasContent || rawContent == nil {
+		issues = append(issues, "content is required")
+	}
+
+	rawContentType, hasContentType := payload["content_type"]
+	contentType := strings.TrimSpace(anyString(rawContentType))
+	if !hasContentType {
+		issues = append(issues, "content_type is required")
+	} else if contentType == "" {
+		issues = append(issues, "content_type must be a non-empty string")
+	} else if contentType != "text" && contentType != "structured" && contentType != "binary" {
+		issues = append(issues, fmt.Sprintf("content_type %q must be one of: text, structured, binary", contentType))
+	}
+
+	rawBaseRevision, hasBaseRevision := payload["if_base_revision"]
+	baseRevision := strings.TrimSpace(anyString(rawBaseRevision))
+	if !hasBaseRevision {
+		issues = append(issues, "if_base_revision is required")
+	} else if baseRevision == "" {
+		issues = append(issues, "if_base_revision must be a non-empty string")
+	}
+
+	appendDocsCommonValidationIssues(payload, &issues)
+	if len(issues) > 0 {
+		return errnorm.Usage("invalid_request", fmt.Sprintf("docs update payload failed local validation: %s", strings.Join(issues, "; ")))
+	}
+	return nil
+}
+
+func appendDocsCommonValidationIssues(payload map[string]any, issues *[]string) {
+	if rawDocument, hasDocument := payload["document"]; hasDocument {
+		if _, ok := rawDocument.(map[string]any); !ok {
+			*issues = append(*issues, "document must be an object when provided")
+		}
+	}
+
+	if rawActorID, hasActorID := payload["actor_id"]; hasActorID {
+		if strings.TrimSpace(anyString(rawActorID)) == "" {
+			*issues = append(*issues, "actor_id must be a non-empty string when provided")
+		}
+	}
+
+	if rawRefs, hasRefs := payload["refs"]; hasRefs {
+		refs, ok := asStringList(rawRefs)
+		if !ok {
+			*issues = append(*issues, "refs must be an array of strings when provided")
+		} else {
+			for _, ref := range refs {
+				if err := validateTypedRef(ref); err != nil {
+					*issues = append(*issues, fmt.Sprintf("refs contains invalid typed ref %q", ref))
+				}
+			}
+		}
+	}
 }
 
 func validateEventsCreateBody(body any) error {
@@ -1967,6 +2281,17 @@ func addMultiQuery(out *[]queryParam, name string, values []string) {
 		return
 	}
 	*out = append(*out, queryParam{name: name, values: clean})
+}
+
+func queryValuesFromParams(query []queryParam) map[string][]string {
+	values := make(map[string][]string, len(query))
+	for _, param := range query {
+		if len(param.values) == 0 {
+			continue
+		}
+		values[param.name] = append([]string(nil), param.values...)
+	}
+	return values
 }
 
 func normalizedHeaders(input http.Header) map[string][]string {

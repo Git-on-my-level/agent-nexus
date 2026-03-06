@@ -308,7 +308,7 @@ func TestEventsUnknownSubcommandGuidance(t *testing.T) {
 		t.Fatalf("unexpected error payload: %#v", payload)
 	}
 	message := anyStringValue(errObj["message"])
-	if !strings.Contains(message, "valid subcommands: get, create, stream, tail, explain") {
+	if !strings.Contains(message, "valid subcommands: get, create, validate, stream, tail, explain") {
 		t.Fatalf("expected valid subcommands in message, got %q", message)
 	}
 	if !strings.Contains(message, "did you mean `oar events stream`?") {
@@ -358,6 +358,206 @@ func TestDocsCommands(t *testing.T) {
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"if_base_revision":"rev_1","content":"next","content_type":"text"}`), []string{"--json", "--base-url", server.URL, "docs", "update", "--document-id", "doc_1"}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "history", "--document-id", "doc_1"}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "revision", "get", "--document-id", "doc_1", "--revision-id", "rev_1"}))
+}
+
+func TestDocsValidateUpdateRequiresBaseRevision(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{"content":"next","content_type":"text"}`), []string{
+		"--json",
+		"docs", "validate-update",
+		"--document-id", "doc_1",
+	})
+	payload := assertEnvelopeError(t, raw)
+	errObj, _ := payload["error"].(map[string]any)
+	if errObj == nil || anyStringValue(errObj["code"]) != "invalid_request" {
+		t.Fatalf("unexpected error payload: %#v", payload)
+	}
+	if message := anyStringValue(errObj["message"]); !strings.Contains(message, "if_base_revision") {
+		t.Fatalf("expected if_base_revision guidance, got %q payload=%#v", message, payload)
+	}
+}
+
+func TestDocsCreateDryRunValidatesPayloadBeforeSuccess(t *testing.T) {
+	t.Parallel()
+
+	var mu sync.Mutex
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		requestCount++
+		mu.Unlock()
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{}`), []string{
+		"--json",
+		"--base-url", server.URL,
+		"docs", "create",
+		"--dry-run",
+	})
+	payload := assertEnvelopeError(t, raw)
+	errObj, _ := payload["error"].(map[string]any)
+	if errObj == nil || anyStringValue(errObj["code"]) != "invalid_request" {
+		t.Fatalf("unexpected error payload: %#v", payload)
+	}
+	message := anyStringValue(errObj["message"])
+	if !strings.Contains(message, "document is required") || !strings.Contains(message, "content is required") || !strings.Contains(message, "content_type") {
+		t.Fatalf("expected docs create validation guidance, got %q payload=%#v", message, payload)
+	}
+
+	mu.Lock()
+	gotRequests := requestCount
+	mu.Unlock()
+	if gotRequests != 0 {
+		t.Fatalf("expected no HTTP request for invalid dry-run payload, got %d", gotRequests)
+	}
+}
+
+func TestDocsValidateUpdateWithContentFile(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	updateFile := filepath.Join(home, "doc-update.json")
+	contentFile := filepath.Join(home, "doc-content.md")
+	if err := os.WriteFile(updateFile, []byte(`{"if_base_revision":"rev_1","content_type":"text"}`), 0o600); err != nil {
+		t.Fatalf("write update file: %v", err)
+	}
+	content := "line 1\nline 2\n"
+	if err := os.WriteFile(contentFile, []byte(content), 0o600); err != nil {
+		t.Fatalf("write content file: %v", err)
+	}
+
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"docs", "validate-update",
+		"--document-id", "doc_1",
+		"--from-file", updateFile,
+		"--content-file", contentFile,
+	})
+	payload := assertEnvelopeOK(t, raw)
+	if got := anyStringValue(payload["command"]); got != "docs validate-update" {
+		t.Fatalf("unexpected command label: %#v", payload)
+	}
+	data, _ := payload["data"].(map[string]any)
+	body, _ := data["body"].(map[string]any)
+	if got := anyStringValue(body["content"]); got != strings.TrimSpace(content) {
+		t.Fatalf("expected content from file in validation payload, got %q payload=%#v", got, payload)
+	}
+}
+
+func TestDocsValidateUpdateRejectsNullContent(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{"if_base_revision":"rev_1","content":null,"content_type":"text"}`), []string{
+		"--json",
+		"docs", "validate-update",
+		"--document-id", "doc_1",
+	})
+	payload := assertEnvelopeError(t, raw)
+	errObj, _ := payload["error"].(map[string]any)
+	if errObj == nil || anyStringValue(errObj["code"]) != "invalid_request" {
+		t.Fatalf("unexpected error payload: %#v", payload)
+	}
+	if message := anyStringValue(errObj["message"]); !strings.Contains(message, "content is required") {
+		t.Fatalf("expected content validation guidance, got %q payload=%#v", message, payload)
+	}
+}
+
+func TestDocsUpdateDryRunRejectsNullContentBeforeHTTP(t *testing.T) {
+	t.Parallel()
+
+	var mu sync.Mutex
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		requestCount++
+		mu.Unlock()
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{"if_base_revision":"rev_1","content":null,"content_type":"text"}`), []string{
+		"--json",
+		"--base-url", server.URL,
+		"docs", "update",
+		"--document-id", "doc_1",
+		"--dry-run",
+	})
+	payload := assertEnvelopeError(t, raw)
+	errObj, _ := payload["error"].(map[string]any)
+	if errObj == nil || anyStringValue(errObj["code"]) != "invalid_request" {
+		t.Fatalf("unexpected error payload: %#v", payload)
+	}
+	if message := anyStringValue(errObj["message"]); !strings.Contains(message, "content is required") {
+		t.Fatalf("expected content validation guidance, got %q payload=%#v", message, payload)
+	}
+
+	mu.Lock()
+	gotRequests := requestCount
+	mu.Unlock()
+	if gotRequests != 0 {
+		t.Fatalf("expected no HTTP request for invalid dry-run payload, got %d", gotRequests)
+	}
+}
+
+func TestDocsUpdateDryRunWithContentFileSkipsHTTP(t *testing.T) {
+	t.Parallel()
+
+	var mu sync.Mutex
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		requestCount++
+		mu.Unlock()
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	updateFile := filepath.Join(home, "doc-update.json")
+	contentFile := filepath.Join(home, "doc-content.md")
+	if err := os.WriteFile(updateFile, []byte(`{"if_base_revision":"rev_1","content_type":"text"}`), 0o600); err != nil {
+		t.Fatalf("write update file: %v", err)
+	}
+	content := "line 1\nline 2\n"
+	if err := os.WriteFile(contentFile, []byte(content), 0o600); err != nil {
+		t.Fatalf("write content file: %v", err)
+	}
+
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"docs", "update",
+		"--document-id", "doc_1",
+		"--from-file", updateFile,
+		"--content-file", contentFile,
+		"--dry-run",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+	if dryRun, _ := data["dry_run"].(bool); !dryRun {
+		t.Fatalf("expected dry_run=true payload=%#v", payload)
+	}
+	if got := anyStringValue(data["path"]); got != "/docs/doc_1" {
+		t.Fatalf("expected path /docs/doc_1, got %q payload=%#v", got, payload)
+	}
+	body, _ := data["body"].(map[string]any)
+	if got := anyStringValue(body["content"]); got != strings.TrimSpace(content) {
+		t.Fatalf("expected content-file override in dry-run payload, got %q payload=%#v", got, payload)
+	}
+
+	mu.Lock()
+	gotRequests := requestCount
+	mu.Unlock()
+	if gotRequests != 0 {
+		t.Fatalf("expected no HTTP request for dry-run, got %d", gotRequests)
+	}
 }
 
 func TestEventsExplainListMode(t *testing.T) {
@@ -425,6 +625,94 @@ func TestEventsExplainUnknownTypeFailure(t *testing.T) {
 	}
 }
 
+func TestEventsValidateCommand(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	eventFile := filepath.Join(home, "event.json")
+	if err := os.WriteFile(eventFile, []byte(`{"event":{"type":"message_posted","summary":"hello","thread_id":"thread_1","refs":["thread:thread_1"],"provenance":{"sources":["artifact:source_1"]}}}`), 0o600); err != nil {
+		t.Fatalf("write event file: %v", err)
+	}
+
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "events", "validate", "--from-file", eventFile})
+	payload := assertEnvelopeOK(t, raw)
+	if got := anyStringValue(payload["command"]); got != "events validate" {
+		t.Fatalf("unexpected command label: %#v", payload)
+	}
+	data, _ := payload["data"].(map[string]any)
+	if validated, _ := data["validated"].(bool); !validated {
+		t.Fatalf("expected validated=true payload=%#v", payload)
+	}
+	if got := anyStringValue(data["command_id"]); got != "events.create" {
+		t.Fatalf("expected command_id events.create, got %q payload=%#v", got, payload)
+	}
+	if got := anyStringValue(data["path"]); got != "/events" {
+		t.Fatalf("expected path /events, got %q payload=%#v", got, payload)
+	}
+}
+
+func TestEventsValidateInvalidJSONIncludesLocation(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	eventFile := filepath.Join(home, "event-invalid.json")
+	if err := os.WriteFile(eventFile, []byte("{\n  \"event\": {\n    \"type\": \"message_posted\",\n    \"summary\": \"hello\",\n  }\n}\n"), 0o600); err != nil {
+		t.Fatalf("write invalid event file: %v", err)
+	}
+
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "events", "validate", "--from-file", eventFile})
+	payload := assertEnvelopeError(t, raw)
+	errObj, _ := payload["error"].(map[string]any)
+	if errObj == nil || anyStringValue(errObj["code"]) != "invalid_json" {
+		t.Fatalf("unexpected error payload: %#v", payload)
+	}
+	message := anyStringValue(errObj["message"])
+	if !strings.Contains(message, "line") || !strings.Contains(message, "column") {
+		t.Fatalf("expected line/column parse guidance, got %q payload=%#v", message, payload)
+	}
+}
+
+func TestEventsCreateDryRunSkipsHTTP(t *testing.T) {
+	t.Parallel()
+
+	var mu sync.Mutex
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		requestCount++
+		mu.Unlock()
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"event":{"id":"event_unexpected"}}`))
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{"event":{"type":"message_posted","summary":"hello","thread_id":"thread_1","refs":["thread:thread_1"],"provenance":{"sources":["artifact:source_1"]}}}`), []string{
+		"--json",
+		"--base-url", server.URL,
+		"events", "create",
+		"--dry-run",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+	if dryRun, _ := data["dry_run"].(bool); !dryRun {
+		t.Fatalf("expected dry_run=true payload=%#v", payload)
+	}
+	if got := anyStringValue(data["method"]); got != "POST" {
+		t.Fatalf("expected method POST, got %q payload=%#v", got, payload)
+	}
+	if got := anyStringValue(data["path"]); got != "/events" {
+		t.Fatalf("expected path /events, got %q payload=%#v", got, payload)
+	}
+
+	mu.Lock()
+	gotRequests := requestCount
+	mu.Unlock()
+	if gotRequests != 0 {
+		t.Fatalf("expected no HTTP request for dry-run, got %d", gotRequests)
+	}
+}
+
 func TestEventsCreateReviewCompletedInvalidRefsFailsLocally(t *testing.T) {
 	t.Parallel()
 
@@ -440,7 +728,7 @@ func TestEventsCreateReviewCompletedInvalidRefsFailsLocally(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	raw := runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{"event":{"type":"review_completed","thread_id":"thread_1","summary":"review done","refs":["artifact:work_order_1","artifact:receipt_1","thread:thread_1"]}}`), []string{
+	raw := runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{"event":{"type":"review_completed","thread_id":"thread_1","summary":"review done","refs":["artifact:work_order_1","artifact:receipt_1","thread:thread_1"],"provenance":{"sources":["artifact:source_1"]}}}`), []string{
 		"--json",
 		"--base-url", server.URL,
 		"events", "create",
@@ -483,7 +771,7 @@ func TestEventsCreateReviewCompletedValidRefsCallsHTTP(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	raw := runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{"event":{"type":"review_completed","thread_id":"thread_1","summary":"review done","refs":["artifact:work_order_1","artifact:receipt_1","artifact:review_1"]}}`), []string{
+	raw := runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{"event":{"type":"review_completed","thread_id":"thread_1","summary":"review done","refs":["artifact:work_order_1","artifact:receipt_1","artifact:review_1"],"provenance":{"sources":["artifact:source_1"]}}}`), []string{
 		"--json",
 		"--base-url", server.URL,
 		"events", "create",
