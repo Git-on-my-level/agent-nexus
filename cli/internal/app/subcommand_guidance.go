@@ -55,25 +55,32 @@ var threadsSubcommandSpec = subcommandSpec{
 var commitmentsSubcommandSpec = subcommandSpec{
 	command:  "commitments",
 	valid:    []string{"list", "get", "create", "update"},
-	examples: []string{"oar commitments list --status open", "oar commitments update --commitment-id <commitment-id>"},
+	examples: []string{"oar commitments list --status open", "oar commitments get --commitment-id <commitment-id>"},
 	aliases: map[string]string{
-		"ls": "list",
+		"ls":      "list",
+		"show":    "get",
+		"inspect": "get",
 	},
 }
 
 var artifactsSubcommandSpec = subcommandSpec{
 	command:  "artifacts",
-	valid:    []string{"list", "get", "create", "content"},
-	examples: []string{"oar artifacts list --kind packet", "oar artifacts content --artifact-id <artifact-id>"},
+	valid:    []string{"list", "get", "create", "content", "inspect"},
+	examples: []string{"oar artifacts list --kind packet", "oar artifacts inspect --artifact-id <artifact-id>"},
 	aliases: map[string]string{
-		"ls": "list",
+		"ls":   "list",
+		"show": "inspect",
 	},
 }
 
 var docsSubcommandSpec = subcommandSpec{
 	command:  "docs",
-	valid:    []string{"create", "get", "update", "validate-update", "history", "revision"},
-	examples: []string{"oar docs get --document-id <document-id>", "oar docs revision get --document-id <document-id> --revision-id <revision-id>"},
+	valid:    []string{"create", "get", "content", "update", "validate-update", "history", "revision"},
+	examples: []string{"oar docs content --document-id <document-id>", "oar docs revision get --document-id <document-id> --revision-id <revision-id>"},
+	aliases: map[string]string{
+		"read": "content",
+		"cat":  "content",
+	},
 }
 
 var docsRevisionSubcommandSpec = subcommandSpec{
@@ -84,10 +91,11 @@ var docsRevisionSubcommandSpec = subcommandSpec{
 
 var eventsSubcommandSpec = subcommandSpec{
 	command:  "events",
-	valid:    []string{"get", "create", "validate", "stream", "tail", "explain"},
-	examples: []string{"oar events stream --thread-id <thread-id> --follow", "oar events tail --max-events 20"},
+	valid:    []string{"list", "get", "create", "validate", "stream", "tail", "explain"},
+	examples: []string{"oar events list --thread-id <thread-id> --type actor_statement", "oar events tail --max-events 20"},
 	aliases: map[string]string{
 		"watch": "stream",
+		"ls":    "list",
 	},
 }
 

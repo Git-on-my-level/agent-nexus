@@ -156,6 +156,9 @@ func TestRunEventsHelpMentionsLocalExplainAcrossEntryPoints(t *testing.T) {
 		if !strings.Contains(output, "events validate") {
 			t.Fatalf("expected local events validate helper output=%s", output)
 		}
+		if !strings.Contains(output, "events list") {
+			t.Fatalf("expected local events list helper output=%s", output)
+		}
 		if !strings.Contains(output, "oar events explain <event-type>") {
 			t.Fatalf("expected events explain usage hint output=%s", output)
 		}
@@ -188,6 +191,9 @@ func TestRunDocsHelpMentionsLocalValidateUpdate(t *testing.T) {
 	output := stdout.String()
 	if !strings.Contains(output, "docs validate-update") {
 		t.Fatalf("expected local docs validate-update helper output=%s", output)
+	}
+	if !strings.Contains(output, "docs content") {
+		t.Fatalf("expected docs content helper output=%s", output)
 	}
 	if !strings.Contains(output, "--content-file <path>") {
 		t.Fatalf("expected content-file hint output=%s", output)

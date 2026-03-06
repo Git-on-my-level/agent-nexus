@@ -308,14 +308,83 @@ func TestEventsUnknownSubcommandGuidance(t *testing.T) {
 		t.Fatalf("unexpected error payload: %#v", payload)
 	}
 	message := anyStringValue(errObj["message"])
-	if !strings.Contains(message, "valid subcommands: get, create, validate, stream, tail, explain") {
+	if !strings.Contains(message, "valid subcommands: list, get, create, validate, stream, tail, explain") {
 		t.Fatalf("expected valid subcommands in message, got %q", message)
 	}
 	if !strings.Contains(message, "did you mean `oar events stream`?") {
 		t.Fatalf("expected stream correction, got %q", message)
 	}
-	if !strings.Contains(message, "`oar events stream --thread-id <thread-id> --follow`") || !strings.Contains(message, "`oar events tail --max-events 20`") {
-		t.Fatalf("expected stream/tail examples, got %q", message)
+	if !strings.Contains(message, "`oar events list --thread-id <thread-id> --type actor_statement`") || !strings.Contains(message, "`oar events tail --max-events 20`") {
+		t.Fatalf("expected list/tail examples, got %q", message)
+	}
+}
+
+func TestEventsListCommandFiltersAndLimits(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/threads/thread_1/timeline" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"events":[
+				{"id":"event_1","thread_id":"thread_1","type":"actor_statement","summary":"first"},
+				{"id":"event_2","thread_id":"thread_1","type":"decision_needed","summary":"second"},
+				{"id":"event_3","thread_id":"thread_1","type":"actor_statement","summary":"third"}
+			],
+			"snapshots":{},
+			"artifacts":{}
+		}`))
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"events", "list",
+		"--thread-id", "thread_1",
+		"--type", "actor_statement",
+		"--max-events", "1",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	if got := anyStringValue(payload["command"]); got != "events list" {
+		t.Fatalf("unexpected command label: %#v", payload)
+	}
+
+	data, _ := payload["data"].(map[string]any)
+	body, _ := data["body"].(map[string]any)
+	if got := anyStringValue(body["thread_id"]); got != "thread_1" {
+		t.Fatalf("expected thread id thread_1, got %#v", body)
+	}
+	totalEvents, _ := body["total_events"].(float64)
+	if int(totalEvents) != 3 {
+		t.Fatalf("expected total_events=3, got %#v", body)
+	}
+	returnedEvents, _ := body["returned_events"].(float64)
+	if int(returnedEvents) != 1 {
+		t.Fatalf("expected returned_events=1, got %#v", body)
+	}
+	events, _ := body["events"].([]any)
+	if len(events) != 1 {
+		t.Fatalf("expected one event after filtering/limit, got %#v", body)
+	}
+	event, _ := events[0].(map[string]any)
+	if got := anyStringValue(event["id"]); got != "event_3" {
+		t.Fatalf("expected most recent matching event event_3, got %#v", body)
+	}
+
+	human := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--base-url", server.URL,
+		"events", "list",
+		"--thread-id", "thread_1",
+		"--type", "actor_statement",
+		"--max-events", "1",
+	})
+	if !strings.Contains(human, "types:") || !strings.Contains(human, "- actor_statement") {
+		t.Fatalf("expected human output to include selected filter types, got:\n%s", human)
 	}
 }
 
@@ -358,6 +427,40 @@ func TestDocsCommands(t *testing.T) {
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"if_base_revision":"rev_1","content":"next","content_type":"text"}`), []string{"--json", "--base-url", server.URL, "docs", "update", "--document-id", "doc_1"}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "history", "--document-id", "doc_1"}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "revision", "get", "--document-id", "doc_1", "--revision-id", "rev_1"}))
+}
+
+func TestDocsContentCommand(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/docs/doc_1" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"document":{"id":"doc_1","title":"Playbook"},
+			"revision":{"revision_id":"rev_2","revision_number":2,"content_type":"text","content":"Line one\nLine two"}
+		}`))
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"docs", "content",
+		"--document-id", "doc_1",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	if got := anyStringValue(payload["command"]); got != "docs content" {
+		t.Fatalf("unexpected command label: %#v", payload)
+	}
+	data, _ := payload["data"].(map[string]any)
+	body, _ := data["body"].(map[string]any)
+	if got := anyStringValue(body["content"]); got != "Line one\nLine two" {
+		t.Fatalf("expected document content, got %#v", body)
+	}
 }
 
 func TestDocsValidateUpdateRequiresBaseRevision(t *testing.T) {
@@ -1287,6 +1390,72 @@ func TestArtifactContentRaw(t *testing.T) {
 	out := runCLIForTest(t, home, env, nil, []string{"--base-url", server.URL, "artifacts", "content", "--artifact-id", "artifact-raw"})
 	if !bytes.Equal([]byte(out), expected) {
 		t.Fatalf("unexpected artifact bytes: got=%v want=%v", []byte(out), expected)
+	}
+}
+
+func TestArtifactsInspectCommand(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/artifacts/artifact_1":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"artifact":{"id":"artifact_1","kind":"packet","summary":"Brief"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/artifacts/artifact_1/content":
+			w.Header().Set("Content-Type", "text/plain")
+			_, _ = w.Write([]byte("artifact body"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"artifacts", "inspect",
+		"--artifact-id", "artifact_1",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	if got := anyStringValue(payload["command"]); got != "artifacts inspect" {
+		t.Fatalf("unexpected command label: %#v", payload)
+	}
+	data, _ := payload["data"].(map[string]any)
+	body, _ := data["body"].(map[string]any)
+	artifact, _ := body["artifact"].(map[string]any)
+	content, _ := body["content"].(map[string]any)
+	if got := anyStringValue(artifact["id"]); got != "artifact_1" {
+		t.Fatalf("expected artifact id artifact_1, got %#v", body)
+	}
+	if got := anyStringValue(content["body_text"]); got != "artifact body" {
+		t.Fatalf("expected artifact content text, got %#v", body)
+	}
+}
+
+func TestCommitmentsInspectAliasMapsToGet(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/commitments/commitment_1" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"commitment":{"id":"commitment_1","status":"open","title":"Publish"}}`))
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"commitments", "inspect",
+		"--commitment-id", "commitment_1",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	if got := anyStringValue(payload["command"]); got != "commitments get" {
+		t.Fatalf("expected commitments inspect alias to run get, payload=%#v", payload)
 	}
 }
 

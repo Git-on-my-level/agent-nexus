@@ -501,6 +501,9 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 			artifactIDLookupSpec,
 		)
 		return result, "artifacts content", callErr
+	case "inspect":
+		result, callErr := a.runArtifactsInspectCommand(ctx, args[1:], cfg)
+		return result, "artifacts inspect", callErr
 	default:
 		return nil, "artifacts", artifactsSubcommandSpec.unknownError(args[0])
 	}
@@ -535,6 +538,9 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "docs get", "docs.get", map[string]string{"document_id": id}, nil, nil)
 		return result, "docs get", callErr
+	case "content":
+		result, callErr := a.runDocsContentCommand(ctx, args[1:], cfg)
+		return result, "docs content", callErr
 	case "update":
 		id, body, dryRun, err := a.parseIDAndBodyInputWithOptions(args[1:], "document-id", "document id", "docs update", jsonBodyInputOptions{
 			allowContentFile: true,
@@ -627,6 +633,9 @@ func (a *App) runEventsCommand(ctx context.Context, args []string, cfg config.Re
 	}
 	sub := eventsSubcommandSpec.normalize(args[0])
 	switch sub {
+	case "list":
+		result, err := a.runEventsListCommand(ctx, args[1:], cfg)
+		return result, "events list", err
 	case "get":
 		id, err := parseIDArg(args[1:], "event-id", "event id")
 		if err != nil {
@@ -670,6 +679,190 @@ func (a *App) runEventsCommand(ctx context.Context, args []string, cfg config.Re
 	default:
 		return nil, "events", eventsSubcommandSpec.unknownError(args[0])
 	}
+}
+
+func (a *App) runArtifactsInspectCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
+	id, err := parseIDArg(args, "artifact-id", "artifact id")
+	if err != nil {
+		return nil, err
+	}
+
+	metadataResult, callErr := a.invokeTypedJSONWithIDResolution(
+		ctx,
+		cfg,
+		"artifacts inspect",
+		"artifacts.get",
+		"artifact_id",
+		id,
+		artifactIDLookupSpec,
+		nil,
+		nil,
+	)
+	if callErr != nil {
+		return nil, callErr
+	}
+
+	metadataData := asMap(metadataResult.Data)
+	metadataBody := asMap(metadataData["body"])
+	artifact := extractNestedMap(metadataBody, "artifact")
+	artifactID := strings.TrimSpace(anyString(artifact["id"]))
+	if artifactID == "" {
+		artifactID = id
+	}
+
+	contentCfg := cfg
+	contentCfg.JSON = true
+	contentResult, contentErr := a.invokeArtifactContentWithIDResolution(
+		ctx,
+		contentCfg,
+		"artifacts inspect",
+		"artifact_id",
+		artifactID,
+		artifactIDLookupSpec,
+	)
+	if contentErr != nil {
+		return nil, contentErr
+	}
+
+	contentData := asMap(contentResult.Data)
+	contentBody := map[string]any{
+		"status_code": contentData["status_code"],
+		"headers":     contentData["headers"],
+		"body_text":   contentData["body_text"],
+		"body_base64": contentData["body_base64"],
+	}
+	if decoded, decodeErr := base64.StdEncoding.DecodeString(strings.TrimSpace(anyString(contentData["body_base64"]))); decodeErr == nil {
+		contentBody["bytes"] = len(decoded)
+	}
+
+	body := map[string]any{
+		"artifact": artifact,
+		"content":  contentBody,
+	}
+	metadataData["body"] = body
+	metadataResult.Data = metadataData
+	metadataResult.Text = formatTypedCommandText(
+		"artifacts.inspect",
+		intValue(metadataData["status_code"]),
+		headerValues(metadataData["headers"]),
+		body,
+		cfg.Verbose,
+		cfg.Headers,
+	)
+	return metadataResult, nil
+}
+
+func (a *App) runDocsContentCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
+	id, err := parseIDArg(args, "document-id", "document id")
+	if err != nil {
+		return nil, err
+	}
+	result, callErr := a.invokeTypedJSON(ctx, cfg, "docs content", "docs.get", map[string]string{"document_id": id}, nil, nil)
+	if callErr != nil {
+		return nil, callErr
+	}
+
+	data := asMap(result.Data)
+	body := asMap(data["body"])
+	document := extractNestedMap(body, "document")
+	revision := extractNestedMap(body, "revision")
+	content := firstNonEmpty(anyString(revision["content"]), anyString(body["content"]), anyString(body["body_text"]))
+	contentBody := map[string]any{
+		"document": document,
+		"revision": revision,
+		"content":  content,
+	}
+	data["body"] = contentBody
+	result.Data = data
+	result.Text = formatTypedCommandText(
+		"docs.content",
+		intValue(data["status_code"]),
+		headerValues(data["headers"]),
+		contentBody,
+		cfg.Verbose,
+		cfg.Headers,
+	)
+	return result, nil
+}
+
+func (a *App) runEventsListCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
+	fs := newSilentFlagSet("events list")
+	var threadIDFlag trackedString
+	var typesCSVFlag trackedString
+	var maxEventsFlag trackedInt
+	var typeFlags trackedStrings
+	fs.Var(&threadIDFlag, "thread-id", "Thread id")
+	fs.Var(&typeFlags, "type", "Filter by event type (repeatable)")
+	fs.Var(&typesCSVFlag, "types", "Comma-separated event types")
+	fs.Var(&maxEventsFlag, "max-events", "Return at most N most-recent matching events (0 means unlimited)")
+	if err := fs.Parse(args); err != nil {
+		return nil, errnorm.Usage("invalid_flags", err.Error())
+	}
+
+	positionals := fs.Args()
+	threadID := strings.TrimSpace(threadIDFlag.value)
+	if threadID == "" && len(positionals) > 0 {
+		threadID = strings.TrimSpace(positionals[0])
+		positionals = positionals[1:]
+	}
+	if err := validateID(threadID, "thread id"); err != nil {
+		return nil, err
+	}
+	if len(positionals) > 0 {
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar events list`")
+	}
+	if maxEventsFlag.set && maxEventsFlag.value < 0 {
+		return nil, errnorm.Usage("invalid_request", "--max-events must be >= 0")
+	}
+
+	typeFilters := normalizeEventTypeFilters(typeFlags.values, typesCSVFlag.value)
+	timelineResult, callErr := a.invokeTypedJSONWithIDResolution(
+		ctx,
+		cfg,
+		"events list",
+		"threads.timeline",
+		"thread_id",
+		threadID,
+		threadIDLookupSpec,
+		nil,
+		nil,
+	)
+	if callErr != nil {
+		return nil, callErr
+	}
+
+	data := asMap(timelineResult.Data)
+	body := asMap(data["body"])
+	allEvents := asSlice(body["events"])
+	matching := filterEventsByType(allEvents, typeFilters)
+	if maxEventsFlag.set && maxEventsFlag.value > 0 && len(matching) > maxEventsFlag.value {
+		matching = matching[len(matching)-maxEventsFlag.value:]
+	}
+
+	listBody := map[string]any{
+		"thread_id":       firstNonEmpty(anyString(body["thread_id"]), eventThreadIDFromList(matching), eventThreadIDFromList(allEvents), threadID),
+		"events":          matching,
+		"total_events":    len(allEvents),
+		"returned_events": len(matching),
+	}
+	if len(typeFilters) > 0 {
+		listBody["types"] = typeFilters
+	}
+	if maxEventsFlag.set {
+		listBody["max_events"] = maxEventsFlag.value
+	}
+
+	data["body"] = listBody
+	timelineResult.Data = data
+	timelineResult.Text = formatTypedCommandText(
+		"events.list",
+		intValue(data["status_code"]),
+		headerValues(data["headers"]),
+		listBody,
+		cfg.Verbose,
+		cfg.Headers,
+	)
+	return timelineResult, nil
 }
 
 func (a *App) runEventsExplainCommand(args []string) (*commandResult, error) {
@@ -1972,6 +2165,117 @@ func minInt(a int, b int) int {
 		return a
 	}
 	return b
+}
+
+func intValue(raw any) int {
+	switch typed := raw.(type) {
+	case int:
+		return typed
+	case int64:
+		return int(typed)
+	case float64:
+		return int(typed)
+	default:
+		return 0
+	}
+}
+
+func headerValues(raw any) map[string][]string {
+	if typed, ok := raw.(map[string][]string); ok {
+		return typed
+	}
+	if typed, ok := raw.(map[string]any); ok {
+		out := make(map[string][]string, len(typed))
+		for key, value := range typed {
+			items, _ := value.([]any)
+			if len(items) == 0 {
+				continue
+			}
+			list := make([]string, 0, len(items))
+			for _, item := range items {
+				text := strings.TrimSpace(anyString(item))
+				if text == "" {
+					continue
+				}
+				list = append(list, text)
+			}
+			if len(list) > 0 {
+				out[key] = list
+			}
+		}
+		return out
+	}
+	return nil
+}
+
+func normalizeEventTypeFilters(explicit []string, csv string) []string {
+	out := make([]string, 0, len(explicit)+2)
+	seen := make(map[string]struct{}, len(explicit)+2)
+	appendValue := func(raw string) {
+		value := strings.TrimSpace(raw)
+		if value == "" {
+			return
+		}
+		if _, ok := seen[value]; ok {
+			return
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	for _, value := range explicit {
+		appendValue(value)
+	}
+	for _, value := range strings.Split(strings.TrimSpace(csv), ",") {
+		appendValue(value)
+	}
+	return out
+}
+
+func filterEventsByType(events []any, types []string) []any {
+	if len(events) == 0 {
+		return nil
+	}
+	if len(types) == 0 {
+		return append([]any(nil), events...)
+	}
+	allowed := make(map[string]struct{}, len(types))
+	for _, eventType := range types {
+		eventType = strings.TrimSpace(eventType)
+		if eventType == "" {
+			continue
+		}
+		allowed[eventType] = struct{}{}
+	}
+	if len(allowed) == 0 {
+		return append([]any(nil), events...)
+	}
+	filtered := make([]any, 0, len(events))
+	for _, raw := range events {
+		event := asMap(raw)
+		if event == nil {
+			continue
+		}
+		eventType := strings.TrimSpace(anyString(event["type"]))
+		if _, ok := allowed[eventType]; !ok {
+			continue
+		}
+		filtered = append(filtered, event)
+	}
+	return filtered
+}
+
+func eventThreadIDFromList(events []any) string {
+	for _, raw := range events {
+		event := asMap(raw)
+		if event == nil {
+			continue
+		}
+		threadID := strings.TrimSpace(anyString(event["thread_id"]))
+		if threadID != "" {
+			return threadID
+		}
+	}
+	return ""
 }
 
 func (a *App) applyContentFileOverride(body any, contentFile string, commandName string) (any, error) {

@@ -178,12 +178,17 @@ func formatGeneratedGroupHelp(topic string, commands []registry.Command) string 
 func localGroupHelpSupplement(topic string) string {
 	switch strings.TrimSpace(topic) {
 	case "events":
-		return strings.TrimSpace(`Local-only helpers:
+		return strings.TrimSpace(`Local inspection helpers:
+  events list              List thread timeline events with optional type filters and max window.
   events explain           Explain known event-type conventions and local validation constraints.
   events validate          Validate an events.create payload from stdin/--from-file without sending a request.
   For details: ` + "`oar events explain <event-type>`")
+	case "artifacts":
+		return strings.TrimSpace(`Local inspection helper:
+  artifacts inspect        Fetch artifact metadata and content in one call.`)
 	case "docs":
-		return strings.TrimSpace(`Local-only helper:
+		return strings.TrimSpace(`Local inspection helpers:
+  docs content             Show current document content with revision metadata.
   docs validate-update     Validate a docs.update payload from stdin/--from-file.
   Tip: add ` + "`--content-file <path>`" + ` to avoid hand-escaping multiline content.`)
 	default:

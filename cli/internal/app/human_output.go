@@ -48,6 +48,8 @@ func formatCommandSummary(commandID string, body any) string {
 		return formatNamedList(body, "commitments", "Commitments", renderCommitmentListItem)
 	case "artifacts.list":
 		return formatNamedList(body, "artifacts", "Artifacts", renderArtifactListItem)
+	case "events.list":
+		return formatEventsList(body)
 	case "inbox.list":
 		return formatNamedList(body, "items", "Inbox", renderInboxItem)
 	case "docs.history":
@@ -62,10 +64,14 @@ func formatCommandSummary(commandID string, body any) string {
 		return formatCommitmentRecord(extractNestedMap(body, "commitment"))
 	case "artifacts.get", "artifacts.create":
 		return formatArtifactRecord(extractNestedMap(body, "artifact"))
+	case "artifacts.inspect":
+		return formatArtifactInspect(body)
 	case "events.get", "events.create":
 		return formatEventRecord(extractNestedMap(body, "event"))
 	case "docs.get", "docs.create", "docs.update":
 		return formatDocumentRecord(body)
+	case "docs.content":
+		return formatDocumentContentRecord(body)
 	case "docs.revision.get":
 		return formatRevisionRecord(extractNestedMap(body, "revision"))
 	default:
@@ -91,6 +97,19 @@ func formatThreadTimeline(body any) string {
 		fmt.Sprintf("Referenced snapshots: %d", len(asMap(root["snapshots"]))),
 		fmt.Sprintf("Referenced artifacts: %d", len(asMap(root["artifacts"]))),
 	}
+	lines = appendListSection(lines, "events", asSlice(root["events"]), renderEventListItem)
+	return strings.Join(lines, "\n")
+}
+
+func formatEventsList(body any) string {
+	root := asMap(body)
+	lines := make([]string, 0, 16)
+	if threadID := strings.TrimSpace(anyString(root["thread_id"])); threadID != "" {
+		lines = append(lines, "Thread "+threadID)
+	}
+	lines = appendScalar(lines, "total_events", root, "total_events")
+	lines = appendScalar(lines, "returned_events", root, "returned_events")
+	lines = appendStringList(lines, "types", stringList(root["types"]))
 	lines = appendListSection(lines, "events", asSlice(root["events"]), renderEventListItem)
 	return strings.Join(lines, "\n")
 }
@@ -174,6 +193,41 @@ func formatDocumentRecord(body any) string {
 	lines = appendScalar(lines, "revision_id", revision, "revision_id")
 	lines = appendScalar(lines, "revision_number", revision, "revision_number")
 	lines = appendScalar(lines, "content_type", revision, "content_type")
+	if content := firstNonEmpty(anyString(revision["content"]), anyString(root["content"]), anyString(root["body_text"])); content != "" {
+		lines = append(lines, "content:")
+		lines = append(lines, indentBlock(strings.TrimSpace(content))...)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatDocumentContentRecord(body any) string {
+	root := asMap(body)
+	document := extractNestedMap(root, "document")
+	revision := extractNestedMap(root, "revision")
+	lines := []string{"Document " + displayID(document)}
+	lines = appendScalar(lines, "revision_id", revision, "revision_id")
+	lines = appendScalar(lines, "revision_number", revision, "revision_number")
+	lines = appendScalar(lines, "content_type", revision, "content_type")
+	content := firstNonEmpty(anyString(root["content"]), anyString(revision["content"]), anyString(root["body_text"]))
+	if content == "" {
+		lines = append(lines, "content: (empty)")
+		return strings.Join(lines, "\n")
+	}
+	lines = append(lines, "content:")
+	lines = append(lines, indentBlock(strings.TrimSpace(content))...)
+	return strings.Join(lines, "\n")
+}
+
+func formatArtifactInspect(body any) string {
+	root := asMap(body)
+	artifact := extractNestedMap(root, "artifact")
+	content := extractNestedMap(root, "content")
+	lines := []string{formatArtifactRecord(artifact)}
+	lines = appendScalar(lines, "content_bytes", content, "bytes")
+	if bodyText := strings.TrimSpace(anyString(content["body_text"])); bodyText != "" {
+		lines = append(lines, "content:")
+		lines = append(lines, indentBlock(bodyText)...)
+	}
 	return strings.Join(lines, "\n")
 }
 
@@ -377,6 +431,20 @@ func asSlice(raw any) []any {
 }
 
 func stringList(raw any) []string {
+	if typed, ok := raw.([]string); ok {
+		if len(typed) == 0 {
+			return nil
+		}
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			value := strings.TrimSpace(item)
+			if value == "" {
+				continue
+			}
+			out = append(out, value)
+		}
+		return out
+	}
 	items, _ := raw.([]any)
 	if len(items) == 0 {
 		return nil

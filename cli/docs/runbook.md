@@ -113,6 +113,10 @@ oar --agent agent-a threads list --status active
 oar --agent agent-a events stream --max-events 1
 oar --agent agent-a inbox stream --max-events 1
 oar --agent agent-a events stream --follow
+oar --agent agent-a events list --thread-id thread_123 --type actor_statement --max-events 20
+oar --agent agent-a docs content --document-id product-constitution
+oar --agent agent-a commitments inspect --commitment-id commitment_123
+oar --agent agent-a artifacts inspect --artifact-id artifact_123
 ```
 
 Draft/commit flow:
