@@ -123,13 +123,13 @@ func TestInboxUnknownSubcommandGuidance(t *testing.T) {
 		t.Fatalf("unexpected error payload: %#v", payload)
 	}
 	message := anyStringValue(errObj["message"])
-	if !strings.Contains(message, "valid subcommands: list, ack, stream, tail") {
+	if !strings.Contains(message, "valid subcommands: list, get, ack, stream, tail") {
 		t.Fatalf("expected valid-subcommands guidance, got %q", message)
 	}
-	if !strings.Contains(message, "`oar inbox list`") || !strings.Contains(message, "`oar inbox ack --thread-id <thread-id> --inbox-item-id <inbox-item-id>`") {
+	if !strings.Contains(message, "`oar inbox get --id <id-or-alias>`") || !strings.Contains(message, "`oar inbox ack --inbox-item-id <id-or-alias>`") {
 		t.Fatalf("expected concrete inbox examples, got %q", message)
 	}
-	if !strings.Contains(message, "did you mean `oar inbox ack --thread-id <thread-id> --inbox-item-id <inbox-item-id>`?") {
+	if !strings.Contains(message, "did you mean `oar inbox ack --inbox-item-id <id-or-alias>`?") {
 		t.Fatalf("expected corrective suggestion, got %q", message)
 	}
 }
@@ -153,6 +153,129 @@ func TestInboxGetAliasMapsToList(t *testing.T) {
 	if got := anyStringValue(payload["command"]); got != "inbox list" {
 		t.Fatalf("expected alias to resolve to inbox list, got %q payload=%#v", got, payload)
 	}
+}
+
+func TestInboxListIncludesAliasesAndLinkedShortIDs(t *testing.T) {
+	t.Parallel()
+
+	const inboxID = "inbox:decision_needed:thread_1234567890:none:event_1234567890"
+	const threadID = "thread_1234567890"
+	const eventID = "event_1234567890"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/inbox" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items":[{"id":"` + inboxID + `","thread_id":"` + threadID + `","source_event_id":"` + eventID + `"}]}`))
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "--base-url", server.URL, "inbox", "list"})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+	body, _ := data["body"].(map[string]any)
+	items, _ := body["items"].([]any)
+	if len(items) != 1 {
+		t.Fatalf("expected one item in inbox payload, got %#v", payload)
+	}
+	item, _ := items[0].(map[string]any)
+	expectedAlias := inboxAliasByID([]string{inboxID})[inboxID]
+	if got := anyStringValue(item["alias"]); got != expectedAlias {
+		t.Fatalf("expected alias %q, got %q payload=%#v", expectedAlias, got, payload)
+	}
+	if got := anyStringValue(item["short_id"]); got != inboxID[:12] {
+		t.Fatalf("expected short_id %q, got %q payload=%#v", inboxID[:12], got, payload)
+	}
+	if got := anyStringValue(item["thread_short_id"]); got != threadID[:12] {
+		t.Fatalf("expected thread_short_id %q, got %q payload=%#v", threadID[:12], got, payload)
+	}
+	if got := anyStringValue(item["source_event_short_id"]); got != eventID[:12] {
+		t.Fatalf("expected source_event_short_id %q, got %q payload=%#v", eventID[:12], got, payload)
+	}
+}
+
+func TestInboxGetByAliasTargetsSingleItem(t *testing.T) {
+	t.Parallel()
+
+	const firstID = "inbox:decision_needed:thread_aaa:none:event_aaa"
+	const secondID = "inbox:decision_needed:thread_bbb:none:event_bbb"
+	alias := inboxAliasByID([]string{firstID, secondID})[secondID]
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/inbox" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items":[{"id":"` + firstID + `","thread_id":"thread_aaa"},{"id":"` + secondID + `","thread_id":"thread_bbb"}]}`))
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"inbox", "get",
+		"--id", alias,
+	})
+	payload := assertEnvelopeOK(t, raw)
+	if got := anyStringValue(payload["command"]); got != "inbox get" {
+		t.Fatalf("expected command inbox get, got %q payload=%#v", got, payload)
+	}
+	data, _ := payload["data"].(map[string]any)
+	body, _ := data["body"].(map[string]any)
+	item, _ := body["item"].(map[string]any)
+	if got := anyStringValue(item["id"]); got != secondID {
+		t.Fatalf("expected inbox item %q, got %q payload=%#v", secondID, got, payload)
+	}
+}
+
+func TestInboxAckAliasResolvesCanonicalAndThreadFromInboxList(t *testing.T) {
+	t.Parallel()
+
+	const inboxID = "inbox:decision_needed:thread_42:none:event_42"
+	alias := inboxAliasByID([]string{inboxID})[inboxID]
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"items":[{"id":"` + inboxID + `","thread_id":"thread_42"}]}`))
+			return
+		case r.Method == http.MethodPost && r.URL.Path == "/inbox/ack":
+			body, _ := io.ReadAll(r.Body)
+			var payload map[string]any
+			if err := json.Unmarshal(body, &payload); err != nil {
+				t.Fatalf("decode inbox ack body: %v body=%s", err, string(body))
+			}
+			if got := strings.TrimSpace(anyStringValue(payload["inbox_item_id"])); got != inboxID {
+				t.Fatalf("expected canonical inbox_item_id %q, got %q body=%s", inboxID, got, string(body))
+			}
+			if got := strings.TrimSpace(anyStringValue(payload["thread_id"])); got != "thread_42" {
+				t.Fatalf("expected resolved thread_id thread_42, got %q body=%s", got, string(body))
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"event":{"id":"event_ack_alias"}}`))
+			return
+		default:
+			http.NotFound(w, r)
+			return
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"inbox", "ack",
+		"--inbox-item-id", alias,
+	})
+	assertEnvelopeOK(t, raw)
 }
 
 func TestEventsUnknownSubcommandGuidance(t *testing.T) {

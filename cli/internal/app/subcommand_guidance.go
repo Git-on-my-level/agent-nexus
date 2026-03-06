@@ -93,10 +93,9 @@ var eventsSubcommandSpec = subcommandSpec{
 
 var inboxSubcommandSpec = subcommandSpec{
 	command:  "inbox",
-	valid:    []string{"list", "ack", "stream", "tail"},
-	examples: []string{"oar inbox list", "oar inbox ack --thread-id <thread-id> --inbox-item-id <inbox-item-id>"},
+	valid:    []string{"list", "get", "ack", "stream", "tail"},
+	examples: []string{"oar inbox get --id <id-or-alias>", "oar inbox ack --inbox-item-id <id-or-alias>"},
 	aliases: map[string]string{
-		"get":   "list",
 		"ls":    "list",
 		"watch": "stream",
 	},
@@ -155,7 +154,7 @@ func (s subcommandSpec) suggestion(raw string) string {
 		return s.commandPath(canonical)
 	}
 	if strings.TrimSpace(s.command) == "inbox" && looksLikePositionalID(raw) {
-		return "oar inbox ack --thread-id <thread-id> --inbox-item-id <inbox-item-id>"
+		return "oar inbox ack --inbox-item-id <id-or-alias>"
 	}
 	if closest := closestSubcommand(token, s.valid); closest != "" {
 		return s.commandPath(closest)

@@ -3,6 +3,7 @@ package app
 import (
 	"bufio"
 	"context"
+	"crypto/sha1"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -30,6 +31,8 @@ import (
 var idPattern = regexp.MustCompile(`^[A-Za-z0-9._:@/-]+$`)
 
 const shortIDLength = 12
+const inboxAliasPrefix = "ibx_"
+const inboxAliasMinDigestLength = 6
 
 type resourceIDLookupSpec struct {
 	idLabel        string
@@ -695,6 +698,9 @@ func (a *App) runInboxCommand(ctx context.Context, args []string, cfg config.Res
 	case "list":
 		result, err := a.invokeTypedJSON(ctx, cfg, "inbox list", "inbox.list", nil, nil, nil)
 		return result, "inbox list", err
+	case "get":
+		result, commandName, err := a.runInboxGet(ctx, args[1:], cfg)
+		return result, commandName, err
 	case "ack":
 		body, err := a.parseAckBodyInput(ctx, args[1:], cfg)
 		if err != nil {
@@ -711,6 +717,57 @@ func (a *App) runInboxCommand(ctx context.Context, args []string, cfg config.Res
 	default:
 		return nil, "inbox", inboxSubcommandSpec.unknownError(args[0])
 	}
+}
+
+func (a *App) runInboxGet(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
+	fs := newSilentFlagSet("inbox get")
+	var idFlag, inboxItemIDFlag trackedString
+	var riskHorizonFlag trackedInt
+	fs.Var(&idFlag, "id", "Inbox item id or alias")
+	fs.Var(&inboxItemIDFlag, "inbox-item-id", "Inbox item id or alias")
+	fs.Var(&riskHorizonFlag, "risk-horizon-days", "Derived inbox risk horizon days")
+	if err := fs.Parse(args); err != nil {
+		return nil, "inbox get", errnorm.Usage("invalid_flags", err.Error())
+	}
+	positionals := fs.Args()
+
+	rawID := firstNonEmpty(strings.TrimSpace(idFlag.value), strings.TrimSpace(inboxItemIDFlag.value))
+	if rawID == "" && len(positionals) > 0 {
+		rawID = strings.TrimSpace(positionals[0])
+		positionals = positionals[1:]
+	}
+	if len(positionals) > 0 {
+		return nil, "inbox get", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar inbox get`")
+	}
+	query := make([]queryParam, 0, 1)
+	if riskHorizonFlag.set {
+		addSingleQuery(&query, "risk_horizon_days", fmt.Sprintf("%d", riskHorizonFlag.value))
+	}
+
+	listResult, err := a.invokeTypedJSON(ctx, cfg, "inbox list", "inbox.list", nil, query, nil)
+	if err != nil {
+		return nil, "inbox get", err
+	}
+	if rawID == "" {
+		return listResult, "inbox list", nil
+	}
+	if err := validateID(rawID, "inbox item id"); err != nil {
+		return nil, "inbox get", err
+	}
+
+	match, err := resolveInboxItemFromListResult(listResult, rawID)
+	if err != nil {
+		return nil, "inbox get", err
+	}
+	data, _ := listResult.Data.(map[string]any)
+	if data == nil {
+		data = map[string]any{}
+	}
+	data["body"] = map[string]any{"item": match.Item}
+	return &commandResult{
+		Text: fmt.Sprintf("inbox item %s (alias=%s)", match.ID, match.Alias),
+		Data: data,
+	}, "inbox get", nil
 }
 
 func (a *App) runPacketsCreateCommand(ctx context.Context, resource string, commandID string, args []string, cfg config.Resolved) (*commandResult, string, error) {
@@ -1326,12 +1383,16 @@ func (a *App) parseAckBodyInput(ctx context.Context, args []string, cfg config.R
 		return nil, err
 	}
 
-	if threadID == "" {
-		resolvedThreadID, err := a.resolveInboxThreadID(ctx, cfg, inboxItemID)
+	shouldResolveInboxItem := threadID == "" || looksLikeInboxAlias(inboxItemID)
+	if shouldResolveInboxItem {
+		resolvedInboxItemID, resolvedThreadID, err := a.resolveInboxItemIDAndThread(ctx, cfg, inboxItemID)
 		if err != nil {
 			return nil, err
 		}
-		threadID = resolvedThreadID
+		inboxItemID = resolvedInboxItemID
+		if threadID == "" {
+			threadID = resolvedThreadID
+		}
 	}
 	if err := validateID(threadID, "thread id"); err != nil {
 		return nil, err
@@ -1351,31 +1412,157 @@ func (a *App) parseAckBodyInput(ctx context.Context, args []string, cfg config.R
 	return body, nil
 }
 
-func (a *App) resolveInboxThreadID(ctx context.Context, cfg config.Resolved, inboxItemID string) (string, error) {
+func looksLikeInboxAlias(raw string) bool {
+	raw = strings.ToLower(strings.TrimSpace(raw))
+	return strings.HasPrefix(raw, inboxAliasPrefix)
+}
+
+func (a *App) resolveInboxItemIDAndThread(ctx context.Context, cfg config.Resolved, inboxItemID string) (string, string, error) {
 	result, err := a.invokeTypedJSON(ctx, cfg, "inbox list", "inbox.list", nil, nil, nil)
 	if err != nil {
-		return "", err
+		return "", "", err
+	}
+	match, err := resolveInboxItemFromListResult(result, inboxItemID)
+	if err != nil {
+		return "", "", err
+	}
+	threadID := strings.TrimSpace(match.ThreadID)
+	if threadID == "" {
+		return "", "", errnorm.Usage(
+			"invalid_request",
+			fmt.Sprintf("thread_id is required for inbox item %q (provide --thread-id or ensure it is present in `oar inbox list`)", match.ID),
+		)
+	}
+	return match.ID, threadID, nil
+}
+
+type inboxListMatch struct {
+	ID       string
+	ShortID  string
+	Alias    string
+	ThreadID string
+	Item     map[string]any
+}
+
+func resolveInboxItemFromListResult(result *commandResult, rawID string) (inboxListMatch, error) {
+	items := listInboxMatches(result)
+	if len(items) == 0 {
+		return inboxListMatch{}, missingInboxItemIDError(rawID)
+	}
+
+	rawID = strings.TrimSpace(rawID)
+	rawLower := strings.ToLower(rawID)
+	for _, item := range items {
+		if item.ID == rawID {
+			return item, nil
+		}
+	}
+	for _, item := range items {
+		if item.Alias != "" && item.Alias == rawLower {
+			return item, nil
+		}
+		if item.ShortID != "" && item.ShortID == rawID {
+			return item, nil
+		}
+	}
+
+	prefixMatches := make([]inboxListMatch, 0, len(items))
+	seen := make(map[string]struct{}, len(items))
+	for _, item := range items {
+		match := strings.HasPrefix(item.ID, rawID)
+		if !match && item.Alias != "" {
+			match = strings.HasPrefix(item.Alias, rawLower)
+		}
+		if !match && item.ShortID != "" {
+			match = strings.HasPrefix(item.ShortID, rawID)
+		}
+		if !match {
+			continue
+		}
+		if _, exists := seen[item.ID]; exists {
+			continue
+		}
+		seen[item.ID] = struct{}{}
+		prefixMatches = append(prefixMatches, item)
+	}
+	if len(prefixMatches) == 1 {
+		return prefixMatches[0], nil
+	}
+	if len(prefixMatches) > 1 {
+		sort.Slice(prefixMatches, func(i int, j int) bool {
+			return prefixMatches[i].ID < prefixMatches[j].ID
+		})
+		return inboxListMatch{}, ambiguousInboxItemIDError(rawID, prefixMatches)
+	}
+	return inboxListMatch{}, missingInboxItemIDError(rawID)
+}
+
+func listInboxMatches(result *commandResult) []inboxListMatch {
+	if result == nil {
+		return nil
 	}
 	data, _ := result.Data.(map[string]any)
 	body, _ := data["body"].(map[string]any)
+	if body == nil {
+		return nil
+	}
+	_ = addInboxAliasesToListField(body, "items")
 	rawItems, _ := body["items"].([]any)
+	if len(rawItems) == 0 {
+		return nil
+	}
+	out := make([]inboxListMatch, 0, len(rawItems))
+	seen := make(map[string]struct{}, len(rawItems))
 	for _, rawItem := range rawItems {
 		item, _ := rawItem.(map[string]any)
 		if item == nil {
 			continue
 		}
-		if strings.TrimSpace(anyString(item["id"])) != inboxItemID {
+		id := strings.TrimSpace(anyString(item["id"]))
+		if id == "" {
 			continue
 		}
-		threadID := strings.TrimSpace(anyString(item["thread_id"]))
-		if threadID != "" {
-			return threadID, nil
+		if _, exists := seen[id]; exists {
+			continue
 		}
-		break
+		seen[id] = struct{}{}
+		out = append(out, inboxListMatch{
+			ID:       id,
+			ShortID:  strings.TrimSpace(anyString(item["short_id"])),
+			Alias:    strings.ToLower(strings.TrimSpace(anyString(item["alias"]))),
+			ThreadID: strings.TrimSpace(anyString(item["thread_id"])),
+			Item:     item,
+		})
 	}
-	return "", errnorm.Usage(
+	return out
+}
+
+func ambiguousInboxItemIDError(rawID string, matches []inboxListMatch) error {
+	samples := make([]string, 0, minInt(3, len(matches)))
+	for idx, match := range matches {
+		if idx >= 3 {
+			break
+		}
+		samples = append(samples, fmt.Sprintf("%s (alias=%s)", match.ID, match.Alias))
+	}
+	return errnorm.Usage(
 		"invalid_request",
-		fmt.Sprintf("thread_id is required for inbox item %q (provide --thread-id or ensure it is present in `oar inbox list`)", inboxItemID),
+		fmt.Sprintf(
+			"inbox item id %q is ambiguous: %d inbox items match. Use a longer id/alias or the canonical id. Matches: %s",
+			rawID,
+			len(matches),
+			strings.Join(samples, ", "),
+		),
+	)
+}
+
+func missingInboxItemIDError(rawID string) error {
+	return errnorm.Usage(
+		"invalid_request",
+		fmt.Sprintf(
+			"inbox item id %q is missing: no canonical id, alias, or unique prefix match was found. Run `oar inbox list` and retry with alias or canonical id.",
+			strings.TrimSpace(rawID),
+		),
 	)
 }
 
@@ -1522,6 +1709,8 @@ func enrichListBodyWithShortIDs(commandID string, body any) (any, bool) {
 		return body, addShortIDToListField(typedBody, "commitments")
 	case "artifacts.list":
 		return body, addShortIDToListField(typedBody, "artifacts")
+	case "inbox.list":
+		return body, addInboxAliasesToListField(typedBody, "items")
 	default:
 		return body, false
 	}
@@ -1551,6 +1740,121 @@ func addShortIDToListField(body map[string]any, field string) bool {
 		changed = true
 	}
 	return changed
+}
+
+func addInboxAliasesToListField(body map[string]any, field string) bool {
+	items, _ := body[field].([]any)
+	if len(items) == 0 {
+		return false
+	}
+
+	ids := make([]string, 0, len(items))
+	seenIDs := make(map[string]struct{}, len(items))
+	for _, rawItem := range items {
+		item, _ := rawItem.(map[string]any)
+		if item == nil {
+			continue
+		}
+		id := strings.TrimSpace(anyString(item["id"]))
+		if id == "" {
+			continue
+		}
+		if _, exists := seenIDs[id]; exists {
+			continue
+		}
+		seenIDs[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	aliasByID := inboxAliasByID(ids)
+
+	changed := false
+	for _, rawItem := range items {
+		item, _ := rawItem.(map[string]any)
+		if item == nil {
+			continue
+		}
+		id := strings.TrimSpace(anyString(item["id"]))
+		if id == "" {
+			continue
+		}
+		expectedShortID := shortID(id)
+		if currentShortID := strings.TrimSpace(anyString(item["short_id"])); currentShortID != expectedShortID {
+			item["short_id"] = expectedShortID
+			changed = true
+		}
+		expectedAlias := aliasByID[id]
+		if currentAlias := strings.TrimSpace(anyString(item["alias"])); currentAlias != expectedAlias {
+			item["alias"] = expectedAlias
+			changed = true
+		}
+		threadID := strings.TrimSpace(anyString(item["thread_id"]))
+		if threadID != "" {
+			threadShortID := shortID(threadID)
+			if current := strings.TrimSpace(anyString(item["thread_short_id"])); current != threadShortID {
+				item["thread_short_id"] = threadShortID
+				changed = true
+			}
+		}
+		sourceEventID := strings.TrimSpace(anyString(item["source_event_id"]))
+		if sourceEventID != "" {
+			sourceShortID := shortID(sourceEventID)
+			if current := strings.TrimSpace(anyString(item["source_event_short_id"])); current != sourceShortID {
+				item["source_event_short_id"] = sourceShortID
+				changed = true
+			}
+		}
+		commitmentID := strings.TrimSpace(anyString(item["commitment_id"]))
+		if commitmentID != "" {
+			commitmentShortID := shortID(commitmentID)
+			if current := strings.TrimSpace(anyString(item["commitment_short_id"])); current != commitmentShortID {
+				item["commitment_short_id"] = commitmentShortID
+				changed = true
+			}
+		}
+	}
+	return changed
+}
+
+func inboxAliasByID(ids []string) map[string]string {
+	if len(ids) == 0 {
+		return map[string]string{}
+	}
+	digestByID := make(map[string]string, len(ids))
+	for _, id := range ids {
+		trimmed := strings.TrimSpace(id)
+		if trimmed == "" {
+			continue
+		}
+		digestByID[trimmed] = inboxAliasDigest(trimmed)
+	}
+	length := inboxAliasMinDigestLength
+	maxDigestLength := 40
+	for length < maxDigestLength {
+		countByPrefix := make(map[string]int, len(digestByID))
+		hasCollision := false
+		for _, digest := range digestByID {
+			prefix := digest[:length]
+			countByPrefix[prefix]++
+			if countByPrefix[prefix] > 1 {
+				hasCollision = true
+			}
+		}
+		if !hasCollision {
+			break
+		}
+		length++
+	}
+
+	aliasByID := make(map[string]string, len(digestByID))
+	for id, digest := range digestByID {
+		aliasByID[id] = inboxAliasPrefix + digest[:length]
+	}
+	return aliasByID
+}
+
+func inboxAliasDigest(id string) string {
+	sum := sha1.Sum([]byte(strings.TrimSpace(id)))
+	return fmt.Sprintf("%x", sum)
 }
 
 func shortID(id string) string {
