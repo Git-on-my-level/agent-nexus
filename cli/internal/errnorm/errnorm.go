@@ -168,7 +168,7 @@ type Metadata struct {
 var defaultMetadataByCode = map[string]Metadata{
 	"actor_exists":                  {Recoverable: true, Hint: "Use a different actor id or load the existing actor with `oar actors list`."},
 	"agent_revoked":                 {Recoverable: false, Hint: "Create/register a new agent profile; revoked agents cannot be reactivated."},
-	"auth_registration_unavailable": {Recoverable: true, Hint: "Core auth may still be starting. Retry `oar auth register` in a few seconds, or run `oar meta health` to confirm readiness."},
+	"auth_registration_unavailable": {Recoverable: true, Hint: "Core auth may still be starting. Retry `oar auth register` in a few seconds, or run `oar api call --path /health` to confirm readiness."},
 	"auth_required":                 {Recoverable: true, Hint: "Run `oar --agent <agent> auth whoami` to refresh credentials, then retry."},
 	"cli_outdated":                  {Recoverable: true, Hint: "Upgrade the CLI to the minimum compatible version from `/meta/handshake`."},
 	"conflict":                      {Recoverable: true, Hint: "Reload current state and retry with a fresh `if_updated_at` value."},

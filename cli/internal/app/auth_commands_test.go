@@ -228,7 +228,7 @@ func TestAuthRegisterInternalErrorIsActionable(t *testing.T) {
 	if message := strings.TrimSpace(anyStr(errObj["message"])); !strings.Contains(message, "temporarily unavailable") {
 		t.Fatalf("expected actionable register error message, got %q payload=%#v", message, payload)
 	}
-	if hint := strings.TrimSpace(anyStr(errObj["hint"])); !strings.Contains(hint, "oar meta health") {
+	if hint := strings.TrimSpace(anyStr(errObj["hint"])); !strings.Contains(hint, "oar api call --path /health") {
 		t.Fatalf("expected readiness hint, got %q payload=%#v", hint, payload)
 	}
 	if recoverable, _ := errObj["recoverable"].(bool); !recoverable {

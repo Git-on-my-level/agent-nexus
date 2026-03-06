@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 
@@ -45,7 +46,12 @@ func InitializeWorkspace(ctx context.Context, workspaceRoot string) (*Workspace,
 		return nil, err
 	}
 
-	db, err := sql.Open("sqlite", layout.DatabasePath)
+	databasePath, err := filepath.Abs(layout.DatabasePath)
+	if err != nil {
+		return nil, fmt.Errorf("resolve sqlite database path: %w", err)
+	}
+
+	db, err := sql.Open("sqlite", sqliteDSN(databasePath))
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite database: %w", err)
 	}
@@ -101,4 +107,16 @@ func (w *Workspace) Close() error {
 		return nil
 	}
 	return w.db.Close()
+}
+
+func sqliteDSN(databasePath string) string {
+	dsn := &url.URL{
+		Scheme: "file",
+		Path:   databasePath,
+	}
+	query := dsn.Query()
+	query.Add("_pragma", "busy_timeout(5000)")
+	query.Add("_pragma", "journal_mode(WAL)")
+	dsn.RawQuery = query.Encode()
+	return dsn.String()
 }

@@ -25,9 +25,12 @@ var ErrKeyMismatch = errors.New("key_mismatch")
 var ErrAgentNotFound = errors.New("agent_not_found")
 
 const (
-	defaultAccessTokenTTL  = 15 * time.Minute
-	defaultRefreshTokenTTL = 30 * 24 * time.Hour
-	defaultAssertionSkew   = 5 * time.Minute
+	defaultAccessTokenTTL   = 15 * time.Minute
+	defaultRefreshTokenTTL  = 30 * 24 * time.Hour
+	defaultAssertionSkew    = 5 * time.Minute
+	registerAgentMaxRetries = 8
+	registerAgentRetryBase  = 15 * time.Millisecond
+	registerAgentRetryMax   = 250 * time.Millisecond
 )
 
 type Option func(*Store)
@@ -137,6 +140,28 @@ func (s *Store) RegisterAgent(ctx context.Context, input RegisterAgentInput) (Ag
 		return Agent{}, AgentKey{}, TokenBundle{}, fmt.Errorf("%w: public_key must be a base64-encoded ed25519 public key: %v", ErrInvalidRequest, err)
 	}
 
+	publicKey := strings.TrimSpace(input.PublicKey)
+	var lastErr error
+	for attempt := 0; attempt < registerAgentMaxRetries; attempt++ {
+		agent, key, tokens, err := s.registerAgentOnce(ctx, username, publicKey)
+		if err == nil {
+			return agent, key, tokens, nil
+		}
+		if errors.Is(err, ErrUsernameTaken) || !isSQLiteBusyError(err) {
+			return Agent{}, AgentKey{}, TokenBundle{}, err
+		}
+		lastErr = err
+		if attempt == registerAgentMaxRetries-1 {
+			break
+		}
+		if err := waitForRegisterRetry(ctx, attempt); err != nil {
+			return Agent{}, AgentKey{}, TokenBundle{}, err
+		}
+	}
+	return Agent{}, AgentKey{}, TokenBundle{}, lastErr
+}
+
+func (s *Store) registerAgentOnce(ctx context.Context, username string, publicKey string) (Agent, AgentKey, TokenBundle, error) {
 	now := time.Now().UTC()
 	nowText := now.Format(time.RFC3339Nano)
 	agentID := "agent_" + uuid.NewString()
@@ -186,7 +211,7 @@ func (s *Store) RegisterAgent(ctx context.Context, input RegisterAgentInput) (Ag
 		 VALUES (?, ?, ?, 'ed25519', ?, NULL)`,
 		keyID,
 		agentID,
-		strings.TrimSpace(input.PublicKey),
+		publicKey,
 		nowText,
 	)
 	if err != nil {
@@ -201,6 +226,7 @@ func (s *Store) RegisterAgent(ctx context.Context, input RegisterAgentInput) (Ag
 	}
 
 	if err := tx.Commit(); err != nil {
+		_ = tx.Rollback()
 		return Agent{}, AgentKey{}, TokenBundle{}, fmt.Errorf("commit register agent transaction: %w", err)
 	}
 
@@ -215,7 +241,7 @@ func (s *Store) RegisterAgent(ctx context.Context, input RegisterAgentInput) (Ag
 			KeyID:     keyID,
 			AgentID:   agentID,
 			Algorithm: "ed25519",
-			PublicKey: strings.TrimSpace(input.PublicKey),
+			PublicKey: publicKey,
 			CreatedAt: nowText,
 		}, tokens, nil
 }
@@ -908,4 +934,30 @@ func hashToken(raw string) string {
 func hashAssertionReplay(message string, signature string) string {
 	sum := sha256.Sum256([]byte(strings.TrimSpace(message) + "|" + strings.TrimSpace(signature)))
 	return hex.EncodeToString(sum[:])
+}
+
+func isSQLiteBusyError(err error) bool {
+	if err == nil {
+		return false
+	}
+	lowered := strings.ToLower(err.Error())
+	return strings.Contains(lowered, "database is locked") ||
+		strings.Contains(lowered, "database table is locked") ||
+		strings.Contains(lowered, "sqlite_busy") ||
+		strings.Contains(lowered, "cannot start a transaction within a transaction")
+}
+
+func waitForRegisterRetry(ctx context.Context, attempt int) error {
+	delay := registerAgentRetryBase << attempt
+	if delay > registerAgentRetryMax {
+		delay = registerAgentRetryMax
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("register agent canceled while waiting to retry: %w", ctx.Err())
+	case <-timer.C:
+		return nil
+	}
 }

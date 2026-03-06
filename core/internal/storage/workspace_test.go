@@ -99,6 +99,36 @@ func TestWorkspaceInitializationAndRestart(t *testing.T) {
 	}
 }
 
+func TestWorkspaceInitializationWithRelativeRoot(t *testing.T) {
+	t.Parallel()
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get working directory: %v", err)
+	}
+
+	workspaceRoot := t.TempDir()
+	relativeRoot, err := filepath.Rel(cwd, workspaceRoot)
+	if err != nil {
+		t.Fatalf("derive relative workspace path: %v", err)
+	}
+	if filepath.IsAbs(relativeRoot) {
+		t.Fatalf("expected relative path, got %q", relativeRoot)
+	}
+
+	workspace, err := storage.InitializeWorkspace(context.Background(), relativeRoot)
+	if err != nil {
+		t.Fatalf("initialize workspace from relative root %q: %v", relativeRoot, err)
+	}
+	defer workspace.Close()
+
+	assertHealthOK(t, workspace)
+
+	if _, err := os.Stat(filepath.Join(workspaceRoot, "state.sqlite")); err != nil {
+		t.Fatalf("expected sqlite database under workspace root: %v", err)
+	}
+}
+
 func assertHealthOK(t *testing.T, workspace *storage.Workspace) {
 	t.Helper()
 

@@ -7,10 +7,13 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -276,6 +279,120 @@ func TestAgentAuthLifecycleAndActorCompatibility(t *testing.T) {
 	revokedMeResp := getJSONExpectStatusWithAuth(t, server.URL+"/agents/me", newAssertionPayload.Tokens.AccessToken, http.StatusForbidden)
 	defer revokedMeResp.Body.Close()
 	assertErrorCode(t, revokedMeResp, "agent_revoked")
+}
+
+func TestConcurrentFreshAuthRegistrationsSucceed(t *testing.T) {
+	t.Parallel()
+
+	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	registry := actors.NewStore(workspace.DB())
+	if _, err := registry.EnsureSystemActor(context.Background(), time.Now().UTC()); err != nil {
+		t.Fatalf("ensure system actor: %v", err)
+	}
+	authStore := auth.NewStore(workspace.DB())
+	contractPath := filepath.Join("..", "..", "..", "contracts", "oar-schema.yaml")
+	contract, err := schema.Load(contractPath)
+	if err != nil {
+		t.Fatalf("load schema contract: %v", err)
+	}
+	primitiveStore := primitives.NewStore(workspace.DB(), workspace.Layout().ArtifactContentDir)
+	handler := NewHandler(
+		"0.2.2",
+		WithActorRegistry(registry),
+		WithAuthStore(authStore),
+		WithHealthCheck(workspace.Ping),
+		WithPrimitiveStore(primitiveStore),
+		WithSchemaContract(contract),
+	)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	const concurrentRegistrations = 8
+	type input struct {
+		username  string
+		publicKey string
+	}
+	inputs := make([]input, 0, concurrentRegistrations)
+	for i := 0; i < concurrentRegistrations; i++ {
+		publicKey, _ := generateKeyPair(t)
+		inputs = append(inputs, input{
+			username:  fmt.Sprintf("user-%d", i+1),
+			publicKey: publicKey,
+		})
+	}
+
+	type result struct {
+		index  int
+		status int
+		body   string
+		err    error
+	}
+	results := make(chan result, concurrentRegistrations)
+	client := &http.Client{Timeout: 10 * time.Second}
+	var wg sync.WaitGroup
+	for i, in := range inputs {
+		wg.Add(1)
+		go func(index int, in input) {
+			defer wg.Done()
+			payload, err := json.Marshal(map[string]any{
+				"username":   in.username,
+				"public_key": in.publicKey,
+			})
+			if err != nil {
+				results <- result{index: index, err: err}
+				return
+			}
+
+			req, err := http.NewRequest(http.MethodPost, server.URL+"/auth/agents/register", bytes.NewReader(payload))
+			if err != nil {
+				results <- result{index: index, err: err}
+				return
+			}
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := client.Do(req)
+			if err != nil {
+				results <- result{index: index, err: err}
+				return
+			}
+			defer resp.Body.Close()
+
+			rawBody, readErr := io.ReadAll(resp.Body)
+			if readErr != nil {
+				results <- result{index: index, err: readErr}
+				return
+			}
+			results <- result{
+				index:  index,
+				status: resp.StatusCode,
+				body:   string(rawBody),
+			}
+		}(i, in)
+	}
+	wg.Wait()
+	close(results)
+
+	failures := make([]string, 0)
+	for result := range results {
+		if result.err != nil {
+			failures = append(failures, fmt.Sprintf("request %d failed: %v", result.index+1, result.err))
+			continue
+		}
+		if result.status != http.StatusCreated {
+			failures = append(
+				failures,
+				fmt.Sprintf("request %d: status=%d body=%s", result.index+1, result.status, result.body),
+			)
+		}
+	}
+	if len(failures) > 0 {
+		t.Fatalf("expected all concurrent registrations to succeed:\n%s", strings.Join(failures, "\n"))
+	}
 }
 
 func generateKeyPair(t *testing.T) (string, ed25519.PrivateKey) {
