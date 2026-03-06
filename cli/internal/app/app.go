@@ -175,7 +175,7 @@ func parseGlobalFlags(args []string) (config.Overrides, []string, bool, error) {
 	}
 	remaining, err := normalizeTrailingGlobalFlags(fs.Args(), &overrides)
 	if err != nil {
-		return config.Overrides{}, nil, false, err
+		return overrides, nil, false, err
 	}
 	return overrides, remaining, false, nil
 }

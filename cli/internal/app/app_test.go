@@ -137,6 +137,45 @@ func TestRunMisplacedGlobalBaseURLShowsCorrectiveUsage(t *testing.T) {
 	}
 }
 
+func TestRunMisplacedGlobalBaseURLPreservesJSONMode(t *testing.T) {
+	t.Parallel()
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	cli := New()
+	cli.Stdout = stdout
+	cli.Stderr = stderr
+	cli.Stdin = strings.NewReader("")
+	cli.StdinIsTTY = func() bool { return true }
+	cli.UserHomeDir = func() (string, error) { return "/home/tester", nil }
+	cli.ReadFile = func(path string) ([]byte, error) {
+		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
+	}
+
+	exitCode := cli.Run([]string{"--json", "version", "--base-url", "http://127.0.0.1:8000"})
+	if exitCode != 2 {
+		t.Fatalf("expected usage exit code 2, got %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
+	}
+	if strings.TrimSpace(stderr.String()) != "" {
+		t.Fatalf("expected stderr to stay empty in --json mode, got %q", stderr.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("decode stdout json: %v raw=%s", err, stdout.String())
+	}
+	if payload["ok"] != false {
+		t.Fatalf("expected ok=false payload=%#v", payload)
+	}
+	errorObj, _ := payload["error"].(map[string]any)
+	if strings.TrimSpace(errorObj["code"].(string)) != "invalid_flags" {
+		t.Fatalf("expected invalid_flags payload=%#v", payload)
+	}
+	if !strings.Contains(errorObj["message"].(string), "--base-url is a global flag") {
+		t.Fatalf("expected corrective global flag message payload=%#v", payload)
+	}
+}
+
 func TestRunDoctorJSON(t *testing.T) {
 	t.Parallel()
 
