@@ -49,6 +49,7 @@ Core Commands:
   doctor        Validate local and network preconditions
   auth          Manage agent registration, profile auth, and token lifecycle
   draft         Stage write requests locally and commit them later
+  provenance    Walk refs/provenance links as a deterministic graph
   api call      Perform an arbitrary HTTP API request
   help [topic]  Show onboarding help or generated command help
 `)+"\n")
@@ -89,6 +90,10 @@ func (a *App) printHelpTopic(topic string) bool {
 	}
 	if topic == "onboarding" {
 		_, _ = io.WriteString(a.Stdout, onboardingHelpText())
+		return true
+	}
+	if topic == "provenance" || topic == "provenance walk" {
+		_, _ = io.WriteString(a.Stdout, provenanceUsageText()+"\n")
 		return true
 	}
 	text, ok := generatedHelpText(topic)

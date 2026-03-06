@@ -34,13 +34,13 @@ var (
 )
 
 type liveCoreHarness struct {
-	t        *testing.T
-	baseURL  string
-	cliBin   string
-	homeDir  string
-	logPath  string
-	logFile  *os.File
-	server   *exec.Cmd
+	t         *testing.T
+	baseURL   string
+	cliBin    string
+	homeDir   string
+	logPath   string
+	logFile   *os.File
+	server    *exec.Cmd
 	workspace string
 }
 
@@ -321,6 +321,98 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 	coordReview := h.runCLIExpectOK(t, "coordinator", nil, "events", "get", "--event-id", reviewEventID)
 	if !strings.Contains(coordReview.Stdout, "actor_statement") || !strings.Contains(coordReview.Stdout, "conflict-safe") || !strings.Contains(coordReview.Stdout, runID) {
 		t.Fatalf("expected review event output to include review details, got: %s", coordReview.Stdout)
+	}
+}
+
+func TestProvenanceWalkScenario(t *testing.T) {
+	t.Parallel()
+
+	h := newLiveCoreHarness(t)
+	runID := runToken()
+
+	h.registerAgent(t, "investigator", "investigator."+runID)
+
+	artifact := h.runCLIExpectOK(t, "investigator", map[string]any{
+		"artifact": map[string]any{
+			"kind":    "evidence",
+			"refs":    []string{"url:https://example.com/provenance/" + runID},
+			"summary": "Provenance seed artifact " + runID,
+		},
+		"content": map[string]any{
+			"run_id": runID,
+			"type":   "provenance-seed",
+		},
+		"content_type": "structured",
+	}, "artifacts", "create")
+	artifactID := mustStringPath(t, artifact.Payload, "data.body.artifact.id")
+
+	thread := h.runCLIExpectOK(t, "investigator", map[string]any{
+		"thread": map[string]any{
+			"title":           "Provenance Walk Harness " + runID,
+			"type":            "incident",
+			"status":          "active",
+			"priority":        "p2",
+			"tags":            []string{"harness", "provenance"},
+			"cadence":         "reactive",
+			"current_summary": "Validate event -> snapshot -> artifact traversal.",
+			"next_actions":    []string{"Create event referencing snapshot"},
+			"key_artifacts":   []string{"artifact:" + artifactID},
+			"provenance": map[string]any{
+				"sources": []string{"artifact:" + artifactID},
+			},
+		},
+	}, "threads", "create")
+	threadID := mustStringPath(t, thread.Payload, "data.body.thread.thread_id")
+
+	event := h.runCLIExpectOK(t, "investigator", map[string]any{
+		"event": map[string]any{
+			"type":      "decision_needed",
+			"thread_id": threadID,
+			"refs":      []string{"snapshot:" + threadID},
+			"summary":   "Trace thread snapshot provenance for run " + runID,
+			"payload": map[string]any{
+				"run_id": runID,
+			},
+			"provenance": map[string]any{
+				"sources": []string{"inferred"},
+			},
+		},
+	}, "events", "create")
+	eventID := mustStringPath(t, event.Payload, "data.body.event.id")
+
+	walk := h.runCLIExpectOK(t, "investigator", nil,
+		"provenance", "walk",
+		"--from", "event:"+eventID,
+		"--depth", "2",
+	)
+	if got := mustStringPath(t, walk.Payload, "command"); got != "provenance walk" {
+		t.Fatalf("unexpected command name: got %q want provenance walk", got)
+	}
+	if got := mustStringPath(t, walk.Payload, "data.from"); got != "event:"+eventID {
+		t.Fatalf("unexpected walk root: got %q want %q", got, "event:"+eventID)
+	}
+
+	data, _ := walk.Payload["data"].(map[string]any)
+	if data == nil {
+		t.Fatalf("missing data payload: %#v", walk.Payload)
+	}
+	nodes, _ := data["nodes"].([]any)
+	if !integrationContainsNodeRef(nodes, "event:"+eventID) {
+		t.Fatalf("expected event node in walk output, payload=%#v", walk.Payload)
+	}
+	if !integrationContainsNodeRef(nodes, "snapshot:"+threadID) {
+		t.Fatalf("expected snapshot node in walk output, payload=%#v", walk.Payload)
+	}
+	if !integrationContainsNodeRef(nodes, "artifact:"+artifactID) {
+		t.Fatalf("expected artifact node in walk output, payload=%#v", walk.Payload)
+	}
+
+	edges, _ := data["edges"].([]any)
+	if !integrationHasEdge(edges, "event:"+eventID, "snapshot:"+threadID, "refs") {
+		t.Fatalf("expected event->snapshot edge, payload=%#v", walk.Payload)
+	}
+	if !integrationHasEdge(edges, "snapshot:"+threadID, "artifact:"+artifactID, "provenance.sources") {
+		t.Fatalf("expected snapshot->artifact provenance edge, payload=%#v", walk.Payload)
 	}
 }
 
@@ -624,6 +716,43 @@ func getPathValue(payload map[string]any, path string) (any, bool) {
 		current = value
 	}
 	return current, true
+}
+
+func integrationContainsNodeRef(nodes []any, ref string) bool {
+	target := strings.TrimSpace(ref)
+	for _, raw := range nodes {
+		node, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		if strings.TrimSpace(fmt.Sprint(node["ref"])) == target {
+			return true
+		}
+	}
+	return false
+}
+
+func integrationHasEdge(edges []any, from string, to string, relation string) bool {
+	expectedFrom := strings.TrimSpace(from)
+	expectedTo := strings.TrimSpace(to)
+	expectedRelation := strings.TrimSpace(relation)
+	for _, raw := range edges {
+		edge, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		if strings.TrimSpace(fmt.Sprint(edge["from"])) != expectedFrom {
+			continue
+		}
+		if strings.TrimSpace(fmt.Sprint(edge["to"])) != expectedTo {
+			continue
+		}
+		if strings.TrimSpace(fmt.Sprint(edge["relation"])) != expectedRelation {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 func runToken() string {

@@ -42,6 +42,12 @@ var draftSubcommandSpec = subcommandSpec{
 	examples: []string{"oar draft list", "oar draft commit --draft-id <draft-id>"},
 }
 
+var provenanceSubcommandSpec = subcommandSpec{
+	command:  "provenance",
+	valid:    []string{"walk"},
+	examples: []string{"oar provenance walk --from event:<event-id> --depth 2"},
+}
+
 var threadsSubcommandSpec = subcommandSpec{
 	command:  "threads",
 	valid:    []string{"list", "get", "create", "patch", "timeline", "context"},
