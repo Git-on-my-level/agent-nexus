@@ -173,5 +173,104 @@ func parseGlobalFlags(args []string) (config.Overrides, []string, bool, error) {
 	if timeoutFlag.set {
 		overrides.Timeout = &timeoutFlag.value
 	}
-	return overrides, fs.Args(), false, nil
+	remaining, err := normalizeTrailingGlobalFlags(fs.Args(), &overrides)
+	if err != nil {
+		return config.Overrides{}, nil, false, err
+	}
+	return overrides, remaining, false, nil
+}
+
+var globalFlagValueHints = map[string]string{
+	"base-url": "<url>",
+	"agent":    "<name>",
+	"timeout":  "<duration>",
+}
+
+func normalizeTrailingGlobalFlags(args []string, overrides *config.Overrides) ([]string, error) {
+	filtered := make([]string, 0, len(args))
+	commandPath := commandPathPrefix(args)
+	for i := 0; i < len(args); i++ {
+		token := args[i]
+		if strings.TrimSpace(token) == "--" {
+			filtered = append(filtered, args[i:]...)
+			break
+		}
+		name, value, hasValue, isFlag := parseLongOptionToken(token)
+		if !isFlag {
+			filtered = append(filtered, token)
+			continue
+		}
+
+		switch name {
+		case "json":
+			jsonValue := true
+			if hasValue {
+				parsed, err := strconvParseBool(value)
+				if err != nil {
+					return nil, errnorm.Usage("invalid_flags", fmt.Sprintf("invalid value for --json: %s", err.Error()))
+				}
+				jsonValue = parsed
+			}
+			overrides.JSON = &jsonValue
+		case "base-url", "agent", "no-color", "verbose", "headers", "timeout":
+			return nil, misplacedGlobalFlagError(name, commandPath)
+		default:
+			filtered = append(filtered, token)
+		}
+	}
+	return filtered, nil
+}
+
+func parseLongOptionToken(token string) (name string, value string, hasValue bool, isFlag bool) {
+	token = strings.TrimSpace(token)
+	if token == "" || token == "-" || token == "--" {
+		return "", "", false, false
+	}
+	if strings.HasPrefix(token, "--") {
+		token = token[2:]
+	} else if strings.HasPrefix(token, "-") {
+		token = token[1:]
+	} else {
+		return "", "", false, false
+	}
+	if token == "" {
+		return "", "", false, false
+	}
+	if idx := strings.IndexRune(token, '='); idx >= 0 {
+		return strings.TrimSpace(token[:idx]), token[idx+1:], true, true
+	}
+	return strings.TrimSpace(token), "", false, true
+}
+
+func commandPathPrefix(args []string) string {
+	parts := make([]string, 0, len(args))
+	for _, token := range args {
+		trimmed := strings.TrimSpace(token)
+		if trimmed == "" {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "-") {
+			break
+		}
+		parts = append(parts, trimmed)
+	}
+	return strings.Join(parts, " ")
+}
+
+func misplacedGlobalFlagError(name string, commandPath string) error {
+	trimmedName := strings.TrimSpace(name)
+	if trimmedName == "" {
+		trimmedName = "flag"
+	}
+
+	exampleParts := []string{"oar", "--" + trimmedName}
+	if hint, ok := globalFlagValueHints[trimmedName]; ok && strings.TrimSpace(hint) != "" {
+		exampleParts = append(exampleParts, hint)
+	}
+	commandPath = strings.TrimSpace(commandPath)
+	if commandPath == "" {
+		commandPath = "<command>"
+	}
+	exampleParts = append(exampleParts, commandPath, "...")
+	return errnorm.Usage("invalid_flags", fmt.Sprintf("--%s is a global flag; use: %s", trimmedName, strings.Join(exampleParts, " ")))
 }

@@ -117,6 +117,12 @@ func TestRunGeneratedHelpTopic(t *testing.T) {
 	if strings.Contains(output, "threads update") {
 		t.Fatalf("unexpected legacy update subcommand in generated help output=%s", output)
 	}
+	if !strings.Contains(output, "Place global flags before the command path.") {
+		t.Fatalf("expected global flag placement guidance output=%s", output)
+	}
+	if !strings.Contains(output, "oar --json threads ...") {
+		t.Fatalf("expected global --json example in generated group help output=%s", output)
+	}
 }
 
 func TestRunEventsHelpMentionsLocalExplainAcrossEntryPoints(t *testing.T) {
@@ -310,5 +316,8 @@ func TestGeneratedCommandHelpIncludesBodySchemaAndEnums(t *testing.T) {
 	}
 	if !strings.Contains(output, "work_order_claimed") {
 		t.Fatalf("expected enum discoverability for work_order_claimed output=%s", output)
+	}
+	if !strings.Contains(output, "oar --json events create ...") {
+		t.Fatalf("expected global --json example in generated command help output=%s", output)
 	}
 }

@@ -171,6 +171,9 @@ func formatGeneratedGroupHelp(topic string, commands []registry.Command) string 
 		b.WriteString(supplement)
 		b.WriteString("\n")
 	}
+	b.WriteString("\n")
+	b.WriteString(formatGlobalFlagUsage(topic))
+	b.WriteString("\n")
 	b.WriteString("\nTip: `oar help <command path>` for full command-level generated details.\n")
 	return strings.TrimSpace(b.String())
 }
@@ -239,7 +242,20 @@ func formatGeneratedCommandHelp(topic string, cmd registry.Command) string {
 		b.WriteString("\n")
 		b.WriteString(schemaBlock)
 	}
+	b.WriteString("\n\n")
+	b.WriteString(formatGlobalFlagUsage(topic))
 	return strings.TrimSpace(b.String())
+}
+
+func formatGlobalFlagUsage(topic string) string {
+	path := strings.Join(strings.Fields(strings.TrimSpace(topic)), " ")
+	if path == "" {
+		path = "<command>"
+	}
+	return strings.TrimSpace(fmt.Sprintf(`Global flags:
+  Place global flags before the command path.
+  Example: oar --json %s ...
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>`, path))
 }
 
 func formatBodySchemaBlock(schema *registry.BodySchema) string {

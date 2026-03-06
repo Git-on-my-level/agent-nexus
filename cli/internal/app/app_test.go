@@ -83,6 +83,60 @@ func TestRunVersionUsesProfileJSONDefault(t *testing.T) {
 	}
 }
 
+func TestRunVersionAcceptsTrailingJSONFlag(t *testing.T) {
+	t.Parallel()
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	cli := New()
+	cli.Stdout = stdout
+	cli.Stderr = stderr
+	cli.Stdin = strings.NewReader("")
+	cli.StdinIsTTY = func() bool { return true }
+	cli.UserHomeDir = func() (string, error) { return "/home/tester", nil }
+	cli.ReadFile = func(path string) ([]byte, error) {
+		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
+	}
+
+	exitCode := cli.Run([]string{"version", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("decode stdout json: %v", err)
+	}
+	if payload["ok"] != true || payload["command"] != "version" {
+		t.Fatalf("unexpected payload: %#v", payload)
+	}
+}
+
+func TestRunMisplacedGlobalBaseURLShowsCorrectiveUsage(t *testing.T) {
+	t.Parallel()
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	cli := New()
+	cli.Stdout = stdout
+	cli.Stderr = stderr
+	cli.Stdin = strings.NewReader("")
+	cli.StdinIsTTY = func() bool { return true }
+	cli.UserHomeDir = func() (string, error) { return "/home/tester", nil }
+	cli.ReadFile = func(path string) ([]byte, error) {
+		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
+	}
+
+	exitCode := cli.Run([]string{"version", "--base-url", "http://127.0.0.1:8000"})
+	if exitCode != 2 {
+		t.Fatalf("expected usage exit code 2, got %d stderr=%s", exitCode, stderr.String())
+	}
+
+	if !strings.Contains(stderr.String(), "--base-url is a global flag; use: oar --base-url <url> version ...") {
+		t.Fatalf("expected corrective global flag usage message stderr=%s", stderr.String())
+	}
+}
+
 func TestRunDoctorJSON(t *testing.T) {
 	t.Parallel()
 
