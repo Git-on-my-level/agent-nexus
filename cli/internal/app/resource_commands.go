@@ -79,6 +79,16 @@ type queryParam struct {
 	values []string
 }
 
+type threadContextSelection struct {
+	threadIDs              []string
+	discoveryQuery         []queryParam
+	discoveryType          string
+	maxEventsSet           bool
+	maxEvents              int
+	includeArtifactContent bool
+	fullID                 bool
+}
+
 type eventTypeGuidance struct {
 	Type        string
 	Summary     string
@@ -312,83 +322,15 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 		)
 		return result, "threads timeline", callErr
 	case "context":
-		fs := newSilentFlagSet("threads context")
-		var threadIDFlags trackedStrings
-		var statusFlag, priorityFlag, staleFlag, typeFlag trackedString
-		var tagsFlag, cadenceFlag trackedStrings
-		var maxEventsFlag trackedInt
-		var includeArtifactContentFlag trackedBool
-		var fullIDFlag trackedBool
-		fs.Var(&threadIDFlags, "thread-id", "Thread id (repeatable)")
-		fs.Var(&statusFlag, "status", "Discover contexts by thread status")
-		fs.Var(&priorityFlag, "priority", "Discover contexts by thread priority")
-		fs.Var(&staleFlag, "stale", "Discover contexts by stale state (true/false)")
-		fs.Var(&tagsFlag, "tag", "Discover contexts by thread tag (repeatable)")
-		fs.Var(&cadenceFlag, "cadence", "Discover contexts by cadence (repeatable)")
-		fs.Var(&typeFlag, "type", "Discover contexts by thread type (local filter after list)")
-		fs.Var(&maxEventsFlag, "max-events", "Maximum recent events to include")
-		fs.Var(&includeArtifactContentFlag, "include-artifact-content", "Include key artifact content previews")
-		fs.Var(&fullIDFlag, "full-id", "Render full event IDs in human output")
-		if err := fs.Parse(args[1:]); err != nil {
-			return nil, "threads context", errnorm.Usage("invalid_flags", err.Error())
+		selection, err := parseThreadContextSelectionArgs(args[1:], "threads context")
+		if err != nil {
+			return nil, "threads context", err
 		}
-		positionals := append([]string(nil), fs.Args()...)
-		threadIDs := make([]string, 0, len(threadIDFlags.values)+len(positionals))
-		threadIDs = append(threadIDs, threadIDFlags.values...)
-		threadIDs = append(threadIDs, positionals...)
-		threadIDs = normalizeIDFilters(threadIDs)
-
-		discoveryQuery := make([]queryParam, 0, 5)
-		addSingleQuery(&discoveryQuery, "status", statusFlag.value)
-		addSingleQuery(&discoveryQuery, "priority", priorityFlag.value)
-		addSingleQuery(&discoveryQuery, "stale", staleFlag.value)
-		addMultiQuery(&discoveryQuery, "tag", tagsFlag.values)
-		addMultiQuery(&discoveryQuery, "cadence", cadenceFlag.values)
-
-		discoveryType := strings.TrimSpace(typeFlag.value)
-		hasDiscoveryFilters := len(discoveryQuery) > 0 || discoveryType != ""
-		if len(threadIDs) > 0 && hasDiscoveryFilters {
-			return nil, "threads context", errnorm.Usage(
-				"invalid_request",
-				"--thread-id cannot be combined with discovery filters (--status/--priority/--stale/--tag/--cadence/--type)",
-			)
+		threadIDs, err := a.resolveThreadContextSelection(ctx, cfg, "threads context", selection, true)
+		if err != nil {
+			return nil, "threads context", err
 		}
-		if len(threadIDs) == 0 {
-			if !hasDiscoveryFilters {
-				return nil, "threads context", errnorm.Usage(
-					"invalid_request",
-					"thread id is required (provide --thread-id <thread-id>) or use discovery filters (--status/--priority/--stale/--tag/--cadence/--type)",
-				)
-			}
-			listResult, err := a.invokeTypedJSON(ctx, cfg, "threads list", "threads.list", nil, discoveryQuery, nil)
-			if err != nil {
-				return nil, "threads context", err
-			}
-			threadIDs = threadIDsFromThreadsList(listResult, discoveryType)
-			if len(threadIDs) == 0 {
-				return nil, "threads context", errnorm.Usage(
-					"invalid_request",
-					"threads context discovery returned no matching threads; run `oar threads list` and refine filters",
-				)
-			}
-		}
-		for _, threadID := range threadIDs {
-			if err := validateID(threadID, "thread id"); err != nil {
-				return nil, "threads context", err
-			}
-		}
-		if maxEventsFlag.set && maxEventsFlag.value < 0 {
-			return nil, "threads context", errnorm.Usage("invalid_request", "--max-events must be >= 0")
-		}
-		fullID := fullIDFlag.set && fullIDFlag.value
-
-		query := make([]queryParam, 0, 2)
-		if maxEventsFlag.set {
-			addSingleQuery(&query, "max_events", fmt.Sprintf("%d", maxEventsFlag.value))
-		}
-		if includeArtifactContentFlag.set && includeArtifactContentFlag.value {
-			addSingleQuery(&query, "include_artifact_content", "true")
-		}
+		query := threadContextQuery(selection)
 		if len(threadIDs) == 1 {
 			result, callErr := a.invokeTypedJSONWithIDResolution(
 				ctx,
@@ -408,7 +350,7 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 			body := asMap(data["body"])
 			if body != nil {
 				addThreadContextCollaborationSummary(body)
-				body["full_id"] = fullID
+				body["full_id"] = selection.fullID
 				data["body"] = body
 				result.Data = data
 				result.Text = formatTypedCommandText(
@@ -464,7 +406,7 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 				continue
 			}
 			addThreadContextCollaborationSummary(body)
-			body["full_id"] = fullID
+			body["full_id"] = selection.fullID
 
 			thread := asMap(body["thread"])
 			resolvedContextThreadID := strings.TrimSpace(anyString(body["thread_id"]))
@@ -504,7 +446,7 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 			"key_artifacts":      uniqueContextArtifactItems(keyArtifacts),
 			"open_commitments":   uniqueMapsByID(openCommitments),
 			"contexts_generated": true,
-			"full_id":            fullID,
+			"full_id":            selection.fullID,
 		}
 		sortEventsByCreatedAt(asSlice(aggregateBody["recent_events"]))
 		addThreadContextCollaborationSummary(aggregateBody)
@@ -524,6 +466,9 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 			cfg.Headers,
 		)
 		return result, "threads context", nil
+	case "inspect":
+		result, err := a.runThreadsInspectCommand(ctx, args[1:], cfg)
+		return result, "threads inspect", err
 	default:
 		return nil, "threads", threadsSubcommandSpec.unknownError(args[0])
 	}
@@ -601,6 +546,186 @@ func (a *App) runCommitmentsCommand(ctx context.Context, args []string, cfg conf
 	default:
 		return nil, "commitments", commitmentsSubcommandSpec.unknownError(args[0])
 	}
+}
+
+func parseThreadContextSelectionArgs(args []string, commandName string) (threadContextSelection, error) {
+	fs := newSilentFlagSet(commandName)
+	var threadIDFlags trackedStrings
+	var statusFlag, priorityFlag, staleFlag, typeFlag trackedString
+	var tagsFlag, cadenceFlag trackedStrings
+	var maxEventsFlag trackedInt
+	var includeArtifactContentFlag trackedBool
+	var fullIDFlag trackedBool
+	fs.Var(&threadIDFlags, "thread-id", "Thread id (repeatable)")
+	fs.Var(&statusFlag, "status", "Discover threads by status")
+	fs.Var(&priorityFlag, "priority", "Discover threads by priority")
+	fs.Var(&staleFlag, "stale", "Discover threads by stale state (true/false)")
+	fs.Var(&tagsFlag, "tag", "Discover threads by tag (repeatable)")
+	fs.Var(&cadenceFlag, "cadence", "Discover threads by cadence (repeatable)")
+	fs.Var(&typeFlag, "type", "Discover threads by type (local filter after list)")
+	fs.Var(&maxEventsFlag, "max-events", "Maximum recent events to include")
+	fs.Var(&includeArtifactContentFlag, "include-artifact-content", "Include key artifact content previews")
+	fs.Var(&fullIDFlag, "full-id", "Render full ids in human output")
+	if err := fs.Parse(args); err != nil {
+		return threadContextSelection{}, errnorm.Usage("invalid_flags", err.Error())
+	}
+
+	positionals := append([]string(nil), fs.Args()...)
+	threadIDs := make([]string, 0, len(threadIDFlags.values)+len(positionals))
+	threadIDs = append(threadIDs, threadIDFlags.values...)
+	threadIDs = append(threadIDs, positionals...)
+	threadIDs = normalizeIDFilters(threadIDs)
+
+	discoveryQuery := make([]queryParam, 0, 5)
+	addSingleQuery(&discoveryQuery, "status", statusFlag.value)
+	addSingleQuery(&discoveryQuery, "priority", priorityFlag.value)
+	addSingleQuery(&discoveryQuery, "stale", staleFlag.value)
+	addMultiQuery(&discoveryQuery, "tag", tagsFlag.values)
+	addMultiQuery(&discoveryQuery, "cadence", cadenceFlag.values)
+
+	if maxEventsFlag.set && maxEventsFlag.value < 0 {
+		return threadContextSelection{}, errnorm.Usage("invalid_request", "--max-events must be >= 0")
+	}
+
+	return threadContextSelection{
+		threadIDs:              threadIDs,
+		discoveryQuery:         discoveryQuery,
+		discoveryType:          strings.TrimSpace(typeFlag.value),
+		maxEventsSet:           maxEventsFlag.set,
+		maxEvents:              maxEventsFlag.value,
+		includeArtifactContent: includeArtifactContentFlag.set && includeArtifactContentFlag.value,
+		fullID:                 fullIDFlag.set && fullIDFlag.value,
+	}, nil
+}
+
+func (a *App) resolveThreadContextSelection(ctx context.Context, cfg config.Resolved, commandName string, selection threadContextSelection, allowMultiple bool) ([]string, error) {
+	hasDiscoveryFilters := len(selection.discoveryQuery) > 0 || selection.discoveryType != ""
+	if len(selection.threadIDs) > 0 && hasDiscoveryFilters {
+		return nil, errnorm.Usage(
+			"invalid_request",
+			"--thread-id cannot be combined with discovery filters (--status/--priority/--stale/--tag/--cadence/--type)",
+		)
+	}
+
+	threadIDs := append([]string(nil), selection.threadIDs...)
+	if len(threadIDs) == 0 {
+		if !hasDiscoveryFilters {
+			return nil, errnorm.Usage(
+				"invalid_request",
+				"thread id is required (provide --thread-id <thread-id>) or use discovery filters (--status/--priority/--stale/--tag/--cadence/--type)",
+			)
+		}
+		listResult, err := a.invokeTypedJSON(ctx, cfg, "threads list", "threads.list", nil, selection.discoveryQuery, nil)
+		if err != nil {
+			return nil, err
+		}
+		threadIDs = threadIDsFromThreadsList(listResult, selection.discoveryType)
+		if len(threadIDs) == 0 {
+			return nil, errnorm.Usage(
+				"invalid_request",
+				commandName+" discovery returned no matching threads; run `oar threads list` and refine filters",
+			)
+		}
+	}
+
+	for _, threadID := range threadIDs {
+		if err := validateID(threadID, "thread id"); err != nil {
+			return nil, err
+		}
+	}
+	if allowMultiple {
+		return threadIDs, nil
+	}
+	if len(threadIDs) != 1 {
+		return nil, errnorm.Usage(
+			"invalid_request",
+			fmt.Sprintf("%s requires exactly one thread; refine filters or pass one --thread-id. For multi-thread views, use `oar threads context`.", commandName),
+		)
+	}
+	return threadIDs, nil
+}
+
+func threadContextQuery(selection threadContextSelection) []queryParam {
+	query := make([]queryParam, 0, 2)
+	if selection.maxEventsSet {
+		addSingleQuery(&query, "max_events", fmt.Sprintf("%d", selection.maxEvents))
+	}
+	if selection.includeArtifactContent {
+		addSingleQuery(&query, "include_artifact_content", "true")
+	}
+	return query
+}
+
+func (a *App) runThreadsInspectCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
+	selection, err := parseThreadContextSelectionArgs(args, "threads inspect")
+	if err != nil {
+		return nil, err
+	}
+	threadIDs, err := a.resolveThreadContextSelection(ctx, cfg, "threads inspect", selection, false)
+	if err != nil {
+		return nil, err
+	}
+
+	contextResult, callErr := a.invokeTypedJSONWithIDResolution(
+		ctx,
+		cfg,
+		"threads context",
+		"threads.context",
+		"thread_id",
+		threadIDs[0],
+		threadIDLookupSpec,
+		threadContextQuery(selection),
+		nil,
+	)
+	if callErr != nil {
+		return nil, callErr
+	}
+
+	data := asMap(contextResult.Data)
+	body := asMap(data["body"])
+	if body == nil {
+		return contextResult, nil
+	}
+	addThreadContextCollaborationSummary(body)
+
+	thread := extractNestedMap(body, "thread")
+	resolvedThreadID := firstNonEmpty(strings.TrimSpace(anyString(body["thread_id"])), strings.TrimSpace(anyString(thread["id"])), strings.TrimSpace(threadIDs[0]))
+
+	inboxResult, err := a.invokeTypedJSON(ctx, cfg, "inbox list", "inbox.list", nil, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	inboxData := asMap(inboxResult.Data)
+	inboxBody := extractNestedMap(inboxData, "body")
+	inboxItems := filteredInboxItems(asSlice(inboxBody["items"]), []string{resolvedThreadID}, nil)
+
+	contextSection := cloneMap(body)
+	delete(contextSection, "thread")
+	delete(contextSection, "collaboration_summary")
+	delete(contextSection, "full_id")
+
+	inspectBody := map[string]any{
+		"thread_id":      resolvedThreadID,
+		"full_id":        selection.fullID,
+		"thread":         thread,
+		"context":        contextSection,
+		"collaboration":  asMap(body["collaboration_summary"]),
+		"inbox":          map[string]any{"thread_id": resolvedThreadID, "items": inboxItems, "count": len(inboxItems), "full_id": selection.fullID},
+		"context_source": "threads.context",
+		"inbox_source":   "inbox.list",
+	}
+
+	data["body"] = inspectBody
+	contextResult.Data = data
+	contextResult.Text = formatTypedCommandText(
+		"threads.inspect",
+		intValue(data["status_code"]),
+		headerValues(data["headers"]),
+		inspectBody,
+		cfg.Verbose,
+		cfg.Headers,
+	)
+	return contextResult, nil
 }
 
 func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
@@ -1161,7 +1286,7 @@ func (a *App) runInboxCommand(ctx context.Context, args []string, cfg config.Res
 	sub := inboxSubcommandSpec.normalize(args[0])
 	switch sub {
 	case "list":
-		result, err := a.invokeTypedJSON(ctx, cfg, "inbox list", "inbox.list", nil, nil, nil)
+		result, err := a.runInboxList(ctx, args[1:], cfg)
 		return result, "inbox list", err
 	case "get":
 		result, commandName, err := a.runInboxGet(ctx, args[1:], cfg)
@@ -1184,11 +1309,79 @@ func (a *App) runInboxCommand(ctx context.Context, args []string, cfg config.Res
 	}
 }
 
+func (a *App) runInboxList(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
+	fs := newSilentFlagSet("inbox list")
+	var threadIDFlags trackedStrings
+	var typeFlags trackedStrings
+	var fullIDFlag trackedBool
+	fs.Var(&threadIDFlags, "thread-id", "Filter by thread id (repeatable)")
+	fs.Var(&typeFlags, "type", "Filter by inbox item type/category/kind (repeatable)")
+	fs.Var(&fullIDFlag, "full-id", "Render full inbox ids in human output")
+	if err := fs.Parse(args); err != nil {
+		return nil, errnorm.Usage("invalid_flags", err.Error())
+	}
+	if len(fs.Args()) > 0 {
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar inbox list`")
+	}
+
+	threadIDs := normalizeIDFilters(threadIDFlags.values)
+	for _, threadID := range threadIDs {
+		if err := validateID(threadID, "thread id"); err != nil {
+			return nil, err
+		}
+	}
+	typeFilters := normalizeStringFilters(typeFlags.values)
+
+	result, err := a.invokeTypedJSON(ctx, cfg, "inbox list", "inbox.list", nil, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	if len(threadIDs) == 0 && len(typeFilters) == 0 && !(fullIDFlag.set && fullIDFlag.value) {
+		return result, nil
+	}
+
+	data := asMap(result.Data)
+	body := asMap(data["body"])
+	if body == nil {
+		return result, nil
+	}
+
+	filteredBody := cloneMap(body)
+	filteredItems := filteredInboxItems(asSlice(body["items"]), threadIDs, typeFilters)
+	filteredBody["items"] = filteredItems
+	filteredBody["returned_items"] = len(filteredItems)
+	filteredBody["total_items"] = len(asSlice(body["items"]))
+	if len(threadIDs) == 1 {
+		filteredBody["thread_id"] = threadIDs[0]
+	} else if len(threadIDs) > 1 {
+		filteredBody["thread_ids"] = threadIDs
+	}
+	if len(typeFilters) > 0 {
+		filteredBody["types"] = typeFilters
+	}
+	if fullIDFlag.set && fullIDFlag.value {
+		filteredBody["full_id"] = true
+	}
+
+	data["body"] = filteredBody
+	result.Data = data
+	result.Text = formatTypedCommandText(
+		"inbox.list",
+		intValue(data["status_code"]),
+		headerValues(data["headers"]),
+		filteredBody,
+		cfg.Verbose,
+		cfg.Headers,
+	)
+	return result, nil
+}
+
 func (a *App) runInboxGet(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
 	fs := newSilentFlagSet("inbox get")
-	var idFlag, inboxItemIDFlag trackedString
+	var idFlag, inboxIDFlag, inboxItemIDFlag trackedString
 	var riskHorizonFlag trackedInt
 	fs.Var(&idFlag, "id", "Inbox item id or alias")
+	fs.Var(&inboxIDFlag, "inbox-id", "Alias for --id")
 	fs.Var(&inboxItemIDFlag, "inbox-item-id", "Inbox item id or alias")
 	fs.Var(&riskHorizonFlag, "risk-horizon-days", "Derived inbox risk horizon days")
 	if err := fs.Parse(args); err != nil {
@@ -1196,13 +1389,13 @@ func (a *App) runInboxGet(ctx context.Context, args []string, cfg config.Resolve
 	}
 	positionals := fs.Args()
 
-	rawID := firstNonEmpty(strings.TrimSpace(idFlag.value), strings.TrimSpace(inboxItemIDFlag.value))
+	rawID := firstNonEmpty(strings.TrimSpace(idFlag.value), strings.TrimSpace(inboxIDFlag.value), strings.TrimSpace(inboxItemIDFlag.value))
 	if rawID == "" && len(positionals) > 0 {
 		rawID = strings.TrimSpace(positionals[0])
 		positionals = positionals[1:]
 	}
 	if len(positionals) > 0 {
-		return nil, "inbox get", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar inbox get`")
+		return nil, "inbox get", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar inbox get`; use `--id <id-or-alias>`")
 	}
 	query := make([]queryParam, 0, 1)
 	if riskHorizonFlag.set {
@@ -2528,6 +2721,26 @@ func normalizeEventTypeFilters(explicit []string, csv string) []string {
 	return out
 }
 
+func normalizeStringFilters(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		out = append(out, trimmed)
+	}
+	return out
+}
+
 func filterEventsByType(events []any, types []string) []any {
 	if len(events) == 0 {
 		return []any{}
@@ -2593,6 +2806,60 @@ func normalizeIDFilters(rawIDs []string) []string {
 		out = append(out, id)
 	}
 	return out
+}
+
+func filteredInboxItems(items []any, threadIDs []string, types []string) []any {
+	if len(items) == 0 {
+		return []any{}
+	}
+	threadFilter := make(map[string]struct{}, len(threadIDs))
+	for _, threadID := range threadIDs {
+		threadID = strings.TrimSpace(threadID)
+		if threadID == "" {
+			continue
+		}
+		threadFilter[threadID] = struct{}{}
+	}
+	typeFilter := make(map[string]struct{}, len(types))
+	for _, inboxType := range types {
+		inboxType = strings.TrimSpace(inboxType)
+		if inboxType == "" {
+			continue
+		}
+		typeFilter[inboxType] = struct{}{}
+	}
+
+	filtered := make([]any, 0, len(items))
+	for _, raw := range items {
+		item := asMap(raw)
+		if item == nil {
+			continue
+		}
+		if len(threadFilter) > 0 {
+			threadID := strings.TrimSpace(anyString(item["thread_id"]))
+			if _, ok := threadFilter[threadID]; !ok {
+				continue
+			}
+		}
+		if len(typeFilter) > 0 {
+			if _, ok := typeFilter[inboxItemType(item)]; !ok {
+				continue
+			}
+		}
+		filtered = append(filtered, item)
+	}
+	return filtered
+}
+
+func inboxItemType(item map[string]any) string {
+	if item == nil {
+		return ""
+	}
+	return firstNonEmpty(
+		strings.TrimSpace(anyString(item["type"])),
+		strings.TrimSpace(anyString(item["category"])),
+		strings.TrimSpace(anyString(item["kind"])),
+	)
 }
 
 func filterEventsByActorID(events []any, actorID string) []any {

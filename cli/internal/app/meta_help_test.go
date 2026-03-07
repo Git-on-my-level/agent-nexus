@@ -114,6 +114,9 @@ func TestRunGeneratedHelpTopic(t *testing.T) {
 	if !strings.Contains(output, "threads timeline") {
 		t.Fatalf("expected timeline subcommand in generated help output=%s", output)
 	}
+	if !strings.Contains(output, "threads inspect") {
+		t.Fatalf("expected local threads inspect helper in generated help output=%s", output)
+	}
 	if strings.Contains(output, "threads update") {
 		t.Fatalf("unexpected legacy update subcommand in generated help output=%s", output)
 	}
@@ -200,6 +203,59 @@ func TestRunEventsHelpMentionsLocalExplainAcrossEntryPoints(t *testing.T) {
 
 	if fromTopic != fromFlag {
 		t.Fatalf("expected same formatter output for help events and events --help\nhelp output:\n%s\nflag output:\n%s", fromTopic, fromFlag)
+	}
+}
+
+func TestRunLocalHelperHelpTopicsResolveAcrossEntryPoints(t *testing.T) {
+	t.Parallel()
+
+	run := func(args []string) string {
+		t.Helper()
+		stdout := &bytes.Buffer{}
+		stderr := &bytes.Buffer{}
+		cli := New()
+		cli.Stdout = stdout
+		cli.Stderr = stderr
+		cli.Stdin = strings.NewReader("")
+		cli.StdinIsTTY = func() bool { return true }
+		cli.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+		cli.ReadFile = func(path string) ([]byte, error) {
+			return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
+		}
+
+		exitCode := cli.Run(args)
+		if exitCode != 0 {
+			t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
+		}
+		return stdout.String()
+	}
+
+	eventsFromTopic := run([]string{"help", "events", "list"})
+	eventsFromFlag := run([]string{"events", "list", "--help"})
+	threadsFromTopic := run([]string{"help", "threads", "inspect"})
+	threadsFromFlag := run([]string{"threads", "inspect", "--help"})
+
+	for _, output := range []string{eventsFromTopic, eventsFromFlag} {
+		if !strings.Contains(output, "Local Help: events list") {
+			t.Fatalf("expected local events list help header output=%s", output)
+		}
+		if !strings.Contains(output, "threads timeline") || !strings.Contains(output, "--full-id") {
+			t.Fatalf("expected events list local helper details output=%s", output)
+		}
+	}
+	for _, output := range []string{threadsFromTopic, threadsFromFlag} {
+		if !strings.Contains(output, "Local Help: threads inspect") {
+			t.Fatalf("expected local threads inspect help header output=%s", output)
+		}
+		if !strings.Contains(output, "threads context") || !strings.Contains(output, "inbox list") {
+			t.Fatalf("expected composed-helper details output=%s", output)
+		}
+	}
+	if eventsFromTopic != eventsFromFlag {
+		t.Fatalf("expected same events list help via topic and --help\nhelp output:\n%s\nflag output:\n%s", eventsFromTopic, eventsFromFlag)
+	}
+	if threadsFromTopic != threadsFromFlag {
+		t.Fatalf("expected same threads inspect help via topic and --help\nhelp output:\n%s\nflag output:\n%s", threadsFromTopic, threadsFromFlag)
 	}
 }
 

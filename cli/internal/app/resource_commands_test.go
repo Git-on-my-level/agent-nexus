@@ -198,6 +198,68 @@ func TestInboxListIncludesAliasesAndLinkedShortIDs(t *testing.T) {
 	}
 }
 
+func TestInboxListSupportsClientSideThreadAndTypeFilters(t *testing.T) {
+	t.Parallel()
+
+	const matchingID = "inbox:decision_needed:thread_1234567890:none:event_1234567890"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/inbox" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items":[
+			{"id":"` + matchingID + `","thread_id":"thread_1234567890","type":"decision_needed","summary":"needs approval"},
+			{"id":"inbox:decision_needed:thread_other:none:event_other","thread_id":"thread_other","type":"decision_needed","summary":"other thread"},
+			{"id":"inbox:review:thread_1234567890:none:event_review","thread_id":"thread_1234567890","type":"review_needed","summary":"other type"}
+		]}`))
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"inbox", "list",
+		"--thread-id", "thread_1234567890",
+		"--type", "decision_needed",
+		"--full-id",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+	body, _ := data["body"].(map[string]any)
+	if got := anyStringValue(body["thread_id"]); got != "thread_1234567890" {
+		t.Fatalf("expected filtered thread_id, got %#v", body)
+	}
+	fullID, _ := body["full_id"].(bool)
+	if !fullID {
+		t.Fatalf("expected full_id=true, got %#v", body)
+	}
+	types := stringList(body["types"])
+	if len(types) != 1 || types[0] != "decision_needed" {
+		t.Fatalf("expected filtered types, got %#v", body)
+	}
+	items, _ := body["items"].([]any)
+	if len(items) != 1 {
+		t.Fatalf("expected one filtered inbox item, got %#v", body)
+	}
+	item, _ := items[0].(map[string]any)
+	if got := anyStringValue(item["id"]); got != matchingID {
+		t.Fatalf("expected matching inbox item %q, got %#v", matchingID, body)
+	}
+
+	human := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--base-url", server.URL,
+		"inbox", "list",
+		"--thread-id", "thread_1234567890",
+		"--type", "decision_needed",
+	})
+	if !strings.Contains(human, "total_items: 3") || !strings.Contains(human, "returned_items: 1") {
+		t.Fatalf("expected rendered inbox counts in human output, got:\n%s", human)
+	}
+}
+
 func TestInboxAliasStableAcrossListMembershipChanges(t *testing.T) {
 	t.Parallel()
 
@@ -260,6 +322,41 @@ func TestInboxGetByAliasTargetsSingleItem(t *testing.T) {
 	}
 	if got := anyStringValue(item["alias"]); got != alias {
 		t.Fatalf("expected inbox alias %q, got %q payload=%#v", alias, got, payload)
+	}
+}
+
+func TestInboxGetAcceptsInboxIDAliasFlag(t *testing.T) {
+	t.Parallel()
+
+	const inboxID = "inbox:decision_needed:thread_abc:none:event_abc"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"items":[{"id":"` + inboxID + `","thread_id":"thread_abc"}]}`))
+			return
+		case r.Method == http.MethodGet && r.URL.Path == "/inbox/"+url.PathEscape(inboxID):
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"item":{"id":"` + inboxID + `","thread_id":"thread_abc"}}`))
+			return
+		default:
+			http.NotFound(w, r)
+			return
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"inbox", "get",
+		"--inbox-id", inboxID,
+	})
+	payload := assertEnvelopeOK(t, raw)
+	if got := anyStringValue(payload["command"]); got != "inbox get" {
+		t.Fatalf("expected command inbox get, got %#v", payload)
 	}
 }
 
@@ -1463,6 +1560,8 @@ func TestThreadsContextSupportsFullIDForEventSections(t *testing.T) {
 	t.Parallel()
 
 	const eventID = "event_1234567890abcdef"
+	const artifactID = "artifact_1234567890abcdef"
+	const commitmentID = "commitment_1234567890abcdef"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet || r.URL.Path != "/threads/thread_1/context" {
 			http.NotFound(w, r)
@@ -1474,8 +1573,8 @@ func TestThreadsContextSupportsFullIDForEventSections(t *testing.T) {
 			"recent_events":[
 				{"id":"` + eventID + `","type":"actor_statement","summary":"ship Friday rescue scope"}
 			],
-			"key_artifacts":[],
-			"open_commitments":[]
+			"key_artifacts":[{"id":"` + artifactID + `","kind":"brief","summary":"Launch brief"}],
+			"open_commitments":[{"id":"` + commitmentID + `","status":"open","title":"Publish launch brief"}]
 		}`))
 	}))
 	defer server.Close()
@@ -1490,6 +1589,12 @@ func TestThreadsContextSupportsFullIDForEventSections(t *testing.T) {
 	if !strings.Contains(humanFull, eventID) {
 		t.Fatalf("expected full event id in output, got:\n%s", humanFull)
 	}
+	if !strings.Contains(humanFull, artifactID) {
+		t.Fatalf("expected full artifact id in output, got:\n%s", humanFull)
+	}
+	if !strings.Contains(humanFull, commitmentID) {
+		t.Fatalf("expected full commitment id in output, got:\n%s", humanFull)
+	}
 
 	humanShort := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--base-url", server.URL,
@@ -1501,6 +1606,151 @@ func TestThreadsContextSupportsFullIDForEventSections(t *testing.T) {
 	}
 	if !strings.Contains(humanShort, eventID[:12]) {
 		t.Fatalf("expected short event id in default output, got:\n%s", humanShort)
+	}
+	if strings.Contains(humanShort, artifactID) || !strings.Contains(humanShort, artifactID[:12]) {
+		t.Fatalf("expected short artifact id in default output, got:\n%s", humanShort)
+	}
+	if strings.Contains(humanShort, commitmentID) || !strings.Contains(humanShort, commitmentID[:12]) {
+		t.Fatalf("expected short commitment id in default output, got:\n%s", humanShort)
+	}
+}
+
+func TestThreadsInspectBuildsCoordinationView(t *testing.T) {
+	t.Parallel()
+
+	const eventID = "event_1234567890abcdef"
+	const inboxID = "inbox:decision_needed:thread_1:none:event_1234567890abcdef"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_1/context":
+			_, _ = w.Write([]byte(`{
+				"thread":{"id":"thread_1","title":"Pilot Rescue","status":"active","type":"initiative"},
+				"recent_events":[
+					{"id":"` + eventID + `","thread_id":"thread_1","type":"actor_statement","summary":"ship Friday rescue scope"},
+					{"id":"event_need_1","thread_id":"thread_1","type":"decision_needed","summary":"approve launch date"}
+				],
+				"key_artifacts":[{"id":"artifact_1","kind":"brief"}],
+				"open_commitments":[{"id":"commitment_1","status":"open","title":"Publish brief"}]
+			}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
+			_, _ = w.Write([]byte(`{"items":[
+				{"id":"` + inboxID + `","thread_id":"thread_1","type":"decision_needed","summary":"launch date still needs acknowledgement"},
+				{"id":"inbox:decision_needed:thread_2:none:event_other","thread_id":"thread_2","type":"decision_needed","summary":"other thread"}
+			]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"threads", "inspect",
+		"--thread-id", "thread_1",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	if got := anyStringValue(payload["command"]); got != "threads inspect" {
+		t.Fatalf("expected threads inspect command, got %#v", payload)
+	}
+	if got := anyStringValue(payload["command_id"]); got != "threads.inspect" {
+		t.Fatalf("expected threads.inspect command_id, got %#v", payload)
+	}
+	data, _ := payload["data"].(map[string]any)
+	body, _ := data["body"].(map[string]any)
+	thread, _ := body["thread"].(map[string]any)
+	if got := anyStringValue(thread["id"]); got != "thread_1" {
+		t.Fatalf("expected thread_1, got %#v", body)
+	}
+	contextBody, _ := body["context"].(map[string]any)
+	recentEvents, _ := contextBody["recent_events"].([]any)
+	if len(recentEvents) != 2 {
+		t.Fatalf("expected 2 recent events, got %#v", body)
+	}
+	collaboration, _ := body["collaboration"].(map[string]any)
+	recommendationCount, _ := collaboration["recommendation_count"].(float64)
+	if got := int(recommendationCount); got != 1 {
+		t.Fatalf("expected recommendation_count=1, got %#v", collaboration)
+	}
+	inbox, _ := body["inbox"].(map[string]any)
+	items, _ := inbox["items"].([]any)
+	if len(items) != 1 {
+		t.Fatalf("expected 1 inbox item for thread_1, got %#v", body)
+	}
+	item, _ := items[0].(map[string]any)
+	if got := anyStringValue(item["id"]); got != inboxID {
+		t.Fatalf("expected inbox item %q, got %#v", inboxID, body)
+	}
+
+	humanFull := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--base-url", server.URL,
+		"threads", "inspect",
+		"--thread-id", "thread_1",
+		"--full-id",
+	})
+	if !strings.Contains(humanFull, eventID) {
+		t.Fatalf("expected full event id in inspect output, got:\n%s", humanFull)
+	}
+	if !strings.Contains(humanFull, "inbox_items (1):") {
+		t.Fatalf("expected inbox section in inspect output, got:\n%s", humanFull)
+	}
+}
+
+func TestThreadsInspectDiscoveryRequiresSingleThread(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/threads":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"threads":[
+				{"id":"thread_init_1","type":"initiative","status":"active"},
+				{"id":"thread_init_2","type":"initiative","status":"active"}
+			]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"threads", "inspect",
+		"--status", "active",
+		"--type", "initiative",
+	})
+	payload := assertEnvelopeError(t, raw)
+	errObj, _ := payload["error"].(map[string]any)
+	if errObj == nil || anyStringValue(errObj["code"]) != "invalid_request" {
+		t.Fatalf("unexpected error payload: %#v", payload)
+	}
+	if !strings.Contains(anyStringValue(errObj["message"]), "exactly one thread") || !strings.Contains(anyStringValue(errObj["message"]), "oar threads context") {
+		t.Fatalf("expected single-thread guidance, got %#v", payload)
+	}
+}
+
+func TestThreadsInspectRejectsMixedSelectionModes(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"threads", "inspect",
+		"--thread-id", "thread_1",
+		"--status", "active",
+	})
+	payload := assertEnvelopeError(t, raw)
+	errObj, _ := payload["error"].(map[string]any)
+	if errObj == nil || anyStringValue(errObj["code"]) != "invalid_request" {
+		t.Fatalf("unexpected error payload: %#v", payload)
+	}
+	if !strings.Contains(anyStringValue(errObj["message"]), "--thread-id cannot be combined with discovery filters") {
+		t.Fatalf("expected shared-selection validation message, got %#v", payload)
 	}
 }
 
@@ -2248,6 +2498,14 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 				"key_artifacts":[{"id":"artifact_ctx_1","kind":"work_order"}],
 				"open_commitments":[{"id":"commitment_ctx_1","status":"open"}]
 			}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{
+				"items":[
+					{"id":"inbox:decision_needed:thread_123:none:event_ctx_2","thread_id":"thread_123","type":"decision_needed","summary":"confirm canonical command labels"},
+					{"id":"inbox:decision_needed:thread_other:none:event_other","thread_id":"thread_other","type":"decision_needed","summary":"ignore other thread"}
+				]
+			}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/events/stream":
 			w.Header().Set("Content-Type", "text/event-stream")
 			_, _ = io.WriteString(w, "id: es_1\nevent: event\ndata: {\"event\":{\"id\":\"event_stream_1\",\"type\":\"actor_statement\"}}\n\n")
@@ -2287,6 +2545,35 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 		"--thread-id", "thread_123",
 	})
 	assertGolden(t, "threads_context_machine.golden.json", threadsContextOut)
+
+	threadsInspectOut := runCLIForTest(t, home, env, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"threads", "inspect",
+		"--thread-id", "thread_123",
+	})
+	assertGolden(t, "threads_inspect_machine.golden.json", threadsInspectOut)
+	threadsInspectPayload := assertEnvelopeOK(t, threadsInspectOut)
+	if got := anyStringValue(threadsInspectPayload["command"]); got != "threads inspect" {
+		t.Fatalf("expected threads inspect command label, got %#v", threadsInspectPayload)
+	}
+	if got := anyStringValue(threadsInspectPayload["command_id"]); got != "threads.inspect" {
+		t.Fatalf("expected threads.inspect command_id, got %#v", threadsInspectPayload)
+	}
+	threadsInspectData, _ := threadsInspectPayload["data"].(map[string]any)
+	threadsInspectBody, _ := threadsInspectData["body"].(map[string]any)
+	if _, ok := threadsInspectBody["thread"].(map[string]any); !ok {
+		t.Fatalf("expected thread section in inspect payload, got %#v", threadsInspectBody)
+	}
+	if _, ok := threadsInspectBody["context"].(map[string]any); !ok {
+		t.Fatalf("expected context section in inspect payload, got %#v", threadsInspectBody)
+	}
+	if _, ok := threadsInspectBody["collaboration"].(map[string]any); !ok {
+		t.Fatalf("expected collaboration section in inspect payload, got %#v", threadsInspectBody)
+	}
+	if _, ok := threadsInspectBody["inbox"].(map[string]any); !ok {
+		t.Fatalf("expected inbox section in inspect payload, got %#v", threadsInspectBody)
+	}
 
 	eventsStreamOut := runCLIForTest(t, home, env, nil, []string{
 		"--json",

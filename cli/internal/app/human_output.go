@@ -51,13 +51,15 @@ func formatCommandSummary(commandID string, body any) string {
 	case "events.list":
 		return formatEventsList(body)
 	case "inbox.list":
-		return formatNamedList(body, "items", "Inbox", renderInboxItem)
+		return formatInboxList(body)
 	case "docs.history":
 		return formatNamedList(body, "revisions", "Revisions", renderRevisionListItem)
 	case "threads.get", "threads.create", "threads.patch":
 		return formatThreadRecord(extractNestedMap(body, "thread"))
 	case "threads.context":
 		return formatThreadContext(body)
+	case "threads.inspect":
+		return formatThreadInspect(body)
 	case "threads.timeline":
 		return formatThreadTimeline(body)
 	case "commitments.get", "commitments.create", "commitments.patch":
@@ -97,8 +99,8 @@ func formatThreadContext(body any) string {
 		lines = appendEventListSection(lines, "decisions", asSlice(collaboration["decisions"]), fullID)
 	}
 	lines = appendEventListSection(lines, "recent_events", asSlice(root["recent_events"]), fullID)
-	lines = appendListSection(lines, "key_artifacts", asSlice(root["key_artifacts"]), renderArtifactListItem)
-	lines = appendListSection(lines, "open_commitments", asSlice(root["open_commitments"]), renderCommitmentListItem)
+	lines = appendArtifactListSection(lines, "key_artifacts", asSlice(root["key_artifacts"]), fullID)
+	lines = appendCommitmentListSection(lines, "open_commitments", asSlice(root["open_commitments"]), fullID)
 	return strings.Join(lines, "\n")
 }
 
@@ -134,8 +136,8 @@ func formatThreadContextAggregate(root map[string]any, fullID bool) string {
 		lines = appendEventListSection(lines, "decisions", asSlice(collaboration["decisions"]), fullID)
 	}
 	lines = appendEventListSection(lines, "recent_events", asSlice(root["recent_events"]), fullID)
-	lines = appendListSection(lines, "key_artifacts", asSlice(root["key_artifacts"]), renderArtifactListItem)
-	lines = appendListSection(lines, "open_commitments", asSlice(root["open_commitments"]), renderCommitmentListItem)
+	lines = appendArtifactListSection(lines, "key_artifacts", asSlice(root["key_artifacts"]), fullID)
+	lines = appendCommitmentListSection(lines, "open_commitments", asSlice(root["open_commitments"]), fullID)
 	return strings.Join(lines, "\n")
 }
 
@@ -167,6 +169,45 @@ func formatEventsList(body any) string {
 		lines = append(lines, "actor_id: "+actorID)
 	}
 	lines = appendEventListSection(lines, "events", asSlice(root["events"]), asBool(root["full_id"]))
+	return strings.Join(lines, "\n")
+}
+
+func formatInboxList(body any) string {
+	root := asMap(body)
+	lines := make([]string, 0, 16)
+	if threadID := strings.TrimSpace(anyString(root["thread_id"])); threadID != "" {
+		lines = append(lines, "Thread "+threadID)
+	}
+	threadIDs := stringList(root["thread_ids"])
+	if len(threadIDs) > 1 {
+		lines = appendStringList(lines, "thread_ids", threadIDs)
+	}
+	lines = appendScalar(lines, "total_items", root, "total_items")
+	lines = appendScalar(lines, "returned_items", root, "returned_items")
+	lines = appendStringList(lines, "types", stringList(root["types"]))
+	lines = appendInboxListSection(lines, "items", asSlice(root["items"]), asBool(root["full_id"]))
+	return strings.Join(lines, "\n")
+}
+
+func formatThreadInspect(body any) string {
+	root := asMap(body)
+	lines := make([]string, 0, 28)
+	lines = append(lines, formatThreadRecord(extractNestedMap(root, "thread")))
+	collaboration := extractNestedMap(root, "collaboration")
+	context := extractNestedMap(root, "context")
+	fullID := asBool(root["full_id"])
+	if collaboration != nil {
+		lines = appendEventListSection(lines, "recommendations", asSlice(collaboration["recommendations"]), fullID)
+		lines = appendEventListSection(lines, "decision_requests", asSlice(collaboration["decision_requests"]), fullID)
+		lines = appendEventListSection(lines, "decisions", asSlice(collaboration["decisions"]), fullID)
+	}
+	if context != nil {
+		lines = appendEventListSection(lines, "recent_events", asSlice(context["recent_events"]), fullID)
+		lines = appendArtifactListSection(lines, "key_artifacts", asSlice(context["key_artifacts"]), fullID)
+		lines = appendCommitmentListSection(lines, "open_commitments", asSlice(context["open_commitments"]), fullID)
+	}
+	inbox := extractNestedMap(root, "inbox")
+	lines = appendInboxListSection(lines, "inbox_items", asSlice(inbox["items"]), fullID)
 	return strings.Join(lines, "\n")
 }
 
@@ -320,10 +361,18 @@ func renderThreadListItem(item map[string]any) string {
 }
 
 func renderCommitmentListItem(item map[string]any) string {
-	return compactSummary(displayID(item), firstNonEmpty(anyString(item["status"]), anyString(item["owner"])), firstNonEmpty(anyString(item["title"]), anyString(item["summary"])))
+	return renderCommitmentListItemWithMode(item, false)
+}
+
+func renderCommitmentListItemWithMode(item map[string]any, fullID bool) string {
+	return compactSummary(displayCompactIDWithMode(item, fullID), firstNonEmpty(anyString(item["status"]), anyString(item["owner"])), firstNonEmpty(anyString(item["title"]), anyString(item["summary"])))
 }
 
 func renderArtifactListItem(item map[string]any) string {
+	return renderArtifactListItemWithMode(item, false)
+}
+
+func renderArtifactListItemWithMode(item map[string]any, fullID bool) string {
 	artifact := item
 	if nested := asMap(item["artifact"]); nested != nil {
 		artifact = nested
@@ -336,7 +385,7 @@ func renderArtifactListItem(item map[string]any) string {
 	if ref != "" {
 		summary = firstNonEmpty(summary, "ref="+ref)
 	}
-	return compactSummary(displayID(artifact), anyString(artifact["kind"]), summary)
+	return compactSummary(displayCompactIDWithMode(artifact, fullID), anyString(artifact["kind"]), summary)
 }
 
 func renderEventListItem(item map[string]any) string {
@@ -344,9 +393,19 @@ func renderEventListItem(item map[string]any) string {
 }
 
 func renderInboxItem(item map[string]any) string {
+	return renderInboxItemWithMode(item, false)
+}
+
+func renderInboxItemWithMode(item map[string]any, fullID bool) string {
+	identifier := displayID(item)
+	if fullID {
+		if id := strings.TrimSpace(anyString(item["id"])); id != "" {
+			identifier = id
+		}
+	}
 	return compactSummary(
-		displayID(item),
-		firstNonEmpty(anyString(item["category"]), anyString(item["kind"]), anyString(item["type"])),
+		identifier,
+		firstNonEmpty(anyString(item["type"]), anyString(item["category"]), anyString(item["kind"])),
 		firstNonEmpty(anyString(item["title"]), anyString(item["summary"]), anyString(item["thread_id"])),
 	)
 }
@@ -390,6 +449,42 @@ func appendEventListSection(lines []string, label string, items []any, fullID bo
 			continue
 		}
 		lines = append(lines, "- "+renderEventListItemWithMode(item, fullID))
+	}
+	return lines
+}
+
+func appendInboxListSection(lines []string, label string, items []any, fullID bool) []string {
+	lines = append(lines, fmt.Sprintf("%s (%d):", label, len(items)))
+	for _, raw := range items {
+		item := asMap(raw)
+		if item == nil {
+			continue
+		}
+		lines = append(lines, "- "+renderInboxItemWithMode(item, fullID))
+	}
+	return lines
+}
+
+func appendArtifactListSection(lines []string, label string, items []any, fullID bool) []string {
+	lines = append(lines, fmt.Sprintf("%s (%d):", label, len(items)))
+	for _, raw := range items {
+		item := asMap(raw)
+		if item == nil {
+			continue
+		}
+		lines = append(lines, "- "+renderArtifactListItemWithMode(item, fullID))
+	}
+	return lines
+}
+
+func appendCommitmentListSection(lines []string, label string, items []any, fullID bool) []string {
+	lines = append(lines, fmt.Sprintf("%s (%d):", label, len(items)))
+	for _, raw := range items {
+		item := asMap(raw)
+		if item == nil {
+			continue
+		}
+		lines = append(lines, "- "+renderCommitmentListItemWithMode(item, fullID))
 	}
 	return lines
 }
@@ -475,12 +570,19 @@ func textualBody(body []byte) (string, bool) {
 }
 
 func displayID(item map[string]any) string {
+	return displayIDWithMode(item, false)
+}
+
+func displayIDWithMode(item map[string]any, fullID bool) string {
 	if item == nil {
 		return ""
 	}
 	id := strings.TrimSpace(anyString(item["id"]))
 	if id == "" {
 		id = strings.TrimSpace(anyString(item["revision_id"]))
+	}
+	if fullID && id != "" {
+		return id
 	}
 	short := strings.TrimSpace(anyString(item["short_id"]))
 	if short == "" && id != "" {
@@ -513,6 +615,24 @@ func displayEventID(item map[string]any, fullID bool) string {
 		return short
 	}
 	return displayID(item)
+}
+
+func displayCompactIDWithMode(item map[string]any, fullID bool) string {
+	if item == nil {
+		return ""
+	}
+	id := strings.TrimSpace(anyString(item["id"]))
+	if id == "" {
+		id = strings.TrimSpace(anyString(item["revision_id"]))
+	}
+	if fullID && id != "" {
+		return id
+	}
+	short := strings.TrimSpace(anyString(item["short_id"]))
+	if short == "" && id != "" {
+		short = shortID(id)
+	}
+	return firstNonEmpty(short, id)
 }
 
 func asBool(raw any) bool {
@@ -588,6 +708,26 @@ func formatScalar(raw any) string {
 			return "true"
 		}
 		return "false"
+	case int:
+		return fmt.Sprintf("%d", typed)
+	case int8:
+		return fmt.Sprintf("%d", typed)
+	case int16:
+		return fmt.Sprintf("%d", typed)
+	case int32:
+		return fmt.Sprintf("%d", typed)
+	case int64:
+		return fmt.Sprintf("%d", typed)
+	case uint:
+		return fmt.Sprintf("%d", typed)
+	case uint8:
+		return fmt.Sprintf("%d", typed)
+	case uint16:
+		return fmt.Sprintf("%d", typed)
+	case uint32:
+		return fmt.Sprintf("%d", typed)
+	case uint64:
+		return fmt.Sprintf("%d", typed)
 	case float64:
 		if typed == float64(int64(typed)) {
 			return fmt.Sprintf("%d", int64(typed))

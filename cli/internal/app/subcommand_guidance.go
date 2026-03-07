@@ -50,8 +50,8 @@ var provenanceSubcommandSpec = subcommandSpec{
 
 var threadsSubcommandSpec = subcommandSpec{
 	command:  "threads",
-	valid:    []string{"list", "get", "create", "patch", "timeline", "context"},
-	examples: []string{"oar threads list --status active", "oar threads context --status active --type initiative --full-id"},
+	valid:    []string{"list", "get", "create", "patch", "timeline", "context", "inspect"},
+	examples: []string{"oar threads list --status active", "oar threads inspect --status active --type initiative --full-id"},
 	aliases: map[string]string{
 		"ls":     "list",
 		"update": "patch",

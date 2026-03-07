@@ -14,6 +14,20 @@ type runtimeHelpTopic struct {
 	Description string
 }
 
+type localHelperFlag struct {
+	Name        string
+	Description string
+}
+
+type localHelperTopic struct {
+	Path        string
+	Summary     string
+	JSONShape   string
+	Composition string
+	Examples    []string
+	Flags       []localHelperFlag
+}
+
 var runtimeGeneratedTopics = []runtimeHelpTopic{
 	{Path: "threads", Description: "Manage thread resources"},
 	{Path: "commitments", Description: "Manage commitment resources"},
@@ -26,6 +40,50 @@ var runtimeGeneratedTopics = []runtimeHelpTopic{
 	{Path: "reviews", Description: "Create review packets"},
 	{Path: "derived", Description: "Run derived-view maintenance actions"},
 	{Path: "meta", Description: "Inspect generated command/concept metadata"},
+}
+
+var localHelperTopics = []localHelperTopic{
+	{
+		Path:        "events list",
+		Summary:     "Compose `threads timeline` responses with client-side thread/type/actor filters and preview summaries.",
+		JSONShape:   "`thread_id`, `thread_ids`, `events`, `total_events`, `returned_events`",
+		Composition: "Fetches one or more thread timelines locally, then filters and summarizes the events without changing contracts or core behavior.",
+		Examples: []string{
+			"oar events list --thread-id <thread-id> --type actor_statement --mine --full-id",
+			"oar events list --thread-id <thread-id> --max-events 10",
+		},
+		Flags: []localHelperFlag{
+			{Name: "--thread-id <thread-id>", Description: "Thread id to inspect (repeatable)."},
+			{Name: "--type <event-type>", Description: "Repeatable event type filter."},
+			{Name: "--types <csv>", Description: "Comma-separated event types."},
+			{Name: "--actor-id <actor-id>", Description: "Filter to one actor id."},
+			{Name: "--mine", Description: "Resolve to the active profile actor_id."},
+			{Name: "--max-events <n>", Description: "Keep the most recent matching events."},
+			{Name: "--full-id", Description: "Render full event ids in human output."},
+		},
+	},
+	{
+		Path:        "threads inspect",
+		Summary:     "Compose one coordination view from `threads context` and related `inbox list` items for the same thread.",
+		JSONShape:   "`thread`, `context`, `collaboration`, `inbox`",
+		Composition: "Resolves one thread by id or discovery filters, loads `threads context`, then filters inbox items client-side by `thread_id`.",
+		Examples: []string{
+			"oar threads inspect --thread-id <thread-id>",
+			"oar threads inspect --status active --type initiative --full-id",
+		},
+		Flags: []localHelperFlag{
+			{Name: "--thread-id <thread-id>", Description: "Thread id to inspect."},
+			{Name: "--status <status>", Description: "Discover one thread by status."},
+			{Name: "--priority <priority>", Description: "Discover one thread by priority."},
+			{Name: "--stale <bool>", Description: "Discover one thread by stale state."},
+			{Name: "--tag <tag>", Description: "Repeatable discovery tag filter."},
+			{Name: "--cadence <cadence>", Description: "Repeatable discovery cadence filter."},
+			{Name: "--type <thread-type>", Description: "Local discovery filter after `threads list`."},
+			{Name: "--max-events <n>", Description: "Maximum recent context events to include."},
+			{Name: "--include-artifact-content", Description: "Include artifact content previews from `threads context`."},
+			{Name: "--full-id", Description: "Render full event and inbox ids in human output."},
+		},
+	},
 }
 
 func isHelpToken(value string) bool {
@@ -112,6 +170,9 @@ func generatedHelpText(topic string) (string, bool) {
 	if rewritten, ok := applyCommandShapeCompatibilityAlias(strings.Fields(topic)); ok {
 		topic = strings.Join(rewritten, " ")
 	}
+	if helper, ok := localHelperTopicByPath(topic); ok {
+		return formatLocalHelperHelp(helper), true
+	}
 	meta, err := registry.LoadEmbedded()
 	if err != nil {
 		return "", false
@@ -190,8 +251,8 @@ func localGroupHelpSupplement(topic string) string {
 	switch strings.TrimSpace(topic) {
 	case "threads":
 		return strings.TrimSpace(`Coordination helper:
-  threads context             Supports one or many thread ids and discovery filters in one command.
-  Tip: use ` + "`--status/--tag/--type initiative`" + ` to build cross-thread initiative views; add ` + "`--full-id`" + ` for copy/paste event ids.`)
+  threads inspect             Compose one thread coordination view from context + inbox in one command.
+  Tip: use ` + "`--status/--tag/--type initiative`" + ` to discover one initiative view; use ` + "`oar threads context`" + ` for cross-thread aggregates and add ` + "`--full-id`" + ` for copy/paste ids.`)
 	case "events":
 		return strings.TrimSpace(`Local inspection helpers:
   events list              List timeline events with thread/type/actor filters, id mode, and preview summaries.
@@ -210,6 +271,44 @@ func localGroupHelpSupplement(topic string) string {
 	default:
 		return ""
 	}
+}
+
+func localHelperTopicByPath(path string) (localHelperTopic, bool) {
+	path = strings.Join(strings.Fields(strings.TrimSpace(path)), " ")
+	for _, topic := range localHelperTopics {
+		if strings.Join(strings.Fields(strings.TrimSpace(topic.Path)), " ") == path {
+			return topic, true
+		}
+	}
+	return localHelperTopic{}, false
+}
+
+func formatLocalHelperHelp(topic localHelperTopic) string {
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("Local Help: %s\n\n", strings.TrimSpace(topic.Path)))
+	b.WriteString("- Kind: `local helper`\n")
+	b.WriteString(fmt.Sprintf("- Summary: %s\n", strings.TrimSpace(topic.Summary)))
+	if strings.TrimSpace(topic.Composition) != "" {
+		b.WriteString(fmt.Sprintf("- Composition: %s\n", strings.TrimSpace(topic.Composition)))
+	}
+	if strings.TrimSpace(topic.JSONShape) != "" {
+		b.WriteString(fmt.Sprintf("- JSON body: %s\n", strings.TrimSpace(topic.JSONShape)))
+	}
+	if len(topic.Examples) > 0 {
+		b.WriteString("- Examples:\n")
+		for _, example := range topic.Examples {
+			b.WriteString(fmt.Sprintf("  - `%s`\n", strings.TrimSpace(example)))
+		}
+	}
+	if len(topic.Flags) > 0 {
+		b.WriteString("\nFlags:\n")
+		for _, flag := range topic.Flags {
+			b.WriteString(fmt.Sprintf("  %-28s %s\n", strings.TrimSpace(flag.Name), strings.TrimSpace(flag.Description)))
+		}
+	}
+	b.WriteString("\n\n")
+	b.WriteString(formatGlobalFlagUsage(topic.Path))
+	return strings.TrimSpace(b.String())
 }
 
 func formatGeneratedCommandHelp(topic string, cmd registry.Command) string {
