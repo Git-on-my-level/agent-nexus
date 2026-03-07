@@ -55,9 +55,18 @@ function getItemTitle(item) {
 
 function readNowTimestamp(options = {}) {
   const now = options.now ?? Date.now();
-  const nowTs =
-    now instanceof Date ? now.getTime() : Number.parseInt(String(now), 10);
-  return Number.isFinite(nowTs) ? nowTs : Date.now();
+  if (now instanceof Date) {
+    const nowTs = now.getTime();
+    return Number.isFinite(nowTs) ? nowTs : Date.now();
+  }
+
+  const numericNow = Number(now);
+  if (Number.isFinite(numericNow)) {
+    return numericNow;
+  }
+
+  const parsedNow = parseTimestamp(now);
+  return Number.isFinite(parsedNow) ? parsedNow : Date.now();
 }
 
 function formatAgeLabel(ageHours) {

@@ -88,6 +88,20 @@ describe("inbox urgency derivation", () => {
     expect(normal.level).toBe("normal");
   });
 
+  it("parses ISO now values when computing age-based urgency boosts", () => {
+    const urgency = deriveInboxUrgency(
+      {
+        category: "decision_needed",
+        source_event_time: "2026-03-06T10:00:00.000Z",
+      },
+      { now: "2026-03-07T12:00:00.000Z" },
+    );
+
+    expect(urgency.ageHours).toBe(26);
+    expect(urgency.score).toBe(86);
+    expect(urgency.level).toBe("high");
+  });
+
   it("enriches items and summarizes urgency counts", () => {
     const now = "2026-03-07T12:00:00.000Z";
     const items = [
