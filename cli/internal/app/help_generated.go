@@ -84,6 +84,28 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--full-id", Description: "Render full event and inbox ids in human output."},
 		},
 	},
+	{
+		Path:        "threads recommendations",
+		Summary:     "Review one thread's recommendation/decision inputs with provenance and follow-up event inspection hints.",
+		JSONShape:   "`thread`, `recommendations`, `decision_requests`, `decisions`, `pending_decisions`, `follow_up`",
+		Composition: "Resolves one thread by id or discovery filters, loads `threads context`, and adds thread-scoped pending decision inbox items from `inbox list`.",
+		Examples: []string{
+			"oar threads recommendations --thread-id <thread-id> --full-id",
+			"oar threads recommendations --status active --type initiative --full-summary",
+		},
+		Flags: []localHelperFlag{
+			{Name: "--thread-id <thread-id>", Description: "Thread id to review."},
+			{Name: "--status <status>", Description: "Discover one thread by status."},
+			{Name: "--priority <priority>", Description: "Discover one thread by priority."},
+			{Name: "--stale <bool>", Description: "Discover one thread by stale state."},
+			{Name: "--tag <tag>", Description: "Repeatable discovery tag filter."},
+			{Name: "--cadence <cadence>", Description: "Repeatable discovery cadence filter."},
+			{Name: "--type <thread-type>", Description: "Local discovery filter after `threads list`."},
+			{Name: "--max-events <n>", Description: "Maximum recent context events to include."},
+			{Name: "--full-summary", Description: "Show full recommendation/decision summaries in human output."},
+			{Name: "--full-id", Description: "Render full event and inbox ids in human output."},
+		},
+	},
 }
 
 func isHelpToken(value string) bool {
@@ -252,7 +274,8 @@ func localGroupHelpSupplement(topic string) string {
 	case "threads":
 		return strings.TrimSpace(`Canonical coordination read path:
   threads inspect             Compose one thread coordination view from context + inbox in one command.
-  Tip: start with ` + "`oar threads inspect`" + ` for one initiative/thread; use ` + "`oar threads context`" + ` for cross-thread aggregates and ` + "`oar threads get`" + ` for raw snapshot-only reads. Add ` + "`--full-id`" + ` for copy/paste ids.`)
+  threads recommendations     Focus recommendation/decision review with actor+timestamp provenance.
+  Tip: start with ` + "`oar threads inspect`" + ` for one initiative/thread, use ` + "`--status/--tag/--type initiative`" + ` to discover one thread, use ` + "`oar threads context`" + ` for cross-thread aggregates, and ` + "`oar threads get`" + ` for raw snapshot-only reads. Add ` + "`--full-id`" + ` for copy/paste ids.`)
 	case "events":
 		return strings.TrimSpace(`Local inspection helpers:
   events list              List timeline events with thread/type/actor filters, id mode, and preview summaries.

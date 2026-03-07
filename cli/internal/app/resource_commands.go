@@ -89,6 +89,11 @@ type threadContextSelection struct {
 	fullID                 bool
 }
 
+type threadRecommendationsSelection struct {
+	threadContextSelection
+	fullSummary bool
+}
+
 type eventTypeGuidance struct {
 	Type        string
 	Summary     string
@@ -469,6 +474,9 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 	case "inspect":
 		result, err := a.runThreadsInspectCommand(ctx, args[1:], cfg)
 		return result, "threads inspect", err
+	case "recommendations":
+		result, err := a.runThreadsRecommendationsCommand(ctx, args[1:], cfg)
+		return result, "threads recommendations", err
 	default:
 		return nil, "threads", threadsSubcommandSpec.unknownError(args[0])
 	}
@@ -598,6 +606,58 @@ func parseThreadContextSelectionArgs(args []string, commandName string) (threadC
 	}, nil
 }
 
+func parseThreadRecommendationsArgs(args []string) (threadRecommendationsSelection, error) {
+	fs := newSilentFlagSet("threads recommendations")
+	var threadIDFlags trackedStrings
+	var statusFlag, priorityFlag, staleFlag, typeFlag trackedString
+	var tagsFlag, cadenceFlag trackedStrings
+	var maxEventsFlag trackedInt
+	var fullIDFlag, fullSummaryFlag trackedBool
+
+	fs.Var(&threadIDFlags, "thread-id", "Thread id (repeatable)")
+	fs.Var(&statusFlag, "status", "Discover threads by status")
+	fs.Var(&priorityFlag, "priority", "Discover threads by priority")
+	fs.Var(&staleFlag, "stale", "Discover threads by stale state (true/false)")
+	fs.Var(&tagsFlag, "tag", "Discover threads by tag (repeatable)")
+	fs.Var(&cadenceFlag, "cadence", "Discover threads by cadence (repeatable)")
+	fs.Var(&typeFlag, "type", "Discover threads by type (local filter after list)")
+	fs.Var(&maxEventsFlag, "max-events", "Maximum recent events to include")
+	fs.Var(&fullIDFlag, "full-id", "Render full ids in human output")
+	fs.Var(&fullSummaryFlag, "full-summary", "Show full recommendation summaries in human output")
+	if err := fs.Parse(args); err != nil {
+		return threadRecommendationsSelection{}, errnorm.Usage("invalid_flags", err.Error())
+	}
+
+	positionals := append([]string(nil), fs.Args()...)
+	threadIDs := make([]string, 0, len(threadIDFlags.values)+len(positionals))
+	threadIDs = append(threadIDs, threadIDFlags.values...)
+	threadIDs = append(threadIDs, positionals...)
+	threadIDs = normalizeIDFilters(threadIDs)
+
+	discoveryQuery := make([]queryParam, 0, 5)
+	addSingleQuery(&discoveryQuery, "status", statusFlag.value)
+	addSingleQuery(&discoveryQuery, "priority", priorityFlag.value)
+	addSingleQuery(&discoveryQuery, "stale", staleFlag.value)
+	addMultiQuery(&discoveryQuery, "tag", tagsFlag.values)
+	addMultiQuery(&discoveryQuery, "cadence", cadenceFlag.values)
+
+	if maxEventsFlag.set && maxEventsFlag.value < 0 {
+		return threadRecommendationsSelection{}, errnorm.Usage("invalid_request", "--max-events must be >= 0")
+	}
+
+	return threadRecommendationsSelection{
+		threadContextSelection: threadContextSelection{
+			threadIDs:      threadIDs,
+			discoveryQuery: discoveryQuery,
+			discoveryType:  strings.TrimSpace(typeFlag.value),
+			maxEventsSet:   maxEventsFlag.set,
+			maxEvents:      maxEventsFlag.value,
+			fullID:         fullIDFlag.set && fullIDFlag.value,
+		},
+		fullSummary: fullSummaryFlag.set && fullSummaryFlag.value,
+	}, nil
+}
+
 func (a *App) resolveThreadContextSelection(ctx context.Context, cfg config.Resolved, commandName string, selection threadContextSelection, allowMultiple bool) ([]string, error) {
 	hasDiscoveryFilters := len(selection.discoveryQuery) > 0 || selection.discoveryType != ""
 	if len(selection.threadIDs) > 0 && hasDiscoveryFilters {
@@ -722,6 +782,93 @@ func (a *App) runThreadsInspectCommand(ctx context.Context, args []string, cfg c
 		intValue(data["status_code"]),
 		headerValues(data["headers"]),
 		inspectBody,
+		cfg.Verbose,
+		cfg.Headers,
+	)
+	return contextResult, nil
+}
+
+func (a *App) runThreadsRecommendationsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
+	selection, err := parseThreadRecommendationsArgs(args)
+	if err != nil {
+		return nil, err
+	}
+	threadIDs, err := a.resolveThreadContextSelection(ctx, cfg, "threads recommendations", selection.threadContextSelection, false)
+	if err != nil {
+		return nil, err
+	}
+
+	contextResult, callErr := a.invokeTypedJSONWithIDResolution(
+		ctx,
+		cfg,
+		"threads context",
+		"threads.context",
+		"thread_id",
+		threadIDs[0],
+		threadIDLookupSpec,
+		threadContextQuery(selection.threadContextSelection),
+		nil,
+	)
+	if callErr != nil {
+		return nil, callErr
+	}
+
+	data := asMap(contextResult.Data)
+	body := asMap(data["body"])
+	if body == nil {
+		return contextResult, nil
+	}
+	addThreadContextCollaborationSummary(body)
+
+	thread := extractNestedMap(body, "thread")
+	resolvedThreadID := firstNonEmpty(strings.TrimSpace(anyString(body["thread_id"])), strings.TrimSpace(anyString(thread["id"])), strings.TrimSpace(threadIDs[0]))
+	collaboration := asMap(body["collaboration_summary"])
+	recommendations := normalizeRecommendationReviewEvents(asSlice(collaboration["recommendations"]))
+	decisionRequests := normalizeRecommendationReviewEvents(asSlice(collaboration["decision_requests"]))
+	decisions := normalizeRecommendationReviewEvents(asSlice(collaboration["decisions"]))
+
+	inboxResult, err := a.invokeTypedJSON(ctx, cfg, "inbox list", "inbox.list", nil, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	inboxData := asMap(inboxResult.Data)
+	inboxBody := extractNestedMap(inboxData, "body")
+	pendingDecisions := filteredInboxItems(asSlice(inboxBody["items"]), []string{resolvedThreadID}, []string{"decision_needed"})
+
+	recommendationBody := map[string]any{
+		"thread_id":    resolvedThreadID,
+		"thread":       thread,
+		"full_id":      selection.fullID,
+		"full_summary": selection.fullSummary,
+		"recommendations": map[string]any{
+			"items": recommendations,
+			"count": len(recommendations),
+		},
+		"decision_requests": map[string]any{
+			"items": decisionRequests,
+			"count": len(decisionRequests),
+		},
+		"decisions": map[string]any{
+			"items": decisions,
+			"count": len(decisions),
+		},
+		"pending_decisions": map[string]any{
+			"items": pendingDecisions,
+			"count": len(pendingDecisions),
+		},
+		"total_review_items": len(recommendations) + len(decisionRequests) + len(decisions),
+		"follow_up":          recommendationFollowUpHints(resolvedThreadID, recommendations, decisionRequests, decisions),
+		"context_source":     "threads.context",
+		"inbox_source":       "inbox.list",
+	}
+
+	data["body"] = recommendationBody
+	contextResult.Data = data
+	contextResult.Text = formatTypedCommandText(
+		"threads.recommendations",
+		intValue(data["status_code"]),
+		headerValues(data["headers"]),
+		recommendationBody,
 		cfg.Verbose,
 		cfg.Headers,
 	)
@@ -2941,6 +3088,79 @@ func enrichEventsForList(events []any) []any {
 		out = append(out, copy)
 	}
 	return out
+}
+
+func normalizeRecommendationReviewEvents(events []any) []any {
+	if len(events) == 0 {
+		return []any{}
+	}
+	out := make([]any, 0, len(events))
+	for _, raw := range events {
+		event := asMap(raw)
+		if event == nil {
+			continue
+		}
+		copy := cloneMap(event)
+		id := strings.TrimSpace(anyString(copy["id"]))
+		if id != "" && strings.TrimSpace(anyString(copy["short_id"])) == "" {
+			copy["short_id"] = shortID(id)
+		}
+		if preview := eventSummaryPreview(copy); preview != "" && strings.TrimSpace(anyString(copy["summary_preview"])) == "" {
+			copy["summary_preview"] = preview
+		}
+		if len(stringList(copy["provenance_sources"])) == 0 {
+			provenance := asMap(copy["provenance"])
+			if len(provenance) > 0 {
+				sources := stringList(provenance["sources"])
+				if len(sources) > 0 {
+					copy["provenance_sources"] = sources
+				}
+			}
+		}
+		out = append(out, copy)
+	}
+	sortEventsByCreatedAt(out)
+	return out
+}
+
+func recommendationFollowUpHints(threadID string, sections ...[]any) map[string]any {
+	eventIDs := make([]string, 0, 8)
+	for _, section := range sections {
+		for _, raw := range section {
+			event := asMap(raw)
+			if event == nil {
+				continue
+			}
+			eventID := strings.TrimSpace(anyString(event["id"]))
+			if eventID == "" {
+				continue
+			}
+			eventIDs = append(eventIDs, eventID)
+		}
+	}
+	eventIDs = normalizeIDFilters(eventIDs)
+
+	examples := make([]string, 0, 3)
+	for _, eventID := range eventIDs {
+		examples = append(examples, "oar events get --event-id "+eventID+" --json")
+		if len(examples) >= 3 {
+			break
+		}
+	}
+
+	hints := map[string]any{
+		"events_get_template":          "oar events get --event-id <event-id> --json",
+		"events_get_examples":          examples,
+		"recommendations_list_command": "",
+		"decisions_list_command":       "",
+		"context_refresh_command":      "",
+	}
+	if strings.TrimSpace(threadID) != "" {
+		hints["recommendations_list_command"] = "oar events list --thread-id " + threadID + " --type actor_statement --full-id --json"
+		hints["decisions_list_command"] = "oar events list --thread-id " + threadID + " --type decision_needed --type decision_made --full-id --json"
+		hints["context_refresh_command"] = "oar threads context --thread-id " + threadID + " --include-artifact-content --full-id --json"
+	}
+	return hints
 }
 
 func cloneMap(in map[string]any) map[string]any {

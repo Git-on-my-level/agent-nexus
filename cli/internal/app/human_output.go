@@ -60,6 +60,8 @@ func formatCommandSummary(commandID string, body any) string {
 		return formatThreadContext(body)
 	case "threads.inspect":
 		return formatThreadInspect(body)
+	case "threads.recommendations":
+		return formatThreadRecommendations(body)
 	case "threads.timeline":
 		return formatThreadTimeline(body)
 	case "commitments.get", "commitments.create", "commitments.patch":
@@ -208,6 +210,21 @@ func formatThreadInspect(body any) string {
 	}
 	inbox := extractNestedMap(root, "inbox")
 	lines = appendInboxListSection(lines, "inbox_items", asSlice(inbox["items"]), fullID)
+	return strings.Join(lines, "\n")
+}
+
+func formatThreadRecommendations(body any) string {
+	root := asMap(body)
+	lines := make([]string, 0, 40)
+	lines = append(lines, formatThreadRecord(extractNestedMap(root, "thread")))
+	fullID := asBool(root["full_id"])
+	fullSummary := asBool(root["full_summary"])
+	lines = appendRecommendationEventSection(lines, "recommendations", extractNestedSlice(extractNestedMap(root, "recommendations"), "items"), fullID, fullSummary)
+	lines = appendRecommendationEventSection(lines, "decision_requests", extractNestedSlice(extractNestedMap(root, "decision_requests"), "items"), fullID, fullSummary)
+	lines = appendRecommendationEventSection(lines, "decisions", extractNestedSlice(extractNestedMap(root, "decisions"), "items"), fullID, fullSummary)
+	lines = appendInboxListSection(lines, "pending_decisions", extractNestedSlice(extractNestedMap(root, "pending_decisions"), "items"), fullID)
+	lines = appendScalar(lines, "total_review_items", root, "total_review_items")
+	lines = appendFollowUpSection(lines, extractNestedMap(root, "follow_up"))
 	return strings.Join(lines, "\n")
 }
 
@@ -453,6 +470,18 @@ func appendEventListSection(lines []string, label string, items []any, fullID bo
 	return lines
 }
 
+func appendRecommendationEventSection(lines []string, label string, items []any, fullID bool, fullSummary bool) []string {
+	lines = append(lines, fmt.Sprintf("%s (%d):", label, len(items)))
+	for _, raw := range items {
+		item := asMap(raw)
+		if item == nil {
+			continue
+		}
+		lines = append(lines, "- "+renderRecommendationEventItemWithMode(item, fullID, fullSummary))
+	}
+	return lines
+}
+
 func appendInboxListSection(lines []string, label string, items []any, fullID bool) []string {
 	lines = append(lines, fmt.Sprintf("%s (%d):", label, len(items)))
 	for _, raw := range items {
@@ -485,6 +514,37 @@ func appendCommitmentListSection(lines []string, label string, items []any, full
 			continue
 		}
 		lines = append(lines, "- "+renderCommitmentListItemWithMode(item, fullID))
+	}
+	return lines
+}
+
+func appendFollowUpSection(lines []string, followUp map[string]any) []string {
+	if followUp == nil {
+		return lines
+	}
+	template := strings.TrimSpace(anyString(followUp["events_get_template"]))
+	examples := stringList(followUp["events_get_examples"])
+	recommendationsList := strings.TrimSpace(anyString(followUp["recommendations_list_command"]))
+	decisionsList := strings.TrimSpace(anyString(followUp["decisions_list_command"]))
+	contextRefresh := strings.TrimSpace(anyString(followUp["context_refresh_command"]))
+	if template == "" && len(examples) == 0 && recommendationsList == "" && decisionsList == "" && contextRefresh == "" {
+		return lines
+	}
+	lines = append(lines, "follow_up:")
+	if template != "" {
+		lines = append(lines, "- events_get_template: "+template)
+	}
+	for _, example := range examples {
+		lines = append(lines, "- events_get_example: "+example)
+	}
+	if recommendationsList != "" {
+		lines = append(lines, "- recommendations_list: "+recommendationsList)
+	}
+	if decisionsList != "" {
+		lines = append(lines, "- decisions_list: "+decisionsList)
+	}
+	if contextRefresh != "" {
+		lines = append(lines, "- context_refresh: "+contextRefresh)
 	}
 	return lines
 }
@@ -599,6 +659,34 @@ func renderEventListItemWithMode(item map[string]any, fullID bool) string {
 	return compactSummary(displayEventID(item, fullID), anyString(item["type"]), summary)
 }
 
+func renderRecommendationEventItemWithMode(item map[string]any, fullID bool, fullSummary bool) string {
+	summary := firstNonEmpty(anyString(item["summary_preview"]), anyString(item["summary"]), anyString(item["created_at"]))
+	if fullSummary {
+		summary = firstNonEmpty(anyString(item["summary"]), anyString(item["summary_preview"]), anyString(item["created_at"]))
+	}
+	actor := strings.TrimSpace(anyString(item["actor_id"]))
+	if actor == "" {
+		actor = "unknown_actor"
+	}
+	createdAt := strings.TrimSpace(anyString(item["created_at"]))
+	if createdAt == "" {
+		createdAt = "unknown_time"
+	}
+	sources := stringList(item["provenance_sources"])
+	sourceLabel := ""
+	if len(sources) > 0 {
+		sourceLabel = "sources=" + strings.Join(sources, ",")
+	}
+	return compactSummary(
+		displayEventID(item, fullID),
+		anyString(item["type"]),
+		"actor="+actor,
+		"at="+createdAt,
+		summary,
+		sourceLabel,
+	)
+}
+
 func displayEventID(item map[string]any, fullID bool) string {
 	if item == nil {
 		return ""
@@ -653,6 +741,13 @@ func extractNestedMap(body any, key string) map[string]any {
 		return nil
 	}
 	return asMap(root[key])
+}
+
+func extractNestedSlice(body map[string]any, key string) []any {
+	if body == nil {
+		return nil
+	}
+	return asSlice(body[key])
 }
 
 func asMap(raw any) map[string]any {

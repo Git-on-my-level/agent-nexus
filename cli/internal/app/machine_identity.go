@@ -16,6 +16,10 @@ var machineCommandIdentityByPath = map[string]machineCommandIdentity{
 	"inbox tail":      {Command: "inbox stream", CommandID: "inbox.stream"},
 	"threads context": {Command: "threads context", CommandID: "threads.context"},
 	"threads inspect": {Command: "threads inspect", CommandID: "threads.inspect"},
+	"threads recommendations": {
+		Command:   "threads recommendations",
+		CommandID: "threads.recommendations",
+	},
 }
 
 func resolveMachineCommandIdentity(command string) machineCommandIdentity {
