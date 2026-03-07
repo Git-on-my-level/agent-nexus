@@ -117,6 +117,9 @@ func TestRunGeneratedHelpTopic(t *testing.T) {
 	if !strings.Contains(output, "threads inspect") {
 		t.Fatalf("expected local threads inspect helper in generated help output=%s", output)
 	}
+	if !strings.Contains(output, "threads recommendations") {
+		t.Fatalf("expected local threads recommendations helper in generated help output=%s", output)
+	}
 	if strings.Contains(output, "threads update") {
 		t.Fatalf("unexpected legacy update subcommand in generated help output=%s", output)
 	}
@@ -234,6 +237,8 @@ func TestRunLocalHelperHelpTopicsResolveAcrossEntryPoints(t *testing.T) {
 	eventsFromFlag := run([]string{"events", "list", "--help"})
 	threadsFromTopic := run([]string{"help", "threads", "inspect"})
 	threadsFromFlag := run([]string{"threads", "inspect", "--help"})
+	threadsRecommendationsFromTopic := run([]string{"help", "threads", "recommendations"})
+	threadsRecommendationsFromFlag := run([]string{"threads", "recommendations", "--help"})
 
 	for _, output := range []string{eventsFromTopic, eventsFromFlag} {
 		if !strings.Contains(output, "Local Help: events list") {
@@ -251,11 +256,22 @@ func TestRunLocalHelperHelpTopicsResolveAcrossEntryPoints(t *testing.T) {
 			t.Fatalf("expected composed-helper details output=%s", output)
 		}
 	}
+	for _, output := range []string{threadsRecommendationsFromTopic, threadsRecommendationsFromFlag} {
+		if !strings.Contains(output, "Local Help: threads recommendations") {
+			t.Fatalf("expected local threads recommendations help header output=%s", output)
+		}
+		if !strings.Contains(output, "decision signals") || !strings.Contains(output, "threads context") {
+			t.Fatalf("expected recommendation-helper details output=%s", output)
+		}
+	}
 	if eventsFromTopic != eventsFromFlag {
 		t.Fatalf("expected same events list help via topic and --help\nhelp output:\n%s\nflag output:\n%s", eventsFromTopic, eventsFromFlag)
 	}
 	if threadsFromTopic != threadsFromFlag {
 		t.Fatalf("expected same threads inspect help via topic and --help\nhelp output:\n%s\nflag output:\n%s", threadsFromTopic, threadsFromFlag)
+	}
+	if threadsRecommendationsFromTopic != threadsRecommendationsFromFlag {
+		t.Fatalf("expected same threads recommendations help via topic and --help\nhelp output:\n%s\nflag output:\n%s", threadsRecommendationsFromTopic, threadsRecommendationsFromFlag)
 	}
 }
 

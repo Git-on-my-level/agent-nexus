@@ -84,6 +84,28 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--full-id", Description: "Render full event and inbox ids in human output."},
 		},
 	},
+	{
+		Path:        "threads recommendations",
+		Summary:     "Review recommendations/decision signals for one thread with author/time provenance and event follow-up commands.",
+		JSONShape:   "`thread`, `recommendations`, `decision_requests`, `decisions`, `pending_decision_requests`, `follow_up`",
+		Composition: "Resolves one thread by id or discovery filters, loads `threads context`, then derives a recommendation-focused review with pending decision inbox entries.",
+		Examples: []string{
+			"oar threads recommendations --thread-id <thread-id> --full-id",
+			"oar threads recommendations --status active --type initiative",
+		},
+		Flags: []localHelperFlag{
+			{Name: "--thread-id <thread-id>", Description: "Thread id to inspect."},
+			{Name: "--status <status>", Description: "Discover one thread by status."},
+			{Name: "--priority <priority>", Description: "Discover one thread by priority."},
+			{Name: "--stale <bool>", Description: "Discover one thread by stale state."},
+			{Name: "--tag <tag>", Description: "Repeatable discovery tag filter."},
+			{Name: "--cadence <cadence>", Description: "Repeatable discovery cadence filter."},
+			{Name: "--type <thread-type>", Description: "Local discovery filter after `threads list`."},
+			{Name: "--max-events <n>", Description: "Maximum recent context events to include."},
+			{Name: "--include-artifact-content", Description: "Include artifact content previews from `threads context`."},
+			{Name: "--full-id", Description: "Render full event and inbox ids in human output."},
+		},
+	},
 }
 
 func isHelpToken(value string) bool {
@@ -251,6 +273,7 @@ func localGroupHelpSupplement(topic string) string {
 	switch strings.TrimSpace(topic) {
 	case "threads":
 		return strings.TrimSpace(`Coordination helper:
+  threads recommendations     Review recommendation/decision inputs for one thread with provenance + follow-up commands.
   threads inspect             Compose one thread coordination view from context + inbox in one command.
   Tip: use ` + "`--status/--tag/--type initiative`" + ` to discover one initiative view; use ` + "`oar threads context`" + ` for cross-thread aggregates and add ` + "`--full-id`" + ` for copy/paste ids.`)
 	case "events":

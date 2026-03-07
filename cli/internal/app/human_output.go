@@ -60,6 +60,8 @@ func formatCommandSummary(commandID string, body any) string {
 		return formatThreadContext(body)
 	case "threads.inspect":
 		return formatThreadInspect(body)
+	case "threads.recommendations":
+		return formatThreadRecommendations(body)
 	case "threads.timeline":
 		return formatThreadTimeline(body)
 	case "commitments.get", "commitments.create", "commitments.patch":
@@ -208,6 +210,29 @@ func formatThreadInspect(body any) string {
 	}
 	inbox := extractNestedMap(root, "inbox")
 	lines = appendInboxListSection(lines, "inbox_items", asSlice(inbox["items"]), fullID)
+	return strings.Join(lines, "\n")
+}
+
+func formatThreadRecommendations(body any) string {
+	root := asMap(body)
+	lines := make([]string, 0, 32)
+	lines = append(lines, formatThreadRecord(extractNestedMap(root, "thread")))
+	fullID := asBool(root["full_id"])
+	lines = appendRecommendationEventListSection(lines, "recommendations", asSlice(root["recommendations"]), fullID)
+	lines = appendRecommendationEventListSection(lines, "decision_requests", asSlice(root["decision_requests"]), fullID)
+	lines = appendRecommendationEventListSection(lines, "decisions", asSlice(root["decisions"]), fullID)
+	pending := extractNestedMap(root, "pending_decision_requests")
+	lines = appendInboxListSection(lines, "pending_decision_requests", asSlice(pending["items"]), fullID)
+	if followUp := extractNestedMap(root, "follow_up"); followUp != nil {
+		lines = append(lines, "follow_up:")
+		for _, key := range []string{"event", "context", "inbox"} {
+			command := strings.TrimSpace(anyString(followUp[key]))
+			if command == "" {
+				continue
+			}
+			lines = append(lines, "- "+command)
+		}
+	}
 	return strings.Join(lines, "\n")
 }
 
@@ -453,6 +478,18 @@ func appendEventListSection(lines []string, label string, items []any, fullID bo
 	return lines
 }
 
+func appendRecommendationEventListSection(lines []string, label string, items []any, fullID bool) []string {
+	lines = append(lines, fmt.Sprintf("%s (%d):", label, len(items)))
+	for _, raw := range items {
+		item := asMap(raw)
+		if item == nil {
+			continue
+		}
+		lines = append(lines, "- "+renderRecommendationEventListItemWithMode(item, fullID))
+	}
+	return lines
+}
+
 func appendInboxListSection(lines []string, label string, items []any, fullID bool) []string {
 	lines = append(lines, fmt.Sprintf("%s (%d):", label, len(items)))
 	for _, raw := range items {
@@ -597,6 +634,32 @@ func displayIDWithMode(item map[string]any, fullID bool) string {
 func renderEventListItemWithMode(item map[string]any, fullID bool) string {
 	summary := firstNonEmpty(anyString(item["summary_preview"]), anyString(item["summary"]), anyString(item["created_at"]))
 	return compactSummary(displayEventID(item, fullID), anyString(item["type"]), summary)
+}
+
+func renderRecommendationEventListItemWithMode(item map[string]any, fullID bool) string {
+	summary := strings.Join(strings.Fields(strings.TrimSpace(firstNonEmpty(
+		anyString(item["summary_full"]),
+		anyString(item["summary"]),
+		anyString(item["summary_preview"]),
+		anyString(item["created_at"]),
+	))), " ")
+	parts := []string{displayEventID(item, fullID), anyString(item["type"])}
+	if actorID := strings.TrimSpace(anyString(item["actor_id"])); actorID != "" {
+		parts = append(parts, "actor="+actorID)
+	}
+	if createdAt := strings.TrimSpace(anyString(item["created_at"])); createdAt != "" {
+		parts = append(parts, "at="+createdAt)
+	}
+	if provenanceSources := stringList(item["provenance_sources"]); len(provenanceSources) > 0 {
+		parts = append(parts, "sources="+strings.Join(provenanceSources, ","))
+	}
+	if summary != "" {
+		parts = append(parts, summary)
+	}
+	if inspectCommand := strings.TrimSpace(anyString(item["inspect_command"])); inspectCommand != "" {
+		parts = append(parts, "inspect="+inspectCommand)
+	}
+	return compactSummary(parts...)
 }
 
 func displayEventID(item map[string]any, fullID bool) string {

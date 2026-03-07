@@ -8,14 +8,15 @@ type machineCommandIdentity struct {
 }
 
 var machineCommandIdentityByPath = map[string]machineCommandIdentity{
-	"events list":     {Command: "events list", CommandID: "threads.timeline"},
-	"events get":      {Command: "events get", CommandID: "events.get"},
-	"events stream":   {Command: "events stream", CommandID: "events.stream"},
-	"events tail":     {Command: "events stream", CommandID: "events.stream"},
-	"inbox stream":    {Command: "inbox stream", CommandID: "inbox.stream"},
-	"inbox tail":      {Command: "inbox stream", CommandID: "inbox.stream"},
-	"threads context": {Command: "threads context", CommandID: "threads.context"},
-	"threads inspect": {Command: "threads inspect", CommandID: "threads.inspect"},
+	"events list":             {Command: "events list", CommandID: "threads.timeline"},
+	"events get":              {Command: "events get", CommandID: "events.get"},
+	"events stream":           {Command: "events stream", CommandID: "events.stream"},
+	"events tail":             {Command: "events stream", CommandID: "events.stream"},
+	"inbox stream":            {Command: "inbox stream", CommandID: "inbox.stream"},
+	"inbox tail":              {Command: "inbox stream", CommandID: "inbox.stream"},
+	"threads context":         {Command: "threads context", CommandID: "threads.context"},
+	"threads inspect":         {Command: "threads inspect", CommandID: "threads.inspect"},
+	"threads recommendations": {Command: "threads recommendations", CommandID: "threads.recommendations"},
 }
 
 func resolveMachineCommandIdentity(command string) machineCommandIdentity {

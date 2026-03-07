@@ -469,6 +469,9 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 	case "inspect":
 		result, err := a.runThreadsInspectCommand(ctx, args[1:], cfg)
 		return result, "threads inspect", err
+	case "recommendations":
+		result, err := a.runThreadsRecommendationsCommand(ctx, args[1:], cfg)
+		return result, "threads recommendations", err
 	default:
 		return nil, "threads", threadsSubcommandSpec.unknownError(args[0])
 	}
@@ -722,6 +725,95 @@ func (a *App) runThreadsInspectCommand(ctx context.Context, args []string, cfg c
 		intValue(data["status_code"]),
 		headerValues(data["headers"]),
 		inspectBody,
+		cfg.Verbose,
+		cfg.Headers,
+	)
+	return contextResult, nil
+}
+
+func (a *App) runThreadsRecommendationsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
+	selection, err := parseThreadContextSelectionArgs(args, "threads recommendations")
+	if err != nil {
+		return nil, err
+	}
+	threadIDs, err := a.resolveThreadContextSelection(ctx, cfg, "threads recommendations", selection, false)
+	if err != nil {
+		return nil, err
+	}
+
+	contextResult, callErr := a.invokeTypedJSONWithIDResolution(
+		ctx,
+		cfg,
+		"threads context",
+		"threads.context",
+		"thread_id",
+		threadIDs[0],
+		threadIDLookupSpec,
+		threadContextQuery(selection),
+		nil,
+	)
+	if callErr != nil {
+		return nil, callErr
+	}
+
+	data := asMap(contextResult.Data)
+	body := asMap(data["body"])
+	if body == nil {
+		return contextResult, nil
+	}
+	addThreadContextCollaborationSummary(body)
+
+	thread := extractNestedMap(body, "thread")
+	resolvedThreadID := firstNonEmpty(strings.TrimSpace(anyString(body["thread_id"])), strings.TrimSpace(anyString(thread["id"])), strings.TrimSpace(threadIDs[0]))
+	collaboration := asMap(body["collaboration_summary"])
+
+	recommendations := decorateRecommendationReviewEvents(asSlice(collaboration["recommendations"]))
+	decisionRequests := decorateRecommendationReviewEvents(asSlice(collaboration["decision_requests"]))
+	decisions := decorateRecommendationReviewEvents(asSlice(collaboration["decisions"]))
+
+	inboxResult, err := a.invokeTypedJSON(ctx, cfg, "inbox list", "inbox.list", nil, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	inboxData := asMap(inboxResult.Data)
+	inboxBody := extractNestedMap(inboxData, "body")
+	pendingDecisionRequests := filteredInboxItems(asSlice(inboxBody["items"]), []string{resolvedThreadID}, []string{"decision_needed"})
+
+	reviewBody := map[string]any{
+		"thread_id":         resolvedThreadID,
+		"full_id":           selection.fullID,
+		"thread":            thread,
+		"recommendations":   recommendations,
+		"decision_requests": decisionRequests,
+		"decisions":         decisions,
+		"pending_decision_requests": map[string]any{
+			"thread_id": resolvedThreadID,
+			"items":     pendingDecisionRequests,
+			"count":     len(pendingDecisionRequests),
+			"full_id":   selection.fullID,
+			"source":    "inbox.list",
+		},
+		"counts": map[string]any{
+			"recommendations":           len(recommendations),
+			"decision_requests":         len(decisionRequests),
+			"decisions":                 len(decisions),
+			"pending_decision_requests": len(pendingDecisionRequests),
+		},
+		"context_source": "threads.context",
+		"follow_up": map[string]any{
+			"event":   "oar events get --event-id <event-id> --json",
+			"context": "oar threads context --thread-id <thread-id> --include-artifact-content --full-id --json",
+			"inbox":   "oar inbox get --id <inbox-id-or-alias> --json",
+		},
+	}
+
+	data["body"] = reviewBody
+	contextResult.Data = data
+	contextResult.Text = formatTypedCommandText(
+		"threads.recommendations",
+		intValue(data["status_code"]),
+		headerValues(data["headers"]),
+		reviewBody,
 		cfg.Verbose,
 		cfg.Headers,
 	)
@@ -2977,6 +3069,73 @@ func eventSummaryPreview(event map[string]any) string {
 		return truncatePreview(strings.Join(refs, ", "))
 	}
 	return truncatePreview(strings.TrimSpace(anyString(event["created_at"])))
+}
+
+func decorateRecommendationReviewEvents(events []any) []any {
+	if len(events) == 0 {
+		return []any{}
+	}
+	out := make([]any, 0, len(events))
+	for _, raw := range events {
+		event := asMap(raw)
+		if event == nil {
+			continue
+		}
+		enriched := cloneMap(event)
+		id := strings.TrimSpace(anyString(enriched["id"]))
+		if id != "" && strings.TrimSpace(anyString(enriched["short_id"])) == "" {
+			enriched["short_id"] = shortID(id)
+		}
+		if summary := recommendationEventSummary(enriched); summary != "" {
+			enriched["summary_full"] = summary
+		}
+		if id != "" {
+			enriched["inspect_command"] = fmt.Sprintf("oar events get --event-id %s --json", id)
+		}
+		if sources := recommendationEventProvenanceSources(enriched); len(sources) > 0 {
+			enriched["provenance_sources"] = sources
+		}
+		out = append(out, enriched)
+	}
+	sortEventsByCreatedAt(out)
+	return out
+}
+
+func recommendationEventSummary(event map[string]any) string {
+	if event == nil {
+		return ""
+	}
+	if summary := strings.TrimSpace(anyString(event["summary"])); summary != "" {
+		return strings.Join(strings.Fields(summary), " ")
+	}
+	payload := asMap(event["payload"])
+	if payload != nil {
+		for _, key := range []string{"recommendation", "decision", "summary", "statement", "message", "title", "content", "text"} {
+			if value := compactPreviewValue(payload[key]); value != "" {
+				return strings.Join(strings.Fields(value), " ")
+			}
+		}
+		if encoded, err := json.Marshal(payload); err == nil {
+			if value := strings.TrimSpace(string(encoded)); value != "" && value != "{}" {
+				return value
+			}
+		}
+	}
+	if refs := stringList(event["refs"]); len(refs) > 0 {
+		return strings.Join(refs, ", ")
+	}
+	return strings.TrimSpace(anyString(event["created_at"]))
+}
+
+func recommendationEventProvenanceSources(event map[string]any) []string {
+	if event == nil {
+		return nil
+	}
+	provenance := asMap(event["provenance"])
+	if provenance == nil {
+		return nil
+	}
+	return stringList(provenance["sources"])
 }
 
 func compactPreviewValue(raw any) string {

@@ -1754,6 +1754,273 @@ func TestThreadsInspectRejectsMixedSelectionModes(t *testing.T) {
 	}
 }
 
+func TestThreadsRecommendationsBuildsFocusedReview(t *testing.T) {
+	t.Parallel()
+
+	const recommendationEventID = "event_rec_1234567890abcdef"
+	const decisionInboxID = "inbox:decision_needed:thread_1:none:event_need_1"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_1/context":
+			_, _ = w.Write([]byte(`{
+				"thread":{"id":"thread_1","title":"Pilot Rescue","status":"active","type":"initiative"},
+				"recent_events":[
+					{"id":"` + recommendationEventID + `","thread_id":"thread_1","type":"actor_statement","actor_id":"pm-1","created_at":"2026-03-07T00:00:00Z","summary":"recommend launching rescue scope once docs are signed","provenance":{"sources":["event:event_seed_1"]}},
+					{"id":"event_need_1","thread_id":"thread_1","type":"decision_needed","actor_id":"lead-1","created_at":"2026-03-07T00:01:00Z","summary":"confirm launch date"},
+					{"id":"event_done_1","thread_id":"thread_1","type":"decision_made","actor_id":"director-1","created_at":"2026-03-07T00:02:00Z","summary":"launch Friday"}
+				],
+				"key_artifacts":[],
+				"open_commitments":[]
+			}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
+			_, _ = w.Write([]byte(`{"items":[
+				{"id":"` + decisionInboxID + `","thread_id":"thread_1","type":"decision_needed","summary":"launch date still needs acknowledgement"},
+				{"id":"inbox:decision_needed:thread_2:none:event_other","thread_id":"thread_2","type":"decision_needed","summary":"ignore other thread"}
+			]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"threads", "recommendations",
+		"--thread-id", "thread_1",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	if got := anyStringValue(payload["command"]); got != "threads recommendations" {
+		t.Fatalf("expected threads recommendations command, got %#v", payload)
+	}
+	if got := anyStringValue(payload["command_id"]); got != "threads.recommendations" {
+		t.Fatalf("expected threads.recommendations command_id, got %#v", payload)
+	}
+	data, _ := payload["data"].(map[string]any)
+	body, _ := data["body"].(map[string]any)
+	recommendations, _ := body["recommendations"].([]any)
+	if len(recommendations) != 1 {
+		t.Fatalf("expected 1 recommendation, got %#v", body)
+	}
+	recommendation, _ := recommendations[0].(map[string]any)
+	if got := anyStringValue(recommendation["inspect_command"]); got != "oar events get --event-id "+recommendationEventID+" --json" {
+		t.Fatalf("expected inspect_command for recommendation event, got %#v", recommendation)
+	}
+	if got := anyStringValue(recommendation["summary_full"]); got != "recommend launching rescue scope once docs are signed" {
+		t.Fatalf("expected non-truncated recommendation summary, got %#v", recommendation)
+	}
+	if got := anyStringValue(recommendation["actor_id"]); got != "pm-1" {
+		t.Fatalf("expected recommendation actor_id pm-1, got %#v", recommendation)
+	}
+	provenanceSources := stringList(recommendation["provenance_sources"])
+	if len(provenanceSources) != 1 || provenanceSources[0] != "event:event_seed_1" {
+		t.Fatalf("expected provenance source in recommendation, got %#v", recommendation)
+	}
+	pendingDecisionRequests, _ := body["pending_decision_requests"].(map[string]any)
+	pendingCount, _ := pendingDecisionRequests["count"].(float64)
+	if got := int(pendingCount); got != 1 {
+		t.Fatalf("expected pending decision request count=1, got %#v", pendingDecisionRequests)
+	}
+	followUp, _ := body["follow_up"].(map[string]any)
+	if !strings.Contains(anyStringValue(followUp["event"]), "oar events get --event-id <event-id> --json") {
+		t.Fatalf("expected follow-up event guidance, got %#v", followUp)
+	}
+}
+
+func TestThreadsRecommendationsHumanOutputShowsProvenanceAndFollowUp(t *testing.T) {
+	t.Parallel()
+
+	const recommendationEventID = "event_rec_human_1"
+	const longSummary = "recommend rolling out in staged phases after support readiness review and launch-ops signoff with full comms checklist coverage for final decision alignment"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_1/context":
+			_, _ = w.Write([]byte(`{
+				"thread":{"id":"thread_1","title":"Pilot Rescue","status":"active"},
+				"recent_events":[
+					{"id":"` + recommendationEventID + `","thread_id":"thread_1","type":"actor_statement","actor_id":"pm-2","created_at":"2026-03-07T01:00:00Z","summary":"` + longSummary + `","provenance":{"sources":["event:event_seed_human_1"]}}
+				],
+				"key_artifacts":[],
+				"open_commitments":[]
+			}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
+			_, _ = w.Write([]byte(`{"items":[]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	human := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--base-url", server.URL,
+		"threads", "recommendations",
+		"--thread-id", "thread_1",
+		"--full-id",
+	})
+	if !strings.Contains(human, "recommendations (1):") || !strings.Contains(human, "actor=pm-2") || !strings.Contains(human, "at=2026-03-07T01:00:00Z") {
+		t.Fatalf("expected recommendation provenance details in human output, got:\n%s", human)
+	}
+	if !strings.Contains(human, longSummary) {
+		t.Fatalf("expected non-truncated summary in human output, got:\n%s", human)
+	}
+	if !strings.Contains(human, "inspect=oar events get --event-id "+recommendationEventID+" --json") {
+		t.Fatalf("expected event inspect follow-up in human output, got:\n%s", human)
+	}
+	if !strings.Contains(human, "follow_up:") || !strings.Contains(human, "oar inbox get --id <inbox-id-or-alias> --json") {
+		t.Fatalf("expected follow_up section in human output, got:\n%s", human)
+	}
+}
+
+func TestThreadsRecommendationsDiscoveryRequiresSingleThread(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/threads":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"threads":[
+				{"id":"thread_init_1","type":"initiative","status":"active"},
+				{"id":"thread_init_2","type":"initiative","status":"active"}
+			]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"threads", "recommendations",
+		"--status", "active",
+		"--type", "initiative",
+	})
+	payload := assertEnvelopeError(t, raw)
+	errObj, _ := payload["error"].(map[string]any)
+	if errObj == nil || anyStringValue(errObj["code"]) != "invalid_request" {
+		t.Fatalf("unexpected error payload: %#v", payload)
+	}
+	if !strings.Contains(anyStringValue(errObj["message"]), "exactly one thread") || !strings.Contains(anyStringValue(errObj["message"]), "oar threads context") {
+		t.Fatalf("expected single-thread guidance, got %#v", payload)
+	}
+}
+
+func TestThreadsRecommendationsPropagatesContextQueryFlags(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_1/context":
+			if got := r.URL.Query().Get("max_events"); got != "3" {
+				t.Fatalf("expected max_events=3, got %q", got)
+			}
+			if got := r.URL.Query().Get("include_artifact_content"); got != "true" {
+				t.Fatalf("expected include_artifact_content=true, got %q", got)
+			}
+			_, _ = w.Write([]byte(`{"thread":{"id":"thread_1"},"recent_events":[],"key_artifacts":[],"open_commitments":[]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
+			_, _ = w.Write([]byte(`{"items":[]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	payload := assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"threads", "recommendations",
+		"--thread-id", "thread_1",
+		"--max-events", "3",
+		"--include-artifact-content",
+	}))
+	if got := anyStringValue(payload["command"]); got != "threads recommendations" {
+		t.Fatalf("expected threads recommendations command, got %#v", payload)
+	}
+}
+
+func TestThreadsRecommendationsInboxFailurePreservesMachineIdentity(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_1/context":
+			_, _ = w.Write([]byte(`{"thread":{"id":"thread_1"},"recent_events":[],"key_artifacts":[],"open_commitments":[]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`{"error":{"code":"inbox_unavailable","message":"inbox list unavailable"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	errPayload := assertEnvelopeError(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"threads", "recommendations",
+		"--thread-id", "thread_1",
+	}))
+	if got := anyStringValue(errPayload["command"]); got != "threads recommendations" {
+		t.Fatalf("expected threads recommendations error command, got %#v", errPayload)
+	}
+	if got := anyStringValue(errPayload["command_id"]); got != "threads.recommendations" {
+		t.Fatalf("expected threads.recommendations command_id, got %#v", errPayload)
+	}
+}
+
+func TestThreadsRecommendationsResolvesShortThreadID(t *testing.T) {
+	t.Parallel()
+
+	const canonicalThreadID = "fff63e25-084b-4598-af8f-b6d0a4fbf001"
+	const shortPrefix = "fff63e25-084b-4598-af8f"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/"+shortPrefix+"/context":
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"code":"not_found","message":"thread not found"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/threads":
+			_, _ = w.Write([]byte(`{"threads":[{"id":"` + canonicalThreadID + `"}]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/"+canonicalThreadID+"/context":
+			_, _ = w.Write([]byte(`{"thread":{"id":"` + canonicalThreadID + `","title":"Pilot Rescue"},"recent_events":[],"key_artifacts":[],"open_commitments":[]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
+			_, _ = w.Write([]byte(`{"items":[{"id":"inbox:decision_needed:` + canonicalThreadID + `:none:event_1","thread_id":"` + canonicalThreadID + `","type":"decision_needed"}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	payload := assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"threads", "recommendations",
+		"--thread-id", shortPrefix,
+	}))
+	data, _ := payload["data"].(map[string]any)
+	body, _ := data["body"].(map[string]any)
+	if got := anyStringValue(body["thread_id"]); got != canonicalThreadID {
+		t.Fatalf("expected canonical thread_id %q, got %#v", canonicalThreadID, body)
+	}
+	pending, _ := body["pending_decision_requests"].(map[string]any)
+	if got := anyStringValue(pending["thread_id"]); got != canonicalThreadID {
+		t.Fatalf("expected pending_decision_requests.thread_id=%q, got %#v", canonicalThreadID, body)
+	}
+}
+
 func TestThreadsContextHumanOutputIsPayloadFirst(t *testing.T) {
 	t.Parallel()
 
@@ -2575,6 +2842,31 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 		t.Fatalf("expected inbox section in inspect payload, got %#v", threadsInspectBody)
 	}
 
+	threadsRecommendationsOut := runCLIForTest(t, home, env, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"threads", "recommendations",
+		"--thread-id", "thread_123",
+	})
+	threadsRecommendationsPayload := assertEnvelopeOK(t, threadsRecommendationsOut)
+	if got := anyStringValue(threadsRecommendationsPayload["command"]); got != "threads recommendations" {
+		t.Fatalf("expected threads recommendations command label, got %#v", threadsRecommendationsPayload)
+	}
+	if got := anyStringValue(threadsRecommendationsPayload["command_id"]); got != "threads.recommendations" {
+		t.Fatalf("expected threads.recommendations command_id, got %#v", threadsRecommendationsPayload)
+	}
+	threadsRecommendationsData, _ := threadsRecommendationsPayload["data"].(map[string]any)
+	threadsRecommendationsBody, _ := threadsRecommendationsData["body"].(map[string]any)
+	if _, ok := threadsRecommendationsBody["recommendations"].([]any); !ok {
+		t.Fatalf("expected recommendations section in payload, got %#v", threadsRecommendationsBody)
+	}
+	if _, ok := threadsRecommendationsBody["pending_decision_requests"].(map[string]any); !ok {
+		t.Fatalf("expected pending_decision_requests section in payload, got %#v", threadsRecommendationsBody)
+	}
+	if _, ok := threadsRecommendationsBody["follow_up"].(map[string]any); !ok {
+		t.Fatalf("expected follow_up section in payload, got %#v", threadsRecommendationsBody)
+	}
+
 	eventsStreamOut := runCLIForTest(t, home, env, nil, []string{
 		"--json",
 		"--base-url", server.URL,
@@ -2716,6 +3008,17 @@ func TestMachineFacingNonStreamErrorsIncludeCommandIdentity(t *testing.T) {
 	}
 	if got := anyStringValue(threadsContextErr["command_id"]); got != "threads.context" {
 		t.Fatalf("expected threads.context command_id, got %q payload=%#v", got, threadsContextErr)
+	}
+
+	threadsRecommendationsErr := assertEnvelopeError(t, runCLIForTest(t, home, env, nil, []string{
+		"--json",
+		"threads", "recommendations",
+	}))
+	if got := anyStringValue(threadsRecommendationsErr["command"]); got != "threads recommendations" {
+		t.Fatalf("expected threads recommendations error command, got %q payload=%#v", got, threadsRecommendationsErr)
+	}
+	if got := anyStringValue(threadsRecommendationsErr["command_id"]); got != "threads.recommendations" {
+		t.Fatalf("expected threads.recommendations command_id, got %q payload=%#v", got, threadsRecommendationsErr)
 	}
 }
 
