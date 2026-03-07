@@ -32,6 +32,7 @@
     THREAD_SCHEDULE_PRESET_LABELS,
     cadencePresetFromValue,
     cadenceToRequestValue,
+    readBackendStaleState,
     formatCadenceLabel,
     getPriorityLabel,
     isLikelyCronExpression,
@@ -567,11 +568,10 @@
   async function loadSnapshot(id) {
     snapshotLoading = true;
     snapshotError = "";
+    threadStale = null;
     try {
       snapshot = (await coreClient.getThread(id)).thread ?? null;
-      if (typeof snapshot?.stale === "boolean") {
-        threadStale = snapshot.stale;
-      }
+      threadStale = readBackendStaleState(snapshot);
       return snapshot;
     } catch (e) {
       snapshotError = `Failed to load thread: ${e instanceof Error ? e.message : String(e)}`;
@@ -731,16 +731,11 @@
   }
 
   async function loadThreadStaleness(id) {
+    threadStale = null;
     try {
       const listed = (await coreClient.listThreads({})).threads ?? [];
       const thread = listed.find((item) => item?.id === id);
-      if (typeof thread?.stale === "boolean") {
-        threadStale = thread.stale;
-        return;
-      }
-      if (typeof thread?.is_stale === "boolean") {
-        threadStale = thread.is_stale;
-      }
+      threadStale = readBackendStaleState(thread);
     } catch {
       // Ignore list fallback errors; stale health can still use local fallback.
     }

@@ -8,6 +8,7 @@ import {
   cadenceToRequestValue,
   computeStaleness,
   formatCadenceLabel,
+  readBackendStaleState,
   validateCadenceSelection,
   parseTagFilterInput,
 } from "../../src/lib/threadFilters.js";
@@ -129,6 +130,15 @@ describe("thread filter query builders", () => {
 
     expect(computeStaleness({ stale: false }).stale).toBe(false);
     expect(computeStaleness({ stale: false }).label).toBe("Fresh");
+  });
+
+  it("reads backend stale state across supported flag names", () => {
+    expect(readBackendStaleState({ stale: true })).toBe(true);
+    expect(readBackendStaleState({ stale: false })).toBe(false);
+    expect(readBackendStaleState({ is_stale: true })).toBe(true);
+    expect(readBackendStaleState({ is_stale: false })).toBe(false);
+    expect(readBackendStaleState({})).toBeNull();
+    expect(readBackendStaleState(null)).toBeNull();
   });
 
   it("falls back to local check-in heuristics when stale state is absent", () => {

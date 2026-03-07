@@ -243,19 +243,22 @@ export function buildThreadFilterRequestQuery(filters = {}) {
   return query;
 }
 
-export function computeStaleness(thread) {
+export function readBackendStaleState(thread) {
   if (typeof thread?.stale === "boolean") {
-    return thread.stale
-      ? { stale: true, label: "Stale", className: "bg-rose-100 text-rose-700" }
-      : {
-          stale: false,
-          label: "Fresh",
-          className: "bg-emerald-100 text-emerald-700",
-        };
+    return thread.stale;
   }
 
   if (typeof thread?.is_stale === "boolean") {
-    return thread.is_stale
+    return thread.is_stale;
+  }
+
+  return null;
+}
+
+export function computeStaleness(thread) {
+  const backendStale = readBackendStaleState(thread);
+  if (typeof backendStale === "boolean") {
+    return backendStale
       ? { stale: true, label: "Stale", className: "bg-rose-100 text-rose-700" }
       : {
           stale: false,
