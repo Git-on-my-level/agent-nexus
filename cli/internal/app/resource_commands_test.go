@@ -1830,6 +1830,10 @@ func TestThreadsRecommendationsBuildsFocusedReview(t *testing.T) {
 	if got := int(pendingCount); got != 1 {
 		t.Fatalf("expected pending decision count=1, got %#v", pending)
 	}
+	totalReviewItems, _ := body["total_review_items"].(float64)
+	if got := int(totalReviewItems); got != 4 {
+		t.Fatalf("expected total_review_items=4 to include pending decisions, got %#v", body)
+	}
 	followUp, _ := body["follow_up"].(map[string]any)
 	examples := stringList(followUp["events_get_examples"])
 	if len(examples) == 0 || !strings.Contains(examples[0], "oar events get --event-id") {
@@ -1892,6 +1896,55 @@ func TestThreadsRecommendationsFullSummaryToggle(t *testing.T) {
 	})
 	if !strings.Contains(fullOut, "tail-marker-xyz") {
 		t.Fatalf("expected --full-summary output to include full summary, got:\n%s", fullOut)
+	}
+}
+
+func TestThreadsRecommendationsCountsPendingDecisionsInTotalWhenRecentWindowExcludesReviewEvents(t *testing.T) {
+	t.Parallel()
+
+	const pendingInboxID = "inbox:decision_needed:thread_1:none:event_pending_1"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_1/context":
+			_, _ = w.Write([]byte(`{
+				"thread":{"id":"thread_1","title":"Pilot Rescue","status":"active","type":"initiative"},
+				"recent_events":[
+					{"id":"event_noise_1","thread_id":"thread_1","type":"status_changed","created_at":"2026-03-07T12:06:00Z","summary":"status moved to active"}
+				],
+				"key_artifacts":[],
+				"open_commitments":[]
+			}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
+			_, _ = w.Write([]byte(`{"items":[
+				{"id":"` + pendingInboxID + `","thread_id":"thread_1","type":"decision_needed","summary":"pending approval remains"}
+			]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"threads", "recommendations",
+		"--thread-id", "thread_1",
+		"--max-events", "1",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+	body, _ := data["body"].(map[string]any)
+
+	pending, _ := body["pending_decisions"].(map[string]any)
+	pendingCount, _ := pending["count"].(float64)
+	if got := int(pendingCount); got != 1 {
+		t.Fatalf("expected pending decision count=1, got %#v", pending)
+	}
+	totalReviewItems, _ := body["total_review_items"].(float64)
+	if got := int(totalReviewItems); got != 1 {
+		t.Fatalf("expected total_review_items=1 when only pending decisions are present, got %#v", body)
 	}
 }
 

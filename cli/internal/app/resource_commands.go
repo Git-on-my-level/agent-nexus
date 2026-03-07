@@ -856,7 +856,7 @@ func (a *App) runThreadsRecommendationsCommand(ctx context.Context, args []strin
 			"items": pendingDecisions,
 			"count": len(pendingDecisions),
 		},
-		"total_review_items": len(recommendations) + len(decisionRequests) + len(decisions),
+		"total_review_items": len(recommendations) + len(decisionRequests) + len(decisions) + len(pendingDecisions),
 		"follow_up":          recommendationFollowUpHints(resolvedThreadID, recommendations, decisionRequests, decisions),
 		"context_source":     "threads.context",
 		"inbox_source":       "inbox.list",
