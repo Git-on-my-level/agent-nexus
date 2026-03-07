@@ -52,4 +52,33 @@ describe("RefLink model", () => {
     expect(unknown.isLink).toBe(false);
     expect(unknown.href).toBe("");
   });
+
+  it("can humanize labels and keep raw ids as secondary labels", () => {
+    const artifactRef = resolveRefLink("artifact:artifact-1", {
+      humanize: true,
+      labelHints: {
+        "artifact:artifact-1": "Receipt draft",
+      },
+    });
+
+    expect(artifactRef).toMatchObject({
+      kind: "artifact",
+      label: "Receipt draft",
+      primaryLabel: "Receipt draft",
+      secondaryLabel: "artifact:artifact-1",
+    });
+
+    const eventRef = resolveRefLink("event:evt-9", {
+      humanize: true,
+      threadId: "thread-1",
+    });
+
+    expect(eventRef).toMatchObject({
+      kind: "event",
+      label: "Event",
+      secondaryLabel: "event:evt-9",
+      href: "/threads/thread-1#event-evt-9",
+      isLink: true,
+    });
+  });
 });

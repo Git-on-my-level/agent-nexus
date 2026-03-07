@@ -14,7 +14,7 @@ describe("artifact ref rendering", () => {
       resolveRefLink(refValue, { threadId: "thread-onboarding" }),
     );
 
-    expect(resolved).toEqual([
+    expect(resolved).toMatchObject([
       {
         raw: "artifact:artifact-receipt-seed",
         prefix: "artifact",

@@ -1,8 +1,18 @@
 <script>
   import { onMount } from "svelte";
 
+  import RefLink from "$lib/components/RefLink.svelte";
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
+
+  const KIND_LABELS = {
+    work_order: "Work Order",
+    receipt: "Receipt",
+    review: "Review",
+    doc: "Document",
+    evidence: "Evidence",
+    log: "Log",
+  };
 
   let artifacts = $state([]);
   let loading = $state(false);
@@ -52,6 +62,7 @@
   async function applyFilters() {
     await loadArtifacts();
   }
+
   async function clearFilters() {
     filters = {
       kind: "",
@@ -62,14 +73,41 @@
     await loadArtifacts();
   }
 
+  function kindLabel(kind) {
+    return KIND_LABELS[String(kind ?? "").trim()] ?? String(kind ?? "Artifact");
+  }
+
+  function kindDescription(kind) {
+    if (kind === "work_order") return "Execution plan and acceptance criteria";
+    if (kind === "receipt") return "Work completion evidence and verification";
+    if (kind === "review") return "Human decision on receipt quality";
+    if (kind === "doc") return "Readable document artifact";
+    if (kind === "evidence") return "Supporting evidence and logs";
+    if (kind === "log") return "Operational activity record";
+    return "Artifact payload";
+  }
+
   function kindBadge(kind) {
     const styles = {
-      work_order: "bg-blue-50 text-blue-700",
-      receipt: "bg-emerald-50 text-emerald-700",
-      review: "bg-purple-50 text-purple-700",
-      doc: "bg-amber-50 text-amber-700",
+      work_order: "bg-blue-50 text-blue-700 border-blue-200",
+      receipt: "bg-emerald-50 text-emerald-700 border-emerald-200",
+      review: "bg-amber-50 text-amber-700 border-amber-200",
+      doc: "bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200",
+      evidence: "bg-slate-100 text-slate-700 border-slate-300",
+      log: "bg-teal-50 text-teal-700 border-teal-200",
     };
-    return styles[kind] ?? "bg-gray-100 text-gray-600";
+    return styles[kind] ?? "bg-gray-100 text-gray-600 border-gray-300";
+  }
+
+  function rowHeading(artifact) {
+    const summary = String(artifact?.summary ?? "").trim();
+    if (summary) return summary;
+    return `${kindLabel(artifact?.kind)} artifact`;
+  }
+
+  function refPreview(artifact) {
+    const refs = Array.isArray(artifact?.refs) ? artifact.refs : [];
+    return refs.slice(0, 3);
   }
 </script>
 
@@ -102,7 +140,7 @@
     class="mt-3 rounded-xl border border-gray-200/80 bg-white p-4 shadow-sm"
     onsubmit={(event) => {
       event.preventDefault();
-      applyFilters();
+      void applyFilters();
     }}
   >
     <div class="grid gap-3 sm:grid-cols-2">
@@ -169,59 +207,78 @@
     {error}
   </div>
 {:else if !loading && artifacts.length === 0}
-  <div class="mt-8 text-center">
-    <svg
-      class="mx-auto h-8 w-8 text-gray-300"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      stroke-width="1.5"
-    >
-      <path
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-      />
-    </svg>
-    <p class="mt-2 text-sm text-gray-400">
-      No artifacts match the current filters.
+  <div
+    class="mt-8 rounded-xl border border-dashed border-gray-300 bg-white p-8 text-center"
+  >
+    <p class="text-sm font-semibold text-gray-700">No matching artifacts</p>
+    <p class="mt-1.5 text-sm text-gray-500">
+      Try adjusting filters or clearing the current view.
     </p>
   </div>
 {/if}
 
 {#if artifacts.length > 0}
-  <div class="mt-4 space-y-1">
+  <div class="mt-4 space-y-2">
     {#each artifacts as artifact}
       <a
-        class="flex items-center gap-3 rounded-lg border border-gray-200/80 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-all hover:border-gray-300/80 hover:shadow-[0_1px_3px_rgba(0,0,0,0.08)]"
+        class="block rounded-xl border border-gray-200/80 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-all hover:border-gray-300/80 hover:shadow-[0_1px_4px_rgba(0,0,0,0.08)]"
         href={`/artifacts/${artifact.id}`}
       >
-        <span
-          class={`shrink-0 rounded-md px-2 py-0.5 text-[11px] font-medium ${kindBadge(artifact.kind)}`}
-          >{artifact.kind}</span
-        >
-        <div class="min-w-0 flex-1">
-          <p class="truncate text-sm font-medium text-gray-900">
-            {artifact.summary || artifact.id}
-          </p>
-          <div class="mt-0.5 flex items-center gap-1.5 text-xs text-gray-400">
-            <span>{artifact.created_by || "unknown"}</span>
-            <span class="text-gray-300">·</span>
-            <span>{formatTimestamp(artifact.created_at) || "—"}</span>
-            {#if artifact.thread_id}
-              <span class="text-gray-300">·</span>
-              <span class="truncate">{artifact.thread_id}</span>
-            {/if}
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0 flex-1">
+            <div class="flex flex-wrap items-center gap-2">
+              <span
+                class={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${kindBadge(artifact.kind)}`}
+              >
+                {kindLabel(artifact.kind)}
+              </span>
+              <span class="text-[11px] text-gray-500">
+                {kindDescription(artifact.kind)}
+              </span>
+            </div>
+            <p class="mt-1.5 truncate text-sm font-semibold text-gray-900">
+              {rowHeading(artifact)}
+            </p>
+            <p class="mt-0.5 text-xs text-gray-500">
+              Created {formatTimestamp(artifact.created_at) || "—"} by {artifact.created_by ||
+                "unknown"}
+            </p>
+            <p class="mt-1 text-[11px] text-gray-400">ID: {artifact.id}</p>
           </div>
-        </div>
-        {#if (artifact.refs ?? []).length > 0}
-          <span
-            class="shrink-0 rounded-md bg-gray-50 px-2 py-0.5 text-xs text-gray-400"
-            >{artifact.refs.length} ref{artifact.refs.length === 1
+          <span class="shrink-0 text-xs text-gray-400">
+            {(artifact.refs ?? []).length} ref{(artifact.refs ?? []).length ===
+            1
               ? ""
-              : "s"}</span
-          >
-        {/if}
+              : "s"}
+          </span>
+        </div>
+
+        <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+          {#if artifact.thread_id}
+            <RefLink
+              humanize
+              labelHints={{
+                [`thread:${artifact.thread_id}`]: "Related thread",
+              }}
+              refValue={`thread:${artifact.thread_id}`}
+              showRaw
+              threadId={artifact.thread_id}
+            />
+          {/if}
+          {#each refPreview(artifact) as refValue}
+            <RefLink
+              humanize
+              {refValue}
+              showRaw
+              threadId={artifact.thread_id}
+            />
+          {/each}
+          {#if (artifact.refs ?? []).length > 3}
+            <span class="text-[11px] text-gray-400">
+              +{artifact.refs.length - 3} more
+            </span>
+          {/if}
+        </div>
       </a>
     {/each}
   </div>

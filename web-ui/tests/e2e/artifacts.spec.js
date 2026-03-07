@@ -3,30 +3,28 @@ import { expect, test } from "@playwright/test";
 test("navigates from thread timeline artifact ref to artifact detail", async ({
   page,
 }) => {
-  const actorId = "actor-artifact-nav-e2e";
+  const actorId = "actor-ops-ai";
 
   await page.addInitScript((selectedActorId) => {
     window.localStorage.setItem("oar_ui_actor_id", selectedActorId);
   }, actorId);
 
-  await page.goto("/threads/thread-onboarding");
+  await page.goto("/threads/thread-lemon-shortage");
 
   await expect(
-    page.getByRole("heading", { name: "Thread Detail: thread-onboarding" }),
+    page.getByRole("heading", { name: "Thread Detail: thread-lemon-shortage" }),
   ).toBeVisible();
 
-  const eventRow = page.locator("article", {
-    hasText: "Waiting on legal review confirmation.",
-  });
-  await expect(eventRow).toBeVisible();
-
-  await eventRow
-    .getByRole("link", { name: "artifact:artifact-policy-draft" })
-    .click();
+  await page.getByRole("button", { name: "Timeline", exact: true }).click();
+  const artifactRef = page
+    .getByRole("link", { name: "artifact:artifact-supplier-sla" })
+    .first();
+  await expect(artifactRef).toBeVisible();
+  await artifactRef.click();
 
   await expect(
     page.getByRole("heading", {
-      name: "Artifact Detail: artifact-policy-draft",
+      name: "CitrusBot Farm SLA — uptime and delivery commitments",
     }),
   ).toBeVisible();
 
@@ -34,6 +32,13 @@ test("navigates from thread timeline artifact ref to artifact detail", async ({
     name: "Text Content",
   });
   await expect(textContentHeading).toBeVisible();
-  const textContentPanel = textContentHeading.locator("xpath=..");
-  await expect(textContentPanel).toContainText("Onboarding Policy Draft");
+  const textContentPanel = page
+    .locator("div", { has: textContentHeading })
+    .first();
+  await expect(textContentPanel).toContainText("CitrusBot Farm Supplier SLA");
+
+  await expect(
+    page.getByText("Artifact", { exact: false }).first(),
+  ).toBeVisible();
+  await expect(page.getByText("ID: artifact-supplier-sla")).toBeVisible();
 });

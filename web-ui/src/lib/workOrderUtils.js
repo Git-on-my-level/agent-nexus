@@ -48,6 +48,13 @@ export function ensureThreadRef(refs = [], threadId) {
 export function validateWorkOrderDraft(draft, options = {}) {
   const threadId = String(options.threadId ?? "").trim();
   const errors = [];
+  const fieldErrors = {};
+
+  function addError(field, message) {
+    errors.push(message);
+    if (!fieldErrors[field]) fieldErrors[field] = [];
+    fieldErrors[field].push(message);
+  }
 
   const objective = String(draft?.objective ?? "").trim();
   const constraints = parseWorkOrderListInput(draft?.constraintsInput);
@@ -63,28 +70,35 @@ export function validateWorkOrderDraft(draft, options = {}) {
   );
 
   if (!threadId) {
-    errors.push("thread_id is required.");
+    addError("thread_id", "thread_id is required.");
   }
 
   if (!objective) {
-    errors.push("Objective is required.");
+    addError("objective", "Objective is required.");
   }
 
   if (constraints.length === 0) {
-    errors.push("At least one constraint is required.");
+    addError("constraints", "At least one constraint is required.");
   }
 
   if (acceptanceCriteria.length === 0) {
-    errors.push("At least one acceptance criterion is required.");
+    addError(
+      "acceptance_criteria",
+      "At least one acceptance criterion is required.",
+    );
   }
 
   if (definitionOfDone.length === 0) {
-    errors.push("At least one definition-of-done item is required.");
+    addError(
+      "definition_of_done",
+      "At least one definition-of-done item is required.",
+    );
   }
 
   const typedRefValidation = validateTypedRefs(contextRefs);
   if (!typedRefValidation.valid) {
-    errors.push(
+    addError(
+      "context_refs",
       `Invalid typed refs in context_refs: ${typedRefValidation.invalidRefs.join(", ")}`,
     );
   }
@@ -92,6 +106,7 @@ export function validateWorkOrderDraft(draft, options = {}) {
   return {
     valid: errors.length === 0,
     errors,
+    fieldErrors,
     normalized: {
       thread_id: threadId,
       objective,

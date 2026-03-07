@@ -239,9 +239,8 @@ test("golden path integration runs against a real oar-core", async ({
   await page
     .getByLabel("Constraints (comma/newline separated)")
     .fill("No downtime");
-  await page
-    .getByLabel("Context refs (typed refs, comma/newline separated)")
-    .fill(`thread:${threadId}\nsnapshot:${commitmentId}`);
+  await page.getByLabel("Add context ref").fill(`snapshot:${commitmentId}`);
+  await page.getByRole("button", { name: "Add ref to context" }).click();
   await page
     .getByLabel("Acceptance criteria (comma/newline separated)")
     .fill("Integration flow passes");
@@ -278,13 +277,13 @@ test("golden path integration runs against a real oar-core", async ({
 
   await page.getByLabel("Work order id").selectOption(workOrderId);
   await page
-    .getByLabel("Receipt outputs (typed refs, comma/newline separated)")
+    .getByLabel("Add receipt output ref")
     .fill(`artifact:${workOrderId}`);
+  await page.getByRole("button", { name: "Add output ref" }).click();
   await page
-    .getByLabel(
-      "Receipt verification evidence (typed refs, comma/newline separated)",
-    )
+    .getByLabel("Add receipt evidence ref")
     .fill(`artifact:${workOrderId}`);
+  await page.getByRole("button", { name: "Add evidence ref" }).click();
   await page.getByLabel("Receipt changes summary").fill(receiptSummary);
   await page
     .getByLabel("Receipt known gaps (comma/newline separated)")
@@ -328,16 +327,15 @@ test("golden path integration runs against a real oar-core", async ({
   await page.getByRole("link", { name: receiptId, exact: true }).click();
 
   await expect(
-    page.getByRole("heading", { name: `Artifact Detail: ${receiptId}` }),
+    page.getByRole("heading", { name: receiptSummary }),
   ).toBeVisible();
 
   await page.getByLabel("Review outcome").selectOption("accept");
   await page.getByLabel("Review notes").fill(reviewNotes);
   await page
-    .getByLabel(
-      "Review evidence refs (typed refs, comma/newline separated; optional)",
-    )
+    .getByLabel("Add review evidence ref")
     .fill(`artifact:${receiptId}`);
+  await page.getByRole("button", { name: "Add review evidence ref" }).click();
 
   const createReviewResponsePromise = page.waitForResponse((response) => {
     return (

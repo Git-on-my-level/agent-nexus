@@ -97,11 +97,15 @@ test("work order composer validates typed refs and sends correct POST payload", 
   });
 
   await page.goto("/threads/thread-onboarding");
+  await page.getByRole("button", { name: "Work" }).click();
 
   await page.getByLabel("Work order objective").fill("Ship onboarding update");
   await page
     .getByLabel("Constraints (comma/newline separated)")
     .fill("No downtime\nNo schema drift");
+  await page
+    .getByRole("button", { name: "Use advanced raw context input" })
+    .click();
   await page
     .getByLabel("Context refs (typed refs, comma/newline separated)")
     .fill("not-a-typed-ref");
@@ -114,13 +118,24 @@ test("work order composer validates typed refs and sends correct POST payload", 
 
   await page.getByRole("button", { name: "Create work order" }).click();
   await expect(
-    page.getByText("Invalid typed refs in context_refs", { exact: false }),
+    page
+      .getByRole("listitem")
+      .filter({ hasText: "Invalid typed refs in context_refs" }),
   ).toBeVisible();
   expect(postedPayload).toBeNull();
 
   await page
     .getByLabel("Context refs (typed refs, comma/newline separated)")
-    .fill("artifact:artifact-policy-draft\nevent:evt-1001");
+    .fill("");
+  await page
+    .getByRole("button", { name: "Hide advanced raw context input" })
+    .click();
+  await page
+    .getByLabel("Add context ref")
+    .fill("artifact:artifact-policy-draft");
+  await page.getByRole("button", { name: "Add ref to context" }).click();
+  await page.getByLabel("Add context ref").fill("event:evt-1001");
+  await page.getByRole("button", { name: "Add ref to context" }).click();
   await page.getByRole("button", { name: "Create work order" }).click();
 
   await expect.poll(() => postedPayload !== null).toBe(true);
@@ -143,6 +158,7 @@ test("work order composer validates typed refs and sends correct POST payload", 
     definition_of_done: ["Merged to main"],
   });
 
+  await page.getByRole("button", { name: "Timeline" }).click();
   await expect(
     page.getByText("Work order created: Ship onboarding update", {
       exact: true,

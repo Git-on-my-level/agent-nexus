@@ -170,16 +170,16 @@
   }
 </script>
 
-<div class="flex items-center justify-between">
-  <h1 class="text-lg font-semibold text-gray-900">Threads</h1>
+<div class="flex items-center justify-between mb-6">
+  <h1 class="text-2xl font-semibold text-slate-900 tracking-tight">Threads</h1>
   <div class="flex items-center gap-2">
     <button
-      class="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100"
+      class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-all hover:bg-slate-50 hover:border-slate-300"
       onclick={() => (filtersOpen = !filtersOpen)}
       type="button"
     >
       <svg
-        class="h-3.5 w-3.5"
+        class="h-4 w-4"
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
@@ -191,16 +191,16 @@
           d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
         />
       </svg>
-      {filtersOpen ? "Hide filters" : "Filter"}
+      {filtersOpen ? "Hide filters" : "Filters"}
     </button>
     <button
-      class="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-colors hover:bg-indigo-500"
+      class="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-all hover:bg-slate-800"
       onclick={() => (createOpen = !createOpen)}
       type="button"
     >
       {#if !createOpen}
         <svg
-          class="h-3.5 w-3.5"
+          class="h-4 w-4"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -220,10 +220,10 @@
 
 {#if error}
   <div
-    class="mt-3 flex items-start gap-2 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700"
+    class="mb-6 flex items-start gap-3 rounded-lg bg-red-50 px-4 py-4 text-sm text-red-700"
   >
     <svg
-      class="mt-0.5 h-4 w-4 shrink-0 text-red-400"
+      class="mt-0.5 h-5 w-5 shrink-0 text-red-400"
       fill="none"
       viewBox="0 0 24 24"
       stroke="currentColor"
@@ -240,13 +240,13 @@
 {/if}
 
 {#if filtersOpen}
-  <div class="mt-3 rounded-xl border border-gray-200/80 bg-white p-4 shadow-sm">
-    <div class="grid gap-3 sm:grid-cols-5">
-      <label class="text-xs font-medium text-gray-500">
-        Status
+  <div class="mb-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div class="grid gap-4 sm:grid-cols-5">
+      <label class="text-sm">
+        <span class="font-medium text-slate-700">Status</span>
         <select
           bind:value={filters.status}
-          class="mt-1.5 w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-sm transition-colors focus:bg-white"
+          class="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm transition-all focus:bg-white focus:border-slate-300"
         >
           <option value="">All</option>
           {#each THREAD_STATUSES as status}<option value={status}
@@ -254,11 +254,11 @@
             >{/each}
         </select>
       </label>
-      <label class="text-xs font-medium text-gray-500">
-        Priority
+      <label class="text-sm">
+        <span class="font-medium text-slate-700">Priority</span>
         <select
           bind:value={filters.priority}
-          class="mt-1.5 w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-sm transition-colors focus:bg-white"
+          class="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm transition-all focus:bg-white focus:border-slate-300"
         >
           <option value="">All</option>
           {#each THREAD_PRIORITIES as priority}<option value={priority}
@@ -266,11 +266,11 @@
             >{/each}
         </select>
       </label>
-      <label class="text-xs font-medium text-gray-500">
-        Cadence
+      <label class="text-sm">
+        <span class="font-medium text-slate-700">Cadence</span>
         <select
           bind:value={filters.cadence}
-          class="mt-1.5 w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-sm transition-colors focus:bg-white"
+          class="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm transition-all focus:bg-white focus:border-slate-300"
         >
           <option value="">All</option>
           {#each THREAD_SCHEDULE_PRESETS as cadence}<option value={cadence}
@@ -278,35 +278,35 @@
             >{/each}
         </select>
       </label>
-      <label class="text-xs font-medium text-gray-500">
-        Staleness
+      <label class="text-sm">
+        <span class="font-medium text-slate-700">Staleness</span>
         <select
           bind:value={filters.staleness}
-          class="mt-1.5 w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-sm transition-colors focus:bg-white"
+          class="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm transition-all focus:bg-white focus:border-slate-300"
         >
           <option value="all">All</option>
           <option value="stale">Stale</option>
           <option value="fresh">Fresh</option>
         </select>
       </label>
-      <label class="text-xs font-medium text-gray-500">
-        Tags
+      <label class="text-sm">
+        <span class="font-medium text-slate-700">Tags</span>
         <input
           bind:value={filters.tagInput}
-          class="mt-1.5 w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-sm transition-colors focus:bg-white"
+          class="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm transition-all focus:bg-white focus:border-slate-300"
           placeholder="ops, customer"
           type="text"
         />
       </label>
     </div>
-    <div class="mt-3 flex gap-2">
+    <div class="mt-4 flex gap-2">
       <button
-        class="rounded-md bg-gray-900 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-gray-800"
+        class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-all hover:bg-slate-800"
         onclick={applyFilters}
         type="button">Apply</button
       >
       <button
-        class="rounded-md px-3 py-1.5 text-xs font-medium text-gray-500 hover:bg-gray-100"
+        class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-all hover:bg-slate-50"
         onclick={resetFilters}
         type="button">Reset</button
       >
@@ -316,55 +316,55 @@
 
 {#if createOpen}
   <form
-    class="mt-3 rounded-xl border border-gray-200/80 bg-white p-5 shadow-sm"
+    class="mb-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
     onsubmit={(event) => {
       event.preventDefault();
       createThread();
     }}
   >
     {#if createError}
-      <div class="mb-4 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+      <div class="mb-5 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
         {createError}
       </div>
     {/if}
-    <div class="grid gap-4 sm:grid-cols-2">
-      <label class="text-xs font-medium text-gray-600 sm:col-span-2">
-        Title
+    <div class="grid gap-5 sm:grid-cols-2">
+      <label class="text-sm sm:col-span-2">
+        <span class="font-medium text-slate-700">Title</span>
         <input
           bind:value={threadDraft.title}
-          class="mt-1.5 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm transition-colors focus:bg-white"
+          class="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm transition-all focus:bg-white focus:border-slate-300"
           placeholder="Thread title..."
           required
           type="text"
         />
       </label>
-      <label class="text-xs font-medium text-gray-600">
-        Status
+      <label class="text-sm">
+        <span class="font-medium text-slate-700">Status</span>
         <select
           bind:value={threadDraft.status}
-          class="mt-1.5 w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2 text-sm transition-colors focus:bg-white"
+          class="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:bg-white focus:border-slate-300"
         >
           {#each THREAD_STATUSES as status}<option value={status}
               >{status}</option
             >{/each}
         </select>
       </label>
-      <label class="text-xs font-medium text-gray-600">
-        Priority
+      <label class="text-sm">
+        <span class="font-medium text-slate-700">Priority</span>
         <select
           bind:value={threadDraft.priority}
-          class="mt-1.5 w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2 text-sm transition-colors focus:bg-white"
+          class="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:bg-white focus:border-slate-300"
         >
           {#each THREAD_PRIORITIES as priority}<option value={priority}
               >{THREAD_PRIORITY_LABELS[priority]}</option
             >{/each}
         </select>
       </label>
-      <label class="text-xs font-medium text-gray-600">
-        Schedule
+      <label class="text-sm">
+        <span class="font-medium text-slate-700">Schedule</span>
         <select
           bind:value={threadDraft.cadencePreset}
-          class="mt-1.5 w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2 text-sm transition-colors focus:bg-white"
+          class="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:bg-white focus:border-slate-300"
         >
           {#each THREAD_SCHEDULE_PRESETS as cadence}<option value={cadence}
               >{THREAD_SCHEDULE_PRESET_LABELS[cadence]}</option
@@ -372,38 +372,38 @@
         </select>
       </label>
       {#if threadDraft.cadencePreset === "custom"}
-        <label class="text-xs font-medium text-gray-600">
-          Cron expression
+        <label class="text-sm">
+          <span class="font-medium text-slate-700">Cron expression</span>
           <input
             bind:value={threadDraft.cadenceCron}
-            class="mt-1.5 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm transition-colors focus:bg-white"
+            class="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm transition-all focus:bg-white focus:border-slate-300"
             placeholder="0 9 * * *"
             type="text"
           />
         </label>
       {/if}
-      <label class="text-xs font-medium text-gray-600">
-        Tags
+      <label class="text-sm">
+        <span class="font-medium text-slate-700">Tags</span>
         <input
           bind:value={threadDraft.tagsInput}
-          class="mt-1.5 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm transition-colors focus:bg-white"
+          class="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm transition-all focus:bg-white focus:border-slate-300"
           placeholder="ops, customer"
           type="text"
         />
       </label>
-      <label class="text-xs font-medium text-gray-600 sm:col-span-2">
-        Summary
+      <label class="text-sm sm:col-span-2">
+        <span class="font-medium text-slate-700">Summary</span>
         <textarea
           bind:value={threadDraft.summary}
-          class="mt-1.5 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm transition-colors focus:bg-white"
+          class="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm transition-all focus:bg-white focus:border-slate-300"
           placeholder="Brief description..."
-          rows="2"
+          rows="3"
         ></textarea>
       </label>
     </div>
-    <div class="mt-4 flex justify-end">
+    <div class="mt-5 flex justify-end">
       <button
-        class="rounded-md bg-indigo-600 px-4 py-2 text-xs font-medium text-white shadow-sm transition-colors hover:bg-indigo-500 disabled:opacity-50"
+        class="rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-medium text-white transition-all hover:bg-slate-800 disabled:opacity-50"
         disabled={creatingThread}
         type="submit"
       >
@@ -415,9 +415,9 @@
 
 {#if loading}
   <div
-    class="mt-12 flex items-center justify-center gap-2 text-sm text-gray-400"
+    class="mt-16 flex items-center justify-center gap-3 text-sm text-slate-400"
   >
-    <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+    <svg class="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24">
       <circle
         class="opacity-25"
         cx="12"
@@ -435,9 +435,9 @@
     Loading threads...
   </div>
 {:else if threads.length === 0}
-  <div class="mt-8 text-center">
+  <div class="mt-12 text-center">
     <svg
-      class="mx-auto h-8 w-8 text-gray-300"
+      class="mx-auto h-12 w-12 text-slate-300"
       fill="none"
       viewBox="0 0 24 24"
       stroke="currentColor"
@@ -449,47 +449,47 @@
         d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
       />
     </svg>
-    <p class="mt-2 text-sm text-gray-400">
+    <p class="mt-3 text-sm text-slate-400">
       No threads match the current filters.
     </p>
   </div>
 {:else}
-  <div class="mt-4 space-y-1">
+  <div class="space-y-2">
     {#each threads as thread}
       {@const staleness = computeStaleness(thread)}
       <a
-        class="flex items-center gap-3 rounded-lg border border-gray-200/80 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-all hover:border-gray-300/80 hover:shadow-[0_1px_3px_rgba(0,0,0,0.08)]"
+        class="flex items-center gap-4 rounded-lg border border-slate-200 bg-white px-5 py-4 shadow-sm transition-all hover:border-slate-300 hover:shadow"
         href={`/threads/${thread.id}`}
       >
         <span
-          class="flex h-2 w-2 shrink-0 rounded-full {priorityDot(
+          class="flex h-2.5 w-2.5 shrink-0 rounded-full {priorityDot(
             thread.priority,
           )}"
           title={getPriorityLabel(thread.priority)}
         ></span>
         <div class="min-w-0 flex-1">
-          <p class="truncate text-sm font-medium text-gray-900">
+          <p class="truncate text-sm font-medium text-slate-900">
             {thread.title}
           </p>
-          <p class="mt-0.5 truncate text-[13px] text-gray-500">
+          <p class="mt-1 truncate text-sm text-slate-500">
             {thread.current_summary}
           </p>
         </div>
         <div class="flex shrink-0 items-center gap-2 text-xs">
           <span
-            class="rounded-md px-2 py-0.5 font-medium capitalize {statusBadge(
+            class="rounded-md px-2.5 py-1 font-medium capitalize {statusBadge(
               thread.status,
             )}">{thread.status}</span
           >
           <span
-            class="hidden rounded-md bg-gray-50 px-2 py-0.5 text-gray-500 sm:inline"
+            class="hidden rounded-md bg-slate-50 px-2.5 py-1 text-slate-500 sm:inline"
             >{formatCadenceLabel(thread.cadence, {
               includeExpression: false,
             })}</span
           >
           {#if (thread.tags ?? []).length > 0}
             <span
-              class="hidden rounded-md bg-gray-50 px-2 py-0.5 text-gray-500 sm:inline"
+              class="hidden rounded-md bg-slate-50 px-2.5 py-1 text-slate-500 sm:inline"
               >{thread.tags[0]}{thread.tags.length > 1
                 ? ` +${thread.tags.length - 1}`
                 : ""}</span
@@ -497,11 +497,11 @@
           {/if}
           {#if staleness.stale}
             <span
-              class="rounded-md bg-red-50 px-2 py-0.5 font-medium text-red-600"
+              class="rounded-md bg-red-50 px-2.5 py-1 font-medium text-red-600"
               >Stale</span
             >
           {/if}
-          <span class="w-14 text-right text-gray-400"
+          <span class="w-16 text-right text-slate-400"
             >{formatTimestamp(thread.updated_at) || "—"}</span
           >
         </div>

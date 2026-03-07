@@ -37,6 +37,13 @@ export function validateReceiptTypedRefs(refs = []) {
 export function validateReceiptDraft(draft, options = {}) {
   const threadId = String(options.threadId ?? "").trim();
   const errors = [];
+  const fieldErrors = {};
+
+  function addError(field, message) {
+    errors.push(message);
+    if (!fieldErrors[field]) fieldErrors[field] = [];
+    fieldErrors[field].push(message);
+  }
 
   const workOrderId = String(draft?.workOrderId ?? "").trim();
   const outputs = parseReceiptListInput(draft?.outputsInput);
@@ -47,35 +54,40 @@ export function validateReceiptDraft(draft, options = {}) {
   const knownGaps = parseReceiptListInput(draft?.knownGapsInput);
 
   if (!threadId) {
-    errors.push("thread_id is required.");
+    addError("thread_id", "thread_id is required.");
   }
 
   if (!workOrderId) {
-    errors.push("work_order_id is required.");
+    addError("work_order_id", "work_order_id is required.");
   }
 
   if (!changesSummary) {
-    errors.push("changes_summary is required.");
+    addError("changes_summary", "changes_summary is required.");
   }
 
   if (outputs.length === 0) {
-    errors.push("outputs must include at least one typed ref.");
+    addError("outputs", "outputs must include at least one typed ref.");
   }
 
   if (verificationEvidence.length === 0) {
-    errors.push("verification_evidence must include at least one typed ref.");
+    addError(
+      "verification_evidence",
+      "verification_evidence must include at least one typed ref.",
+    );
   }
 
   const outputRefValidation = validateReceiptTypedRefs(outputs);
   if (!outputRefValidation.valid) {
-    errors.push(
+    addError(
+      "outputs",
       `Invalid typed refs in outputs: ${outputRefValidation.invalidRefs.join(", ")}`,
     );
   }
 
   const evidenceRefValidation = validateReceiptTypedRefs(verificationEvidence);
   if (!evidenceRefValidation.valid) {
-    errors.push(
+    addError(
+      "verification_evidence",
       `Invalid typed refs in verification_evidence: ${evidenceRefValidation.invalidRefs.join(", ")}`,
     );
   }
@@ -83,6 +95,7 @@ export function validateReceiptDraft(draft, options = {}) {
   return {
     valid: errors.length === 0,
     errors,
+    fieldErrors,
     normalized: {
       thread_id: threadId,
       work_order_id: workOrderId,

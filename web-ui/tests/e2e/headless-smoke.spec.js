@@ -179,9 +179,11 @@ test("mocked core smoke flow: inbox -> threads -> thread detail -> post message 
 
   await page.getByRole("link", { name: "Threads", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Threads" })).toBeVisible();
-  await page
-    .getByRole("link", { name: "Customer Onboarding Workflow", exact: true })
-    .click();
+  const threadLink = page.getByRole("link", {
+    name: /Customer Onboarding Workflow/,
+  });
+  await expect(threadLink).toBeVisible();
+  await threadLink.click();
 
   await expect(
     page.getByRole("heading", { name: "Thread Detail: thread-onboarding" }),

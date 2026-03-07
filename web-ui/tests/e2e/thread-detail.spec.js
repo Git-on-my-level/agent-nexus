@@ -97,8 +97,11 @@ test("thread detail loads snapshot/timeline and posts reply message", async ({
     page.getByRole("heading", { name: "Thread Detail: thread-onboarding" }),
   ).toBeVisible();
   await expect(
-    page.getByText("Customer Onboarding Workflow", { exact: true }),
+    page.locator("header").getByText("Customer Onboarding Workflow", {
+      exact: true,
+    }),
   ).toBeVisible();
+  await expect(page.getByText("What needs to happen next")).toBeVisible();
   await expect(
     page.getByText("Initial timeline message", { exact: true }),
   ).toBeVisible();
@@ -219,7 +222,9 @@ test("thread detail handles snapshot update conflict and retries after reload", 
   await page.goto("/threads/thread-onboarding");
 
   await expect(
-    page.getByText("Customer Onboarding Workflow", { exact: true }),
+    page.locator("header").getByText("Customer Onboarding Workflow", {
+      exact: true,
+    }),
   ).toBeVisible();
 
   await page.getByRole("button", { name: "Edit snapshot" }).click();
@@ -230,7 +235,9 @@ test("thread detail handles snapshot update conflict and retries after reload", 
     page.getByText("Thread was updated elsewhere.", { exact: false }),
   ).toBeVisible();
   await expect(
-    page.getByText("Server updated title", { exact: true }),
+    page.locator("header").getByText("Server updated title", {
+      exact: true,
+    }),
   ).toBeVisible();
 
   await page.getByRole("button", { name: "Edit snapshot" }).click();
@@ -241,13 +248,14 @@ test("thread detail handles snapshot update conflict and retries after reload", 
     page.getByText("Snapshot updated.", { exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByText("Final merged title", { exact: true }),
+    page.locator("header").getByText("Final merged title", { exact: true }),
   ).toBeVisible();
 
   expect(patchRequests).toHaveLength(2);
   expect(patchRequests[0]).toEqual({
     actor_id: actorId,
     patch: {
+      cadence: "0 9 * * 1",
       title: "Edited after conflict",
     },
     if_updated_at: "2026-03-04T00:00:00.000Z",
@@ -255,6 +263,7 @@ test("thread detail handles snapshot update conflict and retries after reload", 
   expect(patchRequests[1]).toEqual({
     actor_id: actorId,
     patch: {
+      cadence: "0 9 * * 1",
       title: "Final merged title",
     },
     if_updated_at: "2026-03-04T02:00:00.000Z",

@@ -231,40 +231,36 @@ test("create receipt then submit review and see review_completed in timeline", a
   });
 
   await page.goto("/threads/thread-onboarding");
+  await page.getByRole("button", { name: "Work" }).click();
 
   await page
     .getByLabel("Receipt changes summary")
     .fill("Receipt for review flow test");
   await page
-    .getByLabel("Receipt outputs (typed refs, comma/newline separated)")
+    .getByLabel("Add receipt output ref")
     .fill("artifact:artifact-output-1");
+  await page.getByRole("button", { name: "Add output ref" }).click();
   await page
-    .getByLabel(
-      "Receipt verification evidence (typed refs, comma/newline separated)",
-    )
+    .getByLabel("Add receipt evidence ref")
     .fill("artifact:artifact-evidence-1");
+  await page.getByRole("button", { name: "Add evidence ref" }).click();
   await page.getByRole("button", { name: "Submit receipt" }).click();
 
   await expect(
-    page.getByText("Receipt added: Receipt for review flow test", {
-      exact: true,
-    }),
+    page.getByText("Receipt submitted.", { exact: true }),
   ).toBeVisible();
 
   await page
     .getByRole("link", { name: createdReceiptArtifact.id, exact: true })
     .click();
-  await expect(
-    page.getByRole("heading", { name: "Receipt Packet" }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Receipt" })).toBeVisible();
 
   await page.getByLabel("Review outcome").selectOption("revise");
   await page.getByLabel("Review notes").fill("Needs additional hardening.");
   await page
-    .getByLabel(
-      "Review evidence refs (typed refs, comma/newline separated; optional)",
-    )
+    .getByLabel("Add review evidence ref")
     .fill("artifact:artifact-evidence-1");
+  await page.getByRole("button", { name: "Add review evidence ref" }).click();
   await page.getByRole("button", { name: "Submit review" }).click();
 
   await expect.poll(() => reviewPayload !== null).toBe(true);
@@ -285,6 +281,6 @@ test("create receipt then submit review and see review_completed in timeline", a
     page.getByText("Review completed (revise)", { exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "open work order composer" }),
+    page.getByRole("link", { name: "Create follow-up work order" }),
   ).toBeVisible();
 });

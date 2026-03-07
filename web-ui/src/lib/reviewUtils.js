@@ -43,37 +43,46 @@ export function validateReviewDraft(draft, options = {}) {
   const reviewId = String(options.reviewId ?? "").trim();
 
   const errors = [];
+  const fieldErrors = {};
+
+  function addError(field, message) {
+    errors.push(message);
+    if (!fieldErrors[field]) fieldErrors[field] = [];
+    fieldErrors[field].push(message);
+  }
+
   const outcome = String(draft?.outcome ?? "").trim();
   const notes = String(draft?.notes ?? "").trim();
   const evidenceRefs = parseReviewListInput(draft?.evidenceRefsInput);
 
   if (!threadId) {
-    errors.push("thread_id is required.");
+    addError("thread_id", "thread_id is required.");
   }
 
   if (!receiptId) {
-    errors.push("receipt_id is required.");
+    addError("receipt_id", "receipt_id is required.");
   }
 
   if (!workOrderId) {
-    errors.push("work_order_id is required.");
+    addError("work_order_id", "work_order_id is required.");
   }
 
   if (!reviewId) {
-    errors.push("review_id is required.");
+    addError("review_id", "review_id is required.");
   }
 
   if (!ALLOWED_REVIEW_OUTCOMES.has(outcome)) {
-    errors.push("outcome must be one of: accept, revise, escalate.");
+    addError("outcome", "outcome must be one of: accept, revise, escalate.");
   }
 
   if (!notes) {
-    errors.push("notes is required.");
+    addError("notes", "notes is required.");
   }
 
   const evidenceValidation = validateReviewTypedRefs(evidenceRefs);
   if (!evidenceValidation.valid) {
-    errors.push(
+    addError(
+      "evidence_refs",
       `Invalid typed refs in evidence_refs: ${evidenceValidation.invalidRefs.join(", ")}`,
     );
   }
@@ -81,6 +90,7 @@ export function validateReviewDraft(draft, options = {}) {
   return {
     valid: errors.length === 0,
     errors,
+    fieldErrors,
     normalized: {
       review_id: reviewId,
       receipt_id: receiptId,
