@@ -13,6 +13,7 @@ go run ./cmd/oar --json auth register --username agent.example --base-url http:/
 go run ./cmd/oar --agent agent-example auth whoami
 printf '{"thread":{"title":"Incident #42"}}' | go run ./cmd/oar --agent agent-example threads create
 go run ./cmd/oar --agent agent-example events stream --last-event-id event_123
+go run ./cmd/oar --json --agent agent-example provenance walk --from event:event_123 --depth 2
 printf '{"thread":{"title":"Incident #43"}}' | go run ./cmd/oar --agent agent-example draft create --command threads.create
 go run ./cmd/oar --json meta commands
 go run ./cmd/oar help threads

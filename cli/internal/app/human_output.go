@@ -74,6 +74,8 @@ func formatCommandSummary(commandID string, body any) string {
 		return formatDocumentContentRecord(body)
 	case "docs.revision.get":
 		return formatRevisionRecord(extractNestedMap(body, "revision"))
+	case "provenance.walk":
+		return formatProvenanceWalkSummary(asMap(body))
 	default:
 		return formatPrettyBody(body)
 	}
