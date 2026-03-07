@@ -693,8 +693,8 @@ func (a *App) runEventsCommand(ctx context.Context, args []string, cfg config.Re
 		result, err := a.runEventsStream(ctx, args[1:], cfg, "events stream", false)
 		return result, "events stream", err
 	case "tail":
-		result, err := a.runEventsStream(ctx, args[1:], cfg, "events tail", true)
-		return result, "events tail", err
+		result, err := a.runEventsStream(ctx, args[1:], cfg, "events stream", true)
+		return result, "events stream", err
 	case "explain":
 		result, err := a.runEventsExplainCommand(args[1:])
 		return result, "events explain", err
@@ -1029,8 +1029,8 @@ func (a *App) runInboxCommand(ctx context.Context, args []string, cfg config.Res
 		result, err := a.runInboxStream(ctx, args[1:], cfg, "inbox stream", false)
 		return result, "inbox stream", err
 	case "tail":
-		result, err := a.runInboxStream(ctx, args[1:], cfg, "inbox tail", true)
-		return result, "inbox tail", err
+		result, err := a.runInboxStream(ctx, args[1:], cfg, "inbox stream", true)
+		return result, "inbox stream", err
 	default:
 		return nil, "inbox", inboxSubcommandSpec.unknownError(args[0])
 	}
@@ -1260,7 +1260,7 @@ func (a *App) runTailStream(ctx context.Context, cfg config.Resolved, commandNam
 			if strings.TrimSpace(event.ID) != "" {
 				cursor = strings.TrimSpace(event.ID)
 			}
-			if err := a.writeStreamEvent(commandName, event, authCfg.JSON); err != nil {
+			if err := a.writeStreamEvent(commandName, commandID, event, authCfg.JSON); err != nil {
 				_ = resp.Body.Close()
 				return nil, err
 			}
@@ -1278,15 +1278,50 @@ func (a *App) runTailStream(ctx context.Context, cfg config.Resolved, commandNam
 	}
 }
 
-func (a *App) writeStreamEvent(commandName string, event streaming.Event, jsonMode bool) error {
+func streamPayload(commandID string, parsedData any) (string, any) {
+	commandID = strings.TrimSpace(commandID)
+	dataMap, ok := parsedData.(map[string]any)
+	if !ok {
+		return "data", parsedData
+	}
+	switch commandID {
+	case "events.stream":
+		if eventPayload, ok := dataMap["event"]; ok {
+			return "event", eventPayload
+		}
+	case "inbox.stream":
+		if itemPayload, ok := dataMap["item"]; ok {
+			return "item", itemPayload
+		}
+	}
+	if len(dataMap) == 1 {
+		for key, value := range dataMap {
+			key = strings.TrimSpace(key)
+			if key == "" {
+				return "data", parsedData
+			}
+			return key, value
+		}
+	}
+	return "data", parsedData
+}
+
+func (a *App) writeStreamEvent(commandName string, commandID string, event streaming.Event, jsonMode bool) error {
 	parsedData := parseResponseBody([]byte(event.Data))
-	payload := map[string]any{
-		"id":   event.ID,
-		"type": event.Type,
-		"data": parsedData,
+	payloadKey, payloadValue := streamPayload(commandID, parsedData)
+	frame := map[string]any{
+		"id":          event.ID,
+		"type":        event.Type,
+		"payload_key": payloadKey,
+		"payload":     payloadValue,
+		"data":        parsedData,
+	}
+	if payloadKey == "event" || payloadKey == "item" {
+		frame[payloadKey] = payloadValue
 	}
 	if jsonMode {
-		envelope := output.Envelope{OK: true, Command: commandName, Data: payload}
+		identity := resolveMachineCommandIdentity(commandName)
+		envelope := output.Envelope{OK: true, Command: identity.Command, CommandID: identity.CommandID, Data: frame}
 		if err := output.WriteEnvelopeJSON(a.Stdout, envelope); err != nil {
 			return errnorm.Wrap(errnorm.KindLocal, "stdout_write_failed", "failed to write stream envelope", err)
 		}

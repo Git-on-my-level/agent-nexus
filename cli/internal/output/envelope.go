@@ -15,10 +15,11 @@ type ErrorPayload struct {
 }
 
 type Envelope struct {
-	OK      bool          `json:"ok"`
-	Command string        `json:"command"`
-	Data    any           `json:"data,omitempty"`
-	Error   *ErrorPayload `json:"error,omitempty"`
+	OK        bool          `json:"ok"`
+	Command   string        `json:"command"`
+	CommandID string        `json:"command_id,omitempty"`
+	Data      any           `json:"data,omitempty"`
+	Error     *ErrorPayload `json:"error,omitempty"`
 }
 
 func WriteEnvelopeJSON(w io.Writer, envelope Envelope) error {

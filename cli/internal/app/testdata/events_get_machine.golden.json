@@ -1,0 +1,21 @@
+{
+  "ok": true,
+  "command": "events get",
+  "command_id": "events.get",
+  "data": {
+    "body": {
+      "event": {
+        "id": "event_456",
+        "summary": "canonical event payload",
+        "thread_id": "thread_123",
+        "type": "actor_statement"
+      }
+    },
+    "headers": {
+      "Content-Type": [
+        "application/json"
+      ]
+    },
+    "status_code": 200
+  }
+}

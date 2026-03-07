@@ -1,0 +1,89 @@
+{
+  "ok": true,
+  "command": "threads context",
+  "command_id": "threads.context",
+  "data": {
+    "body": {
+      "collaboration_summary": {
+        "artifact_count": 1,
+        "decision_count": 0,
+        "decision_request_count": 1,
+        "decision_requests": [
+          {
+            "id": "event_ctx_2",
+            "short_id": "event_ctx_2",
+            "summary": "confirm canonical command labels",
+            "summary_preview": "confirm canonical command labels",
+            "thread_id": "thread_123",
+            "type": "decision_needed"
+          }
+        ],
+        "decisions": [],
+        "key_artifacts": [
+          {
+            "id": "artifact_ctx_1",
+            "kind": "work_order"
+          }
+        ],
+        "open_commitment_count": 1,
+        "open_commitments": [
+          {
+            "id": "commitment_ctx_1",
+            "status": "open"
+          }
+        ],
+        "recommendation_count": 1,
+        "recommendations": [
+          {
+            "id": "event_ctx_1",
+            "short_id": "event_ctx_1",
+            "summary": "normalize frame shape",
+            "summary_preview": "normalize frame shape",
+            "thread_id": "thread_123",
+            "type": "actor_statement"
+          }
+        ]
+      },
+      "key_artifacts": [
+        {
+          "id": "artifact_ctx_1",
+          "kind": "work_order"
+        }
+      ],
+      "open_commitments": [
+        {
+          "id": "commitment_ctx_1",
+          "status": "open"
+        }
+      ],
+      "recent_events": [
+        {
+          "id": "event_ctx_1",
+          "short_id": "event_ctx_1",
+          "summary": "normalize frame shape",
+          "summary_preview": "normalize frame shape",
+          "thread_id": "thread_123",
+          "type": "actor_statement"
+        },
+        {
+          "id": "event_ctx_2",
+          "short_id": "event_ctx_2",
+          "summary": "confirm canonical command labels",
+          "summary_preview": "confirm canonical command labels",
+          "thread_id": "thread_123",
+          "type": "decision_needed"
+        }
+      ],
+      "thread": {
+        "id": "thread_123",
+        "title": "Machine-facing consistency"
+      }
+    },
+    "headers": {
+      "Content-Type": [
+        "application/json"
+      ]
+    },
+    "status_code": 200
+  }
+}

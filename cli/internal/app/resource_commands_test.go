@@ -1973,6 +1973,254 @@ func TestEventsStreamDefaultNoFollow(t *testing.T) {
 	}
 }
 
+func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_123/timeline":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{
+				"thread_id":"thread_123",
+				"events":[
+					{"id":"event_100","thread_id":"thread_123","type":"actor_statement","created_at":"2026-03-07T00:00:00Z","summary":"ship machine-facing fixes"},
+					{"id":"event_101","thread_id":"thread_123","type":"decision_needed","created_at":"2026-03-07T00:01:00Z","summary":"confirm frame shape"}
+				],
+				"snapshots":{},
+				"artifacts":{}
+			}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/events/event_456":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"event":{"id":"event_456","thread_id":"thread_123","type":"actor_statement","summary":"canonical event payload"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_123/context":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{
+				"thread":{"id":"thread_123","title":"Machine-facing consistency"},
+				"recent_events":[
+					{"id":"event_ctx_1","thread_id":"thread_123","type":"actor_statement","summary":"normalize frame shape"},
+					{"id":"event_ctx_2","thread_id":"thread_123","type":"decision_needed","summary":"confirm canonical command labels"}
+				],
+				"key_artifacts":[{"id":"artifact_ctx_1","kind":"work_order"}],
+				"open_commitments":[{"id":"commitment_ctx_1","status":"open"}]
+			}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/events/stream":
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = io.WriteString(w, "id: es_1\nevent: event\ndata: {\"event\":{\"id\":\"event_stream_1\",\"type\":\"actor_statement\"}}\n\n")
+		case r.Method == http.MethodGet && r.URL.Path == "/inbox/stream":
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = io.WriteString(w, "id: ibx_1\nevent: inbox_item\ndata: {\"item\":{\"id\":\"inbox:1\",\"thread_id\":\"thread_123\"}}\n\n")
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	env := map[string]string{}
+
+	eventsListOut := runCLIForTest(t, home, env, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"events", "list",
+		"--thread-id", "thread_123",
+		"--type", "actor_statement",
+	})
+	assertGolden(t, "events_list_machine.golden.json", eventsListOut)
+
+	eventsGetOut := runCLIForTest(t, home, env, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"events", "get",
+		"--event-id", "event_456",
+	})
+	assertGolden(t, "events_get_machine.golden.json", eventsGetOut)
+
+	threadsContextOut := runCLIForTest(t, home, env, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"threads", "context",
+		"--thread-id", "thread_123",
+	})
+	assertGolden(t, "threads_context_machine.golden.json", threadsContextOut)
+
+	eventsStreamOut := runCLIForTest(t, home, env, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"events", "stream",
+		"--max-events", "1",
+	})
+	assertGolden(t, "events_stream_machine.golden.json", eventsStreamOut)
+
+	inboxStreamOut := runCLIForTest(t, home, env, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"inbox", "stream",
+		"--max-events", "1",
+	})
+	assertGolden(t, "inbox_stream_machine.golden.json", inboxStreamOut)
+}
+
+func TestStreamAliasCommandsUseCanonicalMachineIdentity(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/events/stream":
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = io.WriteString(w, "id: e-1\nevent: event\ndata: {\"event\":{\"id\":\"event_1\"}}\n\n")
+		case "/inbox/stream":
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = io.WriteString(w, "id: i-1\nevent: inbox_item\ndata: {\"item\":{\"id\":\"inbox:1\"}}\n\n")
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	env := map[string]string{}
+
+	eventsTail := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"events", "tail",
+		"--max-events", "1",
+	}))
+	if got := anyStringValue(eventsTail["command"]); got != "events stream" {
+		t.Fatalf("expected canonical command events stream, got %q payload=%#v", got, eventsTail)
+	}
+	if got := anyStringValue(eventsTail["command_id"]); got != "events.stream" {
+		t.Fatalf("expected command_id events.stream, got %q payload=%#v", got, eventsTail)
+	}
+	eventsTailData, _ := eventsTail["data"].(map[string]any)
+	if got := anyStringValue(eventsTailData["payload_key"]); got != "event" {
+		t.Fatalf("expected payload_key=event, got %#v", eventsTailData)
+	}
+	if _, ok := eventsTailData["event"].(map[string]any); !ok {
+		t.Fatalf("expected explicit event payload key, got %#v", eventsTailData)
+	}
+
+	inboxTail := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"inbox", "tail",
+		"--max-events", "1",
+	}))
+	if got := anyStringValue(inboxTail["command"]); got != "inbox stream" {
+		t.Fatalf("expected canonical command inbox stream, got %q payload=%#v", got, inboxTail)
+	}
+	if got := anyStringValue(inboxTail["command_id"]); got != "inbox.stream" {
+		t.Fatalf("expected command_id inbox.stream, got %q payload=%#v", got, inboxTail)
+	}
+	inboxTailData, _ := inboxTail["data"].(map[string]any)
+	if got := anyStringValue(inboxTailData["payload_key"]); got != "item" {
+		t.Fatalf("expected payload_key=item, got %#v", inboxTailData)
+	}
+	if _, ok := inboxTailData["item"].(map[string]any); !ok {
+		t.Fatalf("expected explicit item payload key, got %#v", inboxTailData)
+	}
+
+	eventsErr := assertEnvelopeError(t, runCLIForTest(t, home, env, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"events", "tail",
+		"--max-events", "-1",
+	}))
+	if got := anyStringValue(eventsErr["command"]); got != "events stream" {
+		t.Fatalf("expected canonical error command events stream, got %q payload=%#v", got, eventsErr)
+	}
+	if got := anyStringValue(eventsErr["command_id"]); got != "events.stream" {
+		t.Fatalf("expected error command_id events.stream, got %q payload=%#v", got, eventsErr)
+	}
+
+	inboxErr := assertEnvelopeError(t, runCLIForTest(t, home, env, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"inbox", "tail",
+		"--max-events", "-1",
+	}))
+	if got := anyStringValue(inboxErr["command"]); got != "inbox stream" {
+		t.Fatalf("expected canonical error command inbox stream, got %q payload=%#v", got, inboxErr)
+	}
+	if got := anyStringValue(inboxErr["command_id"]); got != "inbox.stream" {
+		t.Fatalf("expected error command_id inbox.stream, got %q payload=%#v", got, inboxErr)
+	}
+}
+
+func TestMachineFacingNonStreamErrorsIncludeCommandIdentity(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	env := map[string]string{}
+
+	eventsListErr := assertEnvelopeError(t, runCLIForTest(t, home, env, nil, []string{
+		"--json",
+		"events", "list",
+	}))
+	if got := anyStringValue(eventsListErr["command"]); got != "events list" {
+		t.Fatalf("expected events list error command, got %q payload=%#v", got, eventsListErr)
+	}
+	if got := anyStringValue(eventsListErr["command_id"]); got != "threads.timeline" {
+		t.Fatalf("expected threads.timeline command_id, got %q payload=%#v", got, eventsListErr)
+	}
+
+	eventsGetErr := assertEnvelopeError(t, runCLIForTest(t, home, env, nil, []string{
+		"--json",
+		"events", "get",
+	}))
+	if got := anyStringValue(eventsGetErr["command"]); got != "events get" {
+		t.Fatalf("expected events get error command, got %q payload=%#v", got, eventsGetErr)
+	}
+	if got := anyStringValue(eventsGetErr["command_id"]); got != "events.get" {
+		t.Fatalf("expected events.get command_id, got %q payload=%#v", got, eventsGetErr)
+	}
+
+	threadsContextErr := assertEnvelopeError(t, runCLIForTest(t, home, env, nil, []string{
+		"--json",
+		"threads", "context",
+	}))
+	if got := anyStringValue(threadsContextErr["command"]); got != "threads context" {
+		t.Fatalf("expected threads context error command, got %q payload=%#v", got, threadsContextErr)
+	}
+	if got := anyStringValue(threadsContextErr["command_id"]); got != "threads.context" {
+		t.Fatalf("expected threads.context command_id, got %q payload=%#v", got, threadsContextErr)
+	}
+}
+
+func TestEventsStreamFallbackPayloadForNonWrapperJSON(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/events/stream" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, "id: e-fallback\nevent: event\ndata: {\"id\":\"event_raw_1\",\"type\":\"actor_statement\"}\n\n")
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	env := map[string]string{}
+	payload := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"events", "stream",
+		"--max-events", "1",
+	}))
+	data, _ := payload["data"].(map[string]any)
+	if got := anyStringValue(data["payload_key"]); got != "data" {
+		t.Fatalf("expected fallback payload_key=data, got %#v", data)
+	}
+	fallbackPayload, _ := data["payload"].(map[string]any)
+	if got := anyStringValue(fallbackPayload["id"]); got != "event_raw_1" {
+		t.Fatalf("expected fallback payload id event_raw_1, got %#v", data)
+	}
+	if _, hasEvent := data["event"]; hasEvent {
+		t.Fatalf("expected no explicit event key for non-wrapper payload, got %#v", data)
+	}
+}
+
 func TestTypedCommandUsageFailures(t *testing.T) {
 	t.Parallel()
 

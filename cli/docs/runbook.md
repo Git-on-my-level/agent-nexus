@@ -135,6 +135,16 @@ The raw fallback remains available:
 oar --json --base-url http://127.0.0.1:8000 --agent agent-a api call --path /meta/handshake
 ```
 
+Machine-facing notes for the targeted automation commands:
+
+- `events list`, `events get`, `events stream`, `inbox stream`, and `threads context` include a stable `command_id` alongside `command`.
+- `events tail` and `inbox tail` resolve to canonical machine command identity (`events stream` / `inbox stream`) in JSON success/error envelopes.
+- Stream frames expose a normalized payload contract:
+  - `id`, `type`
+  - `payload_key` (`event` or `item`)
+  - `payload` (the normalized event/item object)
+  - explicit `event` or `item` key plus legacy `data` passthrough
+
 ## Release process
 
 CLI release artifacts are produced by GitHub workflow:

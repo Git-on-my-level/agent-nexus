@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "command": "events stream",
+  "command_id": "events.stream",
+  "data": {
+    "data": {
+      "event": {
+        "id": "event_stream_1",
+        "type": "actor_statement"
+      }
+    },
+    "event": {
+      "id": "event_stream_1",
+      "type": "actor_statement"
+    },
+    "id": "es_1",
+    "payload": {
+      "id": "event_stream_1",
+      "type": "actor_statement"
+    },
+    "payload_key": "event",
+    "type": "event"
+  }
+}

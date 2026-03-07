@@ -50,7 +50,7 @@ func New() *App {
 func (a *App) Run(args []string) int {
 	overrides, remaining, helpRequested, parseErr := parseGlobalFlags(args)
 	if parseErr != nil {
-		return a.renderError("root", overrides.JSON != nil && *overrides.JSON, parseErr)
+		return a.renderError(resolveMachineCommandIdentity("root"), overrides.JSON != nil && *overrides.JSON, parseErr)
 	}
 	if helpRequested {
 		a.printRootUsage()
@@ -67,22 +67,23 @@ func (a *App) Run(args []string) int {
 		ReadFile:    a.ReadFile,
 	})
 	if err != nil {
-		return a.renderError("root", overrides.JSON != nil && *overrides.JSON, errnorm.Wrap(errnorm.KindLocal, "config_resolution_failed", "failed to resolve cli config", err))
+		return a.renderError(resolveMachineCommandIdentity("root"), overrides.JSON != nil && *overrides.JSON, errnorm.Wrap(errnorm.KindLocal, "config_resolution_failed", "failed to resolve cli config", err))
 	}
 
 	commandName, result, runErr := a.runCommand(context.Background(), remaining, resolved)
+	identity := resolveMachineCommandIdentity(commandName)
 	if runErr != nil {
 		if result != nil && strings.TrimSpace(result.Text) != "" && !resolved.JSON {
 			_, _ = io.WriteString(a.Stderr, result.Text+"\n")
 		}
-		return a.renderError(commandName, resolved.JSON, runErr)
+		return a.renderError(identity, resolved.JSON, runErr)
 	}
 
 	if result != nil && result.RawWritten {
 		return 0
 	}
 	if resolved.JSON {
-		envelope := output.Envelope{OK: true, Command: commandName, Data: nil}
+		envelope := output.Envelope{OK: true, Command: identity.Command, CommandID: identity.CommandID, Data: nil}
 		if result != nil {
 			envelope.Data = result.Data
 		}
@@ -105,12 +106,13 @@ type commandResult struct {
 	RawWritten bool
 }
 
-func (a *App) renderError(command string, jsonMode bool, err error) int {
+func (a *App) renderError(identity machineCommandIdentity, jsonMode bool, err error) int {
 	normalized := errnorm.Normalize(err)
 	if jsonMode {
 		envelope := output.Envelope{
-			OK:      false,
-			Command: command,
+			OK:        false,
+			Command:   identity.Command,
+			CommandID: identity.CommandID,
 			Error: &output.ErrorPayload{
 				Code:        normalized.Code,
 				Message:     normalized.Message,
