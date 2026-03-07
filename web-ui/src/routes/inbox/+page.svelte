@@ -231,9 +231,12 @@
     data-testid="inbox-triage-header"
   >
     <div>
-      <h1 class="text-2xl font-semibold text-slate-900 tracking-tight">Inbox</h1>
+      <h1 class="text-2xl font-semibold text-slate-900 tracking-tight">
+        Inbox
+      </h1>
       <p class="mt-2 text-sm text-slate-600 leading-relaxed">
-        Prioritized for human triage. Urgency is inferred from category and source event age.
+        Prioritized for human triage. Urgency is inferred from category and
+        source event age.
       </p>
     </div>
     <div
@@ -262,7 +265,9 @@
       class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3"
       data-testid="urgency-summary-high"
     >
-      <p class="text-xs uppercase tracking-wide font-medium text-amber-600">High</p>
+      <p class="text-xs uppercase tracking-wide font-medium text-amber-600">
+        High
+      </p>
       <p class="mt-1 text-2xl font-semibold text-amber-700">
         {urgencySummary.high}
       </p>
@@ -382,7 +387,8 @@
       No items match this view
     </h2>
     <p class="mt-2 text-sm text-slate-600 leading-relaxed">
-      Try switching back to <span class="font-semibold">All</span> to see the full queue.
+      Try switching back to <span class="font-semibold">All</span> to see the full
+      queue.
     </p>
     <button
       class="mt-5 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-all hover:bg-slate-50 hover:border-slate-300"
@@ -566,9 +572,7 @@
                     toggleDecisionForm(item, !getDecisionForm(item.id).open)}
                   type="button"
                 >
-                  {getDecisionForm(item.id).open
-                    ? "Close form"
-                    : "Decide"}
+                  {getDecisionForm(item.id).open ? "Close form" : "Decide"}
                 </button>
               </div>
 

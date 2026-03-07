@@ -25,7 +25,7 @@ test("registers actor, unlocks shell, and performs a write", async ({
     page.getByRole("heading", { name: "Organization Autorunner UI" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "What needs attention now?" }),
+    page.getByRole("heading", { name: "What needs attention?" }),
   ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Inbox", exact: true }),
@@ -58,7 +58,7 @@ test("renders a dashboard on / and routes into inbox", async ({ page }) => {
   await page.goto("/");
 
   await expect(
-    page.getByRole("heading", { name: "What needs attention now?" }),
+    page.getByRole("heading", { name: "What needs attention?" }),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Attention queue" }),
@@ -98,7 +98,7 @@ test("shows partial-failure messaging when one dashboard source is unavailable",
   await page.goto("/");
 
   await expect(
-    page.getByRole("heading", { name: "What needs attention now?" }),
+    page.getByRole("heading", { name: "What needs attention?" }),
   ).toBeVisible();
   await expect(
     page.getByText("Failed to load threads:", { exact: false }),

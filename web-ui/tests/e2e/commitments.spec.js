@@ -219,6 +219,21 @@ test("create commitment and enforce status evidence for done transition", async 
   await commitmentsSection
     .getByRole("button", { name: "Edit commitment" })
     .click();
+  await commitmentsSection
+    .getByLabel("Due at (ISO timestamp)")
+    .fill("not-a-timestamp");
+  await commitmentsSection
+    .getByRole("button", { name: "Save commitment" })
+    .click();
+
+  await expect(
+    page.getByText("Due at must be a valid timestamp", { exact: false }),
+  ).toBeVisible();
+  await expect.poll(() => patchPayloads.length).toBe(0);
+
+  await commitmentsSection
+    .getByLabel("Due at (ISO timestamp)")
+    .fill("2026-03-12T00:00:00.000Z");
   await commitmentsSection.getByLabel("Commitment status").selectOption("done");
   await commitmentsSection
     .getByRole("button", { name: "Save commitment" })

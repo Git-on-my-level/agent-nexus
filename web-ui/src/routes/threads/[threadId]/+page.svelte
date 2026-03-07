@@ -412,6 +412,22 @@
     return "";
   }
 
+  function parseCommitmentDueAtInput(rawValue) {
+    const inputValue = String(rawValue ?? "").trim();
+    const dueAt = datetimeLocalToIso(inputValue);
+
+    if (!inputValue || !dueAt) {
+      return {
+        valid: false,
+        dueAt: "",
+        error:
+          "Due at must be a valid timestamp, for example 2026-03-12T00:00:00.000Z.",
+      };
+    }
+
+    return { valid: true, dueAt, error: "" };
+  }
+
   async function loadOpenCommitments(commitmentIds = []) {
     commitmentsLoading = true;
     if (!Array.isArray(commitmentIds) || commitmentIds.length === 0) {
@@ -556,9 +572,15 @@
     try {
       const title = createCommitmentDraft.title.trim();
       const owner = createCommitmentDraft.owner.trim();
-      const dueAt = datetimeLocalToIso(createCommitmentDraft.due_at.trim());
-      if (!title || !owner || !dueAt) {
+      const dueAtResult = parseCommitmentDueAtInput(
+        createCommitmentDraft.due_at,
+      );
+      if (!title || !owner || !createCommitmentDraft.due_at.trim()) {
         createCommitmentError = "Title, owner, and due date are required.";
+        return;
+      }
+      if (!dueAtResult.valid) {
+        createCommitmentError = dueAtResult.error;
         return;
       }
       await coreClient.createCommitment({
@@ -566,7 +588,7 @@
           thread_id: threadId,
           title,
           owner,
-          due_at: dueAt,
+          due_at: dueAtResult.dueAt,
           status: "open",
           definition_of_done: parseCommitmentListInput(
             createCommitmentDraft.definitionOfDoneInput,
@@ -610,10 +632,15 @@
     editCommitmentNotice = "";
     commitmentConflictWarning = "";
     try {
+      const dueAtResult = parseCommitmentDueAtInput(draft.due_at);
+      if (!dueAtResult.valid) {
+        if (isStillEditingTarget()) editCommitmentError = dueAtResult.error;
+        return;
+      }
       const draftSnapshot = {
         title: draft.title.trim(),
         owner: draft.owner.trim(),
-        due_at: datetimeLocalToIso(draft.due_at.trim()),
+        due_at: dueAtResult.dueAt,
         status: draft.status,
         definition_of_done: parseCommitmentListInput(
           draft.definitionOfDoneInput,

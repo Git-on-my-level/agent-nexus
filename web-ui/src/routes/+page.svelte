@@ -117,16 +117,15 @@
   >
     <div class="flex flex-wrap items-start justify-between gap-4">
       <div>
-        <p
-          class="text-xs font-semibold uppercase tracking-wide text-slate-500"
-        >
+        <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">
           Dashboard
         </p>
         <h1 class="mt-1 text-2xl font-semibold text-slate-900 tracking-tight">
           What needs attention?
         </h1>
         <p class="mt-2 text-sm text-slate-600 leading-relaxed">
-          Start with urgent inbox items, then review thread health and recent evidence.
+          Start with urgent inbox items, then review thread health and recent
+          evidence.
         </p>
       </div>
       <div class="flex items-center gap-3">

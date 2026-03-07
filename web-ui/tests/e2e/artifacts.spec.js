@@ -24,7 +24,7 @@ test("navigates from thread timeline artifact ref to artifact detail", async ({
 
   await expect(
     page.getByRole("heading", {
-      name: "Artifact Detail: artifact-supplier-sla",
+      name: "CitrusBot Farm SLA — uptime and delivery commitments",
     }),
   ).toBeVisible();
 

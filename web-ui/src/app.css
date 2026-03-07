@@ -3,7 +3,9 @@
 @tailwind utilities;
 
 :root {
-  --ui-font-sans: "Inter", "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --ui-font-sans:
+    "Inter", "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
   --ui-bg: #f8fafb;
   --ui-bg-soft: #fbfcfd;
   --ui-panel: #ffffff;
@@ -20,9 +22,12 @@
   --ui-accent: #6366f1;
   --ui-accent-strong: #4f46e5;
   --ui-shadow-subtle: 0 1px 2px rgba(0, 0, 0, 0.03);
-  --ui-shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.02);
-  --ui-shadow-panel: 0 1px 3px rgba(0, 0, 0, 0.04), 0 6px 16px rgba(0, 0, 0, 0.03);
-  --ui-shadow-elevated: 0 2px 4px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
+  --ui-shadow-soft:
+    0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.02);
+  --ui-shadow-panel:
+    0 1px 3px rgba(0, 0, 0, 0.04), 0 6px 16px rgba(0, 0, 0, 0.03);
+  --ui-shadow-elevated:
+    0 2px 4px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
   --ui-radius-sm: 0.5rem;
   --ui-radius-md: 0.75rem;
   --ui-radius-lg: 1rem;

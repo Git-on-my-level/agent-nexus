@@ -138,12 +138,9 @@ test("threads list filters and create flow use GET/POST /threads", async ({
     page.getByText("Incident Follow-up", { exact: true }),
   ).toBeVisible();
 
-  await page
-    .locator("section")
-    .first()
-    .getByLabel("Status")
-    .selectOption("active");
-  await page.getByRole("button", { name: "Apply filters" }).click();
+  await page.getByRole("button", { name: "Filter" }).click();
+  await page.getByLabel("Status").selectOption("active");
+  await page.getByRole("button", { name: "Apply" }).click();
 
   await expect
     .poll(() => {
@@ -159,10 +156,10 @@ test("threads list filters and create flow use GET/POST /threads", async ({
     page.getByText("Incident Follow-up", { exact: true }),
   ).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Create thread" }).click();
+  await page.getByRole("button", { name: "New thread" }).click();
   await page.getByLabel("Title").fill("Freshly Created Thread");
   await page.getByLabel("Summary").fill("Created from e2e flow");
-  await page.getByRole("button", { name: "Submit thread" }).click();
+  await page.getByRole("button", { name: "Create thread" }).click();
 
   await expect.poll(() => createCount).toBe(1);
 

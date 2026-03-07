@@ -519,10 +519,7 @@
     >
       Artifact detail
     </p>
-    <h1
-      aria-label={`Artifact Detail: ${artifact.id}`}
-      class="mt-1 text-xl font-semibold text-gray-900"
-    >
+    <h1 class="mt-1 text-xl font-semibold text-gray-900">
       {artifactHeaderTitle}
     </h1>
     <p class="mt-1 text-sm text-gray-600">{kindDescription(artifact.kind)}</p>
