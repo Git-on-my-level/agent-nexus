@@ -66,7 +66,7 @@ e2e-smoke: ## Run end-to-end core + CLI + web-ui smoke flow
 serve: ## Start core, seed mock dataset into core, then start web-ui
 	@set -euo pipefail; \
 	trap 'for pid in $$(jobs -p); do kill "$$pid" 2>/dev/null || true; done' EXIT INT TERM; \
-	$(MAKE) -C $(CORE_DIR) serve HOST="$(CORE_HOST)" PORT="$(CORE_PORT)" & \
+	OAR_ALLOW_UNAUTHENTICATED_WRITES=1 $(MAKE) -C $(CORE_DIR) serve HOST="$(CORE_HOST)" PORT="$(CORE_PORT)" & \
 	core_pid=$$!; \
 	if [ "$(SEED_CORE)" = "1" ]; then \
 		OAR_CORE_BASE_URL="$(CORE_BASE_URL)" OAR_FORCE_SEED="$(FORCE_SEED)" node "$(WEB_UI_DIR)/scripts/seed-core-from-mock.mjs"; \

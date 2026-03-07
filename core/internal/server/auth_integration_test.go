@@ -281,6 +281,110 @@ func TestAgentAuthLifecycleAndActorCompatibility(t *testing.T) {
 	assertErrorCode(t, revokedMeResp, "agent_revoked")
 }
 
+func TestWriteAuthToggleRejectsUnauthenticatedWritesWhenDisabled(t *testing.T) {
+	t.Parallel()
+
+	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	registry := actors.NewStore(workspace.DB())
+	if _, err := registry.EnsureSystemActor(context.Background(), time.Now().UTC()); err != nil {
+		t.Fatalf("ensure system actor: %v", err)
+	}
+	authStore := auth.NewStore(workspace.DB())
+	contractPath := filepath.Join("..", "..", "..", "contracts", "oar-schema.yaml")
+	contract, err := schema.Load(contractPath)
+	if err != nil {
+		t.Fatalf("load schema contract: %v", err)
+	}
+	primitiveStore := primitives.NewStore(workspace.DB(), workspace.Layout().ArtifactContentDir)
+	handler := NewHandler(
+		"0.2.2",
+		WithActorRegistry(registry),
+		WithAuthStore(authStore),
+		WithHealthCheck(workspace.Ping),
+		WithPrimitiveStore(primitiveStore),
+		WithSchemaContract(contract),
+		WithAllowUnauthenticatedWrites(false),
+	)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	createActorResp := postJSON(t, server.URL+"/actors", `{"actor":{"id":"human-actor","display_name":"Human Actor","created_at":"2026-03-05T10:00:00Z"}}`, http.StatusCreated)
+	createActorResp.Body.Close()
+
+	listActorsResp := getJSONExpectStatusWithAuth(t, server.URL+"/actors", "", http.StatusOK)
+	listActorsResp.Body.Close()
+
+	noAuthResp := postJSONExpectStatusWithAuth(t, server.URL+"/threads", map[string]any{
+		"actor_id": "human-actor",
+		"thread": map[string]any{
+			"title":            "Strict auth thread",
+			"type":             "incident",
+			"status":           "active",
+			"priority":         "p1",
+			"tags":             []string{"auth"},
+			"cadence":          "daily",
+			"next_check_in_at": "2030-01-01T00:00:00Z",
+			"current_summary":  "summary",
+			"next_actions":     []string{"action"},
+			"key_artifacts":    []string{},
+			"provenance":       map[string]any{"sources": []string{"inferred"}},
+		},
+	}, "", http.StatusUnauthorized)
+	defer noAuthResp.Body.Close()
+	assertErrorCode(t, noAuthResp, "auth_required")
+
+	publicKey, _ := generateKeyPair(t)
+	registerResp := postJSONExpectStatusWithAuth(t, server.URL+"/auth/agents/register", map[string]any{
+		"username":   "strict.auth",
+		"public_key": publicKey,
+	}, "", http.StatusCreated)
+	defer registerResp.Body.Close()
+
+	var registerPayload struct {
+		Agent struct {
+			ActorID string `json:"actor_id"`
+		} `json:"agent"`
+		Tokens struct {
+			AccessToken string `json:"access_token"`
+		} `json:"tokens"`
+	}
+	if err := json.NewDecoder(registerResp.Body).Decode(&registerPayload); err != nil {
+		t.Fatalf("decode register response: %v", err)
+	}
+
+	authenticatedResp := postJSONExpectStatusWithAuth(t, server.URL+"/threads", map[string]any{
+		"thread": map[string]any{
+			"title":            "Authorized thread",
+			"type":             "incident",
+			"status":           "active",
+			"priority":         "p1",
+			"tags":             []string{"auth"},
+			"cadence":          "daily",
+			"next_check_in_at": "2030-01-01T00:00:00Z",
+			"current_summary":  "summary",
+			"next_actions":     []string{"action"},
+			"key_artifacts":    []string{},
+			"provenance":       map[string]any{"sources": []string{"inferred"}},
+		},
+	}, registerPayload.Tokens.AccessToken, http.StatusCreated)
+	defer authenticatedResp.Body.Close()
+
+	var threadPayload struct {
+		Thread map[string]any `json:"thread"`
+	}
+	if err := json.NewDecoder(authenticatedResp.Body).Decode(&threadPayload); err != nil {
+		t.Fatalf("decode thread response: %v", err)
+	}
+	if asString(threadPayload.Thread["updated_by"]) != registerPayload.Agent.ActorID {
+		t.Fatalf("expected updated_by to match authenticated actor, got %#v", threadPayload.Thread["updated_by"])
+	}
+}
+
 func TestConcurrentFreshAuthRegistrationsSucceed(t *testing.T) {
 	t.Parallel()
 

@@ -319,6 +319,7 @@ func newMetaStreamTestHarness(t *testing.T, options ...HandlerOption) metaStream
 		WithAuthStore(auth.NewStore(workspace.DB())),
 		WithPrimitiveStore(primitives.NewStore(workspace.DB(), workspace.Layout().ArtifactContentDir)),
 		WithSchemaContract(contract),
+		WithAllowUnauthenticatedWrites(true),
 	}
 	baseOptions = append(baseOptions, options...)
 

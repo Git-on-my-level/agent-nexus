@@ -19,6 +19,10 @@ This runbook covers reproducible local and production-like operation for `oar-co
 | Listen port | `--port` | `OAR_PORT` | `8000` |
 | Full listen address (overrides host+port) | `--listen-addr` | `OAR_LISTEN_ADDR` | unset |
 | Schema path | `--schema-path` | `OAR_SCHEMA_PATH` | `../contracts/oar-schema.yaml` |
+| Allow unauthenticated writes | n/a | `OAR_ALLOW_UNAUTHENTICATED_WRITES` | `false` |
+| WebAuthn RP ID | n/a | `OAR_WEBAUTHN_RPID` | `127.0.0.1` |
+| WebAuthn origin | n/a | `OAR_WEBAUTHN_ORIGIN` | `http://127.0.0.1:5173` |
+| WebAuthn RP display name | n/a | `OAR_WEBAUTHN_RP_DISPLAY_NAME` | `OAR` |
 
 ## Workspace layout
 
@@ -59,8 +63,12 @@ Example with explicit config:
 ```bash
 OAR_WORKSPACE_ROOT=/var/lib/oar/workspace \
 OAR_LISTEN_ADDR=0.0.0.0:8000 \
+OAR_WEBAUTHN_RPID=oar.example.com \
+OAR_WEBAUTHN_ORIGIN=https://oar.example.com \
 ./scripts/run-prod
 ```
+
+`./scripts/dev` defaults `OAR_ALLOW_UNAUTHENTICATED_WRITES=1` so local seed workflows keep working. Production-like runs should leave it unset unless an explicitly open local workflow is required.
 
 ## Verify server health
 

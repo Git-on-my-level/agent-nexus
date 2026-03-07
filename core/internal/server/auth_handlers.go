@@ -275,6 +275,10 @@ func resolveWriteActorID(w http.ResponseWriter, r *http.Request, opts handlerOpt
 
 	requestedActorID = strings.TrimSpace(requestedActorID)
 	if principal == nil {
+		if !opts.allowUnauthenticatedWrites {
+			writeError(w, http.StatusUnauthorized, "auth_required", "authorization header is required")
+			return "", false
+		}
 		return requireRegisteredActorID(w, r, opts.actorRegistry, requestedActorID)
 	}
 

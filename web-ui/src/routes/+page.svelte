@@ -3,7 +3,6 @@
 
   import { coreClient } from "$lib/coreClient";
   import {
-    buildArtifactKindSummary,
     buildInboxCategorySummary,
     buildThreadHealthSummary,
     selectRecentArtifacts,
@@ -31,10 +30,6 @@
   let threadHealth = $derived(buildThreadHealthSummary(threadsState.items));
   let recentThreads = $derived(
     selectRecentlyUpdatedThreads(threadsState.items, 5),
-  );
-
-  let artifactKindSummary = $derived(
-    buildArtifactKindSummary(artifactsState.items),
   );
   let recentArtifacts = $derived(
     selectRecentArtifacts(artifactsState.items, 5),
@@ -163,16 +158,23 @@
               class="flex-1 rounded-md border border-gray-200 bg-gray-100 px-3 py-2 text-center transition-colors hover:bg-gray-200"
               href="/inbox"
             >
-              <p class="text-[11px] font-medium text-gray-400">{summary.label}</p>
+              <p class="text-[11px] font-medium text-gray-400">
+                {summary.label}
+              </p>
               <p class="text-lg font-semibold text-gray-900">{summary.count}</p>
             </a>
           {/each}
         </div>
 
-        <div class="space-y-px rounded-md border border-gray-200 bg-gray-100 overflow-hidden">
+        <div
+          class="space-y-px rounded-md border border-gray-200 bg-gray-100 overflow-hidden"
+        >
           {#each topInboxItems as item, i}
             <a
-              class="flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-gray-200 {i > 0 ? 'border-t border-gray-200' : ''}"
+              class="flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-gray-200 {i >
+              0
+                ? 'border-t border-gray-200'
+                : ''}"
               href={inboxItemTarget(item)}
             >
               <div class="min-w-0 flex-1">
@@ -211,35 +213,68 @@
             href="/threads"
           >
             <p class="text-[11px] font-medium text-gray-400">Open</p>
-            <p class="text-lg font-semibold text-gray-900">{threadHealth.openCount}</p>
+            <p class="text-lg font-semibold text-gray-900">
+              {threadHealth.openCount}
+            </p>
           </a>
           <a
             class="flex-1 rounded-md border border-gray-200 bg-gray-100 px-3 py-2 text-center transition-colors hover:bg-gray-200"
             href="/threads"
           >
-            <p class="text-[11px] font-medium {threadHealth.staleCount > 0 ? 'text-amber-400' : 'text-gray-400'}">Stale</p>
-            <p class="text-lg font-semibold {threadHealth.staleCount > 0 ? 'text-amber-400' : 'text-gray-900'}">{threadHealth.staleCount}</p>
+            <p
+              class="text-[11px] font-medium {threadHealth.staleCount > 0
+                ? 'text-amber-400'
+                : 'text-gray-400'}"
+            >
+              Stale
+            </p>
+            <p
+              class="text-lg font-semibold {threadHealth.staleCount > 0
+                ? 'text-amber-400'
+                : 'text-gray-900'}"
+            >
+              {threadHealth.staleCount}
+            </p>
           </a>
           <a
             class="flex-1 rounded-md border border-gray-200 bg-gray-100 px-3 py-2 text-center transition-colors hover:bg-gray-200"
             href="/threads"
           >
-            <p class="text-[11px] font-medium {threadHealth.highPriorityCount > 0 ? 'text-red-400' : 'text-gray-400'}">High priority</p>
-            <p class="text-lg font-semibold {threadHealth.highPriorityCount > 0 ? 'text-red-400' : 'text-gray-900'}">{threadHealth.highPriorityCount}</p>
+            <p
+              class="text-[11px] font-medium {threadHealth.highPriorityCount > 0
+                ? 'text-red-400'
+                : 'text-gray-400'}"
+            >
+              High priority
+            </p>
+            <p
+              class="text-lg font-semibold {threadHealth.highPriorityCount > 0
+                ? 'text-red-400'
+                : 'text-gray-900'}"
+            >
+              {threadHealth.highPriorityCount}
+            </p>
           </a>
           <a
             class="flex-1 rounded-md border border-gray-200 bg-gray-100 px-3 py-2 text-center transition-colors hover:bg-gray-200"
             href="/threads"
           >
             <p class="text-[11px] font-medium text-gray-400">Total</p>
-            <p class="text-lg font-semibold text-gray-900">{threadHealth.totalCount}</p>
+            <p class="text-lg font-semibold text-gray-900">
+              {threadHealth.totalCount}
+            </p>
           </a>
         </div>
 
-        <div class="space-y-px rounded-md border border-gray-200 bg-gray-100 overflow-hidden">
+        <div
+          class="space-y-px rounded-md border border-gray-200 bg-gray-100 overflow-hidden"
+        >
           {#each recentThreads as thread, i}
             <a
-              class="flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-gray-200 {i > 0 ? 'border-t border-gray-200' : ''}"
+              class="flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-gray-200 {i >
+              0
+                ? 'border-t border-gray-200'
+                : ''}"
               href={`/threads/${thread.id}`}
             >
               <div class="min-w-0 flex-1">
@@ -250,7 +285,10 @@
                   Updated {formatTimestamp(thread.updated_at)}
                 </p>
               </div>
-              <span class="text-[11px] font-medium {priorityBadge(thread.priority)}">{getPriorityLabel(thread.priority)}</span>
+              <span
+                class="text-[11px] font-medium {priorityBadge(thread.priority)}"
+                >{getPriorityLabel(thread.priority)}</span
+              >
             </a>
           {/each}
         </div>
@@ -274,21 +312,29 @@
     {:else if artifactsState.items.length === 0}
       <p class="text-[13px] text-gray-400 py-3">No artifacts yet.</p>
     {:else}
-      <div class="space-y-px rounded-md border border-gray-200 bg-gray-100 overflow-hidden">
+      <div
+        class="space-y-px rounded-md border border-gray-200 bg-gray-100 overflow-hidden"
+      >
         {#each recentArtifacts as artifact, i}
           <a
-            class="flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-gray-200 {i > 0 ? 'border-t border-gray-200' : ''}"
+            class="flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-gray-200 {i >
+            0
+              ? 'border-t border-gray-200'
+              : ''}"
             href={`/artifacts/${artifact.id}`}
           >
             <span
               class="shrink-0 rounded bg-gray-200 px-1.5 py-0.5 text-[11px] font-medium text-gray-600"
-            >{artifact.kind}</span>
+              >{artifact.kind}</span
+            >
             <div class="min-w-0 flex-1">
               <p class="truncate text-[13px] font-medium text-gray-900">
                 {artifact.summary || artifact.id}
               </p>
             </div>
-            <span class="text-[11px] text-gray-400">{formatTimestamp(artifact.created_at)}</span>
+            <span class="text-[11px] text-gray-400"
+              >{formatTimestamp(artifact.created_at)}</span
+            >
           </a>
         {/each}
       </div>

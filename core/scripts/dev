@@ -8,6 +8,8 @@ HOST="${HOST:-127.0.0.1}"
 PORT="${PORT:-8000}"
 WORKSPACE_ROOT="${WORKSPACE_ROOT:-$ROOT_DIR/.oar-workspace}"
 SCHEMA_PATH="${SCHEMA_PATH:-$ROOT_DIR/../contracts/oar-schema.yaml}"
+OAR_ALLOW_UNAUTHENTICATED_WRITES="${OAR_ALLOW_UNAUTHENTICATED_WRITES:-1}"
+export OAR_ALLOW_UNAUTHENTICATED_WRITES
 
 exec go run ./cmd/oar-core \
   --host "$HOST" \

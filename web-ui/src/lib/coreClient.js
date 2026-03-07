@@ -1,4 +1,8 @@
 import { browser } from "$app/environment";
+import {
+  createAuthTokenProvider,
+  getAuthenticatedActorId,
+} from "$lib/authSession";
 import { getSelectedActorId } from "$lib/actorSession";
 import { createOarCoreClient } from "$lib/oarCoreClient";
 
@@ -12,9 +16,12 @@ function resolveBrowserClient() {
   }
 
   if (!browserClient) {
+    const fetchFn = globalThis.fetch.bind(globalThis);
     browserClient = createOarCoreClient({
-      actorIdProvider: getSelectedActorId,
-      fetchFn: globalThis.fetch.bind(globalThis),
+      actorIdProvider: () => getAuthenticatedActorId() || getSelectedActorId(),
+      lockActorIdProvider: () => Boolean(getAuthenticatedActorId()),
+      tokenProvider: createAuthTokenProvider(fetchFn),
+      fetchFn,
     });
   }
 

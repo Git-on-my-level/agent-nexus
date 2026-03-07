@@ -157,11 +157,13 @@ export function createOarCoreClient(options = {}) {
   const resolvedBaseUrl = normalizeBaseUrl(options.baseUrl ?? oarCoreBaseUrl);
   const baseFetchFn = options.fetchFn ?? fetch;
   const actorIdProvider = options.actorIdProvider;
+  const lockActorIdProvider = options.lockActorIdProvider;
+  const tokenProvider = options.tokenProvider;
   const target = resolvedBaseUrl || "same-origin";
   const sameOriginProxyBaseUrl = "http://oar.local";
   const generatedBaseUrl = resolvedBaseUrl || sameOriginProxyBaseUrl;
 
-  const fetchFn =
+  const baseTransportFetch =
     resolvedBaseUrl.length > 0
       ? baseFetchFn
       : (input, init) => {
@@ -169,6 +171,68 @@ export function createOarCoreClient(options = {}) {
           const relativeUrl = `${parsedUrl.pathname}${parsedUrl.search}`;
           return baseFetchFn(relativeUrl, init);
         };
+
+  function shouldLockActorId() {
+    if (typeof lockActorIdProvider === "function") {
+      return Boolean(lockActorIdProvider());
+    }
+
+    return Boolean(lockActorIdProvider);
+  }
+
+  function shouldSkipAuthRetry(input) {
+    const parsedUrl = new URL(String(input), sameOriginProxyBaseUrl);
+    return (
+      parsedUrl.pathname === "/auth/token" ||
+      parsedUrl.pathname === "/auth/agents/register" ||
+      parsedUrl.pathname.startsWith("/auth/passkey/")
+    );
+  }
+
+  const fetchFn = async (input, init = {}) => {
+    async function performRequest({ retrying = false } = {}) {
+      const headers = new Headers(init.headers ?? {});
+
+      if (retrying) {
+        headers.delete("authorization");
+      }
+
+      if (!headers.has("authorization")) {
+        const accessToken = await tokenProvider?.getAccessToken?.();
+        if (accessToken) {
+          headers.set("authorization", `Bearer ${accessToken}`);
+        }
+      }
+
+      return baseTransportFetch(input, {
+        ...init,
+        headers,
+      });
+    }
+
+    const response = await performRequest();
+    if (
+      response.status !== 401 ||
+      !tokenProvider ||
+      shouldSkipAuthRetry(input) ||
+      !(await tokenProvider.hasRefreshToken?.())
+    ) {
+      return response;
+    }
+
+    try {
+      const refreshedToken = await tokenProvider.refreshAccessToken?.();
+      if (!refreshedToken) {
+        await tokenProvider.handleRefreshFailure?.();
+        return response;
+      }
+    } catch {
+      await tokenProvider.handleRefreshFailure?.();
+      return response;
+    }
+
+    return performRequest({ retrying: true });
+  };
 
   const generated = new OarClient(generatedBaseUrl, fetchFn);
 
@@ -251,7 +315,7 @@ export function createOarCoreClient(options = {}) {
   }
 
   function withActorId(payload = {}) {
-    if (payload.actor_id) {
+    if (payload.actor_id && !shouldLockActorId()) {
       return payload;
     }
 
@@ -269,6 +333,26 @@ export function createOarCoreClient(options = {}) {
         generated.actorsRegister({ body: payload }),
       ),
     listActors: () => invokeJSON("actors.list", () => generated.actorsList()),
+    issueAuthToken: (payload) =>
+      invokeJSON("auth.token", () => generated.authToken({ body: payload })),
+    getCurrentAgent: () =>
+      invokeJSON("agents.me.get", () => generated.agentsMeGet()),
+    passkeyRegisterOptions: (payload) =>
+      invokeJSON("auth.passkey.register.options", () =>
+        generated.authPasskeyRegisterOptions({ body: payload }),
+      ),
+    passkeyRegisterVerify: (payload) =>
+      invokeJSON("auth.passkey.register.verify", () =>
+        generated.authPasskeyRegisterVerify({ body: payload }),
+      ),
+    passkeyLoginOptions: (payload) =>
+      invokeJSON("auth.passkey.login.options", () =>
+        generated.authPasskeyLoginOptions({ body: payload }),
+      ),
+    passkeyLoginVerify: (payload) =>
+      invokeJSON("auth.passkey.login.verify", () =>
+        generated.authPasskeyLoginVerify({ body: payload }),
+      ),
 
     createThread: (payload) =>
       invokeJSON("threads.create", () =>

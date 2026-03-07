@@ -38,6 +38,7 @@ func TestActorEndpointsRegisterAndListStableOrder(t *testing.T) {
 		WithHealthCheck(workspace.Ping),
 		WithPrimitiveStore(primitiveStore),
 		WithSchemaContract(contract),
+		WithAllowUnauthenticatedWrites(true),
 	)
 	server := httptest.NewServer(handler)
 	defer server.Close()
@@ -92,6 +93,7 @@ func TestPostThreadsRejectsUnknownActorID(t *testing.T) {
 		WithHealthCheck(workspace.Ping),
 		WithPrimitiveStore(primitiveStore),
 		WithSchemaContract(contract),
+		WithAllowUnauthenticatedWrites(true),
 	)
 	server := httptest.NewServer(handler)
 	defer server.Close()

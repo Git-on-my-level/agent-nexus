@@ -213,13 +213,57 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"auth", "identity"},
-		Adjacent:  []string{"auth.token"},
+		Adjacent:  []string{"auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.token"},
 		Examples: []Example{
 			{
 				Title:   "Register agent",
 				Command: "oar auth agents register --username agent.one --public-key <base64-ed25519-pubkey> --json",
 			},
 		},
+	},
+	{
+		CommandID: "auth.passkey.login.options",
+		CLIPath:   "auth passkey login options",
+		Group:     "auth",
+		Method:    "POST",
+		Path:      "/auth/passkey/login/options",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"auth", "passkey"},
+		Adjacent:  []string{"auth.agents.register", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.token"},
+	},
+	{
+		CommandID: "auth.passkey.login.verify",
+		CLIPath:   "auth passkey login verify",
+		Group:     "auth",
+		Method:    "POST",
+		Path:      "/auth/passkey/login/verify",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"auth", "passkey"},
+		Adjacent:  []string{"auth.agents.register", "auth.passkey.login.options", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.token"},
+	},
+	{
+		CommandID: "auth.passkey.register.options",
+		CLIPath:   "auth passkey register options",
+		Group:     "auth",
+		Method:    "POST",
+		Path:      "/auth/passkey/register/options",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"auth", "passkey"},
+		Adjacent:  []string{"auth.agents.register", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.verify", "auth.token"},
+	},
+	{
+		CommandID: "auth.passkey.register.verify",
+		CLIPath:   "auth passkey register verify",
+		Group:     "auth",
+		Method:    "POST",
+		Path:      "/auth/passkey/register/verify",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"auth", "passkey"},
+		Adjacent:  []string{"auth.agents.register", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.token"},
 	},
 	{
 		CommandID: "auth.token",
@@ -230,7 +274,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"auth", "token-lifecycle"},
-		Adjacent:  []string{"auth.agents.register"},
+		Adjacent:  []string{"auth.agents.register", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify"},
 		Examples: []Example{
 			{
 				Title:   "Refresh token grant",
@@ -1013,6 +1057,22 @@ func (c *Client) ArtifactsList(ctx context.Context, opts RequestOptions) (*http.
 
 func (c *Client) AuthAgentsRegister(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "auth.agents.register", nil, opts)
+}
+
+func (c *Client) AuthPasskeyLoginOptions(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "auth.passkey.login.options", nil, opts)
+}
+
+func (c *Client) AuthPasskeyLoginVerify(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "auth.passkey.login.verify", nil, opts)
+}
+
+func (c *Client) AuthPasskeyRegisterOptions(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "auth.passkey.register.options", nil, opts)
+}
+
+func (c *Client) AuthPasskeyRegisterVerify(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "auth.passkey.register.verify", nil, opts)
 }
 
 func (c *Client) AuthToken(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {

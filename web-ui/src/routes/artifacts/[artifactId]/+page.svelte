@@ -91,21 +91,33 @@
   let reviewEvidenceSuggestions = $derived(
     buildRefSuggestions([
       receiptPacket?.receipt_id
-        ? { value: `artifact:${receiptPacket.receipt_id}`, label: `Receipt · ${receiptPacket.receipt_id}` }
+        ? {
+            value: `artifact:${receiptPacket.receipt_id}`,
+            label: `Receipt · ${receiptPacket.receipt_id}`,
+          }
         : artifact?.id
-          ? { value: `artifact:${artifact.id}`, label: `Receipt · ${artifact.id}` }
+          ? {
+              value: `artifact:${artifact.id}`,
+              label: `Receipt · ${artifact.id}`,
+            }
           : null,
       receiptPacket?.work_order_id
-        ? { value: `artifact:${receiptPacket.work_order_id}`, label: `Work order · ${receiptPacket.work_order_id}` }
+        ? {
+            value: `artifact:${receiptPacket.work_order_id}`,
+            label: `Work order · ${receiptPacket.work_order_id}`,
+          }
         : null,
       ...(receiptPacket?.verification_evidence ?? []).map((refValue) => ({
-        value: refValue, label: `Receipt evidence · ${refValue}`,
+        value: refValue,
+        label: `Receipt evidence · ${refValue}`,
       })),
       ...(receiptPacket?.outputs ?? []).map((refValue) => ({
-        value: refValue, label: `Receipt output · ${refValue}`,
+        value: refValue,
+        label: `Receipt output · ${refValue}`,
       })),
       ...timelineView.slice(0, 8).map((event) => ({
-        value: `event:${event.id}`, label: `Event · ${event.typeLabel}`,
+        value: `event:${event.id}`,
+        label: `Event · ${event.typeLabel}`,
       })),
     ]),
   );
@@ -157,7 +169,8 @@
 
   function kindDescription(kind) {
     if (kind === "work_order") return "Execution plan and acceptance criteria";
-    if (kind === "receipt") return "Recorded outcomes and verification evidence";
+    if (kind === "receipt")
+      return "Recorded outcomes and verification evidence";
     if (kind === "review") return "Human review decision on a receipt";
     if (kind === "doc") return "Readable source document";
     if (kind === "evidence") return "Supporting evidence artifact";
@@ -175,17 +188,27 @@
   function buildArtifactRefHints() {
     const hints = {};
     if (!artifact) return hints;
-    hints[`artifact:${artifact.id}`] = `This ${kindLabel(artifact.kind).toLowerCase()}`;
-    if (artifact.thread_id) hints[`thread:${artifact.thread_id}`] = "Related thread";
-    if (workOrderPacket?.work_order_id) hints[`artifact:${workOrderPacket.work_order_id}`] = "Work order";
-    if (receiptPacket?.receipt_id) hints[`artifact:${receiptPacket.receipt_id}`] = "Receipt";
-    else if (artifact.kind === "receipt") hints[`artifact:${artifact.id}`] = "Receipt";
-    if (receiptPacket?.work_order_id) hints[`artifact:${receiptPacket.work_order_id}`] = "Work order";
-    if (reviewPacket?.review_id) hints[`artifact:${reviewPacket.review_id}`] = "Review";
-    if (reviewPacket?.receipt_id) hints[`artifact:${reviewPacket.receipt_id}`] = "Reviewed receipt";
-    if (reviewPacket?.work_order_id) hints[`artifact:${reviewPacket.work_order_id}`] = "Related work order";
+    hints[`artifact:${artifact.id}`] =
+      `This ${kindLabel(artifact.kind).toLowerCase()}`;
+    if (artifact.thread_id)
+      hints[`thread:${artifact.thread_id}`] = "Related thread";
+    if (workOrderPacket?.work_order_id)
+      hints[`artifact:${workOrderPacket.work_order_id}`] = "Work order";
+    if (receiptPacket?.receipt_id)
+      hints[`artifact:${receiptPacket.receipt_id}`] = "Receipt";
+    else if (artifact.kind === "receipt")
+      hints[`artifact:${artifact.id}`] = "Receipt";
+    if (receiptPacket?.work_order_id)
+      hints[`artifact:${receiptPacket.work_order_id}`] = "Work order";
+    if (reviewPacket?.review_id)
+      hints[`artifact:${reviewPacket.review_id}`] = "Review";
+    if (reviewPacket?.receipt_id)
+      hints[`artifact:${reviewPacket.receipt_id}`] = "Reviewed receipt";
+    if (reviewPacket?.work_order_id)
+      hints[`artifact:${reviewPacket.work_order_id}`] = "Related work order";
     timelineView.slice(0, 30).forEach((event) => {
-      hints[`event:${event.id}`] = `${event.typeLabel}: ${truncateLabel(event.summary, 52)}`;
+      hints[`event:${event.id}`] =
+        `${event.typeLabel}: ${truncateLabel(event.summary, 52)}`;
     });
     return hints;
   }
@@ -217,33 +240,59 @@
       const line = String(rawLine ?? "");
       const trimmed = line.trim();
       if (trimmed.startsWith("```")) {
-        flushParagraph(); closeList();
-        if (!inCode) { inCode = true; codeLines = []; } else closeCodeBlock();
+        flushParagraph();
+        closeList();
+        if (!inCode) {
+          inCode = true;
+          codeLines = [];
+        } else closeCodeBlock();
         continue;
       }
-      if (inCode) { codeLines.push(line); continue; }
-      if (!trimmed) { flushParagraph(); closeList(); continue; }
+      if (inCode) {
+        codeLines.push(line);
+        continue;
+      }
+      if (!trimmed) {
+        flushParagraph();
+        closeList();
+        continue;
+      }
       const headingMatch = trimmed.match(/^(#{1,3})\s+(.+)$/);
       if (headingMatch) {
-        flushParagraph(); closeList();
-        blocks.push({ type: "heading", level: headingMatch[1].length, text: headingMatch[2] });
+        flushParagraph();
+        closeList();
+        blocks.push({
+          type: "heading",
+          level: headingMatch[1].length,
+          text: headingMatch[2],
+        });
         continue;
       }
       const bulletMatch = trimmed.match(/^[-*]\s+(.+)$/);
-      if (bulletMatch) { flushParagraph(); listItems.push(bulletMatch[1]); continue; }
+      if (bulletMatch) {
+        flushParagraph();
+        listItems.push(bulletMatch[1]);
+        continue;
+      }
       closeList();
       paragraphLines.push(trimmed);
     }
-    flushParagraph(); closeList(); closeCodeBlock();
+    flushParagraph();
+    closeList();
+    closeCodeBlock();
     return blocks;
   }
 
   async function loadThreadTimeline(threadId) {
-    if (!threadId) { threadTimeline = []; return; }
+    if (!threadId) {
+      threadTimeline = [];
+      return;
+    }
     timelineLoading = true;
     timelineError = "";
     try {
-      threadTimeline = (await coreClient.listThreadTimeline(threadId)).events ?? [];
+      threadTimeline =
+        (await coreClient.listThreadTimeline(threadId)).events ?? [];
     } catch (e) {
       timelineError = `Failed to load timeline: ${e instanceof Error ? e.message : String(e)}`;
       threadTimeline = [];
@@ -291,7 +340,9 @@
       }
       await loadThreadTimeline(artifact.thread_id);
     } catch (e) {
-      reviewErrors = [`Failed to submit review: ${e instanceof Error ? e.message : String(e)}`];
+      reviewErrors = [
+        `Failed to submit review: ${e instanceof Error ? e.message : String(e)}`,
+      ];
     } finally {
       submittingReview = false;
     }
@@ -358,33 +409,65 @@
   }
 </script>
 
-<nav class="mb-3 flex items-center gap-1.5 text-[12px] text-gray-400" aria-label="Breadcrumb">
-  <a class="transition-colors hover:text-gray-600" href="/artifacts">Artifacts</a>
+<nav
+  class="mb-3 flex items-center gap-1.5 text-[12px] text-gray-400"
+  aria-label="Breadcrumb"
+>
+  <a class="transition-colors hover:text-gray-600" href="/artifacts"
+    >Artifacts</a
+  >
   <span class="text-gray-300">/</span>
   <span class="truncate text-gray-600">{artifact?.summary || artifactId}</span>
 </nav>
 
 {#if loading}
-  <div class="mt-8 flex items-center justify-center gap-2 text-[13px] text-gray-400">
+  <div
+    class="mt-8 flex items-center justify-center gap-2 text-[13px] text-gray-400"
+  >
     <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+      <circle
+        class="opacity-25"
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        stroke-width="4"
+      ></circle>
+      <path
+        class="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+      ></path>
     </svg>
     Loading...
   </div>
 {:else if loadError}
-  <div class="rounded-md bg-red-500/10 px-3 py-2 text-[13px] text-red-400">{loadError}</div>
+  <div class="rounded-md bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
+    {loadError}
+  </div>
 {:else if artifact}
   <section class="rounded-md border border-gray-200 bg-gray-100 p-4">
     <h1 class="text-lg font-semibold text-gray-900">{artifactHeaderTitle}</h1>
-    <p class="mt-0.5 text-[13px] text-gray-500">{kindDescription(artifact.kind)}</p>
+    <p class="mt-0.5 text-[13px] text-gray-500">
+      {kindDescription(artifact.kind)}
+    </p>
 
     <div class="mt-2 flex flex-wrap items-center gap-2 text-[12px]">
-      <span class="rounded px-1.5 py-0.5 font-medium {kindColor(artifact.kind)}">{kindLabel(artifact.kind)}</span>
-      <span class="text-gray-400">{formatTimestamp(artifact.created_at) || "—"}</span>
+      <span class="rounded px-1.5 py-0.5 font-medium {kindColor(artifact.kind)}"
+        >{kindLabel(artifact.kind)}</span
+      >
+      <span class="text-gray-400"
+        >{formatTimestamp(artifact.created_at) || "—"}</span
+      >
       <span class="text-gray-400">by {actorName(artifact.created_by)}</span>
       {#if artifact.thread_id}
-        <RefLink humanize labelHints={artifactRefHints} refValue={`thread:${artifact.thread_id}`} showRaw threadId={artifact.thread_id} />
+        <RefLink
+          humanize
+          labelHints={artifactRefHints}
+          refValue={`thread:${artifact.thread_id}`}
+          showRaw
+          threadId={artifact.thread_id}
+        />
       {/if}
     </div>
     <p class="mt-1 text-[11px] text-gray-400">ID: {artifact.id}</p>
@@ -398,20 +481,31 @@
       <h2 class="text-[13px] font-medium text-gray-900">Linked references</h2>
       <div class="mt-1.5 flex flex-wrap gap-1.5 text-[11px]">
         {#each artifact.refs ?? [] as refValue}
-          <RefLink humanize labelHints={artifactRefHints} {refValue} showRaw threadId={artifact.thread_id} />
+          <RefLink
+            humanize
+            labelHints={artifactRefHints}
+            {refValue}
+            showRaw
+            threadId={artifact.thread_id}
+          />
         {/each}
       </div>
     </div>
   {/if}
 
   {#if artifact.kind === "doc" && textContent}
-    <div class="mt-3 rounded-md bg-indigo-500/10 px-3 py-2 text-[12px] text-indigo-400">
-      Document artifacts render in readable mode below. Raw content remains available in the debug panels.
+    <div
+      class="mt-3 rounded-md bg-indigo-500/10 px-3 py-2 text-[12px] text-indigo-400"
+    >
+      Document artifacts render in readable mode below. Raw content remains
+      available in the debug panels.
     </div>
   {/if}
 
   {#if !isKnownPacketArtifactKind && artifact.kind !== "doc"}
-    <div class="mt-3 rounded-md bg-amber-500/10 px-3 py-2 text-[12px] text-amber-400">
+    <div
+      class="mt-3 rounded-md bg-amber-500/10 px-3 py-2 text-[12px] text-amber-400"
+    >
       Unknown artifact kind: {artifact.kind}
     </div>
   {/if}
@@ -428,7 +522,10 @@
             <p class="text-[11px] font-medium text-gray-400">Constraints</p>
             <ul class="mt-1 space-y-0.5">
               {#each workOrderPacket.constraints as c}
-                <li class="flex items-start gap-2"><span class="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-gray-300"></span>{c}</li>
+                <li class="flex items-start gap-2">
+                  <span class="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-gray-300"
+                  ></span>{c}
+                </li>
               {/each}
             </ul>
           </div>
@@ -437,26 +534,42 @@
           <div class="mt-3">
             <p class="text-[11px] font-medium text-gray-400">Context</p>
             <div class="mt-1 flex flex-wrap gap-1.5 text-[11px]">
-              {#each workOrderPacket.context_refs as r}<RefLink humanize labelHints={artifactRefHints} refValue={r} showRaw threadId={workOrderPacket.thread_id} />{/each}
+              {#each workOrderPacket.context_refs as r}<RefLink
+                  humanize
+                  labelHints={artifactRefHints}
+                  refValue={r}
+                  showRaw
+                  threadId={workOrderPacket.thread_id}
+                />{/each}
             </div>
           </div>
         {/if}
         {#if (workOrderPacket.acceptance_criteria ?? []).length > 0}
           <div class="mt-3">
-            <p class="text-[11px] font-medium text-gray-400">Acceptance criteria</p>
+            <p class="text-[11px] font-medium text-gray-400">
+              Acceptance criteria
+            </p>
             <ul class="mt-1 space-y-0.5">
               {#each workOrderPacket.acceptance_criteria as c}
-                <li class="flex items-start gap-2"><span class="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-gray-300"></span>{c}</li>
+                <li class="flex items-start gap-2">
+                  <span class="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-gray-300"
+                  ></span>{c}
+                </li>
               {/each}
             </ul>
           </div>
         {/if}
         {#if (workOrderPacket.definition_of_done ?? []).length > 0}
           <div class="mt-3">
-            <p class="text-[11px] font-medium text-gray-400">Definition of done</p>
+            <p class="text-[11px] font-medium text-gray-400">
+              Definition of done
+            </p>
             <ul class="mt-1 space-y-0.5">
               {#each workOrderPacket.definition_of_done as d}
-                <li class="flex items-start gap-2"><span class="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-gray-300"></span>{d}</li>
+                <li class="flex items-start gap-2">
+                  <span class="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-gray-300"
+                  ></span>{d}
+                </li>
               {/each}
             </ul>
           </div>
@@ -472,35 +585,69 @@
       </div>
       <div class="px-4 py-3 text-[13px]">
         <div class="flex flex-wrap gap-3 text-[12px] text-gray-500">
-          <span class="flex items-center gap-1">Work order: <RefLink humanize labelHints={artifactRefHints} refValue={`artifact:${receiptPacket.work_order_id}`} showRaw /></span>
-          <span class="flex items-center gap-1">Thread: <RefLink humanize labelHints={artifactRefHints} refValue={`thread:${receiptPacket.thread_id}`} showRaw /></span>
+          <span class="flex items-center gap-1"
+            >Work order: <RefLink
+              humanize
+              labelHints={artifactRefHints}
+              refValue={`artifact:${receiptPacket.work_order_id}`}
+              showRaw
+            /></span
+          >
+          <span class="flex items-center gap-1"
+            >Thread: <RefLink
+              humanize
+              labelHints={artifactRefHints}
+              refValue={`thread:${receiptPacket.thread_id}`}
+              showRaw
+            /></span
+          >
         </div>
         {#if (receiptPacket.outputs ?? []).length > 0}
           <div class="mt-3">
             <p class="text-[11px] font-medium text-gray-400">Outputs</p>
             <div class="mt-1 flex flex-wrap gap-1.5 text-[11px]">
-              {#each receiptPacket.outputs as r}<RefLink humanize labelHints={artifactRefHints} refValue={r} showRaw threadId={receiptPacket.thread_id} />{/each}
+              {#each receiptPacket.outputs as r}<RefLink
+                  humanize
+                  labelHints={artifactRefHints}
+                  refValue={r}
+                  showRaw
+                  threadId={receiptPacket.thread_id}
+                />{/each}
             </div>
           </div>
         {/if}
         {#if (receiptPacket.verification_evidence ?? []).length > 0}
           <div class="mt-3">
-            <p class="text-[11px] font-medium text-gray-400">Verification evidence</p>
+            <p class="text-[11px] font-medium text-gray-400">
+              Verification evidence
+            </p>
             <div class="mt-1 flex flex-wrap gap-1.5 text-[11px]">
-              {#each receiptPacket.verification_evidence as r}<RefLink humanize labelHints={artifactRefHints} refValue={r} showRaw threadId={receiptPacket.thread_id} />{/each}
+              {#each receiptPacket.verification_evidence as r}<RefLink
+                  humanize
+                  labelHints={artifactRefHints}
+                  refValue={r}
+                  showRaw
+                  threadId={receiptPacket.thread_id}
+                />{/each}
             </div>
           </div>
         {/if}
         <div class="mt-3">
           <p class="text-[11px] font-medium text-gray-400">Changes summary</p>
-          <p class="mt-1 leading-relaxed text-gray-800">{receiptPacket.changes_summary || "—"}</p>
+          <p class="mt-1 leading-relaxed text-gray-800">
+            {receiptPacket.changes_summary || "—"}
+          </p>
         </div>
         {#if (receiptPacket.known_gaps ?? []).length > 0}
           <div class="mt-3">
             <p class="text-[11px] font-medium text-gray-400">Known gaps</p>
             <ul class="mt-1 space-y-0.5 text-gray-600">
               {#each receiptPacket.known_gaps as g}
-                <li class="flex items-start gap-2"><span class="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-amber-300"></span>{g}</li>
+                <li class="flex items-start gap-2">
+                  <span
+                    class="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-amber-300"
+                  ></span>{g}
+                </li>
               {/each}
             </ul>
           </div>
@@ -510,34 +657,70 @@
       <div class="border-t border-gray-200 px-4 py-3">
         <h3 class="text-[13px] font-medium text-gray-900">Submit Review</h3>
         {#if reviewErrors.length > 0}
-          <ul class="mt-2 list-inside list-disc rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400">
+          <ul
+            class="mt-2 list-inside list-disc rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
+          >
             {#each reviewErrors as e}<li>{e}</li>{/each}
           </ul>
         {/if}
         {#if reviewNotice}
-          <div class="mt-2 rounded-md bg-emerald-500/10 px-3 py-1.5 text-[12px] text-emerald-400">{reviewNotice}</div>
+          <div
+            class="mt-2 rounded-md bg-emerald-500/10 px-3 py-1.5 text-[12px] text-emerald-400"
+          >
+            {reviewNotice}
+          </div>
         {/if}
         {#if reviseFollowupLink}
-          <div class="mt-2 rounded-md bg-amber-500/10 px-3 py-1.5 text-[12px] text-amber-400">
+          <div
+            class="mt-2 rounded-md bg-amber-500/10 px-3 py-1.5 text-[12px] text-amber-400"
+          >
             Outcome is revise.
-            <a class="font-medium underline" href={reviseFollowupLink}>Create follow-up work order</a>
+            <a class="font-medium underline" href={reviseFollowupLink}
+              >Create follow-up work order</a
+            >
           </div>
         {/if}
         {#if reviewDraft}
           <form class="mt-2 grid gap-3" onsubmit={submitReview}>
-            <label class="text-[12px] font-medium text-gray-600">Outcome
-              <select aria-label="Review outcome" bind:value={reviewDraft.outcome} class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-[13px] focus:bg-gray-100">
-                <option value="accept">Accept</option><option value="revise">Revise</option><option value="escalate">Escalate</option>
+            <label class="text-[12px] font-medium text-gray-600"
+              >Outcome
+              <select
+                aria-label="Review outcome"
+                bind:value={reviewDraft.outcome}
+                class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-[13px] focus:bg-gray-100"
+              >
+                <option value="accept">Accept</option><option value="revise"
+                  >Revise</option
+                ><option value="escalate">Escalate</option>
               </select>
             </label>
-            {#if firstFieldError(reviewFieldErrors, "outcome")}<p class="-mt-1 text-[11px] text-red-400">{firstFieldError(reviewFieldErrors, "outcome")}</p>{/if}
+            {#if firstFieldError(reviewFieldErrors, "outcome")}<p
+                class="-mt-1 text-[11px] text-red-400"
+              >
+                {firstFieldError(reviewFieldErrors, "outcome")}
+              </p>{/if}
             {#if reviewOutcomeGuidance}
-              <p class="-mt-1 rounded-md bg-gray-50 px-3 py-1.5 text-[12px] text-gray-500">{reviewOutcomeGuidance}</p>
+              <p
+                class="-mt-1 rounded-md bg-gray-50 px-3 py-1.5 text-[12px] text-gray-500"
+              >
+                {reviewOutcomeGuidance}
+              </p>
             {/if}
-            <label class="text-[12px] font-medium text-gray-600">Notes
-              <textarea aria-label="Review notes" bind:value={reviewDraft.notes} class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] focus:bg-gray-100" placeholder="Review notes..." rows="2"></textarea>
+            <label class="text-[12px] font-medium text-gray-600"
+              >Notes
+              <textarea
+                aria-label="Review notes"
+                bind:value={reviewDraft.notes}
+                class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] focus:bg-gray-100"
+                placeholder="Review notes..."
+                rows="2"
+              ></textarea>
             </label>
-            {#if firstFieldError(reviewFieldErrors, "notes")}<p class="-mt-1 text-[11px] text-red-400">{firstFieldError(reviewFieldErrors, "notes")}</p>{/if}
+            {#if firstFieldError(reviewFieldErrors, "notes")}<p
+                class="-mt-1 text-[11px] text-red-400"
+              >
+                {firstFieldError(reviewFieldErrors, "notes")}
+              </p>{/if}
             <div class="text-[12px] font-medium text-gray-600">
               Evidence refs
               <GuidedTypedRefsInput
@@ -556,13 +739,22 @@
               />
             </div>
             <div class="flex justify-end">
-              <button class="rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50" disabled={submittingReview} type="submit">{submittingReview ? "Submitting..." : "Submit review"}</button>
+              <button
+                class="rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+                disabled={submittingReview}
+                type="submit"
+                >{submittingReview ? "Submitting..." : "Submit review"}</button
+              >
             </div>
           </form>
         {/if}
         {#if createdReview}
           <div class="mt-2 text-[12px] text-gray-500">
-            Review submitted: <a class="font-medium text-indigo-400 hover:text-indigo-400" href={`/artifacts/${createdReview.id}`}>{createdReview.summary || createdReview.id}</a>
+            Review submitted: <a
+              class="font-medium text-indigo-400 hover:text-indigo-400"
+              href={`/artifacts/${createdReview.id}`}
+              >{createdReview.summary || createdReview.id}</a
+            >
           </div>
         {/if}
       </div>
@@ -579,7 +771,11 @@
               {#each timelineView.slice(0, 10) as event}
                 <div class="rounded-md bg-gray-50 px-3 py-2 text-[12px]">
                   <p class="font-medium text-gray-800">{event.summary}</p>
-                  <p class="text-[11px] text-gray-400">{actorName(event.actor_id)} · {event.typeLabel} · {formatTimestamp(event.ts) || "—"}</p>
+                  <p class="text-[11px] text-gray-400">
+                    {actorName(event.actor_id)} · {event.typeLabel} · {formatTimestamp(
+                      event.ts,
+                    ) || "—"}
+                  </p>
                 </div>
               {/each}
             </div>
@@ -596,16 +792,47 @@
       </div>
       <div class="px-4 py-3 text-[13px]">
         <div class="flex items-center gap-3">
-          <span class="rounded px-1.5 py-0.5 text-[12px] font-medium {reviewPacket.outcome === 'accept' ? 'bg-emerald-500/10 text-emerald-400' : reviewPacket.outcome === 'revise' ? 'bg-amber-500/10 text-amber-400' : 'bg-red-500/10 text-red-400'}">{reviewPacket.outcome}</span>
-          <span class="text-[12px] text-gray-500">Receipt: <RefLink humanize labelHints={artifactRefHints} refValue={`artifact:${reviewPacket.receipt_id}`} showRaw threadId={artifact.thread_id} /></span>
-          <span class="text-[12px] text-gray-500">Work order: <RefLink humanize labelHints={artifactRefHints} refValue={`artifact:${reviewPacket.work_order_id}`} showRaw threadId={artifact.thread_id} /></span>
+          <span
+            class="rounded px-1.5 py-0.5 text-[12px] font-medium {reviewPacket.outcome ===
+            'accept'
+              ? 'bg-emerald-500/10 text-emerald-400'
+              : reviewPacket.outcome === 'revise'
+                ? 'bg-amber-500/10 text-amber-400'
+                : 'bg-red-500/10 text-red-400'}">{reviewPacket.outcome}</span
+          >
+          <span class="text-[12px] text-gray-500"
+            >Receipt: <RefLink
+              humanize
+              labelHints={artifactRefHints}
+              refValue={`artifact:${reviewPacket.receipt_id}`}
+              showRaw
+              threadId={artifact.thread_id}
+            /></span
+          >
+          <span class="text-[12px] text-gray-500"
+            >Work order: <RefLink
+              humanize
+              labelHints={artifactRefHints}
+              refValue={`artifact:${reviewPacket.work_order_id}`}
+              showRaw
+              threadId={artifact.thread_id}
+            /></span
+          >
         </div>
-        {#if reviewPacket.notes}<p class="mt-2 leading-relaxed text-gray-700">{reviewPacket.notes}</p>{/if}
+        {#if reviewPacket.notes}<p class="mt-2 leading-relaxed text-gray-700">
+            {reviewPacket.notes}
+          </p>{/if}
         {#if (reviewPacket.evidence_refs ?? []).length > 0}
           <div class="mt-3">
             <p class="text-[11px] font-medium text-gray-400">Evidence</p>
             <div class="mt-1 flex flex-wrap gap-1.5 text-[11px]">
-              {#each reviewPacket.evidence_refs as r}<RefLink humanize labelHints={artifactRefHints} refValue={r} showRaw threadId={artifact.thread_id} />{/each}
+              {#each reviewPacket.evidence_refs as r}<RefLink
+                  humanize
+                  labelHints={artifactRefHints}
+                  refValue={r}
+                  showRaw
+                  threadId={artifact.thread_id}
+                />{/each}
             </div>
           </div>
         {/if}
@@ -615,19 +842,25 @@
 
   {#if textContent}
     <div class="mt-4 rounded-md border border-gray-200 bg-gray-100">
-      <div class="flex items-center justify-between border-b border-gray-200 px-4 py-2.5">
+      <div
+        class="flex items-center justify-between border-b border-gray-200 px-4 py-2.5"
+      >
         <h2 class="text-[13px] font-medium text-gray-900">Text Content</h2>
         <span class="text-[11px] text-gray-400">{artifactContentType}</span>
       </div>
       {#if isMarkdownContent}
-        <article class="markdown-lite max-h-[30rem] overflow-auto px-4 py-3 text-[13px] text-gray-800">
+        <article
+          class="markdown-lite max-h-[30rem] overflow-auto px-4 py-3 text-[13px] text-gray-800"
+        >
           {#each renderedMarkdownBlocks as block}
             {#if block.type === "heading"}
               {#if block.level === 1}<h1>{block.text}</h1>
               {:else if block.level === 2}<h2>{block.text}</h2>
               {:else}<h3>{block.text}</h3>{/if}
             {:else if block.type === "list"}
-              <ul>{#each block.items as item}<li>{item}</li>{/each}</ul>
+              <ul>
+                {#each block.items as item}<li>{item}</li>{/each}
+              </ul>
             {:else if block.type === "code"}
               <pre><code>{block.text}</code></pre>
             {:else}
@@ -636,22 +869,44 @@
           {/each}
         </article>
       {:else}
-        <article class="max-h-[30rem] overflow-auto px-4 py-3 text-[13px] leading-7 text-gray-800 whitespace-pre-wrap">{textContent}</article>
+        <article
+          class="max-h-[30rem] overflow-auto px-4 py-3 text-[13px] leading-7 text-gray-800 whitespace-pre-wrap"
+        >
+          {textContent}
+        </article>
       {/if}
     </div>
   {/if}
 
   <details class="mt-4 rounded-md border border-gray-200 bg-gray-100">
-    <summary class="cursor-pointer px-4 py-2.5 text-[11px] text-gray-400 hover:text-gray-600">Raw metadata JSON</summary>
-    <pre class="overflow-auto px-4 pb-3 text-[11px] text-gray-500">{JSON.stringify(artifact, null, 2)}</pre>
+    <summary
+      class="cursor-pointer px-4 py-2.5 text-[11px] text-gray-400 hover:text-gray-600"
+      >Raw metadata JSON</summary
+    >
+    <pre
+      class="overflow-auto px-4 pb-3 text-[11px] text-gray-500">{JSON.stringify(
+        artifact,
+        null,
+        2,
+      )}</pre>
   </details>
 
   {#if artifactContent && !textContent}
     <details class="mt-2 rounded-md border border-gray-200 bg-gray-100">
-      <summary class="cursor-pointer px-4 py-2.5 text-[11px] text-gray-400 hover:text-gray-600">Raw content JSON</summary>
-      <pre class="overflow-auto px-4 pb-3 text-[11px] text-gray-500">{JSON.stringify(artifactContent, null, 2)}</pre>
+      <summary
+        class="cursor-pointer px-4 py-2.5 text-[11px] text-gray-400 hover:text-gray-600"
+        >Raw content JSON</summary
+      >
+      <pre
+        class="overflow-auto px-4 pb-3 text-[11px] text-gray-500">{JSON.stringify(
+          artifactContent,
+          null,
+          2,
+        )}</pre>
     </details>
   {/if}
 {:else}
-  <div class="mt-8 text-center text-[13px] text-gray-400">Artifact not found.</div>
+  <div class="mt-8 text-center text-[13px] text-gray-400">
+    Artifact not found.
+  </div>
 {/if}

@@ -646,8 +646,7 @@ button:focus-visible {
 }
 
 .markdown-lite code {
-  font-family:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.8em;
   background: #262a33;
   border-radius: 0.25rem;

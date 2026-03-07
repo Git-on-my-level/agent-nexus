@@ -473,10 +473,193 @@ export const commandRegistry = [
             ]
         },
         "adjacent_commands": [
+            "auth.passkey.login.options",
+            "auth.passkey.login.verify",
+            "auth.passkey.register.options",
+            "auth.passkey.register.verify",
             "auth.token"
         ],
         "go_method": "AuthAgentsRegister",
         "ts_method": "authAgentsRegister"
+    },
+    {
+        "command_id": "auth.passkey.login.options",
+        "cli_path": "auth passkey login options",
+        "group": "auth",
+        "method": "POST",
+        "path": "/auth/passkey/login/options",
+        "operation_id": "passkeyLoginOptions",
+        "summary": "Begin passkey login ceremony",
+        "why": "Create a WebAuthn assertion challenge for passkey authentication.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ session_id, options }` where `options` is a WebAuthn assertion payload.",
+        "error_codes": [
+            "invalid_json",
+            "not_found"
+        ],
+        "concepts": [
+            "auth",
+            "passkey"
+        ],
+        "stability": "beta",
+        "agent_notes": "Provide `username` to scope login to one principal, or omit it for discoverable login.",
+        "body_schema": {
+            "optional": [
+                {
+                    "name": "username",
+                    "type": "string"
+                }
+            ]
+        },
+        "adjacent_commands": [
+            "auth.agents.register",
+            "auth.passkey.login.verify",
+            "auth.passkey.register.options",
+            "auth.passkey.register.verify",
+            "auth.token"
+        ],
+        "go_method": "AuthPasskeyLoginOptions",
+        "ts_method": "authPasskeyLoginOptions"
+    },
+    {
+        "command_id": "auth.passkey.login.verify",
+        "cli_path": "auth passkey login verify",
+        "group": "auth",
+        "method": "POST",
+        "path": "/auth/passkey/login/verify",
+        "operation_id": "passkeyLoginVerify",
+        "summary": "Verify passkey login and issue tokens",
+        "why": "Verify a WebAuthn assertion and issue a fresh token bundle.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ agent, tokens }` when passkey verification succeeds.",
+        "error_codes": [
+            "invalid_json",
+            "invalid_request",
+            "invalid_token",
+            "agent_revoked"
+        ],
+        "concepts": [
+            "auth",
+            "passkey"
+        ],
+        "stability": "beta",
+        "agent_notes": "Session ids are one-time use and expire quickly.",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "credential",
+                    "type": "object"
+                },
+                {
+                    "name": "session_id",
+                    "type": "string"
+                }
+            ]
+        },
+        "adjacent_commands": [
+            "auth.agents.register",
+            "auth.passkey.login.options",
+            "auth.passkey.register.options",
+            "auth.passkey.register.verify",
+            "auth.token"
+        ],
+        "go_method": "AuthPasskeyLoginVerify",
+        "ts_method": "authPasskeyLoginVerify"
+    },
+    {
+        "command_id": "auth.passkey.register.options",
+        "cli_path": "auth passkey register options",
+        "group": "auth",
+        "method": "POST",
+        "path": "/auth/passkey/register/options",
+        "operation_id": "passkeyRegisterOptions",
+        "summary": "Begin passkey registration ceremony",
+        "why": "Create a WebAuthn registration challenge for a new human principal.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ session_id, options }` where `options` is a WebAuthn registration payload.",
+        "error_codes": [
+            "invalid_json",
+            "invalid_request"
+        ],
+        "concepts": [
+            "auth",
+            "passkey"
+        ],
+        "stability": "beta",
+        "agent_notes": "Intended for browser-based WebAuthn clients.",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "display_name",
+                    "type": "string"
+                }
+            ]
+        },
+        "adjacent_commands": [
+            "auth.agents.register",
+            "auth.passkey.login.options",
+            "auth.passkey.login.verify",
+            "auth.passkey.register.verify",
+            "auth.token"
+        ],
+        "go_method": "AuthPasskeyRegisterOptions",
+        "ts_method": "authPasskeyRegisterOptions"
+    },
+    {
+        "command_id": "auth.passkey.register.verify",
+        "cli_path": "auth passkey register verify",
+        "group": "auth",
+        "method": "POST",
+        "path": "/auth/passkey/register/verify",
+        "operation_id": "passkeyRegisterVerify",
+        "summary": "Verify passkey registration and issue tokens",
+        "why": "Verify a WebAuthn attestation, create a principal, and issue the initial token bundle.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ agent, tokens }` for the newly registered passkey principal.",
+        "error_codes": [
+            "invalid_json",
+            "invalid_request",
+            "invalid_token"
+        ],
+        "concepts": [
+            "auth",
+            "passkey"
+        ],
+        "stability": "beta",
+        "agent_notes": "Session ids are one-time use and expire quickly.",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "credential",
+                    "type": "object"
+                },
+                {
+                    "name": "session_id",
+                    "type": "string"
+                }
+            ]
+        },
+        "adjacent_commands": [
+            "auth.agents.register",
+            "auth.passkey.login.options",
+            "auth.passkey.login.verify",
+            "auth.passkey.register.options",
+            "auth.token"
+        ],
+        "go_method": "AuthPasskeyRegisterVerify",
+        "ts_method": "authPasskeyRegisterVerify"
     },
     {
         "command_id": "auth.token",
@@ -546,7 +729,11 @@ export const commandRegistry = [
             ]
         },
         "adjacent_commands": [
-            "auth.agents.register"
+            "auth.agents.register",
+            "auth.passkey.login.options",
+            "auth.passkey.login.verify",
+            "auth.passkey.register.options",
+            "auth.passkey.register.verify"
         ],
         "go_method": "AuthToken",
         "ts_method": "authToken"
@@ -2599,6 +2786,18 @@ export class OarClient {
     }
     authAgentsRegister(options = {}) {
         return this.invoke("auth.agents.register", {}, options);
+    }
+    authPasskeyLoginOptions(options = {}) {
+        return this.invoke("auth.passkey.login.options", {}, options);
+    }
+    authPasskeyLoginVerify(options = {}) {
+        return this.invoke("auth.passkey.login.verify", {}, options);
+    }
+    authPasskeyRegisterOptions(options = {}) {
+        return this.invoke("auth.passkey.register.options", {}, options);
+    }
+    authPasskeyRegisterVerify(options = {}) {
+        return this.invoke("auth.passkey.register.verify", {}, options);
     }
     authToken(options = {}) {
         return this.invoke("auth.token", {}, options);

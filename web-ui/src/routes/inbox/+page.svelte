@@ -216,7 +216,8 @@
   <div>
     <h1 class="text-lg font-semibold text-gray-900">Inbox</h1>
     <p class="text-[13px] text-gray-500">
-      Prioritized for human triage. Urgency is inferred from category and source event age.
+      Prioritized for human triage. Urgency is inferred from category and source
+      event age.
     </p>
   </div>
   <span
@@ -230,13 +231,21 @@
 <div class="flex gap-2 mb-4" data-testid="urgency-summary-immediate">
   <div class="flex-1 rounded-md border border-gray-200 bg-gray-100 px-3 py-2">
     <p class="text-[11px] font-medium text-red-400">Immediate</p>
-    <p class="text-lg font-semibold text-gray-900">{urgencySummary.immediate}</p>
+    <p class="text-lg font-semibold text-gray-900">
+      {urgencySummary.immediate}
+    </p>
   </div>
-  <div class="flex-1 rounded-md border border-gray-200 bg-gray-100 px-3 py-2" data-testid="urgency-summary-high">
+  <div
+    class="flex-1 rounded-md border border-gray-200 bg-gray-100 px-3 py-2"
+    data-testid="urgency-summary-high"
+  >
     <p class="text-[11px] font-medium text-amber-400">High</p>
     <p class="text-lg font-semibold text-gray-900">{urgencySummary.high}</p>
   </div>
-  <div class="flex-1 rounded-md border border-gray-200 bg-gray-100 px-3 py-2" data-testid="urgency-summary-normal">
+  <div
+    class="flex-1 rounded-md border border-gray-200 bg-gray-100 px-3 py-2"
+    data-testid="urgency-summary-normal"
+  >
     <p class="text-[11px] font-medium text-gray-400">Normal</p>
     <p class="text-lg font-semibold text-gray-900">{urgencySummary.normal}</p>
   </div>
@@ -245,8 +254,12 @@
 <div class="flex flex-wrap gap-1.5 mb-5" data-testid="inbox-filter-bar">
   {#each [["all", `All (${totalItems})`], ["immediate", `Immediate (${urgencySummary.immediate})`], ["high", `High (${urgencySummary.high})`], ["aging", "Aging 24h+"]] as [value, label]}
     <button
-      class="rounded-md border border-gray-200 px-2.5 py-1.5 text-[12px] font-medium transition-colors {filterButtonClass(value)}"
-      onclick={() => { urgencyFilter = value; }}
+      class="rounded-md border border-gray-200 px-2.5 py-1.5 text-[12px] font-medium transition-colors {filterButtonClass(
+        value,
+      )}"
+      onclick={() => {
+        urgencyFilter = value;
+      }}
       type="button"
     >
       {label}
@@ -255,16 +268,31 @@
 </div>
 
 {#if error}
-  <div class="mb-4 rounded-md bg-red-500/10 px-3 py-2.5 text-[13px] text-red-400">
+  <div
+    class="mb-4 rounded-md bg-red-500/10 px-3 py-2.5 text-[13px] text-red-400"
+  >
     {error}
   </div>
 {/if}
 
 {#if loading}
-  <div class="mt-12 flex items-center justify-center gap-2 text-[13px] text-gray-400">
+  <div
+    class="mt-12 flex items-center justify-center gap-2 text-[13px] text-gray-400"
+  >
     <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+      <circle
+        class="opacity-25"
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        stroke-width="4"
+      ></circle>
+      <path
+        class="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+      ></path>
     </svg>
     Loading inbox...
   </div>
@@ -272,18 +300,24 @@
   <div class="mt-8 text-center py-8" data-testid="inbox-empty-state">
     <h2 class="text-[13px] font-semibold text-gray-900">Inbox is clear</h2>
     <p class="mt-1 text-[13px] text-gray-500">
-      No triage items are pending. New exceptions, risks, or decisions will appear here.
+      No triage items are pending. New exceptions, risks, or decisions will
+      appear here.
     </p>
   </div>
 {:else if !hasFilteredItems}
   <div class="mt-8 text-center py-8" data-testid="inbox-filter-empty-state">
-    <h2 class="text-[13px] font-semibold text-gray-900">No items match this view</h2>
+    <h2 class="text-[13px] font-semibold text-gray-900">
+      No items match this view
+    </h2>
     <p class="mt-1 text-[13px] text-gray-500">
-      Try switching back to <span class="font-semibold">All</span> to see the full queue.
+      Try switching back to <span class="font-semibold">All</span> to see the full
+      queue.
     </p>
     <button
       class="mt-3 rounded-md border border-gray-200 bg-gray-100 px-3 py-1.5 text-[13px] font-medium text-gray-600 hover:bg-gray-200"
-      onclick={() => { urgencyFilter = "all"; }}
+      onclick={() => {
+        urgencyFilter = "all";
+      }}
       type="button"
     >
       Show all
@@ -294,7 +328,9 @@
     {#each visibleGroups as group}
       <section data-testid={`inbox-group-${group.category}`}>
         <div class="mb-2 flex items-center gap-2">
-          <h2 class="text-[12px] font-semibold uppercase tracking-wide text-gray-400">
+          <h2
+            class="text-[12px] font-semibold uppercase tracking-wide text-gray-400"
+          >
             {getInboxCategoryLabel(group.category)}
           </h2>
           <span class="text-[11px] text-gray-300">{group.items.length}</span>
@@ -303,12 +339,20 @@
         <div class="space-y-2">
           {#each group.items as item}
             <article
-              class="rounded-md border border-gray-200 border-l-[3px] bg-gray-100 px-4 py-3 {urgencyBorderClass(item.urgency_level)}"
+              class="rounded-md border border-gray-200 border-l-[3px] bg-gray-100 px-4 py-3 {urgencyBorderClass(
+                item.urgency_level,
+              )}"
               data-testid={`inbox-card-${item.id}`}
             >
               <div class="flex items-center gap-2 text-[11px]">
-                <span class="inline-flex h-1.5 w-1.5 rounded-full {urgencyDot(item.urgency_level)}"></span>
-                <span class="font-medium text-gray-500">{item.urgency_label}</span>
+                <span
+                  class="inline-flex h-1.5 w-1.5 rounded-full {urgencyDot(
+                    item.urgency_level,
+                  )}"
+                ></span>
+                <span class="font-medium text-gray-500"
+                  >{item.urgency_label}</span
+                >
                 <span class="text-gray-300">{item.age_label}</span>
                 {#if item.has_source_event_time}
                   <span class="text-gray-300">
@@ -317,16 +361,22 @@
                 {/if}
               </div>
 
-              <h3 class="mt-1.5 text-[13px] font-semibold text-gray-900 leading-snug">
+              <h3
+                class="mt-1.5 text-[13px] font-semibold text-gray-900 leading-snug"
+              >
                 {item.title}
               </h3>
 
               {#if item.recommended_action}
                 <div class="mt-2 rounded bg-gray-50 px-3 py-2">
-                  <p class="text-[11px] font-medium text-gray-400 uppercase tracking-wide">
+                  <p
+                    class="text-[11px] font-medium text-gray-400 uppercase tracking-wide"
+                  >
                     Recommended
                   </p>
-                  <p class="mt-0.5 text-[13px] text-gray-700">{item.recommended_action}</p>
+                  <p class="mt-0.5 text-[13px] text-gray-700">
+                    {item.recommended_action}
+                  </p>
                 </div>
               {/if}
 
@@ -334,14 +384,17 @@
                 {#if item.thread_id}
                   <a
                     class="font-medium text-gray-500 hover:text-gray-700 transition-colors"
-                    href={`/threads/${item.thread_id}`}
-                  >Thread</a>
+                    href={`/threads/${item.thread_id}`}>Thread</a
+                  >
                 {/if}
                 {#if item.commitment_id}
                   <a
                     class="font-medium text-gray-500 hover:text-gray-700 transition-colors"
-                    href={item.thread_id ? `/threads/${item.thread_id}#commitment-card-${item.commitment_id}` : `/threads#commitment-card-${item.commitment_id}`}
-                  >Commitment</a>
+                    href={item.thread_id
+                      ? `/threads/${item.thread_id}#commitment-card-${item.commitment_id}`
+                      : `/threads#commitment-card-${item.commitment_id}`}
+                    >Commitment</a
+                  >
                 {/if}
                 {#each item.refs ?? [] as refValue}
                   <RefLink {refValue} threadId={item.thread_id} />
@@ -360,7 +413,8 @@
                 </button>
                 <button
                   class="rounded-md bg-gray-200 px-3 py-1.5 text-[12px] font-medium text-gray-900 transition-colors hover:bg-gray-300"
-                  onclick={() => toggleDecisionForm(item, !getDecisionForm(item.id).open)}
+                  onclick={() =>
+                    toggleDecisionForm(item, !getDecisionForm(item.id).open)}
                   type="button"
                 >
                   {getDecisionForm(item.id).open ? "Close form" : "Decide"}
@@ -383,41 +437,66 @@
                 <form
                   class="mt-3 rounded-md border border-gray-200 bg-gray-50 p-3"
                   data-testid={`decision-form-${item.id}`}
-                  onsubmit={(event) => { event.preventDefault(); void recordDecision(item); }}
+                  onsubmit={(event) => {
+                    event.preventDefault();
+                    void recordDecision(item);
+                  }}
                 >
                   <p class="text-[12px] text-gray-500 mb-2">
-                    Record a decision for this item. Creates a `decision_made` event on the linked thread.
+                    Record a decision for this item. Creates a `decision_made`
+                    event on the linked thread.
                   </p>
-                  <label class="block text-[12px] font-medium text-gray-600" for={`decision-summary-${item.id}`}>
+                  <label
+                    class="block text-[12px] font-medium text-gray-600"
+                    for={`decision-summary-${item.id}`}
+                  >
                     Decision summary
                   </label>
                   <input
                     class="mt-1 w-full rounded-md border border-gray-200 bg-gray-100 px-3 py-2 text-[13px] transition-colors"
                     id={`decision-summary-${item.id}`}
-                    oninput={(event) => updateDecisionField(item.id, "summary", event.currentTarget.value)}
+                    oninput={(event) =>
+                      updateDecisionField(
+                        item.id,
+                        "summary",
+                        event.currentTarget.value,
+                      )}
                     placeholder="What was decided?"
                     value={getDecisionForm(item.id).summary}
                   />
                   {#if getDecisionFormError(item.id)}
-                    <p class="mt-1 text-[11px] text-red-400">{getDecisionFormError(item.id)}</p>
+                    <p class="mt-1 text-[11px] text-red-400">
+                      {getDecisionFormError(item.id)}
+                    </p>
                   {/if}
-                  <label class="mt-2 block text-[12px] font-medium text-gray-600" for={`decision-notes-${item.id}`}>
-                    Notes <span class="font-normal text-gray-400">optional</span>
+                  <label
+                    class="mt-2 block text-[12px] font-medium text-gray-600"
+                    for={`decision-notes-${item.id}`}
+                  >
+                    Notes <span class="font-normal text-gray-400">optional</span
+                    >
                   </label>
                   <textarea
                     class="mt-1 w-full rounded-md border border-gray-200 bg-gray-100 px-3 py-2 text-[13px] transition-colors"
                     id={`decision-notes-${item.id}`}
-                    oninput={(event) => updateDecisionField(item.id, "notes", event.currentTarget.value)}
+                    oninput={(event) =>
+                      updateDecisionField(
+                        item.id,
+                        "notes",
+                        event.currentTarget.value,
+                      )}
                     placeholder="Additional context..."
-                    rows="2"
-                  >{getDecisionForm(item.id).notes}</textarea>
+                    rows="2">{getDecisionForm(item.id).notes}</textarea
+                  >
                   <div class="mt-2 flex justify-end">
                     <button
                       class="rounded-md bg-gray-200 px-3 py-1.5 text-[12px] font-medium text-gray-900 hover:bg-gray-300 disabled:opacity-50"
                       disabled={Boolean(decisionInFlightById[item.id])}
                       type="submit"
                     >
-                      {decisionInFlightById[item.id] ? "Recording..." : "Record decision"}
+                      {decisionInFlightById[item.id]
+                        ? "Recording..."
+                        : "Record decision"}
                     </button>
                   </div>
                 </form>

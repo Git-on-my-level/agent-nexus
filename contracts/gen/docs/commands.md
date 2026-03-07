@@ -4,7 +4,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.2.2`
-- Commands: `46`
+- Commands: `50`
 
 ## `actors.list`
 
@@ -159,6 +159,54 @@ Generated from `contracts/oar-openapi.yaml`.
 - Agent notes: Registration is open in v0; future invite/secret gating can wrap this endpoint.
 - Examples:
   - Register agent: `oar auth agents register --username agent.one --public-key <base64-ed25519-pubkey> --json`
+
+## `auth.passkey.login.options`
+
+- CLI path: `auth passkey login options`
+- HTTP: `POST /auth/passkey/login/options`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Create a WebAuthn assertion challenge for passkey authentication.
+- Concepts: `auth`, `passkey`
+- Error codes: `invalid_json`, `not_found`
+- Output: Returns `{ session_id, options }` where `options` is a WebAuthn assertion payload.
+- Agent notes: Provide `username` to scope login to one principal, or omit it for discoverable login.
+
+## `auth.passkey.login.verify`
+
+- CLI path: `auth passkey login verify`
+- HTTP: `POST /auth/passkey/login/verify`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Verify a WebAuthn assertion and issue a fresh token bundle.
+- Concepts: `auth`, `passkey`
+- Error codes: `invalid_json`, `invalid_request`, `invalid_token`, `agent_revoked`
+- Output: Returns `{ agent, tokens }` when passkey verification succeeds.
+- Agent notes: Session ids are one-time use and expire quickly.
+
+## `auth.passkey.register.options`
+
+- CLI path: `auth passkey register options`
+- HTTP: `POST /auth/passkey/register/options`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Create a WebAuthn registration challenge for a new human principal.
+- Concepts: `auth`, `passkey`
+- Error codes: `invalid_json`, `invalid_request`
+- Output: Returns `{ session_id, options }` where `options` is a WebAuthn registration payload.
+- Agent notes: Intended for browser-based WebAuthn clients.
+
+## `auth.passkey.register.verify`
+
+- CLI path: `auth passkey register verify`
+- HTTP: `POST /auth/passkey/register/verify`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Verify a WebAuthn attestation, create a principal, and issue the initial token bundle.
+- Concepts: `auth`, `passkey`
+- Error codes: `invalid_json`, `invalid_request`, `invalid_token`
+- Output: Returns `{ agent, tokens }` for the newly registered passkey principal.
+- Agent notes: Session ids are one-time use and expire quickly.
 
 ## `auth.token`
 

@@ -33,9 +33,13 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `auth`
 
-- Commands: `2`
+- Commands: `6`
 - Command IDs:
   - `auth.agents.register` (`auth agents register`)
+  - `auth.passkey.login.options` (`auth passkey login options`)
+  - `auth.passkey.login.verify` (`auth passkey login verify`)
+  - `auth.passkey.register.options` (`auth passkey register options`)
+  - `auth.passkey.register.verify` (`auth passkey register verify`)
   - `auth.token` (`auth token`)
 
 ## `commitments`

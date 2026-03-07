@@ -54,6 +54,10 @@ export declare class OarClient {
     artifactsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     artifactsList(options?: RequestOptions): Promise<InvokeResult>;
     authAgentsRegister(options?: RequestOptions): Promise<InvokeResult>;
+    authPasskeyLoginOptions(options?: RequestOptions): Promise<InvokeResult>;
+    authPasskeyLoginVerify(options?: RequestOptions): Promise<InvokeResult>;
+    authPasskeyRegisterOptions(options?: RequestOptions): Promise<InvokeResult>;
+    authPasskeyRegisterVerify(options?: RequestOptions): Promise<InvokeResult>;
     authToken(options?: RequestOptions): Promise<InvokeResult>;
     commitmentsCreate(options?: RequestOptions): Promise<InvokeResult>;
     commitmentsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;

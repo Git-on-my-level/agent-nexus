@@ -7,6 +7,7 @@
     lookupActorDisplayName,
     selectedActorId,
   } from "$lib/actorSession";
+  import { getAuthenticatedActorId } from "$lib/authSession";
   import {
     buildCommitmentPatch,
     parseCommitmentListInput,
@@ -156,12 +157,6 @@
     `${threadId}|${$page.url.searchParams.toString()}`,
   );
   let recentTimeline = $derived(timelineView.slice(0, 4));
-  let urgentCommitments = $derived(
-    openCommitments.filter(
-      (commitment) =>
-        commitment.status === "blocked" || commitment.status === "open",
-    ),
-  );
   let staleCheckIn = $derived(
     typeof threadStale === "boolean"
       ? threadStale
@@ -261,7 +256,12 @@
   });
 
   function defaultCommitmentOwner() {
-    return $selectedActorId || $actorRegistry[0]?.id || "";
+    return (
+      getAuthenticatedActorId() ||
+      $selectedActorId ||
+      $actorRegistry[0]?.id ||
+      ""
+    );
   }
   function blankCreateCommitmentDraft() {
     return {
@@ -858,33 +858,58 @@
   }
 </script>
 
-<nav class="mb-3 flex items-center gap-1.5 text-[12px] text-gray-400" aria-label="Breadcrumb">
+<nav
+  class="mb-3 flex items-center gap-1.5 text-[12px] text-gray-400"
+  aria-label="Breadcrumb"
+>
   <a class="transition-colors hover:text-gray-600" href="/threads">Threads</a>
   <span class="text-gray-300">/</span>
   <span class="truncate text-gray-600">{snapshot?.title || threadId}</span>
 </nav>
 
 {#if snapshotLoading}
-  <div class="mt-8 flex items-center justify-center gap-2 text-[13px] text-gray-400">
+  <div
+    class="mt-8 flex items-center justify-center gap-2 text-[13px] text-gray-400"
+  >
     <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+      <circle
+        class="opacity-25"
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        stroke-width="4"
+      ></circle>
+      <path
+        class="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+      ></path>
     </svg>
     Loading...
   </div>
 {:else if snapshotError}
-  <div class="rounded-md bg-red-500/10 px-3 py-2 text-[13px] text-red-400">{snapshotError}</div>
+  <div class="rounded-md bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
+    {snapshotError}
+  </div>
 {:else if !snapshot}
-  <div class="mt-8 text-center text-[13px] text-gray-400">Thread not found.</div>
+  <div class="mt-8 text-center text-[13px] text-gray-400">
+    Thread not found.
+  </div>
 {:else}
   <header class="mb-4">
     <div class="flex items-start justify-between gap-3">
       <div class="min-w-0 flex-1">
         <h1 class="text-lg font-semibold text-gray-900">{snapshot.title}</h1>
-        <p class="mt-0.5 text-[13px] text-gray-500">{snapshot.current_summary || "No summary yet."}</p>
+        <p class="mt-0.5 text-[13px] text-gray-500">
+          {snapshot.current_summary || "No summary yet."}
+        </p>
       </div>
       <div class="flex shrink-0 items-center gap-1.5 text-[12px]">
-        <span class="font-medium capitalize {threadStatusColor(snapshot.status)}">{snapshot.status}</span>
+        <span
+          class="font-medium capitalize {threadStatusColor(snapshot.status)}"
+          >{snapshot.status}</span
+        >
         <span class="text-gray-400">{getPriorityLabel(snapshot.priority)}</span>
       </div>
     </div>
@@ -892,25 +917,37 @@
     <div class="mt-3 flex gap-2 text-[12px]">
       <div class="rounded-md border border-gray-200 bg-gray-100 px-3 py-1.5">
         <span class="text-gray-400">Health</span>
-        <span class="ml-1 font-medium text-gray-900">{threadHealthLabel()}</span>
+        <span class="ml-1 font-medium text-gray-900">{threadHealthLabel()}</span
+        >
       </div>
       <div class="rounded-md border border-gray-200 bg-gray-100 px-3 py-1.5">
         <span class="text-gray-400">Check-in</span>
-        <span class="ml-1 font-medium text-gray-900">{snapshot.next_check_in_at ? formatTimestamp(snapshot.next_check_in_at) : "—"}</span>
+        <span class="ml-1 font-medium text-gray-900"
+          >{snapshot.next_check_in_at
+            ? formatTimestamp(snapshot.next_check_in_at)
+            : "—"}</span
+        >
       </div>
       <div class="rounded-md border border-gray-200 bg-gray-100 px-3 py-1.5">
         <span class="text-gray-400">Commitments</span>
-        <span class="ml-1 font-medium text-gray-900">{openCommitments.length}</span>
+        <span class="ml-1 font-medium text-gray-900"
+          >{openCommitments.length}</span
+        >
       </div>
     </div>
 
     {#if (snapshot.next_actions ?? []).length > 0}
       <div class="mt-3 rounded-md border border-gray-200 bg-gray-100 px-3 py-2">
-        <p class="text-[11px] font-medium text-gray-400 uppercase tracking-wide">Next steps</p>
+        <p
+          class="text-[11px] font-medium text-gray-400 uppercase tracking-wide"
+        >
+          Next steps
+        </p>
         <ul class="mt-1 space-y-0.5 text-[13px] text-gray-700">
           {#each (snapshot.next_actions ?? []).slice(0, 3) as action}
             <li class="flex items-start gap-2">
-              <span class="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-gray-300"></span>
+              <span class="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-gray-300"
+              ></span>
               {action}
             </li>
           {/each}
@@ -919,10 +956,16 @@
     {/if}
   </header>
 
-  <nav class="flex gap-0 border-b border-gray-200 mb-4" aria-label="Thread sections">
+  <nav
+    class="flex gap-0 border-b border-gray-200 mb-4"
+    aria-label="Thread sections"
+  >
     {#each [["overview", "Overview"], ["work", "Work"], ["timeline", "Timeline"]] as [tabId, tabLabel]}
       <button
-        class="relative px-3 py-2 text-[13px] font-medium transition-colors {activeTab === tabId ? 'text-gray-900' : 'text-gray-400 hover:text-gray-600'}"
+        class="relative px-3 py-2 text-[13px] font-medium transition-colors {activeTab ===
+        tabId
+          ? 'text-gray-900'
+          : 'text-gray-400 hover:text-gray-600'}"
         onclick={() => (activeTab = tabId)}
         type="button"
       >
@@ -936,55 +979,84 @@
 
   {#if activeTab === "overview"}
     {#if conflictWarning}
-      <div class="mb-3 rounded-md bg-amber-500/10 px-3 py-2 text-[12px] text-amber-400">{conflictWarning}</div>
+      <div
+        class="mb-3 rounded-md bg-amber-500/10 px-3 py-2 text-[12px] text-amber-400"
+      >
+        {conflictWarning}
+      </div>
     {/if}
     {#if editNotice}
-      <div class="mb-3 rounded-md bg-emerald-500/10 px-3 py-2 text-[12px] text-emerald-400">{editNotice}</div>
+      <div
+        class="mb-3 rounded-md bg-emerald-500/10 px-3 py-2 text-[12px] text-emerald-400"
+      >
+        {editNotice}
+      </div>
     {/if}
 
     <div class="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
       <div class="space-y-3">
         <div class="rounded-md border border-gray-200 bg-gray-100">
-          <div class="flex items-center justify-between border-b border-gray-200 px-4 py-2.5">
+          <div
+            class="flex items-center justify-between border-b border-gray-200 px-4 py-2.5"
+          >
             <h2 class="text-[13px] font-medium text-gray-900">Snapshot</h2>
             <button
               class="text-[12px] font-medium text-indigo-400 hover:text-indigo-300"
               onclick={editOpen ? cancelEdit : beginEdit}
-              type="button"
-            >{editOpen ? "Cancel" : "Edit"}</button>
+              type="button">{editOpen ? "Cancel" : "Edit"}</button
+            >
           </div>
 
-          <div class="grid grid-cols-2 gap-x-4 gap-y-2 px-4 py-3 text-[13px] sm:grid-cols-4">
+          <div
+            class="grid grid-cols-2 gap-x-4 gap-y-2 px-4 py-3 text-[13px] sm:grid-cols-4"
+          >
             <div>
               <p class="text-[11px] font-medium text-gray-400">Type</p>
               <p class="capitalize text-gray-900">{snapshot.type}</p>
             </div>
             <div>
               <p class="text-[11px] font-medium text-gray-400">Cadence</p>
-              <p class="text-gray-900">{formatCadenceLabel(snapshot.cadence)}</p>
+              <p class="text-gray-900">
+                {formatCadenceLabel(snapshot.cadence)}
+              </p>
             </div>
             <div>
               <p class="text-[11px] font-medium text-gray-400">Check-in</p>
-              <p class="text-gray-900">{snapshot.next_check_in_at ? formatTimestamp(snapshot.next_check_in_at) : "—"}</p>
+              <p class="text-gray-900">
+                {snapshot.next_check_in_at
+                  ? formatTimestamp(snapshot.next_check_in_at)
+                  : "—"}
+              </p>
             </div>
             <div>
               <p class="text-[11px] font-medium text-gray-400">Updated</p>
-              <p class="text-gray-900">{formatTimestamp(snapshot.updated_at) || "—"}</p>
-              <p class="text-[11px] text-gray-400">by {actorName(snapshot.updated_by)}</p>
+              <p class="text-gray-900">
+                {formatTimestamp(snapshot.updated_at) || "—"}
+              </p>
+              <p class="text-[11px] text-gray-400">
+                by {actorName(snapshot.updated_by)}
+              </p>
             </div>
           </div>
 
           {#if (snapshot.tags ?? []).length > 0}
-            <div class="border-t border-gray-200 px-4 py-2.5 flex flex-wrap gap-1">
+            <div
+              class="border-t border-gray-200 px-4 py-2.5 flex flex-wrap gap-1"
+            >
               {#each snapshot.tags ?? [] as tag}
-                <span class="rounded bg-gray-200 px-1.5 py-0.5 text-[11px] font-medium text-gray-600">{tag}</span>
+                <span
+                  class="rounded bg-gray-200 px-1.5 py-0.5 text-[11px] font-medium text-gray-600"
+                  >{tag}</span
+                >
               {/each}
             </div>
           {/if}
 
           <div class="border-t border-gray-200 px-4 py-3">
             <p class="text-[11px] font-medium text-gray-400">Summary</p>
-            <p class="mt-1 text-[13px] leading-relaxed text-gray-800">{snapshot.current_summary}</p>
+            <p class="mt-1 text-[13px] leading-relaxed text-gray-800">
+              {snapshot.current_summary}
+            </p>
           </div>
 
           {#if (snapshot.next_actions ?? []).length > 0}
@@ -993,7 +1065,9 @@
               <ul class="mt-1 space-y-0.5 text-[13px] text-gray-800">
                 {#each snapshot.next_actions ?? [] as action}
                   <li class="flex items-start gap-2">
-                    <span class="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-gray-300"></span>
+                    <span
+                      class="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-gray-300"
+                    ></span>
                     {action}
                   </li>
                 {/each}
@@ -1006,7 +1080,10 @@
               <p class="text-[11px] font-medium text-gray-400">Key artifacts</p>
               <div class="mt-1 flex flex-wrap gap-1.5 text-[12px]">
                 {#each snapshot.key_artifacts ?? [] as artifactId}
-                  <RefLink refValue={normalizeKeyArtifactRef(artifactId)} {threadId} />
+                  <RefLink
+                    refValue={normalizeKeyArtifactRef(artifactId)}
+                    {threadId}
+                  />
                 {/each}
               </div>
             </div>
@@ -1017,65 +1094,156 @@
           </div>
 
           <details class="border-t border-gray-200">
-            <summary class="cursor-pointer px-4 py-2.5 text-[11px] text-gray-400 hover:text-gray-600">Raw JSON</summary>
-            <pre class="overflow-auto px-4 pb-3 text-[11px] text-gray-500">{JSON.stringify(snapshot, null, 2)}</pre>
+            <summary
+              class="cursor-pointer px-4 py-2.5 text-[11px] text-gray-400 hover:text-gray-600"
+              >Raw JSON</summary
+            >
+            <pre
+              class="overflow-auto px-4 pb-3 text-[11px] text-gray-500">{JSON.stringify(
+                snapshot,
+                null,
+                2,
+              )}</pre>
           </details>
         </div>
 
         {#if editOpen && editDraft}
           <form
             class="rounded-md border border-gray-200 bg-gray-100 p-4"
-            onsubmit={(event) => { event.preventDefault(); void saveEdit(); }}
+            onsubmit={(event) => {
+              event.preventDefault();
+              void saveEdit();
+            }}
           >
-            {#if editError}<div class="mb-3 rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400">{editError}</div>{/if}
+            {#if editError}<div
+                class="mb-3 rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
+              >
+                {editError}
+              </div>{/if}
             <div class="grid gap-3 sm:grid-cols-2">
-              <label class="text-[12px] font-medium text-gray-600 sm:col-span-2">Title
-                <input bind:value={editDraft.title} class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] focus:bg-gray-100" required type="text" />
+              <label class="text-[12px] font-medium text-gray-600 sm:col-span-2"
+                >Title
+                <input
+                  bind:value={editDraft.title}
+                  class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] focus:bg-gray-100"
+                  required
+                  type="text"
+                />
               </label>
-              <label class="text-[12px] font-medium text-gray-600">Type
-                <select bind:value={editDraft.type} class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-[13px] focus:bg-gray-100">
-                  <option value="case">case</option><option value="process">process</option><option value="relationship">relationship</option><option value="initiative">initiative</option><option value="incident">incident</option><option value="other">other</option>
+              <label class="text-[12px] font-medium text-gray-600"
+                >Type
+                <select
+                  bind:value={editDraft.type}
+                  class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-[13px] focus:bg-gray-100"
+                >
+                  <option value="case">case</option><option value="process"
+                    >process</option
+                  ><option value="relationship">relationship</option><option
+                    value="initiative">initiative</option
+                  ><option value="incident">incident</option><option
+                    value="other">other</option
+                  >
                 </select>
               </label>
-              <label class="text-[12px] font-medium text-gray-600">Status
-                <select bind:value={editDraft.status} class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-[13px] focus:bg-gray-100">
-                  <option value="active">active</option><option value="paused">paused</option><option value="closed">closed</option>
+              <label class="text-[12px] font-medium text-gray-600"
+                >Status
+                <select
+                  bind:value={editDraft.status}
+                  class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-[13px] focus:bg-gray-100"
+                >
+                  <option value="active">active</option><option value="paused"
+                    >paused</option
+                  ><option value="closed">closed</option>
                 </select>
               </label>
-              <label class="text-[12px] font-medium text-gray-600">Priority
-                <select bind:value={editDraft.priority} class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-[13px] focus:bg-gray-100">
-                  <option value="p0">Critical (P0)</option><option value="p1">High (P1)</option><option value="p2">Medium (P2)</option><option value="p3">Low (P3)</option>
+              <label class="text-[12px] font-medium text-gray-600"
+                >Priority
+                <select
+                  bind:value={editDraft.priority}
+                  class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-[13px] focus:bg-gray-100"
+                >
+                  <option value="p0">Critical (P0)</option><option value="p1"
+                    >High (P1)</option
+                  ><option value="p2">Medium (P2)</option><option value="p3"
+                    >Low (P3)</option
+                  >
                 </select>
               </label>
-              <label class="text-[12px] font-medium text-gray-600">Schedule
-                <select bind:value={editDraft.cadencePreset} class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-[13px] focus:bg-gray-100">
-                  {#each THREAD_SCHEDULE_PRESETS as cadence}<option value={cadence}>{THREAD_SCHEDULE_PRESET_LABELS[cadence]}</option>{/each}
+              <label class="text-[12px] font-medium text-gray-600"
+                >Schedule
+                <select
+                  bind:value={editDraft.cadencePreset}
+                  class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-[13px] focus:bg-gray-100"
+                >
+                  {#each THREAD_SCHEDULE_PRESETS as cadence}<option
+                      value={cadence}
+                      >{THREAD_SCHEDULE_PRESET_LABELS[cadence]}</option
+                    >{/each}
                 </select>
               </label>
               {#if editDraft.cadencePreset === "custom"}
-                <label class="text-[12px] font-medium text-gray-600">Cron
-                  <input bind:value={editDraft.cadenceCron} class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] focus:bg-gray-100" placeholder="0 9 * * *" type="text" />
+                <label class="text-[12px] font-medium text-gray-600"
+                  >Cron
+                  <input
+                    bind:value={editDraft.cadenceCron}
+                    class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] focus:bg-gray-100"
+                    placeholder="0 9 * * *"
+                    type="text"
+                  />
                 </label>
               {/if}
-              <label class="text-[12px] font-medium text-gray-600">Next check-in
-                <input bind:value={editDraft.next_check_in_at} class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-[13px] focus:bg-gray-100" type="datetime-local" />
+              <label class="text-[12px] font-medium text-gray-600"
+                >Next check-in
+                <input
+                  bind:value={editDraft.next_check_in_at}
+                  class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-[13px] focus:bg-gray-100"
+                  type="datetime-local"
+                />
               </label>
-              <label class="text-[12px] font-medium text-gray-600">Tags (one per line)
-                <textarea bind:value={editDraft.tagsInput} class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] focus:bg-gray-100" rows="2"></textarea>
+              <label class="text-[12px] font-medium text-gray-600"
+                >Tags (one per line)
+                <textarea
+                  bind:value={editDraft.tagsInput}
+                  class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] focus:bg-gray-100"
+                  rows="2"
+                ></textarea>
               </label>
-              <label class="text-[12px] font-medium text-gray-600 sm:col-span-2">Summary
-                <textarea bind:value={editDraft.current_summary} class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] focus:bg-gray-100" rows="2"></textarea>
+              <label class="text-[12px] font-medium text-gray-600 sm:col-span-2"
+                >Summary
+                <textarea
+                  bind:value={editDraft.current_summary}
+                  class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] focus:bg-gray-100"
+                  rows="2"
+                ></textarea>
               </label>
-              <label class="text-[12px] font-medium text-gray-600 sm:col-span-2">Next actions (one per line)
-                <textarea bind:value={editDraft.nextActionsInput} class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] focus:bg-gray-100" rows="2"></textarea>
+              <label class="text-[12px] font-medium text-gray-600 sm:col-span-2"
+                >Next actions (one per line)
+                <textarea
+                  bind:value={editDraft.nextActionsInput}
+                  class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] focus:bg-gray-100"
+                  rows="2"
+                ></textarea>
               </label>
-              <label class="text-[12px] font-medium text-gray-600 sm:col-span-2">Key artifacts (one per line)
-                <textarea bind:value={editDraft.keyArtifactsInput} class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] focus:bg-gray-100" rows="2"></textarea>
+              <label class="text-[12px] font-medium text-gray-600 sm:col-span-2"
+                >Key artifacts (one per line)
+                <textarea
+                  bind:value={editDraft.keyArtifactsInput}
+                  class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] focus:bg-gray-100"
+                  rows="2"
+                ></textarea>
               </label>
             </div>
             <div class="mt-3 flex gap-2">
-              <button class="rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-indigo-500/100 disabled:opacity-50" disabled={savingEdit} type="submit">{savingEdit ? "Saving..." : "Save"}</button>
-              <button class="rounded-md px-3 py-1.5 text-[12px] font-medium text-gray-500 hover:bg-gray-200" onclick={cancelEdit} type="button">Cancel</button>
+              <button
+                class="rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-indigo-500/100 disabled:opacity-50"
+                disabled={savingEdit}
+                type="submit">{savingEdit ? "Saving..." : "Save"}</button
+              >
+              <button
+                class="rounded-md px-3 py-1.5 text-[12px] font-medium text-gray-500 hover:bg-gray-200"
+                onclick={cancelEdit}
+                type="button">Cancel</button
+              >
             </div>
           </form>
         {/if}
@@ -1085,10 +1253,18 @@
         <section class="rounded-md border border-gray-200 bg-gray-100 p-3">
           <div class="flex items-center justify-between gap-2">
             <h2 class="text-[13px] font-medium text-gray-900">Post update</h2>
-            <button class="text-[11px] text-gray-400 hover:text-gray-600" onclick={() => (activeTab = "timeline")} type="button">Timeline</button>
+            <button
+              class="text-[11px] text-gray-400 hover:text-gray-600"
+              onclick={() => (activeTab = "timeline")}
+              type="button">Timeline</button
+            >
           </div>
           {#if postMessageError}
-            <div class="mt-2 rounded-md bg-red-500/10 px-3 py-1.5 text-[12px] text-red-400">{postMessageError}</div>
+            <div
+              class="mt-2 rounded-md bg-red-500/10 px-3 py-1.5 text-[12px] text-red-400"
+            >
+              {postMessageError}
+            </div>
           {/if}
           <textarea
             aria-label="Message"
@@ -1106,7 +1282,9 @@
           >
             <option value="">Reply to: none</option>
             {#each timelineView as event}
-              <option value={event.id}>{event.typeLabel} · {formatTimestamp(event.ts)}</option>
+              <option value={event.id}
+                >{event.typeLabel} · {formatTimestamp(event.ts)}</option
+              >
             {/each}
           </select>
           <div class="mt-2 flex justify-end">
@@ -1114,28 +1292,46 @@
               class="rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-indigo-500/100 disabled:opacity-50"
               disabled={!canPost}
               onclick={postMessage}
-              type="button"
-            >{postingMessage ? "Posting..." : "Post"}</button>
+              type="button">{postingMessage ? "Posting..." : "Post"}</button
+            >
           </div>
         </section>
 
         <section class="rounded-md border border-gray-200 bg-gray-100 p-3">
           <div class="flex items-center justify-between gap-2">
-            <h2 class="text-[13px] font-medium text-gray-900">Recent activity</h2>
-            <button class="text-[11px] text-gray-400 hover:text-gray-600" onclick={() => (activeTab = "timeline")} type="button">View all</button>
+            <h2 class="text-[13px] font-medium text-gray-900">
+              Recent activity
+            </h2>
+            <button
+              class="text-[11px] text-gray-400 hover:text-gray-600"
+              onclick={() => (activeTab = "timeline")}
+              type="button">View all</button
+            >
           </div>
           {#if recentTimeline.length === 0}
             <p class="mt-2 text-[12px] text-gray-400">No events yet.</p>
           {:else}
             <div class="mt-2 space-y-1">
               {#each recentTimeline as event}
-                <div class="rounded-md bg-gray-50 px-3 py-2" id={`recent-event-${event.id}`}>
+                <div
+                  class="rounded-md bg-gray-50 px-3 py-2"
+                  id={`recent-event-${event.id}`}
+                >
                   <p class="text-[13px] text-gray-900">{event.summary}</p>
-                  <p class="text-[11px] text-gray-400">{event.typeLabel} · {formatTimestamp(event.ts)}</p>
+                  <p class="text-[11px] text-gray-400">
+                    {event.typeLabel} · {formatTimestamp(event.ts)}
+                  </p>
                   {#if !event.isKnownType}
                     <details class="mt-1">
-                      <summary class="cursor-pointer text-[11px] text-gray-400">Details</summary>
-                      <pre class="mt-1 overflow-auto rounded bg-gray-50 p-2 text-[11px] text-gray-500">{JSON.stringify(event.payload ?? {}, null, 2)}</pre>
+                      <summary class="cursor-pointer text-[11px] text-gray-400"
+                        >Details</summary
+                      >
+                      <pre
+                        class="mt-1 overflow-auto rounded bg-gray-50 p-2 text-[11px] text-gray-500">{JSON.stringify(
+                          event.payload ?? {},
+                          null,
+                          2,
+                        )}</pre>
                     </details>
                   {/if}
                 </div>
@@ -1147,75 +1343,156 @@
     </div>
 
     <section class="mt-4 rounded-md border border-gray-200 bg-gray-100">
-      <div class="flex items-center justify-between border-b border-gray-200 px-4 py-2.5">
+      <div
+        class="flex items-center justify-between border-b border-gray-200 px-4 py-2.5"
+      >
         <h2 class="text-[13px] font-medium text-gray-900">Commitments</h2>
         <button
           class="text-[12px] font-medium text-indigo-400 hover:text-indigo-300"
           onclick={() => (commitmentFormOpen = !commitmentFormOpen)}
-          type="button"
-        >{commitmentFormOpen ? "Hide" : "Add"}</button>
+          type="button">{commitmentFormOpen ? "Hide" : "Add"}</button
+        >
       </div>
 
       {#if commitmentConflictWarning}
-        <div class="border-b border-gray-200 bg-amber-500/10 px-4 py-2 text-[12px] text-amber-400">{commitmentConflictWarning}</div>
+        <div
+          class="border-b border-gray-200 bg-amber-500/10 px-4 py-2 text-[12px] text-amber-400"
+        >
+          {commitmentConflictWarning}
+        </div>
       {/if}
       {#if createCommitmentNotice}
-        <div class="border-b border-gray-200 bg-emerald-500/10 px-4 py-2 text-[12px] text-emerald-400">{createCommitmentNotice}</div>
+        <div
+          class="border-b border-gray-200 bg-emerald-500/10 px-4 py-2 text-[12px] text-emerald-400"
+        >
+          {createCommitmentNotice}
+        </div>
       {/if}
 
       {#if commitmentFormOpen}
         <form
           class="border-b border-gray-200 px-4 py-3"
-          onsubmit={(event) => { event.preventDefault(); void createCommitment(); }}
+          onsubmit={(event) => {
+            event.preventDefault();
+            void createCommitment();
+          }}
         >
           {#if createCommitmentError}
-            <div class="mb-2 rounded-md bg-red-500/10 px-3 py-1.5 text-[12px] text-red-400">{createCommitmentError}</div>
+            <div
+              class="mb-2 rounded-md bg-red-500/10 px-3 py-1.5 text-[12px] text-red-400"
+            >
+              {createCommitmentError}
+            </div>
           {/if}
           <div class="grid gap-2 sm:grid-cols-2">
-            <label class="text-[12px] font-medium text-gray-600 sm:col-span-2">Title
-              <input aria-label="Commitment title" bind:value={createCommitmentDraft.title} class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] focus:bg-gray-100" placeholder="What needs to be done?" required type="text" />
+            <label class="text-[12px] font-medium text-gray-600 sm:col-span-2"
+              >Title
+              <input
+                aria-label="Commitment title"
+                bind:value={createCommitmentDraft.title}
+                class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] focus:bg-gray-100"
+                placeholder="What needs to be done?"
+                required
+                type="text"
+              />
             </label>
-            <label class="text-[12px] font-medium text-gray-600">Owner
-              <select aria-label="Owner" bind:value={createCommitmentDraft.owner} class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-[13px] focus:bg-gray-100" required>
+            <label class="text-[12px] font-medium text-gray-600"
+              >Owner
+              <select
+                aria-label="Owner"
+                bind:value={createCommitmentDraft.owner}
+                class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-[13px] focus:bg-gray-100"
+                required
+              >
                 <option disabled value="">Select</option>
-                {#each $actorRegistry as actor}<option value={actor.id}>{actor.display_name || actor.id}</option>{/each}
+                {#each $actorRegistry as actor}<option value={actor.id}
+                    >{actor.display_name || actor.id}</option
+                  >{/each}
               </select>
             </label>
-            <label class="text-[12px] font-medium text-gray-600">Due at
-              <input aria-label="Due at (ISO timestamp)" bind:value={createCommitmentDraft.due_at} class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-[13px] focus:bg-gray-100" placeholder="2026-03-12T00:00:00.000Z" required type="text" />
+            <label class="text-[12px] font-medium text-gray-600"
+              >Due at
+              <input
+                aria-label="Due at (ISO timestamp)"
+                bind:value={createCommitmentDraft.due_at}
+                class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-[13px] focus:bg-gray-100"
+                placeholder="2026-03-12T00:00:00.000Z"
+                required
+                type="text"
+              />
             </label>
-            <label class="text-[12px] font-medium text-gray-600 sm:col-span-2">Definition of done
-              <textarea aria-label="Definition of done (comma/newline separated)" bind:value={createCommitmentDraft.definitionOfDoneInput} class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] focus:bg-gray-100" rows="2"></textarea>
+            <label class="text-[12px] font-medium text-gray-600 sm:col-span-2"
+              >Definition of done
+              <textarea
+                aria-label="Definition of done (comma/newline separated)"
+                bind:value={createCommitmentDraft.definitionOfDoneInput}
+                class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] focus:bg-gray-100"
+                rows="2"
+              ></textarea>
             </label>
-            <label class="text-[12px] font-medium text-gray-600 sm:col-span-2">Links
-              <textarea aria-label="Links (typed refs, comma/newline separated)" bind:value={createCommitmentDraft.linksInput} class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] focus:bg-gray-100" rows="2"></textarea>
+            <label class="text-[12px] font-medium text-gray-600 sm:col-span-2"
+              >Links
+              <textarea
+                aria-label="Links (typed refs, comma/newline separated)"
+                bind:value={createCommitmentDraft.linksInput}
+                class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] focus:bg-gray-100"
+                rows="2"
+              ></textarea>
             </label>
           </div>
           <div class="mt-2 flex justify-end">
-            <button class="rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-indigo-500/100 disabled:opacity-50" disabled={creatingCommitment} type="submit">{creatingCommitment ? "Creating..." : "Create"}</button>
+            <button
+              class="rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-indigo-500/100 disabled:opacity-50"
+              disabled={creatingCommitment}
+              type="submit"
+              >{creatingCommitment ? "Creating..." : "Create"}</button
+            >
           </div>
         </form>
       {/if}
 
       {#if commitmentsLoading}
-        <div class="px-4 py-4 text-center text-[12px] text-gray-400">Loading...</div>
+        <div class="px-4 py-4 text-center text-[12px] text-gray-400">
+          Loading...
+        </div>
       {:else if openCommitments.length === 0}
-        <div class="px-4 py-4 text-center text-[13px] text-gray-400">No open commitments.</div>
+        <div class="px-4 py-4 text-center text-[13px] text-gray-400">
+          No open commitments.
+        </div>
       {:else}
         {#each openCommitments as commitment}
-          <div class="border-b border-gray-200 px-4 py-3 last:border-b-0" id={`commitment-card-${commitment.id}`}>
+          <div
+            class="border-b border-gray-200 px-4 py-3 last:border-b-0"
+            id={`commitment-card-${commitment.id}`}
+          >
             <div class="flex items-start justify-between gap-2">
               <div class="min-w-0 flex-1">
-                <h3 class="text-[13px] font-medium text-gray-900">{commitment.title || commitment.id}</h3>
-                <p class="text-[11px] text-gray-400">{actorName(commitment.owner)} · Due {commitment.due_at ? formatTimestamp(commitment.due_at) : "—"}</p>
+                <h3 class="text-[13px] font-medium text-gray-900">
+                  {commitment.title || commitment.id}
+                </h3>
+                <p class="text-[11px] text-gray-400">
+                  {actorName(commitment.owner)} · Due {commitment.due_at
+                    ? formatTimestamp(commitment.due_at)
+                    : "—"}
+                </p>
               </div>
               <div class="flex shrink-0 items-center gap-2">
-                <span class="text-[11px] font-medium {statusBadgeClass(commitment.status)}">{commitment.status}</span>
+                <span
+                  class="text-[11px] font-medium {statusBadgeClass(
+                    commitment.status,
+                  )}">{commitment.status}</span
+                >
                 <button
                   class="text-[11px] text-gray-400 hover:text-gray-600"
-                  onclick={() => editingCommitmentId === commitment.id ? cancelCommitmentEdit() : beginCommitmentEdit(commitment)}
+                  onclick={() =>
+                    editingCommitmentId === commitment.id
+                      ? cancelCommitmentEdit()
+                      : beginCommitmentEdit(commitment)}
                   type="button"
-                >{editingCommitmentId === commitment.id ? "Cancel" : "Edit"}</button>
+                  >{editingCommitmentId === commitment.id
+                    ? "Cancel"
+                    : "Edit"}</button
+                >
               </div>
             </div>
 
@@ -1223,7 +1500,8 @@
               <ul class="mt-1.5 space-y-0.5 text-[12px] text-gray-600">
                 {#each commitment.definition_of_done ?? [] as item}
                   <li class="flex items-start gap-2">
-                    <span class="mt-1 h-1 w-1 shrink-0 rounded-full bg-gray-300"></span>
+                    <span class="mt-1 h-1 w-1 shrink-0 rounded-full bg-gray-300"
+                    ></span>
                     {item}
                   </li>
                 {/each}
@@ -1232,51 +1510,131 @@
 
             {#if (commitment.links ?? []).length > 0}
               <div class="mt-1.5 flex flex-wrap gap-1 text-[11px]">
-                {#each commitment.links ?? [] as refValue}<RefLink {refValue} {threadId} />{/each}
+                {#each commitment.links ?? [] as refValue}<RefLink
+                    {refValue}
+                    {threadId}
+                  />{/each}
               </div>
             {/if}
 
             {#if editingCommitmentId === commitment.id && editCommitmentDraft}
               <form
                 class="mt-2 rounded-md border border-gray-200 bg-gray-50 p-3"
-                onsubmit={(event) => { event.preventDefault(); void saveCommitmentEdit(commitment.id); }}
+                onsubmit={(event) => {
+                  event.preventDefault();
+                  void saveCommitmentEdit(commitment.id);
+                }}
               >
-                {#if editCommitmentError}<div class="mb-2 rounded-md bg-red-500/10 px-3 py-1.5 text-[12px] text-red-400">{editCommitmentError}</div>{/if}
-                {#if editCommitmentNotice}<div class="mb-2 rounded-md bg-emerald-500/10 px-3 py-1.5 text-[12px] text-emerald-400">{editCommitmentNotice}</div>{/if}
+                {#if editCommitmentError}<div
+                    class="mb-2 rounded-md bg-red-500/10 px-3 py-1.5 text-[12px] text-red-400"
+                  >
+                    {editCommitmentError}
+                  </div>{/if}
+                {#if editCommitmentNotice}<div
+                    class="mb-2 rounded-md bg-emerald-500/10 px-3 py-1.5 text-[12px] text-emerald-400"
+                  >
+                    {editCommitmentNotice}
+                  </div>{/if}
                 <div class="grid gap-2 sm:grid-cols-2">
-                  <label class="text-[12px] font-medium text-gray-600 sm:col-span-2">Title
-                    <input aria-label="Commitment title" bind:value={editCommitmentDraft.title} class="mt-1 w-full rounded-md border border-gray-200 bg-gray-100 px-3 py-1.5 text-[13px]" required type="text" />
+                  <label
+                    class="text-[12px] font-medium text-gray-600 sm:col-span-2"
+                    >Title
+                    <input
+                      aria-label="Commitment title"
+                      bind:value={editCommitmentDraft.title}
+                      class="mt-1 w-full rounded-md border border-gray-200 bg-gray-100 px-3 py-1.5 text-[13px]"
+                      required
+                      type="text"
+                    />
                   </label>
-                  <label class="text-[12px] font-medium text-gray-600">Owner
-                    <select aria-label="Owner" bind:value={editCommitmentDraft.owner} class="mt-1 w-full rounded-md border border-gray-200 bg-gray-100 px-2.5 py-1.5 text-[13px]" required>
+                  <label class="text-[12px] font-medium text-gray-600"
+                    >Owner
+                    <select
+                      aria-label="Owner"
+                      bind:value={editCommitmentDraft.owner}
+                      class="mt-1 w-full rounded-md border border-gray-200 bg-gray-100 px-2.5 py-1.5 text-[13px]"
+                      required
+                    >
                       <option disabled value="">Select</option>
-                      {#each $actorRegistry as actor}<option value={actor.id}>{actor.display_name || actor.id}</option>{/each}
+                      {#each $actorRegistry as actor}<option value={actor.id}
+                          >{actor.display_name || actor.id}</option
+                        >{/each}
                     </select>
                   </label>
-                  <label class="text-[12px] font-medium text-gray-600">Due at
-                    <input aria-label="Due at (ISO timestamp)" bind:value={editCommitmentDraft.due_at} class="mt-1 w-full rounded-md border border-gray-200 bg-gray-100 px-2.5 py-1.5 text-[13px]" placeholder="2026-03-12T00:00:00.000Z" required type="text" />
+                  <label class="text-[12px] font-medium text-gray-600"
+                    >Due at
+                    <input
+                      aria-label="Due at (ISO timestamp)"
+                      bind:value={editCommitmentDraft.due_at}
+                      class="mt-1 w-full rounded-md border border-gray-200 bg-gray-100 px-2.5 py-1.5 text-[13px]"
+                      placeholder="2026-03-12T00:00:00.000Z"
+                      required
+                      type="text"
+                    />
                   </label>
-                  <label class="text-[12px] font-medium text-gray-600">Status
-                    <select aria-label="Commitment status" bind:value={editCommitmentDraft.status} class="mt-1 w-full rounded-md border border-gray-200 bg-gray-100 px-2.5 py-1.5 text-[13px]">
-                      <option value="open">open</option><option value="blocked">blocked</option><option value="done">done</option><option value="canceled">canceled</option>
+                  <label class="text-[12px] font-medium text-gray-600"
+                    >Status
+                    <select
+                      aria-label="Commitment status"
+                      bind:value={editCommitmentDraft.status}
+                      class="mt-1 w-full rounded-md border border-gray-200 bg-gray-100 px-2.5 py-1.5 text-[13px]"
+                    >
+                      <option value="open">open</option><option value="blocked"
+                        >blocked</option
+                      ><option value="done">done</option><option
+                        value="canceled">canceled</option
+                      >
                     </select>
                   </label>
                   <div class="self-end text-[11px] text-gray-500">
-                    {#if statusRequirementText(editCommitmentDraft.status)}<p class="text-amber-400">{statusRequirementText(editCommitmentDraft.status)}</p>{/if}
+                    {#if statusRequirementText(editCommitmentDraft.status)}<p
+                        class="text-amber-400"
+                      >
+                        {statusRequirementText(editCommitmentDraft.status)}
+                      </p>{/if}
                   </div>
-                  <label class="text-[12px] font-medium text-gray-600 sm:col-span-2">Evidence ref
-                    <input aria-label="Status evidence ref (typed ref)" bind:value={editCommitmentDraft.statusRefInput} class="mt-1 w-full rounded-md border border-gray-200 bg-gray-100 px-3 py-1.5 text-[13px]" placeholder="artifact:receipt-123 or event:decision-456" type="text" />
+                  <label
+                    class="text-[12px] font-medium text-gray-600 sm:col-span-2"
+                    >Evidence ref
+                    <input
+                      aria-label="Status evidence ref (typed ref)"
+                      bind:value={editCommitmentDraft.statusRefInput}
+                      class="mt-1 w-full rounded-md border border-gray-200 bg-gray-100 px-3 py-1.5 text-[13px]"
+                      placeholder="artifact:receipt-123 or event:decision-456"
+                      type="text"
+                    />
                   </label>
-                  <label class="text-[12px] font-medium text-gray-600 sm:col-span-2">Completion criteria
-                    <textarea bind:value={editCommitmentDraft.definitionOfDoneInput} class="mt-1 w-full rounded-md border border-gray-200 bg-gray-100 px-3 py-1.5 text-[13px]" rows="2"></textarea>
+                  <label
+                    class="text-[12px] font-medium text-gray-600 sm:col-span-2"
+                    >Completion criteria
+                    <textarea
+                      bind:value={editCommitmentDraft.definitionOfDoneInput}
+                      class="mt-1 w-full rounded-md border border-gray-200 bg-gray-100 px-3 py-1.5 text-[13px]"
+                      rows="2"
+                    ></textarea>
                   </label>
-                  <label class="text-[12px] font-medium text-gray-600 sm:col-span-2">Links
-                    <textarea bind:value={editCommitmentDraft.linksInput} class="mt-1 w-full rounded-md border border-gray-200 bg-gray-100 px-3 py-1.5 text-[13px]" rows="2"></textarea>
+                  <label
+                    class="text-[12px] font-medium text-gray-600 sm:col-span-2"
+                    >Links
+                    <textarea
+                      bind:value={editCommitmentDraft.linksInput}
+                      class="mt-1 w-full rounded-md border border-gray-200 bg-gray-100 px-3 py-1.5 text-[13px]"
+                      rows="2"
+                    ></textarea>
                   </label>
                 </div>
                 <div class="mt-2 flex gap-2">
-                  <button class="rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-indigo-500/100 disabled:opacity-50" disabled={savingCommitmentEdit} type="submit">{savingCommitmentEdit ? "Saving..." : "Save"}</button>
-                  <button class="rounded-md px-3 py-1.5 text-[12px] font-medium text-gray-500 hover:bg-gray-200" onclick={cancelCommitmentEdit} type="button">Cancel</button>
+                  <button
+                    class="rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-indigo-500/100 disabled:opacity-50"
+                    disabled={savingCommitmentEdit}
+                    type="submit"
+                    >{savingCommitmentEdit ? "Saving..." : "Save"}</button
+                  >
+                  <button
+                    class="rounded-md px-3 py-1.5 text-[12px] font-medium text-gray-500 hover:bg-gray-200"
+                    onclick={cancelCommitmentEdit}
+                    type="button">Cancel</button
+                  >
                 </div>
               </form>
             {/if}
@@ -1290,26 +1648,63 @@
     <div class="grid gap-4 xl:grid-cols-2">
       <section class="rounded-md border border-gray-200 bg-gray-100 p-4">
         <h2 class="text-[13px] font-medium text-gray-900">New Work Order</h2>
-        <p class="text-[12px] text-gray-400">Create a work order for this thread.</p>
+        <p class="text-[12px] text-gray-400">
+          Create a work order for this thread.
+        </p>
         {#if workOrderPrefillNotice}
-          <div class="mt-2 rounded-md bg-indigo-500/10 px-3 py-1.5 text-[12px] text-indigo-400">{workOrderPrefillNotice}</div>
+          <div
+            class="mt-2 rounded-md bg-indigo-500/10 px-3 py-1.5 text-[12px] text-indigo-400"
+          >
+            {workOrderPrefillNotice}
+          </div>
         {/if}
         {#if workOrderErrors.length > 0}
-          <ul class="mt-2 list-inside list-disc rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400">
+          <ul
+            class="mt-2 list-inside list-disc rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
+          >
             {#each workOrderErrors as e}<li>{e}</li>{/each}
           </ul>
         {/if}
         {#if workOrderNotice}
-          <div class="mt-2 rounded-md bg-emerald-500/10 px-3 py-1.5 text-[12px] text-emerald-400">{workOrderNotice}</div>
+          <div
+            class="mt-2 rounded-md bg-emerald-500/10 px-3 py-1.5 text-[12px] text-emerald-400"
+          >
+            {workOrderNotice}
+          </div>
         {/if}
         {#if workOrderDraft}
-          <form class="mt-3 grid gap-3" onsubmit={(event) => { event.preventDefault(); void submitWorkOrder(); }}>
-            <label class="text-[12px] font-medium text-gray-600">Objective
-              <textarea aria-label="Work order objective" bind:value={workOrderDraft.objective} class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] focus:bg-gray-100" placeholder="What should be accomplished?" rows="2"></textarea>
+          <form
+            class="mt-3 grid gap-3"
+            onsubmit={(event) => {
+              event.preventDefault();
+              void submitWorkOrder();
+            }}
+          >
+            <label class="text-[12px] font-medium text-gray-600"
+              >Objective
+              <textarea
+                aria-label="Work order objective"
+                bind:value={workOrderDraft.objective}
+                class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] focus:bg-gray-100"
+                placeholder="What should be accomplished?"
+                rows="2"
+              ></textarea>
             </label>
-            {#if firstFieldError(workOrderFieldErrors, "objective")}<p class="-mt-1 text-[11px] text-red-400">{firstFieldError(workOrderFieldErrors, "objective")}</p>{/if}
-            <label class="text-[12px] font-medium text-gray-600">Constraints <span class="font-normal text-gray-400">one per line</span>
-              <textarea aria-label="Constraints (comma/newline separated)" bind:value={workOrderDraft.constraintsInput} class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] focus:bg-gray-100" rows="2"></textarea>
+            {#if firstFieldError(workOrderFieldErrors, "objective")}<p
+                class="-mt-1 text-[11px] text-red-400"
+              >
+                {firstFieldError(workOrderFieldErrors, "objective")}
+              </p>{/if}
+            <label class="text-[12px] font-medium text-gray-600"
+              >Constraints <span class="font-normal text-gray-400"
+                >one per line</span
+              >
+              <textarea
+                aria-label="Constraints (comma/newline separated)"
+                bind:value={workOrderDraft.constraintsInput}
+                class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] focus:bg-gray-100"
+                rows="2"
+              ></textarea>
             </label>
             <div class="text-[12px] font-medium text-gray-600">
               Context references
@@ -1321,50 +1716,110 @@
                 advancedLabel="Advanced raw context refs"
                 advancedToggleLabel="Use advanced raw context input"
                 bind:value={workOrderDraft.contextRefsInput}
-                fieldError={firstFieldError(workOrderFieldErrors, "context_refs")}
+                fieldError={firstFieldError(
+                  workOrderFieldErrors,
+                  "context_refs",
+                )}
                 helperText="Choose related artifacts/events with quick picks or add typed refs manually."
                 hideAdvancedToggleLabel="Hide advanced raw context input"
                 suggestions={workOrderContextSuggestions}
                 textareaAriaLabel="Context refs (typed refs, comma/newline separated)"
               />
             </div>
-            <label class="text-[12px] font-medium text-gray-600">Acceptance criteria <span class="font-normal text-gray-400">one per line</span>
-              <textarea aria-label="Acceptance criteria (comma/newline separated)" bind:value={workOrderDraft.acceptanceCriteriaInput} class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] focus:bg-gray-100" rows="2"></textarea>
+            <label class="text-[12px] font-medium text-gray-600"
+              >Acceptance criteria <span class="font-normal text-gray-400"
+                >one per line</span
+              >
+              <textarea
+                aria-label="Acceptance criteria (comma/newline separated)"
+                bind:value={workOrderDraft.acceptanceCriteriaInput}
+                class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] focus:bg-gray-100"
+                rows="2"
+              ></textarea>
             </label>
-            <label class="text-[12px] font-medium text-gray-600">Definition of done <span class="font-normal text-gray-400">one per line</span>
-              <textarea aria-label="Work order definition of done (comma/newline separated)" bind:value={workOrderDraft.definitionOfDoneInput} class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] focus:bg-gray-100" rows="2"></textarea>
+            <label class="text-[12px] font-medium text-gray-600"
+              >Definition of done <span class="font-normal text-gray-400"
+                >one per line</span
+              >
+              <textarea
+                aria-label="Work order definition of done (comma/newline separated)"
+                bind:value={workOrderDraft.definitionOfDoneInput}
+                class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] focus:bg-gray-100"
+                rows="2"
+              ></textarea>
             </label>
             <div class="flex justify-end">
-              <button class="rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-indigo-500/100 disabled:opacity-50" disabled={creatingWorkOrder} type="submit">{creatingWorkOrder ? "Creating..." : "Create work order"}</button>
+              <button
+                class="rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-indigo-500/100 disabled:opacity-50"
+                disabled={creatingWorkOrder}
+                type="submit"
+                >{creatingWorkOrder
+                  ? "Creating..."
+                  : "Create work order"}</button
+              >
             </div>
           </form>
         {/if}
         {#if createdWorkOrder}
           <div class="mt-2 text-[12px] text-gray-600">
-            Created: <a class="font-medium text-indigo-400 hover:text-indigo-300" href={`/artifacts/${createdWorkOrder.id}`}>{createdWorkOrder.id}</a>
+            Created: <a
+              class="font-medium text-indigo-400 hover:text-indigo-300"
+              href={`/artifacts/${createdWorkOrder.id}`}
+              >{createdWorkOrder.id}</a
+            >
           </div>
         {/if}
       </section>
 
       <section class="rounded-md border border-gray-200 bg-gray-100 p-4">
         <h2 class="text-[13px] font-medium text-gray-900">Add Receipt</h2>
-        <p class="text-[12px] text-gray-400">Submit a receipt tied to a work order.</p>
-        {#if workOrdersError}<div class="mt-2 rounded-md bg-amber-500/10 px-3 py-1.5 text-[12px] text-amber-400">{workOrdersError}</div>{/if}
+        <p class="text-[12px] text-gray-400">
+          Submit a receipt tied to a work order.
+        </p>
+        {#if workOrdersError}<div
+            class="mt-2 rounded-md bg-amber-500/10 px-3 py-1.5 text-[12px] text-amber-400"
+          >
+            {workOrdersError}
+          </div>{/if}
         {#if receiptErrors.length > 0}
-          <ul class="mt-2 list-inside list-disc rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400">
+          <ul
+            class="mt-2 list-inside list-disc rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
+          >
             {#each receiptErrors as e}<li>{e}</li>{/each}
           </ul>
         {/if}
-        {#if receiptNotice}<div class="mt-2 rounded-md bg-emerald-500/10 px-3 py-1.5 text-[12px] text-emerald-400">{receiptNotice}</div>{/if}
+        {#if receiptNotice}<div
+            class="mt-2 rounded-md bg-emerald-500/10 px-3 py-1.5 text-[12px] text-emerald-400"
+          >
+            {receiptNotice}
+          </div>{/if}
         {#if receiptDraft}
-          <form class="mt-3 grid gap-3" onsubmit={(event) => { event.preventDefault(); void submitReceipt(); }}>
-            <label class="text-[12px] font-medium text-gray-600">Work order
-              <select aria-label="Work order id" bind:value={receiptDraft.workOrderId} class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-[13px] focus:bg-gray-100" required>
+          <form
+            class="mt-3 grid gap-3"
+            onsubmit={(event) => {
+              event.preventDefault();
+              void submitReceipt();
+            }}
+          >
+            <label class="text-[12px] font-medium text-gray-600"
+              >Work order
+              <select
+                aria-label="Work order id"
+                bind:value={receiptDraft.workOrderId}
+                class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-[13px] focus:bg-gray-100"
+                required
+              >
                 <option value="">Select work order</option>
-                {#each workOrderArtifacts as wo}<option value={wo.id}>{wo.summary || wo.id}</option>{/each}
+                {#each workOrderArtifacts as wo}<option value={wo.id}
+                    >{wo.summary || wo.id}</option
+                  >{/each}
               </select>
             </label>
-            {#if firstFieldError(receiptFieldErrors, "work_order_id")}<p class="-mt-1 text-[11px] text-red-400">{firstFieldError(receiptFieldErrors, "work_order_id")}</p>{/if}
+            {#if firstFieldError(receiptFieldErrors, "work_order_id")}<p
+                class="-mt-1 text-[11px] text-red-400"
+              >
+                {firstFieldError(receiptFieldErrors, "work_order_id")}
+              </p>{/if}
             <div class="text-[12px] font-medium text-gray-600">
               Outputs
               <GuidedTypedRefsInput
@@ -1392,28 +1847,58 @@
                 advancedLabel="Advanced raw verification evidence refs"
                 advancedToggleLabel="Use advanced raw verification evidence input"
                 bind:value={receiptDraft.verificationEvidenceInput}
-                fieldError={firstFieldError(receiptFieldErrors, "verification_evidence")}
+                fieldError={firstFieldError(
+                  receiptFieldErrors,
+                  "verification_evidence",
+                )}
                 helperText="Attach proof that validates the output."
                 hideAdvancedToggleLabel="Hide advanced raw verification evidence input"
                 suggestions={receiptEvidenceSuggestions}
                 textareaAriaLabel="Receipt verification evidence (typed refs, comma/newline separated)"
               />
             </div>
-            <label class="text-[12px] font-medium text-gray-600">Changes summary
-              <textarea aria-label="Receipt changes summary" bind:value={receiptDraft.changesSummary} class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] focus:bg-gray-100" placeholder="What changed?" rows="2"></textarea>
+            <label class="text-[12px] font-medium text-gray-600"
+              >Changes summary
+              <textarea
+                aria-label="Receipt changes summary"
+                bind:value={receiptDraft.changesSummary}
+                class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] focus:bg-gray-100"
+                placeholder="What changed?"
+                rows="2"
+              ></textarea>
             </label>
-            {#if firstFieldError(receiptFieldErrors, "changes_summary")}<p class="-mt-1 text-[11px] text-red-400">{firstFieldError(receiptFieldErrors, "changes_summary")}</p>{/if}
-            <label class="text-[12px] font-medium text-gray-600">Known gaps <span class="font-normal text-gray-400">one per line</span>
-              <textarea aria-label="Receipt known gaps (comma/newline separated)" bind:value={receiptDraft.knownGapsInput} class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] focus:bg-gray-100" rows="2"></textarea>
+            {#if firstFieldError(receiptFieldErrors, "changes_summary")}<p
+                class="-mt-1 text-[11px] text-red-400"
+              >
+                {firstFieldError(receiptFieldErrors, "changes_summary")}
+              </p>{/if}
+            <label class="text-[12px] font-medium text-gray-600"
+              >Known gaps <span class="font-normal text-gray-400"
+                >one per line</span
+              >
+              <textarea
+                aria-label="Receipt known gaps (comma/newline separated)"
+                bind:value={receiptDraft.knownGapsInput}
+                class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-[13px] focus:bg-gray-100"
+                rows="2"
+              ></textarea>
             </label>
             <div class="flex justify-end">
-              <button class="rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-indigo-500/100 disabled:opacity-50" disabled={creatingReceipt || workOrderArtifacts.length === 0} type="submit">{creatingReceipt ? "Submitting..." : "Submit receipt"}</button>
+              <button
+                class="rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-indigo-500/100 disabled:opacity-50"
+                disabled={creatingReceipt || workOrderArtifacts.length === 0}
+                type="submit"
+                >{creatingReceipt ? "Submitting..." : "Submit receipt"}</button
+              >
             </div>
           </form>
         {/if}
         {#if createdReceipt}
           <div class="mt-2 text-[12px] text-gray-600">
-            Submitted: <a class="font-medium text-indigo-400 hover:text-indigo-300" href={`/artifacts/${createdReceipt.id}`}>{createdReceipt.id}</a>
+            Submitted: <a
+              class="font-medium text-indigo-400 hover:text-indigo-300"
+              href={`/artifacts/${createdReceipt.id}`}>{createdReceipt.id}</a
+            >
           </div>
         {/if}
       </section>
@@ -1423,62 +1908,119 @@
   {#if activeTab === "timeline"}
     <div>
       <p class="mb-2 text-[11px] text-gray-400">
-        Snapshots: {Object.keys(timelineSnapshots ?? {}).length} · Artifacts: {Object.keys(timelineArtifacts ?? {}).length}
+        Snapshots: {Object.keys(timelineSnapshots ?? {}).length} · Artifacts: {Object.keys(
+          timelineArtifacts ?? {},
+        ).length}
       </p>
       {#if timelineLoading}
-        <div class="flex items-center justify-center gap-2 py-6 text-[13px] text-gray-400">
+        <div
+          class="flex items-center justify-center gap-2 py-6 text-[13px] text-gray-400"
+        >
           <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            <circle
+              class="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              stroke-width="4"
+            ></circle>
+            <path
+              class="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+            ></path>
           </svg>
           Loading timeline...
         </div>
       {:else if timelineError}
-        <div class="rounded-md bg-red-500/10 px-3 py-2 text-[13px] text-red-400">{timelineError}</div>
+        <div
+          class="rounded-md bg-red-500/10 px-3 py-2 text-[13px] text-red-400"
+        >
+          {timelineError}
+        </div>
       {:else if timelineView.length === 0}
-        <div class="py-6 text-center text-[13px] text-gray-400">No events yet</div>
+        <div class="py-6 text-center text-[13px] text-gray-400">
+          No events yet
+        </div>
       {:else}
         <div class="relative space-y-0">
-          <div class="absolute left-[7px] top-2 bottom-2 w-px bg-gray-200"></div>
+          <div
+            class="absolute left-[7px] top-2 bottom-2 w-px bg-gray-200"
+          ></div>
 
           {#each timelineView as event}
-            <article class="group relative flex gap-3 py-2" id={`event-${event.id}`}>
-              <div class="relative z-10 mt-1.5 flex h-[15px] w-[15px] shrink-0 items-center justify-center">
-                <span class="h-1.5 w-1.5 rounded-full {event.rawType === 'decision_made' ? 'bg-indigo-500/100' : event.rawType === 'exception_raised' ? 'bg-red-400' : event.rawType === 'message_posted' ? 'bg-blue-400' : 'bg-gray-300'}"></span>
+            <article
+              class="group relative flex gap-3 py-2"
+              id={`event-${event.id}`}
+            >
+              <div
+                class="relative z-10 mt-1.5 flex h-[15px] w-[15px] shrink-0 items-center justify-center"
+              >
+                <span
+                  class="h-1.5 w-1.5 rounded-full {event.rawType ===
+                  'decision_made'
+                    ? 'bg-indigo-500/100'
+                    : event.rawType === 'exception_raised'
+                      ? 'bg-red-400'
+                      : event.rawType === 'message_posted'
+                        ? 'bg-blue-400'
+                        : 'bg-gray-300'}"
+                ></span>
               </div>
 
-              <div class="min-w-0 flex-1 rounded-md px-2.5 py-1.5 transition-colors hover:bg-gray-200">
+              <div
+                class="min-w-0 flex-1 rounded-md px-2.5 py-1.5 transition-colors hover:bg-gray-200"
+              >
                 <div class="flex items-start justify-between gap-2">
                   <div class="min-w-0 flex-1">
                     <p class="text-[13px] text-gray-900">{event.summary}</p>
                     <p class="text-[11px] text-gray-400">
-                      {actorName(event.actor_id)} · {event.typeLabel} · {formatTimestamp(event.ts) || "—"}
+                      {actorName(event.actor_id)} · {event.typeLabel} · {formatTimestamp(
+                        event.ts,
+                      ) || "—"}
                     </p>
                   </div>
                   <button
                     class="shrink-0 text-[11px] text-gray-400 opacity-0 transition-opacity hover:text-gray-600 group-hover:opacity-100"
                     onclick={() => setReplyTarget(event.id)}
-                    type="button">Reply</button>
+                    type="button">Reply</button
+                  >
                 </div>
 
                 {#if event.changedFields.length > 0}
                   <div class="mt-1 flex flex-wrap gap-1 text-[11px]">
                     {#each event.changedFields as field}
-                      <span class="rounded bg-gray-200 px-1 py-0.5 text-gray-500">{field}</span>
+                      <span
+                        class="rounded bg-gray-200 px-1 py-0.5 text-gray-500"
+                        >{field}</span
+                      >
                     {/each}
                   </div>
                 {/if}
 
                 {#if event.refs.length > 0}
                   <div class="mt-1 flex flex-wrap gap-1 text-[11px]">
-                    {#each event.refs as refValue}<RefLink {refValue} {threadId} humanize={true} labelHints={timelineRefLabelHints} />{/each}
+                    {#each event.refs as refValue}<RefLink
+                        {refValue}
+                        {threadId}
+                        humanize={true}
+                        labelHints={timelineRefLabelHints}
+                      />{/each}
                   </div>
                 {/if}
 
                 {#if !event.isKnownType}
                   <details class="mt-1">
-                    <summary class="cursor-pointer text-[11px] text-gray-400">Details</summary>
-                    <pre class="mt-1 overflow-auto rounded bg-gray-50 p-2 text-[11px] text-gray-500">{JSON.stringify(event.payload ?? {}, null, 2)}</pre>
+                    <summary class="cursor-pointer text-[11px] text-gray-400"
+                      >Details</summary
+                    >
+                    <pre
+                      class="mt-1 overflow-auto rounded bg-gray-50 p-2 text-[11px] text-gray-500">{JSON.stringify(
+                        event.payload ?? {},
+                        null,
+                        2,
+                      )}</pre>
                   </details>
                 {/if}
               </div>

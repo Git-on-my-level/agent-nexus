@@ -166,6 +166,28 @@ var migrations = []migration{
 			`CREATE INDEX IF NOT EXISTS idx_document_revisions_document_id_revision_id ON document_revisions (document_id, revision_id);`,
 		},
 	},
+	{
+		Version: 6,
+		Statements: []string{
+			`CREATE TABLE IF NOT EXISTS passkey_credentials (
+				credential_id TEXT PRIMARY KEY,
+				agent_id TEXT NOT NULL,
+				user_handle BLOB NOT NULL,
+				public_key BLOB NOT NULL,
+				attestation_type TEXT NOT NULL,
+				transport TEXT NOT NULL DEFAULT '',
+				sign_count INTEGER NOT NULL DEFAULT 0,
+				backup_eligible INTEGER NOT NULL DEFAULT 0,
+				backup_state INTEGER NOT NULL DEFAULT 0,
+				aaguid BLOB NOT NULL DEFAULT X'',
+				attachment TEXT NOT NULL DEFAULT '',
+				created_at TEXT NOT NULL,
+				FOREIGN KEY(agent_id) REFERENCES agents(id)
+			);`,
+			`CREATE INDEX IF NOT EXISTS idx_passkey_credentials_agent_id ON passkey_credentials (agent_id);`,
+			`CREATE INDEX IF NOT EXISTS idx_passkey_credentials_user_handle ON passkey_credentials (user_handle);`,
+		},
+	},
 }
 
 func applyMigrations(ctx context.Context, db *sql.DB) error {

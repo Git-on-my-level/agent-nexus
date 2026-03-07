@@ -366,6 +366,142 @@ paths:
         '403':
           $ref: '#/components/responses/ErrorResponse'
 
+  /auth/passkey/register/options:
+    post:
+      operationId: passkeyRegisterOptions
+      summary: Begin passkey registration ceremony
+      tags: [auth]
+      x-oar-command-id: "auth.passkey.register.options"
+      x-oar-cli-path: "auth passkey register options"
+      x-oar-why: "Create a WebAuthn registration challenge for a new human principal."
+      x-oar-examples: []
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ session_id, options }` where `options` is a WebAuthn registration payload."
+      x-oar-error-codes: [invalid_json, invalid_request]
+      x-oar-concepts: [auth, passkey]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Intended for browser-based WebAuthn clients."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasskeyRegisterOptionsRequest'
+      responses:
+        '200':
+          description: Passkey registration options
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasskeyOptionsResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/passkey/register/verify:
+    post:
+      operationId: passkeyRegisterVerify
+      summary: Verify passkey registration and issue tokens
+      tags: [auth]
+      x-oar-command-id: "auth.passkey.register.verify"
+      x-oar-cli-path: "auth passkey register verify"
+      x-oar-why: "Verify a WebAuthn attestation, create a principal, and issue the initial token bundle."
+      x-oar-examples: []
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ agent, tokens }` for the newly registered passkey principal."
+      x-oar-error-codes: [invalid_json, invalid_request, invalid_token]
+      x-oar-concepts: [auth, passkey]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Session ids are one-time use and expire quickly."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasskeyVerifyRequest'
+      responses:
+        '201':
+          description: Passkey principal created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasskeyAuthResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/passkey/login/options:
+    post:
+      operationId: passkeyLoginOptions
+      summary: Begin passkey login ceremony
+      tags: [auth]
+      x-oar-command-id: "auth.passkey.login.options"
+      x-oar-cli-path: "auth passkey login options"
+      x-oar-why: "Create a WebAuthn assertion challenge for passkey authentication."
+      x-oar-examples: []
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ session_id, options }` where `options` is a WebAuthn assertion payload."
+      x-oar-error-codes: [invalid_json, not_found]
+      x-oar-concepts: [auth, passkey]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Provide `username` to scope login to one principal, or omit it for discoverable login."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasskeyLoginOptionsRequest'
+      responses:
+        '200':
+          description: Passkey login options
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasskeyOptionsResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/passkey/login/verify:
+    post:
+      operationId: passkeyLoginVerify
+      summary: Verify passkey login and issue tokens
+      tags: [auth]
+      x-oar-command-id: "auth.passkey.login.verify"
+      x-oar-cli-path: "auth passkey login verify"
+      x-oar-why: "Verify a WebAuthn assertion and issue a fresh token bundle."
+      x-oar-examples: []
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ agent, tokens }` when passkey verification succeeds."
+      x-oar-error-codes: [invalid_json, invalid_request, invalid_token, agent_revoked]
+      x-oar-concepts: [auth, passkey]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Session ids are one-time use and expire quickly."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasskeyVerifyRequest'
+      responses:
+        '200':
+          description: Passkey login verified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasskeyAuthResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+
   /agents/me:
     get:
       operationId: getCurrentAgent
@@ -1928,6 +2064,42 @@ components:
         tokens:
           $ref: '#/components/schemas/TokenBundle'
       required: [tokens]
+
+    PasskeyRegisterOptionsRequest:
+      type: object
+      properties:
+        display_name: { type: string }
+      required: [display_name]
+
+    PasskeyLoginOptionsRequest:
+      type: object
+      properties:
+        username: { type: string }
+
+    PasskeyVerifyRequest:
+      type: object
+      properties:
+        session_id: { type: string }
+        credential:
+          $ref: '#/components/schemas/AnyObject'
+      required: [session_id, credential]
+
+    PasskeyOptionsResponse:
+      type: object
+      properties:
+        session_id: { type: string }
+        options:
+          $ref: '#/components/schemas/AnyObject'
+      required: [session_id, options]
+
+    PasskeyAuthResponse:
+      type: object
+      properties:
+        agent:
+          $ref: '#/components/schemas/Agent'
+        tokens:
+          $ref: '#/components/schemas/TokenBundle'
+      required: [agent, tokens]
 
     CurrentAgentResponse:
       type: object

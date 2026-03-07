@@ -48,9 +48,12 @@ Artifacts are written under `cli/.tmp/pi-dogfood/<run-id>/`:
 - `SCENARIO.md`: scenario brief copied into the run workspace
 - `TARGETS.md`: resolved thread/artifact/commitment ids for the scenario
 
+These run directories are disposable. Delete old `cli/.tmp/pi-dogfood/<run-id>/` folders manually when you no longer need the logs or agent artifacts.
+
 The runner also:
 - builds temporary `oar` and `oar-core` binaries
 - starts a managed `oar-core` on a random local port
+- starts that managed core with `OAR_ALLOW_UNAUTHENTICATED_WRITES=1` so the seed phase can bootstrap actors and threads before agents authenticate
 - seeds the core from CLI-owned scenario data under `cli/dogfood/pi/seed/`
 - points Pi at that isolated core via `OAR_BASE_URL`
 

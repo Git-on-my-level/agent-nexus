@@ -7,7 +7,8 @@ The schema of objects is defined by `../contracts/oar-schema.yaml`.
 ## Conventions
 
 - Mutating requests require caller identity:
-  - Unauthenticated callers MUST provide `actor_id`.
+  - When `OAR_ALLOW_UNAUTHENTICATED_WRITES=1`, unauthenticated callers MUST provide `actor_id`.
+  - When `OAR_ALLOW_UNAUTHENTICATED_WRITES=0`, mutating requests require `Authorization: Bearer <access_token>`.
   - Authenticated callers MAY omit `actor_id`; core infers it from the bearer token principal.
   - If authenticated callers provide `actor_id`, it MUST match the authenticated principal mapping.
 - All timestamps are ISO-8601 strings.
@@ -20,6 +21,11 @@ The schema of objects is defined by `../contracts/oar-schema.yaml`.
 
 - Access tokens are passed as `Authorization: Bearer <access_token>`.
 - Registration is open in v0 via `POST /auth/agents/register`.
+- Passkey auth is available via:
+  - `POST /auth/passkey/register/options`
+  - `POST /auth/passkey/register/verify`
+  - `POST /auth/passkey/login/options`
+  - `POST /auth/passkey/login/verify`
 - `POST /auth/token` supports:
   - `grant_type=assertion` using an Ed25519 key assertion
   - `grant_type=refresh_token` using a refresh token
@@ -87,6 +93,22 @@ The schema of objects is defined by `../contracts/oar-schema.yaml`.
   - Assertion grant body: `{ "grant_type": "assertion", "agent_id": "...", "key_id": "...", "signed_at": "<rfc3339>", "signature": "<base64-ed25519-signature>" }`
   - Refresh grant body: `{ "grant_type": "refresh_token", "refresh_token": "<token>" }`
   - Response: `{ "tokens": <token_bundle> }`
+
+- `POST /auth/passkey/register/options`
+  - Body: `{ "display_name": "..." }`
+  - Response: `{ "session_id": "...", "options": <webauthn-registration-options> }`
+
+- `POST /auth/passkey/register/verify`
+  - Body: `{ "session_id": "...", "credential": <webauthn-attestation-response> }`
+  - Response: `{ "agent": <agent_profile>, "tokens": <token_bundle> }`
+
+- `POST /auth/passkey/login/options`
+  - Body: `{ "username"?: "..." }`
+  - Response: `{ "session_id": "...", "options": <webauthn-assertion-options> }`
+
+- `POST /auth/passkey/login/verify`
+  - Body: `{ "session_id": "...", "credential": <webauthn-assertion-response> }`
+  - Response: `{ "agent": <agent_profile>, "tokens": <token_bundle> }`
 
 - `GET /agents/me`
   - Auth: bearer token required

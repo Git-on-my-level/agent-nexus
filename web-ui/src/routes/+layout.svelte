@@ -8,11 +8,18 @@
     actorSessionReady,
     buildActorCreatePayload,
     chooseActor,
+    clearSelectedActor,
     initializeActorSession,
     lookupActorDisplayName,
     selectedActorId,
     shouldShowActorGate,
   } from "$lib/actorSession";
+  import {
+    authenticatedAgent,
+    authSessionReady,
+    clearAuthSession,
+    initializeAuthSession,
+  } from "$lib/authSession";
   import { coreClient } from "$lib/coreClient";
   import { getShellContentConfig, navigationItems } from "$lib/navigation";
 
@@ -34,11 +41,23 @@
   let newActorName = $state("");
   let mobileNavOpen = $state(false);
 
+  let identityReady = $derived($actorSessionReady && $authSessionReady);
+  let principalActorId = $derived($authenticatedAgent?.actor_id ?? "");
+  let activeActorId = $derived(principalActorId || $selectedActorId);
+  let onLoginRoute = $derived($page.url.pathname === "/login");
   let gateVisible = $derived(
-    shouldShowActorGate($actorSessionReady, $selectedActorId),
+    identityReady &&
+      !$authenticatedAgent &&
+      !onLoginRoute &&
+      shouldShowActorGate($actorSessionReady, $selectedActorId),
+  );
+  let renderLoginOnly = $derived(
+    identityReady && !$authenticatedAgent && onLoginRoute,
   );
   let selectedActorName = $derived(
-    lookupActorDisplayName($selectedActorId, $actorRegistry) || "Unknown actor",
+    lookupActorDisplayName(activeActorId, $actorRegistry) ||
+      $authenticatedAgent?.username ||
+      "Unknown actor",
   );
   let initials = $derived(
     selectedActorName
@@ -59,6 +78,9 @@
 
   onMount(async () => {
     initializeActorSession();
+    await initializeAuthSession({
+      fetchFn: globalThis.fetch.bind(globalThis),
+    });
     await refreshActors();
   });
 
@@ -79,11 +101,19 @@
   }
 
   function selectActor(actorId) {
+    if ($authenticatedAgent) {
+      return;
+    }
     chooseActor(actorId);
   }
 
   function switchIdentity() {
-    chooseActor("");
+    if ($authenticatedAgent) {
+      clearAuthSession();
+      window.location.assign("/login");
+      return;
+    }
+    clearSelectedActor();
     closeMobileNav();
   }
 
@@ -155,7 +185,7 @@
 <svelte:window onkeydown={handleWindowKeydown} />
 
 <div class="shell-root">
-  {#if !$actorSessionReady}
+  {#if !identityReady}
     <main class="shell-loading" aria-live="polite">
       <div class="shell-loading-card">
         <svg
@@ -181,6 +211,8 @@
         <p>Loading Organization Autorunner UI...</p>
       </div>
     </main>
+  {:else if renderLoginOnly}
+    {@render children()}
   {:else if gateVisible}
     <main class="actor-gate-wrap">
       <section class="actor-gate-card">
@@ -242,6 +274,12 @@
             </button>
           </div>
         </form>
+
+        <p class="actor-gate-empty">
+          Prefer authenticated access? <a href="/login"
+            >Sign in with a passkey.</a
+          >
+        </p>
       </section>
     </main>
   {:else}
@@ -301,17 +339,20 @@
         </nav>
 
         <div class="shell-actor-panel">
-          <p class="shell-actor-label">Signed in as</p>
+          <p class="shell-actor-label">
+            {$authenticatedAgent ? "Authenticated principal" : "Signed in as"}
+          </p>
           <div class="shell-actor-row">
             <span class="shell-actor-avatar" aria-hidden="true">{initials}</span
             >
             <div class="shell-actor-copy">
               <p>{selectedActorName}</p>
-              <span>{($selectedActorId || "").slice(0, 24)}</span>
+              <span>{activeActorId.slice(0, 24)}</span>
             </div>
           </div>
-          <button onclick={switchIdentity} type="button">Switch identity</button
-          >
+          <button onclick={switchIdentity} type="button">
+            {$authenticatedAgent ? "Sign out" : "Switch identity"}
+          </button>
         </div>
       </aside>
 
@@ -343,7 +384,7 @@
             type="button"
           >
             <span aria-hidden="true">{initials}</span>
-            Switch
+            {$authenticatedAgent ? "Sign out" : "Switch"}
           </button>
         </header>
 

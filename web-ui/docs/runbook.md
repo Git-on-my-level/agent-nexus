@@ -30,6 +30,9 @@ The UI expects these HTTP endpoints (see `docs/http-api.md` for full contract):
 - `GET /meta/handshake` (preferred startup compatibility check)
 - `GET /version` (backward-compatible fallback)
 - `POST /actors`, `GET /actors`
+- `POST /auth/passkey/register/options`, `POST /auth/passkey/register/verify`
+- `POST /auth/passkey/login/options`, `POST /auth/passkey/login/verify`
+- `POST /auth/token`, `GET /agents/me`
 - `POST /threads`, `GET /threads`, `GET /threads/{thread_id}`,
   `PATCH /threads/{thread_id}`, `GET /threads/{thread_id}/timeline`
 - `POST /commitments`, `GET /commitments`, `GET /commitments/{commitment_id}`,
@@ -44,10 +47,16 @@ The UI expects these HTTP endpoints (see `docs/http-api.md` for full contract):
 
 ### Auth assumptions (v0)
 
-v0 uses actor selection only:
+The UI now supports two identity modes:
 
-- No RBAC or external auth is enforced by the UI.
-- Mutating operations include `actor_id` from the selected actor.
+- Passkey-authenticated mode:
+  - Browser signs in through the SvelteKit proxy using the `/auth/passkey/*` endpoints.
+  - Access token is kept in memory.
+  - Refresh token is stored in `sessionStorage` and used to refresh once on `401`.
+  - Mutating requests are locked to the authenticated principal actor.
+- Actor-selection mode:
+  - Still available for local workflows when core is started with `OAR_ALLOW_UNAUTHENTICATED_WRITES=1`.
+  - Mutating operations include `actor_id` from the selected actor.
 
 ## Local Integration (Real Core)
 
@@ -68,6 +77,8 @@ Terminal B (ui):
 cd ../web-ui
 OAR_CORE_BASE_URL=http://127.0.0.1:8000 ./scripts/dev
 ```
+
+If you want actor-selection mode locally, start core with `OAR_ALLOW_UNAUTHENTICATED_WRITES=1` or use the repo-root `make serve` workflow, which sets it automatically for the seeded dev stack.
 
 For end-to-end integration validation:
 

@@ -17,6 +17,9 @@ import (
 	"organization-autorunner-core/internal/schema"
 	"organization-autorunner-core/internal/server"
 	"organization-autorunner-core/internal/storage"
+
+	"github.com/go-webauthn/webauthn/protocol"
+	webauthnlib "github.com/go-webauthn/webauthn/webauthn"
 )
 
 const (
@@ -31,19 +34,23 @@ const (
 
 func main() {
 	var (
-		host                  = envString("OAR_HOST", defaultHost)
-		port                  = envInt("OAR_PORT", defaultPort)
-		listenAddress         = envString("OAR_LISTEN_ADDR", "")
-		schemaPath            = envString("OAR_SCHEMA_PATH", defaultSchemaPath)
-		workspaceRoot         = envString("OAR_WORKSPACE_ROOT", defaultWorkspaceRoot)
-		coreVersion           = envString("OAR_CORE_VERSION", "")
-		apiVersion            = envString("OAR_API_VERSION", defaultAPIVersion)
-		minCLIVersion         = envString("OAR_MIN_CLI_VERSION", defaultMinCLIVersion)
-		recommendedCLIVersion = envString("OAR_RECOMMENDED_CLI_VERSION", defaultMinCLIVersion)
-		cliDownloadURL        = envString("OAR_CLI_DOWNLOAD_URL", "")
-		coreInstanceID        = envString("OAR_CORE_INSTANCE_ID", defaultInstanceID)
-		metaCommandsPath      = envString("OAR_META_COMMANDS_PATH", "")
-		streamPollInterval    = envDuration("OAR_STREAM_POLL_INTERVAL", time.Second)
+		host                       = envString("OAR_HOST", defaultHost)
+		port                       = envInt("OAR_PORT", defaultPort)
+		listenAddress              = envString("OAR_LISTEN_ADDR", "")
+		schemaPath                 = envString("OAR_SCHEMA_PATH", defaultSchemaPath)
+		workspaceRoot              = envString("OAR_WORKSPACE_ROOT", defaultWorkspaceRoot)
+		coreVersion                = envString("OAR_CORE_VERSION", "")
+		apiVersion                 = envString("OAR_API_VERSION", defaultAPIVersion)
+		minCLIVersion              = envString("OAR_MIN_CLI_VERSION", defaultMinCLIVersion)
+		recommendedCLIVersion      = envString("OAR_RECOMMENDED_CLI_VERSION", defaultMinCLIVersion)
+		cliDownloadURL             = envString("OAR_CLI_DOWNLOAD_URL", "")
+		coreInstanceID             = envString("OAR_CORE_INSTANCE_ID", defaultInstanceID)
+		metaCommandsPath           = envString("OAR_META_COMMANDS_PATH", "")
+		streamPollInterval         = envDuration("OAR_STREAM_POLL_INTERVAL", time.Second)
+		allowUnauthenticatedWrites = envBool("OAR_ALLOW_UNAUTHENTICATED_WRITES", false)
+		webAuthnRPID               = envString("OAR_WEBAUTHN_RPID", "127.0.0.1")
+		webAuthnOrigin             = envString("OAR_WEBAUTHN_ORIGIN", "http://127.0.0.1:5173")
+		webAuthnDisplayName        = envString("OAR_WEBAUTHN_RP_DISPLAY_NAME", "OAR")
 	)
 
 	flag.StringVar(&host, "host", host, "host interface to bind")
@@ -103,14 +110,31 @@ func main() {
 		os.Exit(1)
 	}
 	authStore := auth.NewStore(workspace.DB())
+	passkeySessionStore := auth.NewPasskeySessionStore(auth.DefaultPasskeySessionTTL)
+	defer passkeySessionStore.Close()
+	webAuthn, err := webauthnlib.New(&webauthnlib.Config{
+		RPDisplayName: webAuthnDisplayName,
+		RPID:          webAuthnRPID,
+		RPOrigins:     []string{webAuthnOrigin},
+		AuthenticatorSelection: protocol.AuthenticatorSelection{
+			UserVerification: protocol.VerificationPreferred,
+		},
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to initialize WebAuthn: %v\n", err)
+		os.Exit(1)
+	}
 	primitiveStore := primitives.NewStore(workspace.DB(), workspace.Layout().ArtifactContentDir)
 	handler := server.NewHandler(
 		contract.Version,
 		server.WithHealthCheck(workspace.Ping),
 		server.WithActorRegistry(actorRegistry),
 		server.WithAuthStore(authStore),
+		server.WithPasskeySessionStore(passkeySessionStore),
 		server.WithPrimitiveStore(primitiveStore),
 		server.WithSchemaContract(contract),
+		server.WithWebAuthn(webAuthn),
+		server.WithAllowUnauthenticatedWrites(allowUnauthenticatedWrites),
 		server.WithCoreVersion(coreVersion),
 		server.WithAPIVersion(apiVersion),
 		server.WithMinCLIVersion(minCLIVersion),
@@ -164,6 +188,20 @@ func envDuration(name string, fallback time.Duration) time.Duration {
 	parsed, err := time.ParseDuration(value)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "invalid duration value for %s: %q\n", name, value)
+		os.Exit(1)
+	}
+	return parsed
+}
+
+func envBool(name string, fallback bool) bool {
+	value := strings.TrimSpace(os.Getenv(name))
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "invalid boolean value for %s: %q\n", name, value)
 		os.Exit(1)
 	}
 	return parsed

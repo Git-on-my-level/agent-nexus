@@ -118,8 +118,18 @@
     onclick={() => (filtersOpen = !filtersOpen)}
     type="button"
   >
-    <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-      <path stroke-linecap="round" stroke-linejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+    <svg
+      class="h-3.5 w-3.5"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      stroke-width="2"
+    >
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+      />
     </svg>
     Filter
   </button>
@@ -128,7 +138,10 @@
 {#if filtersOpen}
   <form
     class="mb-4 rounded-md border border-gray-200 bg-gray-100 p-3"
-    onsubmit={(event) => { event.preventDefault(); void applyFilters(); }}
+    onsubmit={(event) => {
+      event.preventDefault();
+      void applyFilters();
+    }}
   >
     <div class="grid gap-3 sm:grid-cols-2">
       <label class="text-[12px] font-medium text-gray-500">
@@ -185,32 +198,50 @@
 {:else if !loading && artifacts.length === 0}
   <div class="mt-8 text-center">
     <p class="text-[13px] font-medium text-gray-500">No matching artifacts</p>
-    <p class="mt-1 text-[13px] text-gray-400">Try adjusting filters or clearing the current view.</p>
+    <p class="mt-1 text-[13px] text-gray-400">
+      Try adjusting filters or clearing the current view.
+    </p>
   </div>
 {/if}
 
 {#if artifacts.length > 0}
-  <div class="space-y-px rounded-md border border-gray-200 bg-gray-100 overflow-hidden">
+  <div
+    class="space-y-px rounded-md border border-gray-200 bg-gray-100 overflow-hidden"
+  >
     {#each artifacts as artifact, i}
       <a
-        class="block px-4 py-3 transition-colors hover:bg-gray-200 {i > 0 ? 'border-t border-gray-200' : ''}"
+        class="block px-4 py-3 transition-colors hover:bg-gray-200 {i > 0
+          ? 'border-t border-gray-200'
+          : ''}"
         href={`/artifacts/${artifact.id}`}
       >
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0 flex-1">
             <div class="flex flex-wrap items-center gap-2">
-              <span class="inline-flex rounded px-1.5 py-0.5 text-[11px] font-semibold {kindColor(artifact.kind)}">
+              <span
+                class="inline-flex rounded px-1.5 py-0.5 text-[11px] font-semibold {kindColor(
+                  artifact.kind,
+                )}"
+              >
                 {kindLabel(artifact.kind)}
               </span>
-              <span class="text-[11px] text-gray-400">{kindDescription(artifact.kind)}</span>
+              <span class="text-[11px] text-gray-400"
+                >{kindDescription(artifact.kind)}</span
+              >
             </div>
-            <p class="mt-1 truncate text-[13px] font-medium text-gray-900">{rowHeading(artifact)}</p>
+            <p class="mt-1 truncate text-[13px] font-medium text-gray-900">
+              {rowHeading(artifact)}
+            </p>
             <p class="text-[11px] text-gray-400">
-              Created {formatTimestamp(artifact.created_at) || "—"} by {artifact.created_by || "unknown"}
+              Created {formatTimestamp(artifact.created_at) || "—"} by {artifact.created_by ||
+                "unknown"}
             </p>
           </div>
           <span class="shrink-0 text-[11px] text-gray-300">
-            {(artifact.refs ?? []).length} ref{(artifact.refs ?? []).length === 1 ? "" : "s"}
+            {(artifact.refs ?? []).length} ref{(artifact.refs ?? []).length ===
+            1
+              ? ""
+              : "s"}
           </span>
         </div>
 
@@ -219,17 +250,26 @@
             {#if artifact.thread_id}
               <RefLink
                 humanize
-                labelHints={{ [`thread:${artifact.thread_id}`]: "Related thread" }}
+                labelHints={{
+                  [`thread:${artifact.thread_id}`]: "Related thread",
+                }}
                 refValue={`thread:${artifact.thread_id}`}
                 showRaw
                 threadId={artifact.thread_id}
               />
             {/if}
             {#each refPreview(artifact) as refValue}
-              <RefLink humanize {refValue} showRaw threadId={artifact.thread_id} />
+              <RefLink
+                humanize
+                {refValue}
+                showRaw
+                threadId={artifact.thread_id}
+              />
             {/each}
             {#if (artifact.refs ?? []).length > 3}
-              <span class="text-[11px] text-gray-300">+{artifact.refs.length - 3} more</span>
+              <span class="text-[11px] text-gray-300"
+                >+{artifact.refs.length - 3} more</span
+              >
             {/if}
           </div>
         {/if}

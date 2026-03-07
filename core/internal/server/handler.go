@@ -15,6 +15,8 @@ import (
 	"organization-autorunner-core/internal/auth"
 	"organization-autorunner-core/internal/primitives"
 	"organization-autorunner-core/internal/schema"
+
+	webauthnlib "github.com/go-webauthn/webauthn/webauthn"
 )
 
 type HealthCheckFunc func(ctx context.Context) error
@@ -55,20 +57,23 @@ type PrimitiveStore interface {
 type HandlerOption func(*handlerOptions)
 
 type handlerOptions struct {
-	healthCheck           HealthCheckFunc
-	actorRegistry         ActorRegistry
-	authStore             *auth.Store
-	primitiveStore        PrimitiveStore
-	contract              *schema.Contract
-	inboxRiskHorizon      time.Duration
-	coreVersion           string
-	apiVersion            string
-	minCLIVersion         string
-	recommendedCLIVersion string
-	cliDownloadURL        string
-	coreInstanceID        string
-	metaCommandsPath      string
-	streamPollInterval    time.Duration
+	healthCheck                HealthCheckFunc
+	actorRegistry              ActorRegistry
+	authStore                  *auth.Store
+	passkeySessionStore        *auth.PasskeySessionStore
+	primitiveStore             PrimitiveStore
+	contract                   *schema.Contract
+	webAuthn                   *webauthnlib.WebAuthn
+	allowUnauthenticatedWrites bool
+	inboxRiskHorizon           time.Duration
+	coreVersion                string
+	apiVersion                 string
+	minCLIVersion              string
+	recommendedCLIVersion      string
+	cliDownloadURL             string
+	coreInstanceID             string
+	metaCommandsPath           string
+	streamPollInterval         time.Duration
 }
 
 func WithHealthCheck(healthCheck HealthCheckFunc) HandlerOption {
@@ -89,6 +94,12 @@ func WithAuthStore(authStore *auth.Store) HandlerOption {
 	}
 }
 
+func WithPasskeySessionStore(store *auth.PasskeySessionStore) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.passkeySessionStore = store
+	}
+}
+
 func WithPrimitiveStore(primitiveStore PrimitiveStore) HandlerOption {
 	return func(opts *handlerOptions) {
 		opts.primitiveStore = primitiveStore
@@ -98,6 +109,18 @@ func WithPrimitiveStore(primitiveStore PrimitiveStore) HandlerOption {
 func WithSchemaContract(contract *schema.Contract) HandlerOption {
 	return func(opts *handlerOptions) {
 		opts.contract = contract
+	}
+}
+
+func WithWebAuthn(webAuthn *webauthnlib.WebAuthn) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.webAuthn = webAuthn
+	}
+}
+
+func WithAllowUnauthenticatedWrites(allow bool) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.allowUnauthenticatedWrites = allow
 	}
 }
 
@@ -159,12 +182,13 @@ func WithStreamPollInterval(interval time.Duration) HandlerOption {
 
 func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 	opts := handlerOptions{
-		coreVersion:           strings.TrimSpace(schemaVersion),
-		apiVersion:            "v0",
-		minCLIVersion:         "0.1.0",
-		recommendedCLIVersion: "0.1.0",
-		coreInstanceID:        "core-local",
-		streamPollInterval:    time.Second,
+		coreVersion:                strings.TrimSpace(schemaVersion),
+		apiVersion:                 "v0",
+		minCLIVersion:              "0.1.0",
+		recommendedCLIVersion:      "0.1.0",
+		coreInstanceID:             "core-local",
+		streamPollInterval:         time.Second,
+		allowUnauthenticatedWrites: false,
 	}
 	for _, option := range options {
 		option(&opts)
@@ -294,6 +318,38 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			return
 		}
 		handleIssueAuthToken(w, r, opts)
+	})
+
+	mux.HandleFunc("/auth/passkey/register/options", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+			return
+		}
+		handlePasskeyRegisterOptions(w, r, opts)
+	})
+
+	mux.HandleFunc("/auth/passkey/register/verify", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+			return
+		}
+		handlePasskeyRegisterVerify(w, r, opts)
+	})
+
+	mux.HandleFunc("/auth/passkey/login/options", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+			return
+		}
+		handlePasskeyLoginOptions(w, r, opts)
+	})
+
+	mux.HandleFunc("/auth/passkey/login/verify", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+			return
+		}
+		handlePasskeyLoginVerify(w, r, opts)
 	})
 
 	mux.HandleFunc("/agents/me", func(w http.ResponseWriter, r *http.Request) {
@@ -779,6 +835,9 @@ func shouldEnforceCLIVersion(path string) bool {
 	}
 	switch path {
 	case "/health", "/version", "/meta/handshake", "/auth/token", "/auth/agents/register":
+		return false
+	}
+	if strings.HasPrefix(path, "/auth/passkey/") {
 		return false
 	}
 	return true

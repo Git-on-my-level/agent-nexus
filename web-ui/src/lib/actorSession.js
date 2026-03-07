@@ -33,6 +33,10 @@ export function chooseActor(actorId, storage = localStorage) {
   return stored;
 }
 
+export function clearSelectedActor(storage = localStorage) {
+  return chooseActor("", storage);
+}
+
 export function shouldShowActorGate(isReady, actorId) {
   return Boolean(isReady) && !actorId;
 }
