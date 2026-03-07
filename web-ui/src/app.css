@@ -604,6 +604,58 @@ button:focus-visible {
   width: min(var(--shell-content-max, 112rem), 100%);
 }
 
+.markdown-lite h1,
+.markdown-lite h2,
+.markdown-lite h3 {
+  margin: 0.7rem 0 0.45rem;
+  color: #111827;
+  line-height: 1.25;
+}
+
+.markdown-lite h1 {
+  font-size: 1.08rem;
+}
+
+.markdown-lite h2 {
+  font-size: 1rem;
+}
+
+.markdown-lite h3 {
+  font-size: 0.92rem;
+}
+
+.markdown-lite p {
+  margin: 0.45rem 0;
+}
+
+.markdown-lite ul {
+  margin: 0.35rem 0 0.6rem;
+  padding-left: 1rem;
+}
+
+.markdown-lite li {
+  margin: 0.2rem 0;
+}
+
+.markdown-lite code {
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+  font-size: 0.82em;
+  background: #f3f4f6;
+  border-radius: 0.35rem;
+  padding: 0.04rem 0.28rem;
+}
+
+.markdown-lite pre {
+  margin: 0.6rem 0;
+  background: #111827;
+  color: #e5e7eb;
+  border-radius: 0.65rem;
+  padding: 0.7rem 0.8rem;
+  overflow: auto;
+}
+
 @media (min-width: 640px) {
   .actor-gate-card {
     padding: 1.35rem;

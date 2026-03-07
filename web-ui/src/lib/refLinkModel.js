@@ -4,6 +4,59 @@ function asPathSegment(value) {
   return encodeURIComponent(String(value));
 }
 
+function lookupLabelHint(raw, prefix, value, labelHints) {
+  if (!labelHints || typeof labelHints !== "object") {
+    return "";
+  }
+
+  const direct =
+    labelHints[raw] ?? labelHints[`${prefix}:${value}`] ?? labelHints[value];
+  return String(direct ?? "").trim();
+}
+
+function summarizeUrl(value) {
+  try {
+    const url = new URL(String(value));
+    const path = String(url.pathname ?? "").replace(/\/+$/, "") || "/";
+    const shownPath = path.length > 28 ? `${path.slice(0, 28)}...` : path;
+    return `${url.hostname}${shownPath}`;
+  } catch {
+    return "External link";
+  }
+}
+
+function humanizedLabelForPrefix(prefix, value) {
+  if (prefix === "artifact") return "Artifact";
+  if (prefix === "thread") return "Thread";
+  if (prefix === "snapshot") return "Snapshot";
+  if (prefix === "event") return "Event";
+  if (prefix === "url") return summarizeUrl(value);
+  if (prefix === "inbox") return "Inbox item";
+  return "";
+}
+
+function resolveRefLabels(raw, prefix, value, options = {}) {
+  const humanize = Boolean(options.humanize);
+  const labelHint = lookupLabelHint(raw, prefix, value, options.labelHints);
+
+  if (!humanize) {
+    return {
+      label: raw,
+      primaryLabel: raw,
+      secondaryLabel: "",
+    };
+  }
+
+  const primaryLabel =
+    labelHint || humanizedLabelForPrefix(prefix, value) || raw;
+  const secondaryLabel = primaryLabel === raw ? "" : raw;
+  return {
+    label: primaryLabel,
+    primaryLabel,
+    secondaryLabel,
+  };
+}
+
 export function resolveRefLink(refValue, options = {}) {
   const parsed = parseRef(refValue);
   const raw = renderRef(parsed);
@@ -18,12 +71,14 @@ export function resolveRefLink(refValue, options = {}) {
       prefix,
       value,
       kind: "raw",
-      label: raw,
+      ...resolveRefLabels(raw, prefix, value, options),
       href: "",
       isExternal: false,
       isLink: false,
     };
   }
+
+  const labels = resolveRefLabels(raw, prefix, value, options);
 
   if (prefix === "artifact") {
     return {
@@ -31,7 +86,7 @@ export function resolveRefLink(refValue, options = {}) {
       prefix,
       value,
       kind: "artifact",
-      label: raw,
+      ...labels,
       href: `/artifacts/${asPathSegment(value)}`,
       isExternal: false,
       isLink: true,
@@ -44,7 +99,7 @@ export function resolveRefLink(refValue, options = {}) {
       prefix,
       value,
       kind: "thread",
-      label: raw,
+      ...labels,
       href: `/threads/${asPathSegment(value)}`,
       isExternal: false,
       isLink: true,
@@ -60,7 +115,7 @@ export function resolveRefLink(refValue, options = {}) {
       prefix,
       value,
       kind: "snapshot",
-      label: raw,
+      ...labels,
       href,
       isExternal: false,
       isLink: true,
@@ -74,7 +129,7 @@ export function resolveRefLink(refValue, options = {}) {
         prefix,
         value,
         kind: "event",
-        label: raw,
+        ...labels,
         href: "",
         isExternal: false,
         isLink: false,
@@ -85,7 +140,7 @@ export function resolveRefLink(refValue, options = {}) {
       prefix,
       value,
       kind: "event",
-      label: raw,
+      ...labels,
       href: `/threads/${asPathSegment(threadId)}#event-${asPathSegment(value)}`,
       isExternal: false,
       isLink: true,
@@ -98,7 +153,7 @@ export function resolveRefLink(refValue, options = {}) {
       prefix,
       value,
       kind: "url",
-      label: raw,
+      ...labels,
       href: value,
       isExternal: true,
       isLink: true,
@@ -111,7 +166,7 @@ export function resolveRefLink(refValue, options = {}) {
       prefix,
       value,
       kind: "inbox",
-      label: raw,
+      ...labels,
       href: `/inbox#inbox-${asPathSegment(value)}`,
       isExternal: false,
       isLink: true,
@@ -124,6 +179,8 @@ export function resolveRefLink(refValue, options = {}) {
     value,
     kind: "unknown",
     label: raw,
+    primaryLabel: raw,
+    secondaryLabel: "",
     href: "",
     isExternal: false,
     isLink: false,

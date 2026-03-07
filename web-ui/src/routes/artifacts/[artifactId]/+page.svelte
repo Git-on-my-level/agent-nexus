@@ -79,6 +79,15 @@
   let timelineView = $derived(
     toTimelineView(threadTimeline, { threadId: artifact?.thread_id ?? "" }),
   );
+  let isMarkdownContent = $derived(
+    artifactContentType.includes("markdown") &&
+      typeof textContent === "string" &&
+      textContent.length > 0,
+  );
+  let renderedMarkdownBlocks = $derived(
+    isMarkdownContent ? parseMarkdownLite(textContent) : [],
+  );
+  let artifactRefHints = $derived(buildArtifactRefHints());
   let reviewEvidenceSuggestions = $derived(
     buildRefSuggestions([
       receiptPacket?.receipt_id
@@ -123,6 +132,11 @@
           : "",
   );
 
+  let artifactHeaderTitle = $derived(
+    String(artifact?.summary ?? "").trim() ||
+      `${kindLabel(artifact?.kind ?? "artifact")} artifact`,
+  );
+
   function blankReviewDraft() {
     return { outcome: "accept", notes: "", evidenceRefsInput: "" };
   }
@@ -155,6 +169,160 @@
       return "";
     }
     return candidates[0];
+  }
+
+  function kindDescription(kind) {
+    if (kind === "work_order") return "Execution plan and acceptance criteria";
+    if (kind === "receipt")
+      return "Recorded outcomes and verification evidence";
+    if (kind === "review") return "Human review decision on a receipt";
+    if (kind === "doc") return "Readable source document";
+    if (kind === "evidence") return "Supporting evidence artifact";
+    if (kind === "log") return "Operational log artifact";
+    return "Artifact payload";
+  }
+
+  function truncateLabel(value, max = 72) {
+    const text = String(value ?? "").trim();
+    if (!text) return "";
+    if (text.length <= max) return text;
+    return `${text.slice(0, max)}...`;
+  }
+
+  function buildArtifactRefHints() {
+    const hints = {};
+
+    if (!artifact) return hints;
+
+    hints[`artifact:${artifact.id}`] =
+      `This ${kindLabel(artifact.kind).toLowerCase()}`;
+    if (artifact.thread_id) {
+      hints[`thread:${artifact.thread_id}`] = "Related thread";
+    }
+
+    if (workOrderPacket?.work_order_id) {
+      hints[`artifact:${workOrderPacket.work_order_id}`] = "Work order";
+    }
+
+    if (receiptPacket?.receipt_id) {
+      hints[`artifact:${receiptPacket.receipt_id}`] = "Receipt";
+    } else if (artifact.kind === "receipt") {
+      hints[`artifact:${artifact.id}`] = "Receipt";
+    }
+
+    if (receiptPacket?.work_order_id) {
+      hints[`artifact:${receiptPacket.work_order_id}`] = "Work order";
+    }
+
+    if (reviewPacket?.review_id) {
+      hints[`artifact:${reviewPacket.review_id}`] = "Review";
+    }
+    if (reviewPacket?.receipt_id) {
+      hints[`artifact:${reviewPacket.receipt_id}`] = "Reviewed receipt";
+    }
+    if (reviewPacket?.work_order_id) {
+      hints[`artifact:${reviewPacket.work_order_id}`] = "Related work order";
+    }
+
+    timelineView.slice(0, 30).forEach((event) => {
+      hints[`event:${event.id}`] =
+        `${event.typeLabel}: ${truncateLabel(event.summary, 52)}`;
+    });
+
+    return hints;
+  }
+
+  function parseMarkdownLite(markdown) {
+    const blocks = [];
+    const lines = String(markdown ?? "").split(/\r?\n/);
+    let listItems = [];
+    let inCode = false;
+    let codeLines = [];
+    let paragraphLines = [];
+
+    const flushParagraph = () => {
+      if (paragraphLines.length === 0) return;
+      blocks.push({
+        type: "paragraph",
+        text: paragraphLines.join(" "),
+      });
+      paragraphLines = [];
+    };
+
+    const closeList = () => {
+      if (listItems.length === 0) return;
+      blocks.push({
+        type: "list",
+        items: listItems,
+      });
+      listItems = [];
+    };
+
+    const closeCodeBlock = () => {
+      if (!inCode) return;
+      blocks.push({
+        type: "code",
+        text: codeLines.join("\n"),
+      });
+      inCode = false;
+      codeLines = [];
+    };
+
+    for (const rawLine of lines) {
+      const line = String(rawLine ?? "");
+      const trimmed = line.trim();
+
+      if (trimmed.startsWith("```")) {
+        flushParagraph();
+        closeList();
+        if (!inCode) {
+          inCode = true;
+          codeLines = [];
+        } else {
+          closeCodeBlock();
+        }
+        continue;
+      }
+
+      if (inCode) {
+        codeLines.push(line);
+        continue;
+      }
+
+      if (!trimmed) {
+        flushParagraph();
+        closeList();
+        continue;
+      }
+
+      const headingMatch = trimmed.match(/^(#{1,3})\s+(.+)$/);
+      if (headingMatch) {
+        flushParagraph();
+        closeList();
+        blocks.push({
+          type: "heading",
+          level: headingMatch[1].length,
+          text: headingMatch[2],
+        });
+        continue;
+      }
+
+      const bulletMatch = trimmed.match(/^[-*]\s+(.+)$/);
+      if (bulletMatch) {
+        flushParagraph();
+        listItems.push(bulletMatch[1]);
+        continue;
+      }
+
+      closeList();
+      paragraphLines.push(trimmed);
+    }
+
+    flushParagraph();
+    closeList();
+    closeCodeBlock();
+
+    return blocks;
   }
 
   async function loadThreadTimeline(threadId) {
@@ -345,38 +513,72 @@
     {loadError}
   </div>
 {:else if artifact}
-  <h1 class="text-xl font-semibold text-gray-900">
-    {artifact.summary || artifact.id}
-  </h1>
+  <section class="rounded-xl border border-gray-200/80 bg-white p-5 shadow-sm">
+    <p
+      class="text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-500"
+    >
+      Artifact detail
+    </p>
+    <h1
+      aria-label={`Artifact Detail: ${artifact.id}`}
+      class="mt-1 text-xl font-semibold text-gray-900"
+    >
+      {artifactHeaderTitle}
+    </h1>
+    <p class="mt-1 text-sm text-gray-600">{kindDescription(artifact.kind)}</p>
 
-  <div class="mt-3 flex flex-wrap items-center gap-2 text-xs">
-    <span
-      class={`rounded-md px-2 py-0.5 font-medium ${kindBadge(artifact.kind)}`}
-      >{kindLabel(artifact.kind)}</span
-    >
-    <span class="text-gray-400"
-      >{formatTimestamp(artifact.created_at) || "—"}</span
-    >
-    <span class="text-gray-400">by {actorName(artifact.created_by)}</span>
-    {#if artifact.thread_id}
-      <RefLink
-        refValue={`thread:${artifact.thread_id}`}
-        threadId={artifact.thread_id}
-      />
-    {/if}
-  </div>
+    <div class="mt-3 flex flex-wrap items-center gap-2 text-xs">
+      <span
+        class={`rounded-md px-2 py-0.5 font-medium ${kindBadge(artifact.kind)}`}
+        >{kindLabel(artifact.kind)}</span
+      >
+      <span class="text-gray-400"
+        >{formatTimestamp(artifact.created_at) || "—"}</span
+      >
+      <span class="text-gray-400">by {actorName(artifact.created_by)}</span>
+      {#if artifact.thread_id}
+        <RefLink
+          humanize
+          labelHints={artifactRefHints}
+          refValue={`thread:${artifact.thread_id}`}
+          showRaw
+          threadId={artifact.thread_id}
+        />
+      {/if}
+    </div>
+    <p class="mt-1 text-[11px] text-gray-400">ID: {artifact.id}</p>
+    <div class="mt-2">
+      <ProvenanceBadge provenance={artifact.provenance} />
+    </div>
+  </section>
 
   {#if (artifact.refs ?? []).length > 0}
-    <div class="mt-2 flex flex-wrap gap-1.5 text-xs">
-      {#each artifact.refs ?? [] as refValue}
-        <RefLink {refValue} threadId={artifact.thread_id} />
-      {/each}
+    <div
+      class="mt-3 rounded-xl border border-gray-200/80 bg-white p-4 shadow-sm"
+    >
+      <h2 class="text-sm font-medium text-gray-900">Linked references</h2>
+      <div class="mt-2 flex flex-wrap gap-1.5 text-xs">
+        {#each artifact.refs ?? [] as refValue}
+          <RefLink
+            humanize
+            labelHints={artifactRefHints}
+            {refValue}
+            showRaw
+            threadId={artifact.thread_id}
+          />
+        {/each}
+      </div>
     </div>
   {/if}
 
-  <div class="mt-2">
-    <ProvenanceBadge provenance={artifact.provenance} />
-  </div>
+  {#if artifact.kind === "doc" && textContent}
+    <div
+      class="mt-3 rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-xs text-indigo-700"
+    >
+      Document artifacts render in readable mode below. Raw content remains
+      available in the debug panels.
+    </div>
+  {/if}
 
   {#if !isKnownPacketArtifactKind && artifact.kind !== "doc"}
     <div
@@ -426,7 +628,10 @@
             <p class="text-xs font-medium text-gray-400">Context</p>
             <div class="mt-1.5 flex flex-wrap gap-1.5 text-xs">
               {#each workOrderPacket.context_refs as r}<RefLink
+                  humanize
+                  labelHints={artifactRefHints}
                   refValue={r}
+                  showRaw
                   threadId={workOrderPacket.thread_id}
                 />{/each}
             </div>
@@ -475,12 +680,18 @@
         <div class="flex flex-wrap gap-3 text-xs text-gray-500">
           <span class="flex items-center gap-1"
             >Work order: <RefLink
+              humanize
+              labelHints={artifactRefHints}
               refValue={`artifact:${receiptPacket.work_order_id}`}
+              showRaw
             /></span
           >
           <span class="flex items-center gap-1"
             >Thread: <RefLink
+              humanize
+              labelHints={artifactRefHints}
               refValue={`thread:${receiptPacket.thread_id}`}
+              showRaw
             /></span
           >
         </div>
@@ -489,7 +700,10 @@
             <p class="text-xs font-medium text-gray-400">Outputs</p>
             <div class="mt-1.5 flex flex-wrap gap-1.5 text-xs">
               {#each receiptPacket.outputs as r}<RefLink
+                  humanize
+                  labelHints={artifactRefHints}
                   refValue={r}
+                  showRaw
                   threadId={receiptPacket.thread_id}
                 />{/each}
             </div>
@@ -502,7 +716,10 @@
             </p>
             <div class="mt-1.5 flex flex-wrap gap-1.5 text-xs">
               {#each receiptPacket.verification_evidence as r}<RefLink
+                  humanize
+                  labelHints={artifactRefHints}
                   refValue={r}
+                  showRaw
                   threadId={receiptPacket.thread_id}
                 />{/each}
             </div>
@@ -739,13 +956,19 @@
           >
           <span class="text-xs text-gray-500"
             >Receipt: <RefLink
+              humanize
+              labelHints={artifactRefHints}
               refValue={`artifact:${reviewPacket.receipt_id}`}
+              showRaw
               threadId={artifact.thread_id}
             /></span
           >
           <span class="text-xs text-gray-500"
             >Work order: <RefLink
+              humanize
+              labelHints={artifactRefHints}
               refValue={`artifact:${reviewPacket.work_order_id}`}
+              showRaw
               threadId={artifact.thread_id}
             /></span
           >
@@ -758,7 +981,10 @@
             <p class="text-xs font-medium text-gray-400">Evidence</p>
             <div class="mt-1.5 flex flex-wrap gap-1.5 text-xs">
               {#each reviewPacket.evidence_refs as r}<RefLink
+                  humanize
+                  labelHints={artifactRefHints}
                   refValue={r}
+                  showRaw
                   threadId={artifact.thread_id}
                 />{/each}
             </div>
@@ -773,11 +999,42 @@
       <div
         class="flex items-center justify-between border-b border-gray-100 px-5 py-3"
       >
-        <h2 class="text-sm font-medium text-gray-900">Content</h2>
+        <h2 class="text-sm font-medium text-gray-900">Text Content</h2>
         <span class="text-[11px] text-gray-400">{artifactContentType}</span>
       </div>
-      <pre
-        class="max-h-96 overflow-auto whitespace-pre-wrap px-5 py-4 text-xs text-gray-800">{textContent}</pre>
+      {#if isMarkdownContent}
+        <article
+          class="markdown-lite max-h-[34rem] overflow-auto px-5 py-4 text-sm text-gray-800"
+        >
+          {#each renderedMarkdownBlocks as block}
+            {#if block.type === "heading"}
+              {#if block.level === 1}
+                <h1>{block.text}</h1>
+              {:else if block.level === 2}
+                <h2>{block.text}</h2>
+              {:else}
+                <h3>{block.text}</h3>
+              {/if}
+            {:else if block.type === "list"}
+              <ul>
+                {#each block.items as item}
+                  <li>{item}</li>
+                {/each}
+              </ul>
+            {:else if block.type === "code"}
+              <pre><code>{block.text}</code></pre>
+            {:else}
+              <p>{block.text}</p>
+            {/if}
+          {/each}
+        </article>
+      {:else}
+        <article
+          class="max-h-[34rem] overflow-auto px-5 py-4 text-sm leading-7 text-gray-800 whitespace-pre-wrap"
+        >
+          {textContent}
+        </article>
+      {/if}
     </div>
   {/if}
 
