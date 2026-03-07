@@ -1936,6 +1936,78 @@ func TestThreadsRecommendationsBuildsFocusedReview(t *testing.T) {
 	}
 }
 
+func TestThreadsRecommendationsIncludesRelatedThreadReview(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_main/context":
+			_, _ = w.Write([]byte(`{
+				"thread":{"id":"thread_main","title":"Main Pilot Rescue","status":"active","type":"initiative"},
+				"recent_events":[
+					{"id":"event_main_1","thread_id":"thread_main","type":"actor_statement","actor_id":"agent-main","created_at":"2026-03-07T12:00:00Z","summary":"Main recommendation","refs":["thread:thread_related"]}
+				],
+				"key_artifacts":[],
+				"open_commitments":[
+					{"id":"commit_main_1","thread_id":"thread_main","title":"Coordinate related work","links":["thread:thread_main","thread:thread_related"]}
+				]
+			}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_related/context":
+			_, _ = w.Write([]byte(`{
+				"thread":{"id":"thread_related","title":"Related Feedback Thread","status":"active","type":"case"},
+				"recent_events":[
+					{"id":"event_related_1","thread_id":"thread_related","type":"actor_statement","actor_id":"agent-related","created_at":"2026-03-07T12:05:00Z","summary":"Related recommendation"}
+				],
+				"key_artifacts":[],
+				"open_commitments":[]
+			}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
+			_, _ = w.Write([]byte(`{"items":[]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"threads", "recommendations",
+		"--thread-id", "thread_main",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+	body, _ := data["body"].(map[string]any)
+
+	relatedThreads, _ := body["related_threads"].(map[string]any)
+	relatedThreadCount, _ := relatedThreads["count"].(float64)
+	if got := int(relatedThreadCount); got != 1 {
+		t.Fatalf("expected one related thread, got %#v", body)
+	}
+	relatedRecommendations, _ := body["related_recommendations"].(map[string]any)
+	relatedRecommendationCount, _ := relatedRecommendations["count"].(float64)
+	if got := int(relatedRecommendationCount); got != 1 {
+		t.Fatalf("expected one related recommendation, got %#v", body)
+	}
+	relatedItems, _ := relatedRecommendations["items"].([]any)
+	if len(relatedItems) != 1 {
+		t.Fatalf("expected one related recommendation item, got %#v", relatedRecommendations)
+	}
+	relatedEvent, _ := relatedItems[0].(map[string]any)
+	if got := anyStringValue(relatedEvent["source_thread_id"]); got != "thread_related" {
+		t.Fatalf("expected source_thread_id to annotate related thread, got %#v", relatedEvent)
+	}
+	if got := anyStringValue(relatedEvent["source_thread_title"]); got != "Related Feedback Thread" {
+		t.Fatalf("expected source_thread_title annotation, got %#v", relatedEvent)
+	}
+	totalReviewItems, _ := body["total_review_items"].(float64)
+	if got := int(totalReviewItems); got != 2 {
+		t.Fatalf("expected total_review_items to include related recommendation, got %#v", body)
+	}
+}
+
 func TestThreadsRecommendationsFullSummaryToggle(t *testing.T) {
 	t.Parallel()
 

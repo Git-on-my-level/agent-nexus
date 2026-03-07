@@ -86,9 +86,9 @@ var localHelperTopics = []localHelperTopic{
 	},
 	{
 		Path:        "threads recommendations",
-		Summary:     "Review one thread's recommendation/decision inputs with provenance and follow-up event inspection hints.",
-		JSONShape:   "`thread`, `recommendations`, `decision_requests`, `decisions`, `pending_decisions`, `follow_up`",
-		Composition: "Resolves one thread by id or discovery filters, loads `threads context`, and adds thread-scoped pending decision inbox items from `inbox list`.",
+		Summary:     "Review one thread's recommendation/decision inputs plus related-thread signals with provenance and follow-up hints.",
+		JSONShape:   "`thread`, `recommendations`, `decision_requests`, `decisions`, `pending_decisions`, `related_threads`, `related_recommendations`, `follow_up`",
+		Composition: "Resolves one thread by id or discovery filters, loads `threads context`, adds thread-scoped pending decision inbox items from `inbox list`, and follows related thread refs for additional review context.",
 		Examples: []string{
 			"oar threads recommendations --thread-id <thread-id> --full-id",
 			"oar threads recommendations --status active --type initiative --full-summary",
@@ -382,6 +382,10 @@ func formatGeneratedCommandHelp(topic string, cmd registry.Command) string {
 		b.WriteString("\n")
 		b.WriteString(schemaBlock)
 	}
+	if extra := formatCommandSpecificHelpBlock(cmd); strings.TrimSpace(extra) != "" {
+		b.WriteString("\n\n")
+		b.WriteString(extra)
+	}
 	b.WriteString("\n\n")
 	b.WriteString(formatGlobalFlagUsage(topic))
 	return strings.TrimSpace(b.String())
@@ -423,6 +427,17 @@ func formatBodySchemaBlock(schema *registry.BodySchema) string {
 		b.WriteString("  Enum values: " + enumLine + "\n")
 	}
 	return strings.TrimSpace(b.String())
+}
+
+func formatCommandSpecificHelpBlock(cmd registry.Command) string {
+	switch strings.TrimSpace(cmd.CommandID) {
+	case "events.create":
+		return strings.TrimSpace(`Local CLI notes:
+  - Common open ` + "`event.type`" + ` values include ` + "`actor_statement`" + `; the enum list above is illustrative, not exhaustive.
+  - Use ` + "`--dry-run`" + ` with ` + "`--from-file`" + ` to validate and preview the request without sending the mutation.`)
+	default:
+		return ""
+	}
 }
 
 func formatBodyFieldList(fields []registry.BodyField) string {

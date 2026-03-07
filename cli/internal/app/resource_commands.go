@@ -834,6 +834,10 @@ func (a *App) runThreadsRecommendationsCommand(ctx context.Context, args []strin
 	inboxData := asMap(inboxResult.Data)
 	inboxBody := extractNestedMap(inboxData, "body")
 	pendingDecisions := filteredInboxItems(asSlice(inboxBody["items"]), []string{resolvedThreadID}, []string{"decision_needed"})
+	relatedThreadReview, err := a.collectRelatedThreadRecommendationReview(ctx, cfg, resolvedThreadID, body, selection.threadContextSelection)
+	if err != nil {
+		return nil, err
+	}
 
 	recommendationBody := map[string]any{
 		"thread_id":    resolvedThreadID,
@@ -856,10 +860,14 @@ func (a *App) runThreadsRecommendationsCommand(ctx context.Context, args []strin
 			"items": pendingDecisions,
 			"count": len(pendingDecisions),
 		},
-		"total_review_items": len(recommendations) + len(decisionRequests) + len(decisions) + len(pendingDecisions),
-		"follow_up":          recommendationFollowUpHints(resolvedThreadID, recommendations, decisionRequests, decisions),
-		"context_source":     "threads.context",
-		"inbox_source":       "inbox.list",
+		"related_threads":           relatedThreadReview["related_threads"],
+		"related_recommendations":   relatedThreadReview["related_recommendations"],
+		"related_decision_requests": relatedThreadReview["related_decision_requests"],
+		"related_decisions":         relatedThreadReview["related_decisions"],
+		"total_review_items":        len(recommendations) + len(decisionRequests) + len(decisions) + len(pendingDecisions) + intValue(relatedThreadReview["total_review_items"]),
+		"follow_up":                 recommendationFollowUpHints(resolvedThreadID, recommendations, decisionRequests, decisions),
+		"context_source":            "threads.context",
+		"inbox_source":              "inbox.list",
 	}
 
 	data["body"] = recommendationBody
@@ -873,6 +881,156 @@ func (a *App) runThreadsRecommendationsCommand(ctx context.Context, args []strin
 		cfg.Headers,
 	)
 	return contextResult, nil
+}
+
+func (a *App) collectRelatedThreadRecommendationReview(ctx context.Context, cfg config.Resolved, rootThreadID string, rootBody map[string]any, selection threadContextSelection) (map[string]any, error) {
+	relatedThreadIDs := relatedThreadRefIDs(rootThreadID, rootBody)
+	items := make([]any, 0, len(relatedThreadIDs))
+	relatedRecommendations := make([]any, 0)
+	relatedDecisionRequests := make([]any, 0)
+	relatedDecisions := make([]any, 0)
+	totalReviewItems := 0
+
+	for _, relatedThreadID := range relatedThreadIDs {
+		contextResult, err := a.invokeTypedJSONWithIDResolution(
+			ctx,
+			cfg,
+			"threads context",
+			"threads.context",
+			"thread_id",
+			relatedThreadID,
+			threadIDLookupSpec,
+			threadContextQuery(selection),
+			nil,
+		)
+		if err != nil {
+			return nil, err
+		}
+		data := asMap(contextResult.Data)
+		body := extractNestedMap(data, "body")
+		if body == nil {
+			continue
+		}
+		addThreadContextCollaborationSummary(body)
+		thread := extractNestedMap(body, "thread")
+		collaboration := asMap(body["collaboration_summary"])
+		recommendations := annotateRecommendationReviewEvents(normalizeRecommendationReviewEvents(asSlice(collaboration["recommendations"])), thread)
+		decisionRequests := annotateRecommendationReviewEvents(normalizeRecommendationReviewEvents(asSlice(collaboration["decision_requests"])), thread)
+		decisions := annotateRecommendationReviewEvents(normalizeRecommendationReviewEvents(asSlice(collaboration["decisions"])), thread)
+		relatedRecommendations = append(relatedRecommendations, recommendations...)
+		relatedDecisionRequests = append(relatedDecisionRequests, decisionRequests...)
+		relatedDecisions = append(relatedDecisions, decisions...)
+		threadReviewCount := len(recommendations) + len(decisionRequests) + len(decisions)
+		totalReviewItems += threadReviewCount
+		items = append(items, map[string]any{
+			"thread_id": resolvedThreadIDFromContextBody(body, relatedThreadID),
+			"thread":    thread,
+			"recommendations": map[string]any{
+				"items": recommendations,
+				"count": len(recommendations),
+			},
+			"decision_requests": map[string]any{
+				"items": decisionRequests,
+				"count": len(decisionRequests),
+			},
+			"decisions": map[string]any{
+				"items": decisions,
+				"count": len(decisions),
+			},
+			"total_review_items": threadReviewCount,
+		})
+	}
+
+	return map[string]any{
+		"related_threads": map[string]any{
+			"items": items,
+			"count": len(items),
+		},
+		"related_recommendations": map[string]any{
+			"items": relatedRecommendations,
+			"count": len(relatedRecommendations),
+		},
+		"related_decision_requests": map[string]any{
+			"items": relatedDecisionRequests,
+			"count": len(relatedDecisionRequests),
+		},
+		"related_decisions": map[string]any{
+			"items": relatedDecisions,
+			"count": len(relatedDecisions),
+		},
+		"total_review_items": totalReviewItems,
+	}, nil
+}
+
+func relatedThreadRefIDs(rootThreadID string, body map[string]any) []string {
+	if body == nil {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	out := make([]string, 0)
+	collectThreadRefIDs(body, rootThreadID, seen, &out)
+	sort.Strings(out)
+	return out
+}
+
+func collectThreadRefIDs(value any, rootThreadID string, seen map[string]struct{}, out *[]string) {
+	switch typed := value.(type) {
+	case []any:
+		for _, item := range typed {
+			collectThreadRefIDs(item, rootThreadID, seen, out)
+		}
+	case map[string]any:
+		for _, nested := range typed {
+			collectThreadRefIDs(nested, rootThreadID, seen, out)
+		}
+	case string:
+		ref := strings.TrimSpace(typed)
+		if !strings.HasPrefix(ref, "thread:") {
+			return
+		}
+		threadID := strings.TrimSpace(strings.TrimPrefix(ref, "thread:"))
+		if threadID == "" || threadID == strings.TrimSpace(rootThreadID) {
+			return
+		}
+		if _, ok := seen[threadID]; ok {
+			return
+		}
+		seen[threadID] = struct{}{}
+		*out = append(*out, threadID)
+	}
+}
+
+func annotateRecommendationReviewEvents(events []any, thread map[string]any) []any {
+	if len(events) == 0 {
+		return []any{}
+	}
+	threadID := firstNonEmpty(strings.TrimSpace(anyString(thread["thread_id"])), strings.TrimSpace(anyString(thread["id"])))
+	threadTitle := strings.TrimSpace(anyString(thread["title"]))
+	out := make([]any, 0, len(events))
+	for _, raw := range events {
+		event := cloneMap(asMap(raw))
+		if event == nil {
+			continue
+		}
+		if threadID != "" {
+			event["source_thread_id"] = threadID
+		}
+		if threadTitle != "" {
+			event["source_thread_title"] = threadTitle
+		}
+		out = append(out, event)
+	}
+	return out
+}
+
+func resolvedThreadIDFromContextBody(body map[string]any, fallback string) string {
+	thread := extractNestedMap(body, "thread")
+	return firstNonEmpty(
+		strings.TrimSpace(anyString(body["thread_id"])),
+		strings.TrimSpace(anyString(thread["thread_id"])),
+		strings.TrimSpace(anyString(thread["id"])),
+		strings.TrimSpace(fallback),
+	)
 }
 
 func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {

@@ -48,6 +48,8 @@ Artifacts are written under `cli/.tmp/pi-dogfood/<run-id>/`:
 - `SCENARIO.md`: scenario brief copied into the run workspace
 - `TARGETS.md`: resolved thread/artifact/commitment ids for the scenario
 
+The runner exits non-zero if any agent process fails, if Pi reports a runtime/provider error in the JSON event stream, or if a required `result.md` artifact is missing.
+
 These run directories are disposable. Delete old `cli/.tmp/pi-dogfood/<run-id>/` folders manually when you no longer need the logs or agent artifacts.
 
 The runner also:

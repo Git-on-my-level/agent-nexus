@@ -457,6 +457,12 @@ func TestGeneratedCommandHelpIncludesBodySchemaAndEnums(t *testing.T) {
 	if !strings.Contains(output, "work_order_claimed") {
 		t.Fatalf("expected enum discoverability for work_order_claimed output=%s", output)
 	}
+	if !strings.Contains(output, "`actor_statement`") {
+		t.Fatalf("expected actor_statement discoverability note output=%s", output)
+	}
+	if !strings.Contains(output, "`--dry-run`") {
+		t.Fatalf("expected dry-run discoverability note output=%s", output)
+	}
 	if !strings.Contains(output, "oar --json events create ...") {
 		t.Fatalf("expected global --json example in generated command help output=%s", output)
 	}

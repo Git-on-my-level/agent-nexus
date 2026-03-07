@@ -3,7 +3,7 @@ import net from "node:net";
 import path from "node:path";
 import process from "node:process";
 import { spawnSync, spawn } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = here;
@@ -671,6 +671,74 @@ function agentResultPath(workspaceDir) {
   return path.join(workspaceDir, "result.md");
 }
 
+function uniqueNonEmpty(values) {
+  return [...new Set(values.map((value) => String(value).trim()).filter(Boolean))];
+}
+
+function collectErrorMessages(value, messages = []) {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectErrorMessages(item, messages);
+    }
+    return messages;
+  }
+  if (!value || typeof value !== "object") {
+    return messages;
+  }
+  for (const [key, nested] of Object.entries(value)) {
+    if (key === "errorMessage" && typeof nested === "string") {
+      messages.push(nested);
+      continue;
+    }
+    collectErrorMessages(nested, messages);
+  }
+  if (value.stopReason === "error" && typeof value.errorMessage !== "string") {
+    const scope = typeof value.type === "string" ? value.type : "pi event";
+    messages.push(`${scope} reported stopReason=error without an errorMessage`);
+  }
+  return messages;
+}
+
+export function analyzePiEventLog(rawContent) {
+  const parseErrors = [];
+  const runtimeErrors = [];
+  const lines = String(rawContent).split(/\r?\n/).filter(Boolean);
+
+  for (const [index, line] of lines.entries()) {
+    try {
+      const parsed = JSON.parse(line);
+      runtimeErrors.push(...collectErrorMessages(parsed));
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      parseErrors.push(`line ${index + 1}: ${detail}`);
+    }
+  }
+
+  return {
+    parseErrors: uniqueNonEmpty(parseErrors),
+    runtimeErrors: uniqueNonEmpty(runtimeErrors),
+  };
+}
+
+export function validateAgentOutputs({ eventsPath, resultPath }) {
+  const failures = [];
+  if (!fs.existsSync(eventsPath)) {
+    failures.push(`missing events log at ${eventsPath}`);
+  } else {
+    const diagnostics = analyzePiEventLog(fs.readFileSync(eventsPath, "utf8"));
+    if (diagnostics.parseErrors.length > 0) {
+      failures.push(`events log parse errors: ${diagnostics.parseErrors.join("; ")}`);
+    }
+    if (diagnostics.runtimeErrors.length > 0) {
+      failures.push(`pi runtime errors: ${diagnostics.runtimeErrors.join("; ")}`);
+    }
+  }
+  if (!fs.existsSync(resultPath)) {
+    failures.push(`required artifact missing: ${path.basename(resultPath)}`);
+  }
+  return failures;
+}
+
 async function runPiAgent({
   runDir,
   piHomeDir,
@@ -775,6 +843,15 @@ Environment:
   ensureDir(env.PI_CODING_AGENT_DIR);
 
   return new Promise((resolve, reject) => {
+    const settle = (finalizer) => {
+      eventStream.end(() => {
+        try {
+          finalizer();
+        } catch (error) {
+          reject(error);
+        }
+      });
+    };
     const child = spawn(piExecutable(), piArgs, {
       cwd: workspaceDir,
       env,
@@ -796,26 +873,31 @@ Environment:
     });
     child.on("error", (error) => {
       clearTimeout(timeout);
-      eventStream.end();
-      reject(error);
+      settle(() => reject(error));
     });
     child.on("exit", (code, signal) => {
       clearTimeout(timeout);
-      eventStream.end();
       if (signal) {
-        reject(new Error(`${agentId}: pi terminated by signal ${signal}`));
+        settle(() => reject(new Error(`${agentId}: pi terminated by signal ${signal}`)));
         return;
       }
       if (code !== 0) {
-        reject(new Error(`${agentId}: pi exited with code ${code}`));
+        settle(() => reject(new Error(`${agentId}: pi exited with code ${code}`)));
         return;
       }
-      resolve({
-        agentId,
-        agentUsername,
-        workspaceDir,
-        eventsPath,
-        resultPath,
+      settle(() => {
+        const failures = validateAgentOutputs({ eventsPath, resultPath });
+        if (failures.length > 0) {
+          reject(new Error(`${agentId}: ${failures.join("; ")}`));
+          return;
+        }
+        resolve({
+          agentId,
+          agentUsername,
+          workspaceDir,
+          eventsPath,
+          resultPath,
+        });
       });
     });
   });
@@ -856,7 +938,17 @@ async function main() {
     const pendingAgents = roles.map((role, agentIndex) => {
       const agentId = `agent-${String(agentIndex + 1).padStart(2, "0")}`;
       const agentUsername = `${options.agentPrefix}-${role.name}`;
-      return runPiAgent({
+      const workspaceDir = agentWorkspaceDir(runDir, options.agentCount, agentId);
+      const eventsPath = agentEventsPath(runDir, options.agentCount, agentId);
+      const resultPath = agentResultPath(workspaceDir);
+      return {
+        role,
+        agentId,
+        agentUsername,
+        workspaceDir,
+        eventsPath,
+        resultPath,
+        promise: runPiAgent({
         runDir,
         piHomeDir,
         oarBin,
@@ -871,18 +963,24 @@ async function main() {
         scenarioMarkdown: renderedScenario,
         role,
         targets: roleTargets(config, sharedTargets, role),
-      });
+        }),
+      };
     });
 
-    const settled = await Promise.allSettled(pendingAgents);
+    const settled = await Promise.allSettled(pendingAgents.map((agent) => agent.promise));
     agentRuns = settled.map((result, index) => {
+      const pending = pendingAgents[index];
       if (result.status === "fulfilled") {
-        return { status: "ok", role: roles[index].name, ...result.value };
+        return { status: "ok", role: pending.role.name, ...result.value };
       }
       return {
         status: "failed",
-        role: roles[index].name,
-        agentId: `agent-${String(index + 1).padStart(2, "0")}`,
+        role: pending.role.name,
+        agentId: pending.agentId,
+        agentUsername: pending.agentUsername,
+        workspaceDir: pending.workspaceDir,
+        eventsPath: pending.eventsPath,
+        resultPath: pending.resultPath,
         error: result.reason instanceof Error ? result.reason.message : String(result.reason),
       };
     });
@@ -918,16 +1016,16 @@ async function main() {
     }
     console.log(`workspace (${agent.agentId}): ${agent.workspaceDir}`);
     console.log(`events (${agent.agentId}): ${agent.eventsPath}`);
-    if (fs.existsSync(agent.resultPath)) {
-      console.log(`result (${agent.agentId}): ${agent.resultPath}`);
-    } else {
-      console.log(`warning: ${agent.agentId} did not write result.md`);
-    }
+    console.log(`result (${agent.agentId}): ${agent.resultPath}`);
   }
   console.log(`metadata: ${path.join(runDir, "run-metadata.json")}`);
 }
 
-main().catch((error) => {
-  console.error(error.message);
-  process.exit(1);
-});
+const isEntrypoint = process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url;
+
+if (isEntrypoint) {
+  main().catch((error) => {
+    console.error(error.message);
+    process.exit(1);
+  });
+}
