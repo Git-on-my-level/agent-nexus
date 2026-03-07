@@ -1,0 +1,99 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  buildArtifactKindSummary,
+  buildInboxCategorySummary,
+  buildThreadHealthSummary,
+  selectRecentArtifacts,
+  selectRecentlyUpdatedThreads,
+} from "../../src/lib/dashboardSummary.js";
+
+describe("dashboard summaries", () => {
+  it("summarizes inbox categories in expected order", () => {
+    const summary = buildInboxCategorySummary([
+      { category: "exception" },
+      { category: "decision_needed" },
+      { category: "decision_needed" },
+      { category: "unknown" },
+    ]);
+
+    expect(summary).toEqual([
+      { category: "decision_needed", label: "Needs Decision", count: 2 },
+      { category: "exception", label: "Exception", count: 1 },
+      { category: "commitment_risk", label: "At Risk", count: 0 },
+      { category: "unknown", label: "unknown", count: 1 },
+    ]);
+  });
+
+  it("computes thread health over open threads", () => {
+    const summary = buildThreadHealthSummary([
+      {
+        id: "thread-a",
+        status: "active",
+        priority: "p0",
+        next_check_in_at: "2020-01-01T00:00:00.000Z",
+      },
+      {
+        id: "thread-b",
+        status: "active",
+        priority: "p2",
+        next_check_in_at: "2999-01-01T00:00:00.000Z",
+      },
+      {
+        id: "thread-c",
+        status: "closed",
+        priority: "p1",
+        next_check_in_at: "2020-01-01T00:00:00.000Z",
+      },
+    ]);
+
+    expect(summary).toEqual({
+      totalCount: 3,
+      openCount: 2,
+      staleCount: 1,
+      highPriorityCount: 1,
+    });
+  });
+
+  it("sorts recent threads and artifacts by descending timestamp", () => {
+    const recentThreads = selectRecentlyUpdatedThreads([
+      { id: "thread-1", updated_at: "2025-01-01T00:00:00.000Z" },
+      { id: "thread-2", updated_at: "2026-01-01T00:00:00.000Z" },
+      { id: "thread-3", updated_at: "2024-01-01T00:00:00.000Z" },
+    ]);
+
+    const recentArtifacts = selectRecentArtifacts([
+      { id: "artifact-1", created_at: "2025-01-01T00:00:00.000Z" },
+      { id: "artifact-2", created_at: "2026-01-01T00:00:00.000Z" },
+      { id: "artifact-3", created_at: "2024-01-01T00:00:00.000Z" },
+    ]);
+
+    expect(recentThreads.map((thread) => thread.id)).toEqual([
+      "thread-2",
+      "thread-1",
+      "thread-3",
+    ]);
+    expect(recentArtifacts.map((artifact) => artifact.id)).toEqual([
+      "artifact-2",
+      "artifact-1",
+      "artifact-3",
+    ]);
+  });
+
+  it("summarizes artifact kinds", () => {
+    const summary = buildArtifactKindSummary([
+      { kind: "review" },
+      { kind: "review" },
+      { kind: "work_order" },
+      { kind: "receipt" },
+      { kind: "doc" },
+    ]);
+
+    expect(summary).toEqual({
+      review: 2,
+      receipt: 1,
+      work_order: 1,
+      other: 1,
+    });
+  });
+});

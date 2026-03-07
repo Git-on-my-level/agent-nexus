@@ -19,6 +19,7 @@
   let { children } = $props();
 
   const navIconPathByType = {
+    home: "M3 11.5L12 4l9 7.5M5.5 10.5V20h13v-9.5M9.25 20v-5.5h5.5V20",
     inbox:
       "M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4",
     threads:
@@ -273,6 +274,7 @@
             <a
               class={`shell-nav-link ${active ? "shell-nav-link--active" : ""}`}
               href={item.href}
+              aria-label={item.label}
             >
               <svg
                 class="shell-nav-icon"
@@ -288,7 +290,12 @@
                   d={iconPath(item.icon)}
                 />
               </svg>
-              {item.label}
+              <span class="shell-nav-copy">
+                <span>{item.label}</span>
+                {#if item.hint}
+                  <span class="shell-nav-hint">{item.hint}</span>
+                {/if}
+              </span>
             </a>
           {/each}
         </nav>
@@ -382,6 +389,7 @@
                     class={`shell-nav-link ${active ? "shell-nav-link--active" : ""}`}
                     href={item.href}
                     onclick={closeMobileNav}
+                    aria-label={item.label}
                   >
                     <svg
                       class="shell-nav-icon"
@@ -397,7 +405,7 @@
                         d={iconPath(item.icon)}
                       />
                     </svg>
-                    {item.label}
+                    <span>{item.label}</span>
                   </a>
                 {/each}
               </nav>

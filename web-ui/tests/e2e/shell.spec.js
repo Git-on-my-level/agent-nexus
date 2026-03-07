@@ -24,11 +24,20 @@ test("registers actor, unlocks shell, and performs a write", async ({
   await expect(
     page.getByRole("heading", { name: "Organization Autorunner UI" }),
   ).toBeVisible();
-  await expect(page.getByRole("link", { name: "Inbox" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Threads" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Artifacts" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "What needs attention now?" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Inbox", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Threads", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Artifacts", exact: true }),
+  ).toBeVisible();
 
-  await page.getByRole("link", { name: "Threads" }).click();
+  await page.getByRole("link", { name: "Threads", exact: true }).click();
 
   await expect(page).toHaveURL(/\/threads$/);
   await expect(page.getByRole("heading", { name: "Threads" })).toBeVisible();
@@ -39,6 +48,67 @@ test("registers actor, unlocks shell, and performs a write", async ({
   await page.getByRole("button", { name: "Create thread" }).click();
 
   await expect(page.getByRole("link", { name: threadTitle })).toBeVisible();
+});
+
+test("renders a dashboard on / and routes into inbox", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("oar_ui_actor_id", "actor-ops-ai");
+  });
+
+  await page.goto("/");
+
+  await expect(
+    page.getByRole("heading", { name: "What needs attention now?" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Attention queue" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Thread health" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Recent artifacts" }),
+  ).toBeVisible();
+
+  await page.getByRole("link", { name: "Review Inbox" }).click();
+  await expect(page).toHaveURL(/\/inbox$/);
+  await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
+});
+
+test("shows partial-failure messaging when one dashboard source is unavailable", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("oar_ui_actor_id", "actor-ops-ai");
+  });
+
+  await page.route(/\/threads(\?.*)?$/, async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.continue();
+      return;
+    }
+
+    await route.fulfill({
+      status: 503,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ error: "temporary outage" }),
+    });
+  });
+
+  await page.goto("/");
+
+  await expect(
+    page.getByRole("heading", { name: "What needs attention now?" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Failed to load threads:", { exact: false }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Attention queue" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Recent artifacts" }),
+  ).toBeVisible();
 });
 
 test("opens mobile drawer navigation and navigates between routes", async ({

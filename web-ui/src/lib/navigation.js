@@ -1,22 +1,36 @@
 export const navigationItems = [
   {
+    label: "Home",
+    href: "/",
+    icon: "home",
+    hint: "Overview",
+  },
+  {
     label: "Inbox",
     href: "/inbox",
     icon: "inbox",
+    hint: "Needs attention",
   },
   {
     label: "Threads",
     href: "/threads",
     icon: "threads",
+    hint: "Ongoing work",
   },
   {
     label: "Artifacts",
     href: "/artifacts",
     icon: "artifacts",
+    hint: "Evidence and packets",
   },
 ];
 
 const SHELL_CONTENT_RULES = [
+  {
+    match: /^\/$/,
+    mode: "wide",
+    maxWidth: "92rem",
+  },
   {
     match: /^\/threads\/[^/]+/,
     mode: "fluid",

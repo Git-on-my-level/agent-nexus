@@ -344,7 +344,7 @@ button:focus-visible {
 
 .shell-nav-link {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.55rem;
   border-radius: 0.78rem;
   border: 1px solid transparent;
@@ -371,6 +371,24 @@ button:focus-visible {
   width: 1rem;
   height: 1rem;
   flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+
+.shell-nav-copy {
+  min-width: 0;
+  display: grid;
+  line-height: 1.2;
+}
+
+.shell-nav-hint {
+  color: var(--ui-text-muted);
+  font-size: 0.7rem;
+  font-weight: 500;
+  margin-top: 0.12rem;
+}
+
+.shell-nav-link--active .shell-nav-hint {
+  color: color-mix(in srgb, var(--ui-brand-strong) 78%, white 22%);
 }
 
 .shell-actor-panel {
@@ -544,6 +562,19 @@ button:focus-visible {
 .shell-mobile-nav {
   display: grid;
   gap: 0.45rem;
+}
+
+.shell-mobile-nav .shell-nav-link {
+  align-items: center;
+}
+
+.shell-mobile-nav .shell-nav-icon {
+  margin-top: 0;
+}
+
+.shell-mobile-nav .shell-nav-copy,
+.shell-mobile-nav .shell-nav-hint {
+  display: none;
 }
 
 .shell-mobile-switch {
