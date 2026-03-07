@@ -117,6 +117,7 @@ oar --agent agent-a events list --thread-id thread_123 --thread-id thread_456 --
 oar --json --agent agent-a provenance walk --from event:event_123 --depth 2
 oar --agent agent-a threads inspect --thread-id thread_123 --max-events 50 --full-id
 oar --agent agent-a threads context --status active --tag pilot-rescue --type initiative --full-id
+oar --agent agent-a threads recommendations --thread-id thread_123 --full-id --full-summary
 oar --agent agent-a docs content --document-id product-constitution
 oar --agent agent-a commitments inspect --commitment-id commitment_123
 oar --agent agent-a artifacts inspect --artifact-id artifact_123
@@ -139,7 +140,7 @@ oar --json --base-url http://127.0.0.1:8000 --agent agent-a api call --path /met
 
 Machine-facing notes for the targeted automation commands:
 
-- `events list`, `events get`, `events stream`, `inbox stream`, `threads inspect`, and `threads context` include a stable `command_id` alongside `command`.
+- `events list`, `events get`, `events stream`, `inbox stream`, `threads inspect`, `threads context`, and `threads recommendations` include a stable `command_id` alongside `command`.
 - `events tail` and `inbox tail` resolve to canonical machine command identity (`events stream` / `inbox stream`) in JSON success/error envelopes.
 - Stream frames expose a normalized payload contract:
   - `id`, `type`
