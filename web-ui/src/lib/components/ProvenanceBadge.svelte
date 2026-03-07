@@ -50,7 +50,7 @@
             >Field details</summary
           >
           <pre
-            class="mt-1 overflow-auto rounded bg-white p-2 text-[11px]">{JSON.stringify(
+            class="mt-1 overflow-auto rounded bg-gray-100 p-2 text-[11px]">{JSON.stringify(
               provenance.by_field,
               null,
               2,

@@ -87,16 +87,16 @@
     return "Artifact payload";
   }
 
-  function kindBadge(kind) {
+  function kindColor(kind) {
     const styles = {
-      work_order: "bg-blue-50 text-blue-700 border-blue-200",
-      receipt: "bg-emerald-50 text-emerald-700 border-emerald-200",
-      review: "bg-amber-50 text-amber-700 border-amber-200",
-      doc: "bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200",
-      evidence: "bg-slate-100 text-slate-700 border-slate-300",
-      log: "bg-teal-50 text-teal-700 border-teal-200",
+      work_order: "text-blue-400 bg-blue-500/10",
+      receipt: "text-emerald-400 bg-emerald-500/10",
+      review: "text-amber-400 bg-amber-500/10",
+      doc: "text-fuchsia-400 bg-fuchsia-500/10",
+      evidence: "text-gray-600 bg-gray-200",
+      log: "text-teal-400 bg-teal-500/10",
     };
-    return styles[kind] ?? "bg-gray-100 text-gray-600 border-gray-300";
+    return styles[kind] ?? "text-gray-600 bg-gray-200";
   }
 
   function rowHeading(artifact) {
@@ -111,75 +111,66 @@
   }
 </script>
 
-<div class="flex items-center justify-between">
+<div class="flex items-center justify-between mb-4">
   <h1 class="text-lg font-semibold text-gray-900">Artifacts</h1>
   <button
-    class="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100"
+    class="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-gray-100 px-2.5 py-1.5 text-[12px] font-medium text-gray-600 transition-colors hover:bg-gray-200"
     onclick={() => (filtersOpen = !filtersOpen)}
     type="button"
   >
-    <svg
-      class="h-3.5 w-3.5"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      stroke-width="2"
-    >
-      <path
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
-      />
+    <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
     </svg>
-    {filtersOpen ? "Hide filters" : "Filter"}
+    Filter
   </button>
 </div>
 
 {#if filtersOpen}
   <form
-    class="mt-3 rounded-xl border border-gray-200/80 bg-white p-4 shadow-sm"
-    onsubmit={(event) => {
-      event.preventDefault();
-      void applyFilters();
-    }}
+    class="mb-4 rounded-md border border-gray-200 bg-gray-100 p-3"
+    onsubmit={(event) => { event.preventDefault(); void applyFilters(); }}
   >
     <div class="grid gap-3 sm:grid-cols-2">
-      <label class="text-xs font-medium text-gray-500"
-        >Kind <input
+      <label class="text-[12px] font-medium text-gray-500">
+        Kind
+        <input
           bind:value={filters.kind}
-          class="mt-1.5 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm transition-colors focus:bg-white"
-          placeholder="work_order, receipt, review, doc..."
-        /></label
-      >
-      <label class="text-xs font-medium text-gray-500"
-        >Thread ID <input
+          class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-[13px] transition-colors focus:bg-gray-100"
+          placeholder="work_order, receipt, review..."
+        />
+      </label>
+      <label class="text-[12px] font-medium text-gray-500">
+        Thread ID
+        <input
           bind:value={filters.thread_id}
-          class="mt-1.5 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm transition-colors focus:bg-white"
+          class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-[13px] transition-colors focus:bg-gray-100"
           placeholder="thread-onboarding"
-        /></label
-      >
-      <label class="text-xs font-medium text-gray-500"
-        >Created after <input
+        />
+      </label>
+      <label class="text-[12px] font-medium text-gray-500">
+        Created after
+        <input
           bind:value={filters.created_after}
-          class="mt-1.5 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm transition-colors focus:bg-white"
+          class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-[13px] transition-colors focus:bg-gray-100"
           type="datetime-local"
-        /></label
-      >
-      <label class="text-xs font-medium text-gray-500"
-        >Created before <input
+        />
+      </label>
+      <label class="text-[12px] font-medium text-gray-500">
+        Created before
+        <input
           bind:value={filters.created_before}
-          class="mt-1.5 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm transition-colors focus:bg-white"
+          class="mt-1 w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-[13px] transition-colors focus:bg-gray-100"
           type="datetime-local"
-        /></label
-      >
+        />
+      </label>
     </div>
-    <div class="mt-3 flex gap-2">
+    <div class="mt-3 flex gap-1.5">
       <button
-        class="rounded-md bg-gray-900 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-gray-800"
+        class="rounded-md bg-gray-200 px-3 py-1.5 text-[12px] font-medium text-gray-900 hover:bg-gray-300"
         type="submit">Apply</button
       >
       <button
-        class="rounded-md px-3 py-1.5 text-xs font-medium text-gray-500 hover:bg-gray-100"
+        class="rounded-md border border-gray-200 bg-gray-100 px-3 py-1.5 text-[12px] font-medium text-gray-600 hover:bg-gray-200"
         onclick={clearFilters}
         type="button">Clear</button
       >
@@ -188,97 +179,60 @@
 {/if}
 
 {#if error}
-  <div
-    class="mt-3 flex items-start gap-2 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700"
-  >
-    <svg
-      class="mt-0.5 h-4 w-4 shrink-0 text-red-400"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      stroke-width="2"
-    >
-      <path
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
-      />
-    </svg>
+  <div class="mb-4 rounded-md bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
     {error}
   </div>
 {:else if !loading && artifacts.length === 0}
-  <div
-    class="mt-8 rounded-xl border border-dashed border-gray-300 bg-white p-8 text-center"
-  >
-    <p class="text-sm font-semibold text-gray-700">No matching artifacts</p>
-    <p class="mt-1.5 text-sm text-gray-500">
-      Try adjusting filters or clearing the current view.
-    </p>
+  <div class="mt-8 text-center">
+    <p class="text-[13px] font-medium text-gray-500">No matching artifacts</p>
+    <p class="mt-1 text-[13px] text-gray-400">Try adjusting filters or clearing the current view.</p>
   </div>
 {/if}
 
 {#if artifacts.length > 0}
-  <div class="mt-4 space-y-2">
-    {#each artifacts as artifact}
+  <div class="space-y-px rounded-md border border-gray-200 bg-gray-100 overflow-hidden">
+    {#each artifacts as artifact, i}
       <a
-        class="block rounded-xl border border-gray-200/80 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-all hover:border-gray-300/80 hover:shadow-[0_1px_4px_rgba(0,0,0,0.08)]"
+        class="block px-4 py-3 transition-colors hover:bg-gray-200 {i > 0 ? 'border-t border-gray-200' : ''}"
         href={`/artifacts/${artifact.id}`}
       >
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0 flex-1">
             <div class="flex flex-wrap items-center gap-2">
-              <span
-                class={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${kindBadge(artifact.kind)}`}
-              >
+              <span class="inline-flex rounded px-1.5 py-0.5 text-[11px] font-semibold {kindColor(artifact.kind)}">
                 {kindLabel(artifact.kind)}
               </span>
-              <span class="text-[11px] text-gray-500">
-                {kindDescription(artifact.kind)}
-              </span>
+              <span class="text-[11px] text-gray-400">{kindDescription(artifact.kind)}</span>
             </div>
-            <p class="mt-1.5 truncate text-sm font-semibold text-gray-900">
-              {rowHeading(artifact)}
+            <p class="mt-1 truncate text-[13px] font-medium text-gray-900">{rowHeading(artifact)}</p>
+            <p class="text-[11px] text-gray-400">
+              Created {formatTimestamp(artifact.created_at) || "—"} by {artifact.created_by || "unknown"}
             </p>
-            <p class="mt-0.5 text-xs text-gray-500">
-              Created {formatTimestamp(artifact.created_at) || "—"} by {artifact.created_by ||
-                "unknown"}
-            </p>
-            <p class="mt-1 text-[11px] text-gray-400">ID: {artifact.id}</p>
           </div>
-          <span class="shrink-0 text-xs text-gray-400">
-            {(artifact.refs ?? []).length} ref{(artifact.refs ?? []).length ===
-            1
-              ? ""
-              : "s"}
+          <span class="shrink-0 text-[11px] text-gray-300">
+            {(artifact.refs ?? []).length} ref{(artifact.refs ?? []).length === 1 ? "" : "s"}
           </span>
         </div>
 
-        <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
-          {#if artifact.thread_id}
-            <RefLink
-              humanize
-              labelHints={{
-                [`thread:${artifact.thread_id}`]: "Related thread",
-              }}
-              refValue={`thread:${artifact.thread_id}`}
-              showRaw
-              threadId={artifact.thread_id}
-            />
-          {/if}
-          {#each refPreview(artifact) as refValue}
-            <RefLink
-              humanize
-              {refValue}
-              showRaw
-              threadId={artifact.thread_id}
-            />
-          {/each}
-          {#if (artifact.refs ?? []).length > 3}
-            <span class="text-[11px] text-gray-400">
-              +{artifact.refs.length - 3} more
-            </span>
-          {/if}
-        </div>
+        {#if refPreview(artifact).length > 0 || artifact.thread_id}
+          <div class="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px]">
+            {#if artifact.thread_id}
+              <RefLink
+                humanize
+                labelHints={{ [`thread:${artifact.thread_id}`]: "Related thread" }}
+                refValue={`thread:${artifact.thread_id}`}
+                showRaw
+                threadId={artifact.thread_id}
+              />
+            {/if}
+            {#each refPreview(artifact) as refValue}
+              <RefLink humanize {refValue} showRaw threadId={artifact.thread_id} />
+            {/each}
+            {#if (artifact.refs ?? []).length > 3}
+              <span class="text-[11px] text-gray-300">+{artifact.refs.length - 3} more</span>
+            {/if}
+          </div>
+        {/if}
       </a>
     {/each}
   </div>

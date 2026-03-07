@@ -111,12 +111,12 @@
     <div class="flex flex-wrap gap-1.5">
       {#each refs as refValue}
         <span
-          class="inline-flex items-center gap-1 rounded-md border border-indigo-100 bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700"
+          class="inline-flex items-center gap-1 rounded-md border border-indigo-500/20 bg-indigo-500/10 px-2 py-0.5 text-xs text-indigo-400"
         >
           <span>{refValue}</span>
           <button
             aria-label={`Remove ${refValue}`}
-            class="rounded px-1 text-[11px] text-indigo-500 transition-colors hover:bg-indigo-100 hover:text-indigo-700"
+            class="rounded px-1 text-[11px] text-indigo-400 transition-colors hover:bg-indigo-500/20 hover:text-indigo-300"
             onclick={() => removeRef(refValue)}
             type="button"
           >
@@ -131,7 +131,7 @@
     <input
       aria-label={addInputLabel}
       bind:value={candidateRef}
-      class="min-w-[14rem] flex-1 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm"
+      class="min-w-[14rem] flex-1 rounded-md border border-gray-200 bg-gray-100 px-3 py-2 text-sm"
       onkeydown={(event) => {
         if (event.key === "Enter") {
           event.preventDefault();
@@ -142,7 +142,7 @@
       type="text"
     />
     <button
-      class="rounded-md border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-100"
+      class="rounded-md border border-gray-300 bg-gray-100 px-3 py-2 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-200"
       onclick={addCandidate}
       type="button"
     >
@@ -151,7 +151,7 @@
   </div>
 
   {#if localError}
-    <p class="mt-1.5 text-xs text-red-700">{localError}</p>
+    <p class="mt-1.5 text-xs text-red-400">{localError}</p>
   {/if}
 
   {#if normalizedSuggestions.length > 0}
@@ -164,7 +164,7 @@
       <div class="mt-1.5 flex flex-wrap gap-1.5">
         {#each normalizedSuggestions as suggestion}
           <button
-            class="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-xs text-gray-600 transition-colors hover:border-indigo-200 hover:text-indigo-700"
+            class="rounded-full border border-gray-200 bg-gray-100 px-2.5 py-1 text-xs text-gray-600 transition-colors hover:border-indigo-500/30 hover:text-indigo-300"
             onclick={() => addSuggestion(suggestion.value)}
             type="button"
           >
@@ -176,7 +176,7 @@
   {/if}
 
   <button
-    class="mt-2 rounded-md px-2 py-1 text-xs text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
+    class="mt-2 rounded-md px-2 py-1 text-xs text-gray-500 transition-colors hover:bg-gray-200 hover:text-gray-700"
     onclick={() => {
       showAdvanced = !showAdvanced;
     }}
@@ -191,7 +191,7 @@
       <textarea
         aria-label={textareaAriaLabel}
         bind:value
-        class="mt-1.5 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm"
+        class="mt-1.5 w-full rounded-md border border-gray-200 bg-gray-100 px-3 py-2 text-sm"
         rows={advancedRows}
       ></textarea></label
     >
@@ -200,5 +200,5 @@
 </div>
 
 {#if fieldError}
-  <p class="mt-1.5 text-xs text-red-700">{fieldError}</p>
+  <p class="mt-1.5 text-xs text-red-400">{fieldError}</p>
 {/if}

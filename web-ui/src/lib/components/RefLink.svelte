@@ -22,7 +22,7 @@
 
 {#if resolved.isLink}
   <a
-    class="inline-flex items-baseline gap-1 text-indigo-600 hover:text-indigo-800"
+    class="inline-flex items-baseline gap-1 text-indigo-400 hover:text-indigo-300"
     href={resolved.href}
     rel={resolved.isExternal ? "noreferrer noopener" : undefined}
     target={resolved.isExternal ? "_blank" : undefined}

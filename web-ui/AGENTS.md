@@ -9,6 +9,7 @@ organization-autorunner-ui is the frontend/client application for the Organizati
 - Shared schema: `../contracts/oar-schema.yaml`
 - Spec compliance matrix: `docs/spec-compliance.md`
 - Build/serve/integration runbook: `docs/runbook.md`
+- **Visual style guide: `docs/style-guide.md`** — dark theme palette, component patterns, typography, spacing, and anti-patterns. Read before adding or modifying UI.
 
 ## Architecture at a glance
 - Framework/runtime: SvelteKit app (`src/routes`, `src/lib`, `src/hooks.server.js`).

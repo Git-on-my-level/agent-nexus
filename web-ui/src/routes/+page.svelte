@@ -26,7 +26,7 @@
   let artifactsState = $state({ ...emptySectionState });
 
   let inboxSummary = $derived(buildInboxCategorySummary(inboxState.items));
-  let topInboxItems = $derived(sortInboxItems(inboxState.items).slice(0, 4));
+  let topInboxItems = $derived(sortInboxItems(inboxState.items).slice(0, 5));
 
   let threadHealth = $derived(buildThreadHealthSummary(threadsState.items));
   let recentThreads = $derived(
@@ -95,211 +95,162 @@
     if (item?.thread_id) {
       return `/threads/${item.thread_id}`;
     }
-
     return "/inbox";
   }
 
   function priorityBadge(priority) {
     const styles = {
-      p0: "bg-red-100 text-red-700",
-      p1: "bg-amber-100 text-amber-700",
-      p2: "bg-blue-100 text-blue-700",
-      p3: "bg-slate-100 text-slate-700",
+      p0: "text-red-400",
+      p1: "text-amber-400",
+      p2: "text-blue-600",
+      p3: "text-gray-400",
     };
-
-    return styles[priority] ?? "bg-slate-100 text-slate-700";
+    return styles[priority] ?? "text-gray-400";
   }
 </script>
 
 <div class="space-y-6">
-  <header
-    class="rounded-xl border border-slate-200 bg-white p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)]"
-  >
-    <div class="flex flex-wrap items-start justify-between gap-4">
-      <div>
-        <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Dashboard
-        </p>
-        <h1 class="mt-1 text-2xl font-semibold text-slate-900 tracking-tight">
-          What needs attention?
-        </h1>
-        <p class="mt-2 text-sm text-slate-600 leading-relaxed">
-          Start with urgent inbox items, then review thread health and recent
-          evidence.
-        </p>
-      </div>
-      <div class="flex items-center gap-3">
-        <span class="text-xs text-slate-500">
-          {#if refreshedAt}
-            Updated {formatTimestamp(refreshedAt)}
-          {:else if loading}
-            Loading...
-          {/if}
-        </span>
-        <button
-          class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-all hover:bg-slate-50 hover:border-slate-300"
-          onclick={loadDashboard}
-          type="button"
-        >
-          Refresh
-        </button>
-      </div>
+  <div class="flex items-baseline justify-between gap-4">
+    <div>
+      <h1 class="text-lg font-semibold text-gray-900">Dashboard</h1>
+      <p class="mt-0.5 text-[13px] text-gray-500">
+        {#if refreshedAt}
+          Updated {formatTimestamp(refreshedAt)}
+        {:else if loading}
+          Loading...
+        {/if}
+      </p>
     </div>
-    <div class="mt-5 flex flex-wrap gap-2">
+    <div class="flex items-center gap-2">
+      <button
+        class="rounded-md border border-gray-200 px-2.5 py-1.5 text-[13px] font-medium text-gray-600 transition-colors hover:bg-gray-200"
+        onclick={loadDashboard}
+        type="button"
+      >
+        Refresh
+      </button>
       <a
-        class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-all hover:bg-slate-800"
+        class="rounded-md bg-gray-200 px-3 py-1.5 text-[13px] font-medium text-gray-900 transition-colors hover:bg-gray-300"
         href="/inbox"
       >
-        Review Inbox
-      </a>
-      <a
-        class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-all hover:bg-slate-50 hover:border-slate-300"
-        href="/threads"
-      >
-        Open Threads
-      </a>
-      <a
-        class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-all hover:bg-slate-50 hover:border-slate-300"
-        href="/artifacts"
-      >
-        Inspect Artifacts
+        Review inbox
       </a>
     </div>
-  </header>
+  </div>
 
-  <div class="grid gap-6 xl:grid-cols-3">
-    <section
-      class="rounded-xl border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)] xl:col-span-1"
-    >
-      <div class="flex items-center justify-between gap-3 mb-4">
-        <h2 class="text-base font-semibold text-slate-900">Attention Queue</h2>
+  <div class="grid gap-5 lg:grid-cols-[1fr_1.5fr]">
+    <section>
+      <div class="flex items-center justify-between gap-2 mb-2">
+        <h2 class="text-[13px] font-semibold text-gray-900">Inbox</h2>
         <a
-          class="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
+          class="text-[12px] font-medium text-gray-400 hover:text-gray-600 transition-colors"
           href="/inbox">View all</a
         >
       </div>
 
       {#if inboxState.status === "error"}
-        <p class="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
+        <p class="rounded-md bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
           {inboxState.error}
         </p>
       {:else if inboxState.items.length === 0}
-        <p class="mt-4 text-sm text-slate-500">
-          Inbox is clear. Check Threads for follow-ups.
+        <p class="text-[13px] text-gray-400 py-3">
+          Inbox clear. Check threads for follow-ups.
         </p>
       {:else}
-        <div class="mt-4 grid grid-cols-3 gap-3">
+        <div class="flex gap-2 mb-3">
           {#each inboxSummary as summary}
             <a
-              class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-center transition-all hover:bg-slate-100 hover:border-slate-300"
+              class="flex-1 rounded-md border border-gray-200 bg-gray-100 px-3 py-2 text-center transition-colors hover:bg-gray-200"
               href="/inbox"
             >
-              <p class="text-xs text-slate-500 font-medium">{summary.label}</p>
-              <p class="mt-1 text-xl font-semibold text-slate-900">
-                {summary.count}
-              </p>
+              <p class="text-[11px] font-medium text-gray-400">{summary.label}</p>
+              <p class="text-lg font-semibold text-gray-900">{summary.count}</p>
             </a>
           {/each}
         </div>
 
-        <div class="mt-4 space-y-2">
-          {#each topInboxItems as item}
+        <div class="space-y-px rounded-md border border-gray-200 bg-gray-100 overflow-hidden">
+          {#each topInboxItems as item, i}
             <a
-              class="block rounded-lg border border-slate-200 px-4 py-3 transition-all hover:border-slate-300 hover:bg-slate-50"
+              class="flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-gray-200 {i > 0 ? 'border-t border-gray-200' : ''}"
               href={inboxItemTarget(item)}
             >
-              <p class="truncate text-sm font-medium text-slate-900">
-                {item.title}
-              </p>
-              <p class="mt-1 text-xs text-slate-500">
-                {getInboxCategoryLabel(item.category)}
-                {#if item.source_event_time}
-                  · {formatTimestamp(item.source_event_time)}
-                {/if}
-              </p>
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-[13px] font-medium text-gray-900">
+                  {item.title}
+                </p>
+                <p class="text-[11px] text-gray-400">
+                  {getInboxCategoryLabel(item.category)}
+                </p>
+              </div>
             </a>
           {/each}
         </div>
       {/if}
     </section>
 
-    <section
-      class="rounded-xl border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)] xl:col-span-2"
-    >
-      <div class="flex items-center justify-between gap-3 mb-4">
-        <h2 class="text-base font-semibold text-slate-900">Thread Health</h2>
+    <section>
+      <div class="flex items-center justify-between gap-2 mb-2">
+        <h2 class="text-[13px] font-semibold text-gray-900">Thread health</h2>
         <a
-          class="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
+          class="text-[12px] font-medium text-gray-400 hover:text-gray-600 transition-colors"
           href="/threads">View all</a
         >
       </div>
 
       {#if threadsState.status === "error"}
-        <p class="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
+        <p class="rounded-md bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
           {threadsState.error}
         </p>
       {:else if threadsState.items.length === 0}
-        <p class="mt-4 text-sm text-slate-500">
-          No threads yet. Create one from the Threads page when work starts.
-        </p>
+        <p class="text-[13px] text-gray-400 py-3">No threads yet.</p>
       {:else}
-        <div class="mt-4 grid gap-3 sm:grid-cols-4">
+        <div class="flex gap-2 mb-3">
           <a
-            class="rounded-lg border border-slate-200 bg-slate-50 p-4 transition-all hover:bg-slate-100"
+            class="flex-1 rounded-md border border-gray-200 bg-gray-100 px-3 py-2 text-center transition-colors hover:bg-gray-200"
             href="/threads"
           >
-            <p class="text-xs text-slate-500 font-medium">Open threads</p>
-            <p class="mt-1 text-2xl font-semibold text-slate-900">
-              {threadHealth.openCount}
-            </p>
+            <p class="text-[11px] font-medium text-gray-400">Open</p>
+            <p class="text-lg font-semibold text-gray-900">{threadHealth.openCount}</p>
           </a>
           <a
-            class="rounded-lg border border-amber-200 bg-amber-50 p-4 transition-all hover:bg-amber-100"
+            class="flex-1 rounded-md border border-gray-200 bg-gray-100 px-3 py-2 text-center transition-colors hover:bg-gray-200"
             href="/threads"
           >
-            <p class="text-xs text-amber-700 font-medium">Stale check-ins</p>
-            <p class="mt-1 text-2xl font-semibold text-amber-800">
-              {threadHealth.staleCount}
-            </p>
+            <p class="text-[11px] font-medium {threadHealth.staleCount > 0 ? 'text-amber-400' : 'text-gray-400'}">Stale</p>
+            <p class="text-lg font-semibold {threadHealth.staleCount > 0 ? 'text-amber-400' : 'text-gray-900'}">{threadHealth.staleCount}</p>
           </a>
           <a
-            class="rounded-lg border border-red-200 bg-red-50 p-4 transition-all hover:bg-red-100"
+            class="flex-1 rounded-md border border-gray-200 bg-gray-100 px-3 py-2 text-center transition-colors hover:bg-gray-200"
             href="/threads"
           >
-            <p class="text-xs text-red-700 font-medium">High priority</p>
-            <p class="mt-1 text-2xl font-semibold text-red-800">
-              {threadHealth.highPriorityCount}
-            </p>
+            <p class="text-[11px] font-medium {threadHealth.highPriorityCount > 0 ? 'text-red-400' : 'text-gray-400'}">High priority</p>
+            <p class="text-lg font-semibold {threadHealth.highPriorityCount > 0 ? 'text-red-400' : 'text-gray-900'}">{threadHealth.highPriorityCount}</p>
           </a>
           <a
-            class="rounded-lg border border-slate-200 bg-slate-50 p-4 transition-all hover:bg-slate-100"
+            class="flex-1 rounded-md border border-gray-200 bg-gray-100 px-3 py-2 text-center transition-colors hover:bg-gray-200"
             href="/threads"
           >
-            <p class="text-xs text-slate-500 font-medium">Total threads</p>
-            <p class="mt-1 text-2xl font-semibold text-slate-900">
-              {threadHealth.totalCount}
-            </p>
+            <p class="text-[11px] font-medium text-gray-400">Total</p>
+            <p class="text-lg font-semibold text-gray-900">{threadHealth.totalCount}</p>
           </a>
         </div>
 
-        <div class="mt-4 space-y-2">
-          {#each recentThreads as thread}
+        <div class="space-y-px rounded-md border border-gray-200 bg-gray-100 overflow-hidden">
+          {#each recentThreads as thread, i}
             <a
-              class="flex items-center gap-3 rounded-lg border border-slate-200 px-4 py-3 transition-all hover:border-slate-300 hover:bg-slate-50"
+              class="flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-gray-200 {i > 0 ? 'border-t border-gray-200' : ''}"
               href={`/threads/${thread.id}`}
             >
               <div class="min-w-0 flex-1">
-                <p class="truncate text-sm font-medium text-slate-900">
+                <p class="truncate text-[13px] font-medium text-gray-900">
                   {thread.title}
                 </p>
-                <p class="mt-1 text-xs text-slate-500">
+                <p class="text-[11px] text-gray-400">
                   Updated {formatTimestamp(thread.updated_at)}
                 </p>
               </div>
-              <span
-                class={`rounded-md px-2.5 py-1 text-xs font-medium ${priorityBadge(thread.priority)}`}
-                >{getPriorityLabel(thread.priority)}</span
-              >
+              <span class="text-[11px] font-medium {priorityBadge(thread.priority)}">{getPriorityLabel(thread.priority)}</span>
             </a>
           {/each}
         </div>
@@ -307,85 +258,37 @@
     </section>
   </div>
 
-  <section
-    class="rounded-xl border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]"
-  >
-    <div class="flex items-center justify-between gap-3 mb-4">
-      <h2 class="text-base font-semibold text-slate-900">Recent Artifacts</h2>
+  <section>
+    <div class="flex items-center justify-between gap-2 mb-2">
+      <h2 class="text-[13px] font-semibold text-gray-900">Recent artifacts</h2>
       <a
-        class="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
+        class="text-[12px] font-medium text-gray-400 hover:text-gray-600 transition-colors"
         href="/artifacts">View all</a
       >
     </div>
 
     {#if artifactsState.status === "error"}
-      <p class="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
+      <p class="rounded-md bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
         {artifactsState.error}
       </p>
     {:else if artifactsState.items.length === 0}
-      <p class="mt-4 text-sm text-slate-500">
-        No artifacts yet. Work orders, receipts, and reviews will appear here.
-      </p>
+      <p class="text-[13px] text-gray-400 py-3">No artifacts yet.</p>
     {:else}
-      <div class="mt-4 grid gap-3 sm:grid-cols-4">
-        <a
-          class="rounded-lg border border-slate-200 bg-slate-50 p-4 transition-all hover:bg-slate-100"
-          href="/artifacts"
-        >
-          <p class="text-xs text-slate-500 font-medium">Reviews</p>
-          <p class="mt-1 text-2xl font-semibold text-slate-900">
-            {artifactKindSummary.review}
-          </p>
-        </a>
-        <a
-          class="rounded-lg border border-slate-200 bg-slate-50 p-4 transition-all hover:bg-slate-100"
-          href="/artifacts"
-        >
-          <p class="text-xs text-slate-500 font-medium">Receipts</p>
-          <p class="mt-1 text-2xl font-semibold text-slate-900">
-            {artifactKindSummary.receipt}
-          </p>
-        </a>
-        <a
-          class="rounded-lg border border-slate-200 bg-slate-50 p-4 transition-all hover:bg-slate-100"
-          href="/artifacts"
-        >
-          <p class="text-xs text-slate-500 font-medium">Work orders</p>
-          <p class="mt-1 text-2xl font-semibold text-slate-900">
-            {artifactKindSummary.work_order}
-          </p>
-        </a>
-        <a
-          class="rounded-lg border border-slate-200 bg-slate-50 p-4 transition-all hover:bg-slate-100"
-          href="/artifacts"
-        >
-          <p class="text-xs text-slate-500 font-medium">Other docs</p>
-          <p class="mt-1 text-2xl font-semibold text-slate-900">
-            {artifactKindSummary.other}
-          </p>
-        </a>
-      </div>
-
-      <div class="mt-4 space-y-2">
-        {#each recentArtifacts as artifact}
+      <div class="space-y-px rounded-md border border-gray-200 bg-gray-100 overflow-hidden">
+        {#each recentArtifacts as artifact, i}
           <a
-            class="flex items-center gap-3 rounded-lg border border-slate-200 px-4 py-3 transition-all hover:border-slate-300 hover:bg-slate-50"
+            class="flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-gray-200 {i > 0 ? 'border-t border-gray-200' : ''}"
             href={`/artifacts/${artifact.id}`}
           >
             <span
-              class="shrink-0 rounded-md bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700"
-              >{artifact.kind}</span
-            >
+              class="shrink-0 rounded bg-gray-200 px-1.5 py-0.5 text-[11px] font-medium text-gray-600"
+            >{artifact.kind}</span>
             <div class="min-w-0 flex-1">
-              <p class="truncate text-sm font-medium text-slate-900">
+              <p class="truncate text-[13px] font-medium text-gray-900">
                 {artifact.summary || artifact.id}
               </p>
-              <p class="mt-1 text-xs text-slate-500">
-                {artifact.thread_id ? `${artifact.thread_id} · ` : ""}Updated {formatTimestamp(
-                  artifact.created_at,
-                )}
-              </p>
             </div>
+            <span class="text-[11px] text-gray-400">{formatTimestamp(artifact.created_at)}</span>
           </a>
         {/each}
       </div>

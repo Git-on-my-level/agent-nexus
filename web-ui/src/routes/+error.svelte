@@ -5,7 +5,7 @@
 <div class="flex min-h-[60vh] items-center justify-center">
   <div class="max-w-md text-center">
     <div
-      class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-50"
+      class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-500/10"
     >
       <svg
         class="h-6 w-6 text-red-400"
@@ -26,23 +26,23 @@
       {$page.error?.message ?? "An unexpected error occurred."}
     </p>
     <div
-      class="mt-6 rounded-xl border border-gray-200/80 bg-white p-5 text-left shadow-sm"
+      class="mt-6 rounded-md border border-gray-200 bg-gray-100 p-4 text-left"
     >
-      <p class="text-xs font-medium text-gray-500">Troubleshooting</p>
-      <ol class="mt-3 list-decimal space-y-2 pl-5 text-sm text-gray-600">
+      <p class="text-[12px] font-medium text-gray-500">Troubleshooting</p>
+      <ol class="mt-2 list-decimal space-y-1.5 pl-5 text-[13px] text-gray-600">
         <li>
           Start the backend: <code
-            class="rounded-md bg-gray-100 px-1.5 py-0.5 text-xs font-medium"
+            class="rounded-md bg-gray-200 px-1.5 py-0.5 text-xs font-medium"
             >make serve</code
           >
           in
-          <code class="rounded-md bg-gray-100 px-1.5 py-0.5 text-xs font-medium"
+          <code class="rounded-md bg-gray-200 px-1.5 py-0.5 text-xs font-medium"
             >organization-autorunner-core</code
           >
         </li>
         <li>
           Set <code
-            class="rounded-md bg-gray-100 px-1.5 py-0.5 text-xs font-medium"
+            class="rounded-md bg-gray-200 px-1.5 py-0.5 text-xs font-medium"
             >OAR_CORE_BASE_URL=http://127.0.0.1:8000</code
           >
         </li>
