@@ -264,7 +264,7 @@ if ! wait_for_pid "$EVENTS_TAIL_PID" "$SMOKE_TIMEOUT_SECONDS"; then
   echo "events tail did not complete in time" >&2
   exit 1
 fi
-assert_contains "$EVENTS_TAIL_OUT" '"command"[[:space:]]*:[[:space:]]*"events tail"'
+assert_contains "$EVENTS_TAIL_OUT" '"command"[[:space:]]*:[[:space:]]*"events stream"'
 
 # Ensure inbox has at least one item before stream tail.
 for _ in $(seq 1 40); do
@@ -298,7 +298,7 @@ if ! wait_for_pid "$INBOX_TAIL_PID" "$SMOKE_TIMEOUT_SECONDS"; then
   echo "inbox tail did not complete in time" >&2
   exit 1
 fi
-assert_contains "$INBOX_TAIL_OUT" '"command"[[:space:]]*:[[:space:]]*"inbox tail"'
+assert_contains "$INBOX_TAIL_OUT" '"command"[[:space:]]*:[[:space:]]*"inbox stream"'
 
 # Basic UI compatibility check after typed flow.
 curl -fsS "$UI_BASE_URL/meta/handshake" >"$TMP_DIR/ui-handshake.json"

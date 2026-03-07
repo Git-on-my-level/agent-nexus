@@ -423,7 +423,17 @@ func newLiveCoreHarness(t *testing.T) *liveCoreHarness {
 	cliBin, coreBin := buildBinaries(t)
 	tempDir := t.TempDir()
 	workspace := filepath.Join(tempDir, "workspace")
-	copyDir(t, filepath.Join(root, "core", ".oar-workspace"), workspace)
+	seedWorkspace := filepath.Join(root, "core", ".oar-workspace")
+	switch _, err := os.Stat(seedWorkspace); {
+	case err == nil:
+		copyDir(t, seedWorkspace, workspace)
+	case errors.Is(err, os.ErrNotExist):
+		if mkErr := os.MkdirAll(workspace, 0o755); mkErr != nil {
+			t.Fatalf("create empty workspace %s: %v", workspace, mkErr)
+		}
+	default:
+		t.Fatalf("stat workspace fixture %s: %v", seedWorkspace, err)
+	}
 
 	homeDir := filepath.Join(tempDir, "home")
 	if err := os.MkdirAll(homeDir, 0o755); err != nil {
