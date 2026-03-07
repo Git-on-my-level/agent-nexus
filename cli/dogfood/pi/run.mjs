@@ -227,8 +227,9 @@ Auth:
 
 Read workflow state:
 - List threads: \`oar threads list\`
-- Read thread: \`oar threads get --thread-id <thread-id>\`
-- Read thread context: \`oar threads context --thread-id <thread-id>\`
+- Canonical thread coordination read: \`oar threads inspect --thread-id <thread-id>\`
+- Cross-thread aggregate context (optional): \`oar threads context --status active --type initiative --full-id\`
+- Raw thread snapshot only (optional): \`oar threads get --thread-id <thread-id>\`
 - List inbox items: \`oar inbox list\`
 - List artifacts: \`oar artifacts list --thread-id <thread-id>\`
 - Read artifact metadata: \`oar artifacts get --artifact-id <artifact-id>\`
@@ -416,10 +417,10 @@ function targetsGuide(role, targets) {
     `Shared goal title: ${targets.mainThread.title}`,
     `Primary thread for your role: ${targets.primaryThread.id}`,
     `Primary thread title: ${targets.primaryThread.title}`,
-    `Read shared goal thread: oar threads get --thread-id ${targets.mainThread.id}`,
-    `Read shared goal context: oar threads context --thread-id ${targets.mainThread.id}`,
-    `Read your primary thread: oar threads get --thread-id ${targets.primaryThread.id}`,
-    `Read your primary thread context: oar threads context --thread-id ${targets.primaryThread.id}`,
+    `Canonical read shared goal thread: oar threads inspect --thread-id ${targets.mainThread.id}`,
+    `Canonical read your primary thread: oar threads inspect --thread-id ${targets.primaryThread.id}`,
+    `Optional raw snapshot shared goal thread: oar threads get --thread-id ${targets.mainThread.id}`,
+    `Optional raw snapshot your primary thread: oar threads get --thread-id ${targets.primaryThread.id}`,
   ];
 
   if (targets.relatedThreads.length > 0) {

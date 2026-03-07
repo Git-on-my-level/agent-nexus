@@ -574,11 +574,11 @@ Generated from `contracts/oar-openapi.yaml`.
 - HTTP: `GET /threads/{thread_id}/context`
 - Stability: `beta`
 - Input mode: `none`
-- Why: Load thread state, recent events, key artifacts, and open commitments in a single round-trip.
+- Why: Load one thread's state, recent events, key artifacts, and open commitments in a single round-trip; CLI `oar threads context` can aggregate across threads by composing multiple calls.
 - Concepts: `threads`, `events`, `artifacts`, `commitments`
 - Error codes: `invalid_request`, `not_found`
 - Output: Returns `{ thread, recent_events, key_artifacts, open_commitments }`.
-- Agent notes: Use include_artifact_content for prompt-ready previews; default mode keeps payloads lighter.
+- Agent notes: Use include_artifact_content for prompt-ready previews; default mode keeps payloads lighter. Prefer `oar threads inspect` as the first single-thread coordination read.
 - Examples:
   - Context with defaults: `oar threads context --thread-id thread_123 --json`
   - Context with artifact previews: `oar threads context --thread-id thread_123 --include-artifact-content --max-events 50 --json`
@@ -603,11 +603,11 @@ Generated from `contracts/oar-openapi.yaml`.
 - HTTP: `GET /threads/{thread_id}`
 - Stability: `stable`
 - Input mode: `none`
-- Why: Resolve authoritative thread state before patching or composing packets.
+- Why: Resolve a raw authoritative thread snapshot for low-level reads before patching or composing packets.
 - Concepts: `threads`
 - Error codes: `not_found`
 - Output: Returns `{ thread }`.
-- Agent notes: Safe and idempotent.
+- Agent notes: Safe and idempotent. Prefer `oar threads inspect` for operator coordination reads.
 - Examples:
   - Read thread: `oar threads get --thread-id thread_123 --json`
 

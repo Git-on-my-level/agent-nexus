@@ -64,9 +64,9 @@ var localHelperTopics = []localHelperTopic{
 	},
 	{
 		Path:        "threads inspect",
-		Summary:     "Compose one coordination view from `threads context` and related `inbox list` items for the same thread.",
+		Summary:     "Canonical thread coordination read path: compose one view from `threads context` and related `inbox list` items.",
 		JSONShape:   "`thread`, `context`, `collaboration`, `inbox`",
-		Composition: "Resolves one thread by id or discovery filters, loads `threads context`, then filters inbox items client-side by `thread_id`.",
+		Composition: "Resolves one thread by id or discovery filters, loads `threads context`, then filters inbox items client-side by `thread_id` for one operator-focused coordination view.",
 		Examples: []string{
 			"oar threads inspect --thread-id <thread-id>",
 			"oar threads inspect --status active --type initiative --full-id",
@@ -250,9 +250,9 @@ func formatGeneratedGroupHelp(topic string, commands []registry.Command) string 
 func localGroupHelpSupplement(topic string) string {
 	switch strings.TrimSpace(topic) {
 	case "threads":
-		return strings.TrimSpace(`Coordination helper:
+		return strings.TrimSpace(`Canonical coordination read path:
   threads inspect             Compose one thread coordination view from context + inbox in one command.
-  Tip: use ` + "`--status/--tag/--type initiative`" + ` to discover one initiative view; use ` + "`oar threads context`" + ` for cross-thread aggregates and add ` + "`--full-id`" + ` for copy/paste ids.`)
+  Tip: start with ` + "`oar threads inspect`" + ` for one initiative/thread; use ` + "`oar threads context`" + ` for cross-thread aggregates and ` + "`oar threads get`" + ` for raw snapshot-only reads. Add ` + "`--full-id`" + ` for copy/paste ids.`)
 	case "events":
 		return strings.TrimSpace(`Local inspection helpers:
   events list              List timeline events with thread/type/actor filters, id mode, and preview summaries.
@@ -532,7 +532,8 @@ func onboardingHelpText() string {
 Work-order loop
 
 1. Inspect inbound work and context: ` + "`oar inbox list`" + ` or ` + "`oar inbox stream --max-events 1`" + `.
-2. Read current state before mutating it: ` + "`oar threads get <thread-id>`" + ` and related list/get commands.
+2. Read current state before mutating it: ` + "`oar threads inspect --thread-id <thread-id>`" + `.
+   Use ` + "`oar threads context`" + ` for cross-thread aggregates and ` + "`oar threads get`" + ` for raw snapshot-only reads.
 3. Stage a mutation as a draft when you need reviewable intent: ` + "`oar draft create --command <command-id>`" + `.
 4. Commit the draft (or send a direct typed create/patch command) and capture returned IDs.
 5. Confirm outcomes in timeline/events and ack inbox items to close the loop.

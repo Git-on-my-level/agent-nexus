@@ -2083,7 +2083,7 @@ export const commandRegistry = [
         "path": "/threads/{thread_id}/context",
         "operation_id": "getThreadContext",
         "summary": "Get bundled thread context for agent callers",
-        "why": "Load thread state, recent events, key artifacts, and open commitments in a single round-trip.",
+        "why": "Load one thread's state, recent events, key artifacts, and open commitments in a single round-trip; CLI `oar threads context` can aggregate across threads by composing multiple calls.",
         "input_mode": "none",
         "streaming": {
             "mode": "none"
@@ -2100,7 +2100,7 @@ export const commandRegistry = [
             "commitments"
         ],
         "stability": "beta",
-        "agent_notes": "Use include_artifact_content for prompt-ready previews; default mode keeps payloads lighter.",
+        "agent_notes": "Use include_artifact_content for prompt-ready previews; default mode keeps payloads lighter. Prefer `oar threads inspect` as the first single-thread coordination read.",
         "examples": [
             {
                 "title": "Context with defaults",
@@ -2257,7 +2257,7 @@ export const commandRegistry = [
         "path": "/threads/{thread_id}",
         "operation_id": "getThread",
         "summary": "Get thread snapshot by id",
-        "why": "Resolve authoritative thread state before patching or composing packets.",
+        "why": "Resolve a raw authoritative thread snapshot for low-level reads before patching or composing packets.",
         "input_mode": "none",
         "streaming": {
             "mode": "none"
@@ -2270,7 +2270,7 @@ export const commandRegistry = [
             "threads"
         ],
         "stability": "stable",
-        "agent_notes": "Safe and idempotent.",
+        "agent_notes": "Safe and idempotent. Prefer `oar threads inspect` for operator coordination reads.",
         "examples": [
             {
                 "title": "Read thread",

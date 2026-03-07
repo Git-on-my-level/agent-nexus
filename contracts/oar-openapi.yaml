@@ -587,7 +587,7 @@ paths:
       tags: [threads]
       x-oar-command-id: "threads.get"
       x-oar-cli-path: "threads get"
-      x-oar-why: "Resolve authoritative thread state before patching or composing packets."
+      x-oar-why: "Resolve a raw authoritative thread snapshot for low-level reads before patching or composing packets."
       x-oar-examples:
         - title: Read thread
           command: oar threads get --thread-id thread_123 --json
@@ -597,7 +597,7 @@ paths:
       x-oar-error-codes: [not_found]
       x-oar-concepts: [threads]
       x-oar-stability: "stable"
-      x-oar-agent-notes: "Safe and idempotent."
+      x-oar-agent-notes: "Safe and idempotent. Prefer `oar threads inspect` for operator coordination reads."
       parameters:
         - $ref: '#/components/parameters/ThreadID'
       responses:
@@ -685,7 +685,7 @@ paths:
       tags: [threads]
       x-oar-command-id: "threads.context"
       x-oar-cli-path: "threads context"
-      x-oar-why: "Load thread state, recent events, key artifacts, and open commitments in a single round-trip."
+      x-oar-why: "Load one thread's state, recent events, key artifacts, and open commitments in a single round-trip; CLI `oar threads context` can aggregate across threads by composing multiple calls."
       x-oar-examples:
         - title: Context with defaults
           command: oar threads context --thread-id thread_123 --json
@@ -697,7 +697,7 @@ paths:
       x-oar-error-codes: [invalid_request, not_found]
       x-oar-concepts: [threads, events, artifacts, commitments]
       x-oar-stability: "beta"
-      x-oar-agent-notes: "Use include_artifact_content for prompt-ready previews; default mode keeps payloads lighter."
+      x-oar-agent-notes: "Use include_artifact_content for prompt-ready previews; default mode keeps payloads lighter. Prefer `oar threads inspect` as the first single-thread coordination read."
       parameters:
         - $ref: '#/components/parameters/ThreadID'
         - in: query

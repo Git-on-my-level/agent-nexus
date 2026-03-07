@@ -117,6 +117,12 @@ func TestRunGeneratedHelpTopic(t *testing.T) {
 	if !strings.Contains(output, "threads inspect") {
 		t.Fatalf("expected local threads inspect helper in generated help output=%s", output)
 	}
+	if !strings.Contains(output, "Canonical coordination read path:") {
+		t.Fatalf("expected canonical coordination guidance in threads group help output=%s", output)
+	}
+	if !strings.Contains(output, "oar threads inspect") {
+		t.Fatalf("expected canonical threads inspect command hint in threads group help output=%s", output)
+	}
 	if strings.Contains(output, "threads update") {
 		t.Fatalf("unexpected legacy update subcommand in generated help output=%s", output)
 	}
@@ -400,6 +406,9 @@ func TestRunOnboardingHelpTopic(t *testing.T) {
 	}
 	if !strings.Contains(output, "5. The fastest way to stay aligned") {
 		t.Fatalf("expected fifth mental model sentence output=%s", output)
+	}
+	if !strings.Contains(output, "oar threads inspect --thread-id <thread-id>") {
+		t.Fatalf("expected canonical thread inspect workflow guidance output=%s", output)
 	}
 }
 
