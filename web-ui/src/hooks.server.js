@@ -1,4 +1,5 @@
 import { env } from "$env/dynamic/private";
+import { isProxyableCommand } from "$lib/coreRouteCatalog";
 
 function normalizeBaseUrl(value) {
   return String(value ?? "")
@@ -6,31 +7,8 @@ function normalizeBaseUrl(value) {
     .replace(/\/+$/, "");
 }
 
-function shouldProxyToCore(pathname) {
-  return (
-    pathname.startsWith("/meta/") ||
-    pathname === "/version" ||
-    pathname === "/actors" ||
-    pathname === "/threads" ||
-    pathname.startsWith("/threads/") ||
-    pathname === "/commitments" ||
-    pathname.startsWith("/commitments/") ||
-    pathname === "/artifacts" ||
-    pathname.startsWith("/artifacts/") ||
-    pathname === "/events" ||
-    pathname.startsWith("/events/") ||
-    pathname === "/work_orders" ||
-    pathname.startsWith("/work_orders/") ||
-    pathname === "/receipts" ||
-    pathname.startsWith("/receipts/") ||
-    pathname === "/reviews" ||
-    pathname.startsWith("/reviews/") ||
-    pathname === "/snapshots" ||
-    pathname.startsWith("/snapshots/") ||
-    pathname === "/derived/rebuild" ||
-    pathname === "/inbox" ||
-    pathname === "/inbox/ack"
-  );
+function shouldProxyToCore(pathname, method) {
+  return isProxyableCommand(method, pathname);
 }
 
 function isDocumentNavigationRequest(request) {
@@ -107,9 +85,10 @@ export async function handle({ event, resolve }) {
   );
 
   const pathname = event.url.pathname;
+  const method = event.request.method;
   const documentNavigation = isDocumentNavigationRequest(event.request);
   const shouldProxy =
-    coreBaseUrl && shouldProxyToCore(pathname) && !documentNavigation;
+    coreBaseUrl && shouldProxyToCore(pathname, method) && !documentNavigation;
 
   if (shouldProxy) {
     return proxyToCore(event, coreBaseUrl);

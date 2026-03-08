@@ -38,6 +38,16 @@ export async function POST({ request, url }) {
     );
   }
 
+  if (body.thread?.open_commitments !== undefined) {
+    return json(
+      {
+        error:
+          "open_commitments cannot be set on thread create; manage commitments via commitments API.",
+      },
+      { status: 400 },
+    );
+  }
+
   const created = createMockThread(body);
   return json({ thread: created });
 }

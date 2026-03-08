@@ -1509,21 +1509,25 @@ export function createMockEvent(event) {
 }
 
 export function listMockInboxItems() {
-  return inboxItems;
+  return inboxItems.filter((item) => !item.acknowledged_at);
 }
 
 export function ackMockInboxItem({ thread_id, inbox_item_id }) {
-  const index = inboxItems.findIndex(
+  const item = inboxItems.find(
     (item) =>
       item.id === inbox_item_id &&
       (!thread_id || String(item.thread_id) === String(thread_id)),
   );
 
-  if (index === -1) {
+  if (!item) {
     return null;
   }
 
-  return inboxItems.splice(index, 1)[0];
+  if (!item.acknowledged_at) {
+    item.acknowledged_at = new Date().toISOString();
+  }
+
+  return item;
 }
 
 export function listMockTimelineEvents(threadId) {
