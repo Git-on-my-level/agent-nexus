@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Regression guard: ensure go.mod does not contain a toolchain directive
+# that would trigger auto-download in offline/air-gapped environments.
+#
+# This script exits with an error if a toolchain directive is found,
+# as it would cause "go test", "go vet", etc. to attempt network fetches.
+
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+GOMOD="$ROOT_DIR/go.mod"
+
+if [[ ! -f "$GOMOD" ]]; then
+    echo "ERROR: go.mod not found at $GOMOD"
+    exit 1
+fi
+
+if grep -q '^toolchain ' "$GOMOD"; then
+    echo "ERROR: go.mod contains a 'toolchain' directive which triggers auto-download."
+    echo "Remove the 'toolchain' line to allow offline operation."
+    echo ""
+    echo "For CI, use actions/setup-go with go-version-file instead."
+    exit 1
+fi
+
+echo "OK: no toolchain directive found"

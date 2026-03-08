@@ -5,6 +5,10 @@ PORT ?= 8000
 WORKSPACE_ROOT ?= $(CURDIR)/.oar-workspace
 SCHEMA_PATH ?= $(CURDIR)/../contracts/oar-schema.yaml
 
+# For offline/air-gapped environments (e.g., agent sandboxes), set GOTOOLCHAIN=local
+# to prevent Go from auto-downloading a toolchain version. Example:
+#   GOTOOLCHAIN=local make check
+
 help:
 	@echo "Common targets:"
 	@echo "  make serve      - run oar-core locally (development mode)"
@@ -42,10 +46,13 @@ vet:
 test:
 	@go test ./...
 
-check: fmt vet test
+check: fmt vet test check-offline
 
 lint:
 	@./scripts/lint
+
+check-offline:
+	@./scripts/check-offline
 
 ci-smoke:
 	@./scripts/ci-smoke
