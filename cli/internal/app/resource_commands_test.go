@@ -1136,6 +1136,108 @@ func TestDocsUpdateProposalWithContentFileUsesFetchedDocumentState(t *testing.T)
 	}
 }
 
+func TestDocsUpdateProposalPreservesStructuredContentInDiff(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/docs/doc_structured":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{
+				"document":{"id":"doc_structured","head_revision_id":"rev_1"},
+				"revision":{
+					"revision_id":"rev_1",
+					"revision_number":1,
+					"content_type":"structured",
+					"content":{"summary":"Initial brief","status":"draft","items":["alpha"]}
+				}
+			}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-docs-structured", `{"agent":"agent-docs-structured","actor_id":"actor-docs-structured","access_token":"token-docs","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+
+	raw := runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{
+		"if_base_revision":"rev_1",
+		"content_type":"structured",
+		"content":{"summary":"Updated brief","status":"approved","items":["alpha","beta"]}
+	}`), []string{
+		"--json",
+		"--base-url", server.URL,
+		"--agent", "agent-docs-structured",
+		"docs", "update",
+		"--document-id", "doc_structured",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+	body, _ := data["body"].(map[string]any)
+	content, _ := body["content"].(map[string]any)
+	if got := anyStringValue(content["status"]); got != "approved" {
+		t.Fatalf("expected structured content in staged proposal body, got %#v", body["content"])
+	}
+	diff, _ := data["diff"].(map[string]any)
+	diffText := anyStringValue(diff["text"])
+	if strings.Contains(diffText, "(no changes)") {
+		t.Fatalf("expected structured proposal diff to show changes, got %q", diffText)
+	}
+	if !strings.Contains(diffText, `"status": "draft"`) || !strings.Contains(diffText, `"status": "approved"`) {
+		t.Fatalf("expected structured proposal diff to preserve content changes, got %q", diffText)
+	}
+	if !strings.Contains(diffText, `"items": [`) || !strings.Contains(diffText, `"beta"`) {
+		t.Fatalf("expected structured proposal diff to include nested array changes, got %q", diffText)
+	}
+}
+
+func TestDocsUpdateProposalTextDiffFallsBackWhenRevisionContentEmpty(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/docs/doc_text_fallback":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{
+				"document":{"id":"doc_text_fallback","head_revision_id":"rev_1"},
+				"content":"body fallback content",
+				"revision":{
+					"revision_id":"rev_1",
+					"revision_number":1,
+					"content_type":"text",
+					"content":""
+				}
+			}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-docs-text-fallback", `{"agent":"agent-docs-text-fallback","actor_id":"actor-docs-text-fallback","access_token":"token-docs","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+
+	raw := runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{
+		"if_base_revision":"rev_1",
+		"content_type":"text",
+		"content":"updated body content"
+	}`), []string{
+		"--json",
+		"--base-url", server.URL,
+		"--agent", "agent-docs-text-fallback",
+		"docs", "update",
+		"--document-id", "doc_text_fallback",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+	diff, _ := data["diff"].(map[string]any)
+	diffText := anyStringValue(diff["text"])
+	if !strings.Contains(diffText, "-body fallback content") || !strings.Contains(diffText, "+updated body content") {
+		t.Fatalf("expected text proposal diff to fall back to body content when revision content is empty, got %q", diffText)
+	}
+}
+
 func TestCommitmentsUpdateStagesProposalAndApply(t *testing.T) {
 	t.Parallel()
 

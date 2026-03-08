@@ -50,19 +50,34 @@ func applyPatchMap(current map[string]any, patch map[string]any) map[string]any 
 	return out
 }
 
+func firstContentValue(values ...any) any {
+	for _, value := range values {
+		if value == nil {
+			continue
+		}
+		if text, ok := value.(string); ok && strings.TrimSpace(text) == "" {
+			continue
+		}
+		return value
+	}
+	return nil
+}
+
 func docsProposalDiffText(currentBody map[string]any, updateBody map[string]any) string {
 	revision := extractNestedMap(currentBody, "revision")
-	currentContent := strings.TrimSpace(firstNonEmpty(anyString(revision["content"]), anyString(currentBody["content"]), anyString(currentBody["body_text"])))
-	proposedContent := strings.TrimSpace(anyString(updateBody["content"]))
+	currentContentRaw := firstContentValue(revision["content"], currentBody["content"], currentBody["body_text"])
+	proposedContentRaw := updateBody["content"]
 	currentContentType := strings.TrimSpace(firstNonEmpty(anyString(revision["content_type"]), anyString(currentBody["content_type"])))
 	proposedContentType := strings.TrimSpace(anyString(updateBody["content_type"]))
 	if currentContentType == "text" && proposedContentType == "text" {
+		currentContent := strings.TrimSpace(anyString(currentContentRaw))
+		proposedContent := strings.TrimSpace(anyString(proposedContentRaw))
 		return renderUnifiedDiff("current", currentContent, "proposed", proposedContent)
 	}
 
 	currentView := map[string]any{
 		"content_type": currentContentType,
-		"content":      currentContent,
+		"content":      currentContentRaw,
 		"revision_id":  anyString(revision["revision_id"]),
 		"refs":         stringList(revision["refs"]),
 	}
@@ -70,7 +85,7 @@ func docsProposalDiffText(currentBody map[string]any, updateBody map[string]any)
 	if proposedContentType != "" {
 		proposedView["content_type"] = proposedContentType
 	}
-	proposedView["content"] = proposedContent
+	proposedView["content"] = proposedContentRaw
 	if refs, ok := updateBody["refs"].([]any); ok {
 		proposedView["refs"] = refs
 	} else if refs := stringList(updateBody["refs"]); len(refs) > 0 {
