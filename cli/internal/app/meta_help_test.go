@@ -135,7 +135,7 @@ func TestRunGeneratedHelpTopic(t *testing.T) {
 	if strings.Contains(output, "threads update") {
 		t.Fatalf("unexpected legacy update subcommand in generated help output=%s", output)
 	}
-	if !strings.Contains(output, "Place global flags before the command path.") {
+	if !strings.Contains(output, "Global flags can appear before or after the command path.") {
 		t.Fatalf("expected global flag placement guidance output=%s", output)
 	}
 	if !strings.Contains(output, "oar --json threads ...") {
@@ -274,7 +274,7 @@ func TestRunLocalHelperHelpTopicsResolveAcrossEntryPoints(t *testing.T) {
 		if !strings.Contains(output, "Local Help: threads workspace") {
 			t.Fatalf("expected local threads workspace help header output=%s", output)
 		}
-		if !strings.Contains(output, "related-thread") || !strings.Contains(output, "inbox list") {
+		if !strings.Contains(output, "related-thread") || !strings.Contains(output, "inbox list") || !strings.Contains(output, "--include-related-event-content") {
 			t.Fatalf("expected workspace helper details output=%s", output)
 		}
 	}
@@ -282,7 +282,7 @@ func TestRunLocalHelperHelpTopicsResolveAcrossEntryPoints(t *testing.T) {
 		if !strings.Contains(output, "Local Help: threads recommendations") {
 			t.Fatalf("expected local threads recommendations help header output=%s", output)
 		}
-		if !strings.Contains(output, "--full-summary") || !strings.Contains(output, "inbox list") {
+		if !strings.Contains(output, "--full-summary") || !strings.Contains(output, "inbox list") || !strings.Contains(output, "--include-related-event-content") {
 			t.Fatalf("expected recommendations helper details output=%s", output)
 		}
 	}

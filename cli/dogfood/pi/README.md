@@ -73,4 +73,5 @@ Constraints enforced by the run workspace:
 Scenario command-shape guidance:
 - default to `oar threads workspace --thread-id <thread-id>` for the main coordination read
 - use `oar threads recommendations --thread-id <thread-id>` for recommendation/decision review
+- add `--include-related-event-content --verbose` when you need full related-thread recommendation content in one command
 - document updates are a two-step proposal flow: `oar docs update ...` then `oar docs apply --proposal-id <proposal-id>`

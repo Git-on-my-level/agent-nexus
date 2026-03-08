@@ -229,6 +229,7 @@ Read workflow state:
 - List threads: \`oar threads list\`
 - Canonical thread coordination read: \`oar threads workspace --thread-id <thread-id>\`
 - Focus recommendation review: \`oar threads recommendations --thread-id <thread-id>\`
+- Full related recommendation content in one command: \`oar threads recommendations --thread-id <thread-id> --include-related-event-content --verbose\`
 - Cross-thread aggregate context (optional): \`oar threads context --status active --type initiative --full-id\`
 - Raw thread snapshot only (optional): \`oar threads get --thread-id <thread-id>\`
 - List inbox items: \`oar inbox list\`

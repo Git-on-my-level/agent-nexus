@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRunVersionJSON(t *testing.T) {
@@ -112,7 +113,7 @@ func TestRunVersionAcceptsTrailingJSONFlag(t *testing.T) {
 	}
 }
 
-func TestRunMisplacedGlobalBaseURLShowsCorrectiveUsage(t *testing.T) {
+func TestRunTrailingGlobalBaseURLIsAccepted(t *testing.T) {
 	t.Parallel()
 
 	stdout := &bytes.Buffer{}
@@ -128,16 +129,64 @@ func TestRunMisplacedGlobalBaseURLShowsCorrectiveUsage(t *testing.T) {
 	}
 
 	exitCode := cli.Run([]string{"version", "--base-url", "http://127.0.0.1:8000"})
-	if exitCode != 2 {
-		t.Fatalf("expected usage exit code 2, got %d stderr=%s", exitCode, stderr.String())
+	if exitCode != 0 {
+		t.Fatalf("expected trailing global flag to work, got exit %d stderr=%s", exitCode, stderr.String())
 	}
-
-	if !strings.Contains(stderr.String(), "--base-url is a global flag; use: oar --base-url <url> version ...") {
-		t.Fatalf("expected corrective global flag usage message stderr=%s", stderr.String())
+	if strings.TrimSpace(stderr.String()) != "" {
+		t.Fatalf("expected no stderr for trailing global flag, got %q", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "CLI version:") || !strings.Contains(stdout.String(), "Base URL: http://127.0.0.1:8000") {
+		t.Fatalf("expected version output with trailing global flag, got %q", stdout.String())
 	}
 }
 
-func TestRunMisplacedGlobalBaseURLPreservesJSONMode(t *testing.T) {
+func TestRunTrailingGlobalBaseURLPreservesJSONMode(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/health":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		case "/meta/handshake":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"min_cli_version":"0.1.0"}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	cli := New()
+	cli.Stdout = stdout
+	cli.Stderr = stderr
+	cli.Stdin = strings.NewReader("")
+	cli.StdinIsTTY = func() bool { return true }
+	cli.UserHomeDir = func() (string, error) { return "/home/tester", nil }
+	cli.ReadFile = func(path string) ([]byte, error) {
+		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
+	}
+
+	exitCode := cli.Run([]string{"doctor", "--base-url", server.URL, "--json"})
+	if exitCode != 0 {
+		t.Fatalf("expected trailing global flag to work in json mode, got %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
+	}
+	if strings.TrimSpace(stderr.String()) != "" {
+		t.Fatalf("expected stderr to stay empty in --json mode, got %q", stderr.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("decode stdout json: %v raw=%s", err, stdout.String())
+	}
+	if payload["ok"] != true {
+		t.Fatalf("expected ok=true payload=%#v", payload)
+	}
+}
+
+func TestRunTrailingFlagParseErrorsPreserveJSONMode(t *testing.T) {
 	t.Parallel()
 
 	stdout := &bytes.Buffer{}
@@ -152,12 +201,12 @@ func TestRunMisplacedGlobalBaseURLPreservesJSONMode(t *testing.T) {
 		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
 	}
 
-	exitCode := cli.Run([]string{"--json", "version", "--base-url", "http://127.0.0.1:8000"})
+	exitCode := cli.Run([]string{"doctor", "--timeout", "bad", "--json"})
 	if exitCode != 2 {
 		t.Fatalf("expected usage exit code 2, got %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
 	if strings.TrimSpace(stderr.String()) != "" {
-		t.Fatalf("expected stderr to stay empty in --json mode, got %q", stderr.String())
+		t.Fatalf("expected stderr to stay empty in trailing json mode, got %q", stderr.String())
 	}
 
 	var payload map[string]any
@@ -168,11 +217,44 @@ func TestRunMisplacedGlobalBaseURLPreservesJSONMode(t *testing.T) {
 		t.Fatalf("expected ok=false payload=%#v", payload)
 	}
 	errorObj, _ := payload["error"].(map[string]any)
-	if strings.TrimSpace(errorObj["code"].(string)) != "invalid_flags" {
+	if anyStringValue(errorObj["code"]) != "invalid_flags" {
 		t.Fatalf("expected invalid_flags payload=%#v", payload)
 	}
-	if !strings.Contains(errorObj["message"].(string), "--base-url is a global flag") {
-		t.Fatalf("expected corrective global flag message payload=%#v", payload)
+	if !strings.Contains(anyStringValue(errorObj["message"]), "invalid value for --timeout") {
+		t.Fatalf("expected timeout parse failure in JSON payload=%#v", payload)
+	}
+}
+
+func TestParseGlobalFlagsSupportsTrailingValueAndBoolFlags(t *testing.T) {
+	t.Parallel()
+
+	overrides, remaining, helpRequested, err := parseGlobalFlags([]string{
+		"doctor",
+		"--base-url", "http://127.0.0.1:8000",
+		"--agent", "agent-late",
+		"--headers",
+		"--timeout", "2s",
+	})
+	if err != nil {
+		t.Fatalf("parseGlobalFlags: %v", err)
+	}
+	if helpRequested {
+		t.Fatalf("did not expect helpRequested")
+	}
+	if len(remaining) != 1 || remaining[0] != "doctor" {
+		t.Fatalf("expected remaining command to stay intact, got %#v", remaining)
+	}
+	if overrides.BaseURL == nil || *overrides.BaseURL != "http://127.0.0.1:8000" {
+		t.Fatalf("expected trailing base-url override, got %#v", overrides)
+	}
+	if overrides.Agent == nil || *overrides.Agent != "agent-late" {
+		t.Fatalf("expected trailing agent override, got %#v", overrides)
+	}
+	if overrides.Headers == nil || !*overrides.Headers {
+		t.Fatalf("expected trailing headers bool override, got %#v", overrides)
+	}
+	if overrides.Timeout == nil || *overrides.Timeout != 2*time.Second {
+		t.Fatalf("expected trailing timeout override, got %#v", overrides)
 	}
 }
 

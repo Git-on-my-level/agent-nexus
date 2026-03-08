@@ -91,6 +91,7 @@ var localHelperTopics = []localHelperTopic{
 		Composition: "Resolves one thread by id or discovery filters, loads `threads context`, adds thread-scoped inbox items from `inbox list`, and follows related thread refs for additional review context.",
 		Examples: []string{
 			"oar threads workspace --thread-id <thread-id> --full-id",
+			"oar threads workspace --thread-id <thread-id> --include-related-event-content --verbose",
 			"oar threads workspace --status active --type initiative --full-summary",
 		},
 		Flags: []localHelperFlag{
@@ -103,6 +104,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--type <thread-type>", Description: "Local discovery filter after `threads list`."},
 			{Name: "--max-events <n>", Description: "Maximum recent context events to include."},
 			{Name: "--include-artifact-content", Description: "Include artifact content previews from `threads context`."},
+			{Name: "--include-related-event-content", Description: "Hydrate related review items with full `events get` content in one command."},
 			{Name: "--full-summary", Description: "Show full recommendation/decision summaries in human output."},
 			{Name: "--full-id", Description: "Render full event and inbox ids in human output."},
 		},
@@ -114,6 +116,7 @@ var localHelperTopics = []localHelperTopic{
 		Composition: "Resolves one thread by id or discovery filters, loads `threads context`, adds thread-scoped pending decision inbox items from `inbox list`, and follows related thread refs for additional review context.",
 		Examples: []string{
 			"oar threads recommendations --thread-id <thread-id> --full-id",
+			"oar threads recommendations --thread-id <thread-id> --include-related-event-content --verbose",
 			"oar threads recommendations --status active --type initiative --full-summary",
 		},
 		Flags: []localHelperFlag{
@@ -126,6 +129,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--type <thread-type>", Description: "Local discovery filter after `threads list`."},
 			{Name: "--max-events <n>", Description: "Maximum recent context events to include."},
 			{Name: "--include-artifact-content", Description: "Include artifact content previews from `threads context`."},
+			{Name: "--include-related-event-content", Description: "Hydrate related review items with full `events get` content in one command."},
 			{Name: "--full-summary", Description: "Show full recommendation/decision summaries in human output."},
 			{Name: "--full-id", Description: "Render full event and inbox ids in human output."},
 		},
@@ -512,9 +516,9 @@ func formatGlobalFlagUsage(topic string) string {
 		path = "<command>"
 	}
 	return strings.TrimSpace(fmt.Sprintf(`Global flags:
-  Place global flags before the command path.
-  Example: oar --json %s ...
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>`, path))
+  Global flags can appear before or after the command path.
+  Examples: oar --json %s ... ; oar %s ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>`, path, path))
 }
 
 func formatBodySchemaBlock(schema *registry.BodySchema) string {

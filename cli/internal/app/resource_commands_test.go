@@ -1713,6 +1713,27 @@ func TestThreadsContextIncludesCollaborationSummarySections(t *testing.T) {
 	}
 }
 
+func TestThreadsContextRejectsMixedSelectionModesWithActionableGuidance(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"threads", "context",
+		"--thread-id", "thread_1",
+		"--status", "active",
+	})
+	payload := assertEnvelopeError(t, raw)
+	errObj, _ := payload["error"].(map[string]any)
+	if errObj == nil || anyStringValue(errObj["code"]) != "invalid_request" {
+		t.Fatalf("unexpected error payload: %#v", payload)
+	}
+	message := anyStringValue(errObj["message"])
+	if !strings.Contains(message, "--thread-id cannot be combined with discovery filters") || !strings.Contains(message, "oar threads workspace --thread-id <thread-id>") || !strings.Contains(message, "oar threads context --thread-id <thread-id>") || !strings.Contains(message, "oar threads context --status active") {
+		t.Fatalf("expected actionable threads context guidance, got %#v", payload)
+	}
+}
+
 func TestThreadsContextAggregatesAcrossMultipleThreads(t *testing.T) {
 	t.Parallel()
 
@@ -2045,7 +2066,8 @@ func TestThreadsInspectRejectsMixedSelectionModes(t *testing.T) {
 	if errObj == nil || anyStringValue(errObj["code"]) != "invalid_request" {
 		t.Fatalf("unexpected error payload: %#v", payload)
 	}
-	if !strings.Contains(anyStringValue(errObj["message"]), "--thread-id cannot be combined with discovery filters") {
+	message := anyStringValue(errObj["message"])
+	if !strings.Contains(message, "--thread-id cannot be combined with discovery filters") || !strings.Contains(message, "oar threads inspect --thread-id <thread-id>") || !strings.Contains(message, "oar threads context --status active") {
 		t.Fatalf("expected shared-selection validation message, got %#v", payload)
 	}
 }
@@ -2300,6 +2322,207 @@ func TestThreadsRecommendationsSkipsMissingRelatedThreadsWithWarnings(t *testing
 	}
 }
 
+func TestThreadsRecommendationsCanHydrateRelatedEventContent(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_main/context":
+			_, _ = w.Write([]byte(`{
+				"thread":{"id":"thread_main","title":"Main Pilot Rescue","status":"active","type":"initiative"},
+				"recent_events":[
+					{"id":"event_main_1","thread_id":"thread_main","type":"actor_statement","summary":"Main recommendation","refs":["thread:thread_related"]}
+				],
+				"key_artifacts":[],
+				"open_commitments":[]
+			}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_related/context":
+			_, _ = w.Write([]byte(`{
+				"thread":{"id":"thread_related","title":"Related Feedback Thread","status":"active","type":"case"},
+				"recent_events":[
+					{"id":"event_related_1","thread_id":"thread_related","type":"actor_statement","actor_id":"agent-related","created_at":"2026-03-07T12:05:00Z","summary":"Related recommendation"}
+				],
+				"key_artifacts":[],
+				"open_commitments":[]
+			}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/events/event_related_1":
+			_, _ = w.Write([]byte(`{
+				"event":{
+					"id":"event_related_1",
+					"type":"actor_statement",
+					"summary":"Related recommendation",
+					"payload":{"recommendation":"Ship the digest owner field first","evidence":["customer quote"]}
+				}
+			}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
+			_, _ = w.Write([]byte(`{"items":[]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"threads", "recommendations",
+		"--thread-id", "thread_main",
+		"--include-related-event-content",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+	body, _ := data["body"].(map[string]any)
+	if !asBool(body["related_event_content_enabled"]) {
+		t.Fatalf("expected related_event_content_enabled=true, got %#v", body)
+	}
+	if got := intValue(body["related_event_content_count"]); got != 1 {
+		t.Fatalf("expected one hydrated related event, got %#v", body)
+	}
+	relatedRecommendations, _ := body["related_recommendations"].(map[string]any)
+	relatedItems, _ := relatedRecommendations["items"].([]any)
+	if len(relatedItems) != 1 {
+		t.Fatalf("expected one related recommendation item, got %#v", relatedRecommendations)
+	}
+	relatedEvent, _ := relatedItems[0].(map[string]any)
+	fullEvent, _ := relatedEvent["event"].(map[string]any)
+	payloadMap, _ := fullEvent["payload"].(map[string]any)
+	if got := anyStringValue(payloadMap["recommendation"]); got != "Ship the digest owner field first" {
+		t.Fatalf("expected hydrated related event payload, got %#v", relatedEvent)
+	}
+}
+
+func TestThreadsWorkspaceCanHydrateRelatedEventContent(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_main/context":
+			_, _ = w.Write([]byte(`{
+				"thread":{"id":"thread_main","title":"Main Pilot Rescue","status":"active","type":"initiative"},
+				"recent_events":[
+					{"id":"event_main_1","thread_id":"thread_main","type":"actor_statement","summary":"Main recommendation","refs":["thread:thread_related"]}
+				],
+				"key_artifacts":[],
+				"open_commitments":[]
+			}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_related/context":
+			_, _ = w.Write([]byte(`{
+				"thread":{"id":"thread_related","title":"Related Feedback Thread","status":"active","type":"case"},
+				"recent_events":[
+					{"id":"event_related_1","thread_id":"thread_related","type":"actor_statement","summary":"Related recommendation"}
+				],
+				"key_artifacts":[],
+				"open_commitments":[]
+			}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/events/event_related_1":
+			_, _ = w.Write([]byte(`{
+				"event":{
+					"id":"event_related_1",
+					"type":"actor_statement",
+					"summary":"Related recommendation",
+					"payload":{"recommendation":"Document the staged artifact follow-up"}
+				}
+			}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
+			_, _ = w.Write([]byte(`{"items":[]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"threads", "workspace",
+		"--thread-id", "thread_main",
+		"--include-related-event-content",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+	body, _ := data["body"].(map[string]any)
+	if !asBool(body["related_event_content_enabled"]) {
+		t.Fatalf("expected related_event_content_enabled=true, got %#v", body)
+	}
+	if got := intValue(body["related_event_content_count"]); got != 1 {
+		t.Fatalf("expected one hydrated related event, got %#v", body)
+	}
+	relatedRecommendations, _ := body["related_recommendations"].(map[string]any)
+	relatedItems, _ := relatedRecommendations["items"].([]any)
+	relatedEvent, _ := relatedItems[0].(map[string]any)
+	fullEvent, _ := relatedEvent["event"].(map[string]any)
+	payloadMap, _ := fullEvent["payload"].(map[string]any)
+	if got := anyStringValue(payloadMap["recommendation"]); got != "Document the staged artifact follow-up" {
+		t.Fatalf("expected hydrated related event payload in workspace output, got %#v", relatedEvent)
+	}
+}
+
+func TestThreadsRecommendationsWarnsWhenRelatedEventHydrationFails(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_main/context":
+			_, _ = w.Write([]byte(`{
+				"thread":{"id":"thread_main","title":"Main Pilot Rescue","status":"active","type":"initiative"},
+				"recent_events":[
+					{"id":"event_main_1","thread_id":"thread_main","type":"actor_statement","summary":"Main recommendation","refs":["thread:thread_related"]}
+				],
+				"key_artifacts":[],
+				"open_commitments":[]
+			}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_related/context":
+			_, _ = w.Write([]byte(`{
+				"thread":{"id":"thread_related","title":"Related Feedback Thread","status":"active","type":"case"},
+				"recent_events":[
+					{"id":"event_related_1","thread_id":"thread_related","type":"actor_statement","summary":"Related recommendation"}
+				],
+				"key_artifacts":[],
+				"open_commitments":[]
+			}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/events/event_related_1":
+			http.NotFound(w, r)
+		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
+			_, _ = w.Write([]byte(`{"items":[]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"threads", "recommendations",
+		"--thread-id", "thread_main",
+		"--include-related-event-content",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+	body, _ := data["body"].(map[string]any)
+	if got := intValue(body["related_event_content_count"]); got != 0 {
+		t.Fatalf("expected no hydrated related events when events get fails, got %#v", body)
+	}
+	warnings, _ := body["warnings"].(map[string]any)
+	warningItems, _ := warnings["items"].([]any)
+	if len(warningItems) != 1 {
+		t.Fatalf("expected one hydration warning, got %#v", warnings)
+	}
+	warning, _ := warningItems[0].(map[string]any)
+	if got := anyStringValue(warning["event_id"]); got != "event_related_1" {
+		t.Fatalf("expected event_id in hydration warning, got %#v", warning)
+	}
+	if !strings.Contains(anyStringValue(warning["message"]), "kept summary-only related event event_related_1") {
+		t.Fatalf("expected hydration warning message, got %#v", warning)
+	}
+}
+
 func TestThreadsRecommendationsFullSummaryToggle(t *testing.T) {
 	t.Parallel()
 
@@ -2415,7 +2638,8 @@ func TestThreadsRecommendationsSelectionValidation(t *testing.T) {
 	if mixedErr == nil || anyStringValue(mixedErr["code"]) != "invalid_request" {
 		t.Fatalf("expected invalid_request for mixed selection, got %#v", mixedSelection)
 	}
-	if !strings.Contains(anyStringValue(mixedErr["message"]), "--thread-id cannot be combined with discovery filters") {
+	message := anyStringValue(mixedErr["message"])
+	if !strings.Contains(message, "--thread-id cannot be combined with discovery filters") || !strings.Contains(message, "oar threads recommendations --thread-id <thread-id>") || !strings.Contains(message, "oar threads context --status active") {
 		t.Fatalf("expected mixed selection guidance, got %#v", mixedSelection)
 	}
 

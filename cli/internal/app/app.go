@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"organization-autorunner-cli/internal/config"
 	"organization-autorunner-cli/internal/errnorm"
@@ -175,6 +176,7 @@ func parseGlobalFlags(args []string) (config.Overrides, []string, bool, error) {
 	if timeoutFlag.set {
 		overrides.Timeout = &timeoutFlag.value
 	}
+	captureTrailingJSONOverride(fs.Args(), &overrides)
 	remaining, err := normalizeTrailingGlobalFlags(fs.Args(), &overrides)
 	if err != nil {
 		return overrides, nil, false, err
@@ -182,15 +184,29 @@ func parseGlobalFlags(args []string) (config.Overrides, []string, bool, error) {
 	return overrides, remaining, false, nil
 }
 
-var globalFlagValueHints = map[string]string{
-	"base-url": "<url>",
-	"agent":    "<name>",
-	"timeout":  "<duration>",
+func captureTrailingJSONOverride(args []string, overrides *config.Overrides) {
+	for _, token := range args {
+		if strings.TrimSpace(token) == "--" {
+			break
+		}
+		name, value, hasValue, isFlag := parseLongOptionToken(token)
+		if !isFlag || name != "json" {
+			continue
+		}
+		jsonValue := true
+		if hasValue {
+			parsed, err := strconvParseBool(value)
+			if err != nil {
+				continue
+			}
+			jsonValue = parsed
+		}
+		overrides.JSON = &jsonValue
+	}
 }
 
 func normalizeTrailingGlobalFlags(args []string, overrides *config.Overrides) ([]string, error) {
 	filtered := make([]string, 0, len(args))
-	commandPath := commandPathPrefix(args)
 	for i := 0; i < len(args); i++ {
 		token := args[i]
 		if strings.TrimSpace(token) == "--" {
@@ -201,6 +217,21 @@ func normalizeTrailingGlobalFlags(args []string, overrides *config.Overrides) ([
 		if !isFlag {
 			filtered = append(filtered, token)
 			continue
+		}
+
+		readValue := func(flagName string) (string, error) {
+			if hasValue {
+				return value, nil
+			}
+			if i+1 >= len(args) {
+				return "", errnorm.Usage("invalid_flags", fmt.Sprintf("--%s requires a value", flagName))
+			}
+			next := strings.TrimSpace(args[i+1])
+			if next == "" || next == "--" || strings.HasPrefix(next, "-") {
+				return "", errnorm.Usage("invalid_flags", fmt.Sprintf("--%s requires a value", flagName))
+			}
+			i++
+			return next, nil
 		}
 
 		switch name {
@@ -214,8 +245,47 @@ func normalizeTrailingGlobalFlags(args []string, overrides *config.Overrides) ([
 				jsonValue = parsed
 			}
 			overrides.JSON = &jsonValue
-		case "base-url", "agent", "no-color", "verbose", "headers", "timeout":
-			return nil, misplacedGlobalFlagError(name, commandPath)
+		case "base-url":
+			rawValue, err := readValue(name)
+			if err != nil {
+				return nil, err
+			}
+			parsed := strings.TrimSpace(rawValue)
+			overrides.BaseURL = &parsed
+		case "agent":
+			rawValue, err := readValue(name)
+			if err != nil {
+				return nil, err
+			}
+			parsed := strings.TrimSpace(rawValue)
+			overrides.Agent = &parsed
+		case "timeout":
+			rawValue, err := readValue(name)
+			if err != nil {
+				return nil, err
+			}
+			parsed, err := time.ParseDuration(strings.TrimSpace(rawValue))
+			if err != nil {
+				return nil, errnorm.Usage("invalid_flags", fmt.Sprintf("invalid value for --timeout: %s", err.Error()))
+			}
+			overrides.Timeout = &parsed
+		case "no-color", "verbose", "headers":
+			flagValue := true
+			if hasValue {
+				parsed, err := strconvParseBool(value)
+				if err != nil {
+					return nil, errnorm.Usage("invalid_flags", fmt.Sprintf("invalid value for --%s: %s", name, err.Error()))
+				}
+				flagValue = parsed
+			}
+			switch name {
+			case "no-color":
+				overrides.NoColor = &flagValue
+			case "verbose":
+				overrides.Verbose = &flagValue
+			case "headers":
+				overrides.Headers = &flagValue
+			}
 		default:
 			filtered = append(filtered, token)
 		}
@@ -242,37 +312,4 @@ func parseLongOptionToken(token string) (name string, value string, hasValue boo
 		return strings.TrimSpace(token[:idx]), token[idx+1:], true, true
 	}
 	return strings.TrimSpace(token), "", false, true
-}
-
-func commandPathPrefix(args []string) string {
-	parts := make([]string, 0, len(args))
-	for _, token := range args {
-		trimmed := strings.TrimSpace(token)
-		if trimmed == "" {
-			continue
-		}
-		if strings.HasPrefix(trimmed, "-") {
-			break
-		}
-		parts = append(parts, trimmed)
-	}
-	return strings.Join(parts, " ")
-}
-
-func misplacedGlobalFlagError(name string, commandPath string) error {
-	trimmedName := strings.TrimSpace(name)
-	if trimmedName == "" {
-		trimmedName = "flag"
-	}
-
-	exampleParts := []string{"oar", "--" + trimmedName}
-	if hint, ok := globalFlagValueHints[trimmedName]; ok && strings.TrimSpace(hint) != "" {
-		exampleParts = append(exampleParts, hint)
-	}
-	commandPath = strings.TrimSpace(commandPath)
-	if commandPath == "" {
-		commandPath = "<command>"
-	}
-	exampleParts = append(exampleParts, commandPath, "...")
-	return errnorm.Usage("invalid_flags", fmt.Sprintf("--%s is a global flag; use: %s", trimmedName, strings.Join(exampleParts, " ")))
 }

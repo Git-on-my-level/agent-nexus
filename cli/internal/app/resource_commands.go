@@ -91,7 +91,8 @@ type threadContextSelection struct {
 
 type threadRecommendationsSelection struct {
 	threadContextSelection
-	fullSummary bool
+	fullSummary                bool
+	includeRelatedEventContent bool
 }
 
 type eventTypeGuidance struct {
@@ -594,6 +595,7 @@ func parseThreadRecommendationsArgs(args []string) (threadRecommendationsSelecti
 	var tagsFlag, cadenceFlag trackedStrings
 	var maxEventsFlag trackedInt
 	var includeArtifactContentFlag trackedBool
+	var includeRelatedEventContentFlag trackedBool
 	var fullIDFlag, fullSummaryFlag trackedBool
 
 	fs.Var(&threadIDFlags, "thread-id", "Thread id (repeatable)")
@@ -605,6 +607,7 @@ func parseThreadRecommendationsArgs(args []string) (threadRecommendationsSelecti
 	fs.Var(&typeFlag, "type", "Discover threads by type (local filter after list)")
 	fs.Var(&maxEventsFlag, "max-events", "Maximum recent events to include")
 	fs.Var(&includeArtifactContentFlag, "include-artifact-content", "Include key artifact content previews")
+	fs.Var(&includeRelatedEventContentFlag, "include-related-event-content", "Hydrate related review items with full events.get payloads")
 	fs.Var(&fullIDFlag, "full-id", "Render full ids in human output")
 	fs.Var(&fullSummaryFlag, "full-summary", "Show full recommendation summaries in human output")
 	if err := fs.Parse(args); err != nil {
@@ -638,17 +641,15 @@ func parseThreadRecommendationsArgs(args []string) (threadRecommendationsSelecti
 			includeArtifactContent: includeArtifactContentFlag.set && includeArtifactContentFlag.value,
 			fullID:                 fullIDFlag.set && fullIDFlag.value,
 		},
-		fullSummary: fullSummaryFlag.set && fullSummaryFlag.value,
+		fullSummary:                fullSummaryFlag.set && fullSummaryFlag.value,
+		includeRelatedEventContent: includeRelatedEventContentFlag.set && includeRelatedEventContentFlag.value,
 	}, nil
 }
 
 func (a *App) resolveThreadContextSelection(ctx context.Context, cfg config.Resolved, commandName string, selection threadContextSelection, allowMultiple bool) ([]string, error) {
 	hasDiscoveryFilters := len(selection.discoveryQuery) > 0 || selection.discoveryType != ""
 	if len(selection.threadIDs) > 0 && hasDiscoveryFilters {
-		return nil, errnorm.Usage(
-			"invalid_request",
-			"--thread-id cannot be combined with discovery filters (--status/--priority/--stale/--tag/--cadence/--type)",
-		)
+		return nil, errnorm.Usage("invalid_request", mixedThreadSelectionMessage(commandName))
 	}
 
 	threadIDs := append([]string(nil), selection.threadIDs...)
@@ -687,6 +688,23 @@ func (a *App) resolveThreadContextSelection(ctx context.Context, cfg config.Reso
 		)
 	}
 	return threadIDs, nil
+}
+
+func mixedThreadSelectionMessage(commandName string) string {
+	base := "--thread-id cannot be combined with discovery filters (--status/--priority/--stale/--tag/--cadence/--type). Choose one mode."
+	discoveryExample := "oar threads context --status active"
+	switch strings.TrimSpace(commandName) {
+	case "threads context":
+		return base + " For one thread, use `oar threads workspace --thread-id <thread-id>` for the canonical coordination view or `oar threads context --thread-id <thread-id>` for raw context. For discovery, remove `--thread-id` and use `" + discoveryExample + "`."
+	case "threads recommendations":
+		return base + " For one thread, use `oar threads recommendations --thread-id <thread-id>`. For discovery, remove `--thread-id` and use `" + discoveryExample + "`."
+	case "threads workspace":
+		return base + " For one thread, use `oar threads workspace --thread-id <thread-id>`. For discovery, remove `--thread-id` and use `" + discoveryExample + "`."
+	case "threads inspect":
+		return base + " For one thread, use `oar threads inspect --thread-id <thread-id>`. For discovery, remove `--thread-id` and use `" + discoveryExample + "`."
+	default:
+		return base + " For one thread, use `oar " + strings.TrimSpace(commandName) + " --thread-id <thread-id>`. For discovery, remove `--thread-id` and use `" + discoveryExample + "`."
+	}
 }
 
 func threadContextQuery(selection threadContextSelection) []queryParam {
@@ -818,7 +836,7 @@ func (a *App) runThreadsRecommendationsCommand(ctx context.Context, args []strin
 	inboxData := asMap(inboxResult.Data)
 	inboxBody := extractNestedMap(inboxData, "body")
 	pendingDecisions := filteredInboxItems(asSlice(inboxBody["items"]), []string{resolvedThreadID}, []string{"decision_needed"})
-	relatedThreadReview, err := a.collectRelatedThreadRecommendationReview(ctx, cfg, resolvedThreadID, body, selection.threadContextSelection)
+	relatedThreadReview, err := a.collectRelatedThreadRecommendationReview(ctx, cfg, resolvedThreadID, body, selection.threadContextSelection, selection.includeRelatedEventContent)
 	if err != nil {
 		return nil, err
 	}
@@ -853,6 +871,10 @@ func (a *App) runThreadsRecommendationsCommand(ctx context.Context, args []strin
 		"context_source":            "threads.context",
 		"inbox_source":              "inbox.list",
 	}
+	if selection.includeRelatedEventContent {
+		recommendationBody["related_event_content_enabled"] = true
+		recommendationBody["related_event_content_count"] = intValue(relatedThreadReview["related_event_content_count"])
+	}
 	if warningCount := intValue(relatedThreadReview["warning_count"]); warningCount > 0 {
 		recommendationBody["warnings"] = map[string]any{
 			"items": relatedThreadReview["warnings"],
@@ -873,7 +895,7 @@ func (a *App) runThreadsRecommendationsCommand(ctx context.Context, args []strin
 	return contextResult, nil
 }
 
-func (a *App) collectRelatedThreadRecommendationReview(ctx context.Context, cfg config.Resolved, rootThreadID string, rootBody map[string]any, selection threadContextSelection) (map[string]any, error) {
+func (a *App) collectRelatedThreadRecommendationReview(ctx context.Context, cfg config.Resolved, rootThreadID string, rootBody map[string]any, selection threadContextSelection, includeRelatedEventContent bool) (map[string]any, error) {
 	relatedThreadIDs := relatedThreadRefIDs(rootThreadID, rootBody)
 	items := make([]any, 0, len(relatedThreadIDs))
 	relatedRecommendations := make([]any, 0)
@@ -881,6 +903,7 @@ func (a *App) collectRelatedThreadRecommendationReview(ctx context.Context, cfg 
 	relatedDecisions := make([]any, 0)
 	warnings := make([]any, 0)
 	totalReviewItems := 0
+	relatedEventContentCount := 0
 
 	for _, relatedThreadID := range relatedThreadIDs {
 		contextResult, err := a.invokeTypedJSONWithIDResolution(
@@ -912,6 +935,18 @@ func (a *App) collectRelatedThreadRecommendationReview(ctx context.Context, cfg 
 		recommendations := annotateRecommendationReviewEvents(normalizeRecommendationReviewEvents(asSlice(collaboration["recommendations"])), thread)
 		decisionRequests := annotateRecommendationReviewEvents(normalizeRecommendationReviewEvents(asSlice(collaboration["decision_requests"])), thread)
 		decisions := annotateRecommendationReviewEvents(normalizeRecommendationReviewEvents(asSlice(collaboration["decisions"])), thread)
+		if includeRelatedEventContent {
+			var hydrateWarnings []any
+			recommendations, hydrateWarnings = a.hydrateRelatedReviewEvents(ctx, cfg, relatedThreadID, recommendations)
+			warnings = append(warnings, hydrateWarnings...)
+			decisionRequests, hydrateWarnings = a.hydrateRelatedReviewEvents(ctx, cfg, relatedThreadID, decisionRequests)
+			warnings = append(warnings, hydrateWarnings...)
+			decisions, hydrateWarnings = a.hydrateRelatedReviewEvents(ctx, cfg, relatedThreadID, decisions)
+			warnings = append(warnings, hydrateWarnings...)
+			relatedEventContentCount += hydratedRelatedReviewEventCount(recommendations)
+			relatedEventContentCount += hydratedRelatedReviewEventCount(decisionRequests)
+			relatedEventContentCount += hydratedRelatedReviewEventCount(decisions)
+		}
 		relatedRecommendations = append(relatedRecommendations, recommendations...)
 		relatedDecisionRequests = append(relatedDecisionRequests, decisionRequests...)
 		relatedDecisions = append(relatedDecisions, decisions...)
@@ -953,10 +988,68 @@ func (a *App) collectRelatedThreadRecommendationReview(ctx context.Context, cfg 
 			"items": relatedDecisions,
 			"count": len(relatedDecisions),
 		},
-		"warnings":           warnings,
-		"warning_count":      len(warnings),
-		"total_review_items": totalReviewItems,
+		"warnings":                    warnings,
+		"warning_count":               len(warnings),
+		"related_event_content_count": relatedEventContentCount,
+		"total_review_items":          totalReviewItems,
 	}, nil
+}
+
+func (a *App) hydrateRelatedReviewEvents(ctx context.Context, cfg config.Resolved, threadID string, events []any) ([]any, []any) {
+	if len(events) == 0 {
+		return []any{}, nil
+	}
+	out := make([]any, 0, len(events))
+	warnings := make([]any, 0)
+	for _, raw := range events {
+		item := cloneMap(asMap(raw))
+		if item == nil {
+			continue
+		}
+		eventID := strings.TrimSpace(anyString(item["id"]))
+		if eventID == "" {
+			out = append(out, item)
+			continue
+		}
+		result, err := a.invokeTypedJSON(ctx, cfg, "events get", "events.get", map[string]string{"event_id": eventID}, nil, nil)
+		if err != nil {
+			warnings = append(warnings, map[string]any{
+				"thread_id": threadID,
+				"event_id":  eventID,
+				"message":   fmt.Sprintf("kept summary-only related event %s: %s", eventID, err.Error()),
+			})
+			out = append(out, item)
+			continue
+		}
+		data := asMap(result.Data)
+		body := extractNestedMap(data, "body")
+		fullEvent := extractNestedMap(body, "event")
+		if fullEvent == nil {
+			out = append(out, item)
+			continue
+		}
+		item["event"] = fullEvent
+		if strings.TrimSpace(anyString(item["summary"])) == "" {
+			item["summary"] = anyString(fullEvent["summary"])
+		}
+		if strings.TrimSpace(anyString(item["summary_preview"])) == "" {
+			if preview := eventSummaryPreview(fullEvent); preview != "" {
+				item["summary_preview"] = preview
+			}
+		}
+		out = append(out, item)
+	}
+	return out, warnings
+}
+
+func hydratedRelatedReviewEventCount(events []any) int {
+	count := 0
+	for _, raw := range events {
+		if item := asMap(raw); item != nil && asMap(item["event"]) != nil {
+			count++
+		}
+	}
+	return count
 }
 
 func relatedThreadRefIDs(rootThreadID string, body map[string]any) []string {

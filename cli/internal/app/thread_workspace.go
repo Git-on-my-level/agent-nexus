@@ -74,7 +74,7 @@ func (a *App) buildThreadWorkspaceResult(ctx context.Context, cfg config.Resolve
 	inboxBody := extractNestedMap(inboxData, "body")
 	inboxItems := filteredInboxItems(asSlice(inboxBody["items"]), []string{resolvedThreadID}, nil)
 	pendingDecisions := filteredInboxItems(inboxItems, nil, []string{"decision_needed"})
-	relatedThreadReview, err := a.collectRelatedThreadRecommendationReview(ctx, cfg, resolvedThreadID, body, selection.threadContextSelection)
+	relatedThreadReview, err := a.collectRelatedThreadRecommendationReview(ctx, cfg, resolvedThreadID, body, selection.threadContextSelection, selection.includeRelatedEventContent)
 	if err != nil {
 		return nil, err
 	}
@@ -113,6 +113,10 @@ func (a *App) buildThreadWorkspaceResult(ctx context.Context, cfg config.Resolve
 		"follow_up":                 recommendationFollowUpHints(resolvedThreadID, recommendations, decisionRequests, decisions),
 		"context_source":            "threads.context",
 		"inbox_source":              "inbox.list",
+	}
+	if selection.includeRelatedEventContent {
+		workspaceBody["related_event_content_enabled"] = true
+		workspaceBody["related_event_content_count"] = intValue(relatedThreadReview["related_event_content_count"])
 	}
 	if warningCount := intValue(relatedThreadReview["warning_count"]); warningCount > 0 {
 		workspaceBody["warnings"] = map[string]any{
