@@ -1,0 +1,97 @@
+{
+  "openapi_version": "3.1.0",
+  "contract_version": "0.2.2",
+  "generated_by": "core/cmd/contract-gen",
+  "rule_count": 11,
+  "rules": {
+    "commitment_created": {
+      "thread_id": "required",
+      "refs_must_include": [
+        "snapshot:\u003ccommitment_id\u003e"
+      ]
+    },
+    "commitment_status_changed": {
+      "thread_id": "required",
+      "refs_must_include": [
+        "snapshot:\u003ccommitment_id\u003e"
+      ],
+      "refs_conditional": "If status → done: MUST include artifact:\u003creceipt_artifact_id\u003e OR event:\u003cdecision_event_id\u003e. If status → canceled: MUST include event:\u003cdecision_event_id\u003e.\n",
+      "conditional_refs": [
+        {
+          "when": {
+            "payload_field": "to_status",
+            "equals": "done"
+          },
+          "must_have": [
+            {
+              "prefix": "artifact"
+            },
+            {
+              "prefix": "event"
+            }
+          ],
+          "condition": "or"
+        },
+        {
+          "when": {
+            "payload_field": "to_status",
+            "equals": "canceled"
+          },
+          "must_have": [
+            {
+              "prefix": "event"
+            }
+          ]
+        }
+      ]
+    },
+    "decision_made": {
+      "thread_id": "required"
+    },
+    "decision_needed": {
+      "thread_id": "required"
+    },
+    "exception_raised": {
+      "thread_id": "required",
+      "payload_must_include": [
+        "subtype (e.g. stale_thread)"
+      ]
+    },
+    "inbox_item_acknowledged": {
+      "thread_id": "required",
+      "refs_must_include": [
+        "inbox:\u003cinbox_item_id\u003e"
+      ]
+    },
+    "message_posted": {
+      "thread_id": "required"
+    },
+    "receipt_added": {
+      "thread_id": "required",
+      "refs_must_include": [
+        "artifact:\u003creceipt_artifact_id\u003e",
+        "artifact:\u003cwork_order_artifact_id\u003e"
+      ]
+    },
+    "review_completed": {
+      "thread_id": "required",
+      "refs_must_include": [
+        "artifact:\u003creview_artifact_id\u003e",
+        "artifact:\u003creceipt_artifact_id\u003e",
+        "artifact:\u003cwork_order_artifact_id\u003e"
+      ]
+    },
+    "snapshot_updated": {
+      "thread_id": "required if snapshot is thread-scoped",
+      "refs_must_include": [
+        "snapshot:\u003csnapshot_id\u003e"
+      ]
+    },
+    "work_order_created": {
+      "thread_id": "required",
+      "refs_must_include": [
+        "artifact:\u003cwork_order_artifact_id\u003e"
+      ]
+    }
+  }
+}

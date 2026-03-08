@@ -19,7 +19,7 @@ func TestEmbeddedRegistryIsConsistent(t *testing.T) {
 
 	helpMeta, err := LoadEmbeddedHelp()
 	if err != nil {
-		t.Fatalf("load embedded help metadata: %v", err)
+		t.Fatalf("load help metadata: %v", err)
 	}
 	if helpMeta.CommandCount != meta.CommandCount {
 		t.Fatalf("help command count mismatch: help=%d meta=%d", helpMeta.CommandCount, meta.CommandCount)
@@ -34,5 +34,33 @@ func TestEmbeddedRegistryIsConsistent(t *testing.T) {
 	}
 	if conceptsMeta.ConceptCount == 0 {
 		t.Fatal("expected non-empty concepts metadata")
+	}
+}
+
+func TestEmbeddedEventRefRules(t *testing.T) {
+	t.Parallel()
+
+	rules, err := LoadEmbeddedEventRefRules()
+	if err != nil {
+		t.Fatalf("load embedded event ref rules: %v", err)
+	}
+	if rules.RuleCount == 0 {
+		t.Fatal("expected non-empty event ref rules")
+	}
+
+	commitmentStatusChanged, ok := rules.RuleForEventType("commitment_status_changed")
+	if !ok {
+		t.Fatal("expected commitment_status_changed rule to be loaded")
+	}
+	if commitmentStatusChanged.ThreadID != "required" {
+		t.Fatalf("unexpected thread_id for commitment_status_changed: %q", commitmentStatusChanged.ThreadID)
+	}
+	if len(commitmentStatusChanged.ConditionalRefs) != 2 {
+		t.Fatalf("expected 2 conditional refs for commitment_status_changed, got %d", len(commitmentStatusChanged.ConditionalRefs))
+	}
+
+	_, ok = rules.RuleForEventType("unknown_event_type")
+	if ok {
+		t.Fatal("expected unknown event type to not have a rule")
 	}
 }

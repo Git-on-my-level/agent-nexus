@@ -120,6 +120,61 @@ type metaOutput struct {
 	Commands        []command `json:"commands"`
 }
 
+type eventRefRuleOutput struct {
+	OpenAPIVersion  string                      `json:"openapi_version"`
+	ContractVersion string                      `json:"contract_version"`
+	GeneratedBy     string                      `json:"generated_by"`
+	RuleCount       int                         `json:"rule_count"`
+	Rules           map[string]eventRefRuleJSON `json:"rules"`
+}
+
+type eventRefRuleJSON struct {
+	ThreadID           string               `json:"thread_id,omitempty"`
+	RefsMustInclude    []string             `json:"refs_must_include,omitempty"`
+	RefsConditional    string               `json:"refs_conditional,omitempty"`
+	PayloadMustInclude []string             `json:"payload_must_include,omitempty"`
+	ConditionalRefs    []conditionalRefJSON `json:"conditional_refs,omitempty"`
+}
+
+type conditionalRefJSON struct {
+	When      whenConditionJSON `json:"when"`
+	MustHave  []refPrefixJSON   `json:"must_have"`
+	Condition string            `json:"condition,omitempty"`
+}
+
+type whenConditionJSON struct {
+	PayloadField string `json:"payload_field"`
+	Equals       string `json:"equals"`
+}
+
+type refPrefixJSON struct {
+	Prefix string `json:"prefix"`
+}
+
+type schemaDocument struct {
+	Version              string               `yaml:"version"`
+	ReferenceConventions schemaRefConventions `yaml:"reference_conventions"`
+}
+
+type schemaRefConventions struct {
+	EventRefs map[string]yaml.Node `yaml:"event_refs"`
+}
+
+type schemaConditionalRef struct {
+	When      schemaWhenCondition `yaml:"when"`
+	MustHave  []schemaRefPrefix   `yaml:"must_have"`
+	Condition string              `yaml:"condition"`
+}
+
+type schemaWhenCondition struct {
+	PayloadField string `yaml:"payload_field"`
+	Equals       string `yaml:"equals"`
+}
+
+type schemaRefPrefix struct {
+	Prefix string `yaml:"prefix"`
+}
+
 var pathParamPattern = regexp.MustCompile(`\{([^{}]+)\}`)
 
 func main() {
@@ -144,8 +199,14 @@ func main() {
 		exitf("openapi version is missing")
 	}
 
-	if _, err := os.ReadFile(*schemaPath); err != nil {
+	schemaRaw, err := os.ReadFile(*schemaPath)
+	if err != nil {
 		exitf("read schema contract: %v", err)
+	}
+
+	var schemaDoc schemaDocument
+	if err := yaml.Unmarshal(schemaRaw, &schemaDoc); err != nil {
+		exitf("decode schema yaml: %v", err)
 	}
 
 	commands := collectCommands(doc)
@@ -153,7 +214,7 @@ func main() {
 		exitf("no x-oar commands found in openapi document")
 	}
 
-	if err := generateAll(*outDir, doc, commands); err != nil {
+	if err := generateAll(*outDir, doc, commands, schemaDoc); err != nil {
 		exitf("generate artifacts: %v", err)
 	}
 }
@@ -266,7 +327,7 @@ func collectCommands(doc openAPIDocument) []command {
 	return commands
 }
 
-func generateAll(outDir string, doc openAPIDocument, commands []command) error {
+func generateAll(outDir string, doc openAPIDocument, commands []command, schemaDoc schemaDocument) error {
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return err
 	}
@@ -278,6 +339,9 @@ func generateAll(outDir string, doc openAPIDocument, commands []command) error {
 		return err
 	}
 	if err := writeHelpMeta(filepath.Join(outDir, "meta", "help.json"), doc, commands); err != nil {
+		return err
+	}
+	if err := writeEventRefRules(filepath.Join(outDir, "meta", "event_ref_rules.json"), doc, schemaDoc); err != nil {
 		return err
 	}
 	if err := writeMarkdown(filepath.Join(outDir, "docs", "commands.md"), doc, commands); err != nil {
@@ -364,6 +428,71 @@ func writeHelpMeta(path string, doc openAPIDocument, commands []command) error {
 	}
 	b = append(b, '\n')
 	return os.WriteFile(path, b, 0o644)
+}
+
+func writeEventRefRules(path string, doc openAPIDocument, schemaDoc schemaDocument) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+
+	rules := make(map[string]eventRefRuleJSON)
+	for eventType, node := range schemaDoc.ReferenceConventions.EventRefs {
+		if eventType == "_rule" {
+			continue
+		}
+
+		var rule schemaEventRefRuleParsed
+		if err := node.Decode(&rule); err != nil {
+			return fmt.Errorf("decode event ref rule %q: %w", eventType, err)
+		}
+
+		conditionalRefs := make([]conditionalRefJSON, 0, len(rule.ConditionalRefs))
+		for _, cr := range rule.ConditionalRefs {
+			mustHave := make([]refPrefixJSON, len(cr.MustHave))
+			for i, m := range cr.MustHave {
+				mustHave[i] = refPrefixJSON{Prefix: m.Prefix}
+			}
+			conditionalRefs = append(conditionalRefs, conditionalRefJSON{
+				When: whenConditionJSON{
+					PayloadField: cr.When.PayloadField,
+					Equals:       cr.When.Equals,
+				},
+				MustHave:  mustHave,
+				Condition: cr.Condition,
+			})
+		}
+
+		rules[eventType] = eventRefRuleJSON{
+			ThreadID:           rule.ThreadID,
+			RefsMustInclude:    rule.RefsMustInclude,
+			RefsConditional:    rule.RefsConditional,
+			PayloadMustInclude: rule.PayloadMustInclude,
+			ConditionalRefs:    conditionalRefs,
+		}
+	}
+
+	payload := eventRefRuleOutput{
+		OpenAPIVersion:  doc.OpenAPI,
+		ContractVersion: strings.TrimSpace(doc.Info.Version),
+		GeneratedBy:     "core/cmd/contract-gen",
+		RuleCount:       len(rules),
+		Rules:           rules,
+	}
+
+	b, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return err
+	}
+	b = append(b, '\n')
+	return os.WriteFile(path, b, 0o644)
+}
+
+type schemaEventRefRuleParsed struct {
+	ThreadID           string                 `yaml:"thread_id"`
+	RefsMustInclude    []string               `yaml:"refs_must_include"`
+	RefsConditional    string                 `yaml:"refs_conditional"`
+	PayloadMustInclude []string               `yaml:"payload_must_include"`
+	ConditionalRefs    []schemaConditionalRef `yaml:"conditional_refs"`
 }
 
 func writeMarkdown(path string, doc openAPIDocument, commands []command) error {

@@ -2,6 +2,7 @@ import { json } from "@sveltejs/kit";
 
 import { createMockEvent } from "$lib/mockCoreData";
 import { guardMockRoute } from "$lib/server/mockGuard";
+import { validateEventRefRule } from "$lib/eventRefRules.js";
 
 export async function POST({ request, url }) {
   const guardResponse = guardMockRoute(url.pathname);
@@ -23,11 +24,13 @@ export async function POST({ request, url }) {
     );
   }
 
-  if (eventInput.type === "decision_made" && !eventInput.thread_id) {
-    return json(
-      { error: "decision_made events require event.thread_id" },
-      { status: 400 },
-    );
+  const refValidation = validateEventRefRule(
+    eventInput.type,
+    eventInput.refs ?? [],
+    eventInput.payload ?? {},
+  );
+  if (!refValidation.valid) {
+    return json({ error: refValidation.error }, { status: 400 });
   }
 
   const event = createMockEvent({

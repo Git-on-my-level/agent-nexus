@@ -1,4 +1,5 @@
 import { parseRef } from "./typedRefs.js";
+import { validateCommitmentStatusRef } from "./eventRefRules.js";
 
 const LIST_FIELDS = new Set(["definition_of_done", "links"]);
 const EDITABLE_FIELDS = [
@@ -73,48 +74,16 @@ export function validateCommitmentStatusTransition(status, statusRefInput) {
     return { valid: true, error: "" };
   }
 
-  if (!refValue) {
-    if (nextStatus === "done") {
+  if (refValue) {
+    const parsed = parseRef(refValue);
+    if (!parsed.prefix || !parsed.value) {
       return {
         valid: false,
         error:
-          "Status done requires a typed ref: artifact:<receipt_id> or event:<decision_event_id>.",
+          "Status evidence ref must be a valid typed ref (<prefix>:<value>).",
       };
     }
-
-    return {
-      valid: false,
-      error: "Status canceled requires a typed ref: event:<decision_event_id>.",
-    };
   }
 
-  const parsed = parseRef(refValue);
-  if (!parsed.prefix || !parsed.value) {
-    return {
-      valid: false,
-      error:
-        "Status evidence ref must be a valid typed ref (<prefix>:<value>).",
-    };
-  }
-
-  if (nextStatus === "done") {
-    if (parsed.prefix === "artifact" || parsed.prefix === "event") {
-      return { valid: true, error: "" };
-    }
-
-    return {
-      valid: false,
-      error:
-        "Status done requires artifact:<receipt_id> or event:<decision_event_id>.",
-    };
-  }
-
-  if (parsed.prefix !== "event") {
-    return {
-      valid: false,
-      error: "Status canceled requires event:<decision_event_id>.",
-    };
-  }
-
-  return { valid: true, error: "" };
+  return validateCommitmentStatusRef(nextStatus, refValue);
 }

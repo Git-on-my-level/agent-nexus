@@ -20,6 +20,9 @@ var embeddedConceptsJSON []byte
 //go:embed help.json
 var embeddedHelpJSON []byte
 
+//go:embed event_ref_rules.json
+var embeddedEventRefRulesJSON []byte
+
 type Example struct {
 	Title       string `json:"title"`
 	Command     string `json:"command"`
@@ -91,6 +94,37 @@ type HelpRegistry struct {
 	Commands        []Command `json:"commands"`
 }
 
+type WhenCondition struct {
+	PayloadField string `json:"payload_field"`
+	Equals       string `json:"equals"`
+}
+
+type RefPrefix struct {
+	Prefix string `json:"prefix"`
+}
+
+type ConditionalRef struct {
+	When      WhenCondition `json:"when"`
+	MustHave  []RefPrefix   `json:"must_have"`
+	Condition string        `json:"condition,omitempty"`
+}
+
+type EventRefRule struct {
+	ThreadID           string           `json:"thread_id,omitempty"`
+	RefsMustInclude    []string         `json:"refs_must_include,omitempty"`
+	RefsConditional    string           `json:"refs_conditional,omitempty"`
+	PayloadMustInclude []string         `json:"payload_must_include,omitempty"`
+	ConditionalRefs    []ConditionalRef `json:"conditional_refs,omitempty"`
+}
+
+type EventRefRulesRegistry struct {
+	OpenAPIVersion  string                  `json:"openapi_version"`
+	ContractVersion string                  `json:"contract_version"`
+	GeneratedBy     string                  `json:"generated_by"`
+	RuleCount       int                     `json:"rule_count"`
+	Rules           map[string]EventRefRule `json:"rules"`
+}
+
 func CommandSpecs() []contractsclient.CommandSpec {
 	out := make([]contractsclient.CommandSpec, len(contractsclient.CommandRegistry))
 	copy(out, contractsclient.CommandRegistry)
@@ -125,6 +159,40 @@ func LoadEmbeddedConcepts() (ConceptsRegistry, error) {
 
 func LoadEmbeddedHelp() (HelpRegistry, error) {
 	return parseHelp(embeddedHelpJSON)
+}
+
+func EmbeddedEventRefRulesJSON() []byte {
+	out := make([]byte, len(embeddedEventRefRulesJSON))
+	copy(out, embeddedEventRefRulesJSON)
+	return out
+}
+
+func LoadEmbeddedEventRefRules() (EventRefRulesRegistry, error) {
+	return parseEventRefRules(embeddedEventRefRulesJSON)
+}
+
+func LoadEventRefRulesFromFile(path string) (EventRefRulesRegistry, error) {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return EventRefRulesRegistry{}, fmt.Errorf("read event ref rules file: %w", err)
+	}
+	return parseEventRefRules(content)
+}
+
+func parseEventRefRules(content []byte) (EventRefRulesRegistry, error) {
+	var out EventRefRulesRegistry
+	if err := json.Unmarshal(content, &out); err != nil {
+		return EventRefRulesRegistry{}, fmt.Errorf("decode event ref rules: %w", err)
+	}
+	if out.RuleCount != len(out.Rules) {
+		return EventRefRulesRegistry{}, fmt.Errorf("rule_count mismatch: count=%d rules=%d", out.RuleCount, len(out.Rules))
+	}
+	return out, nil
+}
+
+func (r EventRefRulesRegistry) RuleForEventType(eventType string) (EventRefRule, bool) {
+	rule, ok := r.Rules[eventType]
+	return rule, ok
 }
 
 func LoadFromFile(path string) (MetaRegistry, error) {

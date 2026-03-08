@@ -15,6 +15,10 @@ mkdir -p cli/internal/registry
 cp contracts/gen/meta/commands.json cli/internal/registry/commands.json
 cp contracts/gen/meta/concepts.json cli/internal/registry/concepts.json
 cp contracts/gen/meta/help.json cli/internal/registry/help.json
+cp contracts/gen/meta/event_ref_rules.json cli/internal/registry/event_ref_rules.json
+
+mkdir -p web-ui/src/lib/generated
+cp contracts/gen/meta/event_ref_rules.json web-ui/src/lib/generated/event_ref_rules.json
 
 mkdir -p cli/docs/generated
 cp contracts/gen/docs/commands.md cli/docs/generated/commands.md

@@ -171,53 +171,6 @@ func fmtConditionalRefError(eventType string, cond schema.ConditionalRefRule) er
 		conditionText, eventType, cond.When.PayloadField, cond.When.Equals)
 }
 
-func validateCommitmentStatusChangedRefs(payload map[string]any, refs []string) error {
-	status := commitmentTargetStatus(payload)
-	if status == "" {
-		return nil
-	}
-
-	hasArtifactRef := false
-	hasEventRef := false
-	for _, ref := range refs {
-		prefix, _, err := schema.SplitTypedRef(ref)
-		if err != nil {
-			continue
-		}
-		if prefix == "artifact" {
-			hasArtifactRef = true
-		}
-		if prefix == "event" {
-			hasEventRef = true
-		}
-	}
-
-	switch status {
-	case "done":
-		if hasArtifactRef || hasEventRef {
-			return nil
-		}
-		return fmt.Errorf("event.refs must include artifact:<receipt_id> or event:<decision_event_id> when event.type=\"commitment_status_changed\" and payload.to_status=\"done\"")
-	case "canceled":
-		if hasEventRef {
-			return nil
-		}
-		return fmt.Errorf("event.refs must include event:<decision_event_id> when event.type=\"commitment_status_changed\" and payload.to_status=\"canceled\"")
-	default:
-		return nil
-	}
-}
-
-func commitmentTargetStatus(payload map[string]any) string {
-	if toStatus, ok := payload["to_status"].(string); ok {
-		return strings.TrimSpace(toStatus)
-	}
-	if status, ok := payload["status"].(string); ok {
-		return strings.TrimSpace(status)
-	}
-	return ""
-}
-
 func patternRefPrefix(pattern string) string {
 	idx := strings.Index(pattern, ":")
 	if idx <= 0 {
