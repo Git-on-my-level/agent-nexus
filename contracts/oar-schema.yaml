@@ -335,6 +335,19 @@ reference_conventions:
       refs_conditional: >
         If status → done: MUST include artifact:<receipt_artifact_id> OR event:<decision_event_id>.
         If status → canceled: MUST include event:<decision_event_id>.
+      conditional_refs:
+        - when:
+            payload_field: to_status
+            equals: done
+          must_have:
+            - prefix: artifact
+            - prefix: event
+          condition: or
+        - when:
+            payload_field: to_status
+            equals: canceled
+          must_have:
+            - prefix: event
 
     decision_needed:
       thread_id: required

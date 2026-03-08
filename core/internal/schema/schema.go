@@ -49,6 +49,22 @@ type EventRefRule struct {
 	RefsMustInclude    []string
 	RefsConditional    string
 	PayloadMustInclude []string
+	ConditionalRefs    []ConditionalRefRule
+}
+
+type ConditionalRefRule struct {
+	When      WhenCondition
+	MustHave  []RefPrefixRequirement
+	Condition string
+}
+
+type WhenCondition struct {
+	PayloadField string
+	Equals       string
+}
+
+type RefPrefixRequirement struct {
+	Prefix string
 }
 
 type Contract struct {
@@ -126,10 +142,26 @@ type rawEventRefConventions struct {
 }
 
 type rawEventRefRule struct {
-	ThreadID           string   `yaml:"thread_id"`
-	RefsMustInclude    []string `yaml:"refs_must_include"`
-	RefsConditional    string   `yaml:"refs_conditional"`
-	PayloadMustInclude []string `yaml:"payload_must_include"`
+	ThreadID           string              `yaml:"thread_id"`
+	RefsMustInclude    []string            `yaml:"refs_must_include"`
+	RefsConditional    string              `yaml:"refs_conditional"`
+	PayloadMustInclude []string            `yaml:"payload_must_include"`
+	ConditionalRefs    []rawConditionalRef `yaml:"conditional_refs"`
+}
+
+type rawConditionalRef struct {
+	When      rawWhenCondition  `yaml:"when"`
+	MustHave  []rawRefPrefixReq `yaml:"must_have"`
+	Condition string            `yaml:"condition"`
+}
+
+type rawWhenCondition struct {
+	PayloadField string `yaml:"payload_field"`
+	Equals       string `yaml:"equals"`
+}
+
+type rawRefPrefixReq struct {
+	Prefix string `yaml:"prefix"`
 }
 
 type rawSnapshots struct {
@@ -237,12 +269,30 @@ func Load(path string) (*Contract, error) {
 }
 
 func normalizeEventRefRule(raw rawEventRefRule) EventRefRule {
-	return EventRefRule{
+	rule := EventRefRule{
 		ThreadID:           strings.TrimSpace(raw.ThreadID),
 		RefsMustInclude:    append([]string(nil), raw.RefsMustInclude...),
 		RefsConditional:    strings.TrimSpace(raw.RefsConditional),
 		PayloadMustInclude: append([]string(nil), raw.PayloadMustInclude...),
+		ConditionalRefs:    make([]ConditionalRefRule, 0, len(raw.ConditionalRefs)),
 	}
+
+	for _, cr := range raw.ConditionalRefs {
+		mustHave := make([]RefPrefixRequirement, len(cr.MustHave))
+		for i, m := range cr.MustHave {
+			mustHave[i] = RefPrefixRequirement{Prefix: m.Prefix}
+		}
+		rule.ConditionalRefs = append(rule.ConditionalRefs, ConditionalRefRule{
+			When: WhenCondition{
+				PayloadField: strings.TrimSpace(cr.When.PayloadField),
+				Equals:       strings.TrimSpace(cr.When.Equals),
+			},
+			MustHave:  mustHave,
+			Condition: strings.TrimSpace(cr.Condition),
+		})
+	}
+
+	return rule
 }
 
 func normalizeEnum(name string, enum rawEnum) (EnumSpec, error) {
