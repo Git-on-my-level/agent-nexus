@@ -91,7 +91,6 @@ organization-autorunner-core is the core backend/domain implementation for the O
 - end-to-end flow: `internal/server/api_comprehensive_integration_test.go`
 
 ## Known implementation gaps (track here until closed)
-- `GET /threads/{id}/timeline` returns ordered events only (no expanded referenced snapshots/artifacts).
 - No dedicated decision convenience endpoint; decisions are currently recorded through `POST /events`.
 - `derived_views` table exists in migrations but current derived behavior is computed on demand in server handlers.
 
