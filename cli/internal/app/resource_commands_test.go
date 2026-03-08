@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"organization-autorunner-cli/internal/config"
 )
 
 func TestTypedThreadCommandsGolden(t *testing.T) {
@@ -1501,16 +1504,21 @@ func TestEventsCreateReviewCompletedValidRefsCallsHTTP(t *testing.T) {
 	var mu sync.Mutex
 	requestCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/events" {
-			http.NotFound(w, r)
-			return
-		}
-		mu.Lock()
-		requestCount++
-		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		_, _ = w.Write([]byte(`{"event":{"id":"event_review_completed_1"}}`))
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/events":
+			mu.Lock()
+			requestCount++
+			mu.Unlock()
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"event":{"id":"event_review_completed_1"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/threads":
+			_, _ = w.Write([]byte(`{"threads":[{"id":"thread_1"}]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/artifacts":
+			_, _ = w.Write([]byte(`{"artifacts":[{"id":"artifact:ignored"},{"id":"work_order_1"},{"id":"receipt_1"},{"id":"review_1"}]}`))
+		default:
+			http.NotFound(w, r)
+		}
 	}))
 	defer server.Close()
 
@@ -1533,6 +1541,127 @@ func TestEventsCreateReviewCompletedValidRefsCallsHTTP(t *testing.T) {
 	mu.Unlock()
 	if gotRequests != 1 {
 		t.Fatalf("expected one HTTP request for valid payload, got %d", gotRequests)
+	}
+}
+
+func TestEventsCreateNormalizesThreadIDAndSupportedTypedRefs(t *testing.T) {
+	t.Parallel()
+
+	var captured map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/events":
+			if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+				t.Fatalf("decode request body: %v", err)
+			}
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"event":{"id":"event_created_1"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/threads":
+			_, _ = w.Write([]byte(`{"threads":[{"id":"thread_1234567890"}]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/artifacts":
+			_, _ = w.Write([]byte(`{"artifacts":[{"id":"artifact_1234567890"}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{"event":{"type":"message_posted","summary":"hello","thread_id":"thread_12345","refs":["thread:thread_12345","artifact:artifact_123","event:event_short"],"provenance":{"sources":["artifact:source_1"]}}}`), []string{
+		"--json",
+		"--base-url", server.URL,
+		"events", "create",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+	body, _ := data["body"].(map[string]any)
+	event, _ := body["event"].(map[string]any)
+	if got := anyStringValue(event["id"]); got != "event_created_1" {
+		t.Fatalf("unexpected event id payload=%#v", payload)
+	}
+
+	requestEvent := asMap(captured["event"])
+	if got := anyStringValue(requestEvent["thread_id"]); got != "thread_1234567890" {
+		t.Fatalf("expected canonical thread_id, got %#v", captured)
+	}
+	refs := stringList(requestEvent["refs"])
+	if len(refs) != 3 {
+		t.Fatalf("expected refs to be preserved, got %#v", captured)
+	}
+	if refs[0] != "thread:thread_1234567890" || refs[1] != "artifact:artifact_1234567890" || refs[2] != "event:event_short" {
+		t.Fatalf("expected supported typed refs canonicalized and unsupported refs preserved, got %#v", refs)
+	}
+}
+
+func TestNormalizeMutationBodyIDsSkipsNestedStructuredDocContent(t *testing.T) {
+	t.Parallel()
+
+	app := &App{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/artifacts":
+			_, _ = w.Write([]byte(`{"artifacts":[{"id":"artifact_1234567890"}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	body := map[string]any{
+		"document":     map[string]any{"id": "doc_1"},
+		"content_type": "structured",
+		"refs":         []any{"artifact:artifact_123"},
+		"content": map[string]any{
+			"thread_id": "9a61af8e-d2c",
+			"nested": map[string]any{
+				"refs": []any{"thread:9a61af8e-d2c"},
+			},
+		},
+	}
+
+	normalizedAny, err := app.normalizeMutationBodyIDs(context.Background(), config.Resolved{BaseURL: server.URL}, "docs.update", body)
+	if err != nil {
+		t.Fatalf("normalize docs.update body: %v", err)
+	}
+	normalized, _ := normalizedAny.(map[string]any)
+	refs := asSlice(normalized["refs"])
+	if len(refs) != 1 || anyStringValue(refs[0]) != "artifact:artifact_1234567890" {
+		t.Fatalf("expected top-level docs refs to be normalized, got %#v", normalized)
+	}
+	content := asMap(normalized["content"])
+	if got := anyStringValue(content["thread_id"]); got != "9a61af8e-d2c" {
+		t.Fatalf("expected structured content.thread_id to remain untouched, got %#v", normalized)
+	}
+	nested := asMap(content["nested"])
+	nestedRefs := asSlice(nested["refs"])
+	if len(nestedRefs) != 1 || anyStringValue(nestedRefs[0]) != "thread:9a61af8e-d2c" {
+		t.Fatalf("expected nested structured refs to remain untouched, got %#v", normalized)
+	}
+}
+
+func TestNormalizeMutationBodyIDsPreservesUnsupportedTypedRefsVerbatim(t *testing.T) {
+	t.Parallel()
+
+	app := &App{}
+	body := map[string]any{
+		"event": map[string]any{
+			"type":      "actor_statement",
+			"thread_id": "thread_1",
+			"refs":      []any{"CuStOmType:ABC123"},
+		},
+	}
+
+	normalizedAny, err := app.normalizeMutationBodyIDs(context.Background(), config.Resolved{}, "events.create", body)
+	if err != nil {
+		t.Fatalf("normalize events.create body: %v", err)
+	}
+	normalized, _ := normalizedAny.(map[string]any)
+	event := asMap(normalized["event"])
+	refs := asSlice(event["refs"])
+	if len(refs) != 1 || anyStringValue(refs[0]) != "CuStOmType:ABC123" {
+		t.Fatalf("expected unsupported typed ref to remain verbatim, got %#v", normalized)
 	}
 }
 
@@ -1710,6 +1839,111 @@ func TestThreadsContextIncludesCollaborationSummarySections(t *testing.T) {
 	})
 	if !strings.Contains(human, "recommendations (1):") || !strings.Contains(human, "decision_requests (1):") || !strings.Contains(human, "decisions (1):") {
 		t.Fatalf("expected collaboration sections in human output, got:\n%s", human)
+	}
+}
+
+func TestCommitmentsListResolvesShortThreadIDFilter(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/threads":
+			_, _ = w.Write([]byte(`{"threads":[{"id":"thread_canonical_123"}]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/commitments":
+			if got := r.URL.Query().Get("thread_id"); got != "thread_canonical_123" {
+				t.Fatalf("expected canonical thread_id query, got %q", got)
+			}
+			_, _ = w.Write([]byte(`{"commitments":[{"id":"commitment_1","thread_id":"thread_canonical_123","title":"Do work"}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"commitments", "list",
+		"--thread-id", "thread_canon",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+	body, _ := data["body"].(map[string]any)
+	items := asSlice(body["commitments"])
+	if len(items) != 1 {
+		t.Fatalf("expected one commitment after short thread id resolution, got %#v", body)
+	}
+}
+
+func TestArtifactsListResolvesShortThreadIDFilter(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/threads":
+			_, _ = w.Write([]byte(`{"threads":[{"id":"thread_canonical_123"}]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/artifacts":
+			if got := r.URL.Query().Get("thread_id"); got != "thread_canonical_123" {
+				t.Fatalf("expected canonical thread_id query, got %q", got)
+			}
+			_, _ = w.Write([]byte(`{"artifacts":[{"id":"artifact_1","thread_id":"thread_canonical_123","kind":"doc"}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"artifacts", "list",
+		"--thread-id", "thread_canon",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+	body, _ := data["body"].(map[string]any)
+	items := asSlice(body["artifacts"])
+	if len(items) != 1 {
+		t.Fatalf("expected one artifact after short thread id resolution, got %#v", body)
+	}
+}
+
+func TestInboxListResolvesShortThreadIDFilter(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/threads":
+			_, _ = w.Write([]byte(`{"threads":[{"id":"thread_canonical_123"}]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
+			_, _ = w.Write([]byte(`{"items":[{"id":"inbox:1","thread_id":"thread_canonical_123","title":"Need decision","category":"decision_needed"}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"inbox", "list",
+		"--thread-id", "thread_canon",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+	body, _ := data["body"].(map[string]any)
+	items := asSlice(body["items"])
+	if len(items) != 1 {
+		t.Fatalf("expected one inbox item after short thread id resolution, got %#v", body)
+	}
+	if got := anyStringValue(body["thread_id"]); got != "thread_canonical_123" {
+		t.Fatalf("expected canonical filtered thread_id, got %#v", body)
 	}
 }
 

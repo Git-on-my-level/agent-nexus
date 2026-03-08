@@ -495,8 +495,18 @@ func (a *App) runCommitmentsCommand(ctx context.Context, args []string, cfg conf
 		if len(fs.Args()) > 0 {
 			return nil, "commitments list", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar commitments list`")
 		}
+		resolvedThreadID := strings.TrimSpace(threadIDFlag.value)
+		if resolvedThreadID != "" {
+			resolved, err := a.resolveThreadIDFilters(ctx, cfg, []string{resolvedThreadID})
+			if err != nil {
+				return nil, "commitments list", err
+			}
+			if len(resolved) > 0 {
+				resolvedThreadID = resolved[0]
+			}
+		}
 		query := make([]queryParam, 0, 5)
-		addSingleQuery(&query, "thread_id", threadIDFlag.value)
+		addSingleQuery(&query, "thread_id", resolvedThreadID)
 		addSingleQuery(&query, "owner", ownerFlag.value)
 		addSingleQuery(&query, "status", statusFlag.value)
 		addSingleQuery(&query, "due_before", dueBeforeFlag.value)
@@ -1142,9 +1152,19 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 		if len(fs.Args()) > 0 {
 			return nil, "artifacts list", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar artifacts list`")
 		}
+		resolvedThreadID := strings.TrimSpace(threadIDFlag.value)
+		if resolvedThreadID != "" {
+			resolved, err := a.resolveThreadIDFilters(ctx, cfg, []string{resolvedThreadID})
+			if err != nil {
+				return nil, "artifacts list", err
+			}
+			if len(resolved) > 0 {
+				resolvedThreadID = resolved[0]
+			}
+		}
 		query := make([]queryParam, 0, 4)
 		addSingleQuery(&query, "kind", kindFlag.value)
-		addSingleQuery(&query, "thread_id", threadIDFlag.value)
+		addSingleQuery(&query, "thread_id", resolvedThreadID)
 		addSingleQuery(&query, "created_before", beforeFlag.value)
 		addSingleQuery(&query, "created_after", afterFlag.value)
 		result, err := a.invokeTypedJSON(ctx, cfg, "artifacts list", "artifacts.list", nil, query, nil)
@@ -1717,6 +1737,13 @@ func (a *App) runInboxList(ctx context.Context, args []string, cfg config.Resolv
 			return nil, err
 		}
 	}
+	if len(threadIDs) > 0 {
+		resolvedThreadIDs, err := a.resolveThreadIDFilters(ctx, cfg, threadIDs)
+		if err != nil {
+			return nil, err
+		}
+		threadIDs = resolvedThreadIDs
+	}
 	typeFilters := normalizeStringFilters(typeFlags.values)
 
 	result, err := a.invokeTypedJSON(ctx, cfg, "inbox list", "inbox.list", nil, nil, nil)
@@ -2113,6 +2140,14 @@ func (a *App) invokeArtifactContent(ctx context.Context, cfg config.Resolved, co
 }
 
 func (a *App) invokeTypedJSON(ctx context.Context, cfg config.Resolved, commandName string, commandID string, pathParams map[string]string, query []queryParam, body any) (*commandResult, error) {
+	if body != nil {
+		normalizedBody, err := a.normalizeMutationBodyIDs(ctx, cfg, commandID, body)
+		if err != nil {
+			return nil, err
+		}
+		body = normalizedBody
+	}
+
 	authCfg, err := a.cfgWithResolvedAuthToken(ctx, cfg)
 	if err != nil {
 		return nil, err
