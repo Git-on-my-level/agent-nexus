@@ -7,9 +7,9 @@
 
   let { threadId, onMessagePost } = $props();
 
-  let timeline = $derived(threadDetailStore.timeline);
-  let timelineLoading = $derived(threadDetailStore.timelineLoading);
-  let timelineError = $derived(threadDetailStore.timelineError);
+  let timeline = $derived($threadDetailStore.timeline);
+  let timelineLoading = $derived($threadDetailStore.timelineLoading);
+  let timelineError = $derived($threadDetailStore.timelineError);
 
   let actorName = $derived((id) => lookupActorDisplayName(id, $actorRegistry));
 

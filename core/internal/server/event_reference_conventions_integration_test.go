@@ -54,6 +54,39 @@ func TestEventReferenceConventionsRejectMissingRequiredRefs(t *testing.T) {
 	assertEventErrorMessageContains(t, commitmentStatusResp, "payload.to_status=\"done\"")
 }
 
+func TestEventReferenceConventionsRejectMissingRequiredPayloadFields(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	missingSubtypeResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
+		"actor_id":"actor-1",
+		"event":{
+			"type":"exception_raised",
+			"thread_id":"thread-1",
+			"refs":["thread:thread-1"],
+			"summary":"thread became stale",
+			"payload":{},
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusBadRequest)
+	assertEventErrorMessageContains(t, missingSubtypeResp, "event.payload.subtype is required")
+
+	withSubtypeResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
+		"actor_id":"actor-1",
+		"event":{
+			"type":"exception_raised",
+			"thread_id":"thread-1",
+			"refs":["thread:thread-1"],
+			"summary":"thread became stale",
+			"payload":{"subtype":"stale_thread"},
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated)
+	defer withSubtypeResp.Body.Close()
+}
+
 func TestEventReferenceConventionsAllowUnknownEventType(t *testing.T) {
 	t.Parallel()
 

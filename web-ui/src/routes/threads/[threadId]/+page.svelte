@@ -14,9 +14,9 @@
 
   let threadId = $derived($page.params.threadId);
 
-  let snapshot = $derived(threadDetailStore.snapshot);
-  let snapshotLoading = $derived(threadDetailStore.snapshotLoading);
-  let snapshotError = $derived(threadDetailStore.snapshotError);
+  let snapshot = $derived($threadDetailStore.snapshot);
+  let snapshotLoading = $derived($threadDetailStore.snapshotLoading);
+  let snapshotError = $derived($threadDetailStore.snapshotError);
 
   let activeTab = $state("overview");
 
@@ -46,7 +46,7 @@
         if_updated_at: ifUpdatedAt,
       });
       threadDetailStore.setSnapshot(
-        response.thread ?? threadDetailStore.snapshot,
+        response.thread ?? $threadDetailStore.snapshot,
       );
       editNotice = "Changes saved.";
     } catch (error) {

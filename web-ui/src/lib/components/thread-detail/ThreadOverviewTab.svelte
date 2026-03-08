@@ -26,7 +26,7 @@
 
   let { threadId, onSave, conflictWarning = "", editNotice = "" } = $props();
 
-  let snapshot = $derived(threadDetailStore.snapshot);
+  let snapshot = $derived($threadDetailStore.snapshot);
   let actorName = $derived((id) => lookupActorDisplayName(id, $actorRegistry));
 
   let editOpen = $state(false);

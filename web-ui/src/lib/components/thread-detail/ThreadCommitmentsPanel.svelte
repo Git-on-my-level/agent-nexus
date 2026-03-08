@@ -20,8 +20,8 @@
 
   let { threadId, onCommitmentSave, onCommitmentCreate } = $props();
 
-  let commitments = $derived(threadDetailStore.commitments);
-  let commitmentsLoading = $derived(threadDetailStore.commitmentsLoading);
+  let commitments = $derived($threadDetailStore.commitments);
+  let commitmentsLoading = $derived($threadDetailStore.commitmentsLoading);
 
   let actorName = $derived((id) => lookupActorDisplayName(id, $actorRegistry));
 

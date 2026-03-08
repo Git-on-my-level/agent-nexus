@@ -9,9 +9,9 @@
 
   let { threadId, onWorkOrderSubmit, onReceiptSubmit } = $props();
 
-  let workOrders = $derived(threadDetailStore.workOrders);
-  let workOrdersLoading = $derived(threadDetailStore.workOrdersLoading);
-  let workOrdersError = $derived(threadDetailStore.workOrdersError);
+  let workOrders = $derived($threadDetailStore.workOrders);
+  let workOrdersLoading = $derived($threadDetailStore.workOrdersLoading);
+  let workOrdersError = $derived($threadDetailStore.workOrdersError);
 
   let workOrderShouldPrefill = $derived(
     $page.url.searchParams.get("compose") === "work-order",

@@ -2,8 +2,8 @@
   import { threadDetailStore } from "$lib/threadDetailStore";
   import { getPriorityLabel } from "$lib/threadFilters";
 
-  let snapshot = $derived(threadDetailStore.snapshot);
-  let staleness = $derived(threadDetailStore.getStaleness());
+  let snapshot = $derived($threadDetailStore.snapshot);
+  let staleness = $derived(threadDetailStore.getStaleness(snapshot));
 </script>
 
 <nav

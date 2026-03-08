@@ -9,7 +9,7 @@ export function GET({ params, url }) {
     return guardResponse;
   }
 
-  const snapshotId = params.snapshot_id;
+  const snapshotId = params.snapshotId;
 
   const thread = getMockThread(snapshotId);
   if (thread) {

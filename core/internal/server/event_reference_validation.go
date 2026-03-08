@@ -84,7 +84,7 @@ func validateRequiredRefPatterns(eventType string, refs []string, patterns []str
 
 func validateRequiredPayloadKeys(eventType string, payload map[string]any, requiredKeys []string) error {
 	for _, key := range requiredKeys {
-		key = strings.TrimSpace(key)
+		key = normalizeRequiredPayloadKey(key)
 		if key == "" {
 			continue
 		}
@@ -116,18 +116,21 @@ func validateConditionalRefRules(eventType string, payload map[string]any, refs 
 			continue
 		}
 
-		hasRequired := false
+		matchedCount := 0
 		for _, req := range cond.MustHave {
 			if prefixesPresent[req.Prefix] {
-				hasRequired = true
-				break
+				matchedCount++
 			}
 		}
 
-		if cond.Condition == "or" && !hasRequired {
+		mode := strings.ToLower(strings.TrimSpace(cond.Condition))
+		if mode == "or" {
+			if matchedCount > 0 {
+				continue
+			}
 			return fmtConditionalRefError(eventType, cond)
 		}
-		if cond.Condition != "or" && len(cond.MustHave) > 0 && !hasRequired {
+		if len(cond.MustHave) > 0 && matchedCount != len(cond.MustHave) {
 			return fmtConditionalRefError(eventType, cond)
 		}
 	}
@@ -177,4 +180,16 @@ func patternRefPrefix(pattern string) string {
 		return ""
 	}
 	return strings.TrimSpace(pattern[:idx])
+}
+
+func normalizeRequiredPayloadKey(raw string) string {
+	key := strings.TrimSpace(raw)
+	if key == "" {
+		return ""
+	}
+	idx := strings.IndexAny(key, " (\t")
+	if idx <= 0 {
+		return key
+	}
+	return strings.TrimSpace(key[:idx])
 }

@@ -1,8 +1,9 @@
 import { coreClient } from "./coreClient";
 import { computeStaleness } from "./threadFilters";
+import { get, writable } from "svelte/store";
 
-function createThreadDetailStore() {
-  let state = {
+function initialState() {
+  return {
     snapshot: null,
     snapshotLoading: false,
     snapshotError: "",
@@ -15,101 +16,76 @@ function createThreadDetailStore() {
     workOrdersLoading: false,
     workOrdersError: "",
   };
+}
 
-  const getters = {
-    get snapshot() {
-      return state.snapshot;
-    },
-    get snapshotLoading() {
-      return state.snapshotLoading;
-    },
-    get snapshotError() {
-      return state.snapshotError;
-    },
-    get commitments() {
-      return state.commitments;
-    },
-    get commitmentsLoading() {
-      return state.commitmentsLoading;
-    },
-    get timeline() {
-      return state.timeline;
-    },
-    get timelineLoading() {
-      return state.timelineLoading;
-    },
-    get timelineError() {
-      return state.timelineError;
-    },
-    get workOrders() {
-      return state.workOrders;
-    },
-    get workOrdersLoading() {
-      return state.workOrdersLoading;
-    },
-    get workOrdersError() {
-      return state.workOrdersError;
-    },
-  };
+function createThreadDetailStore() {
+  const store = writable(initialState());
+  const { subscribe, update, set } = store;
+  const patchState = (patch) => update((state) => ({ ...state, ...patch }));
 
   async function loadSnapshot(threadId) {
-    state.snapshotLoading = true;
-    state.snapshotError = "";
+    patchState({ snapshotLoading: true, snapshotError: "" });
     try {
-      state.snapshot = (await coreClient.getThread(threadId)).thread ?? null;
-      return state.snapshot;
+      const snapshot = (await coreClient.getThread(threadId)).thread ?? null;
+      patchState({ snapshot });
+      return snapshot;
     } catch (e) {
-      state.snapshotError = `Failed to load thread: ${e instanceof Error ? e.message : String(e)}`;
-      state.snapshot = null;
+      patchState({
+        snapshotError: `Failed to load thread: ${e instanceof Error ? e.message : String(e)}`,
+        snapshot: null,
+      });
       return null;
     } finally {
-      state.snapshotLoading = false;
+      patchState({ snapshotLoading: false });
     }
   }
 
   async function loadCommitments(threadId) {
-    state.commitmentsLoading = true;
+    patchState({ commitmentsLoading: true });
     try {
       const response = await coreClient.listCommitments({
         thread_id: threadId,
         status: "open",
       });
-      state.commitments = response.commitments ?? [];
+      patchState({ commitments: response.commitments ?? [] });
     } catch {
-      state.commitments = [];
+      patchState({ commitments: [] });
     } finally {
-      state.commitmentsLoading = false;
+      patchState({ commitmentsLoading: false });
     }
   }
 
   async function loadTimeline(threadId) {
-    state.timelineLoading = true;
-    state.timelineError = "";
+    patchState({ timelineLoading: true, timelineError: "" });
     try {
-      state.timeline =
-        (await coreClient.listThreadTimeline(threadId)).events ?? [];
+      patchState({
+        timeline: (await coreClient.listThreadTimeline(threadId)).events ?? [],
+      });
     } catch (e) {
-      state.timelineError = `Failed to load timeline: ${e instanceof Error ? e.message : String(e)}`;
-      state.timeline = [];
+      patchState({
+        timelineError: `Failed to load timeline: ${e instanceof Error ? e.message : String(e)}`,
+        timeline: [],
+      });
     } finally {
-      state.timelineLoading = false;
+      patchState({ timelineLoading: false });
     }
   }
 
   async function loadWorkOrders(threadId) {
-    state.workOrdersLoading = true;
-    state.workOrdersError = "";
+    patchState({ workOrdersLoading: true, workOrdersError: "" });
     try {
       const response = await coreClient.listArtifacts({
         kind: "work_order",
         thread_id: threadId,
       });
-      state.workOrders = response.artifacts ?? [];
+      patchState({ workOrders: response.artifacts ?? [] });
     } catch (error) {
-      state.workOrdersError = `Failed to load work orders: ${error instanceof Error ? error.message : String(error)}`;
-      state.workOrders = [];
+      patchState({
+        workOrdersError: `Failed to load work orders: ${error instanceof Error ? error.message : String(error)}`,
+        workOrders: [],
+      });
     } finally {
-      state.workOrdersLoading = false;
+      patchState({ workOrdersLoading: false });
     }
   }
 
@@ -139,44 +115,33 @@ function createThreadDetailStore() {
   }
 
   function setSnapshot(value) {
-    state.snapshot = value;
+    patchState({ snapshot: value });
   }
 
   function setCommitments(value) {
-    state.commitments = value;
+    patchState({ commitments: value });
   }
 
   function setTimeline(value) {
-    state.timeline = value;
+    patchState({ timeline: value });
   }
 
   function setWorkOrders(value) {
-    state.workOrders = value;
+    patchState({ workOrders: value });
   }
 
-  function getStaleness() {
-    if (!state.snapshot) return null;
-    return computeStaleness(state.snapshot);
+  function getStaleness(snapshot) {
+    const value = snapshot ?? get(store).snapshot;
+    if (!value) return null;
+    return computeStaleness(value);
   }
 
   function reset() {
-    state = {
-      snapshot: null,
-      snapshotLoading: false,
-      snapshotError: "",
-      commitments: [],
-      commitmentsLoading: false,
-      timeline: [],
-      timelineLoading: false,
-      timelineError: "",
-      workOrders: [],
-      workOrdersLoading: false,
-      workOrdersError: "",
-    };
+    set(initialState());
   }
 
   return {
-    ...getters,
+    subscribe,
     loadSnapshot,
     loadCommitments,
     loadTimeline,

@@ -47,6 +47,43 @@ describe("eventRefRules", () => {
       expect(result.error).toContain("thread_id is required");
     });
 
+    it("rejects non-array refs input", () => {
+      const result = validateEventRefRule("message_posted", "thread:thread-1", {
+        thread_id: "thread-1",
+      });
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain("must be an array");
+    });
+
+    it("rejects invalid typed ref entries", () => {
+      const result = validateEventRefRule(
+        "message_posted",
+        ["thread:thread-1", "bad-ref"],
+        { thread_id: "thread-1" },
+      );
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain("valid typed refs");
+    });
+
+    it("enforces payload_must_include contract fields", () => {
+      const missingSubtype = validateEventRefRule(
+        "exception_raised",
+        ["thread:thread-1"],
+        { thread_id: "thread-1" },
+      );
+      expect(missingSubtype.valid).toBe(false);
+      expect(missingSubtype.error).toContain(
+        "event.payload.subtype is required",
+      );
+
+      const withSubtype = validateEventRefRule(
+        "exception_raised",
+        ["thread:thread-1"],
+        { thread_id: "thread-1", subtype: "stale_thread" },
+      );
+      expect(withSubtype.valid).toBe(true);
+    });
+
     it("rejects missing conditional refs for done status", () => {
       const result = validateEventRefRule(
         "commitment_status_changed",
@@ -54,7 +91,7 @@ describe("eventRefRules", () => {
         { thread_id: "thread-1", to_status: "done" },
       );
       expect(result.valid).toBe(false);
-      expect(result.error).toContain("payload.to_status=\"done\"");
+      expect(result.error).toContain('payload.to_status="done"');
     });
 
     it("allows artifact ref for done status", () => {
@@ -82,7 +119,7 @@ describe("eventRefRules", () => {
         { thread_id: "thread-1", to_status: "canceled" },
       );
       expect(result.valid).toBe(false);
-      expect(result.error).toContain("payload.to_status=\"canceled\"");
+      expect(result.error).toContain('payload.to_status="canceled"');
     });
 
     it("allows event ref for canceled status", () => {
@@ -129,12 +166,18 @@ describe("eventRefRules", () => {
     });
 
     it("allows event ref for canceled", () => {
-      const result = validateCommitmentStatusRef("canceled", "event:decision-1");
+      const result = validateCommitmentStatusRef(
+        "canceled",
+        "event:decision-1",
+      );
       expect(result.valid).toBe(true);
     });
 
     it("rejects artifact ref for canceled", () => {
-      const result = validateCommitmentStatusRef("canceled", "artifact:receipt-1");
+      const result = validateCommitmentStatusRef(
+        "canceled",
+        "artifact:receipt-1",
+      );
       expect(result.valid).toBe(false);
     });
 
