@@ -126,6 +126,35 @@ func TestArtifactContentRaw(t *testing.T) {
 	}
 }
 
+func TestDerivedRebuild(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodPost && r.URL.Path == "/derived/rebuild" {
+			body, _ := io.ReadAll(r.Body)
+			if !bytes.Contains(body, []byte(`"force":true`)) {
+				t.Fatalf("expected force=true in rebuild request: %s", string(body))
+			}
+			_, _ = w.Write([]byte(`{"ok":true}`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	env := map[string]string{}
+	out := runCLIForTest(t, home, env, strings.NewReader(`{"force":true}`), []string{"--json", "--base-url", server.URL, "derived", "rebuild"})
+	var resp map[string]any
+	if err := json.Unmarshal([]byte(out), &resp); err != nil {
+		t.Fatalf("failed to parse JSON output: %v", err)
+	}
+	if resp["ok"] != true {
+		t.Fatalf("expected ok=true, got %v", resp)
+	}
+}
+
 func TestEventsTailReconnect(t *testing.T) {
 	t.Parallel()
 
