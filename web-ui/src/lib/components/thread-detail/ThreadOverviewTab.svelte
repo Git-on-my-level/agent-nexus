@@ -6,6 +6,7 @@
     isoToDatetimeLocal,
     datetimeLocalToIso,
   } from "$lib/formatDate";
+  import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import ProvenanceBadge from "$lib/components/ProvenanceBadge.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
   import {
@@ -210,7 +211,10 @@
 
     <div class="border-t border-gray-100 px-4 py-3">
       <p class="text-xs text-gray-400">Summary</p>
-      <p class="mt-1 text-sm text-gray-800">{snapshot.current_summary}</p>
+      <MarkdownRenderer
+        source={snapshot.current_summary}
+        class="mt-1 text-sm text-gray-800"
+      />
     </div>
 
     {#if (snapshot.next_actions ?? []).length > 0}

@@ -10,6 +10,7 @@
     isoToDatetimeLocal,
     datetimeLocalToIso,
   } from "$lib/formatDate";
+  import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
   import {
     buildCommitmentPatch,
@@ -335,7 +336,11 @@
         {#if (commitment.definition_of_done ?? []).length > 0}
           <ul class="mt-1.5 list-inside list-disc text-xs text-gray-600">
             {#each commitment.definition_of_done ?? [] as item}<li>
-                {item}
+                <MarkdownRenderer
+                  source={item}
+                  inline
+                  class="text-xs text-gray-600"
+                />
               </li>{/each}
           </ul>
         {/if}

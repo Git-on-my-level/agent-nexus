@@ -2,6 +2,7 @@
   import { threadDetailStore } from "$lib/threadDetailStore";
   import { actorRegistry, lookupActorDisplayName } from "$lib/actorSession";
   import { formatTimestamp } from "$lib/formatDate";
+  import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
   import { toTimelineView } from "$lib/timelineUtils";
 
@@ -115,7 +116,10 @@
         >
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0 flex-1">
-              <p class="text-sm text-gray-900">{event.summary}</p>
+              <MarkdownRenderer
+                source={event.summary}
+                class="text-sm text-gray-900"
+              />
               <p class="mt-0.5 text-xs text-gray-400">
                 {actorName(event.actor_id)} · {event.typeLabel} · {formatTimestamp(
                   event.ts,

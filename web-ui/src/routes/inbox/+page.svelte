@@ -1,6 +1,7 @@
 <script>
   import { onMount } from "svelte";
 
+  import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
@@ -412,9 +413,10 @@
                   >
                     Recommended
                   </p>
-                  <p class="mt-0.5 text-[13px] text-gray-700">
-                    {item.recommended_action}
-                  </p>
+                  <MarkdownRenderer
+                    source={item.recommended_action}
+                    class="mt-0.5 text-[13px] text-gray-700"
+                  />
                 </div>
               {/if}
 

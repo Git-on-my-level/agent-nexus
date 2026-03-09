@@ -2,6 +2,7 @@
   import { page } from "$app/stores";
 
   import GuidedTypedRefsInput from "$lib/components/GuidedTypedRefsInput.svelte";
+  import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
   import ProvenanceBadge from "$lib/components/ProvenanceBadge.svelte";
@@ -79,13 +80,8 @@
   let timelineView = $derived(
     toTimelineView(threadTimeline, { threadId: artifact?.thread_id ?? "" }),
   );
-  let isMarkdownContent = $derived(
-    artifactContentType.includes("markdown") &&
-      typeof textContent === "string" &&
-      textContent.length > 0,
-  );
-  let renderedMarkdownBlocks = $derived(
-    isMarkdownContent ? parseMarkdownLite(textContent) : [],
+  let hasTextContent = $derived(
+    typeof textContent === "string" && textContent.length > 0,
   );
   let artifactRefHints = $derived(buildArtifactRefHints());
   let reviewEvidenceSuggestions = $derived(
@@ -211,76 +207,6 @@
         `${event.typeLabel}: ${truncateLabel(event.summary, 52)}`;
     });
     return hints;
-  }
-
-  function parseMarkdownLite(markdown) {
-    const blocks = [];
-    const lines = String(markdown ?? "").split(/\r?\n/);
-    let listItems = [];
-    let inCode = false;
-    let codeLines = [];
-    let paragraphLines = [];
-    const flushParagraph = () => {
-      if (paragraphLines.length === 0) return;
-      blocks.push({ type: "paragraph", text: paragraphLines.join(" ") });
-      paragraphLines = [];
-    };
-    const closeList = () => {
-      if (listItems.length === 0) return;
-      blocks.push({ type: "list", items: listItems });
-      listItems = [];
-    };
-    const closeCodeBlock = () => {
-      if (!inCode) return;
-      blocks.push({ type: "code", text: codeLines.join("\n") });
-      inCode = false;
-      codeLines = [];
-    };
-    for (const rawLine of lines) {
-      const line = String(rawLine ?? "");
-      const trimmed = line.trim();
-      if (trimmed.startsWith("```")) {
-        flushParagraph();
-        closeList();
-        if (!inCode) {
-          inCode = true;
-          codeLines = [];
-        } else closeCodeBlock();
-        continue;
-      }
-      if (inCode) {
-        codeLines.push(line);
-        continue;
-      }
-      if (!trimmed) {
-        flushParagraph();
-        closeList();
-        continue;
-      }
-      const headingMatch = trimmed.match(/^(#{1,3})\s+(.+)$/);
-      if (headingMatch) {
-        flushParagraph();
-        closeList();
-        blocks.push({
-          type: "heading",
-          level: headingMatch[1].length,
-          text: headingMatch[2],
-        });
-        continue;
-      }
-      const bulletMatch = trimmed.match(/^[-*]\s+(.+)$/);
-      if (bulletMatch) {
-        flushParagraph();
-        listItems.push(bulletMatch[1]);
-        continue;
-      }
-      closeList();
-      paragraphLines.push(trimmed);
-    }
-    flushParagraph();
-    closeList();
-    closeCodeBlock();
-    return blocks;
   }
 
   async function loadThreadTimeline(threadId) {
@@ -493,7 +419,7 @@
     </div>
   {/if}
 
-  {#if artifact.kind === "doc" && textContent}
+  {#if artifact.kind === "doc" && hasTextContent}
     <div
       class="mt-3 rounded-md bg-indigo-500/10 px-3 py-2 text-[12px] text-indigo-400"
     >
@@ -634,9 +560,14 @@
         {/if}
         <div class="mt-3">
           <p class="text-[11px] font-medium text-gray-400">Changes summary</p>
-          <p class="mt-1 leading-relaxed text-gray-800">
-            {receiptPacket.changes_summary || "—"}
-          </p>
+          {#if receiptPacket.changes_summary}
+            <MarkdownRenderer
+              source={receiptPacket.changes_summary}
+              class="mt-1 leading-relaxed text-gray-800"
+            />
+          {:else}
+            <p class="mt-1 leading-relaxed text-gray-800">—</p>
+          {/if}
         </div>
         {#if (receiptPacket.known_gaps ?? []).length > 0}
           <div class="mt-3">
@@ -770,7 +701,10 @@
             <div class="mt-2 space-y-1">
               {#each timelineView.slice(0, 10) as event}
                 <div class="rounded-md bg-gray-50 px-3 py-2 text-[12px]">
-                  <p class="font-medium text-gray-800">{event.summary}</p>
+                  <MarkdownRenderer
+                    source={event.summary}
+                    class="font-medium text-gray-800"
+                  />
                   <p class="text-[11px] text-gray-400">
                     {actorName(event.actor_id)} · {event.typeLabel} · {formatTimestamp(
                       event.ts,
@@ -819,9 +753,12 @@
             /></span
           >
         </div>
-        {#if reviewPacket.notes}<p class="mt-2 leading-relaxed text-gray-700">
-            {reviewPacket.notes}
-          </p>{/if}
+        {#if reviewPacket.notes}
+          <MarkdownRenderer
+            source={reviewPacket.notes}
+            class="mt-2 leading-relaxed text-gray-700"
+          />
+        {/if}
         {#if (reviewPacket.evidence_refs ?? []).length > 0}
           <div class="mt-3">
             <p class="text-[11px] font-medium text-gray-400">Evidence</p>
@@ -840,7 +777,7 @@
     </div>
   {/if}
 
-  {#if textContent}
+  {#if hasTextContent}
     <div class="mt-4 rounded-md border border-gray-200 bg-gray-100">
       <div
         class="flex items-center justify-between border-b border-gray-200 px-4 py-2.5"
@@ -848,33 +785,10 @@
         <h2 class="text-[13px] font-medium text-gray-900">Text Content</h2>
         <span class="text-[11px] text-gray-400">{artifactContentType}</span>
       </div>
-      {#if isMarkdownContent}
-        <article
-          class="markdown-lite max-h-[30rem] overflow-auto px-4 py-3 text-[13px] text-gray-800"
-        >
-          {#each renderedMarkdownBlocks as block}
-            {#if block.type === "heading"}
-              {#if block.level === 1}<h1>{block.text}</h1>
-              {:else if block.level === 2}<h2>{block.text}</h2>
-              {:else}<h3>{block.text}</h3>{/if}
-            {:else if block.type === "list"}
-              <ul>
-                {#each block.items as item}<li>{item}</li>{/each}
-              </ul>
-            {:else if block.type === "code"}
-              <pre><code>{block.text}</code></pre>
-            {:else}
-              <p>{block.text}</p>
-            {/if}
-          {/each}
-        </article>
-      {:else}
-        <article
-          class="max-h-[30rem] overflow-auto px-4 py-3 text-[13px] leading-7 text-gray-800 whitespace-pre-wrap"
-        >
-          {textContent}
-        </article>
-      {/if}
+      <MarkdownRenderer
+        source={textContent}
+        class="max-h-[30rem] overflow-auto px-4 py-3 text-[13px] text-gray-800"
+      />
     </div>
   {/if}
 
