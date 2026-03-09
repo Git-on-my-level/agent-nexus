@@ -58,5 +58,6 @@ func resolveMachineCommandIdentity(command string) machineCommandIdentity {
 	if identity, ok := machineCommandIdentityByPath[normalized]; ok {
 		return identity
 	}
-	return machineCommandIdentity{Command: normalized}
+	commandID := strings.ReplaceAll(normalized, " ", ".")
+	return machineCommandIdentity{Command: normalized, CommandID: commandID}
 }

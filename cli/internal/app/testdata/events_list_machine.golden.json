@@ -3,36 +3,28 @@
   "command": "events list",
   "command_id": "threads.timeline",
   "data": {
-    "body": {
-      "artifacts": {},
-      "events": [
-        {
-          "created_at": "2026-03-07T00:00:00Z",
-          "id": "event_100",
-          "short_id": "event_100",
-          "summary": "ship machine-facing fixes",
-          "summary_preview": "ship machine-facing fixes",
-          "thread_id": "thread_123",
-          "type": "actor_statement"
-        }
-      ],
-      "full_id": false,
-      "returned_events": 1,
-      "snapshots": {},
-      "thread_id": "thread_123",
-      "thread_ids": [
-        "thread_123"
-      ],
-      "total_events": 2,
-      "types": [
-        "actor_statement"
-      ]
-    },
-    "headers": {
-      "Content-Type": [
-        "application/json"
-      ]
-    },
-    "status_code": 200
+    "artifacts": {},
+    "events": [
+      {
+        "created_at": "2026-03-07T00:00:00Z",
+        "id": "event_100",
+        "short_id": "event_100",
+        "summary": "ship machine-facing fixes",
+        "summary_preview": "ship machine-facing fixes",
+        "thread_id": "thread_123",
+        "type": "actor_statement"
+      }
+    ],
+    "full_id": false,
+    "returned_events": 1,
+    "snapshots": {},
+    "thread_id": "thread_123",
+    "thread_ids": [
+      "thread_123"
+    ],
+    "total_events": 2,
+    "types": [
+      "actor_statement"
+    ]
   }
 }

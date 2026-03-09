@@ -3,134 +3,126 @@
   "command": "threads workspace",
   "command_id": "threads.workspace",
   "data": {
-    "body": {
-      "collaboration": {
-        "decision_requests": [
-          {
-            "id": "event_ctx_2",
-            "short_id": "event_ctx_2",
-            "summary": "confirm canonical command labels",
-            "summary_preview": "confirm canonical command labels",
-            "thread_id": "thread_123",
-            "type": "decision_needed"
-          }
-        ],
-        "decisions": [],
-        "recommendations": [
-          {
-            "id": "event_ctx_1",
-            "short_id": "event_ctx_1",
-            "summary": "normalize frame shape",
-            "summary_preview": "normalize frame shape",
-            "thread_id": "thread_123",
-            "type": "actor_statement"
-          }
-        ]
-      },
-      "context": {
-        "key_artifacts": [
-          {
-            "id": "artifact_ctx_1",
-            "kind": "work_order"
-          }
-        ],
-        "open_commitments": [
-          {
-            "id": "commitment_ctx_1",
-            "status": "open"
-          }
-        ],
-        "recent_events": [
-          {
-            "id": "event_ctx_1",
-            "short_id": "event_ctx_1",
-            "summary": "normalize frame shape",
-            "summary_preview": "normalize frame shape",
-            "thread_id": "thread_123",
-            "type": "actor_statement"
-          },
-          {
-            "id": "event_ctx_2",
-            "short_id": "event_ctx_2",
-            "summary": "confirm canonical command labels",
-            "summary_preview": "confirm canonical command labels",
-            "thread_id": "thread_123",
-            "type": "decision_needed"
-          }
-        ]
-      },
-      "context_source": "threads.context",
-      "follow_up": {
-        "context_refresh_command": "oar threads context --thread-id thread_123 --include-artifact-content --full-id --json",
-        "decisions_list_command": "oar events list --thread-id thread_123 --type decision_needed --type decision_made --full-id --json",
-        "events_get_examples": [
-          "oar events get --event-id event_ctx_1 --json",
-          "oar events get --event-id event_ctx_2 --json"
-        ],
-        "events_get_template": "oar events get --event-id \u003cevent-id\u003e --json",
-        "recommendations_list_command": "oar events list --thread-id thread_123 --type actor_statement --full-id --json"
-      },
-      "full_id": false,
-      "full_summary": false,
-      "inbox": {
-        "count": 1,
-        "full_id": false,
-        "items": [
-          {
-            "alias": "ibx_483c273add26",
-            "id": "inbox:decision_needed:thread_123:none:event_ctx_2",
-            "short_id": "inbox:decisi",
-            "summary": "confirm canonical command labels",
-            "thread_id": "thread_123",
-            "thread_short_id": "thread_123",
-            "type": "decision_needed"
-          }
-        ],
-        "thread_id": "thread_123"
-      },
-      "inbox_source": "inbox.list",
-      "pending_decisions": {
-        "count": 1,
-        "items": [
-          {
-            "alias": "ibx_483c273add26",
-            "id": "inbox:decision_needed:thread_123:none:event_ctx_2",
-            "short_id": "inbox:decisi",
-            "summary": "confirm canonical command labels",
-            "thread_id": "thread_123",
-            "thread_short_id": "thread_123",
-            "type": "decision_needed"
-          }
-        ]
-      },
-      "related_decision_requests": {
-        "count": 0,
-        "items": []
-      },
-      "related_decisions": {
-        "count": 0,
-        "items": []
-      },
-      "related_recommendations": {
-        "count": 0,
-        "items": []
-      },
-      "related_threads": {
-        "count": 0,
-        "items": []
-      },
-      "thread": {
-        "id": "thread_123",
-        "title": "Machine-facing consistency"
-      },
-      "thread_id": "thread_123",
-      "total_review_items": 3
-    },
-    "headers": {
-      "Content-Type": [
-        "application/json"
+    "collaboration": {
+      "decision_requests": [
+        {
+          "id": "event_ctx_2",
+          "short_id": "event_ctx_2",
+          "summary": "confirm canonical command labels",
+          "summary_preview": "confirm canonical command labels",
+          "thread_id": "thread_123",
+          "type": "decision_needed"
+        }
+      ],
+      "decisions": [],
+      "recommendations": [
+        {
+          "id": "event_ctx_1",
+          "short_id": "event_ctx_1",
+          "summary": "normalize frame shape",
+          "summary_preview": "normalize frame shape",
+          "thread_id": "thread_123",
+          "type": "actor_statement"
+        }
       ]
     },
-    "status_code": 200
+    "context": {
+      "key_artifacts": [
+        {
+          "id": "artifact_ctx_1",
+          "kind": "work_order"
+        }
+      ],
+      "open_commitments": [
+        {
+          "id": "commitment_ctx_1",
+          "status": "open"
+        }
+      ],
+      "recent_events": [
+        {
+          "id": "event_ctx_1",
+          "short_id": "event_ctx_1",
+          "summary": "normalize frame shape",
+          "summary_preview": "normalize frame shape",
+          "thread_id": "thread_123",
+          "type": "actor_statement"
+        },
+        {
+          "id": "event_ctx_2",
+          "short_id": "event_ctx_2",
+          "summary": "confirm canonical command labels",
+          "summary_preview": "confirm canonical command labels",
+          "thread_id": "thread_123",
+          "type": "decision_needed"
+        }
+      ]
+    },
+    "context_source": "threads.context",
+    "follow_up": {
+      "context_refresh_command": "oar threads context --thread-id thread_123 --include-artifact-content --full-id --json",
+      "decisions_list_command": "oar events list --thread-id thread_123 --type decision_needed --type decision_made --full-id --json",
+      "events_get_examples": [
+        "oar events get --event-id event_ctx_1 --json",
+        "oar events get --event-id event_ctx_2 --json"
+      ],
+      "events_get_template": "oar events get --event-id \u003cevent-id\u003e --json",
+      "recommendations_list_command": "oar events list --thread-id thread_123 --type actor_statement --full-id --json"
+    },
+    "full_id": false,
+    "full_summary": false,
+    "inbox": {
+      "count": 1,
+      "full_id": false,
+      "items": [
+        {
+          "alias": "ibx_483c273add26",
+          "id": "inbox:decision_needed:thread_123:none:event_ctx_2",
+          "short_id": "inbox:decisi",
+          "summary": "confirm canonical command labels",
+          "thread_id": "thread_123",
+          "thread_short_id": "thread_123",
+          "type": "decision_needed"
+        }
+      ],
+      "thread_id": "thread_123"
+    },
+    "inbox_source": "inbox.list",
+    "pending_decisions": {
+      "count": 1,
+      "items": [
+        {
+          "alias": "ibx_483c273add26",
+          "id": "inbox:decision_needed:thread_123:none:event_ctx_2",
+          "short_id": "inbox:decisi",
+          "summary": "confirm canonical command labels",
+          "thread_id": "thread_123",
+          "thread_short_id": "thread_123",
+          "type": "decision_needed"
+        }
+      ]
+    },
+    "related_decision_requests": {
+      "count": 0,
+      "items": []
+    },
+    "related_decisions": {
+      "count": 0,
+      "items": []
+    },
+    "related_recommendations": {
+      "count": 0,
+      "items": []
+    },
+    "related_threads": {
+      "count": 0,
+      "items": []
+    },
+    "thread": {
+      "id": "thread_123",
+      "title": "Machine-facing consistency"
+    },
+    "thread_id": "thread_123",
+    "total_review_items": 3
   }
 }

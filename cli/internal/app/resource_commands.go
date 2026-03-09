@@ -2069,7 +2069,6 @@ func (a *App) writeStreamEvent(commandName string, commandID string, event strea
 		"type":        event.Type,
 		"payload_key": payloadKey,
 		"payload":     payloadValue,
-		"data":        parsedData,
 	}
 	if payloadKey == "event" || payloadKey == "item" {
 		frame[payloadKey] = payloadValue

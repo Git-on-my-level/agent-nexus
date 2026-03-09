@@ -120,10 +120,6 @@ func FromHTTPFailure(status int, body []byte) *Error {
 	message := fmt.Sprintf("request failed with status %d", status)
 	payload := map[string]any{"status": status}
 
-	if len(body) > 0 {
-		payload["body"] = string(body)
-	}
-
 	var parsed map[string]any
 	if err := json.Unmarshal(body, &parsed); err == nil {
 		if errObj, ok := parsed["error"].(map[string]any); ok {
@@ -142,6 +138,8 @@ func FromHTTPFailure(status int, body []byte) *Error {
 			}
 		}
 		payload["parsed"] = parsed
+	} else if len(body) > 0 {
+		payload["body"] = string(body)
 	}
 	out := &Error{
 		Kind:    KindRemote,

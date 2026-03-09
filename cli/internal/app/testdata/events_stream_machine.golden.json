@@ -3,12 +3,6 @@
   "command": "events stream",
   "command_id": "events.stream",
   "data": {
-    "data": {
-      "event": {
-        "id": "event_stream_1",
-        "type": "actor_statement"
-      }
-    },
     "event": {
       "id": "event_stream_1",
       "type": "actor_statement"

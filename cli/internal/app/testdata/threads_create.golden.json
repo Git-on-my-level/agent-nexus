@@ -1,19 +1,12 @@
 {
   "ok": true,
   "command": "threads create",
+  "command_id": "threads.create",
   "data": {
-    "body": {
-      "thread": {
-        "id": "thread_1",
-        "status": "active",
-        "title": "Alpha"
-      }
-    },
-    "headers": {
-      "Content-Type": [
-        "application/json"
-      ]
-    },
-    "status_code": 201
+    "thread": {
+      "id": "thread_1",
+      "status": "active",
+      "title": "Alpha"
+    }
   }
 }

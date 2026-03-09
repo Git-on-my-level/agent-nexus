@@ -74,6 +74,37 @@ type Environment struct {
 	ReadFile    func(string) ([]byte, error)
 }
 
+func Defaults(overrides Overrides) Resolved {
+	r := Resolved{
+		BaseURL: DefaultBaseURL,
+		Agent:   DefaultAgent,
+		Timeout: DefaultTimeout,
+		Sources: map[string]string{},
+	}
+	if overrides.JSON != nil {
+		r.JSON = *overrides.JSON
+	}
+	if overrides.BaseURL != nil && strings.TrimSpace(*overrides.BaseURL) != "" {
+		r.BaseURL = strings.TrimSpace(*overrides.BaseURL)
+	}
+	if overrides.Agent != nil && strings.TrimSpace(*overrides.Agent) != "" {
+		r.Agent = strings.TrimSpace(*overrides.Agent)
+	}
+	if overrides.NoColor != nil {
+		r.NoColor = *overrides.NoColor
+	}
+	if overrides.Verbose != nil {
+		r.Verbose = *overrides.Verbose
+	}
+	if overrides.Headers != nil {
+		r.Headers = *overrides.Headers
+	}
+	if overrides.Timeout != nil {
+		r.Timeout = *overrides.Timeout
+	}
+	return r
+}
+
 func Resolve(overrides Overrides, env Environment) (Resolved, error) {
 	getenv := env.Getenv
 	if getenv == nil {

@@ -352,8 +352,8 @@ func TestRunAPICallJSONWithStdinBody(t *testing.T) {
 		t.Fatalf("unexpected payload: %#v", payload)
 	}
 	data, _ := payload["data"].(map[string]any)
-	if int(data["status_code"].(float64)) != http.StatusCreated {
-		t.Fatalf("unexpected status code payload: %#v", data)
+	if data == nil {
+		t.Fatalf("unexpected nil data payload: %#v", payload)
 	}
 }
 

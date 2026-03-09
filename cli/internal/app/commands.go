@@ -27,13 +27,13 @@ func (a *App) runCommand(ctx context.Context, args []string, cfg config.Resolved
 		args = rewritten
 	}
 	if len(args) >= 2 && isHelpToken(args[1]) {
-		if a.printHelpTopic(args[0]) {
-			return "help", &commandResult{}, nil
+		if text, ok := helpTopicText(args[0]); ok {
+			return "help", &commandResult{Text: text, Data: map[string]any{"help_text": text}}, nil
 		}
 	}
 	if len(args) >= 3 && isHelpToken(args[2]) {
-		if a.printHelpTopic(args[0] + " " + args[1]) {
-			return "help", &commandResult{}, nil
+		if text, ok := helpTopicText(args[0] + " " + args[1]); ok {
+			return "help", &commandResult{Text: text, Data: map[string]any{"help_text": text}}, nil
 		}
 	}
 	switch args[0] {
@@ -69,13 +69,14 @@ func (a *App) runCommand(ctx context.Context, args []string, cfg config.Resolved
 		return "api call", result, err
 	case "help", "--help", "-h":
 		if len(args) > 1 {
-			if a.printHelpTopic(strings.Join(args[1:], " ")) {
-				return "help", &commandResult{}, nil
+			topic := strings.Join(args[1:], " ")
+			if text, ok := helpTopicText(topic); ok {
+				return "help", &commandResult{Text: text, Data: map[string]any{"help_text": text}}, nil
 			}
-			return "help", nil, errnorm.Usage("unknown_command", fmt.Sprintf("unknown help topic %q", strings.Join(args[1:], " ")))
+			return "help", nil, errnorm.Usage("unknown_command", fmt.Sprintf("unknown help topic %q", topic))
 		}
-		a.printRootUsage()
-		return "help", &commandResult{}, nil
+		text := a.rootUsageText()
+		return "help", &commandResult{Text: text, Data: map[string]any{"help_text": text}}, nil
 	default:
 		return args[0], nil, errnorm.Usage("unknown_command", fmt.Sprintf("unknown command %q", args[0]))
 	}
@@ -334,6 +335,8 @@ func (a *App) runAPICall(ctx context.Context, args []string, cfg config.Resolved
 	return &commandResult{Data: data, Text: text}, nil
 }
 
+const stdinReadTimeout = 2 * time.Second
+
 func (a *App) readStdinBody() ([]byte, error) {
 	if a.Stdin == nil {
 		return nil, nil
@@ -341,14 +344,30 @@ func (a *App) readStdinBody() ([]byte, error) {
 	if a.StdinIsTTY != nil && a.StdinIsTTY() {
 		return nil, nil
 	}
-	content, err := io.ReadAll(a.Stdin)
-	if err != nil {
-		return nil, err
+
+	type readResult struct {
+		data []byte
+		err  error
 	}
-	if len(strings.TrimSpace(string(content))) == 0 {
-		return nil, nil
+	ch := make(chan readResult, 1)
+	go func() {
+		data, err := io.ReadAll(a.Stdin)
+		ch <- readResult{data, err}
+	}()
+
+	select {
+	case res := <-ch:
+		if res.err != nil {
+			return nil, res.err
+		}
+		if len(strings.TrimSpace(string(res.data))) == 0 {
+			return nil, nil
+		}
+		return res.data, nil
+	case <-time.After(stdinReadTimeout):
+		return nil, errnorm.Usage("stdin_timeout",
+			"no input received on stdin within timeout; pipe JSON input or use --from-file")
 	}
-	return content, nil
 }
 
 func parseResponseBody(body []byte) any {

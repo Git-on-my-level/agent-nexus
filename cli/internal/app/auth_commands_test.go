@@ -57,6 +57,15 @@ func TestAuthRegisterLifecycleCommands(t *testing.T) {
 	if serverObj == nil {
 		t.Fatalf("unexpected whoami payload: %#v", whoamiPayload)
 	}
+	if got := anyStr(serverObj["access_token"]); got != "" {
+		t.Fatalf("expected empty access_token in whoami data, got %q", got)
+	}
+	if got := anyStr(serverObj["refresh_token"]); got != "" {
+		t.Fatalf("expected empty refresh_token in whoami data, got %q", got)
+	}
+	if got := anyStr(serverObj["private_key_path"]); got != "" {
+		t.Fatalf("expected empty private_key_path in whoami data, got %q", got)
+	}
 
 	updateOut := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "update-username", "--username", "renamed_agent"})
 	assertEnvelopeOK(t, updateOut)
@@ -89,7 +98,7 @@ func TestAuthRegisterLifecycleCommands(t *testing.T) {
 	protectedOut := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "api", "call", "--path", "/protected"})
 	protectedPayload := assertEnvelopeOK(t, protectedOut)
 	protectedData, _ := protectedPayload["data"].(map[string]any)
-	if protectedData == nil || int(protectedData["status_code"].(float64)) != http.StatusOK {
+	if protectedData == nil {
 		t.Fatalf("unexpected protected api payload: %#v", protectedPayload)
 	}
 

@@ -91,8 +91,12 @@ func (a *App) runAuthWhoAmI(ctx context.Context, service *authcli.Service) (*com
 		"Server username: " + anyString(serverAgent["username"]),
 		"Server agent ID: " + anyString(serverAgent["agent_id"]),
 	}, "\n")
+	redacted := result.Profile
+	redacted.AccessToken = ""
+	redacted.RefreshToken = ""
+	redacted.PrivateKeyPath = ""
 	data := map[string]any{
-		"profile": result.Profile,
+		"profile": redacted,
 		"server":  result.Server,
 	}
 	return &commandResult{Text: text, Data: data}, nil

@@ -188,8 +188,7 @@ func TestInboxListIncludesAliasesAndLinkedShortIDs(t *testing.T) {
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "--base-url", server.URL, "inbox", "list"})
 	payload := assertEnvelopeOK(t, raw)
 	data, _ := payload["data"].(map[string]any)
-	body, _ := data["body"].(map[string]any)
-	items, _ := body["items"].([]any)
+	items, _ := data["items"].([]any)
 	if len(items) != 1 {
 		t.Fatalf("expected one item in inbox payload, got %#v", payload)
 	}
@@ -239,25 +238,24 @@ func TestInboxListSupportsClientSideThreadAndTypeFilters(t *testing.T) {
 	})
 	payload := assertEnvelopeOK(t, raw)
 	data, _ := payload["data"].(map[string]any)
-	body, _ := data["body"].(map[string]any)
-	if got := anyStringValue(body["thread_id"]); got != "thread_1234567890" {
-		t.Fatalf("expected filtered thread_id, got %#v", body)
+	if got := anyStringValue(data["thread_id"]); got != "thread_1234567890" {
+		t.Fatalf("expected filtered thread_id, got %#v", data)
 	}
-	fullID, _ := body["full_id"].(bool)
+	fullID, _ := data["full_id"].(bool)
 	if !fullID {
-		t.Fatalf("expected full_id=true, got %#v", body)
+		t.Fatalf("expected full_id=true, got %#v", data)
 	}
-	types := stringList(body["types"])
+	types := stringList(data["types"])
 	if len(types) != 1 || types[0] != "decision_needed" {
-		t.Fatalf("expected filtered types, got %#v", body)
+		t.Fatalf("expected filtered types, got %#v", data)
 	}
-	items, _ := body["items"].([]any)
+	items, _ := data["items"].([]any)
 	if len(items) != 1 {
-		t.Fatalf("expected one filtered inbox item, got %#v", body)
+		t.Fatalf("expected one filtered inbox item, got %#v", data)
 	}
 	item, _ := items[0].(map[string]any)
 	if got := anyStringValue(item["id"]); got != matchingID {
-		t.Fatalf("expected matching inbox item %q, got %#v", matchingID, body)
+		t.Fatalf("expected matching inbox item %q, got %#v", matchingID, data)
 	}
 
 	human := runCLIForTest(t, home, map[string]string{}, nil, []string{
@@ -326,8 +324,7 @@ func TestInboxGetByAliasTargetsSingleItem(t *testing.T) {
 		t.Fatalf("expected command inbox get, got %q payload=%#v", got, payload)
 	}
 	data, _ := payload["data"].(map[string]any)
-	body, _ := data["body"].(map[string]any)
-	item, _ := body["item"].(map[string]any)
+	item, _ := data["item"].(map[string]any)
 	if got := anyStringValue(item["id"]); got != secondID {
 		t.Fatalf("expected inbox item %q, got %q payload=%#v", secondID, got, payload)
 	}
@@ -474,25 +471,24 @@ func TestEventsListCommandFiltersAndLimits(t *testing.T) {
 	}
 
 	data, _ := payload["data"].(map[string]any)
-	body, _ := data["body"].(map[string]any)
-	if got := anyStringValue(body["thread_id"]); got != "thread_1" {
-		t.Fatalf("expected thread id thread_1, got %#v", body)
+	if got := anyStringValue(data["thread_id"]); got != "thread_1" {
+		t.Fatalf("expected thread id thread_1, got %#v", data)
 	}
-	totalEvents, _ := body["total_events"].(float64)
+	totalEvents, _ := data["total_events"].(float64)
 	if int(totalEvents) != 3 {
-		t.Fatalf("expected total_events=3, got %#v", body)
+		t.Fatalf("expected total_events=3, got %#v", data)
 	}
-	returnedEvents, _ := body["returned_events"].(float64)
+	returnedEvents, _ := data["returned_events"].(float64)
 	if int(returnedEvents) != 1 {
-		t.Fatalf("expected returned_events=1, got %#v", body)
+		t.Fatalf("expected returned_events=1, got %#v", data)
 	}
-	events, _ := body["events"].([]any)
+	events, _ := data["events"].([]any)
 	if len(events) != 1 {
-		t.Fatalf("expected one event after filtering/limit, got %#v", body)
+		t.Fatalf("expected one event after filtering/limit, got %#v", data)
 	}
 	event, _ := events[0].(map[string]any)
 	if got := anyStringValue(event["id"]); got != "event_3" {
-		t.Fatalf("expected most recent matching event event_3, got %#v", body)
+		t.Fatalf("expected most recent matching event event_3, got %#v", data)
 	}
 
 	human := runCLIForTest(t, home, map[string]string{}, nil, []string{
@@ -545,20 +541,19 @@ func TestEventsListCommandSupportsMineActorFilterAndFullID(t *testing.T) {
 	})
 	payload := assertEnvelopeOK(t, raw)
 	data, _ := payload["data"].(map[string]any)
-	body, _ := data["body"].(map[string]any)
-	if got := anyStringValue(body["actor_id"]); got != mineActorID {
-		t.Fatalf("expected actor_id filter %q, got %#v", mineActorID, body)
+	if got := anyStringValue(data["actor_id"]); got != mineActorID {
+		t.Fatalf("expected actor_id filter %q, got %#v", mineActorID, data)
 	}
-	if fullID, _ := body["full_id"].(bool); !fullID {
-		t.Fatalf("expected full_id=true, got %#v", body)
+	if fullID, _ := data["full_id"].(bool); !fullID {
+		t.Fatalf("expected full_id=true, got %#v", data)
 	}
-	events, _ := body["events"].([]any)
+	events, _ := data["events"].([]any)
 	if len(events) != 1 {
-		t.Fatalf("expected one filtered event, got %#v", body)
+		t.Fatalf("expected one filtered event, got %#v", data)
 	}
 	event, _ := events[0].(map[string]any)
 	if got := anyStringValue(event["id"]); got != mineEventID {
-		t.Fatalf("unexpected event id after mine filter: %#v", body)
+		t.Fatalf("unexpected event id after mine filter: %#v", data)
 	}
 	if got := anyStringValue(event["summary_preview"]); !strings.Contains(got, "Ship Friday rescue scope") {
 		t.Fatalf("expected payload preview summary, got %#v", event)
@@ -637,31 +632,30 @@ func TestEventsListCommandSupportsMultipleThreadIDs(t *testing.T) {
 	})
 	payload := assertEnvelopeOK(t, raw)
 	data, _ := payload["data"].(map[string]any)
-	body, _ := data["body"].(map[string]any)
-	totalEvents, _ := body["total_events"].(float64)
+	totalEvents, _ := data["total_events"].(float64)
 	if int(totalEvents) != 4 {
-		t.Fatalf("expected total_events=4, got %#v", body)
+		t.Fatalf("expected total_events=4, got %#v", data)
 	}
-	threadIDs := stringList(body["thread_ids"])
+	threadIDs := stringList(data["thread_ids"])
 	if len(threadIDs) != 2 || threadIDs[0] != "thread_1" || threadIDs[1] != "thread_2" {
-		t.Fatalf("expected thread_ids [thread_1 thread_2], got %#v", body)
+		t.Fatalf("expected thread_ids [thread_1 thread_2], got %#v", data)
 	}
-	events, _ := body["events"].([]any)
+	events, _ := data["events"].([]any)
 	if len(events) != 2 {
-		t.Fatalf("expected max_events to cap result set, got %#v", body)
+		t.Fatalf("expected max_events to cap result set, got %#v", data)
 	}
 	first, _ := events[0].(map[string]any)
 	second, _ := events[1].(map[string]any)
 	if anyStringValue(first["id"]) != "event_3" || anyStringValue(second["id"]) != "event_4" {
-		t.Fatalf("expected most recent cross-thread events, got %#v", body)
+		t.Fatalf("expected most recent cross-thread events, got %#v", data)
 	}
-	snapshots, _ := body["snapshots"].(map[string]any)
+	snapshots, _ := data["snapshots"].(map[string]any)
 	if len(snapshots) != 2 {
-		t.Fatalf("expected merged timeline snapshots, got %#v", body["snapshots"])
+		t.Fatalf("expected merged timeline snapshots, got %#v", data["snapshots"])
 	}
-	artifacts, _ := body["artifacts"].(map[string]any)
+	artifacts, _ := data["artifacts"].(map[string]any)
 	if len(artifacts) != 2 {
-		t.Fatalf("expected merged timeline artifacts, got %#v", body["artifacts"])
+		t.Fatalf("expected merged timeline artifacts, got %#v", data["artifacts"])
 	}
 
 	mu.Lock()
@@ -918,9 +912,8 @@ func TestDocsContentCommand(t *testing.T) {
 		t.Fatalf("unexpected command label: %#v", payload)
 	}
 	data, _ := payload["data"].(map[string]any)
-	body, _ := data["body"].(map[string]any)
-	if got := anyStringValue(body["content"]); got != "Line one\nLine two" {
-		t.Fatalf("expected document content, got %#v", body)
+	if got := anyStringValue(data["content"]); got != "Line one\nLine two" {
+		t.Fatalf("expected document content, got %#v", data)
 	}
 }
 
@@ -1530,8 +1523,7 @@ func TestEventsCreateReviewCompletedValidRefsCallsHTTP(t *testing.T) {
 	})
 	payload := assertEnvelopeOK(t, raw)
 	data, _ := payload["data"].(map[string]any)
-	body, _ := data["body"].(map[string]any)
-	event, _ := body["event"].(map[string]any)
+	event, _ := data["event"].(map[string]any)
 	if got := anyStringValue(event["id"]); got != "event_review_completed_1" {
 		t.Fatalf("unexpected event id in response payload: %#v", payload)
 	}
@@ -1575,8 +1567,7 @@ func TestEventsCreateNormalizesThreadIDAndSupportedTypedRefs(t *testing.T) {
 	})
 	payload := assertEnvelopeOK(t, raw)
 	data, _ := payload["data"].(map[string]any)
-	body, _ := data["body"].(map[string]any)
-	event, _ := body["event"].(map[string]any)
+	event, _ := data["event"].(map[string]any)
 	if got := anyStringValue(event["id"]); got != "event_created_1" {
 		t.Fatalf("unexpected event id payload=%#v", payload)
 	}
@@ -1772,10 +1763,9 @@ func TestThreadsContextCommand(t *testing.T) {
 		t.Fatalf("unexpected command label: %#v", payload)
 	}
 	data, _ := payload["data"].(map[string]any)
-	body, _ := data["body"].(map[string]any)
-	collaboration, _ := body["collaboration_summary"].(map[string]any)
+	collaboration, _ := data["collaboration_summary"].(map[string]any)
 	if collaboration == nil {
-		t.Fatalf("expected collaboration_summary in context payload, got %#v", body)
+		t.Fatalf("expected collaboration_summary in context payload, got %#v", data)
 	}
 }
 
@@ -1814,10 +1804,9 @@ func TestThreadsContextIncludesCollaborationSummarySections(t *testing.T) {
 	})
 	payload := assertEnvelopeOK(t, raw)
 	data, _ := payload["data"].(map[string]any)
-	body, _ := data["body"].(map[string]any)
-	collaboration, _ := body["collaboration_summary"].(map[string]any)
+	collaboration, _ := data["collaboration_summary"].(map[string]any)
 	if collaboration == nil {
-		t.Fatalf("expected collaboration_summary, got %#v", body)
+		t.Fatalf("expected collaboration_summary, got %#v", data)
 	}
 	recommendationCount, _ := collaboration["recommendation_count"].(float64)
 	if got := int(recommendationCount); got != 1 {
@@ -1870,10 +1859,9 @@ func TestCommitmentsListResolvesShortThreadIDFilter(t *testing.T) {
 	})
 	payload := assertEnvelopeOK(t, raw)
 	data, _ := payload["data"].(map[string]any)
-	body, _ := data["body"].(map[string]any)
-	items := asSlice(body["commitments"])
+	items := asSlice(data["commitments"])
 	if len(items) != 1 {
-		t.Fatalf("expected one commitment after short thread id resolution, got %#v", body)
+		t.Fatalf("expected one commitment after short thread id resolution, got %#v", data)
 	}
 }
 
@@ -1905,10 +1893,9 @@ func TestArtifactsListResolvesShortThreadIDFilter(t *testing.T) {
 	})
 	payload := assertEnvelopeOK(t, raw)
 	data, _ := payload["data"].(map[string]any)
-	body, _ := data["body"].(map[string]any)
-	items := asSlice(body["artifacts"])
+	items := asSlice(data["artifacts"])
 	if len(items) != 1 {
-		t.Fatalf("expected one artifact after short thread id resolution, got %#v", body)
+		t.Fatalf("expected one artifact after short thread id resolution, got %#v", data)
 	}
 }
 
@@ -1937,13 +1924,12 @@ func TestInboxListResolvesShortThreadIDFilter(t *testing.T) {
 	})
 	payload := assertEnvelopeOK(t, raw)
 	data, _ := payload["data"].(map[string]any)
-	body, _ := data["body"].(map[string]any)
-	items := asSlice(body["items"])
+	items := asSlice(data["items"])
 	if len(items) != 1 {
-		t.Fatalf("expected one inbox item after short thread id resolution, got %#v", body)
+		t.Fatalf("expected one inbox item after short thread id resolution, got %#v", data)
 	}
-	if got := anyStringValue(body["thread_id"]); got != "thread_canonical_123" {
-		t.Fatalf("expected canonical filtered thread_id, got %#v", body)
+	if got := anyStringValue(data["thread_id"]); got != "thread_canonical_123" {
+		t.Fatalf("expected canonical filtered thread_id, got %#v", data)
 	}
 }
 
@@ -2010,14 +1996,13 @@ func TestThreadsContextAggregatesAcrossMultipleThreads(t *testing.T) {
 	})
 	payload := assertEnvelopeOK(t, raw)
 	data, _ := payload["data"].(map[string]any)
-	body, _ := data["body"].(map[string]any)
-	contexts, _ := body["contexts"].([]any)
+	contexts, _ := data["contexts"].([]any)
 	if len(contexts) != 2 {
-		t.Fatalf("expected 2 contexts, got %#v", body)
+		t.Fatalf("expected 2 contexts, got %#v", data)
 	}
-	collaboration, _ := body["collaboration_summary"].(map[string]any)
+	collaboration, _ := data["collaboration_summary"].(map[string]any)
 	if collaboration == nil {
-		t.Fatalf("expected collaboration summary, got %#v", body)
+		t.Fatalf("expected collaboration summary, got %#v", data)
 	}
 	recommendationCount, _ := collaboration["recommendation_count"].(float64)
 	if got := int(recommendationCount); got != 2 {
@@ -2093,10 +2078,9 @@ func TestThreadsContextDiscoversByFiltersAndType(t *testing.T) {
 	})
 	payload := assertEnvelopeOK(t, raw)
 	data, _ := payload["data"].(map[string]any)
-	body, _ := data["body"].(map[string]any)
-	threadIDs := stringList(body["thread_ids"])
+	threadIDs := stringList(data["thread_ids"])
 	if len(threadIDs) != 2 || threadIDs[0] != "thread_init_1" || threadIDs[1] != "thread_init_2" {
-		t.Fatalf("expected initiative thread_ids [thread_init_1 thread_init_2], got %#v", body)
+		t.Fatalf("expected initiative thread_ids [thread_init_1 thread_init_2], got %#v", data)
 	}
 
 	mu.Lock()
@@ -2211,29 +2195,28 @@ func TestThreadsInspectBuildsCoordinationView(t *testing.T) {
 		t.Fatalf("expected threads.inspect command_id, got %#v", payload)
 	}
 	data, _ := payload["data"].(map[string]any)
-	body, _ := data["body"].(map[string]any)
-	thread, _ := body["thread"].(map[string]any)
+	thread, _ := data["thread"].(map[string]any)
 	if got := anyStringValue(thread["id"]); got != "thread_1" {
-		t.Fatalf("expected thread_1, got %#v", body)
+		t.Fatalf("expected thread_1, got %#v", data)
 	}
-	contextBody, _ := body["context"].(map[string]any)
+	contextBody, _ := data["context"].(map[string]any)
 	recentEvents, _ := contextBody["recent_events"].([]any)
 	if len(recentEvents) != 2 {
-		t.Fatalf("expected 2 recent events, got %#v", body)
+		t.Fatalf("expected 2 recent events, got %#v", data)
 	}
-	collaboration, _ := body["collaboration"].(map[string]any)
+	collaboration, _ := data["collaboration"].(map[string]any)
 	recommendationCount, _ := collaboration["recommendation_count"].(float64)
 	if got := int(recommendationCount); got != 1 {
 		t.Fatalf("expected recommendation_count=1, got %#v", collaboration)
 	}
-	inbox, _ := body["inbox"].(map[string]any)
+	inbox, _ := data["inbox"].(map[string]any)
 	items, _ := inbox["items"].([]any)
 	if len(items) != 1 {
-		t.Fatalf("expected 1 inbox item for thread_1, got %#v", body)
+		t.Fatalf("expected 1 inbox item for thread_1, got %#v", data)
 	}
 	item, _ := items[0].(map[string]any)
 	if got := anyStringValue(item["id"]); got != inboxID {
-		t.Fatalf("expected inbox item %q, got %#v", inboxID, body)
+		t.Fatalf("expected inbox item %q, got %#v", inboxID, data)
 	}
 
 	humanFull := runCLIForTest(t, home, map[string]string{}, nil, []string{
@@ -2355,11 +2338,10 @@ func TestThreadsRecommendationsBuildsFocusedReview(t *testing.T) {
 	}
 
 	data, _ := payload["data"].(map[string]any)
-	body, _ := data["body"].(map[string]any)
-	recommendations, _ := body["recommendations"].(map[string]any)
+	recommendations, _ := data["recommendations"].(map[string]any)
 	recommendationCount, _ := recommendations["count"].(float64)
 	if got := int(recommendationCount); got != 1 {
-		t.Fatalf("expected recommendation count=1, got %#v", body)
+		t.Fatalf("expected recommendation count=1, got %#v", data)
 	}
 	recItems, _ := recommendations["items"].([]any)
 	if len(recItems) != 1 {
@@ -2377,16 +2359,16 @@ func TestThreadsRecommendationsBuildsFocusedReview(t *testing.T) {
 		t.Fatalf("expected provenance_sources, got %#v", rec)
 	}
 
-	pending, _ := body["pending_decisions"].(map[string]any)
+	pending, _ := data["pending_decisions"].(map[string]any)
 	pendingCount, _ := pending["count"].(float64)
 	if got := int(pendingCount); got != 1 {
 		t.Fatalf("expected pending decision count=1, got %#v", pending)
 	}
-	totalReviewItems, _ := body["total_review_items"].(float64)
+	totalReviewItems, _ := data["total_review_items"].(float64)
 	if got := int(totalReviewItems); got != 4 {
-		t.Fatalf("expected total_review_items=4 to include pending decisions, got %#v", body)
+		t.Fatalf("expected total_review_items=4 to include pending decisions, got %#v", data)
 	}
-	followUp, _ := body["follow_up"].(map[string]any)
+	followUp, _ := data["follow_up"].(map[string]any)
 	examples := stringList(followUp["events_get_examples"])
 	if len(examples) == 0 || !strings.Contains(examples[0], "oar events get --event-id") {
 		t.Fatalf("expected events_get_examples follow-up commands, got %#v", followUp)
@@ -2449,17 +2431,16 @@ func TestThreadsRecommendationsIncludesRelatedThreadReview(t *testing.T) {
 	})
 	payload := assertEnvelopeOK(t, raw)
 	data, _ := payload["data"].(map[string]any)
-	body, _ := data["body"].(map[string]any)
 
-	relatedThreads, _ := body["related_threads"].(map[string]any)
+	relatedThreads, _ := data["related_threads"].(map[string]any)
 	relatedThreadCount, _ := relatedThreads["count"].(float64)
 	if got := int(relatedThreadCount); got != 1 {
-		t.Fatalf("expected one related thread, got %#v", body)
+		t.Fatalf("expected one related thread, got %#v", data)
 	}
-	relatedRecommendations, _ := body["related_recommendations"].(map[string]any)
+	relatedRecommendations, _ := data["related_recommendations"].(map[string]any)
 	relatedRecommendationCount, _ := relatedRecommendations["count"].(float64)
 	if got := int(relatedRecommendationCount); got != 1 {
-		t.Fatalf("expected one related recommendation, got %#v", body)
+		t.Fatalf("expected one related recommendation, got %#v", data)
 	}
 	relatedItems, _ := relatedRecommendations["items"].([]any)
 	if len(relatedItems) != 1 {
@@ -2472,9 +2453,9 @@ func TestThreadsRecommendationsIncludesRelatedThreadReview(t *testing.T) {
 	if got := anyStringValue(relatedEvent["source_thread_title"]); got != "Related Feedback Thread" {
 		t.Fatalf("expected source_thread_title annotation, got %#v", relatedEvent)
 	}
-	totalReviewItems, _ := body["total_review_items"].(float64)
+	totalReviewItems, _ := data["total_review_items"].(float64)
 	if got := int(totalReviewItems); got != 2 {
-		t.Fatalf("expected total_review_items to include related recommendation, got %#v", body)
+		t.Fatalf("expected total_review_items to include related recommendation, got %#v", data)
 	}
 }
 
@@ -2521,18 +2502,17 @@ func TestThreadsRecommendationsSkipsMissingRelatedThreadsWithWarnings(t *testing
 	})
 	payload := assertEnvelopeOK(t, raw)
 	data, _ := payload["data"].(map[string]any)
-	body, _ := data["body"].(map[string]any)
 
-	relatedRecommendations, _ := body["related_recommendations"].(map[string]any)
+	relatedRecommendations, _ := data["related_recommendations"].(map[string]any)
 	relatedRecommendationCount, _ := relatedRecommendations["count"].(float64)
 	if got := int(relatedRecommendationCount); got != 1 {
-		t.Fatalf("expected one successful related recommendation despite missing thread, got %#v", body)
+		t.Fatalf("expected one successful related recommendation despite missing thread, got %#v", data)
 	}
 
-	warnings, _ := body["warnings"].(map[string]any)
+	warnings, _ := data["warnings"].(map[string]any)
 	warningCount, _ := warnings["count"].(float64)
 	if got := int(warningCount); got != 1 {
-		t.Fatalf("expected one warning for skipped related thread, got %#v", body)
+		t.Fatalf("expected one warning for skipped related thread, got %#v", data)
 	}
 	warningItems, _ := warnings["items"].([]any)
 	if len(warningItems) != 1 {
@@ -2607,14 +2587,13 @@ func TestThreadsRecommendationsCanHydrateRelatedEventContent(t *testing.T) {
 	})
 	payload := assertEnvelopeOK(t, raw)
 	data, _ := payload["data"].(map[string]any)
-	body, _ := data["body"].(map[string]any)
-	if !asBool(body["related_event_content_enabled"]) {
-		t.Fatalf("expected related_event_content_enabled=true, got %#v", body)
+	if !asBool(data["related_event_content_enabled"]) {
+		t.Fatalf("expected related_event_content_enabled=true, got %#v", data)
 	}
-	if got := intValue(body["related_event_content_count"]); got != 1 {
-		t.Fatalf("expected one hydrated related event, got %#v", body)
+	if got := intValue(data["related_event_content_count"]); got != 1 {
+		t.Fatalf("expected one hydrated related event, got %#v", data)
 	}
-	relatedRecommendations, _ := body["related_recommendations"].(map[string]any)
+	relatedRecommendations, _ := data["related_recommendations"].(map[string]any)
 	relatedItems, _ := relatedRecommendations["items"].([]any)
 	if len(relatedItems) != 1 {
 		t.Fatalf("expected one related recommendation item, got %#v", relatedRecommendations)
@@ -2678,14 +2657,13 @@ func TestThreadsWorkspaceCanHydrateRelatedEventContent(t *testing.T) {
 	})
 	payload := assertEnvelopeOK(t, raw)
 	data, _ := payload["data"].(map[string]any)
-	body, _ := data["body"].(map[string]any)
-	if !asBool(body["related_event_content_enabled"]) {
-		t.Fatalf("expected related_event_content_enabled=true, got %#v", body)
+	if !asBool(data["related_event_content_enabled"]) {
+		t.Fatalf("expected related_event_content_enabled=true, got %#v", data)
 	}
-	if got := intValue(body["related_event_content_count"]); got != 1 {
-		t.Fatalf("expected one hydrated related event, got %#v", body)
+	if got := intValue(data["related_event_content_count"]); got != 1 {
+		t.Fatalf("expected one hydrated related event, got %#v", data)
 	}
-	relatedRecommendations, _ := body["related_recommendations"].(map[string]any)
+	relatedRecommendations, _ := data["related_recommendations"].(map[string]any)
 	relatedItems, _ := relatedRecommendations["items"].([]any)
 	relatedEvent, _ := relatedItems[0].(map[string]any)
 	fullEvent, _ := relatedEvent["event"].(map[string]any)
@@ -2739,11 +2717,10 @@ func TestThreadsRecommendationsWarnsWhenRelatedEventHydrationFails(t *testing.T)
 	})
 	payload := assertEnvelopeOK(t, raw)
 	data, _ := payload["data"].(map[string]any)
-	body, _ := data["body"].(map[string]any)
-	if got := intValue(body["related_event_content_count"]); got != 0 {
-		t.Fatalf("expected no hydrated related events when events get fails, got %#v", body)
+	if got := intValue(data["related_event_content_count"]); got != 0 {
+		t.Fatalf("expected no hydrated related events when events get fails, got %#v", data)
 	}
-	warnings, _ := body["warnings"].(map[string]any)
+	warnings, _ := data["warnings"].(map[string]any)
 	warningItems, _ := warnings["items"].([]any)
 	if len(warningItems) != 1 {
 		t.Fatalf("expected one hydration warning, got %#v", warnings)
@@ -2838,16 +2815,15 @@ func TestThreadsRecommendationsCountsPendingDecisionsInTotalWhenRecentWindowExcl
 	})
 	payload := assertEnvelopeOK(t, raw)
 	data, _ := payload["data"].(map[string]any)
-	body, _ := data["body"].(map[string]any)
 
-	pending, _ := body["pending_decisions"].(map[string]any)
+	pending, _ := data["pending_decisions"].(map[string]any)
 	pendingCount, _ := pending["count"].(float64)
 	if got := int(pendingCount); got != 1 {
 		t.Fatalf("expected pending decision count=1, got %#v", pending)
 	}
-	totalReviewItems, _ := body["total_review_items"].(float64)
+	totalReviewItems, _ := data["total_review_items"].(float64)
 	if got := int(totalReviewItems); got != 1 {
-		t.Fatalf("expected total_review_items=1 when only pending decisions are present, got %#v", body)
+		t.Fatalf("expected total_review_items=1 when only pending decisions are present, got %#v", data)
 	}
 }
 
@@ -3093,8 +3069,7 @@ func TestThreadsContextCommandResolvesUniquePrefix(t *testing.T) {
 	})
 	payload := assertEnvelopeOK(t, raw)
 	data, _ := payload["data"].(map[string]any)
-	body, _ := data["body"].(map[string]any)
-	thread, _ := body["thread"].(map[string]any)
+	thread, _ := data["thread"].(map[string]any)
 	if got := anyStringValue(thread["id"]); got != canonicalID {
 		t.Fatalf("expected canonical thread id %q, got %q payload=%#v", canonicalID, got, payload)
 	}
@@ -3137,24 +3112,23 @@ func TestThreadsContextDeduplicatesResolvedDuplicateIDs(t *testing.T) {
 	})
 	payload := assertEnvelopeOK(t, raw)
 	data, _ := payload["data"].(map[string]any)
-	body, _ := data["body"].(map[string]any)
-	threadIDs := stringList(body["thread_ids"])
+	threadIDs := stringList(data["thread_ids"])
 	if len(threadIDs) != 1 || threadIDs[0] != canonicalID {
-		t.Fatalf("expected one canonical thread_id %q, got %#v", canonicalID, body)
+		t.Fatalf("expected one canonical thread_id %q, got %#v", canonicalID, data)
 	}
-	threadCount, _ := body["thread_count"].(float64)
+	threadCount, _ := data["thread_count"].(float64)
 	if got := int(threadCount); got != 1 {
-		t.Fatalf("expected thread_count=1, got %#v", body)
+		t.Fatalf("expected thread_count=1, got %#v", data)
 	}
-	contexts, _ := body["contexts"].([]any)
+	contexts, _ := data["contexts"].([]any)
 	if len(contexts) != 1 {
-		t.Fatalf("expected one deduplicated context, got %#v", body)
+		t.Fatalf("expected one deduplicated context, got %#v", data)
 	}
-	recentEvents, _ := body["recent_events"].([]any)
+	recentEvents, _ := data["recent_events"].([]any)
 	if len(recentEvents) != 1 {
-		t.Fatalf("expected one deduplicated recent event, got %#v", body)
+		t.Fatalf("expected one deduplicated recent event, got %#v", data)
 	}
-	collaboration, _ := body["collaboration_summary"].(map[string]any)
+	collaboration, _ := data["collaboration_summary"].(map[string]any)
 	recommendationCount, _ := collaboration["recommendation_count"].(float64)
 	if got := int(recommendationCount); got != 1 {
 		t.Fatalf("expected recommendation_count=1 after dedupe, got %#v", collaboration)
@@ -3294,8 +3268,7 @@ func TestThreadsListIncludesShortID(t *testing.T) {
 	})
 	payload := assertEnvelopeOK(t, raw)
 	data, _ := payload["data"].(map[string]any)
-	body, _ := data["body"].(map[string]any)
-	threads, _ := body["threads"].([]any)
+	threads, _ := data["threads"].([]any)
 	if len(threads) != 1 {
 		t.Fatalf("expected one thread in list payload, got %#v", payload)
 	}
@@ -3544,14 +3517,13 @@ func TestArtifactsInspectCommand(t *testing.T) {
 		t.Fatalf("unexpected command label: %#v", payload)
 	}
 	data, _ := payload["data"].(map[string]any)
-	body, _ := data["body"].(map[string]any)
-	artifact, _ := body["artifact"].(map[string]any)
-	content, _ := body["content"].(map[string]any)
+	artifact, _ := data["artifact"].(map[string]any)
+	content, _ := data["content"].(map[string]any)
 	if got := anyStringValue(artifact["id"]); got != "artifact_1" {
-		t.Fatalf("expected artifact id artifact_1, got %#v", body)
+		t.Fatalf("expected artifact id artifact_1, got %#v", data)
 	}
 	if got := anyStringValue(content["body_text"]); got != "artifact body" {
-		t.Fatalf("expected artifact content text, got %#v", body)
+		t.Fatalf("expected artifact content text, got %#v", data)
 	}
 }
 
@@ -3836,18 +3808,17 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 		t.Fatalf("expected threads.inspect command_id, got %#v", threadsInspectPayload)
 	}
 	threadsInspectData, _ := threadsInspectPayload["data"].(map[string]any)
-	threadsInspectBody, _ := threadsInspectData["body"].(map[string]any)
-	if _, ok := threadsInspectBody["thread"].(map[string]any); !ok {
-		t.Fatalf("expected thread section in inspect payload, got %#v", threadsInspectBody)
+	if _, ok := threadsInspectData["thread"].(map[string]any); !ok {
+		t.Fatalf("expected thread section in inspect payload, got %#v", threadsInspectData)
 	}
-	if _, ok := threadsInspectBody["context"].(map[string]any); !ok {
-		t.Fatalf("expected context section in inspect payload, got %#v", threadsInspectBody)
+	if _, ok := threadsInspectData["context"].(map[string]any); !ok {
+		t.Fatalf("expected context section in inspect payload, got %#v", threadsInspectData)
 	}
-	if _, ok := threadsInspectBody["collaboration"].(map[string]any); !ok {
-		t.Fatalf("expected collaboration section in inspect payload, got %#v", threadsInspectBody)
+	if _, ok := threadsInspectData["collaboration"].(map[string]any); !ok {
+		t.Fatalf("expected collaboration section in inspect payload, got %#v", threadsInspectData)
 	}
-	if _, ok := threadsInspectBody["inbox"].(map[string]any); !ok {
-		t.Fatalf("expected inbox section in inspect payload, got %#v", threadsInspectBody)
+	if _, ok := threadsInspectData["inbox"].(map[string]any); !ok {
+		t.Fatalf("expected inbox section in inspect payload, got %#v", threadsInspectData)
 	}
 
 	threadsWorkspaceOut := runCLIForTest(t, home, env, nil, []string{
@@ -3865,15 +3836,14 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 		t.Fatalf("expected threads.workspace command_id, got %#v", threadsWorkspacePayload)
 	}
 	threadsWorkspaceData, _ := threadsWorkspacePayload["data"].(map[string]any)
-	threadsWorkspaceBody, _ := threadsWorkspaceData["body"].(map[string]any)
-	if _, ok := threadsWorkspaceBody["context"].(map[string]any); !ok {
-		t.Fatalf("expected context section in workspace payload, got %#v", threadsWorkspaceBody)
+	if _, ok := threadsWorkspaceData["context"].(map[string]any); !ok {
+		t.Fatalf("expected context section in workspace payload, got %#v", threadsWorkspaceData)
 	}
-	if _, ok := threadsWorkspaceBody["related_threads"].(map[string]any); !ok {
-		t.Fatalf("expected related_threads section in workspace payload, got %#v", threadsWorkspaceBody)
+	if _, ok := threadsWorkspaceData["related_threads"].(map[string]any); !ok {
+		t.Fatalf("expected related_threads section in workspace payload, got %#v", threadsWorkspaceData)
 	}
-	if _, ok := threadsWorkspaceBody["pending_decisions"].(map[string]any); !ok {
-		t.Fatalf("expected pending_decisions section in workspace payload, got %#v", threadsWorkspaceBody)
+	if _, ok := threadsWorkspaceData["pending_decisions"].(map[string]any); !ok {
+		t.Fatalf("expected pending_decisions section in workspace payload, got %#v", threadsWorkspaceData)
 	}
 
 	threadsRecommendationsOut := runCLIForTest(t, home, env, nil, []string{
@@ -3891,15 +3861,14 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 		t.Fatalf("expected threads.recommendations command_id, got %#v", threadsRecommendationsPayload)
 	}
 	threadsRecommendationsData, _ := threadsRecommendationsPayload["data"].(map[string]any)
-	threadsRecommendationsBody, _ := threadsRecommendationsData["body"].(map[string]any)
-	if _, ok := threadsRecommendationsBody["recommendations"].(map[string]any); !ok {
-		t.Fatalf("expected recommendations section in payload, got %#v", threadsRecommendationsBody)
+	if _, ok := threadsRecommendationsData["recommendations"].(map[string]any); !ok {
+		t.Fatalf("expected recommendations section in payload, got %#v", threadsRecommendationsData)
 	}
-	if _, ok := threadsRecommendationsBody["pending_decisions"].(map[string]any); !ok {
-		t.Fatalf("expected pending_decisions section in payload, got %#v", threadsRecommendationsBody)
+	if _, ok := threadsRecommendationsData["pending_decisions"].(map[string]any); !ok {
+		t.Fatalf("expected pending_decisions section in payload, got %#v", threadsRecommendationsData)
 	}
-	if _, ok := threadsRecommendationsBody["follow_up"].(map[string]any); !ok {
-		t.Fatalf("expected follow_up section in payload, got %#v", threadsRecommendationsBody)
+	if _, ok := threadsRecommendationsData["follow_up"].(map[string]any); !ok {
+		t.Fatalf("expected follow_up section in payload, got %#v", threadsRecommendationsData)
 	}
 
 	eventsStreamOut := runCLIForTest(t, home, env, nil, []string{

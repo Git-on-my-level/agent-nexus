@@ -53,14 +53,22 @@ func (a *App) Run(args []string) int {
 	if parseErr != nil {
 		return a.renderError(resolveMachineCommandIdentity("root"), overrides.JSON != nil && *overrides.JSON, parseErr)
 	}
-	if helpRequested {
-		a.printRootUsage()
+
+	jsonMode := overrides.JSON != nil && *overrides.JSON
+
+	if helpRequested || len(remaining) == 0 {
+		text := a.rootUsageText()
+		if jsonMode {
+			envelope := output.Envelope{OK: true, Command: "help", Data: map[string]any{"help_text": text}}
+			_ = output.WriteEnvelopeJSON(a.Stdout, envelope)
+		} else {
+			_, _ = io.WriteString(a.Stdout, text)
+		}
 		return 0
 	}
-	if len(remaining) == 0 {
-		a.printRootUsage()
-		return 0
-	}
+
+	cmdPeek := remaining[0]
+	configLenient := cmdPeek == "version" || cmdPeek == "help" || cmdPeek == "--help" || cmdPeek == "-h"
 
 	resolved, err := config.Resolve(overrides, config.Environment{
 		Getenv:      a.Getenv,
@@ -68,7 +76,11 @@ func (a *App) Run(args []string) int {
 		ReadFile:    a.ReadFile,
 	})
 	if err != nil {
-		return a.renderError(resolveMachineCommandIdentity("root"), overrides.JSON != nil && *overrides.JSON, errnorm.Wrap(errnorm.KindLocal, "config_resolution_failed", "failed to resolve cli config", err))
+		if configLenient {
+			resolved = config.Defaults(overrides)
+		} else {
+			return a.renderError(resolveMachineCommandIdentity("root"), jsonMode, errnorm.Wrap(errnorm.KindLocal, "config_resolution_failed", "failed to resolve cli config", err))
+		}
 	}
 
 	commandName, result, runErr := a.runCommand(context.Background(), remaining, resolved)
@@ -86,7 +98,7 @@ func (a *App) Run(args []string) int {
 	if resolved.JSON {
 		envelope := output.Envelope{OK: true, Command: identity.Command, CommandID: identity.CommandID, Data: nil}
 		if result != nil {
-			envelope.Data = result.Data
+			envelope.Data = flattenEnvelopeData(result.Data, resolved.Headers || resolved.Verbose)
 		}
 		if err := output.WriteEnvelopeJSON(a.Stdout, envelope); err != nil {
 			_, _ = io.WriteString(a.Stderr, "failed to write JSON envelope: "+err.Error()+"\n")
@@ -148,11 +160,13 @@ func parseGlobalFlags(args []string) (config.Overrides, []string, bool, error) {
 	fs.Var(&headersFlag, "headers", "Include response status and headers in human-readable output")
 	fs.Var(&timeoutFlag, "timeout", "HTTP timeout duration")
 
+	var helpRequested bool
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
-			return config.Overrides{}, nil, true, nil
+			helpRequested = true
+		} else {
+			return config.Overrides{}, nil, false, errnorm.Usage("invalid_flags", err.Error())
 		}
-		return config.Overrides{}, nil, false, errnorm.Usage("invalid_flags", err.Error())
 	}
 	overrides := config.Overrides{}
 	if jsonFlag.set {
@@ -181,7 +195,7 @@ func parseGlobalFlags(args []string) (config.Overrides, []string, bool, error) {
 	if err != nil {
 		return overrides, nil, false, err
 	}
-	return overrides, remaining, false, nil
+	return overrides, remaining, helpRequested, nil
 }
 
 func captureTrailingJSONOverride(args []string, overrides *config.Overrides) {
@@ -291,6 +305,38 @@ func normalizeTrailingGlobalFlags(args []string, overrides *config.Overrides) ([
 		}
 	}
 	return filtered, nil
+}
+
+func flattenEnvelopeData(data any, includeTransport bool) any {
+	m, ok := data.(map[string]any)
+	if !ok {
+		return data
+	}
+	body, hasBody := m["body"]
+	_, hasStatusCode := m["status_code"]
+	_, hasHeaders := m["headers"]
+	if !hasBody || !hasStatusCode || !hasHeaders {
+		return data
+	}
+	out := make(map[string]any, len(m))
+	if bodyMap, ok := body.(map[string]any); ok {
+		for k, v := range bodyMap {
+			out[k] = v
+		}
+	} else {
+		out["body"] = body
+	}
+	if includeTransport {
+		out["status_code"] = m["status_code"]
+		out["headers"] = m["headers"]
+	}
+	for k, v := range m {
+		if k == "body" || k == "status_code" || k == "headers" {
+			continue
+		}
+		out[k] = v
+	}
+	return out
 }
 
 func parseLongOptionToken(token string) (name string, value string, hasValue bool, isFlag bool) {

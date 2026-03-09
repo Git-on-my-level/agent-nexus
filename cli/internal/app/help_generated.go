@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"io"
 	"sort"
 	"strings"
 
@@ -226,8 +225,9 @@ func isHelpToken(value string) bool {
 	}
 }
 
-func (a *App) printRootUsage() {
-	_, _ = io.WriteString(a.Stdout, strings.TrimSpace(`oar - Organization Autorunner CLI
+func (a *App) rootUsageText() string {
+	var b strings.Builder
+	b.WriteString(strings.TrimSpace(`oar - Organization Autorunner CLI
 
 Usage:
   oar [global flags] <command>
@@ -240,21 +240,21 @@ Core Commands:
   provenance    Walk refs/provenance links as a deterministic graph
   api call      Perform an arbitrary HTTP API request
   help [topic]  Show onboarding help or generated command help
-`)+"\n")
+`) + "\n")
 
 	meta, err := registry.LoadEmbedded()
 	if err == nil {
-		_, _ = io.WriteString(a.Stdout, "\nGenerated Command Groups:\n")
+		b.WriteString("\nGenerated Command Groups:\n")
 		for _, topic := range runtimeGeneratedTopics {
 			count := len(runtimeCommandsForTopic(meta, topic.Path))
 			if count == 0 {
 				continue
 			}
-			_, _ = io.WriteString(a.Stdout, fmt.Sprintf("  %-12s %s (%d)\n", topic.Path, topic.Description, count))
+			b.WriteString(fmt.Sprintf("  %-12s %s (%d)\n", topic.Path, topic.Description, count))
 		}
 	}
 
-	_, _ = io.WriteString(a.Stdout, strings.TrimSpace(`
+	b.WriteString(strings.TrimSpace(`
 
 Onboarding:
   `+"`oar help onboarding`"+` for the offline quick-start topic.
@@ -267,29 +267,32 @@ Global Flags:
   --verbose
   --headers
   --timeout <duration>
-`)+"\n")
+`) + "\n")
+
+	return b.String()
 }
 
-func (a *App) printHelpTopic(topic string) bool {
+func helpTopicText(topic string) (string, bool) {
 	topic = strings.TrimSpace(topic)
+	if dotConverted := strings.ReplaceAll(topic, ".", " "); dotConverted != topic {
+		if text, ok := helpTopicText(dotConverted); ok {
+			return text, true
+		}
+	}
 	if topic == "draft" {
-		_, _ = io.WriteString(a.Stdout, draftUsageText())
-		return true
+		return draftUsageText(), true
 	}
 	if topic == "onboarding" {
-		_, _ = io.WriteString(a.Stdout, onboardingHelpText())
-		return true
+		return onboardingHelpText(), true
 	}
 	if topic == "provenance" || topic == "provenance walk" {
-		_, _ = io.WriteString(a.Stdout, provenanceUsageText()+"\n")
-		return true
+		return provenanceUsageText() + "\n", true
 	}
 	text, ok := generatedHelpText(topic)
 	if !ok {
-		return false
+		return "", false
 	}
-	_, _ = io.WriteString(a.Stdout, text+"\n")
-	return true
+	return text + "\n", true
 }
 
 func generatedHelpText(topic string) (string, bool) {

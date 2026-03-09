@@ -3,12 +3,6 @@
   "command": "inbox stream",
   "command_id": "inbox.stream",
   "data": {
-    "data": {
-      "item": {
-        "id": "inbox:1",
-        "thread_id": "thread_123"
-      }
-    },
     "id": "ibx_1",
     "item": {
       "id": "inbox:1",
