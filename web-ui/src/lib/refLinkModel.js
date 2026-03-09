@@ -1,5 +1,5 @@
 import { parseRef, renderRef } from "./typedRefs.js";
-import { projectPath } from "./projectPaths.js";
+import { appPath, projectPath } from "./projectPaths.js";
 
 function asPathSegment(value) {
   return encodeURIComponent(String(value));
@@ -59,7 +59,7 @@ function resolveRefLabels(raw, prefix, value, options = {}) {
 }
 
 function toProjectHref(projectSlug, pathname) {
-  return projectSlug ? projectPath(projectSlug, pathname) : pathname;
+  return projectSlug ? projectPath(projectSlug, pathname) : appPath(pathname);
 }
 
 export function resolveRefLink(refValue, options = {}) {

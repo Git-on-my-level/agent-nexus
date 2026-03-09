@@ -29,6 +29,10 @@ Route model:
 - `/` redirects to `/${OAR_DEFAULT_PROJECT}`.
 - Root page routes such as `/threads` and `/inbox` redirect to the default
   project to ease local use and old bookmarks.
+- Optional mount prefix: set `OAR_UI_BASE_PATH=/oar`
+  - External routes become `/oar/:project/...`
+  - `OAR_UI_BASE_PATH` is applied by SvelteKit at dev/build startup, so use the
+    intended value when running `./scripts/dev` or `./scripts/build`
 
 Single-core fallback:
 
@@ -91,6 +95,16 @@ OAR_DEFAULT_PROJECT=local \
 ./scripts/dev
 ```
 
+With an external mount prefix:
+
+```bash
+cd ../web-ui
+OAR_PROJECTS='[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"}]' \
+OAR_DEFAULT_PROJECT=local \
+OAR_UI_BASE_PATH=/oar \
+./scripts/dev
+```
+
 Two cores:
 
 ```bash
@@ -142,15 +156,17 @@ Example Caddy config for external URLs like
 
 ```caddy
 m2-internal.scalingforever.com {
-  handle_path /oar/* {
+  handle /oar* {
     reverse_proxy 127.0.0.1:4173
   }
 }
 ```
 
-`handle_path` strips `/oar`, so the UI receives `/:project/...` as expected.
-The UI server then proxies API traffic to the matching `oar-core` from
-`OAR_PROJECTS`. Core instances do not need to be internet-exposed.
+Configure the UI with `OAR_UI_BASE_PATH=/oar` when building or running the dev
+server. The reverse proxy must preserve `/oar` so SvelteKit can route and
+generate links under the configured base path. The UI server then proxies API
+traffic to the matching `oar-core` from `OAR_PROJECTS`. Core instances do not
+need to be internet-exposed.
 
 ## WebAuthn and hostname/origin limits
 

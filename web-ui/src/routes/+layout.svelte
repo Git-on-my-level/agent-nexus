@@ -25,7 +25,11 @@
   import { coreClient } from "$lib/coreClient";
   import { getShellContentConfig, navigationItems } from "$lib/navigation";
   import { setCurrentProjectSlug } from "$lib/projectContext";
-  import { projectPath, stripProjectPath } from "$lib/projectPaths";
+  import {
+    projectPath,
+    stripBasePath,
+    stripProjectPath,
+  } from "$lib/projectPaths";
 
   let { children, data } = $props();
 
@@ -52,7 +56,7 @@
   let currentAppPath = $derived(
     activeProjectSlug
       ? stripProjectPath($page.url.pathname, activeProjectSlug)
-      : $page.url.pathname,
+      : stripBasePath($page.url.pathname),
   );
   let identityReady = $derived($actorSessionReady && $authSessionReady);
   let principalActorId = $derived($authenticatedAgent?.actor_id ?? "");
@@ -384,16 +388,32 @@
               {projectInitials(activeProject?.label)}
             </span>
             <span class="project-switcher-label">
-              <span class="project-switcher-name">{activeProject?.label || activeProjectSlug}</span>
+              <span class="project-switcher-name"
+                >{activeProject?.label || activeProjectSlug}</span
+              >
               <span class="project-switcher-sub">OAR Control Surface</span>
             </span>
-            <svg class="project-switcher-chevron" class:project-switcher-chevron--open={projectPickerOpen} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-              <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+            <svg
+              class="project-switcher-chevron"
+              class:project-switcher-chevron--open={projectPickerOpen}
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+                clip-rule="evenodd"
+              />
             </svg>
           </button>
 
           {#if projectPickerOpen}
-            <div class="project-switcher-dropdown" role="listbox" aria-label="Switch project">
+            <div
+              class="project-switcher-dropdown"
+              role="listbox"
+              aria-label="Switch project"
+            >
               {#each data.projects ?? [] as project}
                 {@const isCurrent = project.slug === activeProjectSlug}
                 <button
@@ -410,12 +430,23 @@
                   <span class="project-switcher-option-label">
                     <span>{project.label}</span>
                     {#if project.description}
-                      <span class="project-switcher-option-desc">{project.description}</span>
+                      <span class="project-switcher-option-desc"
+                        >{project.description}</span
+                      >
                     {/if}
                   </span>
                   {#if isCurrent}
-                    <svg class="project-switcher-check" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                      <path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd" />
+                    <svg
+                      class="project-switcher-check"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                      aria-hidden="true"
+                    >
+                      <path
+                        fill-rule="evenodd"
+                        d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"
+                        clip-rule="evenodd"
+                      />
                     </svg>
                   {/if}
                 </button>
@@ -548,18 +579,33 @@
                     <button
                       class="project-switcher-option"
                       class:project-switcher-option--active={isCurrent}
-                      onclick={() => { pickProject(project.slug); closeMobileNav(); }}
+                      onclick={() => {
+                        pickProject(project.slug);
+                        closeMobileNav();
+                      }}
                       type="button"
                     >
-                      <span class="project-switcher-option-icon" aria-hidden="true">
+                      <span
+                        class="project-switcher-option-icon"
+                        aria-hidden="true"
+                      >
                         {projectInitials(project.label)}
                       </span>
                       <span class="project-switcher-option-label">
                         <span>{project.label}</span>
                       </span>
                       {#if isCurrent}
-                        <svg class="project-switcher-check" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                          <path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd" />
+                        <svg
+                          class="project-switcher-check"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                          aria-hidden="true"
+                        >
+                          <path
+                            fill-rule="evenodd"
+                            d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"
+                            clip-rule="evenodd"
+                          />
                         </svg>
                       {/if}
                     </button>

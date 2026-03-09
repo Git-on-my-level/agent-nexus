@@ -27,6 +27,10 @@ This package contains the SvelteKit web UI for Organization Autorunner.
   - `/` redirects to the default project.
   - Legacy root page routes (`/threads`, `/inbox`, etc.) redirect to the default
     project for convenience.
+- Optional external mount prefix: `OAR_UI_BASE_PATH=/oar`
+  - External routes become `/oar/:project/...`
+  - Build/dev the UI with the same base path you plan to serve
+  - Reverse proxies should preserve the prefix instead of stripping it
 
 - The SvelteKit server resolves proxied API traffic from the active project
   context and forwards requests to the matching `oar-core`.

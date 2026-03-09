@@ -5,6 +5,7 @@ import { normalizeBaseUrl } from "./config.js";
 import { getCurrentProjectSlug, currentProjectSlug } from "./projectContext.js";
 import {
   DEFAULT_PROJECT_SLUG,
+  appPath,
   buildProjectStorageKey,
   projectPath,
 } from "./projectPaths.js";
@@ -62,7 +63,7 @@ function resolveFetch(fetchFn) {
 function buildUrl(pathname, baseUrl = "") {
   const resolvedBaseUrl = resolveBaseUrl(baseUrl);
   if (!resolvedBaseUrl) {
-    return pathname;
+    return appPath(pathname);
   }
 
   return new URL(pathname, `${resolvedBaseUrl}/`).toString();

@@ -4,6 +4,7 @@ import {
 } from "../../../contracts/gen/ts/dist/client.js";
 
 import { EXPECTED_SCHEMA_VERSION, normalizeBaseUrl } from "./config.js";
+import { appPath } from "./projectPaths.js";
 
 const commandRegistryByID = new Map(
   commandRegistry.map((command) => [command.command_id, command]),
@@ -165,7 +166,9 @@ export function createOarCoreClient(options = {}) {
       ? baseFetchFn
       : (input, init) => {
           const parsedUrl = new URL(String(input), sameOriginProxyBaseUrl);
-          const relativeUrl = `${parsedUrl.pathname}${parsedUrl.search}`;
+          const relativeUrl = appPath(
+            `${parsedUrl.pathname}${parsedUrl.search}`,
+          );
           return baseFetchFn(relativeUrl, init);
         };
 

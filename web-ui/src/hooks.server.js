@@ -1,6 +1,6 @@
 import { env } from "$env/dynamic/private";
 import { isProxyableCommand } from "$lib/coreRouteCatalog";
-import { PROJECT_HEADER } from "$lib/projectPaths";
+import { PROJECT_HEADER, stripBasePath } from "$lib/projectPaths";
 import { loadProjectCatalog } from "$lib/server/projectCatalog";
 import { buildProxyRequestInit } from "$lib/server/coreProxy";
 import { resolveProxyProjectTarget } from "$lib/server/proxyProjectTarget";
@@ -33,8 +33,9 @@ function resolveProjectTarget(event) {
 }
 
 async function proxyToCore(event, coreBaseUrl) {
+  const corePathname = stripBasePath(event.url.pathname);
   const targetUrl = new URL(
-    `${event.url.pathname}${event.url.search}`,
+    `${corePathname}${event.url.search}`,
     `${coreBaseUrl}/`,
   ).toString();
   const requestInit = buildProxyRequestInit(event);
@@ -72,7 +73,7 @@ async function proxyToCore(event, coreBaseUrl) {
 }
 
 export async function handle({ event, resolve }) {
-  const pathname = event.url.pathname;
+  const pathname = stripBasePath(event.url.pathname);
   const method = event.request.method;
   const documentNavigation = isDocumentNavigationRequest(event.request);
   const proxyableRequest =
