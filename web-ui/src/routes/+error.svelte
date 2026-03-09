@@ -28,22 +28,27 @@
     <div
       class="mt-6 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-4 text-left"
     >
-      <p class="text-[12px] font-medium text-[var(--ui-text-muted)]">Troubleshooting</p>
-      <ol class="mt-2 list-decimal space-y-1.5 pl-5 text-[13px] text-[var(--ui-text-muted)]">
+      <p class="text-[12px] font-medium text-[var(--ui-text-muted)]">
+        Troubleshooting
+      </p>
+      <ol
+        class="mt-2 list-decimal space-y-1.5 pl-5 text-[13px] text-[var(--ui-text-muted)]"
+      >
         <li>
           Start the backend: <code
             class="rounded-md bg-[var(--ui-border)] px-1.5 py-0.5 text-xs font-medium"
             >make serve</code
           >
           in
-          <code class="rounded-md bg-[var(--ui-border)] px-1.5 py-0.5 text-xs font-medium"
+          <code
+            class="rounded-md bg-[var(--ui-border)] px-1.5 py-0.5 text-xs font-medium"
             >organization-autorunner-core</code
           >
         </li>
         <li>
           Set <code
             class="rounded-md bg-[var(--ui-border)] px-1.5 py-0.5 text-xs font-medium"
-            >OAR_CORE_BASE_URL=http://127.0.0.1:8000</code
+            >OAR_PROJECTS='[&#123;"slug":"local","coreBaseUrl":"http://127.0.0.1:8000"&#125;]'</code
           >
         </li>
         <li>Reload this page.</li>

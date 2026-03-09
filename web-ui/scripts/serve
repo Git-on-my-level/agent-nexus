@@ -16,6 +16,7 @@ HOST="${HOST:-0.0.0.0}"
 PORT="${PORT:-4173}"
 
 echo "Serving built UI on http://${HOST}:${PORT}"
-echo "Set OAR_CORE_BASE_URL for server-side proxying to oar-core."
+echo "Canonical config: set OAR_PROJECTS (and optionally OAR_DEFAULT_PROJECT)."
+echo "Single-core dev fallback: set OAR_CORE_BASE_URL to synthesize the default 'local' project."
 
 exec pnpm run preview --host "${HOST}" --port "${PORT}"

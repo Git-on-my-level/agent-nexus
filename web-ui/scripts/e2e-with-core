@@ -5,10 +5,58 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 CORE_BASE_URL="${OAR_CORE_BASE_URL:-http://127.0.0.1:8000}"
+PROJECT_SLUG="${OAR_E2E_PROJECT:-${OAR_DEFAULT_PROJECT:-local}}"
+HEALTHCHECK_TIMEOUT_SECONDS="${OAR_CORE_HEALTHCHECK_TIMEOUT_SECONDS:-5}"
+
+if [[ -n "${OAR_PROJECTS:-}" ]]; then
+  if ! CORE_BASE_URL="$(
+    PROJECT_SLUG="${PROJECT_SLUG}" OAR_PROJECTS="${OAR_PROJECTS}" python3 - <<'PY'
+import json
+import os
+import sys
+
+project_slug = os.environ["PROJECT_SLUG"]
+raw = os.environ["OAR_PROJECTS"]
+parsed = json.loads(raw)
+
+if isinstance(parsed, dict):
+    items = []
+    for slug, value in parsed.items():
+        entry = dict(value or {})
+        entry.setdefault("slug", slug)
+        items.append(entry)
+else:
+    items = parsed
+
+for item in items:
+    if str(item.get("slug", "")).strip() != project_slug:
+        continue
+    base_url = str(
+        item.get("coreBaseUrl") or item.get("core_base_url") or ""
+    ).strip().rstrip("/")
+    if not base_url:
+        sys.exit(2)
+    print(base_url)
+    sys.exit(0)
+
+sys.exit(1)
+PY
+  )"; then
+    cat >&2 <<EOF
+ERROR: Could not resolve project '${PROJECT_SLUG}' from OAR_PROJECTS.
+Set OAR_PROJECTS to include that slug, or omit OAR_PROJECTS and set OAR_CORE_BASE_URL.
+EOF
+    exit 1
+  fi
+else
+  CORE_BASE_URL="${CORE_BASE_URL%/}"
+  export OAR_PROJECTS="[{\"slug\":\"${PROJECT_SLUG}\",\"label\":\"${PROJECT_SLUG}\",\"coreBaseUrl\":\"${CORE_BASE_URL}\"}]"
+fi
+
 CORE_BASE_URL="${CORE_BASE_URL%/}"
 VERSION_URL="${CORE_BASE_URL}/version"
 HANDSHAKE_URL="${CORE_BASE_URL}/meta/handshake"
-HEALTHCHECK_TIMEOUT_SECONDS="${OAR_CORE_HEALTHCHECK_TIMEOUT_SECONDS:-5}"
+export OAR_DEFAULT_PROJECT="${OAR_DEFAULT_PROJECT:-${PROJECT_SLUG}}"
 
 echo "Checking oar-core availability at ${HANDSHAKE_URL} ..."
 if ! version_payload="$(
@@ -38,7 +86,9 @@ Backend terminal:
 
 UI terminal:
   cd ../web-ui
-  OAR_CORE_BASE_URL=http://127.0.0.1:8000 ./scripts/e2e-with-core
+  OAR_PROJECTS='[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"}]' \
+  OAR_DEFAULT_PROJECT=local \
+  ./scripts/e2e-with-core
 EOF
   exit 1
   fi
@@ -60,6 +110,5 @@ pnpm install --frozen-lockfile
 pnpm exec playwright install chromium
 
 export OAR_CORE_BASE_URL="${CORE_BASE_URL}"
-unset PUBLIC_OAR_CORE_BASE_URL
 
 exec pnpm exec playwright test --config playwright.integration.config.js "$@"

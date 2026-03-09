@@ -1,34 +1,49 @@
 # oar-ui Runbook
 
-This runbook covers production-like build/serve usage and local integration with
-`oar-core`.
+This runbook covers local integration and production-like serving for the
+project-aware `oar-ui`.
 
 ## Configuration
 
-### Core base URL
+### Project catalog
 
-`oar-ui` supports two configuration modes for oar-core connectivity:
+Canonical runtime config is `OAR_PROJECTS`.
 
-1. Server-side proxy mode (recommended for local/dev-like serving)
-   - Set `OAR_CORE_BASE_URL` in the UI process environment.
-   - The SvelteKit server proxies core API routes to that base URL.
-   - Browser requests stay same-origin to the UI host.
+- Accepts a JSON array or object.
+- Each entry needs a project slug and a core base URL.
+- Optional fields: `label`, `description`.
 
-2. Browser-direct mode
-   - Set `PUBLIC_OAR_CORE_BASE_URL`.
-   - This value is compiled into the frontend bundle at build time.
-   - Browser sends requests directly to the core origin (CORS must be allowed).
+Example:
 
-If neither variable is set, UI requests are same-origin (`/meta/handshake`,
-`/threads`, etc.) and require an upstream reverse proxy that routes those paths
-to oar-core.
+```bash
+export OAR_PROJECTS='[
+  {"slug":"dtrinity","label":"DTrinity","coreBaseUrl":"http://127.0.0.1:8000"},
+  {"slug":"scalingforever","label":"Scaling Forever","coreBaseUrl":"http://127.0.0.1:8001"}
+]'
+export OAR_DEFAULT_PROJECT=dtrinity
+```
+
+Route model:
+
+- `/:project/...` is the canonical UI shape.
+- `/` redirects to `/${OAR_DEFAULT_PROJECT}`.
+- Root page routes such as `/threads` and `/inbox` redirect to the default
+  project to ease local use and old bookmarks.
+
+Single-core fallback:
+
+- If `OAR_PROJECTS` is unset, `OAR_CORE_BASE_URL` still creates one default
+  `local` project for dev/integration use.
+- If neither variable is set, the default `local` project uses same-origin mock
+  routes.
 
 ### Required oar-core endpoints
 
-The UI expects these HTTP endpoints (see `docs/http-api.md` for full contract):
+The UI expects these HTTP endpoints (see `docs/http-api.md` for the full
+contract):
 
 - `GET /meta/handshake` (preferred startup compatibility check)
-- `GET /version` (backward-compatible fallback)
+- `GET /version` (fallback)
 - `POST /actors`, `GET /actors`
 - `POST /auth/passkey/register/options`, `POST /auth/passkey/register/verify`
 - `POST /auth/passkey/login/options`, `POST /auth/passkey/login/verify`
@@ -41,62 +56,61 @@ The UI expects these HTTP endpoints (see `docs/http-api.md` for full contract):
   `GET /artifacts/{artifact_id}/content`
 - `POST /events`, `GET /events/{event_id}`
 - `POST /work_orders`, `POST /receipts`, `POST /reviews`
-- `GET /snapshots/{snapshot_id}` (when snapshot links are resolved via core)
-- `POST /derived/rebuild` (optional utility endpoint; proxied when present)
+- `GET /snapshots/{snapshot_id}`
+- `POST /derived/rebuild` (optional)
 - `GET /inbox`, `POST /inbox/ack`
 
-### Auth assumptions (v0)
+### Auth and actor storage
 
-The UI now supports two identity modes:
+Identity is project-scoped.
 
 - Passkey-authenticated mode:
-  - Browser signs in through the SvelteKit proxy using the `/auth/passkey/*` endpoints.
-  - Access token is kept in memory.
-  - Refresh token is stored in `sessionStorage` and used to refresh once on `401`.
-  - Mutating requests are locked to the authenticated principal actor.
+  - Access token stays in memory per project.
+  - Refresh token is stored in `sessionStorage` per project.
+  - Authenticated writes lock to that project’s principal actor.
 - Actor-selection mode:
-  - Still available for local workflows when core is started with `OAR_ALLOW_UNAUTHENTICATED_WRITES=1`.
-  - Mutating operations include `actor_id` from the selected actor.
+  - Selected actor is stored in `localStorage` per project.
+  - Useful for local workflows when core allows unauthenticated writes.
 
-## Local Integration (Real Core)
+Switching from `/dtrinity/...` to `/scalingforever/...` preserves each project’s
+own auth and actor state independently.
 
-Use sibling backend repo `../core`.
+## Local integration
 
-Terminal A (backend):
+Single core:
 
 ```bash
 cd ../core
 ./scripts/dev
 ```
 
-Backend defaults to `http://127.0.0.1:8000`.
-
-Terminal B (ui):
-
 ```bash
 cd ../web-ui
-OAR_CORE_BASE_URL=http://127.0.0.1:8000 ./scripts/dev
+OAR_PROJECTS='[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"}]' \
+OAR_DEFAULT_PROJECT=local \
+./scripts/dev
 ```
 
-Passkey note:
-
-- In proxy mode, the UI now forwards the browser `Origin` and forwarded host
-  headers to core so WebAuthn can derive the correct RP ID for the hostname
-  you actually opened.
-- If core is started with explicit `OAR_WEBAUTHN_ORIGIN` or
-  `OAR_WEBAUTHN_RPID`, open the UI on that exact hostname. Mixing
-  `localhost`, `127.0.0.1`, or a custom domain will cause browser WebAuthn
-  validation to fail.
-
-If you want actor-selection mode locally, start core with `OAR_ALLOW_UNAUTHENTICATED_WRITES=1` or use the repo-root `make serve` workflow, which sets it automatically for the seeded dev stack.
-
-For end-to-end integration validation:
+Two cores:
 
 ```bash
-OAR_CORE_BASE_URL=http://127.0.0.1:8000 ./scripts/e2e-with-core
+export OAR_PROJECTS='[
+  {"slug":"dtrinity","label":"DTrinity","coreBaseUrl":"http://127.0.0.1:8000"},
+  {"slug":"scalingforever","label":"Scaling Forever","coreBaseUrl":"http://127.0.0.1:8001"}
+]'
+export OAR_DEFAULT_PROJECT=dtrinity
+./scripts/dev
 ```
 
-## Packaging and Serving
+Integration validation:
+
+```bash
+OAR_PROJECTS='[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"}]' \
+OAR_DEFAULT_PROJECT=local \
+./scripts/e2e-with-core
+```
+
+## Packaging and serving
 
 Build distributable assets:
 
@@ -104,27 +118,52 @@ Build distributable assets:
 ./scripts/build
 ```
 
-This installs dependencies with `--frozen-lockfile` and runs `pnpm run build`.
-
 Serve the built UI:
 
 ```bash
-OAR_CORE_BASE_URL=http://127.0.0.1:8000 ./scripts/serve
+OAR_PROJECTS='[
+  {"slug":"dtrinity","label":"DTrinity","coreBaseUrl":"http://127.0.0.1:8000"},
+  {"slug":"scalingforever","label":"Scaling Forever","coreBaseUrl":"http://127.0.0.1:8001"}
+]' \
+OAR_DEFAULT_PROJECT=dtrinity \
+./scripts/serve
 ```
 
 `./scripts/serve` fails fast if build artifacts are missing. Run
 `./scripts/build` first.
 
-## Static Hosting Notes
+## Reverse proxy shape
 
-This project currently uses SvelteKit with `@sveltejs/adapter-auto`.
+Recommended production shape: one UI process, many core processes, path-prefix
+entrypoint at the edge.
 
-- In static or CDN-only hosting (no Node server), server-side proxying via
-  `OAR_CORE_BASE_URL` is unavailable.
-- Use `PUBLIC_OAR_CORE_BASE_URL` during build so the browser can call core
-  directly.
-- Because `PUBLIC_*` values are build-time, changing core URL requires rebuild
-  and redeploy.
+Example Caddy config for external URLs like
+`https://m2-internal.scalingforever.com/oar/dtrinity/...`:
+
+```caddy
+m2-internal.scalingforever.com {
+  handle_path /oar/* {
+    reverse_proxy 127.0.0.1:4173
+  }
+}
+```
+
+`handle_path` strips `/oar`, so the UI receives `/:project/...` as expected.
+The UI server then proxies API traffic to the matching `oar-core` from
+`OAR_PROJECTS`. Core instances do not need to be internet-exposed.
+
+## WebAuthn and hostname/origin limits
+
+WebAuthn is host/origin sensitive, not path sensitive.
+
+- Sharing one hostname across many projects is fine for browser passkey
+  ceremonies.
+- That does not create shared auth state across independent cores. `oar-ui`
+  stores auth per project and each `oar-core` still validates its own tokens.
+- If core is configured with explicit `OAR_WEBAUTHN_ORIGIN` or
+  `OAR_WEBAUTHN_RPID`, the browser must open the UI on that exact hostname.
+- Alternate hostnames such as `localhost`, `127.0.0.1`, Tailscale names, or raw
+  IPs may fail if they do not match the configured RP ID/origin.
 
 ## Troubleshooting
 
@@ -132,65 +171,34 @@ This project currently uses SvelteKit with `@sveltejs/adapter-auto`.
 
 Symptoms:
 
-- Startup compatibility checks fail.
-- UI shows `core_unreachable` or network errors.
-- Integration script fails fast on `${OAR_CORE_BASE_URL}/meta/handshake`.
+- Startup compatibility checks fail for one project.
+- UI shows `core_unreachable` for project-scoped traffic.
+- `./scripts/e2e-with-core` fails health checks.
 
 Actions:
 
-1. Confirm backend is running:
-   `cd ../core && ./scripts/dev`
-2. Verify the exact URL:
+1. Confirm the target core is running.
+2. Verify the exact upstream URL:
    `curl -fsS http://127.0.0.1:8000/meta/handshake`
-3. Re-run UI with matching base URL:
-   `OAR_CORE_BASE_URL=http://127.0.0.1:8000 ./scripts/dev`
+3. Verify the matching project entry in `OAR_PROJECTS`.
 
-### Misconfigured base URL
+### Wrong project mapping
 
 Symptoms:
 
-- 404/5xx from proxied endpoints.
-- Schema check fails at startup.
+- One project works and another consistently 404s/503s.
+- Requests fail with `project_not_configured` or `project_header_required`.
 
 Actions:
 
-1. Remove trailing typo/path segments (use bare origin, e.g.
-   `http://127.0.0.1:8000`).
-2. Ensure UI and backend schema versions match (`/meta/handshake` should
-   report `schema_version: "0.2.2"`).
-3. If using `PUBLIC_OAR_CORE_BASE_URL`, rebuild after env changes:
-   `./scripts/build`.
+1. Confirm the UI URL includes a valid project slug.
+2. Confirm `OAR_PROJECTS` contains that slug.
+3. Keep core base URLs as bare origins, not path-prefixed URLs.
 
-### Version mismatch / outdated clients
-
-Symptoms:
-
-- UI shell fails startup compatibility check
-- Core responds with compatibility errors for client traffic
+### WebAuthn failures on one hostname but not another
 
 Actions:
 
-1. Inspect core handshake fields:
-   `curl -fsS http://127.0.0.1:8000/meta/handshake`
-2. Confirm `schema_version` matches UI expectation and review:
-   - `min_cli_version`
-   - `recommended_cli_version`
-   - `cli_download_url`
-3. Upgrade CLI/UI artifacts when compatibility floors advance.
-
-### SSE troubleshooting (core-backed streams)
-
-UI v0 relies primarily on request/response APIs, but stream diagnostics are useful when live updates are suspected.
-
-Checks:
-
-```bash
-curl -N -H 'Accept: text/event-stream' http://127.0.0.1:8000/events/stream
-curl -N -H 'Accept: text/event-stream' http://127.0.0.1:8000/inbox/stream
-```
-
-If streams fail:
-
-1. Verify reverse proxy buffering is disabled for SSE responses.
-2. Verify `Last-Event-ID` / `last_event_id` resume values when reconnecting.
-3. Confirm core is healthy and not blocked on storage (`/health`).
+1. Open the UI on the hostname expected by core.
+2. Check forwarded host/origin handling at the reverse proxy.
+3. Do not assume path-prefix routing changes WebAuthn identity boundaries.

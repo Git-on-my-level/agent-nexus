@@ -1,68 +1,66 @@
-# oar-ui — CAR ticket pack
+# oar-ui
 
-This folder contains:
+This package contains the SvelteKit web UI for Organization Autorunner.
 
-- `docs/`: the finalized spec and the concrete HTTP API contract for clients
-- `/contracts/oar-schema.yaml`: shared schema contract (v0.2.2)
-- `/contracts/gen/ts/client.ts`: generated TS API client used by `web-ui`
+- `docs/`: operator runbooks and spec/compliance notes
+- `/contracts/oar-schema.yaml`: shared schema contract (`0.2.2`)
+- `/contracts/gen/ts/client.ts`: generated TS API client consumed by `web-ui`
 
-Intended use: unzip into an empty `oar-ui` git repo, then run CAR.
+## Runtime model
 
-## Runtime configuration
+`oar-ui` now assumes project-aware proxying through the UI server.
 
-- `PUBLIC_OAR_CORE_BASE_URL`: base URL for the oar-core HTTP API.
-  - Example: `PUBLIC_OAR_CORE_BASE_URL=http://127.0.0.1:8000`
-  - If omitted, the UI uses same-origin requests.
-- `OAR_CORE_BASE_URL`: server-side proxy target used by the SvelteKit runtime.
-  - Recommended for local/dev and integration runs to avoid browser CORS setup.
+- Canonical config: `OAR_PROJECTS`
+  - JSON array or object mapping `project slug -> core base URL`
+  - Example:
 
-See `docs/runbook.md` for full packaging, serving, endpoint, and troubleshooting
-guidance.
+    ```bash
+    export OAR_PROJECTS='[
+      {"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"},
+      {"slug":"ops","label":"Ops","coreBaseUrl":"http://127.0.0.1:8001"}
+    ]'
+    export OAR_DEFAULT_PROJECT=local
+    ```
 
-On startup, the UI calls `GET /meta/handshake` (falling back to `GET /version`
-for compatibility) and requires `schema_version === "0.2.2"`. If it does not
-match, boot fails with a clear error so incompatible core/UI versions are
-surfaced immediately.
+- UI routes are project-prefixed: `/:project/...`
+  - Examples: `/local`, `/local/inbox`, `/ops/threads/thread-123`
+  - `/` redirects to the default project.
+  - Legacy root page routes (`/threads`, `/inbox`, etc.) redirect to the default
+    project for convenience.
 
-## Proxy/Env smoke check
+- The SvelteKit server resolves proxied API traffic from the active project
+  context and forwards requests to the matching `oar-core`.
 
-Use this quick check before integration runs:
+- Single-core fallback still works for local/dev:
+  - `OAR_CORE_BASE_URL=http://127.0.0.1:8000`
+  - This synthesizes one default `local` project when `OAR_PROJECTS` is unset.
+
+See `docs/runbook.md` for deployment examples, auth/session behavior, and
+WebAuthn constraints.
+
+## Startup compatibility
+
+On project route startup the UI calls `GET /meta/handshake` (falling back to
+`GET /version`) through the project-aware proxy and requires
+`schema_version === "0.2.2"`.
+
+## Quick smoke check
 
 ```bash
-env | rg '^(OAR_CORE_BASE_URL|PUBLIC_OAR_CORE_BASE_URL)='
-```
-
-- Proxy mode (recommended): `OAR_CORE_BASE_URL` must be set in the UI process.
-- Browser-direct mode: `PUBLIC_OAR_CORE_BASE_URL` must be set before build.
-
-Then confirm the UI can reach core through the configured path:
-
-```bash
+env | rg '^(OAR_PROJECTS|OAR_DEFAULT_PROJECT|OAR_CORE_BASE_URL)='
 curl -fsS http://127.0.0.1:8000/meta/handshake
-curl -fsS http://127.0.0.1:5173/meta/handshake
+curl -fsS -H 'x-oar-project-slug: local' http://127.0.0.1:5173/meta/handshake
 ```
 
-The first command checks core directly; the second checks the UI route (proxied
-when `OAR_CORE_BASE_URL` is set). `GET /version` remains available as a
-fallback compatibility endpoint.
+The first `curl` checks `oar-core` directly. The second checks the UI proxy path
+for one project.
 
 ## Integration E2E with real oar-core
 
-The repo includes `./scripts/e2e-with-core` for a headless golden-path
-integration run against a real `oar-core`.
+The repo includes `./scripts/e2e-with-core` for a headless golden-path run
+against a real `oar-core`.
 
-Behavior:
-
-- Uses `OAR_CORE_BASE_URL` (default: `http://127.0.0.1:8000`)
-- Proxies same-origin UI API routes to `OAR_CORE_BASE_URL` during the run
-  (no browser CORS configuration required)
-- Fails fast with a clear message if `${OAR_CORE_BASE_URL}/meta/handshake` is
-  unreachable
-- Runs Playwright integration spec in headless mode
-- Stores failure artifacts under `test-results/e2e-with-core/`
-  (trace/screenshot/video)
-
-Default local runbook:
+Default local run:
 
 Terminal A (backend):
 
@@ -75,5 +73,7 @@ Terminal B (ui):
 
 ```bash
 cd ../web-ui
-OAR_CORE_BASE_URL=http://127.0.0.1:8000 ./scripts/e2e-with-core
+OAR_PROJECTS='[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"}]' \
+OAR_DEFAULT_PROJECT=local \
+./scripts/e2e-with-core
 ```
