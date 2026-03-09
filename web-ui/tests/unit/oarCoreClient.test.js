@@ -73,6 +73,21 @@ describe("oarCoreClient error messaging", () => {
     });
   });
 
+  it("rejects with guidance when handshake returns empty body", async () => {
+    const client = createOarCoreClient({
+      baseUrl: "http://core.test",
+      fetchFn: async () =>
+        new Response("", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    });
+
+    await expect(verifyCoreSchemaVersion(client)).rejects.toThrow(
+      /empty response[\s\S]*Node adapter/,
+    );
+  });
+
   it("falls back to /version when handshake is unavailable", async () => {
     const client = createOarCoreClient({
       baseUrl: "http://core.test",

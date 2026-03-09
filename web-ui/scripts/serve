@@ -4,19 +4,18 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT_DIR}"
 
-pnpm install --frozen-lockfile
-
-if [[ ! -d "${ROOT_DIR}/.svelte-kit/output/client" ]]; then
-  echo "No build artifacts found at .svelte-kit/output/client."
+if [[ ! -f "${ROOT_DIR}/build/index.js" ]]; then
+  echo "No Node adapter build found at build/index.js."
   echo "Run ./scripts/build before ./scripts/serve."
   exit 1
 fi
 
-HOST="${HOST:-0.0.0.0}"
-PORT="${PORT:-4173}"
+export HOST="${HOST:-0.0.0.0}"
+export PORT="${PORT:-4173}"
+export ORIGIN="${ORIGIN:-http://${HOST}:${PORT}}"
 
-echo "Serving built UI on http://${HOST}:${PORT}"
+echo "Serving built UI on http://${HOST}:${PORT} (origin=${ORIGIN})"
 echo "Canonical config: set OAR_PROJECTS (and optionally OAR_DEFAULT_PROJECT)."
 echo "Single-core dev fallback: set OAR_CORE_BASE_URL to synthesize the default 'local' project."
 
-exec pnpm run preview --host "${HOST}" --port "${PORT}"
+exec node build/index.js

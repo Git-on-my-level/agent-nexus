@@ -42,6 +42,16 @@ This package contains the SvelteKit web UI for Organization Autorunner.
 See `docs/runbook.md` for deployment examples, auth/session behavior, and
 WebAuthn constraints.
 
+## Production serving
+
+`./scripts/build` produces a Node.js server (`ADAPTER=node` by default).
+`./scripts/serve` starts it with `node build/index.js`. Do not use
+`vite preview` for production or reverse-proxied deployments -- it does not
+execute SvelteKit server hooks, so API proxying and bootstrap endpoints will
+return empty responses.
+
+See `docs/runbook.md` for reverse proxy configuration and deployment examples.
+
 ## Startup compatibility
 
 On project route startup the UI calls `GET /meta/handshake` (falling back to

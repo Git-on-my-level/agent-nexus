@@ -503,6 +503,19 @@ export async function verifyCoreSchemaVersion(
     }
   }
 
+  if (
+    !version ||
+    (typeof version === "object" && Object.keys(version).length === 0)
+  ) {
+    throw new Error(
+      `oar-core handshake at ${target} returned an empty response. ` +
+        "The UI server may not be running server-side code " +
+        "(e.g. vite preview does not execute SvelteKit hooks). " +
+        "Use the Node adapter build (ADAPTER=node) and serve with " +
+        "'node build/index.js' or './scripts/serve'.",
+    );
+  }
+
   if (version?.schema_version !== expectedSchemaVersion) {
     throw new Error(
       `oar-core schema mismatch at ${target}: expected ${expectedSchemaVersion}, received ${version?.schema_version ?? "unknown"}.`,

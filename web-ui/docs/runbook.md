@@ -132,6 +132,11 @@ Build distributable assets:
 ./scripts/build
 ```
 
+`./scripts/build` defaults to `ADAPTER=node`, producing a Node.js server at
+`build/index.js`. Override with `ADAPTER=auto` if targeting a platform-specific
+adapter (Vercel, Cloudflare, etc.), but note that bare-metal and reverse-proxied
+deployments require the Node adapter for server-side proxy and hook support.
+
 Serve the built UI:
 
 ```bash
@@ -143,8 +148,18 @@ OAR_DEFAULT_PROJECT=dtrinity \
 ./scripts/serve
 ```
 
-`./scripts/serve` fails fast if build artifacts are missing. Run
-`./scripts/build` first.
+`./scripts/serve` runs `node build/index.js` and fails fast if the Node adapter
+build is missing. Run `./scripts/build` first.
+
+`ORIGIN` defaults to `http://${HOST}:${PORT}`. Set it explicitly when serving
+behind TLS or a reverse proxy on a different hostname, e.g.
+`ORIGIN=https://m2-internal.scalingforever.com`.
+
+**Do not use `vite preview` for production-like deployments.** `vite preview` is
+a static preview server that does not execute SvelteKit server hooks or
+server-side proxy logic. Requests to `/meta/handshake` and all proxied core API
+traffic will fail (typically returning `200 OK` with an empty body) because the
+server-side routing in `hooks.server.js` is not active.
 
 ## Reverse proxy shape
 
