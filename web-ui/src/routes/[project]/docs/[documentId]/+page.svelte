@@ -34,6 +34,13 @@
       selectedRevision.revision_id !== headRevision?.revision_id,
   );
 
+  // Only text documents can be edited in the textarea-based editor.
+  // Structured and binary revisions must be updated via CLI/API.
+  let headContentType = $derived(headRevision?.content_type ?? "text");
+  let isTextEditable = $derived(
+    headContentType === "text" || headContentType === "",
+  );
+
   function projectHref(pathname = "/") {
     return projectPath(projectSlug, pathname);
   }
@@ -168,7 +175,7 @@
 
       const result = await coreClient.updateDocument(documentId, {
         content: editDraft.content.trim(),
-        content_type: "text",
+        content_type: headContentType || "text",
         if_base_revision: headRevision.revision_id,
         ...(Object.keys(docPatch).length > 0 ? { document: docPatch } : {}),
       });
@@ -283,7 +290,7 @@
             </div>
           </div>
           <div class="flex shrink-0 items-center gap-1.5">
-            {#if !document.tombstoned_at}
+            {#if !document.tombstoned_at && isTextEditable}
               <button
                 class="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-2.5 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500"
                 onclick={openEdit}
@@ -304,6 +311,26 @@
                 </svg>
                 New revision
               </button>
+            {:else if !document.tombstoned_at}
+              <span
+                class="inline-flex items-center gap-1 rounded-md border border-[var(--ui-border)] px-2.5 py-1.5 text-[12px] text-[var(--ui-text-subtle)]"
+                title="Content type '{headContentType}' can only be updated via the CLI or API"
+              >
+                <svg
+                  class="h-3.5 w-3.5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                {headContentType} — edit via CLI
+              </span>
             {/if}
             <button
               class="cursor-pointer shrink-0 inline-flex items-center gap-1.5 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)]"

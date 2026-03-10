@@ -261,6 +261,81 @@ test("update document flow — PATCH /docs/:id creates a new revision", async ({
   ).toBeVisible();
 });
 
+test("structured/binary content type — New revision button is hidden, CLI hint shown", async ({
+  page,
+}) => {
+  const actorId = "actor-docs-structured-e2e";
+
+  const doc = {
+    id: "structured-doc",
+    title: "Structured Document",
+    status: "active",
+    labels: [],
+    head_revision_id: "rev-struct-1",
+    head_revision_number: 1,
+    updated_at: "2026-03-08T10:00:00Z",
+    updated_by: actorId,
+  };
+
+  const revision = {
+    revision_id: "rev-struct-1",
+    revision_number: 1,
+    created_at: "2026-03-08T10:00:00Z",
+    created_by: actorId,
+    content_type: "structured",
+    content_hash: "hash-s1",
+    revision_hash: "rhash-s1",
+    content: '{"key":"value"}',
+  };
+
+  await page.addInitScript((selectedActorId) => {
+    window.localStorage.setItem("oar_ui_actor_id", selectedActorId);
+  }, actorId);
+
+  await page.route(/\/actors$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        actors: [
+          { id: actorId, display_name: "Structured Tester", tags: ["human"] },
+        ],
+      }),
+    });
+  });
+
+  await page.route(/\/docs\/structured-doc$/, async (route) => {
+    const request = route.request();
+    if (request.method() === "GET" && request.resourceType() === "document") {
+      await route.continue();
+      return;
+    }
+    if (request.method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ document: doc, revision }),
+      });
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.goto("/docs/structured-doc");
+  await expect(
+    page
+      .locator("section")
+      .getByRole("heading", { name: "Structured Document" }),
+  ).toBeVisible();
+
+  // "New revision" button must not appear for structured content
+  await expect(page.getByRole("button", { name: "New revision" })).toHaveCount(
+    0,
+  );
+  // CLI hint badge must appear instead
+  await expect(page.getByText("structured — edit via CLI")).toBeVisible();
+});
+
 test("update document conflict — 409 response shows error", async ({
   page,
 }) => {
