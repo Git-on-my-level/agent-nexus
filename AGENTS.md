@@ -78,3 +78,7 @@ Repo-level gates before handoff:
 - Contract drift is resolved (if applicable).
 - Repo-level gates run for cross-component changes.
 - Related docs are updated with behavior/contract changes.
+
+## Cursor Cloud specific instructions
+
+See [CLOUD_AGENTS.md](CLOUD_AGENTS.md).
