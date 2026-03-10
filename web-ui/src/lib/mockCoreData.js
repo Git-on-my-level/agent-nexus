@@ -1088,6 +1088,7 @@ const artifacts = [
     created_at: new Date(now - 20 * 60 * 60 * 1000).toISOString(),
     created_by: "actor-ops-ai",
     provenance: { sources: ["actor_statement:evt-supply-001"] },
+    tombstoned_at: null,
   },
   {
     id: "artifact-summer-menu-draft",
@@ -1143,6 +1144,7 @@ const artifacts = [
     created_at: new Date(now - 5 * 24 * 60 * 60 * 1000).toISOString(),
     created_by: "actor-flavor-ai",
     provenance: { sources: ["actor_statement:evt-menu-001"] },
+    tombstoned_at: null,
   },
   {
     id: "artifact-tasting-log",
@@ -1167,6 +1169,7 @@ const artifacts = [
     created_at: new Date(now - 4 * 24 * 60 * 60 * 1000).toISOString(),
     created_by: "actor-squeeze-bot",
     provenance: { sources: ["actor_statement:evt-menu-002"] },
+    tombstoned_at: null,
   },
   {
     id: "artifact-maintenance-log",
@@ -1191,6 +1194,7 @@ const artifacts = [
     created_at: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString(),
     created_by: "actor-squeeze-bot",
     provenance: { sources: ["actor_statement:evt-maint-001"] },
+    tombstoned_at: null,
   },
   {
     id: "artifact-wo-lavender-sourcing",
@@ -1229,6 +1233,7 @@ const artifacts = [
         "Lavender syrup added to SupplyRover inventory system",
       ],
     },
+    tombstoned_at: null,
   },
   {
     id: "artifact-receipt-lavender-sourcing",
@@ -1260,6 +1265,7 @@ const artifacts = [
           "required until their API v2 ships in Q3 2026.",
       ],
     },
+    tombstoned_at: null,
   },
   {
     id: "artifact-review-lavender-sourcing",
@@ -1288,6 +1294,7 @@ const artifacts = [
         "by SupplyRover and inventory is updated.",
       evidence_refs: ["artifact:artifact-summer-menu-draft"],
     },
+    tombstoned_at: null,
   },
 
   // ── Pricing glitch artifacts ───────────────────────────────────────────────
@@ -1316,6 +1323,7 @@ const artifacts = [
     created_at: new Date(now - 10 * 24 * 60 * 60 * 1000).toISOString(),
     created_by: "actor-cashier-bot",
     provenance: { sources: ["actor_statement:evt-price-001"] },
+    tombstoned_at: null,
   },
   {
     id: "artifact-wo-pricing-fix",
@@ -1361,6 +1369,7 @@ const artifacts = [
         "Receipt filed against this work order",
       ],
     },
+    tombstoned_at: null,
   },
   {
     id: "artifact-receipt-pricing-v1",
@@ -1372,6 +1381,7 @@ const artifacts = [
     created_at: new Date(now - 9 * 24 * 60 * 60 * 1000).toISOString(),
     created_by: "actor-cashier-bot",
     provenance: { sources: ["actor_statement:evt-price-006"] },
+    tombstoned_at: null,
     packet: {
       receipt_id: "artifact-receipt-pricing-v1",
       work_order_id: "artifact-wo-pricing-fix",
@@ -1405,6 +1415,7 @@ const artifacts = [
     ).toISOString(),
     created_by: "actor-ops-ai",
     provenance: { sources: ["actor_statement:evt-price-007"] },
+    tombstoned_at: null,
     packet: {
       review_id: "artifact-review-pricing-escalate",
       work_order_id: "artifact-wo-pricing-fix",
@@ -1429,6 +1440,7 @@ const artifacts = [
     created_at: new Date(now - 8 * 24 * 60 * 60 * 1000).toISOString(),
     created_by: "actor-cashier-bot",
     provenance: { sources: ["actor_statement:evt-price-009"] },
+    tombstoned_at: null,
     packet: {
       receipt_id: "artifact-receipt-pricing-v2",
       work_order_id: "artifact-wo-pricing-fix",
@@ -1477,6 +1489,23 @@ const artifacts = [
         "artifact:artifact-receipt-pricing-v2",
       ],
     },
+    tombstoned_at: null,
+  },
+  {
+    id: "artifact-tombstoned-doc",
+    kind: "doc",
+    thread_id: "thread-pricing-glitch",
+    summary: "Superseded draft — replaced by final evidence artifact",
+    refs: ["thread:thread-pricing-glitch"],
+    content_type: "text/plain",
+    content_text: "This artifact was superseded and tombstoned.",
+    created_at: new Date(now - 11 * 24 * 60 * 60 * 1000).toISOString(),
+    created_by: "actor-cashier-bot",
+    provenance: { sources: ["actor_statement:evt-price-001"] },
+    tombstoned_at: new Date(now - 10 * 24 * 60 * 60 * 1000).toISOString(),
+    tombstoned_by: "actor-ops-ai",
+    tombstone_reason:
+      "Superseded by artifact-pricing-evidence; draft no longer needed.",
   },
 ];
 
@@ -2111,7 +2140,19 @@ export function createMockWorkOrder({ actor_id, artifact = {}, packet = {} }) {
 }
 
 export function listMockArtifacts(filters = {}) {
+  const includeTombstoned =
+    filters.include_tombstoned === true ||
+    String(filters.include_tombstoned) === "true";
+
   return artifacts.filter((artifact) => {
+    if (
+      !includeTombstoned &&
+      artifact.tombstoned_at != null &&
+      String(artifact.tombstoned_at).trim() !== ""
+    ) {
+      return false;
+    }
+
     if (filters.kind && String(artifact.kind) !== String(filters.kind)) {
       return false;
     }

@@ -262,11 +262,14 @@ func handleListArtifacts(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		threadID = strings.TrimSpace(query.Get("thread"))
 	}
 
+	includeTombstoned := strings.TrimSpace(query.Get("include_tombstoned")) == "true"
+
 	artifacts, err := opts.primitiveStore.ListArtifacts(r.Context(), primitives.ArtifactListFilter{
-		Kind:          strings.TrimSpace(query.Get("kind")),
-		ThreadID:      threadID,
-		CreatedBefore: strings.TrimSpace(query.Get("created_before")),
-		CreatedAfter:  strings.TrimSpace(query.Get("created_after")),
+		Kind:              strings.TrimSpace(query.Get("kind")),
+		ThreadID:          threadID,
+		CreatedBefore:     strings.TrimSpace(query.Get("created_before")),
+		CreatedAfter:      strings.TrimSpace(query.Get("created_after")),
+		IncludeTombstoned: includeTombstoned,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list artifacts")
@@ -339,4 +342,37 @@ func extractStringSlice(raw any) ([]string, error) {
 	default:
 		return nil, errors.New("must be a list of strings")
 	}
+}
+
+func handleTombstoneArtifact(w http.ResponseWriter, r *http.Request, opts handlerOptions, artifactID string) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+
+	var req struct {
+		ActorID string `json:"actor_id"`
+		Reason  string `json:"reason"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+		return
+	}
+
+	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
+	if !ok {
+		return
+	}
+
+	artifact, err := opts.primitiveStore.TombstoneArtifact(r.Context(), actorID, artifactID, req.Reason)
+	if err != nil {
+		if errors.Is(err, primitives.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "artifact not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to tombstone artifact")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"artifact": artifact})
 }

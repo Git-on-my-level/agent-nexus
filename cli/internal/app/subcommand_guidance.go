@@ -73,7 +73,7 @@ var commitmentsSubcommandSpec = subcommandSpec{
 
 var artifactsSubcommandSpec = subcommandSpec{
 	command:  "artifacts",
-	valid:    []string{"list", "get", "create", "content", "inspect"},
+	valid:    []string{"list", "get", "create", "content", "inspect", "tombstone"},
 	examples: []string{"oar artifacts list --kind packet", "oar artifacts inspect --artifact-id <artifact-id>"},
 	aliases: map[string]string{
 		"ls":   "list",
@@ -83,7 +83,7 @@ var artifactsSubcommandSpec = subcommandSpec{
 
 var docsSubcommandSpec = subcommandSpec{
 	command:  "docs",
-	valid:    []string{"create", "get", "content", "update", "apply", "validate-update", "history", "revision"},
+	valid:    []string{"create", "get", "content", "update", "apply", "validate-update", "history", "revision", "tombstone"},
 	examples: []string{"oar docs content --document-id <document-id>", "oar docs update --document-id <document-id> --content-file <path>", "oar docs apply --proposal-id <proposal-id>"},
 	aliases: map[string]string{
 		"read": "content",

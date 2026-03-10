@@ -144,7 +144,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "stable",
 		Concepts:   []string{"artifacts", "content"},
-		Adjacent:   []string{"artifacts.create", "artifacts.get", "artifacts.list"},
+		Adjacent:   []string{"artifacts.create", "artifacts.get", "artifacts.list", "artifacts.tombstone"},
 		Examples: []Example{
 			{
 				Title:   "Download content",
@@ -161,7 +161,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "file-and-body",
 		Stability: "stable",
 		Concepts:  []string{"artifacts", "evidence"},
-		Adjacent:  []string{"artifacts.content.get", "artifacts.get", "artifacts.list"},
+		Adjacent:  []string{"artifacts.content.get", "artifacts.get", "artifacts.list", "artifacts.tombstone"},
 		Examples: []Example{
 			{
 				Title:   "Create structured artifact",
@@ -179,7 +179,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "stable",
 		Concepts:   []string{"artifacts"},
-		Adjacent:   []string{"artifacts.content.get", "artifacts.create", "artifacts.list"},
+		Adjacent:   []string{"artifacts.content.get", "artifacts.create", "artifacts.list", "artifacts.tombstone"},
 		Examples: []Example{
 			{
 				Title:   "Get artifact",
@@ -196,11 +196,29 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "stable",
 		Concepts:  []string{"artifacts", "filtering"},
-		Adjacent:  []string{"artifacts.content.get", "artifacts.create", "artifacts.get"},
+		Adjacent:  []string{"artifacts.content.get", "artifacts.create", "artifacts.get", "artifacts.tombstone"},
 		Examples: []Example{
 			{
 				Title:   "List work orders for a thread",
 				Command: "oar artifacts list --kind work_order --thread-id thread_123 --json",
+			},
+		},
+	},
+	{
+		CommandID:  "artifacts.tombstone",
+		CLIPath:    "artifacts tombstone",
+		Group:      "artifacts",
+		Method:     "POST",
+		Path:       "/artifacts/{artifact_id}/tombstone",
+		PathParams: []string{"artifact_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"artifacts", "lifecycle"},
+		Adjacent:   []string{"artifacts.content.get", "artifacts.create", "artifacts.get", "artifacts.list"},
+		Examples: []Example{
+			{
+				Title:   "Tombstone artifact",
+				Command: "oar artifacts tombstone --artifact-id artifact_123 --reason \"superseded by newer version\" --json",
 			},
 		},
 	},
@@ -381,7 +399,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"docs", "revisions"},
-		Adjacent:  []string{"docs.get", "docs.history", "docs.revision.get", "docs.update"},
+		Adjacent:  []string{"docs.get", "docs.history", "docs.revision.get", "docs.tombstone", "docs.update"},
 		Examples: []Example{
 			{
 				Title:   "Create document",
@@ -399,7 +417,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "revisions"},
-		Adjacent:   []string{"docs.create", "docs.history", "docs.revision.get", "docs.update"},
+		Adjacent:   []string{"docs.create", "docs.history", "docs.revision.get", "docs.tombstone", "docs.update"},
 		Examples: []Example{
 			{
 				Title:   "Get document head",
@@ -417,7 +435,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "revisions", "lineage"},
-		Adjacent:   []string{"docs.create", "docs.get", "docs.revision.get", "docs.update"},
+		Adjacent:   []string{"docs.create", "docs.get", "docs.revision.get", "docs.tombstone", "docs.update"},
 		Examples: []Example{
 			{
 				Title:   "List document history",
@@ -435,11 +453,29 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "revisions"},
-		Adjacent:   []string{"docs.create", "docs.get", "docs.history", "docs.update"},
+		Adjacent:   []string{"docs.create", "docs.get", "docs.history", "docs.tombstone", "docs.update"},
 		Examples: []Example{
 			{
 				Title:   "Get revision",
 				Command: "oar docs revision get --document-id product-constitution --revision-id 019f... --json",
+			},
+		},
+	},
+	{
+		CommandID:  "docs.tombstone",
+		CLIPath:    "docs tombstone",
+		Group:      "docs",
+		Method:     "POST",
+		Path:       "/docs/{document_id}/tombstone",
+		PathParams: []string{"document_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"docs", "lifecycle"},
+		Adjacent:   []string{"docs.create", "docs.get", "docs.history", "docs.revision.get", "docs.update"},
+		Examples: []Example{
+			{
+				Title:   "Tombstone document",
+				Command: "oar docs tombstone --document-id product-constitution --reason \"replaced by v2\" --json",
 			},
 		},
 	},
@@ -453,7 +489,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "revisions", "concurrency"},
-		Adjacent:   []string{"docs.create", "docs.get", "docs.history", "docs.revision.get"},
+		Adjacent:   []string{"docs.create", "docs.get", "docs.history", "docs.revision.get", "docs.tombstone"},
 		Examples: []Example{
 			{
 				Title:   "Update document",
@@ -1055,6 +1091,10 @@ func (c *Client) ArtifactsList(ctx context.Context, opts RequestOptions) (*http.
 	return c.Invoke(ctx, "artifacts.list", nil, opts)
 }
 
+func (c *Client) ArtifactsTombstone(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "artifacts.tombstone", pathParams, opts)
+}
+
 func (c *Client) AuthAgentsRegister(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "auth.agents.register", nil, opts)
 }
@@ -1113,6 +1153,10 @@ func (c *Client) DocsHistory(ctx context.Context, pathParams map[string]string, 
 
 func (c *Client) DocsRevisionGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "docs.revision.get", pathParams, opts)
+}
+
+func (c *Client) DocsTombstone(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "docs.tombstone", pathParams, opts)
 }
 
 func (c *Client) DocsUpdate(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {

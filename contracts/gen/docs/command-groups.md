@@ -24,12 +24,13 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `artifacts`
 
-- Commands: `4`
+- Commands: `5`
 - Command IDs:
   - `artifacts.content.get` (`artifacts content get`)
   - `artifacts.create` (`artifacts create`)
   - `artifacts.get` (`artifacts get`)
   - `artifacts.list` (`artifacts list`)
+  - `artifacts.tombstone` (`artifacts tombstone`)
 
 ## `auth`
 
@@ -59,12 +60,13 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `docs`
 
-- Commands: `5`
+- Commands: `6`
 - Command IDs:
   - `docs.create` (`docs create`)
   - `docs.get` (`docs get`)
   - `docs.history` (`docs history`)
   - `docs.revision.get` (`docs revision get`)
+  - `docs.tombstone` (`docs tombstone`)
   - `docs.update` (`docs update`)
 
 ## `events`

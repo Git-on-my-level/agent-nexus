@@ -290,6 +290,50 @@ func firstNonEmptyString(values ...any) string {
 	return ""
 }
 
+func handleTombstoneDocument(w http.ResponseWriter, r *http.Request, opts handlerOptions, documentID string) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	if err := validateDocumentID(documentID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+
+	var req struct {
+		ActorID string `json:"actor_id"`
+		Reason  string `json:"reason"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+		return
+	}
+
+	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
+	if !ok {
+		return
+	}
+
+	document, revision, err := opts.primitiveStore.TombstoneDocument(r.Context(), actorID, documentID, req.Reason)
+	if err != nil {
+		if errors.Is(err, primitives.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "document not found")
+			return
+		}
+		if errors.Is(err, primitives.ErrInvalidDocumentRequest) {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to tombstone document")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"document": document,
+		"revision": revision,
+	})
+}
+
 func optionalRefs(raw any) ([]string, error) {
 	if raw == nil {
 		return []string{}, nil

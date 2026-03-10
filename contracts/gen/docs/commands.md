@@ -4,7 +4,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.2.2`
-- Commands: `50`
+- Commands: `52`
 
 ## `actors.list`
 
@@ -145,6 +145,20 @@ Generated from `contracts/oar-openapi.yaml`.
 - Agent notes: Safe and idempotent.
 - Examples:
   - List work orders for a thread: `oar artifacts list --kind work_order --thread-id thread_123 --json`
+
+## `artifacts.tombstone`
+
+- CLI path: `artifacts tombstone`
+- HTTP: `POST /artifacts/{artifact_id}/tombstone`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Mark an artifact as inactive while preserving provenance; tombstoned artifacts are excluded from list by default.
+- Concepts: `artifacts`, `lifecycle`
+- Error codes: `invalid_json`, `invalid_request`, `not_found`
+- Output: Returns `{ artifact }` with updated tombstone metadata.
+- Agent notes: Idempotent; repeated tombstone calls on the same artifact are safe.
+- Examples:
+  - Tombstone artifact: `oar artifacts tombstone --artifact-id artifact_123 --reason "superseded by newer version" --json`
 
 ## `auth.agents.register`
 
@@ -348,6 +362,20 @@ Generated from `contracts/oar-openapi.yaml`.
 - Agent notes: Safe and idempotent.
 - Examples:
   - Get revision: `oar docs revision get --document-id product-constitution --revision-id 019f... --json`
+
+## `docs.tombstone`
+
+- CLI path: `docs tombstone`
+- HTTP: `POST /docs/{document_id}/tombstone`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Mark a document as inactive while preserving revision history and provenance.
+- Concepts: `docs`, `lifecycle`
+- Error codes: `invalid_json`, `invalid_request`, `not_found`
+- Output: Returns `{ document, revision }` with updated tombstone metadata.
+- Agent notes: Idempotent; repeated tombstone calls on the same document are safe.
+- Examples:
+  - Tombstone document: `oar docs tombstone --document-id product-constitution --reason "replaced by v2" --json`
 
 ## `docs.update`
 

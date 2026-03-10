@@ -68,13 +68,13 @@ func formatCommandSummary(commandID string, body any) string {
 		return formatThreadTimeline(body)
 	case "commitments.get", "commitments.create", "commitments.patch":
 		return formatCommitmentRecord(extractNestedMap(body, "commitment"))
-	case "artifacts.get", "artifacts.create":
+	case "artifacts.get", "artifacts.create", "artifacts.tombstone":
 		return formatArtifactRecord(extractNestedMap(body, "artifact"))
 	case "artifacts.inspect":
 		return formatArtifactInspect(body)
 	case "events.get", "events.create":
 		return formatEventRecord(extractNestedMap(body, "event"))
-	case "docs.get", "docs.create", "docs.update":
+	case "docs.get", "docs.create", "docs.update", "docs.tombstone":
 		return formatDocumentRecord(body)
 	case "threads.patch.propose", "commitments.patch.propose", "docs.update.propose":
 		return formatProposalPreview(body)
@@ -376,7 +376,14 @@ func formatArtifactRecord(artifact map[string]any) string {
 	lines = appendScalar(lines, "content_type", artifact, "content_type")
 	lines = appendScalar(lines, "created_at", artifact, "created_at")
 	lines = appendScalar(lines, "summary", artifact, "summary", "title")
+	lines = appendScalar(lines, "content_hash", artifact, "content_hash")
 	lines = appendStringList(lines, "refs", stringList(artifact["refs"]))
+	if tombstonedAt := anyString(artifact["tombstoned_at"]); tombstonedAt != "" {
+		lines = append(lines, "⚠ TOMBSTONED")
+		lines = appendScalar(lines, "tombstoned_at", artifact, "tombstoned_at")
+		lines = appendScalar(lines, "tombstoned_by", artifact, "tombstoned_by")
+		lines = appendScalar(lines, "tombstone_reason", artifact, "tombstone_reason")
+	}
 	return strings.Join(lines, "\n")
 }
 
@@ -409,6 +416,12 @@ func formatDocumentRecord(body any) string {
 	lines = appendScalar(lines, "revision_id", revision, "revision_id")
 	lines = appendScalar(lines, "revision_number", revision, "revision_number")
 	lines = appendScalar(lines, "content_type", revision, "content_type")
+	if tombstonedAt := anyString(document["tombstoned_at"]); tombstonedAt != "" {
+		lines = append(lines, "⚠ TOMBSTONED")
+		lines = appendScalar(lines, "tombstoned_at", document, "tombstoned_at")
+		lines = appendScalar(lines, "tombstoned_by", document, "tombstoned_by")
+		lines = appendScalar(lines, "tombstone_reason", document, "tombstone_reason")
+	}
 	if content := firstNonEmpty(anyString(revision["content"]), anyString(root["content"]), anyString(root["body_text"])); content != "" {
 		lines = append(lines, "content:")
 		lines = append(lines, indentBlock(strings.TrimSpace(content))...)
@@ -454,6 +467,8 @@ func formatRevisionRecord(revision map[string]any) string {
 	lines := []string{"Revision " + displayID(revision)}
 	lines = appendScalar(lines, "revision_number", revision, "revision_number")
 	lines = appendScalar(lines, "content_type", revision, "content_type")
+	lines = appendScalar(lines, "content_hash", revision, "content_hash")
+	lines = appendScalar(lines, "revision_hash", revision, "revision_hash")
 	if content := firstNonEmpty(anyString(revision["content"]), anyString(revision["body_text"])); content != "" {
 		lines = append(lines, "content:")
 		lines = append(lines, indentBlock(strings.TrimSpace(content))...)

@@ -29,10 +29,11 @@ var ErrInvalidDocumentRequest = errors.New("invalid document request")
 const actorStatementEventIDPlaceholder = "<event_id>"
 
 type ArtifactListFilter struct {
-	Kind          string
-	ThreadID      string
-	CreatedBefore string
-	CreatedAfter  string
+	Kind              string
+	ThreadID          string
+	CreatedBefore     string
+	CreatedAfter      string
+	IncludeTombstoned bool
 }
 
 type ThreadListFilter struct {
@@ -487,6 +488,10 @@ func (s *Store) ListArtifacts(ctx context.Context, filter ArtifactListFilter) ([
 	query := `SELECT metadata_json FROM artifacts WHERE 1=1`
 	args := make([]any, 0)
 
+	if !filter.IncludeTombstoned {
+		query += ` AND tombstoned_at IS NULL`
+	}
+
 	if filter.Kind != "" {
 		query += ` AND kind = ?`
 		args = append(args, filter.Kind)
@@ -536,6 +541,73 @@ func (s *Store) ListArtifacts(ctx context.Context, filter ArtifactListFilter) ([
 	}
 
 	return artifacts, nil
+}
+
+func (s *Store) TombstoneArtifact(ctx context.Context, actorID string, artifactID string, reason string) (map[string]any, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("primitives store database is not initialized")
+	}
+	actorID = strings.TrimSpace(actorID)
+	if actorID == "" {
+		return nil, fmt.Errorf("actor_id is required")
+	}
+	artifactID = strings.TrimSpace(artifactID)
+	if artifactID == "" {
+		return nil, fmt.Errorf("artifact_id is required")
+	}
+
+	var metadataJSON string
+	var tombstonedAt sql.NullString
+	var tombstonedBy sql.NullString
+	var tombstoneReason sql.NullString
+	err := s.db.QueryRowContext(
+		ctx,
+		`SELECT metadata_json, tombstoned_at, tombstoned_by, tombstone_reason FROM artifacts WHERE id = ?`,
+		artifactID,
+	).Scan(&metadataJSON, &tombstonedAt, &tombstonedBy, &tombstoneReason)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query artifact for tombstone: %w", err)
+	}
+
+	var metadata map[string]any
+	if err := json.Unmarshal([]byte(metadataJSON), &metadata); err != nil {
+		return nil, fmt.Errorf("decode artifact metadata: %w", err)
+	}
+	if tombstonedAt.Valid && strings.TrimSpace(tombstonedAt.String) != "" {
+		metadata["tombstoned_at"] = tombstonedAt.String
+		if tombstonedBy.Valid && strings.TrimSpace(tombstonedBy.String) != "" {
+			metadata["tombstoned_by"] = tombstonedBy.String
+		}
+		if tombstoneReason.Valid && strings.TrimSpace(tombstoneReason.String) != "" {
+			metadata["tombstone_reason"] = tombstoneReason.String
+		}
+		return metadata, nil
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	metadata["tombstoned_at"] = now
+	metadata["tombstoned_by"] = actorID
+	if strings.TrimSpace(reason) != "" {
+		metadata["tombstone_reason"] = reason
+	}
+
+	updatedMetadataJSON, err := json.Marshal(metadata)
+	if err != nil {
+		return nil, fmt.Errorf("encode tombstoned artifact metadata: %w", err)
+	}
+
+	_, err = s.db.ExecContext(ctx,
+		`UPDATE artifacts SET tombstoned_at = ?, tombstoned_by = ?, tombstone_reason = ?, metadata_json = ? WHERE id = ?`,
+		now, actorID, strings.TrimSpace(reason), string(updatedMetadataJSON), artifactID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("tombstone artifact: %w", err)
+	}
+
+	return metadata, nil
 }
 
 func (s *Store) GetSnapshot(ctx context.Context, id string) (map[string]any, error) {

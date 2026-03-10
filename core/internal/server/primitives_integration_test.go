@@ -671,3 +671,224 @@ func requestJSONExpectStatus(t *testing.T, method string, url string, body strin
 	}
 	return resp
 }
+
+func TestArtifactTombstoneLifecycle(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	createResp := postJSONExpectStatus(t, h.baseURL+"/artifacts", `{
+		"actor_id":"actor-1",
+		"artifact":{
+			"kind":"blob",
+			"refs":["thread:thread-1"],
+			"summary":"tombstone test"
+		},
+		"content":"tombstone test content",
+		"content_type":"text"
+	}`, http.StatusCreated)
+	defer createResp.Body.Close()
+
+	var created map[string]map[string]any
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create artifact response: %v", err)
+	}
+	artifactID, _ := created["artifact"]["id"].(string)
+	if artifactID == "" {
+		t.Fatal("expected created artifact id")
+	}
+
+	listResp, err := http.Get(h.baseURL + "/artifacts")
+	if err != nil {
+		t.Fatalf("GET /artifacts: %v", err)
+	}
+	defer listResp.Body.Close()
+	var listed map[string][]map[string]any
+	if err := json.NewDecoder(listResp.Body).Decode(&listed); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+	found := false
+	for _, a := range listed["artifacts"] {
+		if a["id"] == artifactID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected artifact in list before tombstone")
+	}
+
+	tombstoneResp := postJSONExpectStatus(t, h.baseURL+"/artifacts/"+artifactID+"/tombstone", `{
+		"actor_id":"actor-1",
+		"reason":"no longer needed"
+	}`, http.StatusOK)
+	defer tombstoneResp.Body.Close()
+
+	var tombstoned map[string]map[string]any
+	if err := json.NewDecoder(tombstoneResp.Body).Decode(&tombstoned); err != nil {
+		t.Fatalf("decode tombstone response: %v", err)
+	}
+	if tombstoned["artifact"]["tombstoned_at"] == nil {
+		t.Fatal("expected tombstoned_at to be set")
+	}
+	if tombstoned["artifact"]["tombstoned_by"] != "actor-1" {
+		t.Fatalf("expected tombstoned_by=actor-1, got %v", tombstoned["artifact"]["tombstoned_by"])
+	}
+	if tombstoned["artifact"]["tombstone_reason"] != "no longer needed" {
+		t.Fatalf("expected tombstone_reason='no longer needed', got %v", tombstoned["artifact"]["tombstone_reason"])
+	}
+
+	filteredResp, err := http.Get(h.baseURL + "/artifacts")
+	if err != nil {
+		t.Fatalf("GET /artifacts after tombstone: %v", err)
+	}
+	defer filteredResp.Body.Close()
+	var filtered map[string][]map[string]any
+	if err := json.NewDecoder(filteredResp.Body).Decode(&filtered); err != nil {
+		t.Fatalf("decode filtered list response: %v", err)
+	}
+	for _, a := range filtered["artifacts"] {
+		if a["id"] == artifactID {
+			t.Fatal("tombstoned artifact should not appear in default list")
+		}
+	}
+
+	withTombstonedResp, err := http.Get(h.baseURL + "/artifacts?include_tombstoned=true")
+	if err != nil {
+		t.Fatalf("GET /artifacts?include_tombstoned=true: %v", err)
+	}
+	defer withTombstonedResp.Body.Close()
+	var withTombstoned map[string][]map[string]any
+	if err := json.NewDecoder(withTombstonedResp.Body).Decode(&withTombstoned); err != nil {
+		t.Fatalf("decode include_tombstoned list response: %v", err)
+	}
+	found = false
+	for _, a := range withTombstoned["artifacts"] {
+		if a["id"] == artifactID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected tombstoned artifact in list with include_tombstoned=true")
+	}
+
+	getResp, err := http.Get(h.baseURL + "/artifacts/" + artifactID)
+	if err != nil {
+		t.Fatalf("GET /artifacts/{id} after tombstone: %v", err)
+	}
+	defer getResp.Body.Close()
+	if getResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 for direct get of tombstoned artifact, got %d", getResp.StatusCode)
+	}
+	var got map[string]map[string]any
+	if err := json.NewDecoder(getResp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode get response: %v", err)
+	}
+	if got["artifact"]["tombstoned_at"] == nil {
+		t.Fatal("expected tombstoned_at in direct get")
+	}
+
+	reTombstoneResp := postJSONExpectStatus(t, h.baseURL+"/artifacts/"+artifactID+"/tombstone", `{
+		"actor_id":"actor-1",
+		"reason":"still not needed"
+	}`, http.StatusOK)
+	defer reTombstoneResp.Body.Close()
+	var reTombstoned map[string]map[string]any
+	if err := json.NewDecoder(reTombstoneResp.Body).Decode(&reTombstoned); err != nil {
+		t.Fatalf("decode repeat tombstone response: %v", err)
+	}
+	if reTombstoned["artifact"]["tombstoned_at"] != tombstoned["artifact"]["tombstoned_at"] {
+		t.Fatalf("expected repeated tombstone to preserve tombstoned_at, first=%v second=%v", tombstoned["artifact"]["tombstoned_at"], reTombstoned["artifact"]["tombstoned_at"])
+	}
+	if reTombstoned["artifact"]["tombstone_reason"] != tombstoned["artifact"]["tombstone_reason"] {
+		t.Fatalf("expected repeated tombstone to preserve tombstone_reason, first=%v second=%v", tombstoned["artifact"]["tombstone_reason"], reTombstoned["artifact"]["tombstone_reason"])
+	}
+}
+
+func TestDocumentTombstoneLifecycle(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	createResp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
+		"actor_id":"actor-1",
+		"document":{"title":"Tombstone Test Doc"},
+		"content":"initial content",
+		"content_type":"text"
+	}`, http.StatusCreated)
+	defer createResp.Body.Close()
+
+	var created map[string]map[string]any
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create doc response: %v", err)
+	}
+	documentID, _ := created["document"]["id"].(string)
+	if documentID == "" {
+		t.Fatal("expected created document id")
+	}
+
+	tombstoneResp := postJSONExpectStatus(t, h.baseURL+"/docs/"+documentID+"/tombstone", `{
+		"actor_id":"actor-1",
+		"reason":"replaced by v2"
+	}`, http.StatusOK)
+	defer tombstoneResp.Body.Close()
+
+	var tombstonePayload struct {
+		Document map[string]any `json:"document"`
+		Revision map[string]any `json:"revision"`
+	}
+	if err := json.NewDecoder(tombstoneResp.Body).Decode(&tombstonePayload); err != nil {
+		t.Fatalf("decode tombstone doc response: %v", err)
+	}
+	if tombstonePayload.Document["tombstoned_at"] == nil {
+		t.Fatal("expected tombstoned_at to be set on document")
+	}
+	if tombstonePayload.Document["tombstoned_by"] != "actor-1" {
+		t.Fatalf("expected tombstoned_by=actor-1, got %v", tombstonePayload.Document["tombstoned_by"])
+	}
+	if tombstonePayload.Document["tombstone_reason"] != "replaced by v2" {
+		t.Fatalf("expected tombstone_reason='replaced by v2', got %v", tombstonePayload.Document["tombstone_reason"])
+	}
+	if tombstonePayload.Revision == nil {
+		t.Fatal("expected revision to be returned")
+	}
+
+	getResp, err := http.Get(h.baseURL + "/docs/" + documentID)
+	if err != nil {
+		t.Fatalf("GET /docs/{id} after tombstone: %v", err)
+	}
+	defer getResp.Body.Close()
+	if getResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 for direct get of tombstoned document, got %d", getResp.StatusCode)
+	}
+	var gotDoc struct {
+		Document map[string]any `json:"document"`
+	}
+	if err := json.NewDecoder(getResp.Body).Decode(&gotDoc); err != nil {
+		t.Fatalf("decode get doc response: %v", err)
+	}
+	if gotDoc.Document["tombstoned_at"] == nil {
+		t.Fatal("expected tombstoned_at in direct get")
+	}
+
+	reTombstoneResp := postJSONExpectStatus(t, h.baseURL+"/docs/"+documentID+"/tombstone", `{
+		"actor_id":"actor-1",
+		"reason":"still replaced"
+	}`, http.StatusOK)
+	defer reTombstoneResp.Body.Close()
+	var repeatPayload struct {
+		Document map[string]any `json:"document"`
+	}
+	if err := json.NewDecoder(reTombstoneResp.Body).Decode(&repeatPayload); err != nil {
+		t.Fatalf("decode repeat tombstone doc response: %v", err)
+	}
+	if repeatPayload.Document["tombstoned_at"] != tombstonePayload.Document["tombstoned_at"] {
+		t.Fatalf("expected repeated doc tombstone to preserve tombstoned_at, first=%v second=%v", tombstonePayload.Document["tombstoned_at"], repeatPayload.Document["tombstoned_at"])
+	}
+	if repeatPayload.Document["tombstone_reason"] != tombstonePayload.Document["tombstone_reason"] {
+		t.Fatalf("expected repeated doc tombstone to preserve tombstone_reason, first=%v second=%v", tombstonePayload.Document["tombstone_reason"], repeatPayload.Document["tombstone_reason"])
+	}
+}

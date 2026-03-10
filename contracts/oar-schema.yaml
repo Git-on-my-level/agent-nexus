@@ -195,6 +195,9 @@ primitives:
       content_path:  { type: string, required: true, description: "Filesystem path to artifact content, derived from content_hash" }
       refs:          { type: "list<typed_ref>", required: true, description: "Typed references (see ref_format)" }
       summary:       { type: string, required: false }
+      tombstoned_at: { type: datetime, required: false, description: "When this artifact was tombstoned" }
+      tombstoned_by: { type: string, required: false, description: "Actor ID who tombstoned this artifact" }
+      tombstone_reason: { type: string, required: false, description: "Human-readable reason for tombstoning" }
 
 # ---------------------------------------------------------------------------
 # Typed conventions (v0: threads and commitments only)

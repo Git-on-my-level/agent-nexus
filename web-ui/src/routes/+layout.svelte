@@ -89,7 +89,9 @@
   );
   let shellContentConfig = $derived(getShellContentConfig(currentAppPath));
   let pageTitle = $derived(() => {
-    const navItem = navigationItems.find((item) => isActive(item.href) && item.href !== "/");
+    const navItem = navigationItems.find(
+      (item) => isActive(item.href) && item.href !== "/",
+    );
     const section = navItem?.label;
     const projectLabel = activeProject?.label;
     const parts = [section, projectLabel, "OAR"].filter(Boolean);

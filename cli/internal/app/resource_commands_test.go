@@ -1899,6 +1899,110 @@ func TestArtifactsListResolvesShortThreadIDFilter(t *testing.T) {
 	}
 }
 
+func TestArtifactsListIncludesTombstonedQueryFlag(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/artifacts" {
+			http.NotFound(w, r)
+			return
+		}
+		if got := r.URL.Query().Get("include_tombstoned"); got != "true" {
+			t.Fatalf("expected include_tombstoned=true, got %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"artifacts":[]}`))
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"artifacts", "list",
+		"--include-tombstoned",
+	})
+	assertEnvelopeOK(t, raw)
+}
+
+func TestArtifactsTombstoneActorIDMeAliasFromProfile(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/artifacts/artifact_1/tombstone" {
+			http.NotFound(w, r)
+			return
+		}
+		body, _ := io.ReadAll(r.Body)
+		var payload map[string]any
+		if err := json.Unmarshal(body, &payload); err != nil {
+			t.Fatalf("decode artifacts tombstone body: %v body=%s", err, string(body))
+		}
+		if got := strings.TrimSpace(anyStringValue(payload["actor_id"])); got != "actor-profile-artifacts" {
+			t.Fatalf("expected actor_id from profile, got %q body=%s", got, string(body))
+		}
+		if got := strings.TrimSpace(anyStringValue(payload["reason"])); got != "superseded" {
+			t.Fatalf("expected reason superseded, got %q body=%s", got, string(body))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"artifact":{"id":"artifact_1","tombstoned_at":"2026-03-10T10:00:00Z"}}`))
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-artifacts", `{"agent":"agent-artifacts","actor_id":"actor-profile-artifacts","access_token":"token-artifacts","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"--agent", "agent-artifacts",
+		"artifacts", "tombstone",
+		"--artifact-id", "artifact_1",
+		"--actor-id", "me",
+		"--reason", "superseded",
+	})
+	assertEnvelopeOK(t, raw)
+}
+
+func TestDocsTombstoneActorIDMeAliasFromProfile(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/docs/doc_1/tombstone" {
+			http.NotFound(w, r)
+			return
+		}
+		body, _ := io.ReadAll(r.Body)
+		var payload map[string]any
+		if err := json.Unmarshal(body, &payload); err != nil {
+			t.Fatalf("decode docs tombstone body: %v body=%s", err, string(body))
+		}
+		if got := strings.TrimSpace(anyStringValue(payload["actor_id"])); got != "actor-profile-docs-tombstone" {
+			t.Fatalf("expected actor_id from profile, got %q body=%s", got, string(body))
+		}
+		if got := strings.TrimSpace(anyStringValue(payload["reason"])); got != "replaced" {
+			t.Fatalf("expected reason replaced, got %q body=%s", got, string(body))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"document":{"id":"doc_1","tombstoned_at":"2026-03-10T10:00:00Z"},"revision":{"revision_id":"rev_1"}}`))
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-docs-tombstone", `{"agent":"agent-docs-tombstone","actor_id":"actor-profile-docs-tombstone","access_token":"token-docs","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"--agent", "agent-docs-tombstone",
+		"docs", "tombstone",
+		"--document-id", "doc_1",
+		"--actor-id", "me",
+		"--reason", "replaced",
+	})
+	assertEnvelopeOK(t, raw)
+}
+
 func TestInboxListResolvesShortThreadIDFilter(t *testing.T) {
 	t.Parallel()
 

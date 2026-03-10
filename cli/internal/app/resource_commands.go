@@ -1142,10 +1142,12 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 	case "list":
 		fs := newSilentFlagSet("artifacts list")
 		var kindFlag, threadIDFlag, beforeFlag, afterFlag trackedString
+		var includeTombstoned bool
 		fs.Var(&kindFlag, "kind", "Filter by artifact kind")
 		fs.Var(&threadIDFlag, "thread-id", "Filter by thread id")
 		fs.Var(&beforeFlag, "created-before", "Filter by created_at upper bound")
 		fs.Var(&afterFlag, "created-after", "Filter by created_at lower bound")
+		fs.BoolVar(&includeTombstoned, "include-tombstoned", false, "Include tombstoned artifacts")
 		if err := fs.Parse(args[1:]); err != nil {
 			return nil, "artifacts list", errnorm.Usage("invalid_flags", err.Error())
 		}
@@ -1162,11 +1164,14 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 				resolvedThreadID = resolved[0]
 			}
 		}
-		query := make([]queryParam, 0, 4)
+		query := make([]queryParam, 0, 5)
 		addSingleQuery(&query, "kind", kindFlag.value)
 		addSingleQuery(&query, "thread_id", resolvedThreadID)
 		addSingleQuery(&query, "created_before", beforeFlag.value)
 		addSingleQuery(&query, "created_after", afterFlag.value)
+		if includeTombstoned {
+			query = append(query, queryParam{name: "include_tombstoned", values: []string{"true"}})
+		}
 		result, err := a.invokeTypedJSON(ctx, cfg, "artifacts list", "artifacts.list", nil, query, nil)
 		return result, "artifacts list", err
 	case "get":
@@ -1210,6 +1215,44 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 	case "inspect":
 		result, callErr := a.runArtifactsInspectCommand(ctx, args[1:], cfg)
 		return result, "artifacts inspect", callErr
+	case "tombstone":
+		fs := newSilentFlagSet("artifacts tombstone")
+		var artifactIDFlag trackedString
+		var actorIDFlag trackedString
+		var reasonFlag trackedString
+		fs.Var(&artifactIDFlag, "artifact-id", "Artifact id to tombstone")
+		fs.Var(&actorIDFlag, "actor-id", "Actor id")
+		fs.Var(&reasonFlag, "reason", "Reason for tombstoning")
+		if err := fs.Parse(args[1:]); err != nil {
+			return nil, "artifacts tombstone", errnorm.Usage("invalid_flags", err.Error())
+		}
+		positionals := fs.Args()
+		id := strings.TrimSpace(artifactIDFlag.value)
+		if id == "" && len(positionals) > 0 {
+			id = strings.TrimSpace(positionals[0])
+			positionals = positionals[1:]
+		}
+		if err := validateID(id, "artifact id"); err != nil {
+			return nil, "artifacts tombstone", err
+		}
+		if len(positionals) > 0 {
+			return nil, "artifacts tombstone", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar artifacts tombstone`")
+		}
+		body := map[string]any{}
+		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
+		if err != nil {
+			return nil, "artifacts tombstone", err
+		}
+		if actorID != "" {
+			body["actor_id"] = actorID
+		} else if strings.TrimSpace(cfg.ActorID) != "" {
+			body["actor_id"] = strings.TrimSpace(cfg.ActorID)
+		}
+		if strings.TrimSpace(reasonFlag.value) != "" {
+			body["reason"] = strings.TrimSpace(reasonFlag.value)
+		}
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "artifacts tombstone", "artifacts.tombstone", map[string]string{"artifact_id": id}, nil, body)
+		return result, "artifacts tombstone", callErr
 	default:
 		return nil, "artifacts", artifactsSubcommandSpec.unknownError(args[0])
 	}
@@ -1318,6 +1361,44 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 			nil,
 		)
 		return result, "docs revision get", callErr
+	case "tombstone":
+		fs := newSilentFlagSet("docs tombstone")
+		var documentIDFlag trackedString
+		var actorIDFlag trackedString
+		var reasonFlag trackedString
+		fs.Var(&documentIDFlag, "document-id", "Document id to tombstone")
+		fs.Var(&actorIDFlag, "actor-id", "Actor id")
+		fs.Var(&reasonFlag, "reason", "Reason for tombstoning")
+		if err := fs.Parse(args[1:]); err != nil {
+			return nil, "docs tombstone", errnorm.Usage("invalid_flags", err.Error())
+		}
+		positionals := fs.Args()
+		id := strings.TrimSpace(documentIDFlag.value)
+		if id == "" && len(positionals) > 0 {
+			id = strings.TrimSpace(positionals[0])
+			positionals = positionals[1:]
+		}
+		if err := validateID(id, "document id"); err != nil {
+			return nil, "docs tombstone", err
+		}
+		if len(positionals) > 0 {
+			return nil, "docs tombstone", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar docs tombstone`")
+		}
+		body := map[string]any{}
+		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
+		if err != nil {
+			return nil, "docs tombstone", err
+		}
+		if actorID != "" {
+			body["actor_id"] = actorID
+		} else if strings.TrimSpace(cfg.ActorID) != "" {
+			body["actor_id"] = strings.TrimSpace(cfg.ActorID)
+		}
+		if strings.TrimSpace(reasonFlag.value) != "" {
+			body["reason"] = strings.TrimSpace(reasonFlag.value)
+		}
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "docs tombstone", "docs.tombstone", map[string]string{"document_id": id}, nil, body)
+		return result, "docs tombstone", callErr
 	default:
 		return nil, "docs", docsSubcommandSpec.unknownError(args[0])
 	}

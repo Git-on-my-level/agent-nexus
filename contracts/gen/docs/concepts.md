@@ -4,7 +4,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.2.2`
-- Concepts: `37`
+- Concepts: `38`
 
 ## `append-only`
 
@@ -14,12 +14,13 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `artifacts`
 
-- Commands: `5`
+- Commands: `6`
 - Command IDs:
   - `artifacts.content.get`
   - `artifacts.create`
   - `artifacts.get`
   - `artifacts.list`
+  - `artifacts.tombstone`
   - `threads.context`
 
 ## `auth`
@@ -84,12 +85,13 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `docs`
 
-- Commands: `5`
+- Commands: `6`
 - Command IDs:
   - `docs.create`
   - `docs.get`
   - `docs.history`
   - `docs.revision.get`
+  - `docs.tombstone`
   - `docs.update`
 
 ## `events`
@@ -160,6 +162,13 @@ Generated from `contracts/oar-openapi.yaml`.
 - Commands: `1`
 - Command IDs:
   - `agents.me.keys.rotate`
+
+## `lifecycle`
+
+- Commands: `2`
+- Command IDs:
+  - `artifacts.tombstone`
+  - `docs.tombstone`
 
 ## `lineage`
 

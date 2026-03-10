@@ -387,6 +387,27 @@
     {loadError}
   </div>
 {:else if artifact}
+  {#if artifact?.tombstoned_at}
+    <div
+      class="tombstone-banner mb-4 rounded-md border border-red-200 bg-red-50 p-4"
+    >
+      <div class="flex items-center gap-2 text-sm font-semibold text-red-800">
+        <span>⚠</span>
+        <span>This artifact has been tombstoned</span>
+      </div>
+      {#if artifact.tombstone_reason}
+        <p class="mt-2 text-[13px] text-red-900">
+          Reason: {artifact.tombstone_reason}
+        </p>
+      {/if}
+      <p class="mt-1 text-xs text-gray-500">
+        Tombstoned {#if artifact.tombstoned_by}by {artifact.tombstoned_by}{/if}
+        {#if artifact.tombstoned_at}
+          at {new Date(artifact.tombstoned_at).toLocaleString()}
+        {/if}
+      </p>
+    </div>
+  {/if}
   <section
     class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-4"
   >
@@ -424,6 +445,29 @@
       <ProvenanceBadge provenance={artifact.provenance} />
     </div>
   </section>
+
+  {#if artifact.content_hash}
+    <details
+      class="mt-3 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)]"
+    >
+      <summary
+        class="cursor-pointer px-4 py-2.5 text-[11px] text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]"
+        >Hashes</summary
+      >
+      <div class="px-4 pb-3 pt-1">
+        <p
+          class="text-[11px] uppercase tracking-[0.12em] text-[var(--ui-text-subtle)]"
+        >
+          Content hash
+        </p>
+        <p
+          class="mt-1 break-all font-mono text-[12px] text-[var(--ui-text-muted)]"
+        >
+          {artifact.content_hash}
+        </p>
+      </div>
+    </details>
+  {/if}
 
   {#if (artifact.refs ?? []).length > 0}
     <div

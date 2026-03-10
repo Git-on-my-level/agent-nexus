@@ -331,7 +331,8 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "artifacts.create",
       "artifacts.get",
-      "artifacts.list"
+      "artifacts.list",
+      "artifacts.tombstone"
     ],
     "go_method": "ArtifactsContentGet",
     "ts_method": "artifactsContentGet"
@@ -392,7 +393,8 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "artifacts.content.get",
       "artifacts.get",
-      "artifacts.list"
+      "artifacts.list",
+      "artifacts.tombstone"
     ],
     "go_method": "ArtifactsCreate",
     "ts_method": "artifactsCreate"
@@ -431,7 +433,8 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "artifacts.content.get",
       "artifacts.create",
-      "artifacts.list"
+      "artifacts.list",
+      "artifacts.tombstone"
     ],
     "go_method": "ArtifactsGet",
     "ts_method": "artifactsGet"
@@ -468,10 +471,68 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "artifacts.content.get",
       "artifacts.create",
-      "artifacts.get"
+      "artifacts.get",
+      "artifacts.tombstone"
     ],
     "go_method": "ArtifactsList",
     "ts_method": "artifactsList"
+  },
+  {
+    "command_id": "artifacts.tombstone",
+    "cli_path": "artifacts tombstone",
+    "group": "artifacts",
+    "method": "POST",
+    "path": "/artifacts/{artifact_id}/tombstone",
+    "operation_id": "tombstoneArtifact",
+    "summary": "Tombstone an artifact (soft-delete)",
+    "why": "Mark an artifact as inactive while preserving provenance; tombstoned artifacts are excluded from list by default.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ artifact }` with updated tombstone metadata.",
+    "error_codes": [
+      "invalid_json",
+      "invalid_request",
+      "not_found"
+    ],
+    "concepts": [
+      "artifacts",
+      "lifecycle"
+    ],
+    "stability": "beta",
+    "agent_notes": "Idempotent; repeated tombstone calls on the same artifact are safe.",
+    "examples": [
+      {
+        "title": "Tombstone artifact",
+        "command": "oar artifacts tombstone --artifact-id artifact_123 --reason \"superseded by newer version\" --json"
+      }
+    ],
+    "body_schema": {
+      "required": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        }
+      ],
+      "optional": [
+        {
+          "name": "reason",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "artifact_id"
+    ],
+    "adjacent_commands": [
+      "artifacts.content.get",
+      "artifacts.create",
+      "artifacts.get",
+      "artifacts.list"
+    ],
+    "go_method": "ArtifactsTombstone",
+    "ts_method": "artifactsTombstone"
   },
   {
     "command_id": "auth.agents.register",
@@ -1166,6 +1227,7 @@ export const commandRegistry: CommandSpec[] = [
       "docs.get",
       "docs.history",
       "docs.revision.get",
+      "docs.tombstone",
       "docs.update"
     ],
     "go_method": "DocsCreate",
@@ -1208,6 +1270,7 @@ export const commandRegistry: CommandSpec[] = [
       "docs.create",
       "docs.history",
       "docs.revision.get",
+      "docs.tombstone",
       "docs.update"
     ],
     "go_method": "DocsGet",
@@ -1251,6 +1314,7 @@ export const commandRegistry: CommandSpec[] = [
       "docs.create",
       "docs.get",
       "docs.revision.get",
+      "docs.tombstone",
       "docs.update"
     ],
     "go_method": "DocsHistory",
@@ -1294,10 +1358,69 @@ export const commandRegistry: CommandSpec[] = [
       "docs.create",
       "docs.get",
       "docs.history",
+      "docs.tombstone",
       "docs.update"
     ],
     "go_method": "DocsRevisionGet",
     "ts_method": "docsRevisionGet"
+  },
+  {
+    "command_id": "docs.tombstone",
+    "cli_path": "docs tombstone",
+    "group": "docs",
+    "method": "POST",
+    "path": "/docs/{document_id}/tombstone",
+    "operation_id": "tombstoneDocument",
+    "summary": "Tombstone a document (soft-delete)",
+    "why": "Mark a document as inactive while preserving revision history and provenance.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ document, revision }` with updated tombstone metadata.",
+    "error_codes": [
+      "invalid_json",
+      "invalid_request",
+      "not_found"
+    ],
+    "concepts": [
+      "docs",
+      "lifecycle"
+    ],
+    "stability": "beta",
+    "agent_notes": "Idempotent; repeated tombstone calls on the same document are safe.",
+    "examples": [
+      {
+        "title": "Tombstone document",
+        "command": "oar docs tombstone --document-id product-constitution --reason \"replaced by v2\" --json"
+      }
+    ],
+    "body_schema": {
+      "required": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        }
+      ],
+      "optional": [
+        {
+          "name": "reason",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "document_id"
+    ],
+    "adjacent_commands": [
+      "docs.create",
+      "docs.get",
+      "docs.history",
+      "docs.revision.get",
+      "docs.update"
+    ],
+    "go_method": "DocsTombstone",
+    "ts_method": "docsTombstone"
   },
   {
     "command_id": "docs.update",
@@ -1375,7 +1498,8 @@ export const commandRegistry: CommandSpec[] = [
       "docs.create",
       "docs.get",
       "docs.history",
-      "docs.revision.get"
+      "docs.revision.get",
+      "docs.tombstone"
     ],
     "go_method": "DocsUpdate",
     "ts_method": "docsUpdate"
@@ -2847,6 +2971,10 @@ export class OarClient {
     return this.invoke("artifacts.list", {}, options);
   }
 
+  artifactsTombstone(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("artifacts.tombstone", pathParams, options);
+  }
+
   authAgentsRegister(options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("auth.agents.register", {}, options);
   }
@@ -2905,6 +3033,10 @@ export class OarClient {
 
   docsRevisionGet(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("docs.revision.get", pathParams, options);
+  }
+
+  docsTombstone(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("docs.tombstone", pathParams, options);
   }
 
   docsUpdate(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {

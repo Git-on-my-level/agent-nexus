@@ -1377,6 +1377,10 @@ paths:
         - in: query
           name: created_after
           schema: { type: string, format: date-time }
+        - in: query
+          name: include_tombstoned
+          schema: { type: boolean }
+          description: "Include tombstoned artifacts in the list. Defaults to false."
       responses:
         '200':
           description: Artifact list
@@ -1450,6 +1454,82 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /artifacts/{artifact_id}/tombstone:
+    post:
+      operationId: tombstoneArtifact
+      summary: Tombstone an artifact (soft-delete)
+      tags: [artifacts]
+      x-oar-command-id: "artifacts.tombstone"
+      x-oar-cli-path: "artifacts tombstone"
+      x-oar-why: "Mark an artifact as inactive while preserving provenance; tombstoned artifacts are excluded from list by default."
+      x-oar-examples:
+        - title: Tombstone artifact
+          command: oar artifacts tombstone --artifact-id artifact_123 --reason "superseded by newer version" --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ artifact }` with updated tombstone metadata."
+      x-oar-error-codes: [invalid_json, invalid_request, not_found]
+      x-oar-concepts: [artifacts, lifecycle]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Idempotent; repeated tombstone calls on the same artifact are safe."
+      parameters:
+        - $ref: '#/components/parameters/ArtifactID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TombstoneRequest'
+      responses:
+        '200':
+          description: Artifact tombstoned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /docs/{document_id}/tombstone:
+    post:
+      operationId: tombstoneDocument
+      summary: Tombstone a document (soft-delete)
+      tags: [docs]
+      x-oar-command-id: "docs.tombstone"
+      x-oar-cli-path: "docs tombstone"
+      x-oar-why: "Mark a document as inactive while preserving revision history and provenance."
+      x-oar-examples:
+        - title: Tombstone document
+          command: oar docs tombstone --document-id product-constitution --reason "replaced by v2" --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ document, revision }` with updated tombstone metadata."
+      x-oar-error-codes: [invalid_json, invalid_request, not_found]
+      x-oar-concepts: [docs, lifecycle]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Idempotent; repeated tombstone calls on the same document are safe."
+      parameters:
+        - $ref: '#/components/parameters/DocumentID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TombstoneRequest'
+      responses:
+        '200':
+          description: Document tombstoned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentWithRevisionResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
         '404':
           $ref: '#/components/responses/ErrorResponse'
 
@@ -2451,6 +2531,13 @@ components:
         thread_id: { type: string }
         inbox_item_id: { type: string }
       required: [thread_id, inbox_item_id]
+
+    TombstoneRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+        reason: { type: string, description: "Human-readable reason for tombstoning" }
+      required: [actor_id]
 
     OKResponse:
       type: object

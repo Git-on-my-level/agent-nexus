@@ -29,6 +29,9 @@ type documentRow struct {
 	CreatedBy       string
 	UpdatedAt       string
 	UpdatedBy       string
+	TombstonedAt    sql.NullString
+	TombstonedBy    sql.NullString
+	TombstoneReason sql.NullString
 }
 
 func (s *Store) CreateDocument(ctx context.Context, actorID string, document map[string]any, content any, contentType string, refs []string) (map[string]any, map[string]any, error) {
@@ -608,6 +611,52 @@ func (s *Store) GetDocumentRevision(ctx context.Context, documentID string, revi
 	return s.loadDocumentRevision(ctx, documentID, revisionID, true)
 }
 
+func (s *Store) TombstoneDocument(ctx context.Context, actorID string, documentID string, reason string) (map[string]any, map[string]any, error) {
+	if s == nil || s.db == nil {
+		return nil, nil, fmt.Errorf("primitives store database is not initialized")
+	}
+	actorID = strings.TrimSpace(actorID)
+	if actorID == "" {
+		return nil, nil, invalidDocumentRequest("actorID is required")
+	}
+	documentID = strings.TrimSpace(documentID)
+	if documentID == "" {
+		return nil, nil, invalidDocumentRequest("document_id is required")
+	}
+
+	doc, err := s.loadDocumentRow(ctx, documentID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if doc.TombstonedAt.Valid && strings.TrimSpace(doc.TombstonedAt.String) != "" {
+		revision, err := s.loadDocumentRevision(ctx, documentID, doc.HeadRevisionID, true)
+		if err != nil {
+			return nil, nil, err
+		}
+		return doc.toMap(), revision, nil
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	_, err = s.db.ExecContext(ctx,
+		`UPDATE documents SET tombstoned_at = ?, tombstoned_by = ?, tombstone_reason = ? WHERE id = ?`,
+		now, actorID, strings.TrimSpace(reason), documentID,
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("tombstone document: %w", err)
+	}
+
+	doc.TombstonedAt = nullableString(now)
+	doc.TombstonedBy = nullableString(actorID)
+	doc.TombstoneReason = nullableString(reason)
+
+	revision, err := s.loadDocumentRevision(ctx, documentID, doc.HeadRevisionID, true)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return doc.toMap(), revision, nil
+}
+
 func (s *Store) loadDocumentRow(ctx context.Context, documentID string) (documentRow, error) {
 	documentID = strings.TrimSpace(documentID)
 	if err := validateDocumentID(documentID); err != nil {
@@ -618,7 +667,8 @@ func (s *Store) loadDocumentRow(ctx context.Context, documentID string) (documen
 	err := s.db.QueryRowContext(
 		ctx,
 		`SELECT id, thread_id, title, slug, status, labels_json, supersedes_json,
-			 head_revision_id, head_revision_number, created_at, created_by, updated_at, updated_by
+			 head_revision_id, head_revision_number, created_at, created_by, updated_at, updated_by,
+			 tombstoned_at, tombstoned_by, tombstone_reason
 		 FROM documents WHERE id = ?`,
 		documentID,
 	).Scan(
@@ -635,6 +685,9 @@ func (s *Store) loadDocumentRow(ctx context.Context, documentID string) (documen
 		&row.CreatedBy,
 		&row.UpdatedAt,
 		&row.UpdatedBy,
+		&row.TombstonedAt,
+		&row.TombstonedBy,
+		&row.TombstoneReason,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return documentRow{}, ErrNotFound
@@ -767,6 +820,15 @@ func (r documentRow) toMap() map[string]any {
 	}
 	if r.Status.Valid && strings.TrimSpace(r.Status.String) != "" {
 		out["status"] = r.Status.String
+	}
+	if r.TombstonedAt.Valid && strings.TrimSpace(r.TombstonedAt.String) != "" {
+		out["tombstoned_at"] = r.TombstonedAt.String
+	}
+	if r.TombstonedBy.Valid && strings.TrimSpace(r.TombstonedBy.String) != "" {
+		out["tombstoned_by"] = r.TombstonedBy.String
+	}
+	if r.TombstoneReason.Valid && strings.TrimSpace(r.TombstoneReason.String) != "" {
+		out["tombstone_reason"] = r.TombstoneReason.String
 	}
 	return out
 }

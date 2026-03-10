@@ -50,6 +50,8 @@ type PrimitiveStore interface {
 	ListEventsByThread(ctx context.Context, threadID string) ([]map[string]any, error)
 	ListRecentEventsByThread(ctx context.Context, threadID string, limit int) ([]map[string]any, error)
 	ListEvents(ctx context.Context, filter primitives.EventListFilter) ([]map[string]any, error)
+	TombstoneArtifact(ctx context.Context, actorID string, artifactID string, reason string) (map[string]any, error)
+	TombstoneDocument(ctx context.Context, actorID string, documentID string, reason string) (map[string]any, map[string]any, error)
 }
 
 type HandlerOption func(*handlerOptions)
@@ -502,6 +504,21 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			return
 		}
 
+		if strings.HasSuffix(remainder, "/tombstone") {
+			if r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+				return
+			}
+			documentID := strings.TrimSuffix(remainder, "/tombstone")
+			documentID = strings.TrimSuffix(documentID, "/")
+			if documentID == "" || strings.Contains(documentID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			handleTombstoneDocument(w, r, opts, documentID)
+			return
+		}
+
 		if strings.HasSuffix(remainder, "/history") {
 			if r.Method != http.MethodGet {
 				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
@@ -592,14 +609,29 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 	})
 
 	mux.HandleFunc("/artifacts/", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
-			return
-		}
-
 		remainder := strings.TrimPrefix(r.URL.Path, "/artifacts/")
 		if remainder == "" {
 			writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+			return
+		}
+
+		if strings.HasSuffix(remainder, "/tombstone") {
+			if r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+				return
+			}
+			artifactID := strings.TrimSuffix(remainder, "/tombstone")
+			artifactID = strings.TrimSuffix(artifactID, "/")
+			if artifactID == "" || strings.Contains(artifactID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			handleTombstoneArtifact(w, r, opts, artifactID)
+			return
+		}
+
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
 			return
 		}
 

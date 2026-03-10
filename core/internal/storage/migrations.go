@@ -196,6 +196,19 @@ var migrations = []migration{
 			`CREATE INDEX IF NOT EXISTS idx_artifacts_content_hash ON artifacts (content_hash)`,
 		},
 	},
+	{
+		Version: 8,
+		Statements: []string{
+			`ALTER TABLE artifacts ADD COLUMN tombstoned_at TEXT`,
+			`ALTER TABLE artifacts ADD COLUMN tombstoned_by TEXT`,
+			`ALTER TABLE artifacts ADD COLUMN tombstone_reason TEXT`,
+			`CREATE INDEX IF NOT EXISTS idx_artifacts_tombstoned_at ON artifacts (tombstoned_at)`,
+			`ALTER TABLE documents ADD COLUMN tombstoned_at TEXT`,
+			`ALTER TABLE documents ADD COLUMN tombstoned_by TEXT`,
+			`ALTER TABLE documents ADD COLUMN tombstone_reason TEXT`,
+			`CREATE INDEX IF NOT EXISTS idx_documents_tombstoned_at ON documents (tombstoned_at)`,
+		},
+	},
 }
 
 func applyMigrations(ctx context.Context, db *sql.DB) error {
