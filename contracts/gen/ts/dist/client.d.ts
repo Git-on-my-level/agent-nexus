@@ -53,6 +53,7 @@ export declare class OarClient {
     artifactsCreate(options?: RequestOptions): Promise<InvokeResult>;
     artifactsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     artifactsList(options?: RequestOptions): Promise<InvokeResult>;
+    artifactsTombstone(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     authAgentsRegister(options?: RequestOptions): Promise<InvokeResult>;
     authPasskeyLoginOptions(options?: RequestOptions): Promise<InvokeResult>;
     authPasskeyLoginVerify(options?: RequestOptions): Promise<InvokeResult>;
@@ -68,6 +69,7 @@ export declare class OarClient {
     docsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsHistory(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsRevisionGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    docsTombstone(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsUpdate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     eventsCreate(options?: RequestOptions): Promise<InvokeResult>;
     eventsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
