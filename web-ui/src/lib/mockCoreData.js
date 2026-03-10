@@ -2408,6 +2408,154 @@ export function listMockDocuments(filters = {}) {
   });
 }
 
+export function createMockDocument({
+  actor_id,
+  document: docFields = {},
+  content,
+  content_type,
+}) {
+  const docId = String(
+    docFields.id || `doc-${Math.random().toString(36).slice(2, 10)}`,
+  ).trim();
+  const title = String(docFields.title || "").trim();
+
+  if (!title) {
+    return { error: "validation", message: "document.title is required." };
+  }
+
+  if (!content && content !== 0) {
+    return { error: "validation", message: "content is required." };
+  }
+
+  if (!content_type) {
+    return { error: "validation", message: "content_type is required." };
+  }
+
+  if (MOCK_DOCUMENTS.find((d) => d.id === docId)) {
+    return {
+      error: "conflict",
+      message: `Document with id '${docId}' already exists.`,
+    };
+  }
+
+  const now = new Date().toISOString();
+  const revisionId = `rev-${docId}-1`;
+
+  const newDoc = {
+    id: docId,
+    title,
+    slug: docId,
+    status: String(docFields.status || "draft"),
+    labels: Array.isArray(docFields.labels) ? docFields.labels : [],
+    supersedes: [],
+    head_revision_id: revisionId,
+    head_revision_number: 1,
+    thread_id: docFields.thread_id || null,
+    created_at: now,
+    created_by: actor_id,
+    updated_at: now,
+    updated_by: actor_id,
+    tombstoned_at: null,
+  };
+
+  const newRevision = {
+    document_id: docId,
+    revision_id: revisionId,
+    artifact_id: revisionId,
+    revision_number: 1,
+    prev_revision_id: null,
+    created_at: now,
+    created_by: actor_id,
+    content_type,
+    content_hash: `hash-${Math.random().toString(36).slice(2, 10)}`,
+    revision_hash: `rhash-${Math.random().toString(36).slice(2, 10)}`,
+    content: String(content),
+  };
+
+  MOCK_DOCUMENTS.unshift(newDoc);
+  MOCK_DOCUMENT_REVISIONS[docId] = [newRevision];
+
+  return { document: newDoc, revision: newRevision };
+}
+
+export function updateMockDocument({
+  actor_id,
+  document_id,
+  content,
+  content_type,
+  if_base_revision,
+  document: docPatch = {},
+}) {
+  const docIndex = MOCK_DOCUMENTS.findIndex((d) => d.id === document_id);
+  if (docIndex === -1) {
+    return { error: "not_found", message: "Document not found." };
+  }
+
+  const doc = MOCK_DOCUMENTS[docIndex];
+
+  if (!content && content !== 0) {
+    return { error: "validation", message: "content is required." };
+  }
+
+  if (!content_type) {
+    return { error: "validation", message: "content_type is required." };
+  }
+
+  if (!if_base_revision) {
+    return { error: "validation", message: "if_base_revision is required." };
+  }
+
+  const revisions = MOCK_DOCUMENT_REVISIONS[document_id] || [];
+  const headRevision =
+    revisions.find((r) => r.revision_id === doc.head_revision_id) ||
+    revisions[revisions.length - 1];
+
+  if (
+    headRevision &&
+    String(if_base_revision) !== String(headRevision.revision_id)
+  ) {
+    return {
+      error: "conflict",
+      message: `Optimistic concurrency conflict: expected base revision '${if_base_revision}', but current head is '${headRevision?.revision_id}'.`,
+    };
+  }
+
+  const now = new Date().toISOString();
+  const newRevisionNumber = (headRevision?.revision_number ?? 0) + 1;
+  const newRevisionId = `rev-${document_id}-${newRevisionNumber}-${Math.random().toString(36).slice(2, 6)}`;
+
+  const newRevision = {
+    document_id,
+    revision_id: newRevisionId,
+    artifact_id: newRevisionId,
+    revision_number: newRevisionNumber,
+    prev_revision_id: headRevision?.revision_id ?? null,
+    created_at: now,
+    created_by: actor_id,
+    content_type,
+    content_hash: `hash-${Math.random().toString(36).slice(2, 10)}`,
+    revision_hash: `rhash-${Math.random().toString(36).slice(2, 10)}`,
+    content: String(content),
+  };
+
+  const updatedDoc = {
+    ...doc,
+    head_revision_id: newRevisionId,
+    head_revision_number: newRevisionNumber,
+    updated_at: now,
+    updated_by: actor_id,
+  };
+
+  if (docPatch.title) updatedDoc.title = String(docPatch.title).trim();
+  if (docPatch.status) updatedDoc.status = String(docPatch.status);
+  if (Array.isArray(docPatch.labels)) updatedDoc.labels = docPatch.labels;
+
+  MOCK_DOCUMENTS[docIndex] = updatedDoc;
+  MOCK_DOCUMENT_REVISIONS[document_id] = [...revisions, newRevision];
+
+  return { document: updatedDoc, revision: newRevision };
+}
+
 export function getMockDocument(documentId) {
   const doc = MOCK_DOCUMENTS.find((d) => d.id === documentId);
   if (!doc) return null;

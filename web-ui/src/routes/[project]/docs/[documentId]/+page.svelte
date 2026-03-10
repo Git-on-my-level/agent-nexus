@@ -20,6 +20,11 @@
   let loadedDocumentId = $state("");
   let historyOpen = $state(false);
 
+  let editOpen = $state(false);
+  let editDraft = $state({ content: "", title: "", status: "", labels: "" });
+  let saving = $state(false);
+  let saveError = $state("");
+
   let displayedContent = $derived(
     selectedRevision?.content ?? headRevision?.content ?? "",
   );
@@ -27,6 +32,13 @@
   let isViewingOldRevision = $derived(
     selectedRevision &&
       selectedRevision.revision_id !== headRevision?.revision_id,
+  );
+
+  // Only text documents can be edited in the textarea-based editor.
+  // Structured and binary revisions must be updated via CLI/API.
+  let headContentType = $derived(headRevision?.content_type ?? "text");
+  let isTextEditable = $derived(
+    headContentType === "text" || headContentType === "",
   );
 
   function projectHref(pathname = "/") {
@@ -47,6 +59,7 @@
     selectedRevision = null;
     historyLoading = false;
     historyOpen = false;
+    editOpen = false;
     try {
       const result = await coreClient.getDocument(targetId);
       document = result.document ?? null;
@@ -105,6 +118,78 @@
 
   function returnToHead() {
     selectedRevision = null;
+  }
+
+  function openEdit() {
+    editDraft = {
+      content: headRevision?.content ?? "",
+      title: document?.title ?? "",
+      status: document?.status ?? "",
+      labels: (document?.labels ?? []).join(", "),
+    };
+    saveError = "";
+    editOpen = true;
+    historyOpen = false;
+  }
+
+  function closeEdit() {
+    editOpen = false;
+    saveError = "";
+  }
+
+  async function handleSave() {
+    if (!editDraft.content.trim()) {
+      saveError = "Content is required.";
+      return;
+    }
+
+    if (!headRevision?.revision_id) {
+      saveError = "Cannot determine base revision. Please reload.";
+      return;
+    }
+
+    saving = true;
+    saveError = "";
+
+    try {
+      const labels = editDraft.labels
+        .split(",")
+        .map((l) => l.trim())
+        .filter(Boolean);
+
+      const docPatch = {};
+      if (
+        editDraft.title.trim() &&
+        editDraft.title.trim() !== document?.title
+      ) {
+        docPatch.title = editDraft.title.trim();
+      }
+      if (editDraft.status && editDraft.status !== document?.status) {
+        docPatch.status = editDraft.status;
+      }
+      const labelsChanged =
+        JSON.stringify(labels) !== JSON.stringify(document?.labels ?? []);
+      if (labelsChanged) {
+        docPatch.labels = labels;
+      }
+
+      const result = await coreClient.updateDocument(documentId, {
+        content: editDraft.content.trim(),
+        content_type: headContentType || "text",
+        if_base_revision: headRevision.revision_id,
+        ...(Object.keys(docPatch).length > 0 ? { document: docPatch } : {}),
+      });
+
+      document = result.document ?? document;
+      headRevision = result.revision ?? headRevision;
+      selectedRevision = null;
+      revisions = [];
+      editOpen = false;
+    } catch (e) {
+      saveError = `Failed to save revision: ${e instanceof Error ? e.message : String(e)}`;
+    } finally {
+      saving = false;
+    }
   }
 </script>
 
@@ -204,28 +289,161 @@
               >
             </div>
           </div>
-          <button
-            class="cursor-pointer shrink-0 inline-flex items-center gap-1.5 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)]"
-            onclick={loadHistory}
-            type="button"
-          >
-            <svg
-              class="h-3.5 w-3.5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              stroke-width="2"
+          <div class="flex shrink-0 items-center gap-1.5">
+            {#if !document.tombstoned_at && isTextEditable}
+              <button
+                class="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-2.5 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500"
+                onclick={openEdit}
+                type="button"
+              >
+                <svg
+                  class="h-3.5 w-3.5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                  />
+                </svg>
+                New revision
+              </button>
+            {:else if !document.tombstoned_at}
+              <span
+                class="inline-flex items-center gap-1 rounded-md border border-[var(--ui-border)] px-2.5 py-1.5 text-[12px] text-[var(--ui-text-subtle)]"
+                title="Content type '{headContentType}' can only be updated via the CLI or API"
+              >
+                <svg
+                  class="h-3.5 w-3.5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                {headContentType} — edit via CLI
+              </span>
+            {/if}
+            <button
+              class="cursor-pointer shrink-0 inline-flex items-center gap-1.5 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)]"
+              onclick={loadHistory}
+              type="button"
             >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-            Version history
-          </button>
+              <svg
+                class="h-3.5 w-3.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+              Version history
+            </button>
+          </div>
         </div>
       </section>
+
+      {#if editOpen}
+        <div
+          class="mt-3 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-4"
+        >
+          <h2 class="mb-3 text-[13px] font-semibold text-[var(--ui-text)]">
+            New revision
+          </h2>
+
+          <div class="grid gap-3 sm:grid-cols-2">
+            <label class="sm:col-span-2">
+              <span class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+                >Title</span
+              >
+              <input
+                bind:value={editDraft.title}
+                class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-3 py-1.5 text-[13px] text-[var(--ui-text)]"
+                type="text"
+              />
+            </label>
+            <label>
+              <span class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+                >Status</span
+              >
+              <select
+                bind:value={editDraft.status}
+                class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-2.5 py-1.5 text-[13px] text-[var(--ui-text)]"
+              >
+                <option value="draft">draft</option>
+                <option value="active">active</option>
+              </select>
+            </label>
+            <label>
+              <span class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+                >Labels (comma-separated)</span
+              >
+              <input
+                bind:value={editDraft.labels}
+                class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-3 py-1.5 text-[13px] text-[var(--ui-text)] placeholder:text-[var(--ui-text-subtle)]"
+                placeholder="ops, runbook"
+                type="text"
+              />
+            </label>
+            <label class="sm:col-span-2">
+              <span class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+                >Content (Markdown) <span class="text-red-400">*</span></span
+              >
+              <textarea
+                bind:value={editDraft.content}
+                class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-3 py-2 text-[13px] text-[var(--ui-text)] font-mono leading-relaxed resize-y"
+                rows="14"
+              ></textarea>
+            </label>
+          </div>
+
+          {#if saveError}
+            <div
+              class="mt-3 rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
+              role="alert"
+            >
+              {saveError}
+            </div>
+          {/if}
+
+          <p class="mt-2 text-[11px] text-[var(--ui-text-subtle)]">
+            Base revision: <span class="font-mono"
+              >{headRevision?.revision_id ?? "—"}</span
+            > — optimistic concurrency is enforced.
+          </p>
+
+          <div class="mt-3 flex items-center gap-2">
+            <button
+              class="cursor-pointer rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+              disabled={saving}
+              onclick={handleSave}
+              type="button"
+            >
+              {saving ? "Saving…" : "Save revision"}
+            </button>
+            <button
+              class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]"
+              onclick={closeEdit}
+              type="button"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      {/if}
 
       {#if isViewingOldRevision}
         <div

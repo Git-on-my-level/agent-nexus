@@ -1,5 +1,6 @@
 <script>
   import { page } from "$app/stores";
+  import { goto } from "$app/navigation";
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
   import { projectPath } from "$lib/projectPaths";
@@ -8,6 +9,19 @@
   let loading = $state(false);
   let error = $state("");
   let projectSlug = $derived($page.params.project);
+
+  let createOpen = $state(false);
+  let creating = $state(false);
+  let createError = $state("");
+
+  let draft = $state({
+    id: "",
+    title: "",
+    status: "draft",
+    labels: "",
+    thread_id: "",
+    content: "",
+  });
 
   function projectHref(pathname = "/") {
     return projectPath(projectSlug, pathname);
@@ -33,6 +47,74 @@
     }
   }
 
+  function resetDraft() {
+    draft = {
+      id: "",
+      title: "",
+      status: "draft",
+      labels: "",
+      thread_id: "",
+      content: "",
+    };
+  }
+
+  function toggleCreate() {
+    createOpen = !createOpen;
+    if (!createOpen) {
+      createError = "";
+      resetDraft();
+    }
+  }
+
+  async function handleCreate() {
+    if (!draft.title.trim()) {
+      createError = "Title is required.";
+      return;
+    }
+    if (!draft.content.trim()) {
+      createError = "Content is required.";
+      return;
+    }
+
+    creating = true;
+    createError = "";
+
+    try {
+      const labels = draft.labels
+        .split(",")
+        .map((l) => l.trim())
+        .filter(Boolean);
+
+      const docPayload = {
+        title: draft.title.trim(),
+        status: draft.status,
+        labels,
+      };
+      if (draft.id.trim()) docPayload.id = draft.id.trim();
+      if (draft.thread_id.trim()) docPayload.thread_id = draft.thread_id.trim();
+
+      const result = await coreClient.createDocument({
+        document: docPayload,
+        content: draft.content.trim(),
+        content_type: "text",
+      });
+
+      const newDocId = result.document?.id;
+      createOpen = false;
+      resetDraft();
+
+      if (newDocId) {
+        await goto(projectHref(`/docs/${newDocId}`));
+      } else {
+        await loadDocuments();
+      }
+    } catch (e) {
+      createError = `Failed to create document: ${e instanceof Error ? e.message : String(e)}`;
+    } finally {
+      creating = false;
+    }
+  }
+
   function statusColor(status) {
     if (status === "active") return "text-emerald-400 bg-emerald-500/10";
     if (status === "draft") return "text-amber-400 bg-amber-500/10";
@@ -42,7 +124,135 @@
 
 <div class="flex items-center justify-between mb-4">
   <h1 class="text-lg font-semibold text-[var(--ui-text)]">Documents</h1>
+  <button
+    class="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text)] transition-colors hover:bg-[var(--ui-border)]"
+    onclick={toggleCreate}
+    type="button"
+  >
+    {#if !createOpen}
+      <svg
+        class="h-3.5 w-3.5"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        stroke-width="2"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M12 4v16m8-8H4"
+        />
+      </svg>
+    {/if}
+    {createOpen ? "Cancel" : "New document"}
+  </button>
 </div>
+
+{#if createOpen}
+  <div
+    class="mb-4 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-4"
+  >
+    <h2 class="mb-3 text-[13px] font-semibold text-[var(--ui-text)]">
+      New document
+    </h2>
+    <div class="grid gap-3 sm:grid-cols-2">
+      <label class="sm:col-span-2">
+        <span class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+          >Title <span class="text-red-400">*</span></span
+        >
+        <input
+          bind:value={draft.title}
+          class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-3 py-1.5 text-[13px] text-[var(--ui-text)] placeholder:text-[var(--ui-text-subtle)]"
+          placeholder="Document title"
+          type="text"
+        />
+      </label>
+      <label>
+        <span class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+          >ID (optional)</span
+        >
+        <input
+          bind:value={draft.id}
+          class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-3 py-1.5 text-[13px] text-[var(--ui-text)] placeholder:text-[var(--ui-text-subtle)]"
+          placeholder="auto-generated if empty"
+          type="text"
+        />
+      </label>
+      <label>
+        <span class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+          >Status</span
+        >
+        <select
+          bind:value={draft.status}
+          class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-2.5 py-1.5 text-[13px] text-[var(--ui-text)]"
+        >
+          <option value="draft">draft</option>
+          <option value="active">active</option>
+        </select>
+      </label>
+      <label>
+        <span class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+          >Labels (comma-separated)</span
+        >
+        <input
+          bind:value={draft.labels}
+          class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-3 py-1.5 text-[13px] text-[var(--ui-text)] placeholder:text-[var(--ui-text-subtle)]"
+          placeholder="e.g. ops, runbook"
+          type="text"
+        />
+      </label>
+      <label>
+        <span class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+          >Thread ID (optional)</span
+        >
+        <input
+          bind:value={draft.thread_id}
+          class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-3 py-1.5 text-[13px] text-[var(--ui-text)] placeholder:text-[var(--ui-text-subtle)]"
+          placeholder="thread-..."
+          type="text"
+        />
+      </label>
+      <label class="sm:col-span-2">
+        <span class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+          >Content (Markdown) <span class="text-red-400">*</span></span
+        >
+        <textarea
+          bind:value={draft.content}
+          class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-3 py-2 text-[13px] text-[var(--ui-text)] placeholder:text-[var(--ui-text-subtle)] font-mono leading-relaxed resize-y"
+          placeholder="# Document title&#10;&#10;Write your content here..."
+          rows="10"
+        ></textarea>
+      </label>
+    </div>
+
+    {#if createError}
+      <div
+        class="mt-3 rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
+        role="alert"
+      >
+        {createError}
+      </div>
+    {/if}
+
+    <div class="mt-3 flex items-center gap-2">
+      <button
+        class="cursor-pointer rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+        disabled={creating}
+        onclick={handleCreate}
+        type="button"
+      >
+        {creating ? "Creating…" : "Create document"}
+      </button>
+      <button
+        class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]"
+        onclick={toggleCreate}
+        type="button"
+      >
+        Cancel
+      </button>
+    </div>
+  </div>
+{/if}
 
 {#if loading}
   <div
@@ -75,7 +285,7 @@
       No documents yet
     </p>
     <p class="mt-1 text-[13px] text-[var(--ui-text-muted)]">
-      Documents will appear here once created.
+      Create your first document using the button above.
     </p>
   </div>
 {/if}

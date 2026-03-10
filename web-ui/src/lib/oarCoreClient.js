@@ -442,6 +442,10 @@ export function createOarCoreClient(options = {}) {
       return { contentType, content: await response.arrayBuffer() };
     },
 
+    createDocument: (payload) =>
+      invokeJSON("docs.create", () =>
+        generated.docsCreate({ body: withActorId(payload) }),
+      ),
     listDocuments: (filters) =>
       invokeJSON("docs.list", () => generated.docsList({ query: filters })),
     getDocument: (documentId) =>
@@ -458,6 +462,13 @@ export function createOarCoreClient(options = {}) {
           document_id: String(documentId),
           revision_id: String(revisionId),
         }),
+      ),
+    updateDocument: (documentId, payload) =>
+      invokeJSON("docs.update", () =>
+        generated.docsUpdate(
+          { document_id: String(documentId) },
+          { body: withActorId(payload) },
+        ),
       ),
     tombstoneDocument: (documentId, payload) =>
       invokeJSON("docs.tombstone", () =>
