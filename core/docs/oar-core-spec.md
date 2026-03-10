@@ -7,7 +7,7 @@ oar-core is the canonical state and evidence system for Organization Autorunner 
 OAR is a shared workspace where agents and humans self-organize. oar-core owns the institutional memory — the durable truth, the evidence trail, the coordination artifacts. It has no opinion on how actors are instantiated, orchestrated, or upgraded. An actor authenticates with an ID, reads state, does work, writes back. Whether that actor is a human, a Claude agent, an open-source agent framework, or something that doesn't exist yet is outside oar-core's scope.
 
 oar-core:
-- Maintains durable organizational state (events, snapshots, artifacts).
+- Maintains durable organizational state (events, snapshots, artifacts, documents).
 - Stores and validates structured coordination artifacts (work orders, receipts, reviews).
 - Enforces evidence-first grounding rules on restricted state transitions.
 - Computes derived views (inbox, staleness) from canonical data.
@@ -46,7 +46,7 @@ oar-core does **not**:
 ## 2. Storage model
 
 ### 2.1 SQLite + filesystem
-- **SQLite** stores events (rows), snapshots (rows), artifact metadata (rows), actor registry (rows), and derived views (rows).
+- **SQLite** stores events (rows), snapshots (rows), artifact metadata (rows), documents (rows), document_revisions (rows), actor registry (rows), and derived views (rows).
 - **Filesystem** stores artifact content, referenced by `content_path` in the artifact metadata row.
 - This hybrid lets agents manipulate artifact content directly via the filesystem while structured queries go through SQLite.
 
@@ -164,6 +164,20 @@ A lightweight assessment of a receipt against its work order.
 
 Creating a review MUST emit a `review_completed` event. Per reference conventions, the event `refs` MUST include `artifact:<review_artifact_id>`, `artifact:<receipt_artifact_id>`, and `artifact:<work_order_artifact_id>`. If the outcome is `revise`, the reviewer SHOULD create a follow-up work order.
 
+### 5.5 Documents (first-class lifecycle)
+
+Documents are a first-class domain with their own API and storage. They are distinct from the generic artifact model: documents have a mutable head pointer and an ordered revision chain, whereas artifacts are immutable blobs linked only by refs.
+
+**Storage model:**
+- `documents` table: document metadata, head_revision_id, tombstone fields.
+- `document_revisions` table: revision_id, document_id, revision_number, prev_revision_id, artifact_id, revision_hash.
+- Each revision's content is stored in an `artifacts` row with `kind: "doc"`. Content uses content-addressable storage (SHA-256 digest).
+- Revisions form a Merkle chain: `revision_hash` incorporates content_hash, prev_revision_hash, document_id, revision_number, created_at, created_by.
+
+**API surface:** `GET /docs`, `POST /docs`, `GET /docs/{document_id}`, `PATCH /docs/{document_id}`, `GET /docs/{document_id}/history`, `GET /docs/{document_id}/revisions/{revision_id}`, `POST /docs/{document_id}/tombstone`.
+
+**Relationship to artifacts:** Document revisions use artifacts internally for content storage. The docs API is the canonical interface for documents; clients should not treat documents as `GET /artifacts?kind=doc`.
+
 ---
 
 ## 6. Actor registry
@@ -189,6 +203,7 @@ oar-core MUST expose a programmatic API (protocol: HTTP/JSON for v0). All operat
 - List commitments (filters: thread, owner, status, due date range)
 - Get artifact by ID (metadata + content path)
 - List artifacts (filters: kind, thread, time range)
+- List documents, get document head, get document history, get document revision
 - Get inbox items (grouped by category, sorted by time/due date)
 
 ### 7.2 Write / mutate
@@ -198,6 +213,7 @@ oar-core MUST expose a programmatic API (protocol: HTTP/JSON for v0). All operat
 - Create commitment → emits `commitment_created` event with `snapshot:<commitment_id>` in refs, updates parent thread `open_commitments`
 - Update commitment (patch/merge) → emits `commitment_status_changed` or `snapshot_updated` event (enforces restricted transitions with typed refs), updates parent thread `open_commitments` if status changed
 - Create artifact (metadata + content) → returns artifact ID; validates packet content for packet kinds; validates typed ref format
+- Create document, update document (new immutable revision), tombstone document
 - Append event (for messages, decisions, exceptions, acknowledgments) → validates required refs per reference conventions
 
 ### 7.3 Convenience operations
