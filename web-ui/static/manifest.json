@@ -1,0 +1,21 @@
+{
+  "name": "Organization Autorunner",
+  "short_name": "OAR",
+  "description": "Organization Autorunner control surface",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0e1015",
+  "theme_color": "#6366f1",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any"
+    },
+    {
+      "src": "apple-touch-icon.png",
+      "type": "image/png",
+      "sizes": "180x180"
+    }
+  ]
+}

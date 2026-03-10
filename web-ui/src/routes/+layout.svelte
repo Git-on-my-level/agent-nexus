@@ -88,6 +88,13 @@
       : "?",
   );
   let shellContentConfig = $derived(getShellContentConfig(currentAppPath));
+  let pageTitle = $derived(() => {
+    const navItem = navigationItems.find((item) => isActive(item.href) && item.href !== "/");
+    const section = navItem?.label;
+    const projectLabel = activeProject?.label;
+    const parts = [section, projectLabel, "OAR"].filter(Boolean);
+    return parts.join(" · ");
+  });
 
   $effect(() => {
     $page.url.pathname;
@@ -270,6 +277,10 @@
     }
   }
 </script>
+
+<svelte:head>
+  <title>{pageTitle()}</title>
+</svelte:head>
 
 <svelte:window onkeydown={handleWindowKeydown} onclick={handleWindowClick} />
 

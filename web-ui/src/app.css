@@ -34,6 +34,11 @@
   box-sizing: border-box;
 }
 
+::selection {
+  background: rgba(99, 102, 241, 0.35);
+  color: #f0f2f5;
+}
+
 html,
 body {
   min-height: 100%;
