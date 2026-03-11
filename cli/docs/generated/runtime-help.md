@@ -7,6 +7,7 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 - `onboarding` (manual): Offline quick-start mental model and first command flow.
 - `draft` (manual): Local draft staging, listing, commit, and discard workflow.
 - `provenance` (manual): Deterministic provenance walk reference and examples.
+- `import` (manual): Bootstrap an agent-led import with precision-first doctrine, preview-first planning, and graph-aware OAR write conventions.
 - `threads` (group): Manage thread resources
 - `commitments` (group): Manage commitment resources
 - `artifacts` (group): Manage artifact resources and content
@@ -74,6 +75,10 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 - `docs content` (local-helper): Show the current document content together with authoritative head revision metadata.
 - `docs validate-update` (local-helper): Validate a `docs update` payload locally from stdin or file without sending the mutation.
 - `docs apply` (local-helper): Apply a previously staged document update proposal.
+- `import scan` (local-helper): Scan a folder or zip archive into a normalized inventory with text cache, repo-root hints, and cluster hints.
+- `import dedupe` (local-helper): Create exact and probable duplicate reports from a scan inventory with conservative skip recommendations.
+- `import plan` (local-helper): Build a conservative import plan that prefers collector threads, hub docs, dedupe-first writes, and low orphan rates.
+- `import apply` (local-helper): Write payload previews for a plan and optionally execute thread/artifact/doc creates in dependency order.
 
 
 ## `onboarding`
@@ -149,6 +154,59 @@ Examples:
   oar --json provenance walk --from event:event_123 --depth 2
   oar --json provenance walk --from snapshot:snapshot_123 --depth 1
   oar provenance walk --from event:event_123 --depth 3 --include-event-chain
+```
+
+## `import`
+
+Bootstrap an agent-led import with precision-first doctrine, preview-first planning, and graph-aware OAR write conventions.
+
+```text
+Import bootstrap
+
+Purpose
+
+Use `oar import` to start a precision-first import into OAR. The goal is not to dump files into the workspace. The goal is to create a clean graph with low duplication, low orphan rates, and strong discoverability.
+
+Read in this order
+
+1. `oar help import` — doctrine, quality bars, and the recommended loop.
+2. `oar help import scan` — inventory and text-cache generation.
+3. `oar help import plan` — classification, collector threads, hub docs, and review bundles.
+4. If you will execute writes: `oar help threads create`, `oar help artifacts create`, and `oar help docs create`.
+5. Optional graph/provenance reference: `oar help provenance`.
+
+Operating stance
+
+- High precision beats high recall.
+- Exact duplicates should be skipped before writes.
+- Ambiguous or noisy material should be skipped or deferred to review bundles.
+- Imported material should usually get a discoverable entry point: a collector thread, a hub doc, or both.
+- Codebases should not become one OAR object per source file.
+- Binary attachments should be preserved conservatively; if reliable raw upload is not available, keep explicit pending work instead of pretending they were imported cleanly.
+
+Recommended loop
+
+1. `oar import scan --input <dir-or-zip>`
+2. `oar import dedupe --inventory ./.oar-import/<source>/inventory.jsonl`
+3. `oar import plan --inventory ./.oar-import/<source>/inventory.jsonl`
+4. Review `plan-preview.md`, `skipped`, and `review_bundles`.
+5. `oar import apply --plan ./.oar-import/<source>/plan.json` for payload previews.
+6. `oar import apply --plan ./.oar-import/<source>/plan.json --execute` only after the plan looks clean.
+
+Subcommands
+
+  import scan      Build normalized inventory + text cache from a folder or zip
+  import dedupe    Find exact duplicates and probable duplicate review clusters
+  import plan      Build a conservative OAR-native import plan
+  import apply     Write payload previews and optionally execute creates
+
+Output conventions
+
+- Default workdir is `./.oar-import/<source-name>`.
+- `scan` writes `inventory.jsonl` and `scan-summary.json`.
+- `dedupe` writes `dedupe.json`.
+- `plan` writes `plan.json` and `plan-preview.md`.
+- `apply` writes payload previews plus `apply-results.json` and `apply-commands.sh`.
 ```
 
 ## `threads`
@@ -2036,5 +2094,115 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: oar --json docs apply ... ; oar docs apply ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `import scan`
+
+Scan a folder or zip archive into a normalized inventory with text cache, repo-root hints, and cluster hints.
+
+```text
+Local Help: import scan
+
+- Kind: `local helper`
+- Summary: Scan a folder or zip archive into a normalized inventory with text cache, repo-root hints, and cluster hints.
+- Composition: Pure local filesystem helper. Expands `.zip` inputs, ignores obvious generated junk, fingerprints files, caches readable text, and emits `inventory.jsonl` plus `scan-summary.json`.
+- JSON body: `input`, `scan_root`, `extracted_root`, `inventory`, `file_count`, `counts_by_category`, `counts_by_cluster_hint`, `repo_roots`
+- Examples:
+  - `oar import scan --input ./workspace.zip`
+  - `oar import scan --input ./vault --out ./.oar-import/vault`
+
+Flags:
+  --input <path>               Directory or `.zip` archive to scan.
+  --out <dir>                  Output directory. Defaults to `./.oar-import/<source-name>`.
+  --max-preview-bytes <n>      Maximum bytes to keep for preview extraction.
+  --max-text-cache-bytes <n>   Maximum text-file size cached verbatim for later doc creation.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json import scan ... ; oar import scan ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `import dedupe`
+
+Create exact and probable duplicate reports from a scan inventory with conservative skip recommendations.
+
+```text
+Local Help: import dedupe
+
+- Kind: `local helper`
+- Summary: Create exact and probable duplicate reports from a scan inventory with conservative skip recommendations.
+- Composition: Pure local helper. Uses normalized text hashes for readable content and raw SHA-256 for everything else; exact drops are recommended, probable duplicates are review-only.
+- JSON body: `inventory`, `exact_duplicates`, `probable_duplicates`, `recommended_skip_ids`
+- Examples:
+  - `oar import dedupe --inventory ./.oar-import/workspace/inventory.jsonl`
+  - `oar import dedupe ./.oar-import/workspace/inventory.jsonl --out ./.oar-import/workspace`
+
+Flags:
+  --inventory <path>           Inventory produced by `oar import scan`. Positional form also supported.
+  --out <dir>                  Output directory. Defaults to the inventory directory.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json import dedupe ... ; oar import dedupe ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `import plan`
+
+Build a conservative import plan that prefers collector threads, hub docs, dedupe-first writes, and low orphan rates.
+
+```text
+Local Help: import plan
+
+- Kind: `local helper`
+- Summary: Build a conservative import plan that prefers collector threads, hub docs, dedupe-first writes, and low orphan rates.
+- Composition: Pure local helper. Classifies inventory items into docs, artifacts, repo bundles, review bundles, and collector/hub structures. It writes `plan.json` plus `plan-preview.md` without sending requests.
+- JSON body: `source_name`, `inventory`, `dedupe`, `principles`, `objects`, `skipped`, `review_bundles`, `notes`
+- Examples:
+  - `oar import plan --inventory ./.oar-import/workspace/inventory.jsonl`
+  - `oar import plan --inventory ./.oar-import/workspace/inventory.jsonl --dedupe ./.oar-import/workspace/dedupe.json --source-name 'workspace export'`
+
+Flags:
+  --inventory <path>           Inventory produced by `oar import scan`. Positional form also supported.
+  --dedupe <path>              Dedupe report. Defaults to sibling `dedupe.json`.
+  --out <dir>                  Output directory. Defaults to the inventory directory.
+  --source-name <name>         High-signal human name used in titles, tags, and provenance. Defaults from the inventory directory.
+  --collector-threshold <n>    Minimum cluster size that triggers a collector thread.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json import plan ... ; oar import plan ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `import apply`
+
+Write payload previews for a plan and optionally execute thread/artifact/doc creates in dependency order.
+
+```text
+Local Help: import apply
+
+- Kind: `local helper`
+- Summary: Write payload previews for a plan and optionally execute thread/artifact/doc creates in dependency order.
+- Composition: Local helper with optional network writes. Always writes payload previews first; when `--execute` is set it creates threads, then artifacts, then docs, substituting `$REF:<key>` placeholders after upstream IDs are known.
+- JSON body: `plan`, `execute`, `results`, `refs`
+- Examples:
+  - `oar import apply --plan ./.oar-import/workspace/plan.json`
+  - `oar import apply --plan ./.oar-import/workspace/plan.json --execute --agent importer`
+
+Flags:
+  --plan <path>                Plan produced by `oar import plan`. Positional form also supported.
+  --out <dir>                  Output directory for payload previews and apply results. Defaults to `<plan-dir>/apply`.
+  --execute                    Actually call `threads create`, `artifacts create`, and `docs create`. Default is preview-only.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json import apply ... ; oar import apply ... --json
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```

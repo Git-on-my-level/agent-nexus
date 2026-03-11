@@ -49,6 +49,9 @@ func (a *App) runCommand(ctx context.Context, args []string, cfg config.Resolved
 	case "meta":
 		result, name, err := a.runMeta(ctx, args[1:], cfg)
 		return name, result, err
+	case "import":
+		result, name, err := a.runImportCommand(ctx, args[1:], cfg)
+		return name, result, err
 	case "draft":
 		result, name, err := a.runDraft(ctx, args[1:], cfg)
 		return name, result, err
