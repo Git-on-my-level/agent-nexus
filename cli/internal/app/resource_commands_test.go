@@ -2507,17 +2507,87 @@ func TestThreadsRecommendationsIncludesRelatedThreadReview(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_main/workspace":
+			_, _ = w.Write([]byte(`{
+				"thread_id":"thread_main",
+				"thread":{"id":"thread_main","title":"Main Pilot Rescue","status":"active","type":"initiative"},
+				"context":{
+					"recent_events":[
+						{"id":"event_main_1","thread_id":"thread_main","type":"actor_statement","summary":"Main recommendation","refs":["thread:thread_related"]}
+					],
+					"key_artifacts":[],
+					"open_commitments":[],
+					"documents":[]
+				},
+				"collaboration":{
+					"recommendations":[
+						{"id":"event_main_1","thread_id":"thread_main","type":"actor_statement","summary":"Main recommendation","refs":["thread:thread_related"]}
+					],
+					"decision_requests":[],
+					"decisions":[],
+					"key_artifacts":[],
+					"open_commitments":[],
+					"recommendation_count":1,
+					"decision_request_count":0,
+					"decision_count":0,
+					"artifact_count":0,
+					"open_commitment_count":0
+				},
+				"inbox":{"thread_id":"thread_main","items":[],"count":0},
+				"pending_decisions":{"thread_id":"thread_main","items":[],"count":0},
+				"related_threads":{
+					"count":1,
+					"items":[
+						{"thread":{"id":"thread_related","title":"Related Feedback Thread","status":"active","type":"case"},"match_reason":"thread_ref"}
+					]
+				},
+				"related_recommendations":{
+					"count":1,
+					"items":[
+						{
+							"thread":{"id":"thread_related","title":"Related Feedback Thread","status":"active","type":"case"},
+							"event":{
+								"id":"event_related_1",
+								"thread_id":"thread_related",
+								"type":"actor_statement",
+								"summary":"Related recommendation",
+								"payload":{"recommendation":"Document the staged artifact follow-up"}
+							}
+						}
+					]
+				},
+				"related_decision_requests":{"count":0,"items":[]},
+				"related_decisions":{"count":0,"items":[]},
+				"total_review_items":2,
+				"follow_up":{"workspace_refresh_command":"oar threads workspace --thread-id thread_main --include-artifact-content --full-id --json"},
+				"section_kinds":{
+					"thread":"canonical",
+					"context":"canonical",
+					"collaboration":"derived",
+					"inbox":"derived",
+					"pending_decisions":"derived",
+					"related_threads":"derived",
+					"related_recommendations":"derived",
+					"related_decision_requests":"derived",
+					"related_decisions":"derived",
+					"follow_up":"convenience"
+				},
+				"context_source":"threads.workspace",
+				"inbox_source":"threads.workspace",
+				"related_event_content_enabled":true,
+				"related_event_content_count":1
+			}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_main/context":
 			_, _ = w.Write([]byte(`{
 				"thread":{"id":"thread_main","title":"Main Pilot Rescue","status":"active","type":"initiative"},
-				"recent_events":[
-					{"id":"event_main_1","thread_id":"thread_main","type":"actor_statement","actor_id":"agent-main","created_at":"2026-03-07T12:00:00Z","summary":"Main recommendation","refs":["thread:thread_related"]}
-				],
-				"key_artifacts":[],
-				"open_commitments":[
-					{"id":"commit_main_1","thread_id":"thread_main","title":"Coordinate related work","links":["thread:thread_main","thread:thread_related"]}
-				]
-			}`))
+					"recent_events":[
+						{"id":"event_main_1","thread_id":"thread_main","type":"actor_statement","actor_id":"agent-main","created_at":"2026-03-07T12:00:00Z","summary":"Main recommendation","refs":["thread:thread_related"]}
+					],
+					"key_artifacts":[],
+					"open_commitments":[
+						{"id":"commit_main_1","thread_id":"thread_main","title":"Coordinate related work","links":["thread:thread_main","thread:thread_related"]}
+					]
+				}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_related/context":
 			_, _ = w.Write([]byte(`{
 				"thread":{"id":"thread_related","title":"Related Feedback Thread","status":"active","type":"case"},
@@ -2725,6 +2795,76 @@ func TestThreadsWorkspaceCanHydrateRelatedEventContent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_main/workspace":
+			_, _ = w.Write([]byte(`{
+				"thread_id":"thread_main",
+				"thread":{"id":"thread_main","title":"Main Pilot Rescue","status":"active","type":"initiative"},
+				"context":{
+					"recent_events":[
+						{"id":"event_main_1","thread_id":"thread_main","type":"actor_statement","summary":"Main recommendation","refs":["thread:thread_related"]}
+					],
+					"key_artifacts":[],
+					"open_commitments":[],
+					"documents":[]
+				},
+				"collaboration":{
+					"recommendations":[
+						{"id":"event_main_1","thread_id":"thread_main","type":"actor_statement","summary":"Main recommendation","refs":["thread:thread_related"]}
+					],
+					"decision_requests":[],
+					"decisions":[],
+					"key_artifacts":[],
+					"open_commitments":[],
+					"recommendation_count":1,
+					"decision_request_count":0,
+					"decision_count":0,
+					"artifact_count":0,
+					"open_commitment_count":0
+				},
+				"inbox":{"thread_id":"thread_main","items":[],"count":0},
+				"pending_decisions":{"thread_id":"thread_main","items":[],"count":0},
+				"related_threads":{
+					"count":1,
+					"items":[
+						{"thread":{"id":"thread_related","title":"Related Feedback Thread","status":"active","type":"case"},"match_reason":"thread_ref"}
+					]
+				},
+				"related_recommendations":{
+					"count":1,
+					"items":[
+						{
+							"thread":{"id":"thread_related","title":"Related Feedback Thread","status":"active","type":"case"},
+							"event":{
+								"id":"event_related_1",
+								"thread_id":"thread_related",
+								"type":"actor_statement",
+								"summary":"Related recommendation",
+								"payload":{"recommendation":"Document the staged artifact follow-up"}
+							}
+						}
+					]
+				},
+				"related_decision_requests":{"count":0,"items":[]},
+				"related_decisions":{"count":0,"items":[]},
+				"total_review_items":2,
+				"follow_up":{"workspace_refresh_command":"oar threads workspace --thread-id thread_main --include-artifact-content --full-id --json"},
+				"section_kinds":{
+					"thread":"canonical",
+					"context":"canonical",
+					"collaboration":"derived",
+					"inbox":"derived",
+					"pending_decisions":"derived",
+					"related_threads":"derived",
+					"related_recommendations":"derived",
+					"related_decision_requests":"derived",
+					"related_decisions":"derived",
+					"follow_up":"convenience"
+				},
+				"context_source":"threads.workspace",
+				"inbox_source":"threads.workspace",
+				"related_event_content_enabled":true,
+				"related_event_content_count":1
+			}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_main/context":
 			_, _ = w.Write([]byte(`{
 				"thread":{"id":"thread_main","title":"Main Pilot Rescue","status":"active","type":"initiative"},
@@ -3850,21 +3990,85 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_123/context":
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{
-				"thread":{"id":"thread_123","title":"Machine-facing consistency"},
+					"thread":{"id":"thread_123","title":"Machine-facing consistency"},
 				"recent_events":[
 					{"id":"event_ctx_1","thread_id":"thread_123","type":"actor_statement","summary":"normalize frame shape"},
 					{"id":"event_ctx_2","thread_id":"thread_123","type":"decision_needed","summary":"confirm canonical command labels"}
 				],
 				"key_artifacts":[{"id":"artifact_ctx_1","kind":"work_order"}],
 				"open_commitments":[{"id":"commitment_ctx_1","status":"open"}],
-				"documents":[
-					{"id":"doc_ctx_1","title":"Runbook","status":"active","updated_at":"2026-03-07T00:02:00Z","head_revision":{"revision_id":"rev_ctx_1","revision_number":3,"content_type":"text","artifact_id":"artifact_doc_ctx_1","created_at":"2026-03-07T00:02:00Z"}}
-				]
-			}`))
+					"documents":[
+						{"id":"doc_ctx_1","title":"Runbook","status":"active","updated_at":"2026-03-07T00:02:00Z","head_revision":{"revision_id":"rev_ctx_1","revision_number":3,"content_type":"text","artifact_id":"artifact_doc_ctx_1","created_at":"2026-03-07T00:02:00Z"}}
+					]
+				}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_123/workspace":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{
+					"thread_id":"thread_123",
+					"thread":{"id":"thread_123","title":"Machine-facing consistency"},
+					"context":{
+						"recent_events":[
+							{"id":"event_ctx_1","thread_id":"thread_123","type":"actor_statement","summary":"normalize frame shape"},
+							{"id":"event_ctx_2","thread_id":"thread_123","type":"decision_needed","summary":"confirm canonical command labels"}
+						],
+						"key_artifacts":[{"id":"artifact_ctx_1","kind":"work_order"}],
+						"open_commitments":[{"id":"commitment_ctx_1","status":"open"}],
+						"documents":[
+							{"id":"doc_ctx_1","title":"Runbook","status":"active","updated_at":"2026-03-07T00:02:00Z","head_revision":{"revision_id":"rev_ctx_1","revision_number":3,"content_type":"text","artifact_id":"artifact_doc_ctx_1","created_at":"2026-03-07T00:02:00Z"}}
+						]
+					},
+					"collaboration":{
+						"recommendations":[
+							{"id":"event_ctx_1","thread_id":"thread_123","type":"actor_statement","summary":"normalize frame shape"}
+						],
+						"decision_requests":[
+							{"id":"event_ctx_2","thread_id":"thread_123","type":"decision_needed","summary":"confirm canonical command labels"}
+						],
+						"decisions":[],
+						"key_artifacts":[{"id":"artifact_ctx_1","kind":"work_order"}],
+						"open_commitments":[{"id":"commitment_ctx_1","status":"open"}],
+						"recommendation_count":1,
+						"decision_request_count":1,
+						"decision_count":0,
+						"artifact_count":1,
+						"open_commitment_count":1
+					},
+					"inbox":{
+						"thread_id":"thread_123",
+						"items":[
+							{"id":"inbox:decision_needed:thread_123:none:event_ctx_2","thread_id":"thread_123","type":"decision_needed","summary":"confirm canonical command labels"}
+						],
+						"count":1
+					},
+					"pending_decisions":{
+						"thread_id":"thread_123",
+						"items":[
+							{"id":"inbox:decision_needed:thread_123:none:event_ctx_2","thread_id":"thread_123","type":"decision_needed","summary":"confirm canonical command labels"}
+						],
+						"count":1
+					},
+					"related_threads":{"count":0,"items":[]},
+					"related_recommendations":{"count":0,"items":[]},
+					"related_decision_requests":{"count":0,"items":[]},
+					"related_decisions":{"count":0,"items":[]},
+					"total_review_items":3,
+					"follow_up":{
+						"context_refresh_command":"oar threads context --thread-id thread_123 --include-artifact-content --full-id --json",
+						"decisions_list_command":"oar events list --thread-id thread_123 --type decision_needed --type decision_made --full-id --json",
+						"events_get_examples":[
+							"oar events get --event-id event_ctx_1 --json",
+							"oar events get --event-id event_ctx_2 --json"
+						],
+						"events_get_template":"oar events get --event-id <event-id> --json",
+						"recommendations_list_command":"oar events list --thread-id thread_123 --type actor_statement --full-id --json"
+					},
+					"context_source":"threads.context",
+					"inbox_source":"inbox.list"
+				}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{
-				"items":[
+					"items":[
 					{"id":"inbox:decision_needed:thread_123:none:event_ctx_2","thread_id":"thread_123","type":"decision_needed","summary":"confirm canonical command labels"},
 					{"id":"inbox:decision_needed:thread_other:none:event_other","thread_id":"thread_other","type":"decision_needed","summary":"ignore other thread"}
 				]

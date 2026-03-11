@@ -1287,7 +1287,7 @@ export const commandRegistry = [
         "path": "/docs",
         "operation_id": "listDocuments",
         "summary": "List documents and their current head metadata",
-        "why": "Discover available documents without resolving each head individually.",
+        "why": "Discover available documents without resolving each head individually, optionally scoped to a single thread.",
         "input_mode": "none",
         "streaming": {
             "mode": "none"
@@ -1301,7 +1301,7 @@ export const commandRegistry = [
             "revisions"
         ],
         "stability": "beta",
-        "agent_notes": "Safe and idempotent. Use `include_tombstoned=true` when auditing superseded documents.",
+        "agent_notes": "Safe and idempotent. Use `thread_id` to focus on one thread's docs and `include_tombstoned=true` when auditing superseded documents.",
         "examples": [
             {
                 "title": "List documents",
@@ -1559,6 +1559,9 @@ export const commandRegistry = [
                         "commitment_status_changed",
                         "decision_made",
                         "decision_needed",
+                        "document_created",
+                        "document_tombstoned",
+                        "document_updated",
                         "exception_raised",
                         "inbox_item_acknowledged",
                         "message_posted",
@@ -2440,12 +2443,12 @@ export const commandRegistry = [
         "path": "/threads/{thread_id}/context",
         "operation_id": "getThreadContext",
         "summary": "Get bundled thread context for agent callers",
-        "why": "Load one thread's state, recent events, key artifacts, and open commitments in a single round-trip; CLI `oar threads context` can aggregate across threads by composing multiple calls.",
+        "why": "Load one thread's state, recent events, key artifacts, open commitments, and linked documents in a single round-trip; CLI `oar threads context` can aggregate across threads by composing multiple calls.",
         "input_mode": "none",
         "streaming": {
             "mode": "none"
         },
-        "output_envelope": "Returns `{ thread, recent_events, key_artifacts, open_commitments }`.",
+        "output_envelope": "Returns `{ thread, recent_events, key_artifacts, open_commitments, documents }`.",
         "error_codes": [
             "invalid_request",
             "not_found"
@@ -2454,7 +2457,8 @@ export const commandRegistry = [
             "threads",
             "events",
             "artifacts",
-            "commitments"
+            "commitments",
+            "docs"
         ],
         "stability": "beta",
         "agent_notes": "Use include_artifact_content for prompt-ready previews; default mode keeps payloads lighter. Prefer `oar threads inspect` as the first single-thread coordination read.",
@@ -2476,7 +2480,8 @@ export const commandRegistry = [
             "threads.get",
             "threads.list",
             "threads.patch",
-            "threads.timeline"
+            "threads.timeline",
+            "threads.workspace"
         ],
         "go_method": "ThreadsContext",
         "ts_method": "threadsContext"
@@ -2601,7 +2606,8 @@ export const commandRegistry = [
             "threads.get",
             "threads.list",
             "threads.patch",
-            "threads.timeline"
+            "threads.timeline",
+            "threads.workspace"
         ],
         "go_method": "ThreadsCreate",
         "ts_method": "threadsCreate"
@@ -2642,7 +2648,8 @@ export const commandRegistry = [
             "threads.create",
             "threads.list",
             "threads.patch",
-            "threads.timeline"
+            "threads.timeline",
+            "threads.workspace"
         ],
         "go_method": "ThreadsGet",
         "ts_method": "threadsGet"
@@ -2681,7 +2688,8 @@ export const commandRegistry = [
             "threads.create",
             "threads.get",
             "threads.patch",
-            "threads.timeline"
+            "threads.timeline",
+            "threads.workspace"
         ],
         "go_method": "ThreadsList",
         "ts_method": "threadsList"
@@ -2813,7 +2821,8 @@ export const commandRegistry = [
             "threads.create",
             "threads.get",
             "threads.list",
-            "threads.timeline"
+            "threads.timeline",
+            "threads.workspace"
         ],
         "go_method": "ThreadsPatch",
         "ts_method": "threadsPatch"
@@ -2856,10 +2865,63 @@ export const commandRegistry = [
             "threads.create",
             "threads.get",
             "threads.list",
-            "threads.patch"
+            "threads.patch",
+            "threads.workspace"
         ],
         "go_method": "ThreadsTimeline",
         "ts_method": "threadsTimeline"
+    },
+    {
+        "command_id": "threads.workspace",
+        "cli_path": "threads workspace",
+        "group": "threads",
+        "method": "GET",
+        "path": "/threads/{thread_id}/workspace",
+        "operation_id": "getThreadWorkspace",
+        "summary": "Get canonical thread workspace projection",
+        "why": "Load one thread workspace projection from the server, including canonical thread context plus derived collaboration and inbox summaries, so CLI and web do not need client-side joins.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ thread_id, thread, context, collaboration, inbox, pending_decisions, related_threads, follow_up, section_kinds }`, with explicit section classifications.",
+        "error_codes": [
+            "invalid_request",
+            "not_found"
+        ],
+        "concepts": [
+            "threads",
+            "events",
+            "artifacts",
+            "commitments",
+            "docs",
+            "inbox"
+        ],
+        "stability": "beta",
+        "agent_notes": "Prefer this as the single-thread coordination read path. `section_kinds` distinguishes canonical versus derived sections.",
+        "examples": [
+            {
+                "title": "Workspace with defaults",
+                "command": "oar threads workspace --thread-id thread_123 --json"
+            },
+            {
+                "title": "Workspace with hydrated related review events",
+                "command": "oar threads workspace --thread-id thread_123 --include-related-event-content --include-artifact-content --json"
+            }
+        ],
+        "path_params": [
+            "thread_id"
+        ],
+        "adjacent_commands": [
+            "threads.context",
+            "threads.create",
+            "threads.get",
+            "threads.list",
+            "threads.patch",
+            "threads.timeline"
+        ],
+        "go_method": "ThreadsWorkspace",
+        "ts_method": "threadsWorkspace"
     }
 ];
 const commandIndex = new Map(commandRegistry.map((command) => [command.command_id, command]));
@@ -3082,5 +3144,8 @@ export class OarClient {
     }
     threadsTimeline(pathParams, options = {}) {
         return this.invoke("threads.timeline", pathParams, options);
+    }
+    threadsWorkspace(pathParams, options = {}) {
+        return this.invoke("threads.workspace", pathParams, options);
     }
 }

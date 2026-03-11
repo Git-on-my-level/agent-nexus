@@ -161,6 +161,7 @@ Commands:
   threads list             List thread snapshots
   threads patch            Patch thread snapshot
   threads timeline         Get thread timeline events and referenced entities
+  threads workspace        Get canonical thread workspace projection
 
 Canonical coordination read path:
   threads workspace           Compose one holistic thread workspace from context + inbox + related-thread review.
@@ -422,7 +423,7 @@ Generated Help: threads list
 - Error codes: `invalid_request`
 - Concepts: `threads`, `filtering`
 - Agent notes: Safe and idempotent.
-- Adjacent commands: `threads context`, `threads create`, `threads get`, `threads patch`, `threads timeline`
+- Adjacent commands: `threads context`, `threads create`, `threads get`, `threads patch`, `threads timeline`, `threads workspace`
 - Examples:
   - List active p1 threads: `oar threads list --status active --priority p1 --json`
 
@@ -450,7 +451,7 @@ Generated Help: threads get
 - Error codes: `not_found`
 - Concepts: `threads`
 - Agent notes: Safe and idempotent. Prefer `oar threads inspect` for operator coordination reads.
-- Adjacent commands: `threads context`, `threads create`, `threads list`, `threads patch`, `threads timeline`
+- Adjacent commands: `threads context`, `threads create`, `threads list`, `threads patch`, `threads timeline`, `threads workspace`
 - Examples:
   - Read thread: `oar threads get --thread-id thread_123 --json`
 
@@ -478,7 +479,7 @@ Generated Help: threads create
 - Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`
 - Concepts: `threads`, `snapshots`
 - Agent notes: Non-idempotent unless caller enforces a deterministic id strategy externally.
-- Adjacent commands: `threads context`, `threads get`, `threads list`, `threads patch`, `threads timeline`
+- Adjacent commands: `threads context`, `threads get`, `threads list`, `threads patch`, `threads timeline`, `threads workspace`
 - Examples:
   - Create thread: `oar threads create --from-file thread.json --json`
 
@@ -510,7 +511,7 @@ Generated Help: threads timeline
 - Error codes: `not_found`
 - Concepts: `threads`, `events`, `provenance`
 - Agent notes: Events stay time ordered; missing refs are omitted from expansion maps.
-- Adjacent commands: `threads context`, `threads create`, `threads get`, `threads list`, `threads patch`
+- Adjacent commands: `threads context`, `threads create`, `threads get`, `threads list`, `threads patch`, `threads workspace`
 - Examples:
   - Timeline: `oar threads timeline --thread-id thread_123 --json`
 
@@ -538,7 +539,7 @@ Generated Help: threads context
 - Error codes: `invalid_request`, `not_found`
 - Concepts: `threads`, `events`, `artifacts`, `commitments`, `docs`
 - Agent notes: Use include_artifact_content for prompt-ready previews; default mode keeps payloads lighter. Prefer `oar threads inspect` as the first single-thread coordination read.
-- Adjacent commands: `threads create`, `threads get`, `threads list`, `threads patch`, `threads timeline`
+- Adjacent commands: `threads create`, `threads get`, `threads list`, `threads patch`, `threads timeline`, `threads workspace`
 - Examples:
   - Context with defaults: `oar threads context --thread-id thread_123 --json`
   - Context with artifact previews: `oar threads context --thread-id thread_123 --include-artifact-content --max-events 50 --json`
