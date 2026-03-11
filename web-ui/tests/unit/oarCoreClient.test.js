@@ -117,4 +117,54 @@ describe("oarCoreClient error messaging", () => {
       schema_version: "0.2.2",
     });
   });
+
+  it("consumes thread-scoped event streams", async () => {
+    const events = [];
+    const seenUrls = [];
+    const encoder = new TextEncoder();
+    const client = createOarCoreClient({
+      baseUrl: "http://core.test",
+      fetchFn: async (url) => {
+        seenUrls.push(String(url));
+        return new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(
+                encoder.encode(
+                  'id: evt-1\nevent: event\ndata: {"event":{"id":"evt-1","thread_id":"thread-1","type":"message_posted"}}\n\n',
+                ),
+              );
+              controller.close();
+            },
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "text/event-stream" },
+          },
+        );
+      },
+    });
+
+    await client.streamThreadEvents({
+      threadId: "thread-1",
+      onEvent: (event) => events.push(event),
+    });
+
+    expect(seenUrls).toEqual([
+      "http://core.test/events/stream?thread_id=thread-1",
+    ]);
+    expect(events).toEqual([
+      {
+        id: "evt-1",
+        event: "event",
+        data: {
+          event: {
+            id: "evt-1",
+            thread_id: "thread-1",
+            type: "message_posted",
+          },
+        },
+      },
+    ]);
+  });
 });

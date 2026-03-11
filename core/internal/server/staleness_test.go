@@ -118,3 +118,91 @@ func TestIsThreadStaleAtCadenceRules(t *testing.T) {
 		})
 	}
 }
+
+func TestIsMeaningfulThreadActivityEvent(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		event map[string]any
+		want  bool
+	}{
+		{
+			name: "actor statement counts as activity",
+			event: map[string]any{
+				"type":      "actor_statement",
+				"thread_id": "thread-1",
+				"ts":        "2026-03-04T12:00:00Z",
+			},
+			want: true,
+		},
+		{
+			name: "review completed counts as activity",
+			event: map[string]any{
+				"type":      "review_completed",
+				"thread_id": "thread-1",
+				"ts":        "2026-03-04T12:00:00Z",
+			},
+			want: true,
+		},
+		{
+			name: "document update counts as activity",
+			event: map[string]any{
+				"type":      "document_updated",
+				"thread_id": "thread-1",
+				"ts":        "2026-03-04T12:00:00Z",
+			},
+			want: true,
+		},
+		{
+			name: "inbox ack is coordination noise",
+			event: map[string]any{
+				"type":      "inbox_item_acknowledged",
+				"thread_id": "thread-1",
+				"ts":        "2026-03-04T12:00:00Z",
+			},
+			want: false,
+		},
+		{
+			name: "stale exception is coordination noise",
+			event: map[string]any{
+				"type":      "exception_raised",
+				"thread_id": "thread-1",
+				"ts":        "2026-03-04T12:00:00Z",
+				"payload":   map[string]any{"subtype": "stale_thread"},
+			},
+			want: false,
+		},
+		{
+			name: "derived open commitments update is coordination noise",
+			event: map[string]any{
+				"type":      "snapshot_updated",
+				"thread_id": "thread-1",
+				"ts":        "2026-03-04T12:00:00Z",
+				"payload":   map[string]any{"changed_fields": []string{"open_commitments"}},
+			},
+			want: false,
+		},
+		{
+			name: "thread snapshot created is not follow up activity",
+			event: map[string]any{
+				"type":      "snapshot_updated",
+				"thread_id": "thread-1",
+				"ts":        "2026-03-04T12:00:00Z",
+				"summary":   "thread snapshot created",
+				"payload":   map[string]any{"changed_fields": []string{"title", "status"}},
+			},
+			want: false,
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := isMeaningfulThreadActivityEvent(tc.event); got != tc.want {
+				t.Fatalf("unexpected result: got %v want %v for event %#v", got, tc.want, tc.event)
+			}
+		})
+	}
+}

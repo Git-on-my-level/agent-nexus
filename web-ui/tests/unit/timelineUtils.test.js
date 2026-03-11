@@ -32,7 +32,7 @@ describe("timeline utils", () => {
       {
         id: "evt-y",
         type: "snapshot_updated",
-        refs: ["event:evt-z", "thread:thread-1"],
+        refs: ["event:evt-z", "thread:thread-1", "document:doc-1"],
         payload: {
           changed_fields: ["status", "current_summary"],
         },
@@ -52,6 +52,12 @@ describe("timeline utils", () => {
       href: "/threads/thread-1",
       isLink: true,
     });
+    expect(view.resolvedRefs[2]).toMatchObject({
+      kind: "document",
+      href: "/docs/doc-1",
+      isLink: true,
+      primaryLabel: "Document doc-1",
+    });
   });
 
   it("builds label hints from timeline expansions", () => {
@@ -62,9 +68,19 @@ describe("timeline utils", () => {
       {
         artifact_1: { kind: "work_order", summary: "Reproduce issue" },
       },
+      {
+        doc_1: { title: "Product Constitution" },
+      },
+      {
+        rev_1: { document_id: "doc_1", revision_number: 3 },
+      },
     );
 
     expect(hints["snapshot:snapshot_1"]).toBe("Incident thread");
     expect(hints["artifact:artifact_1"]).toBe("Reproduce issue");
+    expect(hints["document:doc_1"]).toBe("Product Constitution");
+    expect(hints["document_revision:rev_1"]).toBe(
+      "Product Constitution revision 3",
+    );
   });
 });

@@ -652,10 +652,10 @@ paths:
       x-oar-input-mode: "json-body"
       x-oar-streaming: { mode: none }
       x-oar-output-envelope: "Returns `{ thread }` including generated id and audit fields."
-      x-oar-error-codes: [invalid_json, invalid_request, unknown_actor_id]
+      x-oar-error-codes: [invalid_json, invalid_request, unknown_actor_id, conflict]
       x-oar-concepts: [threads, snapshots]
       x-oar-stability: "stable"
-      x-oar-agent-notes: "Non-idempotent unless caller enforces a deterministic id strategy externally."
+      x-oar-agent-notes: "Replay-safe when `request_key` is reused with the same body; otherwise core issues a new canonical thread id."
       requestBody:
         required: true
         content:
@@ -821,7 +821,7 @@ paths:
       tags: [threads]
       x-oar-command-id: "threads.context"
       x-oar-cli-path: "threads context"
-      x-oar-why: "Load one thread's state, recent events, key artifacts, and open commitments in a single round-trip; CLI `oar threads context` can aggregate across threads by composing multiple calls."
+      x-oar-why: "Load one thread's state, recent events, key artifacts, open commitments, and linked documents in a single round-trip; CLI `oar threads context` can aggregate across threads by composing multiple calls."
       x-oar-examples:
         - title: Context with defaults
           command: oar threads context --thread-id thread_123 --json
@@ -829,9 +829,9 @@ paths:
           command: oar threads context --thread-id thread_123 --include-artifact-content --max-events 50 --json
       x-oar-input-mode: "none"
       x-oar-streaming: { mode: none }
-      x-oar-output-envelope: "Returns `{ thread, recent_events, key_artifacts, open_commitments }`."
+      x-oar-output-envelope: "Returns `{ thread, recent_events, key_artifacts, open_commitments, documents }`."
       x-oar-error-codes: [invalid_request, not_found]
-      x-oar-concepts: [threads, events, artifacts, commitments]
+      x-oar-concepts: [threads, events, artifacts, commitments, docs]
       x-oar-stability: "beta"
       x-oar-agent-notes: "Use include_artifact_content for prompt-ready previews; default mode keeps payloads lighter. Prefer `oar threads inspect` as the first single-thread coordination read."
       parameters:
@@ -849,6 +849,49 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ThreadContextResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /threads/{thread_id}/workspace:
+    get:
+      operationId: getThreadWorkspace
+      summary: Get canonical thread workspace projection
+      tags: [threads]
+      x-oar-command-id: "threads.workspace"
+      x-oar-cli-path: "threads workspace"
+      x-oar-why: "Load one thread workspace projection from the server, including canonical thread context plus derived collaboration and inbox summaries, so CLI and web do not need client-side joins."
+      x-oar-examples:
+        - title: Workspace with defaults
+          command: oar threads workspace --thread-id thread_123 --json
+        - title: Workspace with hydrated related review events
+          command: oar threads workspace --thread-id thread_123 --include-related-event-content --include-artifact-content --json
+      x-oar-input-mode: "none"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ thread_id, thread, context, collaboration, inbox, pending_decisions, related_threads, follow_up, section_kinds }`, with explicit section classifications."
+      x-oar-error-codes: [invalid_request, not_found]
+      x-oar-concepts: [threads, events, artifacts, commitments, docs, inbox]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Prefer this as the single-thread coordination read path. `section_kinds` distinguishes canonical versus derived sections."
+      parameters:
+        - $ref: '#/components/parameters/ThreadID'
+        - in: query
+          name: max_events
+          schema: { type: integer }
+        - in: query
+          name: include_artifact_content
+          schema: { type: boolean }
+        - in: query
+          name: include_related_event_content
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: Thread workspace payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadWorkspaceResponse'
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '404':
@@ -898,10 +941,10 @@ paths:
       x-oar-input-mode: "json-body"
       x-oar-streaming: { mode: none }
       x-oar-output-envelope: "Returns `{ commitment }` with generated id."
-      x-oar-error-codes: [invalid_json, invalid_request, unknown_actor_id]
+      x-oar-error-codes: [invalid_json, invalid_request, unknown_actor_id, conflict]
       x-oar-concepts: [commitments]
       x-oar-stability: "stable"
-      x-oar-agent-notes: "Non-idempotent unless caller controls external dedupe."
+      x-oar-agent-notes: "Replay-safe when `request_key` is reused with the same body; otherwise each create issues a new commitment id."
       requestBody:
         required: true
         content:
@@ -1033,7 +1076,7 @@ paths:
       tags: [docs]
       x-oar-command-id: "docs.list"
       x-oar-cli-path: "docs list"
-      x-oar-why: "Discover available documents without resolving each head individually."
+      x-oar-why: "Discover available documents without resolving each head individually, optionally scoped to a single thread."
       x-oar-examples:
         - title: List documents
           command: oar docs list --json
@@ -1043,8 +1086,12 @@ paths:
       x-oar-error-codes: [invalid_request]
       x-oar-concepts: [docs, revisions]
       x-oar-stability: "beta"
-      x-oar-agent-notes: "Safe and idempotent. Use `include_tombstoned=true` when auditing superseded documents."
+      x-oar-agent-notes: "Safe and idempotent. Use `thread_id` to focus on one thread's docs and `include_tombstoned=true` when auditing superseded documents."
       parameters:
+        - in: query
+          name: thread_id
+          schema: { type: string }
+          description: "Return only documents currently linked to the given thread id."
         - in: query
           name: include_tombstoned
           schema: { type: boolean }
@@ -1072,7 +1119,7 @@ paths:
       x-oar-error-codes: [invalid_json, invalid_request, unknown_actor_id, conflict]
       x-oar-concepts: [docs, revisions]
       x-oar-stability: "beta"
-      x-oar-agent-notes: "Non-idempotent unless caller provides a deterministic document id and dedupes retries."
+      x-oar-agent-notes: "Replay-safe when `request_key` is reused with the same body; core can issue the canonical document id when one is omitted."
       requestBody:
         required: true
         content:
@@ -1243,7 +1290,7 @@ paths:
       x-oar-error-codes: [invalid_json, invalid_request, unknown_actor_id]
       x-oar-concepts: [events, append-only]
       x-oar-stability: "stable"
-      x-oar-agent-notes: "Non-idempotent unless external dedupe keying is used."
+      x-oar-agent-notes: "Replay-safe when `request_key` is reused with the same body."
       requestBody:
         required: true
         content:
@@ -1579,7 +1626,7 @@ paths:
       x-oar-error-codes: [invalid_json, invalid_request, unknown_actor_id]
       x-oar-concepts: [packets, work-orders]
       x-oar-stability: "stable"
-      x-oar-agent-notes: "Treat as non-idempotent unless artifact ids are controlled."
+      x-oar-agent-notes: "Replay-safe when `request_key` is reused with the same body; packet id fields may be omitted and core will issue the canonical artifact id."
       requestBody:
         required: true
         content:
@@ -1613,7 +1660,7 @@ paths:
       x-oar-error-codes: [invalid_json, invalid_request, unknown_actor_id]
       x-oar-concepts: [packets, receipts]
       x-oar-stability: "stable"
-      x-oar-agent-notes: "Include evidence refs that satisfy packet conventions."
+      x-oar-agent-notes: "Replay-safe when `request_key` is reused with the same body. Include evidence refs that satisfy packet conventions."
       requestBody:
         required: true
         content:
@@ -2256,6 +2303,7 @@ components:
       type: object
       properties:
         actor_id: { type: string }
+        request_key: { type: string }
         thread:
           $ref: '#/components/schemas/AnyObject'
       required: [thread]
@@ -2330,7 +2378,145 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Commitment'
-      required: [thread, recent_events, key_artifacts, open_commitments]
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/Document'
+      required: [thread, recent_events, key_artifacts, open_commitments, documents]
+
+    ThreadWorkspaceEventSection:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Event'
+        count:
+          type: integer
+      required: [items, count]
+
+    ThreadWorkspaceInboxSection:
+      type: object
+      properties:
+        thread_id: { type: string }
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/InboxItem'
+        count:
+          type: integer
+        generated_at:
+          type: string
+          format: date-time
+      required: [thread_id, items, count]
+
+    ThreadWorkspaceSectionKinds:
+      type: object
+      additionalProperties:
+        type: string
+        enum: [canonical, derived, convenience]
+
+    ThreadWorkspaceResponse:
+      type: object
+      properties:
+        thread_id: { type: string }
+        thread:
+          $ref: '#/components/schemas/Thread'
+        context:
+          type: object
+          properties:
+            recent_events:
+              type: array
+              items:
+                $ref: '#/components/schemas/Event'
+            key_artifacts:
+              type: array
+              items:
+                $ref: '#/components/schemas/ThreadContextArtifact'
+            open_commitments:
+              type: array
+              items:
+                $ref: '#/components/schemas/Commitment'
+            documents:
+              type: array
+              items:
+                $ref: '#/components/schemas/Document'
+          required: [recent_events, key_artifacts, open_commitments, documents]
+        collaboration:
+          type: object
+          properties:
+            recommendations:
+              type: array
+              items:
+                $ref: '#/components/schemas/Event'
+            decision_requests:
+              type: array
+              items:
+                $ref: '#/components/schemas/Event'
+            decisions:
+              type: array
+              items:
+                $ref: '#/components/schemas/Event'
+            key_artifacts:
+              type: array
+              items:
+                $ref: '#/components/schemas/ThreadContextArtifact'
+            open_commitments:
+              type: array
+              items:
+                $ref: '#/components/schemas/Commitment'
+          required: [recommendations, decision_requests, decisions, key_artifacts, open_commitments]
+        inbox:
+          $ref: '#/components/schemas/ThreadWorkspaceInboxSection'
+        pending_decisions:
+          $ref: '#/components/schemas/ThreadWorkspaceInboxSection'
+        related_threads:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                type: object
+            count:
+              type: integer
+          required: [items, count]
+        related_recommendations:
+          $ref: '#/components/schemas/ThreadWorkspaceEventSection'
+        related_decision_requests:
+          $ref: '#/components/schemas/ThreadWorkspaceEventSection'
+        related_decisions:
+          $ref: '#/components/schemas/ThreadWorkspaceEventSection'
+        warnings:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                type: object
+            count:
+              type: integer
+        total_review_items:
+          type: integer
+        follow_up:
+          type: object
+          additionalProperties: true
+        section_kinds:
+          $ref: '#/components/schemas/ThreadWorkspaceSectionKinds'
+        context_source:
+          type: string
+        inbox_source:
+          type: string
+        generated_at:
+          type: string
+          format: date-time
+        related_event_content_enabled:
+          type: boolean
+        related_event_content_count:
+          type: integer
+      required:
+        [thread_id, thread, context, collaboration, inbox, pending_decisions, related_threads,
+         related_recommendations, related_decision_requests, related_decisions, total_review_items,
+         follow_up, section_kinds, context_source, inbox_source, generated_at]
 
     SnapshotResponse:
       type: object
@@ -2343,6 +2529,7 @@ components:
       type: object
       properties:
         actor_id: { type: string }
+        request_key: { type: string }
         commitment:
           $ref: '#/components/schemas/AnyObject'
       required: [commitment]
@@ -2381,6 +2568,7 @@ components:
       type: object
       properties:
         actor_id: { type: string }
+        request_key: { type: string }
         document:
           $ref: '#/components/schemas/AnyObject'
         refs:
@@ -2455,6 +2643,7 @@ components:
       type: object
       properties:
         actor_id: { type: string }
+        request_key: { type: string }
         event:
           $ref: '#/components/schemas/AnyObject'
       description: >
@@ -2505,6 +2694,7 @@ components:
       type: object
       properties:
         actor_id: { type: string }
+        request_key: { type: string }
         artifact:
           $ref: '#/components/schemas/AnyObject'
         packet:
@@ -2515,6 +2705,7 @@ components:
       type: object
       properties:
         actor_id: { type: string }
+        request_key: { type: string }
         artifact:
           $ref: '#/components/schemas/AnyObject'
         packet:
@@ -2525,6 +2716,7 @@ components:
       type: object
       properties:
         actor_id: { type: string }
+        request_key: { type: string }
         artifact:
           $ref: '#/components/schemas/AnyObject'
         packet:

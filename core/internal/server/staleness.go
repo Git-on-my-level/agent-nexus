@@ -21,9 +21,7 @@ func emitStaleThreadExceptions(ctx context.Context, opts handlerOptions, now tim
 		return err
 	}
 
-	events, err := opts.primitiveStore.ListEvents(ctx, primitives.EventListFilter{
-		Types: []string{"receipt_added", "decision_made", "exception_raised"},
-	})
+	events, err := opts.primitiveStore.ListEvents(ctx, primitives.EventListFilter{})
 	if err != nil {
 		return err
 	}
@@ -73,8 +71,7 @@ func emitStaleThreadExceptions(ctx context.Context, opts handlerOptions, now tim
 func latestThreadActivityFromEvents(events []map[string]any) map[string]time.Time {
 	out := make(map[string]time.Time)
 	for _, event := range events {
-		eventType, _ := event["type"].(string)
-		if eventType != "receipt_added" && eventType != "decision_made" {
+		if !isMeaningfulThreadActivityEvent(event) {
 			continue
 		}
 		threadID, _ := event["thread_id"].(string)
@@ -90,6 +87,40 @@ func latestThreadActivityFromEvents(events []map[string]any) map[string]time.Tim
 		}
 	}
 	return out
+}
+
+func isMeaningfulThreadActivityEvent(event map[string]any) bool {
+	eventType, _ := event["type"].(string)
+	eventType = strings.TrimSpace(eventType)
+	if eventType == "" {
+		return false
+	}
+
+	switch eventType {
+	case "actor_statement",
+		"decision_needed",
+		"decision_made",
+		"work_order_created",
+		"receipt_added",
+		"review_completed",
+		"document_created",
+		"document_updated",
+		"document_tombstoned",
+		"commitment_created",
+		"commitment_status_changed":
+		return true
+	case "inbox_item_acknowledged", "exception_raised":
+		return false
+	case "snapshot_updated":
+		payload, _ := event["payload"].(map[string]any)
+		changedFields, err := extractStringSlice(payload["changed_fields"])
+		if err == nil && len(changedFields) == 1 && strings.TrimSpace(changedFields[0]) == "open_commitments" {
+			return false
+		}
+		return strings.TrimSpace(anyString(event["summary"])) != "thread snapshot created"
+	default:
+		return false
+	}
 }
 
 func latestStaleExceptionByThread(events []map[string]any) map[string]time.Time {

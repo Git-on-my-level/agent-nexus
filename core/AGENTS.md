@@ -29,7 +29,7 @@ organization-autorunner-core is the core backend/domain implementation for the O
 
 ## System model (implementation reality)
 - Canonical state is persisted in SQLite (`events`, `snapshots`, `artifacts`, `actors`) plus artifact content files under `artifacts/content/`.
-- Derived inbox/staleness behavior is computed from canonical data in server logic; no scheduler is required for correctness.
+- Canonical state is repaired via `POST /derived/rebuild`, while common inbox/staleness/workspace-summary reads are served from incrementally maintained derived projections.
 - `snapshots.kind` is currently `thread` or `commitment`; typed behavior is implemented as conventions over snapshot bodies.
 - Unknown fields are intentionally preserved for snapshot/event/artifact round-tripping.
 - Event and artifact refs are typed strings (`prefix:value`) and validated for shape and convention requirements.
@@ -46,6 +46,7 @@ organization-autorunner-core is the core backend/domain implementation for the O
 - Packet content ID fields must match `artifact.id`.
 - Inbox item IDs are deterministic and acknowledgment suppression must remain stable across rebuilds.
 - Staleness exceptions should be idempotent: no duplicate stale exceptions without newer thread activity.
+- Derived `thread.open_commitments` maintenance is compatibility state, not user-visible collaboration: keep the field correct without emitting timeline noise or bumping visible thread activity clocks.
 
 ## Change guide (where to edit)
 - For schema fields/enums/ref conventions, update:
@@ -70,6 +71,7 @@ organization-autorunner-core is the core backend/domain implementation for the O
 - For staleness/inbox logic changes, update:
 - `internal/server/staleness.go`
 - `internal/server/inbox_handlers.go`
+- `internal/server/derived_projections.go`
 - staleness/inbox integration tests
 
 ## Operational workflows
@@ -92,7 +94,6 @@ organization-autorunner-core is the core backend/domain implementation for the O
 
 ## Known implementation gaps (track here until closed)
 - No dedicated decision convenience endpoint; decisions are currently recorded through `POST /events`.
-- `derived_views` table exists in migrations but current derived behavior is computed on demand in server handlers.
 
 ## Maintenance guidance
 - Keep this file timeless and implementation-oriented.

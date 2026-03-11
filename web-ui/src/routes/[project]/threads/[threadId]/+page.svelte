@@ -8,6 +8,7 @@
 
   import ThreadDetailHeader from "$lib/components/thread-detail/ThreadDetailHeader.svelte";
   import ThreadOverviewTab from "$lib/components/thread-detail/ThreadOverviewTab.svelte";
+  import ThreadDocumentsPanel from "$lib/components/thread-detail/ThreadDocumentsPanel.svelte";
   import ThreadCommitmentsPanel from "$lib/components/thread-detail/ThreadCommitmentsPanel.svelte";
   import ThreadWorkTab from "$lib/components/thread-detail/ThreadWorkTab.svelte";
   import ThreadTimelineTab from "$lib/components/thread-detail/ThreadTimelineTab.svelte";
@@ -23,24 +24,31 @@
   let conflictWarning = $state("");
   let editNotice = $state("");
 
-  const POLL_INTERVAL_MS = 30_000;
-  let pollTimer;
+  const STREAM_RECONNECT_DELAY_MS = 1_500;
+  const RECONCILE_INTERVAL_MS = 120_000;
+  const liveCoordination = {
+    reconcileTimer: null,
+    stopThreadStream: () => {},
+  };
 
   onMount(async () => {
     await ensureActorRegistry();
     await threadDetailStore.fullRefresh(threadId);
-    pollTimer = setInterval(
+    liveCoordination.stopThreadStream = startThreadEventStream(threadId);
+    liveCoordination.reconcileTimer = setInterval(
       () =>
-        threadDetailStore.refreshThreadDetail(threadId, {
-          snapshot: true,
+        threadDetailStore.queueRefreshThreadDetail(threadId, {
+          workspace: true,
           timeline: true,
+          workOrders: true,
         }),
-      POLL_INTERVAL_MS,
+      RECONCILE_INTERVAL_MS,
     );
   });
 
   onDestroy(() => {
-    clearInterval(pollTimer);
+    liveCoordination.stopThreadStream();
+    clearInterval(liveCoordination.reconcileTimer);
   });
 
   async function ensureActorRegistry() {
@@ -68,9 +76,10 @@
       if (error?.status === 409) {
         conflictWarning =
           "Thread was updated elsewhere. Reloaded — reapply your changes.";
-        await threadDetailStore.refreshThreadDetail(threadId, {
-          snapshot: true,
+        await threadDetailStore.queueRefreshThreadDetail(threadId, {
+          workspace: true,
           timeline: true,
+          workOrders: true,
         });
       } else {
         throw error;
@@ -80,49 +89,114 @@
 
   async function handleCreateCommitment(threadId, commitment) {
     await coreClient.createCommitment({ commitment });
-    await threadDetailStore.refreshThreadDetail(threadId, {
-      snapshot: true,
-      commitments: true,
+    await threadDetailStore.queueRefreshThreadDetail(threadId, {
+      workspace: true,
       timeline: true,
     });
   }
 
   async function handleSaveCommitment(commitmentId, payload) {
     await coreClient.updateCommitment(commitmentId, payload);
-    await threadDetailStore.refreshThreadDetail(threadId, {
-      snapshot: true,
-      commitments: true,
+    await threadDetailStore.queueRefreshThreadDetail(threadId, {
+      workspace: true,
       timeline: true,
     });
   }
 
-  async function handleWorkOrderSubmit(threadId, artifact, packet) {
-    await coreClient.createWorkOrder({ artifact, packet });
-    await threadDetailStore.refreshThreadDetail(threadId, {
+  async function handleWorkOrderSubmit(threadId, artifact, packet, requestKey) {
+    const response = await coreClient.createWorkOrder({
+      request_key: requestKey,
+      artifact,
+      packet,
+    });
+    await threadDetailStore.queueRefreshThreadDetail(threadId, {
+      workspace: true,
       timeline: true,
       workOrders: true,
     });
+    return response;
   }
 
-  async function handleReceiptSubmit(threadId, artifact, packet) {
-    await coreClient.createReceipt({ artifact, packet });
-    await threadDetailStore.refreshThreadDetail(threadId, {
+  async function handleReceiptSubmit(threadId, artifact, packet, requestKey) {
+    const response = await coreClient.createReceipt({
+      request_key: requestKey,
+      artifact,
+      packet,
+    });
+    await threadDetailStore.queueRefreshThreadDetail(threadId, {
+      workspace: true,
       timeline: true,
       workOrders: true,
     });
+    return response;
   }
 
   async function handleMessagePost(threadId, event) {
     await coreClient.createEvent({ event });
-    await threadDetailStore.refreshThreadDetail(threadId, {
-      snapshot: true,
+    await threadDetailStore.queueRefreshThreadDetail(threadId, {
+      workspace: true,
       timeline: true,
+      workOrders: true,
     });
+  }
+
+  function startThreadEventStream(threadId) {
+    let stopped = false;
+    let reconnectTimer;
+    let controller = null;
+    let lastEventId = "";
+
+    const connect = async () => {
+      if (stopped) return;
+      controller = new AbortController();
+      try {
+        await coreClient.streamThreadEvents({
+          threadId,
+          lastEventId,
+          signal: controller.signal,
+          onEvent: async (message) => {
+            if (message?.id) {
+              lastEventId = message.id;
+            }
+            if (message?.event !== "event") {
+              return;
+            }
+            await threadDetailStore.queueRefreshThreadDetail(threadId, {
+              workspace: true,
+              timeline: true,
+              workOrders: true,
+            });
+          },
+        });
+      } catch (error) {
+        if (error?.name === "AbortError" || stopped) {
+          return;
+        }
+      }
+
+      if (!stopped) {
+        reconnectTimer = setTimeout(connect, STREAM_RECONNECT_DELAY_MS);
+      }
+    };
+
+    void connect();
+
+    return () => {
+      stopped = true;
+      controller?.abort();
+      clearTimeout(reconnectTimer);
+    };
   }
 
   $effect(() => {
     if ($page.url.searchParams.get("compose") === "work-order") {
       activeTab = "work";
+    }
+  });
+
+  $effect(() => {
+    if (activeTab === "timeline" && threadId) {
+      void threadDetailStore.loadTimeline(threadId);
     }
   });
 </script>
@@ -165,6 +239,7 @@
       {conflictWarning}
       {editNotice}
     />
+    <ThreadDocumentsPanel {threadId} />
     <ThreadCommitmentsPanel
       {threadId}
       onCommitmentSave={handleSaveCommitment}

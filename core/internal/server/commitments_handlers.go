@@ -25,6 +25,7 @@ func handleCreateCommitment(w http.ResponseWriter, r *http.Request, opts handler
 
 	var req struct {
 		ActorID    string         `json:"actor_id"`
+		RequestKey string         `json:"request_key"`
 		Commitment map[string]any `json:"commitment"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -41,7 +42,21 @@ func handleCreateCommitment(w http.ResponseWriter, r *http.Request, opts handler
 	if !ok {
 		return
 	}
-
+	if strings.TrimSpace(req.RequestKey) != "" && firstNonEmptyString(req.Commitment["id"]) == "" {
+		req.Commitment["id"] = deriveRequestScopedID("commitments.create", actorID, req.RequestKey, "commitment")
+	}
+	replayStatus, replayPayload, replayed, err := readIdempotencyReplay(r.Context(), opts.primitiveStore, "commitments.create", actorID, req.RequestKey, req)
+	if writeIdempotencyError(w, err) {
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load idempotency replay")
+		return
+	}
+	if replayed {
+		writeJSON(w, replayStatus, replayPayload)
+		return
+	}
 	if err := validateCommitmentCreate(opts.contract, req.Commitment); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
@@ -49,15 +64,48 @@ func handleCreateCommitment(w http.ResponseWriter, r *http.Request, opts handler
 
 	result, err := opts.primitiveStore.CreateCommitment(r.Context(), actorID, req.Commitment)
 	if err != nil {
+		if errors.Is(err, primitives.ErrConflict) && strings.TrimSpace(req.RequestKey) != "" {
+			commitmentID := firstNonEmptyString(req.Commitment["id"])
+			commitment, loadErr := opts.primitiveStore.GetCommitment(r.Context(), commitmentID)
+			if loadErr == nil {
+				response := map[string]any{"commitment": commitment}
+				status, payload, replayErr := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "commitments.create", actorID, req.RequestKey, req, http.StatusCreated, response)
+				if writeIdempotencyError(w, replayErr) {
+					return
+				}
+				if replayErr != nil {
+					writeError(w, http.StatusInternalServerError, "internal_error", "failed to persist idempotency replay")
+					return
+				}
+				writeJSON(w, status, payload)
+				return
+			}
+		}
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "thread not found")
+			return
+		}
+		if errors.Is(err, primitives.ErrConflict) {
+			writeError(w, http.StatusConflict, "conflict", "commitment already exists")
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to create commitment")
 		return
 	}
+	if err := refreshDerivedThreadProjection(r.Context(), opts, anyString(result.Snapshot["thread_id"]), time.Now().UTC(), actorID); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to refresh derived thread views")
+		return
+	}
 
-	writeJSON(w, http.StatusCreated, map[string]any{"commitment": result.Snapshot})
+	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "commitments.create", actorID, req.RequestKey, req, http.StatusCreated, map[string]any{"commitment": result.Snapshot})
+	if writeIdempotencyError(w, err) {
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to persist idempotency replay")
+		return
+	}
+	writeJSON(w, status, payload)
 }
 
 func handleGetCommitment(w http.ResponseWriter, r *http.Request, opts handlerOptions, commitmentID string) {
@@ -147,6 +195,10 @@ func handlePatchCommitment(w http.ResponseWriter, r *http.Request, opts handlerO
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to patch commitment")
+		return
+	}
+	if err := refreshDerivedThreadProjection(r.Context(), opts, anyString(result.Snapshot["thread_id"]), time.Now().UTC(), actorID); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to refresh derived thread views")
 		return
 	}
 

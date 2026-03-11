@@ -62,9 +62,11 @@ func TestTypedThreadCommandsGolden(t *testing.T) {
 	assertGolden(t, "threads_create.golden.json", createOut)
 
 	patchOut := runCLIForTest(t, home, env, strings.NewReader(`{"patch":{"status":"resolved"}}`), []string{"--json", "--base-url", server.URL, "threads", "patch", "--thread-id", "thread_1"})
-	assertGolden(t, "threads_patch.golden.json", normalizeProposalEnvelopeForGolden(t, patchOut))
-	patchPayload := assertEnvelopeOK(t, patchOut)
-	proposalID := proposalIDFromEnvelope(t, patchPayload)
+	assertGolden(t, "threads_patch.golden.json", patchOut)
+
+	proposeOut := runCLIForTest(t, home, env, strings.NewReader(`{"patch":{"status":"resolved"}}`), []string{"--json", "--base-url", server.URL, "threads", "propose-patch", "--thread-id", "thread_1"})
+	assertGolden(t, "threads_propose_patch.golden.json", normalizeProposalEnvelopeForGolden(t, proposeOut))
+	proposalID := proposalIDFromEnvelope(t, assertEnvelopeOK(t, proposeOut))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "threads", "apply", "--proposal-id", proposalID}))
 
 	timelineOut := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "threads", "timeline", "--thread-id", "thread_1"})
@@ -114,8 +116,9 @@ func TestTypedWorkflowCommands(t *testing.T) {
 	env := map[string]string{}
 
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"thread":{"title":"Flow Thread"}}`), []string{"--json", "--base-url", server.URL, "threads", "create"}))
-	threadPatchPayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"patch":{"status":"resolved"}}`), []string{"--json", "--base-url", server.URL, "threads", "patch", "thread_flow_1"}))
-	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "threads", "apply", proposalIDFromEnvelope(t, threadPatchPayload)}))
+	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"patch":{"status":"resolved"}}`), []string{"--json", "--base-url", server.URL, "threads", "patch", "thread_flow_1"}))
+	threadPatchProposal := assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"patch":{"status":"resolved"}}`), []string{"--json", "--base-url", server.URL, "threads", "propose-patch", "thread_flow_1"}))
+	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "threads", "apply", proposalIDFromEnvelope(t, threadPatchProposal)}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"commitment":{"thread_id":"thread_flow_1","title":"Do work"}}`), []string{"--json", "--base-url", server.URL, "commitments", "create"}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"work_order":{"thread_id":"thread_flow_1"}}`), []string{"--json", "--base-url", server.URL, "work-orders", "create"}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"receipt":{"thread_id":"thread_flow_1"}}`), []string{"--json", "--base-url", server.URL, "receipts", "create"}))
@@ -675,6 +678,9 @@ func TestDocsCommands(t *testing.T) {
 			if got := strings.TrimSpace(r.URL.Query().Get("include_tombstoned")); got != "true" {
 				t.Fatalf("expected include_tombstoned=true query, got %q", got)
 			}
+			if got := strings.TrimSpace(r.URL.Query().Get("thread_id")); got != "thread_docs_1" {
+				t.Fatalf("expected thread_id=thread_docs_1 query, got %q", got)
+			}
 			_, _ = w.Write([]byte(`{"documents":[{"id":"doc_1","head_revision_id":"rev_1"}]}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/docs":
 			body, _ := io.ReadAll(r.Body)
@@ -704,10 +710,11 @@ func TestDocsCommands(t *testing.T) {
 	home := t.TempDir()
 	env := map[string]string{}
 
-	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "list", "--include-tombstoned"}))
+	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "list", "--thread-id", "thread_docs_1", "--include-tombstoned"}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"document":{"id":"doc_1"},"content":"initial","content_type":"text"}`), []string{"--json", "--base-url", server.URL, "docs", "create"}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "get", "--document-id", "doc_1"}))
-	docsUpdatePayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"actor_id":"actor_test","if_base_revision":"rev_1","content":"next","content_type":"text"}`), []string{"--json", "--base-url", server.URL, "docs", "update", "--document-id", "doc_1"}))
+	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"actor_id":"actor_test","if_base_revision":"rev_1","content":"next","content_type":"text"}`), []string{"--json", "--base-url", server.URL, "docs", "update", "--document-id", "doc_1"}))
+	docsUpdatePayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"actor_id":"actor_test","if_base_revision":"rev_1","content":"next","content_type":"text"}`), []string{"--json", "--base-url", server.URL, "docs", "propose-update", "--document-id", "doc_1"}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "apply", "--proposal-id", proposalIDFromEnvelope(t, docsUpdatePayload)}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "history", "--document-id", "doc_1"}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "revision", "get", "--document-id", "doc_1", "--revision-id", "rev_1"}))
@@ -749,14 +756,7 @@ func TestDocsUpdateInjectsActorIDFromProfile(t *testing.T) {
 		"docs", "update",
 		"--document-id", "doc_1",
 	})
-	payload := assertEnvelopeOK(t, raw)
-	assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"--agent", "agent-docs",
-		"docs", "apply",
-		proposalIDFromEnvelope(t, payload),
-	}))
+	assertEnvelopeOK(t, raw)
 }
 
 func TestDocsUpdateRequiresActiveActorIdentity(t *testing.T) {
@@ -867,19 +867,12 @@ func TestProductManagerFlowRegisterThenDocsUpdate(t *testing.T) {
 		"auth", "register",
 		"--username", "pi-dogfood-agent-product-manager",
 	}))
-	docsUpdatePayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"if_base_revision":"rev_1","content":"updated brief","content_type":"text"}`), []string{
+	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"if_base_revision":"rev_1","content":"updated brief","content_type":"text"}`), []string{
 		"--json",
 		"--base-url", server.URL,
 		"--agent", "agent-product-manager",
 		"docs", "update",
 		"--document-id", "northwave-pilot-rescue-brief",
-	}))
-	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"--agent", "agent-product-manager",
-		"docs", "apply",
-		proposalIDFromEnvelope(t, docsUpdatePayload),
 	}))
 
 	mu.Lock()
@@ -1068,7 +1061,7 @@ func TestDocsUpdateRejectsNullContentBeforeHTTP(t *testing.T) {
 	}
 }
 
-func TestDocsUpdateProposalWithContentFileUsesFetchedDocumentState(t *testing.T) {
+func TestDocsProposeUpdateWithContentFileUsesFetchedDocumentState(t *testing.T) {
 	t.Parallel()
 
 	var mu sync.Mutex
@@ -1107,7 +1100,7 @@ func TestDocsUpdateProposalWithContentFileUsesFetchedDocumentState(t *testing.T)
 		"--json",
 		"--base-url", server.URL,
 		"--agent", "agent-docs-content-file",
-		"docs", "update",
+		"docs", "propose-update",
 		"--document-id", "doc_1",
 		"--from-file", updateFile,
 		"--content-file", contentFile,
@@ -1138,7 +1131,7 @@ func TestDocsUpdateProposalWithContentFileUsesFetchedDocumentState(t *testing.T)
 	}
 }
 
-func TestDocsUpdateProposalPreservesStructuredContentInDiff(t *testing.T) {
+func TestDocsProposeUpdatePreservesStructuredContentInDiff(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1171,7 +1164,7 @@ func TestDocsUpdateProposalPreservesStructuredContentInDiff(t *testing.T) {
 		"--json",
 		"--base-url", server.URL,
 		"--agent", "agent-docs-structured",
-		"docs", "update",
+		"docs", "propose-update",
 		"--document-id", "doc_structured",
 	})
 	payload := assertEnvelopeOK(t, raw)
@@ -1194,7 +1187,7 @@ func TestDocsUpdateProposalPreservesStructuredContentInDiff(t *testing.T) {
 	}
 }
 
-func TestDocsUpdateProposalTextDiffFallsBackWhenRevisionContentEmpty(t *testing.T) {
+func TestDocsProposeUpdateTextDiffFallsBackWhenRevisionContentEmpty(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1228,7 +1221,7 @@ func TestDocsUpdateProposalTextDiffFallsBackWhenRevisionContentEmpty(t *testing.
 		"--json",
 		"--base-url", server.URL,
 		"--agent", "agent-docs-text-fallback",
-		"docs", "update",
+		"docs", "propose-update",
 		"--document-id", "doc_text_fallback",
 	})
 	payload := assertEnvelopeOK(t, raw)
@@ -1240,7 +1233,7 @@ func TestDocsUpdateProposalTextDiffFallsBackWhenRevisionContentEmpty(t *testing.
 	}
 }
 
-func TestCommitmentsUpdateStagesProposalAndApply(t *testing.T) {
+func TestCommitmentsPatchWritesImmediatelyAndProposePatchStages(t *testing.T) {
 	t.Parallel()
 
 	var mu sync.Mutex
@@ -1270,10 +1263,28 @@ func TestCommitmentsUpdateStagesProposalAndApply(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
+	assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{"patch":{"status":"done"}}`), []string{
+		"--json",
+		"--base-url", server.URL,
+		"commitments", "patch",
+		"--commitment-id", "commitment_1",
+	}))
+
+	mu.Lock()
+	gotGetsAfterPatch := getCalls
+	gotPatchesAfterPatch := patchCalls
+	mu.Unlock()
+	if gotGetsAfterPatch != 0 {
+		t.Fatalf("expected no commitments get during direct patch, got %d", gotGetsAfterPatch)
+	}
+	if gotPatchesAfterPatch != 1 {
+		t.Fatalf("expected one commitments patch during direct patch, got %d", gotPatchesAfterPatch)
+	}
+
 	updatePayload := assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{"patch":{"status":"done"}}`), []string{
 		"--json",
 		"--base-url", server.URL,
-		"commitments", "update",
+		"commitments", "propose-patch",
 		"--commitment-id", "commitment_1",
 	}))
 
@@ -1284,8 +1295,8 @@ func TestCommitmentsUpdateStagesProposalAndApply(t *testing.T) {
 	if gotGetsAfterStage != 1 {
 		t.Fatalf("expected one commitments get during proposal staging, got %d", gotGetsAfterStage)
 	}
-	if gotPatchesAfterStage != 0 {
-		t.Fatalf("expected no commitments patch during proposal staging, got %d", gotPatchesAfterStage)
+	if gotPatchesAfterStage != 1 {
+		t.Fatalf("expected direct patch count to remain unchanged during proposal staging, got %d", gotPatchesAfterStage)
 	}
 
 	applyPayload := assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
@@ -1301,8 +1312,8 @@ func TestCommitmentsUpdateStagesProposalAndApply(t *testing.T) {
 	mu.Lock()
 	gotPatches := patchCalls
 	mu.Unlock()
-	if gotPatches != 1 {
-		t.Fatalf("expected one commitments patch after apply, got %d", gotPatches)
+	if gotPatches != 2 {
+		t.Fatalf("expected two commitments patches after direct patch plus apply, got %d", gotPatches)
 	}
 }
 
@@ -2504,17 +2515,87 @@ func TestThreadsRecommendationsIncludesRelatedThreadReview(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_main/workspace":
+			_, _ = w.Write([]byte(`{
+				"thread_id":"thread_main",
+				"thread":{"id":"thread_main","title":"Main Pilot Rescue","status":"active","type":"initiative"},
+				"context":{
+					"recent_events":[
+						{"id":"event_main_1","thread_id":"thread_main","type":"actor_statement","summary":"Main recommendation","refs":["thread:thread_related"]}
+					],
+					"key_artifacts":[],
+					"open_commitments":[],
+					"documents":[]
+				},
+				"collaboration":{
+					"recommendations":[
+						{"id":"event_main_1","thread_id":"thread_main","type":"actor_statement","summary":"Main recommendation","refs":["thread:thread_related"]}
+					],
+					"decision_requests":[],
+					"decisions":[],
+					"key_artifacts":[],
+					"open_commitments":[],
+					"recommendation_count":1,
+					"decision_request_count":0,
+					"decision_count":0,
+					"artifact_count":0,
+					"open_commitment_count":0
+				},
+				"inbox":{"thread_id":"thread_main","items":[],"count":0},
+				"pending_decisions":{"thread_id":"thread_main","items":[],"count":0},
+				"related_threads":{
+					"count":1,
+					"items":[
+						{"thread":{"id":"thread_related","title":"Related Feedback Thread","status":"active","type":"case"},"match_reason":"thread_ref"}
+					]
+				},
+				"related_recommendations":{
+					"count":1,
+					"items":[
+						{
+							"thread":{"id":"thread_related","title":"Related Feedback Thread","status":"active","type":"case"},
+							"event":{
+								"id":"event_related_1",
+								"thread_id":"thread_related",
+								"type":"actor_statement",
+								"summary":"Related recommendation",
+								"payload":{"recommendation":"Document the staged artifact follow-up"}
+							}
+						}
+					]
+				},
+				"related_decision_requests":{"count":0,"items":[]},
+				"related_decisions":{"count":0,"items":[]},
+				"total_review_items":2,
+				"follow_up":{"workspace_refresh_command":"oar threads workspace --thread-id thread_main --include-artifact-content --full-id --json"},
+				"section_kinds":{
+					"thread":"canonical",
+					"context":"canonical",
+					"collaboration":"derived",
+					"inbox":"derived",
+					"pending_decisions":"derived",
+					"related_threads":"derived",
+					"related_recommendations":"derived",
+					"related_decision_requests":"derived",
+					"related_decisions":"derived",
+					"follow_up":"convenience"
+				},
+				"context_source":"threads.workspace",
+				"inbox_source":"threads.workspace",
+				"related_event_content_enabled":true,
+				"related_event_content_count":1
+			}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_main/context":
 			_, _ = w.Write([]byte(`{
 				"thread":{"id":"thread_main","title":"Main Pilot Rescue","status":"active","type":"initiative"},
-				"recent_events":[
-					{"id":"event_main_1","thread_id":"thread_main","type":"actor_statement","actor_id":"agent-main","created_at":"2026-03-07T12:00:00Z","summary":"Main recommendation","refs":["thread:thread_related"]}
-				],
-				"key_artifacts":[],
-				"open_commitments":[
-					{"id":"commit_main_1","thread_id":"thread_main","title":"Coordinate related work","links":["thread:thread_main","thread:thread_related"]}
-				]
-			}`))
+					"recent_events":[
+						{"id":"event_main_1","thread_id":"thread_main","type":"actor_statement","actor_id":"agent-main","created_at":"2026-03-07T12:00:00Z","summary":"Main recommendation","refs":["thread:thread_related"]}
+					],
+					"key_artifacts":[],
+					"open_commitments":[
+						{"id":"commit_main_1","thread_id":"thread_main","title":"Coordinate related work","links":["thread:thread_main","thread:thread_related"]}
+					]
+				}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_related/context":
 			_, _ = w.Write([]byte(`{
 				"thread":{"id":"thread_related","title":"Related Feedback Thread","status":"active","type":"case"},
@@ -2722,6 +2803,76 @@ func TestThreadsWorkspaceCanHydrateRelatedEventContent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_main/workspace":
+			_, _ = w.Write([]byte(`{
+				"thread_id":"thread_main",
+				"thread":{"id":"thread_main","title":"Main Pilot Rescue","status":"active","type":"initiative"},
+				"context":{
+					"recent_events":[
+						{"id":"event_main_1","thread_id":"thread_main","type":"actor_statement","summary":"Main recommendation","refs":["thread:thread_related"]}
+					],
+					"key_artifacts":[],
+					"open_commitments":[],
+					"documents":[]
+				},
+				"collaboration":{
+					"recommendations":[
+						{"id":"event_main_1","thread_id":"thread_main","type":"actor_statement","summary":"Main recommendation","refs":["thread:thread_related"]}
+					],
+					"decision_requests":[],
+					"decisions":[],
+					"key_artifacts":[],
+					"open_commitments":[],
+					"recommendation_count":1,
+					"decision_request_count":0,
+					"decision_count":0,
+					"artifact_count":0,
+					"open_commitment_count":0
+				},
+				"inbox":{"thread_id":"thread_main","items":[],"count":0},
+				"pending_decisions":{"thread_id":"thread_main","items":[],"count":0},
+				"related_threads":{
+					"count":1,
+					"items":[
+						{"thread":{"id":"thread_related","title":"Related Feedback Thread","status":"active","type":"case"},"match_reason":"thread_ref"}
+					]
+				},
+				"related_recommendations":{
+					"count":1,
+					"items":[
+						{
+							"thread":{"id":"thread_related","title":"Related Feedback Thread","status":"active","type":"case"},
+							"event":{
+								"id":"event_related_1",
+								"thread_id":"thread_related",
+								"type":"actor_statement",
+								"summary":"Related recommendation",
+								"payload":{"recommendation":"Document the staged artifact follow-up"}
+							}
+						}
+					]
+				},
+				"related_decision_requests":{"count":0,"items":[]},
+				"related_decisions":{"count":0,"items":[]},
+				"total_review_items":2,
+				"follow_up":{"workspace_refresh_command":"oar threads workspace --thread-id thread_main --include-artifact-content --full-id --json"},
+				"section_kinds":{
+					"thread":"canonical",
+					"context":"canonical",
+					"collaboration":"derived",
+					"inbox":"derived",
+					"pending_decisions":"derived",
+					"related_threads":"derived",
+					"related_recommendations":"derived",
+					"related_decision_requests":"derived",
+					"related_decisions":"derived",
+					"follow_up":"convenience"
+				},
+				"context_source":"threads.workspace",
+				"inbox_source":"threads.workspace",
+				"related_event_content_enabled":true,
+				"related_event_content_count":1
+			}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_main/context":
 			_, _ = w.Write([]byte(`{
 				"thread":{"id":"thread_main","title":"Main Pilot Rescue","status":"active","type":"initiative"},
@@ -3847,18 +3998,85 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_123/context":
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{
-				"thread":{"id":"thread_123","title":"Machine-facing consistency"},
+					"thread":{"id":"thread_123","title":"Machine-facing consistency"},
 				"recent_events":[
 					{"id":"event_ctx_1","thread_id":"thread_123","type":"actor_statement","summary":"normalize frame shape"},
 					{"id":"event_ctx_2","thread_id":"thread_123","type":"decision_needed","summary":"confirm canonical command labels"}
 				],
 				"key_artifacts":[{"id":"artifact_ctx_1","kind":"work_order"}],
-				"open_commitments":[{"id":"commitment_ctx_1","status":"open"}]
-			}`))
+				"open_commitments":[{"id":"commitment_ctx_1","status":"open"}],
+					"documents":[
+						{"id":"doc_ctx_1","title":"Runbook","status":"active","updated_at":"2026-03-07T00:02:00Z","head_revision":{"revision_id":"rev_ctx_1","revision_number":3,"content_type":"text","artifact_id":"artifact_doc_ctx_1","created_at":"2026-03-07T00:02:00Z"}}
+					]
+				}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_123/workspace":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{
+					"thread_id":"thread_123",
+					"thread":{"id":"thread_123","title":"Machine-facing consistency"},
+					"context":{
+						"recent_events":[
+							{"id":"event_ctx_1","thread_id":"thread_123","type":"actor_statement","summary":"normalize frame shape"},
+							{"id":"event_ctx_2","thread_id":"thread_123","type":"decision_needed","summary":"confirm canonical command labels"}
+						],
+						"key_artifacts":[{"id":"artifact_ctx_1","kind":"work_order"}],
+						"open_commitments":[{"id":"commitment_ctx_1","status":"open"}],
+						"documents":[
+							{"id":"doc_ctx_1","title":"Runbook","status":"active","updated_at":"2026-03-07T00:02:00Z","head_revision":{"revision_id":"rev_ctx_1","revision_number":3,"content_type":"text","artifact_id":"artifact_doc_ctx_1","created_at":"2026-03-07T00:02:00Z"}}
+						]
+					},
+					"collaboration":{
+						"recommendations":[
+							{"id":"event_ctx_1","thread_id":"thread_123","type":"actor_statement","summary":"normalize frame shape"}
+						],
+						"decision_requests":[
+							{"id":"event_ctx_2","thread_id":"thread_123","type":"decision_needed","summary":"confirm canonical command labels"}
+						],
+						"decisions":[],
+						"key_artifacts":[{"id":"artifact_ctx_1","kind":"work_order"}],
+						"open_commitments":[{"id":"commitment_ctx_1","status":"open"}],
+						"recommendation_count":1,
+						"decision_request_count":1,
+						"decision_count":0,
+						"artifact_count":1,
+						"open_commitment_count":1
+					},
+					"inbox":{
+						"thread_id":"thread_123",
+						"items":[
+							{"id":"inbox:decision_needed:thread_123:none:event_ctx_2","thread_id":"thread_123","type":"decision_needed","summary":"confirm canonical command labels"}
+						],
+						"count":1
+					},
+					"pending_decisions":{
+						"thread_id":"thread_123",
+						"items":[
+							{"id":"inbox:decision_needed:thread_123:none:event_ctx_2","thread_id":"thread_123","type":"decision_needed","summary":"confirm canonical command labels"}
+						],
+						"count":1
+					},
+					"related_threads":{"count":0,"items":[]},
+					"related_recommendations":{"count":0,"items":[]},
+					"related_decision_requests":{"count":0,"items":[]},
+					"related_decisions":{"count":0,"items":[]},
+					"total_review_items":3,
+					"follow_up":{
+						"context_refresh_command":"oar threads context --thread-id thread_123 --include-artifact-content --full-id --json",
+						"decisions_list_command":"oar events list --thread-id thread_123 --type decision_needed --type decision_made --full-id --json",
+						"events_get_examples":[
+							"oar events get --event-id event_ctx_1 --json",
+							"oar events get --event-id event_ctx_2 --json"
+						],
+						"events_get_template":"oar events get --event-id <event-id> --json",
+						"recommendations_list_command":"oar events list --thread-id thread_123 --type actor_statement --full-id --json"
+					},
+					"context_source":"threads.context",
+					"inbox_source":"inbox.list"
+				}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{
-				"items":[
+					"items":[
 					{"id":"inbox:decision_needed:thread_123:none:event_ctx_2","thread_id":"thread_123","type":"decision_needed","summary":"confirm canonical command labels"},
 					{"id":"inbox:decision_needed:thread_other:none:event_other","thread_id":"thread_other","type":"decision_needed","summary":"ignore other thread"}
 				]
@@ -3954,6 +4172,30 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 	}
 	if _, ok := threadsWorkspaceData["pending_decisions"].(map[string]any); !ok {
 		t.Fatalf("expected pending_decisions section in workspace payload, got %#v", threadsWorkspaceData)
+	}
+
+	threadsReviewOut := runCLIForTest(t, home, env, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"threads", "review",
+		"--thread-id", "thread_123",
+	})
+	threadsReviewPayload := assertEnvelopeOK(t, threadsReviewOut)
+	if got := anyStringValue(threadsReviewPayload["command"]); got != "threads review" {
+		t.Fatalf("expected threads review command label, got %#v", threadsReviewPayload)
+	}
+	if got := anyStringValue(threadsReviewPayload["command_id"]); got != "threads.review" {
+		t.Fatalf("expected threads.review command_id, got %#v", threadsReviewPayload)
+	}
+	threadsReviewData, _ := threadsReviewPayload["data"].(map[string]any)
+	if got := anyBoolValue(threadsReviewData["review_mode"]); !got {
+		t.Fatalf("expected review_mode marker in review payload, got %#v", threadsReviewData)
+	}
+	if got := anyBoolValue(threadsReviewData["related_event_content_enabled"]); !got {
+		t.Fatalf("expected related_event_content_enabled marker in review payload, got %#v", threadsReviewData)
+	}
+	if got := anyBoolValue(threadsReviewData["full_summary"]); !got {
+		t.Fatalf("expected full_summary enabled in review payload, got %#v", threadsReviewData)
 	}
 
 	threadsRecommendationsOut := runCLIForTest(t, home, env, nil, []string{
@@ -4225,4 +4467,9 @@ func writeAgentProfile(t *testing.T, home string, agent string, profileJSON stri
 	if err := os.WriteFile(profilePath, []byte(profileJSON), 0o600); err != nil {
 		t.Fatalf("write profile: %v", err)
 	}
+}
+
+func anyBoolValue(raw any) bool {
+	value, _ := raw.(bool)
+	return value
 }

@@ -8,6 +8,7 @@ export function GET({ url }) {
   const params = url.searchParams;
   const filters = {
     include_tombstoned: params.get("include_tombstoned") === "true",
+    thread_id: params.get("thread_id") ?? undefined,
   };
   return json({ documents: listMockDocuments(filters) });
 }

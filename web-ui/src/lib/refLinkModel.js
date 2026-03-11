@@ -26,18 +26,25 @@ function summarizeUrl(value) {
   }
 }
 
+function shouldHumanizeByDefault(prefix) {
+  return prefix === "document" || prefix === "document_revision";
+}
+
 function humanizedLabelForPrefix(prefix, value) {
   if (prefix === "artifact") return "Artifact";
   if (prefix === "thread") return "Thread";
   if (prefix === "snapshot") return "Snapshot";
   if (prefix === "event") return "Event";
+  if (prefix === "document") return `Document ${value}`.trim();
+  if (prefix === "document_revision")
+    return `Document revision ${value}`.trim();
   if (prefix === "url") return summarizeUrl(value);
   if (prefix === "inbox") return "Inbox item";
   return "";
 }
 
 function resolveRefLabels(raw, prefix, value, options = {}) {
-  const humanize = Boolean(options.humanize);
+  const humanize = Boolean(options.humanize) || shouldHumanizeByDefault(prefix);
   const labelHint = lookupLabelHint(raw, prefix, value, options.labelHints);
 
   if (!humanize) {
@@ -177,6 +184,35 @@ export function resolveRefLink(refValue, options = {}) {
       kind: "inbox",
       ...labels,
       href: toProjectHref(projectSlug, `/inbox#inbox-${asPathSegment(value)}`),
+      isExternal: false,
+      isLink: true,
+    };
+  }
+
+  if (prefix === "document") {
+    return {
+      raw,
+      prefix,
+      value,
+      kind: "document",
+      ...labels,
+      href: toProjectHref(projectSlug, `/docs/${asPathSegment(value)}`),
+      isExternal: false,
+      isLink: true,
+    };
+  }
+
+  if (prefix === "document_revision") {
+    return {
+      raw,
+      prefix,
+      value,
+      kind: "document_revision",
+      ...labels,
+      href: toProjectHref(
+        projectSlug,
+        `/docs/revisions/${asPathSegment(value)}`,
+      ),
       isExternal: false,
       isLink: true,
     };

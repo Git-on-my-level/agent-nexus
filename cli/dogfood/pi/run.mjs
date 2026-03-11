@@ -227,7 +227,9 @@ Auth:
 
 Read workflow state:
 - List threads: \`oar threads list\`
+- Fast coordination read in one command: \`oar threads inspect --thread-id <thread-id>\`
 - Canonical thread coordination read: \`oar threads workspace --thread-id <thread-id>\`
+- Hydrated one-command coordination read: \`oar threads workspace --thread-id <thread-id> --include-related-event-content --include-artifact-content --verbose\`
 - Focus recommendation review: \`oar threads recommendations --thread-id <thread-id>\`
 - Full related recommendation content in one command: \`oar threads recommendations --thread-id <thread-id> --include-related-event-content --verbose\`
 - Cross-thread aggregate context (optional): \`oar threads context --status active --type initiative --full-id\`
@@ -237,13 +239,17 @@ Read workflow state:
 - Read artifact metadata: \`oar artifacts get --artifact-id <artifact-id>\`
 - Read artifact content: \`oar artifacts content --artifact-id <artifact-id>\`
 - List commitments for a thread: \`oar commitments list --thread-id <thread-id> --status open\`
+- Read one commitment in full: \`oar commitments get --commitment-id <commitment-id>\`
 - Read a seeded brief document: \`oar docs get --document-id northwave-pilot-rescue-brief\`
-- Stage a document revision update: \`oar docs update --document-id northwave-pilot-rescue-brief --from-file doc-update-template.json\`
+- Stage a document revision update: \`oar docs propose-update --document-id northwave-pilot-rescue-brief --from-file doc-update-template.json\`
 - Apply a staged document update: \`oar docs apply --proposal-id <proposal-id>\`
+- Update a document immediately (no proposal): \`oar docs update --document-id northwave-pilot-rescue-brief --from-file doc-update-template.json\`
 
 Write workflow state:
 - Stage a thread patch proposal: \`oar threads patch --thread-id <thread-id> --from-file patch.json\`
 - Apply a thread patch proposal: \`oar threads apply --proposal-id <proposal-id>\`
+- Validate an event before sending it: \`oar events validate --from-file event-template.json\`
+- Dry-run an event create without sending it: \`oar events create --from-file event-template.json --dry-run\`
 - Edit \`event-template.json\` in place, then create the event: \`oar events create --from-file event-template.json\`
 
 Working event type for this scenario:
@@ -423,6 +429,7 @@ function targetsGuide(role, targets) {
     `Primary thread for your role: ${targets.primaryThread.id}`,
     `Primary thread title: ${targets.primaryThread.title}`,
     `Canonical read shared goal thread: oar threads workspace --thread-id ${targets.mainThread.id}`,
+    `Hydrated read shared goal thread: oar threads workspace --thread-id ${targets.mainThread.id} --include-related-event-content --include-artifact-content --verbose`,
     `Canonical read your primary thread: oar threads workspace --thread-id ${targets.primaryThread.id}`,
     `Recommendation review shared goal thread: oar threads recommendations --thread-id ${targets.mainThread.id}`,
     `Optional raw snapshot shared goal thread: oar threads get --thread-id ${targets.mainThread.id}`,
@@ -449,6 +456,7 @@ function targetsGuide(role, targets) {
     lines.push("", "Commitments in scope:");
     for (const commitment of targets.commitments) {
       lines.push(`- ${commitment.id} :: ${valueFrom(commitment, "title", "summary")}`);
+      lines.push(`  detail: oar commitments get --commitment-id ${commitment.id}`);
     }
   }
 
@@ -464,8 +472,9 @@ function targetsGuide(role, targets) {
     lines.push(
       `Document to update: ${targets.document.id}`,
       `Read it first: oar docs get --document-id ${targets.document.id}`,
-      `Stage it: oar docs update --document-id ${targets.document.id} --from-file doc-update-template.json`,
+      `Stage it: oar docs propose-update --document-id ${targets.document.id} --from-file doc-update-template.json`,
       `Then apply it: oar docs apply --proposal-id <proposal-id>`,
+      `Or write immediately: oar docs update --document-id ${targets.document.id} --from-file doc-update-template.json`,
     );
   }
 
@@ -813,8 +822,8 @@ Environment:
   writeFile(path.join(workspaceDir, "result-template.md"), resultTemplate());
 
   const prompt = role.requireDocsUpdate
-    ? "Read SCENARIO.md, COMMANDS.md, TARGETS.md, and ROLE_CONTEXT.md. Execute your role with the real oar CLI. Update doc-update-template.json in place, stage the rescue-brief update with `oar docs update`, inspect the diff, apply it with `oar docs apply`, then post your final event. Edit event-template.json in place, create the event from that file, write result.md, and then give a short final summary."
-    : "Read SCENARIO.md, COMMANDS.md, TARGETS.md, and ROLE_CONTEXT.md. Execute your role with the real oar CLI. Edit event-template.json in place, create the event from that file, write result.md, and then give a short final summary.";
+    ? "Read SCENARIO.md, COMMANDS.md, TARGETS.md, and ROLE_CONTEXT.md. Execute your role with the real oar CLI. Update doc-update-template.json in place, stage the rescue-brief update with `oar docs propose-update`, inspect the diff, apply it with `oar docs apply`, then post your final event. Use `oar events validate --from-file event-template.json` or `oar events create --from-file event-template.json --dry-run` if you want a local event check before the real create. Edit event-template.json in place, create the event from that file, write result.md, and then give a short final summary."
+    : "Read SCENARIO.md, COMMANDS.md, TARGETS.md, and ROLE_CONTEXT.md. Execute your role with the real oar CLI. Use `oar events validate --from-file event-template.json` or `oar events create --from-file event-template.json --dry-run` if you want a local event check before the real create. Edit event-template.json in place, create the event from that file, write result.md, and then give a short final summary.";
 
   const piArgs = [
     "--print",

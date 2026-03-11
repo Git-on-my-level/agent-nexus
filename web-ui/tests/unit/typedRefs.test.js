@@ -32,6 +32,14 @@ describe("typed refs", () => {
       prefix: "inbox",
       value: "item-4",
     });
+    expect(parseRef("document:doc-1")).toEqual({
+      prefix: "document",
+      value: "doc-1",
+    });
+    expect(parseRef("document_revision:rev-1")).toEqual({
+      prefix: "document_revision",
+      value: "rev-1",
+    });
   });
 
   it("preserves unknown prefixes and renders back to raw string", () => {
@@ -39,5 +47,10 @@ describe("typed refs", () => {
     expect(parsed).toEqual({ prefix: "custom", value: "opaque-value" });
     expect(isKnownRefPrefix(parsed.prefix)).toBe(false);
     expect(renderRef(parsed)).toBe("custom:opaque-value");
+  });
+
+  it("treats document prefixes as known refs", () => {
+    expect(isKnownRefPrefix("document")).toBe(true);
+    expect(isKnownRefPrefix("document_revision")).toBe(true);
   });
 });

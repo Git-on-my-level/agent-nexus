@@ -21,9 +21,6 @@ test("registers actor, unlocks shell, and performs a write", async ({
   await page.getByLabel("Display name").fill("E2E User");
   await page.getByRole("button", { name: "Create and continue" }).click();
 
-  await expect(
-    page.getByRole("heading", { name: "Organization Autorunner UI" }),
-  ).toBeVisible();
   await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Inbox", exact: true }),

@@ -43,6 +43,22 @@ describe("RefLink model", () => {
       href: "/inbox#inbox-item-2",
       isLink: true,
     });
+
+    expect(resolveRefLink("document:doc-1")).toMatchObject({
+      kind: "document",
+      href: "/docs/doc-1",
+      isLink: true,
+      isExternal: false,
+      primaryLabel: "Document doc-1",
+    });
+
+    expect(resolveRefLink("document_revision:rev-1")).toMatchObject({
+      kind: "document_revision",
+      href: "/docs/revisions/rev-1",
+      isLink: true,
+      isExternal: false,
+      primaryLabel: "Document revision rev-1",
+    });
   });
 
   it("preserves unknown prefixes and renders raw text without crashing", () => {
@@ -78,6 +94,21 @@ describe("RefLink model", () => {
       label: "Event",
       secondaryLabel: "event:evt-9",
       href: "/threads/thread-1#event-evt-9",
+      isLink: true,
+    });
+
+    const documentRef = resolveRefLink("document:doc-1", {
+      labelHints: {
+        "document:doc-1": "Product Constitution",
+      },
+    });
+
+    expect(documentRef).toMatchObject({
+      kind: "document",
+      label: "Product Constitution",
+      primaryLabel: "Product Constitution",
+      secondaryLabel: "document:doc-1",
+      href: "/docs/doc-1",
       isLink: true,
     });
   });

@@ -56,11 +56,55 @@ test("receipt form validates typed refs and creates receipt that appears in time
     });
   });
 
+  await page.route(
+    /\/threads\/thread-onboarding\/workspace(\?.*)?$/,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          thread_id: "thread-onboarding",
+          thread: {
+            id: "thread-onboarding",
+            type: "process",
+            title: "Customer Onboarding Workflow",
+            status: "active",
+            priority: "p1",
+            cadence: "weekly",
+            tags: ["ops", "customer"],
+            key_artifacts: ["artifact-policy-draft"],
+            current_summary: "Thread detail summary.",
+            next_actions: ["Collect legal signoff"],
+            open_commitments: [],
+            next_check_in_at: "2026-03-05T00:00:00.000Z",
+            updated_at: "2026-03-04T00:00:00.000Z",
+            updated_by: actorId,
+            provenance: { sources: ["actor_statement:event-1001"] },
+          },
+          context: {
+            recent_events: timeline,
+            key_artifacts: [],
+            open_commitments: [],
+            documents: [],
+          },
+        }),
+      });
+    },
+  );
+
   await page.route(/\/threads\/thread-onboarding\/timeline$/, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({ events: timeline }),
+    });
+  });
+
+  await page.route(/\/events\/stream(\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: ": keepalive\n\n",
     });
   });
 

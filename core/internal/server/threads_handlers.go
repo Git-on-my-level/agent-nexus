@@ -33,8 +33,9 @@ func handleCreateThread(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	}
 
 	var req struct {
-		ActorID string         `json:"actor_id"`
-		Thread  map[string]any `json:"thread"`
+		ActorID    string         `json:"actor_id"`
+		RequestKey string         `json:"request_key"`
+		Thread     map[string]any `json:"thread"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
@@ -54,7 +55,23 @@ func handleCreateThread(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	if !ok {
 		return
 	}
-
+	derivedThreadID := false
+	if strings.TrimSpace(req.RequestKey) != "" && firstNonEmptyString(req.Thread["id"]) == "" {
+		req.Thread["id"] = deriveRequestScopedID("threads.create", actorID, req.RequestKey, "thread")
+		derivedThreadID = true
+	}
+	replayStatus, replayPayload, replayed, err := readIdempotencyReplay(r.Context(), opts.primitiveStore, "threads.create", actorID, req.RequestKey, req)
+	if writeIdempotencyError(w, err) {
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load idempotency replay")
+		return
+	}
+	if replayed {
+		writeJSON(w, replayStatus, replayPayload)
+		return
+	}
 	if err := validateThreadCreate(opts.contract, req.Thread); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
@@ -62,11 +79,44 @@ func handleCreateThread(w http.ResponseWriter, r *http.Request, opts handlerOpti
 
 	result, err := opts.primitiveStore.CreateThread(r.Context(), actorID, req.Thread)
 	if err != nil {
+		if errors.Is(err, primitives.ErrConflict) && strings.TrimSpace(req.RequestKey) != "" && derivedThreadID {
+			threadID := firstNonEmptyString(req.Thread["id"])
+			thread, loadErr := opts.primitiveStore.GetThread(r.Context(), threadID)
+			if loadErr == nil {
+				response := map[string]any{"thread": thread}
+				status, payload, replayErr := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "threads.create", actorID, req.RequestKey, req, http.StatusCreated, response)
+				if writeIdempotencyError(w, replayErr) {
+					return
+				}
+				if replayErr != nil {
+					writeError(w, http.StatusInternalServerError, "internal_error", "failed to persist idempotency replay")
+					return
+				}
+				writeJSON(w, status, payload)
+				return
+			}
+		}
+		if errors.Is(err, primitives.ErrConflict) {
+			writeError(w, http.StatusConflict, "conflict", "thread already exists")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to create thread")
 		return
 	}
+	if err := refreshDerivedThreadProjection(r.Context(), opts, anyString(result.Snapshot["id"]), time.Now().UTC(), actorID); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to refresh derived thread views")
+		return
+	}
 
-	writeJSON(w, http.StatusCreated, map[string]any{"thread": result.Snapshot})
+	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "threads.create", actorID, req.RequestKey, req, http.StatusCreated, map[string]any{"thread": result.Snapshot})
+	if writeIdempotencyError(w, err) {
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to persist idempotency replay")
+		return
+	}
+	writeJSON(w, status, payload)
 }
 
 func handleGetThread(w http.ResponseWriter, r *http.Request, opts handlerOptions, threadID string) {
@@ -148,6 +198,10 @@ func handlePatchThread(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to patch thread")
 		return
 	}
+	if err := refreshDerivedThreadProjection(r.Context(), opts, threadID, time.Now().UTC(), actorID); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to refresh derived thread views")
+		return
+	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"thread": result.Snapshot})
 }
@@ -175,38 +229,29 @@ func handleListThreads(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	threads, err := opts.primitiveStore.ListThreads(r.Context(), primitives.ThreadListFilter{
 		Status:   strings.TrimSpace(query.Get("status")),
 		Priority: strings.TrimSpace(query.Get("priority")),
+		Tags:     tagsFilter,
+		Cadences: cadenceFilter,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list threads")
 		return
 	}
 
-	if len(tagsFilter) > 0 || len(cadenceFilter) > 0 {
-		filtered := make([]map[string]any, 0, len(threads))
-		for _, thread := range threads {
-			if !threadMatchesTagsAndCadence(thread, tagsFilter, cadenceFilter) {
-				continue
-			}
-			filtered = append(filtered, thread)
-		}
-		threads = filtered
+	now := time.Now().UTC()
+	threadIDs := make([]string, 0, len(threads))
+	for _, thread := range threads {
+		threadIDs = append(threadIDs, anyString(thread["id"]))
 	}
-
-	events, err := opts.primitiveStore.ListEvents(r.Context(), primitives.EventListFilter{
-		Types: []string{"receipt_added", "decision_made"},
-	})
+	projections, err := ensureDerivedThreadProjections(r.Context(), opts, threadIDs, now)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to evaluate thread staleness")
 		return
 	}
 
-	now := time.Now().UTC()
-	staleByThread := stalenessByThread(threads, events, now)
-
 	withStale := make([]map[string]any, 0, len(threads))
 	for _, thread := range threads {
 		threadID, _ := thread["id"].(string)
-		stale := staleByThread[threadID]
+		stale := projections[threadID].Stale
 		thread["stale"] = stale
 		if staleFilter != nil && stale != *staleFilter {
 			continue
@@ -299,7 +344,7 @@ func handleThreadTimeline(w http.ResponseWriter, r *http.Request, opts handlerOp
 		return
 	}
 
-	snapshotIDs, artifactIDs := collectTimelineReferencedObjectIDs(events)
+	snapshotIDs, artifactIDs, documentIDs, documentRevisionIDs := collectTimelineReferencedObjectIDs(events)
 
 	snapshots := make(map[string]map[string]any, len(snapshotIDs))
 	for _, snapshotID := range snapshotIDs {
@@ -327,10 +372,56 @@ func handleThreadTimeline(w http.ResponseWriter, r *http.Request, opts handlerOp
 		artifacts[artifactID] = artifact
 	}
 
+	documents := make(map[string]map[string]any, len(documentIDs))
+	for _, documentID := range documentIDs {
+		document, _, err := opts.primitiveStore.GetDocument(r.Context(), documentID)
+		if err != nil {
+			if errors.Is(err, primitives.ErrNotFound) {
+				continue
+			}
+			writeError(w, http.StatusInternalServerError, "internal_error", "failed to load referenced documents")
+			return
+		}
+		documents[documentID] = document
+	}
+
+	documentRevisions := make(map[string]map[string]any, len(documentRevisionIDs))
+	for _, revisionID := range documentRevisionIDs {
+		revision, err := opts.primitiveStore.GetDocumentRevisionByID(r.Context(), revisionID)
+		if err != nil {
+			if errors.Is(err, primitives.ErrNotFound) {
+				continue
+			}
+			writeError(w, http.StatusInternalServerError, "internal_error", "failed to load referenced document revisions")
+			return
+		}
+		documentRevisions[revisionID] = revision
+
+		documentID, _ := revision["document_id"].(string)
+		documentID = strings.TrimSpace(documentID)
+		if documentID == "" {
+			continue
+		}
+		if _, exists := documents[documentID]; exists {
+			continue
+		}
+		document, _, err := opts.primitiveStore.GetDocument(r.Context(), documentID)
+		if err != nil {
+			if errors.Is(err, primitives.ErrNotFound) {
+				continue
+			}
+			writeError(w, http.StatusInternalServerError, "internal_error", "failed to load referenced documents")
+			return
+		}
+		documents[documentID] = document
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
-		"events":    events,
-		"snapshots": snapshots,
-		"artifacts": artifacts,
+		"events":             events,
+		"snapshots":          snapshots,
+		"artifacts":          artifacts,
+		"documents":          documents,
+		"document_revisions": documentRevisions,
 	})
 }
 
@@ -340,27 +431,12 @@ func handleThreadContext(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		return
 	}
 
-	maxEvents := defaultThreadContextMaxEvents
-	if rawMaxEvents := strings.TrimSpace(r.URL.Query().Get("max_events")); rawMaxEvents != "" {
-		parsed, err := strconv.Atoi(rawMaxEvents)
-		if err != nil || parsed < 0 {
-			writeError(w, http.StatusBadRequest, "invalid_request", "max_events must be a non-negative integer")
-			return
-		}
-		maxEvents = parsed
+	options, ok := resolveThreadContextOptions(w, r)
+	if !ok {
+		return
 	}
 
-	includeArtifactContent := false
-	if rawInclude := strings.TrimSpace(r.URL.Query().Get("include_artifact_content")); rawInclude != "" {
-		parsed, err := strconv.ParseBool(rawInclude)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "include_artifact_content must be true or false")
-			return
-		}
-		includeArtifactContent = parsed
-	}
-
-	thread, err := opts.primitiveStore.GetThread(r.Context(), threadID)
+	body, err := buildThreadContextPayload(r.Context(), opts, threadID, options)
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "thread not found")
@@ -370,30 +446,7 @@ func handleThreadContext(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		return
 	}
 
-	recentEvents, err := opts.primitiveStore.ListRecentEventsByThread(r.Context(), threadID, maxEvents)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load thread events")
-		return
-	}
-
-	keyArtifacts, err := buildThreadContextArtifacts(r.Context(), opts, thread, includeArtifactContent)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load key artifacts")
-		return
-	}
-
-	openCommitments, err := buildThreadContextOpenCommitments(r.Context(), opts, threadID, thread)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load open commitments")
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"thread":           thread,
-		"recent_events":    recentEvents,
-		"key_artifacts":    keyArtifacts,
-		"open_commitments": openCommitments,
-	})
+	writeJSON(w, http.StatusOK, body)
 }
 
 func buildThreadContextArtifacts(ctx context.Context, opts handlerOptions, thread map[string]any, includeArtifactContent bool) ([]map[string]any, error) {
@@ -488,6 +541,23 @@ func buildThreadContextOpenCommitments(ctx context.Context, opts handlerOptions,
 	return ordered, nil
 }
 
+func buildThreadContextDocuments(ctx context.Context, opts handlerOptions, threadID string) ([]map[string]any, error) {
+	if strings.TrimSpace(threadID) == "" {
+		return []map[string]any{}, nil
+	}
+
+	documents, err := opts.primitiveStore.ListDocuments(ctx, primitives.DocumentListFilter{
+		ThreadID: threadID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(documents) == 0 {
+		return []map[string]any{}, nil
+	}
+	return documents, nil
+}
+
 func artifactContentPreview(content []byte) string {
 	text := string(content)
 	if strings.TrimSpace(text) == "" {
@@ -500,9 +570,11 @@ func artifactContentPreview(content []byte) string {
 	return string(runes[:threadContextContentPreviewChars])
 }
 
-func collectTimelineReferencedObjectIDs(events []map[string]any) ([]string, []string) {
+func collectTimelineReferencedObjectIDs(events []map[string]any) ([]string, []string, []string, []string) {
 	snapshotSet := make(map[string]struct{})
 	artifactSet := make(map[string]struct{})
+	documentSet := make(map[string]struct{})
+	documentRevisionSet := make(map[string]struct{})
 
 	for _, event := range events {
 		refs, err := extractStringSlice(event["refs"])
@@ -519,13 +591,19 @@ func collectTimelineReferencedObjectIDs(events []map[string]any) ([]string, []st
 				snapshotSet[id] = struct{}{}
 			case "artifact":
 				artifactSet[id] = struct{}{}
+			case "document":
+				documentSet[id] = struct{}{}
+			case "document_revision":
+				documentRevisionSet[id] = struct{}{}
 			}
 		}
 	}
 
 	snapshotIDs := mapKeysSorted(snapshotSet)
 	artifactIDs := mapKeysSorted(artifactSet)
-	return snapshotIDs, artifactIDs
+	documentIDs := mapKeysSorted(documentSet)
+	documentRevisionIDs := mapKeysSorted(documentRevisionSet)
+	return snapshotIDs, artifactIDs, documentIDs, documentRevisionIDs
 }
 
 func mapKeysSorted(values map[string]struct{}) []string {

@@ -21,11 +21,13 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 - `threads list` (command): List thread snapshots
 - `threads get` (command): Get thread snapshot by id
 - `threads create` (command): Create thread snapshot
+- `threads patch` (command): Patch thread snapshot
 - `threads timeline` (command): Get thread timeline events and referenced entities
 - `threads context` (command): Get bundled thread context for agent callers
 - `commitments list` (command): List commitments
 - `commitments get` (command): Get commitment by id
 - `commitments create` (command): Create commitment snapshot
+- `commitments patch` (command): Patch commitment snapshot
 - `artifacts list` (command): List artifact metadata
 - `artifacts get` (command): Get artifact metadata by id
 - `artifacts create` (command): Create artifact
@@ -34,6 +36,7 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 - `docs list` (command): List documents and their current head metadata
 - `docs create` (command): Create document with initial immutable revision
 - `docs get` (command): Get document and authoritative head revision
+- `docs update` (command): Create a new immutable revision for an existing document
 - `docs history` (command): List ordered immutable revisions for a document
 - `docs revision` (group): Nested generated help topic.
 - `docs tombstone` (command): Tombstone a document (soft-delete)
@@ -61,12 +64,13 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 - `artifacts inspect` (local-helper): Fetch artifact metadata and resolved content in one command for operator inspection.
 - `threads inspect` (local-helper): Canonical thread coordination read path: compose one view from `threads context` and related `inbox list` items.
 - `threads workspace` (local-helper): Single holistic thread coordination read: combine context, inbox, recommendation review, and related-thread signals in one command.
+- `threads review` (local-helper): Opinionated deep-read helper: run the holistic workspace view with related-event hydration and full summaries enabled by default.
 - `threads recommendations` (local-helper): Review one thread's recommendation/decision inputs plus related-thread signals with provenance and follow-up hints.
-- `threads patch` (local-helper): Stage a thread patch proposal locally and show the diff before applying it.
+- `threads propose-patch` (local-helper): Stage a thread patch proposal locally and show the diff before applying it.
 - `threads apply` (local-helper): Apply a previously staged thread patch proposal.
-- `commitments update` (local-helper): Stage a commitment update proposal locally and show the diff before applying it.
+- `commitments propose-patch` (local-helper): Stage a commitment patch proposal locally and show the diff before applying it.
 - `commitments apply` (local-helper): Apply a previously staged commitment update proposal.
-- `docs update` (local-helper): Stage a document update proposal locally and show the content diff before applying it.
+- `docs propose-update` (local-helper): Stage a document update proposal locally and show the content diff before applying it.
 - `docs content` (local-helper): Show the current document content together with authoritative head revision metadata.
 - `docs validate-update` (local-helper): Validate a `docs update` payload locally from stdin or file without sending the mutation.
 - `docs apply` (local-helper): Apply a previously staged document update proposal.
@@ -90,7 +94,7 @@ Work-order loop
 1. Inspect inbound work and context: `oar inbox list` or `oar inbox stream --max-events 1`.
 2. Read current state before mutating it: `oar threads workspace --thread-id <thread-id>`.
    Use `oar threads context` for cross-thread aggregates and `oar threads get` for raw snapshot-only reads.
-3. Stage a mutation proposal when you need reviewable intent: `oar docs update`, `oar threads patch`, `oar commitments update`, or `oar draft create --command <command-id>`.
+3. Stage a mutation proposal when you need reviewable intent: `oar docs propose-update`, `oar threads propose-patch`, `oar commitments propose-patch`, or `oar draft create --command <command-id>`.
 4. Apply the staged proposal (or commit a draft for lower-level commands) and capture returned IDs.
 5. Confirm outcomes in timeline/events and ack inbox items to close the loop.
 
@@ -161,15 +165,18 @@ Commands:
   threads list             List thread snapshots
   threads patch            Patch thread snapshot
   threads timeline         Get thread timeline events and referenced entities
+  threads workspace        Get canonical thread workspace projection
 
 Canonical coordination read path:
+  threads review              Deep-read one thread workspace with review hydration enabled by default.
   threads workspace           Compose one holistic thread workspace from context + inbox + related-thread review.
   threads inspect             Compose one thread coordination view from context + inbox in one command.
   threads recommendations     Focus recommendation/decision review with actor+timestamp provenance.
   Mutation flow:
-  threads patch               Stage a thread patch proposal and inspect the diff before applying.
+  threads patch               Send the thread patch to core immediately.
+  threads propose-patch       Stage a thread patch proposal and inspect the diff before applying.
   threads apply               Apply a staged thread patch proposal.
-  Tip: start with `oar threads workspace` for one initiative/thread, use `--status/--tag/--type initiative` to discover one thread, use `oar threads context` for cross-thread aggregates, and `oar threads get` for raw snapshot-only reads. Add `--full-id` for copy/paste ids.
+  Tip: start with `oar threads review` when you want one deep review read, use `oar threads workspace` for the canonical coordination view, use `--status/--tag/--type initiative` to discover one thread, use `oar threads context` for cross-thread aggregates, and `oar threads get` for raw snapshot-only reads. Add `--full-id` for copy/paste ids.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -190,10 +197,11 @@ Commands:
   commitments create       Create commitment snapshot
   commitments get          Get commitment by id
   commitments list         List commitments
-  commitments update       Patch commitment snapshot
+  commitments patch        Patch commitment snapshot
 
 Mutation flow:
-  commitments update         Stage a commitment update proposal and inspect the diff before applying.
+  commitments patch          Send the commitment patch to core immediately.
+  commitments propose-patch  Stage a commitment patch proposal and inspect the diff before applying.
   commitments apply          Apply a staged commitment update proposal.
 
 Global flags:
@@ -246,7 +254,8 @@ Commands:
 Local inspection helpers:
   docs content             Show current document content with revision metadata.
   Mutation flow:
-  docs update              Stage an update proposal and inspect its diff before applying it.
+  docs update              Send the document update to core immediately.
+  docs propose-update      Stage an update proposal and inspect its diff before applying it.
   docs apply               Apply a staged document update proposal.
   docs validate-update     Validate a docs.update payload from stdin/--from-file.
   Tip: add `--content-file <path>` to avoid hand-escaping multiline content.
@@ -422,7 +431,7 @@ Generated Help: threads list
 - Error codes: `invalid_request`
 - Concepts: `threads`, `filtering`
 - Agent notes: Safe and idempotent.
-- Adjacent commands: `threads context`, `threads create`, `threads get`, `threads patch`, `threads timeline`
+- Adjacent commands: `threads context`, `threads create`, `threads get`, `threads patch`, `threads timeline`, `threads workspace`
 - Examples:
   - List active p1 threads: `oar threads list --status active --priority p1 --json`
 
@@ -450,7 +459,7 @@ Generated Help: threads get
 - Error codes: `not_found`
 - Concepts: `threads`
 - Agent notes: Safe and idempotent. Prefer `oar threads inspect` for operator coordination reads.
-- Adjacent commands: `threads context`, `threads create`, `threads list`, `threads patch`, `threads timeline`
+- Adjacent commands: `threads context`, `threads create`, `threads list`, `threads patch`, `threads timeline`, `threads workspace`
 - Examples:
   - Read thread: `oar threads get --thread-id thread_123 --json`
 
@@ -475,21 +484,53 @@ Generated Help: threads create
 - Input mode: `json-body`
 - Why: Open a new thread for tracking ongoing organizational work.
 - Output: Returns `{ thread }` including generated id and audit fields.
-- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`
+- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`
 - Concepts: `threads`, `snapshots`
-- Agent notes: Non-idempotent unless caller enforces a deterministic id strategy externally.
-- Adjacent commands: `threads context`, `threads get`, `threads list`, `threads patch`, `threads timeline`
+- Agent notes: Replay-safe when `request_key` is reused with the same body; otherwise core issues a new canonical thread id.
+- Adjacent commands: `threads context`, `threads get`, `threads list`, `threads patch`, `threads timeline`, `threads workspace`
 - Examples:
   - Create thread: `oar threads create --from-file thread.json --json`
 
 Body schema:
   Required: thread.cadence (string), thread.current_summary (string), thread.key_artifacts (list<typed_ref>), thread.next_actions (list<string>), thread.priority (string), thread.provenance.sources (list<string>), thread.status (string), thread.tags (list<string>), thread.title (string), thread.type (string)
-  Optional: actor_id (string), thread.next_check_in_at (datetime), thread.provenance.by_field (map<string, list<string>>), thread.provenance.notes (string)
+  Optional: actor_id (string), request_key (string), thread.next_check_in_at (datetime), thread.provenance.by_field (map<string, list<string>>), thread.provenance.notes (string)
   Enum values: thread.priority (strict): p0, p1, p2, p3; thread.status (strict): active, closed, paused; thread.type (strict): case, incident, initiative, other, process, relationship
 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: oar --json threads create ... ; oar threads create ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `threads patch`
+
+Patch thread snapshot
+
+```text
+Generated Help: threads patch
+
+- Command ID: `threads.patch`
+- CLI path: `threads patch`
+- HTTP: `PATCH /threads/{thread_id}`
+- Stability: `stable`
+- Input mode: `json-body`
+- Why: Update mutable thread fields while preserving unknown data and auditability.
+- Output: Returns `{ thread }` after patch merge and emitted event side effect.
+- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`, `not_found`
+- Concepts: `threads`, `patch`
+- Agent notes: Use `if_updated_at` for optimistic concurrency.
+- Adjacent commands: `threads context`, `threads create`, `threads get`, `threads list`, `threads timeline`, `threads workspace`
+- Examples:
+  - Patch thread: `oar threads patch --thread-id thread_123 --from-file patch.json --json`
+
+Body schema:
+  Required: none
+  Optional: actor_id (string), if_updated_at (datetime), patch.cadence (string), patch.current_summary (string), patch.key_artifacts (list<typed_ref>), patch.next_actions (list<string>), patch.next_check_in_at (datetime), patch.priority (string), patch.provenance.by_field (map<string, list<string>>), patch.provenance.notes (string), patch.provenance.sources (list<string>), patch.status (string), patch.tags (list<string>), patch.title (string), patch.type (string)
+  Enum values: patch.priority (strict): p0, p1, p2, p3; patch.status (strict): active, closed, paused; patch.type (strict): case, incident, initiative, other, process, relationship
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json threads patch ... ; oar threads patch ... --json
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -510,7 +551,7 @@ Generated Help: threads timeline
 - Error codes: `not_found`
 - Concepts: `threads`, `events`, `provenance`
 - Agent notes: Events stay time ordered; missing refs are omitted from expansion maps.
-- Adjacent commands: `threads context`, `threads create`, `threads get`, `threads list`, `threads patch`
+- Adjacent commands: `threads context`, `threads create`, `threads get`, `threads list`, `threads patch`, `threads workspace`
 - Examples:
   - Timeline: `oar threads timeline --thread-id thread_123 --json`
 
@@ -533,12 +574,12 @@ Generated Help: threads context
 - HTTP: `GET /threads/{thread_id}/context`
 - Stability: `beta`
 - Input mode: `none`
-- Why: Load one thread's state, recent events, key artifacts, and open commitments in a single round-trip; CLI `oar threads context` can aggregate across threads by composing multiple calls.
-- Output: Returns `{ thread, recent_events, key_artifacts, open_commitments }`.
+- Why: Load one thread's state, recent events, key artifacts, open commitments, and linked documents in a single round-trip; CLI `oar threads context` can aggregate across threads by composing multiple calls.
+- Output: Returns `{ thread, recent_events, key_artifacts, open_commitments, documents }`.
 - Error codes: `invalid_request`, `not_found`
-- Concepts: `threads`, `events`, `artifacts`, `commitments`
+- Concepts: `threads`, `events`, `artifacts`, `commitments`, `docs`
 - Agent notes: Use include_artifact_content for prompt-ready previews; default mode keeps payloads lighter. Prefer `oar threads inspect` as the first single-thread coordination read.
-- Adjacent commands: `threads create`, `threads get`, `threads list`, `threads patch`, `threads timeline`
+- Adjacent commands: `threads create`, `threads get`, `threads list`, `threads patch`, `threads timeline`, `threads workspace`
 - Examples:
   - Context with defaults: `oar threads context --thread-id thread_123 --json`
   - Context with artifact previews: `oar threads context --thread-id thread_123 --include-artifact-content --max-events 50 --json`
@@ -567,7 +608,7 @@ Generated Help: commitments list
 - Error codes: `invalid_request`
 - Concepts: `commitments`, `filtering`
 - Agent notes: Safe and idempotent.
-- Adjacent commands: `commitments create`, `commitments get`, `commitments update`
+- Adjacent commands: `commitments create`, `commitments get`, `commitments patch`
 - Examples:
   - List open commitments for a thread: `oar commitments list --thread-id thread_123 --status open --json`
 
@@ -595,7 +636,7 @@ Generated Help: commitments get
 - Error codes: `not_found`
 - Concepts: `commitments`
 - Agent notes: Safe and idempotent.
-- Adjacent commands: `commitments create`, `commitments list`, `commitments update`
+- Adjacent commands: `commitments create`, `commitments list`, `commitments patch`
 - Examples:
   - Get commitment: `oar commitments get --commitment-id commitment_123 --json`
 
@@ -620,21 +661,53 @@ Generated Help: commitments create
 - Input mode: `json-body`
 - Why: Track accountable work items tied to a thread.
 - Output: Returns `{ commitment }` with generated id.
-- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`
+- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`
 - Concepts: `commitments`
-- Agent notes: Non-idempotent unless caller controls external dedupe.
-- Adjacent commands: `commitments get`, `commitments list`, `commitments update`
+- Agent notes: Replay-safe when `request_key` is reused with the same body; otherwise each create issues a new commitment id.
+- Adjacent commands: `commitments get`, `commitments list`, `commitments patch`
 - Examples:
   - Create commitment: `oar commitments create --from-file commitment.json --json`
 
 Body schema:
   Required: commitment.definition_of_done (list<string>), commitment.due_at (datetime), commitment.links (list<typed_ref>), commitment.owner (string), commitment.provenance.sources (list<string>), commitment.status (string), commitment.thread_id (string), commitment.title (string)
-  Optional: actor_id (string), commitment.provenance.by_field (map<string, list<string>>), commitment.provenance.notes (string)
+  Optional: actor_id (string), commitment.provenance.by_field (map<string, list<string>>), commitment.provenance.notes (string), request_key (string)
   Enum values: commitment.status (strict): blocked, canceled, done, open
 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: oar --json commitments create ... ; oar commitments create ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `commitments patch`
+
+Patch commitment snapshot
+
+```text
+Generated Help: commitments patch
+
+- Command ID: `commitments.patch`
+- CLI path: `commitments patch`
+- HTTP: `PATCH /commitments/{commitment_id}`
+- Stability: `stable`
+- Input mode: `json-body`
+- Why: Update ownership, due date, or status with evidence-aware transition rules.
+- Output: Returns `{ commitment }` and emits a status-change event when applicable.
+- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`, `not_found`
+- Concepts: `commitments`, `patch`, `provenance`
+- Agent notes: Provide `refs` for restricted transitions and use `if_updated_at` to avoid lost updates.
+- Adjacent commands: `commitments create`, `commitments get`, `commitments list`
+- Examples:
+  - Mark commitment done: `oar commitments patch --commitment-id commitment_123 --from-file commitment-patch.json --json`
+
+Body schema:
+  Required: none
+  Optional: actor_id (string), if_updated_at (datetime), patch.definition_of_done (list<string>), patch.due_at (datetime), patch.links (list<typed_ref>), patch.owner (string), patch.provenance.by_field (map<string, list<string>>), patch.provenance.notes (string), patch.provenance.sources (list<string>), patch.status (string), patch.title (string), refs (list<string>)
+  Enum values: patch.status (strict): blocked, canceled, done, open
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json commitments patch ... ; oar commitments patch ... --json
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -796,11 +869,11 @@ Generated Help: docs list
 - HTTP: `GET /docs`
 - Stability: `beta`
 - Input mode: `none`
-- Why: Discover available documents without resolving each head individually.
+- Why: Discover available documents without resolving each head individually, optionally scoped to a single thread.
 - Output: Returns `{ documents }` ordered by `updated_at` descending.
 - Error codes: `invalid_request`
 - Concepts: `docs`, `revisions`
-- Agent notes: Safe and idempotent. Use `include_tombstoned=true` when auditing superseded documents.
+- Agent notes: Safe and idempotent. Use `thread_id` to focus on one thread's docs and `include_tombstoned=true` when auditing superseded documents.
 - Adjacent commands: `docs create`, `docs get`, `docs history`, `docs revision get`, `docs tombstone`, `docs update`
 - Examples:
   - List documents: `oar docs list --json`
@@ -828,14 +901,14 @@ Generated Help: docs create
 - Output: Returns `{ document, revision }` where `revision` is the new head.
 - Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`
 - Concepts: `docs`, `revisions`
-- Agent notes: Non-idempotent unless caller provides a deterministic document id and dedupes retries.
+- Agent notes: Replay-safe when `request_key` is reused with the same body; core can issue the canonical document id when one is omitted.
 - Adjacent commands: `docs get`, `docs history`, `docs list`, `docs revision get`, `docs tombstone`, `docs update`
 - Examples:
   - Create document: `oar docs create --from-file doc-create.json --json`
 
 Body schema:
   Required: content (object|string), content_type (string), document (object)
-  Optional: actor_id (string), refs (list<string>)
+  Optional: actor_id (string), refs (list<string>), request_key (string)
   Enum values: content_type: binary, structured, text
 
 Global flags:
@@ -869,6 +942,38 @@ Generated Help: docs get
 Global flags:
   Global flags can appear before or after the command path.
   Examples: oar --json docs get ... ; oar docs get ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `docs update`
+
+Create a new immutable revision for an existing document
+
+```text
+Generated Help: docs update
+
+- Command ID: `docs.update`
+- CLI path: `docs update`
+- HTTP: `PATCH /docs/{document_id}`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Append a revision and atomically advance document head with optimistic concurrency.
+- Output: Returns `{ document, revision }` for the newly-created head revision.
+- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`, `not_found`
+- Concepts: `docs`, `revisions`, `concurrency`
+- Agent notes: Set `if_base_revision` from `docs.get` to prevent lost updates.
+- Adjacent commands: `docs create`, `docs get`, `docs history`, `docs list`, `docs revision get`, `docs tombstone`
+- Examples:
+  - Update document: `oar docs update --document-id product-constitution --from-file doc-update.json --json`
+
+Body schema:
+  Required: content (object|string), content_type (string), if_base_revision (string)
+  Optional: actor_id (string), document (object), refs (list<string>)
+  Enum values: content_type: binary, structured, text
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json docs update ... ; oar docs update ... --json
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1021,15 +1126,15 @@ Generated Help: events create
 - Output: Returns `{ event }` with generated id and timestamp.
 - Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`
 - Concepts: `events`, `append-only`
-- Agent notes: Non-idempotent unless external dedupe keying is used.
+- Agent notes: Replay-safe when `request_key` is reused with the same body.
 - Adjacent commands: `events get`, `events stream`
 - Examples:
   - Append event: `oar events create --from-file event.json --json`
 
 Body schema:
   Required: event.provenance.sources (list<string>), event.refs (list<typed_ref>), event.summary (string), event.type (string)
-  Optional: actor_id (string), event.actor_id (string), event.payload (object), event.provenance.by_field (map<string, list<string>>), event.provenance.notes (string), event.thread_id (string)
-  Enum values: event.type (open): commitment_created, commitment_status_changed, decision_made, decision_needed, exception_raised, inbox_item_acknowledged, message_posted, receipt_added, review_completed, snapshot_updated, work_order_claimed, work_order_created
+  Optional: actor_id (string), event.actor_id (string), event.payload (object), event.provenance.by_field (map<string, list<string>>), event.provenance.notes (string), event.thread_id (string), request_key (string)
+  Enum values: event.type (open): commitment_created, commitment_status_changed, decision_made, decision_needed, document_created, document_tombstoned, document_updated, exception_raised, inbox_item_acknowledged, message_posted, receipt_added, review_completed, snapshot_updated, work_order_claimed, work_order_created
 
 Local CLI notes:
   - Common open `event.type` values include `actor_statement`; the enum list above is illustrative, not exhaustive.
@@ -1403,14 +1508,14 @@ Generated Help: work-orders create
 - Output: Returns `{ artifact, event }`.
 - Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`
 - Concepts: `packets`, `work-orders`
-- Agent notes: Treat as non-idempotent unless artifact ids are controlled.
+- Agent notes: Replay-safe when `request_key` is reused with the same body; packet id fields may be omitted and core will issue the canonical artifact id.
 - Adjacent commands: `receipts create`, `reviews create`
 - Examples:
   - Create work order: `oar work-orders create --from-file work-order.json --json`
 
 Body schema:
   Required: artifact (object), packet.acceptance_criteria (list<string>), packet.constraints (list<string>), packet.context_refs (list<typed_ref>), packet.definition_of_done (list<string>), packet.objective (string), packet.thread_id (string), packet.work_order_id (string)
-  Optional: actor_id (string)
+  Optional: actor_id (string), request_key (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1434,14 +1539,14 @@ Generated Help: receipts create
 - Output: Returns `{ artifact, event }`.
 - Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`
 - Concepts: `packets`, `receipts`
-- Agent notes: Include evidence refs that satisfy packet conventions.
+- Agent notes: Replay-safe when `request_key` is reused with the same body. Include evidence refs that satisfy packet conventions.
 - Adjacent commands: `reviews create`, `work-orders create`
 - Examples:
   - Create receipt: `oar receipts create --from-file receipt.json --json`
 
 Body schema:
   Required: artifact (object), packet.changes_summary (string), packet.known_gaps (list<string>), packet.outputs (list<typed_ref>), packet.receipt_id (string), packet.thread_id (string), packet.verification_evidence (list<typed_ref>), packet.work_order_id (string)
-  Optional: actor_id (string)
+  Optional: actor_id (string), request_key (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1472,7 +1577,7 @@ Generated Help: reviews create
 
 Body schema:
   Required: artifact (object), packet.evidence_refs (list<typed_ref>), packet.notes (string), packet.outcome (string), packet.receipt_id (string), packet.review_id (string), packet.work_order_id (string)
-  Optional: actor_id (string)
+  Optional: actor_id (string), request_key (string)
   Enum values: packet.outcome (strict): accept, escalate, revise
 
 Global flags:
@@ -1658,6 +1763,41 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
+## `threads review`
+
+Opinionated deep-read helper: run the holistic workspace view with related-event hydration and full summaries enabled by default.
+
+```text
+Local Help: threads review
+
+- Kind: `local helper`
+- Summary: Opinionated deep-read helper: run the holistic workspace view with related-event hydration and full summaries enabled by default.
+- Composition: Uses the same aggregate view as `threads workspace`, but defaults to a review-oriented read by hydrating related review items with `events get` content and expanding recommendation summaries in one command.
+- JSON body: `thread`, `context`, `collaboration`, `inbox`, `pending_decisions`, `related_threads`, `related_recommendations`, `related_decisions`, `follow_up`
+- Examples:
+  - `oar threads review --thread-id <thread-id>`
+  - `oar threads review --thread-id <thread-id> --full-id`
+  - `oar threads review --status active --type initiative`
+
+Flags:
+  --thread-id <thread-id>      Thread id to review.
+  --status <status>            Discover one thread by status.
+  --priority <priority>        Discover one thread by priority.
+  --stale <bool>               Discover one thread by stale state.
+  --tag <tag>                  Repeatable discovery tag filter.
+  --cadence <cadence>          Repeatable discovery cadence filter.
+  --type <thread-type>         Local discovery filter after `threads list`.
+  --max-events <n>             Maximum recent context events to include.
+  --include-artifact-content   Include artifact content previews from `threads context`.
+  --full-id                    Render full event and inbox ids in human output.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json threads review ... ; oar threads review ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
 ## `threads recommendations`
 
 Review one thread's recommendation/decision inputs plus related-thread signals with provenance and follow-up hints.
@@ -1695,20 +1835,20 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
-## `threads patch`
+## `threads propose-patch`
 
 Stage a thread patch proposal locally and show the diff before applying it.
 
 ```text
-Local Help: threads patch
+Local Help: threads propose-patch
 
 - Kind: `local helper`
 - Summary: Stage a thread patch proposal locally and show the diff before applying it.
 - Composition: Resolves the thread id, fetches current state with `threads get`, computes a local diff, and persists a proposal file instead of sending the patch immediately.
 - JSON body: `proposal_id`, `target_command_id`, `path`, `body`, `diff`, `apply_command`
 - Examples:
-  - `oar threads patch --thread-id <thread-id> --from-file patch.json`
-  - `cat patch.json | oar threads patch --thread-id <thread-id>`
+  - `oar threads propose-patch --thread-id <thread-id> --from-file patch.json`
+  - `cat patch.json | oar threads propose-patch --thread-id <thread-id>`
 
 Flags:
   --thread-id <thread-id>      Thread id to patch.
@@ -1717,7 +1857,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json threads patch ... ; oar threads patch ... --json
+  Examples: oar --json threads propose-patch ... ; oar threads propose-patch ... --json
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1746,28 +1886,28 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
-## `commitments update`
+## `commitments propose-patch`
 
-Stage a commitment update proposal locally and show the diff before applying it.
+Stage a commitment patch proposal locally and show the diff before applying it.
 
 ```text
-Local Help: commitments update
+Local Help: commitments propose-patch
 
 - Kind: `local helper`
-- Summary: Stage a commitment update proposal locally and show the diff before applying it.
+- Summary: Stage a commitment patch proposal locally and show the diff before applying it.
 - Composition: Resolves the commitment id, fetches current state with `commitments get`, computes a local diff, and persists a proposal file instead of sending the patch immediately.
 - JSON body: `proposal_id`, `target_command_id`, `path`, `body`, `diff`, `apply_command`
 - Examples:
-  - `oar commitments update --commitment-id <commitment-id> --from-file patch.json`
+  - `oar commitments propose-patch --commitment-id <commitment-id> --from-file patch.json`
 
 Flags:
-  --commitment-id <commitment-id> Commitment id to update.
+  --commitment-id <commitment-id> Commitment id to patch.
   --from-file <path>           Load the patch body from a JSON file.
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json commitments update ... ; oar commitments update ... --json
+  Examples: oar --json commitments propose-patch ... ; oar commitments propose-patch ... --json
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1795,20 +1935,20 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
-## `docs update`
+## `docs propose-update`
 
 Stage a document update proposal locally and show the content diff before applying it.
 
 ```text
-Local Help: docs update
+Local Help: docs propose-update
 
 - Kind: `local helper`
 - Summary: Stage a document update proposal locally and show the content diff before applying it.
 - Composition: Fetches the current document revision with `docs get`, computes a local diff against the proposed update, and persists a proposal file instead of sending the update immediately.
 - JSON body: `proposal_id`, `target_command_id`, `path`, `body`, `diff`, `apply_command`
 - Examples:
-  - `oar docs update --document-id <document-id> --content-file <path>`
-  - `cat update.json | oar docs update --document-id <document-id>`
+  - `oar docs propose-update --document-id <document-id> --content-file <path>`
+  - `cat update.json | oar docs propose-update --document-id <document-id>`
 
 Flags:
   --document-id <document-id>  Document id to update.
@@ -1818,7 +1958,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json docs update ... ; oar docs update ... --json
+  Examples: oar --json docs propose-update ... ; oar docs propose-update ... --json
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 

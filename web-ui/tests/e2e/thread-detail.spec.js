@@ -64,11 +64,98 @@ test("thread detail loads snapshot/timeline and posts reply message", async ({
     });
   });
 
+  await page.route(
+    /\/threads\/thread-onboarding\/workspace(\?.*)?$/,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          thread_id: "thread-onboarding",
+          thread: {
+            id: "thread-onboarding",
+            type: "process",
+            title: "Customer Onboarding Workflow",
+            status: "active",
+            priority: "p1",
+            cadence: "weekly",
+            tags: ["ops", "customer"],
+            current_summary: "Thread detail summary.",
+            next_actions: ["Collect legal signoff"],
+            open_commitments: ["commitment-onboard-1"],
+            next_check_in_at: "2026-03-05T00:00:00.000Z",
+            updated_at: "2026-03-04T00:00:00.000Z",
+            updated_by: actorId,
+            provenance: { sources: ["actor_statement:event-1001"] },
+          },
+          context: {
+            recent_events: timeline,
+            key_artifacts: [],
+            open_commitments: [],
+            documents: [
+              {
+                id: "doc-onboarding-runbook",
+                title: "Onboarding Runbook",
+                status: "active",
+                updated_at: "2026-03-04T00:30:00.000Z",
+                updated_by: actorId,
+                labels: ["ops"],
+                head_revision_id: "rev-onboarding-runbook-2",
+                head_revision_number: 2,
+                head_revision: {
+                  revision_id: "rev-onboarding-runbook-2",
+                  revision_number: 2,
+                  content_type: "text",
+                  created_at: "2026-03-04T00:30:00.000Z",
+                },
+              },
+            ],
+          },
+        }),
+      });
+    },
+  );
+
   await page.route(/\/threads\/thread-onboarding\/timeline$/, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({ events: timeline }),
+    });
+  });
+
+  await page.route(/\/events\/stream(\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: ": keepalive\n\n",
+    });
+  });
+
+  await page.route(/\/docs\?thread_id=thread-onboarding$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        documents: [
+          {
+            id: "doc-onboarding-runbook",
+            title: "Onboarding Runbook",
+            status: "active",
+            updated_at: "2026-03-04T00:30:00.000Z",
+            updated_by: actorId,
+            labels: ["ops"],
+            head_revision_id: "rev-onboarding-runbook-2",
+            head_revision_number: 2,
+            head_revision: {
+              revision_id: "rev-onboarding-runbook-2",
+              revision_number: 2,
+              content_type: "text",
+              created_at: "2026-03-04T00:30:00.000Z",
+            },
+          },
+        ],
+      }),
     });
   });
 
@@ -92,6 +179,16 @@ test("thread detail loads snapshot/timeline and posts reply message", async ({
   });
 
   await page.goto("/threads/thread-onboarding");
+
+  await expect(
+    page.getByText("Thread-linked docs and current head revisions."),
+  ).toBeVisible();
+  const docLink = page.getByRole("link", { name: /Onboarding Runbook/ });
+  await expect(docLink).toBeVisible();
+  await expect(docLink).toHaveAttribute(
+    "href",
+    /\/docs\/doc-onboarding-runbook\?revision=rev-onboarding-runbook-2$/,
+  );
   await page.getByRole("button", { name: "Timeline" }).click();
 
   await expect(
@@ -211,11 +308,47 @@ test("thread detail handles snapshot update conflict and retries after reload", 
     await route.continue();
   });
 
+  await page.route(
+    /\/threads\/thread-onboarding\/workspace(\?.*)?$/,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          thread_id: "thread-onboarding",
+          thread: threadSnapshot,
+          context: {
+            recent_events: [],
+            key_artifacts: [],
+            open_commitments: [],
+            documents: [],
+          },
+        }),
+      });
+    },
+  );
+
   await page.route(/\/threads\/thread-onboarding\/timeline$/, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({ events: [] }),
+    });
+  });
+
+  await page.route(/\/events\/stream(\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: ": keepalive\n\n",
+    });
+  });
+
+  await page.route(/\/docs\?thread_id=thread-onboarding$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ documents: [] }),
     });
   });
 
@@ -262,4 +395,251 @@ test("thread detail handles snapshot update conflict and retries after reload", 
     },
     if_updated_at: "2026-03-04T02:00:00.000Z",
   });
+});
+
+test("thread detail updates workspace panels from another actor via event stream", async ({
+  page,
+}) => {
+  const actorId = "actor-live-thread-e2e";
+  let timeline = [
+    {
+      id: "evt-live-1",
+      ts: "2026-03-04T00:00:00.000Z",
+      type: "message_posted",
+      actor_id: actorId,
+      thread_id: "thread-onboarding",
+      refs: ["thread:thread-onboarding"],
+      summary: "Initial activity",
+      payload: { text: "Initial activity" },
+    },
+  ];
+  let workOrders = [
+    {
+      id: "artifact-work-order-1",
+      kind: "work_order",
+      thread_id: "thread-onboarding",
+      summary: "Initial work order",
+      refs: ["thread:thread-onboarding"],
+    },
+  ];
+  let threadSnapshot = {
+    id: "thread-onboarding",
+    type: "process",
+    title: "Customer Onboarding Workflow",
+    status: "active",
+    priority: "p1",
+    cadence: "weekly",
+    tags: ["ops", "customer"],
+    current_summary: "Initial thread summary.",
+    next_actions: ["Collect legal signoff"],
+    open_commitments: ["commitment-open-1"],
+    next_check_in_at: "2026-03-05T00:00:00.000Z",
+    updated_at: "2026-03-04T00:00:00.000Z",
+    updated_by: actorId,
+  };
+  let contextDocuments = [
+    {
+      id: "doc-onboarding-runbook",
+      title: "Onboarding Runbook",
+      status: "active",
+      updated_at: "2026-03-04T00:30:00.000Z",
+      head_revision: {
+        revision_id: "rev-onboarding-runbook-2",
+        revision_number: 2,
+        content_type: "text",
+        created_at: "2026-03-04T00:30:00.000Z",
+      },
+    },
+  ];
+  let contextCommitments = [
+    {
+      id: "commitment-open-1",
+      title: "Collect onboarding requirements",
+      owner: actorId,
+      due_at: "2026-03-07T00:00:00.000Z",
+      status: "open",
+      definition_of_done: [],
+      links: ["thread:thread-onboarding"],
+    },
+  ];
+
+  let releaseRemoteUpdate;
+  const remoteUpdateReady = new Promise((resolve) => {
+    releaseRemoteUpdate = resolve;
+  });
+
+  await page.addInitScript((selectedActorId) => {
+    window.localStorage.setItem("oar_ui_actor_id", selectedActorId);
+  }, actorId);
+
+  await page.route(/\/actors$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        actors: [{ id: actorId, display_name: "Live Thread Tester" }],
+      }),
+    });
+  });
+
+  await page.route(/\/threads\/thread-onboarding$/, async (route) => {
+    const request = route.request();
+    if (request.method() === "GET" && request.resourceType() === "document") {
+      await route.continue();
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ thread: threadSnapshot }),
+    });
+  });
+
+  await page.route(
+    /\/threads\/thread-onboarding\/workspace(\?.*)?$/,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          thread_id: "thread-onboarding",
+          thread: threadSnapshot,
+          context: {
+            recent_events: timeline,
+            key_artifacts: [],
+            open_commitments: contextCommitments,
+            documents: contextDocuments,
+          },
+        }),
+      });
+    },
+  );
+
+  await page.route(/\/threads\/thread-onboarding\/timeline$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ events: timeline }),
+    });
+  });
+
+  await page.route(/\/artifacts(\?.*)?$/, async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get("kind") === "work_order") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ artifacts: workOrders }),
+      });
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ artifacts: [] }),
+    });
+  });
+
+  await page.route(/\/events\/stream(\?.*)?$/, async (route) => {
+    await remoteUpdateReady;
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: `id: evt-live-remote\nevent: event\ndata: ${JSON.stringify({
+        event: timeline[0],
+      })}\n\n`,
+    });
+  });
+
+  await page.goto("/threads/thread-onboarding");
+
+  await expect(
+    page.getByText("Collect onboarding requirements", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Onboarding Runbook", { exact: true }),
+  ).toBeVisible();
+
+  threadSnapshot = {
+    ...threadSnapshot,
+    current_summary: "Updated remotely by another actor.",
+    updated_at: "2026-03-04T02:00:00.000Z",
+    updated_by: "actor-remote",
+  };
+  contextDocuments = [
+    ...contextDocuments,
+    {
+      id: "doc-remote-checklist",
+      title: "Remote Coordination Checklist",
+      status: "active",
+      updated_at: "2026-03-04T02:00:00.000Z",
+      head_revision: {
+        revision_id: "rev-remote-checklist-1",
+        revision_number: 1,
+        content_type: "text",
+        created_at: "2026-03-04T02:00:00.000Z",
+      },
+    },
+  ];
+  contextCommitments = [
+    {
+      id: "commitment-blocked-1",
+      title: "Wait for legal approval",
+      owner: actorId,
+      due_at: "2026-03-04T01:00:00.000Z",
+      status: "blocked",
+      definition_of_done: [],
+      links: ["thread:thread-onboarding"],
+    },
+    ...contextCommitments,
+  ];
+  workOrders = [
+    ...workOrders,
+    {
+      id: "artifact-work-order-2",
+      kind: "work_order",
+      thread_id: "thread-onboarding",
+      summary: "Remote follow-up work order",
+      refs: ["thread:thread-onboarding"],
+    },
+  ];
+  timeline = [
+    {
+      id: "evt-live-remote",
+      ts: "2026-03-04T02:00:00.000Z",
+      type: "message_posted",
+      actor_id: "actor-remote",
+      thread_id: "thread-onboarding",
+      refs: ["thread:thread-onboarding"],
+      summary: "Remote actor updated coordination context",
+      payload: { text: "Remote actor updated coordination context" },
+    },
+    ...timeline,
+  ];
+  releaseRemoteUpdate();
+
+  await expect(
+    page.getByText("Updated remotely by another actor.", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Wait for legal approval", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("Blocked", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Remote Coordination Checklist", { exact: true }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Work" }).click();
+  await expect(
+    page.getByRole("combobox", { name: "Work order" }),
+  ).toContainText("Remote follow-up work order");
+
+  await page.getByRole("button", { name: "Timeline" }).click();
+  await expect(
+    page.getByText("Remote actor updated coordination context", {
+      exact: true,
+    }),
+  ).toBeVisible();
 });

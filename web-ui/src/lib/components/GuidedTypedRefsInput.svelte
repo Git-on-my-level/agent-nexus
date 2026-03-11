@@ -1,4 +1,6 @@
 <script>
+  import { page } from "$app/stores";
+  import { resolveRefLink } from "$lib/refLinkModel";
   import { parseRef, renderRef } from "$lib/typedRefs";
 
   let {
@@ -61,6 +63,13 @@
 
   let refs = $derived(parseRefs(value));
   let normalizedSuggestions = $derived(buildSuggestions(suggestions));
+  let resolvedRefs = $derived(
+    refs.map((refValue) =>
+      resolveRefLink(refValue, {
+        projectSlug: $page.params.project,
+      }),
+    ),
+  );
 
   function writeRefs(items) {
     value = items.join("\n");
@@ -111,15 +120,26 @@
     <p class="text-xs text-[var(--ui-text-muted)]">{emptyText}</p>
   {:else}
     <div class="flex flex-wrap gap-1.5">
-      {#each refs as refValue}
+      {#each resolvedRefs as resolved}
         <span
           class="inline-flex items-center gap-1 rounded-md border border-indigo-500/20 bg-indigo-500/10 px-2 py-0.5 text-xs text-indigo-400"
         >
-          <span>{refValue}</span>
+          {#if resolved.isLink}
+            <a
+              class="hover:text-indigo-300"
+              href={resolved.href}
+              rel={resolved.isExternal ? "noreferrer noopener" : undefined}
+              target={resolved.isExternal ? "_blank" : undefined}
+            >
+              {resolved.primaryLabel}
+            </a>
+          {:else}
+            <span>{resolved.primaryLabel}</span>
+          {/if}
           <button
-            aria-label={`Remove ${refValue}`}
+            aria-label={`Remove ${resolved.raw}`}
             class="cursor-pointer rounded px-1 text-[11px] text-indigo-400 transition-colors hover:bg-indigo-500/20 hover:text-indigo-300"
-            onclick={() => removeRef(refValue)}
+            onclick={() => removeRef(resolved.raw)}
             type="button"
           >
             x

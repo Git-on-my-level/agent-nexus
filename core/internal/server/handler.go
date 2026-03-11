@@ -33,12 +33,21 @@ type PrimitiveStore interface {
 	GetArtifact(ctx context.Context, id string) (map[string]any, error)
 	GetArtifactContent(ctx context.Context, id string) ([]byte, string, error)
 	ListArtifacts(ctx context.Context, filter primitives.ArtifactListFilter) ([]map[string]any, error)
+	GetIdempotencyReplay(ctx context.Context, scope string, actorID string, requestKey string) (primitives.IdempotencyReplay, error)
+	PutIdempotencyReplay(ctx context.Context, scope string, actorID string, requestKey string, requestHash string, status int, response map[string]any) error
+	ListDerivedInboxItems(ctx context.Context, filter primitives.DerivedInboxListFilter) ([]primitives.DerivedInboxItem, error)
+	GetDerivedInboxItem(ctx context.Context, id string) (primitives.DerivedInboxItem, error)
+	ReplaceDerivedInboxItems(ctx context.Context, threadID string, items []primitives.DerivedInboxItem) error
+	GetDerivedThreadProjection(ctx context.Context, threadID string) (primitives.DerivedThreadProjection, error)
+	ListDerivedThreadProjections(ctx context.Context, threadIDs []string) (map[string]primitives.DerivedThreadProjection, error)
+	PutDerivedThreadProjection(ctx context.Context, projection primitives.DerivedThreadProjection) error
 	ListDocuments(ctx context.Context, filter primitives.DocumentListFilter) ([]map[string]any, error)
 	CreateDocument(ctx context.Context, actorID string, document map[string]any, content any, contentType string, refs []string) (map[string]any, map[string]any, error)
 	GetDocument(ctx context.Context, documentID string) (map[string]any, map[string]any, error)
 	UpdateDocument(ctx context.Context, actorID string, documentID string, documentPatch map[string]any, ifBaseRevision string, content any, contentType string, refs []string) (map[string]any, map[string]any, error)
 	ListDocumentHistory(ctx context.Context, documentID string) ([]map[string]any, error)
 	GetDocumentRevision(ctx context.Context, documentID string, revisionID string) (map[string]any, error)
+	GetDocumentRevisionByID(ctx context.Context, revisionID string) (map[string]any, error)
 	GetSnapshot(ctx context.Context, id string) (map[string]any, error)
 	CreateThread(ctx context.Context, actorID string, thread map[string]any) (primitives.PatchSnapshotResult, error)
 	GetThread(ctx context.Context, id string) (map[string]any, error)
@@ -443,6 +452,22 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				return
 			}
 			handleThreadContext(w, r, opts, threadID)
+			return
+		}
+
+		if strings.HasSuffix(remainder, "/workspace") {
+			if r.Method != http.MethodGet {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+				return
+			}
+
+			threadID := strings.TrimSuffix(remainder, "/workspace")
+			threadID = strings.TrimSuffix(threadID, "/")
+			if threadID == "" || strings.Contains(threadID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			handleThreadWorkspace(w, r, opts, threadID)
 			return
 		}
 

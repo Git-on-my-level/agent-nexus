@@ -32,6 +32,34 @@ type documentRow struct {
 	TombstonedAt    sql.NullString
 	TombstonedBy    sql.NullString
 	TombstoneReason sql.NullString
+	HeadArtifactID  sql.NullString
+	HeadContentType sql.NullString
+	HeadCreatedAt   sql.NullString
+	HeadCreatedBy   sql.NullString
+}
+
+func buildListDocumentsQuery(filter DocumentListFilter) (string, []any) {
+	query := `SELECT d.id, d.thread_id, d.title, d.slug, d.status, d.labels_json, d.supersedes_json,
+		d.head_revision_id, d.head_revision_number, d.created_at, d.created_by, d.updated_at, d.updated_by,
+		d.tombstoned_at, d.tombstoned_by, d.tombstone_reason,
+		dr.artifact_id, a.content_type, dr.created_at, dr.created_by
+		FROM documents d
+		LEFT JOIN document_revisions dr ON dr.revision_id = d.head_revision_id
+		LEFT JOIN artifacts a ON a.id = dr.artifact_id`
+	conditions := make([]string, 0, 2)
+	args := make([]any, 0, 2)
+	if threadID := strings.TrimSpace(filter.ThreadID); threadID != "" {
+		conditions = append(conditions, "d.thread_id = ?")
+		args = append(args, threadID)
+	}
+	if !filter.IncludeTombstoned {
+		conditions = append(conditions, "d.tombstoned_at IS NULL")
+	}
+	if len(conditions) > 0 {
+		query += ` WHERE ` + strings.Join(conditions, ` AND `)
+	}
+	query += ` ORDER BY d.updated_at DESC, d.id ASC`
+	return query, args
 }
 
 func (s *Store) ListDocuments(ctx context.Context, filter DocumentListFilter) ([]map[string]any, error) {
@@ -39,16 +67,8 @@ func (s *Store) ListDocuments(ctx context.Context, filter DocumentListFilter) ([
 		return nil, fmt.Errorf("primitives store database is not initialized")
 	}
 
-	query := `SELECT id, thread_id, title, slug, status, labels_json, supersedes_json,
-		head_revision_id, head_revision_number, created_at, created_by, updated_at, updated_by,
-		tombstoned_at, tombstoned_by, tombstone_reason
-		FROM documents`
-	if !filter.IncludeTombstoned {
-		query += ` WHERE tombstoned_at IS NULL`
-	}
-	query += ` ORDER BY updated_at DESC, id ASC`
-
-	rows, err := s.db.QueryContext(ctx, query)
+	query, args := buildListDocumentsQuery(filter)
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query documents: %w", err)
 	}
@@ -74,6 +94,10 @@ func (s *Store) ListDocuments(ctx context.Context, filter DocumentListFilter) ([
 			&row.TombstonedAt,
 			&row.TombstonedBy,
 			&row.TombstoneReason,
+			&row.HeadArtifactID,
+			&row.HeadContentType,
+			&row.HeadCreatedAt,
+			&row.HeadCreatedBy,
 		); err != nil {
 			return nil, fmt.Errorf("scan document row: %w", err)
 		}
@@ -158,6 +182,7 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 	}
 	revisionRefs = uniqueStrings(revisionRefs)
 	sortStringsStable(revisionRefs)
+	threadID = documentLifecycleThreadID(threadID, revisionRefs)
 
 	artifactMetadata := map[string]any{
 		"id":               artifactID,
@@ -210,10 +235,11 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 
 	if _, err := tx.ExecContext(
 		ctx,
-		`INSERT INTO artifacts(id, kind, created_at, created_by, content_type, content_hash, content_path, refs_json, metadata_json)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO artifacts(id, kind, thread_id, created_at, created_by, content_type, content_hash, content_path, refs_json, metadata_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		artifactID,
 		"doc",
+		nullableString(threadID),
 		now,
 		actorID,
 		contentType,
@@ -277,6 +303,25 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 			return nil, nil, ErrConflict
 		}
 		return nil, nil, fmt.Errorf("insert document revision: %w", err)
+	}
+
+	lifecycleEvent, err := prepareEventForInsert(actorID, buildDocumentLifecycleEvent(
+		"document_created",
+		documentLifecycleThreadID(threadID, revisionRefs),
+		documentID,
+		revisionID,
+		artifactID,
+		revisionNumber,
+		title,
+		nil,
+	))
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, nil, err
+	}
+	if err := insertPreparedEvent(ctx, tx, lifecycleEvent); err != nil {
+		_ = tx.Rollback()
+		return nil, nil, err
 	}
 
 	if err := stagedContent.Promote(); err != nil {
@@ -431,6 +476,7 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 	revisionRefs = append(revisionRefs, "artifact:"+doc.HeadRevisionID)
 	revisionRefs = uniqueStrings(revisionRefs)
 	sortStringsStable(revisionRefs)
+	nextThreadID = documentLifecycleThreadID(nextThreadID, revisionRefs)
 
 	artifactMetadata := map[string]any{
 		"id":               artifactID,
@@ -492,10 +538,11 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 
 	if _, err := tx.ExecContext(
 		ctx,
-		`INSERT INTO artifacts(id, kind, created_at, created_by, content_type, content_hash, content_path, refs_json, metadata_json)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO artifacts(id, kind, thread_id, created_at, created_by, content_type, content_hash, content_path, refs_json, metadata_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		artifactID,
 		"doc",
+		nullableString(nextThreadID),
 		now,
 		actorID,
 		contentType,
@@ -532,6 +579,27 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 			return nil, nil, ErrConflict
 		}
 		return nil, nil, fmt.Errorf("insert document revision: %w", err)
+	}
+
+	lifecycleEvent, err := prepareEventForInsert(actorID, buildDocumentLifecycleEvent(
+		"document_updated",
+		documentLifecycleThreadID(nextThreadID, revisionRefs),
+		documentID,
+		revisionID,
+		artifactID,
+		nextRevisionNumber,
+		nextTitle,
+		map[string]any{
+			"prev_revision_id": doc.HeadRevisionID,
+		},
+	))
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, nil, err
+	}
+	if err := insertPreparedEvent(ctx, tx, lifecycleEvent); err != nil {
+		_ = tx.Rollback()
+		return nil, nil, err
 	}
 
 	result, err := tx.ExecContext(
@@ -663,6 +731,32 @@ func (s *Store) GetDocumentRevision(ctx context.Context, documentID string, revi
 	return s.loadDocumentRevision(ctx, documentID, revisionID, true)
 }
 
+func (s *Store) GetDocumentRevisionByID(ctx context.Context, revisionID string) (map[string]any, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("primitives store database is not initialized")
+	}
+
+	revisionID = strings.TrimSpace(revisionID)
+	if revisionID == "" {
+		return nil, fmt.Errorf("revision_id is required")
+	}
+
+	var documentID string
+	err := s.db.QueryRowContext(
+		ctx,
+		`SELECT document_id FROM document_revisions WHERE revision_id = ?`,
+		revisionID,
+	).Scan(&documentID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query document revision by id: %w", err)
+	}
+
+	return s.loadDocumentRevision(ctx, documentID, revisionID, false)
+}
+
 func (s *Store) TombstoneDocument(ctx context.Context, actorID string, documentID string, reason string) (map[string]any, map[string]any, error) {
 	if s == nil || s.db == nil {
 		return nil, nil, fmt.Errorf("primitives store database is not initialized")
@@ -688,23 +782,53 @@ func (s *Store) TombstoneDocument(ctx context.Context, actorID string, documentI
 		return doc.toMap(), revision, nil
 	}
 
+	revision, err := s.loadDocumentRevision(ctx, documentID, doc.HeadRevisionID, true)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	_, err = s.db.ExecContext(ctx,
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("begin document tombstone transaction: %w", err)
+	}
+	_, err = tx.ExecContext(ctx,
 		`UPDATE documents SET tombstoned_at = ?, tombstoned_by = ?, tombstone_reason = ? WHERE id = ?`,
 		now, actorID, strings.TrimSpace(reason), documentID,
 	)
 	if err != nil {
+		_ = tx.Rollback()
 		return nil, nil, fmt.Errorf("tombstone document: %w", err)
+	}
+
+	lifecycleEvent, err := prepareEventForInsert(actorID, buildDocumentLifecycleEvent(
+		"document_tombstoned",
+		documentLifecycleThreadID(nullStringValue(doc.ThreadID), revisionRefsFromRevision(revision)),
+		documentID,
+		doc.HeadRevisionID,
+		anyStringValue(revision["artifact_id"]),
+		asIntValue(revision["revision_number"]),
+		nullStringValue(doc.Title),
+		map[string]any{
+			"reason": strings.TrimSpace(reason),
+		},
+	))
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, nil, err
+	}
+	if err := insertPreparedEvent(ctx, tx, lifecycleEvent); err != nil {
+		_ = tx.Rollback()
+		return nil, nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		_ = tx.Rollback()
+		return nil, nil, fmt.Errorf("commit document tombstone transaction: %w", err)
 	}
 
 	doc.TombstonedAt = nullableString(now)
 	doc.TombstonedBy = nullableString(actorID)
 	doc.TombstoneReason = nullableString(reason)
-
-	revision, err := s.loadDocumentRevision(ctx, documentID, doc.HeadRevisionID, true)
-	if err != nil {
-		return nil, nil, err
-	}
 
 	return doc.toMap(), revision, nil
 }
@@ -861,6 +985,23 @@ func (r documentRow) toMap() map[string]any {
 		"updated_at":           r.UpdatedAt,
 		"updated_by":           r.UpdatedBy,
 	}
+	headRevision := map[string]any{
+		"revision_id":     r.HeadRevisionID,
+		"revision_number": r.HeadRevisionNum,
+	}
+	if r.HeadArtifactID.Valid && strings.TrimSpace(r.HeadArtifactID.String) != "" {
+		headRevision["artifact_id"] = r.HeadArtifactID.String
+	}
+	if r.HeadContentType.Valid && strings.TrimSpace(r.HeadContentType.String) != "" {
+		headRevision["content_type"] = r.HeadContentType.String
+	}
+	if r.HeadCreatedAt.Valid && strings.TrimSpace(r.HeadCreatedAt.String) != "" {
+		headRevision["created_at"] = r.HeadCreatedAt.String
+	}
+	if r.HeadCreatedBy.Valid && strings.TrimSpace(r.HeadCreatedBy.String) != "" {
+		headRevision["created_by"] = r.HeadCreatedBy.String
+	}
+	out["head_revision"] = headRevision
 	if r.ThreadID.Valid && strings.TrimSpace(r.ThreadID.String) != "" {
 		out["thread_id"] = r.ThreadID.String
 	}
@@ -883,6 +1024,99 @@ func (r documentRow) toMap() map[string]any {
 		out["tombstone_reason"] = r.TombstoneReason.String
 	}
 	return out
+}
+
+func buildDocumentLifecycleEvent(eventType, threadID, documentID, revisionID, artifactID string, revisionNumber int, title string, extraPayload map[string]any) map[string]any {
+	refs := []string{
+		"document:" + documentID,
+		"document_revision:" + revisionID,
+	}
+	if threadID != "" {
+		refs = append(refs, "thread:"+threadID)
+	}
+	if artifactID != "" {
+		refs = append(refs, "artifact:"+artifactID)
+	}
+	refs = uniqueStrings(refs)
+	sortStringsStable(refs)
+
+	payload := map[string]any{
+		"document_id":     documentID,
+		"revision_id":     revisionID,
+		"artifact_id":     artifactID,
+		"revision_number": revisionNumber,
+	}
+	for key, value := range extraPayload {
+		payload[key] = value
+	}
+
+	label := strings.TrimSpace(title)
+	if label == "" {
+		label = documentID
+	}
+
+	summary := map[string]string{
+		"document_created":    "Document created",
+		"document_updated":    "Document updated",
+		"document_tombstoned": "Document tombstoned",
+	}[eventType]
+	if summary == "" {
+		summary = "Document lifecycle event"
+	}
+
+	event := map[string]any{
+		"type":       eventType,
+		"refs":       refs,
+		"summary":    summary + ": " + label,
+		"payload":    payload,
+		"provenance": actorStatementProvenance(),
+	}
+	if threadID != "" {
+		event["thread_id"] = threadID
+	}
+	return event
+}
+
+func documentLifecycleThreadID(primaryThreadID string, refs []string) string {
+	primaryThreadID = strings.TrimSpace(primaryThreadID)
+	if primaryThreadID != "" {
+		return primaryThreadID
+	}
+
+	for _, ref := range refs {
+		if !strings.HasPrefix(ref, "thread:") {
+			continue
+		}
+		threadID := strings.TrimSpace(strings.TrimPrefix(ref, "thread:"))
+		if threadID != "" {
+			return threadID
+		}
+	}
+
+	return ""
+}
+
+func revisionRefsFromRevision(revision map[string]any) []string {
+	refs, err := normalizeStringSlice(revision["refs"])
+	if err != nil {
+		return nil
+	}
+	return refs
+}
+
+func asIntValue(value any) int {
+	switch typed := value.(type) {
+	case int:
+		return typed
+	case int32:
+		return int(typed)
+	case int64:
+		return int(typed)
+	case float64:
+		return int(typed)
+	default:
+		return 0
+	}
 }
 
 func validateDocumentID(id string) error {

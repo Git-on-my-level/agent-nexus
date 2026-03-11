@@ -20,8 +20,12 @@ var machineCommandIdentityByPath = map[string]machineCommandIdentity{
 		Command:   "threads workspace",
 		CommandID: "threads.workspace",
 	},
-	"threads patch": {
-		Command:   "threads patch",
+	"threads review": {
+		Command:   "threads review",
+		CommandID: "threads.review",
+	},
+	"threads propose-patch": {
+		Command:   "threads propose-patch",
 		CommandID: "threads.patch.propose",
 	},
 	"threads apply": {
@@ -32,16 +36,16 @@ var machineCommandIdentityByPath = map[string]machineCommandIdentity{
 		Command:   "threads recommendations",
 		CommandID: "threads.recommendations",
 	},
-	"commitments update": {
-		Command:   "commitments update",
+	"commitments propose-patch": {
+		Command:   "commitments propose-patch",
 		CommandID: "commitments.patch.propose",
 	},
 	"commitments apply": {
 		Command:   "commitments apply",
 		CommandID: "commitments.patch.apply",
 	},
-	"docs update": {
-		Command:   "docs update",
+	"docs propose-update": {
+		Command:   "docs propose-update",
 		CommandID: "docs.update.propose",
 	},
 	"docs apply": {

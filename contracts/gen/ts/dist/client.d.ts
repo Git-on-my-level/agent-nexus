@@ -96,4 +96,5 @@ export declare class OarClient {
     threadsList(options?: RequestOptions): Promise<InvokeResult>;
     threadsPatch(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     threadsTimeline(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    threadsWorkspace(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
 }

@@ -4,9 +4,13 @@ import { get, writable } from "svelte/store";
 
 function initialState() {
   return {
+    workspace: null,
     snapshot: null,
     snapshotLoading: false,
     snapshotError: "",
+    documents: [],
+    documentsLoading: false,
+    documentsError: "",
     commitments: [],
     commitmentsLoading: false,
     timeline: [],
@@ -22,36 +26,85 @@ function createThreadDetailStore() {
   const store = writable(initialState());
   const { subscribe, update, set } = store;
   const patchState = (patch) => update((state) => ({ ...state, ...patch }));
+  let queuedRefreshFlags = null;
+  let queuedRefreshThreadId = "";
+  let queuedRefreshPromise = null;
 
-  async function loadSnapshot(threadId) {
-    patchState({ snapshotLoading: true, snapshotError: "" });
-    try {
-      const snapshot = (await coreClient.getThread(threadId)).thread ?? null;
-      patchState({ snapshot });
-      return snapshot;
-    } catch (e) {
-      patchState({
-        snapshotError: `Failed to load thread: ${e instanceof Error ? e.message : String(e)}`,
-        snapshot: null,
-      });
-      return null;
-    } finally {
-      patchState({ snapshotLoading: false });
-    }
+  function mergeRefreshFlags(base = {}, next = {}) {
+    const left = base ?? {};
+    const right = next ?? {};
+    return {
+      workspace: Boolean(left.workspace || right.workspace),
+      snapshot: Boolean(left.snapshot || right.snapshot),
+      documents: Boolean(left.documents || right.documents),
+      timeline: Boolean(left.timeline || right.timeline),
+      commitments: Boolean(left.commitments || right.commitments),
+      workOrders: Boolean(left.workOrders || right.workOrders),
+    };
   }
 
-  async function loadCommitments(threadId) {
-    patchState({ commitmentsLoading: true });
+  async function loadWorkspace(threadId, filters = {}) {
+    const currentState = get(store);
+    const hasWorkspaceData =
+      currentState.workspace !== null ||
+      currentState.snapshot !== null ||
+      currentState.documents.length > 0 ||
+      currentState.commitments.length > 0 ||
+      currentState.timeline.length > 0;
+
+    patchState({
+      snapshotLoading: hasWorkspaceData ? currentState.snapshotLoading : true,
+      snapshotError: hasWorkspaceData ? currentState.snapshotError : "",
+      documentsLoading: hasWorkspaceData ? currentState.documentsLoading : true,
+      documentsError: hasWorkspaceData ? currentState.documentsError : "",
+      commitmentsLoading: hasWorkspaceData
+        ? currentState.commitmentsLoading
+        : true,
+    });
     try {
-      const response = await coreClient.listCommitments({
-        thread_id: threadId,
-        status: "open",
+      const workspace = await coreClient.getThreadWorkspace(threadId, filters);
+      const context =
+        workspace && typeof workspace.context === "object"
+          ? workspace.context
+          : {};
+      patchState({
+        workspace,
+        snapshot: workspace?.thread ?? null,
+        snapshotError: "",
+        documents: Array.isArray(context.documents) ? context.documents : [],
+        documentsError: "",
+        commitments: Array.isArray(context.open_commitments)
+          ? context.open_commitments
+          : [],
+        timeline: Array.isArray(context.recent_events)
+          ? context.recent_events
+          : [],
       });
-      patchState({ commitments: response.commitments ?? [] });
-    } catch {
-      patchState({ commitments: [] });
+      return workspace;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (hasWorkspaceData) {
+        patchState({
+          documentsError: `Failed to refresh workspace: ${message}`,
+        });
+      } else {
+        patchState({
+          workspace: null,
+          snapshotError: `Failed to load workspace: ${message}`,
+          snapshot: null,
+          documentsError: `Failed to load workspace: ${message}`,
+          documents: [],
+          commitments: [],
+          timeline: [],
+        });
+      }
+      return null;
     } finally {
-      patchState({ commitmentsLoading: false });
+      patchState({
+        snapshotLoading: false,
+        documentsLoading: false,
+        commitmentsLoading: false,
+      });
     }
   }
 
@@ -91,27 +144,59 @@ function createThreadDetailStore() {
 
   async function refreshThreadDetail(threadId, flags = {}) {
     const {
+      workspace: refreshWorkspace = false,
       snapshot: refreshSnapshot = false,
+      documents: refreshDocuments = false,
       timeline: refreshTimeline = false,
       commitments: refreshCommitments = false,
       workOrders: refreshWorkOrders = false,
     } = flags;
 
     const promises = [];
-    if (refreshSnapshot) promises.push(loadSnapshot(threadId));
+    if (
+      refreshWorkspace ||
+      refreshSnapshot ||
+      refreshDocuments ||
+      refreshCommitments
+    ) {
+      promises.push(loadWorkspace(threadId));
+    }
     if (refreshTimeline) promises.push(loadTimeline(threadId));
-    if (refreshCommitments) promises.push(loadCommitments(threadId));
     if (refreshWorkOrders) promises.push(loadWorkOrders(threadId));
     await Promise.all(promises);
   }
 
+  async function queueRefreshThreadDetail(threadId, flags = {}) {
+    if (!threadId) return;
+
+    if (queuedRefreshThreadId && queuedRefreshThreadId !== threadId) {
+      queuedRefreshFlags = null;
+      queuedRefreshPromise = null;
+    }
+
+    queuedRefreshThreadId = threadId;
+    queuedRefreshFlags = mergeRefreshFlags(queuedRefreshFlags, flags);
+
+    if (queuedRefreshPromise) {
+      return queuedRefreshPromise;
+    }
+
+    queuedRefreshPromise = (async () => {
+      while (queuedRefreshFlags) {
+        const nextFlags = queuedRefreshFlags;
+        queuedRefreshFlags = null;
+        await refreshThreadDetail(queuedRefreshThreadId, nextFlags);
+      }
+    })().finally(() => {
+      queuedRefreshPromise = null;
+      queuedRefreshThreadId = "";
+    });
+
+    return queuedRefreshPromise;
+  }
+
   async function fullRefresh(threadId) {
-    await Promise.all([
-      loadSnapshot(threadId),
-      loadTimeline(threadId),
-      loadCommitments(threadId),
-      loadWorkOrders(threadId),
-    ]);
+    await Promise.all([loadWorkspace(threadId), loadWorkOrders(threadId)]);
   }
 
   function setSnapshot(value) {
@@ -120,6 +205,10 @@ function createThreadDetailStore() {
 
   function setCommitments(value) {
     patchState({ commitments: value });
+  }
+
+  function setDocuments(value) {
+    patchState({ documents: value });
   }
 
   function setTimeline(value) {
@@ -142,13 +231,14 @@ function createThreadDetailStore() {
 
   return {
     subscribe,
-    loadSnapshot,
-    loadCommitments,
+    loadWorkspace,
     loadTimeline,
     loadWorkOrders,
     refreshThreadDetail,
+    queueRefreshThreadDetail,
     fullRefresh,
     setSnapshot,
+    setDocuments,
     setCommitments,
     setTimeline,
     setWorkOrders,

@@ -860,13 +860,14 @@ export const commandRegistry: CommandSpec[] = [
     "error_codes": [
       "invalid_json",
       "invalid_request",
-      "unknown_actor_id"
+      "unknown_actor_id",
+      "conflict"
     ],
     "concepts": [
       "commitments"
     ],
     "stability": "stable",
-    "agent_notes": "Non-idempotent unless caller controls external dedupe.",
+    "agent_notes": "Replay-safe when `request_key` is reused with the same body; otherwise each create issues a new commitment id.",
     "examples": [
       {
         "title": "Create commitment",
@@ -926,6 +927,10 @@ export const commandRegistry: CommandSpec[] = [
         },
         {
           "name": "commitment.provenance.notes",
+          "type": "string"
+        },
+        {
+          "name": "request_key",
           "type": "string"
         }
       ]
@@ -1185,7 +1190,7 @@ export const commandRegistry: CommandSpec[] = [
       "revisions"
     ],
     "stability": "beta",
-    "agent_notes": "Non-idempotent unless caller provides a deterministic document id and dedupes retries.",
+    "agent_notes": "Replay-safe when `request_key` is reused with the same body; core can issue the canonical document id when one is omitted.",
     "examples": [
       {
         "title": "Create document",
@@ -1220,6 +1225,10 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "refs",
           "type": "list\u003cstring\u003e"
+        },
+        {
+          "name": "request_key",
+          "type": "string"
         }
       ]
     },
@@ -1331,7 +1340,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/docs",
     "operation_id": "listDocuments",
     "summary": "List documents and their current head metadata",
-    "why": "Discover available documents without resolving each head individually.",
+    "why": "Discover available documents without resolving each head individually, optionally scoped to a single thread.",
     "input_mode": "none",
     "streaming": {
       "mode": "none"
@@ -1345,7 +1354,7 @@ export const commandRegistry: CommandSpec[] = [
       "revisions"
     ],
     "stability": "beta",
-    "agent_notes": "Safe and idempotent. Use `include_tombstoned=true` when auditing superseded documents.",
+    "agent_notes": "Safe and idempotent. Use `thread_id` to focus on one thread's docs and `include_tombstoned=true` when auditing superseded documents.",
     "examples": [
       {
         "title": "List documents",
@@ -1574,7 +1583,7 @@ export const commandRegistry: CommandSpec[] = [
       "append-only"
     ],
     "stability": "stable",
-    "agent_notes": "Non-idempotent unless external dedupe keying is used.",
+    "agent_notes": "Replay-safe when `request_key` is reused with the same body.",
     "examples": [
       {
         "title": "Append event",
@@ -1603,6 +1612,9 @@ export const commandRegistry: CommandSpec[] = [
             "commitment_status_changed",
             "decision_made",
             "decision_needed",
+            "document_created",
+            "document_tombstoned",
+            "document_updated",
             "exception_raised",
             "inbox_item_acknowledged",
             "message_posted",
@@ -1638,6 +1650,10 @@ export const commandRegistry: CommandSpec[] = [
         },
         {
           "name": "event.thread_id",
+          "type": "string"
+        },
+        {
+          "name": "request_key",
           "type": "string"
         }
       ]
@@ -2224,7 +2240,7 @@ export const commandRegistry: CommandSpec[] = [
       "receipts"
     ],
     "stability": "stable",
-    "agent_notes": "Include evidence refs that satisfy packet conventions.",
+    "agent_notes": "Replay-safe when `request_key` is reused with the same body. Include evidence refs that satisfy packet conventions.",
     "examples": [
       {
         "title": "Create receipt",
@@ -2269,6 +2285,10 @@ export const commandRegistry: CommandSpec[] = [
       "optional": [
         {
           "name": "actor_id",
+          "type": "string"
+        },
+        {
+          "name": "request_key",
           "type": "string"
         }
       ]
@@ -2352,6 +2372,10 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "actor_id",
           "type": "string"
+        },
+        {
+          "name": "request_key",
+          "type": "string"
         }
       ]
     },
@@ -2386,7 +2410,7 @@ export const commandRegistry: CommandSpec[] = [
       "work-orders"
     ],
     "stability": "stable",
-    "agent_notes": "Treat as non-idempotent unless artifact ids are controlled.",
+    "agent_notes": "Replay-safe when `request_key` is reused with the same body; packet id fields may be omitted and core will issue the canonical artifact id.",
     "examples": [
       {
         "title": "Create work order",
@@ -2431,6 +2455,10 @@ export const commandRegistry: CommandSpec[] = [
       "optional": [
         {
           "name": "actor_id",
+          "type": "string"
+        },
+        {
+          "name": "request_key",
           "type": "string"
         }
       ]
@@ -2484,12 +2512,12 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/threads/{thread_id}/context",
     "operation_id": "getThreadContext",
     "summary": "Get bundled thread context for agent callers",
-    "why": "Load one thread's state, recent events, key artifacts, and open commitments in a single round-trip; CLI `oar threads context` can aggregate across threads by composing multiple calls.",
+    "why": "Load one thread's state, recent events, key artifacts, open commitments, and linked documents in a single round-trip; CLI `oar threads context` can aggregate across threads by composing multiple calls.",
     "input_mode": "none",
     "streaming": {
       "mode": "none"
     },
-    "output_envelope": "Returns `{ thread, recent_events, key_artifacts, open_commitments }`.",
+    "output_envelope": "Returns `{ thread, recent_events, key_artifacts, open_commitments, documents }`.",
     "error_codes": [
       "invalid_request",
       "not_found"
@@ -2498,7 +2526,8 @@ export const commandRegistry: CommandSpec[] = [
       "threads",
       "events",
       "artifacts",
-      "commitments"
+      "commitments",
+      "docs"
     ],
     "stability": "beta",
     "agent_notes": "Use include_artifact_content for prompt-ready previews; default mode keeps payloads lighter. Prefer `oar threads inspect` as the first single-thread coordination read.",
@@ -2520,7 +2549,8 @@ export const commandRegistry: CommandSpec[] = [
       "threads.get",
       "threads.list",
       "threads.patch",
-      "threads.timeline"
+      "threads.timeline",
+      "threads.workspace"
     ],
     "go_method": "ThreadsContext",
     "ts_method": "threadsContext"
@@ -2542,14 +2572,15 @@ export const commandRegistry: CommandSpec[] = [
     "error_codes": [
       "invalid_json",
       "invalid_request",
-      "unknown_actor_id"
+      "unknown_actor_id",
+      "conflict"
     ],
     "concepts": [
       "threads",
       "snapshots"
     ],
     "stability": "stable",
-    "agent_notes": "Non-idempotent unless caller enforces a deterministic id strategy externally.",
+    "agent_notes": "Replay-safe when `request_key` is reused with the same body; otherwise core issues a new canonical thread id.",
     "examples": [
       {
         "title": "Create thread",
@@ -2627,6 +2658,10 @@ export const commandRegistry: CommandSpec[] = [
           "type": "string"
         },
         {
+          "name": "request_key",
+          "type": "string"
+        },
+        {
           "name": "thread.next_check_in_at",
           "type": "datetime"
         },
@@ -2645,7 +2680,8 @@ export const commandRegistry: CommandSpec[] = [
       "threads.get",
       "threads.list",
       "threads.patch",
-      "threads.timeline"
+      "threads.timeline",
+      "threads.workspace"
     ],
     "go_method": "ThreadsCreate",
     "ts_method": "threadsCreate"
@@ -2686,7 +2722,8 @@ export const commandRegistry: CommandSpec[] = [
       "threads.create",
       "threads.list",
       "threads.patch",
-      "threads.timeline"
+      "threads.timeline",
+      "threads.workspace"
     ],
     "go_method": "ThreadsGet",
     "ts_method": "threadsGet"
@@ -2725,7 +2762,8 @@ export const commandRegistry: CommandSpec[] = [
       "threads.create",
       "threads.get",
       "threads.patch",
-      "threads.timeline"
+      "threads.timeline",
+      "threads.workspace"
     ],
     "go_method": "ThreadsList",
     "ts_method": "threadsList"
@@ -2857,7 +2895,8 @@ export const commandRegistry: CommandSpec[] = [
       "threads.create",
       "threads.get",
       "threads.list",
-      "threads.timeline"
+      "threads.timeline",
+      "threads.workspace"
     ],
     "go_method": "ThreadsPatch",
     "ts_method": "threadsPatch"
@@ -2900,10 +2939,63 @@ export const commandRegistry: CommandSpec[] = [
       "threads.create",
       "threads.get",
       "threads.list",
-      "threads.patch"
+      "threads.patch",
+      "threads.workspace"
     ],
     "go_method": "ThreadsTimeline",
     "ts_method": "threadsTimeline"
+  },
+  {
+    "command_id": "threads.workspace",
+    "cli_path": "threads workspace",
+    "group": "threads",
+    "method": "GET",
+    "path": "/threads/{thread_id}/workspace",
+    "operation_id": "getThreadWorkspace",
+    "summary": "Get canonical thread workspace projection",
+    "why": "Load one thread workspace projection from the server, including canonical thread context plus derived collaboration and inbox summaries, so CLI and web do not need client-side joins.",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ thread_id, thread, context, collaboration, inbox, pending_decisions, related_threads, follow_up, section_kinds }`, with explicit section classifications.",
+    "error_codes": [
+      "invalid_request",
+      "not_found"
+    ],
+    "concepts": [
+      "threads",
+      "events",
+      "artifacts",
+      "commitments",
+      "docs",
+      "inbox"
+    ],
+    "stability": "beta",
+    "agent_notes": "Prefer this as the single-thread coordination read path. `section_kinds` distinguishes canonical versus derived sections.",
+    "examples": [
+      {
+        "title": "Workspace with defaults",
+        "command": "oar threads workspace --thread-id thread_123 --json"
+      },
+      {
+        "title": "Workspace with hydrated related review events",
+        "command": "oar threads workspace --thread-id thread_123 --include-related-event-content --include-artifact-content --json"
+      }
+    ],
+    "path_params": [
+      "thread_id"
+    ],
+    "adjacent_commands": [
+      "threads.context",
+      "threads.create",
+      "threads.get",
+      "threads.list",
+      "threads.patch",
+      "threads.timeline"
+    ],
+    "go_method": "ThreadsWorkspace",
+    "ts_method": "threadsWorkspace"
   }
 ] as CommandSpec[];
 
@@ -3187,6 +3279,10 @@ export class OarClient {
 
   threadsTimeline(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("threads.timeline", pathParams, options);
+  }
+
+  threadsWorkspace(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("threads.workspace", pathParams, options);
   }
 
 }

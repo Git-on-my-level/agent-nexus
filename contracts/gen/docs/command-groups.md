@@ -115,7 +115,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `threads`
 
-- Commands: `6`
+- Commands: `7`
 - Command IDs:
   - `threads.context` (`threads context`)
   - `threads.create` (`threads create`)
@@ -123,4 +123,5 @@ Generated from `contracts/oar-openapi.yaml`.
   - `threads.list` (`threads list`)
   - `threads.patch` (`threads patch`)
   - `threads.timeline` (`threads timeline`)
+  - `threads.workspace` (`threads workspace`)
 

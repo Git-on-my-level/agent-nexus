@@ -294,8 +294,11 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "threads create", "threads.create", nil, nil, body)
 		return result, "threads create", callErr
 	case "patch":
-		result, callErr := a.runThreadsPatchProposalCommand(ctx, args[1:], cfg)
+		result, callErr := a.runThreadsPatchCommand(ctx, args[1:], cfg)
 		return result, "threads patch", callErr
+	case "propose-patch":
+		result, callErr := a.runThreadsProposePatchCommand(ctx, args[1:], cfg)
+		return result, "threads propose-patch", callErr
 	case "apply":
 		result, callErr := a.runThreadsApplyCommand(ctx, args[1:], cfg)
 		return result, "threads apply", callErr
@@ -467,6 +470,9 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 	case "workspace":
 		result, err := a.runThreadsWorkspaceCommand(ctx, args[1:], cfg)
 		return result, "threads workspace", err
+	case "review":
+		result, err := a.runThreadsReviewCommand(ctx, args[1:], cfg)
+		return result, "threads review", err
 	case "recommendations":
 		result, err := a.runThreadsRecommendationsCommand(ctx, args[1:], cfg)
 		return result, "threads recommendations", err
@@ -537,9 +543,12 @@ func (a *App) runCommitmentsCommand(ctx context.Context, args []string, cfg conf
 		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "commitments create", "commitments.create", nil, nil, body)
 		return result, "commitments create", callErr
-	case "update":
-		result, callErr := a.runCommitmentsUpdateProposalCommand(ctx, args[1:], cfg)
-		return result, "commitments update", callErr
+	case "patch":
+		result, callErr := a.runCommitmentsPatchCommand(ctx, args[1:], cfg)
+		return result, "commitments patch", callErr
+	case "propose-patch":
+		result, callErr := a.runCommitmentsProposePatchCommand(ctx, args[1:], cfg)
+		return result, "commitments propose-patch", callErr
 	case "apply":
 		result, callErr := a.runCommitmentsApplyCommand(ctx, args[1:], cfg)
 		return result, "commitments apply", callErr
@@ -1266,14 +1275,27 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 	switch sub {
 	case "list":
 		fs := newSilentFlagSet("docs list")
+		var threadIDFlag trackedString
 		includeTombstoned := fs.Bool("include-tombstoned", false, "Include tombstoned documents")
+		fs.Var(&threadIDFlag, "thread-id", "Filter by thread id")
 		if err := fs.Parse(args[1:]); err != nil {
 			return nil, "docs list", errnorm.Usage("invalid_flags", err.Error())
 		}
 		if len(fs.Args()) > 0 {
 			return nil, "docs list", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar docs list`")
 		}
-		query := make([]queryParam, 0, 1)
+		resolvedThreadID := strings.TrimSpace(threadIDFlag.value)
+		if resolvedThreadID != "" {
+			resolved, err := a.resolveThreadIDFilters(ctx, cfg, []string{resolvedThreadID})
+			if err != nil {
+				return nil, "docs list", err
+			}
+			if len(resolved) > 0 {
+				resolvedThreadID = resolved[0]
+			}
+		}
+		query := make([]queryParam, 0, 2)
+		addSingleQuery(&query, "thread_id", resolvedThreadID)
 		if *includeTombstoned {
 			query = append(query, queryParam{name: "include_tombstoned", values: []string{"true"}})
 		}
@@ -1306,8 +1328,11 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 		result, callErr := a.runDocsContentCommand(ctx, args[1:], cfg)
 		return result, "docs content", callErr
 	case "update":
-		result, callErr := a.runDocsUpdateProposalCommand(ctx, args[1:], cfg)
+		result, callErr := a.runDocsUpdateCommand(ctx, args[1:], cfg)
 		return result, "docs update", callErr
+	case "propose-update":
+		result, callErr := a.runDocsProposeUpdateCommand(ctx, args[1:], cfg)
+		return result, "docs propose-update", callErr
 	case "apply":
 		result, callErr := a.runDocsApplyCommand(ctx, args[1:], cfg)
 		return result, "docs apply", callErr
@@ -1575,6 +1600,50 @@ func (a *App) runDocsContentCommand(ctx context.Context, args []string, cfg conf
 		cfg.Headers,
 	)
 	return result, nil
+}
+
+func (a *App) runThreadsPatchCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
+	id, body, err := a.parseThreadPatchInput(args, "threads patch")
+	if err != nil {
+		return nil, err
+	}
+	return a.invokeTypedJSONWithIDResolution(
+		ctx,
+		cfg,
+		"threads patch",
+		"threads.patch",
+		"thread_id",
+		id,
+		threadIDLookupSpec,
+		nil,
+		body,
+	)
+}
+
+func (a *App) runCommitmentsPatchCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
+	id, body, err := a.parseCommitmentPatchInput(args, "commitments patch")
+	if err != nil {
+		return nil, err
+	}
+	return a.invokeTypedJSONWithIDResolution(
+		ctx,
+		cfg,
+		"commitments patch",
+		"commitments.patch",
+		"commitment_id",
+		id,
+		commitmentIDLookupSpec,
+		nil,
+		body,
+	)
+}
+
+func (a *App) runDocsUpdateCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
+	id, body, err := a.parseDocsUpdateInput(args, "docs update", cfg)
+	if err != nil {
+		return nil, err
+	}
+	return a.invokeTypedJSON(ctx, cfg, "docs update", "docs.update", map[string]string{"document_id": id}, nil, body)
 }
 
 func (a *App) runEventsListCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {

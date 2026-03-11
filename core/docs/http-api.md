@@ -16,6 +16,9 @@ The schema of objects is defined by `../contracts/oar-schema.yaml`.
 - `refs` values MUST be typed ref strings per `ref_format`.
 - Error responses use a stable envelope:
   - `{ "error": { "code": "...", "message": "...", "recoverable": <bool>, "hint": "..." } }`
+- Create-heavy write endpoints accept optional `request_key` for replay-safe retries.
+  - Reusing the same `request_key` with the same request body replays the original successful response instead of creating duplicates.
+  - Reusing the same `request_key` with a different request body returns `409 Conflict`.
 
 ### Agent auth conventions
 
@@ -131,7 +134,7 @@ The schema of objects is defined by `../contracts/oar-schema.yaml`.
 ### Threads (thread snapshots)
 
 - `POST /threads`
-  - Body: `{ "actor_id": "...", "thread": <thread_snapshot_fields_without_id> }`
+  - Body: `{ "actor_id": "...", "request_key"?: "...", "thread": <thread_snapshot_fields_without_id> }`
   - `thread.cadence`:
     - MUST be either literal `reactive` or a 5-field cron expression.
     - Legacy values `daily`, `weekly`, `monthly`, `custom` MAY be accepted for backward compatibility.
@@ -160,27 +163,30 @@ The schema of objects is defined by `../contracts/oar-schema.yaml`.
 
 - `GET /threads/{thread_id}/timeline`
   - Response:
-    - `{ "events": [<event>...], "snapshots": { "<snapshot_id>": <snapshot> }, "artifacts": { "<artifact_id>": <artifact_metadata> } }`
+    - `{ "events": [<event>...], "snapshots": { "<snapshot_id>": <snapshot> }, "artifacts": { "<artifact_id>": <artifact_metadata> }, "documents": { "<document_id>": <document> }, "document_revisions": { "<revision_id>": <document_revision> } }`
     - `events` remain time-ordered.
     - `snapshots` includes objects referenced by `snapshot:<id>` refs in returned events when they exist.
     - `artifacts` includes metadata objects referenced by `artifact:<id>` refs in returned events when they exist.
-    - Missing referenced IDs are omitted from `snapshots`/`artifacts` (events still keep their original refs).
+    - `documents` includes objects referenced by `document:<id>` refs in returned events when they exist.
+    - `document_revisions` includes objects referenced by `document_revision:<id>` refs in returned events when they exist.
+    - Missing referenced IDs are omitted from expansion maps (events still keep their original refs).
 
 - `GET /threads/{thread_id}/context`
   - Query (optional):
     - `max_events` (non-negative integer, default `20`)
     - `include_artifact_content` (`true|false`, default `false`)
   - Response:
-    - `{ "thread": <thread_snapshot>, "recent_events": [<event>...], "key_artifacts": [ { "ref": "artifact:<id>", "artifact": <artifact_metadata>, "content_preview"?: "<string>" } ... ], "open_commitments": [<commitment_snapshot>...] }`
+    - `{ "thread": <thread_snapshot>, "recent_events": [<event>...], "key_artifacts": [ { "ref": "artifact:<id>", "artifact": <artifact_metadata>, "content_preview"?: "<string>" } ... ], "open_commitments": [<commitment_snapshot>...], "documents": [<document>...] }`
     - `recent_events` contains at most `max_events` newest events for the thread.
     - `key_artifacts` preserves `thread.key_artifacts` order and omits missing refs.
     - `content_preview` is included only when `include_artifact_content=true`.
     - `open_commitments` expands `thread.open_commitments` IDs into full commitment snapshots (missing IDs are omitted).
+    - `documents` returns thread-linked documents ordered by `updated_at` descending, each with a `head_revision` summary for current revision metadata.
 
 ### Commitments (commitment snapshots)
 
 - `POST /commitments`
-  - Body: `{ "actor_id": "...", "commitment": <commitment_snapshot_fields_without_id> }`
+  - Body: `{ "actor_id": "...", "request_key"?: "...", "commitment": <commitment_snapshot_fields_without_id> }`
   - Response: `{ "commitment": <commitment_snapshot> }`
 
 - `GET /commitments`
@@ -215,10 +221,43 @@ The schema of objects is defined by `../contracts/oar-schema.yaml`.
 - `GET /artifacts/{artifact_id}/content`
   - Response (content-type varies): raw artifact content
 
+### Documents
+
+- `POST /docs`
+  - Body: `{ "actor_id": "...", "request_key"?: "...", "document": { id?, thread_id?, title?, slug?, status?, labels?, supersedes? }, "refs"?: ["typed:ref"...], "content": <string|object|base64>, "content_type": "text|structured|binary" }`
+  - Response: `{ "document": <document>, "revision": <document_revision_with_content> }`
+  - Side effect: appends `document_created` to `events` with thread/document/revision/artifact refs when the document is thread-linked.
+
+- `GET /docs`
+  - Query (optional): `thread_id=<thread_id>`, `include_tombstoned=true|false`
+  - Response: `{ "documents": [<document>...] }`
+  - Notes:
+    - `thread_id` scopes the list to documents whose current `document.thread_id` matches the thread.
+    - Each listed document includes `head_revision` summary metadata (`revision_id`, `revision_number`, `artifact_id`, `content_type`, `created_at`, `created_by`) alongside the existing top-level head revision fields.
+
+- `GET /docs/{document_id}`
+  - Response: `{ "document": <document>, "revision": <document_revision_with_content> }`
+
+- `PATCH /docs/{document_id}`
+  - Body: `{ "actor_id": "...", "document"?: { title?, thread_id?, slug?, status?, labels?, supersedes? }, "if_base_revision": "<revision_id>", "refs"?: ["typed:ref"...], "content": <string|object|base64>, "content_type": "text|structured|binary" }`
+  - Response: `{ "document": <document>, "revision": <document_revision_with_content> }`
+  - Side effect: appends `document_updated` to `events` with thread/document/revision/artifact refs when the document is thread-linked.
+
+- `GET /docs/{document_id}/history`
+  - Response: `{ "document_id": "<document_id>", "revisions": [<document_revision>...] }`
+
+- `GET /docs/{document_id}/revisions/{revision_id}`
+  - Response: `{ "document_id": "<document_id>", "revision": <document_revision_with_content> }`
+
+- `POST /docs/{document_id}/tombstone`
+  - Body: `{ "actor_id": "...", "reason": "..." }`
+  - Response: `{ "document": <document>, "revision": <document_revision_with_content> }`
+  - Side effect: appends `document_tombstoned` to `events` with thread/document/current-revision/artifact refs when the document is thread-linked.
+
 ### Events
 
 - `POST /events`
-  - Body: `{ "actor_id": "...", "event": <event_fields_without_id_ts_actor_id> }`
+  - Body: `{ "actor_id": "...", "request_key"?: "...", "event": <event_fields_without_id_ts_actor_id> }`
   - Response: `{ "event": <event> }`
 
 - `GET /events/stream`
@@ -227,6 +266,7 @@ The schema of objects is defined by `../contracts/oar-schema.yaml`.
   - SSE data envelope: `{ "event": <event> }`
   - Optional query: `thread_id`, repeated `type`, `types` (comma-separated), `last_event_id`
   - Resume supported via `Last-Event-ID` header or `last_event_id` query.
+  - Thread-linked document lifecycle operations emit `document_created`, `document_updated`, and `document_tombstoned` events with `document:*`, `document_revision:*`, and backing `artifact:*` refs.
 
 - `GET /events/{event_id}`
   - Response: `{ "event": <event> }`
@@ -234,15 +274,17 @@ The schema of objects is defined by `../contracts/oar-schema.yaml`.
 ### Packet convenience endpoints
 
 - `POST /work_orders`
-  - Body: `{ "actor_id": "...", "artifact": <artifact_metadata>, "packet": <work_order_packet> }`
+  - Body: `{ "actor_id": "...", "request_key"?: "...", "artifact": <artifact_metadata>, "packet": <work_order_packet> }`
+  - `artifact.id` and `packet.work_order_id` MAY be omitted together; core issues the canonical artifact id and returns it in both artifact metadata and packet content.
   - Response: `{ "artifact": <artifact_metadata>, "event": <event> }`
 
 - `POST /receipts`
-  - Body: `{ "actor_id": "...", "artifact": <artifact_metadata>, "packet": <receipt_packet> }`
+  - Body: `{ "actor_id": "...", "request_key"?: "...", "artifact": <artifact_metadata>, "packet": <receipt_packet> }`
+  - `artifact.id` and `packet.receipt_id` MAY be omitted together; core issues the canonical artifact id and returns it in both artifact metadata and packet content.
   - Response: `{ "artifact": <artifact_metadata>, "event": <event> }`
 
 - `POST /reviews`
-  - Body: `{ "actor_id": "...", "artifact": <artifact_metadata>, "packet": <review_packet> }`
+  - Body: `{ "actor_id": "...", "request_key"?: "...", "artifact": <artifact_metadata>, "packet": <review_packet> }`
   - Response: `{ "artifact": <artifact_metadata>, "event": <event> }`
 
 - Atomicity guarantee:
@@ -273,3 +315,13 @@ The schema of objects is defined by `../contracts/oar-schema.yaml`.
 - `POST /derived/rebuild`
   - Body: `{ "actor_id": "..." }`
   - Response: `{ "ok": true }`
+
+- Materialized derived projections used by the common read path:
+  - `derived_inbox_items`: incrementally maintained inbox items keyed by deterministic `inbox_item_id`, with per-thread rows used by `GET /inbox`, `GET /inbox/{id}`, and thread workspace inbox sections.
+  - `derived_thread_views`: incrementally maintained per-thread stale/workspace summaries used by thread list stale indicators and thread workspace summary surfaces.
+  - `POST /derived/rebuild` remains the deterministic repair path: it re-emits any missing canonical stale-thread exceptions from canonical state, then rebuilds both projection tables from current threads/events/commitments/documents.
+
+- Meaningful thread activity for stale-thread clearing:
+  - The current activity set is explicit: `actor_statement`, `decision_needed`, `decision_made`, `work_order_created`, `receipt_added`, `review_completed`, `document_created`, `document_updated`, `document_tombstoned`, `commitment_created`, `commitment_status_changed`, plus non-create `snapshot_updated` events from direct user-authored snapshot edits.
+  - Coordination noise does not count as activity: inbox acknowledgments, exception notifications, thread-creation bookkeeping, and derived `open_commitments` maintenance.
+  - `thread.open_commitments` remains present on thread reads for compatibility, but keeping that field synchronized no longer emits a user-visible timeline event or bumps the thread’s visible update clock.

@@ -4,29 +4,57 @@
   "command_id": "threads.workspace",
   "data": {
     "collaboration": {
+      "artifact_count": 1,
+      "decision_count": 0,
+      "decision_request_count": 1,
       "decision_requests": [
         {
           "id": "event_ctx_2",
-          "short_id": "event_ctx_2",
           "summary": "confirm canonical command labels",
-          "summary_preview": "confirm canonical command labels",
           "thread_id": "thread_123",
           "type": "decision_needed"
         }
       ],
       "decisions": [],
+      "key_artifacts": [
+        {
+          "id": "artifact_ctx_1",
+          "kind": "work_order"
+        }
+      ],
+      "open_commitment_count": 1,
+      "open_commitments": [
+        {
+          "id": "commitment_ctx_1",
+          "status": "open"
+        }
+      ],
+      "recommendation_count": 1,
       "recommendations": [
         {
           "id": "event_ctx_1",
-          "short_id": "event_ctx_1",
           "summary": "normalize frame shape",
-          "summary_preview": "normalize frame shape",
           "thread_id": "thread_123",
           "type": "actor_statement"
         }
       ]
     },
     "context": {
+      "documents": [
+        {
+          "head_revision": {
+            "artifact_id": "artifact_doc_ctx_1",
+            "content_type": "text",
+            "created_at": "2026-03-07T00:02:00Z",
+            "revision_id": "rev_ctx_1",
+            "revision_number": 3
+          },
+          "id": "doc_ctx_1",
+          "status": "active",
+          "title": "Runbook",
+          "updated_at": "2026-03-07T00:02:00Z"
+        }
+      ],
       "key_artifacts": [
         {
           "id": "artifact_ctx_1",
@@ -42,17 +70,13 @@
       "recent_events": [
         {
           "id": "event_ctx_1",
-          "short_id": "event_ctx_1",
           "summary": "normalize frame shape",
-          "summary_preview": "normalize frame shape",
           "thread_id": "thread_123",
           "type": "actor_statement"
         },
         {
           "id": "event_ctx_2",
-          "short_id": "event_ctx_2",
           "summary": "confirm canonical command labels",
-          "summary_preview": "confirm canonical command labels",
           "thread_id": "thread_123",
           "type": "decision_needed"
         }
@@ -76,12 +100,9 @@
       "full_id": false,
       "items": [
         {
-          "alias": "ibx_483c273add26",
           "id": "inbox:decision_needed:thread_123:none:event_ctx_2",
-          "short_id": "inbox:decisi",
           "summary": "confirm canonical command labels",
           "thread_id": "thread_123",
-          "thread_short_id": "thread_123",
           "type": "decision_needed"
         }
       ],
@@ -92,15 +113,13 @@
       "count": 1,
       "items": [
         {
-          "alias": "ibx_483c273add26",
           "id": "inbox:decision_needed:thread_123:none:event_ctx_2",
-          "short_id": "inbox:decisi",
           "summary": "confirm canonical command labels",
           "thread_id": "thread_123",
-          "thread_short_id": "thread_123",
           "type": "decision_needed"
         }
-      ]
+      ],
+      "thread_id": "thread_123"
     },
     "related_decision_requests": {
       "count": 0,

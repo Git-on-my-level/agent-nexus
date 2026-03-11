@@ -849,8 +849,8 @@ var CommandRegistry = []CommandSpec{
 		PathParams: []string{"thread_id"},
 		InputMode:  "none",
 		Stability:  "beta",
-		Concepts:   []string{"threads", "events", "artifacts", "commitments"},
-		Adjacent:   []string{"threads.create", "threads.get", "threads.list", "threads.patch", "threads.timeline"},
+		Concepts:   []string{"threads", "events", "artifacts", "commitments", "docs"},
+		Adjacent:   []string{"threads.create", "threads.get", "threads.list", "threads.patch", "threads.timeline", "threads.workspace"},
 		Examples: []Example{
 			{
 				Title:   "Context with defaults",
@@ -871,7 +871,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "stable",
 		Concepts:  []string{"threads", "snapshots"},
-		Adjacent:  []string{"threads.context", "threads.get", "threads.list", "threads.patch", "threads.timeline"},
+		Adjacent:  []string{"threads.context", "threads.get", "threads.list", "threads.patch", "threads.timeline", "threads.workspace"},
 		Examples: []Example{
 			{
 				Title:   "Create thread",
@@ -889,7 +889,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "stable",
 		Concepts:   []string{"threads"},
-		Adjacent:   []string{"threads.context", "threads.create", "threads.list", "threads.patch", "threads.timeline"},
+		Adjacent:   []string{"threads.context", "threads.create", "threads.list", "threads.patch", "threads.timeline", "threads.workspace"},
 		Examples: []Example{
 			{
 				Title:   "Read thread",
@@ -906,7 +906,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "stable",
 		Concepts:  []string{"threads", "filtering"},
-		Adjacent:  []string{"threads.context", "threads.create", "threads.get", "threads.patch", "threads.timeline"},
+		Adjacent:  []string{"threads.context", "threads.create", "threads.get", "threads.patch", "threads.timeline", "threads.workspace"},
 		Examples: []Example{
 			{
 				Title:   "List active p1 threads",
@@ -924,7 +924,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "stable",
 		Concepts:   []string{"threads", "patch"},
-		Adjacent:   []string{"threads.context", "threads.create", "threads.get", "threads.list", "threads.timeline"},
+		Adjacent:   []string{"threads.context", "threads.create", "threads.get", "threads.list", "threads.timeline", "threads.workspace"},
 		Examples: []Example{
 			{
 				Title:   "Patch thread",
@@ -942,11 +942,33 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "stable",
 		Concepts:   []string{"threads", "events", "provenance"},
-		Adjacent:   []string{"threads.context", "threads.create", "threads.get", "threads.list", "threads.patch"},
+		Adjacent:   []string{"threads.context", "threads.create", "threads.get", "threads.list", "threads.patch", "threads.workspace"},
 		Examples: []Example{
 			{
 				Title:   "Timeline",
 				Command: "oar threads timeline --thread-id thread_123 --json",
+			},
+		},
+	},
+	{
+		CommandID:  "threads.workspace",
+		CLIPath:    "threads workspace",
+		Group:      "threads",
+		Method:     "GET",
+		Path:       "/threads/{thread_id}/workspace",
+		PathParams: []string{"thread_id"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"threads", "events", "artifacts", "commitments", "docs", "inbox"},
+		Adjacent:   []string{"threads.context", "threads.create", "threads.get", "threads.list", "threads.patch", "threads.timeline"},
+		Examples: []Example{
+			{
+				Title:   "Workspace with defaults",
+				Command: "oar threads workspace --thread-id thread_123 --json",
+			},
+			{
+				Title:   "Workspace with hydrated related review events",
+				Command: "oar threads workspace --thread-id thread_123 --include-related-event-content --include-artifact-content --json",
 			},
 		},
 	},
@@ -1278,4 +1300,8 @@ func (c *Client) ThreadsPatch(ctx context.Context, pathParams map[string]string,
 
 func (c *Client) ThreadsTimeline(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "threads.timeline", pathParams, opts)
+}
+
+func (c *Client) ThreadsWorkspace(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "threads.workspace", pathParams, opts)
 }

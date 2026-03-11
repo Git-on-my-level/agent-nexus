@@ -56,11 +56,49 @@ test("create commitment and enforce status evidence for done transition", async 
     });
   });
 
+  await page.route(
+    /\/threads\/thread-onboarding\/workspace(\?.*)?$/,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          thread_id: "thread-onboarding",
+          thread: snapshot,
+          context: {
+            recent_events: [],
+            key_artifacts: [],
+            open_commitments: snapshot.open_commitments
+              .map((id) => commitments[id])
+              .filter(Boolean),
+            documents: [],
+          },
+        }),
+      });
+    },
+  );
+
   await page.route(/\/threads\/thread-onboarding\/timeline$/, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({ events: [] }),
+    });
+  });
+
+  await page.route(/\/events\/stream(\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: ": keepalive\n\n",
+    });
+  });
+
+  await page.route(/\/events\/stream(\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: ": keepalive\n\n",
     });
   });
 
@@ -243,7 +281,7 @@ test("create commitment and enforce status evidence for done transition", async 
   });
 
   await expect(
-    page.getByText("No open commitments.", { exact: true }),
+    page.getByText("No active or blocked commitments.", { exact: true }),
   ).toBeVisible();
 });
 
@@ -311,6 +349,26 @@ test("commitment edit conflict shows warning and reloads latest snapshot", async
       body: JSON.stringify({ thread: snapshot }),
     });
   });
+
+  await page.route(
+    /\/threads\/thread-onboarding\/workspace(\?.*)?$/,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          thread_id: "thread-onboarding",
+          thread: snapshot,
+          context: {
+            recent_events: [],
+            key_artifacts: [],
+            open_commitments: [commitment],
+            documents: [],
+          },
+        }),
+      });
+    },
+  );
 
   await page.route(/\/threads\/thread-onboarding\/timeline$/, async (route) => {
     await route.fulfill({

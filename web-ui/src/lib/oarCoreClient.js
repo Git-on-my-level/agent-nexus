@@ -107,6 +107,128 @@ function parseGeneratedFailure(error, commandId) {
   };
 }
 
+function buildQueryString(query = {}) {
+  const params = new URLSearchParams();
+
+  for (const [key, rawValue] of Object.entries(query ?? {})) {
+    if (rawValue === undefined || rawValue === null || rawValue === "") {
+      continue;
+    }
+
+    if (Array.isArray(rawValue)) {
+      for (const item of rawValue) {
+        if (item === undefined || item === null || item === "") {
+          continue;
+        }
+        params.append(key, String(item));
+      }
+      continue;
+    }
+
+    params.set(key, String(rawValue));
+  }
+
+  return params.toString();
+}
+
+function parseSSEChunk(rawChunk) {
+  const lines = String(rawChunk ?? "")
+    .split("\n")
+    .map((line) => line.trimEnd());
+
+  let id = "";
+  let event = "message";
+  const dataLines = [];
+
+  for (const line of lines) {
+    if (!line || line.startsWith(":")) {
+      continue;
+    }
+
+    const separatorIndex = line.indexOf(":");
+    const field = separatorIndex >= 0 ? line.slice(0, separatorIndex) : line;
+    let value = separatorIndex >= 0 ? line.slice(separatorIndex + 1) : "";
+    if (value.startsWith(" ")) {
+      value = value.slice(1);
+    }
+
+    if (field === "id") {
+      id = value;
+      continue;
+    }
+    if (field === "event") {
+      event = value || event;
+      continue;
+    }
+    if (field === "data") {
+      dataLines.push(value);
+    }
+  }
+
+  if (!id && dataLines.length === 0) {
+    return null;
+  }
+
+  const rawData = dataLines.join("\n");
+  let data = rawData;
+  if (rawData) {
+    try {
+      data = JSON.parse(rawData);
+    } catch {
+      data = rawData;
+    }
+  }
+
+  return { id, event, data };
+}
+
+async function consumeSSEStream(response, { onEvent, signal } = {}) {
+  if (!response.body) {
+    throw new Error("oar-core returned an empty event stream response body.");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  try {
+    while (true) {
+      if (signal?.aborted) {
+        throw new DOMException("The operation was aborted.", "AbortError");
+      }
+
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+      buffer = buffer.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+
+      let separatorIndex = buffer.indexOf("\n\n");
+      while (separatorIndex >= 0) {
+        const rawChunk = buffer.slice(0, separatorIndex);
+        buffer = buffer.slice(separatorIndex + 2);
+        const parsed = parseSSEChunk(rawChunk);
+        if (parsed) {
+          await onEvent?.(parsed);
+        }
+        separatorIndex = buffer.indexOf("\n\n");
+      }
+    }
+
+    buffer += decoder.decode();
+    const trailing = parseSSEChunk(
+      buffer.replace(/\r\n/g, "\n").replace(/\r/g, "\n"),
+    );
+    if (trailing) {
+      await onEvent?.(trailing);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 function normalizeRequestError(error, { target, commandId, method, path }) {
   const generatedFailure = parseGeneratedFailure(error, commandId);
 
@@ -270,18 +392,24 @@ export function createOarCoreClient(options = {}) {
     }
   }
 
-  async function invokeRaw(commandId, pathParams = {}) {
+  async function invokeRaw(commandId, pathParams = {}, options = {}) {
     const command = commandInfo(commandId);
     const resolvedPath = renderPath(command.path, pathParams);
-    const url = toAbsoluteUrl(resolvedBaseUrl, resolvedPath);
+    const queryString = buildQueryString(options.query);
+    const requestPath = queryString
+      ? `${resolvedPath}?${queryString}`
+      : resolvedPath;
+    const url = toAbsoluteUrl(resolvedBaseUrl, requestPath);
 
     let response;
     try {
       response = await fetchFn(url, {
         method: command.method,
         headers: {
-          accept: "*/*",
+          accept: options.accept ?? "*/*",
+          ...(options.headers ?? {}),
         },
+        signal: options.signal,
       });
     } catch (error) {
       throw normalizeRequestError(error, {
@@ -383,10 +511,32 @@ export function createOarCoreClient(options = {}) {
           { body: withActorId(payload) },
         ),
       ),
+    getThreadWorkspace: (threadId, filters) =>
+      invokeJSON("threads.workspace", () =>
+        generated.threadsWorkspace(
+          { thread_id: String(threadId) },
+          { query: filters },
+        ),
+      ),
     listThreadTimeline: (threadId) =>
       invokeJSON("threads.timeline", () =>
         generated.threadsTimeline({ thread_id: String(threadId) }),
       ),
+    streamThreadEvents: async ({ threadId, lastEventId, signal, onEvent }) => {
+      const response = await invokeRaw(
+        "events.stream",
+        {},
+        {
+          query: {
+            thread_id: String(threadId),
+            last_event_id: lastEventId,
+          },
+          accept: "text/event-stream",
+          signal,
+        },
+      );
+      await consumeSSEStream(response, { onEvent, signal });
+    },
     getSnapshot: (snapshotId) =>
       invokeJSON("snapshots.get", () =>
         generated.snapshotsGet({ snapshot_id: String(snapshotId) }),

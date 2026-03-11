@@ -116,6 +116,47 @@
     return "";
   }
 
+  function commitmentRiskState(commitment) {
+    const dueAt = Date.parse(String(commitment?.due_at ?? ""));
+    if (!Number.isFinite(dueAt)) {
+      return {
+        label: commitment?.status === "blocked" ? "Blocked" : "No due date",
+        tone:
+          commitment?.status === "blocked"
+            ? "bg-amber-500/10 text-amber-400"
+            : "bg-[var(--ui-border)] text-[var(--ui-text-muted)]",
+      };
+    }
+
+    const deltaMs = dueAt - Date.now();
+    if (deltaMs < 0) {
+      return {
+        label:
+          commitment?.status === "blocked" ? "Blocked and overdue" : "Overdue",
+        tone: "bg-red-500/10 text-red-400",
+      };
+    }
+
+    if (commitment?.status === "blocked") {
+      return {
+        label: "Blocked",
+        tone: "bg-amber-500/10 text-amber-400",
+      };
+    }
+
+    if (deltaMs <= 48 * 60 * 60 * 1000) {
+      return {
+        label: "Due soon",
+        tone: "bg-amber-500/10 text-amber-400",
+      };
+    }
+
+    return {
+      label: "On track",
+      tone: "bg-emerald-500/10 text-emerald-400",
+    };
+  }
+
   function beginCommitmentEdit(commitment) {
     createCommitmentNotice = "";
     editCommitmentNotice = "";
@@ -337,7 +378,7 @@
     <p class="px-4 py-3 text-[12px] text-[var(--ui-text-muted)]">Loading...</p>
   {:else if commitments.length === 0}
     <p class="px-4 py-3 text-[13px] text-[var(--ui-text-muted)]">
-      No open commitments.
+      No active or blocked commitments.
     </p>
   {:else}
     {#each commitments as commitment, i}
@@ -358,6 +399,12 @@
                 ? formatTimestamp(commitment.due_at)
                 : "—"}
             </p>
+            <div class="mt-1 flex flex-wrap items-center gap-1.5">
+              <span
+                class={`rounded px-2 py-0.5 text-[11px] font-medium ${commitmentRiskState(commitment).tone}`}
+                >{commitmentRiskState(commitment).label}</span
+              >
+            </div>
           </div>
           <div class="flex shrink-0 items-center gap-2">
             <span

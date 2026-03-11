@@ -32,5 +32,17 @@ describe("mockCoreData parity behaviors", () => {
         "onboarding-guide-v1",
       ]);
     });
+
+    it("supports thread-scoped filtering and head revision summaries", async () => {
+      const mod = await import("../../src/lib/mockCoreData.js");
+      const docs = mod.listMockDocuments({ thread_id: "thread-governance" });
+
+      expect(docs.map((doc) => doc.id)).toEqual(["product-constitution"]);
+      expect(docs[0]?.head_revision).toMatchObject({
+        revision_id: "rev-pc-3",
+        revision_number: 3,
+        content_type: "text",
+      });
+    });
   });
 });

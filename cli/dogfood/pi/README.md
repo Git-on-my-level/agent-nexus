@@ -72,6 +72,11 @@ Constraints enforced by the run workspace:
 
 Scenario command-shape guidance:
 - default to `oar threads workspace --thread-id <thread-id>` for the main coordination read
+- use `oar threads workspace --thread-id <thread-id> --include-related-event-content --include-artifact-content --verbose` when you want the richest one-command thread review
 - use `oar threads recommendations --thread-id <thread-id>` for recommendation/decision review
 - add `--include-related-event-content --verbose` when you need full related-thread recommendation content in one command
-- document updates are a two-step proposal flow: `oar docs update ...` then `oar docs apply --proposal-id <proposal-id>`
+- use `oar commitments get --commitment-id <commitment-id>` when a commitment listed in workspace/inbox needs full owner/due-date details
+- document proposals are a two-step flow: `oar docs propose-update ...` then `oar docs apply --proposal-id <proposal-id>`
+- use `oar docs update ...` only when you want to write the new revision immediately without staging a proposal
+- use `oar events validate --from-file <path>` when you want a local payload check before `oar events create`
+- use `oar events create --from-file <path> --dry-run` when you want the exact create request preview without sending it

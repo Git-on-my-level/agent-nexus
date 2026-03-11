@@ -1,4 +1,5 @@
 <script>
+  import { goto } from "$app/navigation";
   import { page } from "$app/stores";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import { coreClient } from "$lib/coreClient";
@@ -8,6 +9,9 @@
 
   let documentId = $derived($page.params.documentId);
   let projectSlug = $derived($page.params.project);
+  let requestedRevisionId = $derived(
+    String($page.url.searchParams.get("revision") ?? "").trim(),
+  );
   let actorName = $derived((id) => lookupActorDisplayName(id, $actorRegistry));
 
   let document = $state(null);
@@ -24,6 +28,7 @@
   let editDraft = $state({ content: "", title: "", status: "", labels: "" });
   let saving = $state(false);
   let saveError = $state("");
+  let loadingSelectedRevisionKey = $state("");
 
   let displayedContent = $derived(
     selectedRevision?.content ?? headRevision?.content ?? "",
@@ -45,9 +50,55 @@
     return projectPath(projectSlug, pathname);
   }
 
+  async function setRequestedRevision(revisionId = "") {
+    const next = String(revisionId ?? "").trim();
+    const url = new URL($page.url);
+
+    if (next) {
+      url.searchParams.set("revision", next);
+    } else {
+      url.searchParams.delete("revision");
+    }
+
+    const href = `${url.pathname}${url.search}${url.hash}`;
+    await goto(href, {
+      replaceState: true,
+      keepFocus: true,
+      noScroll: true,
+    });
+  }
+
   $effect(() => {
     const id = documentId;
     if (id && id !== loadedDocumentId) loadDocument(id);
+  });
+
+  $effect(() => {
+    if (!documentId || !headRevision?.revision_id) {
+      return;
+    }
+
+    const revisionId = requestedRevisionId;
+    if (!revisionId || revisionId === headRevision.revision_id) {
+      if (selectedRevision) {
+        selectedRevision = null;
+      }
+      return;
+    }
+
+    if (selectedRevision?.revision_id === revisionId) {
+      return;
+    }
+
+    const cachedRevision = revisions.find(
+      (rev) => rev.revision_id === revisionId,
+    );
+    if (cachedRevision?.content) {
+      selectedRevision = cachedRevision;
+      return;
+    }
+
+    void loadSelectedRevision(documentId, revisionId, cachedRevision ?? null);
   });
 
   async function loadDocument(targetId) {
@@ -95,29 +146,69 @@
 
   async function selectRevision(rev) {
     if (rev.revision_id === headRevision?.revision_id) {
-      selectedRevision = null;
+      await setRequestedRevision("");
       return;
     }
     if (rev.content) {
       selectedRevision = rev;
-      return;
     }
-    try {
-      const result = await coreClient.getDocumentRevision(
-        documentId,
-        rev.revision_id,
-      );
-      const loaded = result.revision ?? rev;
-      selectedRevision = loaded;
-      const idx = revisions.findIndex((r) => r.revision_id === rev.revision_id);
-      if (idx >= 0) revisions[idx] = { ...revisions[idx], ...loaded };
-    } catch {
-      selectedRevision = rev;
-    }
+    await setRequestedRevision(rev.revision_id);
   }
 
   function returnToHead() {
-    selectedRevision = null;
+    void setRequestedRevision("");
+  }
+
+  async function loadSelectedRevision(
+    targetDocumentId,
+    targetRevisionId,
+    cachedRevision = null,
+  ) {
+    const requestKey = `${targetDocumentId}:${targetRevisionId}`;
+    if (loadingSelectedRevisionKey === requestKey) {
+      return;
+    }
+
+    loadingSelectedRevisionKey = requestKey;
+    try {
+      const result = await coreClient.getDocumentRevision(
+        targetDocumentId,
+        targetRevisionId,
+      );
+      if (
+        documentId !== targetDocumentId ||
+        requestedRevisionId !== targetRevisionId
+      ) {
+        return;
+      }
+
+      const loaded = result.revision ?? cachedRevision;
+      if (!loaded) {
+        selectedRevision = null;
+        return;
+      }
+
+      selectedRevision = loaded;
+      const idx = revisions.findIndex(
+        (r) => r.revision_id === targetRevisionId,
+      );
+      if (idx >= 0) {
+        revisions[idx] = { ...revisions[idx], ...loaded };
+      } else if (loaded.revision_id) {
+        revisions = [...revisions, loaded];
+      }
+    } catch {
+      if (
+        documentId === targetDocumentId &&
+        requestedRevisionId === targetRevisionId
+      ) {
+        selectedRevision = cachedRevision;
+      }
+    } finally {
+      if (loadingSelectedRevisionKey === requestKey) {
+        loadingSelectedRevisionKey = "";
+      }
+    }
   }
 
   function openEdit() {

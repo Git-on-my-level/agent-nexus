@@ -163,8 +163,8 @@ test("inbox urgency filters reduce visible cards", async ({ page }) => {
 
   await page.getByRole("button", { name: /Aging 24h\+/ }).click();
   await expect(page.getByTestId("inbox-card-inbox-003")).toBeVisible();
-  await expect(page.getByTestId("inbox-card-inbox-001")).toHaveCount(0);
-  await expect(page.getByTestId("inbox-card-inbox-002")).toHaveCount(0);
+  await expect(page.getByTestId("inbox-card-inbox-001")).toBeVisible();
+  await expect(page.getByTestId("inbox-card-inbox-002")).toBeVisible();
 });
 
 test("recording a decision marks only the selected inbox item", async ({

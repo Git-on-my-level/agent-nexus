@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -77,9 +78,10 @@ func createPacketArtifactAndEvent(w http.ResponseWriter, r *http.Request, opts h
 	}
 
 	var req struct {
-		ActorID  string         `json:"actor_id"`
-		Artifact map[string]any `json:"artifact"`
-		Packet   map[string]any `json:"packet"`
+		ActorID    string         `json:"actor_id"`
+		RequestKey string         `json:"request_key"`
+		Artifact   map[string]any `json:"artifact"`
+		Packet     map[string]any `json:"packet"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
@@ -98,7 +100,6 @@ func createPacketArtifactAndEvent(w http.ResponseWriter, r *http.Request, opts h
 	if !ok {
 		return
 	}
-
 	if rawKind, hasKind := req.Artifact["kind"]; hasKind {
 		kindText, ok := rawKind.(string)
 		if !ok {
@@ -111,6 +112,37 @@ func createPacketArtifactAndEvent(w http.ResponseWriter, r *http.Request, opts h
 		}
 	}
 	req.Artifact["kind"] = request.PacketKind
+	scope := "packets." + request.PacketKind + ".create"
+	packetIDLabel := "artifact-" + strings.ReplaceAll(request.PacketKind, "_", "-")
+	idField, hasIDField := packetIDFieldName(request.PacketKind)
+	if !hasIDField {
+		writeError(w, http.StatusBadRequest, "invalid_request", "packet id rule is not defined")
+		return
+	}
+	artifactID := firstNonEmptyString(req.Artifact["id"])
+	if artifactID == "" {
+		if strings.TrimSpace(req.RequestKey) != "" {
+			artifactID = deriveRequestScopedID(scope, actorID, req.RequestKey, packetIDLabel)
+		} else {
+			artifactID = uuid.NewString()
+		}
+		req.Artifact["id"] = artifactID
+	}
+	if firstNonEmptyString(req.Packet[idField]) == "" {
+		req.Packet[idField] = artifactID
+	}
+	replayStatus, replayPayload, replayed, err := readIdempotencyReplay(r.Context(), opts.primitiveStore, scope, actorID, req.RequestKey, req)
+	if writeIdempotencyError(w, err) {
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load idempotency replay")
+		return
+	}
+	if replayed {
+		writeJSON(w, replayStatus, replayPayload)
+		return
+	}
 
 	threadID, err := validatePacketArtifactAndContent(opts.contract, request.PacketKind, req.Artifact, req.Packet)
 	if err != nil {
@@ -118,12 +150,6 @@ func createPacketArtifactAndEvent(w http.ResponseWriter, r *http.Request, opts h
 		return
 	}
 
-	artifactID, _ := req.Artifact["id"].(string)
-	artifactID = strings.TrimSpace(artifactID)
-	if artifactID == "" {
-		artifactID = uuid.NewString()
-		req.Artifact["id"] = artifactID
-	}
 	eventRefs := request.EventRefs(artifactID, threadID, req.Packet)
 	eventRefs = uniqueStringRefs(eventRefs)
 
@@ -135,21 +161,60 @@ func createPacketArtifactAndEvent(w http.ResponseWriter, r *http.Request, opts h
 		"payload":    map[string]any{},
 		"provenance": actorStatementProvenance(),
 	}
+	if strings.TrimSpace(req.RequestKey) != "" {
+		event["id"] = deriveRequestScopedID(scope, actorID, req.RequestKey, packetIDLabel+"-event")
+	}
 
 	artifact, storedEvent, err := opts.primitiveStore.CreateArtifactAndEvent(r.Context(), actorID, req.Artifact, req.Packet, "structured", event)
 	if err != nil {
+		if errors.Is(err, primitives.ErrConflict) && strings.TrimSpace(req.RequestKey) != "" {
+			existingArtifact, artifactErr := opts.primitiveStore.GetArtifact(r.Context(), artifactID)
+			existingEvent, eventErr := opts.primitiveStore.GetEvent(r.Context(), firstNonEmptyString(event["id"]))
+			if artifactErr == nil && eventErr == nil {
+				response := map[string]any{
+					"artifact": existingArtifact,
+					"event":    existingEvent,
+				}
+				status, payload, replayErr := persistIdempotencyReplay(r.Context(), opts.primitiveStore, scope, actorID, req.RequestKey, req, http.StatusCreated, response)
+				if writeIdempotencyError(w, replayErr) {
+					return
+				}
+				if replayErr != nil {
+					writeError(w, http.StatusInternalServerError, "internal_error", "failed to persist idempotency replay")
+					return
+				}
+				writeJSON(w, status, payload)
+				return
+			}
+		}
 		if errors.Is(err, primitives.ErrInvalidArtifactID) {
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+		if errors.Is(err, primitives.ErrConflict) {
+			writeError(w, http.StatusConflict, "conflict", "packet already exists")
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to create packet artifact and event")
 		return
 	}
+	if err := refreshDerivedThreadProjection(r.Context(), opts, threadID, time.Now().UTC(), actorID); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to refresh derived thread views")
+		return
+	}
 
-	writeJSON(w, http.StatusCreated, map[string]any{
+	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, scope, actorID, req.RequestKey, req, http.StatusCreated, map[string]any{
 		"artifact": artifact,
 		"event":    storedEvent,
 	})
+	if writeIdempotencyError(w, err) {
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to persist idempotency replay")
+		return
+	}
+	writeJSON(w, status, payload)
 }
 
 func uniqueStringRefs(values []string) []string {

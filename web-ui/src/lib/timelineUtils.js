@@ -74,7 +74,39 @@ function artifactLabel(artifact, id) {
   return `${kind} ${id}`.trim();
 }
 
-export function buildTimelineRefLabelHints(snapshots = {}, artifacts = {}) {
+function documentLabel(document, id) {
+  const record = asObject(document);
+  const title = String(record.title ?? "").trim();
+  if (title) {
+    return title;
+  }
+  return `Document ${id}`.trim();
+}
+
+function documentRevisionLabel(revision, id, documents = {}) {
+  const record = asObject(revision);
+  const documentId = String(record.document_id ?? "").trim();
+  const document = documentId ? asObject(documents[documentId]) : {};
+  const title = String(document.title ?? "").trim();
+  const revisionNumber = record.revision_number;
+
+  if (title && Number.isFinite(Number(revisionNumber))) {
+    return `${title} revision ${revisionNumber}`.trim();
+  }
+
+  if (title) {
+    return `${title} revision`.trim();
+  }
+
+  return `Document revision ${id}`.trim();
+}
+
+export function buildTimelineRefLabelHints(
+  snapshots = {},
+  artifacts = {},
+  documents = {},
+  documentRevisions = {},
+) {
   const hints = {};
 
   for (const [snapshotId, snapshot] of Object.entries(asObject(snapshots))) {
@@ -89,6 +121,24 @@ export function buildTimelineRefLabelHints(snapshots = {}, artifacts = {}) {
     hints[`artifact:${id}`] = artifactLabel(artifact, id);
   }
 
+  for (const [documentId, document] of Object.entries(asObject(documents))) {
+    const id = String(documentId ?? "").trim();
+    if (!id) continue;
+    hints[`document:${id}`] = documentLabel(document, id);
+  }
+
+  for (const [revisionId, revision] of Object.entries(
+    asObject(documentRevisions),
+  )) {
+    const id = String(revisionId ?? "").trim();
+    if (!id) continue;
+    hints[`document_revision:${id}`] = documentRevisionLabel(
+      revision,
+      id,
+      documents,
+    );
+  }
+
   return hints;
 }
 
@@ -100,7 +150,12 @@ export function toTimelineViewEvent(event, options = {}) {
   const snapshots = asObject(options.snapshots);
   const labelHints =
     options.labelHints ??
-    buildTimelineRefLabelHints(snapshots, options.artifacts);
+    buildTimelineRefLabelHints(
+      snapshots,
+      options.artifacts,
+      options.documents,
+      options.documentRevisions,
+    );
 
   return {
     ...event,
