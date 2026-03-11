@@ -2192,7 +2192,7 @@ export const commandRegistry: CommandSpec[] = [
     "streaming": {
       "mode": "none"
     },
-    "output_envelope": "Returns `{ schema_version }` only.",
+    "output_envelope": "Returns `{ schema_version, command_registry_digest }` for frontend/core compatibility checks.",
     "concepts": [
       "compatibility",
       "schema"

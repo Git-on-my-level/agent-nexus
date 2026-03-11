@@ -7,6 +7,7 @@ RUN go mod download
 
 COPY core/ ./
 COPY contracts/oar-schema.yaml /src/contracts/oar-schema.yaml
+COPY contracts/gen/meta/commands.json /src/contracts/gen/meta/commands.json
 
 RUN CGO_ENABLED=1 go build -trimpath -ldflags='-s -w' -o /out/oar-core ./cmd/oar-core
 
@@ -23,11 +24,13 @@ WORKDIR /app
 
 COPY --from=builder /out/oar-core /usr/local/bin/oar-core
 COPY --from=builder /src/contracts/oar-schema.yaml /app/contracts/oar-schema.yaml
+COPY --from=builder /src/contracts/gen/meta/commands.json /app/contracts/gen/meta/commands.json
 
 RUN mkdir -p /var/lib/oar/workspace && chown -R oar:oar /var/lib/oar
 
 ENV OAR_WORKSPACE_ROOT=/var/lib/oar/workspace
 ENV OAR_SCHEMA_PATH=/app/contracts/oar-schema.yaml
+ENV OAR_META_COMMANDS_PATH=/app/contracts/gen/meta/commands.json
 ENV OAR_LISTEN_ADDR=0.0.0.0:8000
 ENV OAR_ALLOW_UNAUTHENTICATED_WRITES=false
 

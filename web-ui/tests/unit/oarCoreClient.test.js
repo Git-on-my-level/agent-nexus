@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { getExpectedCommandRegistryDigest } from "../../src/lib/commandRegistryDigest.js";
 import {
   createOarCoreClient,
   verifyCoreSchemaVersion,
@@ -44,6 +45,7 @@ describe("oarCoreClient error messaging", () => {
   });
 
   it("verifies schema via handshake when available", async () => {
+    const expectedDigest = await getExpectedCommandRegistryDigest();
     const client = createOarCoreClient({
       baseUrl: "http://core.test",
       fetchFn: async (url) => {
@@ -51,6 +53,7 @@ describe("oarCoreClient error messaging", () => {
           return new Response(
             JSON.stringify({
               schema_version: "0.2.2",
+              command_registry_digest: expectedDigest,
               core_version: "test",
               api_version: "0.2",
             }),
@@ -89,6 +92,7 @@ describe("oarCoreClient error messaging", () => {
   });
 
   it("falls back to /version when handshake is unavailable", async () => {
+    const expectedDigest = await getExpectedCommandRegistryDigest();
     const client = createOarCoreClient({
       baseUrl: "http://core.test",
       fetchFn: async (url) => {
@@ -100,10 +104,16 @@ describe("oarCoreClient error messaging", () => {
         }
 
         if (String(url).endsWith("/version")) {
-          return new Response(JSON.stringify({ schema_version: "0.2.2" }), {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          });
+          return new Response(
+            JSON.stringify({
+              schema_version: "0.2.2",
+              command_registry_digest: expectedDigest,
+            }),
+            {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            },
+          );
         }
 
         return new Response("not found", {
@@ -116,6 +126,37 @@ describe("oarCoreClient error messaging", () => {
     await expect(verifyCoreSchemaVersion(client)).resolves.toMatchObject({
       schema_version: "0.2.2",
     });
+  });
+
+  it("rejects when the deployed core advertises a different command registry", async () => {
+    const client = createOarCoreClient({
+      baseUrl: "http://core.test",
+      fetchFn: async (url) => {
+        if (String(url).endsWith("/meta/handshake")) {
+          return new Response(
+            JSON.stringify({
+              schema_version: "0.2.2",
+              command_registry_digest: "stale-core-digest",
+              core_version: "test",
+              api_version: "0.2",
+            }),
+            {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            },
+          );
+        }
+
+        return new Response("not found", {
+          status: 404,
+          statusText: "Not Found",
+        });
+      },
+    });
+
+    await expect(verifyCoreSchemaVersion(client)).rejects.toThrow(
+      /oar-core contract mismatch at http:\/\/core\.test[\s\S]*web UI is newer than the deployed core/i,
+    );
   });
 
   it("consumes thread-scoped event streams", async () => {

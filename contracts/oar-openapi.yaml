@@ -63,7 +63,7 @@ paths:
           command: oar meta version --json
       x-oar-input-mode: "none"
       x-oar-streaming: { mode: none }
-      x-oar-output-envelope: "Returns `{ schema_version }` only."
+      x-oar-output-envelope: "Returns `{ schema_version, command_registry_digest }` for frontend/core compatibility checks."
       x-oar-error-codes: []
       x-oar-concepts: [compatibility, schema]
       x-oar-stability: "stable"
@@ -1973,7 +1973,8 @@ components:
       type: object
       properties:
         schema_version: { type: string }
-      required: [schema_version]
+        command_registry_digest: { type: string }
+      required: [schema_version, command_registry_digest]
 
     HandshakeResponse:
       type: object
@@ -1981,6 +1982,7 @@ components:
         core_version: { type: string }
         api_version: { type: string }
         schema_version: { type: string }
+        command_registry_digest: { type: string }
         min_cli_version: { type: string }
         recommended_cli_version: { type: string }
         cli_download_url: { type: string }
@@ -1989,6 +1991,7 @@ components:
         - core_version
         - api_version
         - schema_version
+        - command_registry_digest
         - min_cli_version
         - recommended_cli_version
         - cli_download_url

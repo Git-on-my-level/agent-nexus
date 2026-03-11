@@ -10,15 +10,41 @@ import (
 )
 
 func handleMetaHandshake(w http.ResponseWriter, _ *http.Request, opts handlerOptions, schemaVersion string) {
-	writeJSON(w, http.StatusOK, map[string]any{
+	payload, err := handshakePayload(opts, schemaVersion)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "meta_unavailable", "generated command metadata is not available")
+		return
+	}
+	writeJSON(w, http.StatusOK, payload)
+}
+
+func handshakePayload(opts handlerOptions, schemaVersion string) (map[string]any, error) {
+	commandRegistryDigest, err := loadCommandRegistryDigest(opts)
+	if err != nil {
+		return nil, err
+	}
+	payload := map[string]any{
 		"core_version":            strings.TrimSpace(opts.coreVersion),
 		"api_version":             strings.TrimSpace(opts.apiVersion),
 		"schema_version":          strings.TrimSpace(schemaVersion),
+		"command_registry_digest": strings.TrimSpace(commandRegistryDigest),
 		"min_cli_version":         strings.TrimSpace(opts.minCLIVersion),
 		"recommended_cli_version": strings.TrimSpace(opts.recommendedCLIVersion),
 		"cli_download_url":        strings.TrimSpace(opts.cliDownloadURL),
 		"core_instance_id":        strings.TrimSpace(opts.coreInstanceID),
-	})
+	}
+	return payload, nil
+}
+
+func versionPayload(opts handlerOptions, schemaVersion string) (map[string]any, error) {
+	commandRegistryDigest, err := loadCommandRegistryDigest(opts)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"schema_version":          strings.TrimSpace(schemaVersion),
+		"command_registry_digest": strings.TrimSpace(commandRegistryDigest),
+	}, nil
 }
 
 func handleMetaCommands(w http.ResponseWriter, _ *http.Request, opts handlerOptions) {
@@ -107,8 +133,9 @@ func loadMetaCommandsPayload(opts handlerOptions) (map[string]any, []map[string]
 	candidates := make([]string, 0, 1+len(defaultMetaCommandsPathCandidates()))
 	if strings.TrimSpace(opts.metaCommandsPath) != "" {
 		candidates = append(candidates, strings.TrimSpace(opts.metaCommandsPath))
+	} else {
+		candidates = append(candidates, defaultMetaCommandsPathCandidates()...)
 	}
-	candidates = append(candidates, defaultMetaCommandsPathCandidates()...)
 	candidates = uniqueNonEmptyStrings(candidates)
 
 	loadErrors := make([]string, 0, len(candidates))

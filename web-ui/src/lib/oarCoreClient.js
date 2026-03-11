@@ -3,6 +3,7 @@ import {
   commandRegistry,
 } from "../../../contracts/gen/ts/dist/client.js";
 
+import { getExpectedCommandRegistryDigest } from "./commandRegistryDigest.js";
 import { EXPECTED_SCHEMA_VERSION, normalizeBaseUrl } from "./config.js";
 import { appPath } from "./projectPaths.js";
 
@@ -664,6 +665,8 @@ export async function verifyCoreSchemaVersion(
   expectedSchemaVersion = EXPECTED_SCHEMA_VERSION,
 ) {
   const target = client.baseUrl || "same-origin";
+  const expectedCommandRegistryDigest =
+    await getExpectedCommandRegistryDigest();
 
   let version;
   try {
@@ -705,6 +708,12 @@ export async function verifyCoreSchemaVersion(
   if (version?.schema_version !== expectedSchemaVersion) {
     throw new Error(
       `oar-core schema mismatch at ${target}: expected ${expectedSchemaVersion}, received ${version?.schema_version ?? "unknown"}.`,
+    );
+  }
+
+  if (version?.command_registry_digest !== expectedCommandRegistryDigest) {
+    throw new Error(
+      `oar-core contract mismatch at ${target}: expected command registry digest ${expectedCommandRegistryDigest}, received ${version?.command_registry_digest ?? "missing"}. This usually means the web UI is newer than the deployed core and may call endpoints that core does not implement yet.`,
     );
   }
 

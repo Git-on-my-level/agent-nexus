@@ -597,7 +597,7 @@ Generated from `contracts/oar-openapi.yaml`.
 - Input mode: `none`
 - Why: Verify compatibility between core and generated clients before performing writes.
 - Concepts: `compatibility`, `schema`
-- Output: Returns `{ schema_version }` only.
+- Output: Returns `{ schema_version, command_registry_digest }` for frontend/core compatibility checks.
 - Agent notes: Safe and idempotent.
 - Examples:
   - Read version: `oar meta version --json`

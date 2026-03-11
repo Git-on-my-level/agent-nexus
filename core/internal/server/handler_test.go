@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 )
 
@@ -50,6 +51,62 @@ func TestVersionEndpoint(t *testing.T) {
 	}
 	if payload["schema_version"] != "0.2.2" {
 		t.Fatalf("unexpected schema_version: got %q", payload["schema_version"])
+	}
+	if payload["command_registry_digest"] == "" {
+		t.Fatalf("expected command registry digest, payload=%#v", payload)
+	}
+}
+
+func TestHandshakeIncludesCommandRegistryDigest(t *testing.T) {
+	t.Parallel()
+
+	handler := NewHandler("0.2.2")
+	req := httptest.NewRequest(http.MethodGet, "/meta/handshake", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("unexpected status: got %d", rr.Code)
+	}
+
+	var payload map[string]string
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode body: %v", err)
+	}
+	if payload["schema_version"] != "0.2.2" {
+		t.Fatalf("unexpected schema_version: got %q", payload["schema_version"])
+	}
+	if payload["command_registry_digest"] == "" {
+		t.Fatalf("expected command registry digest, payload=%#v", payload)
+	}
+}
+
+func TestVersionEndpointReturnsServiceUnavailableWithoutCommandMetadata(t *testing.T) {
+	t.Parallel()
+
+	handler := NewHandler("0.2.2", WithMetaCommandsPath(filepath.Join(t.TempDir(), "missing-commands.json")))
+	req := httptest.NewRequest(http.MethodGet, "/version", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("unexpected status: got %d", rr.Code)
+	}
+}
+
+func TestHandshakeReturnsServiceUnavailableWithoutCommandMetadata(t *testing.T) {
+	t.Parallel()
+
+	handler := NewHandler("0.2.2", WithMetaCommandsPath(filepath.Join(t.TempDir(), "missing-commands.json")))
+	req := httptest.NewRequest(http.MethodGet, "/meta/handshake", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("unexpected status: got %d", rr.Code)
 	}
 }
 
