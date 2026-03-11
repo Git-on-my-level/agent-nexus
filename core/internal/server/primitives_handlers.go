@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"organization-autorunner-core/internal/primitives"
 	"organization-autorunner-core/internal/schema"
@@ -121,6 +122,10 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to append event")
+		return
+	}
+	if err := refreshDerivedThreadProjection(r.Context(), opts, anyString(stored["thread_id"]), time.Now().UTC(), actorID); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to refresh derived thread views")
 		return
 	}
 

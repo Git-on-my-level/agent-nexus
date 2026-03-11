@@ -274,6 +274,45 @@ var migrations = []migration{
 			`CREATE INDEX IF NOT EXISTS idx_documents_status_tombstoned_updated_at ON documents (status, tombstoned_at, updated_at DESC, id)`,
 		},
 	},
+	{
+		Version: 11,
+		Statements: []string{
+			`CREATE TABLE IF NOT EXISTS derived_inbox_items (
+				id TEXT PRIMARY KEY,
+				thread_id TEXT NOT NULL,
+				category TEXT NOT NULL,
+				trigger_at TEXT NOT NULL,
+				due_at TEXT,
+				has_due_at INTEGER NOT NULL DEFAULT 0,
+				source_event_id TEXT,
+				source_commitment_id TEXT,
+				generated_at TEXT NOT NULL,
+				data_json TEXT NOT NULL,
+				source_hash TEXT
+			);`,
+			`CREATE INDEX IF NOT EXISTS idx_derived_inbox_items_thread_trigger ON derived_inbox_items (thread_id, trigger_at DESC, id);`,
+			`CREATE INDEX IF NOT EXISTS idx_derived_inbox_items_category_trigger ON derived_inbox_items (category, trigger_at DESC, id);`,
+			`CREATE INDEX IF NOT EXISTS idx_derived_inbox_items_due_at ON derived_inbox_items (has_due_at, due_at, id);`,
+			`CREATE TABLE IF NOT EXISTS derived_thread_views (
+				thread_id TEXT PRIMARY KEY,
+				stale INTEGER NOT NULL DEFAULT 0,
+				last_activity_at TEXT,
+				latest_stale_exception_at TEXT,
+				inbox_count INTEGER NOT NULL DEFAULT 0,
+				pending_decision_count INTEGER NOT NULL DEFAULT 0,
+				recommendation_count INTEGER NOT NULL DEFAULT 0,
+				decision_request_count INTEGER NOT NULL DEFAULT 0,
+				decision_count INTEGER NOT NULL DEFAULT 0,
+				artifact_count INTEGER NOT NULL DEFAULT 0,
+				open_commitment_count INTEGER NOT NULL DEFAULT 0,
+				document_count INTEGER NOT NULL DEFAULT 0,
+				generated_at TEXT NOT NULL,
+				data_json TEXT NOT NULL DEFAULT '{}',
+				source_hash TEXT
+			);`,
+			`CREATE INDEX IF NOT EXISTS idx_derived_thread_views_stale_generated_at ON derived_thread_views (stale, generated_at DESC, thread_id);`,
+		},
+	},
 }
 
 func applyMigrations(ctx context.Context, db *sql.DB) error {

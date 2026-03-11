@@ -35,6 +35,12 @@ type PrimitiveStore interface {
 	ListArtifacts(ctx context.Context, filter primitives.ArtifactListFilter) ([]map[string]any, error)
 	GetIdempotencyReplay(ctx context.Context, scope string, actorID string, requestKey string) (primitives.IdempotencyReplay, error)
 	PutIdempotencyReplay(ctx context.Context, scope string, actorID string, requestKey string, requestHash string, status int, response map[string]any) error
+	ListDerivedInboxItems(ctx context.Context, filter primitives.DerivedInboxListFilter) ([]primitives.DerivedInboxItem, error)
+	GetDerivedInboxItem(ctx context.Context, id string) (primitives.DerivedInboxItem, error)
+	ReplaceDerivedInboxItems(ctx context.Context, threadID string, items []primitives.DerivedInboxItem) error
+	GetDerivedThreadProjection(ctx context.Context, threadID string) (primitives.DerivedThreadProjection, error)
+	ListDerivedThreadProjections(ctx context.Context, threadIDs []string) (map[string]primitives.DerivedThreadProjection, error)
+	PutDerivedThreadProjection(ctx context.Context, projection primitives.DerivedThreadProjection) error
 	ListDocuments(ctx context.Context, filter primitives.DocumentListFilter) ([]map[string]any, error)
 	CreateDocument(ctx context.Context, actorID string, document map[string]any, content any, contentType string, refs []string) (map[string]any, map[string]any, error)
 	GetDocument(ctx context.Context, documentID string) (map[string]any, map[string]any, error)

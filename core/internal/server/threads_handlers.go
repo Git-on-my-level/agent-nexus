@@ -101,6 +101,10 @@ func handleCreateThread(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to create thread")
 		return
 	}
+	if err := refreshDerivedThreadProjection(r.Context(), opts, anyString(result.Snapshot["id"]), time.Now().UTC(), actorID); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to refresh derived thread views")
+		return
+	}
 
 	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "threads.create", actorID, req.RequestKey, req, http.StatusCreated, map[string]any{"thread": result.Snapshot})
 	if writeIdempotencyError(w, err) {
@@ -192,6 +196,10 @@ func handlePatchThread(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to patch thread")
 		return
 	}
+	if err := refreshDerivedThreadProjection(r.Context(), opts, threadID, time.Now().UTC(), actorID); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to refresh derived thread views")
+		return
+	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"thread": result.Snapshot})
 }
@@ -227,21 +235,21 @@ func handleListThreads(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		return
 	}
 
-	events, err := opts.primitiveStore.ListEvents(r.Context(), primitives.EventListFilter{
-		Types: []string{"receipt_added", "decision_made"},
-	})
+	now := time.Now().UTC()
+	threadIDs := make([]string, 0, len(threads))
+	for _, thread := range threads {
+		threadIDs = append(threadIDs, anyString(thread["id"]))
+	}
+	projections, err := ensureDerivedThreadProjections(r.Context(), opts, threadIDs, now)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to evaluate thread staleness")
 		return
 	}
 
-	now := time.Now().UTC()
-	staleByThread := stalenessByThread(threads, events, now)
-
 	withStale := make([]map[string]any, 0, len(threads))
 	for _, thread := range threads {
 		threadID, _ := thread["id"].(string)
-		stale := staleByThread[threadID]
+		stale := projections[threadID].Stale
 		thread["stale"] = stale
 		if staleFilter != nil && stale != *staleFilter {
 			continue

@@ -135,6 +135,10 @@ func buildThreadWorkspacePayload(ctx context.Context, opts handlerOptions, threa
 	collaboration := buildThreadWorkspaceCollaborationSummary(contextBody)
 
 	now := time.Now().UTC()
+	projection, err := ensureDerivedThreadProjection(ctx, opts, threadID, now)
+	if err != nil {
+		return nil, err
+	}
 	inboxSection, inboxItems, err := buildThreadWorkspaceInboxSection(ctx, opts, threadID, now)
 	if err != nil {
 		return nil, err
@@ -180,12 +184,14 @@ func buildThreadWorkspacePayload(ctx context.Context, opts handlerOptions, threa
 		"related_decisions":         relatedThreadReview["related_decisions"],
 		"total_review_items":        totalReviewItems,
 		"follow_up":                 buildThreadWorkspaceFollowUpHints(threadID, recommendations, decisionRequests, decisions),
+		"workspace_summary":         cloneWorkspaceMap(projection.Data),
 		"section_kinds": map[string]any{
 			"thread":                    "canonical",
 			"context":                   "canonical",
 			"collaboration":             "derived",
 			"inbox":                     "derived",
 			"pending_decisions":         "derived",
+			"workspace_summary":         "derived",
 			"related_threads":           "derived",
 			"related_recommendations":   "derived",
 			"related_decision_requests": "derived",
@@ -212,21 +218,19 @@ func buildThreadWorkspacePayload(ctx context.Context, opts handlerOptions, threa
 }
 
 func buildThreadWorkspaceInboxSection(ctx context.Context, opts handlerOptions, threadID string, now time.Time) (map[string]any, []map[string]any, error) {
-	horizon := opts.inboxRiskHorizon
-	if horizon <= 0 {
-		horizon = defaultInboxRiskHorizon
+	if _, err := ensureDerivedThreadProjection(ctx, opts, threadID, now); err != nil {
+		return nil, nil, err
 	}
 
-	items, err := deriveInboxItemsNoStaleEmission(ctx, opts, now, horizon)
+	items, err := opts.primitiveStore.ListDerivedInboxItems(ctx, primitives.DerivedInboxListFilter{
+		ThreadID: threadID,
+	})
 	if err != nil {
 		return nil, nil, err
 	}
 
 	filtered := make([]map[string]any, 0, len(items))
 	for _, item := range items {
-		if strings.TrimSpace(anyString(item.Data["thread_id"])) != strings.TrimSpace(threadID) {
-			continue
-		}
 		filtered = append(filtered, cloneWorkspaceMap(item.Data))
 	}
 

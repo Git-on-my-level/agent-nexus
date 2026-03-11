@@ -92,6 +92,10 @@ func handleCreateCommitment(w http.ResponseWriter, r *http.Request, opts handler
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to create commitment")
 		return
 	}
+	if err := refreshDerivedThreadProjection(r.Context(), opts, anyString(result.Snapshot["thread_id"]), time.Now().UTC(), actorID); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to refresh derived thread views")
+		return
+	}
 
 	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "commitments.create", actorID, req.RequestKey, req, http.StatusCreated, map[string]any{"commitment": result.Snapshot})
 	if writeIdempotencyError(w, err) {
@@ -191,6 +195,10 @@ func handlePatchCommitment(w http.ResponseWriter, r *http.Request, opts handlerO
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to patch commitment")
+		return
+	}
+	if err := refreshDerivedThreadProjection(r.Context(), opts, anyString(result.Snapshot["thread_id"]), time.Now().UTC(), actorID); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to refresh derived thread views")
 		return
 	}
 
