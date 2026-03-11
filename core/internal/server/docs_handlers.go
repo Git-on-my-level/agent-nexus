@@ -18,7 +18,9 @@ func handleListDocuments(w http.ResponseWriter, r *http.Request, opts handlerOpt
 	}
 
 	includeTombstoned := strings.TrimSpace(r.URL.Query().Get("include_tombstoned")) == "true"
+	threadID := strings.TrimSpace(r.URL.Query().Get("thread_id"))
 	documents, err := opts.primitiveStore.ListDocuments(r.Context(), primitives.DocumentListFilter{
+		ThreadID:          threadID,
 		IncludeTombstoned: includeTombstoned,
 	})
 	if err != nil {

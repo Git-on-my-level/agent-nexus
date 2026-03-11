@@ -12,6 +12,9 @@
   let loading = $state(false);
   let error = $state("");
   let projectSlug = $derived($page.params.project);
+  let scopedThreadId = $derived(
+    String($page.url.searchParams.get("thread_id") ?? "").trim(),
+  );
   let actorName = $derived((id) => lookupActorDisplayName(id, $actorRegistry));
 
   let createOpen = $state(false);
@@ -32,16 +35,19 @@
   }
 
   $effect(() => {
+    const threadId = scopedThreadId;
     if (projectSlug) {
-      void loadDocuments();
+      void loadDocuments(threadId);
     }
   });
 
-  async function loadDocuments() {
+  async function loadDocuments(threadId = "") {
     loading = true;
     error = "";
     try {
-      const data = await coreClient.listDocuments({});
+      const filters = {};
+      if (threadId) filters.thread_id = threadId;
+      const data = await coreClient.listDocuments(filters);
       documents = data.documents ?? [];
     } catch (e) {
       error = `Failed to load documents: ${e instanceof Error ? e.message : String(e)}`;
@@ -57,7 +63,7 @@
       title: "",
       status: "draft",
       labels: "",
-      thread_id: "",
+      thread_id: scopedThreadId,
       content: "",
     };
   }
@@ -110,7 +116,7 @@
       if (newDocId) {
         await goto(projectHref(`/docs/${newDocId}`));
       } else {
-        await loadDocuments();
+        await loadDocuments(scopedThreadId);
       }
     } catch (e) {
       createError = `Failed to create document: ${e instanceof Error ? e.message : String(e)}`;
@@ -127,7 +133,20 @@
 </script>
 
 <div class="flex items-center justify-between mb-4">
-  <h1 class="text-lg font-semibold text-[var(--ui-text)]">Documents</h1>
+  <div>
+    <h1 class="text-lg font-semibold text-[var(--ui-text)]">Documents</h1>
+    {#if scopedThreadId}
+      <p class="mt-1 text-[12px] text-[var(--ui-text-muted)]">
+        Scoped to thread
+        <a
+          class="text-indigo-300 transition-colors hover:text-indigo-200"
+          href={projectHref(`/threads/${encodeURIComponent(scopedThreadId)}`)}
+        >
+          {scopedThreadId}
+        </a>
+      </p>
+    {/if}
+  </div>
   <button
     class="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text)] transition-colors hover:bg-[var(--ui-border)]"
     onclick={toggleCreate}
@@ -151,6 +170,22 @@
     {createOpen ? "Cancel" : "New document"}
   </button>
 </div>
+
+{#if scopedThreadId}
+  <div
+    class="mb-4 flex items-center justify-between rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2"
+  >
+    <p class="text-[12px] text-[var(--ui-text-muted)]">
+      Showing only documents linked to this thread.
+    </p>
+    <a
+      class="text-[12px] font-medium text-indigo-300 transition-colors hover:text-indigo-200"
+      href={projectHref("/docs")}
+    >
+      Clear scope
+    </a>
+  </div>
+{/if}
 
 {#if createOpen}
   <div

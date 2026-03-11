@@ -72,6 +72,33 @@ test("thread detail loads snapshot/timeline and posts reply message", async ({
     });
   });
 
+  await page.route(/\/docs\?thread_id=thread-onboarding$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        documents: [
+          {
+            id: "doc-onboarding-runbook",
+            title: "Onboarding Runbook",
+            status: "active",
+            updated_at: "2026-03-04T00:30:00.000Z",
+            updated_by: actorId,
+            labels: ["ops"],
+            head_revision_id: "rev-onboarding-runbook-2",
+            head_revision_number: 2,
+            head_revision: {
+              revision_id: "rev-onboarding-runbook-2",
+              revision_number: 2,
+              content_type: "text",
+              created_at: "2026-03-04T00:30:00.000Z",
+            },
+          },
+        ],
+      }),
+    });
+  });
+
   await page.route(/\/events$/, async (route) => {
     const payload = JSON.parse(route.request().postData() ?? "{}");
     postedEvents += 1;
@@ -92,6 +119,14 @@ test("thread detail loads snapshot/timeline and posts reply message", async ({
   });
 
   await page.goto("/threads/thread-onboarding");
+
+  await expect(page.getByText("Thread-linked docs and current head revisions.")).toBeVisible();
+  const docLink = page.getByRole("link", { name: /Onboarding Runbook/ });
+  await expect(docLink).toBeVisible();
+  await expect(docLink).toHaveAttribute(
+    "href",
+    /\/docs\/doc-onboarding-runbook\?revision=rev-onboarding-runbook-2$/,
+  );
   await page.getByRole("button", { name: "Timeline" }).click();
 
   await expect(
@@ -216,6 +251,14 @@ test("thread detail handles snapshot update conflict and retries after reload", 
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({ events: [] }),
+    });
+  });
+
+  await page.route(/\/docs\?thread_id=thread-onboarding$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ documents: [] }),
     });
   });
 

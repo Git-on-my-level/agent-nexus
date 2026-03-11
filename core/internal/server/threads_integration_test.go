@@ -966,6 +966,15 @@ func TestThreadContextBundlesRecentEventsArtifactsAndOpenCommitments(t *testing.
 	}`, http.StatusCreated)
 	createArtifactResp.Body.Close()
 
+	createDocumentResp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
+		"actor_id":"actor-1",
+		"document":{"id":"ctx-doc-1","thread_id":"`+threadID+`","title":"Context runbook","status":"active","labels":["ops"]},
+		"refs":["thread:`+threadID+`"],
+		"content":"# Context runbook",
+		"content_type":"text"
+	}`, http.StatusCreated)
+	defer createDocumentResp.Body.Close()
+
 	createCommitmentResp := postJSONExpectStatus(t, h.baseURL+"/commitments", `{
 		"actor_id":"actor-1",
 		"commitment":{
@@ -1030,6 +1039,7 @@ func TestThreadContextBundlesRecentEventsArtifactsAndOpenCommitments(t *testing.
 		RecentEvents    []map[string]any `json:"recent_events"`
 		KeyArtifacts    []map[string]any `json:"key_artifacts"`
 		OpenCommitments []map[string]any `json:"open_commitments"`
+		Documents       []map[string]any `json:"documents"`
 	}
 	if err := json.NewDecoder(contextResp.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode context response: %v", err)
@@ -1063,6 +1073,16 @@ func TestThreadContextBundlesRecentEventsArtifactsAndOpenCommitments(t *testing.
 	if len(payload.OpenCommitments) != 1 || asString(payload.OpenCommitments[0]["id"]) != commitmentID {
 		t.Fatalf("unexpected open commitments payload: %#v", payload.OpenCommitments)
 	}
+	if len(payload.Documents) != 1 {
+		t.Fatalf("expected 1 thread document, got %#v", payload.Documents)
+	}
+	if asString(payload.Documents[0]["id"]) != "ctx-doc-1" {
+		t.Fatalf("unexpected thread context document payload: %#v", payload.Documents)
+	}
+	headRevision, _ := payload.Documents[0]["head_revision"].(map[string]any)
+	if asString(headRevision["content_type"]) != "text" {
+		t.Fatalf("unexpected thread context document head revision summary: %#v", headRevision)
+	}
 
 	contextNoContentResp, err := http.Get(h.baseURL + "/threads/" + threadID + "/context?max_events=1")
 	if err != nil {
@@ -1075,6 +1095,7 @@ func TestThreadContextBundlesRecentEventsArtifactsAndOpenCommitments(t *testing.
 
 	var payloadNoContent struct {
 		KeyArtifacts []map[string]any `json:"key_artifacts"`
+		Documents    []map[string]any `json:"documents"`
 	}
 	if err := json.NewDecoder(contextNoContentResp.Body).Decode(&payloadNoContent); err != nil {
 		t.Fatalf("decode context no content response: %v", err)
@@ -1084,6 +1105,9 @@ func TestThreadContextBundlesRecentEventsArtifactsAndOpenCommitments(t *testing.
 	}
 	if _, exists := payloadNoContent.KeyArtifacts[0]["content_preview"]; exists {
 		t.Fatalf("did not expect content_preview when include_artifact_content=false: %#v", payloadNoContent.KeyArtifacts[0])
+	}
+	if len(payloadNoContent.Documents) != 1 {
+		t.Fatalf("expected thread documents in no-content context, got %#v", payloadNoContent.Documents)
 	}
 
 	contextZeroEventsResp, err := http.Get(h.baseURL + "/threads/" + threadID + "/context?max_events=0")

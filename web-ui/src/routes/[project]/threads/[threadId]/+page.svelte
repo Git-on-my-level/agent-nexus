@@ -8,6 +8,7 @@
 
   import ThreadDetailHeader from "$lib/components/thread-detail/ThreadDetailHeader.svelte";
   import ThreadOverviewTab from "$lib/components/thread-detail/ThreadOverviewTab.svelte";
+  import ThreadDocumentsPanel from "$lib/components/thread-detail/ThreadDocumentsPanel.svelte";
   import ThreadCommitmentsPanel from "$lib/components/thread-detail/ThreadCommitmentsPanel.svelte";
   import ThreadWorkTab from "$lib/components/thread-detail/ThreadWorkTab.svelte";
   import ThreadTimelineTab from "$lib/components/thread-detail/ThreadTimelineTab.svelte";
@@ -33,6 +34,7 @@
       () =>
         threadDetailStore.refreshThreadDetail(threadId, {
           snapshot: true,
+          documents: true,
           timeline: true,
         }),
       POLL_INTERVAL_MS,
@@ -165,6 +167,7 @@
       {conflictWarning}
       {editNotice}
     />
+    <ThreadDocumentsPanel {threadId} />
     <ThreadCommitmentsPanel
       {threadId}
       onCommitmentSave={handleSaveCommitment}

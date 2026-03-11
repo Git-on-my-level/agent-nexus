@@ -32,6 +32,10 @@ type documentRow struct {
 	TombstonedAt    sql.NullString
 	TombstonedBy    sql.NullString
 	TombstoneReason sql.NullString
+	HeadArtifactID  sql.NullString
+	HeadContentType sql.NullString
+	HeadCreatedAt   sql.NullString
+	HeadCreatedBy   sql.NullString
 }
 
 func (s *Store) ListDocuments(ctx context.Context, filter DocumentListFilter) ([]map[string]any, error) {
@@ -39,16 +43,28 @@ func (s *Store) ListDocuments(ctx context.Context, filter DocumentListFilter) ([
 		return nil, fmt.Errorf("primitives store database is not initialized")
 	}
 
-	query := `SELECT id, thread_id, title, slug, status, labels_json, supersedes_json,
-		head_revision_id, head_revision_number, created_at, created_by, updated_at, updated_by,
-		tombstoned_at, tombstoned_by, tombstone_reason
-		FROM documents`
-	if !filter.IncludeTombstoned {
-		query += ` WHERE tombstoned_at IS NULL`
+	query := `SELECT d.id, d.thread_id, d.title, d.slug, d.status, d.labels_json, d.supersedes_json,
+		d.head_revision_id, d.head_revision_number, d.created_at, d.created_by, d.updated_at, d.updated_by,
+		d.tombstoned_at, d.tombstoned_by, d.tombstone_reason,
+		dr.artifact_id, a.content_type, dr.created_at, dr.created_by
+		FROM documents d
+		LEFT JOIN document_revisions dr ON dr.revision_id = d.head_revision_id
+		LEFT JOIN artifacts a ON a.id = dr.artifact_id`
+	conditions := make([]string, 0, 2)
+	args := make([]any, 0, 2)
+	if threadID := strings.TrimSpace(filter.ThreadID); threadID != "" {
+		conditions = append(conditions, "d.thread_id = ?")
+		args = append(args, threadID)
 	}
-	query += ` ORDER BY updated_at DESC, id ASC`
+	if !filter.IncludeTombstoned {
+		conditions = append(conditions, "d.tombstoned_at IS NULL")
+	}
+	if len(conditions) > 0 {
+		query += ` WHERE ` + strings.Join(conditions, ` AND `)
+	}
+	query += ` ORDER BY d.updated_at DESC, d.id ASC`
 
-	rows, err := s.db.QueryContext(ctx, query)
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query documents: %w", err)
 	}
@@ -74,6 +90,10 @@ func (s *Store) ListDocuments(ctx context.Context, filter DocumentListFilter) ([
 			&row.TombstonedAt,
 			&row.TombstonedBy,
 			&row.TombstoneReason,
+			&row.HeadArtifactID,
+			&row.HeadContentType,
+			&row.HeadCreatedAt,
+			&row.HeadCreatedBy,
 		); err != nil {
 			return nil, fmt.Errorf("scan document row: %w", err)
 		}
@@ -957,6 +977,23 @@ func (r documentRow) toMap() map[string]any {
 		"updated_at":           r.UpdatedAt,
 		"updated_by":           r.UpdatedBy,
 	}
+	headRevision := map[string]any{
+		"revision_id":     r.HeadRevisionID,
+		"revision_number": r.HeadRevisionNum,
+	}
+	if r.HeadArtifactID.Valid && strings.TrimSpace(r.HeadArtifactID.String) != "" {
+		headRevision["artifact_id"] = r.HeadArtifactID.String
+	}
+	if r.HeadContentType.Valid && strings.TrimSpace(r.HeadContentType.String) != "" {
+		headRevision["content_type"] = r.HeadContentType.String
+	}
+	if r.HeadCreatedAt.Valid && strings.TrimSpace(r.HeadCreatedAt.String) != "" {
+		headRevision["created_at"] = r.HeadCreatedAt.String
+	}
+	if r.HeadCreatedBy.Valid && strings.TrimSpace(r.HeadCreatedBy.String) != "" {
+		headRevision["created_by"] = r.HeadCreatedBy.String
+	}
+	out["head_revision"] = headRevision
 	if r.ThreadID.Valid && strings.TrimSpace(r.ThreadID.String) != "" {
 		out["thread_id"] = r.ThreadID.String
 	}

@@ -675,6 +675,9 @@ func TestDocsCommands(t *testing.T) {
 			if got := strings.TrimSpace(r.URL.Query().Get("include_tombstoned")); got != "true" {
 				t.Fatalf("expected include_tombstoned=true query, got %q", got)
 			}
+			if got := strings.TrimSpace(r.URL.Query().Get("thread_id")); got != "thread_docs_1" {
+				t.Fatalf("expected thread_id=thread_docs_1 query, got %q", got)
+			}
 			_, _ = w.Write([]byte(`{"documents":[{"id":"doc_1","head_revision_id":"rev_1"}]}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/docs":
 			body, _ := io.ReadAll(r.Body)
@@ -704,7 +707,7 @@ func TestDocsCommands(t *testing.T) {
 	home := t.TempDir()
 	env := map[string]string{}
 
-	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "list", "--include-tombstoned"}))
+	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "list", "--thread-id", "thread_docs_1", "--include-tombstoned"}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"document":{"id":"doc_1"},"content":"initial","content_type":"text"}`), []string{"--json", "--base-url", server.URL, "docs", "create"}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "get", "--document-id", "doc_1"}))
 	docsUpdatePayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"actor_id":"actor_test","if_base_revision":"rev_1","content":"next","content_type":"text"}`), []string{"--json", "--base-url", server.URL, "docs", "update", "--document-id", "doc_1"}))
@@ -3853,7 +3856,10 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 					{"id":"event_ctx_2","thread_id":"thread_123","type":"decision_needed","summary":"confirm canonical command labels"}
 				],
 				"key_artifacts":[{"id":"artifact_ctx_1","kind":"work_order"}],
-				"open_commitments":[{"id":"commitment_ctx_1","status":"open"}]
+				"open_commitments":[{"id":"commitment_ctx_1","status":"open"}],
+				"documents":[
+					{"id":"doc_ctx_1","title":"Runbook","status":"active","updated_at":"2026-03-07T00:02:00Z","head_revision":{"revision_id":"rev_ctx_1","revision_number":3,"content_type":"text","artifact_id":"artifact_doc_ctx_1","created_at":"2026-03-07T00:02:00Z"}}
+				]
 			}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
 			w.Header().Set("Content-Type", "application/json")

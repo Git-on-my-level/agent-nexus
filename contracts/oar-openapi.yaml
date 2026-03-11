@@ -821,7 +821,7 @@ paths:
       tags: [threads]
       x-oar-command-id: "threads.context"
       x-oar-cli-path: "threads context"
-      x-oar-why: "Load one thread's state, recent events, key artifacts, and open commitments in a single round-trip; CLI `oar threads context` can aggregate across threads by composing multiple calls."
+      x-oar-why: "Load one thread's state, recent events, key artifacts, open commitments, and linked documents in a single round-trip; CLI `oar threads context` can aggregate across threads by composing multiple calls."
       x-oar-examples:
         - title: Context with defaults
           command: oar threads context --thread-id thread_123 --json
@@ -829,9 +829,9 @@ paths:
           command: oar threads context --thread-id thread_123 --include-artifact-content --max-events 50 --json
       x-oar-input-mode: "none"
       x-oar-streaming: { mode: none }
-      x-oar-output-envelope: "Returns `{ thread, recent_events, key_artifacts, open_commitments }`."
+      x-oar-output-envelope: "Returns `{ thread, recent_events, key_artifacts, open_commitments, documents }`."
       x-oar-error-codes: [invalid_request, not_found]
-      x-oar-concepts: [threads, events, artifacts, commitments]
+      x-oar-concepts: [threads, events, artifacts, commitments, docs]
       x-oar-stability: "beta"
       x-oar-agent-notes: "Use include_artifact_content for prompt-ready previews; default mode keeps payloads lighter. Prefer `oar threads inspect` as the first single-thread coordination read."
       parameters:
@@ -1033,7 +1033,7 @@ paths:
       tags: [docs]
       x-oar-command-id: "docs.list"
       x-oar-cli-path: "docs list"
-      x-oar-why: "Discover available documents without resolving each head individually."
+      x-oar-why: "Discover available documents without resolving each head individually, optionally scoped to a single thread."
       x-oar-examples:
         - title: List documents
           command: oar docs list --json
@@ -1043,8 +1043,12 @@ paths:
       x-oar-error-codes: [invalid_request]
       x-oar-concepts: [docs, revisions]
       x-oar-stability: "beta"
-      x-oar-agent-notes: "Safe and idempotent. Use `include_tombstoned=true` when auditing superseded documents."
+      x-oar-agent-notes: "Safe and idempotent. Use `thread_id` to focus on one thread's docs and `include_tombstoned=true` when auditing superseded documents."
       parameters:
+        - in: query
+          name: thread_id
+          schema: { type: string }
+          description: "Return only documents currently linked to the given thread id."
         - in: query
           name: include_tombstoned
           schema: { type: boolean }
@@ -2330,7 +2334,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Commitment'
-      required: [thread, recent_events, key_artifacts, open_commitments]
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/Document'
+      required: [thread, recent_events, key_artifacts, open_commitments, documents]
 
     SnapshotResponse:
       type: object

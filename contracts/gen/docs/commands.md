@@ -355,11 +355,11 @@ Generated from `contracts/oar-openapi.yaml`.
 - HTTP: `GET /docs`
 - Stability: `beta`
 - Input mode: `none`
-- Why: Discover available documents without resolving each head individually.
+- Why: Discover available documents without resolving each head individually, optionally scoped to a single thread.
 - Concepts: `docs`, `revisions`
 - Error codes: `invalid_request`
 - Output: Returns `{ documents }` ordered by `updated_at` descending.
-- Agent notes: Safe and idempotent. Use `include_tombstoned=true` when auditing superseded documents.
+- Agent notes: Safe and idempotent. Use `thread_id` to focus on one thread's docs and `include_tombstoned=true` when auditing superseded documents.
 - Examples:
   - List documents: `oar docs list --json`
 
@@ -664,10 +664,10 @@ Generated from `contracts/oar-openapi.yaml`.
 - HTTP: `GET /threads/{thread_id}/context`
 - Stability: `beta`
 - Input mode: `none`
-- Why: Load one thread's state, recent events, key artifacts, and open commitments in a single round-trip; CLI `oar threads context` can aggregate across threads by composing multiple calls.
-- Concepts: `threads`, `events`, `artifacts`, `commitments`
+- Why: Load one thread's state, recent events, key artifacts, open commitments, and linked documents in a single round-trip; CLI `oar threads context` can aggregate across threads by composing multiple calls.
+- Concepts: `threads`, `events`, `artifacts`, `commitments`, `docs`
 - Error codes: `invalid_request`, `not_found`
-- Output: Returns `{ thread, recent_events, key_artifacts, open_commitments }`.
+- Output: Returns `{ thread, recent_events, key_artifacts, open_commitments, documents }`.
 - Agent notes: Use include_artifact_content for prompt-ready previews; default mode keeps payloads lighter. Prefer `oar threads inspect` as the first single-thread coordination read.
 - Examples:
   - Context with defaults: `oar threads context --thread-id thread_123 --json`

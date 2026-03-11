@@ -533,10 +533,10 @@ Generated Help: threads context
 - HTTP: `GET /threads/{thread_id}/context`
 - Stability: `beta`
 - Input mode: `none`
-- Why: Load one thread's state, recent events, key artifacts, and open commitments in a single round-trip; CLI `oar threads context` can aggregate across threads by composing multiple calls.
-- Output: Returns `{ thread, recent_events, key_artifacts, open_commitments }`.
+- Why: Load one thread's state, recent events, key artifacts, open commitments, and linked documents in a single round-trip; CLI `oar threads context` can aggregate across threads by composing multiple calls.
+- Output: Returns `{ thread, recent_events, key_artifacts, open_commitments, documents }`.
 - Error codes: `invalid_request`, `not_found`
-- Concepts: `threads`, `events`, `artifacts`, `commitments`
+- Concepts: `threads`, `events`, `artifacts`, `commitments`, `docs`
 - Agent notes: Use include_artifact_content for prompt-ready previews; default mode keeps payloads lighter. Prefer `oar threads inspect` as the first single-thread coordination read.
 - Adjacent commands: `threads create`, `threads get`, `threads list`, `threads patch`, `threads timeline`
 - Examples:
@@ -796,11 +796,11 @@ Generated Help: docs list
 - HTTP: `GET /docs`
 - Stability: `beta`
 - Input mode: `none`
-- Why: Discover available documents without resolving each head individually.
+- Why: Discover available documents without resolving each head individually, optionally scoped to a single thread.
 - Output: Returns `{ documents }` ordered by `updated_at` descending.
 - Error codes: `invalid_request`
 - Concepts: `docs`, `revisions`
-- Agent notes: Safe and idempotent. Use `include_tombstoned=true` when auditing superseded documents.
+- Agent notes: Safe and idempotent. Use `thread_id` to focus on one thread's docs and `include_tombstoned=true` when auditing superseded documents.
 - Adjacent commands: `docs create`, `docs get`, `docs history`, `docs revision get`, `docs tombstone`, `docs update`
 - Examples:
   - List documents: `oar docs list --json`
@@ -1029,7 +1029,7 @@ Generated Help: events create
 Body schema:
   Required: event.provenance.sources (list<string>), event.refs (list<typed_ref>), event.summary (string), event.type (string)
   Optional: actor_id (string), event.actor_id (string), event.payload (object), event.provenance.by_field (map<string, list<string>>), event.provenance.notes (string), event.thread_id (string)
-  Enum values: event.type (open): commitment_created, commitment_status_changed, decision_made, decision_needed, exception_raised, inbox_item_acknowledged, message_posted, receipt_added, review_completed, snapshot_updated, work_order_claimed, work_order_created
+  Enum values: event.type (open): commitment_created, commitment_status_changed, decision_made, decision_needed, document_created, document_tombstoned, document_updated, exception_raised, inbox_item_acknowledged, message_posted, receipt_added, review_completed, snapshot_updated, work_order_claimed, work_order_created
 
 Local CLI notes:
   - Common open `event.type` values include `actor_statement`; the enum list above is illustrative, not exhaustive.

@@ -434,11 +434,18 @@ func handleThreadContext(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		return
 	}
 
+	documents, err := buildThreadContextDocuments(r.Context(), opts, threadID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load thread documents")
+		return
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"thread":           thread,
 		"recent_events":    recentEvents,
 		"key_artifacts":    keyArtifacts,
 		"open_commitments": openCommitments,
+		"documents":        documents,
 	})
 }
 
@@ -532,6 +539,23 @@ func buildThreadContextOpenCommitments(ctx context.Context, opts handlerOptions,
 		ordered = append(ordered, commitment)
 	}
 	return ordered, nil
+}
+
+func buildThreadContextDocuments(ctx context.Context, opts handlerOptions, threadID string) ([]map[string]any, error) {
+	if strings.TrimSpace(threadID) == "" {
+		return []map[string]any{}, nil
+	}
+
+	documents, err := opts.primitiveStore.ListDocuments(ctx, primitives.DocumentListFilter{
+		ThreadID: threadID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(documents) == 0 {
+		return []map[string]any{}, nil
+	}
+	return documents, nil
 }
 
 func artifactContentPreview(content []byte) string {

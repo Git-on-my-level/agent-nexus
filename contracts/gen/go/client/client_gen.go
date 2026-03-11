@@ -849,7 +849,7 @@ var CommandRegistry = []CommandSpec{
 		PathParams: []string{"thread_id"},
 		InputMode:  "none",
 		Stability:  "beta",
-		Concepts:   []string{"threads", "events", "artifacts", "commitments"},
+		Concepts:   []string{"threads", "events", "artifacts", "commitments", "docs"},
 		Adjacent:   []string{"threads.create", "threads.get", "threads.list", "threads.patch", "threads.timeline"},
 		Examples: []Example{
 			{

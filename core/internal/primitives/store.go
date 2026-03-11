@@ -37,6 +37,7 @@ type ArtifactListFilter struct {
 }
 
 type DocumentListFilter struct {
+	ThreadID          string
 	IncludeTombstoned bool
 }
 

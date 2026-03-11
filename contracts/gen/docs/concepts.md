@@ -85,7 +85,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `docs`
 
-- Commands: `7`
+- Commands: `8`
 - Command IDs:
   - `docs.create`
   - `docs.get`
@@ -94,6 +94,7 @@ Generated from `contracts/oar-openapi.yaml`.
   - `docs.revision.get`
   - `docs.tombstone`
   - `docs.update`
+  - `threads.context`
 
 ## `events`
 

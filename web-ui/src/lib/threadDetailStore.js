@@ -7,6 +7,9 @@ function initialState() {
     snapshot: null,
     snapshotLoading: false,
     snapshotError: "",
+    documents: [],
+    documentsLoading: false,
+    documentsError: "",
     commitments: [],
     commitmentsLoading: false,
     timeline: [],
@@ -55,6 +58,21 @@ function createThreadDetailStore() {
     }
   }
 
+  async function loadDocuments(threadId) {
+    patchState({ documentsLoading: true, documentsError: "" });
+    try {
+      const response = await coreClient.listDocuments({ thread_id: threadId });
+      patchState({ documents: response.documents ?? [] });
+    } catch (error) {
+      patchState({
+        documentsError: `Failed to load documents: ${error instanceof Error ? error.message : String(error)}`,
+        documents: [],
+      });
+    } finally {
+      patchState({ documentsLoading: false });
+    }
+  }
+
   async function loadTimeline(threadId) {
     patchState({ timelineLoading: true, timelineError: "" });
     try {
@@ -92,6 +110,7 @@ function createThreadDetailStore() {
   async function refreshThreadDetail(threadId, flags = {}) {
     const {
       snapshot: refreshSnapshot = false,
+      documents: refreshDocuments = false,
       timeline: refreshTimeline = false,
       commitments: refreshCommitments = false,
       workOrders: refreshWorkOrders = false,
@@ -99,6 +118,7 @@ function createThreadDetailStore() {
 
     const promises = [];
     if (refreshSnapshot) promises.push(loadSnapshot(threadId));
+    if (refreshDocuments) promises.push(loadDocuments(threadId));
     if (refreshTimeline) promises.push(loadTimeline(threadId));
     if (refreshCommitments) promises.push(loadCommitments(threadId));
     if (refreshWorkOrders) promises.push(loadWorkOrders(threadId));
@@ -108,6 +128,7 @@ function createThreadDetailStore() {
   async function fullRefresh(threadId) {
     await Promise.all([
       loadSnapshot(threadId),
+      loadDocuments(threadId),
       loadTimeline(threadId),
       loadCommitments(threadId),
       loadWorkOrders(threadId),
@@ -120,6 +141,10 @@ function createThreadDetailStore() {
 
   function setCommitments(value) {
     patchState({ commitments: value });
+  }
+
+  function setDocuments(value) {
+    patchState({ documents: value });
   }
 
   function setTimeline(value) {
@@ -143,12 +168,14 @@ function createThreadDetailStore() {
   return {
     subscribe,
     loadSnapshot,
+    loadDocuments,
     loadCommitments,
     loadTimeline,
     loadWorkOrders,
     refreshThreadDetail,
     fullRefresh,
     setSnapshot,
+    setDocuments,
     setCommitments,
     setTimeline,
     setWorkOrders,

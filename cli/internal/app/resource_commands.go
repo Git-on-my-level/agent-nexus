@@ -1266,14 +1266,27 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 	switch sub {
 	case "list":
 		fs := newSilentFlagSet("docs list")
+		var threadIDFlag trackedString
 		includeTombstoned := fs.Bool("include-tombstoned", false, "Include tombstoned documents")
+		fs.Var(&threadIDFlag, "thread-id", "Filter by thread id")
 		if err := fs.Parse(args[1:]); err != nil {
 			return nil, "docs list", errnorm.Usage("invalid_flags", err.Error())
 		}
 		if len(fs.Args()) > 0 {
 			return nil, "docs list", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar docs list`")
 		}
-		query := make([]queryParam, 0, 1)
+		resolvedThreadID := strings.TrimSpace(threadIDFlag.value)
+		if resolvedThreadID != "" {
+			resolved, err := a.resolveThreadIDFilters(ctx, cfg, []string{resolvedThreadID})
+			if err != nil {
+				return nil, "docs list", err
+			}
+			if len(resolved) > 0 {
+				resolvedThreadID = resolved[0]
+			}
+		}
+		query := make([]queryParam, 0, 2)
+		addSingleQuery(&query, "thread_id", resolvedThreadID)
 		if *includeTombstoned {
 			query = append(query, queryParam{name: "include_tombstoned", values: []string{"true"}})
 		}

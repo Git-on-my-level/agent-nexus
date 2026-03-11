@@ -84,7 +84,7 @@ var artifactsSubcommandSpec = subcommandSpec{
 var docsSubcommandSpec = subcommandSpec{
 	command:  "docs",
 	valid:    []string{"list", "create", "get", "content", "update", "apply", "validate-update", "history", "revision", "tombstone"},
-	examples: []string{"oar docs list --include-tombstoned", "oar docs content --document-id <document-id>", "oar docs apply --proposal-id <proposal-id>"},
+	examples: []string{"oar docs list --thread-id <thread-id>", "oar docs content --document-id <document-id>", "oar docs apply --proposal-id <proposal-id>"},
 	aliases: map[string]string{
 		"ls":   "list",
 		"read": "content",

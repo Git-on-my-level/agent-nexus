@@ -2438,15 +2438,44 @@ export function getMockArtifactContent(artifactId) {
 
 export function listMockDocuments(filters = {}) {
   let docs = [...MOCK_DOCUMENTS];
+  if (filters.thread_id) {
+    docs = docs.filter(
+      (doc) => String(doc.thread_id ?? "") === String(filters.thread_id),
+    );
+  }
   if (!filters.include_tombstoned) {
     docs = docs.filter((d) => !d.tombstoned_at);
   }
-  return docs.sort((left, right) => {
+  return docs
+    .map((doc) => {
+      const revisions = MOCK_DOCUMENT_REVISIONS[String(doc.id)] || [];
+      const headRevision =
+        revisions.find((rev) => rev.revision_id === doc.head_revision_id) ||
+        revisions[revisions.length - 1] ||
+        null;
+      return {
+        ...doc,
+        head_revision: headRevision
+          ? {
+              revision_id: headRevision.revision_id,
+              revision_number: headRevision.revision_number,
+              artifact_id: headRevision.artifact_id,
+              content_type: headRevision.content_type,
+              created_at: headRevision.created_at,
+              created_by: headRevision.created_by,
+            }
+          : {
+              revision_id: doc.head_revision_id,
+              revision_number: doc.head_revision_number,
+            },
+      };
+    })
+    .sort((left, right) => {
     const timeDelta =
       Date.parse(right.updated_at ?? 0) - Date.parse(left.updated_at ?? 0);
     if (timeDelta !== 0) return timeDelta;
     return String(left.id ?? "").localeCompare(String(right.id ?? ""));
-  });
+    });
 }
 
 export function createMockDocument({

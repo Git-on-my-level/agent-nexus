@@ -164,8 +164,8 @@ func TestDocumentsLifecycleRoundTrip(t *testing.T) {
 
 	createResp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
 		"actor_id":"actor-1",
-		"document":{"id":"doc-1","title":"Constitution","labels":["governance"]},
-		"refs":["thread:thread-1"],
+		"document":{"id":"doc-1","thread_id":"thread-docs","title":"Constitution","labels":["governance"]},
+		"refs":["thread:thread-docs"],
 		"content":"initial text",
 		"content_type":"text"
 	}`, http.StatusCreated)
@@ -226,6 +226,61 @@ func TestDocumentsLifecycleRoundTrip(t *testing.T) {
 	}
 	if _, ok := listed.Documents[0]["title"].(string); !ok {
 		t.Fatalf("expected listed document title, got %#v", listed.Documents[0]["title"])
+	}
+	headRevisionSummary, ok := listed.Documents[0]["head_revision"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected listed document head_revision summary, got %#v", listed.Documents[0]["head_revision"])
+	}
+	if headRevisionSummary["revision_id"] != headRevisionID {
+		t.Fatalf("unexpected listed document head revision id: %#v", headRevisionSummary["revision_id"])
+	}
+	if headRevisionSummary["revision_number"] != float64(1) {
+		t.Fatalf("unexpected listed document head revision number: %#v", headRevisionSummary["revision_number"])
+	}
+	if _, ok := headRevisionSummary["artifact_id"].(string); !ok {
+		t.Fatalf("expected listed document head revision artifact id, got %#v", headRevisionSummary["artifact_id"])
+	}
+	if headRevisionSummary["content_type"] != "text" {
+		t.Fatalf("unexpected listed document head revision content type: %#v", headRevisionSummary["content_type"])
+	}
+
+	filteredListResp, err := http.Get(h.baseURL + "/docs?thread_id=thread-1")
+	if err != nil {
+		t.Fatalf("GET /docs?thread_id=thread-1: %v", err)
+	}
+	defer filteredListResp.Body.Close()
+	if filteredListResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected GET /docs?thread_id=thread-1 status: got %d", filteredListResp.StatusCode)
+	}
+	var unrelatedThreadDocs struct {
+		Documents []map[string]any `json:"documents"`
+	}
+	if err := json.NewDecoder(filteredListResp.Body).Decode(&unrelatedThreadDocs); err != nil {
+		t.Fatalf("decode unrelated thread-filtered documents response: %v", err)
+	}
+	if len(unrelatedThreadDocs.Documents) != 0 {
+		t.Fatalf("expected no documents for unrelated thread filter, got %#v", unrelatedThreadDocs.Documents)
+	}
+
+	threadDocsResp, err := http.Get(h.baseURL + "/docs?thread_id=thread-docs")
+	if err != nil {
+		t.Fatalf("GET /docs?thread_id=thread-docs: %v", err)
+	}
+	defer threadDocsResp.Body.Close()
+	if threadDocsResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected GET /docs?thread_id=thread-docs status: got %d", threadDocsResp.StatusCode)
+	}
+	var threadDocs struct {
+		Documents []map[string]any `json:"documents"`
+	}
+	if err := json.NewDecoder(threadDocsResp.Body).Decode(&threadDocs); err != nil {
+		t.Fatalf("decode thread-filtered documents response: %v", err)
+	}
+	if len(threadDocs.Documents) != 1 {
+		t.Fatalf("expected one thread-filtered document, got %#v", threadDocs.Documents)
+	}
+	if got := threadDocs.Documents[0]["thread_id"]; got != "thread-docs" {
+		t.Fatalf("expected thread-filtered document thread_id=thread-docs, got %#v", got)
 	}
 
 	updateResp := requestJSONExpectStatus(t, http.MethodPatch, h.baseURL+"/docs/doc-1", `{

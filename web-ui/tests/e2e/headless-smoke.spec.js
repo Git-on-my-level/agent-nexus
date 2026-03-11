@@ -152,6 +152,14 @@ test("mocked core smoke flow: inbox -> threads -> thread detail -> post message 
     await route.continue();
   });
 
+  await page.route(/\/docs\?thread_id=thread-onboarding$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ documents: [] }),
+    });
+  });
+
   await page.route(/\/events$/, async (route) => {
     const payload = JSON.parse(route.request().postData() ?? "{}");
     postedCount += 1;

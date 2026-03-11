@@ -173,11 +173,12 @@ The schema of objects is defined by `../contracts/oar-schema.yaml`.
     - `max_events` (non-negative integer, default `20`)
     - `include_artifact_content` (`true|false`, default `false`)
   - Response:
-    - `{ "thread": <thread_snapshot>, "recent_events": [<event>...], "key_artifacts": [ { "ref": "artifact:<id>", "artifact": <artifact_metadata>, "content_preview"?: "<string>" } ... ], "open_commitments": [<commitment_snapshot>...] }`
+    - `{ "thread": <thread_snapshot>, "recent_events": [<event>...], "key_artifacts": [ { "ref": "artifact:<id>", "artifact": <artifact_metadata>, "content_preview"?: "<string>" } ... ], "open_commitments": [<commitment_snapshot>...], "documents": [<document>...] }`
     - `recent_events` contains at most `max_events` newest events for the thread.
     - `key_artifacts` preserves `thread.key_artifacts` order and omits missing refs.
     - `content_preview` is included only when `include_artifact_content=true`.
     - `open_commitments` expands `thread.open_commitments` IDs into full commitment snapshots (missing IDs are omitted).
+    - `documents` returns thread-linked documents ordered by `updated_at` descending, each with a `head_revision` summary for current revision metadata.
 
 ### Commitments (commitment snapshots)
 
@@ -225,8 +226,11 @@ The schema of objects is defined by `../contracts/oar-schema.yaml`.
   - Side effect: appends `document_created` to `events` with thread/document/revision/artifact refs when the document is thread-linked.
 
 - `GET /docs`
-  - Query (optional): `include_tombstoned=true|false`
+  - Query (optional): `thread_id=<thread_id>`, `include_tombstoned=true|false`
   - Response: `{ "documents": [<document>...] }`
+  - Notes:
+    - `thread_id` scopes the list to documents whose current `document.thread_id` matches the thread.
+    - Each listed document includes `head_revision` summary metadata (`revision_id`, `revision_number`, `artifact_id`, `content_type`, `created_at`, `created_by`) alongside the existing top-level head revision fields.
 
 - `GET /docs/{document_id}`
   - Response: `{ "document": <document>, "revision": <document_revision_with_content> }`

@@ -111,6 +111,7 @@ func formatThreadContext(body any) string {
 	lines = appendEventListSection(lines, "recent_events", asSlice(root["recent_events"]), fullID)
 	lines = appendArtifactListSection(lines, "key_artifacts", asSlice(root["key_artifacts"]), fullID)
 	lines = appendCommitmentListSection(lines, "open_commitments", asSlice(root["open_commitments"]), fullID)
+	lines = appendDocumentListSection(lines, "documents", asSlice(root["documents"]), fullID)
 	return strings.Join(lines, "\n")
 }
 
@@ -130,13 +131,15 @@ func formatThreadContextAggregate(root map[string]any, fullID bool) string {
 		decisionRequests := len(asSlice(collaboration["decision_requests"]))
 		decisions := len(asSlice(collaboration["decisions"]))
 		openCommitments := len(asSlice(context["open_commitments"]))
+		documents := len(asSlice(context["documents"]))
 		lines = append(lines, fmt.Sprintf(
-			"- %s :: recommendations=%d :: decision_requests=%d :: decisions=%d :: open_commitments=%d",
+			"- %s :: recommendations=%d :: decision_requests=%d :: decisions=%d :: open_commitments=%d :: documents=%d",
 			displayID(thread),
 			recommendations,
 			decisionRequests,
 			decisions,
 			openCommitments,
+			documents,
 		))
 	}
 
@@ -148,6 +151,7 @@ func formatThreadContextAggregate(root map[string]any, fullID bool) string {
 	lines = appendEventListSection(lines, "recent_events", asSlice(root["recent_events"]), fullID)
 	lines = appendArtifactListSection(lines, "key_artifacts", asSlice(root["key_artifacts"]), fullID)
 	lines = appendCommitmentListSection(lines, "open_commitments", asSlice(root["open_commitments"]), fullID)
+	lines = appendDocumentListSection(lines, "documents", asSlice(root["documents"]), fullID)
 	return strings.Join(lines, "\n")
 }
 
@@ -217,6 +221,7 @@ func formatThreadInspect(body any) string {
 		lines = appendEventListSection(lines, "recent_events", asSlice(context["recent_events"]), fullID)
 		lines = appendArtifactListSection(lines, "key_artifacts", asSlice(context["key_artifacts"]), fullID)
 		lines = appendCommitmentListSection(lines, "open_commitments", asSlice(context["open_commitments"]), fullID)
+		lines = appendDocumentListSection(lines, "documents", asSlice(context["documents"]), fullID)
 	}
 	inbox := extractNestedMap(root, "inbox")
 	lines = appendInboxListSection(lines, "inbox_items", asSlice(inbox["items"]), fullID)
@@ -257,6 +262,7 @@ func formatThreadWorkspace(body any) string {
 		lines = appendEventListSection(lines, "recent_events", asSlice(context["recent_events"]), fullID)
 		lines = appendArtifactListSection(lines, "key_artifacts", asSlice(context["key_artifacts"]), fullID)
 		lines = appendCommitmentListSection(lines, "open_commitments", asSlice(context["open_commitments"]), fullID)
+		lines = appendDocumentListSection(lines, "documents", asSlice(context["documents"]), fullID)
 	}
 	inbox := extractNestedMap(root, "inbox")
 	lines = appendInboxListSection(lines, "inbox_items", extractNestedSlice(inbox, "items"), fullID)
@@ -551,10 +557,22 @@ func renderRevisionListItem(item map[string]any) string {
 }
 
 func renderDocumentListItem(item map[string]any) string {
+	headRevision := asMap(item["head_revision"])
+	stateParts := make([]string, 0, 3)
+	if status := strings.TrimSpace(anyString(item["status"])); status != "" {
+		stateParts = append(stateParts, status)
+	}
+	if revisionNumber := intValue(headRevision["revision_number"]); revisionNumber > 0 {
+		stateParts = append(stateParts, fmt.Sprintf("v%d", revisionNumber))
+	}
+	if contentType := strings.TrimSpace(anyString(headRevision["content_type"])); contentType != "" {
+		stateParts = append(stateParts, contentType)
+	}
 	return compactSummary(
 		displayID(item),
-		firstNonEmpty(anyString(item["status"]), anyString(item["updated_at"])),
+		strings.Join(stateParts, " "),
 		firstNonEmpty(anyString(item["title"]), anyString(item["slug"])),
+		firstNonEmpty(anyString(item["updated_at"]), anyString(headRevision["created_at"])),
 	)
 }
 
@@ -641,6 +659,40 @@ func appendCommitmentListSection(lines []string, label string, items []any, full
 			continue
 		}
 		lines = append(lines, "- "+renderCommitmentListItemWithMode(item, fullID))
+	}
+	return lines
+}
+
+func appendDocumentListSection(lines []string, label string, items []any, fullID bool) []string {
+	lines = append(lines, fmt.Sprintf("%s (%d):", label, len(items)))
+	for _, raw := range items {
+		item := asMap(raw)
+		if item == nil {
+			continue
+		}
+		headRevision := asMap(item["head_revision"])
+		identifier := displayID(item)
+		if fullID {
+			if id := strings.TrimSpace(anyString(item["id"])); id != "" {
+				identifier = id
+			}
+		}
+		stateParts := make([]string, 0, 3)
+		if status := strings.TrimSpace(anyString(item["status"])); status != "" {
+			stateParts = append(stateParts, status)
+		}
+		if revisionNumber := intValue(headRevision["revision_number"]); revisionNumber > 0 {
+			stateParts = append(stateParts, fmt.Sprintf("v%d", revisionNumber))
+		}
+		if contentType := strings.TrimSpace(anyString(headRevision["content_type"])); contentType != "" {
+			stateParts = append(stateParts, contentType)
+		}
+		lines = append(lines, "- "+compactSummary(
+			identifier,
+			strings.Join(stateParts, " "),
+			firstNonEmpty(anyString(item["title"]), anyString(item["slug"])),
+			firstNonEmpty(anyString(item["updated_at"]), anyString(headRevision["created_at"])),
+		))
 	}
 	return lines
 }
