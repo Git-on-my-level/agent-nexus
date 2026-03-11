@@ -3,6 +3,7 @@ package server
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"sort"
 	"strings"
 )
@@ -31,10 +32,14 @@ func commandRegistryDigest(commands []map[string]any) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func loadCommandRegistryDigest(opts handlerOptions) string {
+func loadCommandRegistryDigest(opts handlerOptions) (string, error) {
 	_, commands, err := loadMetaCommandsPayload(opts)
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("load meta commands payload: %w", err)
 	}
-	return commandRegistryDigest(commands)
+	digest := commandRegistryDigest(commands)
+	if strings.TrimSpace(digest) == "" {
+		return "", fmt.Errorf("command registry digest is empty")
+	}
+	return digest, nil
 }

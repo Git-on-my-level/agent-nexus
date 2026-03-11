@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 )
 
@@ -78,6 +79,34 @@ func TestHandshakeIncludesCommandRegistryDigest(t *testing.T) {
 	}
 	if payload["command_registry_digest"] == "" {
 		t.Fatalf("expected command registry digest, payload=%#v", payload)
+	}
+}
+
+func TestVersionEndpointReturnsServiceUnavailableWithoutCommandMetadata(t *testing.T) {
+	t.Parallel()
+
+	handler := NewHandler("0.2.2", WithMetaCommandsPath(filepath.Join(t.TempDir(), "missing-commands.json")))
+	req := httptest.NewRequest(http.MethodGet, "/version", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("unexpected status: got %d", rr.Code)
+	}
+}
+
+func TestHandshakeReturnsServiceUnavailableWithoutCommandMetadata(t *testing.T) {
+	t.Parallel()
+
+	handler := NewHandler("0.2.2", WithMetaCommandsPath(filepath.Join(t.TempDir(), "missing-commands.json")))
+	req := httptest.NewRequest(http.MethodGet, "/meta/handshake", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("unexpected status: got %d", rr.Code)
 	}
 }
 
