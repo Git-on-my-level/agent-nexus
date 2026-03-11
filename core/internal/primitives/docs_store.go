@@ -279,6 +279,25 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		return nil, nil, fmt.Errorf("insert document revision: %w", err)
 	}
 
+	lifecycleEvent, err := prepareEventForInsert(actorID, buildDocumentLifecycleEvent(
+		"document_created",
+		documentLifecycleThreadID(threadID, revisionRefs),
+		documentID,
+		revisionID,
+		artifactID,
+		revisionNumber,
+		title,
+		nil,
+	))
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, nil, err
+	}
+	if err := insertPreparedEvent(ctx, tx, lifecycleEvent); err != nil {
+		_ = tx.Rollback()
+		return nil, nil, err
+	}
+
 	if err := stagedContent.Promote(); err != nil {
 		_ = tx.Rollback()
 		return nil, nil, fmt.Errorf("finalize document content: %w", err)
@@ -534,6 +553,27 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		return nil, nil, fmt.Errorf("insert document revision: %w", err)
 	}
 
+	lifecycleEvent, err := prepareEventForInsert(actorID, buildDocumentLifecycleEvent(
+		"document_updated",
+		documentLifecycleThreadID(nextThreadID, revisionRefs),
+		documentID,
+		revisionID,
+		artifactID,
+		nextRevisionNumber,
+		nextTitle,
+		map[string]any{
+			"prev_revision_id": doc.HeadRevisionID,
+		},
+	))
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, nil, err
+	}
+	if err := insertPreparedEvent(ctx, tx, lifecycleEvent); err != nil {
+		_ = tx.Rollback()
+		return nil, nil, err
+	}
+
 	result, err := tx.ExecContext(
 		ctx,
 		`UPDATE documents SET
@@ -663,6 +703,32 @@ func (s *Store) GetDocumentRevision(ctx context.Context, documentID string, revi
 	return s.loadDocumentRevision(ctx, documentID, revisionID, true)
 }
 
+func (s *Store) GetDocumentRevisionByID(ctx context.Context, revisionID string) (map[string]any, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("primitives store database is not initialized")
+	}
+
+	revisionID = strings.TrimSpace(revisionID)
+	if revisionID == "" {
+		return nil, fmt.Errorf("revision_id is required")
+	}
+
+	var documentID string
+	err := s.db.QueryRowContext(
+		ctx,
+		`SELECT document_id FROM document_revisions WHERE revision_id = ?`,
+		revisionID,
+	).Scan(&documentID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query document revision by id: %w", err)
+	}
+
+	return s.loadDocumentRevision(ctx, documentID, revisionID, false)
+}
+
 func (s *Store) TombstoneDocument(ctx context.Context, actorID string, documentID string, reason string) (map[string]any, map[string]any, error) {
 	if s == nil || s.db == nil {
 		return nil, nil, fmt.Errorf("primitives store database is not initialized")
@@ -688,23 +754,53 @@ func (s *Store) TombstoneDocument(ctx context.Context, actorID string, documentI
 		return doc.toMap(), revision, nil
 	}
 
+	revision, err := s.loadDocumentRevision(ctx, documentID, doc.HeadRevisionID, true)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	_, err = s.db.ExecContext(ctx,
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("begin document tombstone transaction: %w", err)
+	}
+	_, err = tx.ExecContext(ctx,
 		`UPDATE documents SET tombstoned_at = ?, tombstoned_by = ?, tombstone_reason = ? WHERE id = ?`,
 		now, actorID, strings.TrimSpace(reason), documentID,
 	)
 	if err != nil {
+		_ = tx.Rollback()
 		return nil, nil, fmt.Errorf("tombstone document: %w", err)
+	}
+
+	lifecycleEvent, err := prepareEventForInsert(actorID, buildDocumentLifecycleEvent(
+		"document_tombstoned",
+		documentLifecycleThreadID(nullStringValue(doc.ThreadID), revisionRefsFromRevision(revision)),
+		documentID,
+		doc.HeadRevisionID,
+		anyStringValue(revision["artifact_id"]),
+		asIntValue(revision["revision_number"]),
+		nullStringValue(doc.Title),
+		map[string]any{
+			"reason": strings.TrimSpace(reason),
+		},
+	))
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, nil, err
+	}
+	if err := insertPreparedEvent(ctx, tx, lifecycleEvent); err != nil {
+		_ = tx.Rollback()
+		return nil, nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		_ = tx.Rollback()
+		return nil, nil, fmt.Errorf("commit document tombstone transaction: %w", err)
 	}
 
 	doc.TombstonedAt = nullableString(now)
 	doc.TombstonedBy = nullableString(actorID)
 	doc.TombstoneReason = nullableString(reason)
-
-	revision, err := s.loadDocumentRevision(ctx, documentID, doc.HeadRevisionID, true)
-	if err != nil {
-		return nil, nil, err
-	}
 
 	return doc.toMap(), revision, nil
 }
@@ -883,6 +979,99 @@ func (r documentRow) toMap() map[string]any {
 		out["tombstone_reason"] = r.TombstoneReason.String
 	}
 	return out
+}
+
+func buildDocumentLifecycleEvent(eventType, threadID, documentID, revisionID, artifactID string, revisionNumber int, title string, extraPayload map[string]any) map[string]any {
+	refs := []string{
+		"document:" + documentID,
+		"document_revision:" + revisionID,
+	}
+	if threadID != "" {
+		refs = append(refs, "thread:"+threadID)
+	}
+	if artifactID != "" {
+		refs = append(refs, "artifact:"+artifactID)
+	}
+	refs = uniqueStrings(refs)
+	sortStringsStable(refs)
+
+	payload := map[string]any{
+		"document_id":     documentID,
+		"revision_id":     revisionID,
+		"artifact_id":     artifactID,
+		"revision_number": revisionNumber,
+	}
+	for key, value := range extraPayload {
+		payload[key] = value
+	}
+
+	label := strings.TrimSpace(title)
+	if label == "" {
+		label = documentID
+	}
+
+	summary := map[string]string{
+		"document_created":    "Document created",
+		"document_updated":    "Document updated",
+		"document_tombstoned": "Document tombstoned",
+	}[eventType]
+	if summary == "" {
+		summary = "Document lifecycle event"
+	}
+
+	event := map[string]any{
+		"type":       eventType,
+		"refs":       refs,
+		"summary":    summary + ": " + label,
+		"payload":    payload,
+		"provenance": actorStatementProvenance(),
+	}
+	if threadID != "" {
+		event["thread_id"] = threadID
+	}
+	return event
+}
+
+func documentLifecycleThreadID(primaryThreadID string, refs []string) string {
+	primaryThreadID = strings.TrimSpace(primaryThreadID)
+	if primaryThreadID != "" {
+		return primaryThreadID
+	}
+
+	for _, ref := range refs {
+		if !strings.HasPrefix(ref, "thread:") {
+			continue
+		}
+		threadID := strings.TrimSpace(strings.TrimPrefix(ref, "thread:"))
+		if threadID != "" {
+			return threadID
+		}
+	}
+
+	return ""
+}
+
+func revisionRefsFromRevision(revision map[string]any) []string {
+	refs, err := normalizeStringSlice(revision["refs"])
+	if err != nil {
+		return nil
+	}
+	return refs
+}
+
+func asIntValue(value any) int {
+	switch typed := value.(type) {
+	case int:
+		return typed
+	case int32:
+		return int(typed)
+	case int64:
+		return int(typed)
+	case float64:
+		return int(typed)
+	default:
+		return 0
+	}
 }
 
 func validateDocumentID(id string) error {

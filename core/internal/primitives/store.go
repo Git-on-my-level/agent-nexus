@@ -65,6 +65,19 @@ type Store struct {
 	artifactContentDir string
 }
 
+type eventExec interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+type preparedEvent struct {
+	Body        map[string]any
+	Type        string
+	ThreadID    string
+	RefsJSON    string
+	PayloadJSON string
+	BodyJSON    string
+}
+
 type PatchSnapshotResult struct {
 	Snapshot map[string]any
 	Event    map[string]any
@@ -79,63 +92,15 @@ func (s *Store) AppendEvent(ctx context.Context, actorID string, event map[strin
 		return nil, fmt.Errorf("primitives store database is not initialized")
 	}
 
-	body := cloneMap(event)
-	eventID := uuid.NewString()
-	body["id"] = eventID
-	body["ts"] = time.Now().UTC().Format(time.RFC3339Nano)
-	body["actor_id"] = actorID
-	replaceActorStatementProvenancePlaceholder(body, eventID)
-
-	typeValue, _ := body["type"].(string)
-	threadID, _ := body["thread_id"].(string)
-	refs, err := normalizeStringSlice(body["refs"])
+	prepared, err := prepareEventForInsert(actorID, event)
 	if err != nil {
-		return nil, fmt.Errorf("event.refs: %w", err)
+		return nil, err
+	}
+	if err := insertPreparedEvent(ctx, s.db, prepared); err != nil {
+		return nil, err
 	}
 
-	refsJSON, err := json.Marshal(refs)
-	if err != nil {
-		return nil, fmt.Errorf("marshal event refs: %w", err)
-	}
-
-	payload := map[string]any{}
-	if rawPayload, ok := body["payload"]; ok && rawPayload != nil {
-		switch p := rawPayload.(type) {
-		case map[string]any:
-			payload = p
-		default:
-			return nil, fmt.Errorf("event.payload must be an object when provided")
-		}
-	}
-
-	payloadJSON, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("marshal event payload: %w", err)
-	}
-
-	bodyJSON, err := json.Marshal(body)
-	if err != nil {
-		return nil, fmt.Errorf("marshal event body: %w", err)
-	}
-
-	_, err = s.db.ExecContext(
-		ctx,
-		`INSERT INTO events(id, type, ts, actor_id, thread_id, refs_json, payload_json, body_json, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-		body["id"],
-		typeValue,
-		body["ts"],
-		actorID,
-		threadID,
-		string(refsJSON),
-		string(payloadJSON),
-		string(bodyJSON),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("insert event: %w", err)
-	}
-
-	return body, nil
+	return prepared.Body, nil
 }
 
 func (s *Store) GetEvent(ctx context.Context, id string) (map[string]any, error) {
@@ -347,40 +312,9 @@ func (s *Store) CreateArtifactAndEvent(ctx context.Context, actorID string, arti
 		return nil, nil, fmt.Errorf("marshal artifact metadata: %w", err)
 	}
 
-	eventBody := cloneMap(event)
-	eventID := uuid.NewString()
-	eventBody["id"] = eventID
-	eventBody["ts"] = time.Now().UTC().Format(time.RFC3339Nano)
-	eventBody["actor_id"] = actorID
-	replaceActorStatementProvenancePlaceholder(eventBody, eventID)
-
-	eventType, _ := eventBody["type"].(string)
-	threadID, _ := eventBody["thread_id"].(string)
-	eventRefs, err := normalizeStringSlice(eventBody["refs"])
+	preparedEvent, err := prepareEventForInsert(actorID, event)
 	if err != nil {
-		return nil, nil, fmt.Errorf("event.refs: %w", err)
-	}
-	eventRefsJSON, err := json.Marshal(eventRefs)
-	if err != nil {
-		return nil, nil, fmt.Errorf("marshal event refs: %w", err)
-	}
-
-	eventPayload := map[string]any{}
-	if rawPayload, ok := eventBody["payload"]; ok && rawPayload != nil {
-		switch payload := rawPayload.(type) {
-		case map[string]any:
-			eventPayload = payload
-		default:
-			return nil, nil, fmt.Errorf("event.payload must be an object when provided")
-		}
-	}
-	eventPayloadJSON, err := json.Marshal(eventPayload)
-	if err != nil {
-		return nil, nil, fmt.Errorf("marshal event payload: %w", err)
-	}
-	eventBodyJSON, err := json.Marshal(eventBody)
-	if err != nil {
-		return nil, nil, fmt.Errorf("marshal event body: %w", err)
+		return nil, nil, err
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -406,21 +340,9 @@ func (s *Store) CreateArtifactAndEvent(ctx context.Context, actorID string, arti
 		return nil, nil, fmt.Errorf("insert artifact: %w", err)
 	}
 
-	if _, err := tx.ExecContext(
-		ctx,
-		`INSERT INTO events(id, type, ts, actor_id, thread_id, refs_json, payload_json, body_json, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-		eventBody["id"],
-		eventType,
-		eventBody["ts"],
-		actorID,
-		threadID,
-		string(eventRefsJSON),
-		string(eventPayloadJSON),
-		string(eventBodyJSON),
-	); err != nil {
+	if err := insertPreparedEvent(ctx, tx, preparedEvent); err != nil {
 		_ = tx.Rollback()
-		return nil, nil, fmt.Errorf("insert event: %w", err)
+		return nil, nil, err
 	}
 
 	if err := stagedContent.Promote(); err != nil {
@@ -433,7 +355,7 @@ func (s *Store) CreateArtifactAndEvent(ctx context.Context, actorID string, arti
 		return nil, nil, fmt.Errorf("commit transaction: %w", err)
 	}
 
-	return metadata, eventBody, nil
+	return metadata, preparedEvent.Body, nil
 }
 
 func (s *Store) GetArtifact(ctx context.Context, id string) (map[string]any, error) {
@@ -1106,6 +1028,76 @@ func reverseEvents(events []map[string]any) []map[string]any {
 		events[left], events[right] = events[right], events[left]
 	}
 	return events
+}
+
+func prepareEventForInsert(actorID string, event map[string]any) (preparedEvent, error) {
+	body := cloneMap(event)
+	eventID := uuid.NewString()
+	body["id"] = eventID
+	body["ts"] = time.Now().UTC().Format(time.RFC3339Nano)
+	body["actor_id"] = actorID
+	replaceActorStatementProvenancePlaceholder(body, eventID)
+
+	typeValue, _ := body["type"].(string)
+	threadID, _ := body["thread_id"].(string)
+	refs, err := normalizeStringSlice(body["refs"])
+	if err != nil {
+		return preparedEvent{}, fmt.Errorf("event.refs: %w", err)
+	}
+
+	refsJSON, err := json.Marshal(refs)
+	if err != nil {
+		return preparedEvent{}, fmt.Errorf("marshal event refs: %w", err)
+	}
+
+	payload := map[string]any{}
+	if rawPayload, ok := body["payload"]; ok && rawPayload != nil {
+		switch p := rawPayload.(type) {
+		case map[string]any:
+			payload = p
+		default:
+			return preparedEvent{}, fmt.Errorf("event.payload must be an object when provided")
+		}
+	}
+
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		return preparedEvent{}, fmt.Errorf("marshal event payload: %w", err)
+	}
+
+	bodyJSON, err := json.Marshal(body)
+	if err != nil {
+		return preparedEvent{}, fmt.Errorf("marshal event body: %w", err)
+	}
+
+	return preparedEvent{
+		Body:        body,
+		Type:        typeValue,
+		ThreadID:    threadID,
+		RefsJSON:    string(refsJSON),
+		PayloadJSON: string(payloadJSON),
+		BodyJSON:    string(bodyJSON),
+	}, nil
+}
+
+func insertPreparedEvent(ctx context.Context, exec eventExec, prepared preparedEvent) error {
+	if _, err := exec.ExecContext(
+		ctx,
+		`INSERT INTO events(id, type, ts, actor_id, thread_id, refs_json, payload_json, body_json, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+		prepared.Body["id"],
+		prepared.Type,
+		prepared.Body["ts"],
+		prepared.Body["actor_id"],
+		prepared.ThreadID,
+		prepared.RefsJSON,
+		prepared.PayloadJSON,
+		prepared.BodyJSON,
+	); err != nil {
+		return fmt.Errorf("insert event: %w", err)
+	}
+
+	return nil
 }
 
 func (s *Store) ListEvents(ctx context.Context, filter EventListFilter) ([]map[string]any, error) {

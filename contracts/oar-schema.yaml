@@ -68,6 +68,9 @@ enums:
       - commitment_status_changed
       - exception_raised
       - inbox_item_acknowledged
+      - document_created
+      - document_updated
+      - document_tombstoned
 
   artifact_kind:
     enum_policy: open

@@ -775,6 +775,148 @@ func TestThreadTimelineIncludesReferencedObjectsAndOmitsMissingRefs(t *testing.T
 	}
 }
 
+func TestThreadTimelineIncludesDocumentLifecycleEventsAndExpansions(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	createThreadResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
+		"actor_id":"actor-1",
+		"thread":{
+			"title":"Document lifecycle thread",
+			"type":"incident",
+			"status":"active",
+			"priority":"p1",
+			"tags":["docs"],
+			"cadence":"daily",
+			"next_check_in_at":"2030-01-01T00:00:00Z",
+			"current_summary":"Track document lifecycle",
+			"next_actions":["Verify timeline output"],
+			"key_artifacts":[],
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated)
+	defer createThreadResp.Body.Close()
+
+	var threadPayload struct {
+		Thread map[string]any `json:"thread"`
+	}
+	if err := json.NewDecoder(createThreadResp.Body).Decode(&threadPayload); err != nil {
+		t.Fatalf("decode create thread response: %v", err)
+	}
+	threadID := asString(threadPayload.Thread["id"])
+	if threadID == "" {
+		t.Fatal("expected created thread id")
+	}
+
+	createDocResp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
+		"actor_id":"actor-1",
+		"document":{"id":"timeline-doc-1","thread_id":"`+threadID+`","title":"Timeline Document"},
+		"content":"draft v1",
+		"content_type":"text"
+	}`, http.StatusCreated)
+	defer createDocResp.Body.Close()
+
+	var createdDoc struct {
+		Document map[string]any `json:"document"`
+		Revision map[string]any `json:"revision"`
+	}
+	if err := json.NewDecoder(createDocResp.Body).Decode(&createdDoc); err != nil {
+		t.Fatalf("decode create doc response: %v", err)
+	}
+	documentID := asString(createdDoc.Document["id"])
+	createRevisionID := asString(createdDoc.Revision["revision_id"])
+	createArtifactID := asString(createdDoc.Revision["artifact_id"])
+	if documentID == "" || createRevisionID == "" || createArtifactID == "" {
+		t.Fatalf("expected document lifecycle ids, got document=%#v revision=%#v", createdDoc.Document, createdDoc.Revision)
+	}
+
+	updateDocResp := patchJSONExpectStatus(t, h.baseURL+"/docs/"+documentID, `{
+		"actor_id":"actor-1",
+		"document":{"title":"Timeline Document v2"},
+		"if_base_revision":"`+createRevisionID+`",
+		"content":"draft v2",
+		"content_type":"text"
+	}`, http.StatusOK)
+	defer updateDocResp.Body.Close()
+
+	var updatedDoc struct {
+		Document map[string]any `json:"document"`
+		Revision map[string]any `json:"revision"`
+	}
+	if err := json.NewDecoder(updateDocResp.Body).Decode(&updatedDoc); err != nil {
+		t.Fatalf("decode update doc response: %v", err)
+	}
+	updateRevisionID := asString(updatedDoc.Revision["revision_id"])
+	updateArtifactID := asString(updatedDoc.Revision["artifact_id"])
+	if updateRevisionID == "" || updateArtifactID == "" {
+		t.Fatalf("expected updated revision ids, got %#v", updatedDoc.Revision)
+	}
+
+	tombstoneResp := postJSONExpectStatus(t, h.baseURL+"/docs/"+documentID+"/tombstone", `{
+		"actor_id":"actor-1",
+		"reason":"superseded by final document"
+	}`, http.StatusOK)
+	defer tombstoneResp.Body.Close()
+
+	timelineResp, err := http.Get(h.baseURL + "/threads/" + threadID + "/timeline")
+	if err != nil {
+		t.Fatalf("GET /threads/{id}/timeline: %v", err)
+	}
+	defer timelineResp.Body.Close()
+	if timelineResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected timeline status: got %d", timelineResp.StatusCode)
+	}
+
+	var timeline struct {
+		Events            []map[string]any          `json:"events"`
+		Snapshots         map[string]map[string]any `json:"snapshots"`
+		Artifacts         map[string]map[string]any `json:"artifacts"`
+		Documents         map[string]map[string]any `json:"documents"`
+		DocumentRevisions map[string]map[string]any `json:"document_revisions"`
+	}
+	if err := json.NewDecoder(timelineResp.Body).Decode(&timeline); err != nil {
+		t.Fatalf("decode timeline response: %v", err)
+	}
+
+	var createdEvent, updatedEvent, tombstonedEvent map[string]any
+	for _, event := range timeline.Events {
+		switch asString(event["type"]) {
+		case "document_created":
+			createdEvent = event
+		case "document_updated":
+			updatedEvent = event
+		case "document_tombstoned":
+			tombstonedEvent = event
+		}
+	}
+	if createdEvent == nil || updatedEvent == nil || tombstonedEvent == nil {
+		t.Fatalf("expected document lifecycle events in timeline, got %#v", timeline.Events)
+	}
+
+	assertDocLifecycleEventRefs(t, createdEvent, threadID, documentID, createRevisionID, createArtifactID)
+	assertDocLifecycleEventRefs(t, updatedEvent, threadID, documentID, updateRevisionID, updateArtifactID)
+	assertDocLifecycleEventRefs(t, tombstonedEvent, threadID, documentID, updateRevisionID, updateArtifactID)
+
+	if doc, ok := timeline.Documents[documentID]; !ok {
+		t.Fatalf("expected document %q in timeline documents, got keys=%#v", documentID, mapKeysMapAny(timeline.Documents))
+	} else if doc["tombstoned_at"] == nil {
+		t.Fatalf("expected tombstoned document metadata in timeline documents, got %#v", doc)
+	}
+
+	if revision, ok := timeline.DocumentRevisions[createRevisionID]; !ok {
+		t.Fatalf("expected created revision %q in timeline document revisions, got keys=%#v", createRevisionID, mapKeysMapAny(timeline.DocumentRevisions))
+	} else if asString(revision["artifact_id"]) != createArtifactID {
+		t.Fatalf("unexpected created revision payload: %#v", revision)
+	}
+	if revision, ok := timeline.DocumentRevisions[updateRevisionID]; !ok {
+		t.Fatalf("expected updated revision %q in timeline document revisions, got keys=%#v", updateRevisionID, mapKeysMapAny(timeline.DocumentRevisions))
+	} else if asString(revision["artifact_id"]) != updateArtifactID {
+		t.Fatalf("unexpected updated revision payload: %#v", revision)
+	}
+}
+
 func TestThreadContextBundlesRecentEventsArtifactsAndOpenCommitments(t *testing.T) {
 	t.Parallel()
 
@@ -994,6 +1136,27 @@ func mapKeysMapAny(values map[string]map[string]any) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+func assertDocLifecycleEventRefs(t *testing.T, event map[string]any, threadID, documentID, revisionID, artifactID string) {
+	t.Helper()
+
+	refs, ok := event["refs"].([]any)
+	if !ok {
+		t.Fatalf("expected refs array on lifecycle event, got %#v", event["refs"])
+	}
+	if !containsAny(refs, "thread:"+threadID) {
+		t.Fatalf("expected thread ref on lifecycle event, got %#v", refs)
+	}
+	if !containsAny(refs, "document:"+documentID) {
+		t.Fatalf("expected document ref on lifecycle event, got %#v", refs)
+	}
+	if !containsAny(refs, "document_revision:"+revisionID) {
+		t.Fatalf("expected document revision ref on lifecycle event, got %#v", refs)
+	}
+	if !containsAny(refs, "artifact:"+artifactID) {
+		t.Fatalf("expected artifact ref on lifecycle event, got %#v", refs)
+	}
 }
 
 func containsAny(values []any, expected string) bool {

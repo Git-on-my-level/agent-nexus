@@ -299,7 +299,7 @@ func handleThreadTimeline(w http.ResponseWriter, r *http.Request, opts handlerOp
 		return
 	}
 
-	snapshotIDs, artifactIDs := collectTimelineReferencedObjectIDs(events)
+	snapshotIDs, artifactIDs, documentIDs, documentRevisionIDs := collectTimelineReferencedObjectIDs(events)
 
 	snapshots := make(map[string]map[string]any, len(snapshotIDs))
 	for _, snapshotID := range snapshotIDs {
@@ -327,10 +327,56 @@ func handleThreadTimeline(w http.ResponseWriter, r *http.Request, opts handlerOp
 		artifacts[artifactID] = artifact
 	}
 
+	documents := make(map[string]map[string]any, len(documentIDs))
+	for _, documentID := range documentIDs {
+		document, _, err := opts.primitiveStore.GetDocument(r.Context(), documentID)
+		if err != nil {
+			if errors.Is(err, primitives.ErrNotFound) {
+				continue
+			}
+			writeError(w, http.StatusInternalServerError, "internal_error", "failed to load referenced documents")
+			return
+		}
+		documents[documentID] = document
+	}
+
+	documentRevisions := make(map[string]map[string]any, len(documentRevisionIDs))
+	for _, revisionID := range documentRevisionIDs {
+		revision, err := opts.primitiveStore.GetDocumentRevisionByID(r.Context(), revisionID)
+		if err != nil {
+			if errors.Is(err, primitives.ErrNotFound) {
+				continue
+			}
+			writeError(w, http.StatusInternalServerError, "internal_error", "failed to load referenced document revisions")
+			return
+		}
+		documentRevisions[revisionID] = revision
+
+		documentID, _ := revision["document_id"].(string)
+		documentID = strings.TrimSpace(documentID)
+		if documentID == "" {
+			continue
+		}
+		if _, exists := documents[documentID]; exists {
+			continue
+		}
+		document, _, err := opts.primitiveStore.GetDocument(r.Context(), documentID)
+		if err != nil {
+			if errors.Is(err, primitives.ErrNotFound) {
+				continue
+			}
+			writeError(w, http.StatusInternalServerError, "internal_error", "failed to load referenced documents")
+			return
+		}
+		documents[documentID] = document
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
-		"events":    events,
-		"snapshots": snapshots,
-		"artifacts": artifacts,
+		"events":             events,
+		"snapshots":          snapshots,
+		"artifacts":          artifacts,
+		"documents":          documents,
+		"document_revisions": documentRevisions,
 	})
 }
 
@@ -500,9 +546,11 @@ func artifactContentPreview(content []byte) string {
 	return string(runes[:threadContextContentPreviewChars])
 }
 
-func collectTimelineReferencedObjectIDs(events []map[string]any) ([]string, []string) {
+func collectTimelineReferencedObjectIDs(events []map[string]any) ([]string, []string, []string, []string) {
 	snapshotSet := make(map[string]struct{})
 	artifactSet := make(map[string]struct{})
+	documentSet := make(map[string]struct{})
+	documentRevisionSet := make(map[string]struct{})
 
 	for _, event := range events {
 		refs, err := extractStringSlice(event["refs"])
@@ -519,13 +567,19 @@ func collectTimelineReferencedObjectIDs(events []map[string]any) ([]string, []st
 				snapshotSet[id] = struct{}{}
 			case "artifact":
 				artifactSet[id] = struct{}{}
+			case "document":
+				documentSet[id] = struct{}{}
+			case "document_revision":
+				documentRevisionSet[id] = struct{}{}
 			}
 		}
 	}
 
 	snapshotIDs := mapKeysSorted(snapshotSet)
 	artifactIDs := mapKeysSorted(artifactSet)
-	return snapshotIDs, artifactIDs
+	documentIDs := mapKeysSorted(documentSet)
+	documentRevisionIDs := mapKeysSorted(documentRevisionSet)
+	return snapshotIDs, artifactIDs, documentIDs, documentRevisionIDs
 }
 
 func mapKeysSorted(values map[string]struct{}) []string {

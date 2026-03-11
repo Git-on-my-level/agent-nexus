@@ -39,6 +39,7 @@ type PrimitiveStore interface {
 	UpdateDocument(ctx context.Context, actorID string, documentID string, documentPatch map[string]any, ifBaseRevision string, content any, contentType string, refs []string) (map[string]any, map[string]any, error)
 	ListDocumentHistory(ctx context.Context, documentID string) ([]map[string]any, error)
 	GetDocumentRevision(ctx context.Context, documentID string, revisionID string) (map[string]any, error)
+	GetDocumentRevisionByID(ctx context.Context, revisionID string) (map[string]any, error)
 	GetSnapshot(ctx context.Context, id string) (map[string]any, error)
 	CreateThread(ctx context.Context, actorID string, thread map[string]any) (primitives.PatchSnapshotResult, error)
 	GetThread(ctx context.Context, id string) (map[string]any, error)

@@ -221,6 +221,125 @@ func TestEventsStreamResumesFromLastEventID(t *testing.T) {
 	}
 }
 
+func TestEventsStreamEmitsDocumentLifecycleEventsForThread(t *testing.T) {
+	t.Parallel()
+
+	h := newMetaStreamTestHarness(t, WithStreamPollInterval(20*time.Millisecond))
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-05T10:00:00Z"}}`, http.StatusCreated).Body.Close()
+
+	threadResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
+		"actor_id":"actor-1",
+		"thread":{
+			"title":"Document stream thread",
+			"type":"incident",
+			"status":"active",
+			"priority":"p1",
+			"tags":["docs"],
+			"cadence":"daily",
+			"next_check_in_at":"2030-01-01T00:00:00Z",
+			"current_summary":"summary",
+			"next_actions":["action"],
+			"key_artifacts":[],
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated)
+	defer threadResp.Body.Close()
+
+	var threadPayload struct {
+		Thread map[string]any `json:"thread"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&threadPayload); err != nil {
+		t.Fatalf("decode thread response: %v", err)
+	}
+	threadID := asString(threadPayload.Thread["id"])
+	if threadID == "" {
+		t.Fatal("expected created thread id")
+	}
+
+	timelineResp, err := http.Get(h.baseURL + "/threads/" + threadID + "/timeline")
+	if err != nil {
+		t.Fatalf("GET timeline before stream: %v", err)
+	}
+	defer timelineResp.Body.Close()
+	var timeline struct {
+		Events []map[string]any `json:"events"`
+	}
+	if err := json.NewDecoder(timelineResp.Body).Decode(&timeline); err != nil {
+		t.Fatalf("decode initial timeline: %v", err)
+	}
+	if len(timeline.Events) == 0 {
+		t.Fatal("expected initial thread event in timeline")
+	}
+	lastExistingEventID := asString(timeline.Events[len(timeline.Events)-1]["id"])
+	if lastExistingEventID == "" {
+		t.Fatalf("expected initial event id in timeline, got %#v", timeline.Events)
+	}
+
+	resp := openSSEStream(t, h.baseURL+"/events/stream?thread_id="+threadID, lastExistingEventID)
+	reader, stop := startSSEReader(resp.Body)
+	defer stop()
+
+	createDocResp := postJSONExpectStatus(t, h.baseURL+"/docs", fmt.Sprintf(`{
+		"actor_id":"actor-1",
+		"document":{"id":"stream-doc-1","thread_id":"%s","title":"Stream Document"},
+		"content":"draft v1",
+		"content_type":"text"
+	}`, threadID), http.StatusCreated)
+	defer createDocResp.Body.Close()
+
+	var createdDoc struct {
+		Document map[string]any `json:"document"`
+		Revision map[string]any `json:"revision"`
+	}
+	if err := json.NewDecoder(createDocResp.Body).Decode(&createdDoc); err != nil {
+		t.Fatalf("decode create doc response: %v", err)
+	}
+	documentID := asString(createdDoc.Document["id"])
+	createRevisionID := asString(createdDoc.Revision["revision_id"])
+	createArtifactID := asString(createdDoc.Revision["artifact_id"])
+
+	updateDocResp := requestJSONExpectStatus(t, http.MethodPatch, h.baseURL+"/docs/"+documentID, fmt.Sprintf(`{
+		"actor_id":"actor-1",
+		"document":{"title":"Stream Document v2"},
+		"if_base_revision":"%s",
+		"content":"draft v2",
+		"content_type":"text"
+	}`, createRevisionID), http.StatusOK)
+	defer updateDocResp.Body.Close()
+
+	var updatedDoc struct {
+		Revision map[string]any `json:"revision"`
+	}
+	if err := json.NewDecoder(updateDocResp.Body).Decode(&updatedDoc); err != nil {
+		t.Fatalf("decode update doc response: %v", err)
+	}
+	updateRevisionID := asString(updatedDoc.Revision["revision_id"])
+	updateArtifactID := asString(updatedDoc.Revision["artifact_id"])
+
+	tombstoneResp := postJSONExpectStatus(t, h.baseURL+"/docs/"+documentID+"/tombstone", `{
+		"actor_id":"actor-1",
+		"reason":"stream verification"
+	}`, http.StatusOK)
+	defer tombstoneResp.Body.Close()
+
+	first := awaitSSEEvent(t, reader, 2*time.Second)
+	second := awaitSSEEvent(t, reader, 2*time.Second)
+	third := awaitSSEEvent(t, reader, 2*time.Second)
+
+	events := []sseEvent{first, second, third}
+	expectedTypes := []string{"document_created", "document_updated", "document_tombstoned"}
+	for index, expectedType := range expectedTypes {
+		eventPayload, _ := events[index].Data["event"].(map[string]any)
+		if asString(eventPayload["type"]) != expectedType {
+			t.Fatalf("unexpected streamed event type at index %d: got %#v want %q", index, eventPayload, expectedType)
+		}
+	}
+
+	assertStreamDocLifecycleEvent(t, first.Data, threadID, documentID, createRevisionID, createArtifactID)
+	assertStreamDocLifecycleEvent(t, second.Data, threadID, documentID, updateRevisionID, updateArtifactID)
+	assertStreamDocLifecycleEvent(t, third.Data, threadID, documentID, updateRevisionID, updateArtifactID)
+}
+
 func TestInboxStreamSuppressesDuplicateItems(t *testing.T) {
 	t.Parallel()
 
@@ -460,4 +579,32 @@ func awaitSSEEvent(t *testing.T, events <-chan sseEvent, timeout time.Duration) 
 		t.Fatalf("timed out waiting for sse event after %s", timeout)
 	}
 	return sseEvent{}
+}
+
+func assertStreamDocLifecycleEvent(t *testing.T, data map[string]any, threadID, documentID, revisionID, artifactID string) {
+	t.Helper()
+
+	eventPayload, _ := data["event"].(map[string]any)
+	refs, _ := eventPayload["refs"].([]any)
+	if !containsSSERef(refs, "thread:"+threadID) {
+		t.Fatalf("expected thread ref in streamed event, got %#v", eventPayload)
+	}
+	if !containsSSERef(refs, "document:"+documentID) {
+		t.Fatalf("expected document ref in streamed event, got %#v", eventPayload)
+	}
+	if !containsSSERef(refs, "document_revision:"+revisionID) {
+		t.Fatalf("expected document_revision ref in streamed event, got %#v", eventPayload)
+	}
+	if !containsSSERef(refs, "artifact:"+artifactID) {
+		t.Fatalf("expected artifact ref in streamed event, got %#v", eventPayload)
+	}
+}
+
+func containsSSERef(values []any, expected string) bool {
+	for _, value := range values {
+		if asString(value) == expected {
+			return true
+		}
+	}
+	return false
 }
