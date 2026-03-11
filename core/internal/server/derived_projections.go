@@ -21,6 +21,9 @@ func refreshDerivedThreadProjection(ctx context.Context, opts handlerOptions, th
 
 	thread, err := opts.primitiveStore.GetThread(ctx, threadID)
 	if err != nil {
+		if errors.Is(err, primitives.ErrNotFound) {
+			return nil
+		}
 		return err
 	}
 
@@ -34,33 +37,6 @@ func refreshDerivedThreadProjection(ctx context.Context, opts handlerOptions, th
 	activityAt := latestActivity[threadID]
 	lastStale := latestStaleException[threadID]
 	stale := isThreadStaleAt(now, thread, activityAt)
-
-	if stale && (lastStale.IsZero() || (!activityAt.IsZero() && activityAt.After(lastStale))) {
-		emitter := strings.TrimSpace(actorID)
-		if emitter == "" {
-			emitter = "oar-core"
-		}
-		if _, err := opts.primitiveStore.AppendEvent(ctx, emitter, map[string]any{
-			"type":      "exception_raised",
-			"thread_id": threadID,
-			"refs":      []string{"snapshot:" + threadID},
-			"summary":   "thread is stale",
-			"payload": map[string]any{
-				"subtype": "stale_thread",
-			},
-			"provenance": map[string]any{"sources": []string{"inferred"}},
-		}); err != nil {
-			return err
-		}
-		events, err = opts.primitiveStore.ListEventsByThread(ctx, threadID)
-		if err != nil {
-			return err
-		}
-		latestActivity = latestThreadActivityFromEvents(events)
-		latestStaleException = latestStaleExceptionByThread(events)
-		activityAt = latestActivity[threadID]
-		lastStale = latestStaleException[threadID]
-	}
 
 	horizon := opts.inboxRiskHorizon
 	if horizon <= 0 {
@@ -109,19 +85,19 @@ func refreshDerivedThreadProjection(ctx context.Context, opts handlerOptions, th
 	}
 
 	summary := map[string]any{
-		"thread_id":               threadID,
-		"stale":                   stale,
-		"inbox_count":             len(projectionItems),
-		"pending_decision_count":  pendingDecisions,
-		"recommendation_count":    workspaceIntValue(collaboration["recommendation_count"]),
-		"decision_request_count":  workspaceIntValue(collaboration["decision_request_count"]),
-		"decision_count":          workspaceIntValue(collaboration["decision_count"]),
-		"artifact_count":          len(rawKeyArtifacts),
-		"open_commitment_count":   len(rawOpenCommitments),
-		"document_count":          len(documents),
-		"last_activity_at":        formatOptionalTime(activityAt),
+		"thread_id":                 threadID,
+		"stale":                     stale,
+		"inbox_count":               len(projectionItems),
+		"pending_decision_count":    pendingDecisions,
+		"recommendation_count":      workspaceIntValue(collaboration["recommendation_count"]),
+		"decision_request_count":    workspaceIntValue(collaboration["decision_request_count"]),
+		"decision_count":            workspaceIntValue(collaboration["decision_count"]),
+		"artifact_count":            len(rawKeyArtifacts),
+		"open_commitment_count":     len(rawOpenCommitments),
+		"document_count":            len(documents),
+		"last_activity_at":          formatOptionalTime(activityAt),
 		"latest_stale_exception_at": formatOptionalTime(lastStale),
-		"generated_at":            generatedAt,
+		"generated_at":              generatedAt,
 	}
 
 	if err := opts.primitiveStore.ReplaceDerivedInboxItems(ctx, threadID, projectionItems); err != nil {
@@ -227,6 +203,9 @@ func ensureDerivedThreadProjections(ctx context.Context, opts handlerOptions, th
 }
 
 func rebuildDerivedProjections(ctx context.Context, opts handlerOptions, now time.Time, actorID string) error {
+	if err := emitStaleThreadExceptions(ctx, opts, now, actorID); err != nil {
+		return err
+	}
 	threads, err := opts.primitiveStore.ListThreads(ctx, primitives.ThreadListFilter{})
 	if err != nil {
 		return err

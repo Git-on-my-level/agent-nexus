@@ -315,3 +315,8 @@ The schema of objects is defined by `../contracts/oar-schema.yaml`.
 - `POST /derived/rebuild`
   - Body: `{ "actor_id": "..." }`
   - Response: `{ "ok": true }`
+
+- Materialized derived projections used by the common read path:
+  - `derived_inbox_items`: incrementally maintained inbox items keyed by deterministic `inbox_item_id`, with per-thread rows used by `GET /inbox`, `GET /inbox/{id}`, and thread workspace inbox sections.
+  - `derived_thread_views`: incrementally maintained per-thread stale/workspace summaries used by thread list stale indicators and thread workspace summary surfaces.
+  - `POST /derived/rebuild` remains the deterministic repair path: it re-emits any missing canonical stale-thread exceptions from canonical state, then rebuilds both projection tables from current threads/events/commitments/documents.

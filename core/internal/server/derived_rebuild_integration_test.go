@@ -43,11 +43,11 @@ func TestDerivedRebuildIdempotentAndInboxStable(t *testing.T) {
 		t.Fatal("expected thread id")
 	}
 
-	itemsBefore := normalizeInboxItems(getInboxItems(t, h.baseURL))
 	eventsBefore := countAllEvents(t, h.workspace.DB())
 
 	postJSONExpectStatus(t, h.baseURL+"/derived/rebuild", `{"actor_id":"actor-1"}`, 200).Body.Close()
 	eventsAfterFirst := countAllEvents(t, h.workspace.DB())
+	itemsAfterFirst := normalizeInboxItems(getInboxItems(t, h.baseURL))
 
 	postJSONExpectStatus(t, h.baseURL+"/derived/rebuild", `{"actor_id":"actor-1"}`, 200).Body.Close()
 	eventsAfterSecond := countAllEvents(t, h.workspace.DB())
@@ -64,9 +64,9 @@ func TestDerivedRebuildIdempotentAndInboxStable(t *testing.T) {
 		t.Fatalf("expected at most one stale_thread exception, got %d", staleCount)
 	}
 
-	itemsAfter := normalizeInboxItems(getInboxItems(t, h.baseURL))
-	if !reflect.DeepEqual(itemsBefore, itemsAfter) {
-		t.Fatalf("expected inbox items stable before/after rebuild,\nbefore=%#v\nafter=%#v", itemsBefore, itemsAfter)
+	itemsAfterSecond := normalizeInboxItems(getInboxItems(t, h.baseURL))
+	if !reflect.DeepEqual(itemsAfterFirst, itemsAfterSecond) {
+		t.Fatalf("expected inbox items stable across repeated rebuilds,\nfirst=%#v\nsecond=%#v", itemsAfterFirst, itemsAfterSecond)
 	}
 }
 

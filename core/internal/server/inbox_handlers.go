@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"sort"
 	"strconv"
@@ -33,6 +34,24 @@ func handleGetInbox(w http.ResponseWriter, r *http.Request, opts handlerOptions)
 	now := time.Now().UTC()
 	horizon, ok := resolveInboxRiskHorizon(w, r, opts)
 	if !ok {
+		return
+	}
+	if strings.TrimSpace(r.URL.Query().Get("risk_horizon_days")) != "" {
+		items, err := deriveInboxItems(r.Context(), opts, now, horizon)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "internal_error", "failed to derive inbox items")
+			return
+		}
+
+		payloadItems := make([]map[string]any, 0, len(items))
+		for _, item := range items {
+			payloadItems = append(payloadItems, item.Data)
+		}
+
+		writeJSON(w, http.StatusOK, map[string]any{
+			"items":        payloadItems,
+			"generated_at": now.Format(time.RFC3339Nano),
+		})
 		return
 	}
 
@@ -82,6 +101,26 @@ func handleGetInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	now := time.Now().UTC()
 	horizon, ok := resolveInboxRiskHorizon(w, r, opts)
 	if !ok {
+		return
+	}
+	if strings.TrimSpace(r.URL.Query().Get("risk_horizon_days")) != "" {
+		items, err := deriveInboxItems(r.Context(), opts, now, horizon)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "internal_error", "failed to derive inbox items")
+			return
+		}
+
+		for _, item := range items {
+			if strings.TrimSpace(item.ID) != inboxItemID {
+				continue
+			}
+			writeJSON(w, http.StatusOK, map[string]any{
+				"item":         item.Data,
+				"generated_at": now.Format(time.RFC3339Nano),
+			})
+			return
+		}
+		writeError(w, http.StatusNotFound, "not_found", "inbox item not found")
 		return
 	}
 

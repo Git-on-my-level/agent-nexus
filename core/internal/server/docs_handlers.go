@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"organization-autorunner-core/internal/primitives"
 	"organization-autorunner-core/internal/schema"
@@ -136,6 +137,10 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to create document")
 		return
 	}
+	if err := refreshDerivedThreadProjection(r.Context(), opts, anyString(document["thread_id"]), time.Now().UTC(), actorID); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to refresh derived thread views")
+		return
+	}
 
 	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "docs.create", actorID, req.RequestKey, req, http.StatusCreated, map[string]any{
 		"document": document,
@@ -253,6 +258,10 @@ func handleUpdateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 		default:
 			writeError(w, http.StatusInternalServerError, "internal_error", "failed to update document")
 		}
+		return
+	}
+	if err := refreshDerivedThreadProjection(r.Context(), opts, anyString(document["thread_id"]), time.Now().UTC(), actorID); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to refresh derived thread views")
 		return
 	}
 
@@ -390,6 +399,10 @@ func handleTombstoneDocument(w http.ResponseWriter, r *http.Request, opts handle
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to tombstone document")
+		return
+	}
+	if err := refreshDerivedThreadProjection(r.Context(), opts, anyString(document["thread_id"]), time.Now().UTC(), actorID); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to refresh derived thread views")
 		return
 	}
 

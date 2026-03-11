@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -195,6 +196,10 @@ func createPacketArtifactAndEvent(w http.ResponseWriter, r *http.Request, opts h
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to create packet artifact and event")
+		return
+	}
+	if err := refreshDerivedThreadProjection(r.Context(), opts, threadID, time.Now().UTC(), actorID); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to refresh derived thread views")
 		return
 	}
 

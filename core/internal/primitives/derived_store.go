@@ -86,7 +86,7 @@ func insertDerivedInboxItem(ctx context.Context, exec eventExec, threadID string
 	if item.ID == "" {
 		return fmt.Errorf("derived inbox item id is required")
 	}
-	item.ThreadID = strings.TrimSpace(firstNonEmptyString(item.ThreadID, threadID))
+	item.ThreadID = firstNonEmptyDerivedString(item.ThreadID, threadID)
 	if item.ThreadID == "" {
 		return fmt.Errorf("derived inbox item thread_id is required")
 	}
@@ -115,7 +115,7 @@ func insertDerivedInboxItem(ctx context.Context, exec eventExec, threadID string
 		boolToInt(item.HasDueAt),
 		nullableString(item.SourceEventID),
 		nullableString(item.SourceCommitmentID),
-		firstNonEmptyString(item.GeneratedAt, time.Now().UTC().Format(time.RFC3339Nano)),
+		firstNonEmptyDerivedString(item.GeneratedAt, time.Now().UTC().Format(time.RFC3339Nano)),
 		dataJSON,
 		sourceHash,
 	); err != nil {
@@ -207,13 +207,13 @@ type scanDerivedInboxItemRower interface {
 
 func scanDerivedInboxItem(row scanDerivedInboxItemRower) (DerivedInboxItem, error) {
 	var (
-		item              DerivedInboxItem
-		dueAt             sql.NullString
-		hasDueAt          int
-		sourceEventID     sql.NullString
-		sourceCommitment  sql.NullString
-		dataJSON          string
-		sourceHash        sql.NullString
+		item             DerivedInboxItem
+		dueAt            sql.NullString
+		hasDueAt         int
+		sourceEventID    sql.NullString
+		sourceCommitment sql.NullString
+		dataJSON         string
+		sourceHash       sql.NullString
 	)
 	if err := row.Scan(
 		&item.ID,
@@ -289,7 +289,7 @@ func (s *Store) PutDerivedThreadProjection(ctx context.Context, projection Deriv
 		projection.ArtifactCount,
 		projection.OpenCommitmentCount,
 		projection.DocumentCount,
-		firstNonEmptyString(projection.GeneratedAt, time.Now().UTC().Format(time.RFC3339Nano)),
+		firstNonEmptyDerivedString(projection.GeneratedAt, time.Now().UTC().Format(time.RFC3339Nano)),
 		dataJSON,
 		sourceHash,
 	)
@@ -367,12 +367,12 @@ func (s *Store) ListDerivedThreadProjections(ctx context.Context, threadIDs []st
 
 func scanDerivedThreadProjection(row scanDerivedInboxItemRower) (DerivedThreadProjection, error) {
 	var (
-		projection              DerivedThreadProjection
-		stale                   int
-		lastActivityAt          sql.NullString
-		latestStaleExceptionAt  sql.NullString
-		dataJSON                string
-		sourceHash              sql.NullString
+		projection             DerivedThreadProjection
+		stale                  int
+		lastActivityAt         sql.NullString
+		latestStaleExceptionAt sql.NullString
+		dataJSON               string
+		sourceHash             sql.NullString
 	)
 	if err := row.Scan(
 		&projection.ThreadID,
@@ -437,4 +437,14 @@ func derivedInboxCategoryOrder(category string) int {
 	default:
 		return 99
 	}
+}
+
+func firstNonEmptyDerivedString(values ...string) string {
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }

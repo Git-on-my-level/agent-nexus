@@ -161,24 +161,24 @@ func buildThreadWorkspacePayload(ctx context.Context, opts handlerOptions, threa
 	delete(contextSection, "thread")
 
 	workspaceBody := map[string]any{
-		"thread_id":    firstNonEmptyString(thread["id"], threadID),
-		"thread":       thread,
-		"context":      contextSection,
+		"thread_id": firstNonEmptyString(thread["id"], threadID),
+		"thread":    thread,
+		"context":   contextSection,
 		"collaboration": map[string]any{
-			"recommendations":   recommendations,
-			"decision_requests": decisionRequests,
-			"decisions":         decisions,
-			"key_artifacts":     contextBody["key_artifacts"],
-			"open_commitments":  contextBody["open_commitments"],
+			"recommendations":        recommendations,
+			"decision_requests":      decisionRequests,
+			"decisions":              decisions,
+			"key_artifacts":          contextBody["key_artifacts"],
+			"open_commitments":       contextBody["open_commitments"],
 			"recommendation_count":   len(recommendations),
 			"decision_request_count": len(decisionRequests),
 			"decision_count":         len(decisions),
 			"artifact_count":         workspaceSliceLen(contextBody["key_artifacts"]),
 			"open_commitment_count":  workspaceSliceLen(contextBody["open_commitments"]),
 		},
-		"inbox":               inboxSection,
-		"pending_decisions":   map[string]any{"thread_id": strings.TrimSpace(threadID), "items": pendingDecisions, "count": len(pendingDecisions), "generated_at": now.Format(time.RFC3339Nano)},
-		"related_threads":     relatedThreadReview["related_threads"],
+		"inbox":                     inboxSection,
+		"pending_decisions":         map[string]any{"thread_id": strings.TrimSpace(threadID), "items": pendingDecisions, "count": len(pendingDecisions), "generated_at": now.Format(time.RFC3339Nano)},
+		"related_threads":           relatedThreadReview["related_threads"],
 		"related_recommendations":   relatedThreadReview["related_recommendations"],
 		"related_decision_requests": relatedThreadReview["related_decision_requests"],
 		"related_decisions":         relatedThreadReview["related_decisions"],
@@ -250,14 +250,14 @@ func buildThreadWorkspaceCollaborationSummary(contextBody map[string]any) map[st
 	decisions := filterWorkspaceEventsByType(normalizedEvents, []string{"decision_made"})
 
 	return map[string]any{
-		"recommendations":         recommendations,
-		"decision_requests":       decisionRequests,
-		"decisions":               decisions,
-		"recommendation_count":    len(recommendations),
-		"decision_request_count":  len(decisionRequests),
-		"decision_count":          len(decisions),
-		"artifact_count":          workspaceSliceLen(contextBody["key_artifacts"]),
-		"open_commitment_count":   workspaceSliceLen(contextBody["open_commitments"]),
+		"recommendations":        recommendations,
+		"decision_requests":      decisionRequests,
+		"decisions":              decisions,
+		"recommendation_count":   len(recommendations),
+		"decision_request_count": len(decisionRequests),
+		"decision_count":         len(decisions),
+		"artifact_count":         workspaceSliceLen(contextBody["key_artifacts"]),
+		"open_commitment_count":  workspaceSliceLen(contextBody["open_commitments"]),
 	}
 }
 
@@ -351,12 +351,12 @@ func buildThreadWorkspaceRelatedThreadReview(ctx context.Context, opts handlerOp
 
 func buildEmptyRelatedThreadReview() map[string]any {
 	return map[string]any{
-		"related_threads":           map[string]any{"items": []map[string]any{}, "count": 0},
-		"related_recommendations":   map[string]any{"items": []map[string]any{}, "count": 0},
-		"related_decision_requests": map[string]any{"items": []map[string]any{}, "count": 0},
-		"related_decisions":         map[string]any{"items": []map[string]any{}, "count": 0},
-		"warnings":                  []map[string]any{},
-		"warning_count":             0,
+		"related_threads":             map[string]any{"items": []map[string]any{}, "count": 0},
+		"related_recommendations":     map[string]any{"items": []map[string]any{}, "count": 0},
+		"related_decision_requests":   map[string]any{"items": []map[string]any{}, "count": 0},
+		"related_decisions":           map[string]any{"items": []map[string]any{}, "count": 0},
+		"warnings":                    []map[string]any{},
+		"warning_count":               0,
 		"related_event_content_count": 0,
 		"total_review_items":          0,
 	}
@@ -389,8 +389,8 @@ func buildThreadWorkspaceFollowUpHints(threadID string, sections ...[]map[string
 	}
 
 	hints := map[string]any{
-		"events_get_template":     "oar events get --event-id <event-id> --json",
-		"events_get_examples":     examples,
+		"events_get_template":       "oar events get --event-id <event-id> --json",
+		"events_get_examples":       examples,
 		"workspace_refresh_command": "",
 	}
 	if strings.TrimSpace(threadID) != "" {
