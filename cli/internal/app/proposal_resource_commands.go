@@ -95,17 +95,79 @@ func docsProposalDiffText(currentBody map[string]any, updateBody map[string]any)
 	return renderUnifiedDiff("current.json", prettyProposalJSON(currentView), "proposed.json", prettyProposalJSON(proposedView))
 }
 
-func (a *App) runThreadsPatchProposalCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
-	id, rawBody, err := a.parseIDAndBodyInput(args, "thread-id", "thread id", "threads patch")
+func threadPatchValidationError(commandName string, issues []string) error {
+	return errnorm.WithDetails(
+		errnorm.Usage("invalid_request", strings.TrimSpace(commandName)+" payload failed local validation"),
+		map[string]any{"errors": append([]string(nil), issues...)},
+	)
+}
+
+func commitmentPatchValidationError(commandName string, issues []string) error {
+	return errnorm.WithDetails(
+		errnorm.Usage("invalid_request", strings.TrimSpace(commandName)+" payload failed local validation"),
+		map[string]any{"errors": append([]string(nil), issues...)},
+	)
+}
+
+func (a *App) parseThreadPatchInput(args []string, commandName string) (string, map[string]any, error) {
+	id, rawBody, err := a.parseIDAndBodyInput(args, "thread-id", "thread id", commandName)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
-	body, err := mapBody(rawBody, "threads patch")
+	body, err := mapBody(rawBody, commandName)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 	if validation := validateDraftThreadPatch(body); len(validation) > 0 {
-		return nil, errnorm.WithDetails(errnorm.Usage("draft_validation_failed", "thread patch payload failed local validation"), map[string]any{"errors": validation})
+		return "", nil, threadPatchValidationError(commandName, validation)
+	}
+	return id, body, nil
+}
+
+func (a *App) parseCommitmentPatchInput(args []string, commandName string) (string, map[string]any, error) {
+	id, rawBody, err := a.parseIDAndBodyInput(args, "commitment-id", "commitment id", commandName)
+	if err != nil {
+		return "", nil, err
+	}
+	body, err := mapBody(rawBody, commandName)
+	if err != nil {
+		return "", nil, err
+	}
+	if validation := validateDraftCommitmentPatch(body); len(validation) > 0 {
+		return "", nil, commitmentPatchValidationError(commandName, validation)
+	}
+	return id, body, nil
+}
+
+func (a *App) parseDocsUpdateInput(args []string, commandName string, cfg config.Resolved) (string, map[string]any, error) {
+	id, rawBody, _, err := a.parseIDAndBodyInputWithOptions(args, "document-id", "document id", commandName, jsonBodyInputOptions{
+		allowContentFile: true,
+	})
+	if err != nil {
+		return "", nil, err
+	}
+	body, err := mapBody(rawBody, commandName)
+	if err != nil {
+		return "", nil, err
+	}
+	if err := validateDocsUpdateBody(body, commandName); err != nil {
+		return "", nil, err
+	}
+	bodyAny, err := ensureDocsUpdateActorIdentity(body, cfg)
+	if err != nil {
+		return "", nil, err
+	}
+	body, err = mapBody(bodyAny, commandName)
+	if err != nil {
+		return "", nil, err
+	}
+	return id, body, nil
+}
+
+func (a *App) runThreadsProposePatchCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
+	id, body, err := a.parseThreadPatchInput(args, "threads propose-patch")
+	if err != nil {
+		return nil, err
 	}
 
 	currentResult, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "threads get", "threads.get", "thread_id", id, threadIDLookupSpec, nil, nil)
@@ -140,19 +202,11 @@ func (a *App) runThreadsApplyCommand(ctx context.Context, args []string, cfg con
 	return result, err
 }
 
-func (a *App) runCommitmentsUpdateProposalCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
-	id, rawBody, err := a.parseIDAndBodyInput(args, "commitment-id", "commitment id", "commitments update")
+func (a *App) runCommitmentsProposePatchCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
+	id, body, err := a.parseCommitmentPatchInput(args, "commitments propose-patch")
 	if err != nil {
 		return nil, err
 	}
-	body, err := mapBody(rawBody, "commitments update")
-	if err != nil {
-		return nil, err
-	}
-	if validation := validateDraftCommitmentPatch(body); len(validation) > 0 {
-		return nil, errnorm.WithDetails(errnorm.Usage("draft_validation_failed", "commitment update payload failed local validation"), map[string]any{"errors": validation})
-	}
-
 	currentResult, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "commitments get", "commitments.get", "commitment_id", id, commitmentIDLookupSpec, nil, nil)
 	if callErr != nil {
 		return nil, callErr
@@ -188,25 +242,8 @@ func (a *App) runCommitmentsApplyCommand(ctx context.Context, args []string, cfg
 	return result, err
 }
 
-func (a *App) runDocsUpdateProposalCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
-	id, rawBody, _, err := a.parseIDAndBodyInputWithOptions(args, "document-id", "document id", "docs update", jsonBodyInputOptions{
-		allowContentFile: true,
-	})
-	if err != nil {
-		return nil, err
-	}
-	body, err := mapBody(rawBody, "docs update")
-	if err != nil {
-		return nil, err
-	}
-	if err := validateDocsUpdateBody(body, "docs update"); err != nil {
-		return nil, err
-	}
-	bodyAny, err := ensureDocsUpdateActorIdentity(body, cfg)
-	if err != nil {
-		return nil, err
-	}
-	body, err = mapBody(bodyAny, "docs update")
+func (a *App) runDocsProposeUpdateCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
+	id, body, err := a.parseDocsUpdateInput(args, "docs propose-update", cfg)
 	if err != nil {
 		return nil, err
 	}

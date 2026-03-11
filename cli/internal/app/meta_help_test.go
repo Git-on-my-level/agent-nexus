@@ -114,6 +114,9 @@ func TestRunGeneratedHelpTopic(t *testing.T) {
 	if !strings.Contains(output, "threads patch") {
 		t.Fatalf("expected patch subcommand in generated help output=%s", output)
 	}
+	if !strings.Contains(output, "threads propose-patch") {
+		t.Fatalf("expected explicit proposal subcommand in generated help output=%s", output)
+	}
 	if !strings.Contains(output, "threads timeline") {
 		t.Fatalf("expected timeline subcommand in generated help output=%s", output)
 	}
@@ -329,8 +332,8 @@ func TestRunDocsHelpMentionsLocalValidateUpdate(t *testing.T) {
 	if !strings.Contains(output, "docs content") {
 		t.Fatalf("expected docs content helper output=%s", output)
 	}
-	if !strings.Contains(output, "docs update") || !strings.Contains(output, "docs apply") {
-		t.Fatalf("expected docs proposal/apply helpers output=%s", output)
+	if !strings.Contains(output, "docs update") || !strings.Contains(output, "docs propose-update") || !strings.Contains(output, "docs apply") {
+		t.Fatalf("expected docs direct/proposal/apply helpers output=%s", output)
 	}
 	if !strings.Contains(output, "--content-file <path>") {
 		t.Fatalf("expected content-file hint output=%s", output)
@@ -357,8 +360,8 @@ func TestRunCommitmentsHelpMentionsApplyWorkflow(t *testing.T) {
 		t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
 	output := stdout.String()
-	if !strings.Contains(output, "commitments update") || !strings.Contains(output, "commitments apply") {
-		t.Fatalf("expected commitments proposal/apply workflow output=%s", output)
+	if !strings.Contains(output, "commitments patch") || !strings.Contains(output, "commitments propose-patch") || !strings.Contains(output, "commitments apply") {
+		t.Fatalf("expected commitments direct/proposal/apply workflow output=%s", output)
 	}
 }
 

@@ -175,13 +175,13 @@ var localHelperTopics = []localHelperTopic{
 		},
 	},
 	{
-		Path:        "threads patch",
+		Path:        "threads propose-patch",
 		Summary:     "Stage a thread patch proposal locally and show the diff before applying it.",
 		JSONShape:   "`proposal_id`, `target_command_id`, `path`, `body`, `diff`, `apply_command`",
 		Composition: "Resolves the thread id, fetches current state with `threads get`, computes a local diff, and persists a proposal file instead of sending the patch immediately.",
 		Examples: []string{
-			"oar threads patch --thread-id <thread-id> --from-file patch.json",
-			"cat patch.json | oar threads patch --thread-id <thread-id>",
+			"oar threads propose-patch --thread-id <thread-id> --from-file patch.json",
+			"cat patch.json | oar threads propose-patch --thread-id <thread-id>",
 		},
 		Flags: []localHelperFlag{
 			{Name: "--thread-id <thread-id>", Description: "Thread id to patch."},
@@ -202,15 +202,15 @@ var localHelperTopics = []localHelperTopic{
 		},
 	},
 	{
-		Path:        "commitments update",
-		Summary:     "Stage a commitment update proposal locally and show the diff before applying it.",
+		Path:        "commitments propose-patch",
+		Summary:     "Stage a commitment patch proposal locally and show the diff before applying it.",
 		JSONShape:   "`proposal_id`, `target_command_id`, `path`, `body`, `diff`, `apply_command`",
 		Composition: "Resolves the commitment id, fetches current state with `commitments get`, computes a local diff, and persists a proposal file instead of sending the patch immediately.",
 		Examples: []string{
-			"oar commitments update --commitment-id <commitment-id> --from-file patch.json",
+			"oar commitments propose-patch --commitment-id <commitment-id> --from-file patch.json",
 		},
 		Flags: []localHelperFlag{
-			{Name: "--commitment-id <commitment-id>", Description: "Commitment id to update."},
+			{Name: "--commitment-id <commitment-id>", Description: "Commitment id to patch."},
 			{Name: "--from-file <path>", Description: "Load the patch body from a JSON file."},
 		},
 	},
@@ -227,13 +227,13 @@ var localHelperTopics = []localHelperTopic{
 		},
 	},
 	{
-		Path:        "docs update",
+		Path:        "docs propose-update",
 		Summary:     "Stage a document update proposal locally and show the content diff before applying it.",
 		JSONShape:   "`proposal_id`, `target_command_id`, `path`, `body`, `diff`, `apply_command`",
 		Composition: "Fetches the current document revision with `docs get`, computes a local diff against the proposed update, and persists a proposal file instead of sending the update immediately.",
 		Examples: []string{
-			"oar docs update --document-id <document-id> --content-file <path>",
-			"cat update.json | oar docs update --document-id <document-id>",
+			"oar docs propose-update --document-id <document-id> --content-file <path>",
+			"cat update.json | oar docs propose-update --document-id <document-id>",
 		},
 		Flags: []localHelperFlag{
 			{Name: "--document-id <document-id>", Description: "Document id to update."},
@@ -463,12 +463,14 @@ func localGroupHelpSupplement(topic string) string {
   threads inspect             Compose one thread coordination view from context + inbox in one command.
   threads recommendations     Focus recommendation/decision review with actor+timestamp provenance.
   Mutation flow:
-  threads patch               Stage a thread patch proposal and inspect the diff before applying.
+  threads patch               Send the thread patch to core immediately.
+  threads propose-patch       Stage a thread patch proposal and inspect the diff before applying.
   threads apply               Apply a staged thread patch proposal.
   Tip: start with ` + "`oar threads workspace`" + ` for one initiative/thread, use ` + "`--status/--tag/--type initiative`" + ` to discover one thread, use ` + "`oar threads context`" + ` for cross-thread aggregates, and ` + "`oar threads get`" + ` for raw snapshot-only reads. Add ` + "`--full-id`" + ` for copy/paste ids.`)
 	case "commitments":
 		return strings.TrimSpace(`Mutation flow:
-  commitments update         Stage a commitment update proposal and inspect the diff before applying.
+  commitments patch          Send the commitment patch to core immediately.
+  commitments propose-patch  Stage a commitment patch proposal and inspect the diff before applying.
   commitments apply          Apply a staged commitment update proposal.`)
 	case "events":
 		return strings.TrimSpace(`Local inspection helpers:
@@ -484,7 +486,8 @@ func localGroupHelpSupplement(topic string) string {
 		return strings.TrimSpace(`Local inspection helpers:
   docs content             Show current document content with revision metadata.
   Mutation flow:
-  docs update              Stage an update proposal and inspect its diff before applying it.
+  docs update              Send the document update to core immediately.
+  docs propose-update      Stage an update proposal and inspect its diff before applying it.
   docs apply               Apply a staged document update proposal.
   docs validate-update     Validate a docs.update payload from stdin/--from-file.
   Tip: add ` + "`--content-file <path>`" + ` to avoid hand-escaping multiline content.`)
@@ -783,7 +786,7 @@ Work-order loop
 1. Inspect inbound work and context: ` + "`oar inbox list`" + ` or ` + "`oar inbox stream --max-events 1`" + `.
 2. Read current state before mutating it: ` + "`oar threads workspace --thread-id <thread-id>`" + `.
    Use ` + "`oar threads context`" + ` for cross-thread aggregates and ` + "`oar threads get`" + ` for raw snapshot-only reads.
-3. Stage a mutation proposal when you need reviewable intent: ` + "`oar docs update`" + `, ` + "`oar threads patch`" + `, ` + "`oar commitments update`" + `, or ` + "`oar draft create --command <command-id>`" + `.
+3. Stage a mutation proposal when you need reviewable intent: ` + "`oar docs propose-update`" + `, ` + "`oar threads propose-patch`" + `, ` + "`oar commitments propose-patch`" + `, or ` + "`oar draft create --command <command-id>`" + `.
 4. Apply the staged proposal (or commit a draft for lower-level commands) and capture returned IDs.
 5. Confirm outcomes in timeline/events and ack inbox items to close the loop.
 
@@ -816,15 +819,14 @@ func mapRuntimePathToRegistryPath(path string) string {
 	}
 	path = strings.Join(parts, " ")
 	rewrites := map[string]string{
-		"threads update":     "threads patch",
-		"commitments update": "commitments patch",
-		"events tail":        "events stream",
-		"inbox tail":         "inbox stream",
-		"artifacts content":  "artifacts content get",
-		"meta commands":      "meta commands list",
-		"meta command":       "meta commands get",
-		"meta concepts":      "meta concepts list",
-		"meta concept":       "meta concepts get",
+		"threads update":    "threads patch",
+		"events tail":       "events stream",
+		"inbox tail":        "inbox stream",
+		"artifacts content": "artifacts content get",
+		"meta commands":     "meta commands list",
+		"meta command":      "meta commands get",
+		"meta concepts":     "meta concepts list",
+		"meta concept":      "meta concepts get",
 	}
 	if rewritten, ok := rewrites[path]; ok {
 		return rewritten
@@ -846,7 +848,6 @@ func runtimePathFromRegistryPath(path string) string {
 	}
 	path = strings.Join(parts, " ")
 	rewrites := map[string]string{
-		"commitments patch":  "commitments update",
 		"meta commands list": "meta commands",
 		"meta commands get":  "meta command",
 		"meta concepts list": "meta concepts",

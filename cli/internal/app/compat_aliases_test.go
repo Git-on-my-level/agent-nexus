@@ -113,7 +113,7 @@ func TestCommandShapeCompatibilityAliasesResolveToCanonicalHandlers(t *testing.T
 			name:        "threads update",
 			args:        []string{"threads", "update", "--thread-id", "thread_1"},
 			stdin:       `{"patch":{"status":"resolved"}}`,
-			wantMethod:  http.MethodGet,
+			wantMethod:  http.MethodPatch,
 			wantPath:    "/threads/thread_1",
 			wantCommand: "threads patch",
 		},
@@ -140,12 +140,7 @@ func TestCommandShapeCompatibilityAliasesResolveToCanonicalHandlers(t *testing.T
 					if r.Method == http.MethodPost {
 						w.WriteHeader(http.StatusCreated)
 					}
-					switch {
-					case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_1":
-						_, _ = w.Write([]byte(`{"thread":{"id":"thread_1","status":"active"}}`))
-					default:
-						_, _ = w.Write([]byte(`{"ok":true}`))
-					}
+					_, _ = w.Write([]byte(`{"ok":true}`))
 				}
 			}))
 			defer server.Close()

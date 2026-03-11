@@ -62,9 +62,11 @@ func TestTypedThreadCommandsGolden(t *testing.T) {
 	assertGolden(t, "threads_create.golden.json", createOut)
 
 	patchOut := runCLIForTest(t, home, env, strings.NewReader(`{"patch":{"status":"resolved"}}`), []string{"--json", "--base-url", server.URL, "threads", "patch", "--thread-id", "thread_1"})
-	assertGolden(t, "threads_patch.golden.json", normalizeProposalEnvelopeForGolden(t, patchOut))
-	patchPayload := assertEnvelopeOK(t, patchOut)
-	proposalID := proposalIDFromEnvelope(t, patchPayload)
+	assertGolden(t, "threads_patch.golden.json", patchOut)
+
+	proposeOut := runCLIForTest(t, home, env, strings.NewReader(`{"patch":{"status":"resolved"}}`), []string{"--json", "--base-url", server.URL, "threads", "propose-patch", "--thread-id", "thread_1"})
+	assertGolden(t, "threads_propose_patch.golden.json", normalizeProposalEnvelopeForGolden(t, proposeOut))
+	proposalID := proposalIDFromEnvelope(t, assertEnvelopeOK(t, proposeOut))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "threads", "apply", "--proposal-id", proposalID}))
 
 	timelineOut := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "threads", "timeline", "--thread-id", "thread_1"})
@@ -114,8 +116,9 @@ func TestTypedWorkflowCommands(t *testing.T) {
 	env := map[string]string{}
 
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"thread":{"title":"Flow Thread"}}`), []string{"--json", "--base-url", server.URL, "threads", "create"}))
-	threadPatchPayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"patch":{"status":"resolved"}}`), []string{"--json", "--base-url", server.URL, "threads", "patch", "thread_flow_1"}))
-	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "threads", "apply", proposalIDFromEnvelope(t, threadPatchPayload)}))
+	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"patch":{"status":"resolved"}}`), []string{"--json", "--base-url", server.URL, "threads", "patch", "thread_flow_1"}))
+	threadPatchProposal := assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"patch":{"status":"resolved"}}`), []string{"--json", "--base-url", server.URL, "threads", "propose-patch", "thread_flow_1"}))
+	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "threads", "apply", proposalIDFromEnvelope(t, threadPatchProposal)}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"commitment":{"thread_id":"thread_flow_1","title":"Do work"}}`), []string{"--json", "--base-url", server.URL, "commitments", "create"}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"work_order":{"thread_id":"thread_flow_1"}}`), []string{"--json", "--base-url", server.URL, "work-orders", "create"}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"receipt":{"thread_id":"thread_flow_1"}}`), []string{"--json", "--base-url", server.URL, "receipts", "create"}))
@@ -710,7 +713,8 @@ func TestDocsCommands(t *testing.T) {
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "list", "--thread-id", "thread_docs_1", "--include-tombstoned"}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"document":{"id":"doc_1"},"content":"initial","content_type":"text"}`), []string{"--json", "--base-url", server.URL, "docs", "create"}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "get", "--document-id", "doc_1"}))
-	docsUpdatePayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"actor_id":"actor_test","if_base_revision":"rev_1","content":"next","content_type":"text"}`), []string{"--json", "--base-url", server.URL, "docs", "update", "--document-id", "doc_1"}))
+	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"actor_id":"actor_test","if_base_revision":"rev_1","content":"next","content_type":"text"}`), []string{"--json", "--base-url", server.URL, "docs", "update", "--document-id", "doc_1"}))
+	docsUpdatePayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"actor_id":"actor_test","if_base_revision":"rev_1","content":"next","content_type":"text"}`), []string{"--json", "--base-url", server.URL, "docs", "propose-update", "--document-id", "doc_1"}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "apply", "--proposal-id", proposalIDFromEnvelope(t, docsUpdatePayload)}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "history", "--document-id", "doc_1"}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "revision", "get", "--document-id", "doc_1", "--revision-id", "rev_1"}))
@@ -752,14 +756,7 @@ func TestDocsUpdateInjectsActorIDFromProfile(t *testing.T) {
 		"docs", "update",
 		"--document-id", "doc_1",
 	})
-	payload := assertEnvelopeOK(t, raw)
-	assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"--agent", "agent-docs",
-		"docs", "apply",
-		proposalIDFromEnvelope(t, payload),
-	}))
+	assertEnvelopeOK(t, raw)
 }
 
 func TestDocsUpdateRequiresActiveActorIdentity(t *testing.T) {
@@ -870,19 +867,12 @@ func TestProductManagerFlowRegisterThenDocsUpdate(t *testing.T) {
 		"auth", "register",
 		"--username", "pi-dogfood-agent-product-manager",
 	}))
-	docsUpdatePayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"if_base_revision":"rev_1","content":"updated brief","content_type":"text"}`), []string{
+	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"if_base_revision":"rev_1","content":"updated brief","content_type":"text"}`), []string{
 		"--json",
 		"--base-url", server.URL,
 		"--agent", "agent-product-manager",
 		"docs", "update",
 		"--document-id", "northwave-pilot-rescue-brief",
-	}))
-	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"--agent", "agent-product-manager",
-		"docs", "apply",
-		proposalIDFromEnvelope(t, docsUpdatePayload),
 	}))
 
 	mu.Lock()
@@ -1071,7 +1061,7 @@ func TestDocsUpdateRejectsNullContentBeforeHTTP(t *testing.T) {
 	}
 }
 
-func TestDocsUpdateProposalWithContentFileUsesFetchedDocumentState(t *testing.T) {
+func TestDocsProposeUpdateWithContentFileUsesFetchedDocumentState(t *testing.T) {
 	t.Parallel()
 
 	var mu sync.Mutex
@@ -1110,7 +1100,7 @@ func TestDocsUpdateProposalWithContentFileUsesFetchedDocumentState(t *testing.T)
 		"--json",
 		"--base-url", server.URL,
 		"--agent", "agent-docs-content-file",
-		"docs", "update",
+		"docs", "propose-update",
 		"--document-id", "doc_1",
 		"--from-file", updateFile,
 		"--content-file", contentFile,
@@ -1141,7 +1131,7 @@ func TestDocsUpdateProposalWithContentFileUsesFetchedDocumentState(t *testing.T)
 	}
 }
 
-func TestDocsUpdateProposalPreservesStructuredContentInDiff(t *testing.T) {
+func TestDocsProposeUpdatePreservesStructuredContentInDiff(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1174,7 +1164,7 @@ func TestDocsUpdateProposalPreservesStructuredContentInDiff(t *testing.T) {
 		"--json",
 		"--base-url", server.URL,
 		"--agent", "agent-docs-structured",
-		"docs", "update",
+		"docs", "propose-update",
 		"--document-id", "doc_structured",
 	})
 	payload := assertEnvelopeOK(t, raw)
@@ -1197,7 +1187,7 @@ func TestDocsUpdateProposalPreservesStructuredContentInDiff(t *testing.T) {
 	}
 }
 
-func TestDocsUpdateProposalTextDiffFallsBackWhenRevisionContentEmpty(t *testing.T) {
+func TestDocsProposeUpdateTextDiffFallsBackWhenRevisionContentEmpty(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1231,7 +1221,7 @@ func TestDocsUpdateProposalTextDiffFallsBackWhenRevisionContentEmpty(t *testing.
 		"--json",
 		"--base-url", server.URL,
 		"--agent", "agent-docs-text-fallback",
-		"docs", "update",
+		"docs", "propose-update",
 		"--document-id", "doc_text_fallback",
 	})
 	payload := assertEnvelopeOK(t, raw)
@@ -1243,7 +1233,7 @@ func TestDocsUpdateProposalTextDiffFallsBackWhenRevisionContentEmpty(t *testing.
 	}
 }
 
-func TestCommitmentsUpdateStagesProposalAndApply(t *testing.T) {
+func TestCommitmentsPatchWritesImmediatelyAndProposePatchStages(t *testing.T) {
 	t.Parallel()
 
 	var mu sync.Mutex
@@ -1273,10 +1263,28 @@ func TestCommitmentsUpdateStagesProposalAndApply(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
+	assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{"patch":{"status":"done"}}`), []string{
+		"--json",
+		"--base-url", server.URL,
+		"commitments", "patch",
+		"--commitment-id", "commitment_1",
+	}))
+
+	mu.Lock()
+	gotGetsAfterPatch := getCalls
+	gotPatchesAfterPatch := patchCalls
+	mu.Unlock()
+	if gotGetsAfterPatch != 0 {
+		t.Fatalf("expected no commitments get during direct patch, got %d", gotGetsAfterPatch)
+	}
+	if gotPatchesAfterPatch != 1 {
+		t.Fatalf("expected one commitments patch during direct patch, got %d", gotPatchesAfterPatch)
+	}
+
 	updatePayload := assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{"patch":{"status":"done"}}`), []string{
 		"--json",
 		"--base-url", server.URL,
-		"commitments", "update",
+		"commitments", "propose-patch",
 		"--commitment-id", "commitment_1",
 	}))
 
@@ -1287,8 +1295,8 @@ func TestCommitmentsUpdateStagesProposalAndApply(t *testing.T) {
 	if gotGetsAfterStage != 1 {
 		t.Fatalf("expected one commitments get during proposal staging, got %d", gotGetsAfterStage)
 	}
-	if gotPatchesAfterStage != 0 {
-		t.Fatalf("expected no commitments patch during proposal staging, got %d", gotPatchesAfterStage)
+	if gotPatchesAfterStage != 1 {
+		t.Fatalf("expected direct patch count to remain unchanged during proposal staging, got %d", gotPatchesAfterStage)
 	}
 
 	applyPayload := assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
@@ -1304,8 +1312,8 @@ func TestCommitmentsUpdateStagesProposalAndApply(t *testing.T) {
 	mu.Lock()
 	gotPatches := patchCalls
 	mu.Unlock()
-	if gotPatches != 1 {
-		t.Fatalf("expected one commitments patch after apply, got %d", gotPatches)
+	if gotPatches != 2 {
+		t.Fatalf("expected two commitments patches after direct patch plus apply, got %d", gotPatches)
 	}
 }
 
