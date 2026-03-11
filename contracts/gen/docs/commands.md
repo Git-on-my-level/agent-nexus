@@ -245,9 +245,9 @@ Generated from `contracts/oar-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Track accountable work items tied to a thread.
 - Concepts: `commitments`
-- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`
+- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`
 - Output: Returns `{ commitment }` with generated id.
-- Agent notes: Non-idempotent unless caller controls external dedupe.
+- Agent notes: Replay-safe when `request_key` is reused with the same body; otherwise each create issues a new commitment id.
 - Examples:
   - Create commitment: `oar commitments create --from-file commitment.json --json`
 
@@ -317,7 +317,7 @@ Generated from `contracts/oar-openapi.yaml`.
 - Concepts: `docs`, `revisions`
 - Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`
 - Output: Returns `{ document, revision }` where `revision` is the new head.
-- Agent notes: Non-idempotent unless caller provides a deterministic document id and dedupes retries.
+- Agent notes: Replay-safe when `request_key` is reused with the same body; core can issue the canonical document id when one is omitted.
 - Examples:
   - Create document: `oar docs create --from-file doc-create.json --json`
 
@@ -415,7 +415,7 @@ Generated from `contracts/oar-openapi.yaml`.
 - Concepts: `events`, `append-only`
 - Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`
 - Output: Returns `{ event }` with generated id and timestamp.
-- Agent notes: Non-idempotent unless external dedupe keying is used.
+- Agent notes: Replay-safe when `request_key` is reused with the same body.
 - Examples:
   - Append event: `oar events create --from-file event.json --json`
 
@@ -612,7 +612,7 @@ Generated from `contracts/oar-openapi.yaml`.
 - Concepts: `packets`, `receipts`
 - Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`
 - Output: Returns `{ artifact, event }`.
-- Agent notes: Include evidence refs that satisfy packet conventions.
+- Agent notes: Replay-safe when `request_key` is reused with the same body. Include evidence refs that satisfy packet conventions.
 - Examples:
   - Create receipt: `oar packets receipts create --from-file receipt.json --json`
 
@@ -640,7 +640,7 @@ Generated from `contracts/oar-openapi.yaml`.
 - Concepts: `packets`, `work-orders`
 - Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`
 - Output: Returns `{ artifact, event }`.
-- Agent notes: Treat as non-idempotent unless artifact ids are controlled.
+- Agent notes: Replay-safe when `request_key` is reused with the same body; packet id fields may be omitted and core will issue the canonical artifact id.
 - Examples:
   - Create work order: `oar packets work-orders create --from-file work-order.json --json`
 
@@ -681,9 +681,9 @@ Generated from `contracts/oar-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Open a new thread for tracking ongoing organizational work.
 - Concepts: `threads`, `snapshots`
-- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`
+- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`
 - Output: Returns `{ thread }` including generated id and audit fields.
-- Agent notes: Non-idempotent unless caller enforces a deterministic id strategy externally.
+- Agent notes: Replay-safe when `request_key` is reused with the same body; otherwise core issues a new canonical thread id.
 - Examples:
   - Create thread: `oar threads create --from-file thread.json --json`
 

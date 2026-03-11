@@ -45,6 +45,7 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 
 	var req struct {
 		ActorID     string         `json:"actor_id"`
+		RequestKey  string         `json:"request_key"`
 		Document    map[string]any `json:"document"`
 		Content     any            `json:"content"`
 		ContentType string         `json:"content_type"`
@@ -77,7 +78,21 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 	if !ok {
 		return
 	}
-
+	if strings.TrimSpace(req.RequestKey) != "" && firstNonEmptyString(req.Document["document_id"], req.Document["id"]) == "" {
+		req.Document["document_id"] = deriveRequestScopedID("docs.create", actorID, req.RequestKey, "doc")
+	}
+	replayStatus, replayPayload, replayed, err := readIdempotencyReplay(r.Context(), opts.primitiveStore, "docs.create", actorID, req.RequestKey, req)
+	if writeIdempotencyError(w, err) {
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load idempotency replay")
+		return
+	}
+	if replayed {
+		writeJSON(w, replayStatus, replayPayload)
+		return
+	}
 	refs, err := optionalRefs(req.Refs)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
@@ -90,6 +105,26 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 
 	document, revision, err := opts.primitiveStore.CreateDocument(r.Context(), actorID, req.Document, req.Content, req.ContentType, refs)
 	if err != nil {
+		if errors.Is(err, primitives.ErrConflict) && strings.TrimSpace(req.RequestKey) != "" {
+			documentID := firstNonEmptyString(req.Document["document_id"], req.Document["id"])
+			existingDocument, existingRevision, loadErr := opts.primitiveStore.GetDocument(r.Context(), documentID)
+			if loadErr == nil {
+				response := map[string]any{
+					"document": existingDocument,
+					"revision": existingRevision,
+				}
+				status, payload, replayErr := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "docs.create", actorID, req.RequestKey, req, http.StatusCreated, response)
+				if writeIdempotencyError(w, replayErr) {
+					return
+				}
+				if replayErr != nil {
+					writeError(w, http.StatusInternalServerError, "internal_error", "failed to persist idempotency replay")
+					return
+				}
+				writeJSON(w, status, payload)
+				return
+			}
+		}
 		if errors.Is(err, primitives.ErrConflict) {
 			writeError(w, http.StatusConflict, "conflict", "document already exists")
 			return
@@ -102,10 +137,18 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, map[string]any{
+	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "docs.create", actorID, req.RequestKey, req, http.StatusCreated, map[string]any{
 		"document": document,
 		"revision": revision,
 	})
+	if writeIdempotencyError(w, err) {
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to persist idempotency replay")
+		return
+	}
+	writeJSON(w, status, payload)
 }
 
 func handleGetDocument(w http.ResponseWriter, r *http.Request, opts handlerOptions, documentID string) {

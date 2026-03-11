@@ -652,10 +652,10 @@ paths:
       x-oar-input-mode: "json-body"
       x-oar-streaming: { mode: none }
       x-oar-output-envelope: "Returns `{ thread }` including generated id and audit fields."
-      x-oar-error-codes: [invalid_json, invalid_request, unknown_actor_id]
+      x-oar-error-codes: [invalid_json, invalid_request, unknown_actor_id, conflict]
       x-oar-concepts: [threads, snapshots]
       x-oar-stability: "stable"
-      x-oar-agent-notes: "Non-idempotent unless caller enforces a deterministic id strategy externally."
+      x-oar-agent-notes: "Replay-safe when `request_key` is reused with the same body; otherwise core issues a new canonical thread id."
       requestBody:
         required: true
         content:
@@ -941,10 +941,10 @@ paths:
       x-oar-input-mode: "json-body"
       x-oar-streaming: { mode: none }
       x-oar-output-envelope: "Returns `{ commitment }` with generated id."
-      x-oar-error-codes: [invalid_json, invalid_request, unknown_actor_id]
+      x-oar-error-codes: [invalid_json, invalid_request, unknown_actor_id, conflict]
       x-oar-concepts: [commitments]
       x-oar-stability: "stable"
-      x-oar-agent-notes: "Non-idempotent unless caller controls external dedupe."
+      x-oar-agent-notes: "Replay-safe when `request_key` is reused with the same body; otherwise each create issues a new commitment id."
       requestBody:
         required: true
         content:
@@ -1119,7 +1119,7 @@ paths:
       x-oar-error-codes: [invalid_json, invalid_request, unknown_actor_id, conflict]
       x-oar-concepts: [docs, revisions]
       x-oar-stability: "beta"
-      x-oar-agent-notes: "Non-idempotent unless caller provides a deterministic document id and dedupes retries."
+      x-oar-agent-notes: "Replay-safe when `request_key` is reused with the same body; core can issue the canonical document id when one is omitted."
       requestBody:
         required: true
         content:
@@ -1290,7 +1290,7 @@ paths:
       x-oar-error-codes: [invalid_json, invalid_request, unknown_actor_id]
       x-oar-concepts: [events, append-only]
       x-oar-stability: "stable"
-      x-oar-agent-notes: "Non-idempotent unless external dedupe keying is used."
+      x-oar-agent-notes: "Replay-safe when `request_key` is reused with the same body."
       requestBody:
         required: true
         content:
@@ -1626,7 +1626,7 @@ paths:
       x-oar-error-codes: [invalid_json, invalid_request, unknown_actor_id]
       x-oar-concepts: [packets, work-orders]
       x-oar-stability: "stable"
-      x-oar-agent-notes: "Treat as non-idempotent unless artifact ids are controlled."
+      x-oar-agent-notes: "Replay-safe when `request_key` is reused with the same body; packet id fields may be omitted and core will issue the canonical artifact id."
       requestBody:
         required: true
         content:
@@ -1660,7 +1660,7 @@ paths:
       x-oar-error-codes: [invalid_json, invalid_request, unknown_actor_id]
       x-oar-concepts: [packets, receipts]
       x-oar-stability: "stable"
-      x-oar-agent-notes: "Include evidence refs that satisfy packet conventions."
+      x-oar-agent-notes: "Replay-safe when `request_key` is reused with the same body. Include evidence refs that satisfy packet conventions."
       requestBody:
         required: true
         content:
@@ -2303,6 +2303,7 @@ components:
       type: object
       properties:
         actor_id: { type: string }
+        request_key: { type: string }
         thread:
           $ref: '#/components/schemas/AnyObject'
       required: [thread]
@@ -2528,6 +2529,7 @@ components:
       type: object
       properties:
         actor_id: { type: string }
+        request_key: { type: string }
         commitment:
           $ref: '#/components/schemas/AnyObject'
       required: [commitment]
@@ -2566,6 +2568,7 @@ components:
       type: object
       properties:
         actor_id: { type: string }
+        request_key: { type: string }
         document:
           $ref: '#/components/schemas/AnyObject'
         refs:
@@ -2640,6 +2643,7 @@ components:
       type: object
       properties:
         actor_id: { type: string }
+        request_key: { type: string }
         event:
           $ref: '#/components/schemas/AnyObject'
       description: >
@@ -2690,6 +2694,7 @@ components:
       type: object
       properties:
         actor_id: { type: string }
+        request_key: { type: string }
         artifact:
           $ref: '#/components/schemas/AnyObject'
         packet:
@@ -2700,6 +2705,7 @@ components:
       type: object
       properties:
         actor_id: { type: string }
+        request_key: { type: string }
         artifact:
           $ref: '#/components/schemas/AnyObject'
         packet:
@@ -2710,6 +2716,7 @@ components:
       type: object
       properties:
         actor_id: { type: string }
+        request_key: { type: string }
         artifact:
           $ref: '#/components/schemas/AnyObject'
         packet:

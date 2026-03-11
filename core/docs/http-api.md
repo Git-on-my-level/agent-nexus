@@ -16,6 +16,9 @@ The schema of objects is defined by `../contracts/oar-schema.yaml`.
 - `refs` values MUST be typed ref strings per `ref_format`.
 - Error responses use a stable envelope:
   - `{ "error": { "code": "...", "message": "...", "recoverable": <bool>, "hint": "..." } }`
+- Create-heavy write endpoints accept optional `request_key` for replay-safe retries.
+  - Reusing the same `request_key` with the same request body replays the original successful response instead of creating duplicates.
+  - Reusing the same `request_key` with a different request body returns `409 Conflict`.
 
 ### Agent auth conventions
 
@@ -131,7 +134,7 @@ The schema of objects is defined by `../contracts/oar-schema.yaml`.
 ### Threads (thread snapshots)
 
 - `POST /threads`
-  - Body: `{ "actor_id": "...", "thread": <thread_snapshot_fields_without_id> }`
+  - Body: `{ "actor_id": "...", "request_key"?: "...", "thread": <thread_snapshot_fields_without_id> }`
   - `thread.cadence`:
     - MUST be either literal `reactive` or a 5-field cron expression.
     - Legacy values `daily`, `weekly`, `monthly`, `custom` MAY be accepted for backward compatibility.
@@ -183,7 +186,7 @@ The schema of objects is defined by `../contracts/oar-schema.yaml`.
 ### Commitments (commitment snapshots)
 
 - `POST /commitments`
-  - Body: `{ "actor_id": "...", "commitment": <commitment_snapshot_fields_without_id> }`
+  - Body: `{ "actor_id": "...", "request_key"?: "...", "commitment": <commitment_snapshot_fields_without_id> }`
   - Response: `{ "commitment": <commitment_snapshot> }`
 
 - `GET /commitments`
@@ -221,7 +224,7 @@ The schema of objects is defined by `../contracts/oar-schema.yaml`.
 ### Documents
 
 - `POST /docs`
-  - Body: `{ "actor_id": "...", "document": { id?, thread_id?, title?, slug?, status?, labels?, supersedes? }, "refs"?: ["typed:ref"...], "content": <string|object|base64>, "content_type": "text|structured|binary" }`
+  - Body: `{ "actor_id": "...", "request_key"?: "...", "document": { id?, thread_id?, title?, slug?, status?, labels?, supersedes? }, "refs"?: ["typed:ref"...], "content": <string|object|base64>, "content_type": "text|structured|binary" }`
   - Response: `{ "document": <document>, "revision": <document_revision_with_content> }`
   - Side effect: appends `document_created` to `events` with thread/document/revision/artifact refs when the document is thread-linked.
 
@@ -254,7 +257,7 @@ The schema of objects is defined by `../contracts/oar-schema.yaml`.
 ### Events
 
 - `POST /events`
-  - Body: `{ "actor_id": "...", "event": <event_fields_without_id_ts_actor_id> }`
+  - Body: `{ "actor_id": "...", "request_key"?: "...", "event": <event_fields_without_id_ts_actor_id> }`
   - Response: `{ "event": <event> }`
 
 - `GET /events/stream`
@@ -271,15 +274,17 @@ The schema of objects is defined by `../contracts/oar-schema.yaml`.
 ### Packet convenience endpoints
 
 - `POST /work_orders`
-  - Body: `{ "actor_id": "...", "artifact": <artifact_metadata>, "packet": <work_order_packet> }`
+  - Body: `{ "actor_id": "...", "request_key"?: "...", "artifact": <artifact_metadata>, "packet": <work_order_packet> }`
+  - `artifact.id` and `packet.work_order_id` MAY be omitted together; core issues the canonical artifact id and returns it in both artifact metadata and packet content.
   - Response: `{ "artifact": <artifact_metadata>, "event": <event> }`
 
 - `POST /receipts`
-  - Body: `{ "actor_id": "...", "artifact": <artifact_metadata>, "packet": <receipt_packet> }`
+  - Body: `{ "actor_id": "...", "request_key"?: "...", "artifact": <artifact_metadata>, "packet": <receipt_packet> }`
+  - `artifact.id` and `packet.receipt_id` MAY be omitted together; core issues the canonical artifact id and returns it in both artifact metadata and packet content.
   - Response: `{ "artifact": <artifact_metadata>, "event": <event> }`
 
 - `POST /reviews`
-  - Body: `{ "actor_id": "...", "artifact": <artifact_metadata>, "packet": <review_packet> }`
+  - Body: `{ "actor_id": "...", "request_key"?: "...", "artifact": <artifact_metadata>, "packet": <review_packet> }`
   - Response: `{ "artifact": <artifact_metadata>, "event": <event> }`
 
 - Atomicity guarantee:

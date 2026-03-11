@@ -21,8 +21,9 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	}
 
 	var req struct {
-		ActorID string         `json:"actor_id"`
-		Event   map[string]any `json:"event"`
+		ActorID    string         `json:"actor_id"`
+		RequestKey string         `json:"request_key"`
+		Event      map[string]any `json:"event"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
@@ -38,7 +39,21 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	if !ok {
 		return
 	}
-
+	if strings.TrimSpace(req.RequestKey) != "" && firstNonEmptyString(req.Event["id"]) == "" {
+		req.Event["id"] = deriveRequestScopedID("events.create", actorID, req.RequestKey, "event")
+	}
+	replayStatus, replayPayload, replayed, err := readIdempotencyReplay(r.Context(), opts.primitiveStore, "events.create", actorID, req.RequestKey, req)
+	if writeIdempotencyError(w, err) {
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load idempotency replay")
+		return
+	}
+	if replayed {
+		writeJSON(w, replayStatus, replayPayload)
+		return
+	}
 	typeValue, ok := req.Event["type"].(string)
 	if !ok || strings.TrimSpace(typeValue) == "" {
 		writeError(w, http.StatusBadRequest, "invalid_request", "event.type is required")
@@ -84,11 +99,40 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 
 	stored, err := opts.primitiveStore.AppendEvent(r.Context(), actorID, req.Event)
 	if err != nil {
+		if errors.Is(err, primitives.ErrConflict) && strings.TrimSpace(req.RequestKey) != "" {
+			eventID := firstNonEmptyString(req.Event["id"])
+			existing, loadErr := opts.primitiveStore.GetEvent(r.Context(), eventID)
+			if loadErr == nil {
+				response := map[string]any{"event": existing}
+				status, payload, replayErr := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "events.create", actorID, req.RequestKey, req, http.StatusCreated, response)
+				if writeIdempotencyError(w, replayErr) {
+					return
+				}
+				if replayErr != nil {
+					writeError(w, http.StatusInternalServerError, "internal_error", "failed to persist idempotency replay")
+					return
+				}
+				writeJSON(w, status, payload)
+				return
+			}
+		}
+		if errors.Is(err, primitives.ErrConflict) {
+			writeError(w, http.StatusConflict, "conflict", "event already exists")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to append event")
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, map[string]any{"event": stored})
+	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "events.create", actorID, req.RequestKey, req, http.StatusCreated, map[string]any{"event": stored})
+	if writeIdempotencyError(w, err) {
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to persist idempotency replay")
+		return
+	}
+	writeJSON(w, status, payload)
 }
 
 func handleGetEvent(w http.ResponseWriter, r *http.Request, opts handlerOptions, eventID string) {

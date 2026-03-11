@@ -101,22 +101,32 @@
     });
   }
 
-  async function handleWorkOrderSubmit(threadId, artifact, packet) {
-    await coreClient.createWorkOrder({ artifact, packet });
+  async function handleWorkOrderSubmit(threadId, artifact, packet, requestKey) {
+    const response = await coreClient.createWorkOrder({
+      request_key: requestKey,
+      artifact,
+      packet,
+    });
     await threadDetailStore.queueRefreshThreadDetail(threadId, {
       workspace: true,
       timeline: true,
       workOrders: true,
     });
+    return response;
   }
 
-  async function handleReceiptSubmit(threadId, artifact, packet) {
-    await coreClient.createReceipt({ artifact, packet });
+  async function handleReceiptSubmit(threadId, artifact, packet, requestKey) {
+    const response = await coreClient.createReceipt({
+      request_key: requestKey,
+      artifact,
+      packet,
+    });
     await threadDetailStore.queueRefreshThreadDetail(threadId, {
       workspace: true,
       timeline: true,
       workOrders: true,
     });
+    return response;
   }
 
   async function handleMessagePost(threadId, event) {

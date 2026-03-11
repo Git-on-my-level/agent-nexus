@@ -33,8 +33,9 @@ func handleCreateThread(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	}
 
 	var req struct {
-		ActorID string         `json:"actor_id"`
-		Thread  map[string]any `json:"thread"`
+		ActorID    string         `json:"actor_id"`
+		RequestKey string         `json:"request_key"`
+		Thread     map[string]any `json:"thread"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
@@ -54,7 +55,21 @@ func handleCreateThread(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	if !ok {
 		return
 	}
-
+	if strings.TrimSpace(req.RequestKey) != "" && firstNonEmptyString(req.Thread["id"]) == "" {
+		req.Thread["id"] = deriveRequestScopedID("threads.create", actorID, req.RequestKey, "thread")
+	}
+	replayStatus, replayPayload, replayed, err := readIdempotencyReplay(r.Context(), opts.primitiveStore, "threads.create", actorID, req.RequestKey, req)
+	if writeIdempotencyError(w, err) {
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load idempotency replay")
+		return
+	}
+	if replayed {
+		writeJSON(w, replayStatus, replayPayload)
+		return
+	}
 	if err := validateThreadCreate(opts.contract, req.Thread); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
@@ -62,11 +77,40 @@ func handleCreateThread(w http.ResponseWriter, r *http.Request, opts handlerOpti
 
 	result, err := opts.primitiveStore.CreateThread(r.Context(), actorID, req.Thread)
 	if err != nil {
+		if errors.Is(err, primitives.ErrConflict) && strings.TrimSpace(req.RequestKey) != "" {
+			threadID := firstNonEmptyString(req.Thread["id"])
+			thread, loadErr := opts.primitiveStore.GetThread(r.Context(), threadID)
+			if loadErr == nil {
+				response := map[string]any{"thread": thread}
+				status, payload, replayErr := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "threads.create", actorID, req.RequestKey, req, http.StatusCreated, response)
+				if writeIdempotencyError(w, replayErr) {
+					return
+				}
+				if replayErr != nil {
+					writeError(w, http.StatusInternalServerError, "internal_error", "failed to persist idempotency replay")
+					return
+				}
+				writeJSON(w, status, payload)
+				return
+			}
+		}
+		if errors.Is(err, primitives.ErrConflict) {
+			writeError(w, http.StatusConflict, "conflict", "thread already exists")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to create thread")
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, map[string]any{"thread": result.Snapshot})
+	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "threads.create", actorID, req.RequestKey, req, http.StatusCreated, map[string]any{"thread": result.Snapshot})
+	if writeIdempotencyError(w, err) {
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to persist idempotency replay")
+		return
+	}
+	writeJSON(w, status, payload)
 }
 
 func handleGetThread(w http.ResponseWriter, r *http.Request, opts handlerOptions, threadID string) {

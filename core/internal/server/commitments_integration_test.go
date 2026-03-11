@@ -294,6 +294,118 @@ func TestCommitmentsCreateAndRestrictedTransitions(t *testing.T) {
 	assertActorStatementProvenance(t, statusChangedEvent)
 }
 
+func TestCommitmentCreateRequestKeyReplaysSingleWrite(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	threadResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
+		"actor_id":"actor-1",
+		"thread":{
+			"title":"Commitment replay thread",
+			"type":"incident",
+			"status":"active",
+			"priority":"p1",
+			"tags":["ops"],
+			"cadence":"daily",
+			"next_check_in_at":"2026-03-05T00:00:00Z",
+			"current_summary":"summary",
+			"next_actions":["do x"],
+			"key_artifacts":[],
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated)
+	defer threadResp.Body.Close()
+
+	var createdThread struct {
+		Thread map[string]any `json:"thread"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&createdThread); err != nil {
+		t.Fatalf("decode created thread: %v", err)
+	}
+	threadID, _ := createdThread.Thread["id"].(string)
+	if threadID == "" {
+		t.Fatal("expected thread id")
+	}
+
+	body := `{
+		"actor_id":"actor-1",
+		"request_key":"replay-commitment",
+		"commitment":{
+			"thread_id":"` + threadID + `",
+			"title":"Ship fix",
+			"owner":"actor-1",
+			"due_at":"2026-03-08T00:00:00Z",
+			"status":"open",
+			"definition_of_done":["merged"],
+			"links":["url:https://example.com/work"],
+			"provenance":{"sources":["inferred"]}
+		}
+	}`
+
+	firstResp := postJSONExpectStatus(t, h.baseURL+"/commitments", body, http.StatusCreated)
+	defer firstResp.Body.Close()
+	secondResp := postJSONExpectStatus(t, h.baseURL+"/commitments", body, http.StatusCreated)
+	defer secondResp.Body.Close()
+
+	var firstPayload struct {
+		Commitment map[string]any `json:"commitment"`
+	}
+	if err := json.NewDecoder(firstResp.Body).Decode(&firstPayload); err != nil {
+		t.Fatalf("decode first commitment response: %v", err)
+	}
+	var secondPayload struct {
+		Commitment map[string]any `json:"commitment"`
+	}
+	if err := json.NewDecoder(secondResp.Body).Decode(&secondPayload); err != nil {
+		t.Fatalf("decode second commitment response: %v", err)
+	}
+	if secondPayload.Commitment["id"] != firstPayload.Commitment["id"] {
+		t.Fatalf("expected replayed commitment id %#v, got %#v", firstPayload.Commitment["id"], secondPayload.Commitment["id"])
+	}
+
+	threadAfterResp, err := http.Get(h.baseURL + "/threads/" + threadID)
+	if err != nil {
+		t.Fatalf("GET /threads/{id}: %v", err)
+	}
+	defer threadAfterResp.Body.Close()
+	var threadAfter struct {
+		Thread map[string]any `json:"thread"`
+	}
+	if err := json.NewDecoder(threadAfterResp.Body).Decode(&threadAfter); err != nil {
+		t.Fatalf("decode thread after commitment replay: %v", err)
+	}
+	if open := sortedStringList(threadAfter.Thread["open_commitments"]); len(open) != 1 {
+		t.Fatalf("expected one open commitment after replay, got %#v", threadAfter.Thread["open_commitments"])
+	}
+
+	timelineResp, err := http.Get(h.baseURL + "/threads/" + threadID + "/timeline")
+	if err != nil {
+		t.Fatalf("GET /threads/{id}/timeline: %v", err)
+	}
+	defer timelineResp.Body.Close()
+	var timeline struct {
+		Events []map[string]any `json:"events"`
+	}
+	if err := json.NewDecoder(timelineResp.Body).Decode(&timeline); err != nil {
+		t.Fatalf("decode timeline: %v", err)
+	}
+	if commitmentEventCount := countTimelineEvents(timeline.Events, "commitment_created"); commitmentEventCount != 1 {
+		t.Fatalf("expected one commitment_created event, got %d", commitmentEventCount)
+	}
+}
+
+func countTimelineEvents(events []map[string]any, eventType string) int {
+	count := 0
+	for _, event := range events {
+		if asString(event["type"]) == eventType {
+			count++
+		}
+	}
+	return count
+}
+
 func TestPatchCommitmentIfUpdatedAtOptimisticLocking(t *testing.T) {
 	t.Parallel()
 

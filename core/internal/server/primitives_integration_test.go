@@ -161,6 +161,23 @@ func TestDocumentsLifecycleRoundTrip(t *testing.T) {
 
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+	postJSONExpectStatus(t, h.baseURL+"/threads", `{
+		"actor_id":"actor-1",
+		"thread":{
+			"id":"thread-1",
+			"title":"Replay event thread",
+			"type":"incident",
+			"status":"active",
+			"priority":"p2",
+			"tags":["events"],
+			"cadence":"daily",
+			"next_check_in_at":"2026-03-05T00:00:00Z",
+			"current_summary":"summary",
+			"next_actions":["review"],
+			"key_artifacts":[],
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated).Body.Close()
 
 	createResp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
 		"actor_id":"actor-1",
@@ -363,6 +380,160 @@ func TestDocumentsLifecycleRoundTrip(t *testing.T) {
 	if loadedRevisionHash != createRevisionHash {
 		t.Fatalf("revision_hash mismatch on GET revision: got %q want %q", loadedRevisionHash, createRevisionHash)
 	}
+}
+
+func TestDocumentCreateRequestKeyReplaysSingleWrite(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+	postJSONExpectStatus(t, h.baseURL+"/threads", `{
+		"actor_id":"actor-1",
+		"thread":{
+			"id":"thread-docs",
+			"title":"Replay docs thread",
+			"type":"incident",
+			"status":"active",
+			"priority":"p2",
+			"tags":["docs"],
+			"cadence":"daily",
+			"next_check_in_at":"2026-03-05T00:00:00Z",
+			"current_summary":"summary",
+			"next_actions":["review"],
+			"key_artifacts":[],
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated).Body.Close()
+
+	body := `{
+		"actor_id":"actor-1",
+		"request_key":"replay-doc",
+		"document":{"thread_id":"thread-docs","title":"Replay-safe doc","labels":["governance"]},
+		"refs":["thread:thread-docs"],
+		"content":"initial text",
+		"content_type":"text"
+	}`
+
+	firstResp := postJSONExpectStatus(t, h.baseURL+"/docs", body, http.StatusCreated)
+	defer firstResp.Body.Close()
+	secondResp := postJSONExpectStatus(t, h.baseURL+"/docs", body, http.StatusCreated)
+	defer secondResp.Body.Close()
+
+	var firstPayload struct {
+		Document map[string]any `json:"document"`
+		Revision map[string]any `json:"revision"`
+	}
+	if err := json.NewDecoder(firstResp.Body).Decode(&firstPayload); err != nil {
+		t.Fatalf("decode first doc create response: %v", err)
+	}
+	var secondPayload struct {
+		Document map[string]any `json:"document"`
+		Revision map[string]any `json:"revision"`
+	}
+	if err := json.NewDecoder(secondResp.Body).Decode(&secondPayload); err != nil {
+		t.Fatalf("decode second doc create response: %v", err)
+	}
+
+	documentID, _ := firstPayload.Document["id"].(string)
+	if documentID == "" {
+		t.Fatal("expected server-issued document id")
+	}
+	if secondPayload.Document["id"] != documentID {
+		t.Fatalf("expected replayed document id %q, got %#v", documentID, secondPayload.Document["id"])
+	}
+	if secondPayload.Revision["revision_id"] != firstPayload.Revision["revision_id"] {
+		t.Fatalf("expected replayed revision id %#v, got %#v", firstPayload.Revision["revision_id"], secondPayload.Revision["revision_id"])
+	}
+
+	listResp, err := http.Get(h.baseURL + "/docs?thread_id=thread-docs")
+	if err != nil {
+		t.Fatalf("GET /docs: %v", err)
+	}
+	defer listResp.Body.Close()
+	var listed struct {
+		Documents []map[string]any `json:"documents"`
+	}
+	if err := json.NewDecoder(listResp.Body).Decode(&listed); err != nil {
+		t.Fatalf("decode docs list: %v", err)
+	}
+	if len(listed.Documents) != 1 {
+		t.Fatalf("expected one document after replay, got %d", len(listed.Documents))
+	}
+
+	timelineResp, err := http.Get(h.baseURL + "/threads/thread-docs/timeline")
+	if err != nil {
+		t.Fatalf("GET /threads/{id}/timeline: %v", err)
+	}
+	defer timelineResp.Body.Close()
+	if timelineResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected timeline status: %d", timelineResp.StatusCode)
+	}
+	var timeline struct {
+		Events []map[string]any `json:"events"`
+	}
+	if err := json.NewDecoder(timelineResp.Body).Decode(&timeline); err != nil {
+		t.Fatalf("decode timeline: %v", err)
+	}
+	if countEventsOfType(timeline.Events, "document_created") != 1 {
+		t.Fatalf("expected one document_created event, got %d", countEventsOfType(timeline.Events, "document_created"))
+	}
+}
+
+func TestEventCreateRequestKeyReplaysSingleWrite(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	body := `{
+		"actor_id":"actor-1",
+		"request_key":"replay-event",
+		"event":{
+			"type":"my_custom_event",
+			"thread_id":"thread-1",
+			"refs":["customprefix:abc"],
+			"summary":"custom event",
+			"payload":{"x":1},
+			"provenance":{"sources":["inferred"]}
+		}
+	}`
+
+	firstResp := postJSONExpectStatus(t, h.baseURL+"/events", body, http.StatusCreated)
+	defer firstResp.Body.Close()
+	secondResp := postJSONExpectStatus(t, h.baseURL+"/events", body, http.StatusCreated)
+	defer secondResp.Body.Close()
+
+	var firstPayload map[string]map[string]any
+	if err := json.NewDecoder(firstResp.Body).Decode(&firstPayload); err != nil {
+		t.Fatalf("decode first event create response: %v", err)
+	}
+	var secondPayload map[string]map[string]any
+	if err := json.NewDecoder(secondResp.Body).Decode(&secondPayload); err != nil {
+		t.Fatalf("decode second event create response: %v", err)
+	}
+	if secondPayload["event"]["id"] != firstPayload["event"]["id"] {
+		t.Fatalf("expected replayed event id %#v, got %#v", firstPayload["event"]["id"], secondPayload["event"]["id"])
+	}
+
+	eventID, _ := firstPayload["event"]["id"].(string)
+	getEventResp, err := http.Get(h.baseURL + "/events/" + eventID)
+	if err != nil {
+		t.Fatalf("GET /events/{id}: %v", err)
+	}
+	defer getEventResp.Body.Close()
+	if getEventResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected GET /events/{id} status: %d", getEventResp.StatusCode)
+	}
+}
+
+func countEventsOfType(events []map[string]any, eventType string) int {
+	count := 0
+	for _, event := range events {
+		if asString(event["type"]) == eventType {
+			count++
+		}
+	}
+	return count
 }
 
 func TestArtifactContentDeduplication(t *testing.T) {

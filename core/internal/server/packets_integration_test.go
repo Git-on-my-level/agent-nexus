@@ -271,6 +271,194 @@ func TestPacketValidationErrors(t *testing.T) {
 	assertErrorMessageContains(t, respIDMismatch, "must equal artifact.id")
 }
 
+func TestPacketCreateRequestKeyReplaysSingleWrite(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	threadResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
+		"actor_id":"actor-1",
+		"thread":{
+			"title":"Packet replay thread",
+			"type":"incident",
+			"status":"active",
+			"priority":"p1",
+			"tags":["ops"],
+			"cadence":"daily",
+			"next_check_in_at":"2026-03-05T00:00:00Z",
+			"current_summary":"summary",
+			"next_actions":["do x"],
+			"key_artifacts":[],
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated)
+	defer threadResp.Body.Close()
+
+	var createdThread struct {
+		Thread map[string]any `json:"thread"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&createdThread); err != nil {
+		t.Fatalf("decode thread response: %v", err)
+	}
+	threadID, _ := createdThread.Thread["id"].(string)
+	if threadID == "" {
+		t.Fatal("expected thread id")
+	}
+
+	workOrderBody := `{
+		"actor_id":"actor-1",
+		"request_key":"replay-work-order",
+		"artifact":{
+			"refs":["thread:` + threadID + `"],
+			"summary":"work order artifact"
+		},
+		"packet":{
+			"thread_id":"` + threadID + `",
+			"objective":"Investigate and fix",
+			"constraints":["no downtime"],
+			"context_refs":["url:https://example.com/context"],
+			"acceptance_criteria":["incident resolved"],
+			"definition_of_done":["receipt published"]
+		}
+	}`
+
+	firstWorkOrderResp := postJSONExpectStatus(t, h.baseURL+"/work_orders", workOrderBody, http.StatusCreated)
+	defer firstWorkOrderResp.Body.Close()
+	secondWorkOrderResp := postJSONExpectStatus(t, h.baseURL+"/work_orders", workOrderBody, http.StatusCreated)
+	defer secondWorkOrderResp.Body.Close()
+
+	var firstWorkOrder struct {
+		Artifact map[string]any `json:"artifact"`
+		Event    map[string]any `json:"event"`
+	}
+	if err := json.NewDecoder(firstWorkOrderResp.Body).Decode(&firstWorkOrder); err != nil {
+		t.Fatalf("decode first work order response: %v", err)
+	}
+	var secondWorkOrder struct {
+		Artifact map[string]any `json:"artifact"`
+		Event    map[string]any `json:"event"`
+	}
+	if err := json.NewDecoder(secondWorkOrderResp.Body).Decode(&secondWorkOrder); err != nil {
+		t.Fatalf("decode second work order response: %v", err)
+	}
+	workOrderID, _ := firstWorkOrder.Artifact["id"].(string)
+	if workOrderID == "" {
+		t.Fatal("expected server-issued work order id")
+	}
+	if secondWorkOrder.Artifact["id"] != workOrderID {
+		t.Fatalf("expected replayed work order id %q, got %#v", workOrderID, secondWorkOrder.Artifact["id"])
+	}
+	if secondWorkOrder.Event["id"] != firstWorkOrder.Event["id"] {
+		t.Fatalf("expected replayed work order event id %#v, got %#v", firstWorkOrder.Event["id"], secondWorkOrder.Event["id"])
+	}
+
+	receiptBody := `{
+		"actor_id":"actor-1",
+		"request_key":"replay-receipt",
+		"artifact":{
+			"refs":["thread:` + threadID + `","artifact:` + workOrderID + `"],
+			"summary":"receipt artifact"
+		},
+		"packet":{
+			"work_order_id":"` + workOrderID + `",
+			"thread_id":"` + threadID + `",
+			"outputs":["artifact:output-1"],
+			"verification_evidence":["url:https://example.com/evidence"],
+			"changes_summary":"changed things",
+			"known_gaps":[]
+		}
+	}`
+
+	firstReceiptResp := postJSONExpectStatus(t, h.baseURL+"/receipts", receiptBody, http.StatusCreated)
+	defer firstReceiptResp.Body.Close()
+	secondReceiptResp := postJSONExpectStatus(t, h.baseURL+"/receipts", receiptBody, http.StatusCreated)
+	defer secondReceiptResp.Body.Close()
+
+	var firstReceipt struct {
+		Artifact map[string]any `json:"artifact"`
+		Event    map[string]any `json:"event"`
+	}
+	if err := json.NewDecoder(firstReceiptResp.Body).Decode(&firstReceipt); err != nil {
+		t.Fatalf("decode first receipt response: %v", err)
+	}
+	var secondReceipt struct {
+		Artifact map[string]any `json:"artifact"`
+		Event    map[string]any `json:"event"`
+	}
+	if err := json.NewDecoder(secondReceiptResp.Body).Decode(&secondReceipt); err != nil {
+		t.Fatalf("decode second receipt response: %v", err)
+	}
+	receiptID, _ := firstReceipt.Artifact["id"].(string)
+	if receiptID == "" {
+		t.Fatal("expected server-issued receipt id")
+	}
+	if secondReceipt.Artifact["id"] != receiptID {
+		t.Fatalf("expected replayed receipt id %q, got %#v", receiptID, secondReceipt.Artifact["id"])
+	}
+	if secondReceipt.Event["id"] != firstReceipt.Event["id"] {
+		t.Fatalf("expected replayed receipt event id %#v, got %#v", firstReceipt.Event["id"], secondReceipt.Event["id"])
+	}
+
+	workOrdersResp, err := http.Get(h.baseURL + "/artifacts?thread_id=" + threadID + "&kind=work_order")
+	if err != nil {
+		t.Fatalf("GET /artifacts work_orders: %v", err)
+	}
+	defer workOrdersResp.Body.Close()
+	var workOrdersListed struct {
+		Artifacts []map[string]any `json:"artifacts"`
+	}
+	if err := json.NewDecoder(workOrdersResp.Body).Decode(&workOrdersListed); err != nil {
+		t.Fatalf("decode listed work orders: %v", err)
+	}
+	if len(workOrdersListed.Artifacts) != 1 {
+		t.Fatalf("expected one work order after replay, got %d", len(workOrdersListed.Artifacts))
+	}
+
+	receiptsResp, err := http.Get(h.baseURL + "/artifacts?thread_id=" + threadID + "&kind=receipt")
+	if err != nil {
+		t.Fatalf("GET /artifacts receipts: %v", err)
+	}
+	defer receiptsResp.Body.Close()
+	var receiptsListed struct {
+		Artifacts []map[string]any `json:"artifacts"`
+	}
+	if err := json.NewDecoder(receiptsResp.Body).Decode(&receiptsListed); err != nil {
+		t.Fatalf("decode listed receipts: %v", err)
+	}
+	if len(receiptsListed.Artifacts) != 1 {
+		t.Fatalf("expected one receipt after replay, got %d", len(receiptsListed.Artifacts))
+	}
+
+	timelineResp, err := http.Get(h.baseURL + "/threads/" + threadID + "/timeline")
+	if err != nil {
+		t.Fatalf("GET /threads/{id}/timeline: %v", err)
+	}
+	defer timelineResp.Body.Close()
+	var timeline struct {
+		Events []map[string]any `json:"events"`
+	}
+	if err := json.NewDecoder(timelineResp.Body).Decode(&timeline); err != nil {
+		t.Fatalf("decode timeline: %v", err)
+	}
+	if countEventsByType(timeline.Events, "work_order_created") != 1 {
+		t.Fatalf("expected one work_order_created event, got %d", countEventsByType(timeline.Events, "work_order_created"))
+	}
+	if countEventsByType(timeline.Events, "receipt_added") != 1 {
+		t.Fatalf("expected one receipt_added event, got %d", countEventsByType(timeline.Events, "receipt_added"))
+	}
+}
+
+func countEventsByType(events []map[string]any, eventType string) int {
+	count := 0
+	for _, event := range events {
+		if asString(event["type"]) == eventType {
+			count++
+		}
+	}
+	return count
+}
+
 func TestPacketConvenienceEndpointsRejectUnsafeArtifactIDs(t *testing.T) {
 	t.Parallel()
 

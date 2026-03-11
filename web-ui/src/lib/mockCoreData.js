@@ -2345,8 +2345,13 @@ export function updateMockCommitment({
 }
 
 export function createMockWorkOrder({ actor_id, artifact = {}, packet = {} }) {
-  const artifactId = String(artifact.id ?? "").trim();
-  const packetId = String(packet.work_order_id ?? "").trim();
+  const requestKey = String(arguments[0]?.request_key ?? "").trim();
+  const issuedArtifactId =
+    requestKey && !artifact.id && !packet.work_order_id
+      ? `artifact-work-order-${requestKey.replace(/[^a-z0-9]+/gi, "-").toLowerCase().slice(0, 20) || "mock"}`
+      : "";
+  const artifactId = String(artifact.id ?? issuedArtifactId).trim();
+  const packetId = String(packet.work_order_id ?? artifactId).trim();
   const threadId = String(packet.thread_id ?? artifact.thread_id ?? "").trim();
 
   if (!artifactId) {
@@ -2764,8 +2769,13 @@ export function getMockDocumentRevision(documentId, revisionId) {
 }
 
 export function createMockReceipt({ actor_id, artifact = {}, packet = {} }) {
-  const artifactId = String(artifact.id ?? "").trim();
-  const packetId = String(packet.receipt_id ?? "").trim();
+  const requestKey = String(arguments[0]?.request_key ?? "").trim();
+  const issuedArtifactId =
+    requestKey && !artifact.id && !packet.receipt_id
+      ? `artifact-receipt-${requestKey.replace(/[^a-z0-9]+/gi, "-").toLowerCase().slice(0, 20) || "mock"}`
+      : "";
+  const artifactId = String(artifact.id ?? issuedArtifactId).trim();
+  const packetId = String(packet.receipt_id ?? artifactId).trim();
   const threadId = String(packet.thread_id ?? artifact.thread_id ?? "").trim();
   const workOrderId = String(packet.work_order_id ?? "").trim();
 

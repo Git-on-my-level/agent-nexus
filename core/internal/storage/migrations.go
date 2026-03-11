@@ -209,6 +209,22 @@ var migrations = []migration{
 			`CREATE INDEX IF NOT EXISTS idx_documents_tombstoned_at ON documents (tombstoned_at)`,
 		},
 	},
+	{
+		Version: 9,
+		Statements: []string{
+			`CREATE TABLE IF NOT EXISTS idempotency_replays (
+				scope TEXT NOT NULL,
+				actor_id TEXT NOT NULL,
+				request_key TEXT NOT NULL,
+				request_hash TEXT NOT NULL,
+				response_status INTEGER NOT NULL,
+				response_json TEXT NOT NULL,
+				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				PRIMARY KEY(scope, actor_id, request_key)
+			);`,
+			`CREATE INDEX IF NOT EXISTS idx_idempotency_replays_created_at ON idempotency_replays (created_at)`,
+		},
+	},
 }
 
 func applyMigrations(ctx context.Context, db *sql.DB) error {

@@ -72,6 +72,14 @@
     return projectPath(projectSlug, pathname);
   }
 
+  function createRequestKey(prefix) {
+    const randomUUID = globalThis.crypto?.randomUUID?.bind(globalThis.crypto);
+    if (randomUUID) {
+      return `${prefix}-${randomUUID()}`;
+    }
+    return `${prefix}-${Date.now().toString(36)}-${Math.trunc(performance.now?.() ?? 0).toString(36)}`;
+  }
+
   function blankWorkOrderDraft() {
     return {
       objective: "",
@@ -79,15 +87,8 @@
       contextRefsInput: `thread:${threadId}`,
       acceptanceCriteriaInput: "",
       definitionOfDoneInput: "",
+      requestKey: createRequestKey("work-order"),
     };
-  }
-
-  function generateWorkOrderId() {
-    return `artifact-work-order-${Math.random().toString(36).slice(2, 10)}`;
-  }
-
-  function generateReceiptId() {
-    return `artifact-receipt-${Math.random().toString(36).slice(2, 10)}`;
   }
 
   function blankReceiptDraft() {
@@ -97,6 +98,7 @@
       verificationEvidenceInput: "",
       changesSummary: "",
       knownGapsInput: "",
+      requestKey: createRequestKey("receipt"),
     };
   }
 
@@ -193,24 +195,28 @@
       creatingWorkOrder = false;
       return;
     }
-    const workOrderId = generateWorkOrderId();
     try {
-      await onWorkOrderSubmit(
+      const response = await onWorkOrderSubmit(
         threadId,
         {
-          id: workOrderId,
           kind: "work_order",
           thread_id: threadId,
           summary: v.normalized.objective,
           refs: [`thread:${threadId}`],
         },
         {
-          work_order_id: workOrderId,
           thread_id: threadId,
           ...v.normalized,
         },
+        workOrderDraft.requestKey,
       );
-      createdWorkOrder = { id: workOrderId, summary: v.normalized.objective };
+      const createdArtifact = response?.artifact ?? {};
+      createdWorkOrder = {
+        id: String(createdArtifact.id ?? "").trim(),
+        summary:
+          String(createdArtifact.summary ?? v.normalized.objective).trim() ||
+          v.normalized.objective,
+      };
       workOrderNotice = "Work order created.";
       workOrderDraft = blankWorkOrderDraft();
       workOrderAppliedPrefillKey = "";
@@ -234,12 +240,10 @@
       creatingReceipt = false;
       return;
     }
-    const receiptId = generateReceiptId();
     try {
-      await onReceiptSubmit(
+      const response = await onReceiptSubmit(
         threadId,
         {
-          id: receiptId,
           kind: "receipt",
           thread_id: threadId,
           summary: v.normalized.changes_summary.slice(0, 120),
@@ -249,15 +253,19 @@
           ],
         },
         {
-          receipt_id: receiptId,
           work_order_id: v.normalized.work_order_id,
           thread_id: threadId,
           ...v.normalized,
         },
+        receiptDraft.requestKey,
       );
+      const createdArtifact = response?.artifact ?? {};
       createdReceipt = {
-        id: receiptId,
-        summary: v.normalized.changes_summary.slice(0, 120),
+        id: String(createdArtifact.id ?? "").trim(),
+        summary:
+          String(
+            createdArtifact.summary ?? v.normalized.changes_summary.slice(0, 120),
+          ).trim() || v.normalized.changes_summary.slice(0, 120),
       };
       receiptNotice = "Receipt submitted.";
       receiptDraft = blankReceiptDraft();

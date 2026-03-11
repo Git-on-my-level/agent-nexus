@@ -70,6 +70,10 @@ type eventExec interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
+type queryRower interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
 type preparedEvent struct {
 	Body        map[string]any
 	Type        string
@@ -241,6 +245,9 @@ func (s *Store) CreateArtifact(ctx context.Context, actorID string, artifact map
 		string(metadataJSON),
 	); err != nil {
 		_ = tx.Rollback()
+		if isUniqueViolation(err) {
+			return nil, ErrConflict
+		}
 		return nil, fmt.Errorf("insert artifact: %w", err)
 	}
 
@@ -338,6 +345,9 @@ func (s *Store) CreateArtifactAndEvent(ctx context.Context, actorID string, arti
 		string(artifactMetadataJSON),
 	); err != nil {
 		_ = tx.Rollback()
+		if isUniqueViolation(err) {
+			return nil, nil, ErrConflict
+		}
 		return nil, nil, fmt.Errorf("insert artifact: %w", err)
 	}
 
@@ -630,9 +640,14 @@ func (s *Store) PatchSnapshot(ctx context.Context, actorID string, id string, pa
 		return PatchSnapshotResult{}, fmt.Errorf("encode patched snapshot provenance: %w", err)
 	}
 
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return PatchSnapshotResult{}, fmt.Errorf("begin snapshot patch transaction: %w", err)
+	}
+
 	var updateResult sql.Result
 	if ifUpdatedAt != nil {
-		updateResult, err = s.db.ExecContext(
+		updateResult, err = tx.ExecContext(
 			ctx,
 			`UPDATE snapshots SET body_json = ?, provenance_json = ?, updated_at = ?, updated_by = ? WHERE id = ? AND updated_at = ?`,
 			string(updatedBodyJSON),
@@ -643,7 +658,7 @@ func (s *Store) PatchSnapshot(ctx context.Context, actorID string, id string, pa
 			*ifUpdatedAt,
 		)
 	} else {
-		updateResult, err = s.db.ExecContext(
+		updateResult, err = tx.ExecContext(
 			ctx,
 			`UPDATE snapshots SET body_json = ?, provenance_json = ?, updated_at = ?, updated_by = ? WHERE id = ?`,
 			string(updatedBodyJSON),
@@ -654,14 +669,17 @@ func (s *Store) PatchSnapshot(ctx context.Context, actorID string, id string, pa
 		)
 	}
 	if err != nil {
+		_ = tx.Rollback()
 		return PatchSnapshotResult{}, fmt.Errorf("update snapshot: %w", err)
 	}
 	if ifUpdatedAt != nil {
 		rowsAffected, err := updateResult.RowsAffected()
 		if err != nil {
+			_ = tx.Rollback()
 			return PatchSnapshotResult{}, fmt.Errorf("read patch snapshot rows affected: %w", err)
 		}
 		if rowsAffected == 0 {
+			_ = tx.Rollback()
 			return PatchSnapshotResult{}, ErrConflict
 		}
 	}
@@ -680,9 +698,18 @@ func (s *Store) PatchSnapshot(ctx context.Context, actorID string, id string, pa
 		event["thread_id"] = threadID.String
 	}
 
-	emittedEvent, err := s.AppendEvent(ctx, actorID, event)
+	preparedEvent, err := prepareEventForInsert(actorID, event)
 	if err != nil {
+		_ = tx.Rollback()
+		return PatchSnapshotResult{}, fmt.Errorf("prepare snapshot_updated event: %w", err)
+	}
+	if err := insertPreparedEvent(ctx, tx, preparedEvent); err != nil {
+		_ = tx.Rollback()
 		return PatchSnapshotResult{}, fmt.Errorf("emit snapshot_updated event: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		_ = tx.Rollback()
+		return PatchSnapshotResult{}, fmt.Errorf("commit snapshot patch transaction: %w", err)
 	}
 
 	current["id"] = snapshotID
@@ -698,7 +725,7 @@ func (s *Store) PatchSnapshot(ctx context.Context, actorID string, id string, pa
 
 	return PatchSnapshotResult{
 		Snapshot: current,
-		Event:    emittedEvent,
+		Event:    preparedEvent.Body,
 	}, nil
 }
 
@@ -713,10 +740,15 @@ func (s *Store) CreateThread(ctx context.Context, actorID string, thread map[str
 		return PatchSnapshotResult{}, fmt.Errorf("thread is required")
 	}
 
-	threadID := uuid.NewString()
+	threadID, _ := thread["id"].(string)
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		threadID = uuid.NewString()
+	}
 	updatedAt := time.Now().UTC().Format(time.RFC3339Nano)
 
 	body := cloneMap(thread)
+	delete(body, "id")
 	delete(body, "provenance")
 	body["open_commitments"] = []string{}
 
@@ -734,7 +766,12 @@ func (s *Store) CreateThread(ctx context.Context, actorID string, thread map[str
 		return PatchSnapshotResult{}, fmt.Errorf("marshal thread provenance: %w", err)
 	}
 
-	_, err = s.db.ExecContext(
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return PatchSnapshotResult{}, fmt.Errorf("begin thread create transaction: %w", err)
+	}
+
+	_, err = tx.ExecContext(
 		ctx,
 		`INSERT INTO snapshots(id, kind, thread_id, updated_at, updated_by, body_json, provenance_json)
 		 VALUES (?, 'thread', ?, ?, ?, ?, ?)`,
@@ -746,6 +783,10 @@ func (s *Store) CreateThread(ctx context.Context, actorID string, thread map[str
 		string(provenanceJSON),
 	)
 	if err != nil {
+		_ = tx.Rollback()
+		if isUniqueViolation(err) {
+			return PatchSnapshotResult{}, ErrConflict
+		}
 		return PatchSnapshotResult{}, fmt.Errorf("insert thread snapshot: %w", err)
 	}
 
@@ -764,9 +805,18 @@ func (s *Store) CreateThread(ctx context.Context, actorID string, thread map[str
 		"payload":    map[string]any{"changed_fields": changedFields},
 		"provenance": actorStatementProvenance(),
 	}
-	emittedEvent, err := s.AppendEvent(ctx, actorID, event)
+	preparedEvent, err := prepareEventForInsert(actorID, event)
 	if err != nil {
+		_ = tx.Rollback()
+		return PatchSnapshotResult{}, fmt.Errorf("prepare thread snapshot_updated event: %w", err)
+	}
+	if err := insertPreparedEvent(ctx, tx, preparedEvent); err != nil {
+		_ = tx.Rollback()
 		return PatchSnapshotResult{}, fmt.Errorf("emit thread snapshot_updated event: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		_ = tx.Rollback()
+		return PatchSnapshotResult{}, fmt.Errorf("commit thread create transaction: %w", err)
 	}
 
 	out := cloneMap(body)
@@ -779,7 +829,7 @@ func (s *Store) CreateThread(ctx context.Context, actorID string, thread map[str
 
 	return PatchSnapshotResult{
 		Snapshot: out,
-		Event:    emittedEvent,
+		Event:    preparedEvent.Body,
 	}, nil
 }
 
@@ -1033,7 +1083,11 @@ func reverseEvents(events []map[string]any) []map[string]any {
 
 func prepareEventForInsert(actorID string, event map[string]any) (preparedEvent, error) {
 	body := cloneMap(event)
-	eventID := uuid.NewString()
+	eventID, _ := body["id"].(string)
+	eventID = strings.TrimSpace(eventID)
+	if eventID == "" {
+		eventID = uuid.NewString()
+	}
 	body["id"] = eventID
 	body["ts"] = time.Now().UTC().Format(time.RFC3339Nano)
 	body["actor_id"] = actorID
@@ -1095,6 +1149,9 @@ func insertPreparedEvent(ctx context.Context, exec eventExec, prepared preparedE
 		prepared.PayloadJSON,
 		prepared.BodyJSON,
 	); err != nil {
+		if isUniqueViolation(err) {
+			return ErrConflict
+		}
 		return fmt.Errorf("insert event: %w", err)
 	}
 
@@ -1209,10 +1266,15 @@ func (s *Store) CreateCommitment(ctx context.Context, actorID string, commitment
 		return PatchSnapshotResult{}, ErrNotFound
 	}
 
-	commitmentID := uuid.NewString()
+	commitmentID, _ := commitment["id"].(string)
+	commitmentID = strings.TrimSpace(commitmentID)
+	if commitmentID == "" {
+		commitmentID = uuid.NewString()
+	}
 	updatedAt := time.Now().UTC().Format(time.RFC3339Nano)
 
 	body := cloneMap(commitment)
+	delete(body, "id")
 	bodyJSON, err := json.Marshal(body)
 	if err != nil {
 		return PatchSnapshotResult{}, fmt.Errorf("marshal commitment snapshot body: %w", err)
@@ -1227,7 +1289,12 @@ func (s *Store) CreateCommitment(ctx context.Context, actorID string, commitment
 		return PatchSnapshotResult{}, fmt.Errorf("marshal commitment provenance: %w", err)
 	}
 
-	_, err = s.db.ExecContext(
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return PatchSnapshotResult{}, fmt.Errorf("begin commitment create transaction: %w", err)
+	}
+
+	_, err = tx.ExecContext(
 		ctx,
 		`INSERT INTO snapshots(id, kind, thread_id, updated_at, updated_by, body_json, provenance_json)
 		 VALUES (?, 'commitment', ?, ?, ?, ?, ?)`,
@@ -1239,6 +1306,10 @@ func (s *Store) CreateCommitment(ctx context.Context, actorID string, commitment
 		string(provenanceJSON),
 	)
 	if err != nil {
+		_ = tx.Rollback()
+		if isUniqueViolation(err) {
+			return PatchSnapshotResult{}, ErrConflict
+		}
 		return PatchSnapshotResult{}, fmt.Errorf("insert commitment snapshot: %w", err)
 	}
 
@@ -1250,13 +1321,23 @@ func (s *Store) CreateCommitment(ctx context.Context, actorID string, commitment
 		"payload":    map[string]any{"changed_fields": sortedKeys(body)},
 		"provenance": actorStatementProvenance(),
 	}
-	emittedEvent, err := s.AppendEvent(ctx, actorID, event)
+	preparedEvent, err := prepareEventForInsert(actorID, event)
 	if err != nil {
+		_ = tx.Rollback()
+		return PatchSnapshotResult{}, fmt.Errorf("prepare commitment_created event: %w", err)
+	}
+	if err := insertPreparedEvent(ctx, tx, preparedEvent); err != nil {
+		_ = tx.Rollback()
 		return PatchSnapshotResult{}, fmt.Errorf("emit commitment_created event: %w", err)
 	}
 
-	if err := s.recomputeThreadOpenCommitments(ctx, actorID, threadID); err != nil {
+	if err := s.recomputeThreadOpenCommitmentsTx(ctx, tx, actorID, threadID); err != nil {
+		_ = tx.Rollback()
 		return PatchSnapshotResult{}, fmt.Errorf("recompute thread open_commitments after commitment create: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		_ = tx.Rollback()
+		return PatchSnapshotResult{}, fmt.Errorf("commit commitment create transaction: %w", err)
 	}
 
 	out := cloneMap(body)
@@ -1271,7 +1352,7 @@ func (s *Store) CreateCommitment(ctx context.Context, actorID string, commitment
 
 	return PatchSnapshotResult{
 		Snapshot: out,
-		Event:    emittedEvent,
+		Event:    preparedEvent.Body,
 	}, nil
 }
 
@@ -1376,9 +1457,14 @@ func (s *Store) PatchCommitment(ctx context.Context, actorID string, id string, 
 		return PatchSnapshotResult{}, fmt.Errorf("encode patched commitment provenance: %w", err)
 	}
 
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return PatchSnapshotResult{}, fmt.Errorf("begin commitment patch transaction: %w", err)
+	}
+
 	var updateResult sql.Result
 	if ifUpdatedAt != nil {
-		updateResult, err = s.db.ExecContext(
+		updateResult, err = tx.ExecContext(
 			ctx,
 			`UPDATE snapshots SET body_json = ?, provenance_json = ?, updated_at = ?, updated_by = ? WHERE id = ? AND updated_at = ?`,
 			string(bodyJSON),
@@ -1389,7 +1475,7 @@ func (s *Store) PatchCommitment(ctx context.Context, actorID string, id string, 
 			*ifUpdatedAt,
 		)
 	} else {
-		updateResult, err = s.db.ExecContext(
+		updateResult, err = tx.ExecContext(
 			ctx,
 			`UPDATE snapshots SET body_json = ?, provenance_json = ?, updated_at = ?, updated_by = ? WHERE id = ?`,
 			string(bodyJSON),
@@ -1400,14 +1486,17 @@ func (s *Store) PatchCommitment(ctx context.Context, actorID string, id string, 
 		)
 	}
 	if err != nil {
+		_ = tx.Rollback()
 		return PatchSnapshotResult{}, fmt.Errorf("update commitment snapshot: %w", err)
 	}
 	if ifUpdatedAt != nil {
 		rowsAffected, err := updateResult.RowsAffected()
 		if err != nil {
+			_ = tx.Rollback()
 			return PatchSnapshotResult{}, fmt.Errorf("read patch commitment rows affected: %w", err)
 		}
 		if rowsAffected == 0 {
+			_ = tx.Rollback()
 			return PatchSnapshotResult{}, ErrConflict
 		}
 	}
@@ -1434,15 +1523,25 @@ func (s *Store) PatchCommitment(ctx context.Context, actorID string, id string, 
 		"payload":    eventPayload,
 		"provenance": actorStatementProvenance(),
 	}
-	emittedEvent, err := s.AppendEvent(ctx, actorID, event)
+	preparedEvent, err := prepareEventForInsert(actorID, event)
 	if err != nil {
+		_ = tx.Rollback()
+		return PatchSnapshotResult{}, fmt.Errorf("prepare commitment patch event: %w", err)
+	}
+	if err := insertPreparedEvent(ctx, tx, preparedEvent); err != nil {
+		_ = tx.Rollback()
 		return PatchSnapshotResult{}, fmt.Errorf("emit commitment patch event: %w", err)
 	}
 
 	if statusChanged {
-		if err := s.recomputeThreadOpenCommitments(ctx, actorID, threadID); err != nil {
+		if err := s.recomputeThreadOpenCommitmentsTx(ctx, tx, actorID, threadID); err != nil {
+			_ = tx.Rollback()
 			return PatchSnapshotResult{}, fmt.Errorf("recompute thread open_commitments after commitment patch: %w", err)
 		}
+	}
+	if err := tx.Commit(); err != nil {
+		_ = tx.Rollback()
+		return PatchSnapshotResult{}, fmt.Errorf("commit commitment patch transaction: %w", err)
 	}
 
 	out := cloneMap(currentBody)
@@ -1457,7 +1556,7 @@ func (s *Store) PatchCommitment(ctx context.Context, actorID string, id string, 
 
 	return PatchSnapshotResult{
 		Snapshot: out,
-		Event:    emittedEvent,
+		Event:    preparedEvent.Body,
 	}, nil
 }
 
@@ -1530,7 +1629,23 @@ func (s *Store) ListCommitments(ctx context.Context, filter CommitmentListFilter
 }
 
 func (s *Store) recomputeThreadOpenCommitments(ctx context.Context, actorID string, threadID string) error {
-	threadRow, err := s.getSnapshotRow(ctx, threadID)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin thread open_commitments recompute transaction: %w", err)
+	}
+	if err := s.recomputeThreadOpenCommitmentsTx(ctx, tx, actorID, threadID); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("commit thread open_commitments recompute transaction: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) recomputeThreadOpenCommitmentsTx(ctx context.Context, tx *sql.Tx, actorID string, threadID string) error {
+	threadRow, err := getSnapshotRowFromQueryRower(ctx, tx, threadID)
 	if err != nil {
 		return err
 	}
@@ -1552,7 +1667,7 @@ func (s *Store) recomputeThreadOpenCommitments(ctx context.Context, actorID stri
 		}
 	}
 
-	rows, err := s.db.QueryContext(
+	rows, err := tx.QueryContext(
 		ctx,
 		`SELECT id, body_json
 		 FROM snapshots
@@ -1602,7 +1717,7 @@ func (s *Store) recomputeThreadOpenCommitments(ctx context.Context, actorID stri
 		return fmt.Errorf("encode thread snapshot body: %w", err)
 	}
 
-	_, err = s.db.ExecContext(
+	_, err = tx.ExecContext(
 		ctx,
 		`UPDATE snapshots SET body_json = ?, updated_at = ?, updated_by = ? WHERE id = ? AND kind = 'thread'`,
 		string(bodyJSON),
@@ -1622,7 +1737,11 @@ func (s *Store) recomputeThreadOpenCommitments(ctx context.Context, actorID stri
 		"payload":    map[string]any{"changed_fields": []string{"open_commitments"}},
 		"provenance": actorStatementProvenance(),
 	}
-	if _, err := s.AppendEvent(ctx, actorID, event); err != nil {
+	preparedEvent, err := prepareEventForInsert(actorID, event)
+	if err != nil {
+		return fmt.Errorf("prepare open_commitments snapshot_updated event: %w", err)
+	}
+	if err := insertPreparedEvent(ctx, tx, preparedEvent); err != nil {
 		return fmt.Errorf("emit open_commitments snapshot_updated event: %w", err)
 	}
 
@@ -1644,8 +1763,12 @@ func (s *Store) getSnapshotRow(ctx context.Context, id string) (snapshotRow, err
 		return snapshotRow{}, fmt.Errorf("primitives store database is not initialized")
 	}
 
+	return getSnapshotRowFromQueryRower(ctx, s.db, id)
+}
+
+func getSnapshotRowFromQueryRower(ctx context.Context, db queryRower, id string) (snapshotRow, error) {
 	row := snapshotRow{}
-	err := s.db.QueryRowContext(
+	err := db.QueryRowContext(
 		ctx,
 		`SELECT id, kind, thread_id, updated_at, updated_by, body_json, provenance_json FROM snapshots WHERE id = ?`,
 		id,

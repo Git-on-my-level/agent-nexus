@@ -860,13 +860,14 @@ export const commandRegistry: CommandSpec[] = [
     "error_codes": [
       "invalid_json",
       "invalid_request",
-      "unknown_actor_id"
+      "unknown_actor_id",
+      "conflict"
     ],
     "concepts": [
       "commitments"
     ],
     "stability": "stable",
-    "agent_notes": "Non-idempotent unless caller controls external dedupe.",
+    "agent_notes": "Replay-safe when `request_key` is reused with the same body; otherwise each create issues a new commitment id.",
     "examples": [
       {
         "title": "Create commitment",
@@ -926,6 +927,10 @@ export const commandRegistry: CommandSpec[] = [
         },
         {
           "name": "commitment.provenance.notes",
+          "type": "string"
+        },
+        {
+          "name": "request_key",
           "type": "string"
         }
       ]
@@ -1185,7 +1190,7 @@ export const commandRegistry: CommandSpec[] = [
       "revisions"
     ],
     "stability": "beta",
-    "agent_notes": "Non-idempotent unless caller provides a deterministic document id and dedupes retries.",
+    "agent_notes": "Replay-safe when `request_key` is reused with the same body; core can issue the canonical document id when one is omitted.",
     "examples": [
       {
         "title": "Create document",
@@ -1220,6 +1225,10 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "refs",
           "type": "list\u003cstring\u003e"
+        },
+        {
+          "name": "request_key",
+          "type": "string"
         }
       ]
     },
@@ -1574,7 +1583,7 @@ export const commandRegistry: CommandSpec[] = [
       "append-only"
     ],
     "stability": "stable",
-    "agent_notes": "Non-idempotent unless external dedupe keying is used.",
+    "agent_notes": "Replay-safe when `request_key` is reused with the same body.",
     "examples": [
       {
         "title": "Append event",
@@ -1641,6 +1650,10 @@ export const commandRegistry: CommandSpec[] = [
         },
         {
           "name": "event.thread_id",
+          "type": "string"
+        },
+        {
+          "name": "request_key",
           "type": "string"
         }
       ]
@@ -2227,7 +2240,7 @@ export const commandRegistry: CommandSpec[] = [
       "receipts"
     ],
     "stability": "stable",
-    "agent_notes": "Include evidence refs that satisfy packet conventions.",
+    "agent_notes": "Replay-safe when `request_key` is reused with the same body. Include evidence refs that satisfy packet conventions.",
     "examples": [
       {
         "title": "Create receipt",
@@ -2272,6 +2285,10 @@ export const commandRegistry: CommandSpec[] = [
       "optional": [
         {
           "name": "actor_id",
+          "type": "string"
+        },
+        {
+          "name": "request_key",
           "type": "string"
         }
       ]
@@ -2355,6 +2372,10 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "actor_id",
           "type": "string"
+        },
+        {
+          "name": "request_key",
+          "type": "string"
         }
       ]
     },
@@ -2389,7 +2410,7 @@ export const commandRegistry: CommandSpec[] = [
       "work-orders"
     ],
     "stability": "stable",
-    "agent_notes": "Treat as non-idempotent unless artifact ids are controlled.",
+    "agent_notes": "Replay-safe when `request_key` is reused with the same body; packet id fields may be omitted and core will issue the canonical artifact id.",
     "examples": [
       {
         "title": "Create work order",
@@ -2434,6 +2455,10 @@ export const commandRegistry: CommandSpec[] = [
       "optional": [
         {
           "name": "actor_id",
+          "type": "string"
+        },
+        {
+          "name": "request_key",
           "type": "string"
         }
       ]
@@ -2547,14 +2572,15 @@ export const commandRegistry: CommandSpec[] = [
     "error_codes": [
       "invalid_json",
       "invalid_request",
-      "unknown_actor_id"
+      "unknown_actor_id",
+      "conflict"
     ],
     "concepts": [
       "threads",
       "snapshots"
     ],
     "stability": "stable",
-    "agent_notes": "Non-idempotent unless caller enforces a deterministic id strategy externally.",
+    "agent_notes": "Replay-safe when `request_key` is reused with the same body; otherwise core issues a new canonical thread id.",
     "examples": [
       {
         "title": "Create thread",
@@ -2629,6 +2655,10 @@ export const commandRegistry: CommandSpec[] = [
       "optional": [
         {
           "name": "actor_id",
+          "type": "string"
+        },
+        {
+          "name": "request_key",
           "type": "string"
         },
         {
