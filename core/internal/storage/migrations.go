@@ -313,6 +313,34 @@ var migrations = []migration{
 			`CREATE INDEX IF NOT EXISTS idx_derived_thread_views_stale_generated_at ON derived_thread_views (stale, generated_at DESC, thread_id);`,
 		},
 	},
+	{
+		Version: 12,
+		Statements: []string{
+			`UPDATE documents
+			 SET thread_id = COALESCE(
+			         NULLIF(thread_id, ''),
+			         (
+			             SELECT substr(value, 8)
+			               FROM document_revisions dr, json_each(dr.refs_json)
+			              WHERE dr.revision_id = documents.head_revision_id
+			                AND value LIKE 'thread:%'
+			              LIMIT 1
+			         )
+			     )
+			WHERE documents.thread_id IS NULL OR documents.thread_id = ''`,
+			`UPDATE document_revisions
+			 SET thread_id = COALESCE(
+			         NULLIF(thread_id, ''),
+			         (
+			             SELECT substr(value, 8)
+			               FROM json_each(document_revisions.refs_json)
+			              WHERE value LIKE 'thread:%'
+			              LIMIT 1
+			         )
+			     )
+			WHERE thread_id IS NULL OR thread_id = ''`,
+		},
+	},
 }
 
 func applyMigrations(ctx context.Context, db *sql.DB) error {

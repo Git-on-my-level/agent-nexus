@@ -182,6 +182,7 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 	}
 	revisionRefs = uniqueStrings(revisionRefs)
 	sortStringsStable(revisionRefs)
+	threadID = documentLifecycleThreadID(threadID, revisionRefs)
 
 	artifactMetadata := map[string]any{
 		"id":               artifactID,
@@ -475,6 +476,7 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 	revisionRefs = append(revisionRefs, "artifact:"+doc.HeadRevisionID)
 	revisionRefs = uniqueStrings(revisionRefs)
 	sortStringsStable(revisionRefs)
+	nextThreadID = documentLifecycleThreadID(nextThreadID, revisionRefs)
 
 	artifactMetadata := map[string]any{
 		"id":               artifactID,
