@@ -79,3 +79,52 @@ func TestImportScanJSON(t *testing.T) {
 		t.Fatalf("decode raw envelope: %v", err)
 	}
 }
+
+func TestImportApplyPreviewIsConfigLenient(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	profilesDir := filepath.Join(home, ".config", "oar", "profiles")
+	if err := os.MkdirAll(profilesDir, 0o700); err != nil {
+		t.Fatalf("mkdir profiles dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(profilesDir, "default.json"), []byte("{invalid"), 0o600); err != nil {
+		t.Fatalf("write malformed profile: %v", err)
+	}
+
+	planPath := filepath.Join(home, "plan.json")
+	if err := os.WriteFile(planPath, []byte(`{"created_at":"2026-03-12T00:00:00Z","source_name":"test","inventory":"inventory.jsonl","dedupe":"dedupe.json","objects":[]}`), 0o644); err != nil {
+		t.Fatalf("write plan: %v", err)
+	}
+
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "import", "apply", "--plan", planPath})
+	payload := assertEnvelopeOK(t, raw)
+	if payload["command"] != "import apply" {
+		t.Fatalf("unexpected command: %#v", payload["command"])
+	}
+}
+
+func TestImportApplyExecuteRequiresResolvedConfig(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	profilesDir := filepath.Join(home, ".config", "oar", "profiles")
+	if err := os.MkdirAll(profilesDir, 0o700); err != nil {
+		t.Fatalf("mkdir profiles dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(profilesDir, "default.json"), []byte("{invalid"), 0o600); err != nil {
+		t.Fatalf("write malformed profile: %v", err)
+	}
+
+	planPath := filepath.Join(home, "plan.json")
+	if err := os.WriteFile(planPath, []byte(`{"created_at":"2026-03-12T00:00:00Z","source_name":"test","inventory":"inventory.jsonl","dedupe":"dedupe.json","objects":[]}`), 0o644); err != nil {
+		t.Fatalf("write plan: %v", err)
+	}
+
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "import", "apply", "--plan", planPath, "--execute"})
+	payload := assertEnvelopeError(t, raw)
+	errPayload, _ := payload["error"].(map[string]any)
+	if anyStringValue(errPayload["code"]) != "config_resolution_failed" {
+		t.Fatalf("expected config_resolution_failed, got %#v", payload)
+	}
+}

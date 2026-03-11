@@ -189,6 +189,192 @@ func TestApplyExecuteSubstitutesRefs(t *testing.T) {
 	}
 }
 
+func TestApplyExecuteDropsRefsForPendingBinaryArtifacts(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	planPath := filepath.Join(root, "plan.json")
+	plan := ImportPlan{
+		CreatedAt:  utcNow(),
+		SourceName: "test",
+		Inventory:  filepath.Join(root, "inventory.jsonl"),
+		Dedupe:     filepath.Join(root, "dedupe.json"),
+		Objects: []PlanObject{
+			{
+				Key:  "thread_root",
+				Kind: "thread",
+				Create: map[string]any{
+					"thread": map[string]any{
+						"title":           "Imported root",
+						"type":            "other",
+						"status":          "active",
+						"priority":        "p2",
+						"tags":            []string{"import"},
+						"cadence":         "reactive",
+						"current_summary": "seed",
+						"next_actions":    []string{},
+						"key_artifacts":   []string{},
+						"provenance": map[string]any{
+							"sources": []string{"import_plan:test"},
+						},
+					},
+				},
+			},
+			{
+				Key:                 "artifact_binary",
+				Kind:                "artifact",
+				PendingBinaryUpload: true,
+				Create: map[string]any{
+					"artifact": map[string]any{
+						"kind":    "evidence",
+						"summary": "Binary artifact",
+						"refs":    []string{"$REF:thread_root"},
+					},
+					"content_type": "structured",
+					"content": map[string]any{
+						"filename": "diagram.png",
+					},
+				},
+			},
+			{
+				Key:  "doc_leaf",
+				Kind: "doc",
+				Create: map[string]any{
+					"document": map[string]any{
+						"title": "Imported doc",
+					},
+					"content_type": "text",
+					"content":      "body",
+					"refs":         []string{"$REF:thread_root", "$REF:artifact_binary"},
+				},
+			},
+		},
+	}
+	if err := writeJSON(planPath, plan); err != nil {
+		t.Fatalf("write plan: %v", err)
+	}
+
+	callOrder := []string{}
+	report, err := Apply(ApplyOptions{PlanPath: planPath, OutDir: filepath.Join(root, "apply"), Execute: true}, func(kind string, payload map[string]any) (map[string]any, error) {
+		callOrder = append(callOrder, kind)
+		switch kind {
+		case "thread":
+			return map[string]any{"thread": map[string]any{"id": "thread_123"}}, nil
+		case "doc":
+			refs, _ := payload["refs"].([]any)
+			if len(refs) != 1 || refs[0] != "thread:thread_123" {
+				t.Fatalf("expected only resolved thread ref in doc payload, got %#v", payload["refs"])
+			}
+			return map[string]any{"document": map[string]any{"id": "doc_456"}}, nil
+		default:
+			t.Fatalf("unexpected create kind: %s", kind)
+			return nil, nil
+		}
+	})
+	if err != nil {
+		t.Fatalf("apply execute: %v", err)
+	}
+	if strings.Join(callOrder, ",") != "thread,doc" {
+		t.Fatalf("expected thread,doc execution order, got %v", callOrder)
+	}
+	if report.Refs["artifact_binary"] != "" {
+		t.Fatalf("expected skipped binary artifact to stay unresolved in ref map, got %#v", report.Refs)
+	}
+	var docRow *ApplyResult
+	for i := range report.Results {
+		if report.Results[i].Key == "doc_leaf" {
+			docRow = &report.Results[i]
+			break
+		}
+	}
+	if docRow == nil || !strings.Contains(docRow.Note, "$REF:artifact_binary") {
+		t.Fatalf("expected doc apply row to record dropped binary ref, got %#v", docRow)
+	}
+}
+
+func TestScanPreservesDistinctRepoRootPaths(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	for _, repo := range []string{
+		filepath.Join(root, "a", "service"),
+		filepath.Join(root, "b", "service"),
+	} {
+		if err := os.MkdirAll(repo, 0o755); err != nil {
+			t.Fatalf("mkdir repo: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(repo, "go.mod"), []byte("module example.com/service\n\ngo 1.23.0\n"), 0o644); err != nil {
+			t.Fatalf("write go.mod: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("# Repo\n"), 0o644); err != nil {
+			t.Fatalf("write readme: %v", err)
+		}
+	}
+
+	outDir := filepath.Join(root, ".oar-import", "workspace")
+	summary, err := Scan(ScanOptions{InputPath: root, OutDir: outDir})
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if strings.Join(summary.RepoRoots, ",") != "a/service,b/service" {
+		t.Fatalf("expected distinct relative repo roots, got %#v", summary.RepoRoots)
+	}
+
+	inventory, err := loadInventory(summary.Inventory)
+	if err != nil {
+		t.Fatalf("load inventory: %v", err)
+	}
+	seen := map[string]struct{}{}
+	for _, item := range inventory {
+		if item.RepoRoot != "" {
+			seen[item.RepoRoot] = struct{}{}
+		}
+	}
+	if len(seen) != 2 {
+		t.Fatalf("expected two distinct repo_root values, got %#v", seen)
+	}
+	if _, ok := seen["a/service"]; !ok {
+		t.Fatalf("expected repo_root a/service, got %#v", seen)
+	}
+	if _, ok := seen["b/service"]; !ok {
+		t.Fatalf("expected repo_root b/service, got %#v", seen)
+	}
+}
+
+func TestScanIgnoresNestedOutputDirectory(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "note.md"), []byte("# Note\n"), 0o644); err != nil {
+		t.Fatalf("write source note: %v", err)
+	}
+
+	outDir := filepath.Join(root, ".oar-import", "workspace")
+	if err := os.MkdirAll(filepath.Join(outDir, "stale"), 0o755); err != nil {
+		t.Fatalf("mkdir stale output: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(outDir, "stale", "old.md"), []byte("# Old\n"), 0o644); err != nil {
+		t.Fatalf("write stale output: %v", err)
+	}
+
+	summary, err := Scan(ScanOptions{InputPath: root, OutDir: outDir})
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if summary.FileCount != 1 {
+		t.Fatalf("expected only source file to be scanned, got %d", summary.FileCount)
+	}
+	inventory, err := loadInventory(summary.Inventory)
+	if err != nil {
+		t.Fatalf("load inventory: %v", err)
+	}
+	for _, item := range inventory {
+		if strings.Contains(item.RelPath, ".oar-import/") || strings.HasPrefix(item.RelPath, ".oar-import") {
+			t.Fatalf("expected nested output dir to be excluded from scanned relpaths, got %#v", item)
+		}
+	}
+}
+
 func hasPlannedKind(objects []PlanObject, kind string) bool {
 	for _, obj := range objects {
 		if obj.Kind == kind {

@@ -77,7 +77,8 @@ func Scan(opts ScanOptions) (ScanSummary, error) {
 	if err != nil {
 		return ScanSummary{}, err
 	}
-	repoRoots, err := detectRepoRoots(scanRoot)
+	excludedDirs := computeExcludedDirs(scanRoot, outDir)
+	repoRoots, err := detectRepoRoots(scanRoot, excludedDirs)
 	if err != nil {
 		return ScanSummary{}, err
 	}
@@ -87,7 +88,7 @@ func Scan(opts ScanOptions) (ScanSummary, error) {
 	countsByCluster := map[string]int{}
 	textCacheDir := filepath.Join(outDir, "text-cache")
 
-	files, err := iterFiles(scanRoot)
+	files, err := iterFiles(scanRoot, excludedDirs)
 	if err != nil {
 		return ScanSummary{}, err
 	}
@@ -222,7 +223,7 @@ func extractZip(zipPath string, outDir string) error {
 	return nil
 }
 
-func detectRepoRoots(root string) ([]string, error) {
+func detectRepoRoots(root string, excludedDirs []string) ([]string, error) {
 	markers := map[string]struct{}{".git": {}, "package.json": {}, "pyproject.toml": {}, "go.mod": {}, "Cargo.toml": {}, "pom.xml": {}}
 	found := []string{}
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, walkErr error) error {
@@ -230,6 +231,9 @@ func detectRepoRoots(root string) ([]string, error) {
 			return walkErr
 		}
 		if d.IsDir() {
+			if shouldSkipDir(path, root, excludedDirs) {
+				return filepath.SkipDir
+			}
 			if path != root {
 				if _, ok := ignoreDirs[d.Name()]; ok {
 					return filepath.SkipDir
@@ -264,13 +268,16 @@ func detectRepoRoots(root string) ([]string, error) {
 	return found, nil
 }
 
-func iterFiles(root string) ([]string, error) {
+func iterFiles(root string, excludedDirs []string) ([]string, error) {
 	files := []string{}
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
 		if d.IsDir() {
+			if shouldSkipDir(path, root, excludedDirs) {
+				return filepath.SkipDir
+			}
 			if path != root {
 				if _, ok := ignoreDirs[d.Name()]; ok {
 					return filepath.SkipDir
@@ -377,7 +384,7 @@ func buildRecord(sourceID string, path string, root string, repoRoots []string, 
 		}
 	}
 	category := guessCategory(path, relPath, preview)
-	repoRoot := repoRootFor(path, repoRoots)
+	repoRoot := repoRootFor(path, root, repoRoots)
 	title := extractTitle(relPath, preview)
 	sha, err := sha256File(path)
 	if err != nil {
@@ -523,7 +530,7 @@ func guessCluster(relPath string, category string, repoRoot string) string {
 	return "root"
 }
 
-func repoRootFor(path string, repoRoots []string) string {
+func repoRootFor(path string, root string, repoRoots []string) string {
 	best := ""
 	for _, candidate := range repoRoots {
 		if path == candidate || strings.HasPrefix(path, candidate+string(os.PathSeparator)) {
@@ -535,7 +542,37 @@ func repoRootFor(path string, repoRoots []string) string {
 	if best == "" {
 		return ""
 	}
-	return filepath.Base(best)
+	if best == root {
+		return "."
+	}
+	rel, err := filepath.Rel(root, best)
+	if err != nil {
+		return filepath.ToSlash(best)
+	}
+	return filepath.ToSlash(rel)
+}
+
+func computeExcludedDirs(scanRoot string, outDir string) []string {
+	cleanRoot := filepath.Clean(scanRoot)
+	cleanOut := filepath.Clean(outDir)
+	if cleanOut == cleanRoot || !strings.HasPrefix(cleanOut, cleanRoot+string(os.PathSeparator)) {
+		return nil
+	}
+	return []string{cleanOut}
+}
+
+func shouldSkipDir(path string, root string, excludedDirs []string) bool {
+	if path == root {
+		return false
+	}
+	cleanPath := filepath.Clean(path)
+	for _, excluded := range excludedDirs {
+		excluded = filepath.Clean(excluded)
+		if cleanPath == excluded || strings.HasPrefix(cleanPath, excluded+string(os.PathSeparator)) {
+			return true
+		}
+	}
+	return false
 }
 
 func isLikelyText(path string) bool {
