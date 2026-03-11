@@ -328,6 +328,7 @@ Core Commands:
   version       Print CLI/runtime version details
   doctor        Validate local and network preconditions
   auth          Manage agent registration, profile auth, and token lifecycle
+  import        Bootstrap a precision-first workspace import and run local import helpers
   draft         Stage write requests locally and commit them later
   provenance    Walk refs/provenance links as a deterministic graph
   api call      Perform an arbitrary HTTP API request
@@ -373,6 +374,9 @@ func helpTopicText(topic string) (string, bool) {
 	}
 	if topic == "draft" {
 		return draftUsageText(), true
+	}
+	if topic == "import" {
+		return importUsageText() + "\n", true
 	}
 	if topic == "onboarding" {
 		return onboardingHelpText(), true

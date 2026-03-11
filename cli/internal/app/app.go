@@ -73,6 +73,7 @@ func (a *App) Run(args []string) int {
 		subPeek = remaining[1]
 	}
 	configLenient := cmdPeek == "version" || cmdPeek == "help" || cmdPeek == "--help" || cmdPeek == "-h" || cmdPeek == "meta" ||
+		(cmdPeek == "import" && isConfigLenientImportCommand(remaining[1:])) ||
 		(cmdPeek == "auth" && (subPeek == "list" || subPeek == "ls" || subPeek == "profiles"))
 
 	resolved, err := config.Resolve(overrides, config.Environment{
@@ -363,4 +364,37 @@ func parseLongOptionToken(token string) (name string, value string, hasValue boo
 		return strings.TrimSpace(token[:idx]), token[idx+1:], true, true
 	}
 	return strings.TrimSpace(token), "", false, true
+}
+
+func isConfigLenientImportCommand(args []string) bool {
+	if len(args) == 0 {
+		return true
+	}
+	for _, arg := range args {
+		if isHelpToken(arg) {
+			return true
+		}
+	}
+	if importSubcommandSpec.normalize(args[0]) != "apply" {
+		return true
+	}
+	return !hasTrueBoolFlag(args[1:], "execute")
+}
+
+func hasTrueBoolFlag(args []string, flagName string) bool {
+	for _, arg := range args {
+		name, value, hasValue, isFlag := parseLongOptionToken(arg)
+		if !isFlag || name != flagName {
+			continue
+		}
+		if !hasValue {
+			return true
+		}
+		parsed, err := strconvParseBool(value)
+		if err != nil {
+			return true
+		}
+		return parsed
+	}
+	return false
 }
