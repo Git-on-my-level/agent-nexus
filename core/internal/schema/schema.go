@@ -128,17 +128,31 @@ type rawArtifactRefRule struct {
 }
 
 type rawEventRefConventions struct {
-	WorkOrderCreated        rawEventRefRule `yaml:"work_order_created"`
-	ReceiptAdded            rawEventRefRule `yaml:"receipt_added"`
-	ReviewCompleted         rawEventRefRule `yaml:"review_completed"`
-	CommitmentCreated       rawEventRefRule `yaml:"commitment_created"`
-	CommitmentStatusChanged rawEventRefRule `yaml:"commitment_status_changed"`
-	DecisionNeeded          rawEventRefRule `yaml:"decision_needed"`
-	DecisionMade            rawEventRefRule `yaml:"decision_made"`
-	SnapshotUpdated         rawEventRefRule `yaml:"snapshot_updated"`
-	ExceptionRaised         rawEventRefRule `yaml:"exception_raised"`
-	MessagePosted           rawEventRefRule `yaml:"message_posted"`
-	InboxItemAcknowledged   rawEventRefRule `yaml:"inbox_item_acknowledged"`
+	Rules map[string]rawEventRefRule
+}
+
+func (c *rawEventRefConventions) UnmarshalYAML(value *yaml.Node) error {
+	if value == nil || value.Kind != yaml.MappingNode {
+		c.Rules = nil
+		return nil
+	}
+
+	c.Rules = make(map[string]rawEventRefRule)
+	for i := 0; i+1 < len(value.Content); i += 2 {
+		keyNode := value.Content[i]
+		valueNode := value.Content[i+1]
+		key := strings.TrimSpace(keyNode.Value)
+		if key == "" || strings.HasPrefix(key, "_") {
+			continue
+		}
+
+		var rule rawEventRefRule
+		if err := valueNode.Decode(&rule); err != nil {
+			return err
+		}
+		c.Rules[key] = rule
+	}
+	return nil
 }
 
 type rawEventRefRule struct {
@@ -210,7 +224,7 @@ func Load(path string) (*Contract, error) {
 			"receipt":    append([]string(nil), file.ReferenceConventions.ArtifactRefs.Receipt.RefsMustInclude...),
 			"review":     append([]string(nil), file.ReferenceConventions.ArtifactRefs.Review.RefsMustInclude...),
 		},
-		EventRefRules: make(map[string]EventRefRule, 11),
+		EventRefRules: make(map[string]EventRefRule, len(file.ReferenceConventions.EventRefs.Rules)),
 	}
 
 	if contract.Version == "" {
@@ -253,17 +267,9 @@ func Load(path string) (*Contract, error) {
 	contract.Packets["receipt"] = normalizePacket("receipt", file.Packets.Receipt)
 	contract.Packets["review"] = normalizePacket("review", file.Packets.Review)
 
-	contract.EventRefRules["work_order_created"] = normalizeEventRefRule(file.ReferenceConventions.EventRefs.WorkOrderCreated)
-	contract.EventRefRules["receipt_added"] = normalizeEventRefRule(file.ReferenceConventions.EventRefs.ReceiptAdded)
-	contract.EventRefRules["review_completed"] = normalizeEventRefRule(file.ReferenceConventions.EventRefs.ReviewCompleted)
-	contract.EventRefRules["commitment_created"] = normalizeEventRefRule(file.ReferenceConventions.EventRefs.CommitmentCreated)
-	contract.EventRefRules["commitment_status_changed"] = normalizeEventRefRule(file.ReferenceConventions.EventRefs.CommitmentStatusChanged)
-	contract.EventRefRules["decision_needed"] = normalizeEventRefRule(file.ReferenceConventions.EventRefs.DecisionNeeded)
-	contract.EventRefRules["decision_made"] = normalizeEventRefRule(file.ReferenceConventions.EventRefs.DecisionMade)
-	contract.EventRefRules["snapshot_updated"] = normalizeEventRefRule(file.ReferenceConventions.EventRefs.SnapshotUpdated)
-	contract.EventRefRules["exception_raised"] = normalizeEventRefRule(file.ReferenceConventions.EventRefs.ExceptionRaised)
-	contract.EventRefRules["message_posted"] = normalizeEventRefRule(file.ReferenceConventions.EventRefs.MessagePosted)
-	contract.EventRefRules["inbox_item_acknowledged"] = normalizeEventRefRule(file.ReferenceConventions.EventRefs.InboxItemAcknowledged)
+	for eventType, rawRule := range file.ReferenceConventions.EventRefs.Rules {
+		contract.EventRefRules[eventType] = normalizeEventRefRule(rawRule)
+	}
 
 	return contract, nil
 }

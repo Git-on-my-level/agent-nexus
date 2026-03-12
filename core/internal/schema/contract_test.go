@@ -11,7 +11,7 @@ func TestLoadExtractsCoreSchemaRules(t *testing.T) {
 
 	contract := loadContract(t)
 
-	if contract.Version != "0.2.2" {
+	if contract.Version != "0.2.3" {
 		t.Fatalf("unexpected schema version: got %q", contract.Version)
 	}
 
@@ -36,6 +36,9 @@ func TestLoadExtractsCoreSchemaRules(t *testing.T) {
 	}
 	if !contract.HasKnownTypedRefPrefix("url") {
 		t.Fatal("expected typed ref prefix url to be loaded")
+	}
+	if !contract.HasKnownTypedRefPrefix("board") {
+		t.Fatal("expected typed ref prefix board to be loaded")
 	}
 
 	sources, ok := contract.Provenance.Fields["sources"]
@@ -77,6 +80,13 @@ func TestLoadExtractsCoreSchemaRules(t *testing.T) {
 	}
 	if len(receiptEventRule.RefsMustInclude) != 2 {
 		t.Fatalf("expected receipt_added refs_must_include length=2, got %#v", receiptEventRule.RefsMustInclude)
+	}
+	boardCardMovedRule, ok := contract.EventRefRules["board_card_moved"]
+	if !ok {
+		t.Fatal("board_card_moved event ref rule was not loaded")
+	}
+	if len(boardCardMovedRule.RefsMustInclude) != 2 {
+		t.Fatalf("expected board_card_moved refs_must_include length=2, got %#v", boardCardMovedRule.RefsMustInclude)
 	}
 
 	threadSnapshot, ok := contract.Snapshots["thread"]

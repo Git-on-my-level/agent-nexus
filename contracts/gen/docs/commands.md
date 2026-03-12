@@ -3,8 +3,8 @@
 Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
-- Contract version: `0.2.2`
-- Commands: `54`
+- Contract version: `0.2.3`
+- Commands: `64`
 
 ## `actors.list`
 
@@ -236,6 +236,147 @@ Generated from `contracts/oar-openapi.yaml`.
 - Examples:
   - Refresh token grant: `oar auth token --grant-type refresh_token --refresh-token <token> --json`
   - Assertion grant: `oar auth token --grant-type assertion --agent-id <id> --key-id <id> --signed-at <rfc3339> --signature <base64> --json`
+
+## `boards.cards.add`
+
+- CLI path: `boards cards add`
+- HTTP: `POST /boards/{board_id}/cards`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Create explicit board membership for an existing thread with canonical column placement and server-owned rank.
+- Concepts: `boards`, `planning`, `ordering`, `concurrency`
+- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`, `not_found`
+- Output: Returns `{ board, card }` after membership creation and board concurrency-token advancement.
+- Agent notes: Replay-safe when `request_key` is reused with the same body. The board primary thread cannot be added as a card.
+- Examples:
+  - Add card to backlog: `oar boards cards add --board-id board_product_launch --from-file board-card-add.json --json`
+
+## `boards.cards.list`
+
+- CLI path: `boards cards list`
+- HTTP: `GET /boards/{board_id}/cards`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Read canonical board membership, column placement, and rank ordering without hydrating the full board workspace.
+- Concepts: `boards`, `planning`, `ordering`
+- Error codes: `invalid_request`, `not_found`
+- Output: Returns `{ board_id, cards }` ordered by canonical column sequence and per-column rank.
+- Agent notes: Safe and idempotent. Use `boards.workspace` when you also need hydrated thread, document, and summary sections.
+- Examples:
+  - List board cards: `oar boards cards list --board-id board_product_launch --json`
+
+## `boards.cards.move`
+
+- CLI path: `boards cards move`
+- HTTP: `POST /boards/{board_id}/cards/{thread_id}/move`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Request relative placement for a card while keeping rank tokens opaque and server-owned.
+- Concepts: `boards`, `planning`, `ordering`, `concurrency`
+- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`, `not_found`
+- Output: Returns `{ board, card }` after the move is applied.
+- Agent notes: Provide at most one of `before_thread_id` or `after_thread_id`. If neither is set, the card moves to the end of the target column.
+- Examples:
+  - Move card into review: `oar boards cards move --board-id board_product_launch --thread-id thread_123 --from-file board-card-move.json --json`
+
+## `boards.cards.remove`
+
+- CLI path: `boards cards remove`
+- HTTP: `POST /boards/{board_id}/cards/{thread_id}/remove`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Delete canonical board membership for a card without introducing a separate archived-card lifecycle in v1.
+- Concepts: `boards`, `planning`, `concurrency`
+- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`, `not_found`
+- Output: Returns `{ board, removed_thread_id }` after membership removal and board concurrency-token advancement.
+- Agent notes: Removal deletes canonical membership. Cards are not archived separately in v1.
+- Examples:
+  - Remove board card: `oar boards cards remove --board-id board_product_launch --thread-id thread_123 --from-file board-card-remove.json --json`
+
+## `boards.cards.update`
+
+- CLI path: `boards cards update`
+- HTTP: `PATCH /boards/{board_id}/cards/{thread_id}`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Patch mutable board-card metadata, which in v1 is limited to the pinned document convenience link.
+- Concepts: `boards`, `planning`, `docs`, `concurrency`
+- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`, `not_found`
+- Output: Returns `{ board, card }` after metadata update and board concurrency-token advancement.
+- Agent notes: Set `if_board_updated_at` from the current board read before patching card metadata.
+- Examples:
+  - Update pinned document: `oar boards cards update --board-id board_product_launch --thread-id thread_123 --from-file board-card-update.json --json`
+
+## `boards.create`
+
+- CLI path: `boards create`
+- HTTP: `POST /boards`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Create a first-class coordination board with a canonical primary thread and optional primary document.
+- Concepts: `boards`, `planning`, `concurrency`
+- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`
+- Output: Returns `{ board }` with server-owned identity and concurrency metadata.
+- Agent notes: Replay-safe when `request_key` is reused with the same body. The primary thread is required and is never created as a card implicitly.
+- Examples:
+  - Create board: `oar boards create --from-file board-create.json --json`
+
+## `boards.get`
+
+- CLI path: `boards get`
+- HTTP: `GET /boards/{board_id}`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Resolve one board's canonical metadata and concurrency token without hydrating the full workspace projection.
+- Concepts: `boards`, `planning`
+- Error codes: `invalid_request`, `not_found`
+- Output: Returns `{ board }`.
+- Agent notes: Safe and idempotent.
+- Examples:
+  - Get board: `oar boards get --board-id board_product_launch --json`
+
+## `boards.list`
+
+- CLI path: `boards list`
+- HTTP: `GET /boards`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Discover durable coordination boards with enough summary data for list pages and CLI triage without per-board fan-out.
+- Concepts: `boards`, `planning`, `summaries`
+- Error codes: `invalid_request`
+- Output: Returns `{ boards }`, where each item includes canonical board metadata plus a derived summary.
+- Agent notes: Safe and idempotent. Use repeatable `label` and `owner` filters to narrow the list server-side.
+- Examples:
+  - List boards: `oar boards list --json`
+  - List active boards for an owner: `oar boards list --status active --owner actor_ceo --json`
+
+## `boards.update`
+
+- CLI path: `boards update`
+- HTTP: `PATCH /boards/{board_id}`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Patch mutable board metadata with optimistic concurrency while preserving server-owned identity and timestamps.
+- Concepts: `boards`, `planning`, `concurrency`
+- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`, `not_found`
+- Output: Returns `{ board }` after the metadata patch is applied.
+- Agent notes: Set `if_updated_at` from `boards.get` or `boards.workspace` to avoid lost updates.
+- Examples:
+  - Update board metadata: `oar boards update --board-id board_product_launch --from-file board-update.json --json`
+
+## `boards.workspace`
+
+- CLI path: `boards workspace`
+- HTTP: `GET /boards/{board_id}/workspace`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Load one board's canonical board, primary thread, ordered cards, and aggregated docs/commitments/inbox sections in a single round-trip.
+- Concepts: `boards`, `planning`, `threads`, `docs`, `commitments`, `inbox`
+- Error codes: `invalid_request`, `not_found`
+- Output: Returns `{ board_id, board, primary_thread, primary_document, cards, documents, commitments, inbox, board_summary, section_kinds, generated_at }`.
+- Agent notes: Prefer this as the canonical board read path for CLI and web. Cards are already hydrated with backing thread and derived summary data.
+- Examples:
+  - Board workspace: `oar boards workspace --board-id board_product_launch --json`
 
 ## `commitments.create`
 
@@ -750,10 +891,10 @@ Generated from `contracts/oar-openapi.yaml`.
 - Stability: `beta`
 - Input mode: `none`
 - Why: Load one thread workspace projection from the server, including canonical thread context plus derived collaboration and inbox summaries, so CLI and web do not need client-side joins.
-- Concepts: `threads`, `events`, `artifacts`, `commitments`, `docs`, `inbox`
+- Concepts: `threads`, `events`, `artifacts`, `commitments`, `docs`, `boards`, `inbox`
 - Error codes: `invalid_request`, `not_found`
-- Output: Returns `{ thread_id, thread, context, collaboration, inbox, pending_decisions, related_threads, follow_up, section_kinds }`, with explicit section classifications.
-- Agent notes: Prefer this as the single-thread coordination read path. `section_kinds` distinguishes canonical versus derived sections.
+- Output: Returns `{ thread_id, thread, context, collaboration, board_memberships, inbox, pending_decisions, related_threads, follow_up, section_kinds }`, with explicit section classifications.
+- Agent notes: Prefer this as the single-thread coordination read path. `section_kinds` distinguishes canonical versus derived sections, including additive board membership joins.
 - Examples:
   - Workspace with defaults: `oar threads workspace --thread-id thread_123 --json`
   - Workspace with hydrated related review events: `oar threads workspace --thread-id thread_123 --include-related-event-content --include-artifact-content --json`

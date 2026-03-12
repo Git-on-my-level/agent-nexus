@@ -3,8 +3,8 @@
 Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
-- Contract version: `0.2.2`
-- Concepts: `38`
+- Contract version: `0.2.3`
+- Concepts: `42`
 
 ## `append-only`
 
@@ -39,10 +39,27 @@ Generated from `contracts/oar-openapi.yaml`.
   - `auth.passkey.register.verify`
   - `auth.token`
 
+## `boards`
+
+- Commands: `11`
+- Command IDs:
+  - `boards.cards.add`
+  - `boards.cards.list`
+  - `boards.cards.move`
+  - `boards.cards.remove`
+  - `boards.cards.update`
+  - `boards.create`
+  - `boards.get`
+  - `boards.list`
+  - `boards.update`
+  - `boards.workspace`
+  - `threads.workspace`
+
 ## `commitments`
 
-- Commands: `6`
+- Commands: `7`
 - Command IDs:
+  - `boards.workspace`
   - `commitments.create`
   - `commitments.get`
   - `commitments.list`
@@ -66,8 +83,14 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `concurrency`
 
-- Commands: `1`
+- Commands: `7`
 - Command IDs:
+  - `boards.cards.add`
+  - `boards.cards.move`
+  - `boards.cards.remove`
+  - `boards.cards.update`
+  - `boards.create`
+  - `boards.update`
   - `docs.update`
 
 ## `content`
@@ -87,8 +110,10 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `docs`
 
-- Commands: `9`
+- Commands: `11`
 - Command IDs:
+  - `boards.cards.update`
+  - `boards.workspace`
   - `docs.create`
   - `docs.get`
   - `docs.history`
@@ -149,8 +174,9 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `inbox`
 
-- Commands: `5`
+- Commands: `6`
 - Command IDs:
+  - `boards.workspace`
   - `inbox.ack`
   - `inbox.get`
   - `inbox.list`
@@ -198,6 +224,14 @@ Generated from `contracts/oar-openapi.yaml`.
   - `meta.concepts.get`
   - `meta.concepts.list`
 
+## `ordering`
+
+- Commands: `3`
+- Command IDs:
+  - `boards.cards.add`
+  - `boards.cards.list`
+  - `boards.cards.move`
+
 ## `packets`
 
 - Commands: `3`
@@ -221,6 +255,21 @@ Generated from `contracts/oar-openapi.yaml`.
 - Command IDs:
   - `commitments.patch`
   - `threads.patch`
+
+## `planning`
+
+- Commands: `10`
+- Command IDs:
+  - `boards.cards.add`
+  - `boards.cards.list`
+  - `boards.cards.move`
+  - `boards.cards.remove`
+  - `boards.cards.update`
+  - `boards.create`
+  - `boards.get`
+  - `boards.list`
+  - `boards.update`
+  - `boards.workspace`
 
 ## `provenance`
 
@@ -284,10 +333,17 @@ Generated from `contracts/oar-openapi.yaml`.
   - `events.stream`
   - `inbox.stream`
 
+## `summaries`
+
+- Commands: `1`
+- Command IDs:
+  - `boards.list`
+
 ## `threads`
 
-- Commands: `7`
+- Commands: `8`
 - Command IDs:
+  - `boards.workspace`
   - `threads.context`
   - `threads.create`
   - `threads.get`

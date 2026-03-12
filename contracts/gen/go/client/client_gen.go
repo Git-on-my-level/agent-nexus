@@ -305,6 +305,188 @@ var CommandRegistry = []CommandSpec{
 		},
 	},
 	{
+		CommandID:  "boards.cards.add",
+		CLIPath:    "boards cards add",
+		Group:      "boards",
+		Method:     "POST",
+		Path:       "/boards/{board_id}/cards",
+		PathParams: []string{"board_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"boards", "planning", "ordering", "concurrency"},
+		Adjacent:   []string{"boards.cards.list", "boards.cards.move", "boards.cards.remove", "boards.cards.update", "boards.create", "boards.get", "boards.list", "boards.update", "boards.workspace"},
+		Examples: []Example{
+			{
+				Title:   "Add card to backlog",
+				Command: "oar boards cards add --board-id board_product_launch --from-file board-card-add.json --json",
+			},
+		},
+	},
+	{
+		CommandID:  "boards.cards.list",
+		CLIPath:    "boards cards list",
+		Group:      "boards",
+		Method:     "GET",
+		Path:       "/boards/{board_id}/cards",
+		PathParams: []string{"board_id"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"boards", "planning", "ordering"},
+		Adjacent:   []string{"boards.cards.add", "boards.cards.move", "boards.cards.remove", "boards.cards.update", "boards.create", "boards.get", "boards.list", "boards.update", "boards.workspace"},
+		Examples: []Example{
+			{
+				Title:   "List board cards",
+				Command: "oar boards cards list --board-id board_product_launch --json",
+			},
+		},
+	},
+	{
+		CommandID:  "boards.cards.move",
+		CLIPath:    "boards cards move",
+		Group:      "boards",
+		Method:     "POST",
+		Path:       "/boards/{board_id}/cards/{thread_id}/move",
+		PathParams: []string{"board_id", "thread_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"boards", "planning", "ordering", "concurrency"},
+		Adjacent:   []string{"boards.cards.add", "boards.cards.list", "boards.cards.remove", "boards.cards.update", "boards.create", "boards.get", "boards.list", "boards.update", "boards.workspace"},
+		Examples: []Example{
+			{
+				Title:   "Move card into review",
+				Command: "oar boards cards move --board-id board_product_launch --thread-id thread_123 --from-file board-card-move.json --json",
+			},
+		},
+	},
+	{
+		CommandID:  "boards.cards.remove",
+		CLIPath:    "boards cards remove",
+		Group:      "boards",
+		Method:     "POST",
+		Path:       "/boards/{board_id}/cards/{thread_id}/remove",
+		PathParams: []string{"board_id", "thread_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"boards", "planning", "concurrency"},
+		Adjacent:   []string{"boards.cards.add", "boards.cards.list", "boards.cards.move", "boards.cards.update", "boards.create", "boards.get", "boards.list", "boards.update", "boards.workspace"},
+		Examples: []Example{
+			{
+				Title:   "Remove board card",
+				Command: "oar boards cards remove --board-id board_product_launch --thread-id thread_123 --from-file board-card-remove.json --json",
+			},
+		},
+	},
+	{
+		CommandID:  "boards.cards.update",
+		CLIPath:    "boards cards update",
+		Group:      "boards",
+		Method:     "PATCH",
+		Path:       "/boards/{board_id}/cards/{thread_id}",
+		PathParams: []string{"board_id", "thread_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"boards", "planning", "docs", "concurrency"},
+		Adjacent:   []string{"boards.cards.add", "boards.cards.list", "boards.cards.move", "boards.cards.remove", "boards.create", "boards.get", "boards.list", "boards.update", "boards.workspace"},
+		Examples: []Example{
+			{
+				Title:   "Update pinned document",
+				Command: "oar boards cards update --board-id board_product_launch --thread-id thread_123 --from-file board-card-update.json --json",
+			},
+		},
+	},
+	{
+		CommandID: "boards.create",
+		CLIPath:   "boards create",
+		Group:     "boards",
+		Method:    "POST",
+		Path:      "/boards",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"boards", "planning", "concurrency"},
+		Adjacent:  []string{"boards.cards.add", "boards.cards.list", "boards.cards.move", "boards.cards.remove", "boards.cards.update", "boards.get", "boards.list", "boards.update", "boards.workspace"},
+		Examples: []Example{
+			{
+				Title:   "Create board",
+				Command: "oar boards create --from-file board-create.json --json",
+			},
+		},
+	},
+	{
+		CommandID:  "boards.get",
+		CLIPath:    "boards get",
+		Group:      "boards",
+		Method:     "GET",
+		Path:       "/boards/{board_id}",
+		PathParams: []string{"board_id"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"boards", "planning"},
+		Adjacent:   []string{"boards.cards.add", "boards.cards.list", "boards.cards.move", "boards.cards.remove", "boards.cards.update", "boards.create", "boards.list", "boards.update", "boards.workspace"},
+		Examples: []Example{
+			{
+				Title:   "Get board",
+				Command: "oar boards get --board-id board_product_launch --json",
+			},
+		},
+	},
+	{
+		CommandID: "boards.list",
+		CLIPath:   "boards list",
+		Group:     "boards",
+		Method:    "GET",
+		Path:      "/boards",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"boards", "planning", "summaries"},
+		Adjacent:  []string{"boards.cards.add", "boards.cards.list", "boards.cards.move", "boards.cards.remove", "boards.cards.update", "boards.create", "boards.get", "boards.update", "boards.workspace"},
+		Examples: []Example{
+			{
+				Title:   "List boards",
+				Command: "oar boards list --json",
+			},
+			{
+				Title:   "List active boards for an owner",
+				Command: "oar boards list --status active --owner actor_ceo --json",
+			},
+		},
+	},
+	{
+		CommandID:  "boards.update",
+		CLIPath:    "boards update",
+		Group:      "boards",
+		Method:     "PATCH",
+		Path:       "/boards/{board_id}",
+		PathParams: []string{"board_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"boards", "planning", "concurrency"},
+		Adjacent:   []string{"boards.cards.add", "boards.cards.list", "boards.cards.move", "boards.cards.remove", "boards.cards.update", "boards.create", "boards.get", "boards.list", "boards.workspace"},
+		Examples: []Example{
+			{
+				Title:   "Update board metadata",
+				Command: "oar boards update --board-id board_product_launch --from-file board-update.json --json",
+			},
+		},
+	},
+	{
+		CommandID:  "boards.workspace",
+		CLIPath:    "boards workspace",
+		Group:      "boards",
+		Method:     "GET",
+		Path:       "/boards/{board_id}/workspace",
+		PathParams: []string{"board_id"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"boards", "planning", "threads", "docs", "commitments", "inbox"},
+		Adjacent:   []string{"boards.cards.add", "boards.cards.list", "boards.cards.move", "boards.cards.remove", "boards.cards.update", "boards.create", "boards.get", "boards.list", "boards.update"},
+		Examples: []Example{
+			{
+				Title:   "Board workspace",
+				Command: "oar boards workspace --board-id board_product_launch --json",
+			},
+		},
+	},
+	{
 		CommandID: "commitments.create",
 		CLIPath:   "commitments create",
 		Group:     "commitments",
@@ -959,7 +1141,7 @@ var CommandRegistry = []CommandSpec{
 		PathParams: []string{"thread_id"},
 		InputMode:  "none",
 		Stability:  "beta",
-		Concepts:   []string{"threads", "events", "artifacts", "commitments", "docs", "inbox"},
+		Concepts:   []string{"threads", "events", "artifacts", "commitments", "docs", "boards", "inbox"},
 		Adjacent:   []string{"threads.context", "threads.create", "threads.get", "threads.list", "threads.patch", "threads.timeline"},
 		Examples: []Example{
 			{
@@ -1156,6 +1338,46 @@ func (c *Client) AuthPasskeyRegisterVerify(ctx context.Context, opts RequestOpti
 
 func (c *Client) AuthToken(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "auth.token", nil, opts)
+}
+
+func (c *Client) BoardsCardsAdd(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "boards.cards.add", pathParams, opts)
+}
+
+func (c *Client) BoardsCardsList(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "boards.cards.list", pathParams, opts)
+}
+
+func (c *Client) BoardsCardsMove(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "boards.cards.move", pathParams, opts)
+}
+
+func (c *Client) BoardsCardsRemove(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "boards.cards.remove", pathParams, opts)
+}
+
+func (c *Client) BoardsCardsUpdate(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "boards.cards.update", pathParams, opts)
+}
+
+func (c *Client) BoardsCreate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "boards.create", nil, opts)
+}
+
+func (c *Client) BoardsGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "boards.get", pathParams, opts)
+}
+
+func (c *Client) BoardsList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "boards.list", nil, opts)
+}
+
+func (c *Client) BoardsUpdate(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "boards.update", pathParams, opts)
+}
+
+func (c *Client) BoardsWorkspace(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "boards.workspace", pathParams, opts)
 }
 
 func (c *Client) CommitmentsCreate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {

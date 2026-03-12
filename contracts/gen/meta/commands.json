@@ -1,9 +1,9 @@
 {
   "openapi_version": "3.1.0",
-  "contract_version": "0.2.2",
+  "contract_version": "0.2.3",
   "generated_by": "core/cmd/contract-gen",
   "extension_prefix": "x-oar-",
-  "command_count": 54,
+  "command_count": 64,
   "commands": [
     {
       "command_id": "actors.list",
@@ -806,6 +806,722 @@
       "ts_method": "authToken"
     },
     {
+      "command_id": "boards.cards.add",
+      "cli_path": "boards cards add",
+      "group": "boards",
+      "method": "POST",
+      "path": "/boards/{board_id}/cards",
+      "operation_id": "addBoardCard",
+      "summary": "Add existing thread to board as a card",
+      "why": "Create explicit board membership for an existing thread with canonical column placement and server-owned rank.",
+      "input_mode": "json-body",
+      "streaming": {
+        "mode": "none"
+      },
+      "output_envelope": "Returns `{ board, card }` after membership creation and board concurrency-token advancement.",
+      "error_codes": [
+        "invalid_json",
+        "invalid_request",
+        "unknown_actor_id",
+        "conflict",
+        "not_found"
+      ],
+      "concepts": [
+        "boards",
+        "planning",
+        "ordering",
+        "concurrency"
+      ],
+      "stability": "beta",
+      "agent_notes": "Replay-safe when `request_key` is reused with the same body. The board primary thread cannot be added as a card.",
+      "examples": [
+        {
+          "title": "Add card to backlog",
+          "command": "oar boards cards add --board-id board_product_launch --from-file board-card-add.json --json"
+        }
+      ],
+      "body_schema": {
+        "required": [
+          {
+            "name": "thread_id",
+            "type": "string"
+          }
+        ],
+        "optional": [
+          {
+            "name": "actor_id",
+            "type": "string"
+          },
+          {
+            "name": "after_thread_id",
+            "type": "string"
+          },
+          {
+            "name": "before_thread_id",
+            "type": "string"
+          },
+          {
+            "name": "column_key",
+            "type": "string",
+            "enum_values": [
+              "backlog",
+              "blocked",
+              "done",
+              "in_progress",
+              "ready",
+              "review"
+            ]
+          },
+          {
+            "name": "if_board_updated_at",
+            "type": "datetime"
+          },
+          {
+            "name": "pinned_document_id",
+            "type": "string"
+          },
+          {
+            "name": "request_key",
+            "type": "string"
+          }
+        ]
+      },
+      "path_params": [
+        "board_id"
+      ],
+      "adjacent_commands": [
+        "boards.cards.list",
+        "boards.cards.move",
+        "boards.cards.remove",
+        "boards.cards.update",
+        "boards.create",
+        "boards.get",
+        "boards.list",
+        "boards.update",
+        "boards.workspace"
+      ],
+      "go_method": "BoardsCardsAdd",
+      "ts_method": "boardsCardsAdd"
+    },
+    {
+      "command_id": "boards.cards.list",
+      "cli_path": "boards cards list",
+      "group": "boards",
+      "method": "GET",
+      "path": "/boards/{board_id}/cards",
+      "operation_id": "listBoardCards",
+      "summary": "List ordered board cards",
+      "why": "Read canonical board membership, column placement, and rank ordering without hydrating the full board workspace.",
+      "input_mode": "none",
+      "streaming": {
+        "mode": "none"
+      },
+      "output_envelope": "Returns `{ board_id, cards }` ordered by canonical column sequence and per-column rank.",
+      "error_codes": [
+        "invalid_request",
+        "not_found"
+      ],
+      "concepts": [
+        "boards",
+        "planning",
+        "ordering"
+      ],
+      "stability": "beta",
+      "agent_notes": "Safe and idempotent. Use `boards.workspace` when you also need hydrated thread, document, and summary sections.",
+      "examples": [
+        {
+          "title": "List board cards",
+          "command": "oar boards cards list --board-id board_product_launch --json"
+        }
+      ],
+      "path_params": [
+        "board_id"
+      ],
+      "adjacent_commands": [
+        "boards.cards.add",
+        "boards.cards.move",
+        "boards.cards.remove",
+        "boards.cards.update",
+        "boards.create",
+        "boards.get",
+        "boards.list",
+        "boards.update",
+        "boards.workspace"
+      ],
+      "go_method": "BoardsCardsList",
+      "ts_method": "boardsCardsList"
+    },
+    {
+      "command_id": "boards.cards.move",
+      "cli_path": "boards cards move",
+      "group": "boards",
+      "method": "POST",
+      "path": "/boards/{board_id}/cards/{thread_id}/move",
+      "operation_id": "moveBoardCard",
+      "summary": "Move board card across columns or ranks",
+      "why": "Request relative placement for a card while keeping rank tokens opaque and server-owned.",
+      "input_mode": "json-body",
+      "streaming": {
+        "mode": "none"
+      },
+      "output_envelope": "Returns `{ board, card }` after the move is applied.",
+      "error_codes": [
+        "invalid_json",
+        "invalid_request",
+        "unknown_actor_id",
+        "conflict",
+        "not_found"
+      ],
+      "concepts": [
+        "boards",
+        "planning",
+        "ordering",
+        "concurrency"
+      ],
+      "stability": "beta",
+      "agent_notes": "Provide at most one of `before_thread_id` or `after_thread_id`. If neither is set, the card moves to the end of the target column.",
+      "examples": [
+        {
+          "title": "Move card into review",
+          "command": "oar boards cards move --board-id board_product_launch --thread-id thread_123 --from-file board-card-move.json --json"
+        }
+      ],
+      "body_schema": {
+        "required": [
+          {
+            "name": "column_key",
+            "type": "string",
+            "enum_values": [
+              "backlog",
+              "blocked",
+              "done",
+              "in_progress",
+              "ready",
+              "review"
+            ]
+          },
+          {
+            "name": "if_board_updated_at",
+            "type": "datetime"
+          }
+        ],
+        "optional": [
+          {
+            "name": "actor_id",
+            "type": "string"
+          },
+          {
+            "name": "after_thread_id",
+            "type": "string"
+          },
+          {
+            "name": "before_thread_id",
+            "type": "string"
+          }
+        ]
+      },
+      "path_params": [
+        "board_id",
+        "thread_id"
+      ],
+      "adjacent_commands": [
+        "boards.cards.add",
+        "boards.cards.list",
+        "boards.cards.remove",
+        "boards.cards.update",
+        "boards.create",
+        "boards.get",
+        "boards.list",
+        "boards.update",
+        "boards.workspace"
+      ],
+      "go_method": "BoardsCardsMove",
+      "ts_method": "boardsCardsMove"
+    },
+    {
+      "command_id": "boards.cards.remove",
+      "cli_path": "boards cards remove",
+      "group": "boards",
+      "method": "POST",
+      "path": "/boards/{board_id}/cards/{thread_id}/remove",
+      "operation_id": "removeBoardCard",
+      "summary": "Remove board card membership",
+      "why": "Delete canonical board membership for a card without introducing a separate archived-card lifecycle in v1.",
+      "input_mode": "json-body",
+      "streaming": {
+        "mode": "none"
+      },
+      "output_envelope": "Returns `{ board, removed_thread_id }` after membership removal and board concurrency-token advancement.",
+      "error_codes": [
+        "invalid_json",
+        "invalid_request",
+        "unknown_actor_id",
+        "conflict",
+        "not_found"
+      ],
+      "concepts": [
+        "boards",
+        "planning",
+        "concurrency"
+      ],
+      "stability": "beta",
+      "agent_notes": "Removal deletes canonical membership. Cards are not archived separately in v1.",
+      "examples": [
+        {
+          "title": "Remove board card",
+          "command": "oar boards cards remove --board-id board_product_launch --thread-id thread_123 --from-file board-card-remove.json --json"
+        }
+      ],
+      "body_schema": {
+        "required": [
+          {
+            "name": "if_board_updated_at",
+            "type": "datetime"
+          }
+        ],
+        "optional": [
+          {
+            "name": "actor_id",
+            "type": "string"
+          }
+        ]
+      },
+      "path_params": [
+        "board_id",
+        "thread_id"
+      ],
+      "adjacent_commands": [
+        "boards.cards.add",
+        "boards.cards.list",
+        "boards.cards.move",
+        "boards.cards.update",
+        "boards.create",
+        "boards.get",
+        "boards.list",
+        "boards.update",
+        "boards.workspace"
+      ],
+      "go_method": "BoardsCardsRemove",
+      "ts_method": "boardsCardsRemove"
+    },
+    {
+      "command_id": "boards.cards.update",
+      "cli_path": "boards cards update",
+      "group": "boards",
+      "method": "PATCH",
+      "path": "/boards/{board_id}/cards/{thread_id}",
+      "operation_id": "updateBoardCard",
+      "summary": "Update board card metadata",
+      "why": "Patch mutable board-card metadata, which in v1 is limited to the pinned document convenience link.",
+      "input_mode": "json-body",
+      "streaming": {
+        "mode": "none"
+      },
+      "output_envelope": "Returns `{ board, card }` after metadata update and board concurrency-token advancement.",
+      "error_codes": [
+        "invalid_json",
+        "invalid_request",
+        "unknown_actor_id",
+        "conflict",
+        "not_found"
+      ],
+      "concepts": [
+        "boards",
+        "planning",
+        "docs",
+        "concurrency"
+      ],
+      "stability": "beta",
+      "agent_notes": "Set `if_board_updated_at` from the current board read before patching card metadata.",
+      "examples": [
+        {
+          "title": "Update pinned document",
+          "command": "oar boards cards update --board-id board_product_launch --thread-id thread_123 --from-file board-card-update.json --json"
+        }
+      ],
+      "body_schema": {
+        "required": [
+          {
+            "name": "if_board_updated_at",
+            "type": "datetime"
+          }
+        ],
+        "optional": [
+          {
+            "name": "actor_id",
+            "type": "string"
+          },
+          {
+            "name": "patch.pinned_document_id",
+            "type": "any|string"
+          }
+        ]
+      },
+      "path_params": [
+        "board_id",
+        "thread_id"
+      ],
+      "adjacent_commands": [
+        "boards.cards.add",
+        "boards.cards.list",
+        "boards.cards.move",
+        "boards.cards.remove",
+        "boards.create",
+        "boards.get",
+        "boards.list",
+        "boards.update",
+        "boards.workspace"
+      ],
+      "go_method": "BoardsCardsUpdate",
+      "ts_method": "boardsCardsUpdate"
+    },
+    {
+      "command_id": "boards.create",
+      "cli_path": "boards create",
+      "group": "boards",
+      "method": "POST",
+      "path": "/boards",
+      "operation_id": "createBoard",
+      "summary": "Create board",
+      "why": "Create a first-class coordination board with a canonical primary thread and optional primary document.",
+      "input_mode": "json-body",
+      "streaming": {
+        "mode": "none"
+      },
+      "output_envelope": "Returns `{ board }` with server-owned identity and concurrency metadata.",
+      "error_codes": [
+        "invalid_json",
+        "invalid_request",
+        "unknown_actor_id",
+        "conflict"
+      ],
+      "concepts": [
+        "boards",
+        "planning",
+        "concurrency"
+      ],
+      "stability": "beta",
+      "agent_notes": "Replay-safe when `request_key` is reused with the same body. The primary thread is required and is never created as a card implicitly.",
+      "examples": [
+        {
+          "title": "Create board",
+          "command": "oar boards create --from-file board-create.json --json"
+        }
+      ],
+      "body_schema": {
+        "required": [
+          {
+            "name": "board.primary_thread_id",
+            "type": "string"
+          },
+          {
+            "name": "board.title",
+            "type": "string"
+          }
+        ],
+        "optional": [
+          {
+            "name": "actor_id",
+            "type": "string"
+          },
+          {
+            "name": "board.column_schema",
+            "type": "list\u003cany\u003e"
+          },
+          {
+            "name": "board.id",
+            "type": "string"
+          },
+          {
+            "name": "board.labels",
+            "type": "list\u003cstring\u003e"
+          },
+          {
+            "name": "board.owners",
+            "type": "list\u003cstring\u003e"
+          },
+          {
+            "name": "board.pinned_refs",
+            "type": "list\u003cstring\u003e"
+          },
+          {
+            "name": "board.primary_document_id",
+            "type": "string"
+          },
+          {
+            "name": "board.status",
+            "type": "string",
+            "enum_values": [
+              "active",
+              "closed",
+              "paused"
+            ]
+          },
+          {
+            "name": "request_key",
+            "type": "string"
+          }
+        ]
+      },
+      "adjacent_commands": [
+        "boards.cards.add",
+        "boards.cards.list",
+        "boards.cards.move",
+        "boards.cards.remove",
+        "boards.cards.update",
+        "boards.get",
+        "boards.list",
+        "boards.update",
+        "boards.workspace"
+      ],
+      "go_method": "BoardsCreate",
+      "ts_method": "boardsCreate"
+    },
+    {
+      "command_id": "boards.get",
+      "cli_path": "boards get",
+      "group": "boards",
+      "method": "GET",
+      "path": "/boards/{board_id}",
+      "operation_id": "getBoard",
+      "summary": "Get board metadata",
+      "why": "Resolve one board's canonical metadata and concurrency token without hydrating the full workspace projection.",
+      "input_mode": "none",
+      "streaming": {
+        "mode": "none"
+      },
+      "output_envelope": "Returns `{ board }`.",
+      "error_codes": [
+        "invalid_request",
+        "not_found"
+      ],
+      "concepts": [
+        "boards",
+        "planning"
+      ],
+      "stability": "beta",
+      "agent_notes": "Safe and idempotent.",
+      "examples": [
+        {
+          "title": "Get board",
+          "command": "oar boards get --board-id board_product_launch --json"
+        }
+      ],
+      "path_params": [
+        "board_id"
+      ],
+      "adjacent_commands": [
+        "boards.cards.add",
+        "boards.cards.list",
+        "boards.cards.move",
+        "boards.cards.remove",
+        "boards.cards.update",
+        "boards.create",
+        "boards.list",
+        "boards.update",
+        "boards.workspace"
+      ],
+      "go_method": "BoardsGet",
+      "ts_method": "boardsGet"
+    },
+    {
+      "command_id": "boards.list",
+      "cli_path": "boards list",
+      "group": "boards",
+      "method": "GET",
+      "path": "/boards",
+      "operation_id": "listBoards",
+      "summary": "List boards with derived summary data",
+      "why": "Discover durable coordination boards with enough summary data for list pages and CLI triage without per-board fan-out.",
+      "input_mode": "none",
+      "streaming": {
+        "mode": "none"
+      },
+      "output_envelope": "Returns `{ boards }`, where each item includes canonical board metadata plus a derived summary.",
+      "error_codes": [
+        "invalid_request"
+      ],
+      "concepts": [
+        "boards",
+        "planning",
+        "summaries"
+      ],
+      "stability": "beta",
+      "agent_notes": "Safe and idempotent. Use repeatable `label` and `owner` filters to narrow the list server-side.",
+      "examples": [
+        {
+          "title": "List boards",
+          "command": "oar boards list --json"
+        },
+        {
+          "title": "List active boards for an owner",
+          "command": "oar boards list --status active --owner actor_ceo --json"
+        }
+      ],
+      "adjacent_commands": [
+        "boards.cards.add",
+        "boards.cards.list",
+        "boards.cards.move",
+        "boards.cards.remove",
+        "boards.cards.update",
+        "boards.create",
+        "boards.get",
+        "boards.update",
+        "boards.workspace"
+      ],
+      "go_method": "BoardsList",
+      "ts_method": "boardsList"
+    },
+    {
+      "command_id": "boards.update",
+      "cli_path": "boards update",
+      "group": "boards",
+      "method": "PATCH",
+      "path": "/boards/{board_id}",
+      "operation_id": "updateBoard",
+      "summary": "Update board metadata",
+      "why": "Patch mutable board metadata with optimistic concurrency while preserving server-owned identity and timestamps.",
+      "input_mode": "json-body",
+      "streaming": {
+        "mode": "none"
+      },
+      "output_envelope": "Returns `{ board }` after the metadata patch is applied.",
+      "error_codes": [
+        "invalid_json",
+        "invalid_request",
+        "unknown_actor_id",
+        "conflict",
+        "not_found"
+      ],
+      "concepts": [
+        "boards",
+        "planning",
+        "concurrency"
+      ],
+      "stability": "beta",
+      "agent_notes": "Set `if_updated_at` from `boards.get` or `boards.workspace` to avoid lost updates.",
+      "examples": [
+        {
+          "title": "Update board metadata",
+          "command": "oar boards update --board-id board_product_launch --from-file board-update.json --json"
+        }
+      ],
+      "body_schema": {
+        "required": [
+          {
+            "name": "if_updated_at",
+            "type": "datetime"
+          }
+        ],
+        "optional": [
+          {
+            "name": "actor_id",
+            "type": "string"
+          },
+          {
+            "name": "patch.column_schema",
+            "type": "list\u003cany\u003e"
+          },
+          {
+            "name": "patch.labels",
+            "type": "list\u003cstring\u003e"
+          },
+          {
+            "name": "patch.owners",
+            "type": "list\u003cstring\u003e"
+          },
+          {
+            "name": "patch.pinned_refs",
+            "type": "list\u003cstring\u003e"
+          },
+          {
+            "name": "patch.primary_document_id",
+            "type": "any|string"
+          },
+          {
+            "name": "patch.status",
+            "type": "string",
+            "enum_values": [
+              "active",
+              "closed",
+              "paused"
+            ]
+          },
+          {
+            "name": "patch.title",
+            "type": "string"
+          }
+        ]
+      },
+      "path_params": [
+        "board_id"
+      ],
+      "adjacent_commands": [
+        "boards.cards.add",
+        "boards.cards.list",
+        "boards.cards.move",
+        "boards.cards.remove",
+        "boards.cards.update",
+        "boards.create",
+        "boards.get",
+        "boards.list",
+        "boards.workspace"
+      ],
+      "go_method": "BoardsUpdate",
+      "ts_method": "boardsUpdate"
+    },
+    {
+      "command_id": "boards.workspace",
+      "cli_path": "boards workspace",
+      "group": "boards",
+      "method": "GET",
+      "path": "/boards/{board_id}/workspace",
+      "operation_id": "getBoardWorkspace",
+      "summary": "Get canonical board workspace projection",
+      "why": "Load one board's canonical board, primary thread, ordered cards, and aggregated docs/commitments/inbox sections in a single round-trip.",
+      "input_mode": "none",
+      "streaming": {
+        "mode": "none"
+      },
+      "output_envelope": "Returns `{ board_id, board, primary_thread, primary_document, cards, documents, commitments, inbox, board_summary, section_kinds, generated_at }`.",
+      "error_codes": [
+        "invalid_request",
+        "not_found"
+      ],
+      "concepts": [
+        "boards",
+        "planning",
+        "threads",
+        "docs",
+        "commitments",
+        "inbox"
+      ],
+      "stability": "beta",
+      "agent_notes": "Prefer this as the canonical board read path for CLI and web. Cards are already hydrated with backing thread and derived summary data.",
+      "examples": [
+        {
+          "title": "Board workspace",
+          "command": "oar boards workspace --board-id board_product_launch --json"
+        }
+      ],
+      "path_params": [
+        "board_id"
+      ],
+      "adjacent_commands": [
+        "boards.cards.add",
+        "boards.cards.list",
+        "boards.cards.move",
+        "boards.cards.remove",
+        "boards.cards.update",
+        "boards.create",
+        "boards.get",
+        "boards.list",
+        "boards.update"
+      ],
+      "go_method": "BoardsWorkspace",
+      "ts_method": "boardsWorkspace"
+    },
+    {
       "command_id": "commitments.create",
       "cli_path": "commitments create",
       "group": "commitments",
@@ -1570,6 +2286,12 @@
             "name": "event.type",
             "type": "string",
             "enum_values": [
+              "board_card_added",
+              "board_card_moved",
+              "board_card_removed",
+              "board_card_updated",
+              "board_created",
+              "board_updated",
               "commitment_created",
               "commitment_status_changed",
               "decision_made",
@@ -2920,7 +3642,7 @@
       "streaming": {
         "mode": "none"
       },
-      "output_envelope": "Returns `{ thread_id, thread, context, collaboration, inbox, pending_decisions, related_threads, follow_up, section_kinds }`, with explicit section classifications.",
+      "output_envelope": "Returns `{ thread_id, thread, context, collaboration, board_memberships, inbox, pending_decisions, related_threads, follow_up, section_kinds }`, with explicit section classifications.",
       "error_codes": [
         "invalid_request",
         "not_found"
@@ -2931,10 +3653,11 @@
         "artifacts",
         "commitments",
         "docs",
+        "boards",
         "inbox"
       ],
       "stability": "beta",
-      "agent_notes": "Prefer this as the single-thread coordination read path. `section_kinds` distinguishes canonical versus derived sections.",
+      "agent_notes": "Prefer this as the single-thread coordination read path. `section_kinds` distinguishes canonical versus derived sections, including additive board membership joins.",
       "examples": [
         {
           "title": "Workspace with defaults",

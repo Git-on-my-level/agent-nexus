@@ -1,4 +1,4 @@
-# oar-schema.yaml  —  v0.2.2
+# oar-schema.yaml  —  v0.2.3
 #
 # Shared contract for OAR (Organization Autorunner).
 # OAR is a shared workspace where agents and humans self-organize.
@@ -15,7 +15,7 @@
 #     unspecified fields (including unknown fields) are preserved. List-valued
 #     fields are replaced wholesale when present; absence means no change.
 
-version: "0.2.2"
+version: "0.2.3"
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -48,6 +48,14 @@ enums:
     enum_policy: strict
     values: [decision_needed, exception, commitment_risk]
 
+  board_status:
+    enum_policy: strict
+    values: [active, paused, closed]
+
+  board_column_key:
+    enum_policy: strict
+    values: [backlog, ready, in_progress, blocked, review, done]
+
   # --- Open enums (unknown values stored and round-tripped) ---
 
   event_type:
@@ -71,6 +79,12 @@ enums:
       - document_created
       - document_updated
       - document_tombstoned
+      - board_created
+      - board_updated
+      - board_card_added
+      - board_card_updated
+      - board_card_moved
+      - board_card_removed
 
   artifact_kind:
     enum_policy: open
@@ -109,6 +123,7 @@ ref_format:
     "inbox:<id>":     "References a derived inbox item by ID"
     "document:<id>":  "References a document by ID"
     "document_revision:<id>": "References a document revision by revision ID"
+    "board:<id>":     "References a board by ID"
     "url:<url>":      "References an external URL"
   rules:
     - "All ref strings MUST begin with a typed prefix followed by a colon and the value."
@@ -258,6 +273,59 @@ snapshots:
         requires: "ref to decision event"
 
 # ---------------------------------------------------------------------------
+# Board resources (v1 mutable coordination resources)
+# ---------------------------------------------------------------------------
+boards:
+
+  board_column:
+    description: >
+      Fixed board column object. V1 always uses the canonical ordered keys
+      backlog, ready, in_progress, blocked, review, done. `title` and
+      `wip_limit` are the only customizable fields in v1.
+    fields:
+      key:       { type: string, required: true, ref: enums.board_column_key }
+      title:     { type: string, required: true }
+      wip_limit: { type: integer, required: false, description: "Optional WIP limit; null/absence means no limit." }
+
+  board:
+    description: >
+      Mutable coordination resource. Unlike docs, boards do not use immutable
+      revision chains in v1. `updated_at` is the optimistic concurrency token
+      for both board metadata and card-surface mutations.
+    fields:
+      id:                 { type: string, required: true }
+      title:              { type: string, required: true }
+      status:             { type: string, required: true, ref: enums.board_status }
+      labels:             { type: "list<string>", required: true }
+      owners:             { type: "list<string>", required: true, description: "Actor IDs" }
+      primary_thread_id:  { type: string, required: true }
+      primary_document_id: { type: string, required: false }
+      column_schema:
+        type: "list<object>"
+        required: true
+        description: "Ordered list of board_column objects. Must contain the six canonical keys in canonical order."
+      pinned_refs:        { type: "list<typed_ref>", required: true, description: "Board-level refs, including board:<id> targets when needed." }
+      created_at:         { type: datetime, required: true }
+      created_by:         { type: string, required: true, description: "Actor ID" }
+      updated_at:         { type: datetime, required: true }
+      updated_by:         { type: string, required: true, description: "Actor ID" }
+
+  board_card:
+    description: >
+      Canonical explicit board membership. Membership uniqueness is
+      (board_id, thread_id). The board primary thread is never itself a card.
+    fields:
+      board_id:           { type: string, required: true }
+      thread_id:          { type: string, required: true }
+      column_key:         { type: string, required: true, ref: enums.board_column_key }
+      rank:               { type: string, required: true, description: "Opaque, server-owned ordering token." }
+      pinned_document_id: { type: string, required: false }
+      created_at:         { type: datetime, required: true }
+      created_by:         { type: string, required: true, description: "Actor ID" }
+      updated_at:         { type: datetime, required: true }
+      updated_by:         { type: string, required: true, description: "Actor ID" }
+
+# ---------------------------------------------------------------------------
 # Artifact packet conventions (v0: work orders, receipts, reviews)
 # ---------------------------------------------------------------------------
 packets:
@@ -323,6 +391,7 @@ reference_conventions:
 
   event_refs:
     _rule: "All thread-scoped events MUST set thread_id."
+    _board_rule: "Board lifecycle events MUST use thread_id = the board primary_thread_id."
 
     work_order_created:
       thread_id: required
@@ -385,6 +454,34 @@ reference_conventions:
       thread_id: required
       refs_must_include: ["inbox:<inbox_item_id>"]
 
+    board_created:
+      thread_id: required
+      refs_must_include: ["board:<board_id>"]
+      refs_optional: ["document:<primary_document_id>"]
+
+    board_updated:
+      thread_id: required
+      refs_must_include: ["board:<board_id>"]
+      refs_optional: ["document:<primary_document_id>"]
+
+    board_card_added:
+      thread_id: required
+      refs_must_include: ["board:<board_id>", "thread:<card_thread_id>"]
+      refs_optional: ["document:<pinned_document_id>"]
+
+    board_card_updated:
+      thread_id: required
+      refs_must_include: ["board:<board_id>", "thread:<card_thread_id>"]
+      refs_optional: ["document:<pinned_document_id>"]
+
+    board_card_moved:
+      thread_id: required
+      refs_must_include: ["board:<board_id>", "thread:<card_thread_id>"]
+
+    board_card_removed:
+      thread_id: required
+      refs_must_include: ["board:<board_id>", "thread:<card_thread_id>"]
+
   artifact_refs:
     _rule: "All packet artifacts MUST include thread:<thread_id> in artifact.refs."
     work_order: { refs_must_include: ["thread:<thread_id>"] }
@@ -395,6 +492,44 @@ reference_conventions:
 # Derived views (v0: simple inbox)
 # ---------------------------------------------------------------------------
 derived:
+
+  board_summary:
+    description: >
+      Board-level derived summary used by boards.list and boards.workspace so
+      clients can render useful overviews without fan-out joins.
+    fields:
+      card_count:             { type: integer, required: true }
+      cards_by_column:        { type: object, required: true, description: "Object keyed by canonical board_column_key values with integer counts." }
+      open_commitment_count:  { type: integer, required: true }
+      document_count:         { type: integer, required: true }
+      latest_activity_at:     { type: datetime, required: false }
+      has_primary_document:   { type: boolean, required: true }
+
+  board_card_summary:
+    description: >
+      Per-card derived scan summary for boards.workspace. Derived from existing
+      thread projections and inbox state; not canonical storage.
+    fields:
+      open_commitment_count:  { type: integer, required: true }
+      decision_request_count: { type: integer, required: true }
+      decision_count:         { type: integer, required: true }
+      recommendation_count:   { type: integer, required: true }
+      document_count:         { type: integer, required: true }
+      inbox_count:            { type: integer, required: true }
+      latest_activity_at:     { type: datetime, required: false }
+      stale:                  { type: boolean, required: true }
+
+  thread_board_membership:
+    description: >
+      Lightweight reverse membership join surfaced by threads.workspace. A
+      thread may have zero, one, or many board memberships.
+    fields:
+      board_id:           { type: string, required: true }
+      board_title:        { type: string, required: true }
+      board_status:       { type: string, required: true, ref: enums.board_status }
+      thread_id:          { type: string, required: true }
+      column_key:         { type: string, required: true, ref: enums.board_column_key }
+      pinned_document_id: { type: string, required: false }
 
   inbox_item:
     description: >

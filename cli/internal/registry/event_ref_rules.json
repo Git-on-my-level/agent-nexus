@@ -1,9 +1,49 @@
 {
   "openapi_version": "3.1.0",
-  "contract_version": "0.2.2",
+  "contract_version": "0.2.3",
   "generated_by": "core/cmd/contract-gen",
-  "rule_count": 11,
+  "rule_count": 17,
   "rules": {
+    "board_card_added": {
+      "thread_id": "required",
+      "refs_must_include": [
+        "board:\u003cboard_id\u003e",
+        "thread:\u003ccard_thread_id\u003e"
+      ]
+    },
+    "board_card_moved": {
+      "thread_id": "required",
+      "refs_must_include": [
+        "board:\u003cboard_id\u003e",
+        "thread:\u003ccard_thread_id\u003e"
+      ]
+    },
+    "board_card_removed": {
+      "thread_id": "required",
+      "refs_must_include": [
+        "board:\u003cboard_id\u003e",
+        "thread:\u003ccard_thread_id\u003e"
+      ]
+    },
+    "board_card_updated": {
+      "thread_id": "required",
+      "refs_must_include": [
+        "board:\u003cboard_id\u003e",
+        "thread:\u003ccard_thread_id\u003e"
+      ]
+    },
+    "board_created": {
+      "thread_id": "required",
+      "refs_must_include": [
+        "board:\u003cboard_id\u003e"
+      ]
+    },
+    "board_updated": {
+      "thread_id": "required",
+      "refs_must_include": [
+        "board:\u003cboard_id\u003e"
+      ]
+    },
     "commitment_created": {
       "thread_id": "required",
       "refs_must_include": [
@@ -15,7 +55,7 @@
       "refs_must_include": [
         "snapshot:\u003ccommitment_id\u003e"
       ],
-      "refs_conditional": "If status → done: MUST include artifact:\u003creceipt_artifact_id\u003e OR event:\u003cdecision_event_id\u003e. If status → canceled: MUST include event:\u003cdecision_event_id\u003e.\n",
+      "refs_conditional": "If status → done: MUST include artifact:\u003creceipt_artifact_id\u003e OR event:\u003cdecision_event_id\u003e. If status → canceled: MUST include event:\u003cdecision_event_id\u003e.",
       "conditional_refs": [
         {
           "when": {

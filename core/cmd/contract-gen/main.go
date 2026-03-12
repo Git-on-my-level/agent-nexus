@@ -81,11 +81,12 @@ type openAPISchema struct {
 }
 
 type oarSchemaDocument struct {
-	Enums      map[string]oarEnumDef             `yaml:"enums"`
-	Provenance oarFieldContainer                 `yaml:"provenance"`
-	Primitives map[string]oarMaybeFieldContainer `yaml:"primitives"`
-	Snapshots  map[string]oarMaybeFieldContainer `yaml:"snapshots"`
-	Packets    map[string]oarMaybeFieldContainer `yaml:"packets"`
+	Enums                map[string]oarEnumDef             `yaml:"enums"`
+	Provenance           oarFieldContainer                 `yaml:"provenance"`
+	Primitives           map[string]oarMaybeFieldContainer `yaml:"primitives"`
+	Snapshots            map[string]oarMaybeFieldContainer `yaml:"snapshots"`
+	Packets              map[string]oarMaybeFieldContainer `yaml:"packets"`
+	ReferenceConventions oarReferenceConventions           `yaml:"reference_conventions"`
 }
 
 type oarEnumDef struct {
@@ -106,6 +107,61 @@ type oarFieldDef struct {
 
 type oarMaybeFieldContainer struct {
 	Fields map[string]oarFieldDef `yaml:"fields"`
+}
+
+type oarReferenceConventions struct {
+	EventRefs oarEventRefConventions `yaml:"event_refs"`
+}
+
+type oarEventRefConventions struct {
+	Rules map[string]oarEventRefRule
+}
+
+func (c *oarEventRefConventions) UnmarshalYAML(value *yaml.Node) error {
+	if value == nil || value.Kind != yaml.MappingNode {
+		c.Rules = nil
+		return nil
+	}
+
+	c.Rules = make(map[string]oarEventRefRule)
+	for i := 0; i+1 < len(value.Content); i += 2 {
+		keyNode := value.Content[i]
+		valueNode := value.Content[i+1]
+		key := strings.TrimSpace(keyNode.Value)
+		if key == "" || strings.HasPrefix(key, "_") {
+			continue
+		}
+
+		var rule oarEventRefRule
+		if err := valueNode.Decode(&rule); err != nil {
+			return err
+		}
+		c.Rules[key] = rule
+	}
+	return nil
+}
+
+type oarEventRefRule struct {
+	ThreadID           string                  `yaml:"thread_id" json:"thread_id,omitempty"`
+	RefsMustInclude    []string                `yaml:"refs_must_include" json:"refs_must_include,omitempty"`
+	RefsConditional    string                  `yaml:"refs_conditional" json:"refs_conditional,omitempty"`
+	PayloadMustInclude []string                `yaml:"payload_must_include" json:"payload_must_include,omitempty"`
+	ConditionalRefs    []oarConditionalRefRule `yaml:"conditional_refs" json:"conditional_refs,omitempty"`
+}
+
+type oarConditionalRefRule struct {
+	When      oarWhenCondition      `yaml:"when" json:"when"`
+	MustHave  []oarRefPrefixReq     `yaml:"must_have" json:"must_have,omitempty"`
+	Condition string                `yaml:"condition" json:"condition,omitempty"`
+}
+
+type oarWhenCondition struct {
+	PayloadField string `yaml:"payload_field" json:"payload_field"`
+	Equals       string `yaml:"equals" json:"equals"`
+}
+
+type oarRefPrefixReq struct {
+	Prefix string `yaml:"prefix" json:"prefix"`
 }
 
 func (c *oarMaybeFieldContainer) UnmarshalYAML(value *yaml.Node) error {
@@ -243,7 +299,7 @@ func main() {
 		exitf("no x-oar commands found in openapi document")
 	}
 
-	if err := generateAll(*outDir, doc, commands); err != nil {
+	if err := generateAll(*outDir, doc, commands, schemaDoc); err != nil {
 		exitf("generate artifacts: %v", err)
 	}
 }
@@ -733,6 +789,51 @@ func normalizeOARFieldType(raw string) string {
 	return raw
 }
 
+func normalizeOAREventRefRule(rule oarEventRefRule) oarEventRefRule {
+	out := oarEventRefRule{
+		ThreadID:           strings.TrimSpace(rule.ThreadID),
+		RefsMustInclude:    compactStrings(rule.RefsMustInclude),
+		RefsConditional:    strings.TrimSpace(rule.RefsConditional),
+		PayloadMustInclude: compactStrings(rule.PayloadMustInclude),
+		ConditionalRefs:    make([]oarConditionalRefRule, 0, len(rule.ConditionalRefs)),
+	}
+
+	for _, conditional := range rule.ConditionalRefs {
+		out.ConditionalRefs = append(out.ConditionalRefs, oarConditionalRefRule{
+			When: oarWhenCondition{
+				PayloadField: strings.TrimSpace(conditional.When.PayloadField),
+				Equals:       strings.TrimSpace(conditional.When.Equals),
+			},
+			MustHave:  normalizeOARRefPrefixReqs(conditional.MustHave),
+			Condition: strings.TrimSpace(conditional.Condition),
+		})
+	}
+
+	if len(out.ConditionalRefs) == 0 {
+		out.ConditionalRefs = nil
+	}
+
+	return out
+}
+
+func normalizeOARRefPrefixReqs(values []oarRefPrefixReq) []oarRefPrefixReq {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]oarRefPrefixReq, 0, len(values))
+	for _, value := range values {
+		prefix := strings.TrimSpace(value.Prefix)
+		if prefix == "" {
+			continue
+		}
+		out = append(out, oarRefPrefixReq{Prefix: prefix})
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 func bodySchemaFromAccumulator(acc map[string]bodyFieldState) bodySchema {
 	required := make([]bodyField, 0)
 	optional := make([]bodyField, 0)
@@ -772,7 +873,7 @@ func sortedUniqueStrings(values []string) []string {
 	return out
 }
 
-func generateAll(outDir string, doc openAPIDocument, commands []command) error {
+func generateAll(outDir string, doc openAPIDocument, commands []command, schemaDoc oarSchemaDocument) error {
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return err
 	}
@@ -784,6 +885,9 @@ func generateAll(outDir string, doc openAPIDocument, commands []command) error {
 		return err
 	}
 	if err := writeHelpMeta(filepath.Join(outDir, "meta", "help.json"), doc, commands); err != nil {
+		return err
+	}
+	if err := writeEventRefRulesMeta(filepath.Join(outDir, "meta", "event_ref_rules.json"), doc, schemaDoc); err != nil {
 		return err
 	}
 	if err := writeMarkdown(filepath.Join(outDir, "docs", "commands.md"), doc, commands); err != nil {
@@ -864,6 +968,42 @@ func writeHelpMeta(path string, doc openAPIDocument, commands []command) error {
 		CommandCount:    len(commands),
 		Commands:        commands,
 	}
+	b, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return err
+	}
+	b = append(b, '\n')
+	return os.WriteFile(path, b, 0o644)
+}
+
+func writeEventRefRulesMeta(path string, doc openAPIDocument, schemaDoc oarSchemaDocument) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+
+	rules := make(map[string]oarEventRefRule, len(schemaDoc.ReferenceConventions.EventRefs.Rules))
+	for eventType, rule := range schemaDoc.ReferenceConventions.EventRefs.Rules {
+		eventType = strings.TrimSpace(eventType)
+		if eventType == "" {
+			continue
+		}
+		rules[eventType] = normalizeOAREventRefRule(rule)
+	}
+
+	payload := struct {
+		OpenAPIVersion  string                     `json:"openapi_version"`
+		ContractVersion string                     `json:"contract_version"`
+		GeneratedBy     string                     `json:"generated_by"`
+		RuleCount       int                        `json:"rule_count"`
+		Rules           map[string]oarEventRefRule `json:"rules"`
+	}{
+		OpenAPIVersion:  doc.OpenAPI,
+		ContractVersion: strings.TrimSpace(doc.Info.Version),
+		GeneratedBy:     "core/cmd/contract-gen",
+		RuleCount:       len(rules),
+		Rules:           rules,
+	}
+
 	b, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
 		return err

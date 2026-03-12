@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Organization Autorunner HTTP API
-  version: 0.2.2
+  version: 0.2.3
   description: |
     Canonical HTTP contract for organization-autorunner.
 
@@ -869,11 +869,11 @@ paths:
           command: oar threads workspace --thread-id thread_123 --include-related-event-content --include-artifact-content --json
       x-oar-input-mode: "none"
       x-oar-streaming: { mode: none }
-      x-oar-output-envelope: "Returns `{ thread_id, thread, context, collaboration, inbox, pending_decisions, related_threads, follow_up, section_kinds }`, with explicit section classifications."
+      x-oar-output-envelope: "Returns `{ thread_id, thread, context, collaboration, board_memberships, inbox, pending_decisions, related_threads, follow_up, section_kinds }`, with explicit section classifications."
       x-oar-error-codes: [invalid_request, not_found]
-      x-oar-concepts: [threads, events, artifacts, commitments, docs, inbox]
+      x-oar-concepts: [threads, events, artifacts, commitments, docs, boards, inbox]
       x-oar-stability: "beta"
-      x-oar-agent-notes: "Prefer this as the single-thread coordination read path. `section_kinds` distinguishes canonical versus derived sections."
+      x-oar-agent-notes: "Prefer this as the single-thread coordination read path. `section_kinds` distinguishes canonical versus derived sections, including additive board membership joins."
       parameters:
         - $ref: '#/components/parameters/ThreadID'
         - in: query
@@ -1062,6 +1062,386 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CommitmentResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /boards:
+    get:
+      operationId: listBoards
+      summary: List boards with derived summary data
+      tags: [boards]
+      x-oar-command-id: "boards.list"
+      x-oar-cli-path: "boards list"
+      x-oar-why: "Discover durable coordination boards with enough summary data for list pages and CLI triage without per-board fan-out."
+      x-oar-examples:
+        - title: List boards
+          command: oar boards list --json
+        - title: List active boards for an owner
+          command: oar boards list --status active --owner actor_ceo --json
+      x-oar-input-mode: "none"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ boards }`, where each item includes canonical board metadata plus a derived summary."
+      x-oar-error-codes: [invalid_request]
+      x-oar-concepts: [boards, planning, summaries]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Safe and idempotent. Use repeatable `label` and `owner` filters to narrow the list server-side."
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [active, paused, closed]
+          description: "Return only boards with the given lifecycle status."
+        - in: query
+          name: label
+          schema:
+            type: array
+            items: { type: string }
+          style: form
+          explode: true
+          description: "Return only boards tagged with any of the given labels."
+        - in: query
+          name: owner
+          schema:
+            type: array
+            items: { type: string }
+          style: form
+          explode: true
+          description: "Return only boards owned by any of the given actor ids."
+      responses:
+        '200':
+          description: Board list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardsResponse'
+    post:
+      operationId: createBoard
+      summary: Create board
+      tags: [boards]
+      x-oar-command-id: "boards.create"
+      x-oar-cli-path: "boards create"
+      x-oar-why: "Create a first-class coordination board with a canonical primary thread and optional primary document."
+      x-oar-examples:
+        - title: Create board
+          command: oar boards create --from-file board-create.json --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ board }` with server-owned identity and concurrency metadata."
+      x-oar-error-codes: [invalid_json, invalid_request, unknown_actor_id, conflict]
+      x-oar-concepts: [boards, planning, concurrency]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Replay-safe when `request_key` is reused with the same body. The primary thread is required and is never created as a card implicitly."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBoardRequest'
+      responses:
+        '201':
+          description: Board created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /boards/{board_id}:
+    get:
+      operationId: getBoard
+      summary: Get board metadata
+      tags: [boards]
+      x-oar-command-id: "boards.get"
+      x-oar-cli-path: "boards get"
+      x-oar-why: "Resolve one board's canonical metadata and concurrency token without hydrating the full workspace projection."
+      x-oar-examples:
+        - title: Get board
+          command: oar boards get --board-id board_product_launch --json
+      x-oar-input-mode: "none"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ board }`."
+      x-oar-error-codes: [invalid_request, not_found]
+      x-oar-concepts: [boards, planning]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Safe and idempotent."
+      parameters:
+        - $ref: '#/components/parameters/BoardID'
+      responses:
+        '200':
+          description: Board payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+    patch:
+      operationId: updateBoard
+      summary: Update board metadata
+      tags: [boards]
+      x-oar-command-id: "boards.update"
+      x-oar-cli-path: "boards update"
+      x-oar-why: "Patch mutable board metadata with optimistic concurrency while preserving server-owned identity and timestamps."
+      x-oar-examples:
+        - title: Update board metadata
+          command: oar boards update --board-id board_product_launch --from-file board-update.json --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ board }` after the metadata patch is applied."
+      x-oar-error-codes: [invalid_json, invalid_request, unknown_actor_id, conflict, not_found]
+      x-oar-concepts: [boards, planning, concurrency]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Set `if_updated_at` from `boards.get` or `boards.workspace` to avoid lost updates."
+      parameters:
+        - $ref: '#/components/parameters/BoardID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBoardRequest'
+      responses:
+        '200':
+          description: Board updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /boards/{board_id}/workspace:
+    get:
+      operationId: getBoardWorkspace
+      summary: Get canonical board workspace projection
+      tags: [boards]
+      x-oar-command-id: "boards.workspace"
+      x-oar-cli-path: "boards workspace"
+      x-oar-why: "Load one board's canonical board, primary thread, ordered cards, and aggregated docs/commitments/inbox sections in a single round-trip."
+      x-oar-examples:
+        - title: Board workspace
+          command: oar boards workspace --board-id board_product_launch --json
+      x-oar-input-mode: "none"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ board_id, board, primary_thread, primary_document, cards, documents, commitments, inbox, board_summary, section_kinds, generated_at }`."
+      x-oar-error-codes: [invalid_request, not_found]
+      x-oar-concepts: [boards, planning, threads, docs, commitments, inbox]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Prefer this as the canonical board read path for CLI and web. Cards are already hydrated with backing thread and derived summary data."
+      parameters:
+        - $ref: '#/components/parameters/BoardID'
+      responses:
+        '200':
+          description: Board workspace payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardWorkspaceResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /boards/{board_id}/cards:
+    get:
+      operationId: listBoardCards
+      summary: List ordered board cards
+      tags: [boards]
+      x-oar-command-id: "boards.cards.list"
+      x-oar-cli-path: "boards cards list"
+      x-oar-why: "Read canonical board membership, column placement, and rank ordering without hydrating the full board workspace."
+      x-oar-examples:
+        - title: List board cards
+          command: oar boards cards list --board-id board_product_launch --json
+      x-oar-input-mode: "none"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ board_id, cards }` ordered by canonical column sequence and per-column rank."
+      x-oar-error-codes: [invalid_request, not_found]
+      x-oar-concepts: [boards, planning, ordering]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Safe and idempotent. Use `boards.workspace` when you also need hydrated thread, document, and summary sections."
+      parameters:
+        - $ref: '#/components/parameters/BoardID'
+      responses:
+        '200':
+          description: Board cards list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardCardsResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+    post:
+      operationId: addBoardCard
+      summary: Add existing thread to board as a card
+      tags: [boards]
+      x-oar-command-id: "boards.cards.add"
+      x-oar-cli-path: "boards cards add"
+      x-oar-why: "Create explicit board membership for an existing thread with canonical column placement and server-owned rank."
+      x-oar-examples:
+        - title: Add card to backlog
+          command: oar boards cards add --board-id board_product_launch --from-file board-card-add.json --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ board, card }` after membership creation and board concurrency-token advancement."
+      x-oar-error-codes: [invalid_json, invalid_request, unknown_actor_id, conflict, not_found]
+      x-oar-concepts: [boards, planning, ordering, concurrency]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Replay-safe when `request_key` is reused with the same body. The board primary thread cannot be added as a card."
+      parameters:
+        - $ref: '#/components/parameters/BoardID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddBoardCardRequest'
+      responses:
+        '201':
+          description: Board card added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardCardResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /boards/{board_id}/cards/{thread_id}:
+    patch:
+      operationId: updateBoardCard
+      summary: Update board card metadata
+      tags: [boards]
+      x-oar-command-id: "boards.cards.update"
+      x-oar-cli-path: "boards cards update"
+      x-oar-why: "Patch mutable board-card metadata, which in v1 is limited to the pinned document convenience link."
+      x-oar-examples:
+        - title: Update pinned document
+          command: oar boards cards update --board-id board_product_launch --thread-id thread_123 --from-file board-card-update.json --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ board, card }` after metadata update and board concurrency-token advancement."
+      x-oar-error-codes: [invalid_json, invalid_request, unknown_actor_id, conflict, not_found]
+      x-oar-concepts: [boards, planning, docs, concurrency]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Set `if_board_updated_at` from the current board read before patching card metadata."
+      parameters:
+        - $ref: '#/components/parameters/BoardID'
+        - $ref: '#/components/parameters/ThreadID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBoardCardRequest'
+      responses:
+        '200':
+          description: Board card updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardCardResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /boards/{board_id}/cards/{thread_id}/move:
+    post:
+      operationId: moveBoardCard
+      summary: Move board card across columns or ranks
+      tags: [boards]
+      x-oar-command-id: "boards.cards.move"
+      x-oar-cli-path: "boards cards move"
+      x-oar-why: "Request relative placement for a card while keeping rank tokens opaque and server-owned."
+      x-oar-examples:
+        - title: Move card into review
+          command: oar boards cards move --board-id board_product_launch --thread-id thread_123 --from-file board-card-move.json --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ board, card }` after the move is applied."
+      x-oar-error-codes: [invalid_json, invalid_request, unknown_actor_id, conflict, not_found]
+      x-oar-concepts: [boards, planning, ordering, concurrency]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Provide at most one of `before_thread_id` or `after_thread_id`. If neither is set, the card moves to the end of the target column."
+      parameters:
+        - $ref: '#/components/parameters/BoardID'
+        - $ref: '#/components/parameters/ThreadID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoveBoardCardRequest'
+      responses:
+        '200':
+          description: Board card moved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardCardResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /boards/{board_id}/cards/{thread_id}/remove:
+    post:
+      operationId: removeBoardCard
+      summary: Remove board card membership
+      tags: [boards]
+      x-oar-command-id: "boards.cards.remove"
+      x-oar-cli-path: "boards cards remove"
+      x-oar-why: "Delete canonical board membership for a card without introducing a separate archived-card lifecycle in v1."
+      x-oar-examples:
+        - title: Remove board card
+          command: oar boards cards remove --board-id board_product_launch --thread-id thread_123 --from-file board-card-remove.json --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ board, removed_thread_id }` after membership removal and board concurrency-token advancement."
+      x-oar-error-codes: [invalid_json, invalid_request, unknown_actor_id, conflict, not_found]
+      x-oar-concepts: [boards, planning, concurrency]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Removal deletes canonical membership. Cards are not archived separately in v1."
+      parameters:
+        - $ref: '#/components/parameters/BoardID'
+        - $ref: '#/components/parameters/ThreadID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RemoveBoardCardRequest'
+      responses:
+        '200':
+          description: Board card removed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardCardRemovedResponse'
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '404':
@@ -1903,6 +2283,11 @@ components:
       name: thread_id
       required: true
       schema: { type: string }
+    BoardID:
+      in: path
+      name: board_id
+      required: true
+      schema: { type: string }
     SnapshotID:
       in: path
       name: snapshot_id
@@ -2419,6 +2804,292 @@ components:
         type: string
         enum: [canonical, derived, convenience]
 
+    BoardStatus:
+      type: string
+      enum: [active, paused, closed]
+
+    BoardColumnKey:
+      type: string
+      enum: [backlog, ready, in_progress, blocked, review, done]
+
+    BoardColumn:
+      type: object
+      properties:
+        key:
+          $ref: '#/components/schemas/BoardColumnKey'
+        title:
+          type: string
+        wip_limit:
+          oneOf:
+            - type: integer
+            - type: 'null'
+      required: [key, title, wip_limit]
+
+    Board:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+        status:
+          $ref: '#/components/schemas/BoardStatus'
+        labels:
+          type: array
+          items: { type: string }
+        owners:
+          type: array
+          items: { type: string }
+        primary_thread_id: { type: string }
+        primary_document_id:
+          oneOf:
+            - type: string
+            - type: 'null'
+        column_schema:
+          type: array
+          items:
+            $ref: '#/components/schemas/BoardColumn'
+        pinned_refs:
+          type: array
+          items: { type: string }
+        created_at:
+          type: string
+          format: date-time
+        created_by: { type: string }
+        updated_at:
+          type: string
+          format: date-time
+        updated_by: { type: string }
+      required:
+        [id, title, status, labels, owners, primary_thread_id, primary_document_id, column_schema,
+         pinned_refs, created_at, created_by, updated_at, updated_by]
+
+    BoardCard:
+      type: object
+      properties:
+        board_id: { type: string }
+        thread_id: { type: string }
+        column_key:
+          $ref: '#/components/schemas/BoardColumnKey'
+        rank: { type: string }
+        pinned_document_id:
+          oneOf:
+            - type: string
+            - type: 'null'
+        created_at:
+          type: string
+          format: date-time
+        created_by: { type: string }
+        updated_at:
+          type: string
+          format: date-time
+        updated_by: { type: string }
+      required:
+        [board_id, thread_id, column_key, rank, pinned_document_id, created_at, created_by,
+         updated_at, updated_by]
+
+    BoardCardsByColumn:
+      type: object
+      properties:
+        backlog: { type: integer }
+        ready: { type: integer }
+        in_progress: { type: integer }
+        blocked: { type: integer }
+        review: { type: integer }
+        done: { type: integer }
+      required: [backlog, ready, in_progress, blocked, review, done]
+
+    BoardSummary:
+      type: object
+      properties:
+        card_count: { type: integer }
+        cards_by_column:
+          $ref: '#/components/schemas/BoardCardsByColumn'
+        open_commitment_count: { type: integer }
+        document_count: { type: integer }
+        latest_activity_at:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+        has_primary_document: { type: boolean }
+      required:
+        [card_count, cards_by_column, open_commitment_count, document_count, latest_activity_at,
+         has_primary_document]
+
+    BoardCardSummary:
+      type: object
+      properties:
+        open_commitment_count: { type: integer }
+        decision_request_count: { type: integer }
+        decision_count: { type: integer }
+        recommendation_count: { type: integer }
+        document_count: { type: integer }
+        inbox_count: { type: integer }
+        latest_activity_at:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+        stale: { type: boolean }
+      required:
+        [open_commitment_count, decision_request_count, decision_count, recommendation_count,
+         document_count, inbox_count, latest_activity_at, stale]
+
+    BoardListItem:
+      type: object
+      properties:
+        board:
+          $ref: '#/components/schemas/Board'
+        summary:
+          $ref: '#/components/schemas/BoardSummary'
+      required: [board, summary]
+
+    ThreadBoardMembershipBoard:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+        status:
+          $ref: '#/components/schemas/BoardStatus'
+      required: [id, title, status]
+
+    ThreadBoardMembershipCard:
+      type: object
+      properties:
+        board_id: { type: string }
+        thread_id: { type: string }
+        column_key:
+          $ref: '#/components/schemas/BoardColumnKey'
+        pinned_document_id:
+          oneOf:
+            - type: string
+            - type: 'null'
+      required: [board_id, thread_id, column_key, pinned_document_id]
+
+    ThreadBoardMembership:
+      type: object
+      properties:
+        board:
+          $ref: '#/components/schemas/ThreadBoardMembershipBoard'
+        card:
+          $ref: '#/components/schemas/ThreadBoardMembershipCard'
+      required: [board, card]
+
+    ThreadBoardMembershipSection:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ThreadBoardMembership'
+        count:
+          type: integer
+      required: [items, count]
+
+    BoardWorkspaceCard:
+      type: object
+      properties:
+        card:
+          $ref: '#/components/schemas/BoardCard'
+        thread:
+          $ref: '#/components/schemas/Thread'
+        summary:
+          $ref: '#/components/schemas/BoardCardSummary'
+        pinned_document:
+          oneOf:
+            - $ref: '#/components/schemas/Document'
+            - type: 'null'
+      required: [card, thread, summary, pinned_document]
+
+    BoardWorkspaceCardsSection:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/BoardWorkspaceCard'
+        count:
+          type: integer
+      required: [items, count]
+
+    BoardWorkspaceDocumentsSection:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Document'
+        count:
+          type: integer
+      required: [items, count]
+
+    BoardWorkspaceCommitmentsSection:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Commitment'
+        count:
+          type: integer
+      required: [items, count]
+
+    BoardWorkspaceInboxSection:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/InboxItem'
+        count:
+          type: integer
+        generated_at:
+          type: string
+          format: date-time
+      required: [items, count, generated_at]
+
+    BoardWorkspaceWarningsSection:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        count:
+          type: integer
+      required: [items, count]
+
+    BoardWorkspaceSectionKinds:
+      type: object
+      properties:
+        board:
+          type: string
+          enum: [canonical, derived, convenience]
+        primary_thread:
+          type: string
+          enum: [canonical, derived, convenience]
+        primary_document:
+          type: string
+          enum: [canonical, derived, convenience]
+        cards:
+          type: string
+          enum: [canonical, derived, convenience]
+        documents:
+          type: string
+          enum: [canonical, derived, convenience]
+        commitments:
+          type: string
+          enum: [canonical, derived, convenience]
+        inbox:
+          type: string
+          enum: [canonical, derived, convenience]
+        board_summary:
+          type: string
+          enum: [canonical, derived, convenience]
+      required:
+        [board, primary_thread, primary_document, cards, documents, commitments, inbox,
+         board_summary]
+
     ThreadWorkspaceResponse:
       type: object
       properties:
@@ -2469,6 +3140,8 @@ components:
               items:
                 $ref: '#/components/schemas/Commitment'
           required: [recommendations, decision_requests, decisions, key_artifacts, open_commitments]
+        board_memberships:
+          $ref: '#/components/schemas/ThreadBoardMembershipSection'
         inbox:
           $ref: '#/components/schemas/ThreadWorkspaceInboxSection'
         pending_decisions:
@@ -2517,9 +3190,201 @@ components:
         related_event_content_count:
           type: integer
       required:
-        [thread_id, thread, context, collaboration, inbox, pending_decisions, related_threads,
-         related_recommendations, related_decision_requests, related_decisions, total_review_items,
-         follow_up, section_kinds, context_source, inbox_source, generated_at]
+        [thread_id, thread, context, collaboration, board_memberships, inbox, pending_decisions,
+         related_threads, related_recommendations, related_decision_requests, related_decisions,
+         total_review_items, follow_up, section_kinds, context_source, inbox_source, generated_at]
+
+    CreateBoardRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+        request_key: { type: string }
+        board:
+          type: object
+          properties:
+            id: { type: string }
+            title: { type: string }
+            status:
+              $ref: '#/components/schemas/BoardStatus'
+            labels:
+              type: array
+              items: { type: string }
+            owners:
+              type: array
+              items: { type: string }
+            primary_thread_id: { type: string }
+            primary_document_id: { type: string }
+            column_schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/BoardColumn'
+            pinned_refs:
+              type: array
+              items: { type: string }
+          required: [title, primary_thread_id]
+      required: [board]
+
+    UpdateBoardRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+        if_updated_at:
+          type: string
+          format: date-time
+        patch:
+          type: object
+          properties:
+            title: { type: string }
+            status:
+              $ref: '#/components/schemas/BoardStatus'
+            labels:
+              type: array
+              items: { type: string }
+            owners:
+              type: array
+              items: { type: string }
+            primary_document_id:
+              oneOf:
+                - type: string
+                - type: 'null'
+            column_schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/BoardColumn'
+            pinned_refs:
+              type: array
+              items: { type: string }
+      required: [if_updated_at, patch]
+
+    BoardResponse:
+      type: object
+      properties:
+        board:
+          $ref: '#/components/schemas/Board'
+      required: [board]
+
+    BoardsResponse:
+      type: object
+      properties:
+        boards:
+          type: array
+          items:
+            $ref: '#/components/schemas/BoardListItem'
+      required: [boards]
+
+    BoardCardsResponse:
+      type: object
+      properties:
+        board_id: { type: string }
+        cards:
+          type: array
+          items:
+            $ref: '#/components/schemas/BoardCard'
+      required: [board_id, cards]
+
+    AddBoardCardRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+        request_key: { type: string }
+        if_board_updated_at:
+          type: string
+          format: date-time
+        thread_id: { type: string }
+        column_key:
+          $ref: '#/components/schemas/BoardColumnKey'
+        before_thread_id: { type: string }
+        after_thread_id: { type: string }
+        pinned_document_id: { type: string }
+      required: [thread_id]
+
+    UpdateBoardCardRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+        if_board_updated_at:
+          type: string
+          format: date-time
+        patch:
+          type: object
+          properties:
+            pinned_document_id:
+              oneOf:
+                - type: string
+                - type: 'null'
+      required: [if_board_updated_at, patch]
+
+    MoveBoardCardRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+        if_board_updated_at:
+          type: string
+          format: date-time
+        column_key:
+          $ref: '#/components/schemas/BoardColumnKey'
+        before_thread_id: { type: string }
+        after_thread_id: { type: string }
+      required: [if_board_updated_at, column_key]
+
+    RemoveBoardCardRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+        if_board_updated_at:
+          type: string
+          format: date-time
+      required: [if_board_updated_at]
+
+    BoardCardResponse:
+      type: object
+      properties:
+        board:
+          $ref: '#/components/schemas/Board'
+        card:
+          $ref: '#/components/schemas/BoardCard'
+      required: [board, card]
+
+    BoardCardRemovedResponse:
+      type: object
+      properties:
+        board:
+          $ref: '#/components/schemas/Board'
+        removed_thread_id: { type: string }
+      required: [board, removed_thread_id]
+
+    BoardWorkspaceResponse:
+      type: object
+      properties:
+        board_id: { type: string }
+        board:
+          $ref: '#/components/schemas/Board'
+        primary_thread:
+          $ref: '#/components/schemas/Thread'
+        primary_document:
+          oneOf:
+            - $ref: '#/components/schemas/Document'
+            - type: 'null'
+        cards:
+          $ref: '#/components/schemas/BoardWorkspaceCardsSection'
+        documents:
+          $ref: '#/components/schemas/BoardWorkspaceDocumentsSection'
+        commitments:
+          $ref: '#/components/schemas/BoardWorkspaceCommitmentsSection'
+        inbox:
+          $ref: '#/components/schemas/BoardWorkspaceInboxSection'
+        board_summary:
+          $ref: '#/components/schemas/BoardSummary'
+        warnings:
+          $ref: '#/components/schemas/BoardWorkspaceWarningsSection'
+        section_kinds:
+          $ref: '#/components/schemas/BoardWorkspaceSectionKinds'
+        generated_at:
+          type: string
+          format: date-time
+      required:
+        [board_id, board, primary_thread, primary_document, cards, documents, commitments, inbox,
+         board_summary, warnings, section_kinds, generated_at]
 
     SnapshotResponse:
       type: object

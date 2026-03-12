@@ -14,7 +14,7 @@ func TestReadVersionSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadVersion returned error: %v", err)
 	}
-	if version != "0.2.2" {
+	if version != "0.2.3" {
 		t.Fatalf("unexpected version: got %q", version)
 	}
 }

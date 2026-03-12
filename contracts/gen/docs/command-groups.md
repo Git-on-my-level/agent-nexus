@@ -3,8 +3,8 @@
 Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
-- Contract version: `0.2.2`
-- Groups: `13`
+- Contract version: `0.2.3`
+- Groups: `14`
 
 ## `actors`
 
@@ -42,6 +42,21 @@ Generated from `contracts/oar-openapi.yaml`.
   - `auth.passkey.register.options` (`auth passkey register options`)
   - `auth.passkey.register.verify` (`auth passkey register verify`)
   - `auth.token` (`auth token`)
+
+## `boards`
+
+- Commands: `10`
+- Command IDs:
+  - `boards.cards.add` (`boards cards add`)
+  - `boards.cards.list` (`boards cards list`)
+  - `boards.cards.move` (`boards cards move`)
+  - `boards.cards.remove` (`boards cards remove`)
+  - `boards.cards.update` (`boards cards update`)
+  - `boards.create` (`boards create`)
+  - `boards.get` (`boards get`)
+  - `boards.list` (`boards list`)
+  - `boards.update` (`boards update`)
+  - `boards.workspace` (`boards workspace`)
 
 ## `commitments`
 

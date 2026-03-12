@@ -60,6 +60,16 @@ export declare class OarClient {
     authPasskeyRegisterOptions(options?: RequestOptions): Promise<InvokeResult>;
     authPasskeyRegisterVerify(options?: RequestOptions): Promise<InvokeResult>;
     authToken(options?: RequestOptions): Promise<InvokeResult>;
+    boardsCardsAdd(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    boardsCardsList(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    boardsCardsMove(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    boardsCardsRemove(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    boardsCardsUpdate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    boardsCreate(options?: RequestOptions): Promise<InvokeResult>;
+    boardsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    boardsList(options?: RequestOptions): Promise<InvokeResult>;
+    boardsUpdate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    boardsWorkspace(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     commitmentsCreate(options?: RequestOptions): Promise<InvokeResult>;
     commitmentsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     commitmentsList(options?: RequestOptions): Promise<InvokeResult>;
