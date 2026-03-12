@@ -51,6 +51,8 @@ func TestWorkspaceInitializationAndRestart(t *testing.T) {
 		"auth_refresh_sessions",
 		"auth_access_tokens",
 		"auth_used_assertions",
+		"boards",
+		"board_cards",
 	}
 	assertTablesExist(t, first.DB(), requiredTables)
 	assertHealthOK(t, first)

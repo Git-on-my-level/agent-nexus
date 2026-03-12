@@ -341,6 +341,43 @@ var migrations = []migration{
 			WHERE thread_id IS NULL OR thread_id = ''`,
 		},
 	},
+	{
+		Version: 13,
+		Statements: []string{
+			`CREATE TABLE IF NOT EXISTS boards (
+				id TEXT PRIMARY KEY,
+				title TEXT NOT NULL,
+				status TEXT NOT NULL,
+				labels_json TEXT NOT NULL DEFAULT '[]',
+				owners_json TEXT NOT NULL DEFAULT '[]',
+				primary_thread_id TEXT NOT NULL,
+				primary_document_id TEXT,
+				column_schema_json TEXT NOT NULL,
+				pinned_refs_json TEXT NOT NULL DEFAULT '[]',
+				created_at TEXT NOT NULL,
+				created_by TEXT NOT NULL,
+				updated_at TEXT NOT NULL,
+				updated_by TEXT NOT NULL
+			);`,
+			`CREATE INDEX IF NOT EXISTS idx_boards_status_updated_at ON boards (status, updated_at DESC, id);`,
+			`CREATE INDEX IF NOT EXISTS idx_boards_primary_thread_id ON boards (primary_thread_id);`,
+			`CREATE TABLE IF NOT EXISTS board_cards (
+				board_id TEXT NOT NULL,
+				thread_id TEXT NOT NULL,
+				column_key TEXT NOT NULL,
+				rank TEXT NOT NULL,
+				pinned_document_id TEXT,
+				created_at TEXT NOT NULL,
+				created_by TEXT NOT NULL,
+				updated_at TEXT NOT NULL,
+				updated_by TEXT NOT NULL,
+				PRIMARY KEY (board_id, thread_id),
+				FOREIGN KEY(board_id) REFERENCES boards(id) ON DELETE CASCADE
+			);`,
+			`CREATE INDEX IF NOT EXISTS idx_board_cards_board_column_rank ON board_cards (board_id, column_key, rank, thread_id);`,
+			`CREATE INDEX IF NOT EXISTS idx_board_cards_thread_id ON board_cards (thread_id, board_id);`,
+		},
+	},
 }
 
 func applyMigrations(ctx context.Context, db *sql.DB) error {
