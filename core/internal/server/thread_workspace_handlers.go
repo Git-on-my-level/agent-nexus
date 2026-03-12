@@ -156,6 +156,10 @@ func buildThreadWorkspacePayload(ctx context.Context, opts handlerOptions, threa
 	decisionRequests := asWorkspaceEventSlice(collaboration["decision_requests"])
 	decisions := asWorkspaceEventSlice(collaboration["decisions"])
 	totalReviewItems := len(recommendations) + len(decisionRequests) + len(decisions) + len(pendingDecisions) + workspaceIntValue(relatedThreadReview["total_review_items"])
+	boardMemberships, err := opts.primitiveStore.ListBoardMembershipsByThread(ctx, threadID)
+	if err != nil {
+		return nil, err
+	}
 
 	contextSection := cloneWorkspaceMap(contextBody)
 	delete(contextSection, "thread")
@@ -176,6 +180,7 @@ func buildThreadWorkspacePayload(ctx context.Context, opts handlerOptions, threa
 			"artifact_count":         workspaceSliceLen(contextBody["key_artifacts"]),
 			"open_commitment_count":  workspaceSliceLen(contextBody["open_commitments"]),
 		},
+		"board_memberships":         boardMembershipSectionResponse(boardMemberships),
 		"inbox":                     inboxSection,
 		"pending_decisions":         map[string]any{"thread_id": strings.TrimSpace(threadID), "items": pendingDecisions, "count": len(pendingDecisions), "generated_at": now.Format(time.RFC3339Nano)},
 		"related_threads":           relatedThreadReview["related_threads"],
@@ -189,6 +194,7 @@ func buildThreadWorkspacePayload(ctx context.Context, opts handlerOptions, threa
 			"thread":                    "canonical",
 			"context":                   "canonical",
 			"collaboration":             "derived",
+			"board_memberships":         "canonical",
 			"inbox":                     "derived",
 			"pending_decisions":         "derived",
 			"workspace_summary":         "derived",

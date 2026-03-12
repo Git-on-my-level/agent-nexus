@@ -48,6 +48,16 @@ type PrimitiveStore interface {
 	ListDocumentHistory(ctx context.Context, documentID string) ([]map[string]any, error)
 	GetDocumentRevision(ctx context.Context, documentID string, revisionID string) (map[string]any, error)
 	GetDocumentRevisionByID(ctx context.Context, revisionID string) (map[string]any, error)
+	ListBoards(ctx context.Context, filter primitives.BoardListFilter) ([]primitives.BoardListItem, error)
+	CreateBoard(ctx context.Context, actorID string, board map[string]any) (map[string]any, error)
+	GetBoard(ctx context.Context, boardID string) (map[string]any, error)
+	UpdateBoard(ctx context.Context, actorID string, boardID string, patch map[string]any, ifUpdatedAt *string) (map[string]any, error)
+	ListBoardCards(ctx context.Context, boardID string) ([]map[string]any, error)
+	AddBoardCard(ctx context.Context, actorID string, boardID string, input primitives.AddBoardCardInput) (primitives.BoardCardMutationResult, error)
+	UpdateBoardCard(ctx context.Context, actorID string, boardID string, threadID string, input primitives.UpdateBoardCardInput) (primitives.BoardCardMutationResult, error)
+	MoveBoardCard(ctx context.Context, actorID string, boardID string, threadID string, input primitives.MoveBoardCardInput) (primitives.BoardCardMutationResult, error)
+	RemoveBoardCard(ctx context.Context, actorID string, boardID string, threadID string, input primitives.RemoveBoardCardInput) (primitives.BoardCardRemovalResult, error)
+	ListBoardMembershipsByThread(ctx context.Context, threadID string) ([]primitives.BoardMembership, error)
 	GetSnapshot(ctx context.Context, id string) (map[string]any, error)
 	CreateThread(ctx context.Context, actorID string, thread map[string]any) (primitives.PatchSnapshotResult, error)
 	GetThread(ctx context.Context, id string) (map[string]any, error)
@@ -593,6 +603,127 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			handleGetDocument(w, r, opts, remainder)
 		case http.MethodPatch:
 			handleUpdateDocument(w, r, opts, remainder)
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET and PATCH are supported")
+		}
+	})
+
+	mux.HandleFunc("/boards", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			handleListBoards(w, r, opts)
+		case http.MethodPost:
+			handleCreateBoard(w, r, opts)
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET and POST are supported")
+		}
+	})
+
+	mux.HandleFunc("/boards/", func(w http.ResponseWriter, r *http.Request) {
+		remainder := strings.TrimPrefix(r.URL.Path, "/boards/")
+		if remainder == "" {
+			writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+			return
+		}
+
+		if strings.HasSuffix(remainder, "/workspace") {
+			if r.Method != http.MethodGet {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+				return
+			}
+			boardID := strings.TrimSuffix(remainder, "/workspace")
+			boardID = strings.TrimSuffix(boardID, "/")
+			if boardID == "" || strings.Contains(boardID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			handleGetBoardWorkspace(w, r, opts, boardID)
+			return
+		}
+
+		if strings.HasSuffix(remainder, "/cards") {
+			boardID := strings.TrimSuffix(remainder, "/cards")
+			boardID = strings.TrimSuffix(boardID, "/")
+			if boardID == "" || strings.Contains(boardID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			switch r.Method {
+			case http.MethodGet:
+				handleListBoardCards(w, r, opts, boardID)
+			case http.MethodPost:
+				handleAddBoardCard(w, r, opts, boardID)
+			default:
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET and POST are supported")
+			}
+			return
+		}
+
+		if strings.Contains(remainder, "/cards/") {
+			prefix, suffix, found := strings.Cut(remainder, "/cards/")
+			if !found {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			boardID := strings.TrimSuffix(strings.TrimSpace(prefix), "/")
+			cardRemainder := strings.TrimSpace(suffix)
+			if boardID == "" || cardRemainder == "" || strings.Contains(boardID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+
+			if strings.HasSuffix(cardRemainder, "/move") {
+				if r.Method != http.MethodPost {
+					writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+					return
+				}
+				threadID := strings.TrimSuffix(cardRemainder, "/move")
+				threadID = strings.TrimSuffix(threadID, "/")
+				if threadID == "" || strings.Contains(threadID, "/") {
+					writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+					return
+				}
+				handleMoveBoardCard(w, r, opts, boardID, threadID)
+				return
+			}
+
+			if strings.HasSuffix(cardRemainder, "/remove") {
+				if r.Method != http.MethodPost {
+					writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+					return
+				}
+				threadID := strings.TrimSuffix(cardRemainder, "/remove")
+				threadID = strings.TrimSuffix(threadID, "/")
+				if threadID == "" || strings.Contains(threadID, "/") {
+					writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+					return
+				}
+				handleRemoveBoardCard(w, r, opts, boardID, threadID)
+				return
+			}
+
+			if strings.Contains(cardRemainder, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			if r.Method != http.MethodPatch {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only PATCH is supported")
+				return
+			}
+			handleUpdateBoardCard(w, r, opts, boardID, cardRemainder)
+			return
+		}
+
+		if strings.Contains(remainder, "/") {
+			writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+			return
+		}
+
+		switch r.Method {
+		case http.MethodGet:
+			handleGetBoard(w, r, opts, remainder)
+		case http.MethodPatch:
+			handleUpdateBoard(w, r, opts, remainder)
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET and PATCH are supported")
 		}
