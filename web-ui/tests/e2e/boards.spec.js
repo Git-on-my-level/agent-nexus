@@ -180,6 +180,7 @@ test("board UI supports create/edit and card mutation flows", async ({
   let board = null;
   let cards = [];
   let mutationCounter = 0;
+  const boardCreatePayloads = [];
   const boardPatchPayloads = [];
   const addCardPayloads = [];
   const movePayloads = [];
@@ -240,6 +241,7 @@ test("board UI supports create/edit and card mutation flows", async ({
     }
 
     const payload = JSON.parse(request.postData() ?? "{}");
+    boardCreatePayloads.push(payload);
     board = {
       id: "board-created",
       title: payload.board.title,
@@ -437,10 +439,15 @@ test("board UI supports create/edit and card mutation flows", async ({
   );
 
   await page.goto("/local/boards");
+  await page.waitForLoadState("networkidle");
 
   await expect(page.getByRole("heading", { name: "Boards" })).toBeVisible();
   await page.getByRole("button", { name: "Create board", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Hide create form" }),
+  ).toBeVisible();
   await page.getByLabel("Board title").fill("Launch Control");
+  await page.getByLabel("Status").selectOption("paused");
   await page.getByLabel("Primary thread ID").fill("thread-primary");
   await page.getByLabel("Primary document ID").fill("doc-runbook");
   await page.getByRole("button", { name: "Create board", exact: true }).click();
@@ -449,22 +456,36 @@ test("board UI supports create/edit and card mutation flows", async ({
   await expect(
     page.getByRole("heading", { name: "Launch Control" }),
   ).toBeVisible();
+  await expect(page.getByText("Paused", { exact: true })).toBeVisible();
+  expect(boardCreatePayloads).toEqual([
+    {
+      actor_id: actorId,
+      board: {
+        title: "Launch Control",
+        status: "paused",
+        primary_thread_id: "thread-primary",
+        primary_document_id: "doc-runbook",
+      },
+    },
+  ]);
 
   await page.getByRole("button", { name: "Edit board" }).click();
   await page.getByLabel("Board title").fill("Launch Control v2");
+  await page.getByLabel("Status").selectOption("closed");
   await page.getByLabel("Primary document ID").fill("doc-playbook");
   await page.getByRole("button", { name: "Save board" }).click();
 
   await expect(
     page.getByRole("heading", { name: "Launch Control v2" }),
   ).toBeVisible();
+  await expect(page.getByText("Closed", { exact: true })).toBeVisible();
   expect(boardPatchPayloads).toEqual([
     {
       actor_id: actorId,
       if_updated_at: "2026-03-05T00:00:00.000Z",
       patch: {
         title: "Launch Control v2",
-        status: "active",
+        status: "closed",
         primary_document_id: "doc-playbook",
         labels: [],
         owners: [actorId],

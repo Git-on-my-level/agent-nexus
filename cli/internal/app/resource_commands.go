@@ -2846,6 +2846,19 @@ func (a *App) parseBoardCardTargetAndBodyInput(ctx context.Context, args []strin
 	return a.parseBoardCardMutationInput(ctx, args, cfg, commandName, options)
 }
 
+func (a *App) normalizeBoardMutationThreadField(ctx context.Context, cfg config.Resolved, body map[string]any, field string) error {
+	rawID := strings.TrimSpace(anyString(body[field]))
+	if rawID == "" {
+		return nil
+	}
+	resolvedID, err := a.resolveMaybeThreadID(ctx, cfg, rawID)
+	if err != nil {
+		return err
+	}
+	body[field] = resolvedID
+	return nil
+}
+
 func (a *App) parseBoardCardMutationInput(ctx context.Context, args []string, cfg config.Resolved, commandName string, options boardCardMutationOptions) (string, string, any, error) {
 	fs := newSilentFlagSet(commandName)
 	var boardIDFlag, threadIDFlag trackedString
@@ -2924,6 +2937,10 @@ func (a *App) parseBoardCardMutationInput(ctx context.Context, args []string, cf
 		if err != nil {
 			return "", "", nil, err
 		}
+		bodyMap, _ := body.(map[string]any)
+		if bodyMap == nil {
+			return "", "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `oar %s` must be an object", commandName))
+		}
 		resolvedBoardID, err := a.resolveMaybeBoardID(ctx, cfg, boardID)
 		if err != nil {
 			return "", "", nil, err
@@ -2932,7 +2949,20 @@ func (a *App) parseBoardCardMutationInput(ctx context.Context, args []string, cf
 		if err != nil {
 			return "", "", nil, err
 		}
-		return resolvedBoardID, resolvedThreadID, body, nil
+		if !options.requireThreadTarget {
+			if err := a.normalizeBoardMutationThreadField(ctx, cfg, bodyMap, "thread_id"); err != nil {
+				return "", "", nil, err
+			}
+		}
+		if options.allowBeforeAfter {
+			if err := a.normalizeBoardMutationThreadField(ctx, cfg, bodyMap, "before_thread_id"); err != nil {
+				return "", "", nil, err
+			}
+			if err := a.normalizeBoardMutationThreadField(ctx, cfg, bodyMap, "after_thread_id"); err != nil {
+				return "", "", nil, err
+			}
+		}
+		return resolvedBoardID, resolvedThreadID, bodyMap, nil
 	}
 
 	body := map[string]any{}
@@ -3010,6 +3040,17 @@ func (a *App) parseBoardCardMutationInput(ctx context.Context, args []string, cf
 	resolvedThreadID, err := a.resolveMaybeThreadID(ctx, cfg, threadID)
 	if err != nil {
 		return "", "", nil, err
+	}
+	if !options.requireThreadTarget && resolvedThreadID != "" {
+		body["thread_id"] = resolvedThreadID
+	}
+	if options.allowBeforeAfter {
+		if err := a.normalizeBoardMutationThreadField(ctx, cfg, body, "before_thread_id"); err != nil {
+			return "", "", nil, err
+		}
+		if err := a.normalizeBoardMutationThreadField(ctx, cfg, body, "after_thread_id"); err != nil {
+			return "", "", nil, err
+		}
 	}
 	return resolvedBoardID, resolvedThreadID, body, nil
 }

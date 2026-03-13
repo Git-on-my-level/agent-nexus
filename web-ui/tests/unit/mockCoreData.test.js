@@ -45,4 +45,43 @@ describe("mockCoreData parity behaviors", () => {
       });
     });
   });
+
+  describe("boards parity behaviors", () => {
+    it("returns nested board memberships in thread workspace", async () => {
+      const mod = await import("../../src/lib/mockCoreData.js");
+      const workspace = mod.getMockThreadWorkspace("thread-summer-menu");
+      const membership = workspace?.board_memberships?.items?.[0];
+
+      expect(membership).toMatchObject({
+        board: {
+          id: "board-product-launch",
+          title: "Q2 Product Launch",
+          status: "active",
+        },
+        card: {
+          board_id: "board-product-launch",
+          thread_id: "thread-summer-menu",
+          column_key: "ready",
+          pinned_document_id: "onboarding-guide-v1",
+        },
+      });
+    });
+
+    it("rejects invalid board status values on create", async () => {
+      const mod = await import("../../src/lib/mockCoreData.js");
+      const result = mod.createMockBoard({
+        actor_id: "actor-test",
+        board: {
+          title: "Invalid",
+          primary_thread_id: "thread-summer-menu",
+          status: "archived",
+        },
+      });
+
+      expect(result).toMatchObject({
+        error: "validation",
+        message: "board.status must be one of: active, paused, closed",
+      });
+    });
+  });
 });

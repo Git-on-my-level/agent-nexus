@@ -666,7 +666,7 @@ func buildBoardWorkspacePayload(ctx context.Context, opts handlerOptions, boardI
 		"inbox":            inboxSection,
 		"board_summary":    boardSummary,
 		"warnings":         map[string]any{"items": warnings, "count": len(warnings)},
-		"section_kinds":    map[string]any{"board": "canonical", "primary_thread": "canonical", "primary_document": "canonical", "cards": "canonical", "documents": "canonical", "commitments": "canonical", "inbox": "derived", "board_summary": "derived"},
+		"section_kinds":    map[string]any{"board": "canonical", "primary_thread": "canonical", "primary_document": "canonical", "cards": "convenience", "documents": "derived", "commitments": "derived", "inbox": "derived", "board_summary": "derived"},
 		"generated_at":     now.Format(time.RFC3339Nano),
 	}, nil
 }

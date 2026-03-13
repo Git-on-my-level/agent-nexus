@@ -1,6 +1,7 @@
 export const BOARD_STATUS_LABELS = {
   active: "Active",
-  archived: "Archived",
+  paused: "Paused",
+  closed: "Closed",
 };
 
 export const CANONICAL_BOARD_COLUMNS = [

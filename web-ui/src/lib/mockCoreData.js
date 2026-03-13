@@ -2078,10 +2078,17 @@ export function getMockThreadWorkspace(
       const board = boards.find((b) => b.id === card.board_id);
       if (!board) return null;
       return {
-        board_id: board.id,
-        board_title: board.title,
-        column_key: card.column_key,
-        rank: card.rank,
+        board: {
+          id: board.id,
+          title: board.title,
+          status: board.status,
+        },
+        card: {
+          board_id: card.board_id,
+          thread_id: card.thread_id,
+          column_key: card.column_key,
+          pinned_document_id: card.pinned_document_id,
+        },
       };
     })
     .filter(Boolean);
@@ -3703,16 +3710,32 @@ export function createMockBoard(payload) {
       message: `Thread not found: ${primaryThreadId}`,
     };
   }
+  const boardStatus = String(payload.board.status ?? "active").trim();
+  if (!["active", "paused", "closed"].includes(boardStatus)) {
+    return {
+      error: "validation",
+      message: "board.status must be one of: active, paused, closed",
+    };
+  }
+  const primaryDocumentId = String(
+    payload.board.primary_document_id ?? "",
+  ).trim();
+  if (primaryDocumentId && !getMockDocument(primaryDocumentId)) {
+    return {
+      error: "not_found",
+      message: `Document not found: ${primaryDocumentId}`,
+    };
+  }
 
   const nowIso = new Date().toISOString();
   const newBoard = {
     id: boardId,
     title: payload.board.title,
-    status: payload.board.status || "active",
+    status: boardStatus,
     labels: payload.board.labels || [],
     owners: payload.board.owners || [payload.actor_id].filter(Boolean),
     primary_thread_id: primaryThreadId,
-    primary_document_id: payload.board.primary_document_id || null,
+    primary_document_id: primaryDocumentId || null,
     column_schema: (payload.board.column_schema || canonicalColumnSchema).map(
       (column) => ({ ...column }),
     ),
@@ -3740,6 +3763,25 @@ export function updateMockBoard(boardId, payload) {
   }
 
   const patch = payload.patch ?? {};
+
+  if (patch.status !== undefined) {
+    const nextStatus = String(patch.status ?? "").trim();
+    if (!["active", "paused", "closed"].includes(nextStatus)) {
+      return {
+        error: "validation",
+        message: "board.status must be one of: active, paused, closed",
+      };
+    }
+  }
+  if (patch.primary_document_id !== undefined && patch.primary_document_id) {
+    const primaryDocumentId = String(patch.primary_document_id).trim();
+    if (primaryDocumentId && !getMockDocument(primaryDocumentId)) {
+      return {
+        error: "not_found",
+        message: `Document not found: ${primaryDocumentId}`,
+      };
+    }
+  }
 
   if (patch.title !== undefined) board.title = patch.title;
   if (patch.status !== undefined) board.status = patch.status;

@@ -111,6 +111,24 @@ test("thread detail loads snapshot/timeline and posts reply message", async ({
               },
             ],
           },
+          board_memberships: {
+            items: [
+              {
+                board: {
+                  id: "board-q2-launch",
+                  title: "Q2 Launch Board",
+                  status: "active",
+                },
+                card: {
+                  board_id: "board-q2-launch",
+                  thread_id: "thread-onboarding",
+                  column_key: "backlog",
+                  pinned_document_id: "doc-onboarding-runbook",
+                },
+              },
+            ],
+            count: 1,
+          },
         }),
       });
     },
@@ -183,6 +201,14 @@ test("thread detail loads snapshot/timeline and posts reply message", async ({
   await expect(
     page.getByText("Thread-linked docs and current head revisions."),
   ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: /Q2 Launch Board/ }),
+  ).toHaveAttribute("href", /\/boards\/board-q2-launch$/);
+  await expect(
+    page.getByRole("link", {
+      name: "Pinned doc: doc-onboarding-runbook",
+    }),
+  ).toHaveAttribute("href", /\/docs\/doc-onboarding-runbook$/);
   const docLink = page.getByRole("link", { name: /Onboarding Runbook/ });
   await expect(docLink).toBeVisible();
   await expect(docLink).toHaveAttribute(

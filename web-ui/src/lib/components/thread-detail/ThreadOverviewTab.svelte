@@ -264,17 +264,44 @@
         <p class="text-[12px] text-[var(--ui-text-muted)]">Boards</p>
         <div class="mt-1 flex flex-wrap gap-2">
           {#each boardMemberships as membership}
-            <a
-              class="inline-flex items-center gap-1.5 rounded bg-[var(--ui-border)] px-2 py-1 text-[12px] text-[var(--ui-text)] transition-colors hover:bg-[var(--ui-border-subtle)]"
-              href={projectPath(projectSlug, `/boards/${membership.board_id}`)}
-            >
-              <span class="font-medium">{membership.board_title}</span>
-              <span
-                class="rounded bg-[var(--ui-bg-soft)] px-1.5 py-0.5 text-[10px] text-[var(--ui-text-muted)]"
+            {@const boardId = membership?.board?.id ?? membership?.board_id}
+            {@const boardTitle =
+              membership?.board?.title ?? membership?.board_title ?? boardId}
+            {@const columnKey =
+              membership?.card?.column_key ?? membership?.column_key}
+            {@const pinnedDocumentId =
+              membership?.card?.pinned_document_id ??
+              membership?.pinned_document_id}
+
+            {#if boardId}
+              <div
+                class="inline-flex items-center gap-2 rounded bg-[var(--ui-border)] px-2 py-1 text-[12px] text-[var(--ui-text)]"
               >
-                {membership.column_key}
-              </span>
-            </a>
+                <a
+                  class="inline-flex items-center gap-1.5 transition-colors hover:text-indigo-200"
+                  href={projectPath(projectSlug, `/boards/${boardId}`)}
+                >
+                  <span class="font-medium">{boardTitle}</span>
+                  {#if columnKey}
+                    <span
+                      class="rounded bg-[var(--ui-bg-soft)] px-1.5 py-0.5 text-[10px] text-[var(--ui-text-muted)]"
+                    >
+                      {columnKey}
+                    </span>
+                  {/if}
+                </a>
+
+                {#if pinnedDocumentId}
+                  <span class="text-[var(--ui-text-subtle)]">•</span>
+                  <a
+                    class="text-indigo-300 transition-colors hover:text-indigo-200"
+                    href={projectPath(projectSlug, `/docs/${pinnedDocumentId}`)}
+                  >
+                    Pinned doc: {pinnedDocumentId}
+                  </a>
+                {/if}
+              </div>
+            {/if}
           {/each}
         </div>
       </div>

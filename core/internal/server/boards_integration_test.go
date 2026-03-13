@@ -194,7 +194,12 @@ func TestBoardsWorkspaceAndThreadWorkspaceMemberships(t *testing.T) {
 	if workspacePayload.Warnings.Count != 0 {
 		t.Fatalf("expected warnings.count=0, got %#v", workspacePayload.Warnings)
 	}
-	if workspacePayload.SectionKinds["board"] != "canonical" || workspacePayload.SectionKinds["inbox"] != "derived" || workspacePayload.SectionKinds["board_summary"] != "derived" {
+	if workspacePayload.SectionKinds["board"] != "canonical" ||
+		workspacePayload.SectionKinds["cards"] != "convenience" ||
+		workspacePayload.SectionKinds["documents"] != "derived" ||
+		workspacePayload.SectionKinds["commitments"] != "derived" ||
+		workspacePayload.SectionKinds["inbox"] != "derived" ||
+		workspacePayload.SectionKinds["board_summary"] != "derived" {
 		t.Fatalf("unexpected board workspace section kinds: %#v", workspacePayload.SectionKinds)
 	}
 

@@ -2137,6 +2137,77 @@ func TestBoardCardsMoveRejectsBeforeAndAfterFlags(t *testing.T) {
 	}
 }
 
+func TestBoardCardMutationsResolveShortThreadIDsInBodies(t *testing.T) {
+	t.Parallel()
+
+	const canonicalBoardID = "board_1234567890abcdef"
+	const shortBoardID = "board_123456"
+	const canonicalCardThreadID = "thread_1234567890abcdef"
+	const shortCardThreadID = "thread_12345"
+	const canonicalAnchorThreadID = "thread_anchor_1234567890"
+	const shortAnchorThreadID = "thread_ancho"
+	const updatedAt = "2026-03-08T00:00:00Z"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/boards":
+			_, _ = w.Write([]byte(`{"boards":[{"board":{"id":"` + canonicalBoardID + `","title":"Ops Board","status":"active"},"summary":{"card_count":0,"cards_by_column":{"backlog":0,"ready":0,"in_progress":0,"blocked":0,"review":0,"done":0},"open_commitment_count":0,"document_count":0,"latest_activity_at":null,"has_primary_document":false}}]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/threads":
+			_, _ = w.Write([]byte(`{"threads":[{"id":"` + canonicalCardThreadID + `","title":"Execution Track"},{"id":"` + canonicalAnchorThreadID + `","title":"Review Anchor"}]}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/boards/"+canonicalBoardID+"/cards":
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode add body: %v", err)
+			}
+			if got := anyStringValue(payload["thread_id"]); got != canonicalCardThreadID {
+				t.Fatalf("expected canonical add thread_id %q, got %#v", canonicalCardThreadID, payload)
+			}
+			if got := anyStringValue(payload["after_thread_id"]); got != canonicalAnchorThreadID {
+				t.Fatalf("expected canonical add after_thread_id %q, got %#v", canonicalAnchorThreadID, payload)
+			}
+			_, _ = w.Write([]byte(`{"board":{"id":"` + canonicalBoardID + `","updated_at":"` + updatedAt + `"},"card":{"board_id":"` + canonicalBoardID + `","thread_id":"` + canonicalCardThreadID + `","column_key":"ready","rank":"a","created_at":"` + updatedAt + `","created_by":"actor_1","updated_at":"` + updatedAt + `","updated_by":"actor_1"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/boards/"+canonicalBoardID+"/cards/"+canonicalCardThreadID+"/move":
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode move body: %v", err)
+			}
+			if got := anyStringValue(payload["after_thread_id"]); got != canonicalAnchorThreadID {
+				t.Fatalf("expected canonical move after_thread_id %q, got %#v", canonicalAnchorThreadID, payload)
+			}
+			_, _ = w.Write([]byte(`{"board":{"id":"` + canonicalBoardID + `","updated_at":"` + updatedAt + `"},"card":{"board_id":"` + canonicalBoardID + `","thread_id":"` + canonicalCardThreadID + `","column_key":"review","rank":"b","created_at":"` + updatedAt + `","created_by":"actor_1","updated_at":"` + updatedAt + `","updated_by":"actor_1"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	addFile := filepath.Join(home, "board-add.json")
+	if err := os.WriteFile(addFile, []byte(`{"thread_id":"`+shortCardThreadID+`","column_key":"ready","after_thread_id":"`+shortAnchorThreadID+`"}`), 0o600); err != nil {
+		t.Fatalf("write add file: %v", err)
+	}
+
+	assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"boards", "cards", "add",
+		"--board-id", shortBoardID,
+		"--from-file", addFile,
+	}))
+
+	assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"boards", "cards", "move",
+		"--board-id", shortBoardID,
+		"--thread-id", shortCardThreadID,
+		"--if-board-updated-at", updatedAt,
+		"--column", "review",
+		"--after", shortAnchorThreadID,
+	}))
+}
+
 func TestArtifactsListIncludesTombstonedQueryFlag(t *testing.T) {
 	t.Parallel()
 
