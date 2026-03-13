@@ -1,4 +1,4 @@
-# oar-ui v0.2.2 Spec Compliance
+# oar-ui v0.2.3 Spec Compliance
 
 Last updated: 2026-03-13
 

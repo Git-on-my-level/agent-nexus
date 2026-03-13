@@ -16,7 +16,7 @@ The schema of objects is defined by `/contracts/oar-schema.yaml`.
 ### Version
 
 - `GET /version`
-  - Response: `{ "schema_version": "0.2.2" }`
+  - Response: `{ "schema_version": "0.2.3" }`
 
 ### Actors
 
