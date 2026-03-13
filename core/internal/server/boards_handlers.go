@@ -407,11 +407,11 @@ func handleUpdateBoardCard(w http.ResponseWriter, r *http.Request, opts handlerO
 	if !ok {
 		return
 	}
-	if req.Patch == nil || len(req.Patch) == 0 {
+	if req.Patch == nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", "patch is required")
 		return
 	}
-	pinnedDocumentID, ok := boardCardPatchPinnedDocumentID(w, req.Patch)
+	pinnedDocumentID, hasPinnedDocumentID, ok := boardCardPatchPinnedDocumentID(w, req.Patch)
 	if !ok {
 		return
 	}
@@ -428,6 +428,23 @@ func handleUpdateBoardCard(w http.ResponseWriter, r *http.Request, opts handlerO
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load board card")
+		return
+	}
+	if !hasPinnedDocumentID {
+		currentBoard, err := opts.primitiveStore.GetBoard(r.Context(), boardID)
+		if err != nil {
+			if errors.Is(err, primitives.ErrNotFound) {
+				writeError(w, http.StatusNotFound, "not_found", "board or card not found")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "internal_error", "failed to load board")
+			return
+		}
+		if strings.TrimSpace(anyString(currentBoard["updated_at"])) != ifBoardUpdatedAt {
+			writeError(w, http.StatusConflict, "conflict", "board has been updated; refresh and retry")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"board": currentBoard, "card": beforeCard})
 		return
 	}
 
@@ -1152,26 +1169,25 @@ func validateBoardPlacementRequest(columnKey, beforeThreadID, afterThreadID stri
 	return nil
 }
 
-func boardCardPatchPinnedDocumentID(w http.ResponseWriter, patch map[string]any) (*string, bool) {
+func boardCardPatchPinnedDocumentID(w http.ResponseWriter, patch map[string]any) (*string, bool, bool) {
 	rawValue, exists := patch["pinned_document_id"]
 	if !exists {
-		writeError(w, http.StatusBadRequest, "invalid_request", "patch.pinned_document_id is required")
-		return nil, false
+		return nil, false, true
 	}
 	if rawValue == nil {
 		empty := ""
-		return &empty, true
+		return &empty, true, true
 	}
 	documentID := strings.TrimSpace(anyString(rawValue))
 	if documentID == "" {
 		empty := ""
-		return &empty, true
+		return &empty, true, true
 	}
 	if err := validateDocumentID(documentID); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
-		return nil, false
+		return nil, false, false
 	}
-	return &documentID, true
+	return &documentID, true, true
 }
 
 func normalizeRequiredTimestamp(w http.ResponseWriter, value *string, fieldName string) (string, bool) {

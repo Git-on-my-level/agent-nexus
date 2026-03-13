@@ -472,6 +472,93 @@ func TestBoardLifecycleEventsAndConflictValidation(t *testing.T) {
 	}
 }
 
+func TestBoardCardPatchAllowsContractValidNoOpShapes(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	primaryThreadID := createBoardThreadViaHTTP(t, h, "Patch primary thread")
+	memberThreadID := createBoardThreadViaHTTP(t, h, "Patch member thread")
+
+	createBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
+		"actor_id":"actor-1",
+		"board":{
+			"title":"Patch Board",
+			"primary_thread_id":"`+primaryThreadID+`"
+		}
+	}`, http.StatusCreated)
+	defer createBoardResp.Body.Close()
+
+	var createBoardPayload struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(createBoardResp.Body).Decode(&createBoardPayload); err != nil {
+		t.Fatalf("decode create board response: %v", err)
+	}
+	boardID := asString(createBoardPayload.Board["id"])
+	boardUpdatedAt := asString(createBoardPayload.Board["updated_at"])
+
+	addCardResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+boardUpdatedAt+`",
+		"thread_id":"`+memberThreadID+`",
+		"column_key":"ready"
+	}`, http.StatusCreated)
+	defer addCardResp.Body.Close()
+
+	var addCardPayload struct {
+		Board map[string]any `json:"board"`
+		Card  map[string]any `json:"card"`
+	}
+	if err := json.NewDecoder(addCardResp.Body).Decode(&addCardPayload); err != nil {
+		t.Fatalf("decode add card response: %v", err)
+	}
+	cardUpdatedAt := asString(addCardPayload.Board["updated_at"])
+
+	noopPatchResp := patchJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards/"+memberThreadID, `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+cardUpdatedAt+`",
+		"patch":{}
+	}`, http.StatusOK)
+	defer noopPatchResp.Body.Close()
+
+	var noopPatchPayload struct {
+		Board map[string]any `json:"board"`
+		Card  map[string]any `json:"card"`
+	}
+	if err := json.NewDecoder(noopPatchResp.Body).Decode(&noopPatchPayload); err != nil {
+		t.Fatalf("decode noop patch response: %v", err)
+	}
+	if asString(noopPatchPayload.Board["updated_at"]) != cardUpdatedAt {
+		t.Fatalf("expected noop patch to keep board updated_at, got %#v want %#v", noopPatchPayload.Board["updated_at"], cardUpdatedAt)
+	}
+	if got := noopPatchPayload.Card["pinned_document_id"]; got != nil {
+		t.Fatalf("expected noop patch to keep pinned document nil, got %#v", got)
+	}
+
+	futurePatchResp := patchJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards/"+memberThreadID, `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+cardUpdatedAt+`",
+		"patch":{"future_field":"ignored"}
+	}`, http.StatusOK)
+	defer futurePatchResp.Body.Close()
+
+	var futurePatchPayload struct {
+		Board map[string]any `json:"board"`
+		Card  map[string]any `json:"card"`
+	}
+	if err := json.NewDecoder(futurePatchResp.Body).Decode(&futurePatchPayload); err != nil {
+		t.Fatalf("decode future patch response: %v", err)
+	}
+	if asString(futurePatchPayload.Board["updated_at"]) != cardUpdatedAt {
+		t.Fatalf("expected unknown-field patch to keep board updated_at, got %#v want %#v", futurePatchPayload.Board["updated_at"], cardUpdatedAt)
+	}
+	if got := futurePatchPayload.Card["pinned_document_id"]; got != nil {
+		t.Fatalf("expected unknown-field patch to keep pinned document nil, got %#v", got)
+	}
+}
+
 func TestBoardCardAddRequestKeyFallbackOnlyReplaysEquivalentState(t *testing.T) {
 	t.Parallel()
 
