@@ -1,25 +1,36 @@
 <script>
   import { page } from "$app/stores";
   import { goto } from "$app/navigation";
+  import GuidedTypedRefsInput from "$lib/components/GuidedTypedRefsInput.svelte";
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
   import { projectPath } from "$lib/projectPaths";
   import { lookupActorDisplayName, actorRegistry } from "$lib/actorSession";
-
-  const BOARD_STATUS_LABELS = { active: "Active", archived: "Archived" };
-
-  const CANONICAL_COLUMNS = [
-    "backlog",
-    "ready",
-    "in_progress",
-    "blocked",
-    "review",
-    "done",
-  ];
+  import {
+    BOARD_STATUS_LABELS,
+    CANONICAL_BOARD_COLUMNS,
+    boardSummaryCounts,
+    parseDelimitedValues,
+  } from "$lib/boardUtils";
 
   let boards = $state([]);
   let loading = $state(false);
   let error = $state("");
+  let creating = $state(false);
+  let createError = $state("");
+  let supportError = $state("");
+  let showCreateForm = $state(false);
+  let availableThreads = $state([]);
+  let availableDocuments = $state([]);
+
+  let createTitle = $state("");
+  let createStatus = $state("active");
+  let createPrimaryThreadId = $state("");
+  let createPrimaryDocumentId = $state("");
+  let createLabels = $state("");
+  let createOwners = $state("");
+  let createPinnedRefs = $state("");
+
   let projectSlug = $derived($page.params.project);
   let actorName = $derived((id) => lookupActorDisplayName(id, $actorRegistry));
 
@@ -31,11 +42,20 @@
     goto(projectHref(`/boards/${boardId}`));
   }
 
-  $effect(() => {
-    if (projectSlug) {
-      void loadBoards();
-    }
-  });
+  function resetCreateForm() {
+    createTitle = "";
+    createStatus = "active";
+    createPrimaryThreadId = "";
+    createPrimaryDocumentId = "";
+    createLabels = "";
+    createOwners = "";
+    createPinnedRefs = "";
+  }
+
+  function threadHint(threadId) {
+    const thread = availableThreads.find((item) => item.id === threadId);
+    return thread?.title ?? "";
+  }
 
   async function loadBoards() {
     loading = true;
@@ -51,47 +71,255 @@
     }
   }
 
+  async function loadCreateSupport() {
+    supportError = "";
+    try {
+      const [threadData, documentData] = await Promise.all([
+        coreClient.listThreads({}),
+        coreClient.listDocuments({}),
+      ]);
+      availableThreads = threadData.threads ?? [];
+      availableDocuments = documentData.documents ?? [];
+    } catch (e) {
+      supportError =
+        `Failed to load board form options: ${e instanceof Error ? e.message : String(e)}`;
+      availableThreads = [];
+      availableDocuments = [];
+    }
+  }
+
+  async function submitCreateBoard() {
+    createError = "";
+
+    const title = createTitle.trim();
+    const primaryThreadId = createPrimaryThreadId.trim();
+
+    if (!title || !primaryThreadId) {
+      createError = "Title and primary thread are required.";
+      return;
+    }
+
+    const board = {
+      title,
+      status: createStatus,
+      primary_thread_id: primaryThreadId,
+    };
+    const labels = parseDelimitedValues(createLabels);
+    const owners = parseDelimitedValues(createOwners);
+    const pinnedRefs = parseDelimitedValues(createPinnedRefs);
+
+    if (labels.length > 0) board.labels = labels;
+    if (owners.length > 0) board.owners = owners;
+    if (createPrimaryDocumentId.trim()) {
+      board.primary_document_id = createPrimaryDocumentId.trim();
+    }
+    if (pinnedRefs.length > 0) board.pinned_refs = pinnedRefs;
+
+    creating = true;
+    try {
+      const created = await coreClient.createBoard({ board });
+      await loadBoards();
+      resetCreateForm();
+      showCreateForm = false;
+      await goto(projectHref(`/boards/${created.board.id}`));
+    } catch (e) {
+      createError =
+        `Failed to create board: ${e instanceof Error ? e.message : String(e)}`;
+    } finally {
+      creating = false;
+    }
+  }
+
   function statusColor(status) {
     if (status === "active") return "text-emerald-400 bg-emerald-500/10";
-    if (status === "archived")
+    if (status === "archived") {
       return "text-[var(--ui-text-muted)] bg-[var(--ui-border)]";
+    }
     return "text-[var(--ui-text-muted)] bg-[var(--ui-border)]";
   }
 
-  function getColumnCounts(board) {
-    const counts = {};
-    for (const col of CANONICAL_COLUMNS) {
-      counts[col] = 0;
+  $effect(() => {
+    if (projectSlug) {
+      void loadBoards();
+      void loadCreateSupport();
     }
-    if (board.board_summary?.column_counts) {
-      for (const [col, count] of Object.entries(
-        board.board_summary.column_counts,
-      )) {
-        counts[col] = count;
-      }
-    }
-    return counts;
-  }
-
-  function columnLabel(key) {
-    const labels = {
-      backlog: "Backlog",
-      ready: "Ready",
-      in_progress: "In Progress",
-      blocked: "Blocked",
-      review: "Review",
-      done: "Done",
-    };
-    return labels[key] ?? key;
-  }
+  });
 </script>
 
-<div class="mb-4">
-  <h1 class="text-lg font-semibold text-[var(--ui-text)]">Boards</h1>
-  <p class="mt-1 text-[12px] text-[var(--ui-text-muted)]">
-    Kanban boards for this project
-  </p>
+<datalist id="board-create-thread-options">
+  {#each availableThreads as thread}
+    <option value={thread.id}>{thread.title}</option>
+  {/each}
+</datalist>
+
+<datalist id="board-create-document-options">
+  {#each availableDocuments as document}
+    <option value={document.id}>{document.title}</option>
+  {/each}
+</datalist>
+
+<div class="mb-4 flex items-start justify-between gap-4">
+  <div>
+    <h1 class="text-lg font-semibold text-[var(--ui-text)]">Boards</h1>
+    <p class="mt-1 text-[12px] text-[var(--ui-text-muted)]">
+      Kanban boards for this project
+    </p>
+  </div>
+
+  <button
+    class="rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500"
+    onclick={() => {
+      createError = "";
+      showCreateForm = !showCreateForm;
+    }}
+    type="button"
+  >
+    {showCreateForm ? "Hide create form" : "Create board"}
+  </button>
 </div>
+
+{#if error}
+  <div class="mb-4 rounded-md bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
+    {error}
+  </div>
+{/if}
+
+{#if showCreateForm}
+  <section class="mb-5 rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]">
+    <div class="border-b border-[var(--ui-border)] px-4 py-2.5">
+      <h2 class="text-[13px] font-medium text-[var(--ui-text)]">
+        Create board
+      </h2>
+    </div>
+
+    <div class="space-y-3 px-4 py-3">
+      {#if createError}
+        <div
+          class="rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
+        >
+          {createError}
+        </div>
+      {/if}
+
+      {#if supportError}
+        <div
+          class="rounded-md bg-amber-500/10 px-3 py-2 text-[12px] text-amber-400"
+        >
+          {supportError}
+        </div>
+      {/if}
+
+      <div class="grid gap-3 md:grid-cols-2">
+        <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
+          Board title
+          <input
+            bind:value={createTitle}
+            class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-2 text-[13px] text-[var(--ui-text)]"
+            placeholder="Q3 launch board"
+            type="text"
+          />
+        </label>
+
+        <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
+          Status
+          <select
+            bind:value={createStatus}
+            class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-2 text-[13px] text-[var(--ui-text)]"
+          >
+            {#each Object.entries(BOARD_STATUS_LABELS) as [value, label]}
+              <option {value}>{label}</option>
+            {/each}
+          </select>
+        </label>
+
+        <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
+          Primary thread ID
+          <input
+            bind:value={createPrimaryThreadId}
+            class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-2 text-[13px] text-[var(--ui-text)]"
+            list="board-create-thread-options"
+            placeholder="thread-q2-initiative"
+            type="text"
+          />
+          {#if threadHint(createPrimaryThreadId)}
+            <span class="mt-1 block text-[11px] text-[var(--ui-text-subtle)]">
+              {threadHint(createPrimaryThreadId)}
+            </span>
+          {/if}
+        </label>
+
+        <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
+          Primary document ID
+          <input
+            bind:value={createPrimaryDocumentId}
+            class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-2 text-[13px] text-[var(--ui-text)]"
+            list="board-create-document-options"
+            placeholder="product-constitution"
+            type="text"
+          />
+        </label>
+      </div>
+
+      <div class="grid gap-3 md:grid-cols-2">
+        <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
+          Labels
+          <textarea
+            bind:value={createLabels}
+            class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-2 text-[13px] text-[var(--ui-text)]"
+            placeholder="product, launch"
+            rows="3"
+          ></textarea>
+        </label>
+
+        <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
+          Owners
+          <textarea
+            bind:value={createOwners}
+            class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-2 text-[13px] text-[var(--ui-text)]"
+            placeholder="actor-ops-ai"
+            rows="3"
+          ></textarea>
+        </label>
+      </div>
+
+      <div>
+        <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
+          Pinned refs
+        </label>
+        <GuidedTypedRefsInput
+          bind:value={createPinnedRefs}
+          addInputLabel="Add board pinned ref"
+          addInputPlaceholder="thread:thread-q2-initiative"
+          addButtonLabel="Add ref"
+          emptyText="No pinned refs yet."
+          helperText="Pinned refs appear in the board header."
+          textareaAriaLabel="Board pinned refs"
+        />
+      </div>
+
+      <div class="flex flex-wrap gap-2">
+        <button
+          class="rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={creating}
+          onclick={submitCreateBoard}
+          type="button"
+        >
+          {creating ? "Creating..." : "Create board"}
+        </button>
+        <button
+          class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] hover:text-[var(--ui-text)]"
+          onclick={() => {
+            showCreateForm = false;
+            createError = "";
+          }}
+          type="button"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  </section>
+{/if}
 
 {#if loading}
   <div
@@ -114,36 +342,34 @@
     </svg>
     Loading boards...
   </div>
-{:else if error}
-  <div class="mb-4 rounded-md bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
-    {error}
-  </div>
 {:else if boards.length === 0}
   <div class="mt-8 text-center">
     <p class="text-[13px] font-medium text-[var(--ui-text-muted)]">
       No boards yet
     </p>
     <p class="mt-1 text-[13px] text-[var(--ui-text-muted)]">
-      Boards will appear here once created.
+      Create one to start organizing work into canonical columns.
     </p>
   </div>
-{/if}
-
-{#if !loading && boards.length > 0}
+{:else}
   <div
-    class="space-y-px rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] overflow-hidden"
+    class="space-y-px overflow-hidden rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]"
   >
-    {#each boards as board, i}
-      {@const counts = getColumnCounts(board)}
+    {#each boards as item, i}
+      {@const board = item.board}
+      {@const summary = item.summary}
+      {@const counts = boardSummaryCounts(summary)}
       <div
-        class="block cursor-pointer px-4 py-3 transition-colors hover:bg-[var(--ui-border-subtle)] {i >
-        0
-          ? 'border-t border-[var(--ui-border)]'
-          : ''}"
+        class="block cursor-pointer px-4 py-3 transition-colors hover:bg-[var(--ui-border-subtle)] {i > 0 ? 'border-t border-[var(--ui-border)]' : ''}"
         onclick={() => navigateToBoard(board.id)}
+        onkeydown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            navigateToBoard(board.id);
+          }
+        }}
         role="button"
         tabindex="0"
-        onkeydown={(e) => e.key === "Enter" && navigateToBoard(board.id)}
       >
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0 flex-1">
@@ -152,10 +378,12 @@
                 <span
                   class="inline-flex rounded px-1.5 py-0.5 text-[11px] font-semibold {statusColor(
                     board.status,
-                  )}">{BOARD_STATUS_LABELS[board.status] ?? board.status}</span
+                  )}"
                 >
+                  {BOARD_STATUS_LABELS[board.status] ?? board.status}
+                </span>
               {/if}
-              {#if board.primary_document_id}
+              {#if summary?.has_primary_document}
                 <span
                   class="rounded bg-indigo-500/10 px-1.5 py-0.5 text-[10px] text-indigo-300"
                 >
@@ -165,35 +393,34 @@
               {#each (board.labels ?? []).slice(0, 3) as label}
                 <span
                   class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[10px] text-[var(--ui-text-muted)]"
-                  >{label}</span
                 >
+                  {label}
+                </span>
               {/each}
             </div>
-            <p
-              class="mt-1 truncate text-[13px] font-medium text-[var(--ui-text)]"
-            >
+
+            <p class="mt-1 truncate text-[13px] font-medium text-[var(--ui-text)]">
               {board.title || board.id}
             </p>
+
             <div
               class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[var(--ui-text-muted)]"
             >
               {#if board.owners?.length > 0}
                 <span>
-                  Owned by {board.owners.map((o) => actorName(o)).join(", ")}
+                  Owned by {board.owners.map((owner) => actorName(owner)).join(", ")}
                 </span>
               {/if}
-              {#if board.primary_thread_id}
-                <span>
-                  Primary: <a
-                    class="text-indigo-300 transition-colors hover:text-indigo-200"
-                    href={projectHref(
-                      `/threads/${encodeURIComponent(board.primary_thread_id)}`,
-                    )}
-                  >
-                    {board.primary_thread_id}
-                  </a>
-                </span>
-              {/if}
+              <span>
+                Primary: <a
+                  class="text-indigo-300 transition-colors hover:text-indigo-200"
+                  href={projectHref(
+                    `/threads/${encodeURIComponent(board.primary_thread_id)}`,
+                  )}
+                >
+                  {board.primary_thread_id}
+                </a>
+              </span>
               <span>
                 Updated {formatTimestamp(board.updated_at) || "—"} by {actorName(
                   board.updated_by,
@@ -201,17 +428,21 @@
               </span>
             </div>
           </div>
+
           <div class="shrink-0 text-[11px] text-[var(--ui-text-subtle)]">
             <div class="flex gap-1">
-              {#each CANONICAL_COLUMNS as col}
+              {#each CANONICAL_BOARD_COLUMNS as column}
                 <span
                   class="rounded bg-[var(--ui-border)] px-1.5 py-0.5"
-                  title="{columnLabel(col)}: {counts[col]}"
+                  title={`${column.title}: ${counts[column.key]}`}
                 >
-                  {counts[col]}
+                  {counts[column.key]}
                 </span>
               {/each}
             </div>
+            <p class="mt-1 text-right text-[10px] text-[var(--ui-text-subtle)]">
+              {summary?.card_count ?? 0} cards
+            </p>
           </div>
         </div>
       </div>

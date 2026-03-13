@@ -41,5 +41,15 @@ export async function POST({ request, url }) {
   }
 
   const created = createMockBoard(body);
-  return json(created);
+  if (created?.error === "conflict") {
+    return json({ error: created.message }, { status: 409 });
+  }
+  if (created?.error === "not_found") {
+    return json({ error: created.message }, { status: 404 });
+  }
+  if (created?.error === "validation") {
+    return json({ error: created.message }, { status: 400 });
+  }
+
+  return json(created, { status: 201 });
 }

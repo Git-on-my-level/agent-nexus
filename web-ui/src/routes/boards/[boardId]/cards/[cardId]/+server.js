@@ -15,12 +15,22 @@ export async function PATCH({ params, request, url }) {
     return json({ error: "actor_id is required." }, { status: 400 });
   }
 
-  try {
-    const result = updateMockBoardCard(params.boardId, params.cardId, body);
-    return json(result);
-  } catch (error) {
-    return json({ error: error.message }, { status: 404 });
+  if (!body?.if_board_updated_at) {
+    return json({ error: "if_board_updated_at is required." }, { status: 400 });
   }
+
+  const result = updateMockBoardCard(params.boardId, params.cardId, body);
+  if (result?.error === "conflict") {
+    return json(result, { status: 409 });
+  }
+  if (result?.error === "not_found") {
+    return json({ error: result.message }, { status: 404 });
+  }
+  if (result?.error === "validation") {
+    return json({ error: result.message }, { status: 400 });
+  }
+
+  return json(result);
 }
 
 export async function DELETE({ params, request, url }) {
@@ -35,10 +45,17 @@ export async function DELETE({ params, request, url }) {
     return json({ error: "actor_id is required." }, { status: 400 });
   }
 
-  try {
-    const result = removeMockBoardCard(params.boardId, params.cardId);
-    return json(result);
-  } catch (error) {
-    return json({ error: error.message }, { status: 404 });
+  if (!body?.if_board_updated_at) {
+    return json({ error: "if_board_updated_at is required." }, { status: 400 });
   }
+
+  const result = removeMockBoardCard(params.boardId, params.cardId, body);
+  if (result?.error === "conflict") {
+    return json(result, { status: 409 });
+  }
+  if (result?.error === "not_found") {
+    return json({ error: result.message }, { status: 404 });
+  }
+
+  return json(result);
 }

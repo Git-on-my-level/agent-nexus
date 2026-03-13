@@ -29,10 +29,17 @@ export async function PATCH({ params, request, url }) {
     return json({ error: "actor_id is required." }, { status: 400 });
   }
 
-  try {
-    const updated = updateMockBoard(params.boardId, body);
-    return json(updated);
-  } catch (error) {
-    return json({ error: error.message }, { status: 404 });
+  if (!body?.if_updated_at) {
+    return json({ error: "if_updated_at is required." }, { status: 400 });
   }
+
+  const updated = updateMockBoard(params.boardId, body);
+  if (updated?.error === "conflict") {
+    return json(updated, { status: 409 });
+  }
+  if (updated?.error === "not_found") {
+    return json({ error: updated.message }, { status: 404 });
+  }
+
+  return json(updated);
 }

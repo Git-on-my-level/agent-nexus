@@ -1,17 +1,7 @@
 import { json } from "@sveltejs/kit";
 
-import { listMockBoardCards, createMockBoardCard } from "$lib/mockCoreData";
+import { moveMockBoardCard } from "$lib/mockCoreData";
 import { guardMockRoute } from "$lib/server/mockGuard";
-
-export function GET({ params, url }) {
-  const guardResponse = guardMockRoute(url.pathname);
-  if (guardResponse) {
-    return guardResponse;
-  }
-
-  const cards = listMockBoardCards(params.boardId);
-  return json({ board_id: params.boardId, cards });
-}
 
 export async function POST({ params, request, url }) {
   const guardResponse = guardMockRoute(url.pathname);
@@ -24,12 +14,14 @@ export async function POST({ params, request, url }) {
   if (!body?.actor_id) {
     return json({ error: "actor_id is required." }, { status: 400 });
   }
-
-  if (!body?.thread_id) {
-    return json({ error: "thread_id is required." }, { status: 400 });
+  if (!body?.if_board_updated_at) {
+    return json({ error: "if_board_updated_at is required." }, { status: 400 });
+  }
+  if (!body?.column_key) {
+    return json({ error: "column_key is required." }, { status: 400 });
   }
 
-  const result = createMockBoardCard(params.boardId, body);
+  const result = moveMockBoardCard(params.boardId, params.cardId, body);
   if (result?.error === "conflict") {
     return json(result, { status: 409 });
   }
@@ -40,5 +32,5 @@ export async function POST({ params, request, url }) {
     return json({ error: result.message }, { status: 400 });
   }
 
-  return json(result, { status: 201 });
+  return json(result);
 }

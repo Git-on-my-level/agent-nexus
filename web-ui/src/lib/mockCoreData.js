@@ -3086,7 +3086,7 @@ const boards = [
     labels: ["product", "launch", "q2"],
     owners: ["actor-ops-ai"],
     primary_thread_id: "thread-q2-initiative",
-    primary_document_id: null,
+    primary_document_id: "product-constitution",
     column_schema: canonicalColumnSchema,
     pinned_refs: ["thread:thread-q2-initiative"],
     created_at: new Date(now - 14 * 24 * 60 * 60 * 1000).toISOString(),
@@ -3101,7 +3101,7 @@ const boards = [
     labels: ["supply-chain", "incident", "critical"],
     owners: ["actor-ops-ai", "actor-supply-rover"],
     primary_thread_id: "thread-lemon-shortage",
-    primary_document_id: null,
+    primary_document_id: "incident-response-playbook",
     column_schema: canonicalColumnSchema,
     pinned_refs: [
       "thread:thread-lemon-shortage",
@@ -3119,7 +3119,7 @@ const boards = [
     labels: ["product", "menu", "q2"],
     owners: ["actor-flavor-ai", "actor-cashier-bot"],
     primary_thread_id: "thread-summer-menu",
-    primary_document_id: "artifact-summer-menu-draft",
+    primary_document_id: "onboarding-guide-v1",
     column_schema: canonicalColumnSchema,
     pinned_refs: ["thread:thread-summer-menu"],
     created_at: new Date(now - 5 * 24 * 60 * 60 * 1000).toISOString(),
@@ -3135,7 +3135,7 @@ const boardCards = [
     thread_id: "thread-summer-menu",
     column_key: "ready",
     rank: "0001",
-    pinned_document_id: "artifact-summer-menu-draft",
+    pinned_document_id: "onboarding-guide-v1",
     created_at: new Date(now - 4 * 24 * 60 * 60 * 1000).toISOString(),
     created_by: "actor-flavor-ai",
     updated_at: new Date(now - 4 * 24 * 60 * 60 * 1000).toISOString(),
@@ -3154,8 +3154,8 @@ const boardCards = [
   },
   {
     board_id: "board-supply-crisis",
-    thread_id: "thread-lemon-shortage",
-    column_key: "in_progress",
+    thread_id: "thread-daily-ops",
+    column_key: "ready",
     rank: "0001",
     pinned_document_id: null,
     created_at: new Date(now - 18 * 60 * 60 * 1000).toISOString(),
@@ -3168,7 +3168,7 @@ const boardCards = [
     thread_id: "thread-squeezebot-maintenance",
     column_key: "blocked",
     rank: "0002",
-    pinned_document_id: "artifact-maintenance-log",
+    pinned_document_id: "incident-response-playbook",
     created_at: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString(),
     created_by: "actor-squeeze-bot",
     updated_at: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString(),
@@ -3176,10 +3176,10 @@ const boardCards = [
   },
   {
     board_id: "board-summer-menu",
-    thread_id: "thread-summer-menu",
+    thread_id: "thread-onboarding",
     column_key: "backlog",
     rank: "0001",
-    pinned_document_id: "artifact-summer-menu-draft",
+    pinned_document_id: "onboarding-guide-v1",
     created_at: new Date(now - 5 * 24 * 60 * 60 * 1000).toISOString(),
     created_by: "actor-flavor-ai",
     updated_at: new Date(now - 5 * 24 * 60 * 60 * 1000).toISOString(),
@@ -3198,255 +3198,546 @@ const boardCards = [
   },
 ];
 
+function cloneBoard(board) {
+  if (!board) return null;
+
+  return {
+    ...board,
+    labels: [...(board.labels ?? [])],
+    owners: [...(board.owners ?? [])],
+    pinned_refs: [...(board.pinned_refs ?? [])],
+    column_schema: (board.column_schema ?? canonicalColumnSchema).map(
+      (column) => ({
+        ...column,
+      }),
+    ),
+  };
+}
+
+function boardColumnOrder(columnKey) {
+  const index = canonicalColumnSchema.findIndex((column) => column.key === columnKey);
+  return index >= 0 ? index : canonicalColumnSchema.length;
+}
+
+function sortBoardCardsForBoard(cards) {
+  return [...cards].sort((left, right) => {
+    const columnDelta =
+      boardColumnOrder(left.column_key) - boardColumnOrder(right.column_key);
+    if (columnDelta !== 0) return columnDelta;
+
+    const rankDelta =
+      Number.parseInt(left.rank ?? "0", 10) -
+      Number.parseInt(right.rank ?? "0", 10);
+    if (Number.isFinite(rankDelta) && rankDelta !== 0) return rankDelta;
+
+    return String(left.thread_id ?? "").localeCompare(String(right.thread_id ?? ""));
+  });
+}
+
+function getBoardColumnCards(boardId) {
+  const columns = canonicalColumnSchema.reduce((acc, column) => {
+    acc[column.key] = [];
+    return acc;
+  }, {});
+
+  for (const card of sortBoardCardsForBoard(
+    boardCards.filter((candidate) => candidate.board_id === boardId),
+  )) {
+    if (!columns[card.column_key]) {
+      columns[card.column_key] = [];
+    }
+    columns[card.column_key].push(card);
+  }
+
+  return columns;
+}
+
+function renormalizeColumnCards(cards) {
+  cards.forEach((card, index) => {
+    card.rank = String(index + 1).padStart(4, "0");
+  });
+}
+
+function resolveInsertIndex(cards, { before_thread_id, after_thread_id } = {}) {
+  if (before_thread_id) {
+    const beforeIndex = cards.findIndex(
+      (card) => card.thread_id === before_thread_id,
+    );
+    if (beforeIndex >= 0) return beforeIndex;
+  }
+
+  if (after_thread_id) {
+    const afterIndex = cards.findIndex((card) => card.thread_id === after_thread_id);
+    if (afterIndex >= 0) return afterIndex + 1;
+  }
+
+  return cards.length;
+}
+
+function buildBoardSummary(board) {
+  const cards = boardCards.filter((card) => card.board_id === board.id);
+  const cardsByColumn = canonicalColumnSchema.reduce((counts, column) => {
+    counts[column.key] = 0;
+    return counts;
+  }, {});
+
+  let latestActivityAt = board.updated_at ?? null;
+  let openCommitmentCount = 0;
+  let documentCount = listMockDocuments({
+    thread_id: board.primary_thread_id,
+  }).length;
+
+  for (const card of cards) {
+    cardsByColumn[card.column_key] = (cardsByColumn[card.column_key] ?? 0) + 1;
+
+    const thread = getMockThread(card.thread_id);
+    if (thread?.updated_at) {
+      if (
+        !latestActivityAt ||
+        Date.parse(thread.updated_at) > Date.parse(latestActivityAt)
+      ) {
+        latestActivityAt = thread.updated_at;
+      }
+    }
+
+    openCommitmentCount += Array.isArray(thread?.open_commitments)
+      ? thread.open_commitments.length
+      : 0;
+    documentCount += listMockDocuments({ thread_id: card.thread_id }).length;
+  }
+
+  return {
+    card_count: cards.length,
+    cards_by_column: cardsByColumn,
+    open_commitment_count: openCommitmentCount,
+    document_count: documentCount,
+    latest_activity_at: latestActivityAt,
+    has_primary_document: Boolean(board.primary_document_id),
+  };
+}
+
+function buildBoardWorkspaceCard(card) {
+  const thread = getMockThread(card.thread_id);
+  if (!thread) return null;
+
+  const pinnedDocument = card.pinned_document_id
+    ? getMockDocument(card.pinned_document_id)?.document ?? null
+    : null;
+  const documents = listMockDocuments({ thread_id: card.thread_id });
+
+  return {
+    card: { ...card },
+    thread: { ...thread },
+    summary: {
+      open_commitment_count: Array.isArray(thread.open_commitments)
+        ? thread.open_commitments.length
+        : 0,
+      decision_request_count: 0,
+      decision_count: 0,
+      recommendation_count: 0,
+      document_count: documents.length,
+      inbox_count: 0,
+      latest_activity_at: thread.updated_at ?? card.updated_at ?? null,
+      stale: ["stale", "very-stale"].includes(String(thread.staleness ?? "")),
+    },
+    pinned_document: pinnedDocument ? { ...pinnedDocument } : null,
+  };
+}
+
+function boardMutationConflict(board, expectedUpdatedAt) {
+  if (
+    expectedUpdatedAt &&
+    String(expectedUpdatedAt) !== String(board.updated_at ?? "")
+  ) {
+    return {
+      error: "conflict",
+      message: "Board has been updated by another actor.",
+      current: cloneBoard(board),
+    };
+  }
+
+  return null;
+}
+
+function touchBoard(board, actorId) {
+  board.updated_at = new Date().toISOString();
+  board.updated_by = actorId || board.updated_by || "unknown";
+}
+
+function cloneBoardCard(card) {
+  return card ? { ...card } : null;
+}
+
 export function listMockBoards(filters = {}) {
   let result = [...boards];
 
   if (filters.status) {
-    result = result.filter((b) => b.status === filters.status);
+    result = result.filter((board) => board.status === filters.status);
   }
   if (filters.label) {
-    const labels = Array.isArray(filters.label)
-      ? filters.label
-      : [filters.label];
-    result = result.filter((b) => labels.some((l) => b.labels.includes(l)));
+    const labels = Array.isArray(filters.label) ? filters.label : [filters.label];
+    result = result.filter((board) =>
+      labels.some((label) => board.labels.includes(label)),
+    );
   }
   if (filters.owner) {
-    const owners = Array.isArray(filters.owner)
-      ? filters.owner
-      : [filters.owner];
-    result = result.filter((b) => owners.some((o) => b.owners.includes(o)));
+    const owners = Array.isArray(filters.owner) ? filters.owner : [filters.owner];
+    result = result.filter((board) =>
+      owners.some((owner) => board.owners.includes(owner)),
+    );
   }
 
   return result.map((board) => ({
-    ...board,
-    board_summary: {
-      total_cards: boardCards.filter((c) => c.board_id === board.id).length,
-      cards_by_column: boardCards
-        .filter((c) => c.board_id === board.id)
-        .reduce((acc, card) => {
-          acc[card.column_key] = (acc[card.column_key] || 0) + 1;
-          return acc;
-        }, {}),
-    },
+    board: cloneBoard(board),
+    summary: buildBoardSummary(board),
   }));
 }
 
 export function getMockBoard(boardId) {
-  const board = boards.find((b) => b.id === boardId);
-  if (!board) return null;
-
-  const cards = boardCards.filter((c) => c.board_id === boardId);
-  return {
-    ...board,
-    board_summary: {
-      total_cards: cards.length,
-      cards_by_column: cards.reduce((acc, card) => {
-        acc[card.column_key] = (acc[card.column_key] || 0) + 1;
-        return acc;
-      }, {}),
-    },
-  };
+  const board = boards.find((candidate) => candidate.id === boardId);
+  return cloneBoard(board);
 }
 
 export function getMockBoardWorkspace(boardId) {
-  const board = getMockBoard(boardId);
+  const board = boards.find((candidate) => candidate.id === boardId);
   if (!board) return null;
 
-  const cards = boardCards.filter((c) => c.board_id === boardId);
-  const primaryThread = threads.find((t) => t.id === board.primary_thread_id);
-
-  const cardsByColumn = {};
-  for (const col of canonicalColumnSchema) {
-    cardsByColumn[col.key] = [];
-  }
-  for (const card of cards) {
-    if (cardsByColumn[card.column_key]) {
-      const thread = threads.find((t) => t.id === card.thread_id);
-      if (thread) {
-        cardsByColumn[card.column_key].push({
-          ...card,
-          thread,
-        });
-      }
-    }
-  }
-
-  const documents = artifacts.filter(
-    (a) => a.thread_id === board.primary_thread_id,
-  );
+  const primaryThread = getMockThread(board.primary_thread_id);
+  const primaryDocument = board.primary_document_id
+    ? getMockDocument(board.primary_document_id)?.document ?? null
+    : null;
+  const cards = listMockBoardCards(boardId)
+    .map((card) => buildBoardWorkspaceCard(card))
+    .filter(Boolean);
+  const documents = listMockDocuments({ thread_id: board.primary_thread_id });
   const workspaceCommitments = commitments.filter(
-    (c) => c.thread_id === board.primary_thread_id,
+    (commitment) => commitment.thread_id === board.primary_thread_id,
   );
-  const inbox = [];
+  const generatedAt = new Date().toISOString();
 
   return {
     board_id: board.id,
-    board,
-    primary_thread: primaryThread,
-    primary_document: null,
-    cards: cardsByColumn,
-    documents: { items: documents },
-    commitments: { items: workspaceCommitments },
-    inbox: { items: inbox },
-    board_summary: board.board_summary,
-    warnings: { items: [] },
-    section_kinds: {
-      cards: "by_column",
-      documents: "list",
-      commitments: "list",
-      inbox: "list",
+    board: cloneBoard(board),
+    primary_thread: primaryThread ? { ...primaryThread } : null,
+    primary_document: primaryDocument ? { ...primaryDocument } : null,
+    cards: {
+      items: cards,
+      count: cards.length,
     },
-    generated_at: new Date().toISOString(),
+    documents: {
+      items: documents,
+      count: documents.length,
+    },
+    commitments: {
+      items: workspaceCommitments,
+      count: workspaceCommitments.length,
+    },
+    inbox: {
+      items: [],
+      count: 0,
+      generated_at: generatedAt,
+    },
+    board_summary: buildBoardSummary(board),
+    warnings: {
+      items: [],
+      count: 0,
+    },
+    section_kinds: {
+      board: "canonical",
+      primary_thread: "derived",
+      primary_document: "derived",
+      cards: "canonical",
+      documents: "derived",
+      commitments: "derived",
+      inbox: "derived",
+      board_summary: "derived",
+    },
+    generated_at: generatedAt,
   };
 }
 
 export function listMockBoardCards(boardId) {
-  return boardCards.filter((c) => c.board_id === boardId);
+  return sortBoardCardsForBoard(
+    boardCards.filter((card) => card.board_id === boardId),
+  ).map((card) => cloneBoardCard(card));
 }
 
 export function createMockBoardCard(boardId, payload) {
-  const board = boards.find((b) => b.id === boardId);
+  const board = boards.find((candidate) => candidate.id === boardId);
   if (!board) {
-    throw new Error(`Board not found: ${boardId}`);
+    return { error: "not_found", message: `Board not found: ${boardId}` };
   }
 
-  const existingCards = boardCards.filter((c) => c.board_id === boardId);
-  const maxRank = existingCards.reduce((max, c) => {
-    const num = parseInt(c.rank, 10);
-    return num > max ? num : max;
-  }, 0);
+  const boardConflict = boardMutationConflict(
+    board,
+    payload.if_board_updated_at,
+  );
+  if (boardConflict) {
+    return boardConflict;
+  }
 
+  const threadId = String(payload.thread_id ?? "").trim();
+  if (!threadId) {
+    return { error: "validation", message: "thread_id is required." };
+  }
+  if (!getMockThread(threadId)) {
+    return { error: "not_found", message: `Thread not found: ${threadId}` };
+  }
+  if (threadId === board.primary_thread_id) {
+    return {
+      error: "validation",
+      message: "The board primary thread cannot be added as a card.",
+    };
+  }
+  if (boardCards.some((card) => card.board_id === boardId && card.thread_id === threadId)) {
+    return {
+      error: "conflict",
+      message: `Thread '${threadId}' is already on board '${boardId}'.`,
+      current: cloneBoard(board),
+    };
+  }
+
+  const columnKey = String(payload.column_key || "backlog");
+  const columns = getBoardColumnCards(boardId);
+  const targetColumn = columns[columnKey] ?? (columns[columnKey] = []);
+  const nowIso = new Date().toISOString();
   const newCard = {
     board_id: boardId,
-    thread_id: payload.thread_id,
-    column_key: payload.column_key || "backlog",
-    rank: String(maxRank + 1).padStart(4, "0"),
+    thread_id: threadId,
+    column_key: columnKey,
+    rank: "0000",
     pinned_document_id: payload.pinned_document_id || null,
-    created_at: new Date().toISOString(),
+    created_at: nowIso,
     created_by: payload.actor_id || "unknown",
-    updated_at: new Date().toISOString(),
+    updated_at: nowIso,
     updated_by: payload.actor_id || "unknown",
   };
 
+  targetColumn.splice(resolveInsertIndex(targetColumn, payload), 0, newCard);
+  renormalizeColumnCards(targetColumn);
   boardCards.push(newCard);
+  touchBoard(board, payload.actor_id);
 
-  board.updated_at = new Date().toISOString();
-  board.updated_by = payload.actor_id || "unknown";
-
-  return { board, card: newCard };
+  return {
+    board: cloneBoard(board),
+    card: cloneBoardCard(newCard),
+  };
 }
 
 export function updateMockBoardCard(boardId, cardId, payload) {
-  const cardIndex = boardCards.findIndex(
-    (c) => c.board_id === boardId && c.thread_id === cardId,
+  const board = boards.find((candidate) => candidate.id === boardId);
+  if (!board) {
+    return { error: "not_found", message: `Board not found: ${boardId}` };
+  }
+
+  const card = boardCards.find(
+    (candidate) =>
+      candidate.board_id === boardId && candidate.thread_id === cardId,
   );
-  if (cardIndex === -1) {
-    throw new Error(`Card not found: ${cardId} on board ${boardId}`);
+  if (!card) {
+    return {
+      error: "not_found",
+      message: `Card not found: ${cardId} on board ${boardId}`,
+    };
   }
 
-  const card = boardCards[cardIndex];
-  const board = boards.find((b) => b.id === boardId);
-
-  if (payload.column_key) card.column_key = payload.column_key;
-  if (payload.pinned_document_id !== undefined) {
-    card.pinned_document_id = payload.pinned_document_id;
+  const boardConflict = boardMutationConflict(
+    board,
+    payload.if_board_updated_at,
+  );
+  if (boardConflict) {
+    return boardConflict;
   }
-  if (payload.after_thread_id || payload.before_thread_id) {
-    const boardCardsOnBoard = boardCards
-      .filter((c) => c.board_id === boardId && c.thread_id !== cardId)
-      .sort((a, b) => parseInt(a.rank, 10) - parseInt(b.rank, 10));
 
-    let newRank = "0001";
-    if (payload.after_thread_id) {
-      const afterCard = boardCardsOnBoard.find(
-        (c) => c.thread_id === payload.after_thread_id,
-      );
-      if (afterCard) {
-        newRank = String(parseInt(afterCard.rank, 10) + 1).padStart(4, "0");
-      }
-    } else if (payload.before_thread_id) {
-      const beforeCard = boardCardsOnBoard.find(
-        (c) => c.thread_id === payload.before_thread_id,
-      );
-      if (beforeCard) {
-        newRank = String(parseInt(beforeCard.rank, 10) - 1).padStart(4, "0");
-      }
-    }
-    card.rank = newRank;
+  const patch = payload.patch ?? {};
+  if (Object.prototype.hasOwnProperty.call(patch, "pinned_document_id")) {
+    card.pinned_document_id = patch.pinned_document_id ?? null;
   }
 
   card.updated_at = new Date().toISOString();
-  if (payload.actor_id) card.updated_by = payload.actor_id;
-
-  if (board) {
-    board.updated_at = new Date().toISOString();
-    if (payload.actor_id) board.updated_by = payload.actor_id;
+  if (payload.actor_id) {
+    card.updated_by = payload.actor_id;
   }
+  touchBoard(board, payload.actor_id);
 
-  return { board, card };
+  return {
+    board: cloneBoard(board),
+    card: cloneBoardCard(card),
+  };
 }
 
-export function removeMockBoardCard(boardId, cardId) {
+export function moveMockBoardCard(boardId, cardId, payload) {
+  const board = boards.find((candidate) => candidate.id === boardId);
+  if (!board) {
+    return { error: "not_found", message: `Board not found: ${boardId}` };
+  }
+
+  const card = boardCards.find(
+    (candidate) =>
+      candidate.board_id === boardId && candidate.thread_id === cardId,
+  );
+  if (!card) {
+    return {
+      error: "not_found",
+      message: `Card not found: ${cardId} on board ${boardId}`,
+    };
+  }
+
+  const boardConflict = boardMutationConflict(
+    board,
+    payload.if_board_updated_at,
+  );
+  if (boardConflict) {
+    return boardConflict;
+  }
+
+  const columnKey = String(payload.column_key || card.column_key).trim();
+  const columns = getBoardColumnCards(boardId);
+  const sourceColumn = columns[card.column_key] ?? [];
+  const targetColumn =
+    columns[columnKey] ?? (columns[columnKey] = []);
+  const sourceIndex = sourceColumn.findIndex(
+    (candidate) => candidate.thread_id === card.thread_id,
+  );
+  if (sourceIndex >= 0) {
+    sourceColumn.splice(sourceIndex, 1);
+  }
+
+  card.column_key = columnKey;
+  const insertIndex = resolveInsertIndex(targetColumn, payload);
+  targetColumn.splice(insertIndex, 0, card);
+
+  renormalizeColumnCards(sourceColumn);
+  if (targetColumn !== sourceColumn) {
+    renormalizeColumnCards(targetColumn);
+  } else {
+    renormalizeColumnCards(sourceColumn);
+  }
+
+  card.updated_at = new Date().toISOString();
+  if (payload.actor_id) {
+    card.updated_by = payload.actor_id;
+  }
+  touchBoard(board, payload.actor_id);
+
+  return {
+    board: cloneBoard(board),
+    card: cloneBoardCard(card),
+  };
+}
+
+export function removeMockBoardCard(boardId, cardId, payload = {}) {
+  const board = boards.find((candidate) => candidate.id === boardId);
+  if (!board) {
+    return { error: "not_found", message: `Board not found: ${boardId}` };
+  }
+
+  const boardConflict = boardMutationConflict(
+    board,
+    payload.if_board_updated_at,
+  );
+  if (boardConflict) {
+    return boardConflict;
+  }
+
   const cardIndex = boardCards.findIndex(
-    (c) => c.board_id === boardId && c.thread_id === cardId,
+    (candidate) =>
+      candidate.board_id === boardId && candidate.thread_id === cardId,
   );
   if (cardIndex === -1) {
-    throw new Error(`Card not found: ${cardId} on board ${boardId}`);
+    return {
+      error: "not_found",
+      message: `Card not found: ${cardId} on board ${boardId}`,
+    };
   }
 
   const removedCard = boardCards.splice(cardIndex, 1)[0];
-  const board = boards.find((b) => b.id === boardId);
+  renormalizeColumnCards(
+    boardCards.filter(
+      (candidate) =>
+        candidate.board_id === boardId &&
+        candidate.column_key === removedCard.column_key,
+    ),
+  );
+  touchBoard(board, payload.actor_id);
 
-  if (board) {
-    board.updated_at = new Date().toISOString();
-  }
-
-  return { board, removed_thread_id: removedCard.thread_id };
+  return {
+    board: cloneBoard(board),
+    removed_thread_id: removedCard.thread_id,
+  };
 }
 
 export function createMockBoard(payload) {
+  const requestedId = String(payload.board.id ?? "").trim();
+  const boardId = requestedId || `board-${Math.random().toString(36).slice(2, 10)}`;
+
+  if (boards.some((board) => board.id === boardId)) {
+    return {
+      error: "conflict",
+      message: `Board with id '${boardId}' already exists.`,
+    };
+  }
+
+  const primaryThreadId = String(payload.board.primary_thread_id ?? "").trim();
+  if (!getMockThread(primaryThreadId)) {
+    return {
+      error: "not_found",
+      message: `Thread not found: ${primaryThreadId}`,
+    };
+  }
+
+  const nowIso = new Date().toISOString();
   const newBoard = {
-    id: `board-${Math.random().toString(36).slice(2, 10)}`,
+    id: boardId,
     title: payload.board.title,
     status: payload.board.status || "active",
     labels: payload.board.labels || [],
-    owners: payload.board.owners || [payload.actor_id],
-    primary_thread_id: payload.board.primary_thread_id,
+    owners: payload.board.owners || [payload.actor_id].filter(Boolean),
+    primary_thread_id: primaryThreadId,
     primary_document_id: payload.board.primary_document_id || null,
-    column_schema: payload.board.column_schema || canonicalColumnSchema,
+    column_schema: (payload.board.column_schema || canonicalColumnSchema).map(
+      (column) => ({ ...column }),
+    ),
     pinned_refs: payload.board.pinned_refs || [],
-    created_at: new Date().toISOString(),
+    created_at: nowIso,
     created_by: payload.actor_id || "unknown",
-    updated_at: new Date().toISOString(),
+    updated_at: nowIso,
     updated_by: payload.actor_id || "unknown",
   };
 
   boards.push(newBoard);
 
-  return { board: newBoard };
+  return { board: cloneBoard(newBoard) };
 }
 
 export function updateMockBoard(boardId, payload) {
-  const board = boards.find((b) => b.id === boardId);
+  const board = boards.find((candidate) => candidate.id === boardId);
   if (!board) {
-    throw new Error(`Board not found: ${boardId}`);
+    return { error: "not_found", message: `Board not found: ${boardId}` };
   }
 
-  if (payload.board) {
-    if (payload.board.title !== undefined) board.title = payload.board.title;
-    if (payload.board.status !== undefined) board.status = payload.board.status;
-    if (payload.board.labels !== undefined) board.labels = payload.board.labels;
-    if (payload.board.owners !== undefined) board.owners = payload.board.owners;
-    if (payload.board.pinned_refs !== undefined) {
-      board.pinned_refs = payload.board.pinned_refs;
-    }
-    if (payload.board.column_schema !== undefined) {
-      board.column_schema = payload.board.column_schema;
-    }
+  const boardConflict = boardMutationConflict(board, payload.if_updated_at);
+  if (boardConflict) {
+    return boardConflict;
   }
 
-  board.updated_at = new Date().toISOString();
-  board.updated_by = payload.actor_id || "unknown";
+  const patch = payload.patch ?? {};
 
-  return { board };
+  if (patch.title !== undefined) board.title = patch.title;
+  if (patch.status !== undefined) board.status = patch.status;
+  if (patch.labels !== undefined) board.labels = patch.labels;
+  if (patch.owners !== undefined) board.owners = patch.owners;
+  if (patch.primary_document_id !== undefined) {
+    board.primary_document_id = patch.primary_document_id ?? null;
+  }
+  if (patch.pinned_refs !== undefined) {
+    board.pinned_refs = patch.pinned_refs;
+  }
+  if (patch.column_schema !== undefined) {
+    board.column_schema = patch.column_schema;
+  }
+
+  touchBoard(board, payload.actor_id);
+
+  return { board: cloneBoard(board) };
 }
