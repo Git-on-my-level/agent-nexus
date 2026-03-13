@@ -81,8 +81,7 @@
       availableThreads = threadData.threads ?? [];
       availableDocuments = documentData.documents ?? [];
     } catch (e) {
-      supportError =
-        `Failed to load board form options: ${e instanceof Error ? e.message : String(e)}`;
+      supportError = `Failed to load board form options: ${e instanceof Error ? e.message : String(e)}`;
       availableThreads = [];
       availableDocuments = [];
     }
@@ -123,8 +122,7 @@
       showCreateForm = false;
       await goto(projectHref(`/boards/${created.board.id}`));
     } catch (e) {
-      createError =
-        `Failed to create board: ${e instanceof Error ? e.message : String(e)}`;
+      createError = `Failed to create board: ${e instanceof Error ? e.message : String(e)}`;
     } finally {
       creating = false;
     }
@@ -185,7 +183,9 @@
 {/if}
 
 {#if showCreateForm}
-  <section class="mb-5 rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]">
+  <section
+    class="mb-5 rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]"
+  >
     <div class="border-b border-[var(--ui-border)] px-4 py-2.5">
       <h2 class="text-[13px] font-medium text-[var(--ui-text)]">
         Create board
@@ -283,9 +283,9 @@
       </div>
 
       <div>
-        <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
+        <p class="text-[12px] font-medium text-[var(--ui-text-muted)]">
           Pinned refs
-        </label>
+        </p>
         <GuidedTypedRefsInput
           bind:value={createPinnedRefs}
           addInputLabel="Add board pinned ref"
@@ -360,7 +360,10 @@
       {@const summary = item.summary}
       {@const counts = boardSummaryCounts(summary)}
       <div
-        class="block cursor-pointer px-4 py-3 transition-colors hover:bg-[var(--ui-border-subtle)] {i > 0 ? 'border-t border-[var(--ui-border)]' : ''}"
+        class="block cursor-pointer px-4 py-3 transition-colors hover:bg-[var(--ui-border-subtle)] {i >
+        0
+          ? 'border-t border-[var(--ui-border)]'
+          : ''}"
         onclick={() => navigateToBoard(board.id)}
         onkeydown={(event) => {
           if (event.key === "Enter" || event.key === " ") {
@@ -399,7 +402,9 @@
               {/each}
             </div>
 
-            <p class="mt-1 truncate text-[13px] font-medium text-[var(--ui-text)]">
+            <p
+              class="mt-1 truncate text-[13px] font-medium text-[var(--ui-text)]"
+            >
               {board.title || board.id}
             </p>
 
@@ -408,7 +413,9 @@
             >
               {#if board.owners?.length > 0}
                 <span>
-                  Owned by {board.owners.map((owner) => actorName(owner)).join(", ")}
+                  Owned by {board.owners
+                    .map((owner) => actorName(owner))
+                    .join(", ")}
                 </span>
               {/if}
               <span>

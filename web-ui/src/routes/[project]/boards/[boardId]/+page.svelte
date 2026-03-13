@@ -8,7 +8,6 @@
   import { lookupActorDisplayName, actorRegistry } from "$lib/actorSession";
   import {
     BOARD_STATUS_LABELS,
-    CANONICAL_BOARD_COLUMNS,
     boardColumnTitle,
     groupBoardWorkspaceCards,
     joinDelimitedValues,
@@ -125,8 +124,7 @@
       availableThreads = threadData.threads ?? [];
       availableDocuments = documentData.documents ?? [];
     } catch (e) {
-      supportError =
-        `Failed to load board controls: ${e instanceof Error ? e.message : String(e)}`;
+      supportError = `Failed to load board controls: ${e instanceof Error ? e.message : String(e)}`;
       availableThreads = [];
       availableDocuments = [];
     }
@@ -440,7 +438,9 @@
     {/if}
   </div>
 
-  <div class="mb-6 rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]">
+  <div
+    class="mb-6 rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]"
+  >
     <div class="border-b border-[var(--ui-border)] px-4 py-3">
       <div class="flex items-start justify-between gap-4">
         <div class="min-w-0">
@@ -510,7 +510,9 @@
             <span class="text-[var(--ui-text-muted)]">Primary thread:</span>
             <a
               class="ml-1 text-indigo-300 transition-colors hover:text-indigo-200"
-              href={projectHref(`/threads/${encodeURIComponent(primaryThread.id)}`)}
+              href={projectHref(
+                `/threads/${encodeURIComponent(primaryThread.id)}`,
+              )}
             >
               {primaryThread.id}
             </a>
@@ -533,7 +535,8 @@
                 `/docs/${encodeURIComponent(workspace.primary_document.id)}`,
               )}
             >
-              {workspace.primary_document.title || workspace.primary_document.id}
+              {workspace.primary_document.title ||
+                workspace.primary_document.id}
             </a>
           </div>
         {/if}
@@ -570,7 +573,9 @@
   </div>
 
   {#if showBoardEditForm}
-    <section class="mb-5 rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]">
+    <section
+      class="mb-5 rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]"
+    >
       <div class="border-b border-[var(--ui-border)] px-4 py-2.5">
         <h2 class="text-[13px] font-medium text-[var(--ui-text)]">
           Edit board metadata
@@ -616,9 +621,13 @@
             {/if}
           </label>
 
-          <div class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-2 text-[12px] text-[var(--ui-text-muted)]">
+          <div
+            class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-2 text-[12px] text-[var(--ui-text-muted)]"
+          >
             Primary thread is fixed in v1.
-            <div class="mt-1 text-[var(--ui-text)]">{board.primary_thread_id}</div>
+            <div class="mt-1 text-[var(--ui-text)]">
+              {board.primary_thread_id}
+            </div>
           </div>
         </div>
 
@@ -643,9 +652,9 @@
         </div>
 
         <div>
-          <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
+          <p class="text-[12px] font-medium text-[var(--ui-text-muted)]">
             Pinned refs
-          </label>
+          </p>
           <GuidedTypedRefsInput
             bind:value={boardPinnedRefs}
             addInputLabel="Add board pinned ref"
@@ -682,7 +691,9 @@
   {/if}
 
   {#if showAddCardForm}
-    <section class="mb-5 rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]">
+    <section
+      class="mb-5 rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]"
+    >
       <div class="border-b border-[var(--ui-border)] px-4 py-2.5">
         <h2 class="text-[13px] font-medium text-[var(--ui-text)]">
           Add existing thread as a card
@@ -715,7 +726,8 @@
             >
               {#each board.column_schema as column}
                 <option value={column.key}>
-                  {column.title || boardColumnTitle(column.key, board.column_schema)}
+                  {column.title ||
+                    boardColumnTitle(column.key, board.column_schema)}
                 </option>
               {/each}
             </select>
@@ -794,7 +806,7 @@
               {@const thread = cardItem.thread}
               {@const threadStatus = getThreadStatus(thread)}
               <div
-                class="{index > 0 ? 'border-t border-[var(--ui-border)]' : ''}"
+                class={index > 0 ? "border-t border-[var(--ui-border)]" : ""}
               >
                 <div class="px-4 py-3">
                   <div class="flex items-start justify-between gap-3">
@@ -814,14 +826,15 @@
                           <p
                             class="mt-0.5 text-[11px] text-[var(--ui-text-muted)]"
                           >
-                            {thread?.status ?? "unknown"} · {thread?.priority ?? "—"}
+                            {thread?.status ?? "unknown"} · {thread?.priority ??
+                              "—"}
                             · Added {formatTimestamp(card.created_at)}
                           </p>
                           <p
                             class="mt-1 text-[11px] text-[var(--ui-text-subtle)]"
                           >
-                            {cardItem.summary?.open_commitment_count ?? 0} open
-                            commitments · {cardItem.summary?.document_count ?? 0}
+                            {cardItem.summary?.open_commitment_count ?? 0} open commitments
+                            · {cardItem.summary?.document_count ?? 0}
                             docs
                           </p>
                         </div>
@@ -844,7 +857,9 @@
                             onclick={() => openCardManager(cardItem)}
                             type="button"
                           >
-                            {expandedCardId === card.thread_id ? "Close actions" : "Manage"}
+                            {expandedCardId === card.thread_id
+                              ? "Close actions"
+                              : "Manage"}
                           </button>
                         </div>
                       </div>
@@ -912,15 +927,18 @@
                         </button>
                         <button
                           class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] hover:text-[var(--ui-text)] disabled:cursor-not-allowed disabled:opacity-60"
-                          disabled={index === 0 || mutatingCardId === card.thread_id}
-                          onclick={() => reorderCard(cardItem, cards, index, "up")}
+                          disabled={index === 0 ||
+                            mutatingCardId === card.thread_id}
+                          onclick={() =>
+                            reorderCard(cardItem, cards, index, "up")}
                           type="button"
                         >
                           Move up
                         </button>
                         <button
                           class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] hover:text-[var(--ui-text)] disabled:cursor-not-allowed disabled:opacity-60"
-                          disabled={index === cards.length - 1 || mutatingCardId === card.thread_id}
+                          disabled={index === cards.length - 1 ||
+                            mutatingCardId === card.thread_id}
                           onclick={() =>
                             reorderCard(cardItem, cards, index, "down")}
                           type="button"

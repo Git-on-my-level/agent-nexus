@@ -85,5 +85,8 @@ export function parseDelimitedValues(rawValue) {
 }
 
 export function joinDelimitedValues(items) {
-  return (items ?? []).map((item) => String(item ?? "").trim()).filter(Boolean).join("\n");
+  return (items ?? [])
+    .map((item) => String(item ?? "").trim())
+    .filter(Boolean)
+    .join("\n");
 }

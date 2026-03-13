@@ -3215,7 +3215,9 @@ function cloneBoard(board) {
 }
 
 function boardColumnOrder(columnKey) {
-  const index = canonicalColumnSchema.findIndex((column) => column.key === columnKey);
+  const index = canonicalColumnSchema.findIndex(
+    (column) => column.key === columnKey,
+  );
   return index >= 0 ? index : canonicalColumnSchema.length;
 }
 
@@ -3230,7 +3232,9 @@ function sortBoardCardsForBoard(cards) {
       Number.parseInt(right.rank ?? "0", 10);
     if (Number.isFinite(rankDelta) && rankDelta !== 0) return rankDelta;
 
-    return String(left.thread_id ?? "").localeCompare(String(right.thread_id ?? ""));
+    return String(left.thread_id ?? "").localeCompare(
+      String(right.thread_id ?? ""),
+    );
   });
 }
 
@@ -3267,7 +3271,9 @@ function resolveInsertIndex(cards, { before_thread_id, after_thread_id } = {}) {
   }
 
   if (after_thread_id) {
-    const afterIndex = cards.findIndex((card) => card.thread_id === after_thread_id);
+    const afterIndex = cards.findIndex(
+      (card) => card.thread_id === after_thread_id,
+    );
     if (afterIndex >= 0) return afterIndex + 1;
   }
 
@@ -3321,7 +3327,7 @@ function buildBoardWorkspaceCard(card) {
   if (!thread) return null;
 
   const pinnedDocument = card.pinned_document_id
-    ? getMockDocument(card.pinned_document_id)?.document ?? null
+    ? (getMockDocument(card.pinned_document_id)?.document ?? null)
     : null;
   const documents = listMockDocuments({ thread_id: card.thread_id });
 
@@ -3375,13 +3381,17 @@ export function listMockBoards(filters = {}) {
     result = result.filter((board) => board.status === filters.status);
   }
   if (filters.label) {
-    const labels = Array.isArray(filters.label) ? filters.label : [filters.label];
+    const labels = Array.isArray(filters.label)
+      ? filters.label
+      : [filters.label];
     result = result.filter((board) =>
       labels.some((label) => board.labels.includes(label)),
     );
   }
   if (filters.owner) {
-    const owners = Array.isArray(filters.owner) ? filters.owner : [filters.owner];
+    const owners = Array.isArray(filters.owner)
+      ? filters.owner
+      : [filters.owner];
     result = result.filter((board) =>
       owners.some((owner) => board.owners.includes(owner)),
     );
@@ -3404,7 +3414,7 @@ export function getMockBoardWorkspace(boardId) {
 
   const primaryThread = getMockThread(board.primary_thread_id);
   const primaryDocument = board.primary_document_id
-    ? getMockDocument(board.primary_document_id)?.document ?? null
+    ? (getMockDocument(board.primary_document_id)?.document ?? null)
     : null;
   const cards = listMockBoardCards(boardId)
     .map((card) => buildBoardWorkspaceCard(card))
@@ -3489,7 +3499,11 @@ export function createMockBoardCard(boardId, payload) {
       message: "The board primary thread cannot be added as a card.",
     };
   }
-  if (boardCards.some((card) => card.board_id === boardId && card.thread_id === threadId)) {
+  if (
+    boardCards.some(
+      (card) => card.board_id === boardId && card.thread_id === threadId,
+    )
+  ) {
     return {
       error: "conflict",
       message: `Thread '${threadId}' is already on board '${boardId}'.`,
@@ -3594,8 +3608,7 @@ export function moveMockBoardCard(boardId, cardId, payload) {
   const columnKey = String(payload.column_key || card.column_key).trim();
   const columns = getBoardColumnCards(boardId);
   const sourceColumn = columns[card.column_key] ?? [];
-  const targetColumn =
-    columns[columnKey] ?? (columns[columnKey] = []);
+  const targetColumn = columns[columnKey] ?? (columns[columnKey] = []);
   const sourceIndex = sourceColumn.findIndex(
     (candidate) => candidate.thread_id === card.thread_id,
   );
@@ -3669,7 +3682,8 @@ export function removeMockBoardCard(boardId, cardId, payload = {}) {
 
 export function createMockBoard(payload) {
   const requestedId = String(payload.board.id ?? "").trim();
-  const boardId = requestedId || `board-${Math.random().toString(36).slice(2, 10)}`;
+  const boardId =
+    requestedId || `board-${Math.random().toString(36).slice(2, 10)}`;
 
   if (boards.some((board) => board.id === boardId)) {
     return {
