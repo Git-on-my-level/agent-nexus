@@ -346,7 +346,7 @@ func handleAddBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOpti
 			existingBoard, loadBoardErr := opts.primitiveStore.GetBoard(r.Context(), boardID)
 			existingCards, loadCardsErr := opts.primitiveStore.ListBoardCards(r.Context(), boardID)
 			if loadBoardErr == nil && loadCardsErr == nil {
-				if existingCard, ok := findBoardCard(existingCards, threadID); ok {
+				if existingCard, ok := findBoardCard(existingCards, threadID); ok && boardCardMatchesAddRequest(existingCard, strings.TrimSpace(req.ColumnKey), normalizeOptionalRequestStringPointer(req.PinnedDocumentID)) {
 					response := map[string]any{"board": existingBoard, "card": existingCard}
 					status, payload, replayErr := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "boards.cards.add", actorID, req.RequestKey, req, http.StatusCreated, response)
 					if writeIdempotencyError(w, replayErr) {
@@ -1057,6 +1057,22 @@ func findBoardCard(cards []map[string]any, threadID string) (map[string]any, boo
 		}
 	}
 	return nil, false
+}
+
+func boardCardMatchesAddRequest(card map[string]any, requestedColumnKey string, requestedPinnedDocumentID *string) bool {
+	columnKey := strings.TrimSpace(requestedColumnKey)
+	if columnKey == "" {
+		columnKey = "backlog"
+	}
+	if strings.TrimSpace(anyString(card["column_key"])) != columnKey {
+		return false
+	}
+
+	requestedPinned := ""
+	if requestedPinnedDocumentID != nil {
+		requestedPinned = strings.TrimSpace(*requestedPinnedDocumentID)
+	}
+	return strings.TrimSpace(anyString(card["pinned_document_id"])) == requestedPinned
 }
 
 func validateBoardCreateRequest(contract *schema.Contract, board map[string]any) error {

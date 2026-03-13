@@ -472,6 +472,74 @@ func TestBoardLifecycleEventsAndConflictValidation(t *testing.T) {
 	}
 }
 
+func TestBoardCardAddRequestKeyFallbackOnlyReplaysEquivalentState(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
+
+	primaryThreadID := createBoardThreadViaHTTP(t, h, "Board primary thread")
+	memberThreadID := createBoardThreadViaHTTP(t, h, "Board member thread")
+	memberDocumentID := createBoardDocumentViaHTTP(t, h, memberThreadID, "Member board doc")
+
+	createBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
+		"actor_id":"actor-1",
+		"board":{
+			"title":"Ops Board",
+			"primary_thread_id":"`+primaryThreadID+`"
+		}
+	}`, http.StatusCreated)
+	defer createBoardResp.Body.Close()
+
+	var createBoardPayload struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(createBoardResp.Body).Decode(&createBoardPayload); err != nil {
+		t.Fatalf("decode create board response: %v", err)
+	}
+	boardID := asString(createBoardPayload.Board["id"])
+	initialBoardUpdatedAt := asString(createBoardPayload.Board["updated_at"])
+
+	firstAddResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+initialBoardUpdatedAt+`",
+		"thread_id":"`+memberThreadID+`",
+		"column_key":"ready",
+		"pinned_document_id":"`+memberDocumentID+`"
+	}`, http.StatusCreated)
+	defer firstAddResp.Body.Close()
+
+	replayableAddResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
+		"actor_id":"actor-1",
+		"request_key":"retry-equivalent-add",
+		"if_board_updated_at":"`+initialBoardUpdatedAt+`",
+		"thread_id":"`+memberThreadID+`",
+		"column_key":"ready",
+		"pinned_document_id":"`+memberDocumentID+`"
+	}`, http.StatusCreated)
+	defer replayableAddResp.Body.Close()
+	var replayableAddPayload struct {
+		Board map[string]any `json:"board"`
+		Card  map[string]any `json:"card"`
+	}
+	if err := json.NewDecoder(replayableAddResp.Body).Decode(&replayableAddPayload); err != nil {
+		t.Fatalf("decode replayable add response: %v", err)
+	}
+	if asString(replayableAddPayload.Card["thread_id"]) != memberThreadID || asString(replayableAddPayload.Card["column_key"]) != "ready" || asString(replayableAddPayload.Card["pinned_document_id"]) != memberDocumentID {
+		t.Fatalf("unexpected replayable add payload: %#v", replayableAddPayload)
+	}
+
+	conflictAddResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
+		"actor_id":"actor-1",
+		"request_key":"retry-mismatched-add",
+		"if_board_updated_at":"`+initialBoardUpdatedAt+`",
+		"thread_id":"`+memberThreadID+`",
+		"column_key":"blocked"
+	}`, http.StatusConflict)
+	defer conflictAddResp.Body.Close()
+	assertErrorCode(t, conflictAddResp, "conflict")
+}
+
 func createBoardThreadViaHTTP(t *testing.T, h primitivesTestHarness, title string) string {
 	t.Helper()
 
