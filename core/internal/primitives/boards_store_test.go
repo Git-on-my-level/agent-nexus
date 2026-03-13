@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -128,6 +129,32 @@ func TestBoardStoreCreateUpdateAndListSummaries(t *testing.T) {
 	}
 	if loaded["updated_by"] != "actor-3" {
 		t.Fatalf("expected updated_by actor-3, got %#v", loaded["updated_by"])
+	}
+}
+
+func TestBoardStoreCreateRejectsBoardIDsWithPathSeparators(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	store := primitives.NewStore(workspace.DB(), workspace.Layout().ArtifactContentDir)
+	primaryThreadID := createBoardTestThread(t, ctx, store, "Primary board thread")
+
+	_, err = store.CreateBoard(ctx, "actor-1", map[string]any{
+		"id":                "board/with-slash",
+		"title":             "Invalid Board ID",
+		"primary_thread_id": primaryThreadID,
+	})
+	if !errors.Is(err, primitives.ErrInvalidBoardRequest) {
+		t.Fatalf("expected ErrInvalidBoardRequest, got %v", err)
+	}
+	if err == nil || !strings.Contains(err.Error(), "board.id contains invalid path characters") {
+		t.Fatalf("expected invalid path character error, got %v", err)
 	}
 }
 

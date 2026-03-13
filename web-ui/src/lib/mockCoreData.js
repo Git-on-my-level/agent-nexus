@@ -3422,6 +3422,59 @@ export function getMockBoard(boardId) {
   return cloneBoard(board);
 }
 
+function collectMockBoardWorkspaceThreadIds(boardId, primaryThreadId) {
+  const seen = new Set();
+  const threadIds = [];
+  const pushThreadId = (threadId) => {
+    const normalized = String(threadId ?? "").trim();
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    threadIds.push(normalized);
+  };
+
+  pushThreadId(primaryThreadId);
+  for (const card of boardCards) {
+    if (card.board_id === boardId) {
+      pushThreadId(card.thread_id);
+    }
+  }
+
+  return threadIds;
+}
+
+function listMockBoardWorkspaceDocuments(threadIds) {
+  const documentsById = new Map();
+  for (const threadId of threadIds) {
+    for (const document of listMockDocuments({ thread_id: threadId })) {
+      documentsById.set(document.id, document);
+    }
+  }
+
+  return [...documentsById.values()].sort((left, right) => {
+    const timeDelta =
+      Date.parse(right.updated_at ?? 0) - Date.parse(left.updated_at ?? 0);
+    if (timeDelta !== 0) return timeDelta;
+    return String(left.id ?? "").localeCompare(String(right.id ?? ""));
+  });
+}
+
+function listMockBoardWorkspaceCommitments(threadIds) {
+  const threadIdSet = new Set(threadIds);
+  return commitments
+    .filter((commitment) => threadIdSet.has(String(commitment.thread_id ?? "")))
+    .map((commitment) => ({ ...commitment }))
+    .sort((left, right) => {
+      const leftDue = String(left.due_at ?? "").trim();
+      const rightDue = String(right.due_at ?? "").trim();
+      if (leftDue !== rightDue) {
+        if (!leftDue) return 1;
+        if (!rightDue) return -1;
+        return leftDue.localeCompare(rightDue);
+      }
+      return String(left.id ?? "").localeCompare(String(right.id ?? ""));
+    });
+}
+
 export function getMockBoardWorkspace(boardId) {
   const board = boards.find((candidate) => candidate.id === boardId);
   if (!board) return null;
@@ -3433,10 +3486,12 @@ export function getMockBoardWorkspace(boardId) {
   const cards = listMockBoardCards(boardId)
     .map((card) => buildBoardWorkspaceCard(card))
     .filter(Boolean);
-  const documents = listMockDocuments({ thread_id: board.primary_thread_id });
-  const workspaceCommitments = commitments.filter(
-    (commitment) => commitment.thread_id === board.primary_thread_id,
+  const threadIds = collectMockBoardWorkspaceThreadIds(
+    boardId,
+    board.primary_thread_id,
   );
+  const documents = listMockBoardWorkspaceDocuments(threadIds);
+  const workspaceCommitments = listMockBoardWorkspaceCommitments(threadIds);
   const generatedAt = new Date().toISOString();
 
   return {
@@ -3533,6 +3588,13 @@ export function createMockBoardCard(boardId, payload) {
         "column_key must be one of: backlog, ready, in_progress, blocked, review, done.",
     };
   }
+  const pinnedDocumentId = String(payload.pinned_document_id ?? "").trim();
+  if (pinnedDocumentId && !getMockDocument(pinnedDocumentId)) {
+    return {
+      error: "not_found",
+      message: `Document not found: ${pinnedDocumentId}`,
+    };
+  }
   const columns = getBoardColumnCards(boardId);
   const targetColumn = columns[columnKey] ?? (columns[columnKey] = []);
   const nowIso = new Date().toISOString();
@@ -3541,7 +3603,7 @@ export function createMockBoardCard(boardId, payload) {
     thread_id: threadId,
     column_key: columnKey,
     rank: "0000",
-    pinned_document_id: payload.pinned_document_id || null,
+    pinned_document_id: pinnedDocumentId || null,
     created_at: nowIso,
     created_by: payload.actor_id || "unknown",
     updated_at: nowIso,

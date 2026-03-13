@@ -100,5 +100,37 @@ describe("mockCoreData parity behaviors", () => {
           "column_key must be one of: backlog, ready, in_progress, blocked, review, done.",
       });
     });
+
+    it("rejects missing pinned documents on card creation", async () => {
+      const mod = await import("../../src/lib/mockCoreData.js");
+      const result = mod.createMockBoardCard("board-product-launch", {
+        actor_id: "actor-test",
+        if_board_updated_at: mod.getMockBoard("board-product-launch")
+          ?.updated_at,
+        thread_id: "thread-pricing-glitch",
+        pinned_document_id: "doc-does-not-exist",
+      });
+
+      expect(result).toMatchObject({
+        error: "not_found",
+        message: "Document not found: doc-does-not-exist",
+      });
+    });
+
+    it("aggregates workspace documents and commitments across all board threads", async () => {
+      const mod = await import("../../src/lib/mockCoreData.js");
+      const workspace = mod.getMockBoardWorkspace("board-summer-menu");
+
+      expect(workspace?.documents?.items?.map((doc) => doc.id)).toEqual([
+        "incident-response-playbook",
+      ]);
+      expect(
+        workspace?.commitments?.items?.map((commitment) => commitment.id),
+      ).toEqual([
+        "commitment-pricing-patch",
+        "commitment-pricing-audit",
+        "commitment-menu-board",
+      ]);
+    });
   });
 });

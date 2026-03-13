@@ -130,6 +130,9 @@ func (s *Store) CreateBoard(ctx context.Context, actorID string, board map[strin
 	if boardID == "" {
 		boardID = uuid.NewString()
 	}
+	if err := validateBoardID(boardID); err != nil {
+		return nil, invalidBoardRequestError(err)
+	}
 	title := strings.TrimSpace(anyStringValue(board["title"]))
 	if title == "" {
 		return nil, invalidBoardRequest("board.title is required")
@@ -1600,6 +1603,17 @@ func validateBoardColumnKey(columnKey string) error {
 		}
 	}
 	return fmt.Errorf("column_key must be one of: %s", strings.Join(canonicalBoardColumnOrder, ", "))
+}
+
+func validateBoardID(boardID string) error {
+	boardID = strings.TrimSpace(boardID)
+	if boardID == "" {
+		return fmt.Errorf("board.id is required")
+	}
+	if strings.Contains(boardID, "/") {
+		return fmt.Errorf("board.id contains invalid path characters")
+	}
+	return nil
 }
 
 func validateBoardPlacementAnchors(beforeThreadID, afterThreadID string) error {
