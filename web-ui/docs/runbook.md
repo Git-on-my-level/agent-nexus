@@ -62,9 +62,16 @@ contract):
 - `POST /auth/passkey/login/options`, `POST /auth/passkey/login/verify`
 - `POST /auth/token`, `GET /agents/me`
 - `POST /threads`, `GET /threads`, `GET /threads/{thread_id}`,
-  `PATCH /threads/{thread_id}`, `GET /threads/{thread_id}/timeline`
+  `PATCH /threads/{thread_id}`, `GET /threads/{thread_id}/timeline`,
+  `GET /threads/{thread_id}/workspace`
 - `POST /commitments`, `GET /commitments`, `GET /commitments/{commitment_id}`,
   `PATCH /commitments/{commitment_id}`
+- `POST /boards`, `GET /boards`, `GET /boards/{board_id}`,
+  `PATCH /boards/{board_id}`, `GET /boards/{board_id}/workspace`
+- `POST /boards/{board_id}/cards`, `GET /boards/{board_id}/cards`,
+  `PATCH /boards/{board_id}/cards/{thread_id}`,
+  `POST /boards/{board_id}/cards/{thread_id}/move`,
+  `POST /boards/{board_id}/cards/{thread_id}/remove`
 - `POST /artifacts`, `GET /artifacts`, `GET /artifacts/{artifact_id}`,
   `GET /artifacts/{artifact_id}/content`
 - `POST /events`, `GET /events/{event_id}`
@@ -132,6 +139,23 @@ OAR_PROJECTS='[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8
 OAR_DEFAULT_PROJECT=local \
 ./scripts/e2e-with-core
 ```
+
+Representative seeded local data, including boards/cards/docs from mock mode,
+can be pushed into a live core with:
+
+```bash
+OAR_CORE_BASE_URL=http://127.0.0.1:8000 \
+node ./scripts/seed-core-from-mock.mjs
+```
+
+Primary board UI entry points:
+
+- `/:project/boards`
+- `/:project/boards/:boardId`
+
+The board detail page relies on `GET /boards/{board_id}/workspace` for the
+canonical read model and reloads that workspace after mutations or `409
+conflict` responses.
 
 ## Packaging and serving
 

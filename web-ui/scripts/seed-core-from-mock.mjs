@@ -17,6 +17,8 @@ const seed = getMockSeedData();
 const defaultActorId = seed.actors[0]?.id ?? "actor-ops-ai";
 
 const threadIdMap = new Map();
+const documentIdMap = new Map();
+const boardIdMap = new Map();
 const snapshotIdMap = new Map();
 
 main().catch((error) => {
@@ -38,7 +40,9 @@ async function main() {
   await seedActors();
   await seedThreads();
   await seedCommitments();
+  await seedDocuments();
   await seedArtifacts();
+  await seedBoards();
   const eventStats = await seedEvents();
   await rebuildDerived();
 
@@ -132,6 +136,106 @@ async function seedCommitments() {
     }
 
     snapshotIdMap.set(sourceCommitment.id, newId);
+  }
+}
+
+async function seedDocuments() {
+  const sourceDocuments = Array.isArray(seed.documents) ? seed.documents : [];
+  const revisionsByDocument =
+    seed.documentRevisions && typeof seed.documentRevisions === "object"
+      ? seed.documentRevisions
+      : {};
+
+  for (const sourceDocument of sourceDocuments) {
+    const documentId = String(sourceDocument.id ?? "").trim();
+    if (!documentId) {
+      console.warn("Skipping document with no id in mock seed data.");
+      continue;
+    }
+
+    const revisions = [...(revisionsByDocument[documentId] ?? [])].sort(
+      (left, right) => {
+        const leftNumber = Number(left?.revision_number ?? 0);
+        const rightNumber = Number(right?.revision_number ?? 0);
+        return leftNumber - rightNumber;
+      },
+    );
+
+    if (revisions.length === 0) {
+      console.warn(`Skipping document ${documentId}: no revisions found.`);
+      continue;
+    }
+
+    const firstRevision = revisions[0];
+    const actorId = pickActorId(
+      firstRevision.created_by ?? sourceDocument.created_by,
+    );
+    const threadId = normalizeMappedOptionalThreadId(sourceDocument.thread_id);
+    const refs = threadId ? [`thread:${threadId}`] : [];
+
+    const createResponse = await request("POST", "/docs", {
+      actor_id: actorId,
+      document: {
+        id: documentId,
+        title: sourceDocument.title,
+        slug: sourceDocument.slug,
+        status: sourceDocument.status,
+        labels: sourceDocument.labels,
+        supersedes: sourceDocument.supersedes,
+        ...(threadId ? { thread_id: threadId } : {}),
+      },
+      refs,
+      content: firstRevision.content,
+      content_type: normalizeDocumentContentType(firstRevision.content_type),
+    });
+
+    const createdDocument = createResponse?.document;
+    const createdRevision = createResponse?.revision;
+    const newDocumentId = String(createdDocument?.id ?? "").trim();
+    let baseRevisionId = String(createdRevision?.revision_id ?? "").trim();
+
+    if (!newDocumentId) {
+      throw new Error(`Document create returned no id for ${documentId}`);
+    }
+    if (!baseRevisionId) {
+      throw new Error(
+        `Document create returned no revision id for ${documentId}`,
+      );
+    }
+
+    documentIdMap.set(documentId, newDocumentId);
+
+    for (const revision of revisions.slice(1)) {
+      const updateResponse = await request(
+        "PATCH",
+        `/docs/${encodeURIComponent(newDocumentId)}`,
+        {
+          actor_id: pickActorId(revision.created_by ?? sourceDocument.updated_by),
+          if_base_revision: baseRevisionId,
+          refs,
+          content: revision.content,
+          content_type: normalizeDocumentContentType(revision.content_type),
+        },
+      );
+
+      baseRevisionId = String(updateResponse?.revision?.revision_id ?? "").trim();
+      if (!baseRevisionId) {
+        throw new Error(
+          `Document update returned no revision id for ${documentId}`,
+        );
+      }
+    }
+
+    if (sourceDocument.tombstoned_at) {
+      await request("POST", `/docs/${encodeURIComponent(newDocumentId)}/tombstone`, {
+        actor_id: pickActorId(
+          sourceDocument.tombstoned_by ?? sourceDocument.updated_by,
+        ),
+        reason:
+          sourceDocument.tombstone_reason ??
+          "Tombstoned while seeding mock data.",
+      });
+    }
   }
 }
 
@@ -244,6 +348,91 @@ async function seedArtifacts() {
   }
 }
 
+async function seedBoards() {
+  const sourceBoards = Array.isArray(seed.boards) ? seed.boards : [];
+  const sourceCards = Array.isArray(seed.boardCards) ? seed.boardCards : [];
+
+  for (const sourceBoard of sourceBoards) {
+    const primaryThreadId = normalizeMappedOptionalThreadId(
+      sourceBoard.primary_thread_id,
+    );
+    if (!primaryThreadId) {
+      console.warn(
+        `Skipping board ${String(sourceBoard.id ?? "<unknown>")}: primary thread is not seedable.`,
+      );
+      continue;
+    }
+
+    const actorId = pickActorId(sourceBoard.created_by ?? sourceBoard.updated_by);
+    const primaryDocumentId = mapOptionalDocumentId(
+      sourceBoard.primary_document_id,
+    );
+    const createResponse = await request("POST", "/boards", {
+      actor_id: actorId,
+      board: {
+        id: sourceBoard.id,
+        title: sourceBoard.title,
+        status: sourceBoard.status,
+        labels: sourceBoard.labels,
+        owners: sourceBoard.owners,
+        primary_thread_id: primaryThreadId,
+        ...(primaryDocumentId
+          ? { primary_document_id: primaryDocumentId }
+          : {}),
+        column_schema: sourceBoard.column_schema,
+        pinned_refs: mapRefs(sourceBoard.pinned_refs),
+      },
+    });
+
+    const createdBoard = createResponse?.board;
+    const newBoardId = String(createdBoard?.id ?? "").trim();
+    if (!newBoardId) {
+      throw new Error(`Board create returned no id for ${sourceBoard.title}`);
+    }
+    boardIdMap.set(String(sourceBoard.id ?? ""), newBoardId);
+
+    let currentBoard = createdBoard;
+    const orderedCards = sourceCards
+      .filter((card) => String(card.board_id ?? "") === String(sourceBoard.id ?? ""))
+      .sort(compareBoardCardsForSeed);
+
+    const lastThreadByColumn = new Map();
+
+    for (const sourceCard of orderedCards) {
+      const threadId = normalizeMappedOptionalThreadId(sourceCard.thread_id);
+      if (!threadId) {
+        console.warn(
+          `Skipping board card ${String(sourceCard.thread_id ?? "<unknown>")} on ${newBoardId}: thread is not seedable.`,
+        );
+        continue;
+      }
+      if (threadId === primaryThreadId) {
+        console.warn(
+          `Skipping board card ${threadId} on ${newBoardId}: primary thread cannot be added as a card.`,
+        );
+        continue;
+      }
+
+      const pinnedDocumentId = mapOptionalDocumentId(
+        sourceCard.pinned_document_id,
+      );
+      const columnKey = String(sourceCard.column_key ?? "backlog").trim() || "backlog";
+      const afterThreadId = lastThreadByColumn.get(columnKey);
+      const addResponse = await request("POST", `/boards/${encodeURIComponent(newBoardId)}/cards`, {
+        actor_id: pickActorId(sourceCard.created_by ?? sourceCard.updated_by),
+        if_board_updated_at: String(currentBoard?.updated_at ?? "").trim(),
+        thread_id: threadId,
+        column_key: columnKey,
+        ...(afterThreadId ? { after_thread_id: afterThreadId } : {}),
+        ...(pinnedDocumentId ? { pinned_document_id: pinnedDocumentId } : {}),
+      });
+
+      currentBoard = addResponse?.board ?? currentBoard;
+      lastThreadByColumn.set(columnKey, threadId);
+    }
+  }
+}
+
 async function seedEvents() {
   let posted = 0;
   let skipped = 0;
@@ -301,6 +490,30 @@ function mapThreadId(threadId) {
   return threadIdMap.get(raw) ?? raw;
 }
 
+function normalizeMappedOptionalThreadId(threadId) {
+  const raw = String(threadId ?? "").trim();
+  if (!raw) {
+    return "";
+  }
+  return threadIdMap.get(raw) ?? "";
+}
+
+function mapDocumentId(documentId) {
+  const raw = String(documentId ?? "").trim();
+  if (!raw) {
+    return raw;
+  }
+  return documentIdMap.get(raw) ?? raw;
+}
+
+function mapOptionalDocumentId(documentId) {
+  const raw = String(documentId ?? "").trim();
+  if (!raw) {
+    return "";
+  }
+  return documentIdMap.get(raw) ?? "";
+}
+
 function mustMapThreadId(threadId) {
   const mapped = mapThreadId(threadId);
   if (!mapped) {
@@ -333,6 +546,16 @@ function mapRef(ref) {
     return `${prefix}:${mapped}`;
   }
 
+  if (prefix === "document") {
+    const mapped = mapDocumentId(value);
+    return `${prefix}:${mapped}`;
+  }
+
+  if (prefix === "board") {
+    const mapped = boardIdMap.get(value) ?? value;
+    return `${prefix}:${mapped}`;
+  }
+
   return text;
 }
 
@@ -358,6 +581,58 @@ function normalizeArtifactRefs(values) {
 function pickActorId(candidate) {
   const id = String(candidate ?? "").trim();
   return id || defaultActorId;
+}
+
+function normalizeDocumentContentType(value) {
+  const type = String(value ?? "").trim();
+  switch (type) {
+    case "text":
+    case "structured":
+    case "binary":
+      return type;
+    default:
+      return "text";
+  }
+}
+
+function compareBoardCardsForSeed(left, right) {
+  const leftColumn = String(left?.column_key ?? "");
+  const rightColumn = String(right?.column_key ?? "");
+  const leftColumnOrder = canonicalBoardColumnOrder(leftColumn);
+  const rightColumnOrder = canonicalBoardColumnOrder(rightColumn);
+  if (leftColumnOrder !== rightColumnOrder) {
+    return leftColumnOrder - rightColumnOrder;
+  }
+
+  const leftRank = String(left?.rank ?? "");
+  const rightRank = String(right?.rank ?? "");
+  const rankDelta = leftRank.localeCompare(rightRank);
+  if (rankDelta !== 0) {
+    return rankDelta;
+  }
+
+  return String(left?.thread_id ?? "").localeCompare(
+    String(right?.thread_id ?? ""),
+  );
+}
+
+function canonicalBoardColumnOrder(columnKey) {
+  switch (String(columnKey ?? "").trim()) {
+    case "backlog":
+      return 0;
+    case "ready":
+      return 1;
+    case "in_progress":
+      return 2;
+    case "blocked":
+      return 3;
+    case "review":
+      return 4;
+    case "done":
+      return 5;
+    default:
+      return 99;
+  }
 }
 
 function normalizeEventPayload(type, payload) {

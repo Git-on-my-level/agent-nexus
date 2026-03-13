@@ -1738,7 +1738,11 @@ export function getMockSeedData() {
     actors: deepClone(actors),
     threads: deepClone(threads),
     commitments: deepClone(commitments),
+    documents: deepClone(MOCK_DOCUMENTS),
+    documentRevisions: deepClone(MOCK_DOCUMENT_REVISIONS),
     artifacts: deepClone(artifacts),
+    boards: deepClone(boards),
+    boardCards: deepClone(boardCards),
     events: deepClone(events),
   };
 }

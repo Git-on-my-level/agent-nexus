@@ -150,9 +150,9 @@ type oarEventRefRule struct {
 }
 
 type oarConditionalRefRule struct {
-	When      oarWhenCondition      `yaml:"when" json:"when"`
-	MustHave  []oarRefPrefixReq     `yaml:"must_have" json:"must_have,omitempty"`
-	Condition string                `yaml:"condition" json:"condition,omitempty"`
+	When      oarWhenCondition  `yaml:"when" json:"when"`
+	MustHave  []oarRefPrefixReq `yaml:"must_have" json:"must_have,omitempty"`
+	Condition string            `yaml:"condition" json:"condition,omitempty"`
 }
 
 type oarWhenCondition struct {

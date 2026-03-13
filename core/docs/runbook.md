@@ -86,6 +86,34 @@ curl -fsS http://127.0.0.1:8000/version
 
 `/health` is local-only and fast (workspace storage connectivity check only).
 
+## Board surface quick check
+
+Boards are a first-class coordination surface layered on threads and docs.
+The canonical read path is `GET /boards/{board_id}/workspace`; thread detail
+joins board membership through `GET /threads/{thread_id}/workspace`.
+
+Example local flow:
+
+```bash
+curl -fsS http://127.0.0.1:8000/boards
+curl -fsS http://127.0.0.1:8000/boards/board_product_launch/workspace
+curl -fsS http://127.0.0.1:8000/threads/thread_123/workspace
+```
+
+Mutation endpoints all use the board's `updated_at` as the optimistic
+concurrency token:
+
+- `POST /boards`
+- `PATCH /boards/{board_id}`
+- `POST /boards/{board_id}/cards`
+- `PATCH /boards/{board_id}/cards/{thread_id}`
+- `POST /boards/{board_id}/cards/{thread_id}/move`
+- `POST /boards/{board_id}/cards/{thread_id}/remove`
+
+Board lifecycle and card events are emitted on the primary thread timeline with
+`board:<board_id>` refs, so timeline/debug work should inspect both the board
+workspace and the primary thread timeline.
+
 ## Persistence check (restart behavior)
 
 1. Start server with a workspace root.
@@ -206,6 +234,16 @@ Run the headless smoke script:
 ```
 
 It starts a server in a temporary workspace, checks `/health` and `/version`, then shuts down cleanly.
+
+For the full repo smoke path, run the root script:
+
+```bash
+../scripts/e2e-smoke
+```
+
+That flow brings up `oar-core`, the real CLI, and `oar-ui`; it now includes a
+board-aware path that creates a board, mutates cards through CLI commands, and
+verifies the board workspace through both core and the UI proxy.
 
 ## Compatibility troubleshooting
 

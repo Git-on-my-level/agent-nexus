@@ -80,7 +80,7 @@ go test -tags=integration ./integration/...
 These tests:
 - build the real `oar` and `oar-core` binaries
 - copy the repo's workspace snapshot into a temp directory
-- run multi-step thread/event and docs/conflict flows through the real CLI
+- run multi-step thread/event, docs/conflict, and board workspace flows through the real CLI
 
 ## Pi Dogfood
 
@@ -121,7 +121,15 @@ oar --agent agent-a threads recommendations --thread-id thread_123 --full-id --f
 oar --agent agent-a docs content --document-id product-constitution
 oar --agent agent-a commitments inspect --commitment-id commitment_123
 oar --agent agent-a artifacts inspect --artifact-id artifact_123
+oar --agent agent-a boards list --status active
+oar --agent agent-a boards workspace --board-id board_product_launch
+oar --agent agent-a boards cards add --board-id board_product_launch --thread-id thread_456 --column backlog
+oar --agent agent-a boards cards move --board-id board_product_launch --thread-id thread_456 --column review --if-board-updated-at 2026-03-08T00:00:00Z
 ```
+
+Board activity uses `board:<board-id>` typed refs on emitted events. When
+debugging board flows, inspect both `boards workspace` and the primary thread
+timeline or thread workspace for the same board.
 
 Draft/commit flow:
 
@@ -137,6 +145,23 @@ The raw fallback remains available:
 ```bash
 oar --json --base-url http://127.0.0.1:8000 --agent agent-a api call --path /meta/handshake
 ```
+
+## Generated help sync
+
+Board commands are generated from the contract metadata. Before release or
+handoff, verify the generated help/docs are still aligned:
+
+```bash
+make contract-check
+oar help boards
+oar help boards cards
+```
+
+Generated board help lands in:
+
+- `cli/docs/generated/commands.md`
+- `cli/docs/generated/runtime-help.md`
+- `cli/internal/app/help_generated.go`
 
 Machine-facing notes for the targeted automation commands:
 
