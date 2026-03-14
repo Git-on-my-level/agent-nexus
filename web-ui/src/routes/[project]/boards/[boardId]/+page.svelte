@@ -489,13 +489,14 @@
       class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[var(--ui-text-muted)]"
     >
       {#if primaryThread}
+        <span class="text-[var(--ui-text-subtle)]">Thread</span>
         <a
           class="text-indigo-400 transition-colors hover:text-indigo-300"
           href={projectHref(
             `/threads/${encodeURIComponent(primaryThread.id)}`,
           )}
         >
-          {primaryThread.title || "Thread"}
+          {primaryThread.title || primaryThread.id}
         </a>
         <span class="text-[var(--ui-text-subtle)]">·</span>
       {/if}

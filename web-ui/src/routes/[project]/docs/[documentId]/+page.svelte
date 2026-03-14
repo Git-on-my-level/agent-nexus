@@ -380,6 +380,17 @@
                 >by {actorName(displayedRevision?.created_by)}</span
               >
             </div>
+            {#if document.thread_id}
+              <div class="mt-1 text-[12px] text-[var(--ui-text-muted)]">
+                <span class="text-[var(--ui-text-subtle)]">Thread</span>
+                <a
+                  class="ml-1 text-indigo-400 transition-colors hover:text-indigo-300"
+                  href={projectHref(`/threads/${encodeURIComponent(document.thread_id)}`)}
+                >
+                  {document.thread_id}
+                </a>
+              </div>
+            {/if}
           </div>
           <div class="flex shrink-0 items-center gap-1.5">
             {#if !document.tombstoned_at && isTextEditable}

@@ -442,21 +442,27 @@
               <div class="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
                 {#if item.thread_id}
                   <a
-                    class="font-medium text-[var(--ui-text-muted)] hover:text-[var(--ui-text)] transition-colors"
-                    href={projectHref(`/threads/${item.thread_id}`)}>Thread</a
+                    class="inline-flex items-center gap-1 font-medium text-[var(--ui-text-muted)] hover:text-[var(--ui-text)] transition-colors"
+                    href={projectHref(`/threads/${item.thread_id}`)}
                   >
+                    <span class="text-[var(--ui-text-subtle)]">Thread:</span>
+                    {item.thread_id}
+                  </a>
                 {/if}
                 {#if item.commitment_id}
                   <a
-                    class="font-medium text-[var(--ui-text-muted)] hover:text-[var(--ui-text)] transition-colors"
+                    class="inline-flex items-center gap-1 font-medium text-[var(--ui-text-muted)] hover:text-[var(--ui-text)] transition-colors"
                     href={item.thread_id
                       ? projectHref(
                           `/threads/${item.thread_id}#commitment-card-${item.commitment_id}`,
                         )
                       : projectHref(
                           `/threads#commitment-card-${item.commitment_id}`,
-                        )}>Commitment</a
+                        )}
                   >
+                    <span class="text-[var(--ui-text-subtle)]">Commitment:</span>
+                    {item.commitment_id}
+                  </a>
                 {/if}
                 {#each item.refs ?? [] as refValue}
                   <RefLink {refValue} threadId={item.thread_id} />

@@ -430,16 +430,18 @@
       <span class="text-[var(--ui-text-muted)]"
         >by {actorName(artifact.created_by)}</span
       >
-      {#if artifact.thread_id}
-        <RefLink
-          humanize
-          labelHints={artifactRefHints}
-          refValue={`thread:${artifact.thread_id}`}
-          showRaw
-          threadId={artifact.thread_id}
-        />
-      {/if}
     </div>
+    {#if artifact.thread_id}
+      <div class="mt-1.5 text-[12px] text-[var(--ui-text-muted)]">
+        <span class="text-[var(--ui-text-subtle)]">Thread</span>
+        <a
+          class="ml-1 text-indigo-400 transition-colors hover:text-indigo-300"
+          href={projectHref(`/threads/${encodeURIComponent(artifact.thread_id)}`)}
+        >
+          {artifact.thread_id}
+        </a>
+      </div>
+    {/if}
     <div class="mt-1.5">
       <ProvenanceBadge provenance={artifact.provenance} />
     </div>
@@ -468,7 +470,10 @@
     </details>
   {/if}
 
-  {#if (artifact.refs ?? []).length > 0}
+  {@const nonThreadRefs = (artifact.refs ?? []).filter(
+    (r) => r !== `thread:${artifact.thread_id}`,
+  )}
+  {#if nonThreadRefs.length > 0}
     <div
       class="mt-3 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-3"
     >
@@ -476,7 +481,7 @@
         Linked references
       </h2>
       <div class="mt-1.5 flex flex-wrap gap-1.5 text-[11px]">
-        {#each artifact.refs ?? [] as refValue}
+        {#each nonThreadRefs as refValue}
           <RefLink
             humanize
             labelHints={artifactRefHints}

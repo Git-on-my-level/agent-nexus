@@ -203,6 +203,55 @@ Internal navigation links that sit inline: `text-indigo-400 hover:text-indigo-30
 - Form field gaps: `gap-2` or `gap-3`.
 - Border radius: `rounded-md` for everything. Avoid `rounded-xl` or `rounded-lg`.
 
+## Data Relationships & Navigation
+
+When building pages that display entities with parent/child or many-to-many relationships, follow these principles to avoid confusing users:
+
+### Parent/Owner Links
+
+Every detail page must clearly show its parent entity. Use a labeled inline link in the header area:
+
+```svelte
+<span class="text-[var(--ui-text-subtle)]">Thread</span>
+<a class="ml-1 text-indigo-400 hover:text-indigo-300" href={threadHref}>
+  {threadTitle}
+</a>
+```
+
+Examples: Board → parent thread, Document → owning thread, Artifact → parent thread.
+
+### Navigational Symmetry
+
+If entity A links to entity B, users should be able to navigate from B back to A with equal prominence. When adding a link from a detail page to a related entity, check whether the reverse direction exists. If A owns B, A's detail page should list its B children in a dedicated panel (not a buried badge).
+
+### Attribution in Aggregated Lists
+
+When a page rolls up items from multiple child entities, each item must identify its source. Never show a flat list where users cannot tell which parent each item belongs to.
+
+- On list pages: show the owner (e.g., thread badge on each document row).
+- On detail pages: filter items by relationship and label sections (e.g., "Owned by this thread" vs "Appears as card on").
+
+### Avoid Duplicate Context
+
+The same relationship should not appear in multiple places on the same page with different labels. If a parent thread link is in the header, suppress it from a generic "Linked references" list. Use explicit structural rendering over generic ref dumps.
+
+### Relationship Labels
+
+Use consistent labels for relationship types:
+
+| Relationship | Label | Where |
+|---|---|---|
+| Board → thread | `Thread` | Board header context line |
+| Document → thread | `Thread` | Document header |
+| Artifact → thread | `Thread` | Artifact header |
+| Thread → owned boards | Section: "Owned by this thread" | Thread boards panel |
+| Thread → board cards | Section: "Appears as card on" | Thread boards panel |
+| List item → thread | `Thread: {id}` | List row metadata |
+
+### Scope Labels for Counts
+
+When displaying counts that exclude certain items, label them explicitly. Example: card counts on a board exclude the primary thread — label as "N cards by column" rather than ambiguous "N cards".
+
 ## Anti-Patterns
 
 - **No `bg-white`** — always `bg-gray-100` for surfaces.

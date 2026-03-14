@@ -368,6 +368,11 @@
                 doc.updated_by,
               )} · v{doc.head_revision_number}
             </p>
+            {#if doc.thread_id && !scopedThreadId}
+              <p class="mt-0.5 text-[11px] text-[var(--ui-text-subtle)]">
+                Thread: {doc.thread_id}
+              </p>
+            {/if}
           </div>
           <span class="shrink-0 text-[11px] text-[var(--ui-text-subtle)]">
             {doc.head_revision_number} revision{doc.head_revision_number === 1

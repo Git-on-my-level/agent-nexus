@@ -418,13 +418,14 @@
                 </span>
               {/if}
               <span>
-                Primary: <a
+                <span class="text-[var(--ui-text-subtle)]">Thread:</span>
+                <a
                   class="text-indigo-300 transition-colors hover:text-indigo-200"
                   href={projectHref(
                     `/threads/${encodeURIComponent(board.primary_thread_id)}`,
                   )}
                 >
-                  {board.primary_thread_id}
+                  {threadHint(board.primary_thread_id) || board.primary_thread_id}
                 </a>
               </span>
               <span>
@@ -445,14 +446,14 @@
               {#each CANONICAL_BOARD_COLUMNS as column}
                 <span
                   class="rounded bg-[var(--ui-border)] px-1.5 py-0.5"
-                  title={`${column.title}: ${counts[column.key]}`}
+                  title={`${column.title}: ${counts[column.key]} cards`}
                 >
                   {counts[column.key]}
                 </span>
               {/each}
             </div>
             <p class="mt-1 text-right text-[10px] text-[var(--ui-text-subtle)]">
-              {summary?.card_count ?? 0} cards
+              {summary?.card_count ?? 0} cards by column
             </p>
           </div>
         </div>

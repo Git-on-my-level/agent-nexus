@@ -56,30 +56,46 @@
     </p>
   {:else}
     <div class="divide-y divide-[var(--ui-border-subtle)]">
-      {#each ownedBoards as board}
-        <a
-          class="flex items-center justify-between gap-3 px-4 py-2.5 transition-colors hover:bg-[var(--ui-bg-soft)]"
-          href={projectPath(projectSlug, `/boards/${board.id}`)}
-        >
-          <div class="flex min-w-0 items-center gap-2">
-            <span class="truncate text-[13px] font-medium text-[var(--ui-text)]">
-              {board.title || board.id}
-            </span>
-            {#if board.status}
-              <span
-                class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold {statusTone(board.status)}"
-              >
-                {BOARD_STATUS_LABELS[board.status] ?? board.status}
-              </span>
-            {/if}
+      {#if ownedBoards.length > 0}
+        <div class="divide-y divide-[var(--ui-border-subtle)]">
+          <div
+            class="text-[10px] font-semibold uppercase tracking-wide text-[var(--ui-text-subtle)] px-4 pt-2.5 pb-1"
+          >
+            Owned by this thread
           </div>
-          <div class="shrink-0 text-[11px] text-[var(--ui-text-subtle)]">
-            {board.card_count ?? 0} cards · {formatTimestamp(board.updated_at) || "—"}
-          </div>
-        </a>
-      {/each}
+          {#each ownedBoards as board}
+            <a
+              class="flex items-center justify-between gap-3 px-4 py-2.5 transition-colors hover:bg-[var(--ui-bg-soft)]"
+              href={projectPath(projectSlug, `/boards/${board.id}`)}
+            >
+              <div class="flex min-w-0 items-center gap-2">
+                <span class="truncate text-[13px] font-medium text-[var(--ui-text)]">
+                  {board.title || board.id}
+                </span>
+                {#if board.status}
+                  <span
+                    class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold {statusTone(board.status)}"
+                  >
+                    {BOARD_STATUS_LABELS[board.status] ?? board.status}
+                  </span>
+                {/if}
+              </div>
+              <div class="shrink-0 text-[11px] text-[var(--ui-text-subtle)]">
+                {board.card_count ?? 0} cards · {formatTimestamp(board.updated_at) || "—"}
+              </div>
+            </a>
+          {/each}
+        </div>
+      {/if}
 
-      {#each boardMemberships as membership}
+      {#if boardMemberships.length > 0}
+        <div class="divide-y divide-[var(--ui-border-subtle)]">
+          <div
+            class="text-[10px] font-semibold uppercase tracking-wide text-[var(--ui-text-subtle)] px-4 pt-2.5 pb-1"
+          >
+            Appears as card on
+          </div>
+          {#each boardMemberships as membership}
         {@const boardId = membership?.board?.id ?? membership?.board_id}
         {@const boardTitle = membership?.board?.title ?? membership?.board_title ?? boardId}
         {@const boardStatus = membership?.board?.status ?? membership?.board_status}
@@ -114,6 +130,8 @@
           </a>
         {/if}
       {/each}
+        </div>
+      {/if}
     </div>
   {/if}
 </section>
