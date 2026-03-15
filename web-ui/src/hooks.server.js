@@ -5,10 +5,6 @@ import { loadProjectCatalog } from "$lib/server/projectCatalog";
 import { buildProxyRequestInit } from "$lib/server/coreProxy";
 import { resolveProxyProjectTarget } from "$lib/server/proxyProjectTarget";
 
-function shouldProxyToCore(pathname, method) {
-  return isProxyableCommand(method, pathname);
-}
-
 function isDocumentNavigationRequest(request) {
   const method = request.method.toUpperCase();
   if (method !== "GET" && method !== "HEAD") {
@@ -77,7 +73,7 @@ export async function handle({ event, resolve }) {
   const method = event.request.method;
   const documentNavigation = isDocumentNavigationRequest(event.request);
   const proxyableRequest =
-    shouldProxyToCore(pathname, method) && !documentNavigation;
+    isProxyableCommand(method, pathname) && !documentNavigation;
 
   if (proxyableRequest) {
     const target = resolveProjectTarget(event);

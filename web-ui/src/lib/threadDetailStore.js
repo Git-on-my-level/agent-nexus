@@ -31,7 +31,7 @@ function createThreadDetailStore() {
   let queuedRefreshThreadId = "";
   let queuedRefreshPromise = null;
 
-  function mergeRefreshFlags(base = {}, next = {}) {
+  function mergeRefreshFlags(base, next) {
     const left = base ?? {};
     const right = next ?? {};
     return {

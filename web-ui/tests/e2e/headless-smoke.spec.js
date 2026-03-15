@@ -86,7 +86,7 @@ test("mocked core smoke flow: inbox -> threads -> thread detail -> post message 
               tags: ["ops", "customer"],
               current_summary: "Onboarding policy review pending.",
               updated_at: "2026-03-03T11:00:00.000Z",
-              is_stale: false,
+              stale: false,
               provenance: { sources: ["actor_statement:event-1"] },
             },
           ],

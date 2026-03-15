@@ -1,40 +1,6 @@
-import { parseRef } from "./typedRefs.js";
+import { parseListInput, validateTypedRefs } from "./typedRefs.js";
 
 const ALLOWED_REVIEW_OUTCOMES = new Set(["accept", "revise", "escalate"]);
-
-export function parseReviewListInput(rawValue) {
-  return String(rawValue ?? "")
-    .split(/\r?\n|,/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-export function serializeReviewListInput(items) {
-  if (!Array.isArray(items)) {
-    return "";
-  }
-
-  return items
-    .map((item) => String(item).trim())
-    .filter(Boolean)
-    .join("\n");
-}
-
-export function validateReviewTypedRefs(refs = []) {
-  const invalidRefs = [];
-
-  refs.forEach((refValue) => {
-    const parsed = parseRef(refValue);
-    if (!parsed.prefix || !parsed.value) {
-      invalidRefs.push(refValue);
-    }
-  });
-
-  return {
-    valid: invalidRefs.length === 0,
-    invalidRefs,
-  };
-}
 
 export function validateReviewDraft(draft, options = {}) {
   const threadId = String(options.threadId ?? "").trim();
@@ -53,7 +19,7 @@ export function validateReviewDraft(draft, options = {}) {
 
   const outcome = String(draft?.outcome ?? "").trim();
   const notes = String(draft?.notes ?? "").trim();
-  const evidenceRefs = parseReviewListInput(draft?.evidenceRefsInput);
+  const evidenceRefs = parseListInput(draft?.evidenceRefsInput);
 
   if (!threadId) {
     addError("thread_id", "thread_id is required.");
@@ -79,7 +45,7 @@ export function validateReviewDraft(draft, options = {}) {
     addError("notes", "notes is required.");
   }
 
-  const evidenceValidation = validateReviewTypedRefs(evidenceRefs);
+  const evidenceValidation = validateTypedRefs(evidenceRefs);
   if (!evidenceValidation.valid) {
     addError(
       "evidence_refs",

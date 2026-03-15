@@ -103,13 +103,4 @@ export function describeCron(expr) {
   return "Custom schedule";
 }
 
-export function parseListInput(rawValue) {
-  return String(rawValue ?? "")
-    .split(/\r?\n|,/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-export function serializeListInput(items) {
-  return normalizeList(items).join("\n");
-}
+export { parseListInput, serializeListInput } from "./typedRefs.js";

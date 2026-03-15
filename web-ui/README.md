@@ -3,7 +3,7 @@
 This package contains the SvelteKit web UI for Organization Autorunner.
 
 - `docs/`: operator runbooks and spec/compliance notes
-- `/contracts/oar-schema.yaml`: shared schema contract (`0.2.2`)
+- `/contracts/oar-schema.yaml`: shared schema contract (`0.2.3`)
 - `/contracts/gen/ts/client.ts`: generated TS API client consumed by `web-ui`
 
 ## Runtime model
@@ -59,7 +59,7 @@ See `docs/runbook.md` for reverse proxy configuration and deployment examples.
 
 On project route startup the UI calls `GET /meta/handshake` (falling back to
 `GET /version`) through the project-aware proxy and requires
-`schema_version === "0.2.2"`.
+`schema_version === "0.2.3"`.
 
 ## Quick smoke check
 

@@ -1,7 +1,7 @@
 import { json } from "@sveltejs/kit";
 
 import { removeMockBoardCard } from "$lib/mockCoreData";
-import { guardMockRoute } from "$lib/server/mockGuard";
+import { guardMockRoute, mockResultToResponse } from "$lib/server/mockGuard";
 
 export async function POST({ params, request, url }) {
   const guardResponse = guardMockRoute(url.pathname);
@@ -19,12 +19,5 @@ export async function POST({ params, request, url }) {
   }
 
   const result = removeMockBoardCard(params.boardId, params.cardId, body);
-  if (result?.error === "conflict") {
-    return json(result, { status: 409 });
-  }
-  if (result?.error === "not_found") {
-    return json({ error: result.message }, { status: 404 });
-  }
-
-  return json(result);
+  return mockResultToResponse(result);
 }

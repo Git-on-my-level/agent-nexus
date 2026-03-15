@@ -6,10 +6,10 @@
     applyWorkOrderContextPrefill,
     buildWorkOrderContextSuggestions,
     mergeContextRefsInput,
-    parseWorkOrderListInput,
     removeContextRefsFromInput,
     validateWorkOrderDraft,
   } from "$lib/workOrderUtils";
+  import { parseListInput } from "$lib/typedRefs.js";
   import { validateReceiptDraft } from "$lib/receiptUtils";
 
   let { threadId, onWorkOrderSubmit, onReceiptSubmit } = $props();
@@ -60,7 +60,7 @@
     }),
   );
   let selectedContextRefs = $derived(
-    new Set(parseWorkOrderListInput(workOrderDraft?.contextRefsInput ?? "")),
+    new Set(parseListInput(workOrderDraft?.contextRefsInput ?? "")),
   );
   let selectedSuggestedRefCount = $derived(
     workOrderContextSuggestions.filter((suggestion) =>

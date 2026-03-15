@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildCommitmentPatch,
-  parseCommitmentListInput,
-  serializeCommitmentListInput,
   validateCommitmentStatusTransition,
 } from "../../src/lib/commitmentUtils.js";
+import {
+  parseListInput,
+  serializeListInput,
+} from "../../src/lib/typedRefs.js";
 
 describe("commitment patch builder", () => {
   it("includes scalar changes only when modified", () => {
@@ -100,11 +102,11 @@ describe("commitment transition validation", () => {
 
 describe("commitment list input helpers", () => {
   it("parses and serializes list input", () => {
-    expect(parseCommitmentListInput("one, two\nthree")).toEqual([
+    expect(parseListInput("one, two\nthree")).toEqual([
       "one",
       "two",
       "three",
     ]);
-    expect(serializeCommitmentListInput(["one", "two"])).toBe("one\ntwo");
+    expect(serializeListInput(["one", "two"])).toBe("one\ntwo");
   });
 });

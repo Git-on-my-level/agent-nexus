@@ -24,11 +24,11 @@ function filterThreadsByQuery(allThreads, url) {
       return false;
     }
 
-    if (stale === "true" && !thread.is_stale) {
+    if (stale === "true" && !thread.stale) {
       return false;
     }
 
-    if (stale === "false" && thread.is_stale) {
+    if (stale === "false" && thread.stale) {
       return false;
     }
 
@@ -52,7 +52,7 @@ test("threads list filters and create flow use GET/POST /threads", async ({
       tags: ["ops", "customer"],
       current_summary: "Onboarding policy review pending.",
       updated_at: "2026-03-03T11:00:00.000Z",
-      is_stale: true,
+      stale: true,
       provenance: { sources: ["actor_statement:event-1"] },
     },
     {
@@ -64,7 +64,7 @@ test("threads list filters and create flow use GET/POST /threads", async ({
       tags: ["incident"],
       current_summary: "Postmortem still in progress.",
       updated_at: "2026-03-03T12:00:00.000Z",
-      is_stale: false,
+      stale: false,
       provenance: { sources: ["actor_statement:event-2"] },
     },
   ];
@@ -110,7 +110,7 @@ test("threads list filters and create flow use GET/POST /threads", async ({
       const created = {
         id: `thread-new-${createCount}`,
         updated_at: "2026-03-04T00:00:00.000Z",
-        is_stale: false,
+        stale: false,
         provenance: { sources: ["actor_statement:ui"] },
         ...payload.thread,
       };

@@ -1,7 +1,7 @@
 import { json } from "@sveltejs/kit";
 
 import { listMockBoards, createMockBoard } from "$lib/mockCoreData";
-import { guardMockRoute } from "$lib/server/mockGuard";
+import { guardMockRoute, mockResultToResponse } from "$lib/server/mockGuard";
 
 export function GET({ url }) {
   const guardResponse = guardMockRoute(url.pathname);
@@ -41,15 +41,5 @@ export async function POST({ request, url }) {
   }
 
   const created = createMockBoard(body);
-  if (created?.error === "conflict") {
-    return json({ error: created.message }, { status: 409 });
-  }
-  if (created?.error === "not_found") {
-    return json({ error: created.message }, { status: 404 });
-  }
-  if (created?.error === "validation") {
-    return json({ error: created.message }, { status: 400 });
-  }
-
-  return json(created, { status: 201 });
+  return mockResultToResponse(created, 201);
 }

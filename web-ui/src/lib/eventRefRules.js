@@ -1,22 +1,11 @@
 import eventRefRulesData from "./generated/event_ref_rules.json";
 
-let cachedRules = null;
-
-function getRules() {
-  if (cachedRules === null) {
-    cachedRules = eventRefRulesData;
-  }
-  return cachedRules;
-}
-
 export function getEventRefRule(eventType) {
-  const rules = getRules();
-  return rules.rules?.[eventType] ?? null;
+  return eventRefRulesData.rules?.[eventType] ?? null;
 }
 
 export function hasEventRefRule(eventType) {
-  const rules = getRules();
-  return !!rules.rules?.[eventType];
+  return !!eventRefRulesData.rules?.[eventType];
 }
 
 function normalizeRequiredPayloadField(rawField) {

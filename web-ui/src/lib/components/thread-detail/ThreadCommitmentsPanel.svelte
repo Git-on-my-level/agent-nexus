@@ -14,10 +14,9 @@
   import RefLink from "$lib/components/RefLink.svelte";
   import {
     buildCommitmentPatch,
-    parseCommitmentListInput,
-    serializeCommitmentListInput,
     validateCommitmentStatusTransition,
   } from "$lib/commitmentUtils";
+  import { parseListInput, serializeListInput } from "$lib/typedRefs.js";
 
   const COMMITMENT_STATUS_LABELS = {
     open: "Open",
@@ -92,10 +91,10 @@
       owner: commitment.owner ?? defaultCommitmentOwner(),
       due_at: isoToDatetimeLocal(commitment.due_at ?? ""),
       status: commitment.status ?? "open",
-      definitionOfDoneInput: serializeCommitmentListInput(
+      definitionOfDoneInput: serializeListInput(
         commitment.definition_of_done ?? [],
       ),
-      linksInput: serializeCommitmentListInput(commitment.links ?? []),
+      linksInput: serializeListInput(commitment.links ?? []),
       statusRefInput: "",
     };
   }
@@ -191,10 +190,10 @@
         owner,
         due_at: dueAt,
         status: "open",
-        definition_of_done: parseCommitmentListInput(
+        definition_of_done: parseListInput(
           createCommitmentDraft.definitionOfDoneInput,
         ),
-        links: parseCommitmentListInput(createCommitmentDraft.linksInput),
+        links: parseListInput(createCommitmentDraft.linksInput),
         provenance: { sources: ["actor_statement:ui"] },
       });
       createCommitmentDraft = blankCreateCommitmentDraft();
@@ -222,10 +221,10 @@
         owner: draft.owner.trim(),
         due_at: datetimeLocalToIso(draft.due_at.trim()),
         status: draft.status,
-        definition_of_done: parseCommitmentListInput(
+        definition_of_done: parseListInput(
           draft.definitionOfDoneInput,
         ),
-        links: parseCommitmentListInput(draft.linksInput),
+        links: parseListInput(draft.linksInput),
       };
       const patch = buildCommitmentPatch(original, draftSnapshot);
       if (Object.keys(patch).length === 0) {

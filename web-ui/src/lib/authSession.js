@@ -48,10 +48,6 @@ currentProjectSlug.subscribe((projectSlug) => {
   syncCurrentAuthStores(projectSlug);
 });
 
-function resolveBaseUrl(baseUrl = "") {
-  return normalizeBaseUrl(baseUrl);
-}
-
 function resolveFetch(fetchFn) {
   if (typeof fetchFn === "function") {
     return fetchFn;
@@ -61,7 +57,7 @@ function resolveFetch(fetchFn) {
 }
 
 function buildUrl(pathname, baseUrl = "") {
-  const resolvedBaseUrl = resolveBaseUrl(baseUrl);
+  const resolvedBaseUrl = normalizeBaseUrl(baseUrl);
   if (!resolvedBaseUrl) {
     return appPath(pathname);
   }

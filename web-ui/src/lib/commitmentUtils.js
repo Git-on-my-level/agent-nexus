@@ -23,17 +23,6 @@ function normalizeScalar(value) {
   return value ?? "";
 }
 
-export function parseCommitmentListInput(rawValue) {
-  return String(rawValue ?? "")
-    .split(/\r?\n|,/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-export function serializeCommitmentListInput(items) {
-  return normalizeList(items).join("\n");
-}
-
 export function buildCommitmentPatch(
   originalSnapshot = {},
   draftSnapshot = {},

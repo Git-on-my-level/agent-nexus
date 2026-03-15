@@ -5,8 +5,6 @@
   import { projectPath } from "$lib/projectPaths";
   import { threadDetailStore } from "$lib/threadDetailStore";
 
-  let { threadId } = $props();
-
   let ownedBoards = $derived($threadDetailStore.ownedBoards);
   let boardMemberships = $derived($threadDetailStore.boardMemberships);
   let projectSlug = $derived($page.params.project);

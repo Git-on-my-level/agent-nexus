@@ -4,7 +4,6 @@
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
   import { projectPath } from "$lib/projectPaths";
-  import { lookupActorDisplayName, actorRegistry } from "$lib/actorSession";
   import { enrichInboxItem } from "$lib/inboxUtils";
   import {
     BOARD_STATUS_LABELS,
@@ -47,7 +46,6 @@
 
   let projectSlug = $derived($page.params.project);
   let boardId = $derived($page.params.boardId);
-  let actorName = $derived((id) => lookupActorDisplayName(id, $actorRegistry));
   let enrichedInboxItems = $derived(
     (workspace?.inbox?.items ?? []).map((item) => enrichInboxItem(item)),
   );

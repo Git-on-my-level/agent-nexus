@@ -1,7 +1,7 @@
 import { json } from "@sveltejs/kit";
 
 import { getMockThread, updateMockThread } from "$lib/mockCoreData";
-import { guardMockRoute } from "$lib/server/mockGuard";
+import { guardMockRoute, mockResultToResponse } from "$lib/server/mockGuard";
 
 export function GET({ params, url }) {
   const guardResponse = guardMockRoute(url.pathname);
@@ -37,19 +37,5 @@ export async function PATCH({ params, request, url }) {
     if_updated_at: body.if_updated_at,
   });
 
-  if (result.error === "not_found") {
-    return json({ error: "Thread not found." }, { status: 404 });
-  }
-
-  if (result.error === "conflict") {
-    return json(
-      {
-        error: "Thread has been updated by another actor.",
-        current: result.current,
-      },
-      { status: 409 },
-    );
-  }
-
-  return json({ thread: result.thread });
+  return mockResultToResponse(result);
 }

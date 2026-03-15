@@ -1,38 +1,4 @@
-import { parseRef } from "./typedRefs.js";
-
-export function parseWorkOrderListInput(rawValue) {
-  return String(rawValue ?? "")
-    .split(/\r?\n|,/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-export function serializeWorkOrderListInput(items) {
-  if (!Array.isArray(items)) {
-    return "";
-  }
-
-  return items
-    .map((item) => String(item).trim())
-    .filter(Boolean)
-    .join("\n");
-}
-
-export function validateTypedRefs(refs = []) {
-  const invalidRefs = [];
-
-  refs.forEach((refValue) => {
-    const parsed = parseRef(refValue);
-    if (!parsed.prefix || !parsed.value) {
-      invalidRefs.push(refValue);
-    }
-  });
-
-  return {
-    valid: invalidRefs.length === 0,
-    invalidRefs,
-  };
-}
+import { parseRef, parseListInput, serializeListInput, validateTypedRefs } from "./typedRefs.js";
 
 export function ensureThreadRef(refs = [], threadId) {
   const normalized = refs.map((item) => String(item).trim()).filter(Boolean);
@@ -192,10 +158,10 @@ export function buildWorkOrderContextSuggestions({
 
 export function mergeContextRefsInput(rawInput, refsToAdd = [], options = {}) {
   const threadId = String(options.threadId ?? "").trim();
-  const currentRefs = parseWorkOrderListInput(rawInput);
+  const currentRefs = parseListInput(rawInput);
   const merged = dedupePreserveOrder([...currentRefs, ...refsToAdd]);
 
-  return serializeWorkOrderListInput(
+  return serializeListInput(
     threadId ? ensureThreadRef(merged, threadId) : merged,
   );
 }
@@ -209,11 +175,11 @@ export function removeContextRefsFromInput(
   const removeSet = new Set(
     refsToRemove.map((item) => String(item ?? "").trim()).filter(Boolean),
   );
-  const remaining = parseWorkOrderListInput(rawInput).filter(
+  const remaining = parseListInput(rawInput).filter(
     (item) => !removeSet.has(String(item).trim()),
   );
 
-  return serializeWorkOrderListInput(
+  return serializeListInput(
     threadId ? ensureThreadRef(remaining, threadId) : remaining,
   );
 }
@@ -253,15 +219,15 @@ export function validateWorkOrderDraft(draft, options = {}) {
   }
 
   const objective = String(draft?.objective ?? "").trim();
-  const constraints = parseWorkOrderListInput(draft?.constraintsInput);
+  const constraints = parseListInput(draft?.constraintsInput);
   const contextRefs = ensureThreadRef(
-    parseWorkOrderListInput(draft?.contextRefsInput),
+    parseListInput(draft?.contextRefsInput),
     threadId,
   );
-  const acceptanceCriteria = parseWorkOrderListInput(
+  const acceptanceCriteria = parseListInput(
     draft?.acceptanceCriteriaInput,
   );
-  const definitionOfDone = parseWorkOrderListInput(
+  const definitionOfDone = parseListInput(
     draft?.definitionOfDoneInput,
   );
 

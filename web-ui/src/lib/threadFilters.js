@@ -18,7 +18,6 @@ export const THREAD_SCHEDULE_PRESETS = [
   "monthly",
   "custom",
 ];
-export const THREAD_CADENCES = THREAD_SCHEDULE_PRESETS;
 export const THREAD_SCHEDULE_PRESET_LABELS = {
   reactive: "Reactive",
   daily: "Daily",
@@ -186,7 +185,7 @@ export function cadenceMatchesFilter(cadence, filterCadence) {
   return cadencePresetFromValue(value) === cadencePresetFromValue(filter);
 }
 
-export function buildThreadFilterQuery(filters = {}) {
+export function buildThreadFilterQueryString(filters = {}) {
   const params = new URLSearchParams();
 
   if (filters.status) {
@@ -214,7 +213,7 @@ export function buildThreadFilterQuery(filters = {}) {
   return params.toString();
 }
 
-export function buildThreadFilterRequestQuery(filters = {}) {
+export function buildThreadFilterQueryParams(filters = {}) {
   const tags = filters.tags ?? [];
   const query = {};
 
@@ -246,10 +245,6 @@ export function buildThreadFilterRequestQuery(filters = {}) {
 export function readBackendStaleState(thread) {
   if (typeof thread?.stale === "boolean") {
     return thread.stale;
-  }
-
-  if (typeof thread?.is_stale === "boolean") {
-    return thread.is_stale;
   }
 
   return null;

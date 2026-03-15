@@ -42,3 +42,34 @@ export function renderRef(ref) {
 export function isKnownRefPrefix(prefix) {
   return KNOWN_REF_PREFIXES.has(prefix);
 }
+
+export function parseListInput(rawValue) {
+  return String(rawValue ?? "")
+    .split(/\r?\n|,/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+export function serializeListInput(items) {
+  if (!Array.isArray(items)) {
+    return "";
+  }
+  return items
+    .map((item) => String(item).trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
+export function validateTypedRefs(refs = []) {
+  const invalidRefs = [];
+  refs.forEach((refValue) => {
+    const parsed = parseRef(refValue);
+    if (!parsed.prefix || !parsed.value) {
+      invalidRefs.push(refValue);
+    }
+  });
+  return {
+    valid: invalidRefs.length === 0,
+    invalidRefs,
+  };
+}

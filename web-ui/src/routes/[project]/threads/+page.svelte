@@ -10,7 +10,7 @@
     THREAD_PRIORITIES,
     THREAD_PRIORITY_LABELS,
     THREAD_STATUSES,
-    buildThreadFilterRequestQuery,
+    buildThreadFilterQueryParams,
     cadenceToRequestValue,
     computeStaleness,
     formatCadenceLabel,
@@ -62,7 +62,7 @@
     error = "";
 
     try {
-      const query = buildThreadFilterRequestQuery({
+      const query = buildThreadFilterQueryParams({
         status: filters.status,
         priority: filters.priority,
         cadence: filters.cadence,

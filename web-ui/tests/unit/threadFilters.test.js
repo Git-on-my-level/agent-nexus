@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  buildThreadFilterQuery,
-  buildThreadFilterRequestQuery,
+  buildThreadFilterQueryString,
+  buildThreadFilterQueryParams,
   cadenceMatchesFilter,
   cadencePresetFromValue,
   cadenceToRequestValue,
@@ -15,7 +15,7 @@ import {
 
 describe("thread filter query builders", () => {
   it("builds stable query string for selected filters", () => {
-    const query = buildThreadFilterQuery({
+    const query = buildThreadFilterQueryString({
       status: "active",
       priority: "p1",
       cadence: "weekly",
@@ -36,7 +36,7 @@ describe("thread filter query builders", () => {
     ]);
 
     expect(
-      buildThreadFilterRequestQuery({
+      buildThreadFilterQueryParams({
         status: "",
         priority: "p0",
         cadence: "",
@@ -52,7 +52,7 @@ describe("thread filter query builders", () => {
 
   it("preserves multiple tags in request query (match-all semantics)", () => {
     expect(
-      buildThreadFilterRequestQuery({
+      buildThreadFilterQueryParams({
         tags: ["ops", "customer"],
       }),
     ).toEqual({
@@ -135,8 +135,6 @@ describe("thread filter query builders", () => {
   it("reads backend stale state across supported flag names", () => {
     expect(readBackendStaleState({ stale: true })).toBe(true);
     expect(readBackendStaleState({ stale: false })).toBe(false);
-    expect(readBackendStaleState({ is_stale: true })).toBe(true);
-    expect(readBackendStaleState({ is_stale: false })).toBe(false);
     expect(readBackendStaleState({})).toBeNull();
     expect(readBackendStaleState(null)).toBeNull();
   });

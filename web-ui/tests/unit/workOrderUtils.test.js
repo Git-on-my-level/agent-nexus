@@ -5,21 +5,23 @@ import {
   buildWorkOrderContextSuggestions,
   ensureThreadRef,
   mergeContextRefsInput,
-  parseWorkOrderListInput,
   removeContextRefsFromInput,
-  serializeWorkOrderListInput,
-  validateTypedRefs,
   validateWorkOrderDraft,
 } from "../../src/lib/workOrderUtils.js";
+import {
+  parseListInput,
+  serializeListInput,
+  validateTypedRefs,
+} from "../../src/lib/typedRefs.js";
 
 describe("work order list helpers", () => {
   it("parses and serializes list input", () => {
-    expect(parseWorkOrderListInput("one, two\nthree")).toEqual([
+    expect(parseListInput("one, two\nthree")).toEqual([
       "one",
       "two",
       "three",
     ]);
-    expect(serializeWorkOrderListInput(["one", "two"])).toBe("one\ntwo");
+    expect(serializeListInput(["one", "two"])).toBe("one\ntwo");
   });
 
   it("ensures thread ref is present", () => {

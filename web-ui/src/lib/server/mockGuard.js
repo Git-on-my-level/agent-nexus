@@ -1,9 +1,23 @@
+import { json } from "@sveltejs/kit";
 import { env } from "$env/dynamic/private";
 
 function normalizeCoreBaseUrl(value) {
   return String(value ?? "")
     .trim()
     .replace(/\/+$/, "");
+}
+
+export function mockResultToResponse(result, successStatus = 200) {
+  if (result?.error === "conflict") {
+    return json({ error: result.message ?? "Conflict." }, { status: 409 });
+  }
+  if (result?.error === "not_found") {
+    return json({ error: result.message ?? "Not found." }, { status: 404 });
+  }
+  if (result?.error === "validation") {
+    return json({ error: result.message ?? "Validation error." }, { status: 400 });
+  }
+  return json(result, { status: successStatus });
 }
 
 export function guardMockRoute(pathname) {

@@ -1,7 +1,7 @@
 import { json } from "@sveltejs/kit";
 
 import { getMockCommitment, updateMockCommitment } from "$lib/mockCoreData";
-import { guardMockRoute } from "$lib/server/mockGuard";
+import { guardMockRoute, mockResultToResponse } from "$lib/server/mockGuard";
 
 export function GET({ params, url }) {
   const guardResponse = guardMockRoute(url.pathname);
@@ -37,23 +37,9 @@ export async function PATCH({ params, request, url }) {
     if_updated_at: body.if_updated_at,
   });
 
-  if (result.error === "not_found") {
-    return json({ error: "Commitment not found." }, { status: 404 });
-  }
-
-  if (result.error === "conflict") {
-    return json(
-      {
-        error: "Commitment has been updated by another actor.",
-        current: result.current,
-      },
-      { status: 409 },
-    );
-  }
-
   if (result.error === "invalid_transition") {
     return json({ error: result.message }, { status: 400 });
   }
 
-  return json({ commitment: result.commitment });
+  return mockResultToResponse(result);
 }

@@ -1,7 +1,5 @@
 <script>
-  export let title = "Raw Object";
-  export let objectData = {};
-  export let open = false;
+  let { title = "Raw Object", objectData = {}, open = false } = $props();
 </script>
 
 <details

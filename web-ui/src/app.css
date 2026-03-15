@@ -753,10 +753,6 @@ button:focus-visible {
   width: min(var(--shell-content-max, 100rem), 100%);
 }
 
-/* Legacy alias — kept for any remaining parseMarkdownLite usage */
-.markdown-lite h1,
-.markdown-lite h2,
-.markdown-lite h3,
 .markdown-rendered h1,
 .markdown-rendered h2,
 .markdown-rendered h3 {
@@ -765,19 +761,16 @@ button:focus-visible {
   line-height: 1.3;
 }
 
-.markdown-lite h1,
 .markdown-rendered h1 {
   font-size: 1rem;
   font-weight: 600;
 }
 
-.markdown-lite h2,
 .markdown-rendered h2 {
   font-size: 0.9375rem;
   font-weight: 600;
 }
 
-.markdown-lite h3,
 .markdown-rendered h3 {
   font-size: 0.875rem;
   font-weight: 600;
@@ -798,12 +791,10 @@ button:focus-visible {
   color: #b4b9c2;
 }
 
-.markdown-lite p,
 .markdown-rendered p {
   margin: 0.35rem 0;
 }
 
-.markdown-lite ul,
 .markdown-rendered ul {
   margin: 0.25rem 0 0.5rem;
   padding-left: 1.25rem;
@@ -816,7 +807,6 @@ button:focus-visible {
   list-style: decimal;
 }
 
-.markdown-lite li,
 .markdown-rendered li {
   margin: 0.15rem 0;
 }
@@ -843,7 +833,6 @@ button:focus-visible {
   pointer-events: none;
 }
 
-.markdown-lite code,
 .markdown-rendered code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.8em;
@@ -852,7 +841,6 @@ button:focus-visible {
   padding: 0.1rem 0.3rem;
 }
 
-.markdown-lite pre,
 .markdown-rendered pre {
   margin: 0.5rem 0;
   background: #0e1015;

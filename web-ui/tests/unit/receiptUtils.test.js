@@ -1,30 +1,32 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  parseReceiptListInput,
-  serializeReceiptListInput,
   validateReceiptDraft,
-  validateReceiptTypedRefs,
 } from "../../src/lib/receiptUtils.js";
+import {
+  parseListInput,
+  serializeListInput,
+  validateTypedRefs,
+} from "../../src/lib/typedRefs.js";
 
 describe("receipt list helpers", () => {
   it("parses and serializes list input", () => {
-    expect(parseReceiptListInput("one, two\nthree")).toEqual([
+    expect(parseListInput("one, two\nthree")).toEqual([
       "one",
       "two",
       "three",
     ]);
-    expect(serializeReceiptListInput(["one", "two"])).toBe("one\ntwo");
+    expect(serializeListInput(["one", "two"])).toBe("one\ntwo");
   });
 });
 
 describe("receipt typed-ref validation", () => {
   it("detects malformed typed refs", () => {
-    expect(validateReceiptTypedRefs(["artifact:a", "event:e-1"])).toEqual({
+    expect(validateTypedRefs(["artifact:a", "event:e-1"])).toEqual({
       valid: true,
       invalidRefs: [],
     });
-    expect(validateReceiptTypedRefs(["bad", "url:"])).toEqual({
+    expect(validateTypedRefs(["bad", "url:"])).toEqual({
       valid: false,
       invalidRefs: ["bad", "url:"],
     });

@@ -1,7 +1,7 @@
 import { json } from "@sveltejs/kit";
 
 import { getMockBoard, updateMockBoard } from "$lib/mockCoreData.js";
-import { guardMockRoute } from "$lib/server/mockGuard";
+import { guardMockRoute, mockResultToResponse } from "$lib/server/mockGuard";
 
 export function GET({ params, url }) {
   const guardResponse = guardMockRoute(url.pathname);
@@ -34,15 +34,5 @@ export async function PATCH({ params, request, url }) {
   }
 
   const updated = updateMockBoard(params.boardId, body);
-  if (updated?.error === "validation") {
-    return json({ error: updated.message }, { status: 400 });
-  }
-  if (updated?.error === "conflict") {
-    return json(updated, { status: 409 });
-  }
-  if (updated?.error === "not_found") {
-    return json({ error: updated.message }, { status: 404 });
-  }
-
-  return json(updated);
+  return mockResultToResponse(updated);
 }

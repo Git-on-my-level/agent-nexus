@@ -2,34 +2,36 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildReviewPayload,
-  parseReviewListInput,
-  serializeReviewListInput,
   validateReviewDraft,
-  validateReviewTypedRefs,
 } from "../../src/lib/reviewUtils.js";
+import {
+  parseListInput,
+  serializeListInput,
+  validateTypedRefs,
+} from "../../src/lib/typedRefs.js";
 
 describe("review list helpers", () => {
   it("parses and serializes evidence ref input", () => {
-    expect(parseReviewListInput("one, two\nthree")).toEqual([
+    expect(parseListInput("one, two\nthree")).toEqual([
       "one",
       "two",
       "three",
     ]);
-    expect(serializeReviewListInput(["one", "two"])).toBe("one\ntwo");
+    expect(serializeListInput(["one", "two"])).toBe("one\ntwo");
   });
 });
 
 describe("review typed-ref validation", () => {
   it("allows empty refs and rejects malformed refs", () => {
-    expect(validateReviewTypedRefs([])).toEqual({
+    expect(validateTypedRefs([])).toEqual({
       valid: true,
       invalidRefs: [],
     });
-    expect(validateReviewTypedRefs(["artifact:a", "event:e-1"])).toEqual({
+    expect(validateTypedRefs(["artifact:a", "event:e-1"])).toEqual({
       valid: true,
       invalidRefs: [],
     });
-    expect(validateReviewTypedRefs(["bad"])).toEqual({
+    expect(validateTypedRefs(["bad"])).toEqual({
       valid: false,
       invalidRefs: ["bad"],
     });
