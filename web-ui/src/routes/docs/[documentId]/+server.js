@@ -6,8 +6,7 @@ export function GET({ url, params }) {
   const guardResponse = guardMockRoute(url.pathname);
   if (guardResponse) return guardResponse;
   const result = getMockDocument(params.documentId);
-  if (!result)
-    return json({ error: "document not found" }, { status: 404 });
+  if (!result) return json({ error: "document not found" }, { status: 404 });
   return json(result);
 }
 

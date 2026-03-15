@@ -21,17 +21,22 @@
         />
       </svg>
     </div>
-    <h1 class="text-lg font-semibold text-[var(--ui-text)]">Something went wrong</h1>
+    <h1 class="text-lg font-semibold text-[var(--ui-text)]">
+      Something went wrong
+    </h1>
     <p class="mt-2 text-[13px] text-[var(--ui-text-muted)]">
       {$page.error?.message ?? "An unexpected error occurred."}
     </p>
     <p class="mt-3 text-[13px] text-[var(--ui-text-muted)]">
-      The backend may be unavailable. Contact your administrator or check the service status.
+      The backend may be unavailable. Contact your administrator or check the
+      service status.
     </p>
     <details
       class="mt-6 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-4 text-left"
     >
-      <summary class="cursor-pointer text-[12px] font-medium text-[var(--ui-text-muted)]">
+      <summary
+        class="cursor-pointer text-[12px] font-medium text-[var(--ui-text-muted)]"
+      >
         Technical troubleshooting
       </summary>
       <ol

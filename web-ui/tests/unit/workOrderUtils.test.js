@@ -16,11 +16,7 @@ import {
 
 describe("work order list helpers", () => {
   it("parses and serializes list input", () => {
-    expect(parseListInput("one, two\nthree")).toEqual([
-      "one",
-      "two",
-      "three",
-    ]);
+    expect(parseListInput("one, two\nthree")).toEqual(["one", "two", "three"]);
     expect(serializeListInput(["one", "two"])).toBe("one\ntwo");
   });
 

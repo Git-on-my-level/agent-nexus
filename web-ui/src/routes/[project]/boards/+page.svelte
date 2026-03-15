@@ -425,7 +425,8 @@
                     `/threads/${encodeURIComponent(board.primary_thread_id)}`,
                   )}
                 >
-                  {threadHint(board.primary_thread_id) || board.primary_thread_id}
+                  {threadHint(board.primary_thread_id) ||
+                    board.primary_thread_id}
                 </a>
               </span>
               <span>

@@ -15,7 +15,10 @@ export function mockResultToResponse(result, successStatus = 200) {
     return json({ error: result.message ?? "Not found." }, { status: 404 });
   }
   if (result?.error === "validation") {
-    return json({ error: result.message ?? "Validation error." }, { status: 400 });
+    return json(
+      { error: result.message ?? "Validation error." },
+      { status: 400 },
+    );
   }
   return json(result, { status: successStatus });
 }

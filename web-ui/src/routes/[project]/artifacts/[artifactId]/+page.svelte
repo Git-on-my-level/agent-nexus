@@ -391,7 +391,9 @@
     <div
       class="tombstone-banner mb-4 rounded-md border border-red-500/20 bg-red-500/10 p-4"
     >
-      <div class="flex items-center gap-2 text-[13px] font-semibold text-red-400">
+      <div
+        class="flex items-center gap-2 text-[13px] font-semibold text-red-400"
+      >
         <span>⚠</span>
         <span>This artifact has been tombstoned</span>
       </div>
@@ -436,7 +438,9 @@
         <span class="text-[var(--ui-text-subtle)]">Thread</span>
         <a
           class="ml-1 text-indigo-400 transition-colors hover:text-indigo-300"
-          href={projectHref(`/threads/${encodeURIComponent(artifact.thread_id)}`)}
+          href={projectHref(
+            `/threads/${encodeURIComponent(artifact.thread_id)}`,
+          )}
         >
           {artifact.thread_id}
         </a>

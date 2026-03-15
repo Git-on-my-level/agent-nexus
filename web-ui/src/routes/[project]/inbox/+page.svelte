@@ -460,7 +460,8 @@
                           `/threads#commitment-card-${item.commitment_id}`,
                         )}
                   >
-                    <span class="text-[var(--ui-text-subtle)]">Commitment:</span>
+                    <span class="text-[var(--ui-text-subtle)]">Commitment:</span
+                    >
                     {item.commitment_id}
                   </a>
                 {/if}

@@ -4,10 +4,7 @@ import {
   buildCommitmentPatch,
   validateCommitmentStatusTransition,
 } from "../../src/lib/commitmentUtils.js";
-import {
-  parseListInput,
-  serializeListInput,
-} from "../../src/lib/typedRefs.js";
+import { parseListInput, serializeListInput } from "../../src/lib/typedRefs.js";
 
 describe("commitment patch builder", () => {
   it("includes scalar changes only when modified", () => {
@@ -102,11 +99,7 @@ describe("commitment transition validation", () => {
 
 describe("commitment list input helpers", () => {
   it("parses and serializes list input", () => {
-    expect(parseListInput("one, two\nthree")).toEqual([
-      "one",
-      "two",
-      "three",
-    ]);
+    expect(parseListInput("one, two\nthree")).toEqual(["one", "two", "three"]);
     expect(serializeListInput(["one", "two"])).toBe("one\ntwo");
   });
 });

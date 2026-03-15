@@ -69,6 +69,15 @@ describe("RefLink model", () => {
     expect(unknown.href).toBe("");
   });
 
+  it("keeps event refs non-linkable when no thread context is available", () => {
+    expect(resolveRefLink("event:evt-9")).toMatchObject({
+      kind: "event",
+      href: "",
+      isExternal: false,
+      isLink: false,
+    });
+  });
+
   it("can humanize labels and keep raw ids as secondary labels", () => {
     const artifactRef = resolveRefLink("artifact:artifact-1", {
       humanize: true,

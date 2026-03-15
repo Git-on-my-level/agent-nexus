@@ -326,7 +326,9 @@
 {:else if document}
   {#if document.tombstoned_at}
     <div class="mb-4 rounded-md border border-red-500/30 bg-red-500/10 p-4">
-      <div class="flex items-center gap-2 text-[13px] font-semibold text-red-400">
+      <div
+        class="flex items-center gap-2 text-[13px] font-semibold text-red-400"
+      >
         <span>⚠</span>
         <span>This document has been tombstoned</span>
       </div>
@@ -354,7 +356,10 @@
         <div class="flex items-start justify-between gap-3">
           <div>
             <h1 class="text-lg font-semibold text-[var(--ui-text)]">
-              {document.title || ""}{#if !document.title}<span class="font-mono text-[var(--ui-text-subtle)]">{document.id}</span>{/if}
+              {document.title || ""}{#if !document.title}<span
+                  class="font-mono text-[var(--ui-text-subtle)]"
+                  >{document.id}</span
+                >{/if}
             </h1>
             <div class="mt-1 flex flex-wrap items-center gap-2 text-[12px]">
               {#if document.status}
@@ -385,7 +390,9 @@
                 <span class="text-[var(--ui-text-subtle)]">Thread</span>
                 <a
                   class="ml-1 text-indigo-400 transition-colors hover:text-indigo-300"
-                  href={projectHref(`/threads/${encodeURIComponent(document.thread_id)}`)}
+                  href={projectHref(
+                    `/threads/${encodeURIComponent(document.thread_id)}`,
+                  )}
                 >
                   {document.thread_id}
                 </a>

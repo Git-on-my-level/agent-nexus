@@ -13,9 +13,7 @@ export function validateReceiptDraft(draft, options = {}) {
 
   const workOrderId = String(draft?.workOrderId ?? "").trim();
   const outputs = parseListInput(draft?.outputsInput);
-  const verificationEvidence = parseListInput(
-    draft?.verificationEvidenceInput,
-  );
+  const verificationEvidence = parseListInput(draft?.verificationEvidenceInput);
   const changesSummary = String(draft?.changesSummary ?? "").trim();
   const knownGaps = parseListInput(draft?.knownGapsInput);
 

@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  validateReceiptDraft,
-} from "../../src/lib/receiptUtils.js";
+import { validateReceiptDraft } from "../../src/lib/receiptUtils.js";
 import {
   parseListInput,
   serializeListInput,
@@ -11,11 +9,7 @@ import {
 
 describe("receipt list helpers", () => {
   it("parses and serializes list input", () => {
-    expect(parseListInput("one, two\nthree")).toEqual([
-      "one",
-      "two",
-      "three",
-    ]);
+    expect(parseListInput("one, two\nthree")).toEqual(["one", "two", "three"]);
     expect(serializeListInput(["one", "two"])).toBe("one\ntwo");
   });
 });

@@ -1,4 +1,9 @@
-import { parseRef, parseListInput, serializeListInput, validateTypedRefs } from "./typedRefs.js";
+import {
+  parseRef,
+  parseListInput,
+  serializeListInput,
+  validateTypedRefs,
+} from "./typedRefs.js";
 
 export function ensureThreadRef(refs = [], threadId) {
   const normalized = refs.map((item) => String(item).trim()).filter(Boolean);
@@ -224,12 +229,8 @@ export function validateWorkOrderDraft(draft, options = {}) {
     parseListInput(draft?.contextRefsInput),
     threadId,
   );
-  const acceptanceCriteria = parseListInput(
-    draft?.acceptanceCriteriaInput,
-  );
-  const definitionOfDone = parseListInput(
-    draft?.definitionOfDoneInput,
-  );
+  const acceptanceCriteria = parseListInput(draft?.acceptanceCriteriaInput);
+  const definitionOfDone = parseListInput(draft?.definitionOfDoneInput);
 
   if (!threadId) {
     addError("thread_id", "thread_id is required.");

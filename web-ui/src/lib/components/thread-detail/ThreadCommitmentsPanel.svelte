@@ -221,9 +221,7 @@
         owner: draft.owner.trim(),
         due_at: datetimeLocalToIso(draft.due_at.trim()),
         status: draft.status,
-        definition_of_done: parseListInput(
-          draft.definitionOfDoneInput,
-        ),
+        definition_of_done: parseListInput(draft.definitionOfDoneInput),
         links: parseListInput(draft.linksInput),
       };
       const patch = buildCommitmentPatch(original, draftSnapshot);
@@ -391,7 +389,10 @@
         <div class="flex items-start justify-between gap-2">
           <div class="min-w-0 flex-1">
             <p class="text-[13px] font-medium text-[var(--ui-text)]">
-              {commitment.title || ""}{#if !commitment.title}<span class="font-mono text-[var(--ui-text-subtle)]">{commitment.id}</span>{/if}
+              {commitment.title || ""}{#if !commitment.title}<span
+                  class="font-mono text-[var(--ui-text-subtle)]"
+                  >{commitment.id}</span
+                >{/if}
             </p>
             <p class="mt-0.5 text-[12px] text-[var(--ui-text-muted)]">
               {actorName(commitment.owner)} · Due {commitment.due_at

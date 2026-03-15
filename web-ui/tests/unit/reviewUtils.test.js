@@ -12,11 +12,7 @@ import {
 
 describe("review list helpers", () => {
   it("parses and serializes evidence ref input", () => {
-    expect(parseListInput("one, two\nthree")).toEqual([
-      "one",
-      "two",
-      "three",
-    ]);
+    expect(parseListInput("one, two\nthree")).toEqual(["one", "two", "three"]);
     expect(serializeListInput(["one", "two"])).toBe("one\ntwo");
   });
 });

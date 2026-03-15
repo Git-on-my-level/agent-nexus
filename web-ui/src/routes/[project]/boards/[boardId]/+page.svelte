@@ -490,9 +490,7 @@
         <span class="text-[var(--ui-text-subtle)]">Thread</span>
         <a
           class="text-indigo-400 transition-colors hover:text-indigo-300"
-          href={projectHref(
-            `/threads/${encodeURIComponent(primaryThread.id)}`,
-          )}
+          href={projectHref(`/threads/${encodeURIComponent(primaryThread.id)}`)}
         >
           {primaryThread.title || primaryThread.id}
         </a>
@@ -752,14 +750,11 @@
         class="flex min-w-[220px] flex-1 flex-col rounded-md bg-[var(--ui-panel-muted)]"
       >
         <!-- Column header -->
-        <div
-          class="flex items-center justify-between px-3 py-2.5"
-        >
+        <div class="flex items-center justify-between px-3 py-2.5">
           <h3
             class="text-[11px] font-semibold uppercase tracking-wide text-[var(--ui-text-muted)]"
           >
-            {column.title ||
-              boardColumnTitle(column.key, board.column_schema)}
+            {column.title || boardColumnTitle(column.key, board.column_schema)}
           </h3>
           <span
             class="min-w-[1.25rem] rounded-full bg-[var(--ui-border)] px-1.5 py-0.5 text-center text-[11px] text-[var(--ui-text-subtle)]"
@@ -812,8 +807,7 @@
                   <div
                     class="mt-1 pl-4 text-[11px] text-[var(--ui-text-muted)]"
                   >
-                    {thread?.status ?? "\u2014"} · {thread?.priority ??
-                      "—"}
+                    {thread?.status ?? "\u2014"} · {thread?.priority ?? "—"}
                     · {formatTimestamp(card.created_at)}
                   </div>
 
@@ -872,9 +866,7 @@
                       onclick={() => openCardManager(cardItem)}
                       type="button"
                     >
-                      {expandedCardId === card.thread_id
-                        ? "Close"
-                        : "Actions"}
+                      {expandedCardId === card.thread_id ? "Close" : "Actions"}
                     </button>
                   </div>
                 </div>
@@ -889,17 +881,26 @@
                   >
                     <!-- Per-card commitments -->
                     {#if thisCommitments.length > 0}
-                      <div class="border-b border-[var(--ui-border)] px-2.5 py-1.5">
-                        <p class="text-[10px] font-semibold uppercase tracking-wide text-[var(--ui-text-subtle)]">
+                      <div
+                        class="border-b border-[var(--ui-border)] px-2.5 py-1.5"
+                      >
+                        <p
+                          class="text-[10px] font-semibold uppercase tracking-wide text-[var(--ui-text-subtle)]"
+                        >
                           Commitments
                         </p>
                         {#each thisCommitments as c}
                           <div class="mt-1 text-[11px]">
                             <span class="text-[var(--ui-text)]">
-                              {c.title || ""}{#if !c.title}<span class="font-mono text-[var(--ui-text-subtle)]">{c.id}</span>{/if}
+                              {c.title || ""}{#if !c.title}<span
+                                  class="font-mono text-[var(--ui-text-subtle)]"
+                                  >{c.id}</span
+                                >{/if}
                             </span>
                             <span class="text-[var(--ui-text-subtle)]">
-                              · {c.status ?? "\u2014"} · Due {formatTimestamp(c.due_at) || "—"}
+                              · {c.status ?? "\u2014"} · Due {formatTimestamp(
+                                c.due_at,
+                              ) || "—"}
                             </span>
                           </div>
                         {/each}
@@ -908,13 +909,19 @@
 
                     <!-- Per-card inbox items -->
                     {#if thisInbox.length > 0}
-                      <div class="border-b border-[var(--ui-border)] px-2.5 py-1.5">
-                        <p class="text-[10px] font-semibold uppercase tracking-wide text-[var(--ui-text-subtle)]">
+                      <div
+                        class="border-b border-[var(--ui-border)] px-2.5 py-1.5"
+                      >
+                        <p
+                          class="text-[10px] font-semibold uppercase tracking-wide text-[var(--ui-text-subtle)]"
+                        >
                           Inbox
                         </p>
                         {#each thisInbox as item}
                           <div class="mt-1 text-[11px]">
-                            <span class="text-amber-400">{item.urgency_label}</span>
+                            <span class="text-amber-400"
+                              >{item.urgency_label}</span
+                            >
                             <span class="text-[var(--ui-text)]">
                               {item.title || item.summary || item.id}
                             </span>
@@ -925,8 +932,12 @@
 
                     <!-- Per-card documents -->
                     {#if thisDocs.length > 0}
-                      <div class="border-b border-[var(--ui-border)] px-2.5 py-1.5">
-                        <p class="text-[10px] font-semibold uppercase tracking-wide text-[var(--ui-text-subtle)]">
+                      <div
+                        class="border-b border-[var(--ui-border)] px-2.5 py-1.5"
+                      >
+                        <p
+                          class="text-[10px] font-semibold uppercase tracking-wide text-[var(--ui-text-subtle)]"
+                        >
                           Documents
                         </p>
                         {#each thisDocs as doc}

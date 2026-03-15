@@ -161,7 +161,9 @@
         >
       </div>
       {#if inboxState.status === "ready"}
-        <p class="text-[13px] text-gray-500 mt-1 mb-2">{inboxSummarySentence(inboxSummary)}</p>
+        <p class="text-[13px] text-gray-500 mt-1 mb-2">
+          {inboxSummarySentence(inboxSummary)}
+        </p>
       {/if}
 
       {#if loading && inboxState.status === "idle"}
@@ -248,7 +250,9 @@
         >
       </div>
       {#if threadsState.status === "ready"}
-        <p class="text-[13px] text-gray-500 mt-1 mb-2">{threadHealthSentence(threadHealth)}</p>
+        <p class="text-[13px] text-gray-500 mt-1 mb-2">
+          {threadHealthSentence(threadHealth)}
+        </p>
       {/if}
 
       {#if loading && threadsState.status === "idle"}

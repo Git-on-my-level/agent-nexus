@@ -325,9 +325,7 @@
         <div class="actor-gate-header">
           <p class="actor-gate-eyebrow">Who are you?</p>
           <h1>Choose your identity</h1>
-          <p>
-            Pick an existing identity or create a new one.
-          </p>
+          <p>Pick an existing identity or create a new one.</p>
         </div>
 
         {#if actorError}
@@ -338,7 +336,9 @@
           {#if loadingActors}
             <p class="actor-gate-empty">Loading identities...</p>
           {:else if $actorRegistry.length === 0}
-            <p class="actor-gate-empty">No identities yet. Create one to get started.</p>
+            <p class="actor-gate-empty">
+              No identities yet. Create one to get started.
+            </p>
           {:else}
             {#each $actorRegistry as actor}
               <button
