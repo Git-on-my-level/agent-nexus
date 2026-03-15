@@ -1,84 +1,74 @@
 # AGENTS
 
 ## Scope
-Root onboarding and index for agents working in this monorepo.
+Root onboarding and routing guide for agents working in this monorepo.
 
-Goals:
-- find the right module guide quickly
-- preserve cross-component contracts and invariants
-- run the right checks before handoff
+Use this file for high-level context only. Then drill into the relevant module guide for the local rules, invariants, and checks that matter for your change.
 
-## Start Here
-1. Read [README.md](README.md) for current repo layout and root targets.
+## Monorepo Purpose
+Organization Autorunner is split into a small set of modules with different jobs:
+
+- `contracts/`: canonical shared contract layer. Defines the durable API and schema boundary that every other module must honor.
+- `core/`: canonical state and evidence service. Owns durable organizational truth and evidence-safe mutations.
+- `cli/`: agent-first command-line runtime. Optimized for non-interactive, script-safe, text/JSON-friendly workflows.
+- `web-ui/`: human-operator control surface. Optimized for glanceable visibility, triage, and explicit human intervention.
+- `runbooks/`: operational and release guidance.
+
+## Progressive Discovery
+1. Read [README.md](README.md) for repo layout and root targets.
 2. Identify blast radius: `contracts/`, `core/`, `cli/`, `web-ui/`.
-3. Open module guidance before editing behavior:
+3. Open the nearest relevant guide before editing behavior:
+- [contracts/AGENTS.md](contracts/AGENTS.md)
 - [core/AGENTS.md](core/AGENTS.md)
 - [cli/AGENTS.md](cli/AGENTS.md)
-4. If API/schema may change, read [contracts/README.md](contracts/README.md) first.
-5. Plan validation from component scope to repo-level gates.
+- [web-ui/AGENTS.md](web-ui/AGENTS.md)
+4. If a subdirectory has its own `AGENTS.md`, treat it as a narrower local guide that supplements, rather than replaces, the parent module guide.
+5. Plan validation from component scope outward to repo-level gates.
 
-## Repository Index
-- `contracts/`: canonical OpenAPI + schema contracts and generated artifacts.
-- `core/`: Go backend/domain implementation (`oar-core`).
-- `cli/`: Go CLI (`oar`).
-- `web-ui/`: SvelteKit frontend (`oar-ui`).
-- `runbooks/`: release and operations workflows.
-
-Primary references:
-- [README.md](README.md)
-- [contracts/README.md](contracts/README.md)
-- [runbooks/release.md](runbooks/release.md)
-
-## Source Of Truth Rules
+## Source Of Truth
 - Contracts are authoritative: HTTP/API in `contracts/oar-openapi.yaml`, domain/schema in `contracts/oar-schema.yaml`.
-- Generated artifacts are derived and must stay reproducible: regenerate with `make contract-gen`, verify drift with `make contract-check`.
+- Generated artifacts are derived outputs. Regenerate with `make contract-gen` and verify drift with `make contract-check`.
 - Runtime behavior in `core`, `cli`, and `web-ui` must remain contract-compatible.
 
-## Invariants To Preserve
-- Keep generated files aligned with canonical contract sources.
-- Preserve CLI machine-facing behavior (non-interactive defaults, stable `--json` flows).
-- Preserve core event/snapshot/commitment invariants in [core/AGENTS.md](core/AGENTS.md).
-- Preserve cross-component handshake/schema compatibility.
+## Cross-Module Boundaries
+- `core` is the system of record. Durable truth lives there, not in the CLI or UI.
+- `cli` is the automation and agent surface. Preserve deterministic, non-interactive behavior and stable machine-facing output.
+- `web-ui` is the human surface. Preserve readability, provenance visibility, and safe human intervention rather than agent orchestration.
+- `contracts` defines the handshake between modules. Change it first when shared behavior or data shape changes.
 
 ## Change Routing
-- Contract/API/schema change: update `contracts/` first, regenerate artifacts, then update consumers in `core`/`cli`/`web-ui`.
-- Core behavior change: follow edit/test map in [core/AGENTS.md](core/AGENTS.md).
-- CLI behavior/output change: follow module and runtime guidance in [cli/AGENTS.md](cli/AGENTS.md).
-- UI integration change: use [web-ui/README.md](web-ui/README.md) and `web-ui/docs/` runbook/spec docs.
+- Contract or schema change: start in [contracts/AGENTS.md](contracts/AGENTS.md), regenerate artifacts, then update consumers.
+- Core behavior change: follow [core/AGENTS.md](core/AGENTS.md).
+- CLI behavior or output change: follow [cli/AGENTS.md](cli/AGENTS.md).
+- UI integration or operator workflow change: follow [web-ui/AGENTS.md](web-ui/AGENTS.md).
 
 ## Validation Ladder
-Component-scoped checks first:
+Run the smallest relevant checks first:
+
 - `make -C core check`
 - `make cli-check`
 - `make -C web-ui check`
 
-Contract checks when API/schema is touched:
+When contracts change:
+
 - `make contract-gen`
 - `make contract-check`
 
-Repo-level gates before handoff:
+Before handoff on cross-module work:
+
 - `make check`
 - `make e2e-smoke`
 
-## Operational References
+## References
+- [README.md](README.md)
+- [contracts/README.md](contracts/README.md)
 - [runbooks/release.md](runbooks/release.md)
 - [core/docs/runbook.md](core/docs/runbook.md)
 - [cli/docs/runbook.md](cli/docs/runbook.md)
 - [web-ui/docs/runbook.md](web-ui/docs/runbook.md)
 
 ## Common Pitfalls
-- `make check` is broad; run component checks first for faster diagnosis.
-- `make -C core fmt` rewrites files; run intentionally near the end of edits.
-- `make serve` runs multiple processes; ensure they are cleaned up after interrupts.
-- `pnpm` workspace scope is UI-focused; `core` and `cli` are Go module workflows.
-
-## Handoff Checklist
-- Changes follow the right source of truth.
-- Relevant component checks pass.
-- Contract drift is resolved (if applicable).
-- Repo-level gates run for cross-component changes.
-- Related docs are updated with behavior/contract changes.
-
-## Cursor Cloud specific instructions
-
-See [CLOUD_AGENTS.md](CLOUD_AGENTS.md).
+- Do not edit generated artifacts by hand when the canonical source is under `contracts/`.
+- Do not treat `make check` as the first debugging step; start with component checks.
+- Do not move durable state or contract decisions into the CLI or UI layers.
+- Do not duplicate module-specific detail here when it belongs in a child `AGENTS.md`.

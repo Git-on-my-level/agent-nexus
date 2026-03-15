@@ -1,19 +1,22 @@
-# Pi Dogfood Agents
+# AGENTS
 
-This package is the scenario-testing lane for Pi-driven CLI dogfood.
+## Scope
+Local guide for `cli/dogfood/pi/`.
 
-## Provider And Model Invariant
+Read [../../AGENTS.md](../../AGENTS.md) first for the CLI module purpose. This file only covers the Pi dogfood lane.
 
-- Keep scenario runs on the package default lane: `--provider zai --model glm-5`.
-- Do not override the provider or model during scenario validation unless the user explicitly asks for a different lane.
-- If you need to debug another provider or model, do it outside the scenario runner with a separate direct probe or isolated script.
+## Local Purpose
+This package is the manual scenario-testing lane for CLI agent ergonomics.
 
-Reason:
-- Scenario results are only comparable across runs when they stay on the same provider/model lane.
-- Cross-provider debugging can create false conclusions about scenario health.
+Use it to exercise the real `oar` experience with a real agent runner against an isolated seeded `oar-core`, while keeping results comparable across runs.
 
-## Operational Rule
+## Local Invariants
+- Keep scenario validation on the default lane: `--provider zai --model glm-5`, unless the user explicitly asks to test a different lane.
+- Treat provider or model debugging as separate from scenario validation.
+- Respect runner defaults from [README.md](/Users/dazheng/workspace/organization-autorunner/cli/dogfood/pi/README.md) and `run.mjs`.
+- The runner default is `--max-seconds 900`; do not lower below `600` for multi-agent validation unless intentionally testing timeout behavior.
 
-- Treat [README.md](/Users/dazheng/car-workspace/worktrees/organization-autorunner--discord-1/cli/dogfood/pi/README.md) and [run.mjs](/Users/dazheng/car-workspace/worktrees/organization-autorunner--discord-1/cli/dogfood/pi/run.mjs) defaults as authoritative for scenario execution.
-- If a provider-specific issue needs investigation, clearly label it as separate from scenario validation.
-- The code default is `--max-seconds 900`. For multi-agent scenario validation, do not lower it below `600` unless you are intentionally testing timeout behavior.
+## Why This Matters
+- Comparable runs need a stable provider/model lane.
+- Lower timeouts can make scenario health look worse than actual CLI ergonomics.
+- This lane is for validating end-to-end agent experience, not for mixing in unrelated provider experiments.
