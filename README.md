@@ -9,6 +9,11 @@ Monorepo for Organization Autorunner.
 - `cli/`: Go CLI (`oar`)
 - `web-ui/`: SvelteKit frontend (`oar-ui`)
 
+## Architecture / Design Docs
+
+- **Foundation**: [docs/architecture/foundation.md](docs/architecture/foundation.md) — durable product and architecture decisions that define OAR.
+- Module-level specs: [core/docs/oar-core-spec.md](core/docs/oar-core-spec.md), [web-ui/docs/oar-ui-spec.md](web-ui/docs/oar-ui-spec.md).
+
 ## Quickstart
 
 ```bash
