@@ -1,13 +1,13 @@
 <script>
   import { page } from "$app/stores";
 
-  import { projectPath } from "$lib/projectPaths";
+  import { workspacePath } from "$lib/workspacePaths";
   import { threadDetailStore } from "$lib/threadDetailStore";
   import { getPriorityLabel } from "$lib/threadFilters";
 
   let snapshot = $derived($threadDetailStore.snapshot);
   let staleness = $derived(threadDetailStore.getStaleness(snapshot));
-  let projectSlug = $derived($page.params.project);
+  let workspaceSlug = $derived($page.params.workspace);
 </script>
 
 <nav
@@ -16,7 +16,7 @@
 >
   <a
     class="hover:text-[var(--ui-text)]"
-    href={projectPath(projectSlug, "/threads")}>Threads</a
+    href={workspacePath(workspaceSlug, "/threads")}>Threads</a
   >
   <span class="text-[var(--ui-text-subtle)]">/</span>
   <span class="truncate text-[var(--ui-text)]">{snapshot?.title || ""}</span>

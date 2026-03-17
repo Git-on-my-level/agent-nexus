@@ -8,37 +8,39 @@ This package contains the SvelteKit web UI for Organization Autorunner.
 
 ## Runtime model
 
-`oar-ui` now assumes project-aware proxying through the UI server.
+`oar-ui` now assumes workspace-aware proxying through the UI server.
 
-- Canonical config: `OAR_PROJECTS`
-  - JSON array or object mapping `project slug -> core base URL`
+- Canonical config: `OAR_WORKSPACES`
+  - JSON array or object mapping `workspace slug -> core base URL`
   - Example:
 
     ```bash
-    export OAR_PROJECTS='[
+    export OAR_WORKSPACES='[
       {"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"},
       {"slug":"ops","label":"Ops","coreBaseUrl":"http://127.0.0.1:8001"}
     ]'
-    export OAR_DEFAULT_PROJECT=local
+    export OAR_DEFAULT_WORKSPACE=local
     ```
 
-- UI routes are project-prefixed: `/:project/...`
+  - Legacy aliases (deprecated): `OAR_PROJECTS` and `OAR_DEFAULT_PROJECT` still work if the new names are absent.
+
+- UI routes are workspace-prefixed: `/:workspace/...`
   - Examples: `/local`, `/local/inbox`, `/ops/threads/thread-123`
-  - `/` redirects to the default project.
+  - `/` redirects to the default workspace.
   - Legacy root page routes (`/threads`, `/inbox`, etc.) redirect to the default
-    project for convenience.
+    workspace for convenience.
 - Optional external mount prefix: `OAR_UI_BASE_PATH=/oar`
-  - External routes become `/oar/:project/...`
+  - External routes become `/oar/:workspace/...`
   - Build/dev the UI with the same base path you plan to serve
   - Put build-time values in `web-ui/.env.build` or override them via shell env
   - Reverse proxies should preserve the prefix instead of stripping it
 
-- The SvelteKit server resolves proxied API traffic from the active project
+- The SvelteKit server resolves proxied API traffic from the active workspace
   context and forwards requests to the matching `oar-core`.
 
 - Single-core fallback still works for local/dev:
   - `OAR_CORE_BASE_URL=http://127.0.0.1:8000`
-  - This synthesizes one default `local` project when `OAR_PROJECTS` is unset.
+  - This synthesizes one default `local` workspace when `OAR_WORKSPACES` is unset.
 
 See `docs/runbook.md` for deployment examples, auth/session behavior, and
 WebAuthn constraints.
@@ -57,20 +59,20 @@ See `docs/runbook.md` for reverse proxy configuration and deployment examples.
 
 ## Startup compatibility
 
-On project route startup the UI calls `GET /meta/handshake` (falling back to
-`GET /version`) through the project-aware proxy and requires
+On workspace route startup the UI calls `GET /meta/handshake` (falling back to
+`GET /version`) through the workspace-aware proxy and requires
 `schema_version === "0.2.3"`.
 
 ## Quick smoke check
 
 ```bash
-env | rg '^(OAR_PROJECTS|OAR_DEFAULT_PROJECT|OAR_CORE_BASE_URL)='
+env | rg '^(OAR_WORKSPACES|OAR_DEFAULT_WORKSPACE|OAR_CORE_BASE_URL)='
 curl -fsS http://127.0.0.1:8000/meta/handshake
-curl -fsS -H 'x-oar-project-slug: local' http://127.0.0.1:5173/meta/handshake
+curl -fsS -H 'x-oar-workspace-slug: local' http://127.0.0.1:5173/meta/handshake
 ```
 
 The first `curl` checks `oar-core` directly. The second checks the UI proxy path
-for one project.
+for one workspace.
 
 ## Integration E2E with real oar-core
 
@@ -90,7 +92,7 @@ Terminal B (ui):
 
 ```bash
 cd ../web-ui
-OAR_PROJECTS='[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"}]' \
-OAR_DEFAULT_PROJECT=local \
+OAR_WORKSPACES='[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"}]' \
+OAR_DEFAULT_WORKSPACE=local \
 ./scripts/e2e-with-core
 ```

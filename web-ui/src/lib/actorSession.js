@@ -1,10 +1,14 @@
 import { get, writable } from "svelte/store";
 
-import { getCurrentProjectSlug, currentProjectSlug } from "./projectContext.js";
 import {
-  DEFAULT_PROJECT_SLUG,
+  getCurrentWorkspaceSlug,
+  currentWorkspaceSlug,
+} from "./workspaceContext.js";
+import {
+  DEFAULT_WORKSPACE_SLUG,
+  buildWorkspaceStorageKey,
   buildProjectStorageKey,
-} from "./projectPaths.js";
+} from "./workspacePaths.js";
 
 export const ACTOR_STORAGE_KEY = "oar_ui_actor_id";
 
@@ -12,7 +16,7 @@ export const actorSessionReady = writable(false);
 export const selectedActorId = writable("");
 export const actorRegistry = writable([]);
 
-const actorStateByProject = new Map();
+const actorStateByWorkspace = new Map();
 
 function createEmptyActorState() {
   return {
@@ -22,44 +26,58 @@ function createEmptyActorState() {
   };
 }
 
-function ensureActorState(projectSlug = getCurrentProjectSlug()) {
-  const slug = String(projectSlug ?? "").trim();
-  if (!actorStateByProject.has(slug)) {
-    actorStateByProject.set(slug, createEmptyActorState());
+function ensureActorState(workspaceSlug = getCurrentWorkspaceSlug()) {
+  const slug = String(workspaceSlug ?? "").trim();
+  if (!actorStateByWorkspace.has(slug)) {
+    actorStateByWorkspace.set(slug, createEmptyActorState());
   }
 
-  return actorStateByProject.get(slug);
+  return actorStateByWorkspace.get(slug);
 }
 
-function syncCurrentProjectStores(projectSlug = getCurrentProjectSlug()) {
-  const state = ensureActorState(projectSlug);
+function syncCurrentWorkspaceStores(workspaceSlug = getCurrentWorkspaceSlug()) {
+  const state = ensureActorState(workspaceSlug);
   actorSessionReady.set(state.ready);
   selectedActorId.set(state.selectedActorId);
   actorRegistry.set([...state.actorRegistry]);
   return state;
 }
 
-currentProjectSlug.subscribe((projectSlug) => {
-  syncCurrentProjectStores(projectSlug);
+currentWorkspaceSlug.subscribe((workspaceSlug) => {
+  syncCurrentWorkspaceStores(workspaceSlug);
 });
 
-export function actorStorageKey(projectSlug = getCurrentProjectSlug()) {
-  return buildProjectStorageKey(ACTOR_STORAGE_KEY, projectSlug);
+function migrateProjectActorStorageKey(storage, workspaceSlug) {
+  const oldKey = buildProjectStorageKey(ACTOR_STORAGE_KEY, workspaceSlug);
+  const newKey = buildWorkspaceStorageKey(ACTOR_STORAGE_KEY, workspaceSlug);
+
+  if (oldKey === newKey) return;
+
+  const oldValue = storage.getItem(oldKey);
+  if (oldValue && !storage.getItem(newKey)) {
+    storage.setItem(newKey, oldValue);
+  }
+}
+
+export function actorStorageKey(workspaceSlug = getCurrentWorkspaceSlug()) {
+  return buildWorkspaceStorageKey(ACTOR_STORAGE_KEY, workspaceSlug);
 }
 
 export function loadStoredActorId(
   storage = localStorage,
-  projectSlug = getCurrentProjectSlug(),
+  workspaceSlug = getCurrentWorkspaceSlug(),
 ) {
-  const scopedActorId = storage.getItem(actorStorageKey(projectSlug));
+  migrateProjectActorStorageKey(storage, workspaceSlug);
+
+  const scopedActorId = storage.getItem(actorStorageKey(workspaceSlug));
   if (scopedActorId) {
     return scopedActorId;
   }
 
-  const normalizedProjectSlug = String(projectSlug ?? "").trim();
+  const normalizedWorkspaceSlug = String(workspaceSlug ?? "").trim();
   if (
-    !normalizedProjectSlug ||
-    normalizedProjectSlug === DEFAULT_PROJECT_SLUG
+    !normalizedWorkspaceSlug ||
+    normalizedWorkspaceSlug === DEFAULT_WORKSPACE_SLUG
   ) {
     return storage.getItem(ACTOR_STORAGE_KEY) ?? "";
   }
@@ -70,9 +88,9 @@ export function loadStoredActorId(
 export function saveSelectedActorId(
   actorId,
   storage = localStorage,
-  projectSlug = getCurrentProjectSlug(),
+  workspaceSlug = getCurrentWorkspaceSlug(),
 ) {
-  const storageKey = actorStorageKey(projectSlug);
+  const storageKey = actorStorageKey(workspaceSlug);
   if (!actorId) {
     storage.removeItem(storageKey);
     storage.removeItem(ACTOR_STORAGE_KEY);
@@ -85,40 +103,40 @@ export function saveSelectedActorId(
 
 export function initializeActorSession(
   storage = localStorage,
-  projectSlug = getCurrentProjectSlug(),
+  workspaceSlug = getCurrentWorkspaceSlug(),
 ) {
-  const state = ensureActorState(projectSlug);
-  state.selectedActorId = loadStoredActorId(storage, projectSlug);
+  const state = ensureActorState(workspaceSlug);
+  state.selectedActorId = loadStoredActorId(storage, workspaceSlug);
   state.ready = true;
-  syncCurrentProjectStores(projectSlug);
+  syncCurrentWorkspaceStores(workspaceSlug);
   return state.selectedActorId;
 }
 
 export function chooseActor(
   actorId,
   storage = localStorage,
-  projectSlug = getCurrentProjectSlug(),
+  workspaceSlug = getCurrentWorkspaceSlug(),
 ) {
-  const state = ensureActorState(projectSlug);
-  state.selectedActorId = saveSelectedActorId(actorId, storage, projectSlug);
-  syncCurrentProjectStores(projectSlug);
+  const state = ensureActorState(workspaceSlug);
+  state.selectedActorId = saveSelectedActorId(actorId, storage, workspaceSlug);
+  syncCurrentWorkspaceStores(workspaceSlug);
   return state.selectedActorId;
 }
 
 export function clearSelectedActor(
   storage = localStorage,
-  projectSlug = getCurrentProjectSlug(),
+  workspaceSlug = getCurrentWorkspaceSlug(),
 ) {
-  return chooseActor("", storage, projectSlug);
+  return chooseActor("", storage, workspaceSlug);
 }
 
 export function replaceActorRegistry(
   actors,
-  projectSlug = getCurrentProjectSlug(),
+  workspaceSlug = getCurrentWorkspaceSlug(),
 ) {
-  const state = ensureActorState(projectSlug);
+  const state = ensureActorState(workspaceSlug);
   state.actorRegistry = [...(actors ?? [])];
-  syncCurrentProjectStores(projectSlug);
+  syncCurrentWorkspaceStores(workspaceSlug);
   return state.actorRegistry;
 }
 
@@ -160,9 +178,9 @@ export function lookupActorDisplayName(actorId, actors) {
   return map.get(actorId) ?? actorId;
 }
 
-export function getSelectedActorId(projectSlug = getCurrentProjectSlug()) {
-  if (projectSlug && projectSlug !== getCurrentProjectSlug()) {
-    return ensureActorState(projectSlug).selectedActorId;
+export function getSelectedActorId(workspaceSlug = getCurrentWorkspaceSlug()) {
+  if (workspaceSlug && workspaceSlug !== getCurrentWorkspaceSlug()) {
+    return ensureActorState(workspaceSlug).selectedActorId;
   }
 
   return get(selectedActorId);

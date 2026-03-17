@@ -24,12 +24,12 @@
   } from "$lib/authSession";
   import { coreClient } from "$lib/coreClient";
   import { getShellContentConfig, navigationItems } from "$lib/navigation";
-  import { setCurrentProjectSlug } from "$lib/projectContext";
+  import { setCurrentWorkspaceSlug } from "$lib/workspaceContext";
   import {
-    projectPath,
+    workspacePath,
     stripBasePath,
-    stripProjectPath,
-  } from "$lib/projectPaths";
+    stripWorkspacePath,
+  } from "$lib/workspacePaths";
 
   let { children, data } = $props();
 
@@ -50,14 +50,14 @@
   let creatingActor = $state(false);
   let newActorName = $state("");
   let mobileNavOpen = $state(false);
-  let hydratedProjectSlug = $state("");
-  let projectPickerOpen = $state(false);
+  let hydratedWorkspaceSlug = $state("");
+  let workspacePickerOpen = $state(false);
 
-  let activeProject = $derived($page.data.project ?? null);
-  let activeProjectSlug = $derived(activeProject?.slug ?? "");
+  let activeWorkspace = $derived($page.data.workspace ?? null);
+  let activeWorkspaceSlug = $derived(activeWorkspace?.slug ?? "");
   let currentAppPath = $derived(
-    activeProjectSlug
-      ? stripProjectPath($page.url.pathname, activeProjectSlug)
+    activeWorkspaceSlug
+      ? stripWorkspacePath($page.url.pathname, activeWorkspaceSlug)
       : stripBasePath($page.url.pathname),
   );
   let identityReady = $derived($actorSessionReady && $authSessionReady);
@@ -65,14 +65,17 @@
   let activeActorId = $derived(principalActorId || $selectedActorId);
   let onLoginRoute = $derived(currentAppPath === "/login");
   let gateVisible = $derived(
-    activeProjectSlug &&
+    activeWorkspaceSlug &&
       identityReady &&
       !$authenticatedAgent &&
       !onLoginRoute &&
       shouldShowActorGate($actorSessionReady, $selectedActorId),
   );
   let renderLoginOnly = $derived(
-    activeProjectSlug && identityReady && !$authenticatedAgent && onLoginRoute,
+    activeWorkspaceSlug &&
+      identityReady &&
+      !$authenticatedAgent &&
+      onLoginRoute,
   );
   let selectedActorName = $derived(
     lookupActorDisplayName(activeActorId, $actorRegistry) ||
@@ -95,8 +98,8 @@
       (item) => isActive(item.href) && item.href !== "/",
     );
     const section = navItem?.label;
-    const projectLabel = activeProject?.label;
-    const parts = [section, projectLabel, "OAR"].filter(Boolean);
+    const workspaceLabel = activeWorkspace?.label;
+    const parts = [section, workspaceLabel, "OAR"].filter(Boolean);
     return parts.join(" · ");
   });
 
@@ -110,63 +113,63 @@
       return;
     }
 
-    const projectSlug = activeProjectSlug;
-    if (!projectSlug) {
+    const workspaceSlug = activeWorkspaceSlug;
+    if (!workspaceSlug) {
       return;
     }
 
-    setCurrentProjectSlug(projectSlug);
-    if (hydratedProjectSlug === projectSlug) {
+    setCurrentWorkspaceSlug(workspaceSlug);
+    if (hydratedWorkspaceSlug === workspaceSlug) {
       return;
     }
 
-    hydratedProjectSlug = projectSlug;
-    void hydrateProject(projectSlug);
+    hydratedWorkspaceSlug = workspaceSlug;
+    void hydrateWorkspace(workspaceSlug);
   });
 
-  async function hydrateProject(projectSlug) {
-    initializeActorSession(localStorage, projectSlug);
+  async function hydrateWorkspace(workspaceSlug) {
+    initializeActorSession(localStorage, workspaceSlug);
     await initializeAuthSession({
       fetchFn: globalThis.fetch.bind(globalThis),
-      projectSlug,
+      workspaceSlug,
     });
-    await refreshActors(projectSlug);
+    await refreshActors(workspaceSlug);
   }
 
-  async function refreshActors(projectSlug = activeProjectSlug) {
+  async function refreshActors(workspaceSlug = activeWorkspaceSlug) {
     loadingActors = true;
     actorError = "";
 
     try {
       const response = await coreClient.listActors();
-      replaceActorRegistry(response.actors ?? [], projectSlug);
+      replaceActorRegistry(response.actors ?? [], workspaceSlug);
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       actorError = `Failed to load actors: ${reason}`;
-      replaceActorRegistry([], projectSlug);
+      replaceActorRegistry([], workspaceSlug);
     } finally {
       loadingActors = false;
     }
   }
 
   function selectActor(actorId) {
-    if ($authenticatedAgent || !activeProjectSlug) {
+    if ($authenticatedAgent || !activeWorkspaceSlug) {
       return;
     }
-    chooseActor(actorId, localStorage, activeProjectSlug);
+    chooseActor(actorId, localStorage, activeWorkspaceSlug);
   }
 
   function switchIdentity() {
-    if (!activeProjectSlug) {
+    if (!activeWorkspaceSlug) {
       return;
     }
 
     if ($authenticatedAgent) {
-      clearAuthSession(undefined, activeProjectSlug, { clearActor: true });
-      window.location.assign(projectHref("/login"));
+      clearAuthSession(undefined, activeWorkspaceSlug, { clearActor: true });
+      window.location.assign(workspaceHref("/login"));
       return;
     }
-    clearSelectedActor(localStorage, activeProjectSlug);
+    clearSelectedActor(localStorage, activeWorkspaceSlug);
     closeMobileNav();
   }
 
@@ -201,9 +204,9 @@
       const createdActor = response.actor;
       replaceActorRegistry(
         [...$actorRegistry, createdActor],
-        activeProjectSlug,
+        activeWorkspaceSlug,
       );
-      chooseActor(createdActor.id, localStorage, activeProjectSlug);
+      chooseActor(createdActor.id, localStorage, activeWorkspaceSlug);
       newActorName = "";
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
@@ -217,16 +220,16 @@
     return currentAppPath === href || currentAppPath.startsWith(`${href}/`);
   }
 
-  function projectHref(pathname = "/") {
-    return projectPath(activeProjectSlug, pathname);
+  function workspaceHref(pathname = "/") {
+    return workspacePath(activeWorkspaceSlug, pathname);
   }
 
-  async function switchProject(nextProjectSlug) {
-    if (!nextProjectSlug || nextProjectSlug === activeProjectSlug) {
+  async function switchWorkspace(nextWorkspaceSlug) {
+    if (!nextWorkspaceSlug || nextWorkspaceSlug === activeWorkspaceSlug) {
       return;
     }
 
-    const destination = `${projectPath(nextProjectSlug, currentAppPath)}${$page.url.search}${$page.url.hash}`;
+    const destination = `${workspacePath(nextWorkspaceSlug, currentAppPath)}${$page.url.search}${$page.url.hash}`;
     closeMobileNav();
     await goto(destination);
   }
@@ -243,7 +246,7 @@
     mobileNavOpen = !mobileNavOpen;
   }
 
-  function projectInitials(label) {
+  function workspaceInitials(label) {
     return (label || "?")
       .split(/[\s-]+/)
       .map((w) => w[0])
@@ -252,31 +255,31 @@
       .toUpperCase();
   }
 
-  function toggleProjectPicker() {
-    projectPickerOpen = !projectPickerOpen;
+  function toggleWorkspacePicker() {
+    workspacePickerOpen = !workspacePickerOpen;
   }
 
-  function closeProjectPicker() {
-    projectPickerOpen = false;
+  function closeWorkspacePicker() {
+    workspacePickerOpen = false;
   }
 
-  function pickProject(slug) {
-    closeProjectPicker();
-    switchProject(slug);
+  function pickWorkspace(slug) {
+    closeWorkspacePicker();
+    switchWorkspace(slug);
   }
 
   function handleWindowKeydown(event) {
     if (event.key === "Escape") {
-      if (projectPickerOpen) closeProjectPicker();
+      if (workspacePickerOpen) closeWorkspacePicker();
       if (mobileNavOpen) closeMobileNav();
     }
   }
 
   function handleWindowClick(event) {
-    if (projectPickerOpen) {
-      const picker = document.getElementById("project-picker-container");
+    if (workspacePickerOpen) {
+      const picker = document.getElementById("workspace-picker-container");
       if (picker && !picker.contains(event.target)) {
-        closeProjectPicker();
+        closeWorkspacePicker();
       }
     }
   }
@@ -289,7 +292,7 @@
 <svelte:window onkeydown={handleWindowKeydown} onclick={handleWindowClick} />
 
 <div class="shell-root">
-  {#if !activeProjectSlug}
+  {#if !activeWorkspaceSlug}
     {@render children()}
   {:else if !identityReady}
     <main class="shell-loading" aria-live="polite">
@@ -380,7 +383,7 @@
         </form>
 
         <p class="actor-gate-empty">
-          Prefer authenticated access? <a href={projectHref("/login")}
+          Prefer authenticated access? <a href={workspaceHref("/login")}
             >Sign in with a passkey.</a
           >
         </p>
@@ -389,26 +392,26 @@
   {:else}
     <div class="shell-frame">
       <aside class="shell-sidebar" aria-label="Primary">
-        <div class="project-switcher" id="project-picker-container">
+        <div class="workspace-switcher" id="workspace-picker-container">
           <button
-            class="project-switcher-trigger"
-            onclick={toggleProjectPicker}
-            aria-expanded={projectPickerOpen}
+            class="workspace-switcher-trigger"
+            onclick={toggleWorkspacePicker}
+            aria-expanded={workspacePickerOpen}
             aria-haspopup="listbox"
             type="button"
           >
-            <span class="project-switcher-icon" aria-hidden="true">
-              {projectInitials(activeProject?.label)}
+            <span class="workspace-switcher-icon" aria-hidden="true">
+              {workspaceInitials(activeWorkspace?.label)}
             </span>
-            <span class="project-switcher-label">
-              <span class="project-switcher-name"
-                >{activeProject?.label || activeProjectSlug}</span
+            <span class="workspace-switcher-label">
+              <span class="workspace-switcher-name"
+                >{activeWorkspace?.label || activeWorkspaceSlug}</span
               >
-              <span class="project-switcher-sub">OAR Control Surface</span>
+              <span class="workspace-switcher-sub">OAR Control Surface</span>
             </span>
             <svg
-              class="project-switcher-chevron"
-              class:project-switcher-chevron--open={projectPickerOpen}
+              class="workspace-switcher-chevron"
+              class:workspace-switcher-chevron--open={workspacePickerOpen}
               viewBox="0 0 20 20"
               fill="currentColor"
               aria-hidden="true"
@@ -421,36 +424,39 @@
             </svg>
           </button>
 
-          {#if projectPickerOpen}
+          {#if workspacePickerOpen}
             <div
-              class="project-switcher-dropdown"
+              class="workspace-switcher-dropdown"
               role="listbox"
-              aria-label="Switch project"
+              aria-label="Switch workspace"
             >
-              {#each data.projects ?? [] as project}
-                {@const isCurrent = project.slug === activeProjectSlug}
+              {#each data.workspaces ?? [] as workspace}
+                {@const isCurrent = workspace.slug === activeWorkspaceSlug}
                 <button
-                  class="project-switcher-option"
-                  class:project-switcher-option--active={isCurrent}
+                  class="workspace-switcher-option"
+                  class:workspace-switcher-option--active={isCurrent}
                   role="option"
                   aria-selected={isCurrent}
-                  onclick={() => pickProject(project.slug)}
+                  onclick={() => pickWorkspace(workspace.slug)}
                   type="button"
                 >
-                  <span class="project-switcher-option-icon" aria-hidden="true">
-                    {projectInitials(project.label)}
+                  <span
+                    class="workspace-switcher-option-icon"
+                    aria-hidden="true"
+                  >
+                    {workspaceInitials(workspace.label)}
                   </span>
-                  <span class="project-switcher-option-label">
-                    <span>{project.label}</span>
-                    {#if project.description}
-                      <span class="project-switcher-option-desc"
-                        >{project.description}</span
+                  <span class="workspace-switcher-option-label">
+                    <span>{workspace.label}</span>
+                    {#if workspace.description}
+                      <span class="workspace-switcher-option-desc"
+                        >{workspace.description}</span
                       >
                     {/if}
                   </span>
                   {#if isCurrent}
                     <svg
-                      class="project-switcher-check"
+                      class="workspace-switcher-check"
                       viewBox="0 0 20 20"
                       fill="currentColor"
                       aria-hidden="true"
@@ -473,7 +479,7 @@
             {@const active = isActive(item.href)}
             <a
               class={`shell-nav-link ${active ? "shell-nav-link--active" : ""}`}
-              href={projectHref(item.href)}
+              href={workspaceHref(item.href)}
               aria-label={item.label}
             >
               <svg
@@ -585,30 +591,30 @@
                 </button>
               </div>
               <nav class="shell-mobile-nav" aria-label="Primary mobile">
-                <div class="mobile-project-list">
-                  {#each data.projects ?? [] as project}
-                    {@const isCurrent = project.slug === activeProjectSlug}
+                <div class="mobile-workspace-list">
+                  {#each data.workspaces ?? [] as workspace}
+                    {@const isCurrent = workspace.slug === activeWorkspaceSlug}
                     <button
-                      class="project-switcher-option"
-                      class:project-switcher-option--active={isCurrent}
+                      class="workspace-switcher-option"
+                      class:workspace-switcher-option--active={isCurrent}
                       onclick={() => {
-                        pickProject(project.slug);
+                        pickWorkspace(workspace.slug);
                         closeMobileNav();
                       }}
                       type="button"
                     >
                       <span
-                        class="project-switcher-option-icon"
+                        class="workspace-switcher-option-icon"
                         aria-hidden="true"
                       >
-                        {projectInitials(project.label)}
+                        {workspaceInitials(workspace.label)}
                       </span>
-                      <span class="project-switcher-option-label">
-                        <span>{project.label}</span>
+                      <span class="workspace-switcher-option-label">
+                        <span>{workspace.label}</span>
                       </span>
                       {#if isCurrent}
                         <svg
-                          class="project-switcher-check"
+                          class="workspace-switcher-check"
                           viewBox="0 0 20 20"
                           fill="currentColor"
                           aria-hidden="true"
@@ -623,12 +629,12 @@
                     </button>
                   {/each}
                 </div>
-                <div class="mobile-project-divider"></div>
+                <div class="mobile-workspace-divider"></div>
                 {#each navigationItems as item}
                   {@const active = isActive(item.href)}
                   <a
                     class={`shell-nav-link ${active ? "shell-nav-link--active" : ""}`}
-                    href={projectHref(item.href)}
+                    href={workspaceHref(item.href)}
                     onclick={closeMobileNav}
                     aria-label={item.label}
                   >

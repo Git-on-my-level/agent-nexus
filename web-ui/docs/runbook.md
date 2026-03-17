@@ -1,36 +1,41 @@
 # oar-ui Runbook
 
 This runbook covers local integration and production-like serving for the
-project-aware `oar-ui`.
+workspace-aware `oar-ui`.
 
 ## Configuration
 
-### Project catalog
+### Workspace catalog
 
-Canonical runtime config is `OAR_PROJECTS`.
+Canonical runtime config is `OAR_WORKSPACES`.
 
 - Accepts a JSON array or object.
-- Each entry needs a project slug and a core base URL.
+- Each entry needs a workspace slug and a core base URL.
 - Optional fields: `label`, `description`.
 
 Example:
 
 ```bash
-export OAR_PROJECTS='[
+export OAR_WORKSPACES='[
   {"slug":"dtrinity","label":"DTrinity","coreBaseUrl":"http://127.0.0.1:8000"},
   {"slug":"scalingforever","label":"Scaling Forever","coreBaseUrl":"http://127.0.0.1:8001"}
 ]'
-export OAR_DEFAULT_PROJECT=dtrinity
+export OAR_DEFAULT_WORKSPACE=dtrinity
 ```
+
+Legacy aliases (deprecated):
+
+- `OAR_PROJECTS` is accepted if `OAR_WORKSPACES` is not set.
+- `OAR_DEFAULT_PROJECT` is accepted if `OAR_DEFAULT_WORKSPACE` is not set.
 
 Route model:
 
-- `/:project/...` is the canonical UI shape.
-- `/` redirects to `/${OAR_DEFAULT_PROJECT}`.
+- `/:workspace/...` is the canonical UI shape.
+- `/` redirects to `/${OAR_DEFAULT_WORKSPACE}`.
 - Root page routes such as `/threads` and `/inbox` redirect to the default
-  project to ease local use and old bookmarks.
+  workspace to ease local use and old bookmarks.
 - Optional mount prefix: set `OAR_UI_BASE_PATH=/oar`
-  - External routes become `/oar/:project/...`
+  - External routes become `/oar/:workspace/...`
   - `OAR_UI_BASE_PATH` is applied by SvelteKit at dev/build startup, so use the
     intended value when running `./scripts/dev` or `./scripts/build`
 
@@ -45,9 +50,9 @@ Build-time config files:
 
 Single-core fallback:
 
-- If `OAR_PROJECTS` is unset, `OAR_CORE_BASE_URL` still creates one default
-  `local` project for dev/integration use.
-- If neither variable is set, the default `local` project uses same-origin mock
+- If `OAR_WORKSPACES` is unset, `OAR_CORE_BASE_URL` still creates one default
+  `local` workspace for dev/integration use.
+- If neither variable is set, the default `local` workspace uses same-origin mock
   routes.
 
 ### Required oar-core endpoints
@@ -82,17 +87,17 @@ contract):
 
 ### Auth and actor storage
 
-Identity is project-scoped.
+Identity is workspace-scoped.
 
 - Passkey-authenticated mode:
-  - Access token stays in memory per project.
-  - Refresh token is stored in `sessionStorage` per project.
-  - Authenticated writes lock to that project’s principal actor.
+  - Access token stays in memory per workspace.
+  - Refresh token is stored in `sessionStorage` per workspace.
+  - Authenticated writes lock to that workspace's principal actor.
 - Actor-selection mode:
-  - Selected actor is stored in `localStorage` per project.
+  - Selected actor is stored in `localStorage` per workspace.
   - Useful for local workflows when core allows unauthenticated writes.
 
-Switching from `/dtrinity/...` to `/scalingforever/...` preserves each project’s
+Switching from `/dtrinity/...` to `/scalingforever/...` preserves each workspace's
 own auth and actor state independently.
 
 ## Local integration
@@ -106,8 +111,8 @@ cd ../core
 
 ```bash
 cd ../web-ui
-OAR_PROJECTS='[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"}]' \
-OAR_DEFAULT_PROJECT=local \
+OAR_WORKSPACES='[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"}]' \
+OAR_DEFAULT_WORKSPACE=local \
 ./scripts/dev
 ```
 
@@ -115,8 +120,8 @@ With an external mount prefix:
 
 ```bash
 cd ../web-ui
-OAR_PROJECTS='[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"}]' \
-OAR_DEFAULT_PROJECT=local \
+OAR_WORKSPACES='[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"}]' \
+OAR_DEFAULT_WORKSPACE=local \
 OAR_UI_BASE_PATH=/oar \
 ./scripts/dev
 ```
@@ -124,19 +129,19 @@ OAR_UI_BASE_PATH=/oar \
 Two cores:
 
 ```bash
-export OAR_PROJECTS='[
+export OAR_WORKSPACES='[
   {"slug":"dtrinity","label":"DTrinity","coreBaseUrl":"http://127.0.0.1:8000"},
   {"slug":"scalingforever","label":"Scaling Forever","coreBaseUrl":"http://127.0.0.1:8001"}
 ]'
-export OAR_DEFAULT_PROJECT=dtrinity
+export OAR_DEFAULT_WORKSPACE=dtrinity
 ./scripts/dev
 ```
 
 Integration validation:
 
 ```bash
-OAR_PROJECTS='[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"}]' \
-OAR_DEFAULT_PROJECT=local \
+OAR_WORKSPACES='[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"}]' \
+OAR_DEFAULT_WORKSPACE=local \
 ./scripts/e2e-with-core
 ```
 
@@ -150,8 +155,8 @@ node ./scripts/seed-core-from-mock.mjs
 
 Primary board UI entry points:
 
-- `/:project/boards`
-- `/:project/boards/:boardId`
+- `/:workspace/boards`
+- `/:workspace/boards/:boardId`
 
 The board detail page relies on `GET /boards/{board_id}/workspace` for the
 canonical read model and reloads that workspace after mutations or `409
@@ -182,11 +187,11 @@ deployments require the Node adapter for server-side proxy and hook support.
 Serve the built UI:
 
 ```bash
-OAR_PROJECTS='[
+OAR_WORKSPACES='[
   {"slug":"dtrinity","label":"DTrinity","coreBaseUrl":"http://127.0.0.1:8000"},
   {"slug":"scalingforever","label":"Scaling Forever","coreBaseUrl":"http://127.0.0.1:8001"}
 ]' \
-OAR_DEFAULT_PROJECT=dtrinity \
+OAR_DEFAULT_WORKSPACE=dtrinity \
 ./scripts/serve
 ```
 
@@ -222,17 +227,17 @@ m2-internal.scalingforever.com {
 Configure the UI with `OAR_UI_BASE_PATH=/oar` when building or running the dev
 server. The reverse proxy must preserve `/oar` so SvelteKit can route and
 generate links under the configured base path. The UI server then proxies API
-traffic to the matching `oar-core` from `OAR_PROJECTS`. Core instances do not
+traffic to the matching `oar-core` from `OAR_WORKSPACES`. Core instances do not
 need to be internet-exposed.
 
 ## WebAuthn and hostname/origin limits
 
 WebAuthn is host/origin sensitive, not path sensitive.
 
-- Sharing one hostname across many projects is fine for browser passkey
+- Sharing one hostname across many workspaces is fine for browser passkey
   ceremonies.
 - That does not create shared auth state across independent cores. `oar-ui`
-  stores auth per project and each `oar-core` still validates its own tokens.
+  stores auth per workspace and each `oar-core` still validates its own tokens.
 - If core is configured with explicit `OAR_WEBAUTHN_ORIGIN` or
   `OAR_WEBAUTHN_RPID`, the browser must open the UI on that exact hostname.
 - Alternate hostnames such as `localhost`, `127.0.0.1`, Tailscale names, or raw
@@ -244,8 +249,8 @@ WebAuthn is host/origin sensitive, not path sensitive.
 
 Symptoms:
 
-- Startup compatibility checks fail for one project.
-- UI shows `core_unreachable` for project-scoped traffic.
+- Startup compatibility checks fail for one workspace.
+- UI shows `core_unreachable` for workspace-scoped traffic.
 - `./scripts/e2e-with-core` fails health checks.
 
 Actions:
@@ -253,19 +258,19 @@ Actions:
 1. Confirm the target core is running.
 2. Verify the exact upstream URL:
    `curl -fsS http://127.0.0.1:8000/meta/handshake`
-3. Verify the matching project entry in `OAR_PROJECTS`.
+3. Verify the matching workspace entry in `OAR_WORKSPACES`.
 
-### Wrong project mapping
+### Wrong workspace mapping
 
 Symptoms:
 
-- One project works and another consistently 404s/503s.
-- Requests fail with `project_not_configured` or `project_header_required`.
+- One workspace works and another consistently 404s/503s.
+- Requests fail with `workspace_not_configured` or `workspace_header_required`.
 
 Actions:
 
-1. Confirm the UI URL includes a valid project slug.
-2. Confirm `OAR_PROJECTS` contains that slug.
+1. Confirm the UI URL includes a valid workspace slug.
+2. Confirm `OAR_WORKSPACES` contains that slug.
 3. Keep core base URLs as bare origins, not path-prefixed URLs.
 
 ### WebAuthn failures on one hostname but not another

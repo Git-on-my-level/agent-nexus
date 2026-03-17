@@ -5,8 +5,8 @@ import {
 } from "$lib/authSession";
 import { getSelectedActorId } from "$lib/actorSession";
 import { createOarCoreClient } from "$lib/oarCoreClient";
-import { getCurrentProjectSlug } from "$lib/projectContext";
-import { PROJECT_HEADER } from "$lib/projectPaths";
+import { getCurrentWorkspaceSlug } from "$lib/workspaceContext";
+import { WORKSPACE_HEADER } from "$lib/workspacePaths";
 
 let browserClient;
 
@@ -23,10 +23,10 @@ function resolveBrowserClient() {
       actorIdProvider: () => getAuthenticatedActorId() || getSelectedActorId(),
       lockActorIdProvider: () => Boolean(getAuthenticatedActorId()),
       tokenProvider: createAuthTokenProvider(fetchFn, {
-        projectSlugProvider: () => getCurrentProjectSlug(),
+        workspaceSlugProvider: () => getCurrentWorkspaceSlug(),
       }),
       requestContextHeadersProvider: () => ({
-        [PROJECT_HEADER]: getCurrentProjectSlug(),
+        [WORKSPACE_HEADER]: getCurrentWorkspaceSlug(),
       }),
       fetchFn,
     });

@@ -2,7 +2,7 @@
   import { page } from "$app/stores";
   import { lookupActorDisplayName, actorRegistry } from "$lib/actorSession";
   import { formatTimestamp } from "$lib/formatDate";
-  import { projectPath } from "$lib/projectPaths";
+  import { workspacePath } from "$lib/workspacePaths";
   import { threadDetailStore } from "$lib/threadDetailStore";
 
   const DOC_STATUS_LABELS = { draft: "Draft", active: "Active" };
@@ -12,26 +12,26 @@
   let documents = $derived($threadDetailStore.documents);
   let documentsLoading = $derived($threadDetailStore.documentsLoading);
   let documentsError = $derived($threadDetailStore.documentsError);
-  let projectSlug = $derived($page.params.project);
+  let workspaceSlug = $derived($page.params.workspace);
   let actorName = $derived((id) => lookupActorDisplayName(id, $actorRegistry));
 
-  function projectHref(pathname = "/") {
-    return projectPath(projectSlug, pathname);
+  function workspaceHref(pathname = "/") {
+    return workspacePath(workspaceSlug, pathname);
   }
 
   function docsListHref() {
-    return `${projectHref("/docs")}?thread_id=${encodeURIComponent(threadId)}`;
+    return `${workspaceHref("/docs")}?thread_id=${encodeURIComponent(threadId)}`;
   }
 
   function documentHref(doc) {
     const documentId = String(doc?.id ?? "").trim();
     if (!documentId) {
-      return projectHref("/docs");
+      return workspaceHref("/docs");
     }
     const revisionId = String(
       doc?.head_revision?.revision_id ?? doc?.head_revision_id ?? "",
     ).trim();
-    const base = projectHref(`/docs/${encodeURIComponent(documentId)}`);
+    const base = workspaceHref(`/docs/${encodeURIComponent(documentId)}`);
     if (!revisionId) {
       return base;
     }

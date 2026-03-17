@@ -5,7 +5,7 @@ import {
 
 import { getExpectedCommandRegistryDigest } from "./commandRegistryDigest.js";
 import { EXPECTED_SCHEMA_VERSION, normalizeBaseUrl } from "./config.js";
-import { appPath } from "./projectPaths.js";
+import { appPath } from "./workspacePaths.js";
 
 const commandRegistryByID = new Map(
   commandRegistry.map((command) => [command.command_id, command]),

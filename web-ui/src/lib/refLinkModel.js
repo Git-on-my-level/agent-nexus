@@ -1,5 +1,5 @@
 import { parseRef, renderRef } from "./typedRefs.js";
-import { appPath, projectPath } from "./projectPaths.js";
+import { appPath, workspacePath } from "./workspacePaths.js";
 
 function asPathSegment(value) {
   return encodeURIComponent(String(value));
@@ -66,39 +66,41 @@ function resolveRefLabels(raw, prefix, value, options = {}) {
   };
 }
 
-function toProjectHref(projectSlug, pathname) {
-  return projectSlug ? projectPath(projectSlug, pathname) : appPath(pathname);
+function toWorkspaceHref(workspaceSlug, pathname) {
+  return workspaceSlug
+    ? workspacePath(workspaceSlug, pathname)
+    : appPath(pathname);
 }
 
-function buildInternalHref(projectSlug, pathname) {
-  return toProjectHref(projectSlug, pathname);
+function buildInternalHref(workspaceSlug, pathname) {
+  return toWorkspaceHref(workspaceSlug, pathname);
 }
 
 const LINK_RESOLVERS = {
-  artifact: ({ projectSlug, value }) =>
-    buildInternalHref(projectSlug, `/artifacts/${asPathSegment(value)}`),
-  thread: ({ projectSlug, value }) =>
-    buildInternalHref(projectSlug, `/threads/${asPathSegment(value)}`),
-  snapshot: ({ projectSlug, snapshotIsThread, value }) =>
+  artifact: ({ workspaceSlug, value }) =>
+    buildInternalHref(workspaceSlug, `/artifacts/${asPathSegment(value)}`),
+  thread: ({ workspaceSlug, value }) =>
+    buildInternalHref(workspaceSlug, `/threads/${asPathSegment(value)}`),
+  snapshot: ({ workspaceSlug, snapshotIsThread, value }) =>
     snapshotIsThread
-      ? buildInternalHref(projectSlug, `/threads/${asPathSegment(value)}`)
-      : buildInternalHref(projectSlug, `/snapshots/${asPathSegment(value)}`),
-  event: ({ projectSlug, threadId, value }) =>
+      ? buildInternalHref(workspaceSlug, `/threads/${asPathSegment(value)}`)
+      : buildInternalHref(workspaceSlug, `/snapshots/${asPathSegment(value)}`),
+  event: ({ workspaceSlug, threadId, value }) =>
     threadId
       ? buildInternalHref(
-          projectSlug,
+          workspaceSlug,
           `/threads/${asPathSegment(threadId)}#event-${asPathSegment(value)}`,
         )
       : "",
   url: ({ value }) => value,
-  inbox: ({ projectSlug, value }) =>
-    buildInternalHref(projectSlug, `/inbox#inbox-${asPathSegment(value)}`),
-  document: ({ projectSlug, value }) =>
-    buildInternalHref(projectSlug, `/docs/${asPathSegment(value)}`),
-  document_revision: ({ projectSlug, value }) =>
-    buildInternalHref(projectSlug, `/docs/revisions/${asPathSegment(value)}`),
-  board: ({ projectSlug, value }) =>
-    buildInternalHref(projectSlug, `/boards/${asPathSegment(value)}`),
+  inbox: ({ workspaceSlug, value }) =>
+    buildInternalHref(workspaceSlug, `/inbox#inbox-${asPathSegment(value)}`),
+  document: ({ workspaceSlug, value }) =>
+    buildInternalHref(workspaceSlug, `/docs/${asPathSegment(value)}`),
+  document_revision: ({ workspaceSlug, value }) =>
+    buildInternalHref(workspaceSlug, `/docs/revisions/${asPathSegment(value)}`),
+  board: ({ workspaceSlug, value }) =>
+    buildInternalHref(workspaceSlug, `/boards/${asPathSegment(value)}`),
 };
 
 function createResolvedLink(raw, prefix, value, labels, { href, isExternal }) {
@@ -119,7 +121,7 @@ export function resolveRefLink(refValue, options = {}) {
   const raw = renderRef(parsed);
   const prefix = parsed.prefix;
   const value = parsed.value;
-  const projectSlug = options.projectSlug;
+  const workspaceSlug = options.workspaceSlug;
   const threadId = options.threadId;
   const snapshotIsThread = Boolean(options.snapshotIsThread);
 
@@ -140,7 +142,7 @@ export function resolveRefLink(refValue, options = {}) {
   const linkResolver = LINK_RESOLVERS[prefix];
   if (linkResolver) {
     return createResolvedLink(raw, prefix, value, labels, {
-      href: linkResolver({ projectSlug, snapshotIsThread, threadId, value }),
+      href: linkResolver({ workspaceSlug, snapshotIsThread, threadId, value }),
       isExternal: prefix === "url",
     });
   }

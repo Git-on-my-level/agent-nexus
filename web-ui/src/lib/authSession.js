@@ -2,22 +2,27 @@ import { get, writable } from "svelte/store";
 
 import { clearSelectedActor } from "./actorSession.js";
 import { normalizeBaseUrl } from "./config.js";
-import { getCurrentProjectSlug, currentProjectSlug } from "./projectContext.js";
 import {
-  DEFAULT_PROJECT_SLUG,
+  getCurrentWorkspaceSlug,
+  currentWorkspaceSlug,
+} from "./workspaceContext.js";
+import {
+  DEFAULT_WORKSPACE_SLUG,
   appPath,
+  buildWorkspaceStorageKey,
+  workspacePath,
   buildProjectStorageKey,
-  projectPath,
-} from "./projectPaths.js";
+} from "./workspacePaths.js";
 
 export const REFRESH_TOKEN_STORAGE_KEY = "oar_ui_refresh_token";
+export const LEGACY_REFRESH_TOKEN_KEY = "oar_ui_refresh_token";
 
 export const authSessionReady = writable(false);
 export const authenticatedAgent = writable(null);
 
 const browser = typeof window !== "undefined";
 
-const authStateByProject = new Map();
+const authStateByWorkspace = new Map();
 
 function createEmptyAuthState() {
   return {
@@ -28,24 +33,24 @@ function createEmptyAuthState() {
   };
 }
 
-function ensureAuthState(projectSlug = getCurrentProjectSlug()) {
-  const slug = String(projectSlug ?? "").trim();
-  if (!authStateByProject.has(slug)) {
-    authStateByProject.set(slug, createEmptyAuthState());
+function ensureAuthState(workspaceSlug = getCurrentWorkspaceSlug()) {
+  const slug = String(workspaceSlug ?? "").trim();
+  if (!authStateByWorkspace.has(slug)) {
+    authStateByWorkspace.set(slug, createEmptyAuthState());
   }
 
-  return authStateByProject.get(slug);
+  return authStateByWorkspace.get(slug);
 }
 
-function syncCurrentAuthStores(projectSlug = getCurrentProjectSlug()) {
-  const state = ensureAuthState(projectSlug);
+function syncCurrentAuthStores(workspaceSlug = getCurrentWorkspaceSlug()) {
+  const state = ensureAuthState(workspaceSlug);
   authSessionReady.set(state.ready);
   authenticatedAgent.set(state.authenticatedAgent);
   return state;
 }
 
-currentProjectSlug.subscribe((projectSlug) => {
-  syncCurrentAuthStores(projectSlug);
+currentWorkspaceSlug.subscribe((workspaceSlug) => {
+  syncCurrentAuthStores(workspaceSlug);
 });
 
 function resolveFetch(fetchFn) {
@@ -104,29 +109,51 @@ async function requestJSON(
   return payload;
 }
 
-export function refreshTokenStorageKey(projectSlug = getCurrentProjectSlug()) {
-  return buildProjectStorageKey(REFRESH_TOKEN_STORAGE_KEY, projectSlug);
+function migrateProjectStorageKey(storage, workspaceSlug) {
+  const oldKey = buildProjectStorageKey(
+    REFRESH_TOKEN_STORAGE_KEY,
+    workspaceSlug,
+  );
+  const newKey = buildWorkspaceStorageKey(
+    REFRESH_TOKEN_STORAGE_KEY,
+    workspaceSlug,
+  );
+
+  if (oldKey === newKey) return;
+
+  const oldValue = storage.getItem(oldKey);
+  if (oldValue && !storage.getItem(newKey)) {
+    storage.setItem(newKey, oldValue);
+  }
 }
 
-export function getAccessToken(projectSlug = getCurrentProjectSlug()) {
-  return ensureAuthState(projectSlug).accessToken;
+export function refreshTokenStorageKey(
+  workspaceSlug = getCurrentWorkspaceSlug(),
+) {
+  return buildWorkspaceStorageKey(REFRESH_TOKEN_STORAGE_KEY, workspaceSlug);
+}
+
+export function getAccessToken(workspaceSlug = getCurrentWorkspaceSlug()) {
+  return ensureAuthState(workspaceSlug).accessToken;
 }
 
 export function loadStoredRefreshToken(
   storage = sessionStorage,
-  projectSlug = getCurrentProjectSlug(),
+  workspaceSlug = getCurrentWorkspaceSlug(),
 ) {
+  migrateProjectStorageKey(storage, workspaceSlug);
+
   const scopedRefreshToken = storage.getItem(
-    refreshTokenStorageKey(projectSlug),
+    refreshTokenStorageKey(workspaceSlug),
   );
   if (scopedRefreshToken) {
     return scopedRefreshToken;
   }
 
-  const normalizedProjectSlug = String(projectSlug ?? "").trim();
+  const normalizedWorkspaceSlug = String(workspaceSlug ?? "").trim();
   if (
-    !normalizedProjectSlug ||
-    normalizedProjectSlug === DEFAULT_PROJECT_SLUG
+    !normalizedWorkspaceSlug ||
+    normalizedWorkspaceSlug === DEFAULT_WORKSPACE_SLUG
   ) {
     return storage.getItem(REFRESH_TOKEN_STORAGE_KEY) ?? "";
   }
@@ -137,10 +164,10 @@ export function loadStoredRefreshToken(
 export function saveRefreshToken(
   refreshToken,
   storage = sessionStorage,
-  projectSlug = getCurrentProjectSlug(),
+  workspaceSlug = getCurrentWorkspaceSlug(),
 ) {
   const normalized = String(refreshToken ?? "").trim();
-  const storageKey = refreshTokenStorageKey(projectSlug);
+  const storageKey = refreshTokenStorageKey(workspaceSlug);
   if (!normalized) {
     storage.removeItem(storageKey);
     storage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
@@ -153,70 +180,74 @@ export function saveRefreshToken(
 
 export function clearAuthSession(
   storage = browser ? sessionStorage : undefined,
-  projectSlug = getCurrentProjectSlug(),
+  workspaceSlug = getCurrentWorkspaceSlug(),
   options = {},
 ) {
   const clearActor = Boolean(options.clearActor);
-  const state = ensureAuthState(projectSlug);
+  const state = ensureAuthState(workspaceSlug);
   state.accessToken = "";
   state.authenticatedAgent = null;
   state.refreshPromise = undefined;
   state.ready = true;
   if (storage) {
-    storage.removeItem(refreshTokenStorageKey(projectSlug));
+    storage.removeItem(refreshTokenStorageKey(workspaceSlug));
     storage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
   }
   if (browser && clearActor) {
-    clearSelectedActor(localStorage, projectSlug);
+    clearSelectedActor(localStorage, workspaceSlug);
   }
-  syncCurrentAuthStores(projectSlug);
+  syncCurrentAuthStores(workspaceSlug);
 }
 
 export function completeAuthSession(
   agent,
   tokens,
   storage = sessionStorage,
-  projectSlug = getCurrentProjectSlug(),
+  workspaceSlug = getCurrentWorkspaceSlug(),
 ) {
-  const state = ensureAuthState(projectSlug);
+  const state = ensureAuthState(workspaceSlug);
   state.accessToken = String(tokens?.access_token ?? "").trim();
-  saveRefreshToken(tokens?.refresh_token, storage, projectSlug);
+  saveRefreshToken(tokens?.refresh_token, storage, workspaceSlug);
   state.authenticatedAgent = agent ?? null;
   state.ready = true;
-  syncCurrentAuthStores(projectSlug);
+  syncCurrentAuthStores(workspaceSlug);
   return {
     agent: agent ?? null,
     tokens,
   };
 }
 
-export function getAuthenticatedAgent(projectSlug = getCurrentProjectSlug()) {
-  if (projectSlug && projectSlug !== getCurrentProjectSlug()) {
-    return ensureAuthState(projectSlug).authenticatedAgent;
+export function getAuthenticatedAgent(
+  workspaceSlug = getCurrentWorkspaceSlug(),
+) {
+  if (workspaceSlug && workspaceSlug !== getCurrentWorkspaceSlug()) {
+    return ensureAuthState(workspaceSlug).authenticatedAgent;
   }
 
   return get(authenticatedAgent);
 }
 
-export function getAuthenticatedActorId(projectSlug = getCurrentProjectSlug()) {
-  return getAuthenticatedAgent(projectSlug)?.actor_id ?? "";
+export function getAuthenticatedActorId(
+  workspaceSlug = getCurrentWorkspaceSlug(),
+) {
+  return getAuthenticatedAgent(workspaceSlug)?.actor_id ?? "";
 }
 
-export function isAuthenticated(projectSlug = getCurrentProjectSlug()) {
-  return Boolean(getAuthenticatedAgent(projectSlug)?.agent_id);
+export function isAuthenticated(workspaceSlug = getCurrentWorkspaceSlug()) {
+  return Boolean(getAuthenticatedAgent(workspaceSlug)?.agent_id);
 }
 
 export async function refreshAuthSession({
   fetchFn,
   storage = sessionStorage,
   baseUrl = "",
-  projectSlug = getCurrentProjectSlug(),
+  workspaceSlug = getCurrentWorkspaceSlug(),
   redirectOnFailure = false,
 } = {}) {
-  const state = ensureAuthState(projectSlug);
-  const refreshToken = loadStoredRefreshToken(storage, projectSlug);
+  const state = ensureAuthState(workspaceSlug);
+  const refreshToken = loadStoredRefreshToken(storage, workspaceSlug);
   if (!refreshToken) {
-    clearAuthSession(storage, projectSlug);
+    clearAuthSession(storage, workspaceSlug);
     return null;
   }
 
@@ -233,7 +264,7 @@ export async function refreshAuthSession({
       });
       const nextTokens = tokenResponse.tokens ?? {};
       state.accessToken = String(nextTokens.access_token ?? "").trim();
-      saveRefreshToken(nextTokens.refresh_token, storage, projectSlug);
+      saveRefreshToken(nextTokens.refresh_token, storage, workspaceSlug);
 
       const meResponse = await requestJSON("/agents/me", {
         fetchFn,
@@ -243,8 +274,8 @@ export async function refreshAuthSession({
 
       state.authenticatedAgent = meResponse.agent ?? null;
       state.ready = true;
-      if (projectSlug === getCurrentProjectSlug()) {
-        syncCurrentAuthStores(projectSlug);
+      if (workspaceSlug === getCurrentWorkspaceSlug()) {
+        syncCurrentAuthStores(workspaceSlug);
       }
       return {
         agent: meResponse.agent ?? null,
@@ -252,9 +283,9 @@ export async function refreshAuthSession({
       };
     })()
       .catch((error) => {
-        clearAuthSession(storage, projectSlug);
+        clearAuthSession(storage, workspaceSlug);
         if (redirectOnFailure && browser) {
-          window.location.assign(projectPath(projectSlug, "/login"));
+          window.location.assign(workspacePath(workspaceSlug, "/login"));
         }
         throw error;
       })
@@ -270,62 +301,64 @@ export async function initializeAuthSession({
   fetchFn,
   storage = browser ? sessionStorage : undefined,
   baseUrl = "",
-  projectSlug = getCurrentProjectSlug(),
+  workspaceSlug = getCurrentWorkspaceSlug(),
 } = {}) {
-  const state = ensureAuthState(projectSlug);
+  const state = ensureAuthState(workspaceSlug);
   if (!browser || !storage) {
     state.ready = true;
-    syncCurrentAuthStores(projectSlug);
+    syncCurrentAuthStores(workspaceSlug);
     return null;
   }
 
   state.ready = false;
-  syncCurrentAuthStores(projectSlug);
+  syncCurrentAuthStores(workspaceSlug);
 
   try {
     const result = await refreshAuthSession({
       fetchFn,
       storage,
       baseUrl,
-      projectSlug,
+      workspaceSlug,
       redirectOnFailure: false,
     });
     state.ready = true;
-    syncCurrentAuthStores(projectSlug);
+    syncCurrentAuthStores(workspaceSlug);
     return result;
   } catch {
     state.ready = true;
-    syncCurrentAuthStores(projectSlug);
+    syncCurrentAuthStores(workspaceSlug);
     return null;
   }
 }
 
 export function createAuthTokenProvider(fetchFn, options = {}) {
-  const projectSlugProvider =
-    options.projectSlugProvider ?? (() => getCurrentProjectSlug());
+  const workspaceSlugProvider =
+    options.workspaceSlugProvider ??
+    options.projectSlugProvider ??
+    (() => getCurrentWorkspaceSlug());
   const baseUrl = options.baseUrl ?? "";
 
   return {
     getAccessToken() {
-      return getAccessToken(projectSlugProvider());
+      return getAccessToken(workspaceSlugProvider());
     },
     hasRefreshToken(storage = sessionStorage) {
-      return Boolean(loadStoredRefreshToken(storage, projectSlugProvider()));
+      return Boolean(loadStoredRefreshToken(storage, workspaceSlugProvider()));
     },
     async refreshAccessToken() {
       const result = await refreshAuthSession({
         fetchFn,
         baseUrl,
-        projectSlug: projectSlugProvider(),
+        workspaceSlug: workspaceSlugProvider(),
         redirectOnFailure: true,
       });
       return result?.tokens?.access_token ?? "";
     },
     async handleRefreshFailure() {
-      const projectSlug = projectSlugProvider();
-      clearAuthSession(undefined, projectSlug);
+      const workspaceSlug = workspaceSlugProvider();
+      clearAuthSession(undefined, workspaceSlug);
       if (browser) {
-        window.location.assign(projectPath(projectSlug, "/login"));
+        window.location.assign(workspacePath(workspaceSlug, "/login"));
       }
     },
   };
