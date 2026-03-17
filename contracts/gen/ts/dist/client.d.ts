@@ -20,6 +20,7 @@ export interface CommandSpec {
     output_envelope?: string;
     error_codes?: string[];
     stability?: string;
+    surface?: string;
     agent_notes?: string;
     concepts?: string[];
     adjacent_commands?: string[];
