@@ -46,6 +46,7 @@ func TestWorkspaceInitializationAndRestart(t *testing.T) {
 		"derived_views",
 		"derived_inbox_items",
 		"derived_thread_views",
+		"thread_projection_refresh_status",
 		"agents",
 		"agent_keys",
 		"auth_refresh_sessions",

@@ -378,6 +378,23 @@ var migrations = []migration{
 			`CREATE INDEX IF NOT EXISTS idx_board_cards_thread_id ON board_cards (thread_id, board_id);`,
 		},
 	},
+	{
+		Version: 14,
+		Statements: []string{
+			`CREATE TABLE IF NOT EXISTS thread_projection_refresh_status (
+				thread_id TEXT PRIMARY KEY,
+				is_dirty INTEGER NOT NULL DEFAULT 0,
+				in_progress INTEGER NOT NULL DEFAULT 0,
+				queued_at TEXT,
+				started_at TEXT,
+				completed_at TEXT,
+				last_error_at TEXT,
+				last_error TEXT,
+				updated_at TEXT NOT NULL
+			);`,
+			`CREATE INDEX IF NOT EXISTS idx_thread_projection_refresh_status_dirty ON thread_projection_refresh_status (is_dirty, in_progress, queued_at, thread_id);`,
+		},
+	},
 }
 
 func applyMigrations(ctx context.Context, db *sql.DB) error {

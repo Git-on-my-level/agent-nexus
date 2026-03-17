@@ -48,6 +48,17 @@ type DerivedThreadProjection struct {
 	SourceHash             string
 }
 
+type ThreadProjectionRefreshStatus struct {
+	ThreadID         string
+	IsDirty          bool
+	InProgress       bool
+	QueuedAt         string
+	StartedAt        string
+	LastCompletedAt  string
+	LastErrorAt      string
+	LastErrorMessage string
+}
+
 func (s *Store) ReplaceDerivedInboxItems(ctx context.Context, threadID string, items []DerivedInboxItem) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("primitives store database is not initialized")
@@ -447,4 +458,248 @@ func firstNonEmptyDerivedString(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func (s *Store) MarkThreadProjectionsDirty(ctx context.Context, threadIDs []string, queuedAt time.Time) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("primitives store database is not initialized")
+	}
+
+	threadIDs = uniqueNormalizedStrings(threadIDs)
+	if len(threadIDs) == 0 {
+		return nil
+	}
+
+	queuedAtText := queuedAt.UTC().Format(time.RFC3339Nano)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin projection refresh dirty transaction: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	for _, threadID := range threadIDs {
+		if _, err := tx.ExecContext(
+			ctx,
+			`INSERT INTO thread_projection_refresh_status(
+				thread_id, is_dirty, in_progress, queued_at, updated_at
+			) VALUES (?, 1, 0, ?, ?)
+			ON CONFLICT(thread_id) DO UPDATE SET
+				is_dirty = 1,
+				queued_at = excluded.queued_at,
+				updated_at = excluded.updated_at`,
+			threadID,
+			queuedAtText,
+			queuedAtText,
+		); err != nil {
+			return fmt.Errorf("mark thread projection %s dirty: %w", threadID, err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit projection refresh dirty transaction: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) GetThreadProjectionRefreshStatuses(ctx context.Context, threadIDs []string) (map[string]ThreadProjectionRefreshStatus, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("primitives store database is not initialized")
+	}
+
+	threadIDs = uniqueNormalizedStrings(threadIDs)
+	if len(threadIDs) == 0 {
+		return map[string]ThreadProjectionRefreshStatus{}, nil
+	}
+
+	placeholders := make([]string, 0, len(threadIDs))
+	args := make([]any, 0, len(threadIDs))
+	for _, threadID := range threadIDs {
+		placeholders = append(placeholders, "?")
+		args = append(args, threadID)
+	}
+
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT thread_id, is_dirty, in_progress, queued_at, started_at, completed_at, last_error_at, last_error
+		   FROM thread_projection_refresh_status
+		  WHERE thread_id IN (`+strings.Join(placeholders, ", ")+`)`,
+		args...,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query thread projection refresh status: %w", err)
+	}
+	defer rows.Close()
+
+	out := make(map[string]ThreadProjectionRefreshStatus, len(threadIDs))
+	for rows.Next() {
+		status, err := scanThreadProjectionRefreshStatus(rows)
+		if err != nil {
+			return nil, err
+		}
+		out[status.ThreadID] = status
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate thread projection refresh status: %w", err)
+	}
+	return out, nil
+}
+
+func (s *Store) ClaimNextDirtyThreadProjection(ctx context.Context, startedAt time.Time) (ThreadProjectionRefreshStatus, bool, error) {
+	if s == nil || s.db == nil {
+		return ThreadProjectionRefreshStatus{}, false, fmt.Errorf("primitives store database is not initialized")
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return ThreadProjectionRefreshStatus{}, false, fmt.Errorf("begin claim thread projection refresh transaction: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	row := tx.QueryRowContext(
+		ctx,
+		`SELECT thread_id, is_dirty, in_progress, queued_at, started_at, completed_at, last_error_at, last_error
+		   FROM thread_projection_refresh_status
+		  WHERE is_dirty = 1 AND in_progress = 0
+		  ORDER BY queued_at ASC, thread_id ASC
+		  LIMIT 1`,
+	)
+	status, err := scanThreadProjectionRefreshStatus(row)
+	if err == sql.ErrNoRows {
+		return ThreadProjectionRefreshStatus{}, false, nil
+	}
+	if err != nil {
+		return ThreadProjectionRefreshStatus{}, false, err
+	}
+
+	startedAtText := startedAt.UTC().Format(time.RFC3339Nano)
+	result, err := tx.ExecContext(
+		ctx,
+		`UPDATE thread_projection_refresh_status
+		    SET is_dirty = 0,
+		        in_progress = 1,
+		        started_at = ?,
+		        updated_at = ?
+		  WHERE thread_id = ? AND is_dirty = 1 AND in_progress = 0`,
+		startedAtText,
+		startedAtText,
+		status.ThreadID,
+	)
+	if err != nil {
+		return ThreadProjectionRefreshStatus{}, false, fmt.Errorf("claim thread projection refresh %s: %w", status.ThreadID, err)
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return ThreadProjectionRefreshStatus{}, false, fmt.Errorf("read thread projection refresh rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return ThreadProjectionRefreshStatus{}, false, nil
+	}
+	if err := tx.Commit(); err != nil {
+		return ThreadProjectionRefreshStatus{}, false, fmt.Errorf("commit claim thread projection refresh transaction: %w", err)
+	}
+
+	status.IsDirty = false
+	status.InProgress = true
+	status.StartedAt = startedAtText
+	return status, true, nil
+}
+
+func (s *Store) MarkThreadProjectionRefreshSucceeded(ctx context.Context, threadID string, completedAt time.Time) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("primitives store database is not initialized")
+	}
+
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		return nil
+	}
+
+	completedAtText := completedAt.UTC().Format(time.RFC3339Nano)
+	if _, err := s.db.ExecContext(
+		ctx,
+		`INSERT INTO thread_projection_refresh_status(
+			thread_id, is_dirty, in_progress, completed_at, updated_at
+		) VALUES (?, 0, 0, ?, ?)
+		ON CONFLICT(thread_id) DO UPDATE SET
+			in_progress = 0,
+			completed_at = excluded.completed_at,
+			last_error = NULL,
+			last_error_at = NULL,
+			updated_at = excluded.updated_at`,
+		threadID,
+		completedAtText,
+		completedAtText,
+	); err != nil {
+		return fmt.Errorf("mark thread projection %s refresh succeeded: %w", threadID, err)
+	}
+	return nil
+}
+
+func (s *Store) MarkThreadProjectionRefreshFailed(ctx context.Context, threadID string, failedAt time.Time, message string) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("primitives store database is not initialized")
+	}
+
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		return nil
+	}
+
+	failedAtText := failedAt.UTC().Format(time.RFC3339Nano)
+	message = strings.TrimSpace(message)
+	if _, err := s.db.ExecContext(
+		ctx,
+		`INSERT INTO thread_projection_refresh_status(
+			thread_id, is_dirty, in_progress, last_error_at, last_error, updated_at
+		) VALUES (?, 0, 0, ?, ?, ?)
+		ON CONFLICT(thread_id) DO UPDATE SET
+			in_progress = 0,
+			last_error_at = excluded.last_error_at,
+			last_error = excluded.last_error,
+			updated_at = excluded.updated_at`,
+		threadID,
+		failedAtText,
+		message,
+		failedAtText,
+	); err != nil {
+		return fmt.Errorf("mark thread projection %s refresh failed: %w", threadID, err)
+	}
+	return nil
+}
+
+func scanThreadProjectionRefreshStatus(row scanDerivedInboxItemRower) (ThreadProjectionRefreshStatus, error) {
+	var (
+		status          ThreadProjectionRefreshStatus
+		isDirty         int
+		inProgress      int
+		queuedAt        sql.NullString
+		startedAt       sql.NullString
+		lastCompletedAt sql.NullString
+		lastErrorAt     sql.NullString
+		lastError       sql.NullString
+	)
+	if err := row.Scan(
+		&status.ThreadID,
+		&isDirty,
+		&inProgress,
+		&queuedAt,
+		&startedAt,
+		&lastCompletedAt,
+		&lastErrorAt,
+		&lastError,
+	); err != nil {
+		return ThreadProjectionRefreshStatus{}, err
+	}
+	status.IsDirty = isDirty != 0
+	status.InProgress = inProgress != 0
+	status.QueuedAt = queuedAt.String
+	status.StartedAt = startedAt.String
+	status.LastCompletedAt = lastCompletedAt.String
+	status.LastErrorAt = lastErrorAt.String
+	status.LastErrorMessage = lastError.String
+	return status, nil
 }

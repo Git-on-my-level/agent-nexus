@@ -224,9 +224,11 @@ oar-core MUST expose a programmatic API (protocol: HTTP/JSON for v0). All operat
 - Acknowledge inbox item (emits `inbox_item_acknowledged` event with `inbox:<inbox_item_id>` in refs)
 
 ### 7.4 Derived views
-- Get inbox items (regenerable from canonical data; respects acknowledgment suppression; uses deterministic IDs)
-- Compute staleness (see §9)
-- Rebuild all derived views (idempotent)
+- Derived views are asynchronously materialized from canonical writes; GET endpoints remain side-effect free.
+- Canonical writes enqueue affected thread projections for background refresh rather than recomputing projections inline on reads.
+- Get inbox items from the materialized projection layer (respects acknowledgment suppression; uses deterministic IDs; surfaces freshness metadata when projections are pending, missing, or errored).
+- Compute staleness in the projection worker / explicit rebuild path (see §9); reads consume the last materialized state.
+- Rebuild all derived views explicitly and idempotently.
 
 ---
 

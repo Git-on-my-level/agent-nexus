@@ -19,6 +19,12 @@ import (
 
 type HealthCheckFunc func(ctx context.Context) error
 
+type ProjectionMaintenance interface {
+	Start()
+	Notify(ctx context.Context) error
+	Stop(ctx context.Context) error
+}
+
 type ActorRegistry interface {
 	Register(ctx context.Context, actor actors.Actor) (actors.Actor, error)
 	List(ctx context.Context) ([]actors.Actor, error)
@@ -41,6 +47,11 @@ type PrimitiveStore interface {
 	GetDerivedThreadProjection(ctx context.Context, threadID string) (primitives.DerivedThreadProjection, error)
 	ListDerivedThreadProjections(ctx context.Context, threadIDs []string) (map[string]primitives.DerivedThreadProjection, error)
 	PutDerivedThreadProjection(ctx context.Context, projection primitives.DerivedThreadProjection) error
+	MarkThreadProjectionsDirty(ctx context.Context, threadIDs []string, queuedAt time.Time) error
+	GetThreadProjectionRefreshStatuses(ctx context.Context, threadIDs []string) (map[string]primitives.ThreadProjectionRefreshStatus, error)
+	ClaimNextDirtyThreadProjection(ctx context.Context, startedAt time.Time) (primitives.ThreadProjectionRefreshStatus, bool, error)
+	MarkThreadProjectionRefreshSucceeded(ctx context.Context, threadID string, completedAt time.Time) error
+	MarkThreadProjectionRefreshFailed(ctx context.Context, threadID string, failedAt time.Time, message string) error
 	ListDocuments(ctx context.Context, filter primitives.DocumentListFilter) ([]map[string]any, error)
 	CreateDocument(ctx context.Context, actorID string, document map[string]any, content any, contentType string, refs []string) (map[string]any, map[string]any, error)
 	GetDocument(ctx context.Context, documentID string) (map[string]any, map[string]any, error)
@@ -87,6 +98,7 @@ type handlerOptions struct {
 	allowUnauthenticatedWrites bool
 	enableDevActorMode         bool
 	inboxRiskHorizon           time.Duration
+	projectionMaintenance      ProjectionMaintenance
 	coreVersion                string
 	apiVersion                 string
 	minCLIVersion              string
@@ -155,6 +167,12 @@ func WithEnableDevActorMode(enable bool) HandlerOption {
 func WithInboxRiskHorizon(horizon time.Duration) HandlerOption {
 	return func(opts *handlerOptions) {
 		opts.inboxRiskHorizon = horizon
+	}
+}
+
+func WithProjectionMaintenance(maintenance ProjectionMaintenance) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.projectionMaintenance = maintenance
 	}
 }
 
@@ -253,6 +271,9 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 	}
 	if opts.streamPollInterval <= 0 {
 		opts.streamPollInterval = time.Second
+	}
+	if opts.projectionMaintenance != nil {
+		opts.projectionMaintenance.Start()
 	}
 
 	mux := http.NewServeMux()

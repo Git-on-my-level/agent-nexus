@@ -3,7 +3,7 @@ package server
 import (
 	"context"
 	"errors"
-	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -164,73 +164,6 @@ func deriveThreadInboxItems(ctx context.Context, opts handlerOptions, threadID s
 	return items, nil
 }
 
-func ensureDerivedThreadProjection(ctx context.Context, opts handlerOptions, threadID string, now time.Time) (primitives.DerivedThreadProjection, error) {
-	projection, err := opts.primitiveStore.GetDerivedThreadProjection(ctx, threadID)
-	if err == nil {
-		if derivedThreadProjectionExpired(projection, now) {
-			if err := refreshDerivedThreadProjection(ctx, opts, threadID, now, ""); err != nil {
-				return primitives.DerivedThreadProjection{}, err
-			}
-			return opts.primitiveStore.GetDerivedThreadProjection(ctx, threadID)
-		}
-		return projection, nil
-	}
-	if !errors.Is(err, primitives.ErrNotFound) {
-		return primitives.DerivedThreadProjection{}, err
-	}
-	if err := refreshDerivedThreadProjection(ctx, opts, threadID, now, ""); err != nil {
-		return primitives.DerivedThreadProjection{}, err
-	}
-	return opts.primitiveStore.GetDerivedThreadProjection(ctx, threadID)
-}
-
-func ensureDerivedThreadProjections(ctx context.Context, opts handlerOptions, threadIDs []string, now time.Time) (map[string]primitives.DerivedThreadProjection, error) {
-	projections, err := opts.primitiveStore.ListDerivedThreadProjections(ctx, threadIDs)
-	if err != nil {
-		return nil, err
-	}
-	refreshIDs := make([]string, 0)
-	for _, threadID := range threadIDs {
-		threadID = strings.TrimSpace(threadID)
-		if threadID == "" {
-			continue
-		}
-		projection, ok := projections[threadID]
-		if !ok || derivedThreadProjectionExpired(projection, now) {
-			refreshIDs = append(refreshIDs, threadID)
-		}
-	}
-	for _, threadID := range refreshIDs {
-		if err := refreshDerivedThreadProjection(ctx, opts, threadID, now, ""); err != nil {
-			return nil, err
-		}
-	}
-	if len(refreshIDs) == 0 {
-		return projections, nil
-	}
-	return opts.primitiveStore.ListDerivedThreadProjections(ctx, threadIDs)
-}
-
-func rebuildDerivedProjections(ctx context.Context, opts handlerOptions, now time.Time, actorID string) error {
-	if err := emitStaleThreadExceptions(ctx, opts, now, actorID); err != nil {
-		return err
-	}
-	threads, err := opts.primitiveStore.ListThreads(ctx, primitives.ThreadListFilter{})
-	if err != nil {
-		return err
-	}
-	for _, thread := range threads {
-		threadID := strings.TrimSpace(anyString(thread["id"]))
-		if threadID == "" {
-			continue
-		}
-		if err := refreshDerivedThreadProjection(ctx, opts, threadID, now, actorID); err != nil {
-			return fmt.Errorf("refresh derived projection for thread %s: %w", threadID, err)
-		}
-	}
-	return nil
-}
-
 func formatOptionalTime(value time.Time) string {
 	if value.IsZero() {
 		return ""
@@ -244,4 +177,210 @@ func derivedThreadProjectionExpired(projection primitives.DerivedThreadProjectio
 		return true
 	}
 	return now.Sub(generatedAt) >= derivedProjectionMaxAge
+}
+
+type threadProjectionState struct {
+	Projection primitives.DerivedThreadProjection
+	Refresh    primitives.ThreadProjectionRefreshStatus
+	Freshness  map[string]any
+	Status     string
+}
+
+func loadThreadProjectionState(ctx context.Context, opts handlerOptions, threadID string) (threadProjectionState, error) {
+	states, err := loadThreadProjectionStates(ctx, opts, []string{threadID})
+	if err != nil {
+		return threadProjectionState{}, err
+	}
+	return states[strings.TrimSpace(threadID)], nil
+}
+
+func loadThreadProjectionStates(ctx context.Context, opts handlerOptions, threadIDs []string) (map[string]threadProjectionState, error) {
+	threadIDs = uniqueServerStrings(threadIDs)
+	out := make(map[string]threadProjectionState, len(threadIDs))
+	if opts.primitiveStore == nil || len(threadIDs) == 0 {
+		for _, threadID := range threadIDs {
+			out[threadID] = buildThreadProjectionState(threadID, primitives.DerivedThreadProjection{}, false, primitives.ThreadProjectionRefreshStatus{}, false)
+		}
+		return out, nil
+	}
+
+	projections, err := opts.primitiveStore.ListDerivedThreadProjections(ctx, threadIDs)
+	if err != nil {
+		return nil, err
+	}
+	refreshStatuses, err := opts.primitiveStore.GetThreadProjectionRefreshStatuses(ctx, threadIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, threadID := range threadIDs {
+		projection, hasProjection := projections[threadID]
+		refresh, hasRefresh := refreshStatuses[threadID]
+		out[threadID] = buildThreadProjectionState(threadID, projection, hasProjection, refresh, hasRefresh)
+	}
+	return out, nil
+}
+
+func buildThreadProjectionState(threadID string, projection primitives.DerivedThreadProjection, hasProjection bool, refresh primitives.ThreadProjectionRefreshStatus, hasRefresh bool) threadProjectionState {
+	threadID = strings.TrimSpace(threadID)
+	if !hasProjection {
+		projection = primitives.DerivedThreadProjection{
+			ThreadID: threadID,
+			Data:     map[string]any{"thread_id": threadID},
+		}
+	}
+	if projection.Data == nil {
+		projection.Data = map[string]any{"thread_id": threadID}
+	}
+
+	status := "missing"
+	switch {
+	case hasRefresh && (refresh.InProgress || refresh.IsDirty):
+		status = "pending"
+	case hasRefresh && strings.TrimSpace(refresh.LastErrorMessage) != "":
+		status = "error"
+	case hasProjection:
+		status = "current"
+	}
+
+	freshness := map[string]any{
+		"thread_id":         threadID,
+		"status":            status,
+		"generated_at":      nullableStringValue(projection.GeneratedAt),
+		"queued_at":         nullableStringValue(refresh.QueuedAt),
+		"started_at":        nullableStringValue(refresh.StartedAt),
+		"completed_at":      nullableStringValue(refresh.LastCompletedAt),
+		"last_error_at":     nullableStringValue(refresh.LastErrorAt),
+		"last_error":        nullableStringValue(refresh.LastErrorMessage),
+		"materialized":      hasProjection,
+		"refresh_in_flight": hasRefresh && refresh.InProgress,
+	}
+
+	return threadProjectionState{
+		Projection: projection,
+		Refresh:    refresh,
+		Freshness:  freshness,
+		Status:     status,
+	}
+}
+
+func aggregateThreadProjectionFreshness(states map[string]threadProjectionState, threadIDs []string) map[string]any {
+	threadIDs = uniqueServerStrings(threadIDs)
+	if len(threadIDs) == 0 {
+		return map[string]any{
+			"status":       "current",
+			"thread_count": 0,
+			"threads":      []map[string]any{},
+		}
+	}
+
+	threads := make([]map[string]any, 0, len(threadIDs))
+	aggregateStatus := "current"
+	for _, threadID := range threadIDs {
+		state := states[threadID]
+		threads = append(threads, cloneWorkspaceMap(state.Freshness))
+		if projectionFreshnessRank(state.Status) > projectionFreshnessRank(aggregateStatus) {
+			aggregateStatus = state.Status
+		}
+	}
+	sort.SliceStable(threads, func(i int, j int) bool {
+		return strings.TrimSpace(anyString(threads[i]["thread_id"])) < strings.TrimSpace(anyString(threads[j]["thread_id"]))
+	})
+
+	return map[string]any{
+		"status":       aggregateStatus,
+		"thread_count": len(threadIDs),
+		"threads":      threads,
+	}
+}
+
+func projectionFreshnessRank(status string) int {
+	switch strings.TrimSpace(status) {
+	case "error":
+		return 3
+	case "pending":
+		return 2
+	case "missing":
+		return 1
+	default:
+		return 0
+	}
+}
+
+func markThreadProjectionsDirty(ctx context.Context, opts handlerOptions, threadIDs []string, queuedAt time.Time) error {
+	if opts.primitiveStore == nil {
+		return nil
+	}
+
+	threadIDs = uniqueServerStrings(threadIDs)
+	if len(threadIDs) == 0 {
+		return nil
+	}
+	if err := opts.primitiveStore.MarkThreadProjectionsDirty(ctx, threadIDs, queuedAt); err != nil {
+		return err
+	}
+	if opts.projectionMaintenance != nil {
+		return opts.projectionMaintenance.Notify(ctx)
+	}
+	return nil
+}
+
+func enqueueThreadProjectionsBestEffort(ctx context.Context, opts handlerOptions, threadIDs []string, queuedAt time.Time) {
+	_ = markThreadProjectionsDirty(ctx, opts, threadIDs, queuedAt)
+}
+
+func markExpiredThreadProjectionsDirty(ctx context.Context, opts handlerOptions, now time.Time) error {
+	if opts.primitiveStore == nil {
+		return nil
+	}
+
+	threads, err := opts.primitiveStore.ListThreads(ctx, primitives.ThreadListFilter{})
+	if err != nil {
+		return err
+	}
+	threadIDs := make([]string, 0, len(threads))
+	for _, thread := range threads {
+		threadID := strings.TrimSpace(anyString(thread["id"]))
+		if threadID != "" {
+			threadIDs = append(threadIDs, threadID)
+		}
+	}
+	threadIDs = uniqueServerStrings(threadIDs)
+	if len(threadIDs) == 0 {
+		return nil
+	}
+
+	projections, err := opts.primitiveStore.ListDerivedThreadProjections(ctx, threadIDs)
+	if err != nil {
+		return err
+	}
+
+	dirtyIDs := make([]string, 0)
+	for _, threadID := range threadIDs {
+		projection, ok := projections[threadID]
+		if !ok || derivedThreadProjectionExpired(projection, now) {
+			dirtyIDs = append(dirtyIDs, threadID)
+		}
+	}
+	if len(dirtyIDs) == 0 {
+		return nil
+	}
+	return opts.primitiveStore.MarkThreadProjectionsDirty(ctx, dirtyIDs, now)
+}
+
+func uniqueServerStrings(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
 }

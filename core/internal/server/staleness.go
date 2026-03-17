@@ -11,19 +11,19 @@ import (
 
 const customCadenceWindow = 7 * 24 * time.Hour
 
-func emitStaleThreadExceptions(ctx context.Context, opts handlerOptions, now time.Time, actorID string) error {
+func emitStaleThreadExceptions(ctx context.Context, opts handlerOptions, now time.Time, actorID string) ([]string, error) {
 	if opts.primitiveStore == nil {
-		return nil
+		return nil, nil
 	}
 
 	threads, err := opts.primitiveStore.ListThreads(ctx, primitives.ThreadListFilter{})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	events, err := opts.primitiveStore.ListEvents(ctx, primitives.EventListFilter{})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	latestActivity := latestThreadActivityFromEvents(events)
@@ -33,6 +33,7 @@ func emitStaleThreadExceptions(ctx context.Context, opts handlerOptions, now tim
 	if actor == "" {
 		actor = "oar-core"
 	}
+	emittedThreadIDs := make([]string, 0)
 
 	for _, thread := range threads {
 		threadID, _ := thread["id"].(string)
@@ -61,11 +62,12 @@ func emitStaleThreadExceptions(ctx context.Context, opts handlerOptions, now tim
 			"provenance": map[string]any{"sources": []string{"inferred"}},
 		})
 		if err != nil {
-			return err
+			return nil, err
 		}
+		emittedThreadIDs = append(emittedThreadIDs, threadID)
 	}
 
-	return nil
+	return uniqueServerStrings(emittedThreadIDs), nil
 }
 
 func latestThreadActivityFromEvents(events []map[string]any) map[string]time.Time {

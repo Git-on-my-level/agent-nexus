@@ -103,10 +103,7 @@ func handleCreateThread(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to create thread")
 		return
 	}
-	if err := refreshDerivedThreadProjection(r.Context(), opts, anyString(result.Snapshot["id"]), time.Now().UTC(), actorID); err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to refresh derived thread views")
-		return
-	}
+	enqueueThreadProjectionsBestEffort(r.Context(), opts, []string{anyString(result.Snapshot["id"])}, time.Now().UTC())
 
 	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "threads.create", actorID, req.RequestKey, req, http.StatusCreated, map[string]any{"thread": result.Snapshot})
 	if writeIdempotencyError(w, err) {
@@ -198,10 +195,7 @@ func handlePatchThread(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to patch thread")
 		return
 	}
-	if err := refreshDerivedThreadProjection(r.Context(), opts, threadID, time.Now().UTC(), actorID); err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to refresh derived thread views")
-		return
-	}
+	enqueueThreadProjectionsBestEffort(r.Context(), opts, []string{threadID}, time.Now().UTC())
 
 	writeJSON(w, http.StatusOK, map[string]any{"thread": result.Snapshot})
 }
@@ -237,22 +231,23 @@ func handleListThreads(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		return
 	}
 
-	now := time.Now().UTC()
 	threadIDs := make([]string, 0, len(threads))
 	for _, thread := range threads {
 		threadIDs = append(threadIDs, anyString(thread["id"]))
 	}
-	projections, err := ensureDerivedThreadProjections(r.Context(), opts, threadIDs, now)
+	states, err := loadThreadProjectionStates(r.Context(), opts, threadIDs)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to evaluate thread staleness")
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load thread projection status")
 		return
 	}
 
 	withStale := make([]map[string]any, 0, len(threads))
 	for _, thread := range threads {
 		threadID, _ := thread["id"].(string)
-		stale := projections[threadID].Stale
+		state := states[threadID]
+		stale := state.Projection.Stale
 		thread["stale"] = stale
+		thread["projection_freshness"] = cloneWorkspaceMap(state.Freshness)
 		if staleFilter != nil && stale != *staleFilter {
 			continue
 		}

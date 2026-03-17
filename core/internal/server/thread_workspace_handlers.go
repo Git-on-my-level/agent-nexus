@@ -135,11 +135,11 @@ func buildThreadWorkspacePayload(ctx context.Context, opts handlerOptions, threa
 	collaboration := buildThreadWorkspaceCollaborationSummary(contextBody)
 
 	now := time.Now().UTC()
-	projection, err := ensureDerivedThreadProjection(ctx, opts, threadID, now)
+	projectionState, err := loadThreadProjectionState(ctx, opts, threadID)
 	if err != nil {
 		return nil, err
 	}
-	inboxSection, inboxItems, err := buildThreadWorkspaceInboxSection(ctx, opts, threadID, now)
+	inboxSection, inboxItems, err := buildThreadWorkspaceInboxSection(ctx, opts, threadID, now, projectionState)
 	if err != nil {
 		return nil, err
 	}
@@ -180,16 +180,18 @@ func buildThreadWorkspacePayload(ctx context.Context, opts handlerOptions, threa
 			"artifact_count":         workspaceSliceLen(contextBody["key_artifacts"]),
 			"open_commitment_count":  workspaceSliceLen(contextBody["open_commitments"]),
 		},
-		"board_memberships":         boardMembershipSectionResponse(boardMemberships),
-		"inbox":                     inboxSection,
-		"pending_decisions":         map[string]any{"thread_id": strings.TrimSpace(threadID), "items": pendingDecisions, "count": len(pendingDecisions), "generated_at": now.Format(time.RFC3339Nano)},
-		"related_threads":           relatedThreadReview["related_threads"],
-		"related_recommendations":   relatedThreadReview["related_recommendations"],
-		"related_decision_requests": relatedThreadReview["related_decision_requests"],
-		"related_decisions":         relatedThreadReview["related_decisions"],
-		"total_review_items":        totalReviewItems,
-		"follow_up":                 buildThreadWorkspaceFollowUpHints(threadID, recommendations, decisionRequests, decisions),
-		"workspace_summary":         cloneWorkspaceMap(projection.Data),
+		"board_memberships":           boardMembershipSectionResponse(boardMemberships),
+		"inbox":                       inboxSection,
+		"pending_decisions":           map[string]any{"thread_id": strings.TrimSpace(threadID), "items": pendingDecisions, "count": len(pendingDecisions), "generated_at": nullableStringValue(projectionState.Projection.GeneratedAt), "projection_freshness": cloneWorkspaceMap(projectionState.Freshness)},
+		"related_threads":             relatedThreadReview["related_threads"],
+		"related_recommendations":     relatedThreadReview["related_recommendations"],
+		"related_decision_requests":   relatedThreadReview["related_decision_requests"],
+		"related_decisions":           relatedThreadReview["related_decisions"],
+		"total_review_items":          totalReviewItems,
+		"follow_up":                   buildThreadWorkspaceFollowUpHints(threadID, recommendations, decisionRequests, decisions),
+		"workspace_summary":           cloneWorkspaceMap(projectionState.Projection.Data),
+		"projection_freshness":        cloneWorkspaceMap(projectionState.Freshness),
+		"workspace_summary_freshness": cloneWorkspaceMap(projectionState.Freshness),
 		"section_kinds": map[string]any{
 			"thread":                    "canonical",
 			"context":                   "canonical",
@@ -223,11 +225,7 @@ func buildThreadWorkspacePayload(ctx context.Context, opts handlerOptions, threa
 	return workspaceBody, nil
 }
 
-func buildThreadWorkspaceInboxSection(ctx context.Context, opts handlerOptions, threadID string, now time.Time) (map[string]any, []map[string]any, error) {
-	if _, err := ensureDerivedThreadProjection(ctx, opts, threadID, now); err != nil {
-		return nil, nil, err
-	}
-
+func buildThreadWorkspaceInboxSection(ctx context.Context, opts handlerOptions, threadID string, now time.Time, projectionState threadProjectionState) (map[string]any, []map[string]any, error) {
 	items, err := opts.primitiveStore.ListDerivedInboxItems(ctx, primitives.DerivedInboxListFilter{
 		ThreadID: threadID,
 	})
@@ -241,10 +239,11 @@ func buildThreadWorkspaceInboxSection(ctx context.Context, opts handlerOptions, 
 	}
 
 	return map[string]any{
-		"thread_id":    strings.TrimSpace(threadID),
-		"items":        filtered,
-		"count":        len(filtered),
-		"generated_at": now.Format(time.RFC3339Nano),
+		"thread_id":            strings.TrimSpace(threadID),
+		"items":                filtered,
+		"count":                len(filtered),
+		"generated_at":         nullableStringValue(projectionState.Projection.GeneratedAt),
+		"projection_freshness": cloneWorkspaceMap(projectionState.Freshness),
 	}, filtered, nil
 }
 

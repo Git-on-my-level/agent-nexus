@@ -198,10 +198,7 @@ func createPacketArtifactAndEvent(w http.ResponseWriter, r *http.Request, opts h
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to create packet artifact and event")
 		return
 	}
-	if err := refreshDerivedThreadProjection(r.Context(), opts, threadID, time.Now().UTC(), actorID); err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to refresh derived thread views")
-		return
-	}
+	enqueueThreadProjectionsBestEffort(r.Context(), opts, []string{threadID}, time.Now().UTC())
 
 	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, scope, actorID, req.RequestKey, req, http.StatusCreated, map[string]any{
 		"artifact": artifact,

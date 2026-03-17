@@ -64,8 +64,9 @@ func handleGetInbox(w http.ResponseWriter, r *http.Request, opts handlerOptions)
 	for _, thread := range threads {
 		threadIDs = append(threadIDs, anyString(thread["id"]))
 	}
-	if _, err := ensureDerivedThreadProjections(r.Context(), opts, threadIDs, now); err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to refresh derived inbox projections")
+	states, err := loadThreadProjectionStates(r.Context(), opts, threadIDs)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load inbox projection status")
 		return
 	}
 
@@ -81,8 +82,9 @@ func handleGetInbox(w http.ResponseWriter, r *http.Request, opts handlerOptions)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"items":        payloadItems,
-		"generated_at": now.Format(time.RFC3339Nano),
+		"items":                payloadItems,
+		"generated_at":         now.Format(time.RFC3339Nano),
+		"projection_freshness": aggregateThreadProjectionFreshness(states, threadIDs),
 	})
 }
 
@@ -133,8 +135,9 @@ func handleGetInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	for _, thread := range threads {
 		threadIDs = append(threadIDs, anyString(thread["id"]))
 	}
-	if _, err := ensureDerivedThreadProjections(r.Context(), opts, threadIDs, now); err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to refresh derived inbox projections")
+	states, err := loadThreadProjectionStates(r.Context(), opts, threadIDs)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load inbox projection status")
 		return
 	}
 
@@ -149,8 +152,9 @@ func handleGetInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"item":         cloneWorkspaceMap(item.Data),
-		"generated_at": now.Format(time.RFC3339Nano),
+		"item":                 cloneWorkspaceMap(item.Data),
+		"generated_at":         now.Format(time.RFC3339Nano),
+		"projection_freshness": cloneWorkspaceMap(states[item.ThreadID].Freshness),
 	})
 }
 
@@ -173,8 +177,12 @@ func handleRebuildDerived(w http.ResponseWriter, r *http.Request, opts handlerOp
 		return
 	}
 
-	now := time.Now().UTC()
-	if err := rebuildDerivedProjections(r.Context(), opts, now, actorID); err != nil {
+	worker := NewProjectionWorker(
+		WithPrimitiveStore(opts.primitiveStore),
+		WithSchemaContract(opts.contract),
+		WithInboxRiskHorizon(opts.inboxRiskHorizon),
+	)
+	if err := worker.RunFullRebuild(r.Context(), actorID); err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to rebuild derived views")
 		return
 	}
@@ -240,18 +248,12 @@ func handleAckInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to acknowledge inbox item")
 		return
 	}
-	if err := refreshDerivedThreadProjection(r.Context(), opts, req.ThreadID, time.Now().UTC(), actorID); err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to refresh derived thread views")
-		return
-	}
+	enqueueThreadProjectionsBestEffort(r.Context(), opts, []string{req.ThreadID}, time.Now().UTC())
 
 	writeJSON(w, http.StatusCreated, map[string]any{"event": stored})
 }
 
 func deriveInboxItems(ctx context.Context, opts handlerOptions, now time.Time, riskHorizon time.Duration) ([]derivedInboxItem, error) {
-	if err := emitStaleThreadExceptions(ctx, opts, now, ""); err != nil {
-		return nil, err
-	}
 	return deriveInboxItemsNoStaleEmission(ctx, opts, now, riskHorizon)
 }
 

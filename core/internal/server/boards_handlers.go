@@ -629,12 +629,12 @@ func buildBoardWorkspacePayload(ctx context.Context, opts handlerOptions, boardI
 
 	threadIDs := collectBoardWorkspaceThreadIDs(primaryThreadID, cards)
 	now := time.Now().UTC()
-	projections, err := ensureDerivedThreadProjections(ctx, opts, threadIDs, now)
+	states, err := loadThreadProjectionStates(ctx, opts, threadIDs)
 	if err != nil {
 		return nil, err
 	}
 
-	cardSection, cardWarnings, err := buildBoardWorkspaceCardsSection(ctx, opts, cards, projections)
+	cardSection, cardWarnings, err := buildBoardWorkspaceCardsSection(ctx, opts, cards, states)
 	if err != nil {
 		return nil, err
 	}
@@ -648,29 +648,32 @@ func buildBoardWorkspacePayload(ctx context.Context, opts handlerOptions, boardI
 	if err != nil {
 		return nil, err
 	}
-	inboxSection, err := buildBoardWorkspaceInboxSection(ctx, opts, threadIDs, now)
+	inboxSection, err := buildBoardWorkspaceInboxSection(ctx, opts, threadIDs, now, states)
 	if err != nil {
 		return nil, err
 	}
 
-	boardSummary := buildBoardWorkspaceSummary(board, cards, projections)
+	boardSummary := buildBoardWorkspaceSummary(board, cards, states)
+	freshness := aggregateThreadProjectionFreshness(states, threadIDs)
 	return map[string]any{
-		"board_id":         boardID,
-		"board":            board,
-		"primary_thread":   primaryThread,
-		"primary_document": primaryDocument,
-		"cards":            cardSection,
-		"documents":        documentsSection,
-		"commitments":      commitmentsSection,
-		"inbox":            inboxSection,
-		"board_summary":    boardSummary,
-		"warnings":         map[string]any{"items": warnings, "count": len(warnings)},
-		"section_kinds":    map[string]any{"board": "canonical", "primary_thread": "canonical", "primary_document": "canonical", "cards": "convenience", "documents": "derived", "commitments": "derived", "inbox": "derived", "board_summary": "derived"},
-		"generated_at":     now.Format(time.RFC3339Nano),
+		"board_id":                boardID,
+		"board":                   board,
+		"primary_thread":          primaryThread,
+		"primary_document":        primaryDocument,
+		"cards":                   cardSection,
+		"documents":               documentsSection,
+		"commitments":             commitmentsSection,
+		"inbox":                   inboxSection,
+		"board_summary":           boardSummary,
+		"projection_freshness":    freshness,
+		"board_summary_freshness": cloneWorkspaceMap(freshness),
+		"warnings":                map[string]any{"items": warnings, "count": len(warnings)},
+		"section_kinds":           map[string]any{"board": "canonical", "primary_thread": "canonical", "primary_document": "canonical", "cards": "convenience", "documents": "derived", "commitments": "derived", "inbox": "derived", "board_summary": "derived"},
+		"generated_at":            now.Format(time.RFC3339Nano),
 	}, nil
 }
 
-func buildBoardWorkspaceCardsSection(ctx context.Context, opts handlerOptions, cards []map[string]any, projections map[string]primitives.DerivedThreadProjection) (map[string]any, []map[string]any, error) {
+func buildBoardWorkspaceCardsSection(ctx context.Context, opts handlerOptions, cards []map[string]any, states map[string]threadProjectionState) (map[string]any, []map[string]any, error) {
 	items := make([]map[string]any, 0, len(cards))
 	warnings := make([]map[string]any, 0)
 	for _, card := range cards {
@@ -695,10 +698,11 @@ func buildBoardWorkspaceCardsSection(ctx context.Context, opts handlerOptions, c
 		}
 
 		items = append(items, map[string]any{
-			"card":            card,
-			"thread":          thread,
-			"summary":         boardCardSummaryFromProjection(projections[threadID]),
-			"pinned_document": pinnedDocument,
+			"card":              card,
+			"thread":            thread,
+			"summary":           boardCardSummaryFromProjection(states[threadID].Projection),
+			"summary_freshness": cloneWorkspaceMap(states[threadID].Freshness),
+			"pinned_document":   pinnedDocument,
 		})
 	}
 
@@ -767,7 +771,7 @@ func buildBoardWorkspaceCommitmentsSection(ctx context.Context, opts handlerOpti
 	return map[string]any{"items": items, "count": len(items)}, nil
 }
 
-func buildBoardWorkspaceInboxSection(ctx context.Context, opts handlerOptions, threadIDs []string, now time.Time) (map[string]any, error) {
+func buildBoardWorkspaceInboxSection(ctx context.Context, opts handlerOptions, threadIDs []string, now time.Time, states map[string]threadProjectionState) (map[string]any, error) {
 	items := make([]map[string]any, 0)
 	for _, threadID := range threadIDs {
 		threadItems, err := opts.primitiveStore.ListDerivedInboxItems(ctx, primitives.DerivedInboxListFilter{ThreadID: threadID})
@@ -794,10 +798,15 @@ func buildBoardWorkspaceInboxSection(ctx context.Context, opts handlerOptions, t
 		}
 		return strings.TrimSpace(anyString(items[i]["id"])) < strings.TrimSpace(anyString(items[j]["id"]))
 	})
-	return map[string]any{"items": items, "count": len(items), "generated_at": now.Format(time.RFC3339Nano)}, nil
+	return map[string]any{
+		"items":                items,
+		"count":                len(items),
+		"generated_at":         now.Format(time.RFC3339Nano),
+		"projection_freshness": aggregateThreadProjectionFreshness(states, threadIDs),
+	}, nil
 }
 
-func buildBoardWorkspaceSummary(board map[string]any, cards []map[string]any, projections map[string]primitives.DerivedThreadProjection) map[string]any {
+func buildBoardWorkspaceSummary(board map[string]any, cards []map[string]any, states map[string]threadProjectionState) map[string]any {
 	cardsByColumn := map[string]any{
 		"backlog":     0,
 		"ready":       0,
@@ -827,10 +836,7 @@ func buildBoardWorkspaceSummary(board map[string]any, cards []map[string]any, pr
 	documentCount := 0
 	latestActivityAt := strings.TrimSpace(anyString(board["updated_at"]))
 	for threadID := range threadIDs {
-		projection, ok := projections[threadID]
-		if !ok {
-			continue
-		}
+		projection := states[threadID].Projection
 		openCommitmentCount += projection.OpenCommitmentCount
 		documentCount += projection.DocumentCount
 		latestActivityAt = laterTimestamp(latestActivityAt, projection.LastActivityAt)
@@ -946,7 +952,8 @@ func emitBoardLifecycleEvent(ctx context.Context, opts handlerOptions, actorID s
 	if err != nil {
 		return err
 	}
-	return refreshDerivedThreadProjection(ctx, opts, anyString(stored["thread_id"]), time.Now().UTC(), actorID)
+	enqueueThreadProjectionsBestEffort(ctx, opts, []string{anyString(stored["thread_id"])}, time.Now().UTC())
+	return nil
 }
 
 func emitBoardLifecycleEventBestEffort(ctx context.Context, opts handlerOptions, actorID string, event map[string]any) {
