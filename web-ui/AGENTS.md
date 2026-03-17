@@ -15,7 +15,7 @@ It gives operators fast, glanceable visibility into the shared workspace maintai
 - Optimize for operator usability: clear status, triage context, provenance visibility, and at-a-glance understanding of what needs attention.
 - Provide the main human workflow surfaces for inbox triage, thread inspection, commitments, boards, artifacts, documents, and review flows.
 - Handle forward-compatible data safely: unknown event types, artifact kinds, refs, and fields must remain visible rather than breaking the UI.
-- Gate writes safely through actor-aware and project-aware flows while preserving core contract semantics.
+- Gate writes safely through actor-aware and workspace-aware flows while preserving core contract semantics.
 
 ## High-Value Invariants
 - Persistent writes go through `oar-core`; the UI must not invent its own source of truth.

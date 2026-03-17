@@ -5,18 +5,20 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 CORE_BASE_URL="${OAR_CORE_BASE_URL:-http://127.0.0.1:8000}"
-PROJECT_SLUG="${OAR_E2E_PROJECT:-${OAR_DEFAULT_PROJECT:-local}}"
+WORKSPACE_SLUG="${OAR_E2E_WORKSPACE:-${OAR_E2E_PROJECT:-${OAR_DEFAULT_WORKSPACE:-${OAR_DEFAULT_PROJECT:-local}}}}"
 HEALTHCHECK_TIMEOUT_SECONDS="${OAR_CORE_HEALTHCHECK_TIMEOUT_SECONDS:-5}"
 
-if [[ -n "${OAR_PROJECTS:-}" ]]; then
+WORKSPACE_CATALOG="${OAR_WORKSPACES:-${OAR_PROJECTS:-}}"
+
+if [[ -n "${WORKSPACE_CATALOG:-}" ]]; then
   if ! CORE_BASE_URL="$(
-    PROJECT_SLUG="${PROJECT_SLUG}" OAR_PROJECTS="${OAR_PROJECTS}" python3 - <<'PY'
+    WORKSPACE_SLUG="${WORKSPACE_SLUG}" WORKSPACE_CATALOG="${WORKSPACE_CATALOG}" python3 - <<'PY'
 import json
 import os
 import sys
 
-project_slug = os.environ["PROJECT_SLUG"]
-raw = os.environ["OAR_PROJECTS"]
+workspace_slug = os.environ["WORKSPACE_SLUG"]
+raw = os.environ["WORKSPACE_CATALOG"]
 parsed = json.loads(raw)
 
 if isinstance(parsed, dict):
@@ -29,7 +31,7 @@ else:
     items = parsed
 
 for item in items:
-    if str(item.get("slug", "")).strip() != project_slug:
+    if str(item.get("slug", "")).strip() != workspace_slug:
         continue
     base_url = str(
         item.get("coreBaseUrl") or item.get("core_base_url") or ""
@@ -43,20 +45,24 @@ sys.exit(1)
 PY
   )"; then
     cat >&2 <<EOF
-ERROR: Could not resolve project '${PROJECT_SLUG}' from OAR_PROJECTS.
-Set OAR_PROJECTS to include that slug, or omit OAR_PROJECTS and set OAR_CORE_BASE_URL.
+ERROR: Could not resolve workspace '${WORKSPACE_SLUG}' from OAR_WORKSPACES/OAR_PROJECTS.
+Set OAR_WORKSPACES to include that slug, or omit the workspace catalog and set OAR_CORE_BASE_URL.
 EOF
     exit 1
   fi
 else
   CORE_BASE_URL="${CORE_BASE_URL%/}"
-  export OAR_PROJECTS="[{\"slug\":\"${PROJECT_SLUG}\",\"label\":\"${PROJECT_SLUG}\",\"coreBaseUrl\":\"${CORE_BASE_URL}\"}]"
+  export OAR_WORKSPACES="[{\"slug\":\"${WORKSPACE_SLUG}\",\"label\":\"${WORKSPACE_SLUG}\",\"coreBaseUrl\":\"${CORE_BASE_URL}\"}]"
 fi
 
 CORE_BASE_URL="${CORE_BASE_URL%/}"
 VERSION_URL="${CORE_BASE_URL}/version"
 HANDSHAKE_URL="${CORE_BASE_URL}/meta/handshake"
-export OAR_DEFAULT_PROJECT="${PROJECT_SLUG}"
+export OAR_DEFAULT_WORKSPACE="${WORKSPACE_SLUG}"
+export OAR_DEFAULT_PROJECT="${WORKSPACE_SLUG}"
+if [[ -n "${OAR_WORKSPACES:-}" ]]; then
+  export OAR_PROJECTS="${OAR_PROJECTS:-${OAR_WORKSPACES}}"
+fi
 
 echo "Checking oar-core availability at ${HANDSHAKE_URL} ..."
 if ! version_payload="$(
@@ -86,8 +92,8 @@ Backend terminal:
 
 UI terminal:
   cd ../web-ui
-  OAR_PROJECTS='[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"}]' \
-  OAR_DEFAULT_PROJECT=local \
+  OAR_WORKSPACES='[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"}]' \
+  OAR_DEFAULT_WORKSPACE=local \
   ./scripts/e2e-with-core
 EOF
   exit 1

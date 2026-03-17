@@ -15,7 +15,8 @@ export PORT="${PORT:-4173}"
 export ORIGIN="${ORIGIN:-http://${HOST}:${PORT}}"
 
 echo "Serving built UI on http://${HOST}:${PORT} (origin=${ORIGIN})"
-echo "Canonical config: set OAR_PROJECTS (and optionally OAR_DEFAULT_PROJECT)."
-echo "Single-core dev fallback: set OAR_CORE_BASE_URL to synthesize the default 'local' project."
+echo "Canonical config: set OAR_WORKSPACES (and optionally OAR_DEFAULT_WORKSPACE)."
+echo "Compatibility aliases: OAR_PROJECTS and OAR_DEFAULT_PROJECT are still accepted."
+echo "Single-core dev fallback: set OAR_CORE_BASE_URL to synthesize the default 'local' workspace."
 
 exec node build/index.js
