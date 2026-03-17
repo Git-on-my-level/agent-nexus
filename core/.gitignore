@@ -9,6 +9,7 @@ bin/
 *.test
 *.out
 coverage.out
+oar-core
 
 # Optional local env
 .env
