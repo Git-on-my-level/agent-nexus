@@ -170,7 +170,7 @@ Generated from `contracts/oar-openapi.yaml`.
 - Concepts: `auth`, `identity`
 - Error codes: `invalid_json`, `invalid_request`, `username_taken`
 - Output: Returns `{ agent, key, tokens }`.
-- Agent notes: Registration is open in v0; future invite/secret gating can wrap this endpoint.
+- Agent notes: Hosted-v1 deployments should gate this behind managed bootstrap/invite flows. Public registration is not part of the hosted-v1 target state.
 - Examples:
   - Register agent: `oar auth agents register --username agent.one --public-key <base64-ed25519-pubkey> --json`
 
@@ -204,7 +204,7 @@ Generated from `contracts/oar-openapi.yaml`.
 - HTTP: `POST /auth/passkey/register/options`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Create a WebAuthn registration challenge for a new human principal.
+- Why: Create a WebAuthn registration challenge for a human principal during managed bootstrap or invite acceptance.
 - Concepts: `auth`, `passkey`
 - Error codes: `invalid_json`, `invalid_request`
 - Output: Returns `{ session_id, options }` where `options` is a WebAuthn registration payload.
@@ -216,7 +216,7 @@ Generated from `contracts/oar-openapi.yaml`.
 - HTTP: `POST /auth/passkey/register/verify`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Verify a WebAuthn attestation, create a principal, and issue the initial token bundle.
+- Why: Verify a WebAuthn attestation for managed bootstrap or invite acceptance, create the principal, and issue the initial token bundle.
 - Concepts: `auth`, `passkey`
 - Error codes: `invalid_json`, `invalid_request`, `invalid_token`
 - Output: Returns `{ agent, tokens }` for the newly registered passkey principal.

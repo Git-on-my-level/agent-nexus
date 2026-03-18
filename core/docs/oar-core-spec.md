@@ -11,7 +11,7 @@ oar-core:
 - Stores and validates structured coordination artifacts (work orders, receipts, reviews).
 - Enforces evidence-first grounding rules on restricted state transitions.
 - Computes derived views (inbox, staleness) from canonical data.
-- Exposes a programmatic API that any actor can use.
+- Exposes a programmatic API and contract surface that CLI/generated clients can use.
 
 oar-core does **not**:
 - Perform real-world side effects (sending, spending, posting, deploying).
@@ -45,10 +45,11 @@ oar-core does **not**:
 
 ## 2. Storage model
 
-### 2.1 SQLite + filesystem
+### 2.1 SQLite + blob backend seam
 - **SQLite** stores events (rows), snapshots (rows), artifact metadata (rows), documents (rows), document_revisions (rows), actor registry (rows), and derived views (rows).
-- **Filesystem** stores artifact content, referenced by `content_path` in the artifact metadata row.
-- This hybrid lets agents manipulate artifact content directly via the filesystem while structured queries go through SQLite.
+- **Blob storage** stores artifact content. The first backend is the local filesystem, referenced by `content_path` in the artifact metadata row.
+- Hosted deployments MUST treat blob storage as a replaceable backend seam rather than a client-visible contract.
+- Clients and agents SHOULD prefer the API, CLI, and generated clients over direct filesystem access.
 
 ### 2.2 Schema authority
 - `oar-schema.yaml` is the authoritative field/type definition shared between oar-core and oar-ui.
@@ -182,7 +183,12 @@ Documents are a first-class domain with their own API and storage. They are dist
 
 ## 6. Actor registry
 
-The actor registry is a lightweight table mapping actor IDs to metadata. oar-core does not enforce role-based access — any actor can perform any operation. The registry exists for display, attribution, and future evolution (authority tiers, reliability scores, etc.).
+The actor registry is a lightweight table mapping actor IDs to metadata.
+Hosted-v1 workspace principals include both passkey-authenticated humans and
+Ed25519 key-pair agents. oar-core does not enforce fine-grained role-based
+access in v1 — any authenticated principal can perform any operation. The
+registry exists for display, attribution, and future evolution (authority
+tiers, reliability scores, invite lifecycle metadata, etc.).
 
 **Fields:** per `oar-schema.yaml` → `actor.registry_fields`
 
@@ -193,7 +199,11 @@ The actor registry is a lightweight table mapping actor IDs to metadata. oar-cor
 
 ## 7. API surface
 
-oar-core MUST expose a programmatic API (protocol: HTTP/JSON for v0). All operations require an `actor_id`.
+oar-core MUST expose a programmatic API (protocol: HTTP/JSON for v0).
+Hosted-v1 target state requires authentication on all workspace data routes
+outside development mode, although some current v0 code paths are still being
+aligned to that target. All write operations require an `actor_id` or an
+authenticated principal that resolves to one.
 
 ### 7.1 Read / query
 - Get thread by ID
@@ -227,6 +237,10 @@ oar-core MUST expose a programmatic API (protocol: HTTP/JSON for v0). All operat
 - Get inbox items (regenerable from canonical data; respects acknowledgment suppression; uses deterministic IDs)
 - Compute staleness (see §9)
 - Rebuild all derived views (idempotent)
+
+Derived/workspace projection reads are convenience read models for CLI and UI
+ergonomics. They MUST remain derivable from canonical state and MUST NOT become
+the durable automation contract.
 
 ---
 
@@ -268,11 +282,16 @@ Threads define cadence; staleness is evaluated against cadence.
 - `cron` (5-field expression): thread is stale when `now > next_check_in_at` AND no receipt or decision event has occurred since the previous expected cron run.
 - Legacy `daily | weekly | monthly | custom` values remain accepted for compatibility and retain their historical window behavior.
 
-When staleness is detected, oar-core MUST:
+When staleness is detected by background maintenance or a deterministic derived
+rebuild, oar-core MUST:
 - Emit an `exception_raised` event with subtype `stale_thread`.
 - Surface the thread as an inbox item with category `exception`.
 
-Staleness computation SHOULD run on a regular interval (implementation-defined) or be triggerable on demand.
+Read handlers MUST NOT mint stale-thread exceptions as a side effect of GET
+requests.
+
+Staleness computation SHOULD run on a regular interval (implementation-defined)
+or be triggerable on demand.
 
 ---
 

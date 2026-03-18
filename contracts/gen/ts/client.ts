@@ -558,7 +558,7 @@ export const commandRegistry: CommandSpec[] = [
       "identity"
     ],
     "stability": "beta",
-    "agent_notes": "Registration is open in v0; future invite/secret gating can wrap this endpoint.",
+    "agent_notes": "Hosted-v1 deployments should gate this behind managed bootstrap/invite flows. Public registration is not part of the hosted-v1 target state.",
     "examples": [
       {
         "title": "Register agent",
@@ -685,7 +685,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/auth/passkey/register/options",
     "operation_id": "passkeyRegisterOptions",
     "summary": "Begin passkey registration ceremony",
-    "why": "Create a WebAuthn registration challenge for a new human principal.",
+    "why": "Create a WebAuthn registration challenge for a human principal during managed bootstrap or invite acceptance.",
     "input_mode": "json-body",
     "streaming": {
       "mode": "none"
@@ -727,7 +727,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/auth/passkey/register/verify",
     "operation_id": "passkeyRegisterVerify",
     "summary": "Verify passkey registration and issue tokens",
-    "why": "Verify a WebAuthn attestation, create a principal, and issue the initial token bundle.",
+    "why": "Verify a WebAuthn attestation for managed bootstrap or invite acceptance, create the principal, and issue the initial token bundle.",
     "input_mode": "json-body",
     "streaming": {
       "mode": "none"

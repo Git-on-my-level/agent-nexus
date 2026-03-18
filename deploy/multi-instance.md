@@ -1,8 +1,24 @@
 # Multi-Instance Deployment on macOS (No Docker)
 
+This document describes the managed hosted-v1 operating model on one Mac host:
+one isolated workspace deployment per instance, provisioned by operators. It is
+not a self-service control plane, and it does not introduce shared row-level
+multitenancy.
+
 Run N independent `oar-core` instances on a single Mac host, each with its own
 workspace, port, and process supervision via `launchd`. A reverse proxy
 (Caddy, nginx, etc.) fronts them with TLS and routing.
+
+## Hosted-v1 cut line
+
+- Each instance is one isolated workspace deployment.
+- Provisioning is managed by operators with install/bootstrap scripts.
+- Backup and restore happen per workspace instance.
+- Public registration is not part of the hosted-v1 story. Until invite/bootstrap
+  workflows land in code, treat any direct registration endpoints as controlled
+  provisioning hooks rather than public signup.
+- A future control plane may automate this later, but it is not required to run
+  hosted v1.
 
 ## Prerequisites
 
@@ -33,7 +49,7 @@ Each instance has:
 - Its own `launchd` plist for process supervision
 - Its own log files
 
-Instances share a single binary and schema assets.
+Instances share a single binary and schema assets, but not state.
 
 ## Quick Start
 
@@ -265,6 +281,9 @@ Each instance has a fully independent workspace:
 There is no shared state between instances. Each has its own SQLite database,
 actor registry, and artifact storage.
 
+The hosted-v1 assumption is strict workspace isolation per deployment, not
+shared row-level tenancy inside one database.
+
 ## Backup
 
 Back up each workspace directory independently:
@@ -276,6 +295,19 @@ sqlite3 ~/.oar/workspaces/team-alpha/state.sqlite ".backup /backups/team-alpha-$
 # Or just rsync the whole workspace (stop instance first for consistency)
 rsync -a ~/.oar/workspaces/team-alpha/ /backups/team-alpha/
 ```
+
+## Restore
+
+Restore one workspace at a time:
+
+```bash
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.oar.core.team-alpha.plist
+rsync -a /backups/team-alpha/ ~/.oar/workspaces/team-alpha/
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.oar.core.team-alpha.plist
+```
+
+This recovery model is intentionally script-driven for hosted v1. A separate
+control plane may orchestrate it later, but it is not part of the current pack.
 
 ## Troubleshooting
 

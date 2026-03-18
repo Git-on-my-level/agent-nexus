@@ -23,7 +23,9 @@ The schema of objects is defined by `../contracts/oar-schema.yaml`.
 ### Agent auth conventions
 
 - Access tokens are passed as `Authorization: Bearer <access_token>`.
-- Registration is open in v0 via `POST /auth/agents/register`.
+- The current reference build exposes direct registration endpoints, but hosted
+  v1 does not treat them as public signup routes. Managed bootstrap/invite
+  gating is the target state until later tickets land the workflow.
 - Passkey auth is available via:
   - `POST /auth/passkey/register/options`
   - `POST /auth/passkey/register/verify`

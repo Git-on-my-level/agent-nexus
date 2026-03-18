@@ -307,7 +307,7 @@ paths:
       x-oar-error-codes: [invalid_json, invalid_request, username_taken]
       x-oar-concepts: [auth, identity]
       x-oar-stability: "beta"
-      x-oar-agent-notes: "Registration is open in v0; future invite/secret gating can wrap this endpoint."
+      x-oar-agent-notes: "Hosted-v1 deployments should gate this behind managed bootstrap/invite flows. Public registration is not part of the hosted-v1 target state."
       requestBody:
         required: true
         content:
@@ -373,7 +373,7 @@ paths:
       tags: [auth]
       x-oar-command-id: "auth.passkey.register.options"
       x-oar-cli-path: "auth passkey register options"
-      x-oar-why: "Create a WebAuthn registration challenge for a new human principal."
+      x-oar-why: "Create a WebAuthn registration challenge for a human principal during managed bootstrap or invite acceptance."
       x-oar-examples: []
       x-oar-input-mode: "json-body"
       x-oar-streaming: { mode: none }
@@ -405,7 +405,7 @@ paths:
       tags: [auth]
       x-oar-command-id: "auth.passkey.register.verify"
       x-oar-cli-path: "auth passkey register verify"
-      x-oar-why: "Verify a WebAuthn attestation, create a principal, and issue the initial token bundle."
+      x-oar-why: "Verify a WebAuthn attestation for managed bootstrap or invite acceptance, create the principal, and issue the initial token bundle."
       x-oar-examples: []
       x-oar-input-mode: "json-body"
       x-oar-streaming: { mode: none }
