@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"organization-autorunner-core/internal/actors"
 	"organization-autorunner-core/internal/primitives"
@@ -942,8 +943,9 @@ func TestGetSnapshotByID(t *testing.T) {
 }
 
 type primitivesTestHarness struct {
-	workspace *storage.Workspace
-	baseURL   string
+	workspace  *storage.Workspace
+	baseURL    string
+	maintainer *ProjectionMaintainer
 }
 
 func newPrimitivesTestServer(t *testing.T) primitivesTestHarness {
@@ -962,28 +964,61 @@ func newPrimitivesTestServer(t *testing.T) primitivesTestHarness {
 
 	registry := actors.NewStore(workspace.DB())
 	primitiveStore := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
-	projectionWorker := NewProjectionWorker(
-		WithPrimitiveStore(primitiveStore),
-		WithSchemaContract(contract),
-		WithInboxRiskHorizon(defaultInboxRiskHorizon),
-	)
+	maintainer := NewProjectionMaintainer(ProjectionMaintainerConfig{
+		PrimitiveStore:   primitiveStore,
+		Contract:         contract,
+		InboxRiskHorizon: defaultInboxRiskHorizon,
+		DirtyBatchSize:   100,
+		SystemActorID:    "oar-core",
+	})
 	handler := NewHandler(
 		contract.Version,
 		WithHealthCheck(workspace.Ping),
 		WithActorRegistry(registry),
 		WithPrimitiveStore(primitiveStore),
 		WithSchemaContract(contract),
-		WithProjectionMaintenance(NewSyncProjectionMaintenance(projectionWorker)),
+		WithProjectionMaintainer(maintainer),
 		WithAllowUnauthenticatedWrites(true),
 		WithEnableDevActorMode(true),
 	)
-	server := httptest.NewServer(handler)
+	server := httptest.NewServer(newProjectionMaintainerAutoStepHandler(handler, maintainer))
 	t.Cleanup(func() {
 		server.Close()
 		_ = workspace.Close()
 	})
 
-	return primitivesTestHarness{workspace: workspace, baseURL: server.URL}
+	return primitivesTestHarness{workspace: workspace, baseURL: server.URL, maintainer: maintainer}
+}
+
+func newProjectionMaintainerAutoStepHandler(inner http.Handler, maintainer *ProjectionMaintainer) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		recorder := httptest.NewRecorder()
+		inner.ServeHTTP(recorder, r)
+
+		if shouldAutoStepProjectionMaintainer(r, recorder.Code) && maintainer != nil {
+			_ = maintainer.Step(context.Background(), time.Now().UTC())
+		}
+
+		for key, values := range recorder.Header() {
+			for _, value := range values {
+				w.Header().Add(key, value)
+			}
+		}
+		w.WriteHeader(recorder.Code)
+		_, _ = w.Write(recorder.Body.Bytes())
+	})
+}
+
+func shouldAutoStepProjectionMaintainer(r *http.Request, statusCode int) bool {
+	if statusCode >= http.StatusBadRequest {
+		return false
+	}
+	switch r.Method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return false
+	default:
+		return true
+	}
 }
 
 func postJSONExpectStatus(t *testing.T, url string, body string, expectedStatus int) *http.Response {

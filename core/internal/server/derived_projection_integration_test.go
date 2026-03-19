@@ -165,14 +165,15 @@ func TestEnsureDerivedThreadProjectionRefreshesExpiredTimeSensitiveState(t *test
 		t.Fatalf("expected fresh projection to start non-stale, got %#v", initialProjection)
 	}
 
-	worker := NewProjectionWorker(
-		WithPrimitiveStore(opts.primitiveStore),
-		WithSchemaContract(opts.contract),
-		WithInboxRiskHorizon(opts.inboxRiskHorizon),
-	)
-	worker.now = func() time.Time { return baseNow.Add(2 * time.Minute) }
-	if err := worker.RunUntilIdle(context.Background()); err != nil {
-		t.Fatalf("RunUntilIdle: %v", err)
+	maintainer := NewProjectionMaintainer(ProjectionMaintainerConfig{
+		PrimitiveStore:   opts.primitiveStore,
+		Contract:         opts.contract,
+		InboxRiskHorizon: opts.inboxRiskHorizon,
+		DirtyBatchSize:   20,
+		SystemActorID:    "actor-1",
+	})
+	if err := maintainer.RunFullRebuild(context.Background(), baseNow.Add(2*time.Minute), "actor-1"); err != nil {
+		t.Fatalf("RunFullRebuild: %v", err)
 	}
 	refreshedState, err := loadThreadProjectionState(context.Background(), opts, threadID)
 	if err != nil {

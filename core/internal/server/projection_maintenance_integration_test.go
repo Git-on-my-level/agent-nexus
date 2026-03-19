@@ -3,9 +3,11 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -70,9 +72,13 @@ func newProjectionMaintenanceTestServer(t *testing.T) projectionMaintenanceTestH
 
 func (h projectionMaintenanceTestHarness) step(t *testing.T, now time.Time) {
 	t.Helper()
-	if err := h.maintainer.Step(context.Background(), now); err != nil {
+	if err := h.stepErr(now); err != nil {
 		t.Fatalf("projection maintainer step: %v", err)
 	}
+}
+
+func (h projectionMaintenanceTestHarness) stepErr(now time.Time) error {
+	return h.maintainer.Step(context.Background(), now)
 }
 
 func TestProjectionMaintainerEmitsStaleExceptionsAndRefreshesInbox(t *testing.T) {
@@ -111,17 +117,17 @@ func TestProjectionMaintainerEmitsStaleExceptionsAndRefreshesInbox(t *testing.T)
 	}
 
 	if count := countStaleThreadExceptions(t, h.baseURL, threadID); count != 0 {
-		t.Fatalf("expected no stale exceptions before worker step, got %d", count)
+		t.Fatalf("expected no stale exceptions before maintainer step, got %d", count)
 	}
 
 	stepNow := time.Date(2026, 3, 18, 10, 0, 0, 0, time.UTC)
 	h.step(t, stepNow)
 
 	if count := countStaleThreadExceptions(t, h.baseURL, threadID); count != 1 {
-		t.Fatalf("expected one stale exception after worker step, got %d", count)
+		t.Fatalf("expected one stale exception after maintainer step, got %d", count)
 	}
 	if !threadListedAsStale(t, h.baseURL, threadID) {
-		t.Fatalf("expected thread %s to be stale after worker step", threadID)
+		t.Fatalf("expected thread %s to be stale after maintainer step", threadID)
 	}
 	items := getInboxItems(t, h.baseURL)
 	if _, ok := findInboxItem(items, func(item map[string]any) bool {
@@ -132,7 +138,7 @@ func TestProjectionMaintainerEmitsStaleExceptionsAndRefreshesInbox(t *testing.T)
 
 	h.step(t, stepNow.Add(2*time.Second))
 	if count := countStaleThreadExceptions(t, h.baseURL, threadID); count != 1 {
-		t.Fatalf("expected worker step to avoid duplicate stale exceptions, got %d", count)
+		t.Fatalf("expected maintainer step to avoid duplicate stale exceptions, got %d", count)
 	}
 }
 
@@ -241,6 +247,100 @@ func TestHealthEndpointReportsProjectionMaintenanceLag(t *testing.T) {
 	}
 	if after.LastError != nil {
 		t.Fatalf("did not expect maintenance error after successful step, got %#v", after)
+	}
+}
+
+type projectionMaintenanceFailureStore struct {
+	PrimitiveStore
+	failErr error
+	failed  bool
+}
+
+func (s *projectionMaintenanceFailureStore) PutDerivedThreadProjection(ctx context.Context, projection primitives.DerivedThreadProjection) error {
+	if !s.failed {
+		s.failed = true
+		return s.failErr
+	}
+	return s.PrimitiveStore.PutDerivedThreadProjection(ctx, projection)
+}
+
+func TestHealthEndpointReportsProjectionMaintenanceErrors(t *testing.T) {
+	t.Parallel()
+
+	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	contractPath := filepath.Join("..", "..", "..", "contracts", "oar-schema.yaml")
+	contract, err := schema.Load(contractPath)
+	if err != nil {
+		_ = workspace.Close()
+		t.Fatalf("load schema contract: %v", err)
+	}
+
+	registry := actors.NewStore(workspace.DB())
+	baseStore := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+	primitiveStore := &projectionMaintenanceFailureStore{
+		PrimitiveStore: baseStore,
+		failErr:        errors.New("synthetic projection failure"),
+	}
+	maintainer := NewProjectionMaintainer(ProjectionMaintainerConfig{
+		PrimitiveStore:    primitiveStore,
+		Contract:          contract,
+		StaleScanInterval: time.Second,
+		DirtyBatchSize:    20,
+		SystemActorID:     "oar-core",
+	})
+	handler := NewHandler(
+		contract.Version,
+		WithHealthCheck(workspace.Ping),
+		WithActorRegistry(registry),
+		WithPrimitiveStore(primitiveStore),
+		WithSchemaContract(contract),
+		WithEnableDevActorMode(true),
+		WithAllowUnauthenticatedWrites(true),
+		WithProjectionMaintainer(maintainer),
+	)
+	server := httptest.NewServer(handler)
+	t.Cleanup(func() {
+		server.Close()
+		_ = workspace.Close()
+	})
+
+	postJSONExpectStatus(t, server.URL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
+	postJSONExpectStatus(t, server.URL+"/threads", `{
+		"actor_id":"actor-1",
+		"thread":{
+			"id":"failing-thread",
+			"title":"Failing projection thread",
+			"type":"incident",
+			"status":"active",
+			"priority":"p1",
+			"tags":["ops"],
+			"cadence":"reactive",
+			"current_summary":"summary",
+			"next_actions":["follow up"],
+			"key_artifacts":[],
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated).Body.Close()
+
+	if err := maintainer.Step(context.Background(), time.Date(2026, 3, 18, 10, 0, 0, 0, time.UTC)); err == nil {
+		t.Fatal("expected projection maintainer step to fail")
+	}
+
+	health := getProjectionMaintenanceHealth(t, server.URL)
+	if health.PendingDirtyCount == 0 {
+		t.Fatalf("expected pending dirty work to remain after failure, got %#v", health)
+	}
+	if health.LastError == nil {
+		t.Fatalf("expected maintenance last_error after failure, got %#v", health)
+	}
+	if strings.TrimSpace(health.LastError.Message) == "" {
+		t.Fatalf("expected non-empty maintenance error message, got %#v", health.LastError)
+	}
+	if !strings.Contains(health.LastError.Message, "synthetic projection failure") {
+		t.Fatalf("expected underlying failure text in last_error.message, got %#v", health.LastError)
 	}
 }
 

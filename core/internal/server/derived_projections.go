@@ -307,10 +307,12 @@ func buildThreadProjectionState(threadID string, projection primitives.DerivedTh
 
 	status := "missing"
 	switch {
-	case hasRefresh && (refresh.InProgress || refresh.IsDirty):
+	case hasRefresh && refresh.InProgress:
 		status = "pending"
 	case hasRefresh && strings.TrimSpace(refresh.LastErrorMessage) != "":
 		status = "error"
+	case hasRefresh && refresh.IsDirty:
+		status = "pending"
 	case hasProjection:
 		status = "current"
 	}
@@ -388,64 +390,11 @@ func markThreadProjectionsDirty(ctx context.Context, opts handlerOptions, queued
 	if len(threadIDs) == 0 {
 		return nil
 	}
-	if opts.projectionMaintainer != nil && opts.projectionMaintenance == nil {
-		dirtyAt := queuedAt.UTC().Format(time.RFC3339Nano)
-		for _, threadID := range threadIDs {
-			if err := opts.primitiveStore.MarkDerivedThreadProjectionDirty(ctx, threadID, dirtyAt); err != nil {
-				return err
-			}
-		}
-	}
-	if err := opts.primitiveStore.MarkThreadProjectionsDirty(ctx, threadIDs, queuedAt); err != nil {
-		return err
-	}
-	if opts.projectionMaintenance != nil {
-		return opts.projectionMaintenance.Notify(ctx)
-	}
-	return nil
+	return opts.primitiveStore.MarkThreadProjectionsDirty(ctx, threadIDs, queuedAt)
 }
 
 func enqueueThreadProjectionsBestEffort(ctx context.Context, opts handlerOptions, threadIDs []string, queuedAt time.Time) {
 	_ = markThreadProjectionsDirty(ctx, opts, queuedAt, threadIDs...)
-}
-
-func markExpiredThreadProjectionsDirty(ctx context.Context, opts handlerOptions, now time.Time) error {
-	if opts.primitiveStore == nil {
-		return nil
-	}
-
-	threads, _, err := opts.primitiveStore.ListThreads(ctx, primitives.ThreadListFilter{})
-	if err != nil {
-		return err
-	}
-	threadIDs := make([]string, 0, len(threads))
-	for _, thread := range threads {
-		threadID := strings.TrimSpace(anyString(thread["id"]))
-		if threadID != "" {
-			threadIDs = append(threadIDs, threadID)
-		}
-	}
-	threadIDs = uniqueServerStrings(threadIDs)
-	if len(threadIDs) == 0 {
-		return nil
-	}
-
-	projections, err := opts.primitiveStore.ListDerivedThreadProjections(ctx, threadIDs)
-	if err != nil {
-		return err
-	}
-
-	dirtyIDs := make([]string, 0)
-	for _, threadID := range threadIDs {
-		projection, ok := projections[threadID]
-		if !ok || derivedThreadProjectionExpired(projection, now) {
-			dirtyIDs = append(dirtyIDs, threadID)
-		}
-	}
-	if len(dirtyIDs) == 0 {
-		return nil
-	}
-	return opts.primitiveStore.MarkThreadProjectionsDirty(ctx, dirtyIDs, now)
 }
 
 func uniqueServerStrings(values []string) []string {

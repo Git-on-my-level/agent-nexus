@@ -149,11 +149,6 @@ func main() {
 		DirtyBatchSize:    projectionBatchSize,
 		SystemActorID:     "oar-core",
 	})
-	projectionWorker := server.NewProjectionWorker(
-		server.WithPrimitiveStore(primitiveStore),
-		server.WithSchemaContract(contract),
-	)
-	projectionMaintenance := server.NewBackgroundProjectionMaintenance(projectionWorker, projectionPollInterval)
 	handler := server.NewHandler(
 		contract.Version,
 		server.WithHealthCheck(workspace.Ping),
@@ -162,7 +157,6 @@ func main() {
 		server.WithPasskeySessionStore(passkeySessionStore),
 		server.WithPrimitiveStore(primitiveStore),
 		server.WithSchemaContract(contract),
-		server.WithProjectionMaintenance(projectionMaintenance),
 		server.WithWebAuthnConfig(server.WebAuthnConfig{
 			RPDisplayName: webAuthnDisplayName,
 			RPID:          webAuthnRPID,
@@ -221,10 +215,6 @@ func main() {
 		defer cancel()
 		if err := httpServer.Shutdown(ctx); err != nil {
 			fmt.Fprintf(os.Stderr, "graceful shutdown failed: %v\n", err)
-			os.Exit(1)
-		}
-		if err := projectionMaintenance.Stop(ctx); err != nil {
-			fmt.Fprintf(os.Stderr, "projection worker shutdown failed: %v\n", err)
 			os.Exit(1)
 		}
 		fmt.Println("server stopped")
