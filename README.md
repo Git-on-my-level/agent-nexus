@@ -74,6 +74,7 @@ See `runbooks/release.md` for version-pinning and custom install directory optio
 - `make check`: run checks for both projects
 - `make contract-check`: verify generated contract artifacts are up to date
 - `make cli-check`: run CLI tests
+- `make hosted-smoke`: run hosted-v1 production smoke suite (auth gate, onboarding, workspace access, staleness, backup/restore)
 - `make hosted-ops-test`: run hosted provisioning/backup/restore verification tests
 - `make hosted-ops-smoke`: run one hosted provisioning/backup/restore smoke flow
 - `make cli-integration-test`: run CLI real-binary integration tests (non-default)

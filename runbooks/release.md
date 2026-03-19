@@ -10,6 +10,7 @@ Run from repo root:
 make setup
 make check
 make e2e-smoke
+make hosted-smoke
 ```
 
 Required outcomes:
@@ -17,6 +18,7 @@ Required outcomes:
 - contract drift check passes (`make contract-check`)
 - core, cli, and web-ui checks pass
 - end-to-end smoke script passes (core startup, CLI auth/token refresh/typed commands/streams, UI startup compatibility)
+- hosted production smoke script passes (anonymous read rejection, bootstrap/invite-gated onboarding, authenticated workspace access, stale exception maintenance, backup/restore verification)
 
 ## CLI binary release automation
 
