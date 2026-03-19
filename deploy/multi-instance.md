@@ -284,30 +284,55 @@ actor registry, and artifact storage.
 The hosted-v1 assumption is strict workspace isolation per deployment, not
 shared row-level tenancy inside one database.
 
-## Backup
+## Backup and Restore
 
-Back up each workspace directory independently:
+The hosted-v1 backup/restore story is now standardized in the repo-local ops
+bundle under [`scripts/hosted/`](../scripts/hosted/). Use that flow instead of
+ad hoc `sqlite3` or `rsync` commands so each instance gets the same manifest,
+checksum set, restore guardrails, and verification path.
 
-```bash
-# Safe online backup using SQLite .backup command
-sqlite3 ~/.oar/workspaces/team-alpha/state.sqlite ".backup /backups/team-alpha-$(date +%s).sqlite"
-
-# Or just rsync the whole workspace (stop instance first for consistency)
-rsync -a ~/.oar/workspaces/team-alpha/ /backups/team-alpha/
-```
-
-## Restore
-
-Restore one workspace at a time:
+Provision one deployment root:
 
 ```bash
-launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.oar.core.team-alpha.plist
-rsync -a /backups/team-alpha/ ~/.oar/workspaces/team-alpha/
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.oar.core.team-alpha.plist
+./scripts/hosted/provision-workspace.sh \
+  --instance team-alpha \
+  --instance-root ~/.oar/team-alpha \
+  --public-origin https://team-alpha.oar.example.com \
+  --listen-port 8001 \
+  --generate-bootstrap-token
 ```
 
-This recovery model is intentionally script-driven for hosted v1. A separate
-control plane may orchestrate it later, but it is not part of the current pack.
+Back it up:
+
+```bash
+./scripts/hosted/backup-workspace.sh \
+  --instance-root ~/.oar/team-alpha \
+  --output-dir /backups/team-alpha-$(date -u +%Y%m%dT%H%M%SZ)
+```
+
+Restore it:
+
+```bash
+./scripts/hosted/restore-workspace.sh \
+  --backup-dir /backups/team-alpha-20260319T020000Z \
+  --target-instance-root ~/.oar/team-alpha-restore-drill
+```
+
+Verify the restored workspace before cutover:
+
+```bash
+./core/scripts/build-prod
+
+./scripts/hosted/verify-restore.sh \
+  --instance-root ~/.oar/team-alpha-restore-drill \
+  --core-bin ./core/.bin/oar-core \
+  --schema-path ./contracts/oar-schema.yaml
+```
+
+This recovery model remains intentionally script-driven for hosted v1. A
+separate control plane may orchestrate it later, but it is not part of the
+current pack. For the end-to-end operator flow, see
+[`deploy/managed-hosting.md`](./managed-hosting.md).
 
 ## Troubleshooting
 

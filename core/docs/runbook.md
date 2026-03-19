@@ -19,8 +19,10 @@ This runbook covers reproducible local and production-like operation for `oar-co
 | Listen port | `--port` | `OAR_PORT` | `8000` |
 | Full listen address (overrides host+port) | `--listen-addr` | `OAR_LISTEN_ADDR` | unset |
 | Schema path | `--schema-path` | `OAR_SCHEMA_PATH` | `../contracts/oar-schema.yaml` |
+| Core instance identifier | `--core-instance-id` | `OAR_CORE_INSTANCE_ID` | `core-local` |
 | Enable dev actor mode | n/a | `OAR_ENABLE_DEV_ACTOR_MODE` | `false` |
 | Allow unauthenticated writes | n/a | `OAR_ALLOW_UNAUTHENTICATED_WRITES` | `false` |
+| Bootstrap token for first principal registration | n/a | `OAR_BOOTSTRAP_TOKEN` | unset |
 | WebAuthn RP ID | n/a | `OAR_WEBAUTHN_RPID` | derived from browser origin host |
 | WebAuthn origin | n/a | `OAR_WEBAUTHN_ORIGIN` | derived from browser request origin |
 | WebAuthn RP display name | n/a | `OAR_WEBAUTHN_RP_DISPLAY_NAME` | `OAR` |
@@ -153,6 +155,11 @@ workspace and the primary thread timeline.
 
 ## Production deployment
 
+Hosted v1 production operations are managed per isolated workspace deployment.
+Use [`deploy/managed-hosting.md`](../../deploy/managed-hosting.md) for the
+authoritative provision/bootstrap/backup/restore flow. The sections below focus
+on core-specific runtime behavior inside that operator model.
+
 ### Auth model
 
 In production, `OAR_ENABLE_DEV_ACTOR_MODE` and
@@ -243,13 +250,22 @@ curl -fsS http://127.0.0.1:8000/version
 From the repo root:
 
 ```bash
-cp .env.production.example .env
-# Edit .env with production values
-docker compose up -d
+./scripts/hosted/provision-workspace.sh \
+  --instance team-alpha \
+  --instance-root /srv/oar/team-alpha \
+  --public-origin https://team-alpha.oar.example.com \
+  --listen-port 8001 \
+  --web-ui-port 3001 \
+  --generate-bootstrap-token
+
+docker compose --env-file /srv/oar/team-alpha/config/env.production up -d
 ```
 
 This starts both `core` (port 8000) and `web-ui` (port 3000). The web-ui
-proxies API calls to core over the internal Docker network.
+proxies API calls to core over the internal Docker network. The generated env
+file also carries `HOST_OAR_WORKSPACE_ROOT`, `OAR_CORE_INSTANCE_ID`, and
+`OAR_BOOTSTRAP_TOKEN` so the Compose example matches the hosted-v1 managed-ops
+story instead of a generic shared volume.
 
 ## CI smoke
 

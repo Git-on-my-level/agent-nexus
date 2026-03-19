@@ -13,7 +13,7 @@ FORCE_SEED ?= 0
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup check serve lint test format contract-gen contract-check e2e-smoke cli-check cli-test cli-build cli-integration-test core-% web-ui-%
+.PHONY: help setup check serve lint test format contract-gen contract-check e2e-smoke hosted-ops-test hosted-ops-smoke cli-check cli-test cli-build cli-integration-test core-% web-ui-%
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z0-9_.-]+:.*##/ {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -67,6 +67,12 @@ cli-integration-test: ## Run CLI real-binary integration tests (non-default)
 
 e2e-smoke: ## Run end-to-end core + CLI + web-ui smoke flow
 	./scripts/e2e-smoke
+
+hosted-ops-test: ## Run hosted provisioning/backup/restore verification tests
+	./scripts/hosted/test-hosted-ops.sh
+
+hosted-ops-smoke: ## Run one hosted provisioning/backup/restore smoke flow
+	./scripts/hosted/smoke-test.sh
 
 serve: ## Start core, seed mock dataset into core, then start web-ui
 	@set -euo pipefail; \

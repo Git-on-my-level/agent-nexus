@@ -74,6 +74,8 @@ See `runbooks/release.md` for version-pinning and custom install directory optio
 - `make check`: run checks for both projects
 - `make contract-check`: verify generated contract artifacts are up to date
 - `make cli-check`: run CLI tests
+- `make hosted-ops-test`: run hosted provisioning/backup/restore verification tests
+- `make hosted-ops-smoke`: run one hosted provisioning/backup/restore smoke flow
 - `make cli-integration-test`: run CLI real-binary integration tests (non-default)
 - `make e2e-smoke`: run live core + CLI + web-ui smoke verification
 - `make core-<target>`: pass through to `core/Makefile`
@@ -82,6 +84,7 @@ See `runbooks/release.md` for version-pinning and custom install directory optio
 Release/operations docs:
 
 - `runbooks/release.md`
+- `deploy/managed-hosting.md`
 - `core/docs/runbook.md`
 - `cli/docs/runbook.md`
 - `web-ui/docs/runbook.md`
