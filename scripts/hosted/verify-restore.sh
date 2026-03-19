@@ -64,6 +64,7 @@ fi
 [[ -f "$MANIFEST_PATH" ]] || die "manifest not found: $MANIFEST_PATH"
 [[ -f "$INSTANCE_METADATA_FILE" ]] || die "instance metadata not found: $INSTANCE_METADATA_FILE"
 [[ -f "${WORKSPACE_ROOT}/state.sqlite" ]] || die "restored sqlite database not found: ${WORKSPACE_ROOT}/state.sqlite"
+validate_backup_format_version "$(manifest_get "$MANIFEST_PATH" FORMAT_VERSION || true)"
 
 if [[ -z "$CORE_BIN" ]]; then
   CORE_BIN="$(resolve_core_bin)"
@@ -81,9 +82,14 @@ load_dotenv_file "$ENV_FILE"
 EXPECTED_ARTIFACT_COUNT="$(manifest_get "$MANIFEST_PATH" ARTIFACT_COUNT)"
 EXPECTED_AGENT_COUNT="$(manifest_get "$MANIFEST_PATH" AGENT_COUNT)"
 EXPECTED_INVITE_COUNT="$(manifest_get "$MANIFEST_PATH" INVITE_COUNT)"
+EXPECTED_DOCUMENT_COUNT="$(manifest_get "$MANIFEST_PATH" DOCUMENT_COUNT || true)"
+EXPECTED_DOCUMENT_REVISION_COUNT="$(manifest_get "$MANIFEST_PATH" DOCUMENT_REVISION_COUNT || true)"
 EXPECTED_BLOB_FILE_COUNT="$(manifest_get "$MANIFEST_PATH" BLOB_FILE_COUNT)"
 EXPECTED_CORE_INSTANCE_ID="$(manifest_get "$MANIFEST_PATH" CORE_INSTANCE_ID || true)"
 EXPECTED_BOOTSTRAP_STATE="$(manifest_get "$MANIFEST_PATH" BOOTSTRAP_STATE || true)"
+VERIFY_ARTIFACT_ID="$(manifest_get "$MANIFEST_PATH" VERIFY_ARTIFACT_ID || true)"
+VERIFY_DOCUMENT_ID="$(manifest_get "$MANIFEST_PATH" VERIFY_DOCUMENT_ID || true)"
+VERIFY_DOCUMENT_REVISION_ID="$(manifest_get "$MANIFEST_PATH" VERIFY_DOCUMENT_REVISION_ID || true)"
 SOURCE_INSTANCE_ROOT="$(manifest_get "$MANIFEST_PATH" SOURCE_INSTANCE_ROOT || true)"
 SOURCE_WORKSPACE_ROOT="$(manifest_get "$MANIFEST_PATH" SOURCE_WORKSPACE_ROOT || true)"
 SOURCE_PUBLIC_ORIGIN="$(manifest_get "$MANIFEST_PATH" PUBLIC_ORIGIN || true)"
@@ -108,17 +114,79 @@ fi
 SERVER_LOG_DIR="${WORKSPACE_ROOT}/logs"
 SERVER_LOG_FILE="${SERVER_LOG_DIR}/restore-verify.log"
 mkdir -p "$SERVER_LOG_DIR"
+VERIFY_TMP_DIR="$(mktemp -d)"
+
+sqlite_quote() {
+  printf '%s' "$1" | sed "s/'/''/g"
+}
+
+curl_expect_200() {
+  local url="$1"
+  local output_file="$2"
+  local label="$3"
+  local status
+  status="$(curl -sS -o "$output_file" -w '%{http_code}' "$url")" || die "${label} request failed: ${url}"
+  [[ "$status" == "200" ]] || die "${label} request returned HTTP ${status}: ${url}"
+}
+
+verify_live_artifact_read() {
+  local artifact_id="$1"
+  local metadata_file="${VERIFY_TMP_DIR}/artifact-metadata.json"
+  local content_file="${VERIFY_TMP_DIR}/artifact-content.bin"
+  local expected_content_hash
+  local actual_content_hash
+
+  expected_content_hash="$(sqlite_scalar "${WORKSPACE_ROOT}/state.sqlite" "SELECT COALESCE(content_hash, '') FROM artifacts WHERE id = '$(sqlite_quote "$artifact_id")';")"
+  [[ -n "$expected_content_hash" ]] || die "live artifact verification sample not found in restored database: ${artifact_id}"
+
+  curl_expect_200 "http://127.0.0.1:${LISTEN_PORT}/artifacts/${artifact_id}" "$metadata_file" "artifact metadata"
+  grep -F "\"id\":\"${artifact_id}\"" "$metadata_file" >/dev/null || die "artifact metadata response did not include artifact id ${artifact_id}"
+  grep -F "\"content_hash\":\"${expected_content_hash}\"" "$metadata_file" >/dev/null || die "artifact metadata response did not include expected content hash ${expected_content_hash} for ${artifact_id}"
+
+  curl_expect_200 "http://127.0.0.1:${LISTEN_PORT}/artifacts/${artifact_id}/content" "$content_file" "artifact content"
+  [[ -s "$content_file" ]] || die "artifact content response was empty for ${artifact_id}"
+  actual_content_hash="$(sha256_file "$content_file")"
+  [[ "$actual_content_hash" == "$expected_content_hash" ]] || die "artifact content hash mismatch for ${artifact_id}: expected ${expected_content_hash}, got ${actual_content_hash}"
+}
+
+verify_live_document_revision_read() {
+  local document_id="$1"
+  local revision_id="$2"
+  local revision_file="${VERIFY_TMP_DIR}/document-revision.json"
+  local expected_content_hash
+
+  expected_content_hash="$(sqlite_scalar "${WORKSPACE_ROOT}/state.sqlite" "SELECT COALESCE(a.content_hash, '') FROM document_revisions dr JOIN artifacts a ON a.id = dr.artifact_id WHERE dr.document_id = '$(sqlite_quote "$document_id")' AND dr.revision_id = '$(sqlite_quote "$revision_id")';")"
+  [[ -n "$expected_content_hash" ]] || die "live document verification sample not found in restored database: document=${document_id} revision=${revision_id}"
+
+  curl_expect_200 "http://127.0.0.1:${LISTEN_PORT}/docs/${document_id}/revisions/${revision_id}" "$revision_file" "document revision"
+  grep -F "\"document_id\":\"${document_id}\"" "$revision_file" >/dev/null || die "document revision response did not include document id ${document_id}"
+  grep -F "\"revision_id\":\"${revision_id}\"" "$revision_file" >/dev/null || die "document revision response did not include revision id ${revision_id}"
+  grep -F "\"content_hash\":\"${expected_content_hash}\"" "$revision_file" >/dev/null || die "document revision response did not include expected content hash ${expected_content_hash} for ${revision_id}"
+  grep -F '"content":' "$revision_file" >/dev/null || die "document revision response did not include revision content for ${revision_id}"
+}
+
+verify_referenced_blob_reachability() {
+  local content_hash artifact_ids
+  while IFS='|' read -r content_hash artifact_ids; do
+    [[ -n "$content_hash" ]] || continue
+    if [[ ! -f "${WORKSPACE_ROOT}/artifacts/content/${content_hash}" ]]; then
+      die "referenced blob missing for content hash ${content_hash} (artifact ids: ${artifact_ids})"
+    fi
+  done < <(sqlite3 -noheader -batch -separator '|' "${WORKSPACE_ROOT}/state.sqlite" "SELECT content_hash, group_concat(id, ',') FROM artifacts WHERE TRIM(content_hash) <> '' GROUP BY content_hash ORDER BY content_hash;")
+}
 
 cleanup() {
   if [[ -n "${SERVER_PID:-}" ]]; then
     kill "${SERVER_PID}" >/dev/null 2>&1 || true
     wait "${SERVER_PID}" 2>/dev/null || true
   fi
+  rm -rf "$VERIFY_TMP_DIR"
 }
 trap cleanup EXIT
 
 OAR_ENABLE_DEV_ACTOR_MODE=false \
 OAR_ALLOW_UNAUTHENTICATED_WRITES=false \
+OAR_ALLOW_LOOPBACK_VERIFICATION_READS=true \
 OAR_BOOTSTRAP_TOKEN="${OAR_BOOTSTRAP_TOKEN:-}" \
 "$CORE_BIN" \
   --listen-addr "127.0.0.1:${LISTEN_PORT}" \
@@ -135,6 +203,8 @@ fi
 ACTUAL_ARTIFACT_COUNT="$(sqlite_scalar "${WORKSPACE_ROOT}/state.sqlite" "SELECT COUNT(*) FROM artifacts;")"
 ACTUAL_AGENT_COUNT="$(sqlite_scalar "${WORKSPACE_ROOT}/state.sqlite" "SELECT COUNT(*) FROM agents;")"
 ACTUAL_INVITE_COUNT="$(sqlite_scalar "${WORKSPACE_ROOT}/state.sqlite" "SELECT COUNT(*) FROM auth_invites;")"
+ACTUAL_DOCUMENT_COUNT="$(sqlite_scalar "${WORKSPACE_ROOT}/state.sqlite" "SELECT COUNT(*) FROM documents;")"
+ACTUAL_DOCUMENT_REVISION_COUNT="$(sqlite_scalar "${WORKSPACE_ROOT}/state.sqlite" "SELECT COUNT(*) FROM document_revisions;")"
 ACTUAL_BLOB_FILE_COUNT="$(count_files "${WORKSPACE_ROOT}/artifacts/content")"
 ACTUAL_BOOTSTRAP_STATE="disabled"
 if [[ -n "${OAR_BOOTSTRAP_TOKEN:-}" && "${OAR_BOOTSTRAP_TOKEN}" != "$HOSTED_BOOTSTRAP_PLACEHOLDER" ]]; then
@@ -148,6 +218,12 @@ fi
 [[ "$ACTUAL_ARTIFACT_COUNT" == "$EXPECTED_ARTIFACT_COUNT" ]] || die "artifact count mismatch: expected ${EXPECTED_ARTIFACT_COUNT}, got ${ACTUAL_ARTIFACT_COUNT}"
 [[ "$ACTUAL_AGENT_COUNT" == "$EXPECTED_AGENT_COUNT" ]] || die "agent count mismatch: expected ${EXPECTED_AGENT_COUNT}, got ${ACTUAL_AGENT_COUNT}"
 [[ "$ACTUAL_INVITE_COUNT" == "$EXPECTED_INVITE_COUNT" ]] || die "invite count mismatch: expected ${EXPECTED_INVITE_COUNT}, got ${ACTUAL_INVITE_COUNT}"
+if [[ -n "$EXPECTED_DOCUMENT_COUNT" ]]; then
+  [[ "$ACTUAL_DOCUMENT_COUNT" == "$EXPECTED_DOCUMENT_COUNT" ]] || die "document count mismatch: expected ${EXPECTED_DOCUMENT_COUNT}, got ${ACTUAL_DOCUMENT_COUNT}"
+fi
+if [[ -n "$EXPECTED_DOCUMENT_REVISION_COUNT" ]]; then
+  [[ "$ACTUAL_DOCUMENT_REVISION_COUNT" == "$EXPECTED_DOCUMENT_REVISION_COUNT" ]] || die "document revision count mismatch: expected ${EXPECTED_DOCUMENT_REVISION_COUNT}, got ${ACTUAL_DOCUMENT_REVISION_COUNT}"
+fi
 [[ "$ACTUAL_BLOB_FILE_COUNT" == "$EXPECTED_BLOB_FILE_COUNT" ]] || die "blob file count mismatch: expected ${EXPECTED_BLOB_FILE_COUNT}, got ${ACTUAL_BLOB_FILE_COUNT}"
 [[ "$TARGET_WORKSPACE_ROOT" == "$EXPECTED_TARGET_WORKSPACE_ROOT" ]] || die "active env workspace root mismatch: expected ${EXPECTED_TARGET_WORKSPACE_ROOT}, got ${TARGET_WORKSPACE_ROOT:-<unset>}"
 [[ "$METADATA_INSTANCE_ROOT" == "$INSTANCE_ROOT" ]] || die "active metadata instance root mismatch: expected ${INSTANCE_ROOT}, got ${METADATA_INSTANCE_ROOT:-<unset>}"
@@ -183,12 +259,36 @@ elif [[ -n "$EXPECTED_CORE_INSTANCE_ID" && -n "$TARGET_CORE_INSTANCE_ID" && "$EX
   die "core instance id mismatch: manifest=${EXPECTED_CORE_INSTANCE_ID} env=${TARGET_CORE_INSTANCE_ID}"
 fi
 
+if [[ -z "$VERIFY_ARTIFACT_ID" ]]; then
+  VERIFY_ARTIFACT_ID="$(sqlite_scalar "${WORKSPACE_ROOT}/state.sqlite" "SELECT COALESCE(id, '') FROM artifacts ORDER BY created_at ASC, id ASC LIMIT 1;")"
+fi
+[[ -n "$VERIFY_ARTIFACT_ID" ]] || die "restore verification requires at least one artifact for live read checks"
+verify_live_artifact_read "$VERIFY_ARTIFACT_ID"
+
+if [[ "$ACTUAL_DOCUMENT_COUNT" -gt 0 ]]; then
+  if [[ -z "$VERIFY_DOCUMENT_ID" || -z "$VERIFY_DOCUMENT_REVISION_ID" ]]; then
+    VERIFY_DOCUMENT_ID="$(sqlite_scalar "${WORKSPACE_ROOT}/state.sqlite" "SELECT COALESCE(id, '') FROM documents ORDER BY created_at ASC, id ASC LIMIT 1;")"
+    VERIFY_DOCUMENT_REVISION_ID="$(sqlite_scalar "${WORKSPACE_ROOT}/state.sqlite" "SELECT COALESCE(head_revision_id, '') FROM documents ORDER BY created_at ASC, id ASC LIMIT 1;")"
+  fi
+  [[ -n "$VERIFY_DOCUMENT_ID" ]] || die "restore verification requires a document id for live document checks"
+  [[ -n "$VERIFY_DOCUMENT_REVISION_ID" ]] || die "restore verification requires a document revision id for live document checks"
+  verify_live_document_revision_read "$VERIFY_DOCUMENT_ID" "$VERIFY_DOCUMENT_REVISION_ID"
+fi
+
+verify_referenced_blob_reachability
+
 log "Restore verification succeeded for ${INSTANCE_ROOT}"
 log "  /health:                 ok"
 log "  artifact count:          ${ACTUAL_ARTIFACT_COUNT}"
 log "  agent count:             ${ACTUAL_AGENT_COUNT}"
 log "  invite count:            ${ACTUAL_INVITE_COUNT}"
+log "  document count:          ${ACTUAL_DOCUMENT_COUNT}"
+log "  document revision count: ${ACTUAL_DOCUMENT_REVISION_COUNT}"
 log "  blob file count:         ${ACTUAL_BLOB_FILE_COUNT}"
+log "  artifact live read:      ${VERIFY_ARTIFACT_ID}"
+if [[ "$ACTUAL_DOCUMENT_COUNT" -gt 0 ]]; then
+  log "  document live read:      ${VERIFY_DOCUMENT_ID}@${VERIFY_DOCUMENT_REVISION_ID}"
+fi
 if [[ -n "$RESTORE_BOOTSTRAP_TOKEN_MODE" ]]; then
   log "  bootstrap mode:          ${RESTORE_BOOTSTRAP_TOKEN_MODE}"
 fi

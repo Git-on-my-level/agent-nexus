@@ -87,17 +87,26 @@ fi
 
 BACKUP_DIR="$(cd "$BACKUP_DIR" && pwd -P)"
 [[ -f "${BACKUP_DIR}/manifest.env" ]] || die "backup manifest not found: ${BACKUP_DIR}/manifest.env"
+[[ -f "${BACKUP_DIR}/SHA256SUMS" ]] || die "backup checksum file not found: ${BACKUP_DIR}/SHA256SUMS"
 [[ -f "${BACKUP_DIR}/workspace/state.sqlite" ]] || die "backup sqlite file not found: ${BACKUP_DIR}/workspace/state.sqlite"
 SOURCE_MANIFEST="${BACKUP_DIR}/manifest.env"
 SOURCE_ENV_FILE="${BACKUP_DIR}/config/env.production"
+SOURCE_FORMAT_VERSION="$(manifest_get "$SOURCE_MANIFEST" FORMAT_VERSION || true)"
+validate_backup_format_version "$SOURCE_FORMAT_VERSION"
+verify_backup_checksums "$BACKUP_DIR"
 SOURCE_BOOTSTRAP_STATE="$(manifest_get "$SOURCE_MANIFEST" BOOTSTRAP_STATE || true)"
 SOURCE_BOOTSTRAP_TOKEN=""
 if [[ -f "$SOURCE_ENV_FILE" ]]; then
   SOURCE_BOOTSTRAP_TOKEN="$(dotenv_get "$SOURCE_ENV_FILE" OAR_BOOTSTRAP_TOKEN || true)"
 fi
 
+if [[ -d "$TARGET_INSTANCE_ROOT" ]]; then
+  TARGET_INSTANCE_ROOT="$(cd "$TARGET_INSTANCE_ROOT" && pwd -P)"
+else
+  parent_dir="$(cd "$(dirname "$TARGET_INSTANCE_ROOT")" && pwd -P)"
+  TARGET_INSTANCE_ROOT="${parent_dir}/$(basename "$TARGET_INSTANCE_ROOT")"
+fi
 ensure_empty_or_forced_target "$TARGET_INSTANCE_ROOT" "$FORCE"
-TARGET_INSTANCE_ROOT="$(cd "$TARGET_INSTANCE_ROOT" && pwd -P)"
 TARGET_WORKSPACE_ROOT="${TARGET_INSTANCE_ROOT}/workspace"
 TARGET_CONFIG_DIR="${TARGET_INSTANCE_ROOT}/config"
 TARGET_METADATA_DIR="${TARGET_INSTANCE_ROOT}/metadata"

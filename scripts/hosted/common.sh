@@ -73,6 +73,16 @@ validate_origin() {
   [[ "$origin" =~ ^https?://[^/]+$ ]] || die "origin must be an absolute http(s) origin with no path: $origin"
 }
 
+validate_backup_format_version() {
+  local format_version="$1"
+  if [[ -z "$format_version" ]]; then
+    die "backup manifest is missing FORMAT_VERSION"
+  fi
+  if [[ "$format_version" != "$HOSTED_BACKUP_FORMAT_VERSION" ]]; then
+    die "unsupported backup format version: ${format_version} (supported: ${HOSTED_BACKUP_FORMAT_VERSION})"
+  fi
+}
+
 origin_authority() {
   local origin="$1"
   local without_scheme="${origin#*://}"
@@ -144,6 +154,32 @@ manifest_get() {
 
 dotenv_get() {
   manifest_get "$1" "$2"
+}
+
+verify_backup_checksums() {
+  local backup_dir="$1"
+  local checksum_file="${backup_dir}/SHA256SUMS"
+  local line expected_hash relative_path actual_hash
+
+  [[ -f "$checksum_file" ]] || die "backup checksum file not found: ${checksum_file}"
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ -n "$line" ]] || continue
+    expected_hash="${line%%  *}"
+    if [[ "$line" != *"  "* ]]; then
+      die "invalid checksum entry in ${checksum_file}: ${line}"
+    fi
+    relative_path="${line#*  }"
+    [[ "$expected_hash" =~ ^[0-9a-fA-F]{64}$ ]] || die "invalid checksum hash in ${checksum_file}: ${line}"
+    [[ -n "$relative_path" ]] || die "invalid checksum entry in ${checksum_file}: ${line}"
+    if [[ ! -f "${backup_dir}/${relative_path}" ]]; then
+      die "checksum verification failed for ${relative_path}: file is missing from backup bundle"
+    fi
+    actual_hash="$(sha256_file "${backup_dir}/${relative_path}")"
+    if [[ "$actual_hash" != "$expected_hash" ]]; then
+      die "checksum verification failed for ${relative_path}: expected ${expected_hash}, got ${actual_hash}"
+    fi
+  done <"$checksum_file"
 }
 
 bootstrap_token_configured_state() {

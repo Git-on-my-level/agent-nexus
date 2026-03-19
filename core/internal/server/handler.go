@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -95,6 +96,7 @@ type handlerOptions struct {
 	webAuthnConfig             WebAuthnConfig
 	enableDevActorMode         bool
 	allowUnauthenticatedWrites bool
+	allowLoopbackVerificationReads bool
 	inboxRiskHorizon           time.Duration
 	coreVersion                string
 	apiVersion                 string
@@ -159,6 +161,12 @@ func WithEnableDevActorMode(enable bool) HandlerOption {
 func WithAllowUnauthenticatedWrites(allow bool) HandlerOption {
 	return func(opts *handlerOptions) {
 		opts.allowUnauthenticatedWrites = allow
+	}
+}
+
+func WithAllowLoopbackVerificationReads(allow bool) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.allowLoopbackVerificationReads = allow
 	}
 }
 
@@ -284,6 +292,22 @@ func isReadOnlyRequest(method string) bool {
 	}
 }
 
+func isLoopbackRequest(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	host, _, err := net.SplitHostPort(strings.TrimSpace(r.RemoteAddr))
+	if err != nil {
+		host = strings.TrimSpace(r.RemoteAddr)
+	}
+	host = strings.Trim(host, "[]")
+	if host == "" {
+		return false
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
 func enforceRouteAccess(w http.ResponseWriter, r *http.Request, opts handlerOptions, requirement routeAccessRequirement) bool {
 	if !requirement.supported {
 		return true
@@ -294,6 +318,10 @@ func enforceRouteAccess(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		return true
 	case routeAccessWorkspaceBusiness:
 		if isReadOnlyRequest(r.Method) && opts.enableDevActorMode {
+			_, ok := authenticatePrincipalFromHeader(w, r, opts, false)
+			return ok
+		}
+		if isReadOnlyRequest(r.Method) && opts.allowLoopbackVerificationReads && isLoopbackRequest(r) {
 			_, ok := authenticatePrincipalFromHeader(w, r, opts, false)
 			return ok
 		}

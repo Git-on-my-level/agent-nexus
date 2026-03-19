@@ -54,6 +54,7 @@ func main() {
 		projectionBatchSize        = envInt("OAR_PROJECTION_MAINTENANCE_BATCH_SIZE", 50)
 		enableDevActorMode         = envBool("OAR_ENABLE_DEV_ACTOR_MODE", false)
 		allowUnauthenticatedWrites = envBool("OAR_ALLOW_UNAUTHENTICATED_WRITES", false)
+		allowLoopbackVerifyReads   = envBool("OAR_ALLOW_LOOPBACK_VERIFICATION_READS", false)
 		bootstrapToken             = envString("OAR_BOOTSTRAP_TOKEN", "")
 		webAuthnRPID               = envString("OAR_WEBAUTHN_RPID", "")
 		webAuthnOrigin             = envString("OAR_WEBAUTHN_ORIGIN", "")
@@ -164,6 +165,7 @@ func main() {
 		}),
 		server.WithEnableDevActorMode(enableDevActorMode),
 		server.WithAllowUnauthenticatedWrites(allowUnauthenticatedWrites),
+		server.WithAllowLoopbackVerificationReads(allowLoopbackVerifyReads),
 		server.WithCoreVersion(coreVersion),
 		server.WithAPIVersion(apiVersion),
 		server.WithMinCLIVersion(minCLIVersion),
@@ -197,6 +199,9 @@ func main() {
 		}
 		if allowUnauthenticatedWrites {
 			fmt.Println("  WARNING: unauthenticated writes enabled (dev mode)")
+		}
+		if allowLoopbackVerifyReads {
+			fmt.Println("  WARNING: loopback verification reads enabled (read-only loopback bypass)")
 		}
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			serverErr <- err
