@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 )
 
@@ -15,6 +16,7 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 type migration struct {
 	Version    int
 	Statements []string
+	Apply      func(context.Context, *sql.Tx) error
 }
 
 var migrations = []migration{
@@ -433,6 +435,42 @@ var migrations = []migration{
 			`CREATE INDEX IF NOT EXISTS idx_thread_projection_refresh_status_dirty ON thread_projection_refresh_status (is_dirty, in_progress, queued_at, thread_id);`,
 		},
 	},
+	{
+		Version: 17,
+		Statements: []string{
+			`ALTER TABLE artifacts RENAME TO artifacts_legacy`,
+			`CREATE TABLE artifacts (
+				id TEXT PRIMARY KEY,
+				kind TEXT NOT NULL,
+				thread_id TEXT,
+				created_at TEXT NOT NULL,
+				created_by TEXT NOT NULL,
+				content_type TEXT NOT NULL,
+				content_hash TEXT NOT NULL,
+				refs_json TEXT NOT NULL DEFAULT '[]',
+				metadata_json TEXT NOT NULL DEFAULT '{}',
+				tombstoned_at TEXT,
+				tombstoned_by TEXT,
+				tombstone_reason TEXT
+			);`,
+			`INSERT INTO artifacts(
+				id, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json,
+				tombstoned_at, tombstoned_by, tombstone_reason
+			)
+			SELECT
+				id, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json,
+				tombstoned_at, tombstoned_by, tombstone_reason
+			FROM artifacts_legacy`,
+			`DROP TABLE artifacts_legacy`,
+			`CREATE INDEX IF NOT EXISTS idx_artifacts_kind_created_at ON artifacts (kind, created_at)`,
+			`CREATE INDEX IF NOT EXISTS idx_artifacts_content_hash ON artifacts (content_hash)`,
+			`CREATE INDEX IF NOT EXISTS idx_artifacts_tombstoned_at ON artifacts (tombstoned_at)`,
+			`CREATE INDEX IF NOT EXISTS idx_artifacts_kind_tombstoned_created_at ON artifacts (kind, tombstoned_at, created_at, id)`,
+			`CREATE INDEX IF NOT EXISTS idx_artifacts_thread_tombstoned_created_at ON artifacts (thread_id, tombstoned_at, created_at, id)`,
+			`CREATE INDEX IF NOT EXISTS idx_artifacts_thread_kind_tombstoned_created_at ON artifacts (thread_id, kind, tombstoned_at, created_at, id)`,
+		},
+		Apply: scrubLegacyArtifactMetadata,
+	},
 }
 
 func applyMigrations(ctx context.Context, db *sql.DB) error {
@@ -457,6 +495,12 @@ func applyMigrations(ctx context.Context, db *sql.DB) error {
 
 		for _, statement := range m.Statements {
 			if _, err := tx.ExecContext(ctx, statement); err != nil {
+				_ = tx.Rollback()
+				return fmt.Errorf("apply migration %d: %w", m.Version, err)
+			}
+		}
+		if m.Apply != nil {
+			if err := m.Apply(ctx, tx); err != nil {
 				_ = tx.Rollback()
 				return fmt.Errorf("apply migration %d: %w", m.Version, err)
 			}
@@ -499,4 +543,61 @@ func loadAppliedVersions(ctx context.Context, db *sql.DB) (map[int]bool, error) 
 	}
 
 	return applied, nil
+}
+
+func scrubLegacyArtifactMetadata(ctx context.Context, tx *sql.Tx) error {
+	rows, err := tx.QueryContext(ctx, `SELECT id, metadata_json FROM artifacts`)
+	if err != nil {
+		return fmt.Errorf("query artifact metadata for scrub: %w", err)
+	}
+	defer rows.Close()
+
+	type artifactMetadataRow struct {
+		id           string
+		metadataJSON string
+	}
+
+	pending := make([]artifactMetadataRow, 0)
+	for rows.Next() {
+		var row artifactMetadataRow
+		if err := rows.Scan(&row.id, &row.metadataJSON); err != nil {
+			return fmt.Errorf("scan artifact metadata for scrub: %w", err)
+		}
+
+		scrubbedJSON, changed, err := scrubLegacyArtifactMetadataJSON(row.metadataJSON)
+		if err != nil {
+			return fmt.Errorf("scrub artifact %s metadata_json: %w", row.id, err)
+		}
+		if changed {
+			row.metadataJSON = scrubbedJSON
+			pending = append(pending, row)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate artifact metadata for scrub: %w", err)
+	}
+
+	for _, row := range pending {
+		if _, err := tx.ExecContext(ctx, `UPDATE artifacts SET metadata_json = ? WHERE id = ?`, row.metadataJSON, row.id); err != nil {
+			return fmt.Errorf("update scrubbed artifact %s metadata_json: %w", row.id, err)
+		}
+	}
+
+	return nil
+}
+
+func scrubLegacyArtifactMetadataJSON(metadataJSON string) (string, bool, error) {
+	var metadata map[string]any
+	if err := json.Unmarshal([]byte(metadataJSON), &metadata); err != nil {
+		return "", false, err
+	}
+	if _, ok := metadata["content_path"]; !ok {
+		return metadataJSON, false, nil
+	}
+	delete(metadata, "content_path")
+	encoded, err := json.Marshal(metadata)
+	if err != nil {
+		return "", false, err
+	}
+	return string(encoded), true, nil
 }

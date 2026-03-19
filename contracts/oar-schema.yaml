@@ -212,7 +212,6 @@ primitives:
       kind:          { type: string, required: true, ref: enums.artifact_kind }
       content_type:  { type: string, required: true, description: "text | binary | structured" }
       content_hash:  { type: string, required: true, description: "SHA-256 hex digest of artifact content" }
-      content_path:  { type: string, required: true, description: "Filesystem path to artifact content, derived from content_hash" }
       refs:          { type: "list<typed_ref>", required: true, description: "Typed references (see ref_format)" }
       summary:       { type: string, required: false }
       tombstoned_at: { type: datetime, required: false, description: "When this artifact was tombstoned" }

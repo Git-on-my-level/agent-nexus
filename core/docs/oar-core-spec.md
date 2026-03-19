@@ -47,7 +47,7 @@ oar-core does **not**:
 
 ### 2.1 SQLite + blob backend seam
 - **SQLite** stores events (rows), snapshots (rows), artifact metadata (rows), documents (rows), document_revisions (rows), actor registry (rows), and derived views (rows).
-- **Blob storage** stores artifact content. The first backend is the local filesystem, referenced by `content_path` in the artifact metadata row.
+- **Blob storage** stores artifact content. The first backend is the local filesystem, but canonical artifact/document identity is content-addressed by `content_hash` and `content_type`, not by a filesystem path.
 - Hosted deployments MUST treat blob storage as a replaceable backend seam rather than a client-visible contract.
 - Clients and agents SHOULD prefer the API, CLI, and generated clients over direct filesystem access.
 
@@ -96,7 +96,7 @@ An immutable blob representing a specific version of content at a point in time.
 
 **Behavior:**
 - Artifacts MUST be immutable. New versions are new artifacts.
-- Artifact metadata lives in SQLite. Content lives on the filesystem at `content_path`.
+- Artifact metadata lives in SQLite. Content lives behind the blob backend and is resolved canonically by `content_hash`.
 - Artifact content is **generally opaque** to oar-core — it stores and retrieves but does not interpret. **Exception:** packet kinds (`work_order`, `receipt`, `review`) are schema-validated structured content. oar-core MUST validate their required fields, constraints, and ID consistency on write (see §5).
 - All values in `refs` MUST use typed reference strings.
 

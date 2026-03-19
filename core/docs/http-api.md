@@ -241,7 +241,7 @@ Projection endpoints return a `section_kinds` field to distinguish canonical vs 
 ### Artifacts
 
 - `POST /artifacts`
-  - Body: `{ "actor_id": "...", "artifact": <artifact_metadata_without_id_and_content_path>, "content": <string|object|base64>, "content_type": "text|structured|binary" }`
+  - Body: `{ "actor_id": "...", "artifact": <artifact_metadata_without_id>, "content": <string|object|base64>, "content_type": "text|structured|binary" }`
   - Response: `{ "artifact": <artifact_metadata> }`
 
 - `GET /artifacts`

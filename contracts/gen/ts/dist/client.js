@@ -511,7 +511,7 @@ export const commandRegistry = [
     },
     {
         "command_id": "auth.agents.register",
-        "cli_path": "auth agents register",
+        "cli_path": "auth register",
         "group": "auth",
         "method": "POST",
         "path": "/auth/agents/register",
@@ -609,7 +609,6 @@ export const commandRegistry = [
             }
         ],
         "adjacent_commands": [
-            "auth.agents.register",
             "auth.invites.create",
             "auth.invites.list",
             "auth.invites.revoke",
@@ -617,6 +616,7 @@ export const commandRegistry = [
             "auth.passkey.login.verify",
             "auth.passkey.register.options",
             "auth.passkey.register.verify",
+            "auth.agents.register",
             "auth.token"
         ],
         "go_method": "AuthBootstrapStatus",
@@ -679,7 +679,6 @@ export const commandRegistry = [
             ]
         },
         "adjacent_commands": [
-            "auth.agents.register",
             "auth.bootstrap.status",
             "auth.invites.list",
             "auth.invites.revoke",
@@ -687,6 +686,7 @@ export const commandRegistry = [
             "auth.passkey.login.verify",
             "auth.passkey.register.options",
             "auth.passkey.register.verify",
+            "auth.agents.register",
             "auth.token"
         ],
         "go_method": "AuthInvitesCreate",
@@ -724,7 +724,6 @@ export const commandRegistry = [
             }
         ],
         "adjacent_commands": [
-            "auth.agents.register",
             "auth.bootstrap.status",
             "auth.invites.create",
             "auth.invites.revoke",
@@ -732,6 +731,7 @@ export const commandRegistry = [
             "auth.passkey.login.verify",
             "auth.passkey.register.options",
             "auth.passkey.register.verify",
+            "auth.agents.register",
             "auth.token"
         ],
         "go_method": "AuthInvitesList",
@@ -773,7 +773,6 @@ export const commandRegistry = [
             "invite_id"
         ],
         "adjacent_commands": [
-            "auth.agents.register",
             "auth.bootstrap.status",
             "auth.invites.create",
             "auth.invites.list",
@@ -781,6 +780,7 @@ export const commandRegistry = [
             "auth.passkey.login.verify",
             "auth.passkey.register.options",
             "auth.passkey.register.verify",
+            "auth.agents.register",
             "auth.token"
         ],
         "go_method": "AuthInvitesRevoke",
@@ -820,7 +820,6 @@ export const commandRegistry = [
             ]
         },
         "adjacent_commands": [
-            "auth.agents.register",
             "auth.bootstrap.status",
             "auth.invites.create",
             "auth.invites.list",
@@ -828,6 +827,7 @@ export const commandRegistry = [
             "auth.passkey.login.verify",
             "auth.passkey.register.options",
             "auth.passkey.register.verify",
+            "auth.agents.register",
             "auth.token"
         ],
         "go_method": "AuthPasskeyLoginOptions",
@@ -883,7 +883,6 @@ export const commandRegistry = [
             ]
         },
         "adjacent_commands": [
-            "auth.agents.register",
             "auth.bootstrap.status",
             "auth.invites.create",
             "auth.invites.list",
@@ -891,6 +890,7 @@ export const commandRegistry = [
             "auth.passkey.login.options",
             "auth.passkey.register.options",
             "auth.passkey.register.verify",
+            "auth.agents.register",
             "auth.token"
         ],
         "go_method": "AuthPasskeyLoginVerify",
@@ -941,7 +941,6 @@ export const commandRegistry = [
             ]
         },
         "adjacent_commands": [
-            "auth.agents.register",
             "auth.bootstrap.status",
             "auth.invites.create",
             "auth.invites.list",
@@ -949,6 +948,7 @@ export const commandRegistry = [
             "auth.passkey.login.options",
             "auth.passkey.login.verify",
             "auth.passkey.register.verify",
+            "auth.agents.register",
             "auth.token"
         ],
         "go_method": "AuthPasskeyRegisterOptions",
@@ -1003,7 +1003,6 @@ export const commandRegistry = [
             ]
         },
         "adjacent_commands": [
-            "auth.agents.register",
             "auth.bootstrap.status",
             "auth.invites.create",
             "auth.invites.list",
@@ -1011,6 +1010,7 @@ export const commandRegistry = [
             "auth.passkey.login.options",
             "auth.passkey.login.verify",
             "auth.passkey.register.options",
+            "auth.agents.register",
             "auth.token"
         ],
         "go_method": "AuthPasskeyRegisterVerify",
@@ -1085,7 +1085,6 @@ export const commandRegistry = [
             ]
         },
         "adjacent_commands": [
-            "auth.agents.register",
             "auth.bootstrap.status",
             "auth.invites.create",
             "auth.invites.list",
@@ -1093,7 +1092,8 @@ export const commandRegistry = [
             "auth.passkey.login.options",
             "auth.passkey.login.verify",
             "auth.passkey.register.options",
-            "auth.passkey.register.verify"
+            "auth.passkey.register.verify",
+            "auth.agents.register"
         ],
         "go_method": "AuthToken",
         "ts_method": "authToken"
