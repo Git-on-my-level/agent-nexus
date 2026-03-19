@@ -519,13 +519,15 @@ Generated Help: threads list
 - Stability: `stable`
 - Input mode: `none`
 - Why: Retrieve current thread state for triage and scheduling decisions.
-- Output: Returns `{ threads }`; query filters are additive.
+- Output: Returns `{ threads, next_cursor? }`; query filters are additive. Pagination is optional and backward-compatible.
 - Error codes: `invalid_request`
 - Concepts: `threads`, `filtering`
-- Agent notes: Safe and idempotent.
+- Agent notes: Safe and idempotent. Optional pagination with `q` for search, `limit` for page size, and `cursor` for continuation.
 - Adjacent commands: `threads context`, `threads create`, `threads get`, `threads patch`, `threads timeline`, `threads workspace`
 - Examples:
   - List active p1 threads: `oar threads list --status active --priority p1 --json`
+  - Search threads by title: `oar threads list --q "launch" --json`
+  - Paginated thread list: `oar threads list --limit 20 --json`
 
 
 Global flags:
@@ -962,14 +964,16 @@ Generated Help: boards list
 - Stability: `beta`
 - Input mode: `none`
 - Why: Discover durable coordination boards with enough summary data for list pages and CLI triage without per-board fan-out.
-- Output: Returns `{ boards }`, where each item includes canonical board metadata plus a derived summary.
+- Output: Returns `{ boards, next_cursor? }`, where each item includes canonical board metadata plus a derived summary. Pagination is optional and backward-compatible.
 - Error codes: `invalid_request`
 - Concepts: `boards`, `planning`, `summaries`
-- Agent notes: Safe and idempotent. Use repeatable `label` and `owner` filters to narrow the list server-side.
+- Agent notes: Safe and idempotent. Use repeatable `label` and `owner` filters to narrow the list server-side. Optional pagination with `q` for search, `limit` for page size, and `cursor` for continuation.
 - Adjacent commands: `boards cards add`, `boards cards list`, `boards cards move`, `boards cards remove`, `boards cards update`, `boards create`, `boards get`, `boards update`, `boards workspace`
 - Examples:
   - List boards: `oar boards list --json`
   - List active boards for an owner: `oar boards list --status active --owner actor_ceo --json`
+  - Search boards by label: `oar boards list --q "launch" --json`
+  - Paginated board list: `oar boards list --limit 30 --json`
 
 
 Global flags:
@@ -1231,13 +1235,15 @@ Generated Help: docs list
 - Stability: `beta`
 - Input mode: `none`
 - Why: Discover available documents without resolving each head individually, optionally scoped to a single thread.
-- Output: Returns `{ documents }` ordered by `updated_at` descending.
+- Output: Returns `{ documents, next_cursor? }` ordered by `updated_at` descending. Pagination is optional and backward-compatible.
 - Error codes: `invalid_request`
 - Concepts: `docs`, `revisions`
-- Agent notes: Safe and idempotent. Use `thread_id` to focus on one thread's docs and `include_tombstoned=true` when auditing superseded documents.
+- Agent notes: Safe and idempotent. Use `thread_id` to focus on one thread's docs and `include_tombstoned=true` when auditing superseded documents. Optional pagination with `q` for search, `limit` for page size, and `cursor` for continuation.
 - Adjacent commands: `docs create`, `docs get`, `docs history`, `docs revision get`, `docs tombstone`, `docs update`
 - Examples:
   - List documents: `oar docs list --json`
+  - Search documents by title: `oar docs list --q "constitution" --json`
+  - Paginated document list: `oar docs list --limit 50 --json`
 
 
 Global flags:

@@ -69,7 +69,7 @@ func TestStoreRegisterListAndExists(t *testing.T) {
 		t.Fatal("expected missing-actor not to exist")
 	}
 
-	list, err := store.List(context.Background())
+	list, _, err := store.List(context.Background(), actors.ActorListFilter{})
 	if err != nil {
 		t.Fatalf("list actors: %v", err)
 	}
@@ -117,7 +117,7 @@ func TestStoreEnsureSystemActorIdempotent(t *testing.T) {
 		t.Fatalf("unexpected system actor id on second call: %#v", seededSecond.ID)
 	}
 
-	list, err := store.List(context.Background())
+	list, _, err := store.List(context.Background(), actors.ActorListFilter{})
 	if err != nil {
 		t.Fatalf("list actors: %v", err)
 	}

@@ -69,7 +69,7 @@ func TestBoardStoreCreateUpdateAndListSummaries(t *testing.T) {
 	putBoardTestProjection(t, ctx, store, cardThreadA, "2099-01-02T00:00:00Z", 3, 2)
 	putBoardTestProjection(t, ctx, store, cardThreadB, "2099-01-03T00:00:00Z", 1, 0)
 
-	listed, err := store.ListBoards(ctx, primitives.BoardListFilter{
+	listed, _, err := store.ListBoards(ctx, primitives.BoardListFilter{
 		Status: "active",
 		Label:  "ops",
 		Owner:  "actor-1",
