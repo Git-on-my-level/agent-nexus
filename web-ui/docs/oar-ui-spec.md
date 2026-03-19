@@ -4,7 +4,7 @@
 
 oar-ui is the human-facing interface for Organization Autorunner.
 
-OAR is a manager and executive operating system, not a generic work-management tool. The product foundation and architecture decisions are documented in [docs/architecture/foundation.md](../../docs/architecture/foundation.md). oar-ui provides visibility into the workspace maintained by oar-core and a surface for human intervention: decisions, reviews, snapshot edits, and message posting. It is one of many possible clients of oar-core — agents interact through the API directly; humans interact through this UI.
+OAR is a manager and executive operating system, not a generic work-management tool. The product foundation and architecture decisions are documented in [docs/architecture/foundation.md](../../docs/architecture/foundation.md). oar-ui provides visibility into the workspace maintained by oar-core and a surface for human intervention: decisions, reviews, snapshot edits, and message posting. It is one of many possible clients of oar-core — agents should prefer the CLI and generated clients; humans interact through this UI.
 
 oar-ui does **not**:
 
@@ -154,7 +154,7 @@ A view for inspecting receipt artifacts.
 
 **Must show:** outputs (as navigable typed-ref links), verification evidence (as navigable typed-ref links), changes summary, known gaps.
 
-**Receipt intake:** The UI MUST support at least manual creation of a receipt artifact (fill in fields, attach evidence as typed refs, save). Agents will typically submit receipts via the API directly, but humans need a UI path too.
+**Receipt intake:** The UI MUST support at least manual creation of a receipt artifact (fill in fields, attach evidence as typed refs, save). Agents will typically submit receipts via the CLI or generated clients, but humans need a UI path too.
 
 **Review action:** From a receipt, the user can initiate a review — select outcome (accept / revise / escalate), write notes, attach evidence as typed refs. This creates a review artifact + `review_completed` event (with typed refs per reference conventions). If the outcome is `revise`, the UI SHOULD prompt creation of a follow-up work order.
 

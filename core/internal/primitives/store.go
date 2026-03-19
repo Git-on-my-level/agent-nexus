@@ -218,7 +218,7 @@ func (s *Store) CreateArtifact(ctx context.Context, actorID string, artifact map
 	metadata["created_by"] = actorID
 	metadata["content_type"] = contentType
 	metadata["content_hash"] = contentHash
-	metadata["content_path"] = filepath.Join(s.blobRoot, contentHash)
+	metadata["content_path"] = s.blob.ContentPath(contentHash)
 	artifactThreadID := firstThreadRefValue(refs)
 
 	stagedContent, err := s.blob.Write(ctx, contentHash, encodedContent)
@@ -316,7 +316,7 @@ func (s *Store) CreateArtifactAndEvent(ctx context.Context, actorID string, arti
 	metadata["created_by"] = actorID
 	metadata["content_type"] = contentType
 	metadata["content_hash"] = contentHash
-	metadata["content_path"] = filepath.Join(s.blobRoot, contentHash)
+	metadata["content_path"] = s.blob.ContentPath(contentHash)
 	artifactThreadID := firstThreadRefValue(artifactRefs)
 
 	stagedContent, err := s.blob.Write(ctx, contentHash, encodedContent)

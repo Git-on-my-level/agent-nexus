@@ -4,6 +4,7 @@
   import SearchableEntityPicker from "$lib/components/SearchableEntityPicker.svelte";
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
+  import { searchThreads as searchThreadRecords } from "$lib/searchHelpers";
   import { workspacePath } from "$lib/workspacePaths";
   import { lookupActorDisplayName, actorRegistry } from "$lib/actorSession";
 
@@ -12,21 +13,11 @@
   let documents = $state([]);
   let loading = $state(false);
   let error = $state("");
-  let supportError = $state("");
-  let availableThreads = $state([]);
   let workspaceSlug = $derived($page.params.workspace);
   let scopedThreadId = $derived(
     String($page.url.searchParams.get("thread_id") ?? "").trim(),
   );
   let actorName = $derived((id) => lookupActorDisplayName(id, $actorRegistry));
-  let threadOptions = $derived(
-    availableThreads.map((thread) => ({
-      id: thread.id,
-      title: thread.title || thread.id,
-      subtitle: [thread.status, thread.priority].filter(Boolean).join(" · "),
-      keywords: [thread.type, ...(thread.tags ?? [])],
-    })),
-  );
 
   let createOpen = $state(false);
   let creating = $state(false);
@@ -45,16 +36,24 @@
     return workspacePath(workspaceSlug, pathname);
   }
 
+  function toThreadOption(thread) {
+    return {
+      id: thread.id,
+      title: thread.title || thread.id,
+      subtitle: [thread.status, thread.priority].filter(Boolean).join(" · "),
+      keywords: [thread.type, ...(thread.tags ?? [])],
+    };
+  }
+
+  async function searchThreadOptions(query) {
+    const threads = await searchThreadRecords(query);
+    return threads.map(toThreadOption);
+  }
+
   $effect(() => {
     const threadId = scopedThreadId;
     if (workspaceSlug) {
       void loadDocuments(threadId);
-    }
-  });
-
-  $effect(() => {
-    if (workspaceSlug) {
-      void loadThreadSupport();
     }
   });
 
@@ -71,17 +70,6 @@
       documents = [];
     } finally {
       loading = false;
-    }
-  }
-
-  async function loadThreadSupport() {
-    supportError = "";
-    try {
-      const response = await coreClient.listThreads({});
-      availableThreads = response.threads ?? [];
-    } catch (e) {
-      supportError = `Failed to load doc linkage options: ${e instanceof Error ? e.message : String(e)}`;
-      availableThreads = [];
     }
   }
 
@@ -279,11 +267,11 @@
         bind:value={draft.thread_id}
         advancedLabel="Use a manual thread ID"
         helperText="Optional: link the doc lineage to its primary thread."
-        items={threadOptions}
         label="Thread linkage"
         manualLabel="Thread ID"
         manualPlaceholder="thread-..."
         placeholder="Search threads by title, ID, or tags"
+        searchFn={searchThreadOptions}
       />
       <label class="sm:col-span-2">
         <span class="text-[12px] font-medium text-[var(--ui-text-muted)]"
@@ -306,14 +294,6 @@
         {createError}
       </div>
     {/if}
-    {#if supportError}
-      <div
-        class="mt-3 rounded-md bg-amber-500/10 px-3 py-2 text-[12px] text-amber-400"
-      >
-        {supportError}
-      </div>
-    {/if}
-
     <div class="mt-3 flex items-center gap-2">
       <button
         class="cursor-pointer rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"

@@ -569,7 +569,7 @@ func localGroupHelpSupplement(topic string) string {
   auth rotate             Rotate the active agent key and refresh stored credentials.
   auth revoke             Revoke the active agent and mark the local profile revoked.
   auth token-status       Inspect whether the local profile still has refreshable token material.
-  Tip: use ` + "`oar auth bootstrap status`" + ` before first registration, ` + "`oar auth register --bootstrap-token <token>`" + ` for the first principal, and ` + "`oar auth invites create --kind human|agent`" + ` before later registrations.`)
+  Tip: use ` + "`oar auth bootstrap status`" + ` before first registration, ` + "`oar auth register --username <username> --bootstrap-token <token>`" + ` for the first principal, and ` + "`oar auth invites create --kind human|agent`" + ` before later registrations.`)
 	default:
 		return ""
 	}
@@ -898,7 +898,6 @@ func mapRuntimePathToRegistryPath(path string) string {
 	}
 	path = strings.Join(parts, " ")
 	rewrites := map[string]string{
-		"auth register":     "auth agents register",
 		"threads update":    "threads patch",
 		"events tail":       "events stream",
 		"inbox tail":        "inbox stream",

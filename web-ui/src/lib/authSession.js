@@ -11,8 +11,8 @@ import {
   appPath,
   buildWorkspaceStorageKey,
   workspacePath,
-  buildProjectStorageKey,
 } from "./workspacePaths.js";
+import { buildLegacyProjectStorageKey } from "./compat/workspaceCompat.js";
 
 export const REFRESH_TOKEN_STORAGE_KEY = "oar_ui_refresh_token";
 export const LEGACY_REFRESH_TOKEN_KEY = "oar_ui_refresh_token";
@@ -110,7 +110,7 @@ async function requestJSON(
 }
 
 function migrateProjectStorageKey(storage, workspaceSlug) {
-  const oldKey = buildProjectStorageKey(
+  const oldKey = buildLegacyProjectStorageKey(
     REFRESH_TOKEN_STORAGE_KEY,
     workspaceSlug,
   );
@@ -333,9 +333,7 @@ export async function initializeAuthSession({
 
 export function createAuthTokenProvider(fetchFn, options = {}) {
   const workspaceSlugProvider =
-    options.workspaceSlugProvider ??
-    options.projectSlugProvider ??
-    (() => getCurrentWorkspaceSlug());
+    options.workspaceSlugProvider ?? (() => getCurrentWorkspaceSlug());
   const baseUrl = options.baseUrl ?? "";
 
   return {

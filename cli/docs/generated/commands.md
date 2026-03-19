@@ -175,7 +175,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `auth.agents.register`
 
-- CLI path: `auth agents register`
+- CLI path: `auth register`
 - HTTP: `POST /auth/agents/register`
 - Stability: `beta`
 - Surface: `utility`
@@ -186,8 +186,8 @@ Generated from `contracts/oar-openapi.yaml`.
 - Output: Returns `{ agent, key, tokens }`.
 - Agent notes: Bootstrap is accepted only for the first successful principal registration. Later registrations require an invite token.
 - Examples:
-  - Bootstrap first agent: `oar auth agents register --username agent.one --public-key <base64-ed25519-pubkey> --bootstrap-token <token> --json`
-  - Register invited agent: `oar auth agents register --username agent.two --public-key <base64-ed25519-pubkey> --invite-token <token> --json`
+  - Bootstrap first agent: `oar auth register --username agent.one --bootstrap-token <token> --json`
+  - Register invited agent: `oar auth register --username agent.two --invite-token <token> --json`
 
 ## `auth.bootstrap.status`
 

@@ -691,7 +691,7 @@
         },
         {
           "command_id": "auth.agents.register",
-          "cli_path": "auth agents register",
+          "cli_path": "auth register",
           "group": "auth",
           "method": "POST",
           "path": "/auth/agents/register",
@@ -719,11 +719,11 @@
           "examples": [
             {
               "title": "Bootstrap first agent",
-              "command": "oar auth agents register --username agent.one --public-key \u003cbase64-ed25519-pubkey\u003e --bootstrap-token \u003ctoken\u003e --json"
+              "command": "oar auth register --username agent.one --bootstrap-token \u003ctoken\u003e --json"
             },
             {
               "title": "Register invited agent",
-              "command": "oar auth agents register --username agent.two --public-key \u003cbase64-ed25519-pubkey\u003e --invite-token \u003ctoken\u003e --json"
+              "command": "oar auth register --username agent.two --invite-token \u003ctoken\u003e --json"
             }
           ],
           "body_schema": {
@@ -789,7 +789,6 @@
             }
           ],
           "adjacent_commands": [
-            "auth.agents.register",
             "auth.invites.create",
             "auth.invites.list",
             "auth.invites.revoke",
@@ -797,6 +796,7 @@
             "auth.passkey.login.verify",
             "auth.passkey.register.options",
             "auth.passkey.register.verify",
+            "auth.agents.register",
             "auth.token"
           ],
           "go_method": "AuthBootstrapStatus",
@@ -859,7 +859,6 @@
             ]
           },
           "adjacent_commands": [
-            "auth.agents.register",
             "auth.bootstrap.status",
             "auth.invites.list",
             "auth.invites.revoke",
@@ -867,6 +866,7 @@
             "auth.passkey.login.verify",
             "auth.passkey.register.options",
             "auth.passkey.register.verify",
+            "auth.agents.register",
             "auth.token"
           ],
           "go_method": "AuthInvitesCreate",
@@ -904,7 +904,6 @@
             }
           ],
           "adjacent_commands": [
-            "auth.agents.register",
             "auth.bootstrap.status",
             "auth.invites.create",
             "auth.invites.revoke",
@@ -912,6 +911,7 @@
             "auth.passkey.login.verify",
             "auth.passkey.register.options",
             "auth.passkey.register.verify",
+            "auth.agents.register",
             "auth.token"
           ],
           "go_method": "AuthInvitesList",
@@ -953,7 +953,6 @@
             "invite_id"
           ],
           "adjacent_commands": [
-            "auth.agents.register",
             "auth.bootstrap.status",
             "auth.invites.create",
             "auth.invites.list",
@@ -961,6 +960,7 @@
             "auth.passkey.login.verify",
             "auth.passkey.register.options",
             "auth.passkey.register.verify",
+            "auth.agents.register",
             "auth.token"
           ],
           "go_method": "AuthInvitesRevoke",
@@ -1000,7 +1000,6 @@
             ]
           },
           "adjacent_commands": [
-            "auth.agents.register",
             "auth.bootstrap.status",
             "auth.invites.create",
             "auth.invites.list",
@@ -1008,6 +1007,7 @@
             "auth.passkey.login.verify",
             "auth.passkey.register.options",
             "auth.passkey.register.verify",
+            "auth.agents.register",
             "auth.token"
           ],
           "go_method": "AuthPasskeyLoginOptions",
@@ -1063,7 +1063,6 @@
             ]
           },
           "adjacent_commands": [
-            "auth.agents.register",
             "auth.bootstrap.status",
             "auth.invites.create",
             "auth.invites.list",
@@ -1071,6 +1070,7 @@
             "auth.passkey.login.options",
             "auth.passkey.register.options",
             "auth.passkey.register.verify",
+            "auth.agents.register",
             "auth.token"
           ],
           "go_method": "AuthPasskeyLoginVerify",
@@ -1121,7 +1121,6 @@
             ]
           },
           "adjacent_commands": [
-            "auth.agents.register",
             "auth.bootstrap.status",
             "auth.invites.create",
             "auth.invites.list",
@@ -1129,6 +1128,7 @@
             "auth.passkey.login.options",
             "auth.passkey.login.verify",
             "auth.passkey.register.verify",
+            "auth.agents.register",
             "auth.token"
           ],
           "go_method": "AuthPasskeyRegisterOptions",
@@ -1183,7 +1183,6 @@
             ]
           },
           "adjacent_commands": [
-            "auth.agents.register",
             "auth.bootstrap.status",
             "auth.invites.create",
             "auth.invites.list",
@@ -1191,6 +1190,7 @@
             "auth.passkey.login.options",
             "auth.passkey.login.verify",
             "auth.passkey.register.options",
+            "auth.agents.register",
             "auth.token"
           ],
           "go_method": "AuthPasskeyRegisterVerify",
@@ -1265,7 +1265,6 @@
             ]
           },
           "adjacent_commands": [
-            "auth.agents.register",
             "auth.bootstrap.status",
             "auth.invites.create",
             "auth.invites.list",
@@ -1273,7 +1272,8 @@
             "auth.passkey.login.options",
             "auth.passkey.login.verify",
             "auth.passkey.register.options",
-            "auth.passkey.register.verify"
+            "auth.passkey.register.verify",
+            "auth.agents.register"
           ],
           "go_method": "AuthToken",
           "ts_method": "authToken"
@@ -5166,7 +5166,7 @@
         },
         {
           "command_id": "auth.agents.register",
-          "cli_path": "auth agents register",
+          "cli_path": "auth register",
           "group": "auth",
           "method": "POST",
           "path": "/auth/agents/register",
@@ -5194,11 +5194,11 @@
           "examples": [
             {
               "title": "Bootstrap first agent",
-              "command": "oar auth agents register --username agent.one --public-key \u003cbase64-ed25519-pubkey\u003e --bootstrap-token \u003ctoken\u003e --json"
+              "command": "oar auth register --username agent.one --bootstrap-token \u003ctoken\u003e --json"
             },
             {
               "title": "Register invited agent",
-              "command": "oar auth agents register --username agent.two --public-key \u003cbase64-ed25519-pubkey\u003e --invite-token \u003ctoken\u003e --json"
+              "command": "oar auth register --username agent.two --invite-token \u003ctoken\u003e --json"
             }
           ],
           "body_schema": {
@@ -6163,7 +6163,6 @@
             }
           ],
           "adjacent_commands": [
-            "auth.agents.register",
             "auth.invites.create",
             "auth.invites.list",
             "auth.invites.revoke",
@@ -6171,6 +6170,7 @@
             "auth.passkey.login.verify",
             "auth.passkey.register.options",
             "auth.passkey.register.verify",
+            "auth.agents.register",
             "auth.token"
           ],
           "go_method": "AuthBootstrapStatus",
@@ -6233,7 +6233,6 @@
             ]
           },
           "adjacent_commands": [
-            "auth.agents.register",
             "auth.bootstrap.status",
             "auth.invites.list",
             "auth.invites.revoke",
@@ -6241,6 +6240,7 @@
             "auth.passkey.login.verify",
             "auth.passkey.register.options",
             "auth.passkey.register.verify",
+            "auth.agents.register",
             "auth.token"
           ],
           "go_method": "AuthInvitesCreate",
@@ -6278,7 +6278,6 @@
             }
           ],
           "adjacent_commands": [
-            "auth.agents.register",
             "auth.bootstrap.status",
             "auth.invites.create",
             "auth.invites.revoke",
@@ -6286,6 +6285,7 @@
             "auth.passkey.login.verify",
             "auth.passkey.register.options",
             "auth.passkey.register.verify",
+            "auth.agents.register",
             "auth.token"
           ],
           "go_method": "AuthInvitesList",
@@ -6327,7 +6327,6 @@
             "invite_id"
           ],
           "adjacent_commands": [
-            "auth.agents.register",
             "auth.bootstrap.status",
             "auth.invites.create",
             "auth.invites.list",
@@ -6335,6 +6334,7 @@
             "auth.passkey.login.verify",
             "auth.passkey.register.options",
             "auth.passkey.register.verify",
+            "auth.agents.register",
             "auth.token"
           ],
           "go_method": "AuthInvitesRevoke",
@@ -6901,7 +6901,6 @@
             ]
           },
           "adjacent_commands": [
-            "auth.agents.register",
             "auth.bootstrap.status",
             "auth.invites.create",
             "auth.invites.list",
@@ -6909,6 +6908,7 @@
             "auth.passkey.login.verify",
             "auth.passkey.register.options",
             "auth.passkey.register.verify",
+            "auth.agents.register",
             "auth.token"
           ],
           "go_method": "AuthPasskeyLoginOptions",
@@ -6964,7 +6964,6 @@
             ]
           },
           "adjacent_commands": [
-            "auth.agents.register",
             "auth.bootstrap.status",
             "auth.invites.create",
             "auth.invites.list",
@@ -6972,6 +6971,7 @@
             "auth.passkey.login.options",
             "auth.passkey.register.options",
             "auth.passkey.register.verify",
+            "auth.agents.register",
             "auth.token"
           ],
           "go_method": "AuthPasskeyLoginVerify",
@@ -7022,7 +7022,6 @@
             ]
           },
           "adjacent_commands": [
-            "auth.agents.register",
             "auth.bootstrap.status",
             "auth.invites.create",
             "auth.invites.list",
@@ -7030,6 +7029,7 @@
             "auth.passkey.login.options",
             "auth.passkey.login.verify",
             "auth.passkey.register.verify",
+            "auth.agents.register",
             "auth.token"
           ],
           "go_method": "AuthPasskeyRegisterOptions",
@@ -7084,7 +7084,6 @@
             ]
           },
           "adjacent_commands": [
-            "auth.agents.register",
             "auth.bootstrap.status",
             "auth.invites.create",
             "auth.invites.list",
@@ -7092,6 +7091,7 @@
             "auth.passkey.login.options",
             "auth.passkey.login.verify",
             "auth.passkey.register.options",
+            "auth.agents.register",
             "auth.token"
           ],
           "go_method": "AuthPasskeyRegisterVerify",
@@ -9955,7 +9955,6 @@
             ]
           },
           "adjacent_commands": [
-            "auth.agents.register",
             "auth.bootstrap.status",
             "auth.invites.create",
             "auth.invites.list",
@@ -9963,7 +9962,8 @@
             "auth.passkey.login.options",
             "auth.passkey.login.verify",
             "auth.passkey.register.options",
-            "auth.passkey.register.verify"
+            "auth.passkey.register.verify",
+            "auth.agents.register"
           ],
           "go_method": "AuthToken",
           "ts_method": "authToken"

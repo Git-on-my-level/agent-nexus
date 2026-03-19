@@ -29,7 +29,3 @@ export function setDevActorModeReady(ready) {
 export function getDevActorModeReady() {
   return get(devActorModeReady);
 }
-
-export const currentProjectSlug = currentWorkspaceSlug;
-export const setCurrentProjectSlug = setCurrentWorkspaceSlug;
-export const getCurrentProjectSlug = getCurrentWorkspaceSlug;

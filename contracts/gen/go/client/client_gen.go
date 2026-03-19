@@ -232,7 +232,7 @@ var CommandRegistry = []CommandSpec{
 	},
 	{
 		CommandID: "auth.agents.register",
-		CLIPath:   "auth agents register",
+		CLIPath:   "auth register",
 		Group:     "auth",
 		Method:    "POST",
 		Path:      "/auth/agents/register",
@@ -243,11 +243,11 @@ var CommandRegistry = []CommandSpec{
 		Examples: []Example{
 			{
 				Title:   "Bootstrap first agent",
-				Command: "oar auth agents register --username agent.one --public-key <base64-ed25519-pubkey> --bootstrap-token <token> --json",
+				Command: "oar auth register --username agent.one --bootstrap-token <token> --json",
 			},
 			{
 				Title:   "Register invited agent",
-				Command: "oar auth agents register --username agent.two --public-key <base64-ed25519-pubkey> --invite-token <token> --json",
+				Command: "oar auth register --username agent.two --invite-token <token> --json",
 			},
 		},
 	},
@@ -260,7 +260,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"auth", "onboarding"},
-		Adjacent:  []string{"auth.agents.register", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.token"},
+		Adjacent:  []string{"auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.agents.register", "auth.token"},
 		Examples: []Example{
 			{
 				Title:   "Read bootstrap status",
@@ -277,7 +277,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"auth", "onboarding"},
-		Adjacent:  []string{"auth.agents.register", "auth.bootstrap.status", "auth.invites.list", "auth.invites.revoke", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.token"},
+		Adjacent:  []string{"auth.bootstrap.status", "auth.invites.list", "auth.invites.revoke", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.agents.register", "auth.token"},
 		Examples: []Example{
 			{
 				Title:   "Create agent invite",
@@ -294,7 +294,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"auth", "onboarding"},
-		Adjacent:  []string{"auth.agents.register", "auth.bootstrap.status", "auth.invites.create", "auth.invites.revoke", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.token"},
+		Adjacent:  []string{"auth.bootstrap.status", "auth.invites.create", "auth.invites.revoke", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.agents.register", "auth.token"},
 		Examples: []Example{
 			{
 				Title:   "List invites",
@@ -312,7 +312,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"auth", "onboarding"},
-		Adjacent:   []string{"auth.agents.register", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.token"},
+		Adjacent:   []string{"auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.agents.register", "auth.token"},
 		Examples: []Example{
 			{
 				Title:   "Revoke invite",
@@ -329,7 +329,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"auth", "passkey"},
-		Adjacent:  []string{"auth.agents.register", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.token"},
+		Adjacent:  []string{"auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.agents.register", "auth.token"},
 	},
 	{
 		CommandID: "auth.passkey.login.verify",
@@ -340,7 +340,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"auth", "passkey"},
-		Adjacent:  []string{"auth.agents.register", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.login.options", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.token"},
+		Adjacent:  []string{"auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.login.options", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.agents.register", "auth.token"},
 	},
 	{
 		CommandID: "auth.passkey.register.options",
@@ -351,7 +351,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"auth", "passkey"},
-		Adjacent:  []string{"auth.agents.register", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.verify", "auth.token"},
+		Adjacent:  []string{"auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.verify", "auth.agents.register", "auth.token"},
 	},
 	{
 		CommandID: "auth.passkey.register.verify",
@@ -362,7 +362,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"auth", "passkey"},
-		Adjacent:  []string{"auth.agents.register", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.token"},
+		Adjacent:  []string{"auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.agents.register", "auth.token"},
 	},
 	{
 		CommandID: "auth.token",
@@ -373,7 +373,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"auth", "token-lifecycle"},
-		Adjacent:  []string{"auth.agents.register", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify"},
+		Adjacent:  []string{"auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.agents.register"},
 		Examples: []Example{
 			{
 				Title:   "Refresh token grant",

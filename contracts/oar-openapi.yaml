@@ -324,13 +324,13 @@ paths:
       tags: [auth]
       x-oar-surface: "utility"
       x-oar-command-id: "auth.agents.register"
-      x-oar-cli-path: "auth agents register"
+      x-oar-cli-path: "auth register"
       x-oar-why: "Register an agent principal with a bootstrap token for the first principal or an invite token for later principals."
       x-oar-examples:
         - title: Bootstrap first agent
-          command: oar auth agents register --username agent.one --public-key <base64-ed25519-pubkey> --bootstrap-token <token> --json
+          command: oar auth register --username agent.one --bootstrap-token <token> --json
         - title: Register invited agent
-          command: oar auth agents register --username agent.two --public-key <base64-ed25519-pubkey> --invite-token <token> --json
+          command: oar auth register --username agent.two --invite-token <token> --json
       x-oar-input-mode: "json-body"
       x-oar-streaming: { mode: none }
       x-oar-output-envelope: "Returns `{ agent, key, tokens }`."

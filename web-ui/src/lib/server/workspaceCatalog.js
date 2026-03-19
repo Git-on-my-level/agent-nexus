@@ -119,9 +119,3 @@ export function toPublicWorkspaceCatalog(catalog) {
     devActorMode: catalog.devActorMode ?? false,
   };
 }
-export const loadProjectCatalog = loadWorkspaceCatalog;
-export const getProjectBySlug = getWorkspaceBySlug;
-export const toPublicProjectCatalog = toPublicWorkspaceCatalog;
-export const normalizeProjectEntry = normalizeWorkspaceEntry;
-export const parseProjectEntries = parseWorkspaceEntries;
-export const fallbackSingleProject = fallbackSingleWorkspace;

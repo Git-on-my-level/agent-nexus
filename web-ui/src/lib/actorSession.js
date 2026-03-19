@@ -7,8 +7,8 @@ import {
 import {
   DEFAULT_WORKSPACE_SLUG,
   buildWorkspaceStorageKey,
-  buildProjectStorageKey,
 } from "./workspacePaths.js";
+import { buildLegacyProjectStorageKey } from "./compat/workspaceCompat.js";
 
 export const ACTOR_STORAGE_KEY = "oar_ui_actor_id";
 
@@ -48,7 +48,7 @@ currentWorkspaceSlug.subscribe((workspaceSlug) => {
 });
 
 function migrateProjectActorStorageKey(storage, workspaceSlug) {
-  const oldKey = buildProjectStorageKey(ACTOR_STORAGE_KEY, workspaceSlug);
+  const oldKey = buildLegacyProjectStorageKey(ACTOR_STORAGE_KEY, workspaceSlug);
   const newKey = buildWorkspaceStorageKey(ACTOR_STORAGE_KEY, workspaceSlug);
 
   if (oldKey === newKey) return;

@@ -9,10 +9,10 @@ Monorepo for Organization Autorunner.
 - `cli/`: Go CLI (`oar`)
 - `web-ui/`: SvelteKit frontend (`oar-ui`)
 
-## Hosted v1 target state
+## Hosted v1
 
 Hosted v1 is a managed offering, not a public self-service SaaS. The
-authoritative architecture cut line for this ticket pack is:
+authoritative architecture cut line in this branch is:
 
 - one isolated workspace deployment per customer/workspace
 - managed provisioning plus managed backup/restore scripts
@@ -27,10 +27,6 @@ authoritative architecture cut line for this ticket pack is:
 - agents should prefer the CLI and generated clients over hand-authored HTTP
 - workspace projection APIs are convenience reads, not durable automation
   contracts
-
-These docs describe the hosted-v1 target state. Some implementation details in
-the current v0 codebase still reflect the older reference setup; later tickets
-will close those gaps explicitly rather than pretending they already landed.
 
 Architecture references:
 

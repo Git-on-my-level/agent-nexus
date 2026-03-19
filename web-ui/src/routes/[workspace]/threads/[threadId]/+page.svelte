@@ -2,7 +2,6 @@
   import { onMount, onDestroy } from "svelte";
   import { page } from "$app/stores";
 
-  import { actorRegistry, replaceActorRegistry } from "$lib/actorSession";
   import { coreClient } from "$lib/coreClient";
   import { threadDetailStore } from "$lib/threadDetailStore";
 
@@ -33,7 +32,6 @@
   };
 
   onMount(async () => {
-    await ensureActorRegistry();
     await threadDetailStore.fullRefresh(threadId);
     liveCoordination.stopThreadStream = startThreadEventStream(threadId);
     liveCoordination.reconcileTimer = setInterval(
@@ -51,15 +49,6 @@
     liveCoordination.stopThreadStream();
     clearInterval(liveCoordination.reconcileTimer);
   });
-
-  async function ensureActorRegistry() {
-    if ($actorRegistry.length > 0) return;
-    try {
-      replaceActorRegistry((await coreClient.listActors()).actors ?? []);
-    } catch (error) {
-      void error;
-    }
-  }
 
   async function handleSaveThread(threadId, patch, ifUpdatedAt) {
     conflictWarning = "";

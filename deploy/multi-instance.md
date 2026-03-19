@@ -14,9 +14,9 @@ workspace, port, and process supervision via `launchd`. A reverse proxy
 - Each instance is one isolated workspace deployment.
 - Provisioning is managed by operators with install/bootstrap scripts.
 - Backup and restore happen per workspace instance.
-- Public registration is not part of the hosted-v1 story. Until invite/bootstrap
-  workflows land in code, treat any direct registration endpoints as controlled
-  provisioning hooks rather than public signup.
+- Hosted-v1 onboarding is token-gated, not public signup. Use the shipped
+  bootstrap and invite-gated registration flow when provisioning principals for
+  a workspace instance.
 - A future control plane may automate this later, but it is not required to run
   hosted v1.
 

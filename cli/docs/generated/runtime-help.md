@@ -242,9 +242,10 @@ Onboarding and recovery
 When starting in a new environment:
 
 1. Set base URL.
-2. Register or select an agent/profile if required.
-3. Confirm identity.
-4. Run a cheap read command.
+2. Check onboarding state with `oar auth bootstrap status` before first registration.
+3. Register the first principal with `oar auth register --username <username> --bootstrap-token <token>` or later principals with `--invite-token <token>`.
+4. Confirm identity.
+5. Run a cheap read command.
 
 When stuck:
 
@@ -563,10 +564,6 @@ Generated Help: auth
 
 Commands:
   auth register            Register agent principal and initial key
-  auth bootstrap status    Read bootstrap onboarding availability
-  auth invites create      Create onboarding invite
-  auth invites list        List onboarding invites
-  auth invites revoke      Revoke onboarding invite
 
 Local auth lifecycle helpers:
   auth whoami             Validate the active profile against the server and show resolved identity.
@@ -575,7 +572,7 @@ Local auth lifecycle helpers:
   auth rotate             Rotate the active agent key and refresh stored credentials.
   auth revoke             Revoke the active agent and mark the local profile revoked.
   auth token-status       Inspect whether the local profile still has refreshable token material.
-  Tip: use `oar auth bootstrap status` before first registration, `oar auth register --bootstrap-token <token>` for the first principal, and `oar auth invites create --kind human|agent` before later registrations.
+  Tip: use `oar auth bootstrap status` before first registration, `oar auth register --username <username> --bootstrap-token <token>` for the first principal, and `oar auth invites create --kind human|agent` before later registrations.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -951,8 +948,8 @@ Generated Help: auth register
 - Agent notes: Bootstrap is accepted only for the first successful principal registration. Later registrations require an invite token.
 - Adjacent commands: `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth token`
 - Examples:
-  - Bootstrap first agent: `oar auth register --username agent.one --public-key <base64-ed25519-pubkey> --bootstrap-token <token> --json`
-  - Register invited agent: `oar auth register --username agent.two --public-key <base64-ed25519-pubkey> --invite-token <token> --json`
+  - Bootstrap first agent: `oar auth register --username agent.one --bootstrap-token <token> --json`
+  - Register invited agent: `oar auth register --username agent.two --invite-token <token> --json`
 
 Body schema:
   Required: public_key (string), username (string)
@@ -981,7 +978,7 @@ Generated Help: auth invites list
 - Error codes: `auth_required`, `invalid_token`, `agent_revoked`
 - Concepts: `auth`, `onboarding`
 - Agent notes: Requires Bearer access token. Returned invites contain metadata only, never raw tokens.
-- Adjacent commands: `auth register`, `auth bootstrap status`, `auth invites create`, `auth invites revoke`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth token`
+- Adjacent commands: `auth bootstrap status`, `auth invites create`, `auth invites revoke`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth register`, `auth token`
 - Examples:
   - List invites: `oar auth invites list --json`
 
@@ -1009,7 +1006,7 @@ Generated Help: auth invites create
 - Error codes: `auth_required`, `invalid_json`, `invalid_request`, `invalid_token`, `agent_revoked`
 - Concepts: `auth`, `onboarding`
 - Agent notes: Requires Bearer access token. `kind` may be `human`, `agent`, or `any`.
-- Adjacent commands: `auth register`, `auth bootstrap status`, `auth invites list`, `auth invites revoke`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth token`
+- Adjacent commands: `auth bootstrap status`, `auth invites list`, `auth invites revoke`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth register`, `auth token`
 - Examples:
   - Create agent invite: `oar auth invites create --kind agent --note 'ops bot' --json`
 
@@ -1041,7 +1038,7 @@ Generated Help: auth invites revoke
 - Error codes: `auth_required`, `invalid_token`, `agent_revoked`, `not_found`
 - Concepts: `auth`, `onboarding`
 - Agent notes: Requires Bearer access token.
-- Adjacent commands: `auth register`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth token`
+- Adjacent commands: `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth register`, `auth token`
 - Examples:
   - Revoke invite: `oar auth invites revoke --invite-id invite_123 --json`
 
@@ -1068,7 +1065,7 @@ Generated Help: auth bootstrap status
 - Output: Returns `{ bootstrap_registration_available }` without exposing token material.
 - Concepts: `auth`, `onboarding`
 - Agent notes: This endpoint is intentionally non-enumerating beyond the single bootstrap availability boolean.
-- Adjacent commands: `auth register`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth token`
+- Adjacent commands: `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth register`, `auth token`
 - Examples:
   - Read bootstrap status: `oar auth bootstrap status --json`
 

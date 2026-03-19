@@ -1,3 +1,8 @@
+import {
+  DEFAULT_WORKSPACE_SLUG,
+  normalizeWorkspaceSlug,
+} from "$lib/workspacePaths";
+
 const LEGACY_PROJECTS_ENV = "OAR_PROJECTS";
 const LEGACY_DEFAULT_PROJECT_ENV = "OAR_DEFAULT_PROJECT";
 const LEGACY_PROJECT_HEADER = "x-oar-project-slug";
@@ -25,6 +30,11 @@ export function getWorkspaceHeader(headers) {
   }
 
   return null;
+}
+
+export function buildLegacyProjectStorageKey(baseKey, workspaceSlug) {
+  const slug = normalizeWorkspaceSlug(workspaceSlug) || DEFAULT_WORKSPACE_SLUG;
+  return `${baseKey}:${slug}`;
 }
 
 export const LEGACY_CONSTANTS = {

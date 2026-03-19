@@ -6,6 +6,10 @@
   import SearchableMultiEntityPicker from "$lib/components/SearchableMultiEntityPicker.svelte";
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
+  import {
+    searchDocuments as searchDocumentRecords,
+    searchThreads as searchThreadRecords,
+  } from "$lib/searchHelpers";
   import { workspacePath } from "$lib/workspacePaths";
   import { lookupActorDisplayName, actorRegistry } from "$lib/actorSession";
   import {
@@ -23,10 +27,7 @@
   let error = $state("");
   let creating = $state(false);
   let createError = $state("");
-  let supportError = $state("");
   let showCreateForm = $state(false);
-  let availableThreads = $state([]);
-  let availableDocuments = $state([]);
 
   let createTitle = $state("");
   let createStatus = $state("active");
@@ -38,27 +39,6 @@
 
   let workspaceSlug = $derived($page.params.workspace);
   let actorName = $derived((id) => lookupActorDisplayName(id, $actorRegistry));
-  let threadOptions = $derived(
-    availableThreads.map((thread) => ({
-      id: thread.id,
-      title: thread.title || thread.id,
-      subtitle: [thread.status, thread.priority].filter(Boolean).join(" · "),
-      keywords: [thread.type, ...(thread.tags ?? [])],
-    })),
-  );
-  let documentOptions = $derived(
-    availableDocuments.map((document) => ({
-      id: document.id,
-      title: document.title || document.id,
-      subtitle: [
-        document.status,
-        document.thread_id && `Thread ${document.thread_id}`,
-      ]
-        .filter(Boolean)
-        .join(" · "),
-      keywords: document.labels ?? [],
-    })),
-  );
   let actorOptions = $derived(
     $actorRegistry.map((actor) => ({
       id: actor.id,
@@ -76,8 +56,37 @@
     goto(workspaceHref(`/boards/${boardId}`));
   }
 
-  function threadTitle(threadId) {
-    return availableThreads.find((item) => item.id === threadId)?.title ?? "";
+  function toThreadOption(thread) {
+    return {
+      id: thread.id,
+      title: thread.title || thread.id,
+      subtitle: [thread.status, thread.priority].filter(Boolean).join(" · "),
+      keywords: [thread.type, ...(thread.tags ?? [])],
+    };
+  }
+
+  function toDocumentOption(document) {
+    return {
+      id: document.id,
+      title: document.title || document.id,
+      subtitle: [
+        document.status,
+        document.thread_id && `Thread ${document.thread_id}`,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      keywords: document.labels ?? [],
+    };
+  }
+
+  async function searchThreadOptions(query) {
+    const threads = await searchThreadRecords(query);
+    return threads.map(toThreadOption);
+  }
+
+  async function searchDocumentOptions(query) {
+    const documents = await searchDocumentRecords(query);
+    return documents.map(toDocumentOption);
   }
 
   function resetCreateForm() {
@@ -101,22 +110,6 @@
       boards = [];
     } finally {
       loading = false;
-    }
-  }
-
-  async function loadCreateSupport() {
-    supportError = "";
-    try {
-      const [threadData, documentData] = await Promise.all([
-        coreClient.listThreads({}),
-        coreClient.listDocuments({}),
-      ]);
-      availableThreads = threadData.threads ?? [];
-      availableDocuments = documentData.documents ?? [];
-    } catch (e) {
-      supportError = `Failed to load board form options: ${e instanceof Error ? e.message : String(e)}`;
-      availableThreads = [];
-      availableDocuments = [];
     }
   }
 
@@ -171,7 +164,6 @@
   $effect(() => {
     if (workspaceSlug) {
       void loadBoards();
-      void loadCreateSupport();
     }
   });
 </script>
@@ -222,14 +214,6 @@
         </div>
       {/if}
 
-      {#if supportError}
-        <div
-          class="rounded-md bg-amber-500/10 px-3 py-2 text-[12px] text-amber-400"
-        >
-          {supportError}
-        </div>
-      {/if}
-
       <div class="grid gap-3 md:grid-cols-2">
         <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
           Board title
@@ -257,22 +241,22 @@
           bind:value={createPrimaryThreadId}
           advancedLabel="Use a manual primary thread ID"
           helperText="Pick the canonical thread this board organizes around."
-          items={threadOptions}
           label="Primary thread"
           manualLabel="Primary thread ID"
           manualPlaceholder="thread-q2-initiative"
           placeholder="Search threads by title, ID, or tags"
+          searchFn={searchThreadOptions}
         />
 
         <SearchableEntityPicker
           bind:value={createPrimaryDocumentId}
           advancedLabel="Use a manual primary document ID"
           helperText="Optional: pin the canonical doc lineage this board should foreground."
-          items={documentOptions}
           label="Primary document"
           manualLabel="Primary document ID"
           manualPlaceholder="product-constitution"
           placeholder="Search documents by title, ID, or thread"
+          searchFn={searchDocumentOptions}
         />
       </div>
 
@@ -454,8 +438,7 @@
                     `/threads/${encodeURIComponent(board.primary_thread_id)}`,
                   )}
                 >
-                  {threadTitle(board.primary_thread_id) ||
-                    board.primary_thread_id}
+                  {board.primary_thread_id}
                 </a>
               </span>
               <span>

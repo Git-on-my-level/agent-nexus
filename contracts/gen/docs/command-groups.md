@@ -36,7 +36,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - Commands: `10`
 - Command IDs:
-  - `auth.agents.register` (`auth agents register`)
+  - `auth.agents.register` (`auth register`)
   - `auth.bootstrap.status` (`auth bootstrap status`)
   - `auth.invites.create` (`auth invites create`)
   - `auth.invites.list` (`auth invites list`)

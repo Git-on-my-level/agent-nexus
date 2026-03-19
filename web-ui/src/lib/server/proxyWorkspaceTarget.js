@@ -33,10 +33,6 @@ export function resolveProxyWorkspaceTarget({ catalog, workspaceSlug }) {
     coreBaseUrl: normalizeBaseUrl(workspace.coreBaseUrl),
   };
 }
-
-export const resolveProxyProjectTarget = resolveProxyWorkspaceTarget;
-
-export function resolveProxyTarget({ catalog, workspaceSlug, projectSlug }) {
-  const slug = workspaceSlug || projectSlug;
-  return resolveProxyWorkspaceTarget({ catalog, workspaceSlug: slug });
+export function resolveProxyTarget({ catalog, workspaceSlug }) {
+  return resolveProxyWorkspaceTarget({ catalog, workspaceSlug });
 }

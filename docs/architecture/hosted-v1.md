@@ -6,10 +6,7 @@ for the current ticket pack.
 
 ## Status
 
-This is a target-state architecture note. Some current v0 code paths remain
-more permissive than the hosted-v1 target, especially around registration and
-development affordances. Later tickets are expected to make the implementation
-catch up.
+This is the shipped hosted-v1 cut line for the current branch.
 
 ## Hosted cut line
 
@@ -31,7 +28,7 @@ catch up.
   principals.
 - Hosted v1 intentionally has no fine-grained RBAC. Any authenticated
   principal has the same workspace authority, including invite issuance and
-  invite revocation once that workflow lands.
+  invite revocation.
 
 ## Client and data contract
 

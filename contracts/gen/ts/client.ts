@@ -556,7 +556,7 @@ export const commandRegistry: CommandSpec[] = [
   },
   {
     "command_id": "auth.agents.register",
-    "cli_path": "auth agents register",
+    "cli_path": "auth register",
     "group": "auth",
     "method": "POST",
     "path": "/auth/agents/register",
@@ -584,11 +584,11 @@ export const commandRegistry: CommandSpec[] = [
     "examples": [
       {
         "title": "Bootstrap first agent",
-        "command": "oar auth agents register --username agent.one --public-key \u003cbase64-ed25519-pubkey\u003e --bootstrap-token \u003ctoken\u003e --json"
+        "command": "oar auth register --username agent.one --bootstrap-token \u003ctoken\u003e --json"
       },
       {
         "title": "Register invited agent",
-        "command": "oar auth agents register --username agent.two --public-key \u003cbase64-ed25519-pubkey\u003e --invite-token \u003ctoken\u003e --json"
+        "command": "oar auth register --username agent.two --invite-token \u003ctoken\u003e --json"
       }
     ],
     "body_schema": {
@@ -654,7 +654,6 @@ export const commandRegistry: CommandSpec[] = [
       }
     ],
     "adjacent_commands": [
-      "auth.agents.register",
       "auth.invites.create",
       "auth.invites.list",
       "auth.invites.revoke",
@@ -662,6 +661,7 @@ export const commandRegistry: CommandSpec[] = [
       "auth.passkey.login.verify",
       "auth.passkey.register.options",
       "auth.passkey.register.verify",
+      "auth.agents.register",
       "auth.token"
     ],
     "go_method": "AuthBootstrapStatus",
@@ -724,7 +724,6 @@ export const commandRegistry: CommandSpec[] = [
       ]
     },
     "adjacent_commands": [
-      "auth.agents.register",
       "auth.bootstrap.status",
       "auth.invites.list",
       "auth.invites.revoke",
@@ -732,6 +731,7 @@ export const commandRegistry: CommandSpec[] = [
       "auth.passkey.login.verify",
       "auth.passkey.register.options",
       "auth.passkey.register.verify",
+      "auth.agents.register",
       "auth.token"
     ],
     "go_method": "AuthInvitesCreate",
@@ -769,7 +769,6 @@ export const commandRegistry: CommandSpec[] = [
       }
     ],
     "adjacent_commands": [
-      "auth.agents.register",
       "auth.bootstrap.status",
       "auth.invites.create",
       "auth.invites.revoke",
@@ -777,6 +776,7 @@ export const commandRegistry: CommandSpec[] = [
       "auth.passkey.login.verify",
       "auth.passkey.register.options",
       "auth.passkey.register.verify",
+      "auth.agents.register",
       "auth.token"
     ],
     "go_method": "AuthInvitesList",
@@ -818,7 +818,6 @@ export const commandRegistry: CommandSpec[] = [
       "invite_id"
     ],
     "adjacent_commands": [
-      "auth.agents.register",
       "auth.bootstrap.status",
       "auth.invites.create",
       "auth.invites.list",
@@ -826,6 +825,7 @@ export const commandRegistry: CommandSpec[] = [
       "auth.passkey.login.verify",
       "auth.passkey.register.options",
       "auth.passkey.register.verify",
+      "auth.agents.register",
       "auth.token"
     ],
     "go_method": "AuthInvitesRevoke",
@@ -865,7 +865,6 @@ export const commandRegistry: CommandSpec[] = [
       ]
     },
     "adjacent_commands": [
-      "auth.agents.register",
       "auth.bootstrap.status",
       "auth.invites.create",
       "auth.invites.list",
@@ -873,6 +872,7 @@ export const commandRegistry: CommandSpec[] = [
       "auth.passkey.login.verify",
       "auth.passkey.register.options",
       "auth.passkey.register.verify",
+      "auth.agents.register",
       "auth.token"
     ],
     "go_method": "AuthPasskeyLoginOptions",
@@ -928,7 +928,6 @@ export const commandRegistry: CommandSpec[] = [
       ]
     },
     "adjacent_commands": [
-      "auth.agents.register",
       "auth.bootstrap.status",
       "auth.invites.create",
       "auth.invites.list",
@@ -936,6 +935,7 @@ export const commandRegistry: CommandSpec[] = [
       "auth.passkey.login.options",
       "auth.passkey.register.options",
       "auth.passkey.register.verify",
+      "auth.agents.register",
       "auth.token"
     ],
     "go_method": "AuthPasskeyLoginVerify",
@@ -986,7 +986,6 @@ export const commandRegistry: CommandSpec[] = [
       ]
     },
     "adjacent_commands": [
-      "auth.agents.register",
       "auth.bootstrap.status",
       "auth.invites.create",
       "auth.invites.list",
@@ -994,6 +993,7 @@ export const commandRegistry: CommandSpec[] = [
       "auth.passkey.login.options",
       "auth.passkey.login.verify",
       "auth.passkey.register.verify",
+      "auth.agents.register",
       "auth.token"
     ],
     "go_method": "AuthPasskeyRegisterOptions",
@@ -1048,7 +1048,6 @@ export const commandRegistry: CommandSpec[] = [
       ]
     },
     "adjacent_commands": [
-      "auth.agents.register",
       "auth.bootstrap.status",
       "auth.invites.create",
       "auth.invites.list",
@@ -1056,6 +1055,7 @@ export const commandRegistry: CommandSpec[] = [
       "auth.passkey.login.options",
       "auth.passkey.login.verify",
       "auth.passkey.register.options",
+      "auth.agents.register",
       "auth.token"
     ],
     "go_method": "AuthPasskeyRegisterVerify",
@@ -1130,7 +1130,6 @@ export const commandRegistry: CommandSpec[] = [
       ]
     },
     "adjacent_commands": [
-      "auth.agents.register",
       "auth.bootstrap.status",
       "auth.invites.create",
       "auth.invites.list",
@@ -1138,7 +1137,8 @@ export const commandRegistry: CommandSpec[] = [
       "auth.passkey.login.options",
       "auth.passkey.login.verify",
       "auth.passkey.register.options",
-      "auth.passkey.register.verify"
+      "auth.passkey.register.verify",
+      "auth.agents.register"
     ],
     "go_method": "AuthToken",
     "ts_method": "authToken"

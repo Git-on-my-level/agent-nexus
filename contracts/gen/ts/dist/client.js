@@ -539,11 +539,11 @@ export const commandRegistry = [
         "examples": [
             {
                 "title": "Bootstrap first agent",
-                "command": "oar auth agents register --username agent.one --public-key \u003cbase64-ed25519-pubkey\u003e --bootstrap-token \u003ctoken\u003e --json"
+                "command": "oar auth register --username agent.one --bootstrap-token \u003ctoken\u003e --json"
             },
             {
                 "title": "Register invited agent",
-                "command": "oar auth agents register --username agent.two --public-key \u003cbase64-ed25519-pubkey\u003e --invite-token \u003ctoken\u003e --json"
+                "command": "oar auth register --username agent.two --invite-token \u003ctoken\u003e --json"
             }
         ],
         "body_schema": {
