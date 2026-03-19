@@ -57,8 +57,7 @@ type Invite struct {
 	Note       string `json:"note,omitempty"`
 	CreatedAt  string `json:"created_at"`
 	RevokedAt  string `json:"revoked_at,omitempty"`
-	AcceptedAt string `json:"accepted_at,omitempty"`
-	AcceptedBy string `json:"accepted_by,omitempty"`
+	ConsumedAt string `json:"consumed_at,omitempty"`
 }
 
 type ListInvitesResult struct {

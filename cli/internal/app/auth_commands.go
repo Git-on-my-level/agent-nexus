@@ -83,8 +83,8 @@ func (a *App) runAuthInvitesList(ctx context.Context, service *authcli.Service) 
 		status := "pending"
 		if invite.RevokedAt != "" {
 			status = "revoked"
-		} else if invite.AcceptedAt != "" {
-			status = "accepted"
+		} else if invite.ConsumedAt != "" {
+			status = "consumed"
 		}
 		line := fmt.Sprintf("  %s  kind=%s  status=%s", invite.ID, invite.Kind, status)
 		if invite.Note != "" {

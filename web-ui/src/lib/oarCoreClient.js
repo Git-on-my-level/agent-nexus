@@ -471,7 +471,8 @@ export function createOarCoreClient(options = {}) {
       invokeJSON("actors.register", () =>
         generated.actorsRegister({ body: payload }),
       ),
-    listActors: () => invokeJSON("actors.list", () => generated.actorsList()),
+    listActors: (filters) =>
+      invokeJSON("actors.list", () => generated.actorsList({ query: filters })),
     issueAuthToken: (payload) =>
       invokeJSON("auth.token", () => generated.authToken({ body: payload })),
     getCurrentAgent: () =>

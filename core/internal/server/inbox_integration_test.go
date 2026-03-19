@@ -288,6 +288,89 @@ func TestGetInboxItemDetailByID(t *testing.T) {
 	}
 }
 
+func TestInboxCustomRiskHorizonRetainsStaleExceptions(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	threadResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
+		"actor_id":"actor-1",
+		"thread":{
+			"title":"Stale inbox thread",
+			"type":"incident",
+			"status":"active",
+			"priority":"p1",
+			"tags":["ops"],
+			"cadence":"daily",
+			"next_check_in_at":"2026-03-05T00:00:00Z",
+			"current_summary":"summary",
+			"next_actions":["follow up"],
+			"key_artifacts":[],
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated)
+	defer threadResp.Body.Close()
+
+	var createdThread struct {
+		Thread map[string]any `json:"thread"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&createdThread); err != nil {
+		t.Fatalf("decode thread response: %v", err)
+	}
+	threadID := asString(createdThread.Thread["id"])
+	if threadID == "" {
+		t.Fatal("expected thread id")
+	}
+
+	resp, err := http.Get(h.baseURL + "/inbox?risk_horizon_days=30")
+	if err != nil {
+		t.Fatalf("GET /inbox?risk_horizon_days=30: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected GET /inbox?risk_horizon_days=30 status: %d", resp.StatusCode)
+	}
+
+	var payload struct {
+		Items []map[string]any `json:"items"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode custom-horizon inbox response: %v", err)
+	}
+
+	staleItem, ok := findInboxItem(payload.Items, func(item map[string]any) bool {
+		return asString(item["category"]) == "exception" && asString(item["thread_id"]) == threadID
+	})
+	if !ok {
+		t.Fatalf("expected stale exception on custom-horizon inbox read, got %#v", payload.Items)
+	}
+
+	inboxItemID := asString(staleItem["id"])
+	if inboxItemID == "" {
+		t.Fatalf("expected stale inbox item id, got %#v", staleItem)
+	}
+
+	detailResp, err := http.Get(h.baseURL + "/inbox/" + url.PathEscape(inboxItemID) + "?risk_horizon_days=30")
+	if err != nil {
+		t.Fatalf("GET /inbox/{id}?risk_horizon_days=30: %v", err)
+	}
+	defer detailResp.Body.Close()
+	if detailResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected GET /inbox/{id}?risk_horizon_days=30 status: %d", detailResp.StatusCode)
+	}
+
+	var detailPayload struct {
+		Item map[string]any `json:"item"`
+	}
+	if err := json.NewDecoder(detailResp.Body).Decode(&detailPayload); err != nil {
+		t.Fatalf("decode custom-horizon inbox item response: %v", err)
+	}
+	if got := asString(detailPayload.Item["id"]); got != inboxItemID {
+		t.Fatalf("expected stale inbox item id %q, got %q payload=%#v", inboxItemID, got, detailPayload)
+	}
+}
+
 func getInboxItems(t *testing.T, baseURL string) []map[string]any {
 	t.Helper()
 	resp, err := http.Get(baseURL + "/inbox")

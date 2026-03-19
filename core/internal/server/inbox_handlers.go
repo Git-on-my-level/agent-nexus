@@ -254,6 +254,10 @@ func handleAckInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOpti
 }
 
 func deriveInboxItems(ctx context.Context, opts handlerOptions, now time.Time, riskHorizon time.Duration) ([]derivedInboxItem, error) {
+	if _, err := emitStaleThreadExceptions(ctx, opts, now, ""); err != nil {
+		return nil, err
+	}
+
 	return deriveInboxItemsNoStaleEmission(ctx, opts, now, riskHorizon)
 }
 
