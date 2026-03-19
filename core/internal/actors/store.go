@@ -3,14 +3,17 @@ package actors
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
 
 var ErrAlreadyExists = errors.New("actor already exists")
+var ErrInvalidCursor = errors.New("invalid cursor")
 
 const SystemActorID = "oar-core"
 
@@ -19,6 +22,12 @@ type Actor struct {
 	DisplayName string   `json:"display_name"`
 	Tags        []string `json:"tags"`
 	CreatedAt   string   `json:"created_at"`
+}
+
+type ActorListFilter struct {
+	Query  string
+	Limit  *int
+	Cursor string
 }
 
 type Store struct {
@@ -106,17 +115,41 @@ func (s *Store) EnsureSystemActor(ctx context.Context, now time.Time) (Actor, er
 	})
 }
 
-func (s *Store) List(ctx context.Context) ([]Actor, error) {
+func (s *Store) List(ctx context.Context, filter ActorListFilter) ([]Actor, string, error) {
 	if s == nil || s.db == nil {
-		return nil, fmt.Errorf("actor store database is not initialized")
+		return nil, "", fmt.Errorf("actor store database is not initialized")
+	}
+	if filter.Cursor != "" {
+		if _, err := decodeActorCursor(filter.Cursor); err != nil {
+			return nil, "", fmt.Errorf("%w: %v", ErrInvalidCursor, err)
+		}
 	}
 
-	rows, err := s.db.QueryContext(
-		ctx,
-		`SELECT id, display_name, tags_json, created_at FROM actors ORDER BY created_at ASC, id ASC`,
-	)
+	query := `SELECT id, display_name, tags_json, created_at FROM actors WHERE 1=1`
+	args := make([]any, 0, 3)
+
+	if q := strings.TrimSpace(filter.Query); q != "" {
+		searchPattern := "%" + strings.ToLower(q) + "%"
+		query += ` AND (LOWER(id) LIKE ? OR LOWER(display_name) LIKE ?)`
+		args = append(args, searchPattern, searchPattern)
+	}
+
+	query += ` ORDER BY created_at ASC, id ASC`
+
+	if filter.Limit != nil && *filter.Limit > 0 {
+		query += ` LIMIT ?`
+		args = append(args, *filter.Limit+1)
+		if filter.Cursor != "" {
+			if offset, err := decodeActorCursor(filter.Cursor); err == nil && offset > 0 {
+				query += ` OFFSET ?`
+				args = append(args, offset)
+			}
+		}
+	}
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("query actors: %w", err)
+		return nil, "", fmt.Errorf("query actors: %w", err)
 	}
 	defer rows.Close()
 
@@ -125,10 +158,10 @@ func (s *Store) List(ctx context.Context) ([]Actor, error) {
 		var actor Actor
 		var tagsJSON string
 		if err := rows.Scan(&actor.ID, &actor.DisplayName, &tagsJSON, &actor.CreatedAt); err != nil {
-			return nil, fmt.Errorf("scan actor row: %w", err)
+			return nil, "", fmt.Errorf("scan actor row: %w", err)
 		}
 		if err := json.Unmarshal([]byte(tagsJSON), &actor.Tags); err != nil {
-			return nil, fmt.Errorf("decode actor tags: %w", err)
+			return nil, "", fmt.Errorf("decode actor tags: %w", err)
 		}
 		if actor.Tags == nil {
 			actor.Tags = []string{}
@@ -136,10 +169,50 @@ func (s *Store) List(ctx context.Context) ([]Actor, error) {
 		actors = append(actors, actor)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate actor rows: %w", err)
+		return nil, "", fmt.Errorf("iterate actor rows: %w", err)
 	}
 
-	return actors, nil
+	var nextCursor string
+	if filter.Limit != nil && len(actors) > *filter.Limit {
+		actors = actors[:*filter.Limit]
+		offset := 0
+		if filter.Cursor != "" {
+			offset, _ = decodeActorCursor(filter.Cursor)
+		}
+		nextCursor = encodeActorCursor(offset + *filter.Limit)
+	}
+
+	return actors, nextCursor, nil
+}
+
+func encodeActorCursor(offset int) string {
+	if offset <= 0 {
+		return ""
+	}
+	cursor := fmt.Sprintf("offset:%d", offset)
+	return base64.StdEncoding.EncodeToString([]byte(cursor))
+}
+
+func decodeActorCursor(cursor string) (int, error) {
+	if cursor == "" {
+		return 0, nil
+	}
+	decoded, err := base64.StdEncoding.DecodeString(cursor)
+	if err != nil {
+		return 0, fmt.Errorf("invalid cursor encoding: %w", err)
+	}
+	parts := strings.Split(string(decoded), ":")
+	if len(parts) != 2 || parts[0] != "offset" {
+		return 0, fmt.Errorf("invalid cursor format")
+	}
+	offset, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return 0, fmt.Errorf("invalid cursor offset: %w", err)
+	}
+	if offset <= 0 {
+		return 0, fmt.Errorf("invalid cursor offset: must be greater than zero")
+	}
+	return offset, nil
 }
 
 func (s *Store) Exists(ctx context.Context, actorID string) (bool, error) {

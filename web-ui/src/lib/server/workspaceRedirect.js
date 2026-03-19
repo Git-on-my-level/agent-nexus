@@ -7,5 +7,3 @@ export function redirectToDefaultWorkspace(pathname) {
   const catalog = loadWorkspaceCatalog();
   throw redirect(307, workspacePath(catalog.defaultWorkspace.slug, pathname));
 }
-
-export const redirectToDefaultProject = redirectToDefaultWorkspace;

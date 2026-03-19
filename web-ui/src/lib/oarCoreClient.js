@@ -471,7 +471,8 @@ export function createOarCoreClient(options = {}) {
       invokeJSON("actors.register", () =>
         generated.actorsRegister({ body: payload }),
       ),
-    listActors: () => invokeJSON("actors.list", () => generated.actorsList()),
+    listActors: (filters) =>
+      invokeJSON("actors.list", () => generated.actorsList({ query: filters })),
     issueAuthToken: (payload) =>
       invokeJSON("auth.token", () => generated.authToken({ body: payload })),
     getCurrentAgent: () =>
@@ -491,6 +492,20 @@ export function createOarCoreClient(options = {}) {
     passkeyLoginVerify: (payload) =>
       invokeJSON("auth.passkey.login.verify", () =>
         generated.authPasskeyLoginVerify({ body: payload }),
+      ),
+    bootstrapStatus: () =>
+      invokeJSON("auth.bootstrap.status", () =>
+        generated.authBootstrapStatus(),
+      ),
+    listInvites: () =>
+      invokeJSON("auth.invites.list", () => generated.authInvitesList()),
+    createInvite: (payload) =>
+      invokeJSON("auth.invites.create", () =>
+        generated.authInvitesCreate({ body: payload }),
+      ),
+    revokeInvite: (inviteId) =>
+      invokeJSON("auth.invites.revoke", () =>
+        generated.authInvitesRevoke({ invite_id: String(inviteId) }),
       ),
 
     createThread: (payload) =>

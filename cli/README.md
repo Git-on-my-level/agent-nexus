@@ -9,7 +9,7 @@ cd cli
 go test ./...
 go test -tags=integration ./integration/...
 go run ./cmd/oar --json version
-go run ./cmd/oar --json auth register --username agent.example --base-url http://127.0.0.1:8000 --agent agent-example
+go run ./cmd/oar --json auth register --username agent.example --bootstrap-token <token> --base-url http://127.0.0.1:8000 --agent agent-example
 go run ./cmd/oar --agent agent-example auth whoami
 printf '{"thread":{"title":"Incident #42"}}' | go run ./cmd/oar --agent agent-example threads create
 go run ./cmd/oar --agent agent-example events stream --last-event-id event_123

@@ -15,6 +15,7 @@ import (
 	"os"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -226,6 +227,8 @@ func (a *App) runTypedResource(ctx context.Context, resource string, args []stri
 	}
 
 	switch resource {
+	case "actors":
+		return a.runActorsCommand(ctx, args, cfg)
 	case "threads":
 		return a.runThreadsCommand(ctx, args, cfg)
 	case "commitments":
@@ -253,6 +256,80 @@ func (a *App) runTypedResource(ctx context.Context, resource string, args []stri
 	}
 }
 
+func (a *App) runActorsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
+	if len(args) == 0 {
+		return nil, "actors", actorsSubcommandSpec.requiredError()
+	}
+	sub := actorsSubcommandSpec.normalize(args[0])
+	switch sub {
+	case "list":
+		fs := newSilentFlagSet("actors list")
+		var queryFlag, cursorFlag trackedString
+		var limitFlag trackedInt
+		fs.Var(&queryFlag, "q", "Search by actor id or display name")
+		fs.Var(&limitFlag, "limit", "Limit the number of returned actors")
+		fs.Var(&cursorFlag, "cursor", "Pagination cursor from a previous list response")
+		if err := fs.Parse(args[1:]); err != nil {
+			return nil, "actors list", errnorm.Usage("invalid_flags", err.Error())
+		}
+		if len(fs.Args()) > 0 {
+			return nil, "actors list", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar actors list`")
+		}
+		if limitFlag.set && (limitFlag.value < 1 || limitFlag.value > 1000) {
+			return nil, "actors list", errnorm.Usage("invalid_request", "limit must be between 1 and 1000")
+		}
+		query := make([]queryParam, 0, 3)
+		addSingleQuery(&query, "q", queryFlag.value)
+		if limitFlag.set {
+			addSingleQuery(&query, "limit", strconv.Itoa(limitFlag.value))
+		}
+		addSingleQuery(&query, "cursor", cursorFlag.value)
+		result, err := a.invokeTypedJSON(ctx, cfg, "actors list", "actors.list", nil, query, nil)
+		return result, "actors list", err
+	case "register":
+		fs := newSilentFlagSet("actors register")
+		var idFlag, displayNameFlag, createdAtFlag trackedString
+		var tagsFlag trackedStrings
+		fs.Var(&idFlag, "id", "Actor id")
+		fs.Var(&displayNameFlag, "display-name", "Actor display name")
+		fs.Var(&createdAtFlag, "created-at", "Actor created_at timestamp (RFC3339)")
+		fs.Var(&tagsFlag, "tag", "Actor tag (repeatable)")
+		if err := fs.Parse(args[1:]); err != nil {
+			return nil, "actors register", errnorm.Usage("invalid_flags", err.Error())
+		}
+		if len(fs.Args()) > 0 {
+			return nil, "actors register", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar actors register`")
+		}
+		if strings.TrimSpace(idFlag.value) == "" {
+			return nil, "actors register", errnorm.Usage("invalid_request", "id is required")
+		}
+		if strings.TrimSpace(displayNameFlag.value) == "" {
+			return nil, "actors register", errnorm.Usage("invalid_request", "display-name is required")
+		}
+		createdAt := strings.TrimSpace(createdAtFlag.value)
+		if createdAt == "" {
+			return nil, "actors register", errnorm.Usage("invalid_request", "created-at is required")
+		}
+		if _, err := time.Parse(time.RFC3339, createdAt); err != nil {
+			return nil, "actors register", errnorm.Usage("invalid_request", "created-at must be an RFC3339 datetime string")
+		}
+		body := map[string]any{
+			"actor": map[string]any{
+				"id":           strings.TrimSpace(idFlag.value),
+				"display_name": strings.TrimSpace(displayNameFlag.value),
+				"created_at":   createdAt,
+			},
+		}
+		if len(tagsFlag.values) > 0 {
+			body["actor"].(map[string]any)["tags"] = tagsFlag.values
+		}
+		result, err := a.invokeTypedJSON(ctx, cfg, "actors register", "actors.register", nil, nil, body)
+		return result, "actors register", err
+	default:
+		return nil, "actors", actorsSubcommandSpec.unknownError(args[0])
+	}
+}
+
 func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
 	if len(args) == 0 {
 		return nil, "threads", threadsSubcommandSpec.requiredError()
@@ -261,11 +338,15 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 	switch sub {
 	case "list":
 		fs := newSilentFlagSet("threads list")
-		var statusFlag, priorityFlag, staleFlag trackedString
+		var statusFlag, priorityFlag, staleFlag, queryFlag, cursorFlag trackedString
+		var limitFlag trackedInt
 		var tagsFlag, cadenceFlag trackedStrings
 		fs.Var(&statusFlag, "status", "Filter by status")
 		fs.Var(&priorityFlag, "priority", "Filter by priority")
 		fs.Var(&staleFlag, "stale", "Filter by stale state (true/false)")
+		fs.Var(&queryFlag, "q", "Search by thread id or title")
+		fs.Var(&limitFlag, "limit", "Limit the number of returned threads")
+		fs.Var(&cursorFlag, "cursor", "Pagination cursor from a previous list response")
 		fs.Var(&tagsFlag, "tag", "Filter by tag (repeatable)")
 		fs.Var(&cadenceFlag, "cadence", "Filter by cadence (repeatable)")
 		if err := fs.Parse(args[1:]); err != nil {
@@ -274,10 +355,18 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 		if len(fs.Args()) > 0 {
 			return nil, "threads list", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar threads list`")
 		}
-		query := make([]queryParam, 0, 5)
+		if limitFlag.set && (limitFlag.value < 1 || limitFlag.value > 1000) {
+			return nil, "threads list", errnorm.Usage("invalid_request", "limit must be between 1 and 1000")
+		}
+		query := make([]queryParam, 0, 8)
 		addSingleQuery(&query, "status", statusFlag.value)
 		addSingleQuery(&query, "priority", priorityFlag.value)
 		addSingleQuery(&query, "stale", staleFlag.value)
+		addSingleQuery(&query, "q", queryFlag.value)
+		if limitFlag.set {
+			addSingleQuery(&query, "limit", strconv.Itoa(limitFlag.value))
+		}
+		addSingleQuery(&query, "cursor", cursorFlag.value)
 		addMultiQuery(&query, "tag", tagsFlag.values)
 		addMultiQuery(&query, "cadence", cadenceFlag.values)
 		result, err := a.invokeTypedJSON(ctx, cfg, "threads list", "threads.list", nil, query, nil)
@@ -1288,9 +1377,13 @@ func (a *App) runBoardsCommand(ctx context.Context, args []string, cfg config.Re
 	switch sub {
 	case "list":
 		fs := newSilentFlagSet("boards list")
-		var statusFlag trackedString
+		var statusFlag, queryFlag, cursorFlag trackedString
+		var limitFlag trackedInt
 		var labelFlag, ownerFlag trackedStrings
 		fs.Var(&statusFlag, "status", "Filter by board status")
+		fs.Var(&queryFlag, "q", "Search by board id or title")
+		fs.Var(&limitFlag, "limit", "Limit the number of returned boards")
+		fs.Var(&cursorFlag, "cursor", "Pagination cursor from a previous list response")
 		fs.Var(&labelFlag, "label", "Filter by label (repeatable)")
 		fs.Var(&ownerFlag, "owner", "Filter by owner actor id (repeatable)")
 		if err := fs.Parse(args[1:]); err != nil {
@@ -1299,8 +1392,16 @@ func (a *App) runBoardsCommand(ctx context.Context, args []string, cfg config.Re
 		if len(fs.Args()) > 0 {
 			return nil, "boards list", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar boards list`")
 		}
-		query := make([]queryParam, 0, 3)
+		if limitFlag.set && (limitFlag.value < 1 || limitFlag.value > 1000) {
+			return nil, "boards list", errnorm.Usage("invalid_request", "limit must be between 1 and 1000")
+		}
+		query := make([]queryParam, 0, 6)
 		addSingleQuery(&query, "status", statusFlag.value)
+		addSingleQuery(&query, "q", queryFlag.value)
+		if limitFlag.set {
+			addSingleQuery(&query, "limit", strconv.Itoa(limitFlag.value))
+		}
+		addSingleQuery(&query, "cursor", cursorFlag.value)
 		addMultiQuery(&query, "label", labelFlag.values)
 		addMultiQuery(&query, "owner", ownerFlag.values)
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "boards list", "boards.list", nil, query, nil)
@@ -1434,14 +1535,21 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 	switch sub {
 	case "list":
 		fs := newSilentFlagSet("docs list")
-		var threadIDFlag trackedString
+		var threadIDFlag, queryFlag, cursorFlag trackedString
+		var limitFlag trackedInt
 		includeTombstoned := fs.Bool("include-tombstoned", false, "Include tombstoned documents")
 		fs.Var(&threadIDFlag, "thread-id", "Filter by thread id")
+		fs.Var(&queryFlag, "q", "Search by document id or title")
+		fs.Var(&limitFlag, "limit", "Limit the number of returned documents")
+		fs.Var(&cursorFlag, "cursor", "Pagination cursor from a previous list response")
 		if err := fs.Parse(args[1:]); err != nil {
 			return nil, "docs list", errnorm.Usage("invalid_flags", err.Error())
 		}
 		if len(fs.Args()) > 0 {
 			return nil, "docs list", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar docs list`")
+		}
+		if limitFlag.set && (limitFlag.value < 1 || limitFlag.value > 1000) {
+			return nil, "docs list", errnorm.Usage("invalid_request", "limit must be between 1 and 1000")
 		}
 		resolvedThreadID := strings.TrimSpace(threadIDFlag.value)
 		if resolvedThreadID != "" {
@@ -1453,8 +1561,13 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 				resolvedThreadID = resolved[0]
 			}
 		}
-		query := make([]queryParam, 0, 2)
+		query := make([]queryParam, 0, 5)
 		addSingleQuery(&query, "thread_id", resolvedThreadID)
+		addSingleQuery(&query, "q", queryFlag.value)
+		if limitFlag.set {
+			addSingleQuery(&query, "limit", strconv.Itoa(limitFlag.value))
+		}
+		addSingleQuery(&query, "cursor", cursorFlag.value)
 		if *includeTombstoned {
 			query = append(query, queryParam{name: "include_tombstoned", values: []string{"true"}})
 		}

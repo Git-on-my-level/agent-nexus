@@ -22,6 +22,9 @@ type BoardListFilter struct {
 	Labels []string
 	Owner  string
 	Owners []string
+	Query  string
+	Limit  *int
+	Cursor string
 }
 
 type BoardListItem struct {
@@ -433,15 +436,20 @@ func (s *Store) UpdateBoard(ctx context.Context, actorID, boardID string, patch 
 	}, nil
 }
 
-func (s *Store) ListBoards(ctx context.Context, filter BoardListFilter) ([]BoardListItem, error) {
+func (s *Store) ListBoards(ctx context.Context, filter BoardListFilter) ([]BoardListItem, string, error) {
 	if s == nil || s.db == nil {
-		return nil, fmt.Errorf("primitives store database is not initialized")
+		return nil, "", fmt.Errorf("primitives store database is not initialized")
+	}
+	if filter.Cursor != "" {
+		if _, err := decodeCursor(filter.Cursor); err != nil {
+			return nil, "", fmt.Errorf("%w: %v", ErrInvalidCursor, err)
+		}
 	}
 
 	query, args := buildListBoardsQuery(filter)
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("query boards: %w", err)
+		return nil, "", fmt.Errorf("query boards: %w", err)
 	}
 	defer rows.Close()
 
@@ -449,34 +457,45 @@ func (s *Store) ListBoards(ctx context.Context, filter BoardListFilter) ([]Board
 	for rows.Next() {
 		row, err := scanBoardRow(rows)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		boardRows = append(boardRows, row)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate boards: %w", err)
+		return nil, "", fmt.Errorf("iterate boards: %w", err)
 	}
+
+	var nextCursor string
+	if filter.Limit != nil && len(boardRows) > *filter.Limit {
+		boardRows = boardRows[:*filter.Limit]
+		offset := 0
+		if filter.Cursor != "" {
+			offset, _ = decodeCursor(filter.Cursor)
+		}
+		nextCursor = encodeCursor(offset + *filter.Limit)
+	}
+
 	if len(boardRows) == 0 {
-		return []BoardListItem{}, nil
+		return []BoardListItem{}, nextCursor, nil
 	}
 
 	summaries, err := s.computeBoardSummaries(ctx, boardRows)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	out := make([]BoardListItem, 0, len(boardRows))
 	for _, row := range boardRows {
 		board, err := row.toMap()
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		out = append(out, BoardListItem{
 			Board:   board,
 			Summary: summaries[row.ID],
 		})
 	}
-	return out, nil
+	return out, nextCursor, nil
 }
 
 func (s *Store) ListBoardCards(ctx context.Context, boardID string) ([]map[string]any, error) {
@@ -981,7 +1000,23 @@ func buildListBoardsQuery(filter BoardListFilter) (string, []any) {
 		query += ` AND (` + strings.Join(parts, ` OR `) + `)`
 	}
 
+	if q := strings.TrimSpace(filter.Query); q != "" {
+		searchPattern := "%" + strings.ToLower(q) + "%"
+		query += ` AND (LOWER(id) LIKE ? OR LOWER(title) LIKE ?)`
+		args = append(args, searchPattern, searchPattern)
+	}
+
 	query += ` ORDER BY updated_at DESC, id ASC`
+	if filter.Limit != nil && *filter.Limit > 0 {
+		query += ` LIMIT ?`
+		args = append(args, *filter.Limit+1)
+		if filter.Cursor != "" {
+			if offset, err := decodeCursor(filter.Cursor); err == nil && offset > 0 {
+				query += ` OFFSET ?`
+				args = append(args, offset)
+			}
+		}
+	}
 	return query, args
 }
 

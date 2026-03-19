@@ -76,6 +76,177 @@ func TestTypedThreadCommandsGolden(t *testing.T) {
 	}
 }
 
+func TestListCommandsAcceptPaginationFlags(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/threads":
+			if got := r.URL.Query().Get("q"); got != "launch" {
+				t.Fatalf("expected thread q=launch, got %q", got)
+			}
+			if got := r.URL.Query().Get("limit"); got != "25" {
+				t.Fatalf("expected thread limit=25, got %q", got)
+			}
+			if got := r.URL.Query().Get("cursor"); got != "cursor-threads" {
+				t.Fatalf("expected thread cursor=cursor-threads, got %q", got)
+			}
+			_, _ = w.Write([]byte(`{"threads":[]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/boards":
+			if got := r.URL.Query().Get("q"); got != "roadmap" {
+				t.Fatalf("expected board q=roadmap, got %q", got)
+			}
+			if got := r.URL.Query().Get("limit"); got != "30" {
+				t.Fatalf("expected board limit=30, got %q", got)
+			}
+			if got := r.URL.Query().Get("cursor"); got != "cursor-boards" {
+				t.Fatalf("expected board cursor=cursor-boards, got %q", got)
+			}
+			_, _ = w.Write([]byte(`{"boards":[]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/docs":
+			if got := r.URL.Query().Get("q"); got != "constitution" {
+				t.Fatalf("expected docs q=constitution, got %q", got)
+			}
+			if got := r.URL.Query().Get("limit"); got != "40" {
+				t.Fatalf("expected docs limit=40, got %q", got)
+			}
+			if got := r.URL.Query().Get("cursor"); got != "cursor-docs" {
+				t.Fatalf("expected docs cursor=cursor-docs, got %q", got)
+			}
+			_, _ = w.Write([]byte(`{"documents":[]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	env := map[string]string{}
+
+	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{
+		"--json", "--base-url", server.URL,
+		"threads", "list",
+		"--q", "launch",
+		"--limit", "25",
+		"--cursor", "cursor-threads",
+	}))
+	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{
+		"--json", "--base-url", server.URL,
+		"boards", "list",
+		"--q", "roadmap",
+		"--limit", "30",
+		"--cursor", "cursor-boards",
+	}))
+	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{
+		"--json", "--base-url", server.URL,
+		"docs", "list",
+		"--q", "constitution",
+		"--limit", "40",
+		"--cursor", "cursor-docs",
+	}))
+}
+
+func TestListCommandsRejectInvalidPaginationLimit(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	env := map[string]string{}
+
+	testCases := []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "threads",
+			args: []string{"--json", "threads", "list", "--limit", "0"},
+		},
+		{
+			name: "boards",
+			args: []string{"--json", "boards", "list", "--limit", "1001"},
+		},
+		{
+			name: "docs",
+			args: []string{"--json", "docs", "list", "--limit", "-1"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			payload := assertEnvelopeError(t, runCLIForTest(t, home, env, nil, tc.args))
+			errObj, _ := payload["error"].(map[string]any)
+			if got := anyStringValue(errObj["code"]); got != "invalid_request" {
+				t.Fatalf("expected invalid_request, got %#v", payload)
+			}
+			if got := anyStringValue(errObj["message"]); !strings.Contains(got, "limit must be between 1 and 1000") {
+				t.Fatalf("expected limit validation message, got %#v", payload)
+			}
+		})
+	}
+}
+
+func TestActorsCommands(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/actors":
+			if got := r.URL.Query().Get("q"); got != "bot" {
+				t.Fatalf("expected actors q=bot, got %q", got)
+			}
+			if got := r.URL.Query().Get("limit"); got != "50" {
+				t.Fatalf("expected actors limit=50, got %q", got)
+			}
+			if got := r.URL.Query().Get("cursor"); got != "cursor-actors" {
+				t.Fatalf("expected actors cursor=cursor-actors, got %q", got)
+			}
+			_, _ = w.Write([]byte(`{"actors":[]}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/actors":
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatalf("decode actors register body: %v", err)
+			}
+			actor, _ := body["actor"].(map[string]any)
+			if anyStringValue(actor["id"]) != "bot-1" || anyStringValue(actor["display_name"]) != "Bot 1" {
+				t.Fatalf("unexpected actor register body: %#v", body)
+			}
+			if anyStringValue(actor["created_at"]) != "2026-03-04T10:00:00Z" {
+				t.Fatalf("unexpected actor created_at: %#v", body)
+			}
+			tags, _ := actor["tags"].([]any)
+			if len(tags) != 2 || anyStringValue(tags[0]) != "human" || anyStringValue(tags[1]) != "ops" {
+				t.Fatalf("unexpected actor tags: %#v", body)
+			}
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"actor":{"id":"bot-1","display_name":"Bot 1","created_at":"2026-03-04T10:00:00Z","tags":["human","ops"]}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	env := map[string]string{}
+
+	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{
+		"--json", "--base-url", server.URL,
+		"actors", "list",
+		"--q", "bot",
+		"--limit", "50",
+		"--cursor", "cursor-actors",
+	}))
+	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{
+		"--json", "--base-url", server.URL,
+		"actors", "register",
+		"--id", "bot-1",
+		"--display-name", "Bot 1",
+		"--created-at", "2026-03-04T10:00:00Z",
+		"--tag", "human",
+		"--tag", "ops",
+	}))
+}
+
 func TestTypedWorkflowCommands(t *testing.T) {
 	t.Parallel()
 

@@ -58,7 +58,7 @@ func (a *App) runCommand(ctx context.Context, args []string, cfg config.Resolved
 	case "provenance":
 		result, name, err := a.runProvenanceCommand(ctx, args[1:], cfg)
 		return name, result, err
-	case "threads", "commitments", "artifacts", "boards", "docs", "events", "inbox", "work-orders", "receipts", "reviews", "derived":
+	case "actors", "threads", "commitments", "artifacts", "boards", "docs", "events", "inbox", "work-orders", "receipts", "reviews", "derived":
 		result, name, err := a.runTypedResource(ctx, args[0], args[1:], cfg)
 		return name, result, err
 	case "api":

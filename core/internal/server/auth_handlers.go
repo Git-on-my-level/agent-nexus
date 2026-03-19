@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +11,27 @@ import (
 	"organization-autorunner-core/internal/auth"
 )
 
+type principalContextKey struct{}
+
+func cachedAuthenticatedPrincipal(r *http.Request) (*auth.Principal, bool) {
+	if r == nil {
+		return nil, false
+	}
+	principal, ok := r.Context().Value(principalContextKey{}).(*auth.Principal)
+	if !ok || principal == nil {
+		return nil, false
+	}
+	return principal, true
+}
+
+func cacheAuthenticatedPrincipal(r *http.Request, principal *auth.Principal) {
+	if r == nil || principal == nil {
+		return
+	}
+	ctx := context.WithValue(r.Context(), principalContextKey{}, principal)
+	*r = *r.WithContext(ctx)
+}
+
 func handleRegisterAgent(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 	if opts.authStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "auth_unavailable", "auth store is not configured")
@@ -17,24 +39,33 @@ func handleRegisterAgent(w http.ResponseWriter, r *http.Request, opts handlerOpt
 	}
 
 	var req struct {
-		Username  string `json:"username"`
-		PublicKey string `json:"public_key"`
+		Username       string `json:"username"`
+		PublicKey      string `json:"public_key"`
+		BootstrapToken string `json:"bootstrap_token"`
+		InviteToken    string `json:"invite_token"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
 		return
 	}
 
+	claim, ok := resolveOnboardingClaim(w, r, opts, req.BootstrapToken, req.InviteToken, auth.PrincipalKindAgent)
+	if !ok {
+		return
+	}
+
 	agent, key, tokens, err := opts.authStore.RegisterAgent(r.Context(), auth.RegisterAgentInput{
 		Username:  req.Username,
 		PublicKey: req.PublicKey,
-	})
+	}, claim)
 	if err != nil {
 		switch {
 		case errors.Is(err, auth.ErrUsernameTaken):
 			writeError(w, http.StatusConflict, "username_taken", "username is already taken")
 		case errors.Is(err, auth.ErrInvalidRequest):
 			writeError(w, http.StatusBadRequest, "invalid_request", sanitizeAuthError(err))
+		case isOnboardingTokenError(err):
+			writeError(w, http.StatusUnauthorized, "invalid_token", "bootstrap or invite token is invalid, expired, revoked, or already consumed")
 		default:
 			writeError(w, http.StatusInternalServerError, "internal_error", "failed to register agent")
 		}
@@ -231,6 +262,10 @@ func resolveOptionalPrincipal(w http.ResponseWriter, r *http.Request, opts handl
 }
 
 func authenticatePrincipalFromHeader(w http.ResponseWriter, r *http.Request, opts handlerOptions, required bool) (*auth.Principal, bool) {
+	if principal, ok := cachedAuthenticatedPrincipal(r); ok {
+		return principal, true
+	}
+
 	header := strings.TrimSpace(r.Header.Get("Authorization"))
 	if header == "" {
 		if required {
@@ -264,7 +299,9 @@ func authenticatePrincipalFromHeader(w http.ResponseWriter, r *http.Request, opt
 		return nil, false
 	}
 
-	return &principal, true
+	principalCopy := principal
+	cacheAuthenticatedPrincipal(r, &principalCopy)
+	return &principalCopy, true
 }
 
 func resolveWriteActorID(w http.ResponseWriter, r *http.Request, opts handlerOptions, requestedActorID string) (string, bool) {
@@ -325,4 +362,43 @@ func sanitizeAuthError(err error) string {
 		return "invalid request"
 	}
 	return message
+}
+
+func resolveOnboardingClaim(w http.ResponseWriter, r *http.Request, opts handlerOptions, bootstrapToken string, inviteToken string, principalKind auth.PrincipalKind) (auth.OnboardingClaim, bool) {
+	if opts.authStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "auth_unavailable", "auth store is not configured")
+		return auth.OnboardingClaim{}, false
+	}
+
+	claim, err := opts.authStore.ResolveOnboardingClaim(r.Context(), bootstrapToken, inviteToken, principalKind)
+	if err != nil {
+		switch {
+		case errors.Is(err, auth.ErrInvalidRequest):
+			writeError(w, http.StatusBadRequest, "invalid_request", sanitizeAuthError(err))
+		case errors.Is(err, auth.ErrBootstrapRequired), errors.Is(err, auth.ErrInviteRequired), errors.Is(err, auth.ErrOnboardingRequired):
+			writeError(w, http.StatusBadRequest, "invalid_request", onboardingRequiredMessage(err))
+		case isOnboardingTokenError(err):
+			writeError(w, http.StatusUnauthorized, "invalid_token", "bootstrap or invite token is invalid, expired, revoked, or already consumed")
+		default:
+			writeError(w, http.StatusInternalServerError, "internal_error", "failed to validate onboarding token")
+		}
+		return auth.OnboardingClaim{}, false
+	}
+
+	return claim, true
+}
+
+func onboardingRequiredMessage(err error) string {
+	switch {
+	case errors.Is(err, auth.ErrBootstrapRequired):
+		return "bootstrap_token is required for first principal registration"
+	case errors.Is(err, auth.ErrInviteRequired):
+		return "invite_token is required for this registration"
+	default:
+		return "bootstrap_token or invite_token is required"
+	}
+}
+
+func isOnboardingTokenError(err error) bool {
+	return errors.Is(err, auth.ErrInvalidToken) || errors.Is(err, auth.ErrInviteKindMismatch)
 }

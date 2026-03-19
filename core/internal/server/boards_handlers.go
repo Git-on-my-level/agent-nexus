@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -28,19 +29,41 @@ func handleListBoards(w http.ResponseWriter, r *http.Request, opts handlerOption
 		}
 	}
 
-	items, err := opts.primitiveStore.ListBoards(r.Context(), primitives.BoardListFilter{
+	var limitFilter *int
+	limitRaw := strings.TrimSpace(query.Get("limit"))
+	if limitRaw != "" {
+		parsed, err := strconv.Atoi(limitRaw)
+		if err != nil || parsed < 1 || parsed > 1000 {
+			writeError(w, http.StatusBadRequest, "invalid_request", "limit must be between 1 and 1000")
+			return
+		}
+		limitFilter = &parsed
+	}
+
+	items, nextCursor, err := opts.primitiveStore.ListBoards(r.Context(), primitives.BoardListFilter{
 		Status: status,
 		Labels: normalizedQueryValues(query["label"]),
 		Owners: normalizedQueryValues(query["owner"]),
+		Query:  strings.TrimSpace(query.Get("q")),
+		Limit:  limitFilter,
+		Cursor: strings.TrimSpace(query.Get("cursor")),
 	})
 	if err != nil {
+		if errors.Is(err, primitives.ErrInvalidCursor) {
+			writeError(w, http.StatusBadRequest, "invalid_request", "cursor is invalid")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list boards")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
+	response := map[string]any{
 		"boards": boardListItemsResponse(items),
-	})
+	}
+	if nextCursor != "" {
+		response["next_cursor"] = nextCursor
+	}
+	writeJSON(w, http.StatusOK, response)
 }
 
 func handleCreateBoard(w http.ResponseWriter, r *http.Request, opts handlerOptions) {

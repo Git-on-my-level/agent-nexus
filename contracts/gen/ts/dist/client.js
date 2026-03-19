@@ -12,7 +12,7 @@ export const commandRegistry = [
         "streaming": {
             "mode": "none"
         },
-        "output_envelope": "Returns `{ actors }` ordered by created time ascending.",
+        "output_envelope": "Returns `{ actors, next_cursor? }` ordered by created time ascending. Pagination is optional and backward-compatible.",
         "error_codes": [
             "actor_registry_unavailable"
         ],
@@ -21,11 +21,19 @@ export const commandRegistry = [
         ],
         "stability": "stable",
         "surface": "utility",
-        "agent_notes": "Safe and idempotent.",
+        "agent_notes": "Safe and idempotent. Optional pagination with `q` for search, `limit` for page size, and `cursor` for continuation.",
         "examples": [
             {
                 "title": "List actors",
                 "command": "oar actors list --json"
+            },
+            {
+                "title": "Search actors by name",
+                "command": "oar actors list --q \"bot\" --json"
+            },
+            {
+                "title": "Paginated actor list",
+                "command": "oar actors list --limit 50 --json"
             }
         ],
         "adjacent_commands": [
@@ -509,7 +517,7 @@ export const commandRegistry = [
         "path": "/auth/agents/register",
         "operation_id": "registerAgent",
         "summary": "Register agent principal and initial key",
-        "why": "Bootstrap an authenticated agent identity and obtain initial access + refresh tokens.",
+        "why": "Register an agent principal with a bootstrap token for the first principal or an invite token for later principals.",
         "input_mode": "json-body",
         "streaming": {
             "mode": "none"
@@ -518,6 +526,7 @@ export const commandRegistry = [
         "error_codes": [
             "invalid_json",
             "invalid_request",
+            "invalid_token",
             "username_taken"
         ],
         "concepts": [
@@ -526,11 +535,15 @@ export const commandRegistry = [
         ],
         "stability": "beta",
         "surface": "utility",
-        "agent_notes": "Registration is open in v0; future invite/secret gating can wrap this endpoint.",
+        "agent_notes": "Bootstrap is accepted only for the first successful principal registration. Later registrations require an invite token.",
         "examples": [
             {
-                "title": "Register agent",
-                "command": "oar auth agents register --username agent.one --public-key \u003cbase64-ed25519-pubkey\u003e --json"
+                "title": "Bootstrap first agent",
+                "command": "oar auth register --username agent.one --bootstrap-token \u003ctoken\u003e --json"
+            },
+            {
+                "title": "Register invited agent",
+                "command": "oar auth register --username agent.two --invite-token \u003ctoken\u003e --json"
             }
         ],
         "body_schema": {
@@ -543,9 +556,23 @@ export const commandRegistry = [
                     "name": "username",
                     "type": "string"
                 }
+            ],
+            "optional": [
+                {
+                    "name": "bootstrap_token",
+                    "type": "string"
+                },
+                {
+                    "name": "invite_token",
+                    "type": "string"
+                }
             ]
         },
         "adjacent_commands": [
+            "auth.bootstrap.status",
+            "auth.invites.create",
+            "auth.invites.list",
+            "auth.invites.revoke",
             "auth.passkey.login.options",
             "auth.passkey.login.verify",
             "auth.passkey.register.options",
@@ -554,6 +581,210 @@ export const commandRegistry = [
         ],
         "go_method": "AuthAgentsRegister",
         "ts_method": "authAgentsRegister"
+    },
+    {
+        "command_id": "auth.bootstrap.status",
+        "cli_path": "auth bootstrap status",
+        "group": "auth",
+        "method": "GET",
+        "path": "/auth/bootstrap/status",
+        "operation_id": "getBootstrapStatus",
+        "summary": "Read bootstrap onboarding availability",
+        "why": "Check whether first-principal bootstrap registration is still available for this workspace.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ bootstrap_registration_available }` without exposing token material.",
+        "concepts": [
+            "auth",
+            "onboarding"
+        ],
+        "stability": "beta",
+        "agent_notes": "This endpoint is intentionally non-enumerating beyond the single bootstrap availability boolean.",
+        "examples": [
+            {
+                "title": "Read bootstrap status",
+                "command": "oar auth bootstrap status --json"
+            }
+        ],
+        "adjacent_commands": [
+            "auth.agents.register",
+            "auth.invites.create",
+            "auth.invites.list",
+            "auth.invites.revoke",
+            "auth.passkey.login.options",
+            "auth.passkey.login.verify",
+            "auth.passkey.register.options",
+            "auth.passkey.register.verify",
+            "auth.token"
+        ],
+        "go_method": "AuthBootstrapStatus",
+        "ts_method": "authBootstrapStatus"
+    },
+    {
+        "command_id": "auth.invites.create",
+        "cli_path": "auth invites create",
+        "group": "auth",
+        "method": "POST",
+        "path": "/auth/invites",
+        "operation_id": "createInvite",
+        "summary": "Create onboarding invite",
+        "why": "Mint a single-use invite token for a future human or agent registration.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ invite, token }`. The raw token is returned only once at creation time.",
+        "error_codes": [
+            "auth_required",
+            "invalid_json",
+            "invalid_request",
+            "invalid_token",
+            "agent_revoked"
+        ],
+        "concepts": [
+            "auth",
+            "onboarding"
+        ],
+        "stability": "beta",
+        "agent_notes": "Requires Bearer access token. `kind` may be `human`, `agent`, or `any`.",
+        "examples": [
+            {
+                "title": "Create agent invite",
+                "command": "oar auth invites create --kind agent --note 'ops bot' --json"
+            }
+        ],
+        "body_schema": {
+            "required": [
+                {
+                    "name": "kind",
+                    "type": "string",
+                    "enum_values": [
+                        "agent",
+                        "any",
+                        "human"
+                    ]
+                }
+            ],
+            "optional": [
+                {
+                    "name": "expires_at",
+                    "type": "datetime"
+                },
+                {
+                    "name": "note",
+                    "type": "string"
+                }
+            ]
+        },
+        "adjacent_commands": [
+            "auth.agents.register",
+            "auth.bootstrap.status",
+            "auth.invites.list",
+            "auth.invites.revoke",
+            "auth.passkey.login.options",
+            "auth.passkey.login.verify",
+            "auth.passkey.register.options",
+            "auth.passkey.register.verify",
+            "auth.token"
+        ],
+        "go_method": "AuthInvitesCreate",
+        "ts_method": "authInvitesCreate"
+    },
+    {
+        "command_id": "auth.invites.list",
+        "cli_path": "auth invites list",
+        "group": "auth",
+        "method": "GET",
+        "path": "/auth/invites",
+        "operation_id": "listInvites",
+        "summary": "List onboarding invites",
+        "why": "Inspect current invite state without exposing token secrets.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ invites }` ordered by create time descending.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "agent_revoked"
+        ],
+        "concepts": [
+            "auth",
+            "onboarding"
+        ],
+        "stability": "beta",
+        "agent_notes": "Requires Bearer access token. Returned invites contain metadata only, never raw tokens.",
+        "examples": [
+            {
+                "title": "List invites",
+                "command": "oar auth invites list --json"
+            }
+        ],
+        "adjacent_commands": [
+            "auth.agents.register",
+            "auth.bootstrap.status",
+            "auth.invites.create",
+            "auth.invites.revoke",
+            "auth.passkey.login.options",
+            "auth.passkey.login.verify",
+            "auth.passkey.register.options",
+            "auth.passkey.register.verify",
+            "auth.token"
+        ],
+        "go_method": "AuthInvitesList",
+        "ts_method": "authInvitesList"
+    },
+    {
+        "command_id": "auth.invites.revoke",
+        "cli_path": "auth invites revoke",
+        "group": "auth",
+        "method": "POST",
+        "path": "/auth/invites/{invite_id}/revoke",
+        "operation_id": "revokeInvite",
+        "summary": "Revoke onboarding invite",
+        "why": "Invalidate an invite token before it is consumed.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ invite }` with updated revoke metadata.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "agent_revoked",
+            "not_found"
+        ],
+        "concepts": [
+            "auth",
+            "onboarding"
+        ],
+        "stability": "beta",
+        "agent_notes": "Requires Bearer access token.",
+        "examples": [
+            {
+                "title": "Revoke invite",
+                "command": "oar auth invites revoke --invite-id invite_123 --json"
+            }
+        ],
+        "path_params": [
+            "invite_id"
+        ],
+        "adjacent_commands": [
+            "auth.agents.register",
+            "auth.bootstrap.status",
+            "auth.invites.create",
+            "auth.invites.list",
+            "auth.passkey.login.options",
+            "auth.passkey.login.verify",
+            "auth.passkey.register.options",
+            "auth.passkey.register.verify",
+            "auth.token"
+        ],
+        "go_method": "AuthInvitesRevoke",
+        "ts_method": "authInvitesRevoke"
     },
     {
         "command_id": "auth.passkey.login.options",
@@ -590,6 +821,10 @@ export const commandRegistry = [
         },
         "adjacent_commands": [
             "auth.agents.register",
+            "auth.bootstrap.status",
+            "auth.invites.create",
+            "auth.invites.list",
+            "auth.invites.revoke",
             "auth.passkey.login.verify",
             "auth.passkey.register.options",
             "auth.passkey.register.verify",
@@ -635,10 +870,24 @@ export const commandRegistry = [
                     "name": "session_id",
                     "type": "string"
                 }
+            ],
+            "optional": [
+                {
+                    "name": "bootstrap_token",
+                    "type": "string"
+                },
+                {
+                    "name": "invite_token",
+                    "type": "string"
+                }
             ]
         },
         "adjacent_commands": [
             "auth.agents.register",
+            "auth.bootstrap.status",
+            "auth.invites.create",
+            "auth.invites.list",
+            "auth.invites.revoke",
             "auth.passkey.login.options",
             "auth.passkey.register.options",
             "auth.passkey.register.verify",
@@ -655,7 +904,7 @@ export const commandRegistry = [
         "path": "/auth/passkey/register/options",
         "operation_id": "passkeyRegisterOptions",
         "summary": "Begin passkey registration ceremony",
-        "why": "Create a WebAuthn registration challenge for a new human principal.",
+        "why": "Create a WebAuthn registration challenge for a human principal during managed bootstrap or invite acceptance.",
         "input_mode": "json-body",
         "streaming": {
             "mode": "none"
@@ -663,7 +912,8 @@ export const commandRegistry = [
         "output_envelope": "Returns `{ session_id, options }` where `options` is a WebAuthn registration payload.",
         "error_codes": [
             "invalid_json",
-            "invalid_request"
+            "invalid_request",
+            "invalid_token"
         ],
         "concepts": [
             "auth",
@@ -671,17 +921,31 @@ export const commandRegistry = [
         ],
         "stability": "beta",
         "surface": "utility",
-        "agent_notes": "Intended for browser-based WebAuthn clients.",
+        "agent_notes": "Requires a bootstrap token for the first successful human registration or an invite token for later registrations.",
         "body_schema": {
             "required": [
                 {
                     "name": "display_name",
                     "type": "string"
                 }
+            ],
+            "optional": [
+                {
+                    "name": "bootstrap_token",
+                    "type": "string"
+                },
+                {
+                    "name": "invite_token",
+                    "type": "string"
+                }
             ]
         },
         "adjacent_commands": [
             "auth.agents.register",
+            "auth.bootstrap.status",
+            "auth.invites.create",
+            "auth.invites.list",
+            "auth.invites.revoke",
             "auth.passkey.login.options",
             "auth.passkey.login.verify",
             "auth.passkey.register.verify",
@@ -698,7 +962,7 @@ export const commandRegistry = [
         "path": "/auth/passkey/register/verify",
         "operation_id": "passkeyRegisterVerify",
         "summary": "Verify passkey registration and issue tokens",
-        "why": "Verify a WebAuthn attestation, create a principal, and issue the initial token bundle.",
+        "why": "Verify a WebAuthn attestation for managed bootstrap or invite acceptance, create the principal, and issue the initial token bundle.",
         "input_mode": "json-body",
         "streaming": {
             "mode": "none"
@@ -715,7 +979,7 @@ export const commandRegistry = [
         ],
         "stability": "beta",
         "surface": "utility",
-        "agent_notes": "Session ids are one-time use and expire quickly.",
+        "agent_notes": "Session ids are one-time use and expire quickly. The same bootstrap or invite token used to open the registration flow must be presented again here.",
         "body_schema": {
             "required": [
                 {
@@ -726,10 +990,24 @@ export const commandRegistry = [
                     "name": "session_id",
                     "type": "string"
                 }
+            ],
+            "optional": [
+                {
+                    "name": "bootstrap_token",
+                    "type": "string"
+                },
+                {
+                    "name": "invite_token",
+                    "type": "string"
+                }
             ]
         },
         "adjacent_commands": [
             "auth.agents.register",
+            "auth.bootstrap.status",
+            "auth.invites.create",
+            "auth.invites.list",
+            "auth.invites.revoke",
             "auth.passkey.login.options",
             "auth.passkey.login.verify",
             "auth.passkey.register.options",
@@ -808,6 +1086,10 @@ export const commandRegistry = [
         },
         "adjacent_commands": [
             "auth.agents.register",
+            "auth.bootstrap.status",
+            "auth.invites.create",
+            "auth.invites.list",
+            "auth.invites.revoke",
             "auth.passkey.login.options",
             "auth.passkey.login.verify",
             "auth.passkey.register.options",
@@ -1355,7 +1637,7 @@ export const commandRegistry = [
         "streaming": {
             "mode": "none"
         },
-        "output_envelope": "Returns `{ boards }`, where each item includes canonical board metadata plus a derived summary.",
+        "output_envelope": "Returns `{ boards, next_cursor? }`, where each item includes canonical board metadata plus a derived summary. Pagination is optional and backward-compatible.",
         "error_codes": [
             "invalid_request"
         ],
@@ -1366,7 +1648,7 @@ export const commandRegistry = [
         ],
         "stability": "beta",
         "surface": "canonical",
-        "agent_notes": "Safe and idempotent. Use repeatable `label` and `owner` filters to narrow the list server-side.",
+        "agent_notes": "Safe and idempotent. Use repeatable `label` and `owner` filters to narrow the list server-side. Optional pagination with `q` for search, `limit` for page size, and `cursor` for continuation.",
         "examples": [
             {
                 "title": "List boards",
@@ -1375,6 +1657,14 @@ export const commandRegistry = [
             {
                 "title": "List active boards for an owner",
                 "command": "oar boards list --status active --owner actor_ceo --json"
+            },
+            {
+                "title": "Search boards by label",
+                "command": "oar boards list --q \"launch\" --json"
+            },
+            {
+                "title": "Paginated board list",
+                "command": "oar boards list --limit 30 --json"
             }
         ],
         "adjacent_commands": [
@@ -2052,7 +2342,7 @@ export const commandRegistry = [
         "streaming": {
             "mode": "none"
         },
-        "output_envelope": "Returns `{ documents }` ordered by `updated_at` descending.",
+        "output_envelope": "Returns `{ documents, next_cursor? }` ordered by `updated_at` descending. Pagination is optional and backward-compatible.",
         "error_codes": [
             "invalid_request"
         ],
@@ -2062,11 +2352,19 @@ export const commandRegistry = [
         ],
         "stability": "beta",
         "surface": "canonical",
-        "agent_notes": "Safe and idempotent. Use `thread_id` to focus on one thread's docs and `include_tombstoned=true` when auditing superseded documents.",
+        "agent_notes": "Safe and idempotent. Use `thread_id` to focus on one thread's docs and `include_tombstoned=true` when auditing superseded documents. Optional pagination with `q` for search, `limit` for page size, and `cursor` for continuation.",
         "examples": [
             {
                 "title": "List documents",
                 "command": "oar docs list --json"
+            },
+            {
+                "title": "Search documents by title",
+                "command": "oar docs list --q \"constitution\" --json"
+            },
+            {
+                "title": "Paginated document list",
+                "command": "oar docs list --limit 50 --json"
             }
         ],
         "adjacent_commands": [
@@ -3479,7 +3777,7 @@ export const commandRegistry = [
         "streaming": {
             "mode": "none"
         },
-        "output_envelope": "Returns `{ threads }`; query filters are additive.",
+        "output_envelope": "Returns `{ threads, next_cursor? }`; query filters are additive. Pagination is optional and backward-compatible.",
         "error_codes": [
             "invalid_request"
         ],
@@ -3489,11 +3787,19 @@ export const commandRegistry = [
         ],
         "stability": "stable",
         "surface": "canonical",
-        "agent_notes": "Safe and idempotent.",
+        "agent_notes": "Safe and idempotent. Optional pagination with `q` for search, `limit` for page size, and `cursor` for continuation.",
         "examples": [
             {
                 "title": "List active p1 threads",
                 "command": "oar threads list --status active --priority p1 --json"
+            },
+            {
+                "title": "Search threads by title",
+                "command": "oar threads list --q \"launch\" --json"
+            },
+            {
+                "title": "Paginated thread list",
+                "command": "oar threads list --limit 20 --json"
             }
         ],
         "adjacent_commands": [
@@ -3838,6 +4144,18 @@ export class OarClient {
     }
     authAgentsRegister(options = {}) {
         return this.invoke("auth.agents.register", {}, options);
+    }
+    authBootstrapStatus(options = {}) {
+        return this.invoke("auth.bootstrap.status", {}, options);
+    }
+    authInvitesCreate(options = {}) {
+        return this.invoke("auth.invites.create", {}, options);
+    }
+    authInvitesList(options = {}) {
+        return this.invoke("auth.invites.list", {}, options);
+    }
+    authInvitesRevoke(pathParams, options = {}) {
+        return this.invoke("auth.invites.revoke", pathParams, options);
     }
     authPasskeyLoginOptions(options = {}) {
         return this.invoke("auth.passkey.login.options", {}, options);

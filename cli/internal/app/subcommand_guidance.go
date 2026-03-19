@@ -22,13 +22,45 @@ var apiSubcommandSpec = subcommandSpec{
 }
 
 var authSubcommandSpec = subcommandSpec{
-	command:  "auth",
-	valid:    []string{"register", "whoami", "list", "update-username", "rotate", "revoke", "token-status"},
-	examples: []string{"oar auth register --username <username>", "oar auth whoami", "oar auth list"},
+	command: "auth",
+	valid:   []string{"register", "whoami", "list", "update-username", "rotate", "revoke", "token-status", "invites", "bootstrap"},
+	examples: []string{
+		"oar auth register --username <username> --bootstrap-token <token>",
+		"oar auth register --username <username> --invite-token <token>",
+		"oar auth whoami",
+		"oar auth list",
+		"oar auth invites list",
+		"oar auth invites create --kind agent --note 'ops bot'",
+		"oar auth bootstrap status",
+	},
 	aliases: map[string]string{
 		"status":   "token-status",
 		"profiles": "list",
 		"ls":       "list",
+	},
+}
+
+var authInvitesSubcommandSpec = subcommandSpec{
+	command:  "auth invites",
+	valid:    []string{"list", "create", "revoke"},
+	examples: []string{"oar auth invites list", "oar auth invites create --kind agent --note 'ops bot'", "oar auth invites revoke --invite-id <id>"},
+	aliases: map[string]string{
+		"ls": "list",
+	},
+}
+
+var authBootstrapSubcommandSpec = subcommandSpec{
+	command:  "auth bootstrap",
+	valid:    []string{"status"},
+	examples: []string{"oar auth bootstrap status"},
+}
+
+var actorsSubcommandSpec = subcommandSpec{
+	command:  "actors",
+	valid:    []string{"list", "register"},
+	examples: []string{"oar actors list --q bot --limit 50", "oar actors register --id bot-1 --display-name \"Bot 1\" --created-at 2026-03-04T10:00:00Z"},
+	aliases: map[string]string{
+		"ls": "list",
 	},
 }
 

@@ -4,7 +4,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.2.3`
-- Commands: `64`
+- Commands: `68`
 
 ## `actors.list`
 
@@ -16,10 +16,12 @@ Generated from `contracts/oar-openapi.yaml`.
 - Why: Resolve available actor identities for routing writes.
 - Concepts: `identity`
 - Error codes: `actor_registry_unavailable`
-- Output: Returns `{ actors }` ordered by created time ascending.
-- Agent notes: Safe and idempotent.
+- Output: Returns `{ actors, next_cursor? }` ordered by created time ascending. Pagination is optional and backward-compatible.
+- Agent notes: Safe and idempotent. Optional pagination with `q` for search, `limit` for page size, and `cursor` for continuation.
 - Examples:
   - List actors: `oar actors list --json`
+  - Search actors by name: `oar actors list --q "bot" --json`
+  - Paginated actor list: `oar actors list --limit 50 --json`
 
 ## `actors.register`
 
@@ -173,18 +175,74 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `auth.agents.register`
 
-- CLI path: `auth agents register`
+- CLI path: `auth register`
 - HTTP: `POST /auth/agents/register`
 - Stability: `beta`
 - Surface: `utility`
 - Input mode: `json-body`
-- Why: Bootstrap an authenticated agent identity and obtain initial access + refresh tokens.
+- Why: Register an agent principal with a bootstrap token for the first principal or an invite token for later principals.
 - Concepts: `auth`, `identity`
-- Error codes: `invalid_json`, `invalid_request`, `username_taken`
+- Error codes: `invalid_json`, `invalid_request`, `invalid_token`, `username_taken`
 - Output: Returns `{ agent, key, tokens }`.
-- Agent notes: Registration is open in v0; future invite/secret gating can wrap this endpoint.
+- Agent notes: Bootstrap is accepted only for the first successful principal registration. Later registrations require an invite token.
 - Examples:
-  - Register agent: `oar auth agents register --username agent.one --public-key <base64-ed25519-pubkey> --json`
+  - Bootstrap first agent: `oar auth register --username agent.one --bootstrap-token <token> --json`
+  - Register invited agent: `oar auth register --username agent.two --invite-token <token> --json`
+
+## `auth.bootstrap.status`
+
+- CLI path: `auth bootstrap status`
+- HTTP: `GET /auth/bootstrap/status`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Check whether first-principal bootstrap registration is still available for this workspace.
+- Concepts: `auth`, `onboarding`
+- Output: Returns `{ bootstrap_registration_available }` without exposing token material.
+- Agent notes: This endpoint is intentionally non-enumerating beyond the single bootstrap availability boolean.
+- Examples:
+  - Read bootstrap status: `oar auth bootstrap status --json`
+
+## `auth.invites.create`
+
+- CLI path: `auth invites create`
+- HTTP: `POST /auth/invites`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Mint a single-use invite token for a future human or agent registration.
+- Concepts: `auth`, `onboarding`
+- Error codes: `auth_required`, `invalid_json`, `invalid_request`, `invalid_token`, `agent_revoked`
+- Output: Returns `{ invite, token }`. The raw token is returned only once at creation time.
+- Agent notes: Requires Bearer access token. `kind` may be `human`, `agent`, or `any`.
+- Examples:
+  - Create agent invite: `oar auth invites create --kind agent --note 'ops bot' --json`
+
+## `auth.invites.list`
+
+- CLI path: `auth invites list`
+- HTTP: `GET /auth/invites`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Inspect current invite state without exposing token secrets.
+- Concepts: `auth`, `onboarding`
+- Error codes: `auth_required`, `invalid_token`, `agent_revoked`
+- Output: Returns `{ invites }` ordered by create time descending.
+- Agent notes: Requires Bearer access token. Returned invites contain metadata only, never raw tokens.
+- Examples:
+  - List invites: `oar auth invites list --json`
+
+## `auth.invites.revoke`
+
+- CLI path: `auth invites revoke`
+- HTTP: `POST /auth/invites/{invite_id}/revoke`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Invalidate an invite token before it is consumed.
+- Concepts: `auth`, `onboarding`
+- Error codes: `auth_required`, `invalid_token`, `agent_revoked`, `not_found`
+- Output: Returns `{ invite }` with updated revoke metadata.
+- Agent notes: Requires Bearer access token.
+- Examples:
+  - Revoke invite: `oar auth invites revoke --invite-id invite_123 --json`
 
 ## `auth.passkey.login.options`
 
@@ -219,11 +277,11 @@ Generated from `contracts/oar-openapi.yaml`.
 - Stability: `beta`
 - Surface: `utility`
 - Input mode: `json-body`
-- Why: Create a WebAuthn registration challenge for a new human principal.
+- Why: Create a WebAuthn registration challenge for a human principal during managed bootstrap or invite acceptance.
 - Concepts: `auth`, `passkey`
-- Error codes: `invalid_json`, `invalid_request`
+- Error codes: `invalid_json`, `invalid_request`, `invalid_token`
 - Output: Returns `{ session_id, options }` where `options` is a WebAuthn registration payload.
-- Agent notes: Intended for browser-based WebAuthn clients.
+- Agent notes: Requires a bootstrap token for the first successful human registration or an invite token for later registrations.
 
 ## `auth.passkey.register.verify`
 
@@ -232,11 +290,11 @@ Generated from `contracts/oar-openapi.yaml`.
 - Stability: `beta`
 - Surface: `utility`
 - Input mode: `json-body`
-- Why: Verify a WebAuthn attestation, create a principal, and issue the initial token bundle.
+- Why: Verify a WebAuthn attestation for managed bootstrap or invite acceptance, create the principal, and issue the initial token bundle.
 - Concepts: `auth`, `passkey`
 - Error codes: `invalid_json`, `invalid_request`, `invalid_token`
 - Output: Returns `{ agent, tokens }` for the newly registered passkey principal.
-- Agent notes: Session ids are one-time use and expire quickly.
+- Agent notes: Session ids are one-time use and expire quickly. The same bootstrap or invite token used to open the registration flow must be presented again here.
 
 ## `auth.token`
 
@@ -369,11 +427,13 @@ Generated from `contracts/oar-openapi.yaml`.
 - Why: Discover durable coordination boards with enough summary data for list pages and CLI triage without per-board fan-out.
 - Concepts: `boards`, `planning`, `summaries`
 - Error codes: `invalid_request`
-- Output: Returns `{ boards }`, where each item includes canonical board metadata plus a derived summary.
-- Agent notes: Safe and idempotent. Use repeatable `label` and `owner` filters to narrow the list server-side.
+- Output: Returns `{ boards, next_cursor? }`, where each item includes canonical board metadata plus a derived summary. Pagination is optional and backward-compatible.
+- Agent notes: Safe and idempotent. Use repeatable `label` and `owner` filters to narrow the list server-side. Optional pagination with `q` for search, `limit` for page size, and `cursor` for continuation.
 - Examples:
   - List boards: `oar boards list --json`
   - List active boards for an owner: `oar boards list --status active --owner actor_ceo --json`
+  - Search boards by label: `oar boards list --q "launch" --json`
+  - Paginated board list: `oar boards list --limit 30 --json`
 
 ## `boards.update`
 
@@ -535,10 +595,12 @@ Generated from `contracts/oar-openapi.yaml`.
 - Why: Discover available documents without resolving each head individually, optionally scoped to a single thread.
 - Concepts: `docs`, `revisions`
 - Error codes: `invalid_request`
-- Output: Returns `{ documents }` ordered by `updated_at` descending.
-- Agent notes: Safe and idempotent. Use `thread_id` to focus on one thread's docs and `include_tombstoned=true` when auditing superseded documents.
+- Output: Returns `{ documents, next_cursor? }` ordered by `updated_at` descending. Pagination is optional and backward-compatible.
+- Agent notes: Safe and idempotent. Use `thread_id` to focus on one thread's docs and `include_tombstoned=true` when auditing superseded documents. Optional pagination with `q` for search, `limit` for page size, and `cursor` for continuation.
 - Examples:
   - List documents: `oar docs list --json`
+  - Search documents by title: `oar docs list --q "constitution" --json`
+  - Paginated document list: `oar docs list --limit 50 --json`
 
 ## `docs.revision.get`
 
@@ -912,10 +974,12 @@ Generated from `contracts/oar-openapi.yaml`.
 - Why: Retrieve current thread state for triage and scheduling decisions.
 - Concepts: `threads`, `filtering`
 - Error codes: `invalid_request`
-- Output: Returns `{ threads }`; query filters are additive.
-- Agent notes: Safe and idempotent.
+- Output: Returns `{ threads, next_cursor? }`; query filters are additive. Pagination is optional and backward-compatible.
+- Agent notes: Safe and idempotent. Optional pagination with `q` for search, `limit` for page size, and `cursor` for continuation.
 - Examples:
   - List active p1 threads: `oar threads list --status active --priority p1 --json`
+  - Search threads by title: `oar threads list --q "launch" --json`
+  - Paginated thread list: `oar threads list --limit 20 --json`
 
 ## `threads.patch`
 

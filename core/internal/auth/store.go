@@ -25,12 +25,13 @@ var ErrKeyMismatch = errors.New("key_mismatch")
 var ErrAgentNotFound = errors.New("agent_not_found")
 
 const (
-	defaultAccessTokenTTL   = 15 * time.Minute
-	defaultRefreshTokenTTL  = 30 * 24 * time.Hour
-	defaultAssertionSkew    = 5 * time.Minute
-	registerAgentMaxRetries = 8
-	registerAgentRetryBase  = 15 * time.Millisecond
-	registerAgentRetryMax   = 250 * time.Millisecond
+	bootstrapTokenPlaceholder = "REPLACE_WITH_SECURE_BOOTSTRAP_TOKEN"
+	defaultAccessTokenTTL     = 15 * time.Minute
+	defaultRefreshTokenTTL    = 30 * 24 * time.Hour
+	defaultAssertionSkew      = 5 * time.Minute
+	registerAgentMaxRetries   = 8
+	registerAgentRetryBase    = 15 * time.Millisecond
+	registerAgentRetryMax     = 250 * time.Millisecond
 )
 
 type Option func(*Store)
@@ -81,10 +82,11 @@ type AssertionInput struct {
 }
 
 type Store struct {
-	db               *sql.DB
-	accessTokenTTL   time.Duration
-	refreshTokenTTL  time.Duration
-	maxAssertionSkew time.Duration
+	db                 *sql.DB
+	accessTokenTTL     time.Duration
+	refreshTokenTTL    time.Duration
+	maxAssertionSkew   time.Duration
+	bootstrapTokenHash string
 }
 
 func NewStore(db *sql.DB, options ...Option) *Store {
@@ -124,11 +126,22 @@ func WithAssertionSkew(skew time.Duration) Option {
 	}
 }
 
+func WithBootstrapToken(token string) Option {
+	return func(store *Store) {
+		token = strings.TrimSpace(token)
+		if token == "" || token == bootstrapTokenPlaceholder {
+			store.bootstrapTokenHash = ""
+			return
+		}
+		store.bootstrapTokenHash = hashToken(token)
+	}
+}
+
 func BuildAssertionMessage(agentID string, keyID string, signedAt string) string {
 	return "oar-auth-token|" + strings.TrimSpace(agentID) + "|" + strings.TrimSpace(keyID) + "|" + strings.TrimSpace(signedAt)
 }
 
-func (s *Store) RegisterAgent(ctx context.Context, input RegisterAgentInput) (Agent, AgentKey, TokenBundle, error) {
+func (s *Store) RegisterAgent(ctx context.Context, input RegisterAgentInput, claim OnboardingClaim) (Agent, AgentKey, TokenBundle, error) {
 	if s == nil || s.db == nil {
 		return Agent{}, AgentKey{}, TokenBundle{}, fmt.Errorf("auth store database is not initialized")
 	}
@@ -145,7 +158,7 @@ func (s *Store) RegisterAgent(ctx context.Context, input RegisterAgentInput) (Ag
 	publicKey := strings.TrimSpace(input.PublicKey)
 	var lastErr error
 	for attempt := 0; attempt < registerAgentMaxRetries; attempt++ {
-		agent, key, tokens, err := s.registerAgentOnce(ctx, username, publicKey)
+		agent, key, tokens, err := s.registerAgentOnce(ctx, username, publicKey, claim)
 		if err == nil {
 			return agent, key, tokens, nil
 		}
@@ -163,7 +176,7 @@ func (s *Store) RegisterAgent(ctx context.Context, input RegisterAgentInput) (Ag
 	return Agent{}, AgentKey{}, TokenBundle{}, lastErr
 }
 
-func (s *Store) registerAgentOnce(ctx context.Context, username string, publicKey string) (Agent, AgentKey, TokenBundle, error) {
+func (s *Store) registerAgentOnce(ctx context.Context, username string, publicKey string, claim OnboardingClaim) (Agent, AgentKey, TokenBundle, error) {
 	now := time.Now().UTC()
 	nowText := now.Format(time.RFC3339Nano)
 	agentID := "agent_" + uuid.NewString()
@@ -173,6 +186,11 @@ func (s *Store) registerAgentOnce(ctx context.Context, username string, publicKe
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Agent{}, AgentKey{}, TokenBundle{}, fmt.Errorf("begin register agent transaction: %w", err)
+	}
+
+	if err := s.consumeOnboardingClaimTx(ctx, tx, claim, agentID, actorID, now); err != nil {
+		_ = tx.Rollback()
+		return Agent{}, AgentKey{}, TokenBundle{}, err
 	}
 
 	_, err = tx.ExecContext(

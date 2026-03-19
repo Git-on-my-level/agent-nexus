@@ -55,7 +55,7 @@ func handleGetInbox(w http.ResponseWriter, r *http.Request, opts handlerOptions)
 		return
 	}
 
-	threads, err := opts.primitiveStore.ListThreads(r.Context(), primitives.ThreadListFilter{})
+	threads, _, err := opts.primitiveStore.ListThreads(r.Context(), primitives.ThreadListFilter{})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load threads")
 		return
@@ -126,7 +126,7 @@ func handleGetInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		return
 	}
 
-	threads, err := opts.primitiveStore.ListThreads(r.Context(), primitives.ThreadListFilter{})
+	threads, _, err := opts.primitiveStore.ListThreads(r.Context(), primitives.ThreadListFilter{})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load threads")
 		return
@@ -254,6 +254,10 @@ func handleAckInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOpti
 }
 
 func deriveInboxItems(ctx context.Context, opts handlerOptions, now time.Time, riskHorizon time.Duration) ([]derivedInboxItem, error) {
+	if _, err := emitStaleThreadExceptions(ctx, opts, now, ""); err != nil {
+		return nil, err
+	}
+
 	return deriveInboxItemsNoStaleEmission(ctx, opts, now, riskHorizon)
 }
 

@@ -48,6 +48,16 @@ type DerivedThreadProjection struct {
 	SourceHash             string
 }
 
+type DerivedThreadProjectionDirtyEntry struct {
+	ThreadID string
+	DirtyAt  string
+}
+
+type DerivedThreadProjectionQueueStats struct {
+	PendingCount  int
+	OldestDirtyAt string
+}
+
 type ThreadProjectionRefreshStatus struct {
 	ThreadID         string
 	IsDirty          bool
@@ -308,6 +318,103 @@ func (s *Store) PutDerivedThreadProjection(ctx context.Context, projection Deriv
 		return fmt.Errorf("upsert derived thread projection %s: %w", projection.ThreadID, err)
 	}
 	return nil
+}
+
+func (s *Store) MarkDerivedThreadProjectionDirty(ctx context.Context, threadID string, dirtyAt string) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("primitives store database is not initialized")
+	}
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		return nil
+	}
+	dirtyAt = firstNonEmptyDerivedString(dirtyAt, time.Now().UTC().Format(time.RFC3339Nano))
+
+	_, err := s.db.ExecContext(
+		ctx,
+		`INSERT INTO derived_thread_dirty_queue(thread_id, dirty_at)
+		 VALUES (?, ?)
+		ON CONFLICT(thread_id) DO UPDATE SET
+			dirty_at = CASE
+				WHEN derived_thread_dirty_queue.dirty_at <= excluded.dirty_at THEN derived_thread_dirty_queue.dirty_at
+				ELSE excluded.dirty_at
+			END`,
+		threadID,
+		dirtyAt,
+	)
+	if err != nil {
+		return fmt.Errorf("upsert derived thread dirty queue %s: %w", threadID, err)
+	}
+	return nil
+}
+
+func (s *Store) ClearDerivedThreadProjectionDirty(ctx context.Context, threadID string) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("primitives store database is not initialized")
+	}
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		return nil
+	}
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM derived_thread_dirty_queue WHERE thread_id = ?`, threadID); err != nil {
+		return fmt.Errorf("delete derived thread dirty queue %s: %w", threadID, err)
+	}
+	return nil
+}
+
+func (s *Store) ListDerivedThreadProjectionDirtyEntries(ctx context.Context, limit int) ([]DerivedThreadProjectionDirtyEntry, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("primitives store database is not initialized")
+	}
+	if limit <= 0 {
+		return []DerivedThreadProjectionDirtyEntry{}, nil
+	}
+
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT thread_id, dirty_at
+		   FROM derived_thread_dirty_queue
+		  ORDER BY dirty_at ASC, thread_id ASC
+		  LIMIT ?`,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query derived thread dirty queue: %w", err)
+	}
+	defer rows.Close()
+
+	entries := make([]DerivedThreadProjectionDirtyEntry, 0, limit)
+	for rows.Next() {
+		var entry DerivedThreadProjectionDirtyEntry
+		if err := rows.Scan(&entry.ThreadID, &entry.DirtyAt); err != nil {
+			return nil, fmt.Errorf("scan derived thread dirty queue: %w", err)
+		}
+		entries = append(entries, entry)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate derived thread dirty queue: %w", err)
+	}
+	return entries, nil
+}
+
+func (s *Store) GetDerivedThreadProjectionQueueStats(ctx context.Context) (DerivedThreadProjectionQueueStats, error) {
+	if s == nil || s.db == nil {
+		return DerivedThreadProjectionQueueStats{}, fmt.Errorf("primitives store database is not initialized")
+	}
+
+	var (
+		stats         DerivedThreadProjectionQueueStats
+		oldestDirtyAt sql.NullString
+	)
+	if err := s.db.QueryRowContext(
+		ctx,
+		`SELECT COUNT(*), MIN(dirty_at)
+		   FROM derived_thread_dirty_queue`,
+	).Scan(&stats.PendingCount, &oldestDirtyAt); err != nil {
+		return DerivedThreadProjectionQueueStats{}, fmt.Errorf("query derived thread dirty queue stats: %w", err)
+	}
+	stats.OldestDirtyAt = oldestDirtyAt.String
+	return stats, nil
 }
 
 func (s *Store) GetDerivedThreadProjection(ctx context.Context, threadID string) (DerivedThreadProjection, error) {

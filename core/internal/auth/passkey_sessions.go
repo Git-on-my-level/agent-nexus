@@ -19,13 +19,14 @@ const (
 )
 
 type PasskeySession struct {
-	ID          string
-	Kind        PasskeySessionKind
-	DisplayName string
-	UserHandle  []byte
-	SessionData webauthn.SessionData
-	CreatedAt   time.Time
-	ExpiresAt   time.Time
+	ID              string
+	Kind            PasskeySessionKind
+	DisplayName     string
+	UserHandle      []byte
+	SessionData     webauthn.SessionData
+	OnboardingClaim OnboardingClaim
+	CreatedAt       time.Time
+	ExpiresAt       time.Time
 }
 
 type PasskeySessionStore struct {

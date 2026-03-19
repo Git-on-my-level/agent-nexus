@@ -220,13 +220,32 @@ func handleListThreads(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		staleFilter = &parsed
 	}
 
-	threads, err := opts.primitiveStore.ListThreads(r.Context(), primitives.ThreadListFilter{
+	var limitFilter *int
+	limitRaw := strings.TrimSpace(query.Get("limit"))
+	if limitRaw != "" {
+		parsed, err := strconv.Atoi(limitRaw)
+		if err != nil || parsed < 1 || parsed > 1000 {
+			writeError(w, http.StatusBadRequest, "invalid_request", "limit must be between 1 and 1000")
+			return
+		}
+		limitFilter = &parsed
+	}
+
+	threads, nextCursor, err := opts.primitiveStore.ListThreads(r.Context(), primitives.ThreadListFilter{
 		Status:   strings.TrimSpace(query.Get("status")),
 		Priority: strings.TrimSpace(query.Get("priority")),
 		Tags:     tagsFilter,
 		Cadences: cadenceFilter,
+		Stale:    staleFilter,
+		Query:    strings.TrimSpace(query.Get("q")),
+		Limit:    limitFilter,
+		Cursor:   strings.TrimSpace(query.Get("cursor")),
 	})
 	if err != nil {
+		if errors.Is(err, primitives.ErrInvalidCursor) {
+			writeError(w, http.StatusBadRequest, "invalid_request", "cursor is invalid")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list threads")
 		return
 	}
@@ -255,7 +274,11 @@ func handleListThreads(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	}
 	threads = withStale
 
-	writeJSON(w, http.StatusOK, map[string]any{"threads": threads})
+	response := map[string]any{"threads": threads}
+	if nextCursor != "" {
+		response["next_cursor"] = nextCursor
+	}
+	writeJSON(w, http.StatusOK, response)
 }
 
 func normalizedQueryValues(raw []string) []string {
@@ -541,7 +564,7 @@ func buildThreadContextDocuments(ctx context.Context, opts handlerOptions, threa
 		return []map[string]any{}, nil
 	}
 
-	documents, err := opts.primitiveStore.ListDocuments(ctx, primitives.DocumentListFilter{
+	documents, _, err := opts.primitiveStore.ListDocuments(ctx, primitives.DocumentListFilter{
 		ThreadID: threadID,
 	})
 	if err != nil {

@@ -285,13 +285,30 @@ paths:
       x-oar-examples:
         - title: List actors
           command: oar actors list --json
+        - title: Search actors by name
+          command: oar actors list --q "bot" --json
+        - title: Paginated actor list
+          command: oar actors list --limit 50 --json
       x-oar-input-mode: "none"
       x-oar-streaming: { mode: none }
-      x-oar-output-envelope: "Returns `{ actors }` ordered by created time ascending."
+      x-oar-output-envelope: "Returns `{ actors, next_cursor? }` ordered by created time ascending. Pagination is optional and backward-compatible."
       x-oar-error-codes: [actor_registry_unavailable]
       x-oar-concepts: [identity]
       x-oar-stability: "stable"
-      x-oar-agent-notes: "Safe and idempotent."
+      x-oar-agent-notes: "Safe and idempotent. Optional pagination with `q` for search, `limit` for page size, and `cursor` for continuation."
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+          description: "Optional search query to filter actors by ID or display name using case-insensitive matching."
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 1000 }
+          description: "Maximum number of results to return. Defaults to returning all results when omitted."
+        - in: query
+          name: cursor
+          schema: { type: string }
+          description: "Opaque pagination cursor from a previous response's `next_cursor` field."
       responses:
         '200':
           description: Actor list
@@ -307,18 +324,20 @@ paths:
       tags: [auth]
       x-oar-surface: "utility"
       x-oar-command-id: "auth.agents.register"
-      x-oar-cli-path: "auth agents register"
-      x-oar-why: "Bootstrap an authenticated agent identity and obtain initial access + refresh tokens."
+      x-oar-cli-path: "auth register"
+      x-oar-why: "Register an agent principal with a bootstrap token for the first principal or an invite token for later principals."
       x-oar-examples:
-        - title: Register agent
-          command: oar auth agents register --username agent.one --public-key <base64-ed25519-pubkey> --json
+        - title: Bootstrap first agent
+          command: oar auth register --username agent.one --bootstrap-token <token> --json
+        - title: Register invited agent
+          command: oar auth register --username agent.two --invite-token <token> --json
       x-oar-input-mode: "json-body"
       x-oar-streaming: { mode: none }
       x-oar-output-envelope: "Returns `{ agent, key, tokens }`."
-      x-oar-error-codes: [invalid_json, invalid_request, username_taken]
+      x-oar-error-codes: [invalid_json, invalid_request, invalid_token, username_taken]
       x-oar-concepts: [auth, identity]
       x-oar-stability: "beta"
-      x-oar-agent-notes: "Registration is open in v0; future invite/secret gating can wrap this endpoint."
+      x-oar-agent-notes: "Bootstrap is accepted only for the first successful principal registration. Later registrations require an invite token."
       requestBody:
         required: true
         content:
@@ -334,8 +353,36 @@ paths:
                 $ref: '#/components/schemas/RegisterAgentResponse'
         '400':
           $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
         '409':
           $ref: '#/components/responses/ErrorResponse'
+
+  /auth/bootstrap/status:
+    get:
+      operationId: getBootstrapStatus
+      summary: Read bootstrap onboarding availability
+      tags: [auth]
+      x-oar-command-id: "auth.bootstrap.status"
+      x-oar-cli-path: "auth bootstrap status"
+      x-oar-why: "Check whether first-principal bootstrap registration is still available for this workspace."
+      x-oar-examples:
+        - title: Read bootstrap status
+          command: oar auth bootstrap status --json
+      x-oar-input-mode: "none"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ bootstrap_registration_available }` without exposing token material."
+      x-oar-error-codes: []
+      x-oar-concepts: [auth, onboarding]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "This endpoint is intentionally non-enumerating beyond the single bootstrap availability boolean."
+      responses:
+        '200':
+          description: Bootstrap status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BootstrapStatusResponse'
 
   /auth/token:
     post:
@@ -386,15 +433,15 @@ paths:
       x-oar-surface: "utility"
       x-oar-command-id: "auth.passkey.register.options"
       x-oar-cli-path: "auth passkey register options"
-      x-oar-why: "Create a WebAuthn registration challenge for a new human principal."
+      x-oar-why: "Create a WebAuthn registration challenge for a human principal during managed bootstrap or invite acceptance."
       x-oar-examples: []
       x-oar-input-mode: "json-body"
       x-oar-streaming: { mode: none }
       x-oar-output-envelope: "Returns `{ session_id, options }` where `options` is a WebAuthn registration payload."
-      x-oar-error-codes: [invalid_json, invalid_request]
+      x-oar-error-codes: [invalid_json, invalid_request, invalid_token]
       x-oar-concepts: [auth, passkey]
       x-oar-stability: "beta"
-      x-oar-agent-notes: "Intended for browser-based WebAuthn clients."
+      x-oar-agent-notes: "Requires a bootstrap token for the first successful human registration or an invite token for later registrations."
       requestBody:
         required: true
         content:
@@ -410,6 +457,8 @@ paths:
                 $ref: '#/components/schemas/PasskeyOptionsResponse'
         '400':
           $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
 
   /auth/passkey/register/verify:
     post:
@@ -419,7 +468,7 @@ paths:
       x-oar-surface: "utility"
       x-oar-command-id: "auth.passkey.register.verify"
       x-oar-cli-path: "auth passkey register verify"
-      x-oar-why: "Verify a WebAuthn attestation, create a principal, and issue the initial token bundle."
+      x-oar-why: "Verify a WebAuthn attestation for managed bootstrap or invite acceptance, create the principal, and issue the initial token bundle."
       x-oar-examples: []
       x-oar-input-mode: "json-body"
       x-oar-streaming: { mode: none }
@@ -427,7 +476,7 @@ paths:
       x-oar-error-codes: [invalid_json, invalid_request, invalid_token]
       x-oar-concepts: [auth, passkey]
       x-oar-stability: "beta"
-      x-oar-agent-notes: "Session ids are one-time use and expire quickly."
+      x-oar-agent-notes: "Session ids are one-time use and expire quickly. The same bootstrap or invite token used to open the registration flow must be presented again here."
       requestBody:
         required: true
         content:
@@ -444,6 +493,109 @@ paths:
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/invites:
+    get:
+      operationId: listInvites
+      summary: List onboarding invites
+      tags: [auth]
+      x-oar-command-id: "auth.invites.list"
+      x-oar-cli-path: "auth invites list"
+      x-oar-why: "Inspect current invite state without exposing token secrets."
+      x-oar-examples:
+        - title: List invites
+          command: oar auth invites list --json
+      x-oar-input-mode: "none"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ invites }` ordered by create time descending."
+      x-oar-error-codes: [auth_required, invalid_token, agent_revoked]
+      x-oar-concepts: [auth, onboarding]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Requires Bearer access token. Returned invites contain metadata only, never raw tokens."
+      responses:
+        '200':
+          description: Invite list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListInvitesResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+    post:
+      operationId: createInvite
+      summary: Create onboarding invite
+      tags: [auth]
+      x-oar-command-id: "auth.invites.create"
+      x-oar-cli-path: "auth invites create"
+      x-oar-why: "Mint a single-use invite token for a future human or agent registration."
+      x-oar-examples:
+        - title: Create agent invite
+          command: oar auth invites create --kind agent --note 'ops bot' --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ invite, token }`. The raw token is returned only once at creation time."
+      x-oar-error-codes: [auth_required, invalid_json, invalid_request, invalid_token, agent_revoked]
+      x-oar-concepts: [auth, onboarding]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Requires Bearer access token. `kind` may be `human`, `agent`, or `any`."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInviteRequest'
+      responses:
+        '201':
+          description: Invite created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateInviteResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/invites/{invite_id}/revoke:
+    post:
+      operationId: revokeInvite
+      summary: Revoke onboarding invite
+      tags: [auth]
+      x-oar-command-id: "auth.invites.revoke"
+      x-oar-cli-path: "auth invites revoke"
+      x-oar-why: "Invalidate an invite token before it is consumed."
+      x-oar-examples:
+        - title: Revoke invite
+          command: oar auth invites revoke --invite-id invite_123 --json
+      x-oar-input-mode: "none"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ invite }` with updated revoke metadata."
+      x-oar-error-codes: [auth_required, invalid_token, agent_revoked, not_found]
+      x-oar-concepts: [auth, onboarding]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Requires Bearer access token."
+      parameters:
+        - name: invite_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Invite revoked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevokeInviteResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
           $ref: '#/components/responses/ErrorResponse'
 
   /auth/passkey/login/options:
@@ -703,14 +855,30 @@ paths:
       x-oar-examples:
         - title: List active p1 threads
           command: oar threads list --status active --priority p1 --json
+        - title: Search threads by title
+          command: oar threads list --q "launch" --json
+        - title: Paginated thread list
+          command: oar threads list --limit 20 --json
       x-oar-input-mode: "none"
       x-oar-streaming: { mode: none }
-      x-oar-output-envelope: "Returns `{ threads }`; query filters are additive."
+      x-oar-output-envelope: "Returns `{ threads, next_cursor? }`; query filters are additive. Pagination is optional and backward-compatible."
       x-oar-error-codes: [invalid_request]
       x-oar-concepts: [threads, filtering]
       x-oar-stability: "stable"
-      x-oar-agent-notes: "Safe and idempotent."
+      x-oar-agent-notes: "Safe and idempotent. Optional pagination with `q` for search, `limit` for page size, and `cursor` for continuation."
       parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+          description: "Optional search query to filter threads by ID or title using case-insensitive matching."
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 1000 }
+          description: "Maximum number of results to return. Defaults to returning all results when omitted."
+        - in: query
+          name: cursor
+          schema: { type: string }
+          description: "Opaque pagination cursor from a previous response's `next_cursor` field."
         - in: query
           name: status
           schema: { type: string }
@@ -1115,14 +1283,30 @@ paths:
           command: oar boards list --json
         - title: List active boards for an owner
           command: oar boards list --status active --owner actor_ceo --json
+        - title: Search boards by label
+          command: oar boards list --q "launch" --json
+        - title: Paginated board list
+          command: oar boards list --limit 30 --json
       x-oar-input-mode: "none"
       x-oar-streaming: { mode: none }
-      x-oar-output-envelope: "Returns `{ boards }`, where each item includes canonical board metadata plus a derived summary."
+      x-oar-output-envelope: "Returns `{ boards, next_cursor? }`, where each item includes canonical board metadata plus a derived summary. Pagination is optional and backward-compatible."
       x-oar-error-codes: [invalid_request]
       x-oar-concepts: [boards, planning, summaries]
       x-oar-stability: "beta"
-      x-oar-agent-notes: "Safe and idempotent. Use repeatable `label` and `owner` filters to narrow the list server-side."
+      x-oar-agent-notes: "Safe and idempotent. Use repeatable `label` and `owner` filters to narrow the list server-side. Optional pagination with `q` for search, `limit` for page size, and `cursor` for continuation."
       parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+          description: "Optional search query to filter boards by ID or title using case-insensitive matching."
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 1000 }
+          description: "Maximum number of results to return. Defaults to returning all results when omitted."
+        - in: query
+          name: cursor
+          schema: { type: string }
+          description: "Opaque pagination cursor from a previous response's `next_cursor` field."
         - in: query
           name: status
           schema:
@@ -1503,14 +1687,30 @@ paths:
       x-oar-examples:
         - title: List documents
           command: oar docs list --json
+        - title: Search documents by title
+          command: oar docs list --q "constitution" --json
+        - title: Paginated document list
+          command: oar docs list --limit 50 --json
       x-oar-input-mode: "none"
       x-oar-streaming: { mode: none }
-      x-oar-output-envelope: "Returns `{ documents }` ordered by `updated_at` descending."
+      x-oar-output-envelope: "Returns `{ documents, next_cursor? }` ordered by `updated_at` descending. Pagination is optional and backward-compatible."
       x-oar-error-codes: [invalid_request]
       x-oar-concepts: [docs, revisions]
       x-oar-stability: "beta"
-      x-oar-agent-notes: "Safe and idempotent. Use `thread_id` to focus on one thread's docs and `include_tombstoned=true` when auditing superseded documents."
+      x-oar-agent-notes: "Safe and idempotent. Use `thread_id` to focus on one thread's docs and `include_tombstoned=true` when auditing superseded documents. Optional pagination with `q` for search, `limit` for page size, and `cursor` for continuation."
       parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+          description: "Optional search query to filter documents by ID or title using case-insensitive matching."
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 1000 }
+          description: "Maximum number of results to return. Defaults to returning all results when omitted."
+        - in: query
+          name: cursor
+          schema: { type: string }
+          description: "Opaque pagination cursor from a previous response's `next_cursor` field."
         - in: query
           name: thread_id
           schema: { type: string }
@@ -2437,6 +2637,9 @@ components:
         recommended_cli_version: { type: string }
         cli_download_url: { type: string }
         core_instance_id: { type: string }
+        dev_actor_mode:
+          type: boolean
+          description: Whether legacy dev actor mode is enabled for unauthenticated actor creation and selection flows.
       required:
         - core_version
         - api_version
@@ -2607,6 +2810,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Actor'
+        next_cursor:
+          type: string
+          description: "Opaque pagination cursor for fetching the next page of results. Omitted when there are no more results."
       required: [actors]
 
     Agent:
@@ -2640,11 +2846,35 @@ components:
         expires_in: { type: integer, format: int64 }
       required: [access_token, refresh_token, token_type, expires_in]
 
+    BootstrapStatusResponse:
+      type: object
+      properties:
+        bootstrap_registration_available: { type: boolean }
+      required: [bootstrap_registration_available]
+
+    Invite:
+      type: object
+      properties:
+        id: { type: string }
+        kind:
+          type: string
+          enum: [human, agent, any]
+        created_by_agent_id: { type: string }
+        created_by_actor_id: { type: string }
+        note: { type: string }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        consumed_at: { type: string, format: date-time }
+        revoked_at: { type: string, format: date-time }
+      required: [id, kind, created_by_agent_id, created_by_actor_id, note, created_at]
+
     RegisterAgentRequest:
       type: object
       properties:
         username: { type: string }
         public_key: { type: string }
+        bootstrap_token: { type: string }
+        invite_token: { type: string }
       required: [username, public_key]
 
     RegisterAgentResponse:
@@ -2680,6 +2910,8 @@ components:
       type: object
       properties:
         display_name: { type: string }
+        bootstrap_token: { type: string }
+        invite_token: { type: string }
       required: [display_name]
 
     PasskeyLoginOptionsRequest:
@@ -2691,6 +2923,8 @@ components:
       type: object
       properties:
         session_id: { type: string }
+        bootstrap_token: { type: string }
+        invite_token: { type: string }
         credential:
           $ref: '#/components/schemas/AnyObject'
       required: [session_id, credential]
@@ -2711,6 +2945,40 @@ components:
         tokens:
           $ref: '#/components/schemas/TokenBundle'
       required: [agent, tokens]
+
+    CreateInviteRequest:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum: [human, agent, any]
+        note: { type: string }
+        expires_at: { type: string, format: date-time }
+      required: [kind]
+
+    CreateInviteResponse:
+      type: object
+      properties:
+        invite:
+          $ref: '#/components/schemas/Invite'
+        token: { type: string }
+      required: [invite, token]
+
+    ListInvitesResponse:
+      type: object
+      properties:
+        invites:
+          type: array
+          items:
+            $ref: '#/components/schemas/Invite'
+      required: [invites]
+
+    RevokeInviteResponse:
+      type: object
+      properties:
+        invite:
+          $ref: '#/components/schemas/Invite'
+      required: [invite]
 
     CurrentAgentResponse:
       type: object
@@ -2788,6 +3056,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Thread'
+        next_cursor:
+          type: string
+          description: "Opaque pagination cursor for fetching the next page of results. Omitted when there are no more results."
       required: [threads]
 
     ThreadTimelineResponse:
@@ -3411,6 +3682,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/BoardListItem'
+        next_cursor:
+          type: string
+          description: "Opaque pagination cursor for fetching the next page of results. Omitted when there are no more results."
       required: [boards]
 
     BoardCardsResponse:
@@ -3634,6 +3908,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Document'
+        next_cursor:
+          type: string
+          description: "Opaque pagination cursor for fetching the next page of results. Omitted when there are no more results."
       required: [documents]
 
     DocumentHistoryResponse:

@@ -5,6 +5,7 @@
   import SearchableEntityPicker from "$lib/components/SearchableEntityPicker.svelte";
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
+  import { searchThreads as searchThreadRecords } from "$lib/searchHelpers";
   import { workspacePath } from "$lib/workspacePaths";
   import { lookupActorDisplayName, actorRegistry } from "$lib/actorSession";
 
@@ -22,8 +23,6 @@
   let loading = $state(false);
   let historyLoading = $state(false);
   let loadError = $state("");
-  let supportError = $state("");
-  let availableThreads = $state([]);
   let loadedDocumentId = $state("");
   let historyOpen = $state(false);
 
@@ -38,14 +37,6 @@
   let saving = $state(false);
   let saveError = $state("");
   let loadingSelectedRevisionKey = $state("");
-  let threadOptions = $derived(
-    availableThreads.map((thread) => ({
-      id: thread.id,
-      title: thread.title || thread.id,
-      subtitle: [thread.status, thread.priority].filter(Boolean).join(" · "),
-      keywords: [thread.type, ...(thread.tags ?? [])],
-    })),
-  );
 
   let displayedContent = $derived(
     selectedRevision?.content ?? headRevision?.content ?? "",
@@ -65,6 +56,20 @@
 
   function workspaceHref(pathname = "/") {
     return workspacePath(workspaceSlug, pathname);
+  }
+
+  function toThreadOption(thread) {
+    return {
+      id: thread.id,
+      title: thread.title || thread.id,
+      subtitle: [thread.status, thread.priority].filter(Boolean).join(" · "),
+      keywords: [thread.type, ...(thread.tags ?? [])],
+    };
+  }
+
+  async function searchThreadOptions(query) {
+    const threads = await searchThreadRecords(query);
+    return threads.map(toThreadOption);
   }
 
   async function setRequestedRevision(revisionId = "") {
@@ -88,12 +93,6 @@
   $effect(() => {
     const id = documentId;
     if (id && id !== loadedDocumentId) loadDocument(id);
-  });
-
-  $effect(() => {
-    if (workspaceSlug) {
-      void loadThreadSupport();
-    }
   });
 
   $effect(() => {
@@ -147,17 +146,6 @@
       headRevision = null;
     } finally {
       loading = false;
-    }
-  }
-
-  async function loadThreadSupport() {
-    supportError = "";
-    try {
-      const response = await coreClient.listThreads({});
-      availableThreads = response.threads ?? [];
-    } catch (e) {
-      supportError = `Failed to load doc linkage options: ${e instanceof Error ? e.message : String(e)}`;
-      availableThreads = [];
     }
   }
 
@@ -556,11 +544,11 @@
               bind:value={editDraft.thread_id}
               advancedLabel="Use a manual thread ID"
               helperText="Update the canonical thread linkage for this doc lineage."
-              items={threadOptions}
               label="Thread linkage"
               manualLabel="Thread ID"
               manualPlaceholder="thread-..."
               placeholder="Search threads by title, ID, or tags"
+              searchFn={searchThreadOptions}
             />
             <label class="sm:col-span-2">
               <span class="text-[12px] font-medium text-[var(--ui-text-muted)]"
@@ -582,14 +570,6 @@
               {saveError}
             </div>
           {/if}
-          {#if supportError}
-            <div
-              class="mt-3 rounded-md bg-amber-500/10 px-3 py-2 text-[12px] text-amber-400"
-            >
-              {supportError}
-            </div>
-          {/if}
-
           <p class="mt-2 text-[11px] text-[var(--ui-text-subtle)]">
             Base revision: <span class="font-mono"
               >{headRevision?.revision_id ?? "—"}</span

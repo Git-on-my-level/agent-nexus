@@ -11,7 +11,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"organization-autorunner-core/internal/blob"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -20,47 +19,102 @@ import (
 
 	"organization-autorunner-core/internal/actors"
 	"organization-autorunner-core/internal/auth"
+	"organization-autorunner-core/internal/blob"
 	"organization-autorunner-core/internal/primitives"
 	"organization-autorunner-core/internal/schema"
 	"organization-autorunner-core/internal/storage"
+
+	"github.com/go-webauthn/webauthn/protocol"
+	"github.com/go-webauthn/webauthn/webauthn"
 )
 
-func TestAgentAuthLifecycleAndActorCompatibility(t *testing.T) {
-	t.Parallel()
+const testBootstrapToken = "bootstrap-token-for-tests"
+
+type authIntegrationOptions struct {
+	bootstrapToken             string
+	enableDevActorMode         bool
+	allowUnauthenticatedWrites bool
+	webAuthnConfig             WebAuthnConfig
+}
+
+type authIntegrationEnv struct {
+	workspace           *storage.Workspace
+	registry            *actors.Store
+	authStore           *auth.Store
+	passkeySessionStore *auth.PasskeySessionStore
+	server              *httptest.Server
+}
+
+func newAuthIntegrationEnv(t *testing.T, options authIntegrationOptions) authIntegrationEnv {
+	t.Helper()
 
 	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
 	}
-	defer workspace.Close()
 
 	registry := actors.NewStore(workspace.DB())
 	if _, err := registry.EnsureSystemActor(context.Background(), time.Now().UTC()); err != nil {
+		_ = workspace.Close()
 		t.Fatalf("ensure system actor: %v", err)
 	}
-	authStore := auth.NewStore(workspace.DB())
+
+	authOptions := make([]auth.Option, 0, 1)
+	if strings.TrimSpace(options.bootstrapToken) != "" {
+		authOptions = append(authOptions, auth.WithBootstrapToken(options.bootstrapToken))
+	}
+	authStore := auth.NewStore(workspace.DB(), authOptions...)
+	passkeySessionStore := auth.NewPasskeySessionStore(auth.DefaultPasskeySessionTTL)
+
 	contractPath := filepath.Join("..", "..", "..", "contracts", "oar-schema.yaml")
 	contract, err := schema.Load(contractPath)
 	if err != nil {
+		passkeySessionStore.Close()
+		_ = workspace.Close()
 		t.Fatalf("load schema contract: %v", err)
 	}
+
 	primitiveStore := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
 	handler := NewHandler(
 		"0.2.2",
 		WithActorRegistry(registry),
 		WithAuthStore(authStore),
+		WithPasskeySessionStore(passkeySessionStore),
 		WithHealthCheck(workspace.Ping),
 		WithPrimitiveStore(primitiveStore),
 		WithSchemaContract(contract),
-		WithEnableDevActorMode(true),
+		WithWebAuthnConfig(options.webAuthnConfig),
+		WithEnableDevActorMode(options.enableDevActorMode),
+		WithAllowUnauthenticatedWrites(options.allowUnauthenticatedWrites),
 	)
 	server := httptest.NewServer(handler)
-	defer server.Close()
+
+	t.Cleanup(func() {
+		server.Close()
+		passkeySessionStore.Close()
+		_ = workspace.Close()
+	})
+
+	return authIntegrationEnv{
+		workspace:           workspace,
+		registry:            registry,
+		authStore:           authStore,
+		passkeySessionStore: passkeySessionStore,
+		server:              server,
+	}
+}
+
+func TestAgentAuthLifecycleAndActorCompatibility(t *testing.T) {
+	t.Parallel()
+
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{bootstrapToken: testBootstrapToken})
+	serverURL := env.server.URL
 
 	publicKey1, privateKey1 := generateKeyPair(t)
-	registerResp := postJSONExpectStatusWithAuth(t, server.URL+"/auth/agents/register", map[string]any{
-		"username":   "Agent.One",
-		"public_key": publicKey1,
+	registerResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/agents/register", map[string]any{
+		"username":        "Agent.One",
+		"public_key":      publicKey1,
+		"bootstrap_token": testBootstrapToken,
 	}, "", http.StatusCreated)
 	defer registerResp.Body.Close()
 
@@ -88,7 +142,7 @@ func TestAgentAuthLifecycleAndActorCompatibility(t *testing.T) {
 		t.Fatalf("expected normalized username agent.one, got %q", registerPayload.Agent.Username)
 	}
 
-	meResp := getJSONExpectStatusWithAuth(t, server.URL+"/agents/me", registerPayload.Tokens.AccessToken, http.StatusOK)
+	meResp := getJSONExpectStatusWithAuth(t, serverURL+"/agents/me", registerPayload.Tokens.AccessToken, http.StatusOK)
 	defer meResp.Body.Close()
 	var mePayload struct {
 		Agent map[string]any   `json:"agent"`
@@ -104,7 +158,7 @@ func TestAgentAuthLifecycleAndActorCompatibility(t *testing.T) {
 		t.Fatalf("expected one key, got %#v", mePayload.Keys)
 	}
 
-	patchResp := patchJSONExpectStatusWithAuth(t, server.URL+"/agents/me", map[string]any{"username": "renamed_agent"}, registerPayload.Tokens.AccessToken, http.StatusOK)
+	patchResp := patchJSONExpectStatusWithAuth(t, serverURL+"/agents/me", map[string]any{"username": "renamed_agent"}, registerPayload.Tokens.AccessToken, http.StatusOK)
 	defer patchResp.Body.Close()
 	var patchPayload struct {
 		Agent map[string]any `json:"agent"`
@@ -116,14 +170,20 @@ func TestAgentAuthLifecycleAndActorCompatibility(t *testing.T) {
 		t.Fatalf("unexpected patched username: %#v", patchPayload.Agent)
 	}
 
-	dupResp := postJSONExpectStatusWithAuth(t, server.URL+"/auth/agents/register", map[string]any{
-		"username":   "Renamed_Agent",
-		"public_key": publicKey1,
+	inviteToken := createInviteToken(t, serverURL, registerPayload.Tokens.AccessToken, map[string]any{
+		"kind": "agent",
+		"note": "duplicate-username-check",
+	})
+
+	dupResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/agents/register", map[string]any{
+		"username":     "Renamed_Agent",
+		"public_key":   publicKey1,
+		"invite_token": inviteToken,
 	}, "", http.StatusConflict)
 	defer dupResp.Body.Close()
 	assertErrorCode(t, dupResp, "username_taken")
 
-	refreshResp := postJSONExpectStatusWithAuth(t, server.URL+"/auth/token", map[string]any{
+	refreshResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/token", map[string]any{
 		"grant_type":    "refresh_token",
 		"refresh_token": registerPayload.Tokens.RefreshToken,
 	}, "", http.StatusOK)
@@ -138,16 +198,22 @@ func TestAgentAuthLifecycleAndActorCompatibility(t *testing.T) {
 		t.Fatalf("decode refresh response: %v", err)
 	}
 
-	oldRefreshResp := postJSONExpectStatusWithAuth(t, server.URL+"/auth/token", map[string]any{
+	oldRefreshResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/token", map[string]any{
 		"grant_type":    "refresh_token",
 		"refresh_token": registerPayload.Tokens.RefreshToken,
 	}, "", http.StatusUnauthorized)
 	defer oldRefreshResp.Body.Close()
 	assertErrorCode(t, oldRefreshResp, "invalid_token")
 
-	postJSON(t, server.URL+"/actors", `{"actor":{"id":"human-actor","display_name":"Human Actor","created_at":"2026-03-05T10:00:00Z"}}`, http.StatusCreated).Body.Close()
+	if _, err := env.registry.Register(context.Background(), actors.Actor{
+		ID:          "human-actor",
+		DisplayName: "Human Actor",
+		CreatedAt:   "2026-03-05T10:00:00Z",
+	}); err != nil {
+		t.Fatalf("seed human actor: %v", err)
+	}
 
-	threadResp := postJSONExpectStatusWithAuth(t, server.URL+"/threads", map[string]any{
+	threadResp := postJSONExpectStatusWithAuth(t, serverURL+"/threads", map[string]any{
 		"thread": map[string]any{
 			"title":            "Auth-backed thread",
 			"type":             "incident",
@@ -173,7 +239,7 @@ func TestAgentAuthLifecycleAndActorCompatibility(t *testing.T) {
 		t.Fatalf("expected thread updated_by to use authenticated actor mapping, got %#v", threadPayload.Thread["updated_by"])
 	}
 
-	mismatchResp := postJSONExpectStatusWithAuth(t, server.URL+"/threads", map[string]any{
+	mismatchResp := postJSONExpectStatusWithAuth(t, serverURL+"/threads", map[string]any{
 		"actor_id": "human-actor",
 		"thread": map[string]any{
 			"title":            "Mismatch thread",
@@ -194,7 +260,7 @@ func TestAgentAuthLifecycleAndActorCompatibility(t *testing.T) {
 
 	assertionSignedAt := time.Now().UTC().Format(time.RFC3339)
 	assertionSig := signAssertion(t, privateKey1, registerPayload.Agent.AgentID, registerPayload.Key.KeyID, assertionSignedAt)
-	assertionResp := postJSONExpectStatusWithAuth(t, server.URL+"/auth/token", map[string]any{
+	assertionResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/token", map[string]any{
 		"grant_type": "assertion",
 		"agent_id":   registerPayload.Agent.AgentID,
 		"key_id":     registerPayload.Key.KeyID,
@@ -211,7 +277,7 @@ func TestAgentAuthLifecycleAndActorCompatibility(t *testing.T) {
 	if err := json.NewDecoder(assertionResp.Body).Decode(&assertionPayload); err != nil {
 		t.Fatalf("decode assertion response: %v", err)
 	}
-	replayResp := postJSONExpectStatusWithAuth(t, server.URL+"/auth/token", map[string]any{
+	replayResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/token", map[string]any{
 		"grant_type": "assertion",
 		"agent_id":   registerPayload.Agent.AgentID,
 		"key_id":     registerPayload.Key.KeyID,
@@ -222,7 +288,7 @@ func TestAgentAuthLifecycleAndActorCompatibility(t *testing.T) {
 	assertErrorCode(t, replayResp, "key_mismatch")
 
 	publicKey2, privateKey2 := generateKeyPair(t)
-	rotateResp := postJSONExpectStatusWithAuth(t, server.URL+"/agents/me/keys/rotate", map[string]any{
+	rotateResp := postJSONExpectStatusWithAuth(t, serverURL+"/agents/me/keys/rotate", map[string]any{
 		"public_key": publicKey2,
 	}, assertionPayload.Tokens.AccessToken, http.StatusOK)
 	defer rotateResp.Body.Close()
@@ -239,7 +305,7 @@ func TestAgentAuthLifecycleAndActorCompatibility(t *testing.T) {
 	}
 
 	oldSignedAt := time.Now().UTC().Format(time.RFC3339)
-	oldAssertionResp := postJSONExpectStatusWithAuth(t, server.URL+"/auth/token", map[string]any{
+	oldAssertionResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/token", map[string]any{
 		"grant_type": "assertion",
 		"agent_id":   registerPayload.Agent.AgentID,
 		"key_id":     registerPayload.Key.KeyID,
@@ -250,7 +316,7 @@ func TestAgentAuthLifecycleAndActorCompatibility(t *testing.T) {
 	assertErrorCode(t, oldAssertionResp, "key_mismatch")
 
 	newSignedAt := time.Now().UTC().Format(time.RFC3339)
-	newAssertionResp := postJSONExpectStatusWithAuth(t, server.URL+"/auth/token", map[string]any{
+	newAssertionResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/token", map[string]any{
 		"grant_type": "assertion",
 		"agent_id":   registerPayload.Agent.AgentID,
 		"key_id":     rotatePayload.Key.KeyID,
@@ -268,61 +334,316 @@ func TestAgentAuthLifecycleAndActorCompatibility(t *testing.T) {
 		t.Fatalf("decode new assertion response: %v", err)
 	}
 
-	revokeResp := postJSONExpectStatusWithAuth(t, server.URL+"/agents/me/revoke", map[string]any{}, newAssertionPayload.Tokens.AccessToken, http.StatusOK)
+	revokeResp := postJSONExpectStatusWithAuth(t, serverURL+"/agents/me/revoke", map[string]any{}, newAssertionPayload.Tokens.AccessToken, http.StatusOK)
 	defer revokeResp.Body.Close()
 
-	revokedRefreshResp := postJSONExpectStatusWithAuth(t, server.URL+"/auth/token", map[string]any{
+	revokedRefreshResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/token", map[string]any{
 		"grant_type":    "refresh_token",
 		"refresh_token": newAssertionPayload.Tokens.RefreshToken,
 	}, "", http.StatusForbidden)
 	defer revokedRefreshResp.Body.Close()
 	assertErrorCode(t, revokedRefreshResp, "agent_revoked")
 
-	revokedMeResp := getJSONExpectStatusWithAuth(t, server.URL+"/agents/me", newAssertionPayload.Tokens.AccessToken, http.StatusForbidden)
+	revokedMeResp := getJSONExpectStatusWithAuth(t, serverURL+"/agents/me", newAssertionPayload.Tokens.AccessToken, http.StatusForbidden)
 	defer revokedMeResp.Body.Close()
 	assertErrorCode(t, revokedMeResp, "agent_revoked")
+}
+
+func TestBootstrapAndInviteGatedRegistrationFlow(t *testing.T) {
+	t.Parallel()
+
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{bootstrapToken: testBootstrapToken})
+	serverURL := env.server.URL
+
+	if available := getBootstrapStatus(t, serverURL); !available {
+		t.Fatal("expected bootstrap registration to be available before first principal")
+	}
+
+	noTokenResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/agents/register", map[string]any{
+		"username":   "no.token",
+		"public_key": mustGeneratePublicKey(t),
+	}, "", http.StatusBadRequest)
+	defer noTokenResp.Body.Close()
+	assertErrorCode(t, noTokenResp, "invalid_request")
+
+	passkeyNoTokenResp := postJSONExpectStatusWithHeaders(t, serverURL+"/auth/passkey/register/options", map[string]any{
+		"display_name": "Casey Human",
+	}, nil, http.StatusBadRequest)
+	defer passkeyNoTokenResp.Body.Close()
+	assertErrorCode(t, passkeyNoTokenResp, "invalid_request")
+
+	firstPublicKey, _ := generateKeyPair(t)
+	firstResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/agents/register", map[string]any{
+		"username":        "bootstrap.first",
+		"public_key":      firstPublicKey,
+		"bootstrap_token": testBootstrapToken,
+	}, "", http.StatusCreated)
+	defer firstResp.Body.Close()
+
+	var firstPayload struct {
+		Tokens struct {
+			AccessToken string `json:"access_token"`
+		} `json:"tokens"`
+	}
+	if err := json.NewDecoder(firstResp.Body).Decode(&firstPayload); err != nil {
+		t.Fatalf("decode bootstrap register response: %v", err)
+	}
+
+	if available := getBootstrapStatus(t, serverURL); available {
+		t.Fatal("expected bootstrap registration to be unavailable after first principal")
+	}
+
+	secondBootstrapResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/agents/register", map[string]any{
+		"username":        "bootstrap.second",
+		"public_key":      mustGeneratePublicKey(t),
+		"bootstrap_token": testBootstrapToken,
+	}, "", http.StatusUnauthorized)
+	defer secondBootstrapResp.Body.Close()
+	assertErrorCode(t, secondBootstrapResp, "invalid_token")
+
+	missingInviteResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/agents/register", map[string]any{
+		"username":   "invite.required",
+		"public_key": mustGeneratePublicKey(t),
+	}, "", http.StatusBadRequest)
+	defer missingInviteResp.Body.Close()
+	assertErrorCode(t, missingInviteResp, "invalid_request")
+
+	invite, inviteToken := createInvite(t, serverURL, firstPayload.Tokens.AccessToken, map[string]any{
+		"kind": "agent",
+		"note": "second-agent",
+	})
+	if invite["token"] != nil {
+		t.Fatalf("invite metadata unexpectedly included token: %#v", invite)
+	}
+
+	secondResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/agents/register", map[string]any{
+		"username":     "invite.agent",
+		"public_key":   mustGeneratePublicKey(t),
+		"invite_token": inviteToken,
+	}, "", http.StatusCreated)
+	secondResp.Body.Close()
+
+	invites := listInvites(t, serverURL, firstPayload.Tokens.AccessToken)
+	if len(invites) == 0 {
+		t.Fatal("expected invite list to include created invite")
+	}
+	matched := false
+	for _, listed := range invites {
+		if asString(listed["id"]) != asString(invite["id"]) {
+			continue
+		}
+		matched = true
+		if asString(listed["kind"]) != "agent" {
+			t.Fatalf("unexpected invite kind: %#v", listed)
+		}
+		if asString(listed["note"]) != "second-agent" {
+			t.Fatalf("unexpected invite note: %#v", listed)
+		}
+		if listed["token"] != nil {
+			t.Fatalf("listed invite unexpectedly exposed token: %#v", listed)
+		}
+		if asString(listed["consumed_at"]) == "" {
+			t.Fatalf("expected consumed invite metadata after registration: %#v", listed)
+		}
+	}
+	if !matched {
+		t.Fatalf("expected invite %q in list %#v", asString(invite["id"]), invites)
+	}
+}
+
+func TestInviteLifecycleRejectsExpiredRevokedWrongKindAndReuse(t *testing.T) {
+	t.Parallel()
+
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{bootstrapToken: testBootstrapToken})
+	serverURL := env.server.URL
+
+	bootstrapResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/agents/register", map[string]any{
+		"username":        "invite.admin",
+		"public_key":      mustGeneratePublicKey(t),
+		"bootstrap_token": testBootstrapToken,
+	}, "", http.StatusCreated)
+	defer bootstrapResp.Body.Close()
+
+	var bootstrapPayload struct {
+		Tokens struct {
+			AccessToken string `json:"access_token"`
+		} `json:"tokens"`
+	}
+	if err := json.NewDecoder(bootstrapResp.Body).Decode(&bootstrapPayload); err != nil {
+		t.Fatalf("decode bootstrap response: %v", err)
+	}
+
+	singleUseInvite, singleUseToken := createInvite(t, serverURL, bootstrapPayload.Tokens.AccessToken, map[string]any{
+		"kind": "agent",
+		"note": "single-use",
+	})
+	firstUseResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/agents/register", map[string]any{
+		"username":     "single.use",
+		"public_key":   mustGeneratePublicKey(t),
+		"invite_token": singleUseToken,
+	}, "", http.StatusCreated)
+	firstUseResp.Body.Close()
+
+	reuseResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/agents/register", map[string]any{
+		"username":     "single.use.again",
+		"public_key":   mustGeneratePublicKey(t),
+		"invite_token": singleUseToken,
+	}, "", http.StatusUnauthorized)
+	defer reuseResp.Body.Close()
+	assertErrorCode(t, reuseResp, "invalid_token")
+
+	wrongKindInvite, wrongKindToken := createInvite(t, serverURL, bootstrapPayload.Tokens.AccessToken, map[string]any{
+		"kind": "human",
+		"note": "wrong-kind",
+	})
+	wrongKindResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/agents/register", map[string]any{
+		"username":     "wrong.kind",
+		"public_key":   mustGeneratePublicKey(t),
+		"invite_token": wrongKindToken,
+	}, "", http.StatusUnauthorized)
+	defer wrongKindResp.Body.Close()
+	assertErrorCode(t, wrongKindResp, "invalid_token")
+
+	revokedInvite, revokedToken := createInvite(t, serverURL, bootstrapPayload.Tokens.AccessToken, map[string]any{
+		"kind": "agent",
+		"note": "revoked",
+	})
+	revokeResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/invites/"+asString(revokedInvite["id"])+"/revoke", map[string]any{}, bootstrapPayload.Tokens.AccessToken, http.StatusOK)
+	defer revokeResp.Body.Close()
+
+	revokedUseResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/agents/register", map[string]any{
+		"username":     "revoked.use",
+		"public_key":   mustGeneratePublicKey(t),
+		"invite_token": revokedToken,
+	}, "", http.StatusUnauthorized)
+	defer revokedUseResp.Body.Close()
+	assertErrorCode(t, revokedUseResp, "invalid_token")
+
+	expiredInvite, expiredToken := createInvite(t, serverURL, bootstrapPayload.Tokens.AccessToken, map[string]any{
+		"kind": "agent",
+		"note": "expired",
+	})
+	if _, err := env.workspace.DB().ExecContext(
+		context.Background(),
+		`UPDATE auth_invites SET expires_at = ? WHERE id = ?`,
+		time.Now().UTC().Add(-time.Minute).Format(time.RFC3339Nano),
+		asString(expiredInvite["id"]),
+	); err != nil {
+		t.Fatalf("force invite expiry: %v", err)
+	}
+	expiredUseResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/agents/register", map[string]any{
+		"username":     "expired.use",
+		"public_key":   mustGeneratePublicKey(t),
+		"invite_token": expiredToken,
+	}, "", http.StatusUnauthorized)
+	defer expiredUseResp.Body.Close()
+	assertErrorCode(t, expiredUseResp, "invalid_token")
+
+	_ = singleUseInvite
+	_ = wrongKindInvite
+}
+
+func TestFirstPasskeyRegistrationWithBootstrapToken(t *testing.T) {
+	t.Parallel()
+
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{
+		bootstrapToken: testBootstrapToken,
+		webAuthnConfig: WebAuthnConfig{
+			RPID:     "webauthn.io",
+			RPOrigin: "https://webauthn.io",
+		},
+	})
+	serverURL := env.server.URL
+
+	optionsResp := postJSONExpectStatusWithHeaders(t, serverURL+"/auth/passkey/register/options", map[string]any{
+		"display_name":    "Casey Human",
+		"bootstrap_token": testBootstrapToken,
+	}, map[string]string{"Origin": "https://webauthn.io"}, http.StatusOK)
+	defer optionsResp.Body.Close()
+	var optionsPayload struct {
+		SessionID string `json:"session_id"`
+	}
+	if err := json.NewDecoder(optionsResp.Body).Decode(&optionsPayload); err != nil {
+		t.Fatalf("decode passkey options response: %v", err)
+	}
+	if strings.TrimSpace(optionsPayload.SessionID) == "" {
+		t.Fatal("expected passkey register options to return a session_id")
+	}
+
+	claim, err := env.authStore.ResolveOnboardingClaim(context.Background(), testBootstrapToken, "", auth.PrincipalKindHuman)
+	if err != nil {
+		t.Fatalf("resolve bootstrap onboarding claim: %v", err)
+	}
+	userHandle := mustDecodeStdBase64(t, "1zMAAAAAAAAAAA==")
+	sessionID := env.passkeySessionStore.Save(auth.PasskeySession{
+		Kind:            auth.PasskeySessionKindRegistration,
+		DisplayName:     "testuser1",
+		UserHandle:      userHandle,
+		OnboardingClaim: claim,
+		SessionData: webauthn.SessionData{
+			Challenge:        "sVt4ScceMzqFSnfAq8hgLzblvo3fa4_aFVEcIESHIJ0",
+			RelyingPartyID:   "webauthn.io",
+			UserID:           append([]byte(nil), userHandle...),
+			Expires:          time.Now().UTC().Add(time.Minute),
+			UserVerification: protocol.VerificationPreferred,
+			CredParams: []protocol.CredentialParameter{
+				{Type: protocol.PublicKeyCredentialType, Algorithm: -7},
+			},
+		},
+	})
+
+	verifyResp := postJSONExpectStatusWithHeaders(t, serverURL+"/auth/passkey/register/verify", map[string]any{
+		"session_id":      sessionID,
+		"bootstrap_token": testBootstrapToken,
+		"credential":      mustDecodeJSONObject(t, samplePasskeyCredentialJSON),
+	}, map[string]string{"Origin": "https://webauthn.io"}, http.StatusCreated)
+	defer verifyResp.Body.Close()
+
+	var verifyPayload struct {
+		Agent struct {
+			AgentID  string `json:"agent_id"`
+			Username string `json:"username"`
+		} `json:"agent"`
+		Tokens struct {
+			AccessToken string `json:"access_token"`
+		} `json:"tokens"`
+	}
+	if err := json.NewDecoder(verifyResp.Body).Decode(&verifyPayload); err != nil {
+		t.Fatalf("decode passkey verify response: %v", err)
+	}
+	if strings.TrimSpace(verifyPayload.Agent.AgentID) == "" || strings.TrimSpace(verifyPayload.Tokens.AccessToken) == "" {
+		t.Fatalf("unexpected passkey verify payload: %#v", verifyPayload)
+	}
+	if !strings.HasPrefix(verifyPayload.Agent.Username, "passkey.testuser1.") {
+		t.Fatalf("unexpected passkey username: %q", verifyPayload.Agent.Username)
+	}
+	if available := getBootstrapStatus(t, serverURL); available {
+		t.Fatal("expected bootstrap registration to be unavailable after first passkey principal")
+	}
 }
 
 func TestWriteAuthToggleRejectsUnauthenticatedWritesWhenDisabled(t *testing.T) {
 	t.Parallel()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
-	if err != nil {
-		t.Fatalf("initialize workspace: %v", err)
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{
+		bootstrapToken:             testBootstrapToken,
+		allowUnauthenticatedWrites: false,
+	})
+	serverURL := env.server.URL
+
+	if _, err := env.registry.Register(context.Background(), actors.Actor{
+		ID:          "human-actor",
+		DisplayName: "Human Actor",
+		CreatedAt:   "2026-03-05T10:00:00Z",
+	}); err != nil {
+		t.Fatalf("seed human actor: %v", err)
 	}
-	defer workspace.Close()
 
-	registry := actors.NewStore(workspace.DB())
-	if _, err := registry.EnsureSystemActor(context.Background(), time.Now().UTC()); err != nil {
-		t.Fatalf("ensure system actor: %v", err)
-	}
-	authStore := auth.NewStore(workspace.DB())
-	contractPath := filepath.Join("..", "..", "..", "contracts", "oar-schema.yaml")
-	contract, err := schema.Load(contractPath)
-	if err != nil {
-		t.Fatalf("load schema contract: %v", err)
-	}
-	primitiveStore := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
-	handler := NewHandler(
-		"0.2.2",
-		WithActorRegistry(registry),
-		WithAuthStore(authStore),
-		WithHealthCheck(workspace.Ping),
-		WithPrimitiveStore(primitiveStore),
-		WithSchemaContract(contract),
-		WithAllowUnauthenticatedWrites(false),
-		WithEnableDevActorMode(true),
-	)
-	server := httptest.NewServer(handler)
-	defer server.Close()
+	listActorsResp := getJSONExpectStatusWithAuth(t, serverURL+"/actors", "", http.StatusUnauthorized)
+	defer listActorsResp.Body.Close()
+	assertErrorCode(t, listActorsResp, "auth_required")
 
-	createActorResp := postJSON(t, server.URL+"/actors", `{"actor":{"id":"human-actor","display_name":"Human Actor","created_at":"2026-03-05T10:00:00Z"}}`, http.StatusCreated)
-	createActorResp.Body.Close()
-
-	listActorsResp := getJSONExpectStatusWithAuth(t, server.URL+"/actors", "", http.StatusOK)
-	listActorsResp.Body.Close()
-
-	noAuthResp := postJSONExpectStatusWithAuth(t, server.URL+"/threads", map[string]any{
+	noAuthResp := postJSONExpectStatusWithAuth(t, serverURL+"/threads", map[string]any{
 		"actor_id": "human-actor",
 		"thread": map[string]any{
 			"title":            "Strict auth thread",
@@ -342,9 +663,10 @@ func TestWriteAuthToggleRejectsUnauthenticatedWritesWhenDisabled(t *testing.T) {
 	assertErrorCode(t, noAuthResp, "auth_required")
 
 	publicKey, _ := generateKeyPair(t)
-	registerResp := postJSONExpectStatusWithAuth(t, server.URL+"/auth/agents/register", map[string]any{
-		"username":   "strict.auth",
-		"public_key": publicKey,
+	registerResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/agents/register", map[string]any{
+		"username":        "strict.auth",
+		"public_key":      publicKey,
+		"bootstrap_token": testBootstrapToken,
 	}, "", http.StatusCreated)
 	defer registerResp.Body.Close()
 
@@ -360,7 +682,7 @@ func TestWriteAuthToggleRejectsUnauthenticatedWritesWhenDisabled(t *testing.T) {
 		t.Fatalf("decode register response: %v", err)
 	}
 
-	authenticatedResp := postJSONExpectStatusWithAuth(t, server.URL+"/threads", map[string]any{
+	authenticatedResp := postJSONExpectStatusWithAuth(t, serverURL+"/threads", map[string]any{
 		"thread": map[string]any{
 			"title":            "Authorized thread",
 			"type":             "incident",
@@ -388,48 +710,175 @@ func TestWriteAuthToggleRejectsUnauthenticatedWritesWhenDisabled(t *testing.T) {
 	}
 }
 
+func TestHostedModeProtectsWorkspaceReadsAndBlocksLegacyActorFlows(t *testing.T) {
+	t.Parallel()
+
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{bootstrapToken: testBootstrapToken})
+	serverURL := env.server.URL
+
+	healthResp, err := http.Get(serverURL + "/health")
+	if err != nil {
+		t.Fatalf("GET /health: %v", err)
+	}
+	healthResp.Body.Close()
+	if healthResp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /health unexpected status: got %d", healthResp.StatusCode)
+	}
+
+	handshakeResp, err := http.Get(serverURL + "/meta/handshake")
+	if err != nil {
+		t.Fatalf("GET /meta/handshake: %v", err)
+	}
+	handshakeResp.Body.Close()
+	if handshakeResp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /meta/handshake unexpected status: got %d", handshakeResp.StatusCode)
+	}
+
+	tokenResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/token", map[string]any{
+		"grant_type": "invalid",
+	}, "", http.StatusBadRequest)
+	defer tokenResp.Body.Close()
+	assertErrorCode(t, tokenResp, "invalid_request")
+
+	threadsResp := getJSONExpectStatusWithAuth(t, serverURL+"/threads", "", http.StatusUnauthorized)
+	defer threadsResp.Body.Close()
+	assertErrorCode(t, threadsResp, "auth_required")
+
+	actorsResp := getJSONExpectStatusWithAuth(t, serverURL+"/actors", "", http.StatusUnauthorized)
+	defer actorsResp.Body.Close()
+	assertErrorCode(t, actorsResp, "auth_required")
+
+	createActorResp := postJSONExpectStatusWithAuth(t, serverURL+"/actors", map[string]any{
+		"actor": map[string]any{
+			"id":           "legacy-actor",
+			"display_name": "Legacy Actor",
+			"created_at":   "2026-03-05T10:00:00Z",
+		},
+	}, "", http.StatusForbidden)
+	defer createActorResp.Body.Close()
+	assertErrorCode(t, createActorResp, "dev_actor_mode_required")
+
+	publicKey, _ := generateKeyPair(t)
+	registerResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/agents/register", map[string]any{
+		"username":        "hosted.reader",
+		"public_key":      publicKey,
+		"bootstrap_token": testBootstrapToken,
+	}, "", http.StatusCreated)
+	defer registerResp.Body.Close()
+
+	var registerPayload struct {
+		Tokens struct {
+			AccessToken string `json:"access_token"`
+		} `json:"tokens"`
+	}
+	if err := json.NewDecoder(registerResp.Body).Decode(&registerPayload); err != nil {
+		t.Fatalf("decode register response: %v", err)
+	}
+
+	authedThreadsResp := getJSONExpectStatusWithAuth(t, serverURL+"/threads", registerPayload.Tokens.AccessToken, http.StatusOK)
+	authedThreadsResp.Body.Close()
+
+	authedActorsResp := getJSONExpectStatusWithAuth(t, serverURL+"/actors", registerPayload.Tokens.AccessToken, http.StatusOK)
+	authedActorsResp.Body.Close()
+}
+
+func TestExplicitDevModeKeepsLegacyActorFlowAndAnonymousWorkspaceAccess(t *testing.T) {
+	t.Parallel()
+
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{
+		enableDevActorMode:         true,
+		allowUnauthenticatedWrites: true,
+	})
+	serverURL := env.server.URL
+
+	createActorResp := postJSONExpectStatusWithAuth(t, serverURL+"/actors", map[string]any{
+		"actor": map[string]any{
+			"id":           "dev-actor",
+			"display_name": "Dev Actor",
+			"created_at":   "2026-03-05T10:00:00Z",
+		},
+	}, "", http.StatusCreated)
+	createActorResp.Body.Close()
+
+	listActorsResp := getJSONExpectStatusWithAuth(t, serverURL+"/actors", "", http.StatusOK)
+	defer listActorsResp.Body.Close()
+	var actorsPayload struct {
+		Actors []actors.Actor `json:"actors"`
+	}
+	if err := json.NewDecoder(listActorsResp.Body).Decode(&actorsPayload); err != nil {
+		t.Fatalf("decode actors response: %v", err)
+	}
+	if len(actorsPayload.Actors) == 0 {
+		t.Fatal("expected dev actor list to include at least one actor")
+	}
+
+	createThreadResp := postJSONExpectStatusWithAuth(t, serverURL+"/threads", map[string]any{
+		"actor_id": "dev-actor",
+		"thread": map[string]any{
+			"title":            "Dev mode thread",
+			"type":             "incident",
+			"status":           "active",
+			"priority":         "p1",
+			"tags":             []string{"dev"},
+			"cadence":          "daily",
+			"next_check_in_at": "2030-01-01T00:00:00Z",
+			"current_summary":  "summary",
+			"next_actions":     []string{"action"},
+			"key_artifacts":    []string{},
+			"provenance":       map[string]any{"sources": []string{"inferred"}},
+		},
+	}, "", http.StatusCreated)
+	createThreadResp.Body.Close()
+
+	listThreadsResp := getJSONExpectStatusWithAuth(t, serverURL+"/threads", "", http.StatusOK)
+	defer listThreadsResp.Body.Close()
+	var threadsPayload struct {
+		Threads []map[string]any `json:"threads"`
+	}
+	if err := json.NewDecoder(listThreadsResp.Body).Decode(&threadsPayload); err != nil {
+		t.Fatalf("decode threads response: %v", err)
+	}
+	if len(threadsPayload.Threads) != 1 {
+		t.Fatalf("expected one thread in dev mode, got %d", len(threadsPayload.Threads))
+	}
+}
+
 func TestConcurrentFreshAuthRegistrationsSucceed(t *testing.T) {
 	t.Parallel()
 
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
-	if err != nil {
-		t.Fatalf("initialize workspace: %v", err)
-	}
-	defer workspace.Close()
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{bootstrapToken: testBootstrapToken})
+	serverURL := env.server.URL
 
-	registry := actors.NewStore(workspace.DB())
-	if _, err := registry.EnsureSystemActor(context.Background(), time.Now().UTC()); err != nil {
-		t.Fatalf("ensure system actor: %v", err)
+	initialPublicKey, _ := generateKeyPair(t)
+	initialResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/agents/register", map[string]any{
+		"username":        "bootstrap.concurrent",
+		"public_key":      initialPublicKey,
+		"bootstrap_token": testBootstrapToken,
+	}, "", http.StatusCreated)
+	defer initialResp.Body.Close()
+
+	var initialPayload struct {
+		Tokens struct {
+			AccessToken string `json:"access_token"`
+		} `json:"tokens"`
 	}
-	authStore := auth.NewStore(workspace.DB())
-	contractPath := filepath.Join("..", "..", "..", "contracts", "oar-schema.yaml")
-	contract, err := schema.Load(contractPath)
-	if err != nil {
-		t.Fatalf("load schema contract: %v", err)
+	if err := json.NewDecoder(initialResp.Body).Decode(&initialPayload); err != nil {
+		t.Fatalf("decode bootstrap register response: %v", err)
 	}
-	primitiveStore := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
-	handler := NewHandler(
-		"0.2.2",
-		WithActorRegistry(registry),
-		WithAuthStore(authStore),
-		WithHealthCheck(workspace.Ping),
-		WithPrimitiveStore(primitiveStore),
-		WithSchemaContract(contract),
-	)
-	server := httptest.NewServer(handler)
-	defer server.Close()
 
 	const concurrentRegistrations = 8
 	type input struct {
-		username  string
-		publicKey string
+		username    string
+		publicKey   string
+		inviteToken string
 	}
 	inputs := make([]input, 0, concurrentRegistrations)
 	for i := 0; i < concurrentRegistrations; i++ {
 		publicKey, _ := generateKeyPair(t)
 		inputs = append(inputs, input{
-			username:  fmt.Sprintf("user-%d", i+1),
-			publicKey: publicKey,
+			username:    fmt.Sprintf("user-%d", i+1),
+			publicKey:   publicKey,
+			inviteToken: createInviteToken(t, serverURL, initialPayload.Tokens.AccessToken, map[string]any{"kind": "agent", "note": fmt.Sprintf("concurrent-%d", i+1)}),
 		})
 	}
 
@@ -447,15 +896,16 @@ func TestConcurrentFreshAuthRegistrationsSucceed(t *testing.T) {
 		go func(index int, in input) {
 			defer wg.Done()
 			payload, err := json.Marshal(map[string]any{
-				"username":   in.username,
-				"public_key": in.publicKey,
+				"username":     in.username,
+				"public_key":   in.publicKey,
+				"invite_token": in.inviteToken,
 			})
 			if err != nil {
 				results <- result{index: index, err: err}
 				return
 			}
 
-			req, err := http.NewRequest(http.MethodPost, server.URL+"/auth/agents/register", bytes.NewReader(payload))
+			req, err := http.NewRequest(http.MethodPost, serverURL+"/auth/agents/register", bytes.NewReader(payload))
 			if err != nil {
 				results <- result{index: index, err: err}
 				return
@@ -500,6 +950,64 @@ func TestConcurrentFreshAuthRegistrationsSucceed(t *testing.T) {
 	if len(failures) > 0 {
 		t.Fatalf("expected all concurrent registrations to succeed:\n%s", strings.Join(failures, "\n"))
 	}
+}
+
+func getBootstrapStatus(t *testing.T, serverURL string) bool {
+	t.Helper()
+	resp := getJSONExpectStatusWithAuth(t, serverURL+"/auth/bootstrap/status", "", http.StatusOK)
+	defer resp.Body.Close()
+
+	var payload struct {
+		Available bool `json:"bootstrap_registration_available"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode bootstrap status response: %v", err)
+	}
+	return payload.Available
+}
+
+func createInviteToken(t *testing.T, serverURL string, accessToken string, payload map[string]any) string {
+	t.Helper()
+	_, token := createInvite(t, serverURL, accessToken, payload)
+	return token
+}
+
+func createInvite(t *testing.T, serverURL string, accessToken string, payload map[string]any) (map[string]any, string) {
+	t.Helper()
+	resp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/invites", payload, accessToken, http.StatusCreated)
+	defer resp.Body.Close()
+
+	var decoded struct {
+		Invite map[string]any `json:"invite"`
+		Token  string         `json:"token"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+		t.Fatalf("decode create invite response: %v", err)
+	}
+	if strings.TrimSpace(decoded.Token) == "" {
+		t.Fatalf("expected create invite response to include token: %#v", decoded)
+	}
+	return decoded.Invite, decoded.Token
+}
+
+func listInvites(t *testing.T, serverURL string, accessToken string) []map[string]any {
+	t.Helper()
+	resp := getJSONExpectStatusWithAuth(t, serverURL+"/auth/invites", accessToken, http.StatusOK)
+	defer resp.Body.Close()
+
+	var payload struct {
+		Invites []map[string]any `json:"invites"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode invites list response: %v", err)
+	}
+	return payload.Invites
+}
+
+func mustGeneratePublicKey(t *testing.T) string {
+	t.Helper()
+	publicKey, _ := generateKeyPair(t)
+	return publicKey
 }
 
 func generateKeyPair(t *testing.T) (string, ed25519.PrivateKey) {
@@ -572,6 +1080,33 @@ func patchJSONExpectStatusWithAuth(t *testing.T, url string, payload any, access
 	return response
 }
 
+func postJSONExpectStatusWithHeaders(t *testing.T, url string, payload any, headers map[string]string, expectedStatus int) *http.Response {
+	t.Helper()
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal request body: %v", err)
+	}
+	request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("new POST request: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	for key, value := range headers {
+		request.Header.Set(key, value)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("POST %s failed: %v", url, err)
+	}
+	if response.StatusCode != expectedStatus {
+		defer response.Body.Close()
+		var decoded map[string]any
+		_ = json.NewDecoder(response.Body).Decode(&decoded)
+		t.Fatalf("POST %s unexpected status: got %d want %d body=%#v", url, response.StatusCode, expectedStatus, decoded)
+	}
+	return response
+}
+
 func getJSONExpectStatusWithAuth(t *testing.T, url string, accessToken string, expectedStatus int) *http.Response {
 	t.Helper()
 	request, err := http.NewRequest(http.MethodGet, url, nil)
@@ -608,3 +1143,31 @@ func assertErrorCode(t *testing.T, response *http.Response, expectedCode string)
 		t.Fatalf("unexpected error code: got %q want %q", payload.Error.Code, expectedCode)
 	}
 }
+
+func mustDecodeStdBase64(t *testing.T, raw string) []byte {
+	t.Helper()
+	value, err := base64.StdEncoding.DecodeString(raw)
+	if err != nil {
+		t.Fatalf("decode base64 %q: %v", raw, err)
+	}
+	return value
+}
+
+func mustDecodeJSONObject(t *testing.T, raw string) map[string]any {
+	t.Helper()
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		t.Fatalf("decode JSON object: %v", err)
+	}
+	return payload
+}
+
+const samplePasskeyCredentialJSON = `{
+  "id": "6Jry73M_WVWDoXLsGxRsBVVHpPWDpNy1ETGXUEvJLdTAn5Ew6nDGU6W8iO3ZkcLEqr-CBwvx0p2WAxzt8RiwQQ",
+  "rawId": "6Jry73M_WVWDoXLsGxRsBVVHpPWDpNy1ETGXUEvJLdTAn5Ew6nDGU6W8iO3ZkcLEqr-CBwvx0p2WAxzt8RiwQQ",
+  "response": {
+    "attestationObject": "o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YVjEdKbqkhPJnC90siSSsyDPQCYqlMGpUKA5fyklC2CEHvBBAAAAAAAAAAAAAAAAAAAAAAAAAAAAQOia8u9zP1lVg6Fy7BsUbAVVR6T1g6TctRExl1BLyS3UwJ-RMOpwxlOlvIjt2ZHCxKq_ggcL8dKdlgMc7fEYsEGlAQIDJiABIVgg--n_QvZithDycYmnifk6vMHiwBP6kugn2PlsnvkrcSgiWCBAlBYm2B-rMtQlp5MxGTLoGDHoktxb0p364Hy2BH9U2Q",
+    "clientDataJSON": "eyJjaGFsbGVuZ2UiOiJzVnQ0U2NjZU16cUZTbmZBcThoZ0x6Ymx2bzNmYTRfYUZWRWNJRVNISUowIiwib3JpZ2luIjoiaHR0cHM6Ly93ZWJhdXRobi5pbyIsInR5cGUiOiJ3ZWJhdXRobi5jcmVhdGUifQ"
+  },
+  "type": "public-key"
+}`

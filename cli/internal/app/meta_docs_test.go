@@ -44,6 +44,18 @@ func TestRunMetaDocPrintsSingleTopicMarkdown(t *testing.T) {
 	}
 }
 
+func TestRunMetaDocPrintsLocalAuthLifecycleTopicMarkdown(t *testing.T) {
+	t.Parallel()
+
+	output := runHelpCommand(t, "meta", "doc", "auth whoami")
+	if !strings.Contains(output, "## `auth whoami`") {
+		t.Fatalf("expected auth whoami markdown header output=%s", output)
+	}
+	if !strings.Contains(output, "Local Help: auth whoami") {
+		t.Fatalf("expected embedded auth whoami help text output=%s", output)
+	}
+}
+
 func TestRunMetaDocPrintsAgentGuideMarkdown(t *testing.T) {
 	t.Parallel()
 

@@ -27,7 +27,7 @@ type ProjectionMaintenance interface {
 
 type ActorRegistry interface {
 	Register(ctx context.Context, actor actors.Actor) (actors.Actor, error)
-	List(ctx context.Context) ([]actors.Actor, error)
+	List(ctx context.Context, filter actors.ActorListFilter) ([]actors.Actor, string, error)
 	Exists(ctx context.Context, actorID string) (bool, error)
 }
 
@@ -47,19 +47,23 @@ type PrimitiveStore interface {
 	GetDerivedThreadProjection(ctx context.Context, threadID string) (primitives.DerivedThreadProjection, error)
 	ListDerivedThreadProjections(ctx context.Context, threadIDs []string) (map[string]primitives.DerivedThreadProjection, error)
 	PutDerivedThreadProjection(ctx context.Context, projection primitives.DerivedThreadProjection) error
+	MarkDerivedThreadProjectionDirty(ctx context.Context, threadID string, dirtyAt string) error
+	ClearDerivedThreadProjectionDirty(ctx context.Context, threadID string) error
+	ListDerivedThreadProjectionDirtyEntries(ctx context.Context, limit int) ([]primitives.DerivedThreadProjectionDirtyEntry, error)
+	GetDerivedThreadProjectionQueueStats(ctx context.Context) (primitives.DerivedThreadProjectionQueueStats, error)
+	ListDocuments(ctx context.Context, filter primitives.DocumentListFilter) ([]map[string]any, string, error)
 	MarkThreadProjectionsDirty(ctx context.Context, threadIDs []string, queuedAt time.Time) error
 	GetThreadProjectionRefreshStatuses(ctx context.Context, threadIDs []string) (map[string]primitives.ThreadProjectionRefreshStatus, error)
 	ClaimNextDirtyThreadProjection(ctx context.Context, startedAt time.Time) (primitives.ThreadProjectionRefreshStatus, bool, error)
 	MarkThreadProjectionRefreshSucceeded(ctx context.Context, threadID string, completedAt time.Time) error
 	MarkThreadProjectionRefreshFailed(ctx context.Context, threadID string, failedAt time.Time, message string) error
-	ListDocuments(ctx context.Context, filter primitives.DocumentListFilter) ([]map[string]any, error)
 	CreateDocument(ctx context.Context, actorID string, document map[string]any, content any, contentType string, refs []string) (map[string]any, map[string]any, error)
 	GetDocument(ctx context.Context, documentID string) (map[string]any, map[string]any, error)
 	UpdateDocument(ctx context.Context, actorID string, documentID string, documentPatch map[string]any, ifBaseRevision string, content any, contentType string, refs []string) (map[string]any, map[string]any, error)
 	ListDocumentHistory(ctx context.Context, documentID string) ([]map[string]any, error)
 	GetDocumentRevision(ctx context.Context, documentID string, revisionID string) (map[string]any, error)
 	GetDocumentRevisionByID(ctx context.Context, revisionID string) (map[string]any, error)
-	ListBoards(ctx context.Context, filter primitives.BoardListFilter) ([]primitives.BoardListItem, error)
+	ListBoards(ctx context.Context, filter primitives.BoardListFilter) ([]primitives.BoardListItem, string, error)
 	CreateBoard(ctx context.Context, actorID string, board map[string]any) (map[string]any, error)
 	GetBoard(ctx context.Context, boardID string) (map[string]any, error)
 	UpdateBoard(ctx context.Context, actorID string, boardID string, patch map[string]any, ifUpdatedAt *string) (map[string]any, error)
@@ -73,7 +77,7 @@ type PrimitiveStore interface {
 	CreateThread(ctx context.Context, actorID string, thread map[string]any) (primitives.PatchSnapshotResult, error)
 	GetThread(ctx context.Context, id string) (map[string]any, error)
 	PatchThread(ctx context.Context, actorID string, id string, patch map[string]any, ifUpdatedAt *string) (primitives.PatchSnapshotResult, error)
-	ListThreads(ctx context.Context, filter primitives.ThreadListFilter) ([]map[string]any, error)
+	ListThreads(ctx context.Context, filter primitives.ThreadListFilter) ([]map[string]any, string, error)
 	CreateCommitment(ctx context.Context, actorID string, commitment map[string]any) (primitives.PatchSnapshotResult, error)
 	GetCommitment(ctx context.Context, id string) (map[string]any, error)
 	PatchCommitment(ctx context.Context, actorID string, id string, patch map[string]any, refs []string, ifUpdatedAt *string) (primitives.PatchSnapshotResult, error)
@@ -95,8 +99,8 @@ type handlerOptions struct {
 	primitiveStore             PrimitiveStore
 	contract                   *schema.Contract
 	webAuthnConfig             WebAuthnConfig
-	allowUnauthenticatedWrites bool
 	enableDevActorMode         bool
+	allowUnauthenticatedWrites bool
 	inboxRiskHorizon           time.Duration
 	projectionMaintenance      ProjectionMaintenance
 	coreVersion                string
@@ -108,6 +112,7 @@ type handlerOptions struct {
 	metaCommandsPath           string
 	streamPollInterval         time.Duration
 	corsAllowedOrigins         []string
+	projectionMaintainer       *ProjectionMaintainer
 }
 
 func WithHealthCheck(healthCheck HealthCheckFunc) HandlerOption {
@@ -152,15 +157,15 @@ func WithWebAuthnConfig(config WebAuthnConfig) HandlerOption {
 	}
 }
 
-func WithAllowUnauthenticatedWrites(allow bool) HandlerOption {
-	return func(opts *handlerOptions) {
-		opts.allowUnauthenticatedWrites = allow
-	}
-}
-
 func WithEnableDevActorMode(enable bool) HandlerOption {
 	return func(opts *handlerOptions) {
 		opts.enableDevActorMode = enable
+	}
+}
+
+func WithAllowUnauthenticatedWrites(allow bool) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.allowUnauthenticatedWrites = allow
 	}
 }
 
@@ -241,6 +246,92 @@ func WithCORSAllowedOrigins(origins string) HandlerOption {
 	}
 }
 
+func WithProjectionMaintainer(maintainer *ProjectionMaintainer) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.projectionMaintainer = maintainer
+	}
+}
+
+type routeAccessBucket string
+
+const (
+	routeAccessAlwaysPublic           routeAccessBucket = "always_public"
+	routeAccessPublicAuthCeremony     routeAccessBucket = "public_auth_ceremony"
+	routeAccessWorkspaceBusiness      routeAccessBucket = "workspace_business_surface"
+	routeAccessDevOnlyLegacyActor     routeAccessBucket = "dev_only_legacy_actor_surface"
+	routeAccessAuthenticatedPrincipal routeAccessBucket = "authenticated_principal_surface"
+)
+
+type routeAccessRequirement struct {
+	bucket    routeAccessBucket
+	supported bool
+}
+
+type routeAccessClassifier func(*http.Request) routeAccessRequirement
+
+func exactRouteAccess(bucket routeAccessBucket, methods ...string) routeAccessClassifier {
+	allowed := make(map[string]struct{}, len(methods))
+	for _, method := range methods {
+		method = strings.ToUpper(strings.TrimSpace(method))
+		if method != "" {
+			allowed[method] = struct{}{}
+		}
+	}
+
+	return func(r *http.Request) routeAccessRequirement {
+		if len(allowed) > 0 {
+			if _, ok := allowed[strings.ToUpper(strings.TrimSpace(r.Method))]; !ok {
+				return routeAccessRequirement{}
+			}
+		}
+		return routeAccessRequirement{bucket: bucket, supported: true}
+	}
+}
+
+func isReadOnlyRequest(method string) bool {
+	switch strings.ToUpper(strings.TrimSpace(method)) {
+	case http.MethodGet, http.MethodHead:
+		return true
+	default:
+		return false
+	}
+}
+
+func enforceRouteAccess(w http.ResponseWriter, r *http.Request, opts handlerOptions, requirement routeAccessRequirement) bool {
+	if !requirement.supported {
+		return true
+	}
+
+	switch requirement.bucket {
+	case routeAccessAlwaysPublic, routeAccessPublicAuthCeremony:
+		return true
+	case routeAccessWorkspaceBusiness:
+		if isReadOnlyRequest(r.Method) && opts.enableDevActorMode {
+			_, ok := authenticatePrincipalFromHeader(w, r, opts, false)
+			return ok
+		}
+		if !isReadOnlyRequest(r.Method) && opts.allowUnauthenticatedWrites {
+			_, ok := authenticatePrincipalFromHeader(w, r, opts, false)
+			return ok
+		}
+		_, ok := authenticatePrincipalFromHeader(w, r, opts, true)
+		return ok
+	case routeAccessDevOnlyLegacyActor:
+		if !opts.enableDevActorMode {
+			writeError(w, http.StatusForbidden, "dev_actor_mode_required", "legacy actor flows require explicit development mode")
+			return false
+		}
+		_, ok := authenticatePrincipalFromHeader(w, r, opts, false)
+		return ok
+	case routeAccessAuthenticatedPrincipal:
+		_, ok := authenticatePrincipalFromHeader(w, r, opts, true)
+		return ok
+	default:
+		writeError(w, http.StatusForbidden, "access_denied", "request is not allowed on this deployment")
+		return false
+	}
+}
+
 func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 	opts := handlerOptions{
 		coreVersion:                strings.TrimSpace(schemaVersion),
@@ -277,8 +368,16 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 	}
 
 	mux := http.NewServeMux()
+	registerRoute := func(pattern string, classify routeAccessClassifier, handler http.HandlerFunc) {
+		mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
+			if !enforceRouteAccess(w, r, opts, classify(r)) {
+				return
+			}
+			handler(w, r)
+		})
+	}
 
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/health", exactRouteAccess(routeAccessAlwaysPublic, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
 			return
@@ -294,10 +393,14 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			}
 		}
 
-		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+		payload := map[string]any{"ok": true}
+		if opts.projectionMaintainer != nil {
+			payload["projection_maintenance"] = opts.projectionMaintainer.Snapshot(r.Context(), time.Now().UTC())
+		}
+		writeJSON(w, http.StatusOK, payload)
 	})
 
-	mux.HandleFunc("/version", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/version", exactRouteAccess(routeAccessAlwaysPublic, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
 			return
@@ -310,7 +413,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		writeJSON(w, http.StatusOK, payload)
 	})
 
-	mux.HandleFunc("/meta/handshake", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/meta/handshake", exactRouteAccess(routeAccessAlwaysPublic, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
 			return
@@ -318,7 +421,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleMetaHandshake(w, r, opts, schemaVersion)
 	})
 
-	mux.HandleFunc("/meta/commands", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/meta/commands", exactRouteAccess(routeAccessAlwaysPublic, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
 			return
@@ -326,7 +429,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleMetaCommands(w, r, opts)
 	})
 
-	mux.HandleFunc("/meta/commands/", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/meta/commands/", exactRouteAccess(routeAccessAlwaysPublic, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
 			return
@@ -340,7 +443,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleMetaCommandByID(w, r, opts, commandID)
 	})
 
-	mux.HandleFunc("/meta/concepts", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/meta/concepts", exactRouteAccess(routeAccessAlwaysPublic, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
 			return
@@ -348,7 +451,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleMetaConcepts(w, r, opts)
 	})
 
-	mux.HandleFunc("/meta/concepts/", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/meta/concepts/", exactRouteAccess(routeAccessAlwaysPublic, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
 			return
@@ -362,7 +465,16 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleMetaConceptByName(w, r, opts, conceptName)
 	})
 
-	mux.HandleFunc("/actors", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/actors", func(r *http.Request) routeAccessRequirement {
+		switch r.Method {
+		case http.MethodGet:
+			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+		case http.MethodPost:
+			return routeAccessRequirement{bucket: routeAccessDevOnlyLegacyActor, supported: true}
+		default:
+			return routeAccessRequirement{}
+		}
+	}, func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodPost:
 			handleRegisterActor(w, r, opts)
@@ -373,7 +485,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 	})
 
-	mux.HandleFunc("/auth/agents/register", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/auth/agents/register", exactRouteAccess(routeAccessPublicAuthCeremony, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
 			return
@@ -381,7 +493,54 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleRegisterAgent(w, r, opts)
 	})
 
-	mux.HandleFunc("/auth/token", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/auth/bootstrap/status", exactRouteAccess(routeAccessPublicAuthCeremony, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+			return
+		}
+		handleBootstrapStatus(w, r, opts)
+	})
+
+	registerRoute("/auth/invites", exactRouteAccess(routeAccessAuthenticatedPrincipal, http.MethodGet, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			handleListInvites(w, r, opts)
+		case http.MethodPost:
+			handleCreateInvite(w, r, opts)
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET and POST are supported")
+		}
+	})
+
+	registerRoute("/auth/invites/", func(r *http.Request) routeAccessRequirement {
+		remainder := strings.TrimPrefix(r.URL.Path, "/auth/invites/")
+		if remainder == "" {
+			return routeAccessRequirement{}
+		}
+		if strings.Count(remainder, "/") != 1 || !strings.HasSuffix(remainder, "/revoke") {
+			return routeAccessRequirement{}
+		}
+		inviteID := strings.TrimSuffix(remainder, "/revoke")
+		inviteID = strings.TrimSuffix(inviteID, "/")
+		if strings.TrimSpace(inviteID) == "" || strings.Contains(inviteID, "/") {
+			return routeAccessRequirement{}
+		}
+		return exactRouteAccess(routeAccessAuthenticatedPrincipal, http.MethodPost)(r)
+	}, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+			return
+		}
+		remainder := strings.TrimPrefix(r.URL.Path, "/auth/invites/")
+		inviteID := strings.TrimSuffix(strings.TrimSuffix(remainder, "/revoke"), "/")
+		if inviteID == "" || strings.Contains(inviteID, "/") {
+			writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+			return
+		}
+		handleRevokeInvite(w, r, opts, inviteID)
+	})
+
+	registerRoute("/auth/token", exactRouteAccess(routeAccessPublicAuthCeremony, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
 			return
@@ -389,7 +548,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleIssueAuthToken(w, r, opts)
 	})
 
-	mux.HandleFunc("/auth/passkey/register/options", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/auth/passkey/register/options", exactRouteAccess(routeAccessPublicAuthCeremony, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
 			return
@@ -397,7 +556,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handlePasskeyRegisterOptions(w, r, opts)
 	})
 
-	mux.HandleFunc("/auth/passkey/register/verify", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/auth/passkey/register/verify", exactRouteAccess(routeAccessPublicAuthCeremony, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
 			return
@@ -405,7 +564,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handlePasskeyRegisterVerify(w, r, opts)
 	})
 
-	mux.HandleFunc("/auth/passkey/login/options", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/auth/passkey/login/options", exactRouteAccess(routeAccessPublicAuthCeremony, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
 			return
@@ -413,7 +572,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handlePasskeyLoginOptions(w, r, opts)
 	})
 
-	mux.HandleFunc("/auth/passkey/login/verify", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/auth/passkey/login/verify", exactRouteAccess(routeAccessPublicAuthCeremony, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
 			return
@@ -421,7 +580,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handlePasskeyLoginVerify(w, r, opts)
 	})
 
-	mux.HandleFunc("/agents/me", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/agents/me", exactRouteAccess(routeAccessAuthenticatedPrincipal, http.MethodGet, http.MethodPatch), func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			handleGetCurrentAgent(w, r, opts)
@@ -432,7 +591,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 	})
 
-	mux.HandleFunc("/agents/me/keys/rotate", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/agents/me/keys/rotate", exactRouteAccess(routeAccessAuthenticatedPrincipal, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
 			return
@@ -440,7 +599,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleRotateCurrentAgentKey(w, r, opts)
 	})
 
-	mux.HandleFunc("/agents/me/revoke", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/agents/me/revoke", exactRouteAccess(routeAccessAuthenticatedPrincipal, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
 			return
@@ -448,7 +607,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleRevokeCurrentAgent(w, r, opts)
 	})
 
-	mux.HandleFunc("/threads", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/threads", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodGet, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodPost:
 			handleCreateThread(w, r, opts)
@@ -459,7 +618,25 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 	})
 
-	mux.HandleFunc("/threads/", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/threads/", func(r *http.Request) routeAccessRequirement {
+		remainder := strings.TrimPrefix(r.URL.Path, "/threads/")
+		if remainder == "" {
+			return routeAccessRequirement{}
+		}
+		switch {
+		case strings.HasSuffix(remainder, "/timeline"), strings.HasSuffix(remainder, "/context"), strings.HasSuffix(remainder, "/workspace"):
+			if r.Method == http.MethodGet {
+				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+			}
+			return routeAccessRequirement{}
+		case strings.Contains(remainder, "/"):
+			return routeAccessRequirement{}
+		case r.Method == http.MethodGet || r.Method == http.MethodPatch:
+			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+		default:
+			return routeAccessRequirement{}
+		}
+	}, func(w http.ResponseWriter, r *http.Request) {
 		remainder := strings.TrimPrefix(r.URL.Path, "/threads/")
 		if remainder == "" {
 			writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
@@ -529,7 +706,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 	})
 
-	mux.HandleFunc("/commitments", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/commitments", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodGet, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodPost:
 			handleCreateCommitment(w, r, opts)
@@ -540,7 +717,18 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 	})
 
-	mux.HandleFunc("/commitments/", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/commitments/", func(r *http.Request) routeAccessRequirement {
+		commitmentID := strings.TrimPrefix(r.URL.Path, "/commitments/")
+		if commitmentID == "" || strings.Contains(commitmentID, "/") {
+			return routeAccessRequirement{}
+		}
+		switch r.Method {
+		case http.MethodGet, http.MethodPatch:
+			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+		default:
+			return routeAccessRequirement{}
+		}
+	}, func(w http.ResponseWriter, r *http.Request) {
 		commitmentID := strings.TrimPrefix(r.URL.Path, "/commitments/")
 		if commitmentID == "" || strings.Contains(commitmentID, "/") {
 			writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
@@ -557,7 +745,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 	})
 
-	mux.HandleFunc("/docs", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/docs", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodGet, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			handleListDocuments(w, r, opts)
@@ -568,7 +756,35 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 	})
 
-	mux.HandleFunc("/docs/", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/docs/", func(r *http.Request) routeAccessRequirement {
+		remainder := strings.TrimPrefix(r.URL.Path, "/docs/")
+		if remainder == "" {
+			return routeAccessRequirement{}
+		}
+		switch {
+		case strings.HasSuffix(remainder, "/tombstone"):
+			if r.Method == http.MethodPost {
+				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+			}
+			return routeAccessRequirement{}
+		case strings.HasSuffix(remainder, "/history"):
+			if r.Method == http.MethodGet {
+				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+			}
+			return routeAccessRequirement{}
+		case strings.Contains(remainder, "/revisions/"):
+			if r.Method == http.MethodGet {
+				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+			}
+			return routeAccessRequirement{}
+		case strings.Contains(remainder, "/"):
+			return routeAccessRequirement{}
+		case r.Method == http.MethodGet || r.Method == http.MethodPatch:
+			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+		default:
+			return routeAccessRequirement{}
+		}
+	}, func(w http.ResponseWriter, r *http.Request) {
 		remainder := strings.TrimPrefix(r.URL.Path, "/docs/")
 		if remainder == "" {
 			writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
@@ -636,7 +852,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 	})
 
-	mux.HandleFunc("/boards", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/boards", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodGet, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			handleListBoards(w, r, opts)
@@ -647,7 +863,45 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 	})
 
-	mux.HandleFunc("/boards/", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/boards/", func(r *http.Request) routeAccessRequirement {
+		remainder := strings.TrimPrefix(r.URL.Path, "/boards/")
+		if remainder == "" {
+			return routeAccessRequirement{}
+		}
+		switch {
+		case strings.HasSuffix(remainder, "/workspace"):
+			if r.Method == http.MethodGet {
+				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+			}
+			return routeAccessRequirement{}
+		case strings.HasSuffix(remainder, "/cards"):
+			if r.Method == http.MethodGet || r.Method == http.MethodPost {
+				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+			}
+			return routeAccessRequirement{}
+		case strings.Contains(remainder, "/cards/"):
+			cardRemainder := strings.TrimSpace(strings.SplitN(remainder, "/cards/", 2)[1])
+			switch {
+			case strings.HasSuffix(cardRemainder, "/move"), strings.HasSuffix(cardRemainder, "/remove"):
+				if r.Method == http.MethodPost {
+					return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+				}
+				return routeAccessRequirement{}
+			case strings.Contains(cardRemainder, "/"):
+				return routeAccessRequirement{}
+			case r.Method == http.MethodPatch:
+				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+			default:
+				return routeAccessRequirement{}
+			}
+		case strings.Contains(remainder, "/"):
+			return routeAccessRequirement{}
+		case r.Method == http.MethodGet || r.Method == http.MethodPatch:
+			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+		default:
+			return routeAccessRequirement{}
+		}
+	}, func(w http.ResponseWriter, r *http.Request) {
 		remainder := strings.TrimPrefix(r.URL.Path, "/boards/")
 		if remainder == "" {
 			writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
@@ -757,7 +1011,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 	})
 
-	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/events", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
 			return
@@ -766,7 +1020,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleAppendEvent(w, r, opts)
 	})
 
-	mux.HandleFunc("/events/stream", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/events/stream", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
 			return
@@ -774,7 +1028,13 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleEventsStream(w, r, opts)
 	})
 
-	mux.HandleFunc("/events/", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/events/", func(r *http.Request) routeAccessRequirement {
+		eventID := strings.TrimPrefix(r.URL.Path, "/events/")
+		if eventID == "" || strings.Contains(eventID, "/") || r.Method != http.MethodGet {
+			return routeAccessRequirement{}
+		}
+		return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+	}, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
 			return
@@ -789,7 +1049,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleGetEvent(w, r, opts, eventID)
 	})
 
-	mux.HandleFunc("/artifacts", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/artifacts", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodGet, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodPost:
 			handleCreateArtifact(w, r, opts)
@@ -800,7 +1060,30 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 	})
 
-	mux.HandleFunc("/artifacts/", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/artifacts/", func(r *http.Request) routeAccessRequirement {
+		remainder := strings.TrimPrefix(r.URL.Path, "/artifacts/")
+		if remainder == "" {
+			return routeAccessRequirement{}
+		}
+		switch {
+		case strings.HasSuffix(remainder, "/tombstone"):
+			if r.Method == http.MethodPost {
+				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+			}
+			return routeAccessRequirement{}
+		case strings.HasSuffix(remainder, "/content"):
+			if r.Method == http.MethodGet {
+				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+			}
+			return routeAccessRequirement{}
+		case strings.Contains(remainder, "/"):
+			return routeAccessRequirement{}
+		case r.Method == http.MethodGet:
+			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+		default:
+			return routeAccessRequirement{}
+		}
+	}, func(w http.ResponseWriter, r *http.Request) {
 		remainder := strings.TrimPrefix(r.URL.Path, "/artifacts/")
 		if remainder == "" {
 			writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
@@ -846,7 +1129,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleGetArtifact(w, r, opts, remainder)
 	})
 
-	mux.HandleFunc("/work_orders", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/work_orders", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
 			return
@@ -854,7 +1137,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleCreateWorkOrder(w, r, opts)
 	})
 
-	mux.HandleFunc("/receipts", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/receipts", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
 			return
@@ -862,7 +1145,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleCreateReceipt(w, r, opts)
 	})
 
-	mux.HandleFunc("/reviews", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/reviews", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
 			return
@@ -870,7 +1153,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleCreateReview(w, r, opts)
 	})
 
-	mux.HandleFunc("/inbox", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/inbox", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
 			return
@@ -878,7 +1161,13 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleGetInbox(w, r, opts)
 	})
 
-	mux.HandleFunc("/inbox/", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/inbox/", func(r *http.Request) routeAccessRequirement {
+		inboxItemID := strings.TrimPrefix(r.URL.Path, "/inbox/")
+		if inboxItemID == "" || strings.Contains(inboxItemID, "/") || r.Method != http.MethodGet {
+			return routeAccessRequirement{}
+		}
+		return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+	}, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
 			return
@@ -891,7 +1180,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleGetInboxItem(w, r, opts, inboxItemID)
 	})
 
-	mux.HandleFunc("/inbox/stream", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/inbox/stream", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
 			return
@@ -899,7 +1188,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleInboxStream(w, r, opts)
 	})
 
-	mux.HandleFunc("/inbox/ack", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/inbox/ack", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
 			return
@@ -907,7 +1196,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleAckInboxItem(w, r, opts)
 	})
 
-	mux.HandleFunc("/derived/rebuild", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/derived/rebuild", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
 			return
@@ -915,7 +1204,13 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleRebuildDerived(w, r, opts)
 	})
 
-	mux.HandleFunc("/snapshots/", func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/snapshots/", func(r *http.Request) routeAccessRequirement {
+		snapshotID := strings.TrimPrefix(r.URL.Path, "/snapshots/")
+		if snapshotID == "" || strings.Contains(snapshotID, "/") || r.Method != http.MethodGet {
+			return routeAccessRequirement{}
+		}
+		return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+	}, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
 			return
@@ -930,7 +1225,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleGetSnapshot(w, r, opts, snapshotID)
 	})
 
-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+	registerRoute("/", exactRouteAccess(routeAccessAlwaysPublic), func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
 	})
 
@@ -1047,13 +1342,36 @@ func handleListActors(w http.ResponseWriter, r *http.Request, actorRegistry Acto
 		return
 	}
 
-	listed, err := actorRegistry.List(r.Context())
+	var limitFilter *int
+	limitRaw := strings.TrimSpace(r.URL.Query().Get("limit"))
+	if limitRaw != "" {
+		parsed, err := strconv.Atoi(limitRaw)
+		if err != nil || parsed < 1 || parsed > 1000 {
+			writeError(w, http.StatusBadRequest, "invalid_request", "limit must be between 1 and 1000")
+			return
+		}
+		limitFilter = &parsed
+	}
+
+	listed, nextCursor, err := actorRegistry.List(r.Context(), actors.ActorListFilter{
+		Query:  strings.TrimSpace(r.URL.Query().Get("q")),
+		Limit:  limitFilter,
+		Cursor: strings.TrimSpace(r.URL.Query().Get("cursor")),
+	})
 	if err != nil {
+		if errors.Is(err, actors.ErrInvalidCursor) {
+			writeError(w, http.StatusBadRequest, "invalid_request", "cursor is invalid")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list actors")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"actors": listed})
+	response := map[string]any{"actors": listed}
+	if nextCursor != "" {
+		response["next_cursor"] = nextCursor
+	}
+	writeJSON(w, http.StatusOK, response)
 }
 
 func writeError(w http.ResponseWriter, status int, code string, message string) {
@@ -1105,7 +1423,7 @@ func shouldEnforceCLIVersion(path string) bool {
 		return false
 	}
 	switch path {
-	case "/health", "/version", "/meta/handshake", "/auth/token", "/auth/agents/register":
+	case "/health", "/version", "/meta/handshake", "/auth/token", "/auth/agents/register", "/auth/bootstrap/status":
 		return false
 	}
 	if strings.HasPrefix(path, "/auth/passkey/") {

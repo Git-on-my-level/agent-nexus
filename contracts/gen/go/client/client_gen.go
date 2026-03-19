@@ -47,6 +47,14 @@ var CommandRegistry = []CommandSpec{
 				Title:   "List actors",
 				Command: "oar actors list --json",
 			},
+			{
+				Title:   "Search actors by name",
+				Command: "oar actors list --q \"bot\" --json",
+			},
+			{
+				Title:   "Paginated actor list",
+				Command: "oar actors list --limit 50 --json",
+			},
 		},
 	},
 	{
@@ -224,18 +232,91 @@ var CommandRegistry = []CommandSpec{
 	},
 	{
 		CommandID: "auth.agents.register",
-		CLIPath:   "auth agents register",
+		CLIPath:   "auth register",
 		Group:     "auth",
 		Method:    "POST",
 		Path:      "/auth/agents/register",
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"auth", "identity"},
-		Adjacent:  []string{"auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.token"},
+		Adjacent:  []string{"auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.token"},
 		Examples: []Example{
 			{
-				Title:   "Register agent",
-				Command: "oar auth agents register --username agent.one --public-key <base64-ed25519-pubkey> --json",
+				Title:   "Bootstrap first agent",
+				Command: "oar auth register --username agent.one --bootstrap-token <token> --json",
+			},
+			{
+				Title:   "Register invited agent",
+				Command: "oar auth register --username agent.two --invite-token <token> --json",
+			},
+		},
+	},
+	{
+		CommandID: "auth.bootstrap.status",
+		CLIPath:   "auth bootstrap status",
+		Group:     "auth",
+		Method:    "GET",
+		Path:      "/auth/bootstrap/status",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"auth", "onboarding"},
+		Adjacent:  []string{"auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.agents.register", "auth.token"},
+		Examples: []Example{
+			{
+				Title:   "Read bootstrap status",
+				Command: "oar auth bootstrap status --json",
+			},
+		},
+	},
+	{
+		CommandID: "auth.invites.create",
+		CLIPath:   "auth invites create",
+		Group:     "auth",
+		Method:    "POST",
+		Path:      "/auth/invites",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"auth", "onboarding"},
+		Adjacent:  []string{"auth.bootstrap.status", "auth.invites.list", "auth.invites.revoke", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.agents.register", "auth.token"},
+		Examples: []Example{
+			{
+				Title:   "Create agent invite",
+				Command: "oar auth invites create --kind agent --note 'ops bot' --json",
+			},
+		},
+	},
+	{
+		CommandID: "auth.invites.list",
+		CLIPath:   "auth invites list",
+		Group:     "auth",
+		Method:    "GET",
+		Path:      "/auth/invites",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"auth", "onboarding"},
+		Adjacent:  []string{"auth.bootstrap.status", "auth.invites.create", "auth.invites.revoke", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.agents.register", "auth.token"},
+		Examples: []Example{
+			{
+				Title:   "List invites",
+				Command: "oar auth invites list --json",
+			},
+		},
+	},
+	{
+		CommandID:  "auth.invites.revoke",
+		CLIPath:    "auth invites revoke",
+		Group:      "auth",
+		Method:     "POST",
+		Path:       "/auth/invites/{invite_id}/revoke",
+		PathParams: []string{"invite_id"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"auth", "onboarding"},
+		Adjacent:   []string{"auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.agents.register", "auth.token"},
+		Examples: []Example{
+			{
+				Title:   "Revoke invite",
+				Command: "oar auth invites revoke --invite-id invite_123 --json",
 			},
 		},
 	},
@@ -248,7 +329,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"auth", "passkey"},
-		Adjacent:  []string{"auth.agents.register", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.token"},
+		Adjacent:  []string{"auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.agents.register", "auth.token"},
 	},
 	{
 		CommandID: "auth.passkey.login.verify",
@@ -259,7 +340,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"auth", "passkey"},
-		Adjacent:  []string{"auth.agents.register", "auth.passkey.login.options", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.token"},
+		Adjacent:  []string{"auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.login.options", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.agents.register", "auth.token"},
 	},
 	{
 		CommandID: "auth.passkey.register.options",
@@ -270,7 +351,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"auth", "passkey"},
-		Adjacent:  []string{"auth.agents.register", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.verify", "auth.token"},
+		Adjacent:  []string{"auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.verify", "auth.agents.register", "auth.token"},
 	},
 	{
 		CommandID: "auth.passkey.register.verify",
@@ -281,7 +362,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"auth", "passkey"},
-		Adjacent:  []string{"auth.agents.register", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.token"},
+		Adjacent:  []string{"auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.agents.register", "auth.token"},
 	},
 	{
 		CommandID: "auth.token",
@@ -292,7 +373,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"auth", "token-lifecycle"},
-		Adjacent:  []string{"auth.agents.register", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify"},
+		Adjacent:  []string{"auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.agents.register"},
 		Examples: []Example{
 			{
 				Title:   "Refresh token grant",
@@ -447,6 +528,14 @@ var CommandRegistry = []CommandSpec{
 			{
 				Title:   "List active boards for an owner",
 				Command: "oar boards list --status active --owner actor_ceo --json",
+			},
+			{
+				Title:   "Search boards by label",
+				Command: "oar boards list --q \"launch\" --json",
+			},
+			{
+				Title:   "Paginated board list",
+				Command: "oar boards list --limit 30 --json",
 			},
 		},
 	},
@@ -639,6 +728,14 @@ var CommandRegistry = []CommandSpec{
 			{
 				Title:   "List documents",
 				Command: "oar docs list --json",
+			},
+			{
+				Title:   "Search documents by title",
+				Command: "oar docs list --q \"constitution\" --json",
+			},
+			{
+				Title:   "Paginated document list",
+				Command: "oar docs list --limit 50 --json",
 			},
 		},
 	},
@@ -1094,6 +1191,14 @@ var CommandRegistry = []CommandSpec{
 				Title:   "List active p1 threads",
 				Command: "oar threads list --status active --priority p1 --json",
 			},
+			{
+				Title:   "Search threads by title",
+				Command: "oar threads list --q \"launch\" --json",
+			},
+			{
+				Title:   "Paginated thread list",
+				Command: "oar threads list --limit 20 --json",
+			},
 		},
 	},
 	{
@@ -1318,6 +1423,22 @@ func (c *Client) ArtifactsTombstone(ctx context.Context, pathParams map[string]s
 
 func (c *Client) AuthAgentsRegister(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "auth.agents.register", nil, opts)
+}
+
+func (c *Client) AuthBootstrapStatus(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "auth.bootstrap.status", nil, opts)
+}
+
+func (c *Client) AuthInvitesCreate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "auth.invites.create", nil, opts)
+}
+
+func (c *Client) AuthInvitesList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "auth.invites.list", nil, opts)
+}
+
+func (c *Client) AuthInvitesRevoke(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "auth.invites.revoke", pathParams, opts)
 }
 
 func (c *Client) AuthPasskeyLoginOptions(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {

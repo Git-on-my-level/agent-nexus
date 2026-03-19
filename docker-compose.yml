@@ -7,7 +7,7 @@ services:
     ports:
       - "${OAR_CORE_PORT:-8000}:8000"
     volumes:
-      - oar-workspace:/var/lib/oar/workspace
+      - "${HOST_OAR_WORKSPACE_ROOT:-oar-workspace}:/var/lib/oar/workspace"
     environment:
       OAR_LISTEN_ADDR: "0.0.0.0:8000"
       OAR_ALLOW_UNAUTHENTICATED_WRITES: "${OAR_ALLOW_UNAUTHENTICATED_WRITES:-false}"
@@ -15,6 +15,8 @@ services:
       OAR_WEBAUTHN_RPID: "${OAR_WEBAUTHN_RPID:-}"
       OAR_WEBAUTHN_ORIGIN: "${OAR_WEBAUTHN_ORIGIN:-}"
       OAR_WEBAUTHN_RP_DISPLAY_NAME: "${OAR_WEBAUTHN_RP_DISPLAY_NAME:-OAR}"
+      OAR_CORE_INSTANCE_ID: "${OAR_CORE_INSTANCE_ID:-core-local}"
+      OAR_BOOTSTRAP_TOKEN: "${OAR_BOOTSTRAP_TOKEN:-}"
       OAR_SHUTDOWN_TIMEOUT: "${OAR_SHUTDOWN_TIMEOUT:-15s}"
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://127.0.0.1:8000/health"]

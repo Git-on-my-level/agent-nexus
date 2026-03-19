@@ -7,6 +7,24 @@ import {
 } from "../../src/lib/oarCoreClient.js";
 
 describe("oarCoreClient error messaging", () => {
+  it("forwards actor list query parameters", async () => {
+    const seenUrls = [];
+    const client = createOarCoreClient({
+      baseUrl: "http://core.test",
+      fetchFn: async (url) => {
+        seenUrls.push(String(url));
+        return new Response(JSON.stringify({ actors: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      },
+    });
+
+    await client.listActors({ q: "alice", limit: 7 });
+
+    expect(seenUrls).toEqual(["http://core.test/actors?q=alice&limit=7"]);
+  });
+
   it("returns actionable guidance when core is unreachable", async () => {
     const client = createOarCoreClient({
       baseUrl: "http://core.test",

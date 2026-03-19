@@ -1,8 +1,24 @@
 # Multi-Instance Deployment on macOS (No Docker)
 
+This document describes the managed hosted-v1 operating model on one Mac host:
+one isolated workspace deployment per instance, provisioned by operators. It is
+not a self-service control plane, and it does not introduce shared row-level
+multitenancy.
+
 Run N independent `oar-core` instances on a single Mac host, each with its own
 workspace, port, and process supervision via `launchd`. A reverse proxy
 (Caddy, nginx, etc.) fronts them with TLS and routing.
+
+## Hosted-v1 cut line
+
+- Each instance is one isolated workspace deployment.
+- Provisioning is managed by operators with install/bootstrap scripts.
+- Backup and restore happen per workspace instance.
+- Hosted-v1 onboarding is token-gated, not public signup. Use the shipped
+  bootstrap and invite-gated registration flow when provisioning principals for
+  a workspace instance.
+- A future control plane may automate this later, but it is not required to run
+  hosted v1.
 
 ## Prerequisites
 
@@ -33,7 +49,7 @@ Each instance has:
 - Its own `launchd` plist for process supervision
 - Its own log files
 
-Instances share a single binary and schema assets.
+Instances share a single binary and schema assets, but not state.
 
 ## Quick Start
 
@@ -265,17 +281,58 @@ Each instance has a fully independent workspace:
 There is no shared state between instances. Each has its own SQLite database,
 actor registry, and artifact storage.
 
-## Backup
+The hosted-v1 assumption is strict workspace isolation per deployment, not
+shared row-level tenancy inside one database.
 
-Back up each workspace directory independently:
+## Backup and Restore
+
+The hosted-v1 backup/restore story is now standardized in the repo-local ops
+bundle under [`scripts/hosted/`](../scripts/hosted/). Use that flow instead of
+ad hoc `sqlite3` or `rsync` commands so each instance gets the same manifest,
+checksum set, restore guardrails, and verification path.
+
+Provision one deployment root:
 
 ```bash
-# Safe online backup using SQLite .backup command
-sqlite3 ~/.oar/workspaces/team-alpha/state.sqlite ".backup /backups/team-alpha-$(date +%s).sqlite"
-
-# Or just rsync the whole workspace (stop instance first for consistency)
-rsync -a ~/.oar/workspaces/team-alpha/ /backups/team-alpha/
+./scripts/hosted/provision-workspace.sh \
+  --instance team-alpha \
+  --instance-root ~/.oar/team-alpha \
+  --public-origin https://team-alpha.oar.example.com \
+  --listen-port 8001 \
+  --generate-bootstrap-token
 ```
+
+Back it up:
+
+```bash
+./scripts/hosted/backup-workspace.sh \
+  --instance-root ~/.oar/team-alpha \
+  --output-dir /backups/team-alpha-$(date -u +%Y%m%dT%H%M%SZ)
+```
+
+Restore it:
+
+```bash
+./scripts/hosted/restore-workspace.sh \
+  --backup-dir /backups/team-alpha-20260319T020000Z \
+  --target-instance-root ~/.oar/team-alpha-restore-drill
+```
+
+Verify the restored workspace before cutover:
+
+```bash
+./core/scripts/build-prod
+
+./scripts/hosted/verify-restore.sh \
+  --instance-root ~/.oar/team-alpha-restore-drill \
+  --core-bin ./core/.bin/oar-core \
+  --schema-path ./contracts/oar-schema.yaml
+```
+
+This recovery model remains intentionally script-driven for hosted v1. A
+separate control plane may orchestrate it later, but it is not part of the
+current pack. For the end-to-end operator flow, see
+[`deploy/managed-hosting.md`](./managed-hosting.md).
 
 ## Troubleshooting
 

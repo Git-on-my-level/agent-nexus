@@ -10,18 +10,89 @@
     value = $bindable(""),
     items = [],
     disabledIds = [],
+    searchFn = null,
   } = $props();
 
   let query = $state("");
-  let selectedItem = $derived(items.find((item) => item.id === value) ?? null);
+  let remoteItems = $state([]);
+  let searchLoading = $state(false);
+  let searchError = $state("");
+  let selectedItemOverride = $state(null);
+  let searchTimer = null;
+  let latestSearchRequestId = 0;
   let disabledIdSet = $derived(
     new Set((disabledIds ?? []).map((item) => String(item))),
   );
+  let selectedItem = $derived(
+    (items ?? []).find((item) => String(item.id) === String(value)) ??
+      remoteItems.find((item) => String(item.id) === String(value)) ??
+      (selectedItemOverride && String(selectedItemOverride.id) === String(value)
+        ? selectedItemOverride
+        : null),
+  );
+
+  $effect(() => {
+    if (!searchFn) {
+      remoteItems = [];
+      searchLoading = false;
+      searchError = "";
+      return;
+    }
+
+    const needle = query.trim();
+    if (searchTimer) {
+      clearTimeout(searchTimer);
+      searchTimer = null;
+    }
+
+    if (!needle) {
+      remoteItems = [];
+      searchLoading = false;
+      searchError = "";
+      return;
+    }
+
+    const requestID = ++latestSearchRequestId;
+    searchLoading = true;
+    searchError = "";
+    searchTimer = setTimeout(async () => {
+      try {
+        const results = (await searchFn(needle)) ?? [];
+        if (requestID !== latestSearchRequestId) {
+          return;
+        }
+        remoteItems = results;
+      } catch (error) {
+        if (requestID !== latestSearchRequestId) {
+          return;
+        }
+        const reason = error instanceof Error ? error.message : String(error);
+        searchError = `Search failed: ${reason}`;
+        remoteItems = [];
+      } finally {
+        if (requestID === latestSearchRequestId) {
+          searchLoading = false;
+        }
+      }
+    }, 300);
+
+    return () => {
+      if (searchTimer) {
+        clearTimeout(searchTimer);
+        searchTimer = null;
+      }
+    };
+  });
+
   let filteredItems = $derived.by(() => {
-    const needle = query.trim().toLowerCase();
-    const availableItems = (items ?? []).filter(
+    const availableItems = (searchFn ? remoteItems : (items ?? [])).filter(
       (item) => !disabledIdSet.has(String(item.id)),
     );
+    if (searchFn) {
+      return availableItems.slice(0, 8);
+    }
+
+    const needle = query.trim().toLowerCase();
     if (!needle) {
       return availableItems.slice(0, 8);
     }
@@ -44,12 +115,17 @@
 
   function chooseItem(id) {
     value = String(id ?? "").trim();
+    selectedItemOverride =
+      filteredItems.find((item) => String(item.id) === value) ?? null;
     query = "";
+    searchError = "";
   }
 
   function clearSelection() {
     value = "";
+    selectedItemOverride = null;
     query = "";
+    searchError = "";
   }
 
   function manualValue() {
@@ -115,6 +191,14 @@
     />
   </label>
 
+  {#if searchLoading}
+    <div class="text-[11px] text-[var(--ui-text-subtle)]">Searching…</div>
+  {/if}
+
+  {#if searchError}
+    <div class="text-[11px] text-red-400">{searchError}</div>
+  {/if}
+
   <div
     class="max-h-48 overflow-y-auto rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]"
   >
@@ -170,6 +254,7 @@
           aria-label={manualLabel}
           class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-2 text-[13px] text-[var(--ui-text)] placeholder:text-[var(--ui-text-subtle)]"
           oninput={(event) => {
+            selectedItemOverride = null;
             value = event.currentTarget.value.trim();
           }}
           placeholder={manualPlaceholder}

@@ -19,7 +19,8 @@ Run against local core:
 cd cli
 go run ./cmd/oar --json --base-url http://127.0.0.1:8000 --agent local version
 go run ./cmd/oar --json --base-url http://127.0.0.1:8000 --agent local doctor
-go run ./cmd/oar --json --base-url http://127.0.0.1:8000 --agent local auth register --username local.agent
+go run ./cmd/oar --json --base-url http://127.0.0.1:8000 --agent local auth bootstrap status
+go run ./cmd/oar --json --base-url http://127.0.0.1:8000 --agent local auth register --username local.agent --bootstrap-token <token>
 go run ./cmd/oar --agent local version
 ```
 
@@ -46,7 +47,8 @@ Supported env vars:
 Registration and profile bootstrap:
 
 ```bash
-oar --json --base-url http://127.0.0.1:8000 --agent agent-a auth register --username agent.a
+oar --json --base-url http://127.0.0.1:8000 --agent agent-a auth bootstrap status
+oar --json --base-url http://127.0.0.1:8000 --agent agent-a auth register --username agent.a --bootstrap-token <token>
 oar --agent agent-a auth whoami
 oar --agent agent-a auth token-status
 ```

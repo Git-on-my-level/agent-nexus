@@ -47,8 +47,8 @@ func buildListDocumentsQuery(filter DocumentListFilter) (string, []any) {
 		FROM documents d
 		LEFT JOIN document_revisions dr ON dr.revision_id = d.head_revision_id
 		LEFT JOIN artifacts a ON a.id = dr.artifact_id`
-	conditions := make([]string, 0, 2)
-	args := make([]any, 0, 2)
+	conditions := make([]string, 0, 3)
+	args := make([]any, 0, 3)
 	if threadID := strings.TrimSpace(filter.ThreadID); threadID != "" {
 		conditions = append(conditions, "d.thread_id = ?")
 		args = append(args, threadID)
@@ -56,22 +56,42 @@ func buildListDocumentsQuery(filter DocumentListFilter) (string, []any) {
 	if !filter.IncludeTombstoned {
 		conditions = append(conditions, "d.tombstoned_at IS NULL")
 	}
+	if q := strings.TrimSpace(filter.Query); q != "" {
+		searchPattern := "%" + strings.ToLower(q) + "%"
+		conditions = append(conditions, "(LOWER(d.id) LIKE ? OR LOWER(d.title) LIKE ?)")
+		args = append(args, searchPattern, searchPattern)
+	}
 	if len(conditions) > 0 {
 		query += ` WHERE ` + strings.Join(conditions, ` AND `)
 	}
 	query += ` ORDER BY d.updated_at DESC, d.id ASC`
+	if filter.Limit != nil && *filter.Limit > 0 {
+		query += ` LIMIT ?`
+		args = append(args, *filter.Limit+1)
+		if filter.Cursor != "" {
+			if offset, err := decodeCursor(filter.Cursor); err == nil && offset > 0 {
+				query += ` OFFSET ?`
+				args = append(args, offset)
+			}
+		}
+	}
 	return query, args
 }
 
-func (s *Store) ListDocuments(ctx context.Context, filter DocumentListFilter) ([]map[string]any, error) {
+func (s *Store) ListDocuments(ctx context.Context, filter DocumentListFilter) ([]map[string]any, string, error) {
 	if s == nil || s.db == nil {
-		return nil, fmt.Errorf("primitives store database is not initialized")
+		return nil, "", fmt.Errorf("primitives store database is not initialized")
+	}
+	if filter.Cursor != "" {
+		if _, err := decodeCursor(filter.Cursor); err != nil {
+			return nil, "", fmt.Errorf("%w: %v", ErrInvalidCursor, err)
+		}
 	}
 
 	query, args := buildListDocumentsQuery(filter)
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("query documents: %w", err)
+		return nil, "", fmt.Errorf("query documents: %w", err)
 	}
 	defer rows.Close()
 
@@ -100,15 +120,25 @@ func (s *Store) ListDocuments(ctx context.Context, filter DocumentListFilter) ([
 			&row.HeadCreatedAt,
 			&row.HeadCreatedBy,
 		); err != nil {
-			return nil, fmt.Errorf("scan document row: %w", err)
+			return nil, "", fmt.Errorf("scan document row: %w", err)
 		}
 		documents = append(documents, row.toMap())
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate document rows: %w", err)
+		return nil, "", fmt.Errorf("iterate document rows: %w", err)
 	}
 
-	return documents, nil
+	var nextCursor string
+	if filter.Limit != nil && len(documents) > *filter.Limit {
+		documents = documents[:*filter.Limit]
+		offset := 0
+		if filter.Cursor != "" {
+			offset, _ = decodeCursor(filter.Cursor)
+		}
+		nextCursor = encodeCursor(offset + *filter.Limit)
+	}
+
+	return documents, nextCursor, nil
 }
 
 func (s *Store) CreateDocument(ctx context.Context, actorID string, document map[string]any, content any, contentType string, refs []string) (map[string]any, map[string]any, error) {
@@ -192,7 +222,7 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		"created_by":       actorID,
 		"content_type":     contentType,
 		"content_hash":     contentHash,
-		"content_path":     filepath.Join(s.blobRoot, contentHash),
+		"content_path":     s.blob.ContentPath(contentHash),
 		"refs":             revisionRefs,
 		"document_id":      documentID,
 		"revision_id":      revisionID,
@@ -486,7 +516,7 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		"created_by":       actorID,
 		"content_type":     contentType,
 		"content_hash":     contentHash,
-		"content_path":     filepath.Join(s.blobRoot, contentHash),
+		"content_path":     s.blob.ContentPath(contentHash),
 		"refs":             revisionRefs,
 		"document_id":      documentID,
 		"revision_id":      revisionID,

@@ -9,6 +9,31 @@ Monorepo for Organization Autorunner.
 - `cli/`: Go CLI (`oar`)
 - `web-ui/`: SvelteKit frontend (`oar-ui`)
 
+## Hosted v1
+
+Hosted v1 is a managed offering, not a public self-service SaaS. The
+authoritative architecture cut line in this branch is:
+
+- one isolated workspace deployment per customer/workspace
+- managed provisioning plus managed backup/restore scripts
+- no required self-service control plane in this pack
+- no shared row-level multitenancy
+- auth required on all workspace data routes outside development mode
+- `OAR_ALLOW_UNAUTHENTICATED_WRITES` and UI actor-selection flows are
+  development-only
+- passkey humans and Ed25519 key-pair agents are both workspace principals
+- public registration is closed; onboarding is bootstrap/invite-gated
+- no fine-grained RBAC in v1; authenticated principals share the same authority
+- agents should prefer the CLI and generated clients over hand-authored HTTP
+- workspace projection APIs are convenience reads, not durable automation
+  contracts
+
+Architecture references:
+
+- `docs/architecture/foundation.md`
+- `docs/architecture/hosted-v1.md`
+- `docs/architecture/hosted-gate.md`
+
 ## Architecture / Design Docs
 
 - **Foundation**: [docs/architecture/foundation.md](docs/architecture/foundation.md) — durable product and architecture decisions that define OAR.
@@ -51,6 +76,9 @@ See `runbooks/release.md` for version-pinning and custom install directory optio
 - `make check`: run checks for both projects
 - `make contract-check`: verify generated contract artifacts are up to date
 - `make cli-check`: run CLI tests
+- `make hosted-smoke`: run hosted-v1 production smoke suite (auth gate, onboarding, workspace access, staleness, backup/restore)
+- `make hosted-ops-test`: run hosted provisioning/backup/restore verification tests
+- `make hosted-ops-smoke`: run one hosted provisioning/backup/restore smoke flow
 - `make cli-integration-test`: run CLI real-binary integration tests (non-default)
 - `make e2e-smoke`: run live core + CLI + web-ui smoke verification
 - `make core-<target>`: pass through to `core/Makefile`
@@ -59,6 +87,7 @@ See `runbooks/release.md` for version-pinning and custom install directory optio
 Release/operations docs:
 
 - `runbooks/release.md`
+- `deploy/managed-hosting.md`
 - `core/docs/runbook.md`
 - `cli/docs/runbook.md`
 - `web-ui/docs/runbook.md`

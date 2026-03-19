@@ -5,6 +5,7 @@ import {
   normalizeWorkspaceSlug,
 } from "$lib/workspacePaths";
 import { normalizeBaseUrl } from "$lib/config";
+import { resolveWorkspaceEnv } from "$lib/compat/workspaceCompat";
 
 function normalizeWorkspaceEntry(entry, index) {
   if (!entry || typeof entry !== "object") {
@@ -42,10 +43,17 @@ function parseWorkspaceEntries(rawValue) {
 
   const entries = Array.isArray(parsed)
     ? parsed
-    : Object.entries(parsed ?? {}).map(([slug, value]) => ({
-        slug,
-        ...(value ?? {}),
-      }));
+    : Object.entries(parsed ?? {}).map(([slug, value]) =>
+        value && typeof value === "object"
+          ? {
+              slug,
+              ...value,
+            }
+          : {
+              slug,
+              coreBaseUrl: value,
+            },
+      );
 
   return entries.map(normalizeWorkspaceEntry);
 }
@@ -62,21 +70,14 @@ function fallbackSingleWorkspace(env) {
 }
 
 export function loadWorkspaceCatalog(env = privateEnv) {
-  let configuredWorkspaces = parseWorkspaceEntries(
-    env.OAR_WORKSPACES || env.OAR_PROJECTS,
-  );
-
-  if (configuredWorkspaces.length === 0 && env.OAR_PROJECTS) {
-    configuredWorkspaces = parseWorkspaceEntries(env.OAR_PROJECTS);
-  }
-
+  const resolved = resolveWorkspaceEnv(env);
+  const configuredWorkspaces = parseWorkspaceEntries(resolved.OAR_WORKSPACES);
   const workspaces =
     configuredWorkspaces.length > 0
       ? configuredWorkspaces
       : fallbackSingleWorkspace(env);
   const defaultCandidate = normalizeWorkspaceSlug(
-    env.OAR_DEFAULT_WORKSPACE ||
-      env.OAR_DEFAULT_PROJECT ||
+    resolved.OAR_DEFAULT_WORKSPACE ||
       workspaces[0]?.slug ||
       DEFAULT_WORKSPACE_SLUG,
   );
@@ -88,12 +89,15 @@ export function loadWorkspaceCatalog(env = privateEnv) {
     throw new Error("At least one OAR workspace must be configured.");
   }
 
+  const devActorMode =
+    env.OAR_DEV_ACTOR_MODE === "true" || env.OAR_DEV_ACTOR_MODE === "1";
   return {
     defaultWorkspace,
     workspaces,
     workspaceBySlug: new Map(
       workspaces.map((workspace) => [workspace.slug, workspace]),
     ),
+    devActorMode,
   };
 }
 
@@ -112,12 +116,6 @@ export function toPublicWorkspaceCatalog(catalog) {
       label: workspace.label,
       description: workspace.description,
     })),
+    devActorMode: catalog.devActorMode ?? false,
   };
 }
-
-export const loadProjectCatalog = loadWorkspaceCatalog;
-export const getProjectBySlug = getWorkspaceBySlug;
-export const toPublicProjectCatalog = toPublicWorkspaceCatalog;
-export const normalizeProjectEntry = normalizeWorkspaceEntry;
-export const parseProjectEntries = parseWorkspaceEntries;
-export const fallbackSingleProject = fallbackSingleWorkspace;

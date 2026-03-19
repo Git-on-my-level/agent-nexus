@@ -5,11 +5,13 @@
     lookupActorDisplayName,
     selectedActorId,
   } from "$lib/actorSession";
+  import SearchableEntityPicker from "$lib/components/SearchableEntityPicker.svelte";
   import {
     formatTimestamp,
     isoToDatetimeLocal,
     datetimeLocalToIso,
   } from "$lib/formatDate";
+  import { searchActors as searchActorRecords } from "$lib/searchHelpers";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
   import {
@@ -72,7 +74,21 @@
   let savingCommitmentEdit = $state(false);
 
   function defaultCommitmentOwner() {
-    return $selectedActorId || $actorRegistry[0]?.id || "";
+    return $selectedActorId || "";
+  }
+
+  function toActorOption(actor) {
+    return {
+      id: actor.id,
+      title: actor.display_name || actor.id,
+      subtitle: actor.id,
+      keywords: actor.tags ?? [],
+    };
+  }
+
+  async function searchActorOptions(query) {
+    const actors = await searchActorRecords(query);
+    return actors.map(toActorOption);
   }
 
   function blankCreateCommitmentDraft() {
@@ -335,17 +351,16 @@
             type="text"
           /></label
         >
-        <label class="text-[12px] font-medium text-[var(--ui-text-muted)]"
-          >Owner <select
-            bind:value={createCommitmentDraft.owner}
-            class="mt-1 w-full rounded border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-2 py-1.5 text-[13px] text-[var(--ui-text)]"
-            required
-            ><option disabled value="">Select</option
-            >{#each $actorRegistry as actor}<option value={actor.id}
-                >{actor.display_name || actor.id}</option
-              >{/each}</select
-          ></label
-        >
+        <SearchableEntityPicker
+          bind:value={createCommitmentDraft.owner}
+          advancedLabel="Use a manual owner ID"
+          helperText="Owner is required. Search actors by name or ID."
+          label="Owner"
+          manualLabel="Owner ID"
+          manualPlaceholder="actor-..."
+          placeholder="Search actors by name, ID, or tags"
+          searchFn={searchActorOptions}
+        />
         <label class="text-[12px] font-medium text-[var(--ui-text-muted)]"
           >Due date <input
             bind:value={createCommitmentDraft.due_at}
@@ -476,17 +491,16 @@
                   type="text"
                 /></label
               >
-              <label class="text-[12px] font-medium text-[var(--ui-text-muted)]"
-                >Owner <select
-                  bind:value={editCommitmentDraft.owner}
-                  class="mt-1 w-full rounded border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-2 py-1.5 text-[13px] text-[var(--ui-text)]"
-                  required
-                  ><option disabled value="">Select</option
-                  >{#each $actorRegistry as actor}<option value={actor.id}
-                      >{actor.display_name || actor.id}</option
-                    >{/each}</select
-                ></label
-              >
+              <SearchableEntityPicker
+                bind:value={editCommitmentDraft.owner}
+                advancedLabel="Use a manual owner ID"
+                helperText="Owner is required. Search actors by name or ID."
+                label="Owner"
+                manualLabel="Owner ID"
+                manualPlaceholder="actor-..."
+                placeholder="Search actors by name, ID, or tags"
+                searchFn={searchActorOptions}
+              />
               <label class="text-[12px] font-medium text-[var(--ui-text-muted)]"
                 >Due date <input
                   bind:value={editCommitmentDraft.due_at}

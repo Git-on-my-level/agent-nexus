@@ -23,7 +23,9 @@ The schema of objects is defined by `../contracts/oar-schema.yaml`.
 ### Agent auth conventions
 
 - Access tokens are passed as `Authorization: Bearer <access_token>`.
-- Registration is open in v0 via `POST /auth/agents/register`.
+- First-principal registration is bootstrap-token gated via `POST /auth/agents/register` or the passkey registration endpoints.
+- Once the first principal exists, further registration requires a valid invite token.
+- `GET /auth/bootstrap/status` exposes whether bootstrap registration is still available.
 - Passkey auth is available via:
   - `POST /auth/passkey/register/options`
   - `POST /auth/passkey/register/verify`
@@ -98,12 +100,13 @@ Projection endpoints return a `section_kinds` field to distinguish canonical vs 
   - **Blocked when `dev_actor_mode=false`**: Returns `403 Forbidden` with error code `dev_actor_mode_disabled`. Production deployments should use passkey or public key authentication to create linked actors instead.
 
 - `GET /actors`
-  - Response: `{ "actors": [<actor>...] }`
+  - Query (optional): `q`, `limit`, `cursor`
+  - Response: `{ "actors": [<actor>...], "next_cursor"?: "..." }`
 
 ### Agent auth and self-management
 
 - `POST /auth/agents/register`
-  - Body: `{ "username": "...", "public_key": "<base64-ed25519-public-key>" }`
+  - Body: `{ "username": "...", "public_key": "<base64-ed25519-public-key>", "bootstrap_token"?: "...", "invite_token"?: "..." }`
   - Response: `{ "agent": <agent_profile>, "key": <agent_key>, "tokens": <token_bundle> }`
 
 - `POST /auth/token`
@@ -112,12 +115,28 @@ Projection endpoints return a `section_kinds` field to distinguish canonical vs 
   - Response: `{ "tokens": <token_bundle> }`
 
 - `POST /auth/passkey/register/options`
-  - Body: `{ "display_name": "..." }`
+  - Body: `{ "display_name": "...", "bootstrap_token"?: "...", "invite_token"?: "..." }`
   - Response: `{ "session_id": "...", "options": <webauthn-registration-options> }`
 
 - `POST /auth/passkey/register/verify`
-  - Body: `{ "session_id": "...", "credential": <webauthn-attestation-response> }`
+  - Body: `{ "session_id": "...", "credential": <webauthn-attestation-response>, "bootstrap_token"?: "...", "invite_token"?: "..." }`
   - Response: `{ "agent": <agent_profile>, "tokens": <token_bundle> }`
+
+- `GET /auth/bootstrap/status`
+  - Response: `{ "bootstrap_registration_available": <bool> }`
+
+- `GET /auth/invites`
+  - Auth: bearer token required
+  - Response: `{ "invites": [<invite>...] }`
+
+- `POST /auth/invites`
+  - Auth: bearer token required
+  - Body: `{ "kind": "human" | "agent" | "any", "note"?: "..." }`
+  - Response: `{ "invite": <invite>, "token": "<raw_token_once>" }`
+
+- `POST /auth/invites/{invite_id}/revoke`
+  - Auth: bearer token required
+  - Response: `{ "invite": <invite> }`
 
 - `POST /auth/passkey/login/options`
   - Body: `{ "username"?: "..." }`
@@ -155,14 +174,14 @@ Projection endpoints return a `section_kinds` field to distinguish canonical vs 
   - Response: `{ "thread": <thread_snapshot> }`
 
 - `GET /threads`
-  - Query (optional): `status`, `priority`, `tag`, `cadence`, `stale` (boolean)
+  - Query (optional): `status`, `priority`, `tag`, `cadence`, `stale` (boolean), `q`, `limit`, `cursor`
   - `tag` MAY be repeated (for example `?tag=ops&tag=backend`). Repeated tags use AND semantics: returned threads MUST contain all provided tags.
   - `cadence` MAY be repeated (for example `?cadence=daily&cadence=weekly`). Repeated cadence values use OR semantics: returned threads MAY match any provided cadence.
   - `cadence` filter values are preset-oriented (`reactive`, `daily`, `weekly`, `monthly`, `custom`).
   - Canonical preset cron expressions (for example `0 9 * * *`) are treated as their preset aliases.
   - Non-preset cron expressions match by exact cadence string.
   - When both `tag` and `cadence` filters are present, both filters apply.
-  - Response: `{ "threads": [<thread_snapshot>...] }`
+  - Response: `{ "threads": [<thread_snapshot>...], "next_cursor"?: "..." }`
 
 - `GET /threads/{thread_id}`
   - Response: `{ "thread": <thread_snapshot> }`
@@ -243,8 +262,8 @@ Projection endpoints return a `section_kinds` field to distinguish canonical vs 
   - Side effect: appends `document_created` to `events` with thread/document/revision/artifact refs when the document is thread-linked.
 
 - `GET /docs`
-  - Query (optional): `thread_id=<thread_id>`, `include_tombstoned=true|false`
-  - Response: `{ "documents": [<document>...] }`
+  - Query (optional): `thread_id=<thread_id>`, `include_tombstoned=true|false`, `q`, `limit`, `cursor`
+  - Response: `{ "documents": [<document>...], "next_cursor"?: "..." }`
   - Notes:
     - `thread_id` scopes the list to documents whose current `document.thread_id` matches the thread.
     - Each listed document includes `head_revision` summary metadata (`revision_id`, `revision_number`, `artifact_id`, `content_type`, `created_at`, `created_by`) alongside the existing top-level head revision fields.

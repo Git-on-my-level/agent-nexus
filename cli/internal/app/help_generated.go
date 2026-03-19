@@ -28,6 +28,8 @@ type localHelperTopic struct {
 }
 
 var runtimeGeneratedTopics = []runtimeHelpTopic{
+	{Path: "actors", Description: "List and register actor identities"},
+	{Path: "auth", Description: "Register, inspect, and manage auth state"},
 	{Path: "threads", Description: "Manage thread resources"},
 	{Path: "commitments", Description: "Manage commitment resources"},
 	{Path: "artifacts", Description: "Manage artifact resources and content"},
@@ -421,6 +423,9 @@ func helpTopicText(topic string) (string, bool) {
 	if topic == "meta doc" {
 		return metaDocUsageText() + "\n", true
 	}
+	if text, ok := authLocalHelpText(topic); ok {
+		return text + "\n", true
+	}
 	text, ok := generatedHelpText(topic)
 	if !ok {
 		return "", false
@@ -556,6 +561,15 @@ func localGroupHelpSupplement(topic string) string {
   meta doc                Print one bundled Markdown topic, for example ` + "`oar meta doc agent-guide`" + `.
   meta skill              Render a bundled editor-specific skill file, for example ` + "`oar meta skill cursor`" + `.
   Tip: use ` + "`oar help meta`" + ` for the short runtime surface, ` + "`oar meta docs`" + ` for the full shipped reference, and ` + "`oar meta skill cursor --write-dir ~/.cursor/skills/oar-cli-onboard`" + ` to export a Cursor skill.`)
+	case "auth":
+		return strings.TrimSpace(`Local auth lifecycle helpers:
+  auth whoami             Validate the active profile against the server and show resolved identity.
+  auth list               List local CLI profiles and which one is active.
+  auth update-username    Update the current principal username and sync the local profile.
+  auth rotate             Rotate the active agent key and refresh stored credentials.
+  auth revoke             Revoke the active agent and mark the local profile revoked.
+  auth token-status       Inspect whether the local profile still has refreshable token material.
+  Tip: use ` + "`oar auth bootstrap status`" + ` before first registration, ` + "`oar auth register --username <username> --bootstrap-token <token>`" + ` for the first principal, and ` + "`oar auth invites create --kind human|agent`" + ` before later registrations.`)
 	default:
 		return ""
 	}
@@ -790,6 +804,15 @@ func runtimeSupportedCommandIDs() map[string]struct{} {
 
 func runtimeGeneratedHelpSpecs() []subcommandSpec {
 	return []subcommandSpec{
+		actorsSubcommandSpec,
+		{
+			command:  "auth",
+			valid:    []string{"register"},
+			examples: authSubcommandSpec.examples,
+			aliases:  authSubcommandSpec.aliases,
+		},
+		authInvitesSubcommandSpec,
+		authBootstrapSubcommandSpec,
 		threadsSubcommandSpec,
 		commitmentsSubcommandSpec,
 		artifactsSubcommandSpec,
@@ -848,7 +871,8 @@ Use onboarding to get a working session quickly. For the fuller operating model,
 First commands to run
 
   oar --base-url http://127.0.0.1:8000 --agent <agent> doctor
-  oar --base-url http://127.0.0.1:8000 --agent <agent> auth register --username <username>
+  oar --base-url http://127.0.0.1:8000 --agent <agent> auth bootstrap status
+  oar --base-url http://127.0.0.1:8000 --agent <agent> auth register --username <username> --bootstrap-token <token>
   oar --agent <agent> auth whoami
   oar --agent <agent> threads list
   oar --agent <agent> inbox stream --max-events 1
@@ -903,10 +927,11 @@ func runtimePathFromRegistryPath(path string) string {
 	}
 	path = strings.Join(parts, " ")
 	rewrites := map[string]string{
-		"meta commands list": "meta commands",
-		"meta commands get":  "meta command",
-		"meta concepts list": "meta concepts",
-		"meta concepts get":  "meta concept",
+		"auth agents register": "auth register",
+		"meta commands list":   "meta commands",
+		"meta commands get":    "meta command",
+		"meta concepts list":   "meta concepts",
+		"meta concepts get":    "meta concept",
 	}
 	if rewritten, ok := rewrites[path]; ok {
 		return rewritten
@@ -935,6 +960,7 @@ func runtimeCommandFromRegistryCommand(command string) string {
 	command = strings.ReplaceAll(command, "oar packets work-orders", "oar work-orders")
 	command = strings.ReplaceAll(command, "oar packets receipts", "oar receipts")
 	command = strings.ReplaceAll(command, "oar packets reviews", "oar reviews")
+	command = strings.ReplaceAll(command, "oar auth agents register", "oar auth register")
 	command = strings.ReplaceAll(command, "oar events stream", "oar events tail")
 	command = strings.ReplaceAll(command, "oar inbox stream", "oar inbox tail")
 	command = strings.ReplaceAll(command, "oar meta commands get", "oar meta command")
@@ -942,4 +968,62 @@ func runtimeCommandFromRegistryCommand(command string) string {
 	command = strings.ReplaceAll(command, "oar meta concepts get", "oar meta concept")
 	command = strings.ReplaceAll(command, "oar meta concepts list", "oar meta concepts")
 	return command
+}
+
+func authLocalHelpText(topic string) (string, bool) {
+	type authTopic struct {
+		summary  string
+		usage    string
+		examples []string
+	}
+	topics := map[string]authTopic{
+		"auth whoami": {
+			summary:  "Validate the active profile against the server and print resolved identity metadata.",
+			usage:    "oar auth whoami",
+			examples: []string{"oar auth whoami", "oar --json auth whoami"},
+		},
+		"auth list": {
+			summary:  "List local CLI profiles and identify the active one.",
+			usage:    "oar auth list",
+			examples: []string{"oar auth list", "oar --json auth list"},
+		},
+		"auth update-username": {
+			summary:  "Update the authenticated agent username and sync the local profile copy.",
+			usage:    "oar auth update-username --username <username>",
+			examples: []string{"oar auth update-username --username renamed_agent"},
+		},
+		"auth rotate": {
+			summary:  "Rotate the active agent key and refresh stored credentials.",
+			usage:    "oar auth rotate",
+			examples: []string{"oar auth rotate", "oar --json auth rotate"},
+		},
+		"auth revoke": {
+			summary:  "Revoke the active agent and mark the local profile revoked.",
+			usage:    "oar auth revoke",
+			examples: []string{"oar auth revoke", "oar --json auth revoke"},
+		},
+		"auth token-status": {
+			summary:  "Inspect whether the local profile still has refreshable token material.",
+			usage:    "oar auth token-status",
+			examples: []string{"oar auth token-status", "oar --json auth token-status"},
+		},
+	}
+	entry, ok := topics[strings.Join(strings.Fields(strings.TrimSpace(topic)), " ")]
+	if !ok {
+		return "", false
+	}
+	var b strings.Builder
+	b.WriteString("Local Help: " + strings.TrimSpace(topic) + "\n\n")
+	b.WriteString(strings.TrimSpace(entry.summary) + "\n\n")
+	b.WriteString("Usage:\n")
+	b.WriteString("  " + strings.TrimSpace(entry.usage) + "\n")
+	if len(entry.examples) > 0 {
+		b.WriteString("\nExamples:\n")
+		for _, example := range entry.examples {
+			b.WriteString("  " + strings.TrimSpace(example) + "\n")
+		}
+	}
+	b.WriteString("\n")
+	b.WriteString(formatGlobalFlagUsage(topic))
+	return strings.TrimSpace(b.String()), true
 }

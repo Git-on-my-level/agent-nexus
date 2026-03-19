@@ -17,15 +17,33 @@
   import { devActorMode } from "$lib/workspaceContext";
 
   let registrationName = $state("");
+  let registrationToken = $state("");
   let registrationError = $state("");
   let loginError = $state("");
   let loadingRegistration = $state(false);
   let loadingLogin = $state(false);
+  let loadingBootstrapStatus = $state(true);
+  let bootstrapAvailable = $state(false);
   let workspaceSlug = $derived($page.params.workspace);
 
-  onMount(() => {
+  onMount(async () => {
     if (isAuthenticated(workspaceSlug)) {
       goto(workspacePath(workspaceSlug));
+      return;
+    }
+
+    const tokenParam = $page.url.searchParams.get("token");
+    if (tokenParam) {
+      registrationToken = tokenParam;
+    }
+
+    try {
+      const status = await coreClient.bootstrapStatus();
+      bootstrapAvailable = status.bootstrap_registration_available ?? false;
+    } catch {
+      bootstrapAvailable = false;
+    } finally {
+      loadingBootstrapStatus = false;
     }
   });
 
@@ -35,19 +53,36 @@
       return;
     }
 
+    if (!registrationToken.trim()) {
+      registrationError = bootstrapAvailable
+        ? "A bootstrap token is required for registration."
+        : "An invite token is required for registration.";
+      return;
+    }
+
     loadingRegistration = true;
     registrationError = "";
     loginError = "";
 
     try {
-      const options = await coreClient.passkeyRegisterOptions({
+      const registrationTokenValue = registrationToken.trim();
+      const tokenKey = bootstrapAvailable ? "bootstrap_token" : "invite_token";
+      const optionsPayload = {
         display_name: registrationName.trim(),
-      });
+      };
+      if (registrationTokenValue) {
+        optionsPayload[tokenKey] = registrationTokenValue;
+      }
+      const options = await coreClient.passkeyRegisterOptions(optionsPayload);
       const credential = await createPasskeyCredential(options.options);
-      const result = await coreClient.passkeyRegisterVerify({
+      const verifyPayload = {
         session_id: options.session_id,
         credential,
-      });
+      };
+      if (registrationTokenValue) {
+        verifyPayload[tokenKey] = registrationTokenValue;
+      }
+      const result = await coreClient.passkeyRegisterVerify(verifyPayload);
       completeAuthSession(
         result.agent,
         result.tokens,
@@ -99,6 +134,14 @@
       Redirecting to the workspace...
     </div>
   </main>
+{:else if loadingBootstrapStatus}
+  <main class="min-h-screen bg-[var(--ui-bg)] px-4 py-10 text-[var(--ui-text)]">
+    <div
+      class="mx-auto flex max-w-xl items-center justify-center rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-4 py-10 text-[13px]"
+    >
+      Checking workspace status...
+    </div>
+  </main>
 {:else}
   <main class="min-h-screen bg-[var(--ui-bg)] px-4 py-10 text-[var(--ui-text)]">
     <div class="mx-auto flex max-w-5xl flex-col gap-4 lg:flex-row">
@@ -109,14 +152,14 @@
           <p
             class="text-[11px] font-medium uppercase tracking-wide text-[var(--ui-text-muted)]"
           >
-            Auth-first
+            Sign in
           </p>
           <h1 class="mt-1 text-lg font-semibold text-[var(--ui-text)]">
             Sign in with a passkey
           </h1>
           <p class="mt-2 text-[13px] text-[var(--ui-text-muted)]">
-            Browser passkeys are now the primary web identity path. Once
-            authenticated, all writes are locked to your principal actor.
+            Use your existing passkey to authenticate. All writes are locked to
+            your principal actor.
           </p>
         </div>
 
@@ -153,10 +196,10 @@
           <p
             class="text-[11px] font-medium uppercase tracking-wide text-[var(--ui-text-muted)]"
           >
-            First-time setup
+            New to this workspace?
           </p>
           <h2 class="mt-1 text-[13px] font-semibold text-[var(--ui-text)]">
-            Create a new passkey-backed principal
+            Join with an invite token
           </h2>
         </div>
 
@@ -167,20 +210,44 @@
             handleRegistration();
           }}
         >
-          <label
-            class="block text-[12px] font-medium text-[var(--ui-text-muted)]"
-            for="display-name"
-          >
-            Display name
-          </label>
-          <input
-            bind:value={registrationName}
-            class="w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-[13px] text-[var(--ui-text)]"
-            id="display-name"
-            maxlength="120"
-            placeholder="Alex Chen"
-            type="text"
-          />
+          <div>
+            <label
+              class="block text-[12px] font-medium text-[var(--ui-text-muted)]"
+              for="display-name"
+            >
+              Display name
+            </label>
+            <input
+              bind:value={registrationName}
+              class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-[13px] text-[var(--ui-text)]"
+              id="display-name"
+              maxlength="120"
+              placeholder="Alex Chen"
+              type="text"
+            />
+          </div>
+
+          <div>
+            <label
+              class="block text-[12px] font-medium text-[var(--ui-text-muted)]"
+              for="invite-token"
+            >
+              {#if bootstrapAvailable}
+                Bootstrap token
+              {:else}
+                Invite token
+              {/if}
+            </label>
+            <input
+              bind:value={registrationToken}
+              class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 font-mono text-[13px] text-[var(--ui-text)]"
+              id="invite-token"
+              placeholder={bootstrapAvailable
+                ? "Paste the bootstrap token"
+                : "Paste your invite token"}
+              type="text"
+            />
+          </div>
 
           {#if registrationError}
             <div
@@ -190,22 +257,32 @@
             </div>
           {/if}
 
-          <div
-            class="rounded-md bg-indigo-500/10 px-3 py-2 text-[12px] text-indigo-400"
-          >
-            Registration creates a new agent, a linked actor, and an
-            authenticated browser session in one step.
-          </div>
+          {#if bootstrapAvailable}
+            <div
+              class="rounded-md bg-amber-500/10 px-3 py-2 text-[12px] text-amber-400"
+            >
+              Bootstrap registration is available for the first principal and
+              requires the workspace bootstrap token. After the first
+              registration, new members require an invite token.
+            </div>
+          {:else}
+            <div
+              class="rounded-md bg-indigo-500/10 px-3 py-2 text-[12px] text-indigo-400"
+            >
+              This workspace requires an invite token to join. Contact your
+              workspace administrator for an invitation.
+            </div>
+          {/if}
 
           <div class="flex flex-wrap gap-2">
             <button
-              class="cursor-pointer rounded-md bg-indigo-600 px-3 py-2 text-[12px] font-medium text-white hover:bg-indigo-500"
-              disabled={loadingRegistration}
+              class="cursor-pointer rounded-md bg-indigo-600 px-3 py-2 text-[12px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+              disabled={loadingRegistration || !registrationToken.trim()}
               type="submit"
             >
               {loadingRegistration
                 ? "Waiting for passkey..."
-                : "Create passkey and continue"}
+                : "Create passkey and join"}
             </button>
             {#if $devActorMode}
               <a

@@ -6,6 +6,10 @@
   import { actorRegistry, lookupActorDisplayName } from "$lib/actorSession";
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
+  import {
+    searchDocuments as searchDocumentRecords,
+    searchThreads as searchThreadRecords,
+  } from "$lib/searchHelpers";
   import { workspacePath } from "$lib/workspacePaths";
   import { enrichInboxItem } from "$lib/inboxUtils";
   import {
@@ -22,12 +26,9 @@
   let workspace = $state(null);
   let loading = $state(false);
   let error = $state("");
-  let supportError = $state("");
   let mutationNotice = $state("");
   let mutationError = $state("");
   let conflictWarning = $state("");
-  let availableThreads = $state([]);
-  let availableDocuments = $state([]);
 
   let showBoardEditForm = $state(false);
   let showAddCardForm = $state(false);
@@ -56,27 +57,6 @@
   let enrichedInboxItems = $derived(
     (workspace?.inbox?.items ?? []).map((item) => enrichInboxItem(item)),
   );
-  let threadOptions = $derived(
-    availableThreads.map((thread) => ({
-      id: thread.id,
-      title: thread.title || thread.id,
-      subtitle: [thread.status, thread.priority].filter(Boolean).join(" · "),
-      keywords: [thread.type, ...(thread.tags ?? [])],
-    })),
-  );
-  let documentOptions = $derived(
-    availableDocuments.map((document) => ({
-      id: document.id,
-      title: document.title || document.id,
-      subtitle: [
-        document.status,
-        document.thread_id && `Thread ${document.thread_id}`,
-      ]
-        .filter(Boolean)
-        .join(" · "),
-      keywords: document.labels ?? [],
-    })),
-  );
   let actorOptions = $derived(
     $actorRegistry.map((actor) => ({
       id: actor.id,
@@ -88,6 +68,39 @@
 
   function workspaceHref(pathname = "/") {
     return workspacePath(workspaceSlug, pathname);
+  }
+
+  function toThreadOption(thread) {
+    return {
+      id: thread.id,
+      title: thread.title || thread.id,
+      subtitle: [thread.status, thread.priority].filter(Boolean).join(" · "),
+      keywords: [thread.type, ...(thread.tags ?? [])],
+    };
+  }
+
+  function toDocumentOption(document) {
+    return {
+      id: document.id,
+      title: document.title || document.id,
+      subtitle: [
+        document.status,
+        document.thread_id && `Thread ${document.thread_id}`,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      keywords: document.labels ?? [],
+    };
+  }
+
+  async function searchThreadOptions(query) {
+    const threads = await searchThreadRecords(query);
+    return threads.map(toThreadOption);
+  }
+
+  async function searchDocumentOptions(query) {
+    const documents = await searchDocumentRecords(query);
+    return documents.map(toDocumentOption);
   }
 
   function syncBoardDrafts(board) {
@@ -173,22 +186,6 @@
       workspace = null;
     } finally {
       loading = false;
-    }
-  }
-
-  async function loadSupportData() {
-    supportError = "";
-    try {
-      const [threadData, documentData] = await Promise.all([
-        coreClient.listThreads({}),
-        coreClient.listDocuments({}),
-      ]);
-      availableThreads = threadData.threads ?? [];
-      availableDocuments = documentData.documents ?? [];
-    } catch (e) {
-      supportError = `Failed to load board controls: ${e instanceof Error ? e.message : String(e)}`;
-      availableThreads = [];
-      availableDocuments = [];
     }
   }
 
@@ -423,7 +420,6 @@
   $effect(() => {
     if (workspaceSlug && boardId) {
       void loadWorkspace();
-      void loadSupportData();
     }
   });
 </script>
@@ -577,7 +573,7 @@
   </section>
 
   <!-- Notification alerts -->
-  {#if mutationNotice || conflictWarning || mutationError || supportError}
+  {#if mutationNotice || conflictWarning || mutationError}
     <div class="mb-3 space-y-2">
       {#if mutationNotice}
         <div
@@ -598,13 +594,6 @@
           class="rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
         >
           {mutationError}
-        </div>
-      {/if}
-      {#if supportError}
-        <div
-          class="rounded-md bg-amber-500/10 px-3 py-2 text-[12px] text-amber-400"
-        >
-          {supportError}
         </div>
       {/if}
     </div>
@@ -648,11 +637,11 @@
             bind:value={boardPrimaryDocumentId}
             advancedLabel="Use a manual primary document ID"
             helperText="Optional: foreground the canonical doc lineage most operators should inspect first."
-            items={documentOptions}
             label="Primary document"
             manualLabel="Primary document ID"
             manualPlaceholder="incident-response-playbook"
             placeholder="Search documents by title, ID, or thread"
+            searchFn={searchDocumentOptions}
           />
 
           <div
@@ -747,11 +736,11 @@
             advancedLabel="Use a manual card thread ID"
             disabledIds={[board.primary_thread_id]}
             helperText="Pick an existing canonical thread. The board primary thread cannot also be a card."
-            items={threadOptions}
             label="Card thread"
             manualLabel="Card thread ID"
             manualPlaceholder="thread-onboarding"
             placeholder="Search threads by title, ID, or tags"
+            searchFn={searchThreadOptions}
           />
 
           <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
@@ -773,11 +762,11 @@
             bind:value={addCardPinnedDocumentId}
             advancedLabel="Use a manual pinned document ID"
             helperText="Optional: surface one canonical doc lineage directly on the card."
-            items={documentOptions}
             label="Pinned document"
             manualLabel="Pinned document ID"
             manualPlaceholder="onboarding-guide-v1"
             placeholder="Search documents by title, ID, or thread"
+            searchFn={searchDocumentOptions}
           />
         </div>
 
@@ -1082,11 +1071,11 @@
                           bind:value={managePinnedDocumentId}
                           advancedLabel="Use a manual pinned document ID"
                           helperText="Update the canonical pinned doc lineage for this card."
-                          items={documentOptions}
                           label="Pinned document"
                           manualLabel="Pinned document ID"
                           manualPlaceholder="doc-lineage-id"
                           placeholder="Search documents by title, ID, or thread"
+                          searchFn={searchDocumentOptions}
                         />
                         <div class="flex justify-end">
                           <button

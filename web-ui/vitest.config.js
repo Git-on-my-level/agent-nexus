@@ -8,6 +8,10 @@ export default defineConfig({
       "$app/paths": fileURLToPath(
         new URL("./tests/mocks/app-paths.js", import.meta.url),
       ),
+      "$env/dynamic/private": fileURLToPath(
+        new URL("./tests/mocks/env-dynamic-private.js", import.meta.url),
+      ),
+      $lib: fileURLToPath(new URL("./src/lib", import.meta.url)),
     },
   },
   test: {

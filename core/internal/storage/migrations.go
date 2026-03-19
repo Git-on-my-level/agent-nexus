@@ -344,6 +344,44 @@ var migrations = []migration{
 	{
 		Version: 13,
 		Statements: []string{
+			`CREATE TABLE IF NOT EXISTS derived_thread_dirty_queue (
+				thread_id TEXT PRIMARY KEY,
+				dirty_at TEXT NOT NULL
+			);`,
+			`CREATE INDEX IF NOT EXISTS idx_derived_thread_dirty_queue_dirty_at ON derived_thread_dirty_queue (dirty_at ASC, thread_id ASC);`,
+		},
+	},
+	{
+		Version: 14,
+		Statements: []string{
+			`CREATE TABLE IF NOT EXISTS auth_bootstrap_state (
+				id INTEGER PRIMARY KEY CHECK (id = 1),
+				consumed_token_hash TEXT NOT NULL,
+				consumed_at TEXT NOT NULL,
+				consumed_by_agent_id TEXT NOT NULL,
+				consumed_by_actor_id TEXT NOT NULL
+			);`,
+			`CREATE TABLE IF NOT EXISTS auth_invites (
+				id TEXT PRIMARY KEY,
+				token_hash TEXT NOT NULL UNIQUE,
+				kind TEXT NOT NULL,
+				created_by_agent_id TEXT NOT NULL,
+				created_by_actor_id TEXT NOT NULL,
+				note TEXT NOT NULL DEFAULT '',
+				created_at TEXT NOT NULL,
+				expires_at TEXT,
+				consumed_at TEXT,
+				revoked_at TEXT
+			);`,
+			`CREATE INDEX IF NOT EXISTS idx_auth_invites_created_at ON auth_invites (created_at DESC, id DESC);`,
+			`CREATE INDEX IF NOT EXISTS idx_auth_invites_consumed_at ON auth_invites (consumed_at);`,
+			`CREATE INDEX IF NOT EXISTS idx_auth_invites_revoked_at ON auth_invites (revoked_at);`,
+			`CREATE INDEX IF NOT EXISTS idx_auth_invites_expires_at ON auth_invites (expires_at);`,
+		},
+	},
+	{
+		Version: 15,
+		Statements: []string{
 			`CREATE TABLE IF NOT EXISTS boards (
 				id TEXT PRIMARY KEY,
 				title TEXT NOT NULL,
@@ -379,7 +417,7 @@ var migrations = []migration{
 		},
 	},
 	{
-		Version: 14,
+		Version: 16,
 		Statements: []string{
 			`CREATE TABLE IF NOT EXISTS thread_projection_refresh_status (
 				thread_id TEXT PRIMARY KEY,

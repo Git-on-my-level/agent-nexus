@@ -60,7 +60,7 @@ These run directories are disposable. Delete old `cli/.tmp/pi-dogfood/<run-id>/`
 The runner also:
 - builds temporary `oar` and `oar-core` binaries
 - starts a managed `oar-core` on a random local port
-- starts that managed core with `OAR_ALLOW_UNAUTHENTICATED_WRITES=1` so the seed phase can bootstrap actors and threads before agents authenticate
+- starts that managed core with `OAR_ENABLE_DEV_ACTOR_MODE=1` and `OAR_ALLOW_UNAUTHENTICATED_WRITES=1` so the seed phase can bootstrap actors, reads, and threads before agents authenticate
 - seeds the core from CLI-owned scenario data under `cli/dogfood/pi/seed/`
 - points Pi at that isolated core via `OAR_BASE_URL`
 

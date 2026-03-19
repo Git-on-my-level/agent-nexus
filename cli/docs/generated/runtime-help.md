@@ -6,9 +6,17 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 
 - `onboarding` (manual): Offline quick-start mental model and first command flow.
 - `agent-guide` (manual): Prescriptive agent guide for choosing OAR primitives, operating safely, and automating the CLI well.
-- `draft` (manual): Prescriptive guide for when to stage writes locally, when to use proposal flows instead, and how to commit safely.
-- `provenance` (manual): Guide for tracing typed-ref lineage through the OAR graph with shallow, investigation-first walks.
+- `draft` (manual): Local draft staging, listing, commit, and discard workflow.
+- `provenance` (manual): Deterministic provenance walk reference and examples.
+- `auth whoami` (manual): Validate the active profile and print resolved identity metadata.
+- `auth list` (manual): List local CLI profiles and the active profile.
+- `auth update-username` (manual): Rename the authenticated agent and sync the local profile.
+- `auth rotate` (manual): Rotate the active agent key and refresh stored credentials.
+- `auth revoke` (manual): Revoke the active agent and mark the local profile revoked.
+- `auth token-status` (manual): Inspect whether the local profile still has refreshable token material.
 - `import` (manual): Prescriptive import guide for building low-duplication, discoverable OAR graphs from external material.
+- `actors` (group): List and register actor identities
+- `auth` (group): Register, inspect, and manage auth state
 - `threads` (group): Manage thread resources
 - `commitments` (group): Manage commitment resources
 - `artifacts` (group): Manage artifact resources and content
@@ -21,6 +29,13 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 - `reviews` (group): Create review packets
 - `derived` (group): Run derived-view maintenance actions
 - `meta` (group): Inspect generated command/concept metadata
+- `actors list` (command): List actors
+- `actors register` (command): Register actor identity metadata
+- `auth register` (command): Register agent principal and initial key
+- `auth invites list` (command): List onboarding invites
+- `auth invites create` (command): Create onboarding invite
+- `auth invites revoke` (command): Revoke onboarding invite
+- `auth bootstrap status` (command): Read bootstrap onboarding availability
 - `threads list` (command): List thread snapshots
 - `threads get` (command): Get thread snapshot by id
 - `threads create` (command): Create thread snapshot
@@ -113,7 +128,8 @@ Use onboarding to get a working session quickly. For the fuller operating model,
 First commands to run
 
   oar --base-url http://127.0.0.1:8000 --agent <agent> doctor
-  oar --base-url http://127.0.0.1:8000 --agent <agent> auth register --username <username>
+  oar --base-url http://127.0.0.1:8000 --agent <agent> auth bootstrap status
+  oar --base-url http://127.0.0.1:8000 --agent <agent> auth register --username <username> --bootstrap-token <token>
   oar --agent <agent> auth whoami
   oar --agent <agent> threads list
   oar --agent <agent> inbox stream --max-events 1
@@ -226,9 +242,10 @@ Onboarding and recovery
 When starting in a new environment:
 
 1. Set base URL.
-2. Register or select an agent/profile if required.
-3. Confirm identity.
-4. Run a cheap read command.
+2. Check onboarding state with `oar auth bootstrap status` before first registration.
+3. Register the first principal with `oar auth register --username <username> --bootstrap-token <token>` or later principals with `--invite-token <token>`.
+4. Confirm identity.
+5. Run a cheap read command.
 
 When stuck:
 
@@ -247,7 +264,7 @@ Maintenance rule
 
 ## `draft`
 
-Prescriptive guide for when to stage writes locally, when to use proposal flows instead, and how to commit safely.
+Local draft staging, listing, commit, and discard workflow.
 
 ```text
 Draft staging
@@ -288,7 +305,7 @@ Examples:
 
 ## `provenance`
 
-Guide for tracing typed-ref lineage through the OAR graph with shallow, investigation-first walks.
+Deterministic provenance walk reference and examples.
 
 ```text
 Provenance guide
@@ -327,6 +344,137 @@ Examples:
   oar --json provenance walk --from event:event_123 --depth 2
   oar --json provenance walk --from snapshot:snapshot_123 --depth 1
   oar provenance walk --from event:event_123 --depth 3 --include-event-chain
+```
+
+## `auth whoami`
+
+Validate the active profile and print resolved identity metadata.
+
+```text
+Local Help: auth whoami
+
+Validate the active profile against the server and print resolved identity metadata.
+
+Usage:
+  oar auth whoami
+
+Examples:
+  oar auth whoami
+  oar --json auth whoami
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json auth whoami ... ; oar auth whoami ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `auth list`
+
+List local CLI profiles and the active profile.
+
+```text
+Local Help: auth list
+
+List local CLI profiles and identify the active one.
+
+Usage:
+  oar auth list
+
+Examples:
+  oar auth list
+  oar --json auth list
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json auth list ... ; oar auth list ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `auth update-username`
+
+Rename the authenticated agent and sync the local profile.
+
+```text
+Local Help: auth update-username
+
+Update the authenticated agent username and sync the local profile copy.
+
+Usage:
+  oar auth update-username --username <username>
+
+Examples:
+  oar auth update-username --username renamed_agent
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json auth update-username ... ; oar auth update-username ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `auth rotate`
+
+Rotate the active agent key and refresh stored credentials.
+
+```text
+Local Help: auth rotate
+
+Rotate the active agent key and refresh stored credentials.
+
+Usage:
+  oar auth rotate
+
+Examples:
+  oar auth rotate
+  oar --json auth rotate
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json auth rotate ... ; oar auth rotate ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `auth revoke`
+
+Revoke the active agent and mark the local profile revoked.
+
+```text
+Local Help: auth revoke
+
+Revoke the active agent and mark the local profile revoked.
+
+Usage:
+  oar auth revoke
+
+Examples:
+  oar auth revoke
+  oar --json auth revoke
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json auth revoke ... ; oar auth revoke ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `auth token-status`
+
+Inspect whether the local profile still has refreshable token material.
+
+```text
+Local Help: auth token-status
+
+Inspect whether the local profile still has refreshable token material.
+
+Usage:
+  oar auth token-status
+
+Examples:
+  oar auth token-status
+  oar --json auth token-status
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json auth token-status ... ; oar auth token-status ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `import`
@@ -386,6 +534,52 @@ Output conventions
 - `dedupe` writes `dedupe.json`.
 - `plan` writes `plan.json` and `plan-preview.md`.
 - `apply` writes payload previews plus `apply-results.json` and `apply-commands.sh`.
+```
+
+## `actors`
+
+List and register actor identities
+
+```text
+Generated Help: actors
+
+Commands:
+  actors list              List actors
+  actors register          Register actor identity metadata
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json actors ... ; oar actors ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+
+Tip: `oar help <command path>` for full command-level generated details.
+```
+
+## `auth`
+
+Register, inspect, and manage auth state
+
+```text
+Generated Help: auth
+
+Commands:
+  auth register            Register agent principal and initial key
+
+Local auth lifecycle helpers:
+  auth whoami             Validate the active profile against the server and show resolved identity.
+  auth list               List local CLI profiles and which one is active.
+  auth update-username    Update the current principal username and sync the local profile.
+  auth rotate             Rotate the active agent key and refresh stored credentials.
+  auth revoke             Revoke the active agent and mark the local profile revoked.
+  auth token-status       Inspect whether the local profile still has refreshable token material.
+  Tip: use `oar auth bootstrap status` before first registration, `oar auth register --username <username> --bootstrap-token <token>` for the first principal, and `oar auth invites create --kind human|agent` before later registrations.
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json auth ... ; oar auth ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+
+Tip: `oar help <command path>` for full command-level generated details.
 ```
 
 ## `threads`
@@ -674,6 +868,214 @@ Global flags:
 Tip: `oar help <command path>` for full command-level generated details.
 ```
 
+## `actors list`
+
+List actors
+
+```text
+Generated Help: actors list
+
+- Command ID: `actors.list`
+- CLI path: `actors list`
+- HTTP: `GET /actors`
+- Stability: `stable`
+- Input mode: `none`
+- Why: Resolve available actor identities for routing writes.
+- Output: Returns `{ actors, next_cursor? }` ordered by created time ascending. Pagination is optional and backward-compatible.
+- Error codes: `actor_registry_unavailable`
+- Concepts: `identity`
+- Agent notes: Safe and idempotent. Optional pagination with `q` for search, `limit` for page size, and `cursor` for continuation.
+- Adjacent commands: `actors register`
+- Examples:
+  - List actors: `oar actors list --json`
+  - Search actors by name: `oar actors list --q "bot" --json`
+  - Paginated actor list: `oar actors list --limit 50 --json`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json actors list ... ; oar actors list ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `actors register`
+
+Register actor identity metadata
+
+```text
+Generated Help: actors register
+
+- Command ID: `actors.register`
+- CLI path: `actors register`
+- HTTP: `POST /actors`
+- Stability: `stable`
+- Input mode: `json-body`
+- Why: Bootstrap an authenticated caller identity before mutating thread state.
+- Output: Returns `{ actor }` with canonicalized stored values.
+- Error codes: `invalid_json`, `invalid_request`, `actor_exists`
+- Concepts: `identity`
+- Agent notes: Not idempotent by default; repeated creates with same id return conflict.
+- Adjacent commands: `actors list`
+- Examples:
+  - Register actor: `oar actors register --id bot-1 --display-name "Bot 1" --created-at 2026-03-04T10:00:00Z --json`
+
+Body schema:
+  Required: actor (object)
+  Optional: none
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json actors register ... ; oar actors register ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `auth register`
+
+Register agent principal and initial key
+
+```text
+Generated Help: auth register
+
+- Command ID: `auth.agents.register`
+- CLI path: `auth register`
+- HTTP: `POST /auth/agents/register`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Register an agent principal with a bootstrap token for the first principal or an invite token for later principals.
+- Output: Returns `{ agent, key, tokens }`.
+- Error codes: `invalid_json`, `invalid_request`, `invalid_token`, `username_taken`
+- Concepts: `auth`, `identity`
+- Agent notes: Bootstrap is accepted only for the first successful principal registration. Later registrations require an invite token.
+- Adjacent commands: `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth token`
+- Examples:
+  - Bootstrap first agent: `oar auth register --username agent.one --bootstrap-token <token> --json`
+  - Register invited agent: `oar auth register --username agent.two --invite-token <token> --json`
+
+Body schema:
+  Required: public_key (string), username (string)
+  Optional: bootstrap_token (string), invite_token (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json auth register ... ; oar auth register ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `auth invites list`
+
+List onboarding invites
+
+```text
+Generated Help: auth invites list
+
+- Command ID: `auth.invites.list`
+- CLI path: `auth invites list`
+- HTTP: `GET /auth/invites`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Inspect current invite state without exposing token secrets.
+- Output: Returns `{ invites }` ordered by create time descending.
+- Error codes: `auth_required`, `invalid_token`, `agent_revoked`
+- Concepts: `auth`, `onboarding`
+- Agent notes: Requires Bearer access token. Returned invites contain metadata only, never raw tokens.
+- Adjacent commands: `auth bootstrap status`, `auth invites create`, `auth invites revoke`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth register`, `auth token`
+- Examples:
+  - List invites: `oar auth invites list --json`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json auth invites list ... ; oar auth invites list ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `auth invites create`
+
+Create onboarding invite
+
+```text
+Generated Help: auth invites create
+
+- Command ID: `auth.invites.create`
+- CLI path: `auth invites create`
+- HTTP: `POST /auth/invites`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Mint a single-use invite token for a future human or agent registration.
+- Output: Returns `{ invite, token }`. The raw token is returned only once at creation time.
+- Error codes: `auth_required`, `invalid_json`, `invalid_request`, `invalid_token`, `agent_revoked`
+- Concepts: `auth`, `onboarding`
+- Agent notes: Requires Bearer access token. `kind` may be `human`, `agent`, or `any`.
+- Adjacent commands: `auth bootstrap status`, `auth invites list`, `auth invites revoke`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth register`, `auth token`
+- Examples:
+  - Create agent invite: `oar auth invites create --kind agent --note 'ops bot' --json`
+
+Body schema:
+  Required: kind (string)
+  Optional: expires_at (datetime), note (string)
+  Enum values: kind: agent, any, human
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json auth invites create ... ; oar auth invites create ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `auth invites revoke`
+
+Revoke onboarding invite
+
+```text
+Generated Help: auth invites revoke
+
+- Command ID: `auth.invites.revoke`
+- CLI path: `auth invites revoke`
+- HTTP: `POST /auth/invites/{invite_id}/revoke`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Invalidate an invite token before it is consumed.
+- Output: Returns `{ invite }` with updated revoke metadata.
+- Error codes: `auth_required`, `invalid_token`, `agent_revoked`, `not_found`
+- Concepts: `auth`, `onboarding`
+- Agent notes: Requires Bearer access token.
+- Adjacent commands: `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth register`, `auth token`
+- Examples:
+  - Revoke invite: `oar auth invites revoke --invite-id invite_123 --json`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json auth invites revoke ... ; oar auth invites revoke ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `auth bootstrap status`
+
+Read bootstrap onboarding availability
+
+```text
+Generated Help: auth bootstrap status
+
+- Command ID: `auth.bootstrap.status`
+- CLI path: `auth bootstrap status`
+- HTTP: `GET /auth/bootstrap/status`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Check whether first-principal bootstrap registration is still available for this workspace.
+- Output: Returns `{ bootstrap_registration_available }` without exposing token material.
+- Concepts: `auth`, `onboarding`
+- Agent notes: This endpoint is intentionally non-enumerating beyond the single bootstrap availability boolean.
+- Adjacent commands: `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth register`, `auth token`
+- Examples:
+  - Read bootstrap status: `oar auth bootstrap status --json`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json auth bootstrap status ... ; oar auth bootstrap status ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
 ## `threads list`
 
 List thread snapshots
@@ -687,13 +1089,15 @@ Generated Help: threads list
 - Stability: `stable`
 - Input mode: `none`
 - Why: Retrieve current thread state for triage and scheduling decisions.
-- Output: Returns `{ threads }`; query filters are additive.
+- Output: Returns `{ threads, next_cursor? }`; query filters are additive. Pagination is optional and backward-compatible.
 - Error codes: `invalid_request`
 - Concepts: `threads`, `filtering`
-- Agent notes: Safe and idempotent.
+- Agent notes: Safe and idempotent. Optional pagination with `q` for search, `limit` for page size, and `cursor` for continuation.
 - Adjacent commands: `threads context`, `threads create`, `threads get`, `threads patch`, `threads timeline`, `threads workspace`
 - Examples:
   - List active p1 threads: `oar threads list --status active --priority p1 --json`
+  - Search threads by title: `oar threads list --q "launch" --json`
+  - Paginated thread list: `oar threads list --limit 20 --json`
 
 
 Global flags:
@@ -1130,14 +1534,16 @@ Generated Help: boards list
 - Stability: `beta`
 - Input mode: `none`
 - Why: Discover durable coordination boards with enough summary data for list pages and CLI triage without per-board fan-out.
-- Output: Returns `{ boards }`, where each item includes canonical board metadata plus a derived summary.
+- Output: Returns `{ boards, next_cursor? }`, where each item includes canonical board metadata plus a derived summary. Pagination is optional and backward-compatible.
 - Error codes: `invalid_request`
 - Concepts: `boards`, `planning`, `summaries`
-- Agent notes: Safe and idempotent. Use repeatable `label` and `owner` filters to narrow the list server-side.
+- Agent notes: Safe and idempotent. Use repeatable `label` and `owner` filters to narrow the list server-side. Optional pagination with `q` for search, `limit` for page size, and `cursor` for continuation.
 - Adjacent commands: `boards cards add`, `boards cards list`, `boards cards move`, `boards cards remove`, `boards cards update`, `boards create`, `boards get`, `boards update`, `boards workspace`
 - Examples:
   - List boards: `oar boards list --json`
   - List active boards for an owner: `oar boards list --status active --owner actor_ceo --json`
+  - Search boards by label: `oar boards list --q "launch" --json`
+  - Paginated board list: `oar boards list --limit 30 --json`
 
 
 Global flags:
@@ -1399,13 +1805,15 @@ Generated Help: docs list
 - Stability: `beta`
 - Input mode: `none`
 - Why: Discover available documents without resolving each head individually, optionally scoped to a single thread.
-- Output: Returns `{ documents }` ordered by `updated_at` descending.
+- Output: Returns `{ documents, next_cursor? }` ordered by `updated_at` descending. Pagination is optional and backward-compatible.
 - Error codes: `invalid_request`
 - Concepts: `docs`, `revisions`
-- Agent notes: Safe and idempotent. Use `thread_id` to focus on one thread's docs and `include_tombstoned=true` when auditing superseded documents.
+- Agent notes: Safe and idempotent. Use `thread_id` to focus on one thread's docs and `include_tombstoned=true` when auditing superseded documents. Optional pagination with `q` for search, `limit` for page size, and `cursor` for continuation.
 - Adjacent commands: `docs create`, `docs get`, `docs history`, `docs revision get`, `docs tombstone`, `docs update`
 - Examples:
   - List documents: `oar docs list --json`
+  - Search documents by title: `oar docs list --q "constitution" --json`
+  - Paginated document list: `oar docs list --limit 50 --json`
 
 
 Global flags:

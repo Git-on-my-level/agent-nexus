@@ -61,6 +61,7 @@
 
   let activeWorkspace = $derived($page.data.workspace ?? null);
   let activeWorkspaceSlug = $derived(activeWorkspace?.slug ?? "");
+  let hasMultipleWorkspaces = $derived((data.workspaces ?? []).length > 1);
   let currentAppPath = $derived(
     activeWorkspaceSlug
       ? stripWorkspacePath($page.url.pathname, activeWorkspaceSlug)
@@ -162,12 +163,22 @@
       fetchFn: globalThis.fetch.bind(globalThis),
       workspaceSlug,
     });
-    await refreshActors(workspaceSlug);
     try {
       const handshake = await coreClient.getHandshake();
-      setDevActorMode(handshake.dev_actor_mode === true);
+      const devActorModeEnabled = handshake.dev_actor_mode === true;
+      setDevActorMode(devActorModeEnabled);
+      if (devActorModeEnabled) {
+        await refreshActors(workspaceSlug);
+      } else {
+        actorError = "";
+        loadingActors = false;
+        replaceActorRegistry([], workspaceSlug);
+      }
     } catch {
       setDevActorMode(false);
+      actorError = "";
+      loadingActors = false;
+      replaceActorRegistry([], workspaceSlug);
     } finally {
       setDevActorModeReady(true);
     }
@@ -429,87 +440,89 @@
   {:else}
     <div class="shell-frame">
       <aside class="shell-sidebar" aria-label="Primary">
-        <div class="workspace-switcher" id="workspace-picker-container">
-          <button
-            class="workspace-switcher-trigger"
-            onclick={toggleWorkspacePicker}
-            aria-expanded={workspacePickerOpen}
-            aria-haspopup="listbox"
-            type="button"
-          >
-            <span class="workspace-switcher-icon" aria-hidden="true">
-              {workspaceInitials(activeWorkspace?.label)}
-            </span>
-            <span class="workspace-switcher-label">
-              <span class="workspace-switcher-name"
-                >{activeWorkspace?.label || activeWorkspaceSlug}</span
-              >
-              <span class="workspace-switcher-sub">OAR Control Surface</span>
-            </span>
-            <svg
-              class="workspace-switcher-chevron"
-              class:workspace-switcher-chevron--open={workspacePickerOpen}
-              viewBox="0 0 20 20"
-              fill="currentColor"
-              aria-hidden="true"
+        {#if hasMultipleWorkspaces}
+          <div class="workspace-switcher" id="workspace-picker-container">
+            <button
+              class="workspace-switcher-trigger"
+              onclick={toggleWorkspacePicker}
+              aria-expanded={workspacePickerOpen}
+              aria-haspopup="listbox"
+              type="button"
             >
-              <path
-                fill-rule="evenodd"
-                d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
-                clip-rule="evenodd"
-              />
-            </svg>
-          </button>
-
-          {#if workspacePickerOpen}
-            <div
-              class="workspace-switcher-dropdown"
-              role="listbox"
-              aria-label="Switch workspace"
-            >
-              {#each data.workspaces ?? [] as workspace}
-                {@const isCurrent = workspace.slug === activeWorkspaceSlug}
-                <button
-                  class="workspace-switcher-option"
-                  class:workspace-switcher-option--active={isCurrent}
-                  role="option"
-                  aria-selected={isCurrent}
-                  onclick={() => pickWorkspace(workspace.slug)}
-                  type="button"
+              <span class="workspace-switcher-icon" aria-hidden="true">
+                {workspaceInitials(activeWorkspace?.label)}
+              </span>
+              <span class="workspace-switcher-label">
+                <span class="workspace-switcher-name"
+                  >{activeWorkspace?.label || activeWorkspaceSlug}</span
                 >
-                  <span
-                    class="workspace-switcher-option-icon"
-                    aria-hidden="true"
+                <span class="workspace-switcher-sub">OAR Control Surface</span>
+              </span>
+              <svg
+                class="workspace-switcher-chevron"
+                class:workspace-switcher-chevron--open={workspacePickerOpen}
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <path
+                  fill-rule="evenodd"
+                  d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+                  clip-rule="evenodd"
+                />
+              </svg>
+            </button>
+
+            {#if workspacePickerOpen}
+              <div
+                class="workspace-switcher-dropdown"
+                role="listbox"
+                aria-label="Switch workspace"
+              >
+                {#each data.workspaces ?? [] as workspace}
+                  {@const isCurrent = workspace.slug === activeWorkspaceSlug}
+                  <button
+                    class="workspace-switcher-option"
+                    class:workspace-switcher-option--active={isCurrent}
+                    role="option"
+                    aria-selected={isCurrent}
+                    onclick={() => pickWorkspace(workspace.slug)}
+                    type="button"
                   >
-                    {workspaceInitials(workspace.label)}
-                  </span>
-                  <span class="workspace-switcher-option-label">
-                    <span>{workspace.label}</span>
-                    {#if workspace.description}
-                      <span class="workspace-switcher-option-desc"
-                        >{workspace.description}</span
-                      >
-                    {/if}
-                  </span>
-                  {#if isCurrent}
-                    <svg
-                      class="workspace-switcher-check"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
+                    <span
+                      class="workspace-switcher-option-icon"
                       aria-hidden="true"
                     >
-                      <path
-                        fill-rule="evenodd"
-                        d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"
-                        clip-rule="evenodd"
-                      />
-                    </svg>
-                  {/if}
-                </button>
-              {/each}
-            </div>
-          {/if}
-        </div>
+                      {workspaceInitials(workspace.label)}
+                    </span>
+                    <span class="workspace-switcher-option-label">
+                      <span>{workspace.label}</span>
+                      {#if workspace.description}
+                        <span class="workspace-switcher-option-desc"
+                          >{workspace.description}</span
+                        >
+                      {/if}
+                    </span>
+                    {#if isCurrent}
+                      <svg
+                        class="workspace-switcher-check"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                        aria-hidden="true"
+                      >
+                        <path
+                          fill-rule="evenodd"
+                          d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"
+                          clip-rule="evenodd"
+                        />
+                      </svg>
+                    {/if}
+                  </button>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {/if}
 
         <nav class="shell-nav" aria-label="Primary">
           {#each navigationItems as item}
@@ -628,44 +641,47 @@
                 </button>
               </div>
               <nav class="shell-mobile-nav" aria-label="Primary mobile">
-                <div class="mobile-workspace-list">
-                  {#each data.workspaces ?? [] as workspace}
-                    {@const isCurrent = workspace.slug === activeWorkspaceSlug}
-                    <button
-                      class="workspace-switcher-option"
-                      class:workspace-switcher-option--active={isCurrent}
-                      onclick={() => {
-                        pickWorkspace(workspace.slug);
-                        closeMobileNav();
-                      }}
-                      type="button"
-                    >
-                      <span
-                        class="workspace-switcher-option-icon"
-                        aria-hidden="true"
+                {#if hasMultipleWorkspaces}
+                  <div class="mobile-workspace-list">
+                    {#each data.workspaces ?? [] as workspace}
+                      {@const isCurrent =
+                        workspace.slug === activeWorkspaceSlug}
+                      <button
+                        class="workspace-switcher-option"
+                        class:workspace-switcher-option--active={isCurrent}
+                        onclick={() => {
+                          pickWorkspace(workspace.slug);
+                          closeMobileNav();
+                        }}
+                        type="button"
                       >
-                        {workspaceInitials(workspace.label)}
-                      </span>
-                      <span class="workspace-switcher-option-label">
-                        <span>{workspace.label}</span>
-                      </span>
-                      {#if isCurrent}
-                        <svg
-                          class="workspace-switcher-check"
-                          viewBox="0 0 20 20"
-                          fill="currentColor"
+                        <span
+                          class="workspace-switcher-option-icon"
                           aria-hidden="true"
                         >
-                          <path
-                            fill-rule="evenodd"
-                            d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"
-                            clip-rule="evenodd"
-                          />
-                        </svg>
-                      {/if}
-                    </button>
-                  {/each}
-                </div>
+                          {workspaceInitials(workspace.label)}
+                        </span>
+                        <span class="workspace-switcher-option-label">
+                          <span>{workspace.label}</span>
+                        </span>
+                        {#if isCurrent}
+                          <svg
+                            class="workspace-switcher-check"
+                            viewBox="0 0 20 20"
+                            fill="currentColor"
+                            aria-hidden="true"
+                          >
+                            <path
+                              fill-rule="evenodd"
+                              d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"
+                              clip-rule="evenodd"
+                            />
+                          </svg>
+                        {/if}
+                      </button>
+                    {/each}
+                  </div>
+                {/if}
                 <div class="mobile-workspace-divider"></div>
                 {#each navigationItems as item}
                   {@const active = isActive(item.href)}

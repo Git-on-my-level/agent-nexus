@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,20 +19,42 @@ func handleListDocuments(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		return
 	}
 
+	var limitFilter *int
+	limitRaw := strings.TrimSpace(r.URL.Query().Get("limit"))
+	if limitRaw != "" {
+		parsed, err := strconv.Atoi(limitRaw)
+		if err != nil || parsed < 1 || parsed > 1000 {
+			writeError(w, http.StatusBadRequest, "invalid_request", "limit must be between 1 and 1000")
+			return
+		}
+		limitFilter = &parsed
+	}
+
 	includeTombstoned := strings.TrimSpace(r.URL.Query().Get("include_tombstoned")) == "true"
 	threadID := strings.TrimSpace(r.URL.Query().Get("thread_id"))
-	documents, err := opts.primitiveStore.ListDocuments(r.Context(), primitives.DocumentListFilter{
+	documents, nextCursor, err := opts.primitiveStore.ListDocuments(r.Context(), primitives.DocumentListFilter{
 		ThreadID:          threadID,
 		IncludeTombstoned: includeTombstoned,
+		Query:             strings.TrimSpace(r.URL.Query().Get("q")),
+		Limit:             limitFilter,
+		Cursor:            strings.TrimSpace(r.URL.Query().Get("cursor")),
 	})
 	if err != nil {
+		if errors.Is(err, primitives.ErrInvalidCursor) {
+			writeError(w, http.StatusBadRequest, "invalid_request", "cursor is invalid")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list documents")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
+	response := map[string]any{
 		"documents": documents,
-	})
+	}
+	if nextCursor != "" {
+		response["next_cursor"] = nextCursor
+	}
+	writeJSON(w, http.StatusOK, response)
 }
 
 func handleCreateDocument(w http.ResponseWriter, r *http.Request, opts handlerOptions) {

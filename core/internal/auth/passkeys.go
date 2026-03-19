@@ -32,7 +32,7 @@ type PasskeyIdentity struct {
 	Credentials []webauthn.Credential
 }
 
-func (s *Store) RegisterPasskeyAgent(ctx context.Context, input RegisterPasskeyAgentInput) (Agent, TokenBundle, error) {
+func (s *Store) RegisterPasskeyAgent(ctx context.Context, input RegisterPasskeyAgentInput, claim OnboardingClaim) (Agent, TokenBundle, error) {
 	if s == nil || s.db == nil {
 		return Agent{}, TokenBundle{}, fmt.Errorf("auth store database is not initialized")
 	}
@@ -63,6 +63,11 @@ func (s *Store) RegisterPasskeyAgent(ctx context.Context, input RegisterPasskeyA
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Agent{}, TokenBundle{}, fmt.Errorf("begin register passkey transaction: %w", err)
+	}
+
+	if err := s.consumeOnboardingClaimTx(ctx, tx, claim, agentID, actorID, now); err != nil {
+		_ = tx.Rollback()
+		return Agent{}, TokenBundle{}, err
 	}
 
 	_, err = tx.ExecContext(

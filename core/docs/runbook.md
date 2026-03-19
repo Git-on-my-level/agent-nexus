@@ -19,27 +19,23 @@ This runbook covers reproducible local and production-like operation for `oar-co
 | Listen port | `--port` | `OAR_PORT` | `8000` |
 | Full listen address (overrides host+port) | `--listen-addr` | `OAR_LISTEN_ADDR` | unset |
 | Schema path | `--schema-path` | `OAR_SCHEMA_PATH` | `../contracts/oar-schema.yaml` |
+| Core instance identifier | `--core-instance-id` | `OAR_CORE_INSTANCE_ID` | `core-local` |
+| Enable dev actor mode | n/a | `OAR_ENABLE_DEV_ACTOR_MODE` | `false` |
 | Allow unauthenticated writes | n/a | `OAR_ALLOW_UNAUTHENTICATED_WRITES` | `false` |
-| Enable development actor mode | n/a | `OAR_ENABLE_DEV_ACTOR_MODE` | `false` |
+| Bootstrap token for first principal registration | n/a | `OAR_BOOTSTRAP_TOKEN` | unset |
 | WebAuthn RP ID | n/a | `OAR_WEBAUTHN_RPID` | derived from browser origin host |
 | WebAuthn origin | n/a | `OAR_WEBAUTHN_ORIGIN` | derived from browser request origin |
 | WebAuthn RP display name | n/a | `OAR_WEBAUTHN_RP_DISPLAY_NAME` | `OAR` |
 | CORS allowed origins | n/a | `OAR_CORS_ALLOWED_ORIGINS` | unset (CORS disabled) |
 | Graceful shutdown timeout | n/a | `OAR_SHUTDOWN_TIMEOUT` | `15s` |
-| Blob storage backend | n/a | `OAR_BLOB_BACKEND` | `filesystem` |
-| Blob storage root | n/a | `OAR_BLOB_ROOT` | `<workspace>/artifacts/content` |
 
 ## Workspace layout
 
 The workspace root contains:
 
 - `state.sqlite`: canonical structured data (events, snapshots, artifacts metadata, actors, derived views)
-- `artifacts/content/`: artifact bytes (content-addressable blobs)
+- `artifacts/content/`: artifact bytes
 - `logs/`, `tmp/`: operational directories
-
-Blob storage is abstracted behind a storage seam (`internal/blob.Backend`). The default
-`filesystem` backend stores content in `artifacts/content/` using content-addressable paths.
-Future backends (S3, GCS, etc.) can be added without changes to core logic.
 
 ## Migrations / initialization
 
@@ -82,20 +78,10 @@ derives them per request from the browser origin forwarded by the UI proxy.
 If you set either value explicitly, the browser must access the UI on that same
 hostname or WebAuthn ceremonies will be rejected.
 
-`./scripts/dev` defaults `OAR_ALLOW_UNAUTHENTICATED_WRITES=1` so local seed workflows keep working. Production-like runs should leave it unset unless an explicitly open local workflow is required.
-
-## Development actor mode
-
-By default, `OAR_ENABLE_DEV_ACTOR_MODE` is `false`, making production-like deployments **auth-first**:
-- Users must authenticate via passkey to obtain a linked actor
-- `POST /actors` returns `403 Forbidden` with error code `dev_actor_mode_disabled`
-- The web UI hides the legacy actor picker/creator flow and redirects unauthenticated users to `/login`
-
-For local development convenience, set `OAR_ENABLE_DEV_ACTOR_MODE=1` to:
-- Allow `POST /actors` for arbitrary actor creation
-- Show the legacy actor picker/creator UI flow in the web UI
-
-This is a development convenience only and should not be enabled in production.
+`./scripts/dev` defaults `OAR_ENABLE_DEV_ACTOR_MODE=1` and
+`OAR_ALLOW_UNAUTHENTICATED_WRITES=1` so local actor-selection, reads, and seed
+workflows keep working. Production-like runs should leave both unset unless an
+explicitly open local workflow is required.
 
 ## Verify server health
 
@@ -104,7 +90,26 @@ curl -fsS http://127.0.0.1:8000/health
 curl -fsS http://127.0.0.1:8000/version
 ```
 
-`/health` is local-only and fast (workspace storage connectivity check only).
+`/health` is local-only and fast. It performs the workspace storage connectivity
+check and reports projection-maintenance lag/status without rebuilding derived
+state inline.
+
+The health payload also includes projection maintenance status:
+
+- `pending_dirty_count`: thread projections queued for refresh.
+- `oldest_dirty_at` / `oldest_dirty_lag_seconds`: lag indicator for the oldest queued projection refresh.
+- `last_successful_stale_scan_at`: last successful background stale-thread scan.
+- `last_error`: last maintenance failure, if one has occurred since the most recent successful pass.
+
+Background projection maintenance is driven by:
+
+- `OAR_PROJECTION_MAINTENANCE_INTERVAL`
+- `OAR_PROJECTION_STALE_SCAN_INTERVAL`
+- `OAR_PROJECTION_MAINTENANCE_BATCH_SIZE`
+
+Normal operations should allow the worker to catch up asynchronously. `POST /derived/rebuild`
+is still the explicit repair tool when the queue is badly behind, after operator intervention,
+or after a code/data fix that requires a full recompute from canonical state.
 
 ## Board surface quick check
 
@@ -150,10 +155,17 @@ workspace and the primary thread timeline.
 
 ## Production deployment
 
+Hosted v1 production operations are managed per isolated workspace deployment.
+Use [`deploy/managed-hosting.md`](../../deploy/managed-hosting.md) for the
+authoritative provision/bootstrap/backup/restore flow. The sections below focus
+on core-specific runtime behavior inside that operator model.
+
 ### Auth model
 
-In production, `OAR_ALLOW_UNAUTHENTICATED_WRITES` must be `false` (the default).
-All write operations require a valid Bearer token. Two principal types are supported:
+In production, `OAR_ENABLE_DEV_ACTOR_MODE` and
+`OAR_ALLOW_UNAUTHENTICATED_WRITES` must both be `false` (the defaults).
+Workspace reads and writes require a valid Bearer token, and `POST /actors`
+must remain disabled. Two principal types are supported:
 
 - **Human users** authenticate via WebAuthn passkeys through the web-ui.
   Requires `OAR_WEBAUTHN_RPID` and `OAR_WEBAUTHN_ORIGIN` to match the
@@ -219,6 +231,7 @@ docker run -d --restart unless-stopped \
   -p 8000:8000 \
   -v oar-workspace:/var/lib/oar/workspace \
   -e OAR_LISTEN_ADDR=0.0.0.0:8000 \
+  -e OAR_ENABLE_DEV_ACTOR_MODE=false \
   -e OAR_ALLOW_UNAUTHENTICATED_WRITES=false \
   -e OAR_WEBAUTHN_RPID=oar.example.com \
   -e OAR_WEBAUTHN_ORIGIN=https://oar.example.com \
@@ -237,13 +250,22 @@ curl -fsS http://127.0.0.1:8000/version
 From the repo root:
 
 ```bash
-cp .env.production.example .env
-# Edit .env with production values
-docker compose up -d
+./scripts/hosted/provision-workspace.sh \
+  --instance team-alpha \
+  --instance-root /srv/oar/team-alpha \
+  --public-origin https://team-alpha.oar.example.com \
+  --listen-port 8001 \
+  --web-ui-port 3001 \
+  --generate-bootstrap-token
+
+docker compose --env-file /srv/oar/team-alpha/config/env.production up -d
 ```
 
 This starts both `core` (port 8000) and `web-ui` (port 3000). The web-ui
-proxies API calls to core over the internal Docker network.
+proxies API calls to core over the internal Docker network. The generated env
+file also carries `HOST_OAR_WORKSPACE_ROOT`, `OAR_CORE_INSTANCE_ID`, and
+`OAR_BOOTSTRAP_TOKEN` so the Compose example matches the hosted-v1 managed-ops
+story instead of a generic shared volume.
 
 ## CI smoke
 

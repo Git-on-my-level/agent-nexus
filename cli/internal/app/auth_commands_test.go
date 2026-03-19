@@ -245,6 +245,76 @@ func TestAuthRegisterInternalErrorIsActionable(t *testing.T) {
 	}
 }
 
+func TestAuthInvitesCreateRequiresKind(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"auth", "invites", "create",
+	})
+	payload := assertEnvelopeError(t, raw)
+	errObj, _ := payload["error"].(map[string]any)
+	if errObj == nil || strings.TrimSpace(anyStr(errObj["code"])) != "invite_kind_required" {
+		t.Fatalf("unexpected auth invites create error payload: %#v", payload)
+	}
+	if message := strings.TrimSpace(anyStr(errObj["message"])); !strings.Contains(message, "kind is required") {
+		t.Fatalf("expected kind-required guidance, got %q payload=%#v", message, payload)
+	}
+}
+
+func TestAuthInvitesListShowsConsumedInvites(t *testing.T) {
+	t.Parallel()
+
+	core := newFakeAuthCore(t)
+	core.invites = []map[string]any{{
+		"id":                  "invite-1",
+		"kind":                "human",
+		"note":                "operator",
+		"created_at":          "2026-03-19T00:00:00Z",
+		"created_by_agent_id": "agent-123",
+		"created_by_actor_id": "actor-123",
+		"consumed_at":         "2026-03-19T01:00:00Z",
+	}}
+	server := httptest.NewServer(http.HandlerFunc(core.handle))
+	defer server.Close()
+
+	home := t.TempDir()
+	env := map[string]string{}
+
+	_ = runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "register", "--username", "Agent.One"})
+	profilePath := filepath.Join(home, ".config", "oar", "profiles", "agent-a.json")
+	storedProfile, ok, err := profile.Load(profilePath)
+	if err != nil || !ok {
+		t.Fatalf("load profile after register: ok=%t err=%v", ok, err)
+	}
+	jsonOutput := false
+	storedProfile.JSON = &jsonOutput
+	if err := profile.Save(profilePath, storedProfile); err != nil {
+		t.Fatalf("persist profile with text output default: %v", err)
+	}
+
+	listOut := runCLIForTest(t, home, env, nil, []string{"--base-url", server.URL, "--agent", "agent-a", "auth", "invites", "list"})
+	if !strings.Contains(listOut, "status=consumed") {
+		t.Fatalf("expected consumed invite status, got %q", listOut)
+	}
+
+	jsonOut := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "invites", "list"})
+	payload := assertEnvelopeOK(t, jsonOut)
+	data, _ := payload["data"].(map[string]any)
+	if data == nil {
+		t.Fatalf("unexpected auth invites list payload: %#v", payload)
+	}
+	invites, _ := data["invites"].([]any)
+	if len(invites) != 1 {
+		t.Fatalf("expected one invite in payload, got %#v", payload)
+	}
+	invite, _ := invites[0].(map[string]any)
+	if invite == nil || strings.TrimSpace(anyStr(invite["consumed_at"])) == "" {
+		t.Fatalf("expected consumed_at in JSON payload, got %#v", payload)
+	}
+}
+
 func runCLIForTest(t *testing.T, home string, env map[string]string, stdin io.Reader, args []string) string {
 	t.Helper()
 	if stdin == nil {
@@ -306,6 +376,7 @@ type fakeAuthCore struct {
 	accessToken  string
 	refreshToken string
 	revoked      bool
+	invites      []map[string]any
 	counter      int
 	refreshCalls int
 }
@@ -438,6 +509,12 @@ func (f *fakeAuthCore) handle(w http.ResponseWriter, r *http.Request) {
 		}
 		f.revoked = true
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		return
+	case r.Method == http.MethodGet && r.URL.Path == "/auth/invites":
+		if !f.requireAuth(w, r) {
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"invites": f.invites})
 		return
 	case r.Method == http.MethodGet && r.URL.Path == "/protected":
 		if !f.requireAuth(w, r) {

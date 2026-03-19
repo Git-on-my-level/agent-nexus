@@ -39,15 +39,162 @@ func (a *App) runAuth(ctx context.Context, args []string, cfg config.Resolved) (
 	case "token-status":
 		result, err := a.runAuthTokenStatus(ctx, service)
 		return result, "auth token-status", err
+	case "invites":
+		result, err := a.runAuthInvites(ctx, service, args[1:])
+		return result, "auth invites", err
+	case "bootstrap":
+		result, err := a.runAuthBootstrap(ctx, service, args[1:])
+		return result, "auth bootstrap", err
 	default:
 		return nil, "auth", authSubcommandSpec.unknownError(args[0])
 	}
 }
 
+func (a *App) runAuthInvites(ctx context.Context, service *authcli.Service, args []string) (*commandResult, error) {
+	if len(args) == 0 {
+		return nil, authInvitesSubcommandSpec.requiredError()
+	}
+	subcommand := authInvitesSubcommandSpec.normalize(args[0])
+	switch subcommand {
+	case "list":
+		return a.runAuthInvitesList(ctx, service)
+	case "create":
+		return a.runAuthInvitesCreate(ctx, service, args[1:])
+	case "revoke":
+		return a.runAuthInvitesRevoke(ctx, service, args[1:])
+	default:
+		return nil, authInvitesSubcommandSpec.unknownError(args[0])
+	}
+}
+
+func (a *App) runAuthInvitesList(ctx context.Context, service *authcli.Service) (*commandResult, error) {
+	result, err := service.ListInvites(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(result.Invites) == 0 {
+		return &commandResult{
+			Text: "No invites found.",
+			Data: map[string]any{"invites": []any{}, "count": 0},
+		}, nil
+	}
+	var lines []string
+	for _, invite := range result.Invites {
+		status := "pending"
+		if invite.RevokedAt != "" {
+			status = "revoked"
+		} else if invite.ConsumedAt != "" {
+			status = "consumed"
+		}
+		line := fmt.Sprintf("  %s  kind=%s  status=%s", invite.ID, invite.Kind, status)
+		if invite.Note != "" {
+			line += "  note=" + invite.Note
+		}
+		lines = append(lines, line)
+	}
+	header := fmt.Sprintf("Invites (%d):", len(result.Invites))
+	text := header + "\n" + strings.Join(lines, "\n")
+	return &commandResult{Text: text, Data: map[string]any{"invites": result.Invites, "count": len(result.Invites)}}, nil
+}
+
+func (a *App) runAuthInvitesCreate(ctx context.Context, service *authcli.Service, args []string) (*commandResult, error) {
+	fs := newSilentFlagSet("auth invites create")
+	var kindFlag trackedString
+	var noteFlag trackedString
+	fs.Var(&kindFlag, "kind", "Invite kind (human, agent, or any)")
+	fs.Var(&noteFlag, "note", "Optional note describing the invite")
+	if err := fs.Parse(args); err != nil {
+		return nil, errnorm.Usage("invalid_auth_invites_flags", err.Error())
+	}
+	if len(fs.Args()) > 0 {
+		return nil, errnorm.Usage("invalid_auth_invites_args", "unexpected positional arguments")
+	}
+	kind := strings.TrimSpace(kindFlag.value)
+	if kind == "" {
+		return nil, errnorm.Usage("invite_kind_required", "kind is required")
+	}
+	if kind != "human" && kind != "agent" && kind != "any" {
+		return nil, errnorm.Usage("invalid_invite_kind", "kind must be human, agent, or any")
+	}
+	result, err := service.CreateInvite(ctx, kind, strings.TrimSpace(noteFlag.value))
+	if err != nil {
+		return nil, err
+	}
+	text := strings.Join([]string{
+		"Created invite successfully.",
+		"Invite ID: " + result.Invite.ID,
+		"Kind: " + result.Invite.Kind,
+		"Token: " + result.Token,
+		"",
+		"Share the token with the recipient. The token is shown only once.",
+	}, "\n")
+	data := map[string]any{"invite": result.Invite, "token": result.Token}
+	return &commandResult{Text: text, Data: data}, nil
+}
+
+func (a *App) runAuthInvitesRevoke(ctx context.Context, service *authcli.Service, args []string) (*commandResult, error) {
+	fs := newSilentFlagSet("auth invites revoke")
+	var inviteIDFlag trackedString
+	fs.Var(&inviteIDFlag, "invite-id", "Invite ID to revoke")
+	if err := fs.Parse(args); err != nil {
+		return nil, errnorm.Usage("invalid_auth_invites_revoke_flags", err.Error())
+	}
+	if len(fs.Args()) > 0 {
+		return nil, errnorm.Usage("invalid_auth_invites_revoke_args", "unexpected positional arguments")
+	}
+	inviteID := strings.TrimSpace(inviteIDFlag.value)
+	if inviteID == "" {
+		return nil, errnorm.Usage("invite_id_required", "invite-id is required")
+	}
+	result, err := service.RevokeInvite(ctx, inviteID)
+	if err != nil {
+		return nil, err
+	}
+	text := "Revoked invite " + result.Invite.ID
+	data := map[string]any{"invite": result.Invite}
+	return &commandResult{Text: text, Data: data}, nil
+}
+
+func (a *App) runAuthBootstrap(ctx context.Context, service *authcli.Service, args []string) (*commandResult, error) {
+	if len(args) == 0 {
+		return nil, authBootstrapSubcommandSpec.requiredError()
+	}
+	subcommand := authBootstrapSubcommandSpec.normalize(args[0])
+	switch subcommand {
+	case "status":
+		return a.runAuthBootstrapStatus(ctx, service)
+	default:
+		return nil, authBootstrapSubcommandSpec.unknownError(args[0])
+	}
+}
+
+func (a *App) runAuthBootstrapStatus(ctx context.Context, service *authcli.Service) (*commandResult, error) {
+	result, err := service.BootstrapStatus(ctx)
+	if err != nil {
+		return nil, err
+	}
+	status := "not available"
+	if result.BootstrapRegistrationAvailable {
+		status = "available"
+	}
+	text := strings.Join([]string{
+		"Bootstrap registration: " + status,
+		"",
+		"If bootstrap is available, you can register the first principal with:",
+		"  oar auth register --username <name> --bootstrap-token <token>",
+	}, "\n")
+	data := map[string]any{"bootstrap_registration_available": result.BootstrapRegistrationAvailable}
+	return &commandResult{Text: text, Data: data}, nil
+}
+
 func (a *App) runAuthRegister(ctx context.Context, service *authcli.Service, args []string) (*commandResult, error) {
 	fs := newSilentFlagSet("auth register")
 	var usernameFlag trackedString
+	var bootstrapTokenFlag trackedString
+	var inviteTokenFlag trackedString
 	fs.Var(&usernameFlag, "username", "Agent username")
+	fs.Var(&bootstrapTokenFlag, "bootstrap-token", "Bootstrap token for first principal registration")
+	fs.Var(&inviteTokenFlag, "invite-token", "Invite token for subsequent principal registration")
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_auth_flags", err.Error())
 	}
@@ -61,7 +208,12 @@ func (a *App) runAuthRegister(ctx context.Context, service *authcli.Service, arg
 	if username == "" {
 		return nil, errnorm.Usage("invalid_request", "username is required; use --username or OAR_USERNAME")
 	}
-	registered, err := service.Register(ctx, username)
+	bootstrapToken := strings.TrimSpace(bootstrapTokenFlag.value)
+	inviteToken := strings.TrimSpace(inviteTokenFlag.value)
+	if bootstrapToken != "" && inviteToken != "" {
+		return nil, errnorm.Usage("invalid_request", "cannot specify both --bootstrap-token and --invite-token")
+	}
+	registered, err := service.RegisterWithToken(ctx, username, bootstrapToken, inviteToken)
 	if err != nil {
 		return nil, err
 	}

@@ -150,6 +150,61 @@ func TestRunGeneratedHelpTopic(t *testing.T) {
 	}
 }
 
+func TestRunGeneratedAuthHelpTopics(t *testing.T) {
+	t.Parallel()
+
+	run := func(args []string) string {
+		t.Helper()
+		stdout := &bytes.Buffer{}
+		stderr := &bytes.Buffer{}
+		cli := New()
+		cli.Stdout = stdout
+		cli.Stderr = stderr
+		cli.Stdin = strings.NewReader("")
+		cli.StdinIsTTY = func() bool { return true }
+		cli.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+		cli.ReadFile = func(path string) ([]byte, error) {
+			return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
+		}
+
+		exitCode := cli.Run(args)
+		if exitCode != 0 {
+			t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
+		}
+		return stdout.String()
+	}
+
+	authOutput := run([]string{"help", "auth"})
+	if !strings.Contains(authOutput, "Generated Help: auth") {
+		t.Fatalf("expected generated auth help header output=%s", authOutput)
+	}
+	if !strings.Contains(authOutput, "auth register") || !strings.Contains(authOutput, "auth invites") || !strings.Contains(authOutput, "auth bootstrap") {
+		t.Fatalf("expected auth subcommand discoverability output=%s", authOutput)
+	}
+	if !strings.Contains(authOutput, "auth whoami") || !strings.Contains(authOutput, "auth token-status") {
+		t.Fatalf("expected local auth lifecycle guidance output=%s", authOutput)
+	}
+
+	invitesOutput := run([]string{"help", "auth", "invites"})
+	if !strings.Contains(invitesOutput, "Generated Help: auth invites") {
+		t.Fatalf("expected generated auth invites help header output=%s", invitesOutput)
+	}
+	if !strings.Contains(invitesOutput, "auth invites create") || !strings.Contains(invitesOutput, "auth invites revoke") {
+		t.Fatalf("expected auth invites subcommand discoverability output=%s", invitesOutput)
+	}
+}
+
+func TestRunLocalAuthLifecycleHelpTopics(t *testing.T) {
+	t.Parallel()
+
+	for _, topic := range []string{"auth whoami", "auth list", "auth update-username", "auth rotate", "auth revoke", "auth token-status"} {
+		output := runHelpCommand(t, append([]string{"help"}, strings.Fields(topic)...)...)
+		if !strings.Contains(output, "Local Help: "+topic) {
+			t.Fatalf("expected local auth help header for %q output=%s", topic, output)
+		}
+	}
+}
+
 func TestRunGeneratedHelpTopicSupportsCompatibilityAliasPath(t *testing.T) {
 	t.Parallel()
 
@@ -542,6 +597,12 @@ func TestRunMetaSkillCursorWritesSkillFile(t *testing.T) {
 	if !strings.Contains(string(content), "## Maintenance rule") {
 		t.Fatalf("expected written maintenance section content=%s", string(content))
 	}
+	if !strings.Contains(output, "auth bootstrap status") {
+		t.Fatalf("expected bootstrap status onboarding guidance output=%s", output)
+	}
+	if !strings.Contains(output, "auth register --username <username> --bootstrap-token <token>") {
+		t.Fatalf("expected token-gated onboarding guidance output=%s", output)
+	}
 }
 
 func TestGeneratedCommandHelpIncludesBodySchemaAndEnums(t *testing.T) {
@@ -721,19 +782,7 @@ func expectedRuntimeSupportedCommandIDs(meta registry.MetaRegistry) map[string]s
 		expected[commandID] = struct{}{}
 	}
 
-	for _, spec := range []subcommandSpec{
-		threadsSubcommandSpec,
-		commitmentsSubcommandSpec,
-		artifactsSubcommandSpec,
-		boardsSubcommandSpec,
-		boardsCardsSubcommandSpec,
-		docsSubcommandSpec,
-		docsRevisionSubcommandSpec,
-		eventsSubcommandSpec,
-		inboxSubcommandSpec,
-		derivedSubcommandSpec,
-		metaSubcommandSpec,
-	} {
+	for _, spec := range runtimeGeneratedHelpSpecs() {
 		command := strings.TrimSpace(spec.command)
 		if command == "" {
 			continue
@@ -763,19 +812,7 @@ func expectedGeneratedHelpRuntimePaths() []string {
 		paths = append(paths, path)
 	}
 
-	for _, spec := range []subcommandSpec{
-		threadsSubcommandSpec,
-		commitmentsSubcommandSpec,
-		artifactsSubcommandSpec,
-		boardsSubcommandSpec,
-		boardsCardsSubcommandSpec,
-		docsSubcommandSpec,
-		docsRevisionSubcommandSpec,
-		eventsSubcommandSpec,
-		inboxSubcommandSpec,
-		derivedSubcommandSpec,
-		metaSubcommandSpec,
-	} {
+	for _, spec := range runtimeGeneratedHelpSpecs() {
 		command := strings.TrimSpace(spec.command)
 		if command == "" {
 			continue

@@ -45,12 +45,12 @@ func TestVersionEndpoint(t *testing.T) {
 		t.Fatalf("unexpected status: got %d", rr.Code)
 	}
 
-	var payload map[string]string
+	var payload map[string]any
 	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("failed to decode body: %v", err)
 	}
 	if payload["schema_version"] != "0.2.2" {
-		t.Fatalf("unexpected schema_version: got %q", payload["schema_version"])
+		t.Fatalf("unexpected schema_version: got %#v", payload["schema_version"])
 	}
 	if payload["command_registry_digest"] == "" {
 		t.Fatalf("expected command registry digest, payload=%#v", payload)
@@ -75,7 +75,7 @@ func TestHandshakeIncludesCommandRegistryDigest(t *testing.T) {
 		t.Fatalf("failed to decode body: %v", err)
 	}
 	if payload["schema_version"] != "0.2.2" {
-		t.Fatalf("unexpected schema_version: got %q", payload["schema_version"])
+		t.Fatalf("unexpected schema_version: got %#v", payload["schema_version"])
 	}
 	if payload["command_registry_digest"] == "" {
 		t.Fatalf("expected command registry digest, payload=%#v", payload)

@@ -51,6 +51,32 @@ type TokenStatusResult struct {
 	Source             string `json:"source"`
 }
 
+type Invite struct {
+	ID         string `json:"id"`
+	Kind       string `json:"kind"`
+	Note       string `json:"note,omitempty"`
+	CreatedAt  string `json:"created_at"`
+	RevokedAt  string `json:"revoked_at,omitempty"`
+	ConsumedAt string `json:"consumed_at,omitempty"`
+}
+
+type ListInvitesResult struct {
+	Invites []Invite `json:"invites"`
+}
+
+type CreateInviteResult struct {
+	Invite Invite `json:"invite"`
+	Token  string `json:"token"`
+}
+
+type RevokeInviteResult struct {
+	Invite Invite `json:"invite"`
+}
+
+type BootstrapStatusResult struct {
+	BootstrapRegistrationAvailable bool `json:"bootstrap_registration_available"`
+}
+
 func New(cfg config.Resolved) *Service {
 	return &Service{cfg: cfg, now: func() time.Time { return time.Now().UTC() }}
 }
@@ -60,6 +86,10 @@ func (s *Service) Config() config.Resolved {
 }
 
 func (s *Service) Register(ctx context.Context, username string) (RegisterResult, error) {
+	return s.RegisterWithToken(ctx, username, "", "")
+}
+
+func (s *Service) RegisterWithToken(ctx context.Context, username, bootstrapToken, inviteToken string) (RegisterResult, error) {
 	username = strings.TrimSpace(username)
 	if username == "" {
 		return RegisterResult{}, errnorm.Usage("invalid_request", "username is required")
@@ -75,7 +105,18 @@ func (s *Service) Register(ctx context.Context, username string) (RegisterResult
 		return RegisterResult{}, errnorm.Wrap(errnorm.KindLocal, "http_client_init_failed", "failed to initialize HTTP client", err)
 	}
 
-	body, err := json.Marshal(map[string]any{"username": username, "public_key": publicKey})
+	reqBody := map[string]any{
+		"username":   username,
+		"public_key": publicKey,
+	}
+	if bootstrapToken != "" {
+		reqBody["bootstrap_token"] = bootstrapToken
+	}
+	if inviteToken != "" {
+		reqBody["invite_token"] = inviteToken
+	}
+
+	body, err := json.Marshal(reqBody)
 	if err != nil {
 		return RegisterResult{}, errnorm.Wrap(errnorm.KindInternal, "json_encode_failed", "failed to encode register request", err)
 	}
@@ -331,6 +372,112 @@ func (s *Service) TokenStatus(ctx context.Context) (TokenStatusResult, error) {
 		Source:             now.Format(time.RFC3339Nano),
 	}
 	return status, nil
+}
+
+func (s *Service) ListInvites(ctx context.Context) (ListInvitesResult, error) {
+	prof, err := s.ensureAccessToken(ctx)
+	if err != nil {
+		return ListInvitesResult{}, err
+	}
+	client, err := s.newClient(prof.AccessToken)
+	if err != nil {
+		return ListInvitesResult{}, errnorm.Wrap(errnorm.KindLocal, "http_client_init_failed", "failed to initialize HTTP client", err)
+	}
+	resp, err := client.RawCall(ctx, httpclient.RawRequest{Method: http.MethodGet, Path: "/auth/invites"})
+	if err != nil {
+		return ListInvitesResult{}, errnorm.Wrap(errnorm.KindNetwork, "request_failed", "list invites request failed", err)
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		return ListInvitesResult{}, errnorm.FromHTTPFailure(resp.StatusCode, resp.Body)
+	}
+	var payload struct {
+		Invites []Invite `json:"invites"`
+	}
+	if err := json.Unmarshal(resp.Body, &payload); err != nil {
+		return ListInvitesResult{}, errnorm.Wrap(errnorm.KindRemote, "invalid_response", "list invites response is not valid JSON", err)
+	}
+	return ListInvitesResult{Invites: payload.Invites}, nil
+}
+
+func (s *Service) CreateInvite(ctx context.Context, kind, note string) (CreateInviteResult, error) {
+	prof, err := s.ensureAccessToken(ctx)
+	if err != nil {
+		return CreateInviteResult{}, err
+	}
+	client, err := s.newClient(prof.AccessToken)
+	if err != nil {
+		return CreateInviteResult{}, errnorm.Wrap(errnorm.KindLocal, "http_client_init_failed", "failed to initialize HTTP client", err)
+	}
+	body, _ := json.Marshal(map[string]any{
+		"kind": kind,
+		"note": note,
+	})
+	resp, err := client.RawCall(ctx, httpclient.RawRequest{Method: http.MethodPost, Path: "/auth/invites", Body: body})
+	if err != nil {
+		return CreateInviteResult{}, errnorm.Wrap(errnorm.KindNetwork, "request_failed", "create invite request failed", err)
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		return CreateInviteResult{}, errnorm.FromHTTPFailure(resp.StatusCode, resp.Body)
+	}
+	var payload struct {
+		Invite Invite `json:"invite"`
+		Token  string `json:"token"`
+	}
+	if err := json.Unmarshal(resp.Body, &payload); err != nil {
+		return CreateInviteResult{}, errnorm.Wrap(errnorm.KindRemote, "invalid_response", "create invite response is not valid JSON", err)
+	}
+	return CreateInviteResult{Invite: payload.Invite, Token: payload.Token}, nil
+}
+
+func (s *Service) RevokeInvite(ctx context.Context, inviteID string) (RevokeInviteResult, error) {
+	inviteID = strings.TrimSpace(inviteID)
+	if inviteID == "" {
+		return RevokeInviteResult{}, errnorm.Usage("invalid_request", "invite-id is required")
+	}
+	prof, err := s.ensureAccessToken(ctx)
+	if err != nil {
+		return RevokeInviteResult{}, err
+	}
+	client, err := s.newClient(prof.AccessToken)
+	if err != nil {
+		return RevokeInviteResult{}, errnorm.Wrap(errnorm.KindLocal, "http_client_init_failed", "failed to initialize HTTP client", err)
+	}
+	path := "/auth/invites/" + inviteID + "/revoke"
+	resp, err := client.RawCall(ctx, httpclient.RawRequest{Method: http.MethodPost, Path: path, Body: []byte("{}")})
+	if err != nil {
+		return RevokeInviteResult{}, errnorm.Wrap(errnorm.KindNetwork, "request_failed", "revoke invite request failed", err)
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		return RevokeInviteResult{}, errnorm.FromHTTPFailure(resp.StatusCode, resp.Body)
+	}
+	var payload struct {
+		Invite Invite `json:"invite"`
+	}
+	if err := json.Unmarshal(resp.Body, &payload); err != nil {
+		return RevokeInviteResult{}, errnorm.Wrap(errnorm.KindRemote, "invalid_response", "revoke invite response is not valid JSON", err)
+	}
+	return RevokeInviteResult{Invite: payload.Invite}, nil
+}
+
+func (s *Service) BootstrapStatus(ctx context.Context) (BootstrapStatusResult, error) {
+	client, err := s.newClient("")
+	if err != nil {
+		return BootstrapStatusResult{}, errnorm.Wrap(errnorm.KindLocal, "http_client_init_failed", "failed to initialize HTTP client", err)
+	}
+	resp, err := client.RawCall(ctx, httpclient.RawRequest{Method: http.MethodGet, Path: "/auth/bootstrap/status"})
+	if err != nil {
+		return BootstrapStatusResult{}, errnorm.Wrap(errnorm.KindNetwork, "request_failed", "bootstrap status request failed", err)
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		return BootstrapStatusResult{}, errnorm.FromHTTPFailure(resp.StatusCode, resp.Body)
+	}
+	var payload struct {
+		BootstrapRegistrationAvailable bool `json:"bootstrap_registration_available"`
+	}
+	if err := json.Unmarshal(resp.Body, &payload); err != nil {
+		return BootstrapStatusResult{}, errnorm.Wrap(errnorm.KindRemote, "invalid_response", "bootstrap status response is not valid JSON", err)
+	}
+	return BootstrapStatusResult{BootstrapRegistrationAvailable: payload.BootstrapRegistrationAvailable}, nil
 }
 
 func (s *Service) EnsureAccessToken(ctx context.Context) (profile.Profile, error) {

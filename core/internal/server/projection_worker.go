@@ -54,7 +54,7 @@ func (w *ProjectionWorker) RunFullRebuild(ctx context.Context, actorID string) e
 		}
 	}
 
-	threads, err := w.opts.primitiveStore.ListThreads(ctx, primitives.ThreadListFilter{})
+	threads, _, err := w.opts.primitiveStore.ListThreads(ctx, primitives.ThreadListFilter{})
 	if err != nil {
 		return err
 	}

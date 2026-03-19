@@ -615,6 +615,7 @@ async function startManagedCore(runDir, coreBin, requestedBaseUrl) {
     cwd: path.join(repoRoot, "core"),
     env: {
       ...process.env,
+      OAR_ENABLE_DEV_ACTOR_MODE: "1",
       OAR_ALLOW_UNAUTHENTICATED_WRITES: "1",
     },
     stdio: ["ignore", "pipe", "pipe"],

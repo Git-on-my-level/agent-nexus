@@ -16,7 +16,7 @@ func emitStaleThreadExceptions(ctx context.Context, opts handlerOptions, now tim
 		return nil, nil
 	}
 
-	threads, err := opts.primitiveStore.ListThreads(ctx, primitives.ThreadListFilter{})
+	threads, _, err := opts.primitiveStore.ListThreads(ctx, primitives.ThreadListFilter{})
 	if err != nil {
 		return nil, err
 	}
@@ -34,7 +34,6 @@ func emitStaleThreadExceptions(ctx context.Context, opts handlerOptions, now tim
 		actor = "oar-core"
 	}
 	emittedThreadIDs := make([]string, 0)
-
 	for _, thread := range threads {
 		threadID, _ := thread["id"].(string)
 		if strings.TrimSpace(threadID) == "" {

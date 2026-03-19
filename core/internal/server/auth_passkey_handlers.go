@@ -21,7 +21,9 @@ func handlePasskeyRegisterOptions(w http.ResponseWriter, r *http.Request, opts h
 	}
 
 	var req struct {
-		DisplayName string `json:"display_name"`
+		DisplayName    string `json:"display_name"`
+		BootstrapToken string `json:"bootstrap_token"`
+		InviteToken    string `json:"invite_token"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
@@ -31,6 +33,11 @@ func handlePasskeyRegisterOptions(w http.ResponseWriter, r *http.Request, opts h
 	displayName, err := auth.NormalizePasskeyDisplayName(req.DisplayName)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+
+	claim, ok := resolveOnboardingClaim(w, r, opts, req.BootstrapToken, req.InviteToken, auth.PrincipalKindHuman)
+	if !ok {
 		return
 	}
 
@@ -62,10 +69,11 @@ func handlePasskeyRegisterOptions(w http.ResponseWriter, r *http.Request, opts h
 	}
 
 	sessionID := opts.passkeySessionStore.Save(auth.PasskeySession{
-		Kind:        auth.PasskeySessionKindRegistration,
-		DisplayName: displayName,
-		UserHandle:  userHandle,
-		SessionData: *sessionData,
+		Kind:            auth.PasskeySessionKindRegistration,
+		DisplayName:     displayName,
+		UserHandle:      userHandle,
+		SessionData:     *sessionData,
+		OnboardingClaim: claim,
 	})
 
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -80,8 +88,10 @@ func handlePasskeyRegisterVerify(w http.ResponseWriter, r *http.Request, opts ha
 	}
 
 	var req struct {
-		SessionID  string          `json:"session_id"`
-		Credential json.RawMessage `json:"credential"`
+		SessionID      string          `json:"session_id"`
+		BootstrapToken string          `json:"bootstrap_token"`
+		InviteToken    string          `json:"invite_token"`
+		Credential     json.RawMessage `json:"credential"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
@@ -102,6 +112,15 @@ func handlePasskeyRegisterVerify(w http.ResponseWriter, r *http.Request, opts ha
 	displayName, err := auth.NormalizePasskeyDisplayName(session.DisplayName)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+
+	claim, ok := resolveOnboardingClaim(w, r, opts, req.BootstrapToken, req.InviteToken, auth.PrincipalKindHuman)
+	if !ok {
+		return
+	}
+	if claim.Mode != session.OnboardingClaim.Mode || claim.TokenHash != session.OnboardingClaim.TokenHash || claim.InviteID != session.OnboardingClaim.InviteID {
+		writeError(w, http.StatusUnauthorized, "invalid_token", "bootstrap or invite token does not match the registration session")
 		return
 	}
 
@@ -133,11 +152,13 @@ func handlePasskeyRegisterVerify(w http.ResponseWriter, r *http.Request, opts ha
 		DisplayName: displayName,
 		UserHandle:  session.UserHandle,
 		Credential:  credential,
-	})
+	}, claim)
 	if err != nil {
 		switch {
 		case errors.Is(err, auth.ErrInvalidRequest):
 			writeError(w, http.StatusBadRequest, "invalid_request", sanitizeAuthError(err))
+		case isOnboardingTokenError(err):
+			writeError(w, http.StatusUnauthorized, "invalid_token", "bootstrap or invite token is invalid, expired, revoked, or already consumed")
 		default:
 			writeError(w, http.StatusInternalServerError, "internal_error", "failed to register passkey agent")
 		}

@@ -49,8 +49,12 @@ func main() {
 		coreInstanceID             = envString("OAR_CORE_INSTANCE_ID", defaultInstanceID)
 		metaCommandsPath           = envString("OAR_META_COMMANDS_PATH", "")
 		streamPollInterval         = envDuration("OAR_STREAM_POLL_INTERVAL", time.Second)
-		allowUnauthenticatedWrites = envBool("OAR_ALLOW_UNAUTHENTICATED_WRITES", false)
+		projectionPollInterval     = envDuration("OAR_PROJECTION_MAINTENANCE_INTERVAL", 5*time.Second)
+		staleScanInterval          = envDuration("OAR_PROJECTION_STALE_SCAN_INTERVAL", 30*time.Second)
+		projectionBatchSize        = envInt("OAR_PROJECTION_MAINTENANCE_BATCH_SIZE", 50)
 		enableDevActorMode         = envBool("OAR_ENABLE_DEV_ACTOR_MODE", false)
+		allowUnauthenticatedWrites = envBool("OAR_ALLOW_UNAUTHENTICATED_WRITES", false)
+		bootstrapToken             = envString("OAR_BOOTSTRAP_TOKEN", "")
 		webAuthnRPID               = envString("OAR_WEBAUTHN_RPID", "")
 		webAuthnOrigin             = envString("OAR_WEBAUTHN_ORIGIN", "")
 		webAuthnDisplayName        = envString("OAR_WEBAUTHN_RP_DISPLAY_NAME", "OAR")
@@ -73,6 +77,9 @@ func main() {
 	flag.StringVar(&coreInstanceID, "core-instance-id", coreInstanceID, "stable core instance identifier for handshake metadata")
 	flag.StringVar(&metaCommandsPath, "meta-commands-path", metaCommandsPath, "path to generated commands metadata JSON")
 	flag.DurationVar(&streamPollInterval, "stream-poll-interval", streamPollInterval, "poll interval used by SSE stream endpoints")
+	flag.DurationVar(&projectionPollInterval, "projection-maintenance-interval", projectionPollInterval, "poll interval used by background projection maintenance")
+	flag.DurationVar(&staleScanInterval, "projection-stale-scan-interval", staleScanInterval, "interval used by background stale-thread scanning")
+	flag.IntVar(&projectionBatchSize, "projection-maintenance-batch-size", projectionBatchSize, "max dirty thread projections refreshed per maintenance pass")
 	flag.Parse()
 
 	workspace, err := storage.InitializeWorkspace(context.Background(), workspaceRoot)
@@ -130,15 +137,23 @@ func main() {
 		fmt.Fprintf(os.Stderr, "failed to seed system actor: %v\n", err)
 		os.Exit(1)
 	}
-	authStore := auth.NewStore(workspace.DB())
+	authStore := auth.NewStore(workspace.DB(), auth.WithBootstrapToken(bootstrapToken))
 	passkeySessionStore := auth.NewPasskeySessionStore(auth.DefaultPasskeySessionTTL)
 	defer passkeySessionStore.Close()
 	primitiveStore := primitives.NewStore(workspace.DB(), blobBackendImpl, effectiveBlobRoot)
+	projectionMaintainer := server.NewProjectionMaintainer(server.ProjectionMaintainerConfig{
+		PrimitiveStore:    primitiveStore,
+		Contract:          contract,
+		PollInterval:      projectionPollInterval,
+		StaleScanInterval: staleScanInterval,
+		DirtyBatchSize:    projectionBatchSize,
+		SystemActorID:     "oar-core",
+	})
 	projectionWorker := server.NewProjectionWorker(
 		server.WithPrimitiveStore(primitiveStore),
 		server.WithSchemaContract(contract),
 	)
-	projectionMaintenance := server.NewBackgroundProjectionMaintenance(projectionWorker, 0)
+	projectionMaintenance := server.NewBackgroundProjectionMaintenance(projectionWorker, projectionPollInterval)
 	handler := server.NewHandler(
 		contract.Version,
 		server.WithHealthCheck(workspace.Ping),
@@ -153,8 +168,8 @@ func main() {
 			RPID:          webAuthnRPID,
 			RPOrigin:      webAuthnOrigin,
 		}),
-		server.WithAllowUnauthenticatedWrites(allowUnauthenticatedWrites),
 		server.WithEnableDevActorMode(enableDevActorMode),
+		server.WithAllowUnauthenticatedWrites(allowUnauthenticatedWrites),
 		server.WithCoreVersion(coreVersion),
 		server.WithAPIVersion(apiVersion),
 		server.WithMinCLIVersion(minCLIVersion),
@@ -164,6 +179,7 @@ func main() {
 		server.WithMetaCommandsPath(metaCommandsPath),
 		server.WithStreamPollInterval(streamPollInterval),
 		server.WithCORSAllowedOrigins(corsAllowedOrigins),
+		server.WithProjectionMaintainer(projectionMaintainer),
 	)
 	httpServer := &http.Server{
 		Addr:              addr,
@@ -177,8 +193,14 @@ func main() {
 	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
 
 	serverErr := make(chan error, 1)
+	maintenanceCtx, maintenanceCancel := context.WithCancel(context.Background())
+	defer maintenanceCancel()
+	go projectionMaintainer.Run(maintenanceCtx)
 	go func() {
 		fmt.Printf("oar-core listening on http://%s\n", addr)
+		if enableDevActorMode {
+			fmt.Println("  WARNING: dev actor mode enabled (anonymous workspace reads and legacy actor flows)")
+		}
 		if allowUnauthenticatedWrites {
 			fmt.Println("  WARNING: unauthenticated writes enabled (dev mode)")
 		}
@@ -194,6 +216,7 @@ func main() {
 		os.Exit(1)
 	case sig := <-shutdown:
 		fmt.Printf("\nreceived %s, shutting down gracefully...\n", sig)
+		maintenanceCancel()
 		ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()
 		if err := httpServer.Shutdown(ctx); err != nil {
