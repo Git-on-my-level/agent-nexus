@@ -176,25 +176,25 @@ verify_referenced_blob_reachability() {
 }
 
 cleanup() {
-  if [[ -n "${SERVER_PID:-}" ]]; then
-    kill "${SERVER_PID}" >/dev/null 2>&1 || true
-    wait "${SERVER_PID}" 2>/dev/null || true
-  fi
+  stop_background_process "${SERVER_PID:-}"
   rm -rf "$VERIFY_TMP_DIR"
 }
 trap cleanup EXIT
 
-OAR_ENABLE_DEV_ACTOR_MODE=false \
-OAR_ALLOW_UNAUTHENTICATED_WRITES=false \
-OAR_ALLOW_LOOPBACK_VERIFICATION_READS=true \
-OAR_BOOTSTRAP_TOKEN="${OAR_BOOTSTRAP_TOKEN:-}" \
-"$CORE_BIN" \
-  --listen-addr "127.0.0.1:${LISTEN_PORT}" \
-  --schema-path "$SCHEMA_PATH" \
-  --workspace-root "$WORKSPACE_ROOT" \
-  --core-instance-id "${TARGET_CORE_INSTANCE_ID:-${EXPECTED_CORE_INSTANCE_ID:-restore-verify}}" \
-  >"$SERVER_LOG_FILE" 2>&1 &
-SERVER_PID="$!"
+start_core_server \
+  SERVER_PID \
+  "$CORE_BIN" \
+  "$WORKSPACE_ROOT" \
+  "$SCHEMA_PATH" \
+  "127.0.0.1" \
+  "$LISTEN_PORT" \
+  "$SERVER_LOG_FILE" \
+  "${TARGET_CORE_INSTANCE_ID:-${EXPECTED_CORE_INSTANCE_ID:-restore-verify}}" \
+  set \
+  "${OAR_BOOTSTRAP_TOKEN-}" \
+  false \
+  false \
+  true
 
 if ! wait_for_http_ok "http://127.0.0.1:${LISTEN_PORT}/health" "$TIMEOUT_SECONDS"; then
   die "restore verification could not reach /health on 127.0.0.1:${LISTEN_PORT}; see ${SERVER_LOG_FILE}"

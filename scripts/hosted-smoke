@@ -19,10 +19,7 @@ BOOTSTRAP_TOKEN="hosted-smoke-bootstrap-$(generate_token 16)"
 
 cleanup() {
   local code=$?
-  if [[ -n "${CORE_PID:-}" ]] && kill -0 "$CORE_PID" >/dev/null 2>&1; then
-    kill "$CORE_PID" >/dev/null 2>&1 || true
-    wait "$CORE_PID" >/dev/null 2>&1 || true
-  fi
+  stop_background_process "${CORE_PID:-}"
 
   if [[ $code -ne 0 ]]; then
     echo "hosted smoke failed; artifacts kept at: $TMP_DIR" >&2
@@ -43,45 +40,17 @@ assert_http_status() {
   fi
 }
 
-extract_json_string() {
-  local json="$1"
-  local key="$2"
-  printf '%s' "$json" | grep -o "\"${key}\":\"[^\"]*\"" | head -n 1 | cut -d'"' -f4 || true
-}
-
 extract_thread_id() {
   local json="$1"
-  local thread_id
-
-  thread_id="$(extract_json_string "$json" thread_id)"
-  if [[ -n "$thread_id" ]]; then
-    printf '%s\n' "$thread_id"
-    return 0
-  fi
-
-  extract_json_string "$json" id
-}
-
-count_fixed_matches() {
-  local needle="$1"
-  local input="$2"
-  printf '%s' "$input" | (grep -o -F -- "$needle" || true) | wc -l | tr -d ' '
+  json_get_first "$json" thread_id id thread.thread_id thread.id || true
 }
 
 extract_inbox_items_json() {
   local json="$1"
-  local items
-
-  items="$(printf '%s' "$json" | sed -n 's/.*"items":\(\[.*\]\),"projection_freshness".*/\1/p')"
-  if [[ -n "$items" ]]; then
-    printf '%s\n' "$items"
-    return 0
-  fi
-
-  printf '%s\n' "$json"
+  json_get "$json" items 2>/dev/null || printf '%s\n' "$json"
 }
 
-require_command curl go grep sed cut
+require_command curl go python3 sed
 
 generate_ed25519_public_key_base64() {
   local go_file
@@ -111,12 +80,8 @@ EOF
 }
 
 echo "Building core binary..."
-(
-  cd "$REPO_ROOT/core"
-  go build -o "$TMP_DIR/oar-core" ./cmd/oar-core
-)
-CORE_BIN="$TMP_DIR/oar-core"
-SCHEMA_PATH="$REPO_ROOT/contracts/oar-schema.yaml"
+CORE_BIN="$(build_core_binary "$TMP_DIR/oar-core")"
+SCHEMA_PATH="$(resolve_schema_path)"
 
 echo "Generating Ed25519 key pairs for test agents..."
 KEYS=$(generate_ed25519_public_key_base64)
@@ -127,13 +92,20 @@ PUBKEY4=$(echo "$KEYS" | sed -n '4p')
 
 echo "Starting core in hosted mode (no dev flags)..."
 mkdir -p "$WORKSPACE_ROOT"
-OAR_BOOTSTRAP_TOKEN="$BOOTSTRAP_TOKEN" \
+start_core_server \
+  CORE_PID \
   "$CORE_BIN" \
-    --listen-addr "${CORE_HOST}:${CORE_PORT}" \
-    --workspace-root "$WORKSPACE_ROOT" \
-    --schema-path "$SCHEMA_PATH" \
-    >"$CORE_LOG" 2>&1 &
-CORE_PID=$!
+  "$WORKSPACE_ROOT" \
+  "$SCHEMA_PATH" \
+  "$CORE_HOST" \
+  "$CORE_PORT" \
+  "$CORE_LOG" \
+  "" \
+  set \
+  "$BOOTSTRAP_TOKEN" \
+  false \
+  false \
+  false
 
 if ! wait_for_http_ok "$CORE_BASE_URL/health" "$SMOKE_TIMEOUT_SECONDS"; then
   echo "core did not become healthy" >&2
@@ -192,8 +164,8 @@ REGISTER1_RESPONSE=$(curl -sS \
   -d "{\"username\":\"hosted-agent-1\",\"public_key\":\"$PUBKEY3\",\"bootstrap_token\":\"$BOOTSTRAP_TOKEN\"}" \
   "$CORE_BASE_URL/auth/agents/register")
 
-AGENT1_TOKEN="$(extract_json_string "$REGISTER1_RESPONSE" access_token)"
-AGENT1_ACTOR_ID="$(extract_json_string "$REGISTER1_RESPONSE" actor_id)"
+AGENT1_TOKEN="$(json_get_first "$REGISTER1_RESPONSE" access_token tokens.access_token || true)"
+AGENT1_ACTOR_ID="$(json_get_first "$REGISTER1_RESPONSE" actor_id agent.actor_id || true)"
 if [[ -z "$AGENT1_TOKEN" ]]; then
   echo "failed to extract access token from bootstrap registration" >&2
   echo "response: $REGISTER1_RESPONSE" >&2
@@ -225,7 +197,7 @@ INVITE_RESPONSE=$(curl -sS \
   -d '{"kind":"agent","note":"hosted smoke invite"}' \
   "$CORE_BASE_URL/auth/invites")
 
-INVITE_TOKEN="$(extract_json_string "$INVITE_RESPONSE" token)"
+INVITE_TOKEN="$(json_get "$INVITE_RESPONSE" token || true)"
 if [[ -z "$INVITE_TOKEN" ]]; then
   echo "failed to extract invite token" >&2
   echo "response: $INVITE_RESPONSE" >&2
@@ -250,7 +222,7 @@ REGISTER3_RESPONSE=$(curl -sS \
   -d "{\"username\":\"hosted-agent-3\",\"public_key\":\"$PUBKEY2\",\"invite_token\":\"$INVITE_TOKEN\"}" \
   "$CORE_BASE_URL/auth/agents/register")
 
-AGENT3_TOKEN="$(extract_json_string "$REGISTER3_RESPONSE" access_token)"
+AGENT3_TOKEN="$(json_get_first "$REGISTER3_RESPONSE" access_token tokens.access_token || true)"
 if [[ -z "$AGENT3_TOKEN" ]]; then
   echo "failed to extract access token from invite registration" >&2
   echo "response: $REGISTER3_RESPONSE" >&2
@@ -373,8 +345,9 @@ INBOX_RESPONSE=$(curl -sS \
   -H "authorization: Bearer $AGENT1_TOKEN" \
   "$CORE_BASE_URL/inbox")
 INBOX_ITEMS_JSON="$(extract_inbox_items_json "$INBOX_RESPONSE")"
-STALE_INBOX_COUNT="$(count_fixed_matches "\"thread_id\":\"$STALE_THREAD_ID\"" "$INBOX_ITEMS_JSON")"
-if [[ "$STALE_INBOX_COUNT" -ne 1 ]] || ! printf '%s' "$INBOX_ITEMS_JSON" | grep -F -q '"category":"exception"'; then
+STALE_INBOX_COUNT="$(json_count_key_value "$INBOX_ITEMS_JSON" thread_id "$STALE_THREAD_ID")"
+STALE_EXCEPTION_COUNT="$(json_count_key_value "$INBOX_ITEMS_JSON" category exception)"
+if [[ "$STALE_INBOX_COUNT" -ne 1 ]] || [[ "$STALE_EXCEPTION_COUNT" -lt 1 ]]; then
   echo "expected one stale exception inbox item after rebuild, got count=$STALE_INBOX_COUNT" >&2
   echo "inbox: $INBOX_RESPONSE" >&2
   exit 1
@@ -393,7 +366,7 @@ INBOX_RESPONSE=$(curl -sS \
   -H "authorization: Bearer $AGENT1_TOKEN" \
   "$CORE_BASE_URL/inbox")
 INBOX_ITEMS_JSON="$(extract_inbox_items_json "$INBOX_RESPONSE")"
-STALE_INBOX_COUNT="$(count_fixed_matches "\"thread_id\":\"$STALE_THREAD_ID\"" "$INBOX_ITEMS_JSON")"
+STALE_INBOX_COUNT="$(json_count_key_value "$INBOX_ITEMS_JSON" thread_id "$STALE_THREAD_ID")"
 if [[ "$STALE_INBOX_COUNT" -ne 1 ]]; then
   echo "expected stale rebuild to remain idempotent, got $STALE_INBOX_COUNT inbox items for the stale thread" >&2
   echo "inbox: $INBOX_RESPONSE" >&2
@@ -403,7 +376,8 @@ fi
 STALE_THREADS_RESPONSE=$(curl -sS \
   -H "authorization: Bearer $AGENT1_TOKEN" \
   "$CORE_BASE_URL/threads?stale=true")
-if ! printf '%s' "$STALE_THREADS_RESPONSE" | grep -F -q "\"id\":\"$STALE_THREAD_ID\""; then
+STALE_THREAD_MATCHES="$(json_count_key_value "$STALE_THREADS_RESPONSE" id "$STALE_THREAD_ID")"
+if [[ "$STALE_THREAD_MATCHES" -lt 1 ]]; then
   echo "expected stale thread to appear in stale thread listing" >&2
   echo "response: $STALE_THREADS_RESPONSE" >&2
   exit 1

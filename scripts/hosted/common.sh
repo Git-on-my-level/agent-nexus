@@ -3,6 +3,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+HOSTED_JSON_TOOL_PATH="${REPO_ROOT}/scripts/hosted/json-tool.py"
 HOSTED_BACKUP_FORMAT_VERSION="hosted-ops-backup/v1"
 HOSTED_INSTANCE_FORMAT_VERSION="hosted-instance/v1"
 HOSTED_BOOTSTRAP_PLACEHOLDER="REPLACE_WITH_SECURE_BOOTSTRAP_TOKEN"
@@ -27,6 +28,39 @@ require_command() {
       die "required command not found: $command_name"
     fi
   done
+}
+
+require_hosted_json_tool() {
+  require_command python3
+  [[ -f "$HOSTED_JSON_TOOL_PATH" ]] || die "hosted JSON helper not found: $HOSTED_JSON_TOOL_PATH"
+}
+
+json_get() {
+  local json="$1"
+  local path="$2"
+  require_hosted_json_tool
+  printf '%s' "$json" | python3 "$HOSTED_JSON_TOOL_PATH" get "$path"
+}
+
+json_get_first() {
+  local json="$1"
+  shift
+  local path value
+  for path in "$@"; do
+    if value="$(json_get "$json" "$path" 2>/dev/null)"; then
+      printf '%s\n' "$value"
+      return 0
+    fi
+  done
+  return 1
+}
+
+json_count_key_value() {
+  local json="$1"
+  local key="$2"
+  local value="$3"
+  require_hosted_json_tool
+  printf '%s' "$json" | python3 "$HOSTED_JSON_TOOL_PATH" count-key-value "$key" "$value"
 }
 
 sha256_file() {
@@ -263,6 +297,72 @@ wait_for_http_ok() {
     waited=$((waited + 1))
   done
   return 1
+}
+
+build_core_binary() {
+  local bin_path="${1:-${REPO_ROOT}/core/.bin/oar-core}"
+  local bin_dir
+  bin_dir="$(dirname "$bin_path")"
+  BIN_DIR="$bin_dir" OAR_CORE_BIN="$bin_path" "${REPO_ROOT}/core/scripts/build-prod" >&2
+  printf '%s\n' "$bin_path"
+}
+
+start_core_server() {
+  local pid_var_name="$1"
+  local core_bin="$2"
+  local workspace_root="$3"
+  local schema_path="$4"
+  local listen_host="$5"
+  local listen_port="$6"
+  local log_file="$7"
+  local core_instance_id="${8:-}"
+  local bootstrap_token_mode="${9:-unset}"
+  local bootstrap_token="${10:-}"
+  local dev_actor_mode="${11:-false}"
+  local allow_unauthenticated_writes="${12:-false}"
+  local allow_loopback_verification_reads="${13:-false}"
+  local -a cmd
+
+  validate_port "$listen_port"
+  mkdir -p "$(dirname "$log_file")"
+
+  cmd=(
+    "$core_bin"
+    --listen-addr "${listen_host}:${listen_port}"
+    --schema-path "$schema_path"
+    --workspace-root "$workspace_root"
+  )
+  if [[ -n "$core_instance_id" ]]; then
+    cmd+=(--core-instance-id "$core_instance_id")
+  fi
+
+  (
+    export OAR_ENABLE_DEV_ACTOR_MODE="$dev_actor_mode"
+    export OAR_ALLOW_UNAUTHENTICATED_WRITES="$allow_unauthenticated_writes"
+    export OAR_ALLOW_LOOPBACK_VERIFICATION_READS="$allow_loopback_verification_reads"
+    case "$bootstrap_token_mode" in
+      unset)
+        unset OAR_BOOTSTRAP_TOKEN
+        ;;
+      set)
+        export OAR_BOOTSTRAP_TOKEN="$bootstrap_token"
+        ;;
+      *)
+        die "unsupported bootstrap token mode for start_core_server: $bootstrap_token_mode"
+        ;;
+    esac
+    exec "${cmd[@]}"
+  ) >"$log_file" 2>&1 &
+
+  printf -v "$pid_var_name" '%s' "$!"
+}
+
+stop_background_process() {
+  local pid="${1:-}"
+  if [[ -n "$pid" ]] && kill -0 "$pid" >/dev/null 2>&1; then
+    kill "$pid" >/dev/null 2>&1 || true
+    wait "$pid" >/dev/null 2>&1 || true
+  fi
 }
 
 resolve_core_bin() {

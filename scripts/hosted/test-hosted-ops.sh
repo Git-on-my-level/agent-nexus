@@ -122,16 +122,22 @@ seed_workspace_fixture() {
   local schema_path="$3"
   local listen_port="$4"
   local log_file="$5"
-  OAR_ENABLE_DEV_ACTOR_MODE=1 \
-  OAR_ALLOW_UNAUTHENTICATED_WRITES=1 \
-  "$core_bin" \
-    --listen-addr "127.0.0.1:${listen_port}" \
-    --schema-path "$schema_path" \
-    --workspace-root "$workspace_root" \
-    --core-instance-id hosted-ops-test \
-    >"$log_file" 2>&1 &
-  local server_pid="$!"
-  trap 'kill "$server_pid" >/dev/null 2>&1 || true; wait "$server_pid" 2>/dev/null || true' RETURN
+  local server_pid
+  start_core_server \
+    server_pid \
+    "$core_bin" \
+    "$workspace_root" \
+    "$schema_path" \
+    "127.0.0.1" \
+    "$listen_port" \
+    "$log_file" \
+    "hosted-ops-test" \
+    unset \
+    "" \
+    true \
+    true \
+    false
+  trap 'stop_background_process "${server_pid:-}"' RETURN
   wait_for_http_ok "http://127.0.0.1:${listen_port}/health" 20 || die "failed to start temporary core for test fixture"
 
   curl -fsS \
@@ -152,8 +158,7 @@ seed_workspace_fixture() {
     -d '{"actor_id":"oar-core","document":{"document_id":"ops-runbook","thread_id":"thread-hosted-ops","title":"Hosted Ops Runbook"},"refs":["thread:thread-hosted-ops"],"content":"restore drill document body","content_type":"text"}' \
     "http://127.0.0.1:${listen_port}/docs" >/dev/null
 
-  kill "$server_pid" >/dev/null 2>&1 || true
-  wait "$server_pid" 2>/dev/null || true
+  stop_background_process "$server_pid"
   trap - RETURN
 }
 
@@ -186,9 +191,8 @@ replace_blob_with_dummy() {
 TMP_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 
-"${REPO_ROOT}/core/scripts/build-prod"
-CORE_BIN="${REPO_ROOT}/core/.bin/oar-core"
-SCHEMA_PATH="${REPO_ROOT}/contracts/oar-schema.yaml"
+CORE_BIN="$(build_core_binary)"
+SCHEMA_PATH="$(resolve_schema_path)"
 
 INSTANCE_ROOT="${TMP_ROOT}/source/team-alpha"
 BACKUP_DIR="${TMP_ROOT}/backup-bundle"
