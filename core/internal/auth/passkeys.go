@@ -107,6 +107,25 @@ func (s *Store) RegisterPasskeyAgent(ctx context.Context, input RegisterPasskeyA
 		return Agent{}, TokenBundle{}, fmt.Errorf("insert passkey credential: %w", err)
 	}
 
+	if err := s.recordAuthAuditEventTx(ctx, tx, AuthAuditEventInput{
+		EventType:      AuthAuditEventPrincipalRegistered,
+		OccurredAt:     now.Add(time.Nanosecond),
+		ActorAgentID:   agentID,
+		ActorActorID:   actorID,
+		SubjectAgentID: agentID,
+		SubjectActorID: actorID,
+		InviteID:       claim.InviteID,
+		Metadata: map[string]any{
+			"username":        username,
+			"principal_kind":  "human",
+			"auth_method":     "passkey",
+			"onboarding_mode": string(claim.Mode),
+		},
+	}); err != nil {
+		_ = tx.Rollback()
+		return Agent{}, TokenBundle{}, err
+	}
+
 	tokens, _, err := s.issueTokenBundleTx(ctx, tx, agentID, now)
 	if err != nil {
 		_ = tx.Rollback()

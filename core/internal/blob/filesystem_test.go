@@ -3,7 +3,6 @@ package blob
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"testing"
 )
 
@@ -119,21 +118,6 @@ func TestFilesystemBackendWriteIdempotent(t *testing.T) {
 	}
 	if string(readData) != string(data) {
 		t.Fatalf("Read data mismatch after idempotent writes")
-	}
-}
-
-func TestFilesystemBackendContentPath(t *testing.T) {
-	t.Parallel()
-
-	root := "/path/to/blobs"
-	backend := NewFilesystemBackend(root)
-
-	hash := "abc123"
-	expected := filepath.Join(root, hash)
-	got := backend.ContentPath(hash)
-
-	if got != expected {
-		t.Fatalf("ContentPath: got %q, want %q", got, expected)
 	}
 }
 

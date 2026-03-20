@@ -34,9 +34,10 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `auth`
 
-- Commands: `10`
+- Commands: `12`
 - Command IDs:
   - `auth.agents.register` (`auth register`)
+  - `auth.audit.list` (`auth audit list`)
   - `auth.bootstrap.status` (`auth bootstrap status`)
   - `auth.invites.create` (`auth invites create`)
   - `auth.invites.list` (`auth invites list`)
@@ -45,6 +46,7 @@ Generated from `contracts/oar-openapi.yaml`.
   - `auth.passkey.login.verify` (`auth passkey login verify`)
   - `auth.passkey.register.options` (`auth passkey register options`)
   - `auth.passkey.register.verify` (`auth passkey register verify`)
+  - `auth.principals.list` (`auth principals list`)
   - `auth.token` (`auth token`)
 
 ## `boards`

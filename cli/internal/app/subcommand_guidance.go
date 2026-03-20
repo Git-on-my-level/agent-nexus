@@ -23,7 +23,7 @@ var apiSubcommandSpec = subcommandSpec{
 
 var authSubcommandSpec = subcommandSpec{
 	command: "auth",
-	valid:   []string{"register", "whoami", "list", "update-username", "rotate", "revoke", "token-status", "invites", "bootstrap"},
+	valid:   []string{"register", "whoami", "list", "update-username", "rotate", "revoke", "token-status", "invites", "bootstrap", "principals", "audit"},
 	examples: []string{
 		"oar auth register --username <username> --bootstrap-token <token>",
 		"oar auth register --username <username> --invite-token <token>",
@@ -32,6 +32,8 @@ var authSubcommandSpec = subcommandSpec{
 		"oar auth invites list",
 		"oar auth invites create --kind agent --note 'ops bot'",
 		"oar auth bootstrap status",
+		"oar auth principals list",
+		"oar auth audit list",
 	},
 	aliases: map[string]string{
 		"status":   "token-status",
@@ -53,6 +55,24 @@ var authBootstrapSubcommandSpec = subcommandSpec{
 	command:  "auth bootstrap",
 	valid:    []string{"status"},
 	examples: []string{"oar auth bootstrap status"},
+}
+
+var authPrincipalsSubcommandSpec = subcommandSpec{
+	command:  "auth principals",
+	valid:    []string{"list"},
+	examples: []string{"oar auth principals list", "oar auth principals list --limit 20"},
+	aliases: map[string]string{
+		"ls": "list",
+	},
+}
+
+var authAuditSubcommandSpec = subcommandSpec{
+	command:  "auth audit",
+	valid:    []string{"list"},
+	examples: []string{"oar auth audit list", "oar auth audit list --limit 50"},
+	aliases: map[string]string{
+		"ls": "list",
+	},
 }
 
 var actorsSubcommandSpec = subcommandSpec{

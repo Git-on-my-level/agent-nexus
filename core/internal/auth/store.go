@@ -239,6 +239,25 @@ func (s *Store) registerAgentOnce(ctx context.Context, username string, publicKe
 		return Agent{}, AgentKey{}, TokenBundle{}, fmt.Errorf("insert agent key: %w", err)
 	}
 
+	if err := s.recordAuthAuditEventTx(ctx, tx, AuthAuditEventInput{
+		EventType:      AuthAuditEventPrincipalRegistered,
+		OccurredAt:     now.Add(time.Nanosecond),
+		ActorAgentID:   agentID,
+		ActorActorID:   actorID,
+		SubjectAgentID: agentID,
+		SubjectActorID: actorID,
+		InviteID:       claim.InviteID,
+		Metadata: map[string]any{
+			"username":        username,
+			"principal_kind":  "agent",
+			"auth_method":     "public_key",
+			"onboarding_mode": string(claim.Mode),
+		},
+	}); err != nil {
+		_ = tx.Rollback()
+		return Agent{}, AgentKey{}, TokenBundle{}, err
+	}
+
 	tokens, _, err := s.issueTokenBundleTx(ctx, tx, agentID, now)
 	if err != nil {
 		_ = tx.Rollback()
@@ -781,7 +800,7 @@ func (s *Store) RotateKey(ctx context.Context, agentID string, publicKey string)
 	}, nil
 }
 
-func (s *Store) RevokeAgent(ctx context.Context, agentID string) error {
+func (s *Store) RevokeAgent(ctx context.Context, agentID string, revokedBy Principal) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("auth store database is not initialized")
 	}
@@ -790,18 +809,47 @@ func (s *Store) RevokeAgent(ctx context.Context, agentID string) error {
 	if agentID == "" {
 		return ErrAgentNotFound
 	}
+	revokedBy.AgentID = strings.TrimSpace(revokedBy.AgentID)
+	revokedBy.ActorID = strings.TrimSpace(revokedBy.ActorID)
+	if revokedBy.AgentID == "" || revokedBy.ActorID == "" {
+		return fmt.Errorf("%w: authenticated principal is required", ErrAuthRequired)
+	}
 
-	nowText := time.Now().UTC().Format(time.RFC3339Nano)
+	now := time.Now().UTC()
+	nowText := now.Format(time.RFC3339Nano)
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin revoke agent transaction: %w", err)
 	}
 
-	result, err := tx.ExecContext(
+	var (
+		subjectActorID  string
+		existingRevoked sql.NullString
+	)
+	err = tx.QueryRowContext(
+		ctx,
+		`SELECT actor_id, revoked_at
+		 FROM agents
+		 WHERE id = ?`,
+		agentID,
+	).Scan(&subjectActorID, &existingRevoked)
+	if err != nil {
+		_ = tx.Rollback()
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrAgentNotFound
+		}
+		return fmt.Errorf("query agent revoke state: %w", err)
+	}
+	if existingRevoked.Valid {
+		_ = tx.Rollback()
+		return ErrAgentRevoked
+	}
+
+	_, err = tx.ExecContext(
 		ctx,
 		`UPDATE agents
 		 SET revoked_at = ?, updated_at = ?
-		 WHERE id = ? AND revoked_at IS NULL`,
+		 WHERE id = ?`,
 		nowText,
 		nowText,
 		agentID,
@@ -809,28 +857,6 @@ func (s *Store) RevokeAgent(ctx context.Context, agentID string) error {
 	if err != nil {
 		_ = tx.Rollback()
 		return fmt.Errorf("revoke agent: %w", err)
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		_ = tx.Rollback()
-		return fmt.Errorf("read revoke agent rows affected: %w", err)
-	}
-	if rowsAffected == 0 {
-		var existingRevoked sql.NullString
-		err := tx.QueryRowContext(ctx, `SELECT revoked_at FROM agents WHERE id = ?`, agentID).Scan(&existingRevoked)
-		if err != nil {
-			_ = tx.Rollback()
-			if errors.Is(err, sql.ErrNoRows) {
-				return ErrAgentNotFound
-			}
-			return fmt.Errorf("query agent revoke state: %w", err)
-		}
-		_ = tx.Rollback()
-		if existingRevoked.Valid {
-			return ErrAgentRevoked
-		}
-		return ErrAgentNotFound
 	}
 
 	_, err = tx.ExecContext(
@@ -844,6 +870,25 @@ func (s *Store) RevokeAgent(ctx context.Context, agentID string) error {
 	if err != nil {
 		_ = tx.Rollback()
 		return fmt.Errorf("revoke agent keys: %w", err)
+	}
+
+	eventType := AuthAuditEventPrincipalRevoked
+	metadata := map[string]any{}
+	if revokedBy.AgentID == agentID {
+		eventType = AuthAuditEventPrincipalSelfRevoked
+		metadata["revocation_mode"] = "self"
+	}
+	if err := s.recordAuthAuditEventTx(ctx, tx, AuthAuditEventInput{
+		EventType:      eventType,
+		OccurredAt:     now,
+		ActorAgentID:   revokedBy.AgentID,
+		ActorActorID:   revokedBy.ActorID,
+		SubjectAgentID: agentID,
+		SubjectActorID: subjectActorID,
+		Metadata:       metadata,
+	}); err != nil {
+		_ = tx.Rollback()
+		return err
 	}
 
 	if err := tx.Commit(); err != nil {

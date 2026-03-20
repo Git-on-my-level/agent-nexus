@@ -229,13 +229,15 @@ func handleRevokeCurrentAgent(w http.ResponseWriter, r *http.Request, opts handl
 		return
 	}
 
-	err := opts.authStore.RevokeAgent(r.Context(), principal.AgentID)
+	err := opts.authStore.RevokeAgent(r.Context(), principal.AgentID, *principal)
 	if err != nil {
 		switch {
 		case errors.Is(err, auth.ErrAgentRevoked):
 			writeError(w, http.StatusForbidden, "agent_revoked", "agent has been revoked")
 		case errors.Is(err, auth.ErrAgentNotFound):
 			writeError(w, http.StatusUnauthorized, "invalid_token", "authenticated agent no longer exists")
+		case errors.Is(err, auth.ErrAuthRequired):
+			writeError(w, http.StatusUnauthorized, "auth_required", "authorization header is required")
 		default:
 			writeError(w, http.StatusInternalServerError, "internal_error", "failed to revoke agent")
 		}

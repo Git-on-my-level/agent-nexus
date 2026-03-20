@@ -9,6 +9,7 @@ import (
 	"organization-autorunner-core/internal/blob"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"organization-autorunner-core/internal/actors"
 	"organization-autorunner-core/internal/primitives"
@@ -18,8 +19,8 @@ import (
 
 type manualProjectionHarness struct {
 	primitivesTestHarness
-	store  *primitives.Store
-	worker *ProjectionWorker
+	store      *primitives.Store
+	maintainer *ProjectionMaintainer
 }
 
 func newManualProjectionTestServer(t *testing.T) manualProjectionHarness {
@@ -38,11 +39,13 @@ func newManualProjectionTestServer(t *testing.T) manualProjectionHarness {
 
 	registry := actors.NewStore(workspace.DB())
 	primitiveStore := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
-	worker := NewProjectionWorker(
-		WithPrimitiveStore(primitiveStore),
-		WithSchemaContract(contract),
-		WithInboxRiskHorizon(defaultInboxRiskHorizon),
-	)
+	maintainer := NewProjectionMaintainer(ProjectionMaintainerConfig{
+		PrimitiveStore:   primitiveStore,
+		Contract:         contract,
+		InboxRiskHorizon: defaultInboxRiskHorizon,
+		DirtyBatchSize:   20,
+		SystemActorID:    "oar-core",
+	})
 	handler := NewHandler(
 		contract.Version,
 		WithHealthCheck(workspace.Ping),
@@ -59,9 +62,9 @@ func newManualProjectionTestServer(t *testing.T) manualProjectionHarness {
 	})
 
 	return manualProjectionHarness{
-		primitivesTestHarness: primitivesTestHarness{workspace: workspace, baseURL: server.URL},
+		primitivesTestHarness: primitivesTestHarness{workspace: workspace, baseURL: server.URL, maintainer: maintainer},
 		store:                 primitiveStore,
-		worker:                worker,
+		maintainer:            maintainer,
 	}
 }
 
@@ -174,7 +177,7 @@ func TestInboxReadDoesNotEmitStaleThreadExceptions(t *testing.T) {
 	}
 }
 
-func TestProjectionWorkerRunUntilIdleClearsPendingStatus(t *testing.T) {
+func TestProjectionMaintainerStepClearsPendingStatus(t *testing.T) {
 	t.Parallel()
 
 	h := newManualProjectionTestServer(t)
@@ -201,8 +204,8 @@ func TestProjectionWorkerRunUntilIdleClearsPendingStatus(t *testing.T) {
 		t.Fatalf("expected thread %s to be marked dirty before worker runs, got %#v", threadID, statuses[threadID])
 	}
 
-	if err := h.worker.RunUntilIdle(context.Background()); err != nil {
-		t.Fatalf("RunUntilIdle: %v", err)
+	if err := h.maintainer.Step(context.Background(), time.Now().UTC()); err != nil {
+		t.Fatalf("Step: %v", err)
 	}
 
 	state, err := loadThreadProjectionState(context.Background(), handlerOptions{primitiveStore: h.store}, threadID)

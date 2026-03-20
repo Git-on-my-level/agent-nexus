@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ARTIFACT_DIR="${HOSTED_SMOKE_ARTIFACT_DIR:-$ROOT_DIR/.tmp/hosted-smoke}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/hosted/common.sh"
+
+ARTIFACT_DIR="${HOSTED_SMOKE_ARTIFACT_DIR:-$REPO_ROOT/.tmp/hosted-smoke}"
 CORE_PORT="${CORE_PORT:-18090}"
 CORE_HOST="127.0.0.1"
 CORE_BASE_URL="http://${CORE_HOST}:${CORE_PORT}"
@@ -12,7 +15,7 @@ mkdir -p "$ARTIFACT_DIR"
 TMP_DIR="$(mktemp -d "$ARTIFACT_DIR/run.XXXXXX")"
 CORE_LOG="$TMP_DIR/core.log"
 WORKSPACE_ROOT="$TMP_DIR/workspace"
-BOOTSTRAP_TOKEN="hosted-smoke-bootstrap-$(od -vAn -N16 -tx1 /dev/urandom | tr -d ' \n')"
+BOOTSTRAP_TOKEN="hosted-smoke-bootstrap-$(generate_token 16)"
 
 cleanup() {
   local code=$?
@@ -30,28 +33,6 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-require_cmd() {
-  local cmd="$1"
-  command -v "$cmd" >/dev/null 2>&1 || {
-    echo "required command not found: $cmd" >&2
-    exit 1
-  }
-}
-
-wait_for_url() {
-  local url="$1"
-  local attempts="${2:-120}"
-  local sleep_seconds="${3:-0.25}"
-
-  for _ in $(seq 1 "$attempts"); do
-    if curl -fsS "$url" >/dev/null 2>&1; then
-      return 0
-    fi
-    sleep "$sleep_seconds"
-  done
-  return 1
-}
-
 assert_http_status() {
   local expected_status="$1"
   local actual_status="$2"
@@ -62,12 +43,50 @@ assert_http_status() {
   fi
 }
 
-require_cmd curl
-require_cmd go
-require_cmd rg
+extract_json_string() {
+  local json="$1"
+  local key="$2"
+  printf '%s' "$json" | grep -o "\"${key}\":\"[^\"]*\"" | head -n 1 | cut -d'"' -f4 || true
+}
+
+extract_thread_id() {
+  local json="$1"
+  local thread_id
+
+  thread_id="$(extract_json_string "$json" thread_id)"
+  if [[ -n "$thread_id" ]]; then
+    printf '%s\n' "$thread_id"
+    return 0
+  fi
+
+  extract_json_string "$json" id
+}
+
+count_fixed_matches() {
+  local needle="$1"
+  local input="$2"
+  printf '%s' "$input" | (grep -o -F -- "$needle" || true) | wc -l | tr -d ' '
+}
+
+extract_inbox_items_json() {
+  local json="$1"
+  local items
+
+  items="$(printf '%s' "$json" | sed -n 's/.*"items":\(\[.*\]\),"projection_freshness".*/\1/p')"
+  if [[ -n "$items" ]]; then
+    printf '%s\n' "$items"
+    return 0
+  fi
+
+  printf '%s\n' "$json"
+}
+
+require_command curl go grep sed cut
 
 generate_ed25519_public_key_base64() {
-  cat > /tmp/genkey$$.go << 'EOF'
+  local go_file
+  go_file="$(mktemp "${TMP_DIR}/genkey.XXXXXX.go")"
+  cat >"$go_file" <<'EOF'
 package main
 import (
 	"crypto/ed25519"
@@ -87,17 +106,17 @@ func main() {
 	}
 }
 EOF
-  go run /tmp/genkey$$.go
-  rm -f /tmp/genkey$$.go
+  go run "$go_file"
+  rm -f "$go_file"
 }
 
 echo "Building core binary..."
 (
-  cd "$ROOT_DIR/core"
+  cd "$REPO_ROOT/core"
   go build -o "$TMP_DIR/oar-core" ./cmd/oar-core
 )
 CORE_BIN="$TMP_DIR/oar-core"
-SCHEMA_PATH="$ROOT_DIR/contracts/oar-schema.yaml"
+SCHEMA_PATH="$REPO_ROOT/contracts/oar-schema.yaml"
 
 echo "Generating Ed25519 key pairs for test agents..."
 KEYS=$(generate_ed25519_public_key_base64)
@@ -116,7 +135,7 @@ OAR_BOOTSTRAP_TOKEN="$BOOTSTRAP_TOKEN" \
     >"$CORE_LOG" 2>&1 &
 CORE_PID=$!
 
-if ! wait_for_url "$CORE_BASE_URL/health" 160 0.15; then
+if ! wait_for_http_ok "$CORE_BASE_URL/health" "$SMOKE_TIMEOUT_SECONDS"; then
   echo "core did not become healthy" >&2
   cat "$CORE_LOG" >&2 || true
   exit 1
@@ -173,9 +192,15 @@ REGISTER1_RESPONSE=$(curl -sS \
   -d "{\"username\":\"hosted-agent-1\",\"public_key\":\"$PUBKEY3\",\"bootstrap_token\":\"$BOOTSTRAP_TOKEN\"}" \
   "$CORE_BASE_URL/auth/agents/register")
 
-AGENT1_TOKEN=$(echo "$REGISTER1_RESPONSE" | grep -o '"access_token":"[^"]*' | cut -d'"' -f4 || true)
+AGENT1_TOKEN="$(extract_json_string "$REGISTER1_RESPONSE" access_token)"
+AGENT1_ACTOR_ID="$(extract_json_string "$REGISTER1_RESPONSE" actor_id)"
 if [[ -z "$AGENT1_TOKEN" ]]; then
   echo "failed to extract access token from bootstrap registration" >&2
+  echo "response: $REGISTER1_RESPONSE" >&2
+  exit 1
+fi
+if [[ -z "$AGENT1_ACTOR_ID" ]]; then
+  echo "failed to extract actor id from bootstrap registration" >&2
   echo "response: $REGISTER1_RESPONSE" >&2
   exit 1
 fi
@@ -200,7 +225,7 @@ INVITE_RESPONSE=$(curl -sS \
   -d '{"kind":"agent","note":"hosted smoke invite"}' \
   "$CORE_BASE_URL/auth/invites")
 
-INVITE_TOKEN=$(echo "$INVITE_RESPONSE" | grep -o '"token":"[^"]*' | cut -d'"' -f4 || true)
+INVITE_TOKEN="$(extract_json_string "$INVITE_RESPONSE" token)"
 if [[ -z "$INVITE_TOKEN" ]]; then
   echo "failed to extract invite token" >&2
   echo "response: $INVITE_RESPONSE" >&2
@@ -225,7 +250,7 @@ REGISTER3_RESPONSE=$(curl -sS \
   -d "{\"username\":\"hosted-agent-3\",\"public_key\":\"$PUBKEY2\",\"invite_token\":\"$INVITE_TOKEN\"}" \
   "$CORE_BASE_URL/auth/agents/register")
 
-AGENT3_TOKEN=$(echo "$REGISTER3_RESPONSE" | grep -o '"access_token":"[^"]*' | cut -d'"' -f4 || true)
+AGENT3_TOKEN="$(extract_json_string "$REGISTER3_RESPONSE" access_token)"
 if [[ -z "$AGENT3_TOKEN" ]]; then
   echo "failed to extract access token from invite registration" >&2
   echo "response: $REGISTER3_RESPONSE" >&2
@@ -265,10 +290,7 @@ THREAD_RESPONSE=$(curl -sS \
   }' \
   "$CORE_BASE_URL/threads")
 
-THREAD_ID=$(echo "$THREAD_RESPONSE" | grep -o '"thread_id":"[^"]*' | cut -d'"' -f4 || true)
-if [[ -z "$THREAD_ID" ]]; then
-  THREAD_ID=$(echo "$THREAD_RESPONSE" | grep -o '"id":"[^"]*' | head -1 | cut -d'"' -f4 || true)
-fi
+THREAD_ID="$(extract_thread_id "$THREAD_RESPONSE")"
 if [[ -z "$THREAD_ID" ]]; then
   echo "failed to extract thread id" >&2
   echo "response: $THREAD_RESPONSE" >&2
@@ -308,7 +330,7 @@ assert_http_status "201" "$EVENT_STATUS" "authenticated event create"
 echo "✓ Authenticated workspace read/write works"
 
 echo ""
-echo "=== Test 6: Stale exceptions appear through background maintenance ==="
+echo "=== Test 6: Stale exceptions rebuild deterministically ==="
 echo "Creating stale thread (daily cadence, old next_check_in_at)..."
 STALE_THREAD_RESPONSE=$(curl -sS \
   -H "content-type: application/json" \
@@ -331,59 +353,72 @@ STALE_THREAD_RESPONSE=$(curl -sS \
   }' \
   "$CORE_BASE_URL/threads")
 
-STALE_THREAD_ID=$(echo "$STALE_THREAD_RESPONSE" | grep -o '"thread_id":"[^"]*' | cut -d'"' -f4 || true)
-if [[ -z "$STALE_THREAD_ID" ]]; then
-  STALE_THREAD_ID=$(echo "$STALE_THREAD_RESPONSE" | grep -o '"id":"[^"]*' | head -1 | cut -d'"' -f4 || true)
-fi
+STALE_THREAD_ID="$(extract_thread_id "$STALE_THREAD_RESPONSE")"
 if [[ -z "$STALE_THREAD_ID" ]]; then
   echo "failed to extract stale thread id" >&2
   echo "response: $STALE_THREAD_RESPONSE" >&2
   exit 1
 fi
 
-echo "Waiting for background stale exception scanner (up to 35 seconds)..."
-FOUND_STALE=0
-sleep 2
-for i in 1 2 3 4 5 6 7; do
-  STALE_EVENT_COUNT=$(curl -sS \
-    -H "authorization: Bearer $AGENT1_TOKEN" \
-    "$CORE_BASE_URL/threads/$STALE_THREAD_ID/events" | grep -o '"type":"stale_thread_exception"' | wc -l | tr -d ' ' || echo "0")
-  
-  if [[ "$STALE_EVENT_COUNT" -ge 1 ]]; then
-    FOUND_STALE=1
-    break
-  fi
-  sleep 5
-done
+echo "Rebuilding derived views to force stale detection..."
+REBUILD_STATUS=$(curl -sS -o /dev/null -w '%{http_code}' \
+  -H "content-type: application/json" \
+  -H "authorization: Bearer $AGENT1_TOKEN" \
+  -X POST \
+  -d "{\"actor_id\":\"$AGENT1_ACTOR_ID\"}" \
+  "$CORE_BASE_URL/derived/rebuild" || true)
+assert_http_status "200" "$REBUILD_STATUS" "derived rebuild"
 
-if [[ "$FOUND_STALE" -eq 1 ]]; then
-  echo "✓ Stale exceptions appear through background maintenance"
-else
-  echo "⚠ Warning: Stale exception not detected within 35s (background maintainer may need tuning)"
-  echo "  This is a non-blocking warning - integration tests cover this thoroughly"
+INBOX_RESPONSE=$(curl -sS \
+  -H "authorization: Bearer $AGENT1_TOKEN" \
+  "$CORE_BASE_URL/inbox")
+INBOX_ITEMS_JSON="$(extract_inbox_items_json "$INBOX_RESPONSE")"
+STALE_INBOX_COUNT="$(count_fixed_matches "\"thread_id\":\"$STALE_THREAD_ID\"" "$INBOX_ITEMS_JSON")"
+if [[ "$STALE_INBOX_COUNT" -ne 1 ]] || ! printf '%s' "$INBOX_ITEMS_JSON" | grep -F -q '"category":"exception"'; then
+  echo "expected one stale exception inbox item after rebuild, got count=$STALE_INBOX_COUNT" >&2
+  echo "inbox: $INBOX_RESPONSE" >&2
+  exit 1
 fi
+
+echo "Rebuilding derived views again to verify idempotence..."
+REBUILD_STATUS=$(curl -sS -o /dev/null -w '%{http_code}' \
+  -H "content-type: application/json" \
+  -H "authorization: Bearer $AGENT1_TOKEN" \
+  -X POST \
+  -d "{\"actor_id\":\"$AGENT1_ACTOR_ID\"}" \
+  "$CORE_BASE_URL/derived/rebuild" || true)
+assert_http_status "200" "$REBUILD_STATUS" "second derived rebuild"
+
+INBOX_RESPONSE=$(curl -sS \
+  -H "authorization: Bearer $AGENT1_TOKEN" \
+  "$CORE_BASE_URL/inbox")
+INBOX_ITEMS_JSON="$(extract_inbox_items_json "$INBOX_RESPONSE")"
+STALE_INBOX_COUNT="$(count_fixed_matches "\"thread_id\":\"$STALE_THREAD_ID\"" "$INBOX_ITEMS_JSON")"
+if [[ "$STALE_INBOX_COUNT" -ne 1 ]]; then
+  echo "expected stale rebuild to remain idempotent, got $STALE_INBOX_COUNT inbox items for the stale thread" >&2
+  echo "inbox: $INBOX_RESPONSE" >&2
+  exit 1
+fi
+
+STALE_THREADS_RESPONSE=$(curl -sS \
+  -H "authorization: Bearer $AGENT1_TOKEN" \
+  "$CORE_BASE_URL/threads?stale=true")
+if ! printf '%s' "$STALE_THREADS_RESPONSE" | grep -F -q "\"id\":\"$STALE_THREAD_ID\""; then
+  echo "expected stale thread to appear in stale thread listing" >&2
+  echo "response: $STALE_THREADS_RESPONSE" >&2
+  exit 1
+fi
+
+echo "✓ Stale exceptions rebuild deterministically"
 
 echo ""
-echo "=== Test 7: Backup/restore verification succeeds ==="
-SCRIPTS_HOSTED="$ROOT_DIR/scripts/hosted"
-if [[ -x "$SCRIPTS_HOSTED/smoke-test.sh" ]]; then
-  echo "Running hosted ops smoke test..."
-  if ! "$SCRIPTS_HOSTED/smoke-test.sh" 2>&1 | tee "$TMP_DIR/hosted-ops-smoke.log"; then
-    echo "hosted ops smoke test failed" >&2
-    exit 1
-  fi
-  echo "✓ Backup/restore verification passed"
-else
-  echo "Warning: hosted ops smoke test not found at $SCRIPTS_HOSTED/smoke-test.sh"
-  echo "Skipping backup/restore verification"
-fi
-
 cat >"$TMP_DIR/summary.txt" <<SUMMARY
 core_base_url=${CORE_BASE_URL}
 bootstrap_token_used=true
 invite_token_used=true
 authenticated_agent=hosted-agent-1
 stale_thread_id=${STALE_THREAD_ID}
+coverage=auth,onboarding,workspace,staleness
 artifacts_dir=${TMP_DIR}
 SUMMARY
 

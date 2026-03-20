@@ -543,6 +543,227 @@ func TestInviteLifecycleRejectsExpiredRevokedWrongKindAndReuse(t *testing.T) {
 	_ = wrongKindInvite
 }
 
+func TestAuthAuditAndPrincipalInventoryVisibility(t *testing.T) {
+	t.Parallel()
+
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{bootstrapToken: testBootstrapToken})
+	serverURL := env.server.URL
+
+	adminPublicKey, _ := generateKeyPair(t)
+	adminResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/agents/register", map[string]any{
+		"username":        "audit.admin",
+		"public_key":      adminPublicKey,
+		"bootstrap_token": testBootstrapToken,
+	}, "", http.StatusCreated)
+	defer adminResp.Body.Close()
+
+	var adminPayload struct {
+		Agent struct {
+			AgentID string `json:"agent_id"`
+			ActorID string `json:"actor_id"`
+		} `json:"agent"`
+		Tokens struct {
+			AccessToken string `json:"access_token"`
+		} `json:"tokens"`
+	}
+	if err := json.NewDecoder(adminResp.Body).Decode(&adminPayload); err != nil {
+		t.Fatalf("decode admin register response: %v", err)
+	}
+
+	consumedInvite, consumedToken := createInvite(t, serverURL, adminPayload.Tokens.AccessToken, map[string]any{
+		"kind": "agent",
+		"note": "consumed-invite",
+	})
+
+	secondResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/agents/register", map[string]any{
+		"username":     "audit.member",
+		"public_key":   mustGeneratePublicKey(t),
+		"invite_token": consumedToken,
+	}, "", http.StatusCreated)
+	defer secondResp.Body.Close()
+
+	var secondPayload struct {
+		Agent struct {
+			AgentID string `json:"agent_id"`
+			ActorID string `json:"actor_id"`
+		} `json:"agent"`
+		Tokens struct {
+			AccessToken string `json:"access_token"`
+		} `json:"tokens"`
+	}
+	if err := json.NewDecoder(secondResp.Body).Decode(&secondPayload); err != nil {
+		t.Fatalf("decode second register response: %v", err)
+	}
+
+	revokedInvite, _ := createInvite(t, serverURL, adminPayload.Tokens.AccessToken, map[string]any{
+		"kind": "agent",
+		"note": "revoked-invite",
+	})
+	revokeInviteResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/invites/"+asString(revokedInvite["id"])+"/revoke", map[string]any{}, adminPayload.Tokens.AccessToken, http.StatusOK)
+	revokeInviteResp.Body.Close()
+
+	revokePrincipalResp := postJSONExpectStatusWithAuth(t, serverURL+"/agents/me/revoke", map[string]any{}, secondPayload.Tokens.AccessToken, http.StatusOK)
+	revokePrincipalResp.Body.Close()
+
+	invites := listInvites(t, serverURL, adminPayload.Tokens.AccessToken)
+	consumedInviteID := asString(consumedInvite["id"])
+	revokedInviteID := asString(revokedInvite["id"])
+
+	var consumedInviteRow map[string]any
+	var revokedInviteRow map[string]any
+	for _, invite := range invites {
+		switch asString(invite["id"]) {
+		case consumedInviteID:
+			consumedInviteRow = invite
+		case revokedInviteID:
+			revokedInviteRow = invite
+		}
+	}
+	if consumedInviteRow == nil {
+		t.Fatalf("expected consumed invite %q in list %#v", consumedInviteID, invites)
+	}
+	if asString(consumedInviteRow["created_by_agent_id"]) != adminPayload.Agent.AgentID {
+		t.Fatalf("unexpected consumed invite creator: %#v", consumedInviteRow)
+	}
+	if asString(consumedInviteRow["consumed_by_agent_id"]) != secondPayload.Agent.AgentID {
+		t.Fatalf("unexpected consumed invite consumer: %#v", consumedInviteRow)
+	}
+	if asString(consumedInviteRow["consumed_by_actor_id"]) != secondPayload.Agent.ActorID {
+		t.Fatalf("unexpected consumed invite consumer actor: %#v", consumedInviteRow)
+	}
+	if asString(consumedInviteRow["consumed_at"]) == "" {
+		t.Fatalf("expected consumed invite timestamp: %#v", consumedInviteRow)
+	}
+
+	if revokedInviteRow == nil {
+		t.Fatalf("expected revoked invite %q in list %#v", revokedInviteID, invites)
+	}
+	if asString(revokedInviteRow["revoked_by_agent_id"]) != adminPayload.Agent.AgentID {
+		t.Fatalf("unexpected revoked invite actor: %#v", revokedInviteRow)
+	}
+	if asString(revokedInviteRow["revoked_by_actor_id"]) != adminPayload.Agent.ActorID {
+		t.Fatalf("unexpected revoked invite actor_id: %#v", revokedInviteRow)
+	}
+	if asString(revokedInviteRow["revoked_at"]) == "" {
+		t.Fatalf("expected revoked invite timestamp: %#v", revokedInviteRow)
+	}
+
+	firstPrincipalPage := listAuthPrincipalsPage(t, serverURL, adminPayload.Tokens.AccessToken, 1, "")
+	if len(firstPrincipalPage.Principals) != 1 {
+		t.Fatalf("expected one principal on first page, got %#v", firstPrincipalPage)
+	}
+	if asString(firstPrincipalPage.Principals[0]["agent_id"]) != secondPayload.Agent.AgentID {
+		t.Fatalf("expected newest principal first, got %#v", firstPrincipalPage.Principals)
+	}
+	if !asBool(firstPrincipalPage.Principals[0]["revoked"]) {
+		t.Fatalf("expected revoked principal to remain visible: %#v", firstPrincipalPage.Principals[0])
+	}
+	if firstPrincipalPage.NextCursor == "" {
+		t.Fatal("expected next_cursor for principals pagination")
+	}
+
+	secondPrincipalPage := listAuthPrincipalsPage(t, serverURL, adminPayload.Tokens.AccessToken, 1, firstPrincipalPage.NextCursor)
+	if len(secondPrincipalPage.Principals) != 1 {
+		t.Fatalf("expected one principal on second page, got %#v", secondPrincipalPage)
+	}
+	if asString(secondPrincipalPage.Principals[0]["agent_id"]) != adminPayload.Agent.AgentID {
+		t.Fatalf("expected admin principal on second page, got %#v", secondPrincipalPage.Principals)
+	}
+	if asBool(secondPrincipalPage.Principals[0]["revoked"]) {
+		t.Fatalf("expected admin principal to remain active: %#v", secondPrincipalPage.Principals[0])
+	}
+
+	auditPage := listAuthAuditPage(t, serverURL, adminPayload.Tokens.AccessToken, 3, "")
+	if len(auditPage.Events) != 3 {
+		t.Fatalf("expected three audit events on first page, got %#v", auditPage)
+	}
+	if auditPage.NextCursor == "" {
+		t.Fatal("expected next_cursor for audit pagination")
+	}
+	if asString(auditPage.Events[0]["event_type"]) != auth.AuthAuditEventPrincipalSelfRevoked {
+		t.Fatalf("expected newest audit event to be principal_self_revoked, got %#v", auditPage.Events[0])
+	}
+
+	allEvents := append([]map[string]any{}, auditPage.Events...)
+	cursor := auditPage.NextCursor
+	for cursor != "" {
+		page := listAuthAuditPage(t, serverURL, adminPayload.Tokens.AccessToken, 3, cursor)
+		allEvents = append(allEvents, page.Events...)
+		cursor = page.NextCursor
+	}
+
+	if len(allEvents) != 8 {
+		t.Fatalf("expected 8 audit events, got %d: %#v", len(allEvents), allEvents)
+	}
+
+	findEvent := func(eventType string, inviteID string, subjectAgentID string) map[string]any {
+		for _, event := range allEvents {
+			if asString(event["event_type"]) != eventType {
+				continue
+			}
+			if inviteID != "" && asString(event["invite_id"]) != inviteID {
+				continue
+			}
+			if subjectAgentID != "" && asString(event["subject_agent_id"]) != subjectAgentID {
+				continue
+			}
+			return event
+		}
+		return nil
+	}
+
+	bootstrapEvent := findEvent(auth.AuthAuditEventBootstrapConsumed, "", adminPayload.Agent.AgentID)
+	if bootstrapEvent == nil {
+		t.Fatal("expected bootstrap_consumed audit event")
+	}
+	if asString(mapValue(bootstrapEvent["metadata"], "principal_kind")) != "agent" {
+		t.Fatalf("unexpected bootstrap audit metadata: %#v", bootstrapEvent)
+	}
+
+	inviteCreateEvent := findEvent(auth.AuthAuditEventInviteCreated, consumedInviteID, "")
+	if inviteCreateEvent == nil {
+		t.Fatal("expected invite_created event for consumed invite")
+	}
+	if asString(inviteCreateEvent["actor_agent_id"]) != adminPayload.Agent.AgentID {
+		t.Fatalf("unexpected invite_created actor: %#v", inviteCreateEvent)
+	}
+
+	inviteConsumedEvent := findEvent(auth.AuthAuditEventInviteConsumed, consumedInviteID, secondPayload.Agent.AgentID)
+	if inviteConsumedEvent == nil {
+		t.Fatal("expected invite_consumed event")
+	}
+	if asString(inviteConsumedEvent["actor_agent_id"]) != secondPayload.Agent.AgentID {
+		t.Fatalf("unexpected invite_consumed actor: %#v", inviteConsumedEvent)
+	}
+	if asString(mapValue(inviteConsumedEvent["metadata"], "invite_kind")) != "agent" {
+		t.Fatalf("unexpected invite_consumed metadata: %#v", inviteConsumedEvent)
+	}
+
+	principalRegisteredEvent := findEvent(auth.AuthAuditEventPrincipalRegistered, consumedInviteID, secondPayload.Agent.AgentID)
+	if principalRegisteredEvent == nil {
+		t.Fatal("expected principal_registered event for invited principal")
+	}
+	if asString(mapValue(principalRegisteredEvent["metadata"], "auth_method")) != "public_key" {
+		t.Fatalf("unexpected principal_registered metadata: %#v", principalRegisteredEvent)
+	}
+
+	inviteRevokedEvent := findEvent(auth.AuthAuditEventInviteRevoked, revokedInviteID, "")
+	if inviteRevokedEvent == nil {
+		t.Fatal("expected invite_revoked event")
+	}
+	if asString(inviteRevokedEvent["actor_agent_id"]) != adminPayload.Agent.AgentID {
+		t.Fatalf("unexpected invite_revoked actor: %#v", inviteRevokedEvent)
+	}
+
+	selfRevokedEvent := findEvent(auth.AuthAuditEventPrincipalSelfRevoked, "", secondPayload.Agent.AgentID)
+	if selfRevokedEvent == nil {
+		t.Fatal("expected principal_self_revoked event")
+	}
+	if asString(selfRevokedEvent["actor_agent_id"]) != secondPayload.Agent.AgentID {
+		t.Fatalf("unexpected principal_self_revoked actor: %#v", selfRevokedEvent)
+	}
+}
+
 func TestFirstPasskeyRegistrationWithBootstrapToken(t *testing.T) {
 	t.Parallel()
 
@@ -747,6 +968,14 @@ func TestHostedModeProtectsWorkspaceReadsAndBlocksLegacyActorFlows(t *testing.T)
 	actorsResp := getJSONExpectStatusWithAuth(t, serverURL+"/actors", "", http.StatusUnauthorized)
 	defer actorsResp.Body.Close()
 	assertErrorCode(t, actorsResp, "auth_required")
+
+	principalsResp := getJSONExpectStatusWithAuth(t, serverURL+"/auth/principals", "", http.StatusUnauthorized)
+	defer principalsResp.Body.Close()
+	assertErrorCode(t, principalsResp, "auth_required")
+
+	auditResp := getJSONExpectStatusWithAuth(t, serverURL+"/auth/audit", "", http.StatusUnauthorized)
+	defer auditResp.Body.Close()
+	assertErrorCode(t, auditResp, "auth_required")
 
 	createActorResp := postJSONExpectStatusWithAuth(t, serverURL+"/actors", map[string]any{
 		"actor": map[string]any{
@@ -1004,6 +1233,50 @@ func listInvites(t *testing.T, serverURL string, accessToken string) []map[strin
 	return payload.Invites
 }
 
+func listAuthPrincipalsPage(t *testing.T, serverURL string, accessToken string, limit int, cursor string) struct {
+	Principals []map[string]any `json:"principals"`
+	NextCursor string           `json:"next_cursor"`
+} {
+	t.Helper()
+	url := fmt.Sprintf("%s/auth/principals?limit=%d", serverURL, limit)
+	if strings.TrimSpace(cursor) != "" {
+		url += "&cursor=" + cursor
+	}
+	resp := getJSONExpectStatusWithAuth(t, url, accessToken, http.StatusOK)
+	defer resp.Body.Close()
+
+	var payload struct {
+		Principals []map[string]any `json:"principals"`
+		NextCursor string           `json:"next_cursor"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode auth principals response: %v", err)
+	}
+	return payload
+}
+
+func listAuthAuditPage(t *testing.T, serverURL string, accessToken string, limit int, cursor string) struct {
+	Events     []map[string]any `json:"events"`
+	NextCursor string           `json:"next_cursor"`
+} {
+	t.Helper()
+	url := fmt.Sprintf("%s/auth/audit?limit=%d", serverURL, limit)
+	if strings.TrimSpace(cursor) != "" {
+		url += "&cursor=" + cursor
+	}
+	resp := getJSONExpectStatusWithAuth(t, url, accessToken, http.StatusOK)
+	defer resp.Body.Close()
+
+	var payload struct {
+		Events     []map[string]any `json:"events"`
+		NextCursor string           `json:"next_cursor"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode auth audit response: %v", err)
+	}
+	return payload
+}
+
 func mustGeneratePublicKey(t *testing.T) string {
 	t.Helper()
 	publicKey, _ := generateKeyPair(t)
@@ -1024,6 +1297,19 @@ func signAssertion(t *testing.T, privateKey ed25519.PrivateKey, agentID string, 
 	message := auth.BuildAssertionMessage(agentID, keyID, signedAt)
 	signature := ed25519.Sign(privateKey, []byte(message))
 	return base64.StdEncoding.EncodeToString(signature)
+}
+
+func mapValue(raw any, key string) any {
+	decoded, _ := raw.(map[string]any)
+	if decoded == nil {
+		return nil
+	}
+	return decoded[key]
+}
+
+func asBool(raw any) bool {
+	value, _ := raw.(bool)
+	return value
 }
 
 func postJSONExpectStatusWithAuth(t *testing.T, url string, payload any, accessToken string, expectedStatus int) *http.Response {

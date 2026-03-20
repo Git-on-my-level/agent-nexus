@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -18,12 +19,6 @@ import (
 )
 
 type HealthCheckFunc func(ctx context.Context) error
-
-type ProjectionMaintenance interface {
-	Start()
-	Notify(ctx context.Context) error
-	Stop(ctx context.Context) error
-}
 
 type ActorRegistry interface {
 	Register(ctx context.Context, actor actors.Actor) (actors.Actor, error)
@@ -54,7 +49,7 @@ type PrimitiveStore interface {
 	ListDocuments(ctx context.Context, filter primitives.DocumentListFilter) ([]map[string]any, string, error)
 	MarkThreadProjectionsDirty(ctx context.Context, threadIDs []string, queuedAt time.Time) error
 	GetThreadProjectionRefreshStatuses(ctx context.Context, threadIDs []string) (map[string]primitives.ThreadProjectionRefreshStatus, error)
-	ClaimNextDirtyThreadProjection(ctx context.Context, startedAt time.Time) (primitives.ThreadProjectionRefreshStatus, bool, error)
+	MarkThreadProjectionRefreshStarted(ctx context.Context, threadID string, startedAt time.Time) error
 	MarkThreadProjectionRefreshSucceeded(ctx context.Context, threadID string, completedAt time.Time) error
 	MarkThreadProjectionRefreshFailed(ctx context.Context, threadID string, failedAt time.Time, message string) error
 	CreateDocument(ctx context.Context, actorID string, document map[string]any, content any, contentType string, refs []string) (map[string]any, map[string]any, error)
@@ -92,27 +87,27 @@ type PrimitiveStore interface {
 type HandlerOption func(*handlerOptions)
 
 type handlerOptions struct {
-	healthCheck                HealthCheckFunc
-	actorRegistry              ActorRegistry
-	authStore                  *auth.Store
-	passkeySessionStore        *auth.PasskeySessionStore
-	primitiveStore             PrimitiveStore
-	contract                   *schema.Contract
-	webAuthnConfig             WebAuthnConfig
-	enableDevActorMode         bool
-	allowUnauthenticatedWrites bool
-	inboxRiskHorizon           time.Duration
-	projectionMaintenance      ProjectionMaintenance
-	coreVersion                string
-	apiVersion                 string
-	minCLIVersion              string
-	recommendedCLIVersion      string
-	cliDownloadURL             string
-	coreInstanceID             string
-	metaCommandsPath           string
-	streamPollInterval         time.Duration
-	corsAllowedOrigins         []string
-	projectionMaintainer       *ProjectionMaintainer
+	healthCheck                    HealthCheckFunc
+	actorRegistry                  ActorRegistry
+	authStore                      *auth.Store
+	passkeySessionStore            *auth.PasskeySessionStore
+	primitiveStore                 PrimitiveStore
+	contract                       *schema.Contract
+	webAuthnConfig                 WebAuthnConfig
+	enableDevActorMode             bool
+	allowUnauthenticatedWrites     bool
+	allowLoopbackVerificationReads bool
+	inboxRiskHorizon               time.Duration
+	coreVersion                    string
+	apiVersion                     string
+	minCLIVersion                  string
+	recommendedCLIVersion          string
+	cliDownloadURL                 string
+	coreInstanceID                 string
+	metaCommandsPath               string
+	streamPollInterval             time.Duration
+	corsAllowedOrigins             []string
+	projectionMaintainer           *ProjectionMaintainer
 }
 
 func WithHealthCheck(healthCheck HealthCheckFunc) HandlerOption {
@@ -169,15 +164,15 @@ func WithAllowUnauthenticatedWrites(allow bool) HandlerOption {
 	}
 }
 
-func WithInboxRiskHorizon(horizon time.Duration) HandlerOption {
+func WithAllowLoopbackVerificationReads(allow bool) HandlerOption {
 	return func(opts *handlerOptions) {
-		opts.inboxRiskHorizon = horizon
+		opts.allowLoopbackVerificationReads = allow
 	}
 }
 
-func WithProjectionMaintenance(maintenance ProjectionMaintenance) HandlerOption {
+func WithInboxRiskHorizon(horizon time.Duration) HandlerOption {
 	return func(opts *handlerOptions) {
-		opts.projectionMaintenance = maintenance
+		opts.inboxRiskHorizon = horizon
 	}
 }
 
@@ -297,6 +292,22 @@ func isReadOnlyRequest(method string) bool {
 	}
 }
 
+func isLoopbackRequest(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	host, _, err := net.SplitHostPort(strings.TrimSpace(r.RemoteAddr))
+	if err != nil {
+		host = strings.TrimSpace(r.RemoteAddr)
+	}
+	host = strings.Trim(host, "[]")
+	if host == "" {
+		return false
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
 func enforceRouteAccess(w http.ResponseWriter, r *http.Request, opts handlerOptions, requirement routeAccessRequirement) bool {
 	if !requirement.supported {
 		return true
@@ -307,6 +318,10 @@ func enforceRouteAccess(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		return true
 	case routeAccessWorkspaceBusiness:
 		if isReadOnlyRequest(r.Method) && opts.enableDevActorMode {
+			_, ok := authenticatePrincipalFromHeader(w, r, opts, false)
+			return ok
+		}
+		if isReadOnlyRequest(r.Method) && opts.allowLoopbackVerificationReads && isLoopbackRequest(r) {
 			_, ok := authenticatePrincipalFromHeader(w, r, opts, false)
 			return ok
 		}
@@ -362,9 +377,6 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 	}
 	if opts.streamPollInterval <= 0 {
 		opts.streamPollInterval = time.Second
-	}
-	if opts.projectionMaintenance != nil {
-		opts.projectionMaintenance.Start()
 	}
 
 	mux := http.NewServeMux()
@@ -510,6 +522,22 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET and POST are supported")
 		}
+	})
+
+	registerRoute("/auth/principals", exactRouteAccess(routeAccessAuthenticatedPrincipal, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+			return
+		}
+		handleListAuthPrincipals(w, r, opts)
+	})
+
+	registerRoute("/auth/audit", exactRouteAccess(routeAccessAuthenticatedPrincipal, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+			return
+		}
+		handleListAuthAudit(w, r, opts)
 	})
 
 	registerRoute("/auth/invites/", func(r *http.Request) routeAccessRequirement {

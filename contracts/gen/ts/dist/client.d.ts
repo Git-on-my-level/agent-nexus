@@ -56,6 +56,7 @@ export declare class OarClient {
     artifactsList(options?: RequestOptions): Promise<InvokeResult>;
     artifactsTombstone(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     authAgentsRegister(options?: RequestOptions): Promise<InvokeResult>;
+    authAuditList(options?: RequestOptions): Promise<InvokeResult>;
     authBootstrapStatus(options?: RequestOptions): Promise<InvokeResult>;
     authInvitesCreate(options?: RequestOptions): Promise<InvokeResult>;
     authInvitesList(options?: RequestOptions): Promise<InvokeResult>;
@@ -64,6 +65,7 @@ export declare class OarClient {
     authPasskeyLoginVerify(options?: RequestOptions): Promise<InvokeResult>;
     authPasskeyRegisterOptions(options?: RequestOptions): Promise<InvokeResult>;
     authPasskeyRegisterVerify(options?: RequestOptions): Promise<InvokeResult>;
+    authPrincipalsList(options?: RequestOptions): Promise<InvokeResult>;
     authToken(options?: RequestOptions): Promise<InvokeResult>;
     boardsCardsAdd(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     boardsCardsList(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;

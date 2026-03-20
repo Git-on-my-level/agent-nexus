@@ -4,7 +4,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.2.3`
-- Concepts: `43`
+- Concepts: `44`
 
 ## `append-only`
 
@@ -24,15 +24,22 @@ Generated from `contracts/oar-openapi.yaml`.
   - `threads.context`
   - `threads.workspace`
 
+## `audit`
+
+- Commands: `1`
+- Command IDs:
+  - `auth.audit.list`
+
 ## `auth`
 
-- Commands: `14`
+- Commands: `16`
 - Command IDs:
   - `agents.me.get`
   - `agents.me.keys.rotate`
   - `agents.me.patch`
   - `agents.me.revoke`
   - `auth.agents.register`
+  - `auth.audit.list`
   - `auth.bootstrap.status`
   - `auth.invites.create`
   - `auth.invites.list`
@@ -41,6 +48,7 @@ Generated from `contracts/oar-openapi.yaml`.
   - `auth.passkey.login.verify`
   - `auth.passkey.register.options`
   - `auth.passkey.register.verify`
+  - `auth.principals.list`
   - `auth.token`
 
 ## `boards`
@@ -168,13 +176,14 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `identity`
 
-- Commands: `5`
+- Commands: `6`
 - Command IDs:
   - `actors.list`
   - `actors.register`
   - `agents.me.get`
   - `agents.me.patch`
   - `auth.agents.register`
+  - `auth.principals.list`
 
 ## `inbox`
 

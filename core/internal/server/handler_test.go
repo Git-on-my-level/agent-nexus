@@ -175,3 +175,33 @@ func TestHealthEndpointStorageError(t *testing.T) {
 		t.Fatalf("expected non-empty hint, payload=%#v", errObj)
 	}
 }
+
+func TestLoopbackVerificationReadsAllowReadOnlyWorkspaceRoutes(t *testing.T) {
+	t.Parallel()
+
+	handler := NewHandler("0.2.2", WithAllowLoopbackVerificationReads(true))
+	req := httptest.NewRequest(http.MethodGet, "/artifacts", nil)
+	req.RemoteAddr = "127.0.0.1:43123"
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("unexpected status: got %d want %d", rr.Code, http.StatusServiceUnavailable)
+	}
+}
+
+func TestLoopbackVerificationReadsDoNotAllowNonLoopbackRequests(t *testing.T) {
+	t.Parallel()
+
+	handler := NewHandler("0.2.2", WithAllowLoopbackVerificationReads(true))
+	req := httptest.NewRequest(http.MethodGet, "/artifacts", nil)
+	req.RemoteAddr = "192.0.2.10:43123"
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("unexpected status: got %d want %d", rr.Code, http.StatusUnauthorized)
+	}
+}

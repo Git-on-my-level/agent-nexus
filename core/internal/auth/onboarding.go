@@ -37,18 +37,23 @@ type OnboardingClaim struct {
 	PrincipalKind PrincipalKind
 	TokenHash     string
 	InviteID      string
+	InviteKind    string
 }
 
 type Invite struct {
-	ID               string  `json:"id"`
-	Kind             string  `json:"kind"`
-	CreatedByAgentID string  `json:"created_by_agent_id"`
-	CreatedByActorID string  `json:"created_by_actor_id"`
-	Note             string  `json:"note"`
-	CreatedAt        string  `json:"created_at"`
-	ExpiresAt        *string `json:"expires_at,omitempty"`
-	ConsumedAt       *string `json:"consumed_at,omitempty"`
-	RevokedAt        *string `json:"revoked_at,omitempty"`
+	ID                string  `json:"id"`
+	Kind              string  `json:"kind"`
+	CreatedByAgentID  string  `json:"created_by_agent_id"`
+	CreatedByActorID  string  `json:"created_by_actor_id"`
+	Note              string  `json:"note"`
+	CreatedAt         string  `json:"created_at"`
+	ExpiresAt         *string `json:"expires_at,omitempty"`
+	ConsumedAt        *string `json:"consumed_at,omitempty"`
+	ConsumedByAgentID *string `json:"consumed_by_agent_id,omitempty"`
+	ConsumedByActorID *string `json:"consumed_by_actor_id,omitempty"`
+	RevokedAt         *string `json:"revoked_at,omitempty"`
+	RevokedByAgentID  *string `json:"revoked_by_agent_id,omitempty"`
+	RevokedByActorID  *string `json:"revoked_by_actor_id,omitempty"`
 }
 
 type CreateInviteInput struct {
@@ -171,7 +176,8 @@ func (s *Store) CreateInvite(ctx context.Context, createdBy Principal, input Cre
 		expiresAtText = &value
 	}
 
-	nowText := time.Now().UTC().Format(time.RFC3339Nano)
+	now := time.Now().UTC()
+	nowText := now.Format(time.RFC3339Nano)
 	inviteID := "invite_" + uuid.NewString()
 	tokenBody, err := generateOpaqueToken(24)
 	if err != nil {
@@ -179,7 +185,12 @@ func (s *Store) CreateInvite(ctx context.Context, createdBy Principal, input Cre
 	}
 	token := "oinv_" + tokenBody
 
-	_, err = s.db.ExecContext(
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Invite{}, "", fmt.Errorf("begin create invite transaction: %w", err)
+	}
+
+	_, err = tx.ExecContext(
 		ctx,
 		`INSERT INTO auth_invites(
 			id,
@@ -191,8 +202,12 @@ func (s *Store) CreateInvite(ctx context.Context, createdBy Principal, input Cre
 			created_at,
 			expires_at,
 			consumed_at,
-			revoked_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)`,
+			consumed_by_agent_id,
+			consumed_by_actor_id,
+			revoked_at,
+			revoked_by_agent_id,
+			revoked_by_actor_id
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL)`,
 		inviteID,
 		hashToken(token),
 		string(kind),
@@ -203,7 +218,32 @@ func (s *Store) CreateInvite(ctx context.Context, createdBy Principal, input Cre
 		expiresAtText,
 	)
 	if err != nil {
+		_ = tx.Rollback()
 		return Invite{}, "", fmt.Errorf("insert auth invite: %w", err)
+	}
+
+	metadata := map[string]any{"kind": string(kind)}
+	if note != "" {
+		metadata["note"] = note
+	}
+	if expiresAtText != nil {
+		metadata["expires_at"] = *expiresAtText
+	}
+	if err := s.recordAuthAuditEventTx(ctx, tx, AuthAuditEventInput{
+		EventType:    AuthAuditEventInviteCreated,
+		OccurredAt:   now,
+		ActorAgentID: createdBy.AgentID,
+		ActorActorID: createdBy.ActorID,
+		InviteID:     inviteID,
+		Metadata:     metadata,
+	}); err != nil {
+		_ = tx.Rollback()
+		return Invite{}, "", err
+	}
+
+	if err := tx.Commit(); err != nil {
+		_ = tx.Rollback()
+		return Invite{}, "", fmt.Errorf("commit create invite transaction: %w", err)
 	}
 
 	return Invite{
@@ -233,7 +273,11 @@ func (s *Store) ListInvites(ctx context.Context) ([]Invite, error) {
 			created_at,
 			expires_at,
 			consumed_at,
-			revoked_at
+			consumed_by_agent_id,
+			consumed_by_actor_id,
+			revoked_at,
+			revoked_by_agent_id,
+			revoked_by_actor_id
 		 FROM auth_invites
 		 ORDER BY created_at DESC, id DESC`,
 	)
@@ -257,7 +301,7 @@ func (s *Store) ListInvites(ctx context.Context) ([]Invite, error) {
 	return invites, nil
 }
 
-func (s *Store) RevokeInvite(ctx context.Context, inviteID string) (Invite, error) {
+func (s *Store) RevokeInvite(ctx context.Context, inviteID string, revokedBy Principal) (Invite, error) {
 	if s == nil || s.db == nil {
 		return Invite{}, fmt.Errorf("auth store database is not initialized")
 	}
@@ -266,32 +310,95 @@ func (s *Store) RevokeInvite(ctx context.Context, inviteID string) (Invite, erro
 	if inviteID == "" {
 		return Invite{}, fmt.Errorf("%w: invite_id is required", ErrInvalidRequest)
 	}
+	revokedBy.AgentID = strings.TrimSpace(revokedBy.AgentID)
+	revokedBy.ActorID = strings.TrimSpace(revokedBy.ActorID)
+	if revokedBy.AgentID == "" || revokedBy.ActorID == "" {
+		return Invite{}, fmt.Errorf("%w: authenticated principal is required", ErrAuthRequired)
+	}
 
-	_, err := s.db.ExecContext(
+	now := time.Now().UTC()
+	nowText := now.Format(time.RFC3339Nano)
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Invite{}, fmt.Errorf("begin revoke invite transaction: %w", err)
+	}
+
+	result, err := tx.ExecContext(
 		ctx,
 		`UPDATE auth_invites
-		 SET revoked_at = CASE
-		     WHEN revoked_at IS NULL THEN ?
-		     ELSE revoked_at
-		 END
-		 WHERE id = ?`,
-		time.Now().UTC().Format(time.RFC3339Nano),
+		 SET revoked_at = ?,
+		     revoked_by_agent_id = ?,
+		     revoked_by_actor_id = ?
+		 WHERE id = ?
+		   AND revoked_at IS NULL`,
+		nowText,
+		revokedBy.AgentID,
+		revokedBy.ActorID,
 		inviteID,
 	)
 	if err != nil {
+		_ = tx.Rollback()
 		return Invite{}, fmt.Errorf("revoke auth invite: %w", err)
 	}
 
-	return s.getInviteByID(ctx, inviteID)
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		_ = tx.Rollback()
+		return Invite{}, fmt.Errorf("read revoke invite rows affected: %w", err)
+	}
+
+	invite, err := getInviteByIDWithQuerier(ctx, tx, inviteID)
+	if err != nil {
+		_ = tx.Rollback()
+		if errors.Is(err, ErrInviteNotFound) {
+			return Invite{}, ErrInviteNotFound
+		}
+		return Invite{}, err
+	}
+
+	if rowsAffected == 0 {
+		_ = tx.Rollback()
+		return invite, nil
+	}
+
+	if err := s.recordAuthAuditEventTx(ctx, tx, AuthAuditEventInput{
+		EventType:    AuthAuditEventInviteRevoked,
+		OccurredAt:   now,
+		ActorAgentID: revokedBy.AgentID,
+		ActorActorID: revokedBy.ActorID,
+		InviteID:     inviteID,
+		Metadata: map[string]any{
+			"kind": invite.Kind,
+		},
+	}); err != nil {
+		_ = tx.Rollback()
+		return Invite{}, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		_ = tx.Rollback()
+		return Invite{}, fmt.Errorf("commit revoke invite transaction: %w", err)
+	}
+
+	return invite, nil
 }
 
 func (s *Store) getInviteByID(ctx context.Context, inviteID string) (Invite, error) {
+	return getInviteByIDWithQuerier(ctx, s.db, inviteID)
+}
+
+type inviteQueryer interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+func getInviteByIDWithQuerier(ctx context.Context, queryer inviteQueryer, inviteID string) (Invite, error) {
 	inviteID = strings.TrimSpace(inviteID)
 	if inviteID == "" {
 		return Invite{}, ErrInviteNotFound
 	}
 
-	row := s.db.QueryRowContext(
+	row := queryer.QueryRowContext(
 		ctx,
 		`SELECT
 			id,
@@ -302,7 +409,11 @@ func (s *Store) getInviteByID(ctx context.Context, inviteID string) (Invite, err
 			created_at,
 			expires_at,
 			consumed_at,
-			revoked_at
+			consumed_by_agent_id,
+			consumed_by_actor_id,
+			revoked_at,
+			revoked_by_agent_id,
+			revoked_by_actor_id
 		 FROM auth_invites
 		 WHERE id = ?`,
 		inviteID,
@@ -361,6 +472,7 @@ func (s *Store) resolveInviteClaim(ctx context.Context, inviteToken string, prin
 		PrincipalKind: principalKind,
 		TokenHash:     hashToken(inviteToken),
 		InviteID:      inviteID,
+		InviteKind:    kind,
 	}, nil
 }
 
@@ -390,12 +502,27 @@ func (s *Store) consumeOnboardingClaimTx(ctx context.Context, tx *sql.Tx, claim 
 			}
 			return fmt.Errorf("consume bootstrap token: %w", err)
 		}
+		if err := s.recordAuthAuditEventTx(ctx, tx, AuthAuditEventInput{
+			EventType:      AuthAuditEventBootstrapConsumed,
+			OccurredAt:     now,
+			ActorAgentID:   agentID,
+			ActorActorID:   actorID,
+			SubjectAgentID: agentID,
+			SubjectActorID: actorID,
+			Metadata: map[string]any{
+				"principal_kind": string(claim.PrincipalKind),
+			},
+		}); err != nil {
+			return err
+		}
 		return nil
 	case OnboardingModeInvite:
 		result, err := tx.ExecContext(
 			ctx,
 			`UPDATE auth_invites
-			 SET consumed_at = ?
+			 SET consumed_at = ?,
+			     consumed_by_agent_id = ?,
+			     consumed_by_actor_id = ?
 			 WHERE id = ?
 			   AND token_hash = ?
 			   AND consumed_at IS NULL
@@ -403,6 +530,8 @@ func (s *Store) consumeOnboardingClaimTx(ctx context.Context, tx *sql.Tx, claim 
 			   AND (expires_at IS NULL OR expires_at > ?)
 			   AND (kind = ? OR kind = ?)`,
 			now.Format(time.RFC3339Nano),
+			agentID,
+			actorID,
 			claim.InviteID,
 			claim.TokenHash,
 			now.Format(time.RFC3339Nano),
@@ -419,6 +548,24 @@ func (s *Store) consumeOnboardingClaimTx(ctx context.Context, tx *sql.Tx, claim 
 		if rowsAffected == 0 {
 			return ErrInvalidToken
 		}
+		metadata := map[string]any{
+			"principal_kind": string(claim.PrincipalKind),
+		}
+		if strings.TrimSpace(claim.InviteKind) != "" {
+			metadata["invite_kind"] = claim.InviteKind
+		}
+		if err := s.recordAuthAuditEventTx(ctx, tx, AuthAuditEventInput{
+			EventType:      AuthAuditEventInviteConsumed,
+			OccurredAt:     now,
+			ActorAgentID:   agentID,
+			ActorActorID:   actorID,
+			SubjectAgentID: agentID,
+			SubjectActorID: actorID,
+			InviteID:       claim.InviteID,
+			Metadata:       metadata,
+		}); err != nil {
+			return err
+		}
 		return nil
 	default:
 		return fmt.Errorf("%w: unsupported onboarding mode", ErrInvalidRequest)
@@ -431,10 +578,14 @@ type inviteScanner interface {
 
 func scanInvite(scanner inviteScanner) (Invite, error) {
 	var (
-		invite     Invite
-		expiresAt  sql.NullString
-		consumedAt sql.NullString
-		revokedAt  sql.NullString
+		invite            Invite
+		expiresAt         sql.NullString
+		consumedAt        sql.NullString
+		consumedByAgentID sql.NullString
+		consumedByActorID sql.NullString
+		revokedAt         sql.NullString
+		revokedByAgentID  sql.NullString
+		revokedByActorID  sql.NullString
 	)
 	if err := scanner.Scan(
 		&invite.ID,
@@ -445,7 +596,11 @@ func scanInvite(scanner inviteScanner) (Invite, error) {
 		&invite.CreatedAt,
 		&expiresAt,
 		&consumedAt,
+		&consumedByAgentID,
+		&consumedByActorID,
 		&revokedAt,
+		&revokedByAgentID,
+		&revokedByActorID,
 	); err != nil {
 		return Invite{}, err
 	}
@@ -455,8 +610,20 @@ func scanInvite(scanner inviteScanner) (Invite, error) {
 	if consumedAt.Valid {
 		invite.ConsumedAt = &consumedAt.String
 	}
+	if consumedByAgentID.Valid {
+		invite.ConsumedByAgentID = &consumedByAgentID.String
+	}
+	if consumedByActorID.Valid {
+		invite.ConsumedByActorID = &consumedByActorID.String
+	}
 	if revokedAt.Valid {
 		invite.RevokedAt = &revokedAt.String
+	}
+	if revokedByAgentID.Valid {
+		invite.RevokedByAgentID = &revokedByAgentID.String
+	}
+	if revokedByActorID.Valid {
+		invite.RevokedByActorID = &revokedByActorID.String
 	}
 	return invite, nil
 }

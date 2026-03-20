@@ -54,27 +54,29 @@ func newPrimitivesTestServerWithStore(t *testing.T, workspace *storage.Workspace
 	}
 
 	registry := actors.NewStore(workspace.DB())
-	projectionWorker := NewProjectionWorker(
-		WithPrimitiveStore(primitiveStore),
-		WithSchemaContract(contract),
-		WithInboxRiskHorizon(defaultInboxRiskHorizon),
-	)
+	maintainer := NewProjectionMaintainer(ProjectionMaintainerConfig{
+		PrimitiveStore:   primitiveStore,
+		Contract:         contract,
+		InboxRiskHorizon: defaultInboxRiskHorizon,
+		DirtyBatchSize:   100,
+		SystemActorID:    "oar-core",
+	})
 	handler := NewHandler(
 		contract.Version,
 		WithHealthCheck(workspace.Ping),
 		WithActorRegistry(registry),
 		WithPrimitiveStore(primitiveStore),
 		WithSchemaContract(contract),
-		WithProjectionMaintenance(NewSyncProjectionMaintenance(projectionWorker)),
+		WithProjectionMaintainer(maintainer),
 		WithAllowUnauthenticatedWrites(true),
 		WithEnableDevActorMode(true),
 	)
-	server := httptest.NewServer(handler)
+	server := httptest.NewServer(newProjectionMaintainerAutoStepHandler(handler, maintainer))
 	t.Cleanup(func() {
 		server.Close()
 	})
 
-	return primitivesTestHarness{workspace: workspace, baseURL: server.URL}
+	return primitivesTestHarness{workspace: workspace, baseURL: server.URL, maintainer: maintainer}
 }
 
 func TestBoardCreateSucceedsWhenLifecycleEventAppendFails(t *testing.T) {

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"organization-autorunner-cli/internal/authcli"
@@ -45,6 +46,12 @@ func (a *App) runAuth(ctx context.Context, args []string, cfg config.Resolved) (
 	case "bootstrap":
 		result, err := a.runAuthBootstrap(ctx, service, args[1:])
 		return result, "auth bootstrap", err
+	case "principals":
+		result, err := a.runAuthPrincipals(ctx, service, args[1:])
+		return result, "auth principals", err
+	case "audit":
+		result, err := a.runAuthAudit(ctx, service, args[1:])
+		return result, "auth audit", err
 	default:
 		return nil, "auth", authSubcommandSpec.unknownError(args[0])
 	}
@@ -166,6 +173,142 @@ func (a *App) runAuthBootstrap(ctx context.Context, service *authcli.Service, ar
 	default:
 		return nil, authBootstrapSubcommandSpec.unknownError(args[0])
 	}
+}
+
+func (a *App) runAuthPrincipals(ctx context.Context, service *authcli.Service, args []string) (*commandResult, error) {
+	if len(args) == 0 {
+		return nil, authPrincipalsSubcommandSpec.requiredError()
+	}
+	switch authPrincipalsSubcommandSpec.normalize(args[0]) {
+	case "list":
+		return a.runAuthPrincipalsList(ctx, service, args[1:])
+	default:
+		return nil, authPrincipalsSubcommandSpec.unknownError(args[0])
+	}
+}
+
+func (a *App) runAuthAudit(ctx context.Context, service *authcli.Service, args []string) (*commandResult, error) {
+	if len(args) == 0 {
+		return nil, authAuditSubcommandSpec.requiredError()
+	}
+	switch authAuditSubcommandSpec.normalize(args[0]) {
+	case "list":
+		return a.runAuthAuditList(ctx, service, args[1:])
+	default:
+		return nil, authAuditSubcommandSpec.unknownError(args[0])
+	}
+}
+
+func (a *App) runAuthPrincipalsList(ctx context.Context, service *authcli.Service, args []string) (*commandResult, error) {
+	limit, cursor, err := parseAuthListFlags("auth principals list", args)
+	if err != nil {
+		return nil, err
+	}
+	result, err := service.ListPrincipals(ctx, limit, cursor)
+	if err != nil {
+		return nil, err
+	}
+	if len(result.Principals) == 0 {
+		data := map[string]any{"principals": []any{}, "count": 0}
+		if result.NextCursor != "" {
+			data["next_cursor"] = result.NextCursor
+		}
+		return &commandResult{Text: "No principals found.", Data: data}, nil
+	}
+
+	lines := make([]string, 0, len(result.Principals))
+	for _, principal := range result.Principals {
+		status := "active"
+		if principal.Revoked {
+			status = "revoked"
+		}
+		lines = append(
+			lines,
+			fmt.Sprintf("  %s  username=%s  kind=%s  auth=%s  status=%s", principal.AgentID, principal.Username, principal.PrincipalKind, principal.AuthMethod, status),
+		)
+	}
+	text := fmt.Sprintf("Principals (%d):\n%s", len(result.Principals), strings.Join(lines, "\n"))
+	data := map[string]any{"principals": result.Principals, "count": len(result.Principals)}
+	if result.NextCursor != "" {
+		text += "\n\nNext cursor: " + result.NextCursor
+		data["next_cursor"] = result.NextCursor
+	}
+	return &commandResult{Text: text, Data: data}, nil
+}
+
+func (a *App) runAuthAuditList(ctx context.Context, service *authcli.Service, args []string) (*commandResult, error) {
+	limit, cursor, err := parseAuthListFlags("auth audit list", args)
+	if err != nil {
+		return nil, err
+	}
+	result, err := service.ListAudit(ctx, limit, cursor)
+	if err != nil {
+		return nil, err
+	}
+	if len(result.Events) == 0 {
+		data := map[string]any{"events": []any{}, "count": 0}
+		if result.NextCursor != "" {
+			data["next_cursor"] = result.NextCursor
+		}
+		return &commandResult{Text: "No auth audit events found.", Data: data}, nil
+	}
+
+	lines := make([]string, 0, len(result.Events))
+	for _, event := range result.Events {
+		parts := []string{event.OccurredAt, event.EventType}
+		if event.ActorAgentID != "" {
+			parts = append(parts, "actor="+event.ActorAgentID)
+		}
+		if event.SubjectAgentID != "" {
+			parts = append(parts, "subject="+event.SubjectAgentID)
+		}
+		if event.InviteID != "" {
+			parts = append(parts, "invite="+event.InviteID)
+		}
+		lines = append(lines, "  "+strings.Join(parts, "  "))
+	}
+	text := fmt.Sprintf("Auth audit events (%d):\n%s", len(result.Events), strings.Join(lines, "\n"))
+	data := map[string]any{"events": result.Events, "count": len(result.Events)}
+	if result.NextCursor != "" {
+		text += "\n\nNext cursor: " + result.NextCursor
+		data["next_cursor"] = result.NextCursor
+	}
+	return &commandResult{Text: text, Data: data}, nil
+}
+
+func parseAuthListFlags(commandName string, args []string) (int, string, error) {
+	fs := newSilentFlagSet(commandName)
+	var limitFlag trackedString
+	var cursorFlag trackedString
+	fs.Var(&limitFlag, "limit", "Maximum number of results to return")
+	fs.Var(&cursorFlag, "cursor", "Opaque pagination cursor from a previous response")
+	if err := fs.Parse(args); err != nil {
+		return 0, "", errnorm.Usage("invalid_auth_list_flags", err.Error())
+	}
+	if len(fs.Args()) > 0 {
+		return 0, "", errnorm.Usage("invalid_auth_list_args", "unexpected positional arguments")
+	}
+
+	limit := 0
+	if strings.TrimSpace(limitFlag.value) != "" {
+		parsed, err := parsePositiveInt(limitFlag.value)
+		if err != nil {
+			return 0, "", errnorm.Usage("invalid_request", "limit must be a positive integer")
+		}
+		limit = parsed
+	}
+	return limit, strings.TrimSpace(cursorFlag.value), nil
+}
+
+func parsePositiveInt(raw string) (int, error) {
+	value, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil {
+		return 0, err
+	}
+	if value <= 0 {
+		return 0, fmt.Errorf("value must be greater than zero")
+	}
+	return value, nil
 }
 
 func (a *App) runAuthBootstrapStatus(ctx context.Context, service *authcli.Service) (*commandResult, error) {

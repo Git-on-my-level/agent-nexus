@@ -507,6 +507,14 @@ export function createOarCoreClient(options = {}) {
       invokeJSON("auth.invites.revoke", () =>
         generated.authInvitesRevoke({ invite_id: String(inviteId) }),
       ),
+    listPrincipals: (filters) =>
+      invokeJSON("auth.principals.list", () =>
+        generated.authPrincipalsList({ query: filters }),
+      ),
+    listAuthAudit: (filters) =>
+      invokeJSON("auth.audit.list", () =>
+        generated.authAuditList({ query: filters }),
+      ),
 
     createThread: (payload) =>
       invokeJSON("threads.create", () =>

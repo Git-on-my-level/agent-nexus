@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { isKnownSection, navigationItems } from "../../src/lib/navigation.js";
+import {
+  getShellContentConfig,
+  isKnownSection,
+  navigationItems,
+} from "../../src/lib/navigation.js";
 
 describe("navigation model", () => {
   it("includes expected top-level labels", () => {
@@ -10,6 +14,7 @@ describe("navigation model", () => {
       "Threads",
       "Boards",
       "Artifacts",
+      "Access",
       "Docs",
     ]);
   });
@@ -18,6 +23,13 @@ describe("navigation model", () => {
     expect(isKnownSection("/")).toBe(true);
     expect(isKnownSection("/threads")).toBe(true);
     expect(isKnownSection("/boards")).toBe(true);
+    expect(isKnownSection("/access")).toBe(true);
     expect(isKnownSection("/missing")).toBe(false);
+  });
+
+  it("provides shell content config for access route", () => {
+    const config = getShellContentConfig("/access");
+    expect(config.mode).toBe("wide");
+    expect(config.maxWidth).toBe("84rem");
   });
 });

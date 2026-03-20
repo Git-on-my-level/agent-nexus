@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -52,12 +54,16 @@ type TokenStatusResult struct {
 }
 
 type Invite struct {
-	ID         string `json:"id"`
-	Kind       string `json:"kind"`
-	Note       string `json:"note,omitempty"`
-	CreatedAt  string `json:"created_at"`
-	RevokedAt  string `json:"revoked_at,omitempty"`
-	ConsumedAt string `json:"consumed_at,omitempty"`
+	ID                string `json:"id"`
+	Kind              string `json:"kind"`
+	Note              string `json:"note,omitempty"`
+	CreatedAt         string `json:"created_at"`
+	ConsumedAt        string `json:"consumed_at,omitempty"`
+	ConsumedByAgentID string `json:"consumed_by_agent_id,omitempty"`
+	ConsumedByActorID string `json:"consumed_by_actor_id,omitempty"`
+	RevokedAt         string `json:"revoked_at,omitempty"`
+	RevokedByAgentID  string `json:"revoked_by_agent_id,omitempty"`
+	RevokedByActorID  string `json:"revoked_by_actor_id,omitempty"`
 }
 
 type ListInvitesResult struct {
@@ -75,6 +81,40 @@ type RevokeInviteResult struct {
 
 type BootstrapStatusResult struct {
 	BootstrapRegistrationAvailable bool `json:"bootstrap_registration_available"`
+}
+
+type Principal struct {
+	AgentID       string `json:"agent_id"`
+	ActorID       string `json:"actor_id"`
+	Username      string `json:"username"`
+	PrincipalKind string `json:"principal_kind"`
+	AuthMethod    string `json:"auth_method"`
+	CreatedAt     string `json:"created_at"`
+	UpdatedAt     string `json:"updated_at"`
+	Revoked       bool   `json:"revoked"`
+	RevokedAt     string `json:"revoked_at,omitempty"`
+}
+
+type ListPrincipalsResult struct {
+	Principals []Principal `json:"principals"`
+	NextCursor string      `json:"next_cursor,omitempty"`
+}
+
+type AuditEvent struct {
+	EventID        string         `json:"event_id"`
+	EventType      string         `json:"event_type"`
+	OccurredAt     string         `json:"occurred_at"`
+	ActorAgentID   string         `json:"actor_agent_id,omitempty"`
+	ActorActorID   string         `json:"actor_actor_id,omitempty"`
+	SubjectAgentID string         `json:"subject_agent_id,omitempty"`
+	SubjectActorID string         `json:"subject_actor_id,omitempty"`
+	InviteID       string         `json:"invite_id,omitempty"`
+	Metadata       map[string]any `json:"metadata"`
+}
+
+type ListAuditResult struct {
+	Events     []AuditEvent `json:"events"`
+	NextCursor string       `json:"next_cursor,omitempty"`
 }
 
 func New(cfg config.Resolved) *Service {
@@ -478,6 +518,91 @@ func (s *Service) BootstrapStatus(ctx context.Context) (BootstrapStatusResult, e
 		return BootstrapStatusResult{}, errnorm.Wrap(errnorm.KindRemote, "invalid_response", "bootstrap status response is not valid JSON", err)
 	}
 	return BootstrapStatusResult{BootstrapRegistrationAvailable: payload.BootstrapRegistrationAvailable}, nil
+}
+
+func (s *Service) ListPrincipals(ctx context.Context, limit int, cursor string) (ListPrincipalsResult, error) {
+	prof, err := s.ensureAccessToken(ctx)
+	if err != nil {
+		return ListPrincipalsResult{}, err
+	}
+	client, err := s.newClient(prof.AccessToken)
+	if err != nil {
+		return ListPrincipalsResult{}, errnorm.Wrap(errnorm.KindLocal, "http_client_init_failed", "failed to initialize HTTP client", err)
+	}
+
+	path := "/auth/principals"
+	query := url.Values{}
+	if limit > 0 {
+		query.Set("limit", strconv.Itoa(limit))
+	}
+	if strings.TrimSpace(cursor) != "" {
+		query.Set("cursor", strings.TrimSpace(cursor))
+	}
+	if encoded := query.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+
+	resp, err := client.RawCall(ctx, httpclient.RawRequest{Method: http.MethodGet, Path: path})
+	if err != nil {
+		return ListPrincipalsResult{}, errnorm.Wrap(errnorm.KindNetwork, "request_failed", "list principals request failed", err)
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		return ListPrincipalsResult{}, errnorm.FromHTTPFailure(resp.StatusCode, resp.Body)
+	}
+
+	var payload struct {
+		Principals []Principal `json:"principals"`
+		NextCursor string      `json:"next_cursor"`
+	}
+	if err := json.Unmarshal(resp.Body, &payload); err != nil {
+		return ListPrincipalsResult{}, errnorm.Wrap(errnorm.KindRemote, "invalid_response", "list principals response is not valid JSON", err)
+	}
+	return ListPrincipalsResult{Principals: payload.Principals, NextCursor: payload.NextCursor}, nil
+}
+
+func (s *Service) ListAudit(ctx context.Context, limit int, cursor string) (ListAuditResult, error) {
+	prof, err := s.ensureAccessToken(ctx)
+	if err != nil {
+		return ListAuditResult{}, err
+	}
+	client, err := s.newClient(prof.AccessToken)
+	if err != nil {
+		return ListAuditResult{}, errnorm.Wrap(errnorm.KindLocal, "http_client_init_failed", "failed to initialize HTTP client", err)
+	}
+
+	path := "/auth/audit"
+	query := url.Values{}
+	if limit > 0 {
+		query.Set("limit", strconv.Itoa(limit))
+	}
+	if strings.TrimSpace(cursor) != "" {
+		query.Set("cursor", strings.TrimSpace(cursor))
+	}
+	if encoded := query.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+
+	resp, err := client.RawCall(ctx, httpclient.RawRequest{Method: http.MethodGet, Path: path})
+	if err != nil {
+		return ListAuditResult{}, errnorm.Wrap(errnorm.KindNetwork, "request_failed", "list auth audit request failed", err)
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		return ListAuditResult{}, errnorm.FromHTTPFailure(resp.StatusCode, resp.Body)
+	}
+
+	var payload struct {
+		Events     []AuditEvent `json:"events"`
+		NextCursor string       `json:"next_cursor"`
+	}
+	if err := json.Unmarshal(resp.Body, &payload); err != nil {
+		return ListAuditResult{}, errnorm.Wrap(errnorm.KindRemote, "invalid_response", "list auth audit response is not valid JSON", err)
+	}
+	for i := range payload.Events {
+		if payload.Events[i].Metadata == nil {
+			payload.Events[i].Metadata = map[string]any{}
+		}
+	}
+	return ListAuditResult{Events: payload.Events, NextCursor: payload.NextCursor}, nil
 }
 
 func (s *Service) EnsureAccessToken(ctx context.Context) (profile.Profile, error) {

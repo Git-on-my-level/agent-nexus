@@ -10,7 +10,6 @@ Run from repo root:
 make setup
 make check
 make e2e-smoke
-make hosted-smoke
 ```
 
 Required outcomes:
@@ -18,7 +17,22 @@ Required outcomes:
 - contract drift check passes (`make contract-check`)
 - core, cli, and web-ui checks pass
 - end-to-end smoke script passes (core startup, CLI auth/token refresh/typed commands/streams, UI startup compatibility)
-- hosted production smoke script passes (anonymous read rejection, bootstrap/invite-gated onboarding, authenticated workspace access, stale exception maintenance, backup/restore verification)
+
+### Hosted gates
+
+Hosted validation runs automatically in CI when relevant code changes:
+
+- `make hosted-ops-test` - runs on hosted-sensitive changes (core, contracts, web-ui, scripts/hosted, deploy, workflow files)
+- `make hosted-smoke` - runs on hosted-sensitive changes
+
+These gates are first-class CI jobs and do not require manual workflow dispatch.
+
+For local validation or pre-release checks outside CI:
+
+```bash
+make hosted-ops-test
+make hosted-smoke
+```
 
 ## CLI binary release automation
 

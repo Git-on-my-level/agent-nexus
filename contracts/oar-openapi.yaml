@@ -598,6 +598,88 @@ paths:
         '404':
           $ref: '#/components/responses/ErrorResponse'
 
+  /auth/principals:
+    get:
+      operationId: listAuthPrincipals
+      summary: List current principals with revoke state
+      tags: [auth]
+      x-oar-command-id: "auth.principals.list"
+      x-oar-cli-path: "auth principals list"
+      x-oar-why: "Inspect the current workspace principal inventory, including revoked principals, without direct database access."
+      x-oar-examples:
+        - title: List principals
+          command: oar auth principals list --json
+      x-oar-input-mode: "none"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ principals, next_cursor? }` ordered by create time descending."
+      x-oar-error-codes: [auth_required, invalid_token, agent_revoked, invalid_request]
+      x-oar-concepts: [auth, identity]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Requires Bearer access token. Pagination is bounded from the start with `limit` and `cursor`."
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200 }
+          description: "Maximum number of principals to return. Defaults to 50."
+        - in: query
+          name: cursor
+          schema: { type: string }
+          description: "Opaque pagination cursor from a previous response's `next_cursor` field."
+      responses:
+        '200':
+          description: Principal inventory
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthPrincipalsResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/audit:
+    get:
+      operationId: listAuthAudit
+      summary: List auth and onboarding audit events
+      tags: [auth]
+      x-oar-command-id: "auth.audit.list"
+      x-oar-cli-path: "auth audit list"
+      x-oar-why: "Inspect durable auth and onboarding audit facts for principal registration, invite lifecycle, and revocation activity."
+      x-oar-examples:
+        - title: List auth audit events
+          command: oar auth audit list --json
+      x-oar-input-mode: "none"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ events, next_cursor? }` ordered newest first."
+      x-oar-error-codes: [auth_required, invalid_token, agent_revoked, invalid_request]
+      x-oar-concepts: [auth, audit]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Requires Bearer access token. Pagination is bounded from the start with `limit` and `cursor`."
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200 }
+          description: "Maximum number of audit events to return. Defaults to 50."
+        - in: query
+          name: cursor
+          schema: { type: string }
+          description: "Opaque pagination cursor from a previous response's `next_cursor` field."
+      responses:
+        '200':
+          description: Auth audit event list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthAuditResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+
   /auth/passkey/login/options:
     post:
       operationId: passkeyLoginOptions
@@ -2865,8 +2947,78 @@ components:
         created_at: { type: string, format: date-time }
         expires_at: { type: string, format: date-time }
         consumed_at: { type: string, format: date-time }
+        consumed_by_agent_id: { type: string }
+        consumed_by_actor_id: { type: string }
         revoked_at: { type: string, format: date-time }
+        revoked_by_agent_id: { type: string }
+        revoked_by_actor_id: { type: string }
       required: [id, kind, created_by_agent_id, created_by_actor_id, note, created_at]
+
+    AuthPrincipalSummary:
+      type: object
+      properties:
+        agent_id: { type: string }
+        actor_id: { type: string }
+        username: { type: string }
+        principal_kind:
+          type: string
+          enum: [human, agent]
+        auth_method:
+          type: string
+          enum: [passkey, public_key]
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        revoked: { type: boolean }
+        revoked_at: { type: string, format: date-time }
+      required: [agent_id, actor_id, username, principal_kind, auth_method, created_at, updated_at, revoked]
+
+    AuthPrincipalsResponse:
+      type: object
+      properties:
+        principals:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthPrincipalSummary'
+        next_cursor:
+          type: string
+          description: "Opaque pagination cursor for fetching the next page of results. Omitted when there are no more results."
+      required: [principals]
+
+    AuthAuditEvent:
+      type: object
+      properties:
+        event_id: { type: string }
+        event_type:
+          type: string
+          enum:
+            - bootstrap_consumed
+            - invite_created
+            - invite_revoked
+            - invite_consumed
+            - principal_registered
+            - principal_revoked
+            - principal_self_revoked
+        occurred_at: { type: string, format: date-time }
+        actor_agent_id: { type: string }
+        actor_actor_id: { type: string }
+        subject_agent_id: { type: string }
+        subject_actor_id: { type: string }
+        invite_id: { type: string }
+        metadata:
+          $ref: '#/components/schemas/AnyObject'
+      required: [event_id, event_type, occurred_at, metadata]
+
+    AuthAuditResponse:
+      type: object
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthAuditEvent'
+        next_cursor:
+          type: string
+          description: "Opaque pagination cursor for fetching the next page of results. Omitted when there are no more results."
+      required: [events]
 
     RegisterAgentRequest:
       type: object

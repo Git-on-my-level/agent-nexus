@@ -218,7 +218,6 @@ func (s *Store) CreateArtifact(ctx context.Context, actorID string, artifact map
 	metadata["created_by"] = actorID
 	metadata["content_type"] = contentType
 	metadata["content_hash"] = contentHash
-	metadata["content_path"] = s.blob.ContentPath(contentHash)
 	artifactThreadID := firstThreadRefValue(refs)
 
 	stagedContent, err := s.blob.Write(ctx, contentHash, encodedContent)
@@ -242,11 +241,10 @@ func (s *Store) CreateArtifact(ctx context.Context, actorID string, artifact map
 		return nil, fmt.Errorf("begin artifact transaction: %w", err)
 	}
 
-	contentPath := metadata["content_path"].(string)
 	if _, err := tx.ExecContext(
 		ctx,
-		`INSERT INTO artifacts(id, kind, thread_id, created_at, created_by, content_type, content_hash, content_path, refs_json, metadata_json)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO artifacts(id, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		metadata["id"],
 		kind,
 		nullableString(artifactThreadID),
@@ -254,7 +252,6 @@ func (s *Store) CreateArtifact(ctx context.Context, actorID string, artifact map
 		actorID,
 		contentType,
 		contentHash,
-		contentPath,
 		string(refsJSON),
 		string(metadataJSON),
 	); err != nil {
@@ -316,7 +313,6 @@ func (s *Store) CreateArtifactAndEvent(ctx context.Context, actorID string, arti
 	metadata["created_by"] = actorID
 	metadata["content_type"] = contentType
 	metadata["content_hash"] = contentHash
-	metadata["content_path"] = s.blob.ContentPath(contentHash)
 	artifactThreadID := firstThreadRefValue(artifactRefs)
 
 	stagedContent, err := s.blob.Write(ctx, contentHash, encodedContent)
@@ -325,7 +321,6 @@ func (s *Store) CreateArtifactAndEvent(ctx context.Context, actorID string, arti
 	}
 	defer func() { _ = stagedContent.Cleanup() }()
 
-	contentPath := metadata["content_path"].(string)
 	artifactRefsJSON, err := json.Marshal(artifactRefs)
 	if err != nil {
 		return nil, nil, fmt.Errorf("marshal artifact refs: %w", err)
@@ -347,8 +342,8 @@ func (s *Store) CreateArtifactAndEvent(ctx context.Context, actorID string, arti
 
 	if _, err := tx.ExecContext(
 		ctx,
-		`INSERT INTO artifacts(id, kind, thread_id, created_at, created_by, content_type, content_hash, content_path, refs_json, metadata_json)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO artifacts(id, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		metadata["id"],
 		kind,
 		nullableString(artifactThreadID),
@@ -356,7 +351,6 @@ func (s *Store) CreateArtifactAndEvent(ctx context.Context, actorID string, arti
 		actorID,
 		contentType,
 		contentHash,
-		contentPath,
 		string(artifactRefsJSON),
 		string(artifactMetadataJSON),
 	); err != nil {
@@ -399,12 +393,7 @@ func (s *Store) GetArtifact(ctx context.Context, id string) (map[string]any, err
 		return nil, fmt.Errorf("query artifact metadata: %w", err)
 	}
 
-	var metadata map[string]any
-	if err := json.Unmarshal([]byte(metadataJSON), &metadata); err != nil {
-		return nil, fmt.Errorf("decode artifact metadata: %w", err)
-	}
-
-	return metadata, nil
+	return decodeArtifactMetadataJSON(metadataJSON)
 }
 
 func (s *Store) GetArtifactContent(ctx context.Context, id string) ([]byte, string, error) {
@@ -422,7 +411,7 @@ func (s *Store) GetArtifactContent(ctx context.Context, id string) ([]byte, stri
 		return nil, "", ErrNotFound
 	}
 	if err != nil {
-		return nil, "", fmt.Errorf("query artifact content path: %w", err)
+		return nil, "", fmt.Errorf("query artifact content metadata: %w", err)
 	}
 
 	body, err := s.blob.Read(ctx, contentHash)
@@ -455,9 +444,9 @@ func (s *Store) ListArtifacts(ctx context.Context, filter ArtifactListFilter) ([
 			return nil, fmt.Errorf("scan artifact row: %w", err)
 		}
 
-		var metadata map[string]any
-		if err := json.Unmarshal([]byte(metadataJSON), &metadata); err != nil {
-			return nil, fmt.Errorf("decode artifact metadata: %w", err)
+		metadata, err := decodeArtifactMetadataJSON(metadataJSON)
+		if err != nil {
+			return nil, err
 		}
 
 		artifacts = append(artifacts, metadata)
@@ -498,9 +487,9 @@ func (s *Store) TombstoneArtifact(ctx context.Context, actorID string, artifactI
 		return nil, fmt.Errorf("query artifact for tombstone: %w", err)
 	}
 
-	var metadata map[string]any
-	if err := json.Unmarshal([]byte(metadataJSON), &metadata); err != nil {
-		return nil, fmt.Errorf("decode artifact metadata: %w", err)
+	metadata, err := decodeArtifactMetadataJSON(metadataJSON)
+	if err != nil {
+		return nil, err
 	}
 	if tombstonedAt.Valid && strings.TrimSpace(tombstonedAt.String) != "" {
 		metadata["tombstoned_at"] = tombstonedAt.String
@@ -2140,6 +2129,22 @@ func cloneMap(in map[string]any) map[string]any {
 		out[key] = value
 	}
 	return out
+}
+
+func scrubArtifactMetadataMap(metadata map[string]any) map[string]any {
+	if metadata == nil {
+		return nil
+	}
+	delete(metadata, "content_path")
+	return metadata
+}
+
+func decodeArtifactMetadataJSON(metadataJSON string) (map[string]any, error) {
+	var metadata map[string]any
+	if err := json.Unmarshal([]byte(metadataJSON), &metadata); err != nil {
+		return nil, fmt.Errorf("decode artifact metadata: %w", err)
+	}
+	return scrubArtifactMetadataMap(metadata), nil
 }
 
 func sortedKeys(values map[string]any) []string {

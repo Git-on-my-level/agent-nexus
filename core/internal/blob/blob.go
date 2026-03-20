@@ -16,5 +16,4 @@ type Backend interface {
 	Write(ctx context.Context, hash string, data []byte) (StagedWrite, error)
 	Read(ctx context.Context, hash string) ([]byte, error)
 	Exists(ctx context.Context, hash string) (bool, error)
-	ContentPath(hash string) string
 }

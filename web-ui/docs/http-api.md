@@ -88,7 +88,7 @@ Each endpoint is classified with an `x-oar-surface` extension indicating its rol
 ### Artifacts
 
 - `POST /artifacts`
-  - Body: `{ "actor_id": "...", "artifact": <artifact_metadata_without_id_and_content_path>, "content": <string|object|base64>, "content_type": "text|structured|binary" }`
+  - Body: `{ "actor_id": "...", "artifact": <artifact_metadata_without_id>, "content": <string|object|base64>, "content_type": "text|structured|binary" }`
   - Response: `{ "artifact": <artifact_metadata> }`
 
 - `GET /artifacts`

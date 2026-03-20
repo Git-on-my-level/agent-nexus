@@ -30,6 +30,12 @@ export const navigationItems = [
     hint: "Work orders, receipts, reviews",
   },
   {
+    label: "Access",
+    href: "/access",
+    icon: "access",
+    hint: "Manage principals and invites",
+  },
+  {
     label: "Docs",
     href: "/docs",
     icon: "docs",
@@ -42,6 +48,11 @@ const SHELL_CONTENT_RULES = [
     match: /^\/$/,
     mode: "wide",
     maxWidth: "92rem",
+  },
+  {
+    match: /^\/access$/,
+    mode: "wide",
+    maxWidth: "84rem",
   },
   {
     match: /^\/threads\/[^/]+/,

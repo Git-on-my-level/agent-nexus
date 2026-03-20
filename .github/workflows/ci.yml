@@ -19,6 +19,7 @@ jobs:
       web_ui: ${{ steps.filter.outputs.web_ui }}
       root: ${{ steps.filter.outputs.root }}
       contracts: ${{ steps.filter.outputs.contracts }}
+      hosted: ${{ steps.filter.outputs.hosted }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -46,6 +47,14 @@ jobs:
               - 'web-ui/**'
             e2e:
               - 'scripts/e2e-smoke'
+            hosted:
+              - 'core/**'
+              - 'contracts/**'
+              - 'web-ui/**'
+              - 'scripts/hosted/**'
+              - 'scripts/hosted-smoke'
+              - 'deploy/**'
+              - '.github/workflows/ci.yml'
 
   contracts-check:
     runs-on: ubuntu-latest
@@ -170,4 +179,46 @@ jobs:
         with:
           name: e2e-smoke-artifacts
           path: .tmp/e2e-smoke/**
+          if-no-files-found: ignore
+
+  hosted-checks:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ matrix.timeout_minutes }}
+    needs: changes
+    if: needs.changes.outputs.hosted == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: hosted-ops-test
+            timeout_minutes: 15
+            make_target: hosted-ops-test
+            artifact_name: ""
+            artifact_path: ""
+          - name: hosted-smoke
+            timeout_minutes: 20
+            make_target: hosted-smoke
+            artifact_name: hosted-smoke-artifacts
+            artifact_path: .tmp/hosted-smoke/**
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: core/go.mod
+
+      - name: Run ${{ matrix.name }}
+        env:
+          HOSTED_SMOKE_ARTIFACT_DIR: ${{ github.workspace }}/.tmp/hosted-smoke
+        run: make ${{ matrix.make_target }}
+
+      - name: Upload hosted artifacts
+        if: always() && matrix.artifact_path != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_path }}
           if-no-files-found: ignore

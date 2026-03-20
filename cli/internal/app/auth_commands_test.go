@@ -315,6 +315,76 @@ func TestAuthInvitesListShowsConsumedInvites(t *testing.T) {
 	}
 }
 
+func TestAuthPrincipalsAndAuditList(t *testing.T) {
+	t.Parallel()
+
+	core := newFakeAuthCore(t)
+	core.principals = []map[string]any{{
+		"agent_id":       "agent-999",
+		"actor_id":       "actor-999",
+		"username":       "revoked.agent",
+		"principal_kind": "agent",
+		"auth_method":    "public_key",
+		"created_at":     "2026-03-19T00:00:00Z",
+		"updated_at":     "2026-03-19T01:00:00Z",
+		"revoked":        true,
+		"revoked_at":     "2026-03-19T02:00:00Z",
+	}}
+	core.principalsNextCursor = "cursor-principals"
+	core.auditEvents = []map[string]any{{
+		"event_id":         "authevt-1",
+		"event_type":       "invite_revoked",
+		"occurred_at":      "2026-03-19T03:00:00Z",
+		"actor_agent_id":   "agent-123",
+		"subject_agent_id": "agent-999",
+		"invite_id":        "invite-1",
+		"metadata":         map[string]any{"kind": "agent"},
+	}}
+	core.auditNextCursor = "cursor-audit"
+
+	server := httptest.NewServer(http.HandlerFunc(core.handle))
+	defer server.Close()
+
+	home := t.TempDir()
+	env := map[string]string{}
+
+	_ = runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "register", "--username", "Agent.One"})
+	profilePath := filepath.Join(home, ".config", "oar", "profiles", "agent-a.json")
+	storedProfile, ok, err := profile.Load(profilePath)
+	if err != nil || !ok {
+		t.Fatalf("load profile after register: ok=%t err=%v", ok, err)
+	}
+	jsonOutput := false
+	storedProfile.JSON = &jsonOutput
+	if err := profile.Save(profilePath, storedProfile); err != nil {
+		t.Fatalf("persist profile with text output default: %v", err)
+	}
+
+	principalsOut := runCLIForTest(t, home, env, nil, []string{"--base-url", server.URL, "--agent", "agent-a", "auth", "principals", "list", "--limit", "1"})
+	if !strings.Contains(principalsOut, "status=revoked") {
+		t.Fatalf("expected revoked principal status in output, got %q", principalsOut)
+	}
+
+	principalsJSON := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "principals", "list", "--limit", "1"})
+	principalsPayload := assertEnvelopeOK(t, principalsJSON)
+	principalsData, _ := principalsPayload["data"].(map[string]any)
+	if principalsData == nil || strings.TrimSpace(anyStr(principalsData["next_cursor"])) != "cursor-principals" {
+		t.Fatalf("unexpected principals payload: %#v", principalsPayload)
+	}
+
+	auditOut := runCLIForTest(t, home, env, nil, []string{"--base-url", server.URL, "--agent", "agent-a", "auth", "audit", "list", "--limit", "1"})
+	if !strings.Contains(auditOut, "invite_revoked") || !strings.Contains(auditOut, "invite=invite-1") {
+		t.Fatalf("expected auth audit details in output, got %q", auditOut)
+	}
+
+	auditJSON := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "audit", "list", "--limit", "1"})
+	auditPayload := assertEnvelopeOK(t, auditJSON)
+	auditData, _ := auditPayload["data"].(map[string]any)
+	if auditData == nil || strings.TrimSpace(anyStr(auditData["next_cursor"])) != "cursor-audit" {
+		t.Fatalf("unexpected auth audit payload: %#v", auditPayload)
+	}
+}
+
 func runCLIForTest(t *testing.T, home string, env map[string]string, stdin io.Reader, args []string) string {
 	t.Helper()
 	if stdin == nil {
@@ -367,18 +437,22 @@ func assertEnvelopeError(t *testing.T, raw string) map[string]any {
 type fakeAuthCore struct {
 	t *testing.T
 
-	mu           sync.Mutex
-	agentID      string
-	actorID      string
-	username     string
-	keyID        string
-	publicKeyB64 string
-	accessToken  string
-	refreshToken string
-	revoked      bool
-	invites      []map[string]any
-	counter      int
-	refreshCalls int
+	mu                   sync.Mutex
+	agentID              string
+	actorID              string
+	username             string
+	keyID                string
+	publicKeyB64         string
+	accessToken          string
+	refreshToken         string
+	revoked              bool
+	invites              []map[string]any
+	principals           []map[string]any
+	principalsNextCursor string
+	auditEvents          []map[string]any
+	auditNextCursor      string
+	counter              int
+	refreshCalls         int
 }
 
 func newFakeAuthCore(t *testing.T) *fakeAuthCore {
@@ -515,6 +589,18 @@ func (f *fakeAuthCore) handle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"invites": f.invites})
+		return
+	case r.Method == http.MethodGet && r.URL.Path == "/auth/principals":
+		if !f.requireAuth(w, r) {
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"principals": f.principals, "next_cursor": f.principalsNextCursor})
+		return
+	case r.Method == http.MethodGet && r.URL.Path == "/auth/audit":
+		if !f.requireAuth(w, r) {
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"events": f.auditEvents, "next_cursor": f.auditNextCursor})
 		return
 	case r.Method == http.MethodGet && r.URL.Path == "/protected":
 		if !f.requireAuth(w, r) {

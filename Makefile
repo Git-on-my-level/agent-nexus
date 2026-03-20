@@ -68,7 +68,7 @@ cli-integration-test: ## Run CLI real-binary integration tests (non-default)
 e2e-smoke: ## Run end-to-end core + CLI + web-ui smoke flow
 	./scripts/e2e-smoke
 
-hosted-smoke: ## Run hosted-v1 production smoke suite (auth gate, onboarding, workspace access, staleness, backup/restore)
+hosted-smoke: ## Run hosted-v1 production smoke suite (auth gate, onboarding, workspace access, staleness)
 	./scripts/hosted-smoke
 
 hosted-ops-test: ## Run hosted provisioning/backup/restore verification tests

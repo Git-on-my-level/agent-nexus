@@ -20,7 +20,7 @@ func (b *FilesystemBackend) Write(ctx context.Context, hash string, data []byte)
 		return nil, err
 	}
 
-	finalPath := filepath.Join(b.rootDir, hash)
+	finalPath := b.blobPath(hash)
 	file, err := os.CreateTemp(b.rootDir, ".cas-*")
 	if err != nil {
 		return nil, err
@@ -49,7 +49,7 @@ func (b *FilesystemBackend) Write(ctx context.Context, hash string, data []byte)
 }
 
 func (b *FilesystemBackend) Read(ctx context.Context, hash string) ([]byte, error) {
-	path := filepath.Join(b.rootDir, hash)
+	path := b.blobPath(hash)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -61,7 +61,7 @@ func (b *FilesystemBackend) Read(ctx context.Context, hash string) ([]byte, erro
 }
 
 func (b *FilesystemBackend) Exists(ctx context.Context, hash string) (bool, error) {
-	path := filepath.Join(b.rootDir, hash)
+	path := b.blobPath(hash)
 	_, err := os.Stat(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -72,7 +72,7 @@ func (b *FilesystemBackend) Exists(ctx context.Context, hash string) (bool, erro
 	return true, nil
 }
 
-func (b *FilesystemBackend) ContentPath(hash string) string {
+func (b *FilesystemBackend) blobPath(hash string) string {
 	return filepath.Join(b.rootDir, hash)
 }
 

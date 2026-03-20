@@ -92,15 +92,18 @@ func handleListInvites(w http.ResponseWriter, r *http.Request, opts handlerOptio
 }
 
 func handleRevokeInvite(w http.ResponseWriter, r *http.Request, opts handlerOptions, inviteID string) {
-	if _, ok := requireAuthenticatedPrincipal(w, r, opts); !ok {
+	principal, ok := requireAuthenticatedPrincipal(w, r, opts)
+	if !ok {
 		return
 	}
 
-	invite, err := opts.authStore.RevokeInvite(r.Context(), inviteID)
+	invite, err := opts.authStore.RevokeInvite(r.Context(), inviteID, *principal)
 	if err != nil {
 		switch {
 		case errors.Is(err, auth.ErrInvalidRequest):
 			writeError(w, http.StatusBadRequest, "invalid_request", sanitizeAuthError(err))
+		case errors.Is(err, auth.ErrAuthRequired):
+			writeError(w, http.StatusUnauthorized, "auth_required", "authorization header is required")
 		case errors.Is(err, auth.ErrInviteNotFound):
 			writeError(w, http.StatusNotFound, "not_found", "invite not found")
 		default:

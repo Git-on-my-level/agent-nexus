@@ -3,7 +3,9 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"time"
 )
 
 const createMigrationsTableSQL = `
@@ -15,6 +17,7 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 type migration struct {
 	Version    int
 	Statements []string
+	Apply      func(context.Context, *sql.Tx) error
 }
 
 var migrations = []migration{
@@ -433,6 +436,70 @@ var migrations = []migration{
 			`CREATE INDEX IF NOT EXISTS idx_thread_projection_refresh_status_dirty ON thread_projection_refresh_status (is_dirty, in_progress, queued_at, thread_id);`,
 		},
 	},
+	{
+		Version: 17,
+		Statements: []string{
+			`ALTER TABLE artifacts RENAME TO artifacts_legacy`,
+			`CREATE TABLE artifacts (
+				id TEXT PRIMARY KEY,
+				kind TEXT NOT NULL,
+				thread_id TEXT,
+				created_at TEXT NOT NULL,
+				created_by TEXT NOT NULL,
+				content_type TEXT NOT NULL,
+				content_hash TEXT NOT NULL,
+				refs_json TEXT NOT NULL DEFAULT '[]',
+				metadata_json TEXT NOT NULL DEFAULT '{}',
+				tombstoned_at TEXT,
+				tombstoned_by TEXT,
+				tombstone_reason TEXT
+			);`,
+			`INSERT INTO artifacts(
+				id, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json,
+				tombstoned_at, tombstoned_by, tombstone_reason
+			)
+			SELECT
+				id, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json,
+				tombstoned_at, tombstoned_by, tombstone_reason
+			FROM artifacts_legacy`,
+			`DROP TABLE artifacts_legacy`,
+			`CREATE INDEX IF NOT EXISTS idx_artifacts_kind_created_at ON artifacts (kind, created_at)`,
+			`CREATE INDEX IF NOT EXISTS idx_artifacts_content_hash ON artifacts (content_hash)`,
+			`CREATE INDEX IF NOT EXISTS idx_artifacts_tombstoned_at ON artifacts (tombstoned_at)`,
+			`CREATE INDEX IF NOT EXISTS idx_artifacts_kind_tombstoned_created_at ON artifacts (kind, tombstoned_at, created_at, id)`,
+			`CREATE INDEX IF NOT EXISTS idx_artifacts_thread_tombstoned_created_at ON artifacts (thread_id, tombstoned_at, created_at, id)`,
+			`CREATE INDEX IF NOT EXISTS idx_artifacts_thread_kind_tombstoned_created_at ON artifacts (thread_id, kind, tombstoned_at, created_at, id)`,
+		},
+		Apply: scrubLegacyArtifactMetadata,
+	},
+	{
+		Version: 18,
+		Statements: []string{
+			`CREATE TABLE IF NOT EXISTS auth_audit_events (
+				id TEXT PRIMARY KEY,
+				event_type TEXT NOT NULL,
+				occurred_at TEXT NOT NULL,
+				actor_agent_id TEXT,
+				actor_actor_id TEXT,
+				subject_agent_id TEXT,
+				subject_actor_id TEXT,
+				invite_id TEXT,
+				metadata_json TEXT NOT NULL DEFAULT '{}'
+			);`,
+			`CREATE INDEX IF NOT EXISTS idx_auth_audit_events_occurred_at ON auth_audit_events (occurred_at DESC, id DESC)`,
+			`CREATE INDEX IF NOT EXISTS idx_auth_audit_events_event_type ON auth_audit_events (event_type, occurred_at DESC, id DESC)`,
+			`CREATE INDEX IF NOT EXISTS idx_auth_audit_events_invite_id ON auth_audit_events (invite_id, occurred_at DESC, id DESC)`,
+		},
+		Apply: applyAuthAuditMigration,
+	},
+	{
+		Version: 19,
+		Statements: []string{
+			`ALTER TABLE auth_audit_events ADD COLUMN occurred_at_sort_key TEXT`,
+			`CREATE INDEX IF NOT EXISTS idx_auth_audit_events_sort_key ON auth_audit_events (occurred_at_sort_key DESC, id DESC)`,
+		},
+		Apply: applyAuthAuditSortKeyMigration,
+	},
 }
 
 func applyMigrations(ctx context.Context, db *sql.DB) error {
@@ -457,6 +524,12 @@ func applyMigrations(ctx context.Context, db *sql.DB) error {
 
 		for _, statement := range m.Statements {
 			if _, err := tx.ExecContext(ctx, statement); err != nil {
+				_ = tx.Rollback()
+				return fmt.Errorf("apply migration %d: %w", m.Version, err)
+			}
+		}
+		if m.Apply != nil {
+			if err := m.Apply(ctx, tx); err != nil {
 				_ = tx.Rollback()
 				return fmt.Errorf("apply migration %d: %w", m.Version, err)
 			}
@@ -499,4 +572,201 @@ func loadAppliedVersions(ctx context.Context, db *sql.DB) (map[int]bool, error) 
 	}
 
 	return applied, nil
+}
+
+func scrubLegacyArtifactMetadata(ctx context.Context, tx *sql.Tx) error {
+	rows, err := tx.QueryContext(ctx, `SELECT id, metadata_json FROM artifacts`)
+	if err != nil {
+		return fmt.Errorf("query artifact metadata for scrub: %w", err)
+	}
+	defer rows.Close()
+
+	type artifactMetadataRow struct {
+		id           string
+		metadataJSON string
+	}
+
+	pending := make([]artifactMetadataRow, 0)
+	for rows.Next() {
+		var row artifactMetadataRow
+		if err := rows.Scan(&row.id, &row.metadataJSON); err != nil {
+			return fmt.Errorf("scan artifact metadata for scrub: %w", err)
+		}
+
+		scrubbedJSON, changed, err := scrubLegacyArtifactMetadataJSON(row.metadataJSON)
+		if err != nil {
+			return fmt.Errorf("scrub artifact %s metadata_json: %w", row.id, err)
+		}
+		if changed {
+			row.metadataJSON = scrubbedJSON
+			pending = append(pending, row)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate artifact metadata for scrub: %w", err)
+	}
+
+	for _, row := range pending {
+		if _, err := tx.ExecContext(ctx, `UPDATE artifacts SET metadata_json = ? WHERE id = ?`, row.metadataJSON, row.id); err != nil {
+			return fmt.Errorf("update scrubbed artifact %s metadata_json: %w", row.id, err)
+		}
+	}
+
+	return nil
+}
+
+func applyAuthAuditMigration(ctx context.Context, tx *sql.Tx) error {
+	exists, err := tableExistsTx(ctx, tx, "auth_invites")
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return nil
+	}
+
+	columns := []struct {
+		name       string
+		definition string
+	}{
+		{name: "consumed_by_agent_id", definition: "TEXT"},
+		{name: "consumed_by_actor_id", definition: "TEXT"},
+		{name: "revoked_by_agent_id", definition: "TEXT"},
+		{name: "revoked_by_actor_id", definition: "TEXT"},
+	}
+	for _, column := range columns {
+		present, err := columnExistsTx(ctx, tx, "auth_invites", column.name)
+		if err != nil {
+			return err
+		}
+		if present {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, fmt.Sprintf("ALTER TABLE auth_invites ADD COLUMN %s %s", column.name, column.definition)); err != nil {
+			return err
+		}
+	}
+
+	indexes := []string{
+		`CREATE INDEX IF NOT EXISTS idx_auth_invites_consumed_by_agent_id ON auth_invites (consumed_by_agent_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_auth_invites_revoked_by_agent_id ON auth_invites (revoked_by_agent_id)`,
+	}
+	for _, statement := range indexes {
+		if _, err := tx.ExecContext(ctx, statement); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func applyAuthAuditSortKeyMigration(ctx context.Context, tx *sql.Tx) error {
+	exists, err := tableExistsTx(ctx, tx, "auth_audit_events")
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return nil
+	}
+
+	rows, err := tx.QueryContext(ctx, `SELECT id, occurred_at FROM auth_audit_events WHERE COALESCE(occurred_at_sort_key, '') = ''`)
+	if err != nil {
+		return fmt.Errorf("query auth audit events for sort key backfill: %w", err)
+	}
+	defer rows.Close()
+
+	type authAuditRow struct {
+		id         string
+		occurredAt string
+		sortKey    string
+	}
+
+	pending := make([]authAuditRow, 0)
+	for rows.Next() {
+		var row authAuditRow
+		if err := rows.Scan(&row.id, &row.occurredAt); err != nil {
+			return fmt.Errorf("scan auth audit row for sort key backfill: %w", err)
+		}
+		occurredAt, err := parseAuthAuditOccurredAt(row.occurredAt)
+		if err != nil {
+			return fmt.Errorf("parse auth audit occurred_at for %s: %w", row.id, err)
+		}
+		row.sortKey = formatAuthAuditSortKey(occurredAt)
+		pending = append(pending, row)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate auth audit rows for sort key backfill: %w", err)
+	}
+
+	for _, row := range pending {
+		if _, err := tx.ExecContext(ctx, `UPDATE auth_audit_events SET occurred_at_sort_key = ? WHERE id = ?`, row.sortKey, row.id); err != nil {
+			return fmt.Errorf("update auth audit sort key for %s: %w", row.id, err)
+		}
+	}
+
+	return nil
+}
+
+func parseAuthAuditOccurredAt(raw string) (time.Time, error) {
+	return time.Parse(time.RFC3339Nano, raw)
+}
+
+func formatAuthAuditSortKey(occurredAt time.Time) string {
+	return occurredAt.UTC().Format("2006-01-02T15:04:05.000000000Z07:00")
+}
+
+func tableExistsTx(ctx context.Context, tx *sql.Tx, tableName string) (bool, error) {
+	var exists bool
+	if err := tx.QueryRowContext(
+		ctx,
+		`SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?)`,
+		tableName,
+	).Scan(&exists); err != nil {
+		return false, fmt.Errorf("check table %s existence: %w", tableName, err)
+	}
+	return exists, nil
+}
+
+func columnExistsTx(ctx context.Context, tx *sql.Tx, tableName string, columnName string) (bool, error) {
+	rows, err := tx.QueryContext(ctx, fmt.Sprintf("PRAGMA table_info(%s)", tableName))
+	if err != nil {
+		return false, fmt.Errorf("describe table %s: %w", tableName, err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var (
+			cid        int
+			name       string
+			dataType   string
+			notNull    int
+			defaultVal sql.NullString
+			pk         int
+		)
+		if err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultVal, &pk); err != nil {
+			return false, fmt.Errorf("scan table info %s: %w", tableName, err)
+		}
+		if name == columnName {
+			return true, nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return false, fmt.Errorf("iterate table info %s: %w", tableName, err)
+	}
+	return false, nil
+}
+
+func scrubLegacyArtifactMetadataJSON(metadataJSON string) (string, bool, error) {
+	var metadata map[string]any
+	if err := json.Unmarshal([]byte(metadataJSON), &metadata); err != nil {
+		return "", false, err
+	}
+	if _, ok := metadata["content_path"]; !ok {
+		return metadataJSON, false, nil
+	}
+	delete(metadata, "content_path")
+	encoded, err := json.Marshal(metadata)
+	if err != nil {
+		return "", false, err
+	}
+	return string(encoded), true, nil
 }

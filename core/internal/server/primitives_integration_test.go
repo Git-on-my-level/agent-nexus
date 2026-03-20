@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"organization-autorunner-core/internal/actors"
 	"organization-autorunner-core/internal/primitives"
@@ -101,6 +102,9 @@ func TestPrimitivesCRUDRoundTrip(t *testing.T) {
 	if contentHash != expectedHash {
 		t.Fatalf("content_hash mismatch: got %q want %q", contentHash, expectedHash)
 	}
+	if _, ok := createdArtifact["artifact"]["content_path"]; ok {
+		t.Fatalf("expected create artifact response to omit content_path: %#v", createdArtifact["artifact"])
+	}
 
 	getArtifactResp, err := http.Get(h.baseURL + "/artifacts/" + artifactID)
 	if err != nil {
@@ -120,6 +124,9 @@ func TestPrimitivesCRUDRoundTrip(t *testing.T) {
 	}
 	if loadedArtifact["artifact"]["content_hash"] != expectedHash {
 		t.Fatalf("content_hash mismatch on GET: got %#v", loadedArtifact["artifact"]["content_hash"])
+	}
+	if _, ok := loadedArtifact["artifact"]["content_path"]; ok {
+		t.Fatalf("expected get artifact response to omit content_path: %#v", loadedArtifact["artifact"])
 	}
 
 	contentResp, err := http.Get(h.baseURL + "/artifacts/" + artifactID + "/content")
@@ -299,6 +306,13 @@ func TestDocumentsLifecycleRoundTrip(t *testing.T) {
 	}
 	if createContentHash != sha256Hex([]byte("initial text")) {
 		t.Fatalf("content_hash mismatch on create: got %q", createContentHash)
+	}
+	createdArtifactMeta, ok := created["revision"]["artifact"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected created revision artifact metadata map, got %#v", created["revision"]["artifact"])
+	}
+	if _, ok := createdArtifactMeta["content_path"]; ok {
+		t.Fatalf("expected created revision artifact metadata to omit content_path: %#v", createdArtifactMeta)
 	}
 	createRevisionHash, _ := created["revision"]["revision_hash"].(string)
 	if createRevisionHash == "" {
@@ -673,11 +687,11 @@ func TestArtifactContentDeduplication(t *testing.T) {
 	if hash1 != hash2 {
 		t.Fatalf("identical content should produce identical content_hash: %q vs %q", hash1, hash2)
 	}
-
-	path1, _ := art1["artifact"]["content_path"].(string)
-	path2, _ := art2["artifact"]["content_path"].(string)
-	if path1 != path2 {
-		t.Fatalf("identical content should share content_path: %q vs %q", path1, path2)
+	if _, ok := art1["artifact"]["content_path"]; ok {
+		t.Fatalf("expected first artifact response to omit content_path: %#v", art1["artifact"])
+	}
+	if _, ok := art2["artifact"]["content_path"]; ok {
+		t.Fatalf("expected second artifact response to omit content_path: %#v", art2["artifact"])
 	}
 
 	entries, err := os.ReadDir(h.workspace.Layout().ArtifactContentDir)
@@ -686,6 +700,142 @@ func TestArtifactContentDeduplication(t *testing.T) {
 	}
 	if len(entries) != 1 {
 		t.Fatalf("expected 1 content file (dedup), got %d", len(entries))
+	}
+}
+
+func TestLegacyContentPathIsStrippedFromArtifactAndRevisionResponses(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+
+	artifactContent := []byte("legacy artifact body")
+	artifactHash := sha256Hex(artifactContent)
+	if err := os.WriteFile(filepath.Join(h.workspace.Layout().ArtifactContentDir, artifactHash), artifactContent, 0o644); err != nil {
+		t.Fatalf("write legacy artifact body: %v", err)
+	}
+
+	revisionContent := []byte("legacy revision body")
+	revisionHash := sha256Hex(revisionContent)
+	if err := os.WriteFile(filepath.Join(h.workspace.Layout().ArtifactContentDir, revisionHash), revisionContent, 0o644); err != nil {
+		t.Fatalf("write legacy revision body: %v", err)
+	}
+
+	legacyArtifactMetadata, err := json.Marshal(map[string]any{
+		"id":           "artifact-legacy-http",
+		"kind":         "evidence",
+		"created_at":   "2026-03-04T10:00:00Z",
+		"created_by":   "actor-1",
+		"content_type": "text",
+		"content_hash": artifactHash,
+		"content_path": filepath.Join(h.workspace.Layout().ArtifactContentDir, artifactHash),
+		"refs":         []string{"thread:thread-legacy-http"},
+	})
+	if err != nil {
+		t.Fatalf("marshal legacy artifact metadata: %v", err)
+	}
+	legacyRevisionMetadata, err := json.Marshal(map[string]any{
+		"id":               "artifact-doc-legacy-http",
+		"kind":             "doc",
+		"created_at":       "2026-03-04T11:00:00Z",
+		"created_by":       "actor-1",
+		"content_type":     "text",
+		"content_hash":     revisionHash,
+		"content_path":     filepath.Join(h.workspace.Layout().ArtifactContentDir, revisionHash),
+		"refs":             []string{"thread:thread-legacy-http"},
+		"document_id":      "legacy-doc-http",
+		"revision_id":      "rev-legacy-http",
+		"revision_number":  1,
+		"prev_revision_id": nil,
+	})
+	if err != nil {
+		t.Fatalf("marshal legacy revision metadata: %v", err)
+	}
+
+	if _, err := h.workspace.DB().ExecContext(
+		context.Background(),
+		`INSERT INTO artifacts(id, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"artifact-legacy-http",
+		"evidence",
+		"thread-legacy-http",
+		"2026-03-04T10:00:00Z",
+		"actor-1",
+		"text",
+		artifactHash,
+		`["thread:thread-legacy-http"]`,
+		string(legacyArtifactMetadata),
+	); err != nil {
+		t.Fatalf("insert legacy artifact row: %v", err)
+	}
+	if _, err := h.workspace.DB().ExecContext(
+		context.Background(),
+		`INSERT INTO artifacts(id, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"artifact-doc-legacy-http",
+		"doc",
+		"thread-legacy-http",
+		"2026-03-04T11:00:00Z",
+		"actor-1",
+		"text",
+		revisionHash,
+		`["thread:thread-legacy-http"]`,
+		string(legacyRevisionMetadata),
+	); err != nil {
+		t.Fatalf("insert legacy doc artifact row: %v", err)
+	}
+	if _, err := h.workspace.DB().ExecContext(
+		context.Background(),
+		`INSERT INTO document_revisions(
+			revision_id, document_id, revision_number, prev_revision_id, artifact_id, thread_id, refs_json, revision_hash, created_at, created_by
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"rev-legacy-http",
+		"legacy-doc-http",
+		1,
+		nil,
+		"artifact-doc-legacy-http",
+		"thread-legacy-http",
+		`["thread:thread-legacy-http"]`,
+		"legacy-chain-hash",
+		"2026-03-04T11:00:00Z",
+		"actor-1",
+	); err != nil {
+		t.Fatalf("insert legacy document revision row: %v", err)
+	}
+
+	artifactResp, err := http.Get(h.baseURL + "/artifacts/artifact-legacy-http")
+	if err != nil {
+		t.Fatalf("GET legacy artifact: %v", err)
+	}
+	defer artifactResp.Body.Close()
+	if artifactResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected legacy artifact status: %d", artifactResp.StatusCode)
+	}
+	var artifactPayload map[string]map[string]any
+	if err := json.NewDecoder(artifactResp.Body).Decode(&artifactPayload); err != nil {
+		t.Fatalf("decode legacy artifact payload: %v", err)
+	}
+	if _, ok := artifactPayload["artifact"]["content_path"]; ok {
+		t.Fatalf("expected legacy artifact response to omit content_path: %#v", artifactPayload["artifact"])
+	}
+
+	revisionResp, err := http.Get(h.baseURL + "/docs/legacy-doc-http/revisions/rev-legacy-http")
+	if err != nil {
+		t.Fatalf("GET legacy revision: %v", err)
+	}
+	defer revisionResp.Body.Close()
+	if revisionResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected legacy revision status: %d", revisionResp.StatusCode)
+	}
+	var revisionPayload map[string]map[string]any
+	if err := json.NewDecoder(revisionResp.Body).Decode(&revisionPayload); err != nil {
+		t.Fatalf("decode legacy revision payload: %v", err)
+	}
+	revisionArtifact, ok := revisionPayload["revision"]["artifact"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected legacy revision artifact metadata map, got %#v", revisionPayload["revision"]["artifact"])
+	}
+	if _, ok := revisionArtifact["content_path"]; ok {
+		t.Fatalf("expected legacy revision response to omit content_path: %#v", revisionArtifact)
 	}
 }
 
@@ -942,8 +1092,9 @@ func TestGetSnapshotByID(t *testing.T) {
 }
 
 type primitivesTestHarness struct {
-	workspace *storage.Workspace
-	baseURL   string
+	workspace  *storage.Workspace
+	baseURL    string
+	maintainer *ProjectionMaintainer
 }
 
 func newPrimitivesTestServer(t *testing.T) primitivesTestHarness {
@@ -962,28 +1113,61 @@ func newPrimitivesTestServer(t *testing.T) primitivesTestHarness {
 
 	registry := actors.NewStore(workspace.DB())
 	primitiveStore := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
-	projectionWorker := NewProjectionWorker(
-		WithPrimitiveStore(primitiveStore),
-		WithSchemaContract(contract),
-		WithInboxRiskHorizon(defaultInboxRiskHorizon),
-	)
+	maintainer := NewProjectionMaintainer(ProjectionMaintainerConfig{
+		PrimitiveStore:   primitiveStore,
+		Contract:         contract,
+		InboxRiskHorizon: defaultInboxRiskHorizon,
+		DirtyBatchSize:   100,
+		SystemActorID:    "oar-core",
+	})
 	handler := NewHandler(
 		contract.Version,
 		WithHealthCheck(workspace.Ping),
 		WithActorRegistry(registry),
 		WithPrimitiveStore(primitiveStore),
 		WithSchemaContract(contract),
-		WithProjectionMaintenance(NewSyncProjectionMaintenance(projectionWorker)),
+		WithProjectionMaintainer(maintainer),
 		WithAllowUnauthenticatedWrites(true),
 		WithEnableDevActorMode(true),
 	)
-	server := httptest.NewServer(handler)
+	server := httptest.NewServer(newProjectionMaintainerAutoStepHandler(handler, maintainer))
 	t.Cleanup(func() {
 		server.Close()
 		_ = workspace.Close()
 	})
 
-	return primitivesTestHarness{workspace: workspace, baseURL: server.URL}
+	return primitivesTestHarness{workspace: workspace, baseURL: server.URL, maintainer: maintainer}
+}
+
+func newProjectionMaintainerAutoStepHandler(inner http.Handler, maintainer *ProjectionMaintainer) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		recorder := httptest.NewRecorder()
+		inner.ServeHTTP(recorder, r)
+
+		if shouldAutoStepProjectionMaintainer(r, recorder.Code) && maintainer != nil {
+			_ = maintainer.Step(context.Background(), time.Now().UTC())
+		}
+
+		for key, values := range recorder.Header() {
+			for _, value := range values {
+				w.Header().Add(key, value)
+			}
+		}
+		w.WriteHeader(recorder.Code)
+		_, _ = w.Write(recorder.Body.Bytes())
+	})
+}
+
+func shouldAutoStepProjectionMaintainer(r *http.Request, statusCode int) bool {
+	if statusCode >= http.StatusBadRequest {
+		return false
+	}
+	switch r.Method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return false
+	default:
+		return true
+	}
 }
 
 func postJSONExpectStatus(t *testing.T, url string, body string, expectedStatus int) *http.Response {

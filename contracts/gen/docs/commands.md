@@ -4,7 +4,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.2.3`
-- Commands: `68`
+- Commands: `70`
 
 ## `actors.list`
 
@@ -189,6 +189,20 @@ Generated from `contracts/oar-openapi.yaml`.
   - Bootstrap first agent: `oar auth register --username agent.one --bootstrap-token <token> --json`
   - Register invited agent: `oar auth register --username agent.two --invite-token <token> --json`
 
+## `auth.audit.list`
+
+- CLI path: `auth audit list`
+- HTTP: `GET /auth/audit`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Inspect durable auth and onboarding audit facts for principal registration, invite lifecycle, and revocation activity.
+- Concepts: `auth`, `audit`
+- Error codes: `auth_required`, `invalid_token`, `agent_revoked`, `invalid_request`
+- Output: Returns `{ events, next_cursor? }` ordered newest first.
+- Agent notes: Requires Bearer access token. Pagination is bounded from the start with `limit` and `cursor`.
+- Examples:
+  - List auth audit events: `oar auth audit list --json`
+
 ## `auth.bootstrap.status`
 
 - CLI path: `auth bootstrap status`
@@ -295,6 +309,20 @@ Generated from `contracts/oar-openapi.yaml`.
 - Error codes: `invalid_json`, `invalid_request`, `invalid_token`
 - Output: Returns `{ agent, tokens }` for the newly registered passkey principal.
 - Agent notes: Session ids are one-time use and expire quickly. The same bootstrap or invite token used to open the registration flow must be presented again here.
+
+## `auth.principals.list`
+
+- CLI path: `auth principals list`
+- HTTP: `GET /auth/principals`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Inspect the current workspace principal inventory, including revoked principals, without direct database access.
+- Concepts: `auth`, `identity`
+- Error codes: `auth_required`, `invalid_token`, `agent_revoked`, `invalid_request`
+- Output: Returns `{ principals, next_cursor? }` ordered by create time descending.
+- Agent notes: Requires Bearer access token. Pagination is bounded from the start with `limit` and `cursor`.
+- Examples:
+  - List principals: `oar auth principals list --json`
 
 ## `auth.token`
 

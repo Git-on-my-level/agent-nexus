@@ -45,7 +45,7 @@ SCHEMA_PATH="${REPO_ROOT}/contracts/oar-schema.yaml"
 
 INSTANCE_ROOT="${TMP_ROOT}/team-alpha"
 BACKUP_DIR="${TMP_ROOT}/backup-bundle"
-RESTORED_ROOT="${TMP_ROOT}/team-alpha-restored"
+RESTORED_ROOT="${TMP_ROOT}/restored/team-beta"
 SEED_PORT="$(pick_loopback_port)"
 
 "${SCRIPT_DIR}/provision-workspace.sh" \
@@ -64,7 +64,11 @@ seed_workspace_with_artifact "${INSTANCE_ROOT}/workspace" "$CORE_BIN" "$SCHEMA_P
 
 "${SCRIPT_DIR}/restore-workspace.sh" \
   --backup-dir "$BACKUP_DIR" \
-  --target-instance-root "$RESTORED_ROOT"
+  --target-instance-root "$RESTORED_ROOT" \
+  --instance team-beta \
+  --public-origin https://team-beta.example.test \
+  --listen-port 8011 \
+  --web-ui-port 3011
 
 "${SCRIPT_DIR}/verify-restore.sh" \
   --instance-root "$RESTORED_ROOT" \

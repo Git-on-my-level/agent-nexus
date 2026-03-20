@@ -222,7 +222,6 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		"created_by":       actorID,
 		"content_type":     contentType,
 		"content_hash":     contentHash,
-		"content_path":     s.blob.ContentPath(contentHash),
 		"refs":             revisionRefs,
 		"document_id":      documentID,
 		"revision_id":      revisionID,
@@ -232,7 +231,6 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 	if title != "" {
 		artifactMetadata["summary"] = title
 	}
-	contentPath := artifactMetadata["content_path"].(string)
 
 	stagedContent, err := s.blob.Write(ctx, contentHash, encodedContent)
 	if err != nil {
@@ -266,8 +264,8 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 
 	if _, err := tx.ExecContext(
 		ctx,
-		`INSERT INTO artifacts(id, kind, thread_id, created_at, created_by, content_type, content_hash, content_path, refs_json, metadata_json)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO artifacts(id, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		artifactID,
 		"doc",
 		nullableString(threadID),
@@ -275,7 +273,6 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		actorID,
 		contentType,
 		contentHash,
-		contentPath,
 		string(refsJSON),
 		string(artifactMetadataJSON),
 	); err != nil {
@@ -516,7 +513,6 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		"created_by":       actorID,
 		"content_type":     contentType,
 		"content_hash":     contentHash,
-		"content_path":     s.blob.ContentPath(contentHash),
 		"refs":             revisionRefs,
 		"document_id":      documentID,
 		"revision_id":      revisionID,
@@ -526,7 +522,6 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 	if nextTitle != "" {
 		artifactMetadata["summary"] = nextTitle
 	}
-	contentPath := artifactMetadata["content_path"].(string)
 
 	stagedContent, err := s.blob.Write(ctx, contentHash, encodedContent)
 	if err != nil {
@@ -569,8 +564,8 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 
 	if _, err := tx.ExecContext(
 		ctx,
-		`INSERT INTO artifacts(id, kind, thread_id, created_at, created_by, content_type, content_hash, content_path, refs_json, metadata_json)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO artifacts(id, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		artifactID,
 		"doc",
 		nullableString(nextThreadID),
@@ -578,7 +573,6 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		actorID,
 		contentType,
 		contentHash,
-		contentPath,
 		string(refsJSON),
 		string(artifactMetadataJSON),
 	); err != nil {
@@ -963,8 +957,8 @@ func (s *Store) loadDocumentRevision(ctx context.Context, documentID string, rev
 	}
 
 	refs := decodeJSONListOrEmpty(refsJSON)
-	var artifact map[string]any
-	if err := json.Unmarshal([]byte(artifactMetaJSON), &artifact); err != nil {
+	artifact, err := decodeArtifactMetadataJSON(artifactMetaJSON)
+	if err != nil {
 		return nil, fmt.Errorf("decode document revision artifact: %w", err)
 	}
 

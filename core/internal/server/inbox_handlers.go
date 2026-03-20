@@ -177,12 +177,16 @@ func handleRebuildDerived(w http.ResponseWriter, r *http.Request, opts handlerOp
 		return
 	}
 
-	worker := NewProjectionWorker(
-		WithPrimitiveStore(opts.primitiveStore),
-		WithSchemaContract(opts.contract),
-		WithInboxRiskHorizon(opts.inboxRiskHorizon),
-	)
-	if err := worker.RunFullRebuild(r.Context(), actorID); err != nil {
+	maintainer := opts.projectionMaintainer
+	if maintainer == nil {
+		maintainer = NewProjectionMaintainer(ProjectionMaintainerConfig{
+			PrimitiveStore:   opts.primitiveStore,
+			Contract:         opts.contract,
+			InboxRiskHorizon: opts.inboxRiskHorizon,
+			SystemActorID:    "oar-core",
+		})
+	}
+	if err := maintainer.RunFullRebuild(r.Context(), time.Now().UTC(), actorID); err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to rebuild derived views")
 		return
 	}
