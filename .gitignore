@@ -3,6 +3,7 @@ node_modules/
 .pnpm-store/
 .tmp/
 .codex-autorunner/
+.DS_Store
 
 _src_core/
 _src_ui/
