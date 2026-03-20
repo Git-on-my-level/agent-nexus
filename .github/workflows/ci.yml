@@ -50,6 +50,7 @@ jobs:
             hosted:
               - 'core/**'
               - 'contracts/**'
+              - 'web-ui/**'
               - 'scripts/hosted/**'
               - 'scripts/hosted-smoke'
               - 'deploy/**'

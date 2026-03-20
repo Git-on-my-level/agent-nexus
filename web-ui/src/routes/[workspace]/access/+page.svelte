@@ -5,7 +5,6 @@
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
   import { workspacePath } from "$lib/workspacePaths";
-  import { devActorMode } from "$lib/workspaceContext";
 
   let loading = $state(true);
   let pageError = $state("");
@@ -37,7 +36,7 @@
   let invitesState = $state({ status: SECTION_IDLE, error: "" });
   let auditState = $state({ status: SECTION_IDLE, error: "" });
 
-  let canManageAccess = $derived($authenticatedAgent && !$devActorMode);
+  let canManageAccess = $derived(Boolean($authenticatedAgent));
 
   $effect(() => {
     if (!canManageAccess) return;
@@ -179,7 +178,7 @@
   }
 
   function principalBadge(principal) {
-    if (principal?.revoked_at) {
+    if (principal?.revoked) {
       return { label: "Revoked", class: "bg-red-500/10 text-red-400" };
     }
     return { label: "Active", class: "bg-emerald-500/10 text-emerald-400" };
@@ -189,26 +188,36 @@
     if (invite?.revoked_at) {
       return { label: "Revoked", class: "bg-red-500/10 text-red-400" };
     }
-    if (invite?.claimed_at) {
-      return { label: "Claimed", class: "bg-blue-500/10 text-blue-400" };
+    if (invite?.consumed_at) {
+      return { label: "Consumed", class: "bg-blue-500/10 text-blue-400" };
     }
     return { label: "Pending", class: "bg-amber-500/10 text-amber-400" };
   }
 
   function auditEventDescription(event) {
-    const kind = event?.event_kind ?? "";
-    const actorLabel = event?.actor_id ?? "unknown";
+    const kind = event?.event_type ?? "";
+    const actorLabel =
+      event?.actor_agent_id ?? event?.actor_actor_id ?? "unknown";
+    const subjectLabel =
+      event?.subject_agent_id ?? event?.subject_actor_id ?? actorLabel;
+    const inviteLabel = event?.invite_id ?? "invite";
     switch (kind) {
+      case "bootstrap_consumed":
+        return `Bootstrap consumed by ${subjectLabel}`;
       case "principal_registered":
-        return `Principal ${actorLabel} registered`;
+        return `Principal ${subjectLabel} registered`;
       case "invite_created":
-        return `Invite created by ${actorLabel}`;
-      case "invite_claimed":
-        return `Invite claimed by ${actorLabel}`;
+        return `${inviteLabel} created by ${actorLabel}`;
+      case "invite_consumed":
+        return `${inviteLabel} consumed by ${subjectLabel}`;
       case "invite_revoked":
-        return `Invite revoked by ${actorLabel}`;
+        return `${inviteLabel} revoked by ${actorLabel}`;
+      case "principal_revoked":
+        return `Principal ${subjectLabel} revoked by ${actorLabel}`;
+      case "principal_self_revoked":
+        return `Principal ${subjectLabel} self-revoked`;
       default:
-        return `${kind} (${actorLabel})`;
+        return `${kind || "unknown"} (${actorLabel})`;
     }
   }
 </script>
@@ -411,7 +420,8 @@
               id="invite-kind"
             >
               <option value="agent">Agent</option>
-              <option value="operator">Operator</option>
+              <option value="human">Human</option>
+              <option value="any">Any</option>
             </select>
           </div>
           <div class="flex-[2] min-w-[240px]">
@@ -484,7 +494,7 @@
                 <span class="text-[11px] text-[var(--ui-text-muted)]">
                   {formatTimestamp(invite.created_at)}
                 </span>
-                {#if !invite.revoked_at && !invite.claimed_at}
+                {#if !invite.revoked_at && !invite.consumed_at}
                   <button
                     class="shrink-0 cursor-pointer rounded px-2 py-1 text-[11px] font-medium text-red-400 hover:bg-red-400/10 disabled:opacity-50"
                     disabled={revokingInviteId === invite.id}
@@ -536,10 +546,11 @@
                   <p
                     class="truncate text-[13px] font-medium text-[var(--ui-text)]"
                   >
-                    {principal.display_name || principal.actor_id}
+                    {principal.username || principal.actor_id}
                   </p>
                   <p class="text-[11px] text-[var(--ui-text-muted)]">
-                    {principal.actor_id}
+                    {principal.actor_id} - {principal.principal_kind} via{" "}
+                    {principal.auth_method}
                   </p>
                 </div>
                 <span class="text-[11px] text-[var(--ui-text-muted)]">

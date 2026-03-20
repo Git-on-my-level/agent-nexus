@@ -1,5 +1,47 @@
 import { expect, test } from "@playwright/test";
 
+async function seedAuthenticatedAgent(page) {
+  await page.addInitScript(() => {
+    window.sessionStorage.setItem(
+      "oar_ui_refresh_token:local",
+      "test-refresh-token",
+    );
+  });
+
+  await page.route("**/auth/token", async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        tokens: {
+          access_token: "test-access-token",
+          refresh_token: "test-refresh-token",
+          token_type: "Bearer",
+          expires_in: 3600,
+        },
+      }),
+    });
+  });
+
+  await page.route("**/agents/me", async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        agent: {
+          agent_id: "agent-ops-ai",
+          actor_id: "actor-ops-ai",
+          username: "ops-ai",
+          revoked: false,
+          created_at: "2024-01-15T10:00:00Z",
+          updated_at: "2024-01-15T10:00:00Z",
+        },
+        keys: [],
+      }),
+    });
+  });
+}
+
 test.describe("Access management page", () => {
   test("shows access denied message for dev actor mode", async ({ page }) => {
     await page.addInitScript(() => {
@@ -18,21 +60,7 @@ test.describe("Access management page", () => {
   });
 
   test("loads access data for authenticated agent", async ({ page }) => {
-    await page.addInitScript(() => {
-      window.sessionStorage.setItem(
-        "oar_ui_auth_agent",
-        JSON.stringify({
-          agent: {
-            actor_id: "actor-ops-ai",
-            username: "ops-ai",
-          },
-          tokens: {
-            access_token: "test-access-token",
-            refresh_token: "test-refresh-token",
-          },
-        }),
-      );
-    });
+    await seedAuthenticatedAgent(page);
 
     await page.route("**/auth/bootstrap/status", async (route) => {
       await route.fulfill({
@@ -51,16 +79,21 @@ test.describe("Access management page", () => {
         body: JSON.stringify({
           principals: [
             {
+              agent_id: "agent-ops-ai",
               actor_id: "actor-ops-ai",
-              display_name: "Ops AI",
+              username: "ops-ai",
+              principal_kind: "agent",
+              auth_method: "public_key",
+              revoked: false,
               created_at: "2024-01-15T10:00:00Z",
+              updated_at: "2024-01-15T10:00:00Z",
             },
           ],
         }),
       });
     });
 
-    await page.route("**/auth/invites*", async (route) => {
+    await page.route(/\/auth\/invites(?:\/.*)?$/, async (route) => {
       if (route.request().method() === "GET") {
         await route.fulfill({
           status: 200,
@@ -89,9 +122,13 @@ test.describe("Access management page", () => {
           events: [
             {
               event_id: "evt_001",
-              event_kind: "principal_registered",
-              actor_id: "actor-ops-ai",
+              event_type: "principal_registered",
+              actor_agent_id: "agent-ops-ai",
+              actor_actor_id: "actor-ops-ai",
+              subject_agent_id: "agent-ops-ai",
+              subject_actor_id: "actor-ops-ai",
               occurred_at: "2024-01-15T10:00:00Z",
+              metadata: {},
             },
           ],
         }),
@@ -110,32 +147,24 @@ test.describe("Access management page", () => {
       page.getByText("Bootstrap registration is closed"),
     ).toBeVisible();
 
-    await expect(page.getByText("Principals")).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Principals" }),
+    ).toBeVisible();
     await expect(page.getByText("actor-ops-ai")).toBeVisible();
 
-    await expect(page.getByText("Invites")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Invites" })).toBeVisible();
     await expect(page.getByText("invite_abc123")).toBeVisible();
 
-    await expect(page.getByText("Recent auth events")).toBeVisible();
-    await expect(page.getByText("principal_registered")).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Recent auth events" }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Principal agent-ops-ai registered"),
+    ).toBeVisible();
   });
 
   test("creates an invite and reveals one-time token", async ({ page }) => {
-    await page.addInitScript(() => {
-      window.sessionStorage.setItem(
-        "oar_ui_auth_agent",
-        JSON.stringify({
-          agent: {
-            actor_id: "actor-ops-ai",
-            username: "ops-ai",
-          },
-          tokens: {
-            access_token: "test-access-token",
-            refresh_token: "test-refresh-token",
-          },
-        }),
-      );
-    });
+    await seedAuthenticatedAgent(page);
 
     await page.route("**/auth/bootstrap/status", async (route) => {
       await route.fulfill({
@@ -156,7 +185,7 @@ test.describe("Access management page", () => {
     });
 
     let createInviteCalled = false;
-    await page.route("**/auth/invites*", async (route) => {
+    await page.route(/\/auth\/invites(?:\/.*)?$/, async (route) => {
       const method = route.request().method();
       if (method === "POST") {
         createInviteCalled = true;
@@ -167,6 +196,8 @@ test.describe("Access management page", () => {
             invite: {
               id: "invite_new",
               kind: "agent",
+              created_by_agent_id: "agent-ops-ai",
+              created_by_actor_id: "actor-ops-ai",
               note: "Test invite",
               created_at: "2024-01-17T14:00:00Z",
             },
@@ -190,7 +221,7 @@ test.describe("Access management page", () => {
       });
     });
 
-    await page.goto("/access");
+    await page.goto("/local/access");
 
     await expect(page.getByRole("heading", { name: "Access" })).toBeVisible();
 
@@ -209,21 +240,7 @@ test.describe("Access management page", () => {
   });
 
   test("revokes an invite", async ({ page }) => {
-    await page.addInitScript(() => {
-      window.sessionStorage.setItem(
-        "oar_ui_auth_agent",
-        JSON.stringify({
-          agent: {
-            actor_id: "actor-ops-ai",
-            username: "ops-ai",
-          },
-          tokens: {
-            access_token: "test-access-token",
-            refresh_token: "test-refresh-token",
-          },
-        }),
-      );
-    });
+    await seedAuthenticatedAgent(page);
 
     await page.route("**/auth/bootstrap/status", async (route) => {
       await route.fulfill({
@@ -246,7 +263,7 @@ test.describe("Access management page", () => {
     let revokeCalled = false;
     let inviteRevoked = false;
 
-    await page.route("**/auth/invites*", async (route) => {
+    await page.route(/\/auth\/invites(?:\/.*)?$/, async (route) => {
       const method = route.request().method();
       const url = route.request().url();
 
@@ -263,6 +280,8 @@ test.describe("Access management page", () => {
           {
             id: "invite_to_revoke",
             kind: "agent",
+            created_by_agent_id: "agent-ops-ai",
+            created_by_actor_id: "actor-ops-ai",
             note: "Pending invite",
             created_at: "2024-01-16T12:00:00Z",
             revoked_at: inviteRevoked ? "2024-01-17T15:00:00Z" : null,
@@ -284,7 +303,7 @@ test.describe("Access management page", () => {
       });
     });
 
-    await page.goto("/access");
+    await page.goto("/local/access");
 
     await expect(page.getByRole("heading", { name: "Access" })).toBeVisible();
 
@@ -298,21 +317,7 @@ test.describe("Access management page", () => {
   });
 
   test("shows error states when API fails", async ({ page }) => {
-    await page.addInitScript(() => {
-      window.sessionStorage.setItem(
-        "oar_ui_auth_agent",
-        JSON.stringify({
-          agent: {
-            actor_id: "actor-ops-ai",
-            username: "ops-ai",
-          },
-          tokens: {
-            access_token: "test-access-token",
-            refresh_token: "test-refresh-token",
-          },
-        }),
-      );
-    });
+    await seedAuthenticatedAgent(page);
 
     await page.route("**/auth/bootstrap/status", async (route) => {
       await route.fulfill({
@@ -330,7 +335,7 @@ test.describe("Access management page", () => {
       });
     });
 
-    await page.route("**/auth/invites*", async (route) => {
+    await page.route(/\/auth\/invites(?:\/.*)?$/, async (route) => {
       await route.fulfill({
         status: 500,
         headers: { "content-type": "application/json" },
@@ -346,34 +351,15 @@ test.describe("Access management page", () => {
       });
     });
 
-    await page.goto("/access");
+    await page.goto("/local/access");
 
     await expect(page.getByRole("heading", { name: "Access" })).toBeVisible();
 
-    await expect(
-      page.getByText("Failed to load bootstrap status"),
-    ).toBeVisible();
-    await expect(page.getByText("Failed to load principals")).toBeVisible();
-    await expect(page.getByText("Failed to load invites")).toBeVisible();
-    await expect(page.getByText("Failed to load audit events")).toBeVisible();
+    await expect(page.getByText(/Internal server error/)).toHaveCount(4);
   });
 
   test("shows empty states when no data", async ({ page }) => {
-    await page.addInitScript(() => {
-      window.sessionStorage.setItem(
-        "oar_ui_auth_agent",
-        JSON.stringify({
-          agent: {
-            actor_id: "actor-ops-ai",
-            username: "ops-ai",
-          },
-          tokens: {
-            access_token: "test-access-token",
-            refresh_token: "test-refresh-token",
-          },
-        }),
-      );
-    });
+    await seedAuthenticatedAgent(page);
 
     await page.route("**/auth/bootstrap/status", async (route) => {
       await route.fulfill({
@@ -409,7 +395,7 @@ test.describe("Access management page", () => {
       });
     });
 
-    await page.goto("/access");
+    await page.goto("/local/access");
 
     await expect(page.getByRole("heading", { name: "Access" })).toBeVisible();
 
