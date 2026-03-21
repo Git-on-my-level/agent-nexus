@@ -27,6 +27,18 @@ This runbook covers reproducible local and production-like operation for `oar-co
 | WebAuthn origin | n/a | `OAR_WEBAUTHN_ORIGIN` | derived from browser request origin |
 | WebAuthn RP display name | n/a | `OAR_WEBAUTHN_RP_DISPLAY_NAME` | `OAR` |
 | CORS allowed origins | n/a | `OAR_CORS_ALLOWED_ORIGINS` | unset (CORS disabled) |
+| Workspace blob quota | n/a | `OAR_WORKSPACE_MAX_BLOB_BYTES` | `1073741824` |
+| Workspace artifact quota | n/a | `OAR_WORKSPACE_MAX_ARTIFACTS` | `100000` |
+| Workspace document quota | n/a | `OAR_WORKSPACE_MAX_DOCUMENTS` | `50000` |
+| Workspace revision quota | n/a | `OAR_WORKSPACE_MAX_DOCUMENT_REVISIONS` | `250000` |
+| Max upload size per workspace write | n/a | `OAR_WORKSPACE_MAX_UPLOAD_BYTES` | `8388608` |
+| Default JSON request body cap | n/a | `OAR_REQUEST_BODY_LIMIT_BYTES` | `1048576` |
+| Auth request body cap | n/a | `OAR_AUTH_REQUEST_BODY_LIMIT_BYTES` | `262144` |
+| Large content request body cap | n/a | `OAR_CONTENT_REQUEST_BODY_LIMIT_BYTES` | `8388608` |
+| Auth route rate limit per minute | n/a | `OAR_AUTH_ROUTE_RATE_LIMIT_PER_MINUTE` | `600` |
+| Auth route burst | n/a | `OAR_AUTH_ROUTE_RATE_BURST` | `100` |
+| Write route rate limit per minute | n/a | `OAR_WRITE_ROUTE_RATE_LIMIT_PER_MINUTE` | `1200` |
+| Write route burst | n/a | `OAR_WRITE_ROUTE_RATE_BURST` | `200` |
 | Graceful shutdown timeout | n/a | `OAR_SHUTDOWN_TIMEOUT` | `15s` |
 
 ## Workspace layout
@@ -188,6 +200,35 @@ When running behind a reverse proxy (nginx, Caddy, etc.):
 - Terminate TLS at the proxy; core listens plain HTTP.
 - Set `OAR_WEBAUTHN_RPID` and `OAR_WEBAUTHN_ORIGIN` explicitly when the
   proxy hostname differs from the core listen address.
+
+Core already enforces request-body limits, workspace quotas, and route-class
+throttles. Edge limits should be complementary, not a replacement. A minimal
+nginx example:
+
+```nginx
+http {
+  limit_req_zone $binary_remote_addr zone=oar_auth:10m rate=30r/m;
+  limit_req_zone $binary_remote_addr zone=oar_write:10m rate=300r/m;
+
+  server {
+    location /auth/ {
+      limit_req zone=oar_auth burst=10 nodelay;
+      proxy_pass http://127.0.0.1:8000;
+    }
+
+    location ~ ^/(threads|commitments|boards|docs|artifacts|events|work_orders|receipts|reviews|inbox/ack|derived/rebuild) {
+      limit_req zone=oar_write burst=100 nodelay;
+      proxy_pass http://127.0.0.1:8000;
+    }
+  }
+}
+```
+
+When these limits trip, clients should expect:
+
+- `413 request_too_large` for oversized request bodies
+- `507 workspace_quota_exceeded` for storage or count quota exhaustion
+- `429 rate_limited` with `Retry-After` for route-class throttling
 
 ### CORS
 

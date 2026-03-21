@@ -100,6 +100,129 @@ func TestCreateArtifactAcceptsSafeIDAndRejectsUnsafeIDs(t *testing.T) {
 	}
 }
 
+func TestCreateDocumentRejectsOversizedUpload(t *testing.T) {
+	t.Parallel()
+
+	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	store := primitives.NewStore(
+		workspace.DB(),
+		blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir),
+		workspace.Layout().ArtifactContentDir,
+		primitives.WithWorkspaceQuota(primitives.WorkspaceQuota{
+			MaxUploadBytes: 4,
+			MaxBlobBytes:   1024,
+		}),
+	)
+
+	_, _, err = store.CreateDocument(context.Background(), "actor-1", map[string]any{
+		"id":    "doc-too-large",
+		"title": "Too large",
+	}, "hello", "text", nil)
+	if err == nil {
+		t.Fatal("expected upload quota error")
+	}
+
+	var violation *primitives.QuotaViolation
+	if !errors.As(err, &violation) {
+		t.Fatalf("expected quota violation, got %v", err)
+	}
+	if violation.Code != "request_too_large" || violation.Metric != "upload_bytes" {
+		t.Fatalf("unexpected quota violation: %#v", violation)
+	}
+}
+
+func TestCreateDocumentRejectsBlobQuotaExceeded(t *testing.T) {
+	t.Parallel()
+
+	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	store := primitives.NewStore(
+		workspace.DB(),
+		blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir),
+		workspace.Layout().ArtifactContentDir,
+		primitives.WithWorkspaceQuota(primitives.WorkspaceQuota{
+			MaxBlobBytes:   7,
+			MaxUploadBytes: 1024,
+		}),
+	)
+
+	if _, _, err := store.CreateDocument(context.Background(), "actor-1", map[string]any{
+		"id":    "doc-1",
+		"title": "Doc 1",
+	}, "1111", "text", nil); err != nil {
+		t.Fatalf("create first document: %v", err)
+	}
+
+	_, _, err = store.CreateDocument(context.Background(), "actor-1", map[string]any{
+		"id":    "doc-2",
+		"title": "Doc 2",
+	}, "2222", "text", nil)
+	if err == nil {
+		t.Fatal("expected blob quota error")
+	}
+
+	var violation *primitives.QuotaViolation
+	if !errors.As(err, &violation) {
+		t.Fatalf("expected quota violation, got %v", err)
+	}
+	if violation.Code != "workspace_quota_exceeded" || violation.Metric != "blob_bytes" {
+		t.Fatalf("unexpected quota violation: %#v", violation)
+	}
+}
+
+func TestUpdateDocumentRejectsRevisionQuotaExceeded(t *testing.T) {
+	t.Parallel()
+
+	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	store := primitives.NewStore(
+		workspace.DB(),
+		blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir),
+		workspace.Layout().ArtifactContentDir,
+		primitives.WithWorkspaceQuota(primitives.WorkspaceQuota{
+			MaxBlobBytes:         1024,
+			MaxUploadBytes:       1024,
+			MaxDocumentRevisions: 1,
+		}),
+	)
+
+	document, revision, err := store.CreateDocument(context.Background(), "actor-1", map[string]any{
+		"id":    "doc-revisions",
+		"title": "Doc revisions",
+	}, "1111", "text", nil)
+	if err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+
+	_, _, err = store.UpdateDocument(context.Background(), "actor-1", document["id"].(string), map[string]any{
+		"title": "Doc revisions updated",
+	}, revision["revision_id"].(string), "2222", "text", nil)
+	if err == nil {
+		t.Fatal("expected revision quota error")
+	}
+
+	var violation *primitives.QuotaViolation
+	if !errors.As(err, &violation) {
+		t.Fatalf("expected quota violation, got %v", err)
+	}
+	if violation.Code != "workspace_quota_exceeded" || violation.Metric != "document_revision_count" {
+		t.Fatalf("unexpected quota violation: %#v", violation)
+	}
+}
+
 func TestCreateArtifactConflictDoesNotLeakStagedContent(t *testing.T) {
 	t.Parallel()
 

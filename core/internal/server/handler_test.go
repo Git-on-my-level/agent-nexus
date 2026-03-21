@@ -7,7 +7,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"organization-autorunner-core/internal/auth"
+	"organization-autorunner-core/internal/storage"
 )
 
 func TestHealthEndpoint(t *testing.T) {
@@ -191,6 +195,91 @@ func TestMethodNotAllowed(t *testing.T) {
 	}
 	if hint, _ := errObj["hint"].(string); hint == "" {
 		t.Fatalf("expected non-empty hint, payload=%#v", errObj)
+	}
+}
+
+func TestRequestBodyTooLargeReturnsRequestTooLarge(t *testing.T) {
+	t.Parallel()
+
+	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	handler := NewHandler(
+		"0.2.2",
+		WithAuthStore(auth.NewStore(workspace.DB())),
+		WithRequestBodyLimits(RequestBodyLimits{Auth: 16}),
+	)
+	req := httptest.NewRequest(http.MethodPost, "/auth/token", strings.NewReader(`{"grant_type":"refresh_token","refresh_token":"this-is-too-long"}`))
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("unexpected status: got %d want %d", rr.Code, http.StatusRequestEntityTooLarge)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode body: %v", err)
+	}
+	errObj, _ := payload["error"].(map[string]any)
+	if errObj == nil {
+		t.Fatalf("expected error object, payload=%#v", payload)
+	}
+	if got := errObj["code"]; got != "request_too_large" {
+		t.Fatalf("unexpected error code: %#v", got)
+	}
+	requestBody, _ := payload["request_body"].(map[string]any)
+	if requestBody == nil {
+		t.Fatalf("expected request_body details, payload=%#v", payload)
+	}
+	if limit, _ := requestBody["limit_bytes"].(float64); limit != 16 {
+		t.Fatalf("unexpected limit_bytes: %#v", requestBody["limit_bytes"])
+	}
+}
+
+func TestAuthRouteRateLimitingReturnsRateLimited(t *testing.T) {
+	t.Parallel()
+
+	handler := NewHandler(
+		"0.2.2",
+		WithRouteRateLimits(RouteRateLimits{
+			AuthRequestsPerMinute:  1,
+			AuthBurst:              1,
+			WriteRequestsPerMinute: 1,
+			WriteBurst:             1,
+		}),
+	)
+
+	body := strings.NewReader(`{"grant_type":"refresh_token","refresh_token":"token"}`)
+	req1 := httptest.NewRequest(http.MethodPost, "/auth/token", body)
+	rr1 := httptest.NewRecorder()
+	handler.ServeHTTP(rr1, req1)
+
+	req2 := httptest.NewRequest(http.MethodPost, "/auth/token", strings.NewReader(`{"grant_type":"refresh_token","refresh_token":"token"}`))
+	rr2 := httptest.NewRecorder()
+	handler.ServeHTTP(rr2, req2)
+
+	if rr2.Code != http.StatusTooManyRequests {
+		t.Fatalf("unexpected status: got %d want %d", rr2.Code, http.StatusTooManyRequests)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(rr2.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode body: %v", err)
+	}
+	errObj, _ := payload["error"].(map[string]any)
+	if errObj == nil {
+		t.Fatalf("expected error object, payload=%#v", payload)
+	}
+	if got := errObj["code"]; got != "rate_limited" {
+		t.Fatalf("unexpected error code: %#v", got)
+	}
+	if retryAfter := rr2.Header().Get("Retry-After"); retryAfter == "" {
+		t.Fatalf("expected Retry-After header, payload=%#v", payload)
 	}
 }
 

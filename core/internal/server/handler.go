@@ -109,6 +109,9 @@ type handlerOptions struct {
 	streamPollInterval             time.Duration
 	corsAllowedOrigins             []string
 	projectionMaintainer           *ProjectionMaintainer
+	requestBodyLimits              RequestBodyLimits
+	routeRateLimits                RouteRateLimits
+	rateLimiter                    *routeRateLimiter
 }
 
 func WithHealthCheck(healthCheck HealthCheckFunc) HandlerOption {
@@ -245,6 +248,18 @@ func WithCORSAllowedOrigins(origins string) HandlerOption {
 func WithProjectionMaintainer(maintainer *ProjectionMaintainer) HandlerOption {
 	return func(opts *handlerOptions) {
 		opts.projectionMaintainer = maintainer
+	}
+}
+
+func WithRequestBodyLimits(limits RequestBodyLimits) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.requestBodyLimits = limits
+	}
+}
+
+func WithRouteRateLimits(limits RouteRateLimits) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.routeRateLimits = limits
 	}
 }
 
@@ -403,12 +418,25 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 	if opts.streamPollInterval <= 0 {
 		opts.streamPollInterval = time.Second
 	}
+	opts.requestBodyLimits = opts.requestBodyLimits.normalize()
+	opts.routeRateLimits = opts.routeRateLimits.normalize()
+	opts.rateLimiter = newRouteRateLimiter(opts.routeRateLimits)
 
 	mux := http.NewServeMux()
 	registerRoute := func(pattern string, classify routeAccessClassifier, handler http.HandlerFunc) {
 		mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
-			if !enforceRouteAccess(w, r, opts, classify(r)) {
+			requirement := classify(r)
+			if !enforceRouteAccess(w, r, opts, requirement) {
 				return
+			}
+			if bucket := routeRateLimitBucketForRequest(r.URL.Path, r.Method, requirement); bucket != "" {
+				if ok, retryAfter := opts.rateLimiter.allow(bucket, time.Now().UTC()); !ok {
+					writeRateLimitedError(w, bucket, retryAfter)
+					return
+				}
+			}
+			if limit := requestBodyLimitForRequest(r.URL.Path, r.Method, requirement, opts.requestBodyLimits); limit > 0 {
+				r.Body = http.MaxBytesReader(w, r.Body, limit)
 			}
 			handler(w, r)
 		})
@@ -1397,8 +1425,7 @@ func handleRegisterActor(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		} `json:"actor"`
 	}
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 

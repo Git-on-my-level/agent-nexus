@@ -7,6 +7,12 @@ info:
 
     This OpenAPI contract is the monorepo source of truth for generated clients,
     CLI command registry metadata, and command docs.
+
+    Core request/abuse controls are surfaced explicitly: oversized requests use
+    `request_too_large`, workspace storage exhaustion uses
+    `workspace_quota_exceeded`, and route-class throttling uses `rate_limited`.
+    When present, the JSON error payload includes `request_body`, `quota`, or
+    `rate_limit` detail objects so clients can react without guessing.
 servers:
   - url: http://127.0.0.1:8000
 x-oar-extension-vocabulary:
@@ -17,7 +23,7 @@ x-oar-extension-vocabulary:
   x-oar-input-mode: "none | json-body | raw-stream | file-and-body"
   x-oar-streaming: "Streaming characteristics for this operation"
   x-oar-output-envelope: "Output shape and stability notes"
-  x-oar-error-codes: "Stable semantic error codes surfaced by core"
+  x-oar-error-codes: "Stable semantic error codes surfaced by core, including request_too_large, workspace_quota_exceeded, and rate_limited"
   x-oar-concepts: "Concept tags for docs/help grouping"
   x-oar-stability: "experimental | beta | stable"
   x-oar-surface: "Surface classification: canonical, projection, or utility"

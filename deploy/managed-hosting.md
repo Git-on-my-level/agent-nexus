@@ -90,6 +90,37 @@ The generated env file sets:
 For source-run or launchd deployments, use the same values from
 `config/env.production` when configuring the process.
 
+## Reverse proxy edge limits
+
+Core already enforces request-size limits, workspace quotas, and in-process
+route-class throttles. The reverse proxy should add complementary edge limits
+so abusive traffic is rejected before it reaches the workspace instance.
+
+Example nginx configuration:
+
+```nginx
+http {
+  limit_req_zone $binary_remote_addr zone=oar_auth:10m rate=30r/m;
+  limit_req_zone $binary_remote_addr zone=oar_write:10m rate=300r/m;
+
+  server {
+    location /auth/ {
+      limit_req zone=oar_auth burst=10 nodelay;
+      proxy_pass http://127.0.0.1:8001;
+    }
+
+    location ~ ^/(threads|commitments|boards|docs|artifacts|events|work_orders|receipts|reviews|inbox/ack|derived/rebuild) {
+      limit_req zone=oar_write burst=100 nodelay;
+      proxy_pass http://127.0.0.1:8001;
+    }
+  }
+}
+```
+
+If the edge limit trips, clients should see `429` responses before the core
+workload is consumed. Core still returns explicit `request_too_large`,
+`workspace_quota_exceeded`, and `rate_limited` payloads when requests reach it.
+
 ### 3. Confirm the empty deployment is healthy
 
 ```bash

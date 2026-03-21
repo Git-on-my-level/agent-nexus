@@ -30,6 +30,19 @@ const (
 	defaultAPIVersion    = "v0"
 	defaultMinCLIVersion = "0.1.0"
 	defaultInstanceID    = "core-local"
+
+	defaultWorkspaceMaxBlobBytes         int64 = 1 << 30
+	defaultWorkspaceMaxArtifacts         int64 = 100000
+	defaultWorkspaceMaxDocuments         int64 = 50000
+	defaultWorkspaceMaxDocumentRevisions int64 = 250000
+	defaultWorkspaceMaxUploadBytes       int64 = 8 << 20
+	defaultRequestBodyLimit              int64 = 1 << 20
+	defaultAuthRequestBodyLimit          int64 = 256 << 10
+	defaultContentRequestBodyLimit       int64 = 8 << 20
+	defaultAuthRouteRateLimitPerMinute         = 600
+	defaultAuthRouteRateBurst                  = 100
+	defaultWriteRouteRateLimitPerMinute        = 1200
+	defaultWriteRouteRateBurst                 = 200
 )
 
 func main() {
@@ -61,6 +74,24 @@ func main() {
 		webAuthnDisplayName        = envString("OAR_WEBAUTHN_RP_DISPLAY_NAME", "OAR")
 		corsAllowedOrigins         = envString("OAR_CORS_ALLOWED_ORIGINS", "")
 		shutdownTimeout            = envDuration("OAR_SHUTDOWN_TIMEOUT", 15*time.Second)
+		workspaceQuota             = primitives.WorkspaceQuota{
+			MaxBlobBytes:         envInt64("OAR_WORKSPACE_MAX_BLOB_BYTES", defaultWorkspaceMaxBlobBytes),
+			MaxArtifacts:         envInt64("OAR_WORKSPACE_MAX_ARTIFACTS", defaultWorkspaceMaxArtifacts),
+			MaxDocuments:         envInt64("OAR_WORKSPACE_MAX_DOCUMENTS", defaultWorkspaceMaxDocuments),
+			MaxDocumentRevisions: envInt64("OAR_WORKSPACE_MAX_DOCUMENT_REVISIONS", defaultWorkspaceMaxDocumentRevisions),
+			MaxUploadBytes:       envInt64("OAR_WORKSPACE_MAX_UPLOAD_BYTES", defaultWorkspaceMaxUploadBytes),
+		}
+		requestBodyLimits = server.RequestBodyLimits{
+			Default: envInt64("OAR_REQUEST_BODY_LIMIT_BYTES", defaultRequestBodyLimit),
+			Auth:    envInt64("OAR_AUTH_REQUEST_BODY_LIMIT_BYTES", defaultAuthRequestBodyLimit),
+			Content: envInt64("OAR_CONTENT_REQUEST_BODY_LIMIT_BYTES", defaultContentRequestBodyLimit),
+		}
+		routeRateLimits = server.RouteRateLimits{
+			AuthRequestsPerMinute:  envInt("OAR_AUTH_ROUTE_RATE_LIMIT_PER_MINUTE", defaultAuthRouteRateLimitPerMinute),
+			AuthBurst:              envInt("OAR_AUTH_ROUTE_RATE_BURST", defaultAuthRouteRateBurst),
+			WriteRequestsPerMinute: envInt("OAR_WRITE_ROUTE_RATE_LIMIT_PER_MINUTE", defaultWriteRouteRateLimitPerMinute),
+			WriteBurst:             envInt("OAR_WRITE_ROUTE_RATE_BURST", defaultWriteRouteRateBurst),
+		}
 	)
 
 	flag.StringVar(&host, "host", host, "host interface to bind")
@@ -141,7 +172,7 @@ func main() {
 	authStore := auth.NewStore(workspace.DB(), auth.WithBootstrapToken(bootstrapToken))
 	passkeySessionStore := auth.NewPasskeySessionStore(auth.DefaultPasskeySessionTTL)
 	defer passkeySessionStore.Close()
-	primitiveStore := primitives.NewStore(workspace.DB(), blobBackendImpl, effectiveBlobRoot)
+	primitiveStore := primitives.NewStore(workspace.DB(), blobBackendImpl, effectiveBlobRoot, primitives.WithWorkspaceQuota(workspaceQuota))
 	projectionMaintainer := server.NewProjectionMaintainer(server.ProjectionMaintainerConfig{
 		PrimitiveStore:    primitiveStore,
 		Contract:          contract,
@@ -176,6 +207,8 @@ func main() {
 		server.WithStreamPollInterval(streamPollInterval),
 		server.WithCORSAllowedOrigins(corsAllowedOrigins),
 		server.WithProjectionMaintainer(projectionMaintainer),
+		server.WithRequestBodyLimits(requestBodyLimits),
+		server.WithRouteRateLimits(routeRateLimits),
 	)
 	httpServer := &http.Server{
 		Addr:              addr,
@@ -241,6 +274,20 @@ func envInt(name string, fallback int) int {
 	}
 
 	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "invalid integer value for %s: %q\n", name, value)
+		os.Exit(1)
+	}
+	return parsed
+}
+
+func envInt64(name string, fallback int64) int64 {
+	value := strings.TrimSpace(os.Getenv(name))
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.ParseInt(value, 10, 64)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "invalid integer value for %s: %q\n", name, value)
 		os.Exit(1)

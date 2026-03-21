@@ -25,8 +25,7 @@ func handlePasskeyRegisterOptions(w http.ResponseWriter, r *http.Request, opts h
 		BootstrapToken string `json:"bootstrap_token"`
 		InviteToken    string `json:"invite_token"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
@@ -93,8 +92,7 @@ func handlePasskeyRegisterVerify(w http.ResponseWriter, r *http.Request, opts ha
 		InviteToken    string          `json:"invite_token"`
 		Credential     json.RawMessage `json:"credential"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 	req.SessionID = strings.TrimSpace(req.SessionID)
@@ -179,8 +177,7 @@ func handlePasskeyLoginOptions(w http.ResponseWriter, r *http.Request, opts hand
 	var req struct {
 		Username string `json:"username"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
@@ -257,8 +254,7 @@ func handlePasskeyLoginVerify(w http.ResponseWriter, r *http.Request, opts handl
 		SessionID  string          `json:"session_id"`
 		Credential json.RawMessage `json:"credential"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 	req.SessionID = strings.TrimSpace(req.SessionID)

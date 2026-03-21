@@ -2,10 +2,8 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 
@@ -45,8 +43,7 @@ func handleRegisterAgent(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		BootstrapToken string `json:"bootstrap_token"`
 		InviteToken    string `json:"invite_token"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
@@ -94,8 +91,7 @@ func handleIssueAuthToken(w http.ResponseWriter, r *http.Request, opts handlerOp
 		SignedAt     string `json:"signed_at"`
 		Signature    string `json:"signature"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
@@ -169,8 +165,7 @@ func handlePatchCurrentAgent(w http.ResponseWriter, r *http.Request, opts handle
 	var req struct {
 		Username string `json:"username"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
@@ -201,8 +196,7 @@ func handleRotateCurrentAgentKey(w http.ResponseWriter, r *http.Request, opts ha
 	var req struct {
 		PublicKey string `json:"public_key"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
@@ -307,11 +301,7 @@ func decodeRevokePrincipalRequest(w http.ResponseWriter, r *http.Request) (struc
 	if r == nil || r.Body == nil {
 		return req, true
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		if errors.Is(err, io.EOF) {
-			return req, true
-		}
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	if !decodeJSONBodyAllowEmpty(w, r, &req) {
 		return req, false
 	}
 	return req, true
