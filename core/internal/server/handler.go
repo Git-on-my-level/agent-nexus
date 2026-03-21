@@ -313,15 +313,22 @@ func writeLivenessOK(w http.ResponseWriter) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
-func checkReadiness(w http.ResponseWriter, r *http.Request, opts handlerOptions) bool {
+func readinessErrorPayload(r *http.Request, opts handlerOptions) map[string]any {
 	if opts.healthCheck != nil {
 		if err := opts.healthCheck(r.Context()); err != nil {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+			return map[string]any{
 				"ok":    false,
 				"error": errorPayload("storage_unavailable", "storage health check failed"),
-			})
-			return false
+			}
 		}
+	}
+	return nil
+}
+
+func checkReadiness(w http.ResponseWriter, r *http.Request, opts handlerOptions) bool {
+	if payload := readinessErrorPayload(r, opts); payload != nil {
+		writeJSON(w, http.StatusServiceUnavailable, payload)
+		return false
 	}
 	return true
 }
@@ -439,13 +446,17 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
 			return
 		}
-		if !checkReadiness(w, r, opts) {
-			return
-		}
 
 		payload := map[string]any{"ok": true}
 		if opts.projectionMaintainer != nil {
 			payload["projection_maintenance"] = opts.projectionMaintainer.Snapshot(r.Context(), time.Now().UTC())
+		}
+		if readinessPayload := readinessErrorPayload(r, opts); readinessPayload != nil {
+			for key, value := range readinessPayload {
+				payload[key] = value
+			}
+			writeJSON(w, http.StatusServiceUnavailable, payload)
+			return
 		}
 		writeJSON(w, http.StatusOK, payload)
 	})

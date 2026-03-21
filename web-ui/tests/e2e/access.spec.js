@@ -150,7 +150,8 @@ test.describe("Access management page", () => {
     await expect(
       page.getByRole("heading", { name: "Principals" }),
     ).toBeVisible();
-    await expect(page.getByText("actor-ops-ai")).toBeVisible();
+    await expect(page.getByText("agent-ops-ai", { exact: true })).toBeVisible();
+    await expect(page.getByText("Current session")).toBeVisible();
 
     await expect(page.getByRole("heading", { name: "Invites" })).toBeVisible();
     await expect(page.getByText("invite_abc123")).toBeVisible();
@@ -161,6 +162,77 @@ test.describe("Access management page", () => {
     await expect(
       page.getByText("Principal agent-ops-ai registered"),
     ).toBeVisible();
+  });
+
+  test("does not offer admin revoke for the signed-in principal", async ({
+    page,
+  }) => {
+    await seedAuthenticatedAgent(page);
+
+    await page.route("**/auth/bootstrap/status", async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          bootstrap_registration_available: false,
+        }),
+      });
+    });
+
+    await page.route("**/auth/principals*", async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          principals: [
+            {
+              agent_id: "agent-ops-ai",
+              actor_id: "actor-ops-ai",
+              username: "ops-ai",
+              principal_kind: "agent",
+              auth_method: "public_key",
+              revoked: false,
+              created_at: "2024-01-15T10:00:00Z",
+              updated_at: "2024-01-15T10:00:00Z",
+            },
+            {
+              agent_id: "agent-ci-bot",
+              actor_id: "actor-ci-bot",
+              username: "ci-bot",
+              principal_kind: "agent",
+              auth_method: "public_key",
+              revoked: false,
+              created_at: "2024-01-16T10:00:00Z",
+              updated_at: "2024-01-16T10:00:00Z",
+            },
+          ],
+        }),
+      });
+    });
+
+    await page.route(/\/auth\/invites(?:\/.*)?$/, async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ invites: [] }),
+      });
+    });
+
+    await page.route("**/auth/audit*", async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ events: [] }),
+      });
+    });
+
+    await page.goto("/local/access");
+
+    await expect(page.getByText("Current session")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Revoke", exact: true }),
+    ).toHaveCount(1);
+    await expect(page.getByText("agent-ci-bot")).toBeVisible();
   });
 
   test("creates an invite and reveals one-time token", async ({ page }) => {

@@ -680,23 +680,98 @@ func TestOpsHealthEndpointReportsProjectionMaintenanceErrors(t *testing.T) {
 	}
 }
 
+func TestOpsHealthEndpointKeepsDiagnosticsWhenReadinessFails(t *testing.T) {
+	t.Parallel()
+
+	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	contractPath := filepath.Join("..", "..", "..", "contracts", "oar-schema.yaml")
+	contract, err := schema.Load(contractPath)
+	if err != nil {
+		_ = workspace.Close()
+		t.Fatalf("load schema contract: %v", err)
+	}
+
+	registry := actors.NewStore(workspace.DB())
+	primitiveStore := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+	maintainer := NewProjectionMaintainer(ProjectionMaintainerConfig{
+		PrimitiveStore:    primitiveStore,
+		Contract:          contract,
+		StaleScanInterval: time.Second,
+		DirtyBatchSize:    20,
+		SystemActorID:     "oar-core",
+	})
+	handler := NewHandler(
+		contract.Version,
+		WithHealthCheck(func(context.Context) error { return errors.New("database unavailable") }),
+		WithActorRegistry(registry),
+		WithPrimitiveStore(primitiveStore),
+		WithSchemaContract(contract),
+		WithEnableDevActorMode(true),
+		WithAllowUnauthenticatedWrites(true),
+		WithProjectionMaintainer(maintainer),
+	)
+	server := httptest.NewServer(handler)
+	t.Cleanup(func() {
+		server.Close()
+		_ = workspace.Close()
+	})
+
+	resp, err := http.Get(server.URL + "/ops/health")
+	if err != nil {
+		t.Fatalf("GET /ops/health: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("unexpected /ops/health status: got %d want %d", resp.StatusCode, http.StatusServiceUnavailable)
+	}
+
+	var payload map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode /ops/health response: %v", err)
+	}
+	if ok, _ := payload["ok"].(bool); ok {
+		t.Fatalf("expected readiness failure payload, got %#v", payload)
+	}
+	errPayload, _ := payload["error"].(map[string]any)
+	if errPayload == nil || errPayload["code"] != "storage_unavailable" {
+		t.Fatalf("expected storage_unavailable error code, got %#v", payload["error"])
+	}
+	if _, ok := payload["projection_maintenance"]; !ok {
+		t.Fatalf("expected projection_maintenance payload even on readiness failure, got %#v", payload)
+	}
+}
+
 func getProjectionMaintenanceHealth(t *testing.T, baseURL string, path string) ProjectionMaintenanceSnapshot {
 	t.Helper()
+	status, payload := getProjectionMaintenanceHealthPayload(t, baseURL, path)
+	if status != http.StatusOK {
+		t.Fatalf("unexpected %s status: %d", path, status)
+	}
+	return payload.ProjectionMaintenance
+}
 
+func getProjectionMaintenanceHealthPayload(t *testing.T, baseURL string, path string) (int, struct {
+	OK                    bool                          `json:"ok"`
+	Error                 map[string]any                `json:"error"`
+	ProjectionMaintenance ProjectionMaintenanceSnapshot `json:"projection_maintenance"`
+}) {
+	t.Helper()
 	resp, err := http.Get(baseURL + path)
 	if err != nil {
 		t.Fatalf("GET %s: %v", path, err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("unexpected %s status: %d", path, resp.StatusCode)
-	}
 
 	var payload struct {
+		OK                    bool                          `json:"ok"`
+		Error                 map[string]any                `json:"error"`
 		ProjectionMaintenance ProjectionMaintenanceSnapshot `json:"projection_maintenance"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode %s response: %v", path, err)
 	}
-	return payload.ProjectionMaintenance
+	return resp.StatusCode, payload
 }

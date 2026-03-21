@@ -79,7 +79,10 @@ mkdir -p "$BACKUP_DB_DIR" "$BACKUP_BLOB_DIR" "$BACKUP_CONFIG_DIR" "$BACKUP_METAD
 
 sqlite3 "$DB_PATH" ".timeout 5000" ".backup '${BACKUP_DB_DIR}/state.sqlite'"
 copy_tree_contents "$BLOB_DIR" "$BACKUP_BLOB_DIR"
-if [[ "$INCLUDE_CONFIG_SECRETS" -eq 1 && -f "$ENV_FILE" ]]; then
+if [[ "$INCLUDE_CONFIG_SECRETS" -eq 1 && ! -f "$ENV_FILE" ]]; then
+  die "--include-config-secrets requires ${ENV_FILE} to exist"
+fi
+if [[ "$INCLUDE_CONFIG_SECRETS" -eq 1 ]]; then
   warn "--include-config-secrets specified: backup bundle will contain config/env.production with deployment secrets"
   cp "$ENV_FILE" "${BACKUP_CONFIG_DIR}/env.production"
   chmod 600 "${BACKUP_CONFIG_DIR}/env.production"

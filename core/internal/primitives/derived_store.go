@@ -382,7 +382,20 @@ func (s *Store) ListDerivedThreadProjectionDirtyEntries(ctx context.Context, lim
 	rows, err := s.db.QueryContext(
 		ctx,
 		`SELECT thread_id, dirty_at
-		   FROM derived_thread_dirty_queue
+		   FROM (
+				SELECT q.thread_id, q.dirty_at
+				  FROM derived_thread_dirty_queue q
+				UNION ALL
+				SELECT s.thread_id,
+				       COALESCE(NULLIF(TRIM(s.queued_at), ''), NULLIF(TRIM(s.started_at), ''), NULLIF(TRIM(s.last_error_at), ''), s.updated_at) AS dirty_at
+				  FROM thread_projection_refresh_status s
+				 WHERE s.desired_generation > s.materialized_generation
+				   AND NOT EXISTS (
+						SELECT 1
+						  FROM derived_thread_dirty_queue q
+						 WHERE q.thread_id = s.thread_id
+				   )
+		   )
 		  ORDER BY dirty_at ASC, thread_id ASC
 		  LIMIT ?`,
 		limit,
@@ -418,7 +431,20 @@ func (s *Store) GetDerivedThreadProjectionQueueStats(ctx context.Context) (Deriv
 	if err := s.db.QueryRowContext(
 		ctx,
 		`SELECT COUNT(*), MIN(dirty_at)
-		   FROM derived_thread_dirty_queue`,
+		   FROM (
+				SELECT q.thread_id, q.dirty_at
+				  FROM derived_thread_dirty_queue q
+				UNION ALL
+				SELECT s.thread_id,
+				       COALESCE(NULLIF(TRIM(s.queued_at), ''), NULLIF(TRIM(s.started_at), ''), NULLIF(TRIM(s.last_error_at), ''), s.updated_at) AS dirty_at
+				  FROM thread_projection_refresh_status s
+				 WHERE s.desired_generation > s.materialized_generation
+				   AND NOT EXISTS (
+						SELECT 1
+						  FROM derived_thread_dirty_queue q
+						 WHERE q.thread_id = s.thread_id
+				   )
+		   ) pending`,
 	).Scan(&stats.PendingCount, &oldestDirtyAt); err != nil {
 		return DerivedThreadProjectionQueueStats{}, fmt.Errorf("query derived thread dirty queue stats: %w", err)
 	}

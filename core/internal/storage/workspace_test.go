@@ -348,6 +348,66 @@ func TestWorkspaceMigrationBackfillsProjectionGenerationsConservatively(t *testi
 	assertColumnAbsent(t, workspace.DB(), "thread_projection_refresh_status", "in_progress")
 }
 
+func TestProjectionQueueStatsAndListingRecoverStrandedGenerationRows(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	store := primitives.NewStore(
+		workspace.DB(),
+		blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir),
+		workspace.Layout().ArtifactContentDir,
+	)
+
+	if _, err := workspace.DB().ExecContext(
+		ctx,
+		`INSERT INTO thread_projection_refresh_status(
+			thread_id,
+			desired_generation,
+			materialized_generation,
+			in_progress_generation,
+			queued_at,
+			started_at,
+			updated_at
+		) VALUES (?, 3, 2, 3, NULL, ?, ?)`,
+		"stranded-thread",
+		"2026-03-21T10:00:00Z",
+		"2026-03-21T10:00:00Z",
+	); err != nil {
+		t.Fatalf("seed stranded projection status: %v", err)
+	}
+
+	entries, err := store.ListDerivedThreadProjectionDirtyEntries(ctx, 10)
+	if err != nil {
+		t.Fatalf("list dirty projection entries: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected one recoverable dirty entry, got %#v", entries)
+	}
+	if entries[0].ThreadID != "stranded-thread" {
+		t.Fatalf("expected stranded thread to be returned, got %#v", entries[0])
+	}
+	if entries[0].DirtyAt != "2026-03-21T10:00:00Z" {
+		t.Fatalf("expected stranded dirty_at to come from status timestamps, got %#v", entries[0])
+	}
+
+	stats, err := store.GetDerivedThreadProjectionQueueStats(ctx)
+	if err != nil {
+		t.Fatalf("load queue stats: %v", err)
+	}
+	if stats.PendingCount != 1 {
+		t.Fatalf("expected pending count to include stranded status rows, got %#v", stats)
+	}
+	if stats.OldestDirtyAt != "2026-03-21T10:00:00Z" {
+		t.Fatalf("expected oldest dirty timestamp from stranded status row, got %#v", stats)
+	}
+}
+
 func assertHealthOK(t *testing.T, workspace *storage.Workspace) {
 	t.Helper()
 

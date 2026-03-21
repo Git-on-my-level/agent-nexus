@@ -51,6 +51,7 @@
   let auditState = $state({ status: SECTION_IDLE, error: "" });
 
   let canManageAccess = $derived(Boolean($authenticatedAgent));
+  let authenticatedAgentId = $derived($authenticatedAgent?.agent_id ?? "");
 
   $effect(() => {
     if (!canManageAccess) return;
@@ -214,6 +215,9 @@
   }
 
   function startPrincipalRevoke(principal) {
+    if (!principal?.agent_id || principal.agent_id === authenticatedAgentId) {
+      return;
+    }
     principalRevokeTarget = principal;
     principalRevokeConfirming = false;
     principalRevokeForcing = false;
@@ -400,6 +404,13 @@
     }
 
     return parts.join(" \u2022 ");
+  }
+
+  function isCurrentPrincipal(principal) {
+    return (
+      Boolean(principal?.agent_id) &&
+      principal.agent_id === authenticatedAgentId
+    );
   }
 </script>
 
@@ -741,7 +752,7 @@
                 <span class="text-[11px] text-[var(--ui-text-muted)]">
                   {formatTimestamp(principal.created_at)}
                 </span>
-                {#if !principal.revoked}
+                {#if !principal.revoked && !isCurrentPrincipal(principal)}
                   <button
                     class="shrink-0 cursor-pointer rounded px-2 py-1 text-[11px] font-medium text-red-400 hover:bg-red-400/10 disabled:opacity-50"
                     disabled={principalRevokeConfirming ||
@@ -751,6 +762,12 @@
                   >
                     Revoke
                   </button>
+                {:else if !principal.revoked}
+                  <span
+                    class="shrink-0 text-[11px] font-medium text-[var(--ui-text-muted)]"
+                  >
+                    Current session
+                  </span>
                 {/if}
               </div>
             {/each}
