@@ -357,6 +357,33 @@ func NewHandler(service *controlplane.Service, config Config) http.Handler {
 		writeJSON(w, http.StatusOK, map[string]any{"summary": summary})
 	})
 
+	mux.HandleFunc("GET /organizations/{organization_id}/workspace-inventory", func(w http.ResponseWriter, r *http.Request) {
+		identity, ok := requireIdentity(w, r, service)
+		if !ok {
+			return
+		}
+		pageReq, ok := parsePageRequest(w, r)
+		if !ok {
+			return
+		}
+		summary, err := service.GetUsageSummary(r.Context(), identity, r.PathValue("organization_id"))
+		if err != nil {
+			writeServiceError(w, err)
+			return
+		}
+		page, err := service.ListWorkspaceInventory(r.Context(), identity, r.PathValue("organization_id"), pageReq)
+		if err != nil {
+			writeServiceError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"organization_id": r.PathValue("organization_id"),
+			"summary":         summary,
+			"workspaces":      page.Items,
+			"next_cursor":     page.NextCursor,
+		})
+	})
+
 	mux.HandleFunc("GET /workspaces", func(w http.ResponseWriter, r *http.Request) {
 		identity, ok := requireIdentity(w, r, service)
 		if !ok {
@@ -380,16 +407,18 @@ func NewHandler(service *controlplane.Service, config Config) http.Handler {
 			return
 		}
 		var body struct {
-			OrganizationID string `json:"organization_id"`
-			Slug           string `json:"slug"`
-			DisplayName    string `json:"display_name"`
-			Region         string `json:"region"`
-			WorkspaceTier  string `json:"workspace_tier"`
+			OrganizationID           string `json:"organization_id"`
+			Slug                     string `json:"slug"`
+			DisplayName              string `json:"display_name"`
+			Region                   string `json:"region"`
+			WorkspaceTier            string `json:"workspace_tier"`
+			ServiceIdentityID        string `json:"service_identity_id"`
+			ServiceIdentityPublicKey string `json:"service_identity_public_key"`
 		}
 		if !decodeJSONBody(w, r, &body) {
 			return
 		}
-		workspace, job, err := service.CreateWorkspace(r.Context(), identity, body.OrganizationID, body.Slug, body.DisplayName, body.Region, body.WorkspaceTier)
+		workspace, job, err := service.CreateWorkspace(r.Context(), identity, body.OrganizationID, body.Slug, body.DisplayName, body.Region, body.WorkspaceTier, body.ServiceIdentityID, body.ServiceIdentityPublicKey)
 		if err != nil {
 			writeServiceError(w, err)
 			return
@@ -406,6 +435,28 @@ func NewHandler(service *controlplane.Service, config Config) http.Handler {
 			return
 		}
 		workspace, err := service.GetWorkspace(r.Context(), identity, r.PathValue("workspace_id"))
+		if err != nil {
+			writeServiceError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"workspace": workspace})
+	})
+
+	mux.HandleFunc("POST /workspaces/{workspace_id}/heartbeat", func(w http.ResponseWriter, r *http.Request) {
+		authorization := strings.TrimSpace(r.Header.Get("Authorization"))
+		token := authorization
+		if strings.HasPrefix(strings.ToLower(token), "bearer ") {
+			token = strings.TrimSpace(token[7:])
+		}
+		if token == "" {
+			writeError(w, http.StatusUnauthorized, "auth_required", "workspace service assertion is required")
+			return
+		}
+		var body controlplane.WorkspaceHeartbeatRequest
+		if !decodeJSONBody(w, r, &body) {
+			return
+		}
+		workspace, err := service.RecordWorkspaceHeartbeat(r.Context(), token, r.PathValue("workspace_id"), body)
 		if err != nil {
 			writeServiceError(w, err)
 			return
@@ -498,6 +549,64 @@ func NewHandler(service *controlplane.Service, config Config) http.Handler {
 			return
 		}
 		workspace, job, err := service.RestoreWorkspace(r.Context(), identity, r.PathValue("workspace_id"), body.BackupDir)
+		if err != nil {
+			writeServiceError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"workspace": workspace, "provisioning_job": job})
+	})
+
+	mux.HandleFunc("POST /workspaces/{workspace_id}/backups", func(w http.ResponseWriter, r *http.Request) {
+		identity, ok := requireIdentity(w, r, service)
+		if !ok {
+			return
+		}
+		var body struct {
+			ScheduleName  string `json:"schedule_name"`
+			RetentionDays int    `json:"retention_days"`
+		}
+		if !decodeJSONBody(w, r, &body) {
+			return
+		}
+		workspace, job, err := service.RunWorkspaceBackup(r.Context(), identity, r.PathValue("workspace_id"), body.ScheduleName, body.RetentionDays)
+		if err != nil {
+			writeServiceError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"workspace": workspace, "provisioning_job": job})
+	})
+
+	mux.HandleFunc("POST /workspaces/{workspace_id}/upgrade", func(w http.ResponseWriter, r *http.Request) {
+		identity, ok := requireIdentity(w, r, service)
+		if !ok {
+			return
+		}
+		var body struct {
+			DesiredVersion string `json:"desired_version"`
+		}
+		if !decodeJSONBody(w, r, &body) {
+			return
+		}
+		workspace, job, err := service.RunWorkspaceUpgrade(r.Context(), identity, r.PathValue("workspace_id"), body.DesiredVersion)
+		if err != nil {
+			writeServiceError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"workspace": workspace, "provisioning_job": job})
+	})
+
+	mux.HandleFunc("POST /workspaces/{workspace_id}/restore-drills", func(w http.ResponseWriter, r *http.Request) {
+		identity, ok := requireIdentity(w, r, service)
+		if !ok {
+			return
+		}
+		var body struct {
+			BackupDir string `json:"backup_dir"`
+		}
+		if !decodeJSONBody(w, r, &body) {
+			return
+		}
+		workspace, job, err := service.RunWorkspaceRestoreDrill(r.Context(), identity, r.PathValue("workspace_id"), body.BackupDir)
 		if err != nil {
 			writeServiceError(w, err)
 			return

@@ -54,26 +54,36 @@ type OrganizationInvite struct {
 }
 
 type Workspace struct {
-	ID                  string `json:"id"`
-	OrganizationID      string `json:"organization_id"`
-	Slug                string `json:"slug"`
-	DisplayName         string `json:"display_name"`
-	Status              string `json:"status"`
-	Region              string `json:"region"`
-	WorkspaceTier       string `json:"workspace_tier"`
-	WorkspacePath       string `json:"workspace_path"`
-	BaseURL             string `json:"base_url"`
-	PublicOrigin        string `json:"public_origin"`
-	CoreOrigin          string `json:"core_origin"`
-	DeploymentRoot      string `json:"deployment_root"`
-	InstanceID          string `json:"instance_id"`
-	DesiredState        string `json:"desired_state"`
-	QuotaConfigRef      string `json:"quota_config_ref"`
-	QuotaEnvelopeRef    string `json:"quota_envelope_ref"`
-	DeployedVersion     string `json:"deployed_version"`
-	RoutingManifestPath string `json:"routing_manifest_path"`
-	CreatedAt           string `json:"created_at"`
-	UpdatedAt           string `json:"updated_at"`
+	ID                                    string         `json:"id"`
+	OrganizationID                        string         `json:"organization_id"`
+	Slug                                  string         `json:"slug"`
+	DisplayName                           string         `json:"display_name"`
+	Status                                string         `json:"status"`
+	Region                                string         `json:"region"`
+	WorkspaceTier                         string         `json:"workspace_tier"`
+	WorkspacePath                         string         `json:"workspace_path"`
+	BaseURL                               string         `json:"base_url"`
+	PublicOrigin                          string         `json:"public_origin"`
+	CoreOrigin                            string         `json:"core_origin"`
+	DeploymentRoot                        string         `json:"deployment_root"`
+	InstanceID                            string         `json:"instance_id"`
+	ServiceIdentityID                     string         `json:"service_identity_id,omitempty"`
+	ServiceIdentityPublicKey              string         `json:"service_identity_public_key,omitempty"`
+	DesiredState                          string         `json:"desired_state"`
+	DesiredVersion                        string         `json:"desired_version"`
+	QuotaConfigRef                        string         `json:"quota_config_ref"`
+	QuotaEnvelopeRef                      string         `json:"quota_envelope_ref"`
+	DeployedVersion                       string         `json:"deployed_version"`
+	RoutingManifestPath                   string         `json:"routing_manifest_path"`
+	LastHeartbeatAt                       *string        `json:"last_heartbeat_at,omitempty"`
+	HeartbeatVersion                      string         `json:"heartbeat_version,omitempty"`
+	HeartbeatBuild                        string         `json:"heartbeat_build,omitempty"`
+	HeartbeatHealthSummary                map[string]any `json:"heartbeat_health_summary,omitempty"`
+	HeartbeatProjectionMaintenanceSummary map[string]any `json:"heartbeat_projection_maintenance_summary,omitempty"`
+	HeartbeatUsageSummary                 map[string]any `json:"heartbeat_usage_summary,omitempty"`
+	LastSuccessfulBackupAt                *string        `json:"last_successful_backup_at,omitempty"`
+	CreatedAt                             string         `json:"created_at"`
+	UpdatedAt                             string         `json:"updated_at"`
 }
 
 type ProvisioningJob struct {
@@ -106,9 +116,11 @@ type WorkspaceRoutingManifest struct {
 	InstanceID          string `json:"instance_id"`
 	CurrentState        string `json:"current_state"`
 	DesiredState        string `json:"desired_state"`
+	CurrentVersion      string `json:"current_version"`
+	DesiredVersion      string `json:"desired_version"`
+	DeployedVersion     string `json:"deployed_version,omitempty"`
 	QuotaConfigRef      string `json:"quota_config_ref"`
 	QuotaEnvelopeRef    string `json:"quota_envelope_ref"`
-	DeployedVersion     string `json:"deployed_version"`
 	RoutingManifestPath string `json:"routing_manifest_path"`
 	GeneratedAt         string `json:"generated_at"`
 }
@@ -156,6 +168,50 @@ type UsageSummary struct {
 	Plan           UsagePlan  `json:"plan"`
 	Usage          UsageMeter `json:"usage"`
 	Quota          UsageQuota `json:"quota"`
+}
+
+type WorkspaceUsageSummary struct {
+	Usage       WorkspaceUsage `json:"usage"`
+	Quota       WorkspaceQuota `json:"quota"`
+	GeneratedAt string         `json:"generated_at"`
+}
+
+type WorkspaceUsage struct {
+	BlobBytes   int64 `json:"blob_bytes"`
+	BlobObjects int64 `json:"blob_objects"`
+	Artifacts   int64 `json:"artifact_count"`
+	Documents   int64 `json:"document_count"`
+	Revisions   int64 `json:"document_revision_count"`
+}
+
+type WorkspaceQuota struct {
+	MaxBlobBytes         int64 `json:"max_blob_bytes"`
+	MaxArtifacts         int64 `json:"max_artifacts"`
+	MaxDocuments         int64 `json:"max_documents"`
+	MaxDocumentRevisions int64 `json:"max_document_revisions"`
+	MaxUploadBytes       int64 `json:"max_upload_bytes"`
+}
+
+type WorkspaceHeartbeatRequest struct {
+	Version                      string         `json:"version"`
+	Build                        string         `json:"build"`
+	HealthSummary                map[string]any `json:"health_summary"`
+	ProjectionMaintenanceSummary map[string]any `json:"projection_maintenance_summary"`
+	UsageSummary                 map[string]any `json:"usage_summary"`
+	LastSuccessfulBackupAt       *string        `json:"last_successful_backup_at,omitempty"`
+}
+
+type WorkspaceInventoryItem struct {
+	Workspace          Workspace         `json:"workspace"`
+	OpenFailedJobs     []ProvisioningJob `json:"open_failed_jobs"`
+	OpenFailedJobCount int               `json:"open_failed_job_count"`
+}
+
+type WorkspaceInventoryResponse struct {
+	OrganizationID string                   `json:"organization_id"`
+	Summary        UsageSummary             `json:"summary"`
+	Workspaces     []WorkspaceInventoryItem `json:"workspaces"`
+	NextCursor     string                   `json:"next_cursor,omitempty"`
 }
 
 type AuditEvent struct {

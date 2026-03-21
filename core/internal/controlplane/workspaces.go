@@ -19,7 +19,7 @@ func (s *Service) ListWorkspaces(ctx context.Context, identity RequestIdentity, 
 		return Page[Workspace]{}, invalidRequest("cursor is invalid")
 	}
 
-	query := `SELECT w.id, w.organization_id, w.slug, w.display_name, w.status, w.region, w.workspace_tier, w.workspace_path, w.base_url, w.public_origin, w.core_origin, w.deployment_root, w.instance_id, w.desired_state, w.quota_config_ref, w.quota_envelope_ref, w.deployed_version, w.routing_manifest_path, w.created_at, w.updated_at
+	query := `SELECT w.id, w.organization_id, w.slug, w.display_name, w.status, w.region, w.workspace_tier, w.workspace_path, w.base_url, w.public_origin, w.core_origin, w.deployment_root, w.instance_id, w.service_identity_id, w.service_identity_public_key, w.desired_state, w.desired_version, w.quota_config_ref, w.quota_envelope_ref, w.deployed_version, w.routing_manifest_path, w.last_heartbeat_at, w.heartbeat_version, w.heartbeat_build, w.heartbeat_health_summary_json, w.heartbeat_projection_maintenance_summary_json, w.heartbeat_usage_summary_json, w.last_successful_backup_at, w.created_at, w.updated_at
 		FROM workspaces w
 		JOIN organization_memberships m ON m.organization_id = w.organization_id
 		WHERE m.account_id = ? AND m.status = 'active'`
@@ -57,7 +57,7 @@ func (s *Service) ListWorkspaces(ctx context.Context, identity RequestIdentity, 
 	}), nil
 }
 
-func (s *Service) CreateWorkspace(ctx context.Context, identity RequestIdentity, organizationID string, slug string, displayName string, region string, workspaceTier string) (Workspace, ProvisioningJob, error) {
+func (s *Service) CreateWorkspace(ctx context.Context, identity RequestIdentity, organizationID string, slug string, displayName string, region string, workspaceTier string, serviceIdentityID string, serviceIdentityPublicKey string) (Workspace, ProvisioningJob, error) {
 	organization, membership, err := s.requireOrganizationAccess(ctx, identity, organizationID, false)
 	if err != nil {
 		return Workspace{}, ProvisioningJob{}, err
@@ -80,6 +80,19 @@ func (s *Service) CreateWorkspace(ctx context.Context, identity RequestIdentity,
 	if err := validateWorkspaceTier(workspaceTier); err != nil {
 		return Workspace{}, ProvisioningJob{}, err
 	}
+	serviceIdentityID = strings.TrimSpace(serviceIdentityID)
+	serviceIdentityPublicKey = strings.TrimSpace(serviceIdentityPublicKey)
+	if serviceIdentityID == "" && serviceIdentityPublicKey != "" {
+		return Workspace{}, ProvisioningJob{}, invalidRequest("service_identity_id is required when service_identity_public_key is provided")
+	}
+	if serviceIdentityID != "" && serviceIdentityPublicKey == "" {
+		return Workspace{}, ProvisioningJob{}, invalidRequest("service_identity_public_key is required when service_identity_id is provided")
+	}
+	if serviceIdentityPublicKey != "" {
+		if _, err := controlplaneauth.ParseEd25519PublicKeyBase64(serviceIdentityPublicKey); err != nil {
+			return Workspace{}, ProvisioningJob{}, invalidRequest("service_identity_public_key is invalid")
+		}
+	}
 	usageSummary, err := s.GetUsageSummary(ctx, identity, organizationID)
 	if err != nil {
 		return Workspace{}, ProvisioningJob{}, err
@@ -93,22 +106,25 @@ func (s *Service) CreateWorkspace(ctx context.Context, identity RequestIdentity,
 	workspacePath := "/" + slug
 	workspaceBaseURL := formatTemplateURL(s.workspaceURLTemplate, strings.TrimPrefix(workspacePath, "/"))
 	workspace := Workspace{
-		ID:               workspaceID,
-		OrganizationID:   organizationID,
-		Slug:             slug,
-		DisplayName:      displayName,
-		Status:           "provisioning",
-		Region:           region,
-		WorkspaceTier:    workspaceTier,
-		WorkspacePath:    workspacePath,
-		BaseURL:          workspaceBaseURL,
-		PublicOrigin:     s.workspacePublicOrigin(Workspace{BaseURL: workspaceBaseURL}),
-		DesiredState:     "ready",
-		QuotaConfigRef:   "plan:" + organization.PlanTier,
-		QuotaEnvelopeRef: "organization:" + organization.ID + ":quota",
-		DeployedVersion:  hostedInstanceVersion,
-		CreatedAt:        nowText,
-		UpdatedAt:        nowText,
+		ID:                       workspaceID,
+		OrganizationID:           organizationID,
+		Slug:                     slug,
+		DisplayName:              displayName,
+		Status:                   "provisioning",
+		Region:                   region,
+		WorkspaceTier:            workspaceTier,
+		WorkspacePath:            workspacePath,
+		BaseURL:                  workspaceBaseURL,
+		PublicOrigin:             s.workspacePublicOrigin(Workspace{BaseURL: workspaceBaseURL}),
+		DesiredState:             "ready",
+		DesiredVersion:           hostedInstanceVersion,
+		QuotaConfigRef:           "plan:" + organization.PlanTier,
+		QuotaEnvelopeRef:         "organization:" + organization.ID + ":quota",
+		DeployedVersion:          hostedInstanceVersion,
+		ServiceIdentityID:        serviceIdentityID,
+		ServiceIdentityPublicKey: serviceIdentityPublicKey,
+		CreatedAt:                nowText,
+		UpdatedAt:                nowText,
 	}
 	workspace.CoreOrigin = s.workspaceCoreOrigin(workspace)
 	workspace.InstanceID = workspace.ID
@@ -149,9 +165,12 @@ func (s *Service) CreateWorkspace(ctx context.Context, identity RequestIdentity,
 		ctx,
 		`INSERT INTO workspaces(
 			id, organization_id, slug, display_name, status, region, workspace_tier, workspace_path, base_url,
-			public_origin, core_origin, deployment_root, instance_id, desired_state, quota_config_ref, quota_envelope_ref,
-			deployed_version, routing_manifest_path, routing_manifest_json, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			public_origin, core_origin, deployment_root, instance_id, service_identity_id, service_identity_public_key,
+			desired_state, desired_version, quota_config_ref, quota_envelope_ref, deployed_version, routing_manifest_path,
+			last_heartbeat_at, heartbeat_version, heartbeat_build, heartbeat_health_summary_json,
+			heartbeat_projection_maintenance_summary_json, heartbeat_usage_summary_json, last_successful_backup_at,
+			routing_manifest_json, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		workspace.ID,
 		workspace.OrganizationID,
 		workspace.Slug,
@@ -165,11 +184,21 @@ func (s *Service) CreateWorkspace(ctx context.Context, identity RequestIdentity,
 		workspace.CoreOrigin,
 		workspace.DeploymentRoot,
 		workspace.InstanceID,
+		workspace.ServiceIdentityID,
+		workspace.ServiceIdentityPublicKey,
 		workspace.DesiredState,
+		workspace.DesiredVersion,
 		workspace.QuotaConfigRef,
 		workspace.QuotaEnvelopeRef,
 		workspace.DeployedVersion,
 		workspace.RoutingManifestPath,
+		nil,
+		"",
+		"",
+		"{}",
+		"{}",
+		"{}",
+		nil,
 		"{}",
 		workspace.CreatedAt,
 		workspace.UpdatedAt,
@@ -181,6 +210,9 @@ func (s *Service) CreateWorkspace(ctx context.Context, identity RequestIdentity,
 	}
 	if err := s.insertProvisioningJob(ctx, tx, job); err != nil {
 		return Workspace{}, ProvisioningJob{}, internalError("failed to create provisioning job")
+	}
+	if err := s.insertWorkspaceBackupScheduleTx(ctx, tx, workspace, nowText); err != nil {
+		return Workspace{}, ProvisioningJob{}, internalError("failed to create workspace backup schedule")
 	}
 	if err := insertAuditEventTx(ctx, tx, AuditEvent{
 		ID:             "audit_" + uuid.NewString(),
@@ -446,13 +478,18 @@ func (s *Service) ExchangeWorkspaceSession(ctx context.Context, workspaceID stri
 	}
 
 	var (
-		launchID       string
-		accountID      string
-		returnPath     sql.NullString
-		organizationID string
-		workspace      Workspace
-		expiresAt      string
-		consumedAt     sql.NullString
+		launchID                              string
+		accountID                             string
+		returnPath                            sql.NullString
+		organizationID                        string
+		workspace                             Workspace
+		expiresAt                             string
+		consumedAt                            sql.NullString
+		lastHeartbeatAt                       sql.NullString
+		lastSuccessfulBackupAt                sql.NullString
+		heartbeatHealthSummary                sql.NullString
+		heartbeatProjectionMaintenanceSummary sql.NullString
+		heartbeatUsageSummary                 sql.NullString
 	)
 	err = tx.QueryRowContext(
 		ctx,
@@ -475,11 +512,21 @@ func (s *Service) ExchangeWorkspaceSession(ctx context.Context, workspaceID stri
 			w.core_origin,
 			w.deployment_root,
 			w.instance_id,
+			w.service_identity_id,
+			w.service_identity_public_key,
 			w.desired_state,
+			w.desired_version,
 			w.quota_config_ref,
 			w.quota_envelope_ref,
 			w.deployed_version,
 			w.routing_manifest_path,
+			w.last_heartbeat_at,
+			w.heartbeat_version,
+			w.heartbeat_build,
+			w.heartbeat_health_summary_json,
+			w.heartbeat_projection_maintenance_summary_json,
+			w.heartbeat_usage_summary_json,
+			w.last_successful_backup_at,
 			w.created_at,
 			w.updated_at
 		 FROM launch_sessions l
@@ -506,11 +553,21 @@ func (s *Service) ExchangeWorkspaceSession(ctx context.Context, workspaceID stri
 		&workspace.CoreOrigin,
 		&workspace.DeploymentRoot,
 		&workspace.InstanceID,
+		&workspace.ServiceIdentityID,
+		&workspace.ServiceIdentityPublicKey,
 		&workspace.DesiredState,
+		&workspace.DesiredVersion,
 		&workspace.QuotaConfigRef,
 		&workspace.QuotaEnvelopeRef,
 		&workspace.DeployedVersion,
 		&workspace.RoutingManifestPath,
+		&lastHeartbeatAt,
+		&workspace.HeartbeatVersion,
+		&workspace.HeartbeatBuild,
+		&heartbeatHealthSummary,
+		&heartbeatProjectionMaintenanceSummary,
+		&heartbeatUsageSummary,
+		&lastSuccessfulBackupAt,
 		&workspace.CreatedAt,
 		&workspace.UpdatedAt,
 	)
@@ -521,6 +578,11 @@ func (s *Service) ExchangeWorkspaceSession(ctx context.Context, workspaceID stri
 		return Workspace{}, WorkspaceGrant{}, internalError("failed to load launch session")
 	}
 	workspace.OrganizationID = organizationID
+	workspace.LastHeartbeatAt = nullableString(lastHeartbeatAt)
+	workspace.LastSuccessfulBackupAt = nullableString(lastSuccessfulBackupAt)
+	workspace.HeartbeatHealthSummary = decodeJSONMap(heartbeatHealthSummary)
+	workspace.HeartbeatProjectionMaintenanceSummary = decodeJSONMap(heartbeatProjectionMaintenanceSummary)
+	workspace.HeartbeatUsageSummary = decodeJSONMap(heartbeatUsageSummary)
 	if workspace.Status != "ready" {
 		return Workspace{}, WorkspaceGrant{}, &APIError{Status: http.StatusConflict, Code: "workspace_not_ready", Message: "workspace is not ready for launch"}
 	}
@@ -590,7 +652,7 @@ func (s *Service) requireWorkspaceAccess(ctx context.Context, identity RequestId
 	row := s.db.QueryRowContext(
 		ctx,
 		`SELECT
-			w.id, w.organization_id, w.slug, w.display_name, w.status, w.region, w.workspace_tier, w.workspace_path, w.base_url, w.public_origin, w.core_origin, w.deployment_root, w.instance_id, w.desired_state, w.quota_config_ref, w.quota_envelope_ref, w.deployed_version, w.routing_manifest_path, w.created_at, w.updated_at,
+			w.id, w.organization_id, w.slug, w.display_name, w.status, w.region, w.workspace_tier, w.workspace_path, w.base_url, w.public_origin, w.core_origin, w.deployment_root, w.instance_id, w.service_identity_id, w.service_identity_public_key, w.desired_state, w.desired_version, w.quota_config_ref, w.quota_envelope_ref, w.deployed_version, w.routing_manifest_path, w.last_heartbeat_at, w.heartbeat_version, w.heartbeat_build, w.heartbeat_health_summary_json, w.heartbeat_projection_maintenance_summary_json, w.heartbeat_usage_summary_json, w.last_successful_backup_at, w.created_at, w.updated_at,
 			m.id, m.account_id, m.role, m.status, m.created_at
 		 FROM workspaces w
 		 JOIN organization_memberships m ON m.organization_id = w.organization_id
@@ -599,8 +661,13 @@ func (s *Service) requireWorkspaceAccess(ctx context.Context, identity RequestId
 		identity.Account.ID,
 	)
 	var (
-		workspace  Workspace
-		membership Membership
+		workspace                             Workspace
+		membership                            Membership
+		lastHeartbeatAt                       sql.NullString
+		lastSuccessfulBackupAt                sql.NullString
+		heartbeatHealthSummary                sql.NullString
+		heartbeatProjectionMaintenanceSummary sql.NullString
+		heartbeatUsageSummary                 sql.NullString
 	)
 	if err := row.Scan(
 		&workspace.ID,
@@ -616,11 +683,21 @@ func (s *Service) requireWorkspaceAccess(ctx context.Context, identity RequestId
 		&workspace.CoreOrigin,
 		&workspace.DeploymentRoot,
 		&workspace.InstanceID,
+		&workspace.ServiceIdentityID,
+		&workspace.ServiceIdentityPublicKey,
 		&workspace.DesiredState,
+		&workspace.DesiredVersion,
 		&workspace.QuotaConfigRef,
 		&workspace.QuotaEnvelopeRef,
 		&workspace.DeployedVersion,
 		&workspace.RoutingManifestPath,
+		&lastHeartbeatAt,
+		&workspace.HeartbeatVersion,
+		&workspace.HeartbeatBuild,
+		&heartbeatHealthSummary,
+		&heartbeatProjectionMaintenanceSummary,
+		&heartbeatUsageSummary,
+		&lastSuccessfulBackupAt,
 		&workspace.CreatedAt,
 		&workspace.UpdatedAt,
 		&membership.ID,
@@ -634,6 +711,11 @@ func (s *Service) requireWorkspaceAccess(ctx context.Context, identity RequestId
 		}
 		return Workspace{}, Membership{}, internalError("failed to load workspace access")
 	}
+	workspace.LastHeartbeatAt = nullableString(lastHeartbeatAt)
+	workspace.LastSuccessfulBackupAt = nullableString(lastSuccessfulBackupAt)
+	workspace.HeartbeatHealthSummary = decodeJSONMap(heartbeatHealthSummary)
+	workspace.HeartbeatProjectionMaintenanceSummary = decodeJSONMap(heartbeatProjectionMaintenanceSummary)
+	workspace.HeartbeatUsageSummary = decodeJSONMap(heartbeatUsageSummary)
 	membership.OrganizationID = workspace.OrganizationID
 	if membership.Status != "active" {
 		return Workspace{}, Membership{}, accessDenied("workspace membership is disabled")

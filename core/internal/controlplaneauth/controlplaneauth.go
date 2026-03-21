@@ -14,8 +14,9 @@ const (
 	HumanAuthModeWorkspaceLocal = "workspace_local"
 	HumanAuthModeControlPlane   = "control_plane"
 
-	GrantTypeWorkspaceHuman = "workspace_human"
-	DefaultClientAssertion  = 5 * time.Minute
+	GrantTypeWorkspaceHuman           = "workspace_human"
+	WorkspaceServiceAssertionAudience = "oar-control-plane"
+	DefaultClientAssertion            = 5 * time.Minute
 )
 
 type WorkspaceHumanClaims struct {
@@ -92,6 +93,39 @@ type WorkspaceServiceIdentity struct {
 	id         string
 	privateKey ed25519.PrivateKey
 	now        func() time.Time
+}
+
+type WorkspaceServiceAssertionClaims struct {
+	WorkspaceID    string `json:"workspace_id"`
+	OrganizationID string `json:"organization_id,omitempty"`
+	Purpose        string `json:"purpose,omitempty"`
+	jwt.RegisteredClaims
+}
+
+type WorkspaceServiceAssertionVerifierConfig struct {
+	IdentityID  string
+	WorkspaceID string
+	Audience    string
+	PublicKey   ed25519.PublicKey
+	Now         func() time.Time
+}
+
+type WorkspaceServiceAssertionIdentity struct {
+	Issuer         string
+	Subject        string
+	Audience       string
+	WorkspaceID    string
+	OrganizationID string
+	Purpose        string
+	ExpiresAt      string
+}
+
+type WorkspaceServiceAssertionVerifier struct {
+	identityID  string
+	workspaceID string
+	audience    string
+	publicKey   ed25519.PublicKey
+	now         func() time.Time
 }
 
 func NewWorkspaceHumanGrantSigner(config WorkspaceHumanGrantSignerConfig) (*WorkspaceHumanGrantSigner, error) {
@@ -312,6 +346,82 @@ func (i *WorkspaceServiceIdentity) SignClientAssertion(audience string, ttl time
 		return "", "", fmt.Errorf("sign client assertion: %w", err)
 	}
 	return signed, expiresAt.Format(time.RFC3339Nano), nil
+}
+
+func NewWorkspaceServiceAssertionVerifier(config WorkspaceServiceAssertionVerifierConfig) (*WorkspaceServiceAssertionVerifier, error) {
+	if strings.TrimSpace(config.IdentityID) == "" {
+		return nil, fmt.Errorf("identity_id is required")
+	}
+	if strings.TrimSpace(config.WorkspaceID) == "" {
+		return nil, fmt.Errorf("workspace_id is required")
+	}
+	if strings.TrimSpace(config.Audience) == "" {
+		return nil, fmt.Errorf("audience is required")
+	}
+	if len(config.PublicKey) != ed25519.PublicKeySize {
+		return nil, fmt.Errorf("public key must be %d bytes", ed25519.PublicKeySize)
+	}
+	nowFn := config.Now
+	if nowFn == nil {
+		nowFn = func() time.Time { return time.Now().UTC() }
+	}
+	return &WorkspaceServiceAssertionVerifier{
+		identityID:  strings.TrimSpace(config.IdentityID),
+		workspaceID: strings.TrimSpace(config.WorkspaceID),
+		audience:    strings.TrimSpace(config.Audience),
+		publicKey:   append(ed25519.PublicKey(nil), config.PublicKey...),
+		now:         nowFn,
+	}, nil
+}
+
+func (v *WorkspaceServiceAssertionVerifier) Verify(tokenString string) (WorkspaceServiceAssertionIdentity, error) {
+	if v == nil {
+		return WorkspaceServiceAssertionIdentity{}, fmt.Errorf("workspace service verifier is not configured")
+	}
+	claims := WorkspaceServiceAssertionClaims{}
+	token, err := jwt.ParseWithClaims(
+		strings.TrimSpace(tokenString),
+		&claims,
+		func(token *jwt.Token) (any, error) {
+			if token == nil || token.Method == nil || token.Method.Alg() != jwt.SigningMethodEdDSA.Alg() {
+				return nil, fmt.Errorf("unexpected signing method")
+			}
+			return v.publicKey, nil
+		},
+		jwt.WithAudience(v.audience),
+		jwt.WithIssuer(v.identityID),
+		jwt.WithTimeFunc(v.now),
+	)
+	if err != nil {
+		return WorkspaceServiceAssertionIdentity{}, fmt.Errorf("verify workspace service assertion: %w", err)
+	}
+	if token == nil || !token.Valid {
+		return WorkspaceServiceAssertionIdentity{}, fmt.Errorf("workspace service assertion is invalid")
+	}
+	if strings.TrimSpace(claims.Subject) != v.identityID {
+		return WorkspaceServiceAssertionIdentity{}, fmt.Errorf("workspace service assertion has the wrong subject")
+	}
+	if strings.TrimSpace(claims.WorkspaceID) != v.workspaceID {
+		return WorkspaceServiceAssertionIdentity{}, fmt.Errorf("workspace service assertion is scoped to the wrong workspace")
+	}
+	if strings.TrimSpace(claims.Purpose) != "heartbeat" {
+		return WorkspaceServiceAssertionIdentity{}, fmt.Errorf("workspace service assertion has invalid purpose")
+	}
+
+	expiresAt := ""
+	if claims.ExpiresAt != nil {
+		expiresAt = claims.ExpiresAt.Time.UTC().Format(time.RFC3339Nano)
+	}
+
+	return WorkspaceServiceAssertionIdentity{
+		Issuer:         claims.Issuer,
+		Subject:        claims.Subject,
+		Audience:       v.audience,
+		WorkspaceID:    claims.WorkspaceID,
+		OrganizationID: strings.TrimSpace(claims.OrganizationID),
+		Purpose:        strings.TrimSpace(claims.Purpose),
+		ExpiresAt:      expiresAt,
+	}, nil
 }
 
 func ParseEd25519PublicKeyBase64(raw string) (ed25519.PublicKey, error) {

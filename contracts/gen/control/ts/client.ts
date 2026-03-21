@@ -365,7 +365,8 @@ export const commandRegistry: CommandSpec[] = [
       "control.organizations.memberships.list",
       "control.organizations.memberships.update",
       "control.organizations.update",
-      "control.organizations.usage-summary.get"
+      "control.organizations.usage-summary.get",
+      "control.organizations.workspace-inventory.list"
     ],
     "go_method": "ControlOrganizationsCreate",
     "ts_method": "controlOrganizationsCreate"
@@ -414,7 +415,8 @@ export const commandRegistry: CommandSpec[] = [
       "control.organizations.memberships.list",
       "control.organizations.memberships.update",
       "control.organizations.update",
-      "control.organizations.usage-summary.get"
+      "control.organizations.usage-summary.get",
+      "control.organizations.workspace-inventory.list"
     ],
     "go_method": "ControlOrganizationsGet",
     "ts_method": "controlOrganizationsGet"
@@ -484,7 +486,8 @@ export const commandRegistry: CommandSpec[] = [
       "control.organizations.memberships.list",
       "control.organizations.memberships.update",
       "control.organizations.update",
-      "control.organizations.usage-summary.get"
+      "control.organizations.usage-summary.get",
+      "control.organizations.workspace-inventory.list"
     ],
     "go_method": "ControlOrganizationsInvitesCreate",
     "ts_method": "controlOrganizationsInvitesCreate"
@@ -534,7 +537,8 @@ export const commandRegistry: CommandSpec[] = [
       "control.organizations.memberships.list",
       "control.organizations.memberships.update",
       "control.organizations.update",
-      "control.organizations.usage-summary.get"
+      "control.organizations.usage-summary.get",
+      "control.organizations.workspace-inventory.list"
     ],
     "go_method": "ControlOrganizationsInvitesList",
     "ts_method": "controlOrganizationsInvitesList"
@@ -585,7 +589,8 @@ export const commandRegistry: CommandSpec[] = [
       "control.organizations.memberships.list",
       "control.organizations.memberships.update",
       "control.organizations.update",
-      "control.organizations.usage-summary.get"
+      "control.organizations.usage-summary.get",
+      "control.organizations.workspace-inventory.list"
     ],
     "go_method": "ControlOrganizationsInvitesRevoke",
     "ts_method": "controlOrganizationsInvitesRevoke"
@@ -630,7 +635,8 @@ export const commandRegistry: CommandSpec[] = [
       "control.organizations.memberships.list",
       "control.organizations.memberships.update",
       "control.organizations.update",
-      "control.organizations.usage-summary.get"
+      "control.organizations.usage-summary.get",
+      "control.organizations.workspace-inventory.list"
     ],
     "go_method": "ControlOrganizationsList",
     "ts_method": "controlOrganizationsList"
@@ -680,7 +686,8 @@ export const commandRegistry: CommandSpec[] = [
       "control.organizations.list",
       "control.organizations.memberships.update",
       "control.organizations.update",
-      "control.organizations.usage-summary.get"
+      "control.organizations.usage-summary.get",
+      "control.organizations.workspace-inventory.list"
     ],
     "go_method": "ControlOrganizationsMembershipsList",
     "ts_method": "controlOrganizationsMembershipsList"
@@ -755,7 +762,8 @@ export const commandRegistry: CommandSpec[] = [
       "control.organizations.list",
       "control.organizations.memberships.list",
       "control.organizations.update",
-      "control.organizations.usage-summary.get"
+      "control.organizations.usage-summary.get",
+      "control.organizations.workspace-inventory.list"
     ],
     "go_method": "ControlOrganizationsMembershipsUpdate",
     "ts_method": "controlOrganizationsMembershipsUpdate"
@@ -833,7 +841,8 @@ export const commandRegistry: CommandSpec[] = [
       "control.organizations.list",
       "control.organizations.memberships.list",
       "control.organizations.memberships.update",
-      "control.organizations.usage-summary.get"
+      "control.organizations.usage-summary.get",
+      "control.organizations.workspace-inventory.list"
     ],
     "go_method": "ControlOrganizationsUpdate",
     "ts_method": "controlOrganizationsUpdate"
@@ -883,10 +892,61 @@ export const commandRegistry: CommandSpec[] = [
       "control.organizations.list",
       "control.organizations.memberships.list",
       "control.organizations.memberships.update",
-      "control.organizations.update"
+      "control.organizations.update",
+      "control.organizations.workspace-inventory.list"
     ],
     "go_method": "ControlOrganizationsUsageSummaryGet",
     "ts_method": "controlOrganizationsUsageSummaryGet"
+  },
+  {
+    "command_id": "control.organizations.workspace-inventory.list",
+    "cli_path": "organizations workspace-inventory list",
+    "group": "organizations",
+    "method": "GET",
+    "path": "/organizations/{organization_id}/workspace-inventory",
+    "operation_id": "listControlWorkspaceInventory",
+    "summary": "List workspace fleet inventory",
+    "why": "Inspect workspace health, heartbeats, backups, and failed jobs from one support-friendly surface.",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ organization_id, summary, workspaces, next_cursor }`.",
+    "error_codes": [
+      "auth_required",
+      "invalid_token"
+    ],
+    "concepts": [
+      "workspaces",
+      "inventory",
+      "operations"
+    ],
+    "stability": "beta",
+    "surface": "utility",
+    "agent_notes": "Safe and idempotent. The inventory is paginated by workspace creation order.",
+    "examples": [
+      {
+        "title": "List workspace inventory",
+        "command": "oar api call --base-url https://control.oar.example --method GET --path '/organizations/org_123/workspace-inventory' --header 'Authorization: Bearer \u003ccontrol-session\u003e'"
+      }
+    ],
+    "path_params": [
+      "organization_id"
+    ],
+    "adjacent_commands": [
+      "control.organizations.create",
+      "control.organizations.get",
+      "control.organizations.invites.create",
+      "control.organizations.invites.list",
+      "control.organizations.invites.revoke",
+      "control.organizations.list",
+      "control.organizations.memberships.list",
+      "control.organizations.memberships.update",
+      "control.organizations.update",
+      "control.organizations.usage-summary.get"
+    ],
+    "go_method": "ControlOrganizationsWorkspaceInventoryList",
+    "ts_method": "controlOrganizationsWorkspaceInventoryList"
   },
   {
     "command_id": "control.provisioning.jobs.get",
@@ -926,6 +986,76 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "go_method": "ControlProvisioningJobsGet",
     "ts_method": "controlProvisioningJobsGet"
+  },
+  {
+    "command_id": "control.workspaces.backups.create",
+    "cli_path": "workspaces backups create",
+    "group": "workspaces",
+    "method": "POST",
+    "path": "/workspaces/{workspace_id}/backups",
+    "operation_id": "createControlWorkspaceBackup",
+    "summary": "Create workspace backup job",
+    "why": "Queue a durable backup job for the workspace and record the resulting backup history and retention metadata.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ workspace, provisioning_job }`.",
+    "error_codes": [
+      "auth_required",
+      "invalid_token",
+      "invalid_json",
+      "invalid_request",
+      "not_found",
+      "workspace_not_ready"
+    ],
+    "concepts": [
+      "workspaces",
+      "backups",
+      "provisioning"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Backups are recorded as durable jobs. Retry only after checking the prior job result.",
+    "examples": [
+      {
+        "title": "Run backup job",
+        "command": "oar api call --base-url https://control.oar.example --method POST --path /workspaces/ws_123/backups --body '{\"schedule_name\":\"nightly\",\"retention_days\":30}' --header 'Authorization: Bearer \u003ccontrol-session\u003e'"
+      }
+    ],
+    "body_schema": {
+      "optional": [
+        {
+          "name": "retention_days",
+          "type": "integer"
+        },
+        {
+          "name": "schedule_name",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "workspace_id"
+    ],
+    "adjacent_commands": [
+      "control.workspaces.create",
+      "control.workspaces.decommission",
+      "control.workspaces.get",
+      "control.workspaces.heartbeat.record",
+      "control.workspaces.launch-sessions.create",
+      "control.workspaces.list",
+      "control.workspaces.replace",
+      "control.workspaces.restore",
+      "control.workspaces.restore-drills.create",
+      "control.workspaces.resume",
+      "control.workspaces.routing-manifest.get",
+      "control.workspaces.session-exchange.create",
+      "control.workspaces.suspend",
+      "control.workspaces.upgrade.create"
+    ],
+    "go_method": "ControlWorkspacesBackupsCreate",
+    "ts_method": "controlWorkspacesBackupsCreate"
   },
   {
     "command_id": "control.workspaces.create",
@@ -991,19 +1121,33 @@ export const commandRegistry: CommandSpec[] = [
             "standard"
           ]
         }
+      ],
+      "optional": [
+        {
+          "name": "service_identity_id",
+          "type": "string"
+        },
+        {
+          "name": "service_identity_public_key",
+          "type": "string"
+        }
       ]
     },
     "adjacent_commands": [
+      "control.workspaces.backups.create",
       "control.workspaces.decommission",
       "control.workspaces.get",
+      "control.workspaces.heartbeat.record",
       "control.workspaces.launch-sessions.create",
       "control.workspaces.list",
       "control.workspaces.replace",
       "control.workspaces.restore",
+      "control.workspaces.restore-drills.create",
       "control.workspaces.resume",
       "control.workspaces.routing-manifest.get",
       "control.workspaces.session-exchange.create",
-      "control.workspaces.suspend"
+      "control.workspaces.suspend",
+      "control.workspaces.upgrade.create"
     ],
     "go_method": "ControlWorkspacesCreate",
     "ts_method": "controlWorkspacesCreate"
@@ -1045,16 +1189,20 @@ export const commandRegistry: CommandSpec[] = [
       "workspace_id"
     ],
     "adjacent_commands": [
+      "control.workspaces.backups.create",
       "control.workspaces.create",
       "control.workspaces.get",
+      "control.workspaces.heartbeat.record",
       "control.workspaces.launch-sessions.create",
       "control.workspaces.list",
       "control.workspaces.replace",
       "control.workspaces.restore",
+      "control.workspaces.restore-drills.create",
       "control.workspaces.resume",
       "control.workspaces.routing-manifest.get",
       "control.workspaces.session-exchange.create",
-      "control.workspaces.suspend"
+      "control.workspaces.suspend",
+      "control.workspaces.upgrade.create"
     ],
     "go_method": "ControlWorkspacesDecommission",
     "ts_method": "controlWorkspacesDecommission"
@@ -1095,19 +1243,150 @@ export const commandRegistry: CommandSpec[] = [
       "workspace_id"
     ],
     "adjacent_commands": [
+      "control.workspaces.backups.create",
       "control.workspaces.create",
       "control.workspaces.decommission",
+      "control.workspaces.heartbeat.record",
       "control.workspaces.launch-sessions.create",
       "control.workspaces.list",
       "control.workspaces.replace",
       "control.workspaces.restore",
+      "control.workspaces.restore-drills.create",
       "control.workspaces.resume",
       "control.workspaces.routing-manifest.get",
       "control.workspaces.session-exchange.create",
-      "control.workspaces.suspend"
+      "control.workspaces.suspend",
+      "control.workspaces.upgrade.create"
     ],
     "go_method": "ControlWorkspacesGet",
     "ts_method": "controlWorkspacesGet"
+  },
+  {
+    "command_id": "control.workspaces.heartbeat.record",
+    "cli_path": "workspaces heartbeat record",
+    "group": "workspaces",
+    "method": "POST",
+    "path": "/workspaces/{workspace_id}/heartbeat",
+    "operation_id": "recordControlWorkspaceHeartbeat",
+    "summary": "Record workspace heartbeat",
+    "why": "Let the isolated workspace instance report version, health, projection maintenance, usage, and backup telemetry back to the control plane.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ workspace }` with refreshed fleet telemetry.",
+    "error_codes": [
+      "invalid_json",
+      "invalid_request",
+      "invalid_token",
+      "not_found",
+      "service_unavailable"
+    ],
+    "concepts": [
+      "workspaces",
+      "heartbeat",
+      "operations"
+    ],
+    "stability": "beta",
+    "surface": "utility",
+    "agent_notes": "Workspace-service authenticated. Do not replay with stale assertions.",
+    "examples": [
+      {
+        "title": "Record heartbeat",
+        "command": "oar api call --base-url https://control.oar.example --method POST --path /workspaces/ws_123/heartbeat --header 'Authorization: Bearer \u003cworkspace-service-token\u003e' --body @heartbeat.json"
+      }
+    ],
+    "body_schema": {
+      "required": [
+        {
+          "name": "build",
+          "type": "string"
+        },
+        {
+          "name": "health_summary",
+          "type": "object"
+        },
+        {
+          "name": "projection_maintenance_summary",
+          "type": "object"
+        },
+        {
+          "name": "usage_summary.generated_at",
+          "type": "datetime"
+        },
+        {
+          "name": "usage_summary.quota.max_artifacts",
+          "type": "integer"
+        },
+        {
+          "name": "usage_summary.quota.max_blob_bytes",
+          "type": "integer"
+        },
+        {
+          "name": "usage_summary.quota.max_document_revisions",
+          "type": "integer"
+        },
+        {
+          "name": "usage_summary.quota.max_documents",
+          "type": "integer"
+        },
+        {
+          "name": "usage_summary.quota.max_upload_bytes",
+          "type": "integer"
+        },
+        {
+          "name": "usage_summary.usage.artifact_count",
+          "type": "integer"
+        },
+        {
+          "name": "usage_summary.usage.blob_bytes",
+          "type": "integer"
+        },
+        {
+          "name": "usage_summary.usage.blob_objects",
+          "type": "integer"
+        },
+        {
+          "name": "usage_summary.usage.document_count",
+          "type": "integer"
+        },
+        {
+          "name": "usage_summary.usage.document_revision_count",
+          "type": "integer"
+        },
+        {
+          "name": "version",
+          "type": "string"
+        }
+      ],
+      "optional": [
+        {
+          "name": "last_successful_backup_at",
+          "type": "datetime"
+        }
+      ]
+    },
+    "path_params": [
+      "workspace_id"
+    ],
+    "adjacent_commands": [
+      "control.workspaces.backups.create",
+      "control.workspaces.create",
+      "control.workspaces.decommission",
+      "control.workspaces.get",
+      "control.workspaces.launch-sessions.create",
+      "control.workspaces.list",
+      "control.workspaces.replace",
+      "control.workspaces.restore",
+      "control.workspaces.restore-drills.create",
+      "control.workspaces.resume",
+      "control.workspaces.routing-manifest.get",
+      "control.workspaces.session-exchange.create",
+      "control.workspaces.suspend",
+      "control.workspaces.upgrade.create"
+    ],
+    "go_method": "ControlWorkspacesHeartbeatRecord",
+    "ts_method": "controlWorkspacesHeartbeatRecord"
   },
   {
     "command_id": "control.workspaces.launch-sessions.create",
@@ -1157,16 +1436,20 @@ export const commandRegistry: CommandSpec[] = [
       "workspace_id"
     ],
     "adjacent_commands": [
+      "control.workspaces.backups.create",
       "control.workspaces.create",
       "control.workspaces.decommission",
       "control.workspaces.get",
+      "control.workspaces.heartbeat.record",
       "control.workspaces.list",
       "control.workspaces.replace",
       "control.workspaces.restore",
+      "control.workspaces.restore-drills.create",
       "control.workspaces.resume",
       "control.workspaces.routing-manifest.get",
       "control.workspaces.session-exchange.create",
-      "control.workspaces.suspend"
+      "control.workspaces.suspend",
+      "control.workspaces.upgrade.create"
     ],
     "go_method": "ControlWorkspacesLaunchSessionsCreate",
     "ts_method": "controlWorkspacesLaunchSessionsCreate"
@@ -1204,16 +1487,20 @@ export const commandRegistry: CommandSpec[] = [
       }
     ],
     "adjacent_commands": [
+      "control.workspaces.backups.create",
       "control.workspaces.create",
       "control.workspaces.decommission",
       "control.workspaces.get",
+      "control.workspaces.heartbeat.record",
       "control.workspaces.launch-sessions.create",
       "control.workspaces.replace",
       "control.workspaces.restore",
+      "control.workspaces.restore-drills.create",
       "control.workspaces.resume",
       "control.workspaces.routing-manifest.get",
       "control.workspaces.session-exchange.create",
-      "control.workspaces.suspend"
+      "control.workspaces.suspend",
+      "control.workspaces.upgrade.create"
     ],
     "go_method": "ControlWorkspacesList",
     "ts_method": "controlWorkspacesList"
@@ -1266,16 +1553,20 @@ export const commandRegistry: CommandSpec[] = [
       "workspace_id"
     ],
     "adjacent_commands": [
+      "control.workspaces.backups.create",
       "control.workspaces.create",
       "control.workspaces.decommission",
       "control.workspaces.get",
+      "control.workspaces.heartbeat.record",
       "control.workspaces.launch-sessions.create",
       "control.workspaces.list",
       "control.workspaces.restore",
+      "control.workspaces.restore-drills.create",
       "control.workspaces.resume",
       "control.workspaces.routing-manifest.get",
       "control.workspaces.session-exchange.create",
-      "control.workspaces.suspend"
+      "control.workspaces.suspend",
+      "control.workspaces.upgrade.create"
     ],
     "go_method": "ControlWorkspacesReplace",
     "ts_method": "controlWorkspacesReplace"
@@ -1328,19 +1619,90 @@ export const commandRegistry: CommandSpec[] = [
       "workspace_id"
     ],
     "adjacent_commands": [
+      "control.workspaces.backups.create",
       "control.workspaces.create",
       "control.workspaces.decommission",
       "control.workspaces.get",
+      "control.workspaces.heartbeat.record",
       "control.workspaces.launch-sessions.create",
       "control.workspaces.list",
       "control.workspaces.replace",
+      "control.workspaces.restore-drills.create",
       "control.workspaces.resume",
       "control.workspaces.routing-manifest.get",
       "control.workspaces.session-exchange.create",
-      "control.workspaces.suspend"
+      "control.workspaces.suspend",
+      "control.workspaces.upgrade.create"
     ],
     "go_method": "ControlWorkspacesRestore",
     "ts_method": "controlWorkspacesRestore"
+  },
+  {
+    "command_id": "control.workspaces.restore-drills.create",
+    "cli_path": "workspaces restore-drills create",
+    "group": "workspaces",
+    "method": "POST",
+    "path": "/workspaces/{workspace_id}/restore-drills",
+    "operation_id": "createControlWorkspaceRestoreDrill",
+    "summary": "Create workspace restore drill job",
+    "why": "Verify that a representative backup can be restored and booted without touching the live workspace registry record.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ workspace, provisioning_job }`.",
+    "error_codes": [
+      "auth_required",
+      "invalid_token",
+      "invalid_json",
+      "invalid_request",
+      "not_found",
+      "workspace_not_ready"
+    ],
+    "concepts": [
+      "workspaces",
+      "backups",
+      "restore",
+      "drills"
+    ],
+    "stability": "beta",
+    "surface": "utility",
+    "agent_notes": "Restore drills use a temporary deployment root and retain job stderr/stdout on failure.",
+    "examples": [
+      {
+        "title": "Run restore drill",
+        "command": "oar api call --base-url https://control.oar.example --method POST --path /workspaces/ws_123/restore-drills --body '{\"backup_dir\":\"/var/backups/ws_123-20260321T000000Z\"}' --header 'Authorization: Bearer \u003ccontrol-session\u003e'"
+      }
+    ],
+    "body_schema": {
+      "required": [
+        {
+          "name": "backup_dir",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "workspace_id"
+    ],
+    "adjacent_commands": [
+      "control.workspaces.backups.create",
+      "control.workspaces.create",
+      "control.workspaces.decommission",
+      "control.workspaces.get",
+      "control.workspaces.heartbeat.record",
+      "control.workspaces.launch-sessions.create",
+      "control.workspaces.list",
+      "control.workspaces.replace",
+      "control.workspaces.restore",
+      "control.workspaces.resume",
+      "control.workspaces.routing-manifest.get",
+      "control.workspaces.session-exchange.create",
+      "control.workspaces.suspend",
+      "control.workspaces.upgrade.create"
+    ],
+    "go_method": "ControlWorkspacesRestoreDrillsCreate",
+    "ts_method": "controlWorkspacesRestoreDrillsCreate"
   },
   {
     "command_id": "control.workspaces.resume",
@@ -1380,16 +1742,20 @@ export const commandRegistry: CommandSpec[] = [
       "workspace_id"
     ],
     "adjacent_commands": [
+      "control.workspaces.backups.create",
       "control.workspaces.create",
       "control.workspaces.decommission",
       "control.workspaces.get",
+      "control.workspaces.heartbeat.record",
       "control.workspaces.launch-sessions.create",
       "control.workspaces.list",
       "control.workspaces.replace",
       "control.workspaces.restore",
+      "control.workspaces.restore-drills.create",
       "control.workspaces.routing-manifest.get",
       "control.workspaces.session-exchange.create",
-      "control.workspaces.suspend"
+      "control.workspaces.suspend",
+      "control.workspaces.upgrade.create"
     ],
     "go_method": "ControlWorkspacesResume",
     "ts_method": "controlWorkspacesResume"
@@ -1431,16 +1797,20 @@ export const commandRegistry: CommandSpec[] = [
       "workspace_id"
     ],
     "adjacent_commands": [
+      "control.workspaces.backups.create",
       "control.workspaces.create",
       "control.workspaces.decommission",
       "control.workspaces.get",
+      "control.workspaces.heartbeat.record",
       "control.workspaces.launch-sessions.create",
       "control.workspaces.list",
       "control.workspaces.replace",
       "control.workspaces.restore",
+      "control.workspaces.restore-drills.create",
       "control.workspaces.resume",
       "control.workspaces.session-exchange.create",
-      "control.workspaces.suspend"
+      "control.workspaces.suspend",
+      "control.workspaces.upgrade.create"
     ],
     "go_method": "ControlWorkspacesRoutingManifestGet",
     "ts_method": "controlWorkspacesRoutingManifestGet"
@@ -1493,16 +1863,20 @@ export const commandRegistry: CommandSpec[] = [
       "workspace_id"
     ],
     "adjacent_commands": [
+      "control.workspaces.backups.create",
       "control.workspaces.create",
       "control.workspaces.decommission",
       "control.workspaces.get",
+      "control.workspaces.heartbeat.record",
       "control.workspaces.launch-sessions.create",
       "control.workspaces.list",
       "control.workspaces.replace",
       "control.workspaces.restore",
+      "control.workspaces.restore-drills.create",
       "control.workspaces.resume",
       "control.workspaces.routing-manifest.get",
-      "control.workspaces.suspend"
+      "control.workspaces.suspend",
+      "control.workspaces.upgrade.create"
     ],
     "go_method": "ControlWorkspacesSessionExchangeCreate",
     "ts_method": "controlWorkspacesSessionExchangeCreate"
@@ -1545,19 +1919,89 @@ export const commandRegistry: CommandSpec[] = [
       "workspace_id"
     ],
     "adjacent_commands": [
+      "control.workspaces.backups.create",
       "control.workspaces.create",
       "control.workspaces.decommission",
       "control.workspaces.get",
+      "control.workspaces.heartbeat.record",
       "control.workspaces.launch-sessions.create",
       "control.workspaces.list",
       "control.workspaces.replace",
       "control.workspaces.restore",
+      "control.workspaces.restore-drills.create",
       "control.workspaces.resume",
       "control.workspaces.routing-manifest.get",
-      "control.workspaces.session-exchange.create"
+      "control.workspaces.session-exchange.create",
+      "control.workspaces.upgrade.create"
     ],
     "go_method": "ControlWorkspacesSuspend",
     "ts_method": "controlWorkspacesSuspend"
+  },
+  {
+    "command_id": "control.workspaces.upgrade.create",
+    "cli_path": "workspaces upgrade create",
+    "group": "workspaces",
+    "method": "POST",
+    "path": "/workspaces/{workspace_id}/upgrade",
+    "operation_id": "createControlWorkspaceUpgrade",
+    "summary": "Create workspace upgrade job",
+    "why": "Track desired version versus current version and record pre/post health checks for a workspace upgrade.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ workspace, provisioning_job }`.",
+    "error_codes": [
+      "auth_required",
+      "invalid_token",
+      "invalid_json",
+      "invalid_request",
+      "not_found",
+      "workspace_not_ready"
+    ],
+    "concepts": [
+      "workspaces",
+      "upgrades",
+      "provisioning"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Fail closed if the workspace has not reported a healthy heartbeat.",
+    "examples": [
+      {
+        "title": "Run upgrade job",
+        "command": "oar api call --base-url https://control.oar.example --method POST --path /workspaces/ws_123/upgrade --body '{\"desired_version\":\"hosted-instance/v2\"}' --header 'Authorization: Bearer \u003ccontrol-session\u003e'"
+      }
+    ],
+    "body_schema": {
+      "required": [
+        {
+          "name": "desired_version",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "workspace_id"
+    ],
+    "adjacent_commands": [
+      "control.workspaces.backups.create",
+      "control.workspaces.create",
+      "control.workspaces.decommission",
+      "control.workspaces.get",
+      "control.workspaces.heartbeat.record",
+      "control.workspaces.launch-sessions.create",
+      "control.workspaces.list",
+      "control.workspaces.replace",
+      "control.workspaces.restore",
+      "control.workspaces.restore-drills.create",
+      "control.workspaces.resume",
+      "control.workspaces.routing-manifest.get",
+      "control.workspaces.session-exchange.create",
+      "control.workspaces.suspend"
+    ],
+    "go_method": "ControlWorkspacesUpgradeCreate",
+    "ts_method": "controlWorkspacesUpgradeCreate"
   }
 ] as CommandSpec[];
 
@@ -1691,8 +2135,16 @@ export class OarClient {
     return this.invoke("control.organizations.usage-summary.get", pathParams, options);
   }
 
+  controlOrganizationsWorkspaceInventoryList(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("control.organizations.workspace-inventory.list", pathParams, options);
+  }
+
   controlProvisioningJobsGet(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("control.provisioning.jobs.get", pathParams, options);
+  }
+
+  controlWorkspacesBackupsCreate(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("control.workspaces.backups.create", pathParams, options);
   }
 
   controlWorkspacesCreate(options: RequestOptions = {}): Promise<InvokeResult> {
@@ -1705,6 +2157,10 @@ export class OarClient {
 
   controlWorkspacesGet(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("control.workspaces.get", pathParams, options);
+  }
+
+  controlWorkspacesHeartbeatRecord(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("control.workspaces.heartbeat.record", pathParams, options);
   }
 
   controlWorkspacesLaunchSessionsCreate(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
@@ -1723,6 +2179,10 @@ export class OarClient {
     return this.invoke("control.workspaces.restore", pathParams, options);
   }
 
+  controlWorkspacesRestoreDrillsCreate(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("control.workspaces.restore-drills.create", pathParams, options);
+  }
+
   controlWorkspacesResume(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("control.workspaces.resume", pathParams, options);
   }
@@ -1737,6 +2197,10 @@ export class OarClient {
 
   controlWorkspacesSuspend(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("control.workspaces.suspend", pathParams, options);
+  }
+
+  controlWorkspacesUpgradeCreate(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("control.workspaces.upgrade.create", pathParams, options);
   }
 
 }

@@ -112,6 +112,7 @@ Relevant control-plane configuration:
 | Ceremony TTL | `--ceremony-ttl` | `OAR_CONTROL_PLANE_CEREMONY_TTL` | `5m` |
 | Launch TTL | `--launch-ttl` | `OAR_CONTROL_PLANE_LAUNCH_TTL` | `10m` |
 | Invite TTL | `--invite-ttl` | `OAR_CONTROL_PLANE_INVITE_TTL` | `168h` |
+| Backup maintenance interval | `--backup-maintenance-interval` | `OAR_CONTROL_PLANE_BACKUP_MAINTENANCE_INTERVAL` | `5m` |
 | Graceful shutdown timeout | `--shutdown-timeout` | `OAR_CONTROL_PLANE_SHUTDOWN_TIMEOUT` | `15s` |
 
 Useful control-plane endpoints:
@@ -122,6 +123,10 @@ Useful control-plane endpoints:
 - `GET /workspaces`
 - `GET /provisioning/jobs`
 - `GET /audit-events`
+
+The control plane seeds per-workspace backup schedules, runs due backups on the
+maintenance interval, and prunes expired backup bundles using the recorded
+retention metadata.
 
 Basic smoke check:
 

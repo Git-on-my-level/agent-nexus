@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"io"
@@ -34,6 +35,7 @@ type controlPlaneTestEnv struct {
 	t               *testing.T
 	root            string
 	workspace       *cpstorage.Workspace
+	service         *controlplane.Service
 	server          *httptest.Server
 	grantIssuer     string
 	grantAudience   string
@@ -253,6 +255,117 @@ func TestControlPlaneWorkspaceProvisioningProducesReachableDeploymentAndRoutingM
 	_ = coreCmd
 }
 
+func TestControlPlaneWorkspaceBackupMaintenanceAndRetentionSweep(t *testing.T) {
+	env := newControlPlaneTestEnv(t, "")
+	defer env.Close()
+
+	_, ownerSession := registerAccount(t, env, "backup-owner@example.com", "Backup Owner", "cred-backup-owner")
+	ownerToken := asString(t, ownerSession["access_token"])
+
+	createOrganizationResp := requestJSON(t, http.MethodPost, env.server.URL+"/organizations", map[string]any{
+		"slug":         "backup-org",
+		"display_name": "Backup Org",
+		"plan_tier":    "team",
+	}, http.StatusCreated, authHeaders(ownerToken))
+	organizationID := asString(t, asMap(t, createOrganizationResp["organization"])["id"])
+
+	createWorkspaceResp := requestJSON(t, http.MethodPost, env.server.URL+"/workspaces", map[string]any{
+		"organization_id": organizationID,
+		"slug":            "nightly",
+		"display_name":    "Nightly Workspace",
+		"region":          "us-central1",
+		"workspace_tier":  "standard",
+	}, http.StatusCreated, authHeaders(ownerToken))
+	workspace := asMap(t, createWorkspaceResp["workspace"])
+	workspaceID := asString(t, workspace["id"])
+	coreWorkspaceRoot := filepath.Join(asString(t, workspace["deployment_root"]), "workspace")
+	_, _, cleanup := startCoreServerForTest(t, coreWorkspaceRoot)
+	defer cleanup()
+
+	dueAt := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339Nano)
+	if _, err := env.workspace.DB().ExecContext(context.Background(), `UPDATE workspace_backup_schedules
+		SET next_run_at = ?, retention_days = ?, interval_seconds = ?, schedule_name = ?, updated_at = ?
+		WHERE workspace_id = ?`,
+		dueAt,
+		1,
+		int(time.Hour/time.Second),
+		"nightly",
+		time.Now().UTC().Format(time.RFC3339Nano),
+		workspaceID,
+	); err != nil {
+		t.Fatalf("force workspace backup schedule due: %v", err)
+	}
+
+	if err := env.service.RunBackupMaintenancePass(context.Background()); err != nil {
+		t.Fatalf("run backup maintenance pass: %v", err)
+	}
+
+	var (
+		runID              string
+		status             string
+		backupDir          string
+		retentionExpiresAt sql.NullString
+		failureReason      sql.NullString
+		prunedAt           sql.NullString
+	)
+	row := env.workspace.DB().QueryRowContext(context.Background(), `SELECT id, status, backup_dir, retention_expires_at, failure_reason, pruned_at
+		FROM workspace_backup_runs
+		WHERE workspace_id = ?
+		ORDER BY requested_at DESC, id DESC
+		LIMIT 1`, workspaceID)
+	if err := row.Scan(&runID, &status, &backupDir, &retentionExpiresAt, &failureReason, &prunedAt); err != nil {
+		t.Fatalf("load workspace backup run: %v", err)
+	}
+	if status != "succeeded" {
+		t.Fatalf("expected scheduled backup run to succeed, got %q (%s)", status, strings.TrimSpace(failureReason.String))
+	}
+	if backupDir == "" {
+		t.Fatal("expected backup_dir in backup run record")
+	}
+	if !retentionExpiresAt.Valid || strings.TrimSpace(retentionExpiresAt.String) == "" {
+		t.Fatal("expected retention_expires_at in backup run record")
+	}
+	if prunedAt.Valid {
+		t.Fatal("did not expect backup run to be pruned before retention expiry")
+	}
+
+	inventoryResp := requestJSON(t, http.MethodGet, env.server.URL+"/organizations/"+organizationID+"/workspace-inventory?limit=1", nil, http.StatusOK, authHeaders(ownerToken))
+	inventoryItems := asSlice(t, inventoryResp["workspaces"])
+	if len(inventoryItems) != 1 {
+		t.Fatalf("expected 1 workspace in inventory, got %d", len(inventoryItems))
+	}
+	inventoryWorkspace := asMap(t, asMap(t, inventoryItems[0])["workspace"])
+	if got := asString(t, inventoryWorkspace["last_successful_backup_at"]); got == "" {
+		t.Fatal("expected inventory to expose last_successful_backup_at after scheduled backup")
+	}
+
+	pastRetention := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339Nano)
+	if _, err := env.workspace.DB().ExecContext(context.Background(), `UPDATE workspace_backup_runs
+		SET retention_expires_at = ?, updated_at = ?
+		WHERE id = ?`, pastRetention, time.Now().UTC().Format(time.RFC3339Nano), runID); err != nil {
+		t.Fatalf("force backup retention expiry: %v", err)
+	}
+
+	if err := env.service.RunBackupMaintenancePass(context.Background()); err != nil {
+		t.Fatalf("run backup retention sweep: %v", err)
+	}
+
+	if _, err := os.Stat(backupDir); !os.IsNotExist(err) {
+		t.Fatalf("expected backup bundle to be pruned, stat err=%v", err)
+	}
+
+	row = env.workspace.DB().QueryRowContext(context.Background(), `SELECT pruned_at, prune_failure_reason
+		FROM workspace_backup_runs
+		WHERE id = ?`, runID)
+	var pruneFailureReason sql.NullString
+	if err := row.Scan(&prunedAt, &pruneFailureReason); err != nil {
+		t.Fatalf("load pruned backup run: %v", err)
+	}
+	if !prunedAt.Valid || strings.TrimSpace(prunedAt.String) == "" {
+		t.Fatal("expected backup run to be marked as pruned")
+	}
+}
+
 func TestControlPlaneProvisionRestoreFailureAndRetrySemantics(t *testing.T) {
 	env := newControlPlaneTestEnv(t, "")
 	defer env.Close()
@@ -378,6 +491,220 @@ func TestControlPlaneProvisioningFailureIsDurableAndRetryable(t *testing.T) {
 	}
 }
 
+func TestControlPlaneFleetHeartbeatBackupUpgradeDrillAndInventory(t *testing.T) {
+	env := newControlPlaneTestEnv(t, "")
+	defer env.Close()
+
+	_, ownerSession := registerAccount(t, env, "fleet@example.com", "Fleet Owner", "cred-fleet-owner")
+	ownerToken := asString(t, ownerSession["access_token"])
+
+	createOrganizationResp := requestJSON(t, http.MethodPost, env.server.URL+"/organizations", map[string]any{
+		"slug":         "fleet-org",
+		"display_name": "Fleet Org",
+		"plan_tier":    "team",
+	}, http.StatusCreated, authHeaders(ownerToken))
+	organizationID := asString(t, asMap(t, createOrganizationResp["organization"])["id"])
+
+	serviceIdentityID := "svc_fleet_workspace"
+	_, serviceIdentityPrivateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate workspace service key: %v", err)
+	}
+	serviceIdentityKey, err := controlplaneauth.NewWorkspaceServiceIdentity(controlplaneauth.WorkspaceServiceIdentityConfig{
+		ID:         serviceIdentityID,
+		PrivateKey: serviceIdentityPrivateKey,
+	})
+	if err != nil {
+		t.Fatalf("new workspace service identity: %v", err)
+	}
+
+	createWorkspaceResp := requestJSON(t, http.MethodPost, env.server.URL+"/workspaces", map[string]any{
+		"organization_id":             organizationID,
+		"slug":                        "fleet",
+		"display_name":                "Fleet Workspace",
+		"region":                      "us-central1",
+		"workspace_tier":              "standard",
+		"service_identity_id":         serviceIdentityID,
+		"service_identity_public_key": serviceIdentityKey.PublicKeyBase64(),
+	}, http.StatusCreated, authHeaders(ownerToken))
+	workspace := asMap(t, createWorkspaceResp["workspace"])
+	workspaceID := asString(t, workspace["id"])
+	deploymentRoot := asString(t, workspace["deployment_root"])
+	if deploymentRoot == "" {
+		t.Fatal("expected deployment_root in workspace response")
+	}
+
+	heartbeatToken, _, err := serviceIdentityKey.SignClientAssertion(controlplaneauth.WorkspaceServiceAssertionAudience, 10*time.Minute, map[string]any{
+		"workspace_id":    workspaceID,
+		"organization_id": organizationID,
+		"purpose":         "heartbeat",
+	})
+	if err != nil {
+		t.Fatalf("sign heartbeat token: %v", err)
+	}
+
+	heartbeatResp := requestJSON(t, http.MethodPost, env.server.URL+"/workspaces/"+workspaceID+"/heartbeat", map[string]any{
+		"version": "hosted-instance/v1",
+		"build":   "build-001",
+		"health_summary": map[string]any{
+			"status": "healthy",
+			"checks": map[string]any{
+				"db": "ok",
+			},
+		},
+		"projection_maintenance_summary": map[string]any{
+			"status": "current",
+		},
+		"usage_summary": map[string]any{
+			"usage": map[string]any{
+				"blob_bytes":              1024,
+				"blob_objects":            3,
+				"artifact_count":          1,
+				"document_count":          0,
+				"document_revision_count": 0,
+			},
+			"quota": map[string]any{
+				"max_blob_bytes":         1024 * 1024,
+				"max_artifacts":          100,
+				"max_documents":          100,
+				"max_document_revisions": 500,
+				"max_upload_bytes":       1024 * 1024,
+			},
+			"generated_at": time.Now().UTC().Format(time.RFC3339Nano),
+		},
+		"last_successful_backup_at": "2026-03-21T00:00:00Z",
+	}, http.StatusOK, map[string]string{"Authorization": "Bearer " + heartbeatToken})
+	heartbeatWorkspace := asMap(t, heartbeatResp["workspace"])
+	if got := asString(t, heartbeatWorkspace["heartbeat_version"]); got != "hosted-instance/v1" {
+		t.Fatalf("expected heartbeat version to be recorded, got %q", got)
+	}
+	if got := asString(t, heartbeatWorkspace["desired_version"]); got != "hosted-instance/v1" {
+		t.Fatalf("expected desired_version to start at current version, got %q", got)
+	}
+
+	coreWorkspaceRoot := filepath.Join(deploymentRoot, "workspace")
+	_, _, cleanup := startCoreServerForTest(t, coreWorkspaceRoot)
+	defer cleanup()
+
+	backupResp := requestJSON(t, http.MethodPost, env.server.URL+"/workspaces/"+workspaceID+"/backups", map[string]any{
+		"schedule_name":  "nightly",
+		"retention_days": 30,
+	}, http.StatusOK, authHeaders(ownerToken))
+	backupJob := asMap(t, backupResp["provisioning_job"])
+	if got := asString(t, backupJob["status"]); got != "succeeded" {
+		t.Fatalf("expected backup job to succeed, got %q", got)
+	}
+	backupDir := asString(t, asMap(t, backupJob["result"])["backup_dir"])
+	if backupDir == "" {
+		t.Fatal("expected backup_dir in backup job result")
+	}
+
+	upgradeResp := requestJSON(t, http.MethodPost, env.server.URL+"/workspaces/"+workspaceID+"/upgrade", map[string]any{
+		"desired_version": "hosted-instance/v2",
+	}, http.StatusOK, authHeaders(ownerToken))
+	upgradeWorkspace := asMap(t, upgradeResp["workspace"])
+	if got := asString(t, upgradeWorkspace["deployed_version"]); got != "hosted-instance/v2" {
+		t.Fatalf("expected deployed_version to update, got %q", got)
+	}
+	if got := asString(t, upgradeWorkspace["desired_version"]); got != "hosted-instance/v2" {
+		t.Fatalf("expected desired_version to update, got %q", got)
+	}
+
+	heartbeatToken, _, err = serviceIdentityKey.SignClientAssertion(controlplaneauth.WorkspaceServiceAssertionAudience, 10*time.Minute, map[string]any{
+		"workspace_id":    workspaceID,
+		"organization_id": organizationID,
+		"purpose":         "heartbeat",
+	})
+	if err != nil {
+		t.Fatalf("sign post-upgrade heartbeat token: %v", err)
+	}
+	postUpgradeHeartbeatResp := requestJSON(t, http.MethodPost, env.server.URL+"/workspaces/"+workspaceID+"/heartbeat", map[string]any{
+		"version": "hosted-instance/v2",
+		"build":   "build-002",
+		"health_summary": map[string]any{
+			"status": "healthy",
+			"checks": map[string]any{
+				"db": "ok",
+			},
+		},
+		"projection_maintenance_summary": map[string]any{
+			"status": "current",
+		},
+		"usage_summary": map[string]any{
+			"usage": map[string]any{
+				"blob_bytes":              2048,
+				"blob_objects":            4,
+				"artifact_count":          2,
+				"document_count":          1,
+				"document_revision_count": 1,
+			},
+			"quota": map[string]any{
+				"max_blob_bytes":         1024 * 1024,
+				"max_artifacts":          100,
+				"max_documents":          100,
+				"max_document_revisions": 500,
+				"max_upload_bytes":       1024 * 1024,
+			},
+			"generated_at": time.Now().UTC().Format(time.RFC3339Nano),
+		},
+		"last_successful_backup_at": time.Now().UTC().Format(time.RFC3339Nano),
+	}, http.StatusOK, map[string]string{"Authorization": "Bearer " + heartbeatToken})
+	postUpgradeHeartbeatWorkspace := asMap(t, postUpgradeHeartbeatResp["workspace"])
+	if got := asString(t, postUpgradeHeartbeatWorkspace["heartbeat_version"]); got != "hosted-instance/v2" {
+		t.Fatalf("expected post-upgrade heartbeat version, got %q", got)
+	}
+
+	restoreDrillResp := requestJSON(t, http.MethodPost, env.server.URL+"/workspaces/"+workspaceID+"/restore-drills", map[string]any{
+		"backup_dir": backupDir,
+	}, http.StatusOK, authHeaders(ownerToken))
+	restoreDrillJob := asMap(t, restoreDrillResp["provisioning_job"])
+	if got := asString(t, restoreDrillJob["status"]); got != "succeeded" {
+		t.Fatalf("expected restore drill to succeed, got %q", got)
+	}
+
+	badBackupDir := filepath.Join(t.TempDir(), "backup-bad")
+	copyDir(t, backupDir, badBackupDir)
+	tamperManifest(t, filepath.Join(badBackupDir, "manifest.env"))
+
+	failedDrillResp := requestJSON(t, http.MethodPost, env.server.URL+"/workspaces/"+workspaceID+"/restore-drills", map[string]any{
+		"backup_dir": badBackupDir,
+	}, http.StatusOK, authHeaders(ownerToken))
+	failedDrillJob := asMap(t, failedDrillResp["provisioning_job"])
+	if got := asString(t, failedDrillJob["status"]); got != "failed" {
+		t.Fatalf("expected failed restore drill, got %q", got)
+	}
+	if got := asString(t, failedDrillJob["failure_reason"]); got == "" {
+		t.Fatal("expected failure_reason for failed restore drill")
+	}
+
+	inventoryResp := requestJSON(t, http.MethodGet, env.server.URL+"/organizations/"+organizationID+"/workspace-inventory?limit=1", nil, http.StatusOK, authHeaders(ownerToken))
+	if got := asString(t, inventoryResp["organization_id"]); got != organizationID {
+		t.Fatalf("expected inventory organization_id=%q, got %q", organizationID, got)
+	}
+	inventoryWorkspaces := asSlice(t, inventoryResp["workspaces"])
+	if len(inventoryWorkspaces) != 1 {
+		t.Fatalf("expected 1 workspace in inventory, got %d", len(inventoryWorkspaces))
+	}
+	inventoryItem := asMap(t, inventoryWorkspaces[0])
+	inventoryWorkspace := asMap(t, inventoryItem["workspace"])
+	if got := asString(t, inventoryWorkspace["heartbeat_version"]); got != "hosted-instance/v2" {
+		t.Fatalf("expected inventory heartbeat_version=%q, got %q", "hosted-instance/v2", got)
+	}
+	if got := asString(t, inventoryWorkspace["desired_version"]); got != "hosted-instance/v2" {
+		t.Fatalf("expected inventory desired_version=%q, got %q", "hosted-instance/v2", got)
+	}
+	if got := int(asFloat(t, inventoryItem["open_failed_job_count"])); got < 1 {
+		t.Fatalf("expected at least one open failed job, got %d", got)
+	}
+	failedJobs := asSlice(t, inventoryItem["open_failed_jobs"])
+	if len(failedJobs) == 0 {
+		t.Fatal("expected open failed jobs in inventory")
+	}
+	if got := asString(t, asMap(t, failedJobs[0])["kind"]); got != "workspace_restore_drill" {
+		t.Fatalf("expected restore drill in failed jobs, got %q", got)
+	}
+}
+
 func TestControlPlaneCeremoniesAndSessionsSurviveRestart(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "control-plane")
 
@@ -478,6 +805,7 @@ func newControlPlaneTestEnvWithScripts(t *testing.T, root string, hostedScriptsD
 		t:               t,
 		root:            root,
 		workspace:       workspace,
+		service:         service,
 		server:          server,
 		grantIssuer:     grantIssuer,
 		grantAudience:   grantAudience,

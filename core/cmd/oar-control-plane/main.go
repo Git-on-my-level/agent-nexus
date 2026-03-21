@@ -20,32 +20,34 @@ import (
 )
 
 const (
-	defaultHost             = "127.0.0.1"
-	defaultPort             = 8100
-	defaultWorkspaceRoot    = ".oar-control-plane"
-	defaultShutdownTimeout  = 15 * time.Second
-	defaultWorkspaceURLTmpl = "http://127.0.0.1:8000/%s"
-	defaultInviteURLTmpl    = "http://127.0.0.1:8100/invites/%s"
+	defaultHost                      = "127.0.0.1"
+	defaultPort                      = 8100
+	defaultWorkspaceRoot             = ".oar-control-plane"
+	defaultShutdownTimeout           = 15 * time.Second
+	defaultBackupMaintenanceInterval = 5 * time.Minute
+	defaultWorkspaceURLTmpl          = "http://127.0.0.1:8000/%s"
+	defaultInviteURLTmpl             = "http://127.0.0.1:8100/invites/%s"
 )
 
 func main() {
 	var (
-		host                     = envString("OAR_CONTROL_PLANE_HOST", defaultHost)
-		port                     = envInt("OAR_CONTROL_PLANE_PORT", defaultPort)
-		listenAddress            = envString("OAR_CONTROL_PLANE_LISTEN_ADDR", "")
-		workspaceRoot            = envString("OAR_CONTROL_PLANE_WORKSPACE_ROOT", defaultWorkspaceRoot)
-		webAuthnRPID             = envString("OAR_CONTROL_PLANE_WEBAUTHN_RPID", "")
-		webAuthnOrigin           = envString("OAR_CONTROL_PLANE_WEBAUTHN_ORIGIN", "")
-		workspaceURLTemplate     = envString("OAR_CONTROL_PLANE_WORKSPACE_URL_TEMPLATE", defaultWorkspaceURLTmpl)
-		inviteURLTemplate        = envString("OAR_CONTROL_PLANE_INVITE_URL_TEMPLATE", defaultInviteURLTmpl)
-		workspaceGrantIssuer     = envString("OAR_CONTROL_PLANE_WORKSPACE_GRANT_ISSUER", "")
-		workspaceGrantAudience   = envString("OAR_CONTROL_PLANE_WORKSPACE_GRANT_AUDIENCE", "")
-		workspaceGrantSigningKey = envString("OAR_CONTROL_PLANE_WORKSPACE_GRANT_SIGNING_KEY", "")
-		sessionTTL               = envDuration("OAR_CONTROL_PLANE_SESSION_TTL", 12*time.Hour)
-		ceremonyTTL              = envDuration("OAR_CONTROL_PLANE_CEREMONY_TTL", 5*time.Minute)
-		launchTTL                = envDuration("OAR_CONTROL_PLANE_LAUNCH_TTL", 10*time.Minute)
-		inviteTTL                = envDuration("OAR_CONTROL_PLANE_INVITE_TTL", 7*24*time.Hour)
-		shutdownTimeout          = envDuration("OAR_CONTROL_PLANE_SHUTDOWN_TIMEOUT", defaultShutdownTimeout)
+		host                      = envString("OAR_CONTROL_PLANE_HOST", defaultHost)
+		port                      = envInt("OAR_CONTROL_PLANE_PORT", defaultPort)
+		listenAddress             = envString("OAR_CONTROL_PLANE_LISTEN_ADDR", "")
+		workspaceRoot             = envString("OAR_CONTROL_PLANE_WORKSPACE_ROOT", defaultWorkspaceRoot)
+		webAuthnRPID              = envString("OAR_CONTROL_PLANE_WEBAUTHN_RPID", "")
+		webAuthnOrigin            = envString("OAR_CONTROL_PLANE_WEBAUTHN_ORIGIN", "")
+		workspaceURLTemplate      = envString("OAR_CONTROL_PLANE_WORKSPACE_URL_TEMPLATE", defaultWorkspaceURLTmpl)
+		inviteURLTemplate         = envString("OAR_CONTROL_PLANE_INVITE_URL_TEMPLATE", defaultInviteURLTmpl)
+		workspaceGrantIssuer      = envString("OAR_CONTROL_PLANE_WORKSPACE_GRANT_ISSUER", "")
+		workspaceGrantAudience    = envString("OAR_CONTROL_PLANE_WORKSPACE_GRANT_AUDIENCE", "")
+		workspaceGrantSigningKey  = envString("OAR_CONTROL_PLANE_WORKSPACE_GRANT_SIGNING_KEY", "")
+		sessionTTL                = envDuration("OAR_CONTROL_PLANE_SESSION_TTL", 12*time.Hour)
+		ceremonyTTL               = envDuration("OAR_CONTROL_PLANE_CEREMONY_TTL", 5*time.Minute)
+		launchTTL                 = envDuration("OAR_CONTROL_PLANE_LAUNCH_TTL", 10*time.Minute)
+		inviteTTL                 = envDuration("OAR_CONTROL_PLANE_INVITE_TTL", 7*24*time.Hour)
+		backupMaintenanceInterval = envDuration("OAR_CONTROL_PLANE_BACKUP_MAINTENANCE_INTERVAL", defaultBackupMaintenanceInterval)
+		shutdownTimeout           = envDuration("OAR_CONTROL_PLANE_SHUTDOWN_TIMEOUT", defaultShutdownTimeout)
 	)
 
 	flag.StringVar(&host, "host", host, "host interface to bind")
@@ -62,6 +64,7 @@ func main() {
 	flag.DurationVar(&ceremonyTTL, "ceremony-ttl", ceremonyTTL, "passkey ceremony TTL")
 	flag.DurationVar(&launchTTL, "launch-ttl", launchTTL, "workspace launch grant TTL")
 	flag.DurationVar(&inviteTTL, "invite-ttl", inviteTTL, "organization invite TTL")
+	flag.DurationVar(&backupMaintenanceInterval, "backup-maintenance-interval", backupMaintenanceInterval, "scheduled workspace backup maintenance interval")
 	flag.DurationVar(&shutdownTimeout, "shutdown-timeout", shutdownTimeout, "graceful shutdown timeout")
 	flag.Parse()
 
@@ -107,6 +110,29 @@ func main() {
 		WorkspaceGrantSigner: workspaceGrantSigner,
 	})
 
+	backupMaintenanceCtx, cancelBackupMaintenance := context.WithCancel(context.Background())
+	defer cancelBackupMaintenance()
+	if backupMaintenanceInterval <= 0 {
+		backupMaintenanceInterval = defaultBackupMaintenanceInterval
+	}
+	go func() {
+		if err := service.RunBackupMaintenancePass(backupMaintenanceCtx); err != nil && backupMaintenanceCtx.Err() == nil {
+			fmt.Fprintf(os.Stderr, "backup maintenance pass failed: %v\n", err)
+		}
+		ticker := time.NewTicker(backupMaintenanceInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-backupMaintenanceCtx.Done():
+				return
+			case <-ticker.C:
+				if err := service.RunBackupMaintenancePass(backupMaintenanceCtx); err != nil && backupMaintenanceCtx.Err() == nil {
+					fmt.Fprintf(os.Stderr, "backup maintenance pass failed: %v\n", err)
+				}
+			}
+		}
+	}()
+
 	handler := cpserver.NewHandler(service, cpserver.Config{
 		HealthCheck: workspace.Ping,
 		WebAuthnConfig: cpserver.WebAuthnConfig{
@@ -141,10 +167,12 @@ func main() {
 	select {
 	case err := <-serverErr:
 		if err != nil {
+			cancelBackupMaintenance()
 			fmt.Fprintf(os.Stderr, "server error: %v\n", err)
 			os.Exit(1)
 		}
 	case sig := <-shutdownSignals:
+		cancelBackupMaintenance()
 		fmt.Printf("\nreceived %s, shutting down gracefully...\n", sig)
 		ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()

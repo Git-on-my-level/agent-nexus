@@ -126,7 +126,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"organizations", "tenancy", "billing"},
-		Adjacent:  []string{"control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.usage-summary.get"},
+		Adjacent:  []string{"control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.usage-summary.get", "control.organizations.workspace-inventory.list"},
 		Examples: []Example{
 			{
 				Title:   "Create organization",
@@ -144,7 +144,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"organizations", "tenancy"},
-		Adjacent:   []string{"control.organizations.create", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.usage-summary.get"},
+		Adjacent:   []string{"control.organizations.create", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.usage-summary.get", "control.organizations.workspace-inventory.list"},
 		Examples: []Example{
 			{
 				Title:   "Get organization",
@@ -162,7 +162,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"organizations", "invites", "access"},
-		Adjacent:   []string{"control.organizations.create", "control.organizations.get", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.usage-summary.get"},
+		Adjacent:   []string{"control.organizations.create", "control.organizations.get", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.usage-summary.get", "control.organizations.workspace-inventory.list"},
 		Examples: []Example{
 			{
 				Title:   "Invite organization admin",
@@ -180,7 +180,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"organizations", "invites", "access"},
-		Adjacent:   []string{"control.organizations.create", "control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.usage-summary.get"},
+		Adjacent:   []string{"control.organizations.create", "control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.usage-summary.get", "control.organizations.workspace-inventory.list"},
 		Examples: []Example{
 			{
 				Title:   "List org invites",
@@ -198,7 +198,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"organizations", "invites", "access"},
-		Adjacent:   []string{"control.organizations.create", "control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.usage-summary.get"},
+		Adjacent:   []string{"control.organizations.create", "control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.usage-summary.get", "control.organizations.workspace-inventory.list"},
 		Examples: []Example{
 			{
 				Title:   "Revoke org invite",
@@ -215,7 +215,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"organizations", "tenancy"},
-		Adjacent:  []string{"control.organizations.create", "control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.usage-summary.get"},
+		Adjacent:  []string{"control.organizations.create", "control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.usage-summary.get", "control.organizations.workspace-inventory.list"},
 		Examples: []Example{
 			{
 				Title:   "List organizations",
@@ -233,7 +233,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"organizations", "memberships", "access"},
-		Adjacent:   []string{"control.organizations.create", "control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.usage-summary.get"},
+		Adjacent:   []string{"control.organizations.create", "control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.usage-summary.get", "control.organizations.workspace-inventory.list"},
 		Examples: []Example{
 			{
 				Title:   "List memberships",
@@ -251,7 +251,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"organizations", "memberships", "access"},
-		Adjacent:   []string{"control.organizations.create", "control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.update", "control.organizations.usage-summary.get"},
+		Adjacent:   []string{"control.organizations.create", "control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.update", "control.organizations.usage-summary.get", "control.organizations.workspace-inventory.list"},
 		Examples: []Example{
 			{
 				Title:   "Promote organization member",
@@ -269,7 +269,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"organizations", "billing", "lifecycle"},
-		Adjacent:   []string{"control.organizations.create", "control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.usage-summary.get"},
+		Adjacent:   []string{"control.organizations.create", "control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.usage-summary.get", "control.organizations.workspace-inventory.list"},
 		Examples: []Example{
 			{
 				Title:   "Update organization plan",
@@ -287,11 +287,29 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"usage", "plans", "quotas"},
-		Adjacent:   []string{"control.organizations.create", "control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.update"},
+		Adjacent:   []string{"control.organizations.create", "control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.workspace-inventory.list"},
 		Examples: []Example{
 			{
 				Title:   "Get usage summary",
 				Command: "oar api call --base-url https://control.oar.example --method GET --path /organizations/org_123/usage-summary --header 'Authorization: Bearer <control-session>'",
+			},
+		},
+	},
+	{
+		CommandID:  "control.organizations.workspace-inventory.list",
+		CLIPath:    "organizations workspace-inventory list",
+		Group:      "organizations",
+		Method:     "GET",
+		Path:       "/organizations/{organization_id}/workspace-inventory",
+		PathParams: []string{"organization_id"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"workspaces", "inventory", "operations"},
+		Adjacent:   []string{"control.organizations.create", "control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.usage-summary.get"},
+		Examples: []Example{
+			{
+				Title:   "List workspace inventory",
+				Command: "oar api call --base-url https://control.oar.example --method GET --path '/organizations/org_123/workspace-inventory' --header 'Authorization: Bearer <control-session>'",
 			},
 		},
 	},
@@ -313,6 +331,24 @@ var CommandRegistry = []CommandSpec{
 		},
 	},
 	{
+		CommandID:  "control.workspaces.backups.create",
+		CLIPath:    "workspaces backups create",
+		Group:      "workspaces",
+		Method:     "POST",
+		Path:       "/workspaces/{workspace_id}/backups",
+		PathParams: []string{"workspace_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"workspaces", "backups", "provisioning"},
+		Adjacent:   []string{"control.workspaces.create", "control.workspaces.decommission", "control.workspaces.get", "control.workspaces.heartbeat.record", "control.workspaces.launch-sessions.create", "control.workspaces.list", "control.workspaces.replace", "control.workspaces.restore", "control.workspaces.restore-drills.create", "control.workspaces.resume", "control.workspaces.routing-manifest.get", "control.workspaces.session-exchange.create", "control.workspaces.suspend", "control.workspaces.upgrade.create"},
+		Examples: []Example{
+			{
+				Title:   "Run backup job",
+				Command: "oar api call --base-url https://control.oar.example --method POST --path /workspaces/ws_123/backups --body '{\"schedule_name\":\"nightly\",\"retention_days\":30}' --header 'Authorization: Bearer <control-session>'",
+			},
+		},
+	},
+	{
 		CommandID: "control.workspaces.create",
 		CLIPath:   "workspaces create",
 		Group:     "workspaces",
@@ -321,7 +357,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"workspaces", "provisioning", "registry"},
-		Adjacent:  []string{"control.workspaces.decommission", "control.workspaces.get", "control.workspaces.launch-sessions.create", "control.workspaces.list", "control.workspaces.replace", "control.workspaces.restore", "control.workspaces.resume", "control.workspaces.routing-manifest.get", "control.workspaces.session-exchange.create", "control.workspaces.suspend"},
+		Adjacent:  []string{"control.workspaces.backups.create", "control.workspaces.decommission", "control.workspaces.get", "control.workspaces.heartbeat.record", "control.workspaces.launch-sessions.create", "control.workspaces.list", "control.workspaces.replace", "control.workspaces.restore", "control.workspaces.restore-drills.create", "control.workspaces.resume", "control.workspaces.routing-manifest.get", "control.workspaces.session-exchange.create", "control.workspaces.suspend", "control.workspaces.upgrade.create"},
 		Examples: []Example{
 			{
 				Title:   "Provision workspace",
@@ -339,7 +375,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"workspaces", "lifecycle", "routing"},
-		Adjacent:   []string{"control.workspaces.create", "control.workspaces.get", "control.workspaces.launch-sessions.create", "control.workspaces.list", "control.workspaces.replace", "control.workspaces.restore", "control.workspaces.resume", "control.workspaces.routing-manifest.get", "control.workspaces.session-exchange.create", "control.workspaces.suspend"},
+		Adjacent:   []string{"control.workspaces.backups.create", "control.workspaces.create", "control.workspaces.get", "control.workspaces.heartbeat.record", "control.workspaces.launch-sessions.create", "control.workspaces.list", "control.workspaces.replace", "control.workspaces.restore", "control.workspaces.restore-drills.create", "control.workspaces.resume", "control.workspaces.routing-manifest.get", "control.workspaces.session-exchange.create", "control.workspaces.suspend", "control.workspaces.upgrade.create"},
 		Examples: []Example{
 			{
 				Title:   "Decommission workspace",
@@ -357,11 +393,29 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"workspaces", "registry"},
-		Adjacent:   []string{"control.workspaces.create", "control.workspaces.decommission", "control.workspaces.launch-sessions.create", "control.workspaces.list", "control.workspaces.replace", "control.workspaces.restore", "control.workspaces.resume", "control.workspaces.routing-manifest.get", "control.workspaces.session-exchange.create", "control.workspaces.suspend"},
+		Adjacent:   []string{"control.workspaces.backups.create", "control.workspaces.create", "control.workspaces.decommission", "control.workspaces.heartbeat.record", "control.workspaces.launch-sessions.create", "control.workspaces.list", "control.workspaces.replace", "control.workspaces.restore", "control.workspaces.restore-drills.create", "control.workspaces.resume", "control.workspaces.routing-manifest.get", "control.workspaces.session-exchange.create", "control.workspaces.suspend", "control.workspaces.upgrade.create"},
 		Examples: []Example{
 			{
 				Title:   "Read workspace",
 				Command: "oar api call --base-url https://control.oar.example --method GET --path /workspaces/ws_123 --header 'Authorization: Bearer <control-session>'",
+			},
+		},
+	},
+	{
+		CommandID:  "control.workspaces.heartbeat.record",
+		CLIPath:    "workspaces heartbeat record",
+		Group:      "workspaces",
+		Method:     "POST",
+		Path:       "/workspaces/{workspace_id}/heartbeat",
+		PathParams: []string{"workspace_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"workspaces", "heartbeat", "operations"},
+		Adjacent:   []string{"control.workspaces.backups.create", "control.workspaces.create", "control.workspaces.decommission", "control.workspaces.get", "control.workspaces.launch-sessions.create", "control.workspaces.list", "control.workspaces.replace", "control.workspaces.restore", "control.workspaces.restore-drills.create", "control.workspaces.resume", "control.workspaces.routing-manifest.get", "control.workspaces.session-exchange.create", "control.workspaces.suspend", "control.workspaces.upgrade.create"},
+		Examples: []Example{
+			{
+				Title:   "Record heartbeat",
+				Command: "oar api call --base-url https://control.oar.example --method POST --path /workspaces/ws_123/heartbeat --header 'Authorization: Bearer <workspace-service-token>' --body @heartbeat.json",
 			},
 		},
 	},
@@ -375,7 +429,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"workspaces", "launch", "grants"},
-		Adjacent:   []string{"control.workspaces.create", "control.workspaces.decommission", "control.workspaces.get", "control.workspaces.list", "control.workspaces.replace", "control.workspaces.restore", "control.workspaces.resume", "control.workspaces.routing-manifest.get", "control.workspaces.session-exchange.create", "control.workspaces.suspend"},
+		Adjacent:   []string{"control.workspaces.backups.create", "control.workspaces.create", "control.workspaces.decommission", "control.workspaces.get", "control.workspaces.heartbeat.record", "control.workspaces.list", "control.workspaces.replace", "control.workspaces.restore", "control.workspaces.restore-drills.create", "control.workspaces.resume", "control.workspaces.routing-manifest.get", "control.workspaces.session-exchange.create", "control.workspaces.suspend", "control.workspaces.upgrade.create"},
 		Examples: []Example{
 			{
 				Title:   "Launch workspace UI",
@@ -392,7 +446,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"workspaces", "registry", "tenancy"},
-		Adjacent:  []string{"control.workspaces.create", "control.workspaces.decommission", "control.workspaces.get", "control.workspaces.launch-sessions.create", "control.workspaces.replace", "control.workspaces.restore", "control.workspaces.resume", "control.workspaces.routing-manifest.get", "control.workspaces.session-exchange.create", "control.workspaces.suspend"},
+		Adjacent:  []string{"control.workspaces.backups.create", "control.workspaces.create", "control.workspaces.decommission", "control.workspaces.get", "control.workspaces.heartbeat.record", "control.workspaces.launch-sessions.create", "control.workspaces.replace", "control.workspaces.restore", "control.workspaces.restore-drills.create", "control.workspaces.resume", "control.workspaces.routing-manifest.get", "control.workspaces.session-exchange.create", "control.workspaces.suspend", "control.workspaces.upgrade.create"},
 		Examples: []Example{
 			{
 				Title:   "List workspaces for an organization",
@@ -410,7 +464,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"workspaces", "lifecycle", "restore"},
-		Adjacent:   []string{"control.workspaces.create", "control.workspaces.decommission", "control.workspaces.get", "control.workspaces.launch-sessions.create", "control.workspaces.list", "control.workspaces.restore", "control.workspaces.resume", "control.workspaces.routing-manifest.get", "control.workspaces.session-exchange.create", "control.workspaces.suspend"},
+		Adjacent:   []string{"control.workspaces.backups.create", "control.workspaces.create", "control.workspaces.decommission", "control.workspaces.get", "control.workspaces.heartbeat.record", "control.workspaces.launch-sessions.create", "control.workspaces.list", "control.workspaces.restore", "control.workspaces.restore-drills.create", "control.workspaces.resume", "control.workspaces.routing-manifest.get", "control.workspaces.session-exchange.create", "control.workspaces.suspend", "control.workspaces.upgrade.create"},
 		Examples: []Example{
 			{
 				Title:   "Replace workspace",
@@ -428,11 +482,29 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"workspaces", "lifecycle", "restore"},
-		Adjacent:   []string{"control.workspaces.create", "control.workspaces.decommission", "control.workspaces.get", "control.workspaces.launch-sessions.create", "control.workspaces.list", "control.workspaces.replace", "control.workspaces.resume", "control.workspaces.routing-manifest.get", "control.workspaces.session-exchange.create", "control.workspaces.suspend"},
+		Adjacent:   []string{"control.workspaces.backups.create", "control.workspaces.create", "control.workspaces.decommission", "control.workspaces.get", "control.workspaces.heartbeat.record", "control.workspaces.launch-sessions.create", "control.workspaces.list", "control.workspaces.replace", "control.workspaces.restore-drills.create", "control.workspaces.resume", "control.workspaces.routing-manifest.get", "control.workspaces.session-exchange.create", "control.workspaces.suspend", "control.workspaces.upgrade.create"},
 		Examples: []Example{
 			{
 				Title:   "Restore workspace",
 				Command: "oar api call --base-url https://control.oar.example --method POST --path /workspaces/ws_123/restore --body '{\"backup_dir\":\"/var/backups/ws_123-20260321T000000Z\"}' --header 'Authorization: Bearer <control-session>'",
+			},
+		},
+	},
+	{
+		CommandID:  "control.workspaces.restore-drills.create",
+		CLIPath:    "workspaces restore-drills create",
+		Group:      "workspaces",
+		Method:     "POST",
+		Path:       "/workspaces/{workspace_id}/restore-drills",
+		PathParams: []string{"workspace_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"workspaces", "backups", "restore", "drills"},
+		Adjacent:   []string{"control.workspaces.backups.create", "control.workspaces.create", "control.workspaces.decommission", "control.workspaces.get", "control.workspaces.heartbeat.record", "control.workspaces.launch-sessions.create", "control.workspaces.list", "control.workspaces.replace", "control.workspaces.restore", "control.workspaces.resume", "control.workspaces.routing-manifest.get", "control.workspaces.session-exchange.create", "control.workspaces.suspend", "control.workspaces.upgrade.create"},
+		Examples: []Example{
+			{
+				Title:   "Run restore drill",
+				Command: "oar api call --base-url https://control.oar.example --method POST --path /workspaces/ws_123/restore-drills --body '{\"backup_dir\":\"/var/backups/ws_123-20260321T000000Z\"}' --header 'Authorization: Bearer <control-session>'",
 			},
 		},
 	},
@@ -446,7 +518,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"workspaces", "lifecycle", "routing"},
-		Adjacent:   []string{"control.workspaces.create", "control.workspaces.decommission", "control.workspaces.get", "control.workspaces.launch-sessions.create", "control.workspaces.list", "control.workspaces.replace", "control.workspaces.restore", "control.workspaces.routing-manifest.get", "control.workspaces.session-exchange.create", "control.workspaces.suspend"},
+		Adjacent:   []string{"control.workspaces.backups.create", "control.workspaces.create", "control.workspaces.decommission", "control.workspaces.get", "control.workspaces.heartbeat.record", "control.workspaces.launch-sessions.create", "control.workspaces.list", "control.workspaces.replace", "control.workspaces.restore", "control.workspaces.restore-drills.create", "control.workspaces.routing-manifest.get", "control.workspaces.session-exchange.create", "control.workspaces.suspend", "control.workspaces.upgrade.create"},
 		Examples: []Example{
 			{
 				Title:   "Resume workspace",
@@ -464,7 +536,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"workspaces", "registry", "routing"},
-		Adjacent:   []string{"control.workspaces.create", "control.workspaces.decommission", "control.workspaces.get", "control.workspaces.launch-sessions.create", "control.workspaces.list", "control.workspaces.replace", "control.workspaces.restore", "control.workspaces.resume", "control.workspaces.session-exchange.create", "control.workspaces.suspend"},
+		Adjacent:   []string{"control.workspaces.backups.create", "control.workspaces.create", "control.workspaces.decommission", "control.workspaces.get", "control.workspaces.heartbeat.record", "control.workspaces.launch-sessions.create", "control.workspaces.list", "control.workspaces.replace", "control.workspaces.restore", "control.workspaces.restore-drills.create", "control.workspaces.resume", "control.workspaces.session-exchange.create", "control.workspaces.suspend", "control.workspaces.upgrade.create"},
 		Examples: []Example{
 			{
 				Title:   "Read routing manifest",
@@ -482,7 +554,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"workspaces", "grants", "launch"},
-		Adjacent:   []string{"control.workspaces.create", "control.workspaces.decommission", "control.workspaces.get", "control.workspaces.launch-sessions.create", "control.workspaces.list", "control.workspaces.replace", "control.workspaces.restore", "control.workspaces.resume", "control.workspaces.routing-manifest.get", "control.workspaces.suspend"},
+		Adjacent:   []string{"control.workspaces.backups.create", "control.workspaces.create", "control.workspaces.decommission", "control.workspaces.get", "control.workspaces.heartbeat.record", "control.workspaces.launch-sessions.create", "control.workspaces.list", "control.workspaces.replace", "control.workspaces.restore", "control.workspaces.restore-drills.create", "control.workspaces.resume", "control.workspaces.routing-manifest.get", "control.workspaces.suspend", "control.workspaces.upgrade.create"},
 		Examples: []Example{
 			{
 				Title:   "Exchange launch token",
@@ -500,11 +572,29 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"workspaces", "lifecycle", "routing"},
-		Adjacent:   []string{"control.workspaces.create", "control.workspaces.decommission", "control.workspaces.get", "control.workspaces.launch-sessions.create", "control.workspaces.list", "control.workspaces.replace", "control.workspaces.restore", "control.workspaces.resume", "control.workspaces.routing-manifest.get", "control.workspaces.session-exchange.create"},
+		Adjacent:   []string{"control.workspaces.backups.create", "control.workspaces.create", "control.workspaces.decommission", "control.workspaces.get", "control.workspaces.heartbeat.record", "control.workspaces.launch-sessions.create", "control.workspaces.list", "control.workspaces.replace", "control.workspaces.restore", "control.workspaces.restore-drills.create", "control.workspaces.resume", "control.workspaces.routing-manifest.get", "control.workspaces.session-exchange.create", "control.workspaces.upgrade.create"},
 		Examples: []Example{
 			{
 				Title:   "Suspend workspace",
 				Command: "oar api call --base-url https://control.oar.example --method POST --path /workspaces/ws_123/suspend --header 'Authorization: Bearer <control-session>'",
+			},
+		},
+	},
+	{
+		CommandID:  "control.workspaces.upgrade.create",
+		CLIPath:    "workspaces upgrade create",
+		Group:      "workspaces",
+		Method:     "POST",
+		Path:       "/workspaces/{workspace_id}/upgrade",
+		PathParams: []string{"workspace_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"workspaces", "upgrades", "provisioning"},
+		Adjacent:   []string{"control.workspaces.backups.create", "control.workspaces.create", "control.workspaces.decommission", "control.workspaces.get", "control.workspaces.heartbeat.record", "control.workspaces.launch-sessions.create", "control.workspaces.list", "control.workspaces.replace", "control.workspaces.restore", "control.workspaces.restore-drills.create", "control.workspaces.resume", "control.workspaces.routing-manifest.get", "control.workspaces.session-exchange.create", "control.workspaces.suspend"},
+		Examples: []Example{
+			{
+				Title:   "Run upgrade job",
+				Command: "oar api call --base-url https://control.oar.example --method POST --path /workspaces/ws_123/upgrade --body '{\"desired_version\":\"hosted-instance/v2\"}' --header 'Authorization: Bearer <control-session>'",
 			},
 		},
 	},
@@ -686,8 +776,16 @@ func (c *Client) ControlOrganizationsUsageSummaryGet(ctx context.Context, pathPa
 	return c.Invoke(ctx, "control.organizations.usage-summary.get", pathParams, opts)
 }
 
+func (c *Client) ControlOrganizationsWorkspaceInventoryList(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "control.organizations.workspace-inventory.list", pathParams, opts)
+}
+
 func (c *Client) ControlProvisioningJobsGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "control.provisioning.jobs.get", pathParams, opts)
+}
+
+func (c *Client) ControlWorkspacesBackupsCreate(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "control.workspaces.backups.create", pathParams, opts)
 }
 
 func (c *Client) ControlWorkspacesCreate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
@@ -700,6 +798,10 @@ func (c *Client) ControlWorkspacesDecommission(ctx context.Context, pathParams m
 
 func (c *Client) ControlWorkspacesGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "control.workspaces.get", pathParams, opts)
+}
+
+func (c *Client) ControlWorkspacesHeartbeatRecord(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "control.workspaces.heartbeat.record", pathParams, opts)
 }
 
 func (c *Client) ControlWorkspacesLaunchSessionsCreate(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
@@ -718,6 +820,10 @@ func (c *Client) ControlWorkspacesRestore(ctx context.Context, pathParams map[st
 	return c.Invoke(ctx, "control.workspaces.restore", pathParams, opts)
 }
 
+func (c *Client) ControlWorkspacesRestoreDrillsCreate(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "control.workspaces.restore-drills.create", pathParams, opts)
+}
+
 func (c *Client) ControlWorkspacesResume(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "control.workspaces.resume", pathParams, opts)
 }
@@ -732,4 +838,8 @@ func (c *Client) ControlWorkspacesSessionExchangeCreate(ctx context.Context, pat
 
 func (c *Client) ControlWorkspacesSuspend(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "control.workspaces.suspend", pathParams, opts)
+}
+
+func (c *Client) ControlWorkspacesUpgradeCreate(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "control.workspaces.upgrade.create", pathParams, opts)
 }

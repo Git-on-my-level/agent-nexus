@@ -632,6 +632,49 @@ paths:
         '404':
           $ref: '#/components/responses/ErrorResponse'
 
+  /workspaces/{workspace_id}/heartbeat:
+    post:
+      operationId: recordControlWorkspaceHeartbeat
+      summary: Record workspace heartbeat
+      tags: [workspaces]
+      x-oar-surface: "utility"
+      x-oar-command-id: "control.workspaces.heartbeat.record"
+      x-oar-cli-path: "workspaces heartbeat record"
+      x-oar-why: "Let the isolated workspace instance report version, health, projection maintenance, usage, and backup telemetry back to the control plane."
+      x-oar-examples:
+        - title: Record heartbeat
+          command: "oar api call --base-url https://control.oar.example --method POST --path /workspaces/ws_123/heartbeat --header 'Authorization: Bearer <workspace-service-token>' --body @heartbeat.json"
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ workspace }` with refreshed fleet telemetry."
+      x-oar-error-codes: [invalid_json, invalid_request, invalid_token, not_found, service_unavailable]
+      x-oar-concepts: [workspaces, heartbeat, operations]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Workspace-service authenticated. Do not replay with stale assertions."
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkspaceHeartbeatRequest'
+      responses:
+        '200':
+          description: Heartbeat recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/ErrorResponse'
+
   /workspaces/{workspace_id}/routing-manifest:
     get:
       operationId: getControlWorkspaceRoutingManifest
@@ -660,6 +703,129 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/WorkspaceRoutingManifestResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /workspaces/{workspace_id}/backups:
+    post:
+      operationId: createControlWorkspaceBackup
+      summary: Create workspace backup job
+      tags: [workspaces]
+      x-oar-surface: "canonical"
+      x-oar-command-id: "control.workspaces.backups.create"
+      x-oar-cli-path: "workspaces backups create"
+      x-oar-why: "Queue a durable backup job for the workspace and record the resulting backup history and retention metadata."
+      x-oar-examples:
+        - title: Run backup job
+          command: "oar api call --base-url https://control.oar.example --method POST --path /workspaces/ws_123/backups --body '{\"schedule_name\":\"nightly\",\"retention_days\":30}' --header 'Authorization: Bearer <control-session>'"
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ workspace, provisioning_job }`."
+      x-oar-error-codes: [auth_required, invalid_token, invalid_json, invalid_request, not_found, workspace_not_ready]
+      x-oar-concepts: [workspaces, backups, provisioning]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Backups are recorded as durable jobs. Retry only after checking the prior job result."
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkspaceBackupRequest'
+      responses:
+        '200':
+          description: Workspace backup job created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceJobMutationResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /workspaces/{workspace_id}/upgrade:
+    post:
+      operationId: createControlWorkspaceUpgrade
+      summary: Create workspace upgrade job
+      tags: [workspaces]
+      x-oar-surface: "canonical"
+      x-oar-command-id: "control.workspaces.upgrade.create"
+      x-oar-cli-path: "workspaces upgrade create"
+      x-oar-why: "Track desired version versus current version and record pre/post health checks for a workspace upgrade."
+      x-oar-examples:
+        - title: Run upgrade job
+          command: "oar api call --base-url https://control.oar.example --method POST --path /workspaces/ws_123/upgrade --body '{\"desired_version\":\"hosted-instance/v2\"}' --header 'Authorization: Bearer <control-session>'"
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ workspace, provisioning_job }`."
+      x-oar-error-codes: [auth_required, invalid_token, invalid_json, invalid_request, not_found, workspace_not_ready]
+      x-oar-concepts: [workspaces, upgrades, provisioning]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Fail closed if the workspace has not reported a healthy heartbeat."
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkspaceUpgradeRequest'
+      responses:
+        '200':
+          description: Workspace upgrade job created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceJobMutationResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /workspaces/{workspace_id}/restore-drills:
+    post:
+      operationId: createControlWorkspaceRestoreDrill
+      summary: Create workspace restore drill job
+      tags: [workspaces]
+      x-oar-surface: "utility"
+      x-oar-command-id: "control.workspaces.restore-drills.create"
+      x-oar-cli-path: "workspaces restore-drills create"
+      x-oar-why: "Verify that a representative backup can be restored and booted without touching the live workspace registry record."
+      x-oar-examples:
+        - title: Run restore drill
+          command: "oar api call --base-url https://control.oar.example --method POST --path /workspaces/ws_123/restore-drills --body '{\"backup_dir\":\"/var/backups/ws_123-20260321T000000Z\"}' --header 'Authorization: Bearer <control-session>'"
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ workspace, provisioning_job }`."
+      x-oar-error-codes: [auth_required, invalid_token, invalid_json, invalid_request, not_found, workspace_not_ready]
+      x-oar-concepts: [workspaces, backups, restore, drills]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Restore drills use a temporary deployment root and retain job stderr/stdout on failure."
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkspaceRestoreDrillRequest'
+      responses:
+        '200':
+          description: Workspace restore drill job created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceJobMutationResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
         '401':
           $ref: '#/components/responses/ErrorResponse'
         '404':
@@ -1000,6 +1166,49 @@ paths:
         '404':
           $ref: '#/components/responses/ErrorResponse'
 
+  /organizations/{organization_id}/workspace-inventory:
+    get:
+      operationId: listControlWorkspaceInventory
+      summary: List workspace fleet inventory
+      tags: [workspaces]
+      x-oar-surface: "utility"
+      x-oar-command-id: "control.organizations.workspace-inventory.list"
+      x-oar-cli-path: "organizations workspace-inventory list"
+      x-oar-why: "Inspect workspace health, heartbeats, backups, and failed jobs from one support-friendly surface."
+      x-oar-examples:
+        - title: List workspace inventory
+          command: "oar api call --base-url https://control.oar.example --method GET --path '/organizations/org_123/workspace-inventory' --header 'Authorization: Bearer <control-session>'"
+      x-oar-input-mode: "none"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ organization_id, summary, workspaces, next_cursor }`."
+      x-oar-error-codes: [auth_required, invalid_token]
+      x-oar-concepts: [workspaces, inventory, operations]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Safe and idempotent. The inventory is paginated by workspace creation order."
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+          description: Page size limit.
+        - in: query
+          name: cursor
+          required: false
+          schema:
+            type: string
+          description: Pagination cursor from the prior page.
+      responses:
+        '200':
+          description: Workspace inventory
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceInventoryResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
 components:
   parameters:
     OrganizationID:
@@ -1192,9 +1401,15 @@ components:
           type: string
         instance_id:
           type: string
+        service_identity_id:
+          type: string
+        service_identity_public_key:
+          type: string
         desired_state:
           type: string
           enum: [provisioning, ready, suspended, archived]
+        desired_version:
+          type: string
         quota_config_ref:
           type: string
         quota_envelope_ref:
@@ -1203,13 +1418,31 @@ components:
           type: string
         routing_manifest_path:
           type: string
+        last_heartbeat_at:
+          type: string
+          format: date-time
+        heartbeat_version:
+          type: string
+        heartbeat_build:
+          type: string
+        heartbeat_health_summary:
+          type: object
+          additionalProperties: true
+        heartbeat_projection_maintenance_summary:
+          type: object
+          additionalProperties: true
+        heartbeat_usage_summary:
+          $ref: '#/components/schemas/WorkspaceUsageSummary'
+        last_successful_backup_at:
+          type: string
+          format: date-time
         created_at:
           type: string
           format: date-time
         updated_at:
           type: string
           format: date-time
-      required: [id, organization_id, slug, display_name, status, region, workspace_tier, workspace_path, base_url, public_origin, core_origin, deployment_root, instance_id, desired_state, quota_config_ref, quota_envelope_ref, deployed_version, routing_manifest_path, created_at, updated_at]
+      required: [id, organization_id, slug, display_name, status, region, workspace_tier, workspace_path, base_url, public_origin, core_origin, deployment_root, instance_id, desired_state, desired_version, quota_config_ref, quota_envelope_ref, deployed_version, routing_manifest_path, created_at, updated_at]
 
     WorkspaceRoutingManifest:
       type: object
@@ -1236,6 +1469,10 @@ components:
           type: string
         desired_state:
           type: string
+        current_version:
+          type: string
+        desired_version:
+          type: string
         quota_config_ref:
           type: string
         quota_envelope_ref:
@@ -1247,7 +1484,7 @@ components:
         generated_at:
           type: string
           format: date-time
-      required: [workspace_id, organization_id, slug, workspace_path, public_origin, base_url, core_origin, deployment_root, instance_id, current_state, desired_state, quota_config_ref, quota_envelope_ref, deployed_version, routing_manifest_path, generated_at]
+      required: [workspace_id, organization_id, slug, workspace_path, public_origin, base_url, core_origin, deployment_root, instance_id, current_state, desired_state, current_version, desired_version, quota_config_ref, quota_envelope_ref, deployed_version, routing_manifest_path, generated_at]
 
     ProvisioningJob:
       type: object
@@ -1257,7 +1494,7 @@ components:
         workspace_id: { type: string }
         kind:
           type: string
-          enum: [workspace_create, workspace_suspend, workspace_resume, workspace_restore, workspace_replace, workspace_decommission, workspace_repair]
+          enum: [workspace_create, workspace_suspend, workspace_resume, workspace_restore, workspace_replace, workspace_decommission, workspace_repair, workspace_backup, workspace_upgrade, workspace_restore_drill]
         status:
           type: string
           enum: [queued, running, succeeded, failed]
@@ -1366,6 +1603,68 @@ components:
         quota:
           $ref: '#/components/schemas/UsageQuota'
       required: [organization_id, plan, usage, quota]
+
+    WorkspaceUsage:
+      type: object
+      properties:
+        blob_bytes:
+          type: integer
+        blob_objects:
+          type: integer
+        artifact_count:
+          type: integer
+        document_count:
+          type: integer
+        document_revision_count:
+          type: integer
+      required: [blob_bytes, blob_objects, artifact_count, document_count, document_revision_count]
+
+    WorkspaceQuota:
+      type: object
+      properties:
+        max_blob_bytes:
+          type: integer
+        max_artifacts:
+          type: integer
+        max_documents:
+          type: integer
+        max_document_revisions:
+          type: integer
+        max_upload_bytes:
+          type: integer
+      required: [max_blob_bytes, max_artifacts, max_documents, max_document_revisions, max_upload_bytes]
+
+    WorkspaceUsageSummary:
+      type: object
+      properties:
+        usage:
+          $ref: '#/components/schemas/WorkspaceUsage'
+        quota:
+          $ref: '#/components/schemas/WorkspaceQuota'
+        generated_at:
+          type: string
+          format: date-time
+      required: [usage, quota, generated_at]
+
+    WorkspaceHeartbeatRequest:
+      type: object
+      properties:
+        version:
+          type: string
+        build:
+          type: string
+        health_summary:
+          type: object
+          additionalProperties: true
+        projection_maintenance_summary:
+          type: object
+          additionalProperties: true
+        usage_summary:
+          $ref: '#/components/schemas/WorkspaceUsageSummary'
+        last_successful_backup_at:
+          type: string
+          format: date-time
+      required: [version, build, health_summary, projection_maintenance_summary, usage_summary]
 
     StartPasskeyRegistrationRequest:
       type: object
@@ -1553,6 +1852,8 @@ components:
         workspace_tier:
           type: string
           enum: [standard, plus, dedicated]
+        service_identity_id: { type: string }
+        service_identity_public_key: { type: string }
       required: [organization_id, slug, display_name, region, workspace_tier]
 
     WorkspaceResponse:
@@ -1589,6 +1890,33 @@ components:
           $ref: '#/components/schemas/ProvisioningJob'
       required: [workspace, provisioning_job]
 
+    WorkspaceInventoryItem:
+      type: object
+      properties:
+        workspace:
+          $ref: '#/components/schemas/Workspace'
+        open_failed_jobs:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProvisioningJob'
+        open_failed_job_count:
+          type: integer
+      required: [workspace, open_failed_jobs, open_failed_job_count]
+
+    WorkspaceInventoryResponse:
+      type: object
+      properties:
+        organization_id: { type: string }
+        summary:
+          $ref: '#/components/schemas/UsageSummary'
+        workspaces:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkspaceInventoryItem'
+        next_cursor:
+          type: string
+      required: [organization_id, summary, workspaces]
+
     ProvisioningJobResponse:
       type: object
       properties:
@@ -1602,6 +1930,28 @@ components:
         routing_manifest:
           $ref: '#/components/schemas/WorkspaceRoutingManifest'
       required: [routing_manifest]
+
+    WorkspaceBackupRequest:
+      type: object
+      properties:
+        schedule_name:
+          type: string
+        retention_days:
+          type: integer
+
+    WorkspaceUpgradeRequest:
+      type: object
+      properties:
+        desired_version:
+          type: string
+      required: [desired_version]
+
+    WorkspaceRestoreDrillRequest:
+      type: object
+      properties:
+        backup_dir:
+          type: string
+      required: [backup_dir]
 
     RestoreWorkspaceRequest:
       type: object

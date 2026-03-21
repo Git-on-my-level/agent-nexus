@@ -70,7 +70,14 @@ func (w *tailWriter) String() string {
 }
 
 func scanWorkspaceRow(scanner rowScanner) (Workspace, error) {
-	var workspace Workspace
+	var (
+		workspace                             Workspace
+		lastHeartbeatAt                       sql.NullString
+		lastSuccessfulBackupAt                sql.NullString
+		heartbeatHealthSummary                sql.NullString
+		heartbeatProjectionMaintenanceSummary sql.NullString
+		heartbeatUsageSummary                 sql.NullString
+	)
 	if err := scanner.Scan(
 		&workspace.ID,
 		&workspace.OrganizationID,
@@ -85,16 +92,31 @@ func scanWorkspaceRow(scanner rowScanner) (Workspace, error) {
 		&workspace.CoreOrigin,
 		&workspace.DeploymentRoot,
 		&workspace.InstanceID,
+		&workspace.ServiceIdentityID,
+		&workspace.ServiceIdentityPublicKey,
 		&workspace.DesiredState,
+		&workspace.DesiredVersion,
 		&workspace.QuotaConfigRef,
 		&workspace.QuotaEnvelopeRef,
 		&workspace.DeployedVersion,
 		&workspace.RoutingManifestPath,
+		&lastHeartbeatAt,
+		&workspace.HeartbeatVersion,
+		&workspace.HeartbeatBuild,
+		&heartbeatHealthSummary,
+		&heartbeatProjectionMaintenanceSummary,
+		&heartbeatUsageSummary,
+		&lastSuccessfulBackupAt,
 		&workspace.CreatedAt,
 		&workspace.UpdatedAt,
 	); err != nil {
 		return Workspace{}, err
 	}
+	workspace.LastHeartbeatAt = nullableString(lastHeartbeatAt)
+	workspace.LastSuccessfulBackupAt = nullableString(lastSuccessfulBackupAt)
+	workspace.HeartbeatHealthSummary = decodeJSONMap(heartbeatHealthSummary)
+	workspace.HeartbeatProjectionMaintenanceSummary = decodeJSONMap(heartbeatProjectionMaintenanceSummary)
+	workspace.HeartbeatUsageSummary = decodeJSONMap(heartbeatUsageSummary)
 	return workspace, nil
 }
 
@@ -302,9 +324,11 @@ func (s *Service) workspaceRoutingManifest(workspace Workspace) WorkspaceRouting
 		InstanceID:          workspace.InstanceID,
 		CurrentState:        workspace.Status,
 		DesiredState:        workspace.DesiredState,
+		CurrentVersion:      workspace.DeployedVersion,
+		DesiredVersion:      workspace.DesiredVersion,
+		DeployedVersion:     workspace.DeployedVersion,
 		QuotaConfigRef:      workspace.QuotaConfigRef,
 		QuotaEnvelopeRef:    workspace.QuotaEnvelopeRef,
-		DeployedVersion:     workspace.DeployedVersion,
 		RoutingManifestPath: s.workspaceRoutingManifestPath(workspace),
 		GeneratedAt:         s.now().Format(time.RFC3339Nano),
 	}
@@ -352,7 +376,7 @@ func (s *Service) updateWorkspaceRow(ctx context.Context, tx *sql.Tx, workspace 
 	_, err := tx.ExecContext(
 		ctx,
 		`UPDATE workspaces
-		 SET status = ?, region = ?, workspace_tier = ?, workspace_path = ?, base_url = ?, public_origin = ?, core_origin = ?, deployment_root = ?, instance_id = ?, desired_state = ?, quota_config_ref = ?, quota_envelope_ref = ?, deployed_version = ?, routing_manifest_path = ?, routing_manifest_json = ?, updated_at = ?
+		 SET status = ?, region = ?, workspace_tier = ?, workspace_path = ?, base_url = ?, public_origin = ?, core_origin = ?, deployment_root = ?, instance_id = ?, service_identity_id = ?, service_identity_public_key = ?, desired_state = ?, desired_version = ?, quota_config_ref = ?, quota_envelope_ref = ?, deployed_version = ?, routing_manifest_path = ?, last_heartbeat_at = ?, heartbeat_version = ?, heartbeat_build = ?, heartbeat_health_summary_json = ?, heartbeat_projection_maintenance_summary_json = ?, heartbeat_usage_summary_json = ?, last_successful_backup_at = ?, routing_manifest_json = ?, updated_at = ?
 		 WHERE id = ?`,
 		workspace.Status,
 		workspace.Region,
@@ -363,11 +387,21 @@ func (s *Service) updateWorkspaceRow(ctx context.Context, tx *sql.Tx, workspace 
 		workspace.CoreOrigin,
 		workspace.DeploymentRoot,
 		workspace.InstanceID,
+		workspace.ServiceIdentityID,
+		workspace.ServiceIdentityPublicKey,
 		workspace.DesiredState,
+		workspace.DesiredVersion,
 		workspace.QuotaConfigRef,
 		workspace.QuotaEnvelopeRef,
 		workspace.DeployedVersion,
 		workspace.RoutingManifestPath,
+		nullStringValue(workspace.LastHeartbeatAt),
+		workspace.HeartbeatVersion,
+		workspace.HeartbeatBuild,
+		encodeJSONValue(workspace.HeartbeatHealthSummary),
+		encodeJSONValue(workspace.HeartbeatProjectionMaintenanceSummary),
+		encodeJSONValue(workspace.HeartbeatUsageSummary),
+		nullStringValue(workspace.LastSuccessfulBackupAt),
 		string(rawManifest),
 		workspace.UpdatedAt,
 		workspace.ID,
@@ -468,17 +502,29 @@ func (s *Service) runProvisionWorkspaceScript(ctx context.Context, workspace Wor
 }
 
 func (s *Service) runRestoreWorkspaceScript(ctx context.Context, workspace Workspace, backupDir string) (scriptResult, error) {
+	return s.runRestoreWorkspaceScriptTo(ctx, workspace, backupDir, workspace.DeploymentRoot, workspace.InstanceID)
+}
+
+func (s *Service) runRestoreWorkspaceScriptTo(ctx context.Context, workspace Workspace, backupDir string, targetInstanceRoot string, instanceName string) (scriptResult, error) {
 	args := []string{
 		"--backup-dir", backupDir,
-		"--target-instance-root", workspace.DeploymentRoot,
-		"--instance", workspace.InstanceID,
+		"--target-instance-root", targetInstanceRoot,
+		"--instance", instanceName,
 		"--public-origin", s.workspacePublicOrigin(workspace),
 		"--listen-port", "8000",
 		"--web-ui-port", "3000",
-		"--core-instance-id", workspace.InstanceID,
+		"--core-instance-id", instanceName,
 		"--force",
 	}
 	return s.runHostedScript(ctx, "restore-workspace.sh", args...)
+}
+
+func (s *Service) runBackupWorkspaceScript(ctx context.Context, workspace Workspace, outputDir string) (scriptResult, error) {
+	args := []string{
+		"--instance-root", workspace.DeploymentRoot,
+		"--output-dir", outputDir,
+	}
+	return s.runHostedScript(ctx, "backup-workspace.sh", args...)
 }
 
 func (s *Service) runVerifyRestoreScript(ctx context.Context, workspace Workspace) (scriptResult, error) {

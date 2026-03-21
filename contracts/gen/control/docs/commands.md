@@ -4,7 +4,7 @@ Generated from `contracts/oar-control-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.1.0`
-- Commands: `27`
+- Commands: `32`
 
 ## `control.accounts.passkeys.register.finish`
 
@@ -231,6 +231,21 @@ Generated from `contracts/oar-control-openapi.yaml`.
 - Examples:
   - Get usage summary: `oar api call --base-url https://control.oar.example --method GET --path /organizations/org_123/usage-summary --header 'Authorization: Bearer <control-session>'`
 
+## `control.organizations.workspace-inventory.list`
+
+- CLI path: `organizations workspace-inventory list`
+- HTTP: `GET /organizations/{organization_id}/workspace-inventory`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Inspect workspace health, heartbeats, backups, and failed jobs from one support-friendly surface.
+- Concepts: `workspaces`, `inventory`, `operations`
+- Error codes: `auth_required`, `invalid_token`
+- Output: Returns `{ organization_id, summary, workspaces, next_cursor }`.
+- Agent notes: Safe and idempotent. The inventory is paginated by workspace creation order.
+- Examples:
+  - List workspace inventory: `oar api call --base-url https://control.oar.example --method GET --path '/organizations/org_123/workspace-inventory' --header 'Authorization: Bearer <control-session>'`
+
 ## `control.provisioning.jobs.get`
 
 - CLI path: `provisioning jobs get`
@@ -245,6 +260,21 @@ Generated from `contracts/oar-control-openapi.yaml`.
 - Agent notes: Safe and idempotent. Use polling or backoff; the contract does not require a watch stream yet.
 - Examples:
   - Poll provisioning job: `oar api call --base-url https://control.oar.example --method GET --path /provisioning/jobs/job_123 --header 'Authorization: Bearer <control-session>'`
+
+## `control.workspaces.backups.create`
+
+- CLI path: `workspaces backups create`
+- HTTP: `POST /workspaces/{workspace_id}/backups`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Queue a durable backup job for the workspace and record the resulting backup history and retention metadata.
+- Concepts: `workspaces`, `backups`, `provisioning`
+- Error codes: `auth_required`, `invalid_token`, `invalid_json`, `invalid_request`, `not_found`, `workspace_not_ready`
+- Output: Returns `{ workspace, provisioning_job }`.
+- Agent notes: Backups are recorded as durable jobs. Retry only after checking the prior job result.
+- Examples:
+  - Run backup job: `oar api call --base-url https://control.oar.example --method POST --path /workspaces/ws_123/backups --body '{"schedule_name":"nightly","retention_days":30}' --header 'Authorization: Bearer <control-session>'`
 
 ## `control.workspaces.create`
 
@@ -290,6 +320,21 @@ Generated from `contracts/oar-control-openapi.yaml`.
 - Agent notes: Safe and idempotent.
 - Examples:
   - Read workspace: `oar api call --base-url https://control.oar.example --method GET --path /workspaces/ws_123 --header 'Authorization: Bearer <control-session>'`
+
+## `control.workspaces.heartbeat.record`
+
+- CLI path: `workspaces heartbeat record`
+- HTTP: `POST /workspaces/{workspace_id}/heartbeat`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `json-body`
+- Why: Let the isolated workspace instance report version, health, projection maintenance, usage, and backup telemetry back to the control plane.
+- Concepts: `workspaces`, `heartbeat`, `operations`
+- Error codes: `invalid_json`, `invalid_request`, `invalid_token`, `not_found`, `service_unavailable`
+- Output: Returns `{ workspace }` with refreshed fleet telemetry.
+- Agent notes: Workspace-service authenticated. Do not replay with stale assertions.
+- Examples:
+  - Record heartbeat: `oar api call --base-url https://control.oar.example --method POST --path /workspaces/ws_123/heartbeat --header 'Authorization: Bearer <workspace-service-token>' --body @heartbeat.json`
 
 ## `control.workspaces.launch-sessions.create`
 
@@ -351,6 +396,21 @@ Generated from `contracts/oar-control-openapi.yaml`.
 - Examples:
   - Restore workspace: `oar api call --base-url https://control.oar.example --method POST --path /workspaces/ws_123/restore --body '{"backup_dir":"/var/backups/ws_123-20260321T000000Z"}' --header 'Authorization: Bearer <control-session>'`
 
+## `control.workspaces.restore-drills.create`
+
+- CLI path: `workspaces restore-drills create`
+- HTTP: `POST /workspaces/{workspace_id}/restore-drills`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `json-body`
+- Why: Verify that a representative backup can be restored and booted without touching the live workspace registry record.
+- Concepts: `workspaces`, `backups`, `restore`, `drills`
+- Error codes: `auth_required`, `invalid_token`, `invalid_json`, `invalid_request`, `not_found`, `workspace_not_ready`
+- Output: Returns `{ workspace, provisioning_job }`.
+- Agent notes: Restore drills use a temporary deployment root and retain job stderr/stdout on failure.
+- Examples:
+  - Run restore drill: `oar api call --base-url https://control.oar.example --method POST --path /workspaces/ws_123/restore-drills --body '{"backup_dir":"/var/backups/ws_123-20260321T000000Z"}' --header 'Authorization: Bearer <control-session>'`
+
 ## `control.workspaces.resume`
 
 - CLI path: `workspaces resume`
@@ -410,4 +470,19 @@ Generated from `contracts/oar-control-openapi.yaml`.
 - Agent notes: Safe to retry only after checking the previous job result. Suspension is a registry-level state transition.
 - Examples:
   - Suspend workspace: `oar api call --base-url https://control.oar.example --method POST --path /workspaces/ws_123/suspend --header 'Authorization: Bearer <control-session>'`
+
+## `control.workspaces.upgrade.create`
+
+- CLI path: `workspaces upgrade create`
+- HTTP: `POST /workspaces/{workspace_id}/upgrade`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Track desired version versus current version and record pre/post health checks for a workspace upgrade.
+- Concepts: `workspaces`, `upgrades`, `provisioning`
+- Error codes: `auth_required`, `invalid_token`, `invalid_json`, `invalid_request`, `not_found`, `workspace_not_ready`
+- Output: Returns `{ workspace, provisioning_job }`.
+- Agent notes: Fail closed if the workspace has not reported a healthy heartbeat.
+- Examples:
+  - Run upgrade job: `oar api call --base-url https://control.oar.example --method POST --path /workspaces/ws_123/upgrade --body '{"desired_version":"hosted-instance/v2"}' --header 'Authorization: Bearer <control-session>'`
 

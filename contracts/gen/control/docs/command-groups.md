@@ -18,7 +18,7 @@ Generated from `contracts/oar-control-openapi.yaml`.
 
 ## `organizations`
 
-- Commands: `10`
+- Commands: `11`
 - Command IDs:
   - `control.organizations.create` (`organizations create`)
   - `control.organizations.get` (`organizations get`)
@@ -30,6 +30,7 @@ Generated from `contracts/oar-control-openapi.yaml`.
   - `control.organizations.memberships.update` (`organizations memberships update`)
   - `control.organizations.update` (`organizations update`)
   - `control.organizations.usage-summary.get` (`organizations usage-summary get`)
+  - `control.organizations.workspace-inventory.list` (`organizations workspace-inventory list`)
 
 ## `provisioning`
 
@@ -39,17 +40,21 @@ Generated from `contracts/oar-control-openapi.yaml`.
 
 ## `workspaces`
 
-- Commands: `11`
+- Commands: `15`
 - Command IDs:
+  - `control.workspaces.backups.create` (`workspaces backups create`)
   - `control.workspaces.create` (`workspaces create`)
   - `control.workspaces.decommission` (`workspaces decommission`)
   - `control.workspaces.get` (`workspaces get`)
+  - `control.workspaces.heartbeat.record` (`workspaces heartbeat record`)
   - `control.workspaces.launch-sessions.create` (`workspaces launch-sessions create`)
   - `control.workspaces.list` (`workspaces list`)
   - `control.workspaces.replace` (`workspaces replace`)
   - `control.workspaces.restore` (`workspaces restore`)
+  - `control.workspaces.restore-drills.create` (`workspaces restore-drills create`)
   - `control.workspaces.resume` (`workspaces resume`)
   - `control.workspaces.routing-manifest.get` (`workspaces routing-manifest get`)
   - `control.workspaces.session-exchange.create` (`workspaces session-exchange create`)
   - `control.workspaces.suspend` (`workspaces suspend`)
+  - `control.workspaces.upgrade.create` (`workspaces upgrade create`)
 
