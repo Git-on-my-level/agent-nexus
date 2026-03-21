@@ -150,6 +150,49 @@ func TestRunMetaDocsIsConfigLenient(t *testing.T) {
 	}
 }
 
+func TestRunMetaUtilityCommandsDispatchGeneratedEndpoints(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/livez":
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		case "/readyz":
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		case "/ops/health":
+			if got := strings.TrimSpace(r.Header.Get("Authorization")); got != "Bearer access-token-1" {
+				t.Fatalf("expected auth header for /ops/health, got %q", got)
+			}
+			_, _ = w.Write([]byte(`{"ok":true,"projection_maintenance":{"pending_dirty_count":1}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	profilesDir := filepath.Join(home, ".config", "oar", "profiles")
+	if err := os.MkdirAll(profilesDir, 0o700); err != nil {
+		t.Fatalf("mkdir profiles dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(profilesDir, "agent-a.json"), []byte(`{"base_url":"`+server.URL+`","access_token":"access-token-1","access_token_expires_at":"2099-01-01T00:00:00Z"}`), 0o600); err != nil {
+		t.Fatalf("write profile: %v", err)
+	}
+
+	livezRaw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "--agent", "agent-a", "meta", "livez"})
+	livezPayload := assertEnvelopeOK(t, livezRaw)
+	if got := anyStringValue(livezPayload["command"]); got != "meta livez" {
+		t.Fatalf("unexpected livez envelope: %#v", livezPayload)
+	}
+
+	opsRaw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "--agent", "agent-a", "meta", "ops", "health"})
+	opsPayload := assertEnvelopeOK(t, opsRaw)
+	if got := anyStringValue(opsPayload["command"]); got != "meta ops health" {
+		t.Fatalf("unexpected ops health envelope: %#v", opsPayload)
+	}
+}
+
 func TestRunTrailingGlobalBaseURLIsAccepted(t *testing.T) {
 	t.Parallel()
 

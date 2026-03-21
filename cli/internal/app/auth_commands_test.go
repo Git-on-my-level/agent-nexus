@@ -422,6 +422,38 @@ func TestAuthPrincipalsRevoke(t *testing.T) {
 	}
 }
 
+func TestAuthPrincipalsRevokeRejectsCurrentProfile(t *testing.T) {
+	t.Parallel()
+
+	core := newFakeAuthCore(t)
+	server := httptest.NewServer(http.HandlerFunc(core.handle))
+	defer server.Close()
+
+	home := t.TempDir()
+	env := map[string]string{}
+
+	_ = runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "register", "--username", "Agent.One"})
+
+	profilePath := filepath.Join(home, ".config", "oar", "profiles", "agent-a.json")
+	storedProfile, ok, err := profile.Load(profilePath)
+	if err != nil || !ok {
+		t.Fatalf("load profile after register: ok=%t err=%v", ok, err)
+	}
+
+	raw := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "principals", "revoke", "--agent-id", storedProfile.AgentID})
+	payload := assertEnvelopeError(t, raw)
+	errObj, _ := payload["error"].(map[string]any)
+	if errObj == nil {
+		t.Fatalf("expected error payload, got %#v", payload)
+	}
+	if got := strings.TrimSpace(anyStr(errObj["code"])); got != "invalid_request" {
+		t.Fatalf("expected invalid_request code, got %#v", payload)
+	}
+	if msg := strings.TrimSpace(anyStr(errObj["message"])); !strings.Contains(msg, "oar auth revoke") {
+		t.Fatalf("expected self-revoke guidance, got %#v", payload)
+	}
+}
+
 func runCLIForTest(t *testing.T, home string, env map[string]string, stdin io.Reader, args []string) string {
 	t.Helper()
 	if stdin == nil {

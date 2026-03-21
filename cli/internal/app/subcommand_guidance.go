@@ -87,8 +87,14 @@ var actorsSubcommandSpec = subcommandSpec{
 
 var metaSubcommandSpec = subcommandSpec{
 	command:  "meta",
-	valid:    []string{"commands", "command", "concepts", "concept", "docs", "doc", "skill"},
-	examples: []string{"oar meta commands", "oar meta command --command-id threads.list", "oar meta docs", "oar meta doc agent-guide", "oar meta skill cursor --write-dir ~/.cursor/skills/oar-cli-onboard"},
+	valid:    []string{"health", "livez", "readyz", "version", "handshake", "ops", "commands", "command", "concepts", "concept", "docs", "doc", "skill"},
+	examples: []string{"oar meta health", "oar meta readyz", "oar meta ops health", "oar meta commands", "oar meta command --command-id threads.list", "oar meta docs", "oar meta doc agent-guide", "oar meta skill cursor --write-dir ~/.cursor/skills/oar-cli-onboard"},
+}
+
+var metaOpsSubcommandSpec = subcommandSpec{
+	command:  "meta ops",
+	valid:    []string{"health"},
+	examples: []string{"oar meta ops health"},
 }
 
 var draftSubcommandSpec = subcommandSpec{

@@ -11,7 +11,7 @@ import (
 	"organization-autorunner-cli/internal/registry"
 )
 
-func (a *App) runMeta(_ context.Context, args []string, _ config.Resolved) (*commandResult, string, error) {
+func (a *App) runMeta(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
 	if len(args) == 0 || isHelpToken(args[0]) {
 		if text, ok := generatedHelpText("meta"); ok {
 			return &commandResult{Text: text}, "meta", nil
@@ -20,6 +20,24 @@ func (a *App) runMeta(_ context.Context, args []string, _ config.Resolved) (*com
 	}
 	sub := metaSubcommandSpec.normalize(args[0])
 	switch sub {
+	case "health":
+		result, err := a.runMetaUtility(ctx, cfg, "meta health", "meta.health")
+		return result, "meta health", err
+	case "livez":
+		result, err := a.runMetaUtility(ctx, cfg, "meta livez", "meta.livez")
+		return result, "meta livez", err
+	case "readyz":
+		result, err := a.runMetaUtility(ctx, cfg, "meta readyz", "meta.readyz")
+		return result, "meta readyz", err
+	case "version":
+		result, err := a.runMetaUtility(ctx, cfg, "meta version", "meta.version")
+		return result, "meta version", err
+	case "handshake":
+		result, err := a.runMetaUtility(ctx, cfg, "meta handshake", "meta.handshake")
+		return result, "meta handshake", err
+	case "ops":
+		result, name, err := a.runMetaOps(ctx, cfg, args[1:])
+		return result, name, err
 	case "commands":
 		result, err := a.runMetaCommands(args[1:])
 		return result, "meta commands", err
@@ -43,6 +61,26 @@ func (a *App) runMeta(_ context.Context, args []string, _ config.Resolved) (*com
 		return result, "meta skill", err
 	default:
 		return nil, "meta", metaSubcommandSpec.unknownError(args[0])
+	}
+}
+
+func (a *App) runMetaUtility(ctx context.Context, cfg config.Resolved, commandName string, commandID string) (*commandResult, error) {
+	return a.invokeTypedJSON(ctx, cfg, commandName, commandID, nil, nil, nil)
+}
+
+func (a *App) runMetaOps(ctx context.Context, cfg config.Resolved, args []string) (*commandResult, string, error) {
+	if len(args) == 0 {
+		return nil, "meta ops", metaOpsSubcommandSpec.requiredError()
+	}
+	switch metaOpsSubcommandSpec.normalize(args[0]) {
+	case "health":
+		if len(args) > 1 {
+			return nil, "meta ops health", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar meta ops health`")
+		}
+		result, err := a.runMetaUtility(ctx, cfg, "meta ops health", "meta.ops.health")
+		return result, "meta ops health", err
+	default:
+		return nil, "meta ops", metaOpsSubcommandSpec.unknownError(args[0])
 	}
 }
 

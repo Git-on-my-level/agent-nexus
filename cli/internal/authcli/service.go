@@ -429,6 +429,9 @@ func (s *Service) RevokePrincipal(ctx context.Context, agentID string, forceLast
 	if err != nil {
 		return RevokePrincipalResult{}, err
 	}
+	if strings.TrimSpace(prof.AgentID) != "" && agentID == strings.TrimSpace(prof.AgentID) {
+		return RevokePrincipalResult{}, errnorm.Usage("invalid_request", "use `oar auth revoke` to revoke the current profile")
+	}
 	client, err := s.newClient(prof.AccessToken)
 	if err != nil {
 		return RevokePrincipalResult{}, errnorm.Wrap(errnorm.KindLocal, "http_client_init_failed", "failed to initialize HTTP client", err)
