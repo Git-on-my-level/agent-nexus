@@ -61,8 +61,14 @@ export declare class OarClient {
     controlOrganizationsUsageSummaryGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     controlProvisioningJobsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     controlWorkspacesCreate(options?: RequestOptions): Promise<InvokeResult>;
+    controlWorkspacesDecommission(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     controlWorkspacesGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     controlWorkspacesLaunchSessionsCreate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     controlWorkspacesList(options?: RequestOptions): Promise<InvokeResult>;
+    controlWorkspacesReplace(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    controlWorkspacesRestore(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    controlWorkspacesResume(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    controlWorkspacesRoutingManifestGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     controlWorkspacesSessionExchangeCreate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    controlWorkspacesSuspend(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
 }

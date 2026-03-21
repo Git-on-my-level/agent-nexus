@@ -949,13 +949,70 @@ export const commandRegistry = [
             ]
         },
         "adjacent_commands": [
+            "control.workspaces.decommission",
             "control.workspaces.get",
             "control.workspaces.launch-sessions.create",
             "control.workspaces.list",
-            "control.workspaces.session-exchange.create"
+            "control.workspaces.replace",
+            "control.workspaces.restore",
+            "control.workspaces.resume",
+            "control.workspaces.routing-manifest.get",
+            "control.workspaces.session-exchange.create",
+            "control.workspaces.suspend"
         ],
         "go_method": "ControlWorkspacesCreate",
         "ts_method": "controlWorkspacesCreate"
+    },
+    {
+        "command_id": "control.workspaces.decommission",
+        "cli_path": "workspaces decommission",
+        "group": "workspaces",
+        "method": "POST",
+        "path": "/workspaces/{workspace_id}/decommission",
+        "operation_id": "decommissionControlWorkspace",
+        "summary": "Decommission workspace deployment",
+        "why": "Retire a workspace deployment while preserving the control-plane registry and job history for later audit and retry decisions.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ workspace, provisioning_job }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "not_found"
+        ],
+        "concepts": [
+            "workspaces",
+            "lifecycle",
+            "routing"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Idempotent from a user perspective once the workspace is archived.",
+        "examples": [
+            {
+                "title": "Decommission workspace",
+                "command": "oar api call --base-url https://control.oar.example --method POST --path /workspaces/ws_123/decommission --header 'Authorization: Bearer \u003ccontrol-session\u003e'"
+            }
+        ],
+        "path_params": [
+            "workspace_id"
+        ],
+        "adjacent_commands": [
+            "control.workspaces.create",
+            "control.workspaces.get",
+            "control.workspaces.launch-sessions.create",
+            "control.workspaces.list",
+            "control.workspaces.replace",
+            "control.workspaces.restore",
+            "control.workspaces.resume",
+            "control.workspaces.routing-manifest.get",
+            "control.workspaces.session-exchange.create",
+            "control.workspaces.suspend"
+        ],
+        "go_method": "ControlWorkspacesDecommission",
+        "ts_method": "controlWorkspacesDecommission"
     },
     {
         "command_id": "control.workspaces.get",
@@ -994,9 +1051,15 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "control.workspaces.create",
+            "control.workspaces.decommission",
             "control.workspaces.launch-sessions.create",
             "control.workspaces.list",
-            "control.workspaces.session-exchange.create"
+            "control.workspaces.replace",
+            "control.workspaces.restore",
+            "control.workspaces.resume",
+            "control.workspaces.routing-manifest.get",
+            "control.workspaces.session-exchange.create",
+            "control.workspaces.suspend"
         ],
         "go_method": "ControlWorkspacesGet",
         "ts_method": "controlWorkspacesGet"
@@ -1050,9 +1113,15 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "control.workspaces.create",
+            "control.workspaces.decommission",
             "control.workspaces.get",
             "control.workspaces.list",
-            "control.workspaces.session-exchange.create"
+            "control.workspaces.replace",
+            "control.workspaces.restore",
+            "control.workspaces.resume",
+            "control.workspaces.routing-manifest.get",
+            "control.workspaces.session-exchange.create",
+            "control.workspaces.suspend"
         ],
         "go_method": "ControlWorkspacesLaunchSessionsCreate",
         "ts_method": "controlWorkspacesLaunchSessionsCreate"
@@ -1091,12 +1160,245 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "control.workspaces.create",
+            "control.workspaces.decommission",
             "control.workspaces.get",
             "control.workspaces.launch-sessions.create",
-            "control.workspaces.session-exchange.create"
+            "control.workspaces.replace",
+            "control.workspaces.restore",
+            "control.workspaces.resume",
+            "control.workspaces.routing-manifest.get",
+            "control.workspaces.session-exchange.create",
+            "control.workspaces.suspend"
         ],
         "go_method": "ControlWorkspacesList",
         "ts_method": "controlWorkspacesList"
+    },
+    {
+        "command_id": "control.workspaces.replace",
+        "cli_path": "workspaces replace",
+        "group": "workspaces",
+        "method": "POST",
+        "path": "/workspaces/{workspace_id}/replace",
+        "operation_id": "replaceControlWorkspace",
+        "summary": "Replace workspace deployment from backup",
+        "why": "Replace a workspace deployment in place by restoring a backup bundle into its registry-owned instance root.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ workspace, provisioning_job }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "invalid_json",
+            "invalid_request",
+            "not_found",
+            "workspace_not_ready"
+        ],
+        "concepts": [
+            "workspaces",
+            "lifecycle",
+            "restore"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "The backup bundle must already exist and pass validation. The job is retryable if the prior attempt failed.",
+        "examples": [
+            {
+                "title": "Replace workspace",
+                "command": "oar api call --base-url https://control.oar.example --method POST --path /workspaces/ws_123/replace --body '{\"backup_dir\":\"/var/backups/ws_123-20260321T000000Z\"}' --header 'Authorization: Bearer \u003ccontrol-session\u003e'"
+            }
+        ],
+        "body_schema": {
+            "required": [
+                {
+                    "name": "backup_dir",
+                    "type": "string"
+                }
+            ]
+        },
+        "path_params": [
+            "workspace_id"
+        ],
+        "adjacent_commands": [
+            "control.workspaces.create",
+            "control.workspaces.decommission",
+            "control.workspaces.get",
+            "control.workspaces.launch-sessions.create",
+            "control.workspaces.list",
+            "control.workspaces.restore",
+            "control.workspaces.resume",
+            "control.workspaces.routing-manifest.get",
+            "control.workspaces.session-exchange.create",
+            "control.workspaces.suspend"
+        ],
+        "go_method": "ControlWorkspacesReplace",
+        "ts_method": "controlWorkspacesReplace"
+    },
+    {
+        "command_id": "control.workspaces.restore",
+        "cli_path": "workspaces restore",
+        "group": "workspaces",
+        "method": "POST",
+        "path": "/workspaces/{workspace_id}/restore",
+        "operation_id": "restoreControlWorkspace",
+        "summary": "Restore workspace deployment from backup",
+        "why": "Restore a workspace deployment from a validated backup bundle using the hosted restore workflow.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ workspace, provisioning_job }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "invalid_json",
+            "invalid_request",
+            "not_found",
+            "workspace_not_ready"
+        ],
+        "concepts": [
+            "workspaces",
+            "lifecycle",
+            "restore"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "The backup bundle must already exist and pass validation. Failed restores must retain the script stderr tail.",
+        "examples": [
+            {
+                "title": "Restore workspace",
+                "command": "oar api call --base-url https://control.oar.example --method POST --path /workspaces/ws_123/restore --body '{\"backup_dir\":\"/var/backups/ws_123-20260321T000000Z\"}' --header 'Authorization: Bearer \u003ccontrol-session\u003e'"
+            }
+        ],
+        "body_schema": {
+            "required": [
+                {
+                    "name": "backup_dir",
+                    "type": "string"
+                }
+            ]
+        },
+        "path_params": [
+            "workspace_id"
+        ],
+        "adjacent_commands": [
+            "control.workspaces.create",
+            "control.workspaces.decommission",
+            "control.workspaces.get",
+            "control.workspaces.launch-sessions.create",
+            "control.workspaces.list",
+            "control.workspaces.replace",
+            "control.workspaces.resume",
+            "control.workspaces.routing-manifest.get",
+            "control.workspaces.session-exchange.create",
+            "control.workspaces.suspend"
+        ],
+        "go_method": "ControlWorkspacesRestore",
+        "ts_method": "controlWorkspacesRestore"
+    },
+    {
+        "command_id": "control.workspaces.resume",
+        "cli_path": "workspaces resume",
+        "group": "workspaces",
+        "method": "POST",
+        "path": "/workspaces/{workspace_id}/resume",
+        "operation_id": "resumeControlWorkspace",
+        "summary": "Resume workspace deployment",
+        "why": "Return a suspended workspace deployment to the ready state so shared routing can direct traffic to it again.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ workspace, provisioning_job }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "not_found",
+            "workspace_not_ready"
+        ],
+        "concepts": [
+            "workspaces",
+            "lifecycle",
+            "routing"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Safe to retry only after checking the previous job result.",
+        "examples": [
+            {
+                "title": "Resume workspace",
+                "command": "oar api call --base-url https://control.oar.example --method POST --path /workspaces/ws_123/resume --header 'Authorization: Bearer \u003ccontrol-session\u003e'"
+            }
+        ],
+        "path_params": [
+            "workspace_id"
+        ],
+        "adjacent_commands": [
+            "control.workspaces.create",
+            "control.workspaces.decommission",
+            "control.workspaces.get",
+            "control.workspaces.launch-sessions.create",
+            "control.workspaces.list",
+            "control.workspaces.replace",
+            "control.workspaces.restore",
+            "control.workspaces.routing-manifest.get",
+            "control.workspaces.session-exchange.create",
+            "control.workspaces.suspend"
+        ],
+        "go_method": "ControlWorkspacesResume",
+        "ts_method": "controlWorkspacesResume"
+    },
+    {
+        "command_id": "control.workspaces.routing-manifest.get",
+        "cli_path": "workspaces routing-manifest get",
+        "group": "workspaces",
+        "method": "GET",
+        "path": "/workspaces/{workspace_id}/routing-manifest",
+        "operation_id": "getControlWorkspaceRoutingManifest",
+        "summary": "Get workspace routing manifest",
+        "why": "Load machine-readable routing metadata for a single isolated workspace deployment so shared apps and proxies can resolve the correct backend.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ routing_manifest }` for the requested workspace.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "not_found"
+        ],
+        "concepts": [
+            "workspaces",
+            "registry",
+            "routing"
+        ],
+        "stability": "beta",
+        "surface": "projection",
+        "agent_notes": "Safe and idempotent. The manifest is derived from registry state and is suitable for proxy consumption.",
+        "examples": [
+            {
+                "title": "Read routing manifest",
+                "command": "oar api call --base-url https://control.oar.example --method GET --path /workspaces/ws_123/routing-manifest --header 'Authorization: Bearer \u003ccontrol-session\u003e'"
+            }
+        ],
+        "path_params": [
+            "workspace_id"
+        ],
+        "adjacent_commands": [
+            "control.workspaces.create",
+            "control.workspaces.decommission",
+            "control.workspaces.get",
+            "control.workspaces.launch-sessions.create",
+            "control.workspaces.list",
+            "control.workspaces.replace",
+            "control.workspaces.restore",
+            "control.workspaces.resume",
+            "control.workspaces.session-exchange.create",
+            "control.workspaces.suspend"
+        ],
+        "go_method": "ControlWorkspacesRoutingManifestGet",
+        "ts_method": "controlWorkspacesRoutingManifestGet"
     },
     {
         "command_id": "control.workspaces.session-exchange.create",
@@ -1147,12 +1449,70 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "control.workspaces.create",
+            "control.workspaces.decommission",
             "control.workspaces.get",
             "control.workspaces.launch-sessions.create",
-            "control.workspaces.list"
+            "control.workspaces.list",
+            "control.workspaces.replace",
+            "control.workspaces.restore",
+            "control.workspaces.resume",
+            "control.workspaces.routing-manifest.get",
+            "control.workspaces.suspend"
         ],
         "go_method": "ControlWorkspacesSessionExchangeCreate",
         "ts_method": "controlWorkspacesSessionExchangeCreate"
+    },
+    {
+        "command_id": "control.workspaces.suspend",
+        "cli_path": "workspaces suspend",
+        "group": "workspaces",
+        "method": "POST",
+        "path": "/workspaces/{workspace_id}/suspend",
+        "operation_id": "suspendControlWorkspace",
+        "summary": "Suspend workspace deployment",
+        "why": "Mark a workspace deployment as suspended and stop routing new launches to it without deleting the registry record.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ workspace, provisioning_job }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "not_found",
+            "workspace_not_ready"
+        ],
+        "concepts": [
+            "workspaces",
+            "lifecycle",
+            "routing"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Safe to retry only after checking the previous job result. Suspension is a registry-level state transition.",
+        "examples": [
+            {
+                "title": "Suspend workspace",
+                "command": "oar api call --base-url https://control.oar.example --method POST --path /workspaces/ws_123/suspend --header 'Authorization: Bearer \u003ccontrol-session\u003e'"
+            }
+        ],
+        "path_params": [
+            "workspace_id"
+        ],
+        "adjacent_commands": [
+            "control.workspaces.create",
+            "control.workspaces.decommission",
+            "control.workspaces.get",
+            "control.workspaces.launch-sessions.create",
+            "control.workspaces.list",
+            "control.workspaces.replace",
+            "control.workspaces.restore",
+            "control.workspaces.resume",
+            "control.workspaces.routing-manifest.get",
+            "control.workspaces.session-exchange.create"
+        ],
+        "go_method": "ControlWorkspacesSuspend",
+        "ts_method": "controlWorkspacesSuspend"
     }
 ];
 const commandIndex = new Map(commandRegistry.map((command) => [command.command_id, command]));
@@ -1268,6 +1628,9 @@ export class OarClient {
     controlWorkspacesCreate(options = {}) {
         return this.invoke("control.workspaces.create", {}, options);
     }
+    controlWorkspacesDecommission(pathParams, options = {}) {
+        return this.invoke("control.workspaces.decommission", pathParams, options);
+    }
     controlWorkspacesGet(pathParams, options = {}) {
         return this.invoke("control.workspaces.get", pathParams, options);
     }
@@ -1277,7 +1640,22 @@ export class OarClient {
     controlWorkspacesList(options = {}) {
         return this.invoke("control.workspaces.list", {}, options);
     }
+    controlWorkspacesReplace(pathParams, options = {}) {
+        return this.invoke("control.workspaces.replace", pathParams, options);
+    }
+    controlWorkspacesRestore(pathParams, options = {}) {
+        return this.invoke("control.workspaces.restore", pathParams, options);
+    }
+    controlWorkspacesResume(pathParams, options = {}) {
+        return this.invoke("control.workspaces.resume", pathParams, options);
+    }
+    controlWorkspacesRoutingManifestGet(pathParams, options = {}) {
+        return this.invoke("control.workspaces.routing-manifest.get", pathParams, options);
+    }
     controlWorkspacesSessionExchangeCreate(pathParams, options = {}) {
         return this.invoke("control.workspaces.session-exchange.create", pathParams, options);
+    }
+    controlWorkspacesSuspend(pathParams, options = {}) {
+        return this.invoke("control.workspaces.suspend", pathParams, options);
     }
 }
