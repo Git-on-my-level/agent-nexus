@@ -104,6 +104,9 @@ See `runbooks/release.md` for version-pinning and custom install directory optio
 - `make hosted-smoke`: run hosted-v1 production smoke suite (auth gate, onboarding, workspace access, staleness)
 - `make hosted-ops-test`: run hosted provisioning/backup/restore verification tests
 - `make hosted-ops-smoke`: run one hosted provisioning/backup/restore smoke flow
+- `make saas-smoke`: run SaaS control-plane multi-workspace smoke (account, org, workspaces, invite, launch, session-exchange)
+- `make saas-e2e`: run extended SaaS e2e flow (workspace isolation, backup, session revocation)
+- `make saas-load-smoke`: run SaaS load smoke test (multiple workspaces with concurrent operations)
 - `make cli-integration-test`: run CLI real-binary integration tests (non-default)
 - `make e2e-smoke`: run live core + CLI + web-ui smoke verification
 - `make core-<target>`: pass through to `core/Makefile`

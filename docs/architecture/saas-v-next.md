@@ -121,3 +121,52 @@ Hosted v1 and SaaS v-next intentionally split human authentication:
 
 This split is intentional. It lets hosted v1 stay operationally simple while
 making SaaS self-serve identity coherent.
+
+## Operational notes
+
+### Control-plane startup
+
+Start the control plane from the repo root:
+
+```bash
+make serve-control-plane
+# or directly:
+go run ./core/cmd/oar-control-plane --listen-addr 127.0.0.1:8100 --workspace-root .oar-control-plane
+```
+
+Required environment for session-exchange grants:
+
+- `OAR_CONTROL_PLANE_WORKSPACE_GRANT_ISSUER` - issuer URL (defaults to control-plane listen address)
+- `OAR_CONTROL_PLANE_WORKSPACE_GRANT_AUDIENCE` - audience (e.g., `oar-core`)
+- `OAR_CONTROL_PLANE_WORKSPACE_GRANT_SIGNING_KEY` - Ed25519 private key in base64
+
+### Test commands
+
+CI runs these gates automatically on SaaS-sensitive changes:
+
+```bash
+make saas-smoke      # Multi-workspace control-plane smoke
+make saas-e2e        # Extended flow with isolation and session revocation
+make saas-load-smoke # Basic load with concurrent reads/writes
+```
+
+For local iteration, each script can be run directly:
+
+```bash
+./scripts/saas-smoke
+./scripts/saas-e2e
+SAAS_LOAD_NUM_WORKSPACES=2 ./scripts/saas-load-smoke
+```
+
+### What is intentionally out of scope
+
+This ticket pack does not include:
+
+- Billing and subscription integration
+- External identity provider federation
+- Multi-region workspace placement
+- Automated traffic cutover or DNS management
+- Tiered storage or archival policies
+- Public signup flows
+
+These are future work after the core SaaS path stabilizes.

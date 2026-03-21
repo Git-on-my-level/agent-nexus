@@ -59,16 +59,21 @@ export declare class OarClient {
     controlOrganizationsMembershipsUpdate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     controlOrganizationsUpdate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     controlOrganizationsUsageSummaryGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    controlOrganizationsWorkspaceInventoryList(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     controlProvisioningJobsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    controlWorkspacesBackupsCreate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     controlWorkspacesCreate(options?: RequestOptions): Promise<InvokeResult>;
     controlWorkspacesDecommission(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     controlWorkspacesGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    controlWorkspacesHeartbeatRecord(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     controlWorkspacesLaunchSessionsCreate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     controlWorkspacesList(options?: RequestOptions): Promise<InvokeResult>;
     controlWorkspacesReplace(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     controlWorkspacesRestore(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    controlWorkspacesRestoreDrillsCreate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     controlWorkspacesResume(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     controlWorkspacesRoutingManifestGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     controlWorkspacesSessionExchangeCreate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     controlWorkspacesSuspend(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    controlWorkspacesUpgradeCreate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
 }

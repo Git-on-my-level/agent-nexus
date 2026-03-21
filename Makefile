@@ -14,7 +14,7 @@ FORCE_SEED ?= 0
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup check serve serve-control-plane lint test format contract-gen contract-check e2e-smoke hosted-smoke hosted-ops-test hosted-ops-smoke cli-check cli-test cli-build cli-integration-test core-% web-ui-%
+.PHONY: help setup check serve serve-control-plane lint test format contract-gen contract-check e2e-smoke hosted-smoke hosted-ops-test hosted-ops-smoke saas-smoke saas-e2e saas-load-smoke cli-check cli-test cli-build cli-integration-test core-% web-ui-%
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z0-9_.-]+:.*##/ {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -77,6 +77,15 @@ hosted-ops-test: ## Run hosted provisioning/backup/restore verification tests
 
 hosted-ops-smoke: ## Run one hosted provisioning/backup/restore smoke flow
 	./scripts/hosted/smoke-test.sh
+
+saas-smoke: ## Run SaaS control-plane multi-workspace smoke test (account, org, workspaces, invite, launch, session-exchange, workspace-rw)
+	./scripts/saas-smoke
+
+saas-e2e: ## Run extended SaaS e2e flow (multi-workspace isolation, backup, session revocation)
+	./scripts/saas-e2e
+
+saas-load-smoke: ## Run SaaS load smoke test (multiple workspaces with concurrent reads/writes)
+	./scripts/saas-load-smoke
 
 serve: ## Start core, seed mock dataset into core, then start web-ui
 	@set -euo pipefail; \
