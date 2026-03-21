@@ -386,13 +386,73 @@ fi
 echo "✓ Stale exceptions rebuild deterministically"
 
 echo ""
+echo "=== Test 7: Ops-health endpoint requires auth and returns diagnostics ==="
+echo "Verifying /ops/health rejects anonymous requests..."
+ANON_OPS_HEALTH_STATUS=$(curl -sS -o /dev/null -w '%{http_code}' "$CORE_BASE_URL/ops/health" || true)
+assert_http_status "401" "$ANON_OPS_HEALTH_STATUS" "anonymous /ops/health"
+
+echo "Verifying /ops/health returns diagnostics for authenticated agent..."
+OPS_HEALTH_RESPONSE=$(curl -sS \
+  -H "authorization: Bearer $AGENT1_TOKEN" \
+  "$CORE_BASE_URL/ops/health")
+OPS_HEALTH_OK=$(json_get "$OPS_HEALTH_RESPONSE" ok || true)
+if [[ "$OPS_HEALTH_OK" != "true" ]]; then
+  echo "expected /ops/health to return ok=true, got: $OPS_HEALTH_RESPONSE" >&2
+  exit 1
+fi
+
+echo "Verifying /ops/health includes projection_maintenance when available..."
+OPS_HEALTH_PROJ=$(json_get "$OPS_HEALTH_RESPONSE" projection_maintenance || true)
+if [[ -z "$OPS_HEALTH_PROJ" ]] || [[ "$OPS_HEALTH_PROJ" == "null" ]]; then
+  echo "/ops/health projection_maintenance missing or null (may be expected if maintainer disabled)" >&2
+fi
+
+echo "✓ Ops-health endpoint works correctly"
+
+echo ""
+echo "=== Test 8: Agent self-revoke offboarding path ==="
+echo "Verifying invite creation still works before revoke..."
+INVITE2_RESPONSE=$(curl -sS \
+  -H "content-type: application/json" \
+  -H "authorization: Bearer $AGENT1_TOKEN" \
+  -X POST \
+  -d '{"kind":"agent","note":"pre-revoke invite"}' \
+  "$CORE_BASE_URL/auth/invites")
+INVITE2_TOKEN="$(json_get "$INVITE2_RESPONSE" token || true)"
+if [[ -z "$INVITE2_TOKEN" ]]; then
+  echo "failed to create invite before revoke test" >&2
+  exit 1
+fi
+
+echo "Self-revoking agent3 to test offboarding path..."
+REVOKE_RESPONSE=$(curl -sS \
+  -H "authorization: Bearer $AGENT3_TOKEN" \
+  -X POST \
+  "$CORE_BASE_URL/agents/me/revoke")
+REVOKE_OK=$(json_get "$REVOKE_RESPONSE" ok || true)
+if [[ "$REVOKE_OK" != "true" ]]; then
+  echo "expected self-revoke to return ok=true, got: $REVOKE_RESPONSE" >&2
+  exit 1
+fi
+
+echo "Verifying revoked agent cannot authenticate..."
+REVOKED_THREAD_STATUS=$(curl -sS -o /dev/null -w '%{http_code}' \
+  -H "authorization: Bearer $AGENT3_TOKEN" \
+  "$CORE_BASE_URL/threads" || true)
+assert_http_status "403" "$REVOKED_THREAD_STATUS" "revoked agent thread access"
+
+echo "✓ Agent self-revoke offboarding path works correctly"
+
+echo ""
 cat >"$TMP_DIR/summary.txt" <<SUMMARY
 core_base_url=${CORE_BASE_URL}
 bootstrap_token_used=true
 invite_token_used=true
 authenticated_agent=hosted-agent-1
 stale_thread_id=${STALE_THREAD_ID}
-coverage=auth,onboarding,workspace,staleness
+ops_health_tested=true
+revoke_path_tested=true
+coverage=auth,onboarding,workspace,staleness,ops-health,revoke
 artifacts_dir=${TMP_DIR}
 SUMMARY
 
