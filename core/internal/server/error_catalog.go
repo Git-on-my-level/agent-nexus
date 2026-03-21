@@ -21,6 +21,7 @@ var defaultErrorMetadata = map[string]errorMetadata{
 	"invalid_request":            {Recoverable: true, Hint: "Fix request shape/fields and retry."},
 	"invalid_token":              {Recoverable: true, Hint: "Refresh or rotate credentials, then retry."},
 	"key_mismatch":               {Recoverable: true, Hint: "Rotate key material and retry token exchange."},
+	"last_active_principal":      {Recoverable: true, Hint: "Retry with `force_last_active=true` only for explicit break-glass recovery; it can leave the workspace inaccessible."},
 	"meta_unavailable":           {Recoverable: false, Hint: "Generated command metadata is unavailable; retry later or escalate."},
 	"method_not_allowed":         {Recoverable: true, Hint: "Use the HTTP method documented for this endpoint."},
 	"not_found":                  {Recoverable: true, Hint: "Verify the target resource exists and retry."},

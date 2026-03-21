@@ -568,6 +568,7 @@ func localGroupHelpSupplement(topic string) string {
   auth update-username    Update the current principal username and sync the local profile.
   auth rotate             Rotate the active agent key and refresh stored credentials.
   auth revoke             Revoke the active agent and mark the local profile revoked.
+  auth principals revoke  Revoke another principal by id, with an explicit break-glass flag for the last active principal.
   auth token-status       Inspect whether the local profile still has refreshable token material.
   Tip: use ` + "`oar auth bootstrap status`" + ` before first registration, ` + "`oar auth register --username <username> --bootstrap-token <token>`" + ` for the first principal, and ` + "`oar auth invites create --kind human|agent`" + ` before later registrations.`)
 	default:

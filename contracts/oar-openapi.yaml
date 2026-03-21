@@ -639,6 +639,54 @@ paths:
         '403':
           $ref: '#/components/responses/ErrorResponse'
 
+  /auth/principals/{agent_id}/revoke:
+    post:
+      operationId: revokePrincipal
+      summary: Revoke a principal by id
+      tags: [auth]
+      x-oar-surface: "utility"
+      x-oar-command-id: "auth.principals.revoke"
+      x-oar-cli-path: "auth principals revoke"
+      x-oar-why: "Let a hosted operator revoke another principal through a first-class, audit-safe path."
+      x-oar-examples:
+        - title: Revoke a principal
+          command: oar auth principals revoke --agent-id agent_123 --json
+        - title: Force revoke the last active principal
+          command: oar auth principals revoke --agent-id agent_123 --force-last-active --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ ok, principal, revocation }` and is idempotent when the target principal is already revoked."
+      x-oar-error-codes: [auth_required, invalid_token, agent_revoked, not_found, last_active_principal]
+      x-oar-concepts: [auth, identity, revocation]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Requires Bearer access token. Set `force_last_active=true` only for explicit break-glass recovery work."
+      parameters:
+        - name: agent_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RevokePrincipalRequest'
+      responses:
+        '200':
+          description: Principal revoked or already revoked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevokePrincipalResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
   /auth/audit:
     get:
       operationId: listAuthAudit
@@ -873,23 +921,31 @@ paths:
       x-oar-examples:
         - title: Revoke self
           command: oar agents me revoke --json
-      x-oar-input-mode: "none"
+      x-oar-input-mode: "json-body"
       x-oar-streaming: { mode: none }
-      x-oar-output-envelope: "Returns `{ ok: true }` on first successful revoke."
-      x-oar-error-codes: [auth_required, invalid_token, agent_revoked]
+      x-oar-output-envelope: "Returns `{ ok, principal, revocation }`; repeated calls after successful self-revoke require a fresh principal because the revoked caller can no longer authenticate."
+      x-oar-error-codes: [auth_required, invalid_token, agent_revoked, last_active_principal]
       x-oar-concepts: [auth, revocation]
       x-oar-stability: "beta"
-      x-oar-agent-notes: "Requires Bearer access token."
+      x-oar-agent-notes: "Requires Bearer access token. `force_last_active=true` is an explicit break-glass path that can leave the workspace without an active principal."
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RevokePrincipalRequest'
       responses:
         '200':
           description: Agent revoked
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/OKResponse'
+                $ref: '#/components/schemas/RevokePrincipalResponse'
         '401':
           $ref: '#/components/responses/ErrorResponse'
         '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
           $ref: '#/components/responses/ErrorResponse'
 
   /threads:
@@ -2983,6 +3039,36 @@ components:
           type: string
           description: "Opaque pagination cursor for fetching the next page of results. Omitted when there are no more results."
       required: [principals]
+
+    RevokePrincipalRequest:
+      type: object
+      properties:
+        force_last_active:
+          type: boolean
+          description: "Break-glass override that allows revoking the final active principal in the workspace."
+
+    PrincipalRevocationSummary:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum: [self, admin]
+        already_revoked:
+          type: boolean
+        force_last_active:
+          type: boolean
+          description: "Whether the last-active safeguard was explicitly bypassed for this successful revoke."
+      required: [mode, already_revoked, force_last_active]
+
+    RevokePrincipalResponse:
+      type: object
+      properties:
+        ok: { type: boolean }
+        principal:
+          $ref: '#/components/schemas/AuthPrincipalSummary'
+        revocation:
+          $ref: '#/components/schemas/PrincipalRevocationSummary'
+      required: [ok, principal, revocation]
 
     AuthAuditEvent:
       type: object

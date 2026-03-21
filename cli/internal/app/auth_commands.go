@@ -182,6 +182,8 @@ func (a *App) runAuthPrincipals(ctx context.Context, service *authcli.Service, a
 	switch authPrincipalsSubcommandSpec.normalize(args[0]) {
 	case "list":
 		return a.runAuthPrincipalsList(ctx, service, args[1:])
+	case "revoke":
+		return a.runAuthPrincipalsRevoke(ctx, service, args[1:])
 	default:
 		return nil, authPrincipalsSubcommandSpec.unknownError(args[0])
 	}
@@ -234,6 +236,45 @@ func (a *App) runAuthPrincipalsList(ctx context.Context, service *authcli.Servic
 		data["next_cursor"] = result.NextCursor
 	}
 	return &commandResult{Text: text, Data: data}, nil
+}
+
+func (a *App) runAuthPrincipalsRevoke(ctx context.Context, service *authcli.Service, args []string) (*commandResult, error) {
+	fs := newSilentFlagSet("auth principals revoke")
+	var agentIDFlag trackedString
+	var forceLastActiveFlag trackedBool
+	fs.Var(&agentIDFlag, "agent-id", "Principal agent ID to revoke")
+	fs.Var(&forceLastActiveFlag, "force-last-active", "Break-glass override to revoke the last active principal")
+	if err := fs.Parse(args); err != nil {
+		return nil, errnorm.Usage("invalid_auth_principals_revoke_flags", err.Error())
+	}
+	if len(fs.Args()) > 0 {
+		return nil, errnorm.Usage("invalid_auth_principals_revoke_args", "unexpected positional arguments")
+	}
+	agentID := strings.TrimSpace(agentIDFlag.value)
+	if agentID == "" {
+		return nil, errnorm.Usage("agent_id_required", "agent-id is required")
+	}
+
+	result, err := service.RevokePrincipal(ctx, agentID, forceLastActiveFlag.value)
+	if err != nil {
+		return nil, err
+	}
+
+	status := "revoked"
+	if result.Revocation.AlreadyRevoked {
+		status = "already-revoked"
+	}
+	text := fmt.Sprintf("Principal %s %s.", result.Principal.AgentID, status)
+	if result.Revocation.ForceLastActive {
+		text += " Break-glass last-active override was used."
+	}
+	return &commandResult{
+		Text: text,
+		Data: map[string]any{
+			"principal":  result.Principal,
+			"revocation": result.Revocation,
+		},
+	}, nil
 }
 
 func (a *App) runAuthAuditList(ctx context.Context, service *authcli.Service, args []string) (*commandResult, error) {

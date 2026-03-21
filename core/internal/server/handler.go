@@ -533,6 +533,34 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleListAuthPrincipals(w, r, opts)
 	})
 
+	registerRoute("/auth/principals/", func(r *http.Request) routeAccessRequirement {
+		remainder := strings.TrimPrefix(r.URL.Path, "/auth/principals/")
+		if remainder == "" {
+			return routeAccessRequirement{}
+		}
+		if strings.Count(remainder, "/") != 1 || !strings.HasSuffix(remainder, "/revoke") {
+			return routeAccessRequirement{}
+		}
+		agentID := strings.TrimSuffix(remainder, "/revoke")
+		agentID = strings.TrimSuffix(agentID, "/")
+		if strings.TrimSpace(agentID) == "" || strings.Contains(agentID, "/") {
+			return routeAccessRequirement{}
+		}
+		return exactRouteAccess(routeAccessAuthenticatedPrincipal, http.MethodPost)(r)
+	}, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+			return
+		}
+		remainder := strings.TrimPrefix(r.URL.Path, "/auth/principals/")
+		agentID := strings.TrimSuffix(strings.TrimSuffix(remainder, "/revoke"), "/")
+		if agentID == "" || strings.Contains(agentID, "/") {
+			writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+			return
+		}
+		handleRevokePrincipal(w, r, opts, agentID)
+	})
+
 	registerRoute("/auth/audit", exactRouteAccess(routeAccessAuthenticatedPrincipal, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")

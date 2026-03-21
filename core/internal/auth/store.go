@@ -23,6 +23,7 @@ var ErrAuthRequired = errors.New("auth_required")
 var ErrAgentRevoked = errors.New("agent_revoked")
 var ErrKeyMismatch = errors.New("key_mismatch")
 var ErrAgentNotFound = errors.New("agent_not_found")
+var ErrLastActivePrincipal = errors.New("last_active_principal")
 
 const (
 	bootstrapTokenPlaceholder = "REPLACE_WITH_SECURE_BOOTSTRAP_TOKEN"
@@ -67,6 +68,28 @@ type Principal struct {
 	AgentID  string
 	ActorID  string
 	Username string
+}
+
+type RevocationMode string
+
+const (
+	RevocationModeSelf  RevocationMode = "self"
+	RevocationModeAdmin RevocationMode = "admin"
+)
+
+type RevokeAgentInput struct {
+	Actor           Principal
+	Mode            RevocationMode
+	ForceLastActive bool
+}
+
+type RevokeAgentResult struct {
+	Principal  AuthPrincipalSummary `json:"principal"`
+	Revocation struct {
+		Mode            string `json:"mode"`
+		AlreadyRevoked  bool   `json:"already_revoked"`
+		ForceLastActive bool   `json:"force_last_active"`
+	} `json:"revocation"`
 }
 
 type RegisterAgentInput struct {
@@ -601,6 +624,19 @@ func (s *Store) GetAgent(ctx context.Context, agentID string) (Agent, error) {
 	return agent, nil
 }
 
+func (s *Store) GetPrincipalSummary(ctx context.Context, agentID string) (AuthPrincipalSummary, error) {
+	if s == nil || s.db == nil {
+		return AuthPrincipalSummary{}, fmt.Errorf("auth store database is not initialized")
+	}
+
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" {
+		return AuthPrincipalSummary{}, ErrAgentNotFound
+	}
+
+	return s.getPrincipalSummaryQueryRow(ctx, s.db.QueryRowContext, agentID)
+}
+
 func (s *Store) ListKeys(ctx context.Context, agentID string) ([]AgentKey, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("auth store database is not initialized")
@@ -800,26 +836,29 @@ func (s *Store) RotateKey(ctx context.Context, agentID string, publicKey string)
 	}, nil
 }
 
-func (s *Store) RevokeAgent(ctx context.Context, agentID string, revokedBy Principal) error {
+func (s *Store) RevokeAgent(ctx context.Context, agentID string, input RevokeAgentInput) (RevokeAgentResult, error) {
 	if s == nil || s.db == nil {
-		return fmt.Errorf("auth store database is not initialized")
+		return RevokeAgentResult{}, fmt.Errorf("auth store database is not initialized")
 	}
 
 	agentID = strings.TrimSpace(agentID)
 	if agentID == "" {
-		return ErrAgentNotFound
+		return RevokeAgentResult{}, ErrAgentNotFound
 	}
-	revokedBy.AgentID = strings.TrimSpace(revokedBy.AgentID)
-	revokedBy.ActorID = strings.TrimSpace(revokedBy.ActorID)
-	if revokedBy.AgentID == "" || revokedBy.ActorID == "" {
-		return fmt.Errorf("%w: authenticated principal is required", ErrAuthRequired)
+	input.Actor.AgentID = strings.TrimSpace(input.Actor.AgentID)
+	input.Actor.ActorID = strings.TrimSpace(input.Actor.ActorID)
+	if input.Actor.AgentID == "" || input.Actor.ActorID == "" {
+		return RevokeAgentResult{}, fmt.Errorf("%w: authenticated principal is required", ErrAuthRequired)
+	}
+	if strings.TrimSpace(string(input.Mode)) == "" {
+		input.Mode = RevocationModeAdmin
 	}
 
 	now := time.Now().UTC()
 	nowText := now.Format(time.RFC3339Nano)
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("begin revoke agent transaction: %w", err)
+		return RevokeAgentResult{}, fmt.Errorf("begin revoke agent transaction: %w", err)
 	}
 
 	var (
@@ -836,14 +875,32 @@ func (s *Store) RevokeAgent(ctx context.Context, agentID string, revokedBy Princ
 	if err != nil {
 		_ = tx.Rollback()
 		if errors.Is(err, sql.ErrNoRows) {
-			return ErrAgentNotFound
+			return RevokeAgentResult{}, ErrAgentNotFound
 		}
-		return fmt.Errorf("query agent revoke state: %w", err)
+		return RevokeAgentResult{}, fmt.Errorf("query agent revoke state: %w", err)
 	}
 	if existingRevoked.Valid {
+		principal, loadErr := s.getPrincipalSummaryTx(ctx, tx, agentID)
 		_ = tx.Rollback()
-		return ErrAgentRevoked
+		if loadErr != nil {
+			return RevokeAgentResult{}, loadErr
+		}
+		result := RevokeAgentResult{Principal: principal}
+		result.Revocation.Mode = string(input.Mode)
+		result.Revocation.AlreadyRevoked = true
+		return result, nil
 	}
+
+	activeCount, err := s.countActivePrincipalsTx(ctx, tx)
+	if err != nil {
+		_ = tx.Rollback()
+		return RevokeAgentResult{}, err
+	}
+	if activeCount == 1 && !input.ForceLastActive {
+		_ = tx.Rollback()
+		return RevokeAgentResult{}, ErrLastActivePrincipal
+	}
+	usedForceLastActive := activeCount == 1 && input.ForceLastActive
 
 	_, err = tx.ExecContext(
 		ctx,
@@ -856,7 +913,7 @@ func (s *Store) RevokeAgent(ctx context.Context, agentID string, revokedBy Princ
 	)
 	if err != nil {
 		_ = tx.Rollback()
-		return fmt.Errorf("revoke agent: %w", err)
+		return RevokeAgentResult{}, fmt.Errorf("revoke agent: %w", err)
 	}
 
 	_, err = tx.ExecContext(
@@ -869,33 +926,109 @@ func (s *Store) RevokeAgent(ctx context.Context, agentID string, revokedBy Princ
 	)
 	if err != nil {
 		_ = tx.Rollback()
-		return fmt.Errorf("revoke agent keys: %w", err)
+		return RevokeAgentResult{}, fmt.Errorf("revoke agent keys: %w", err)
 	}
 
 	eventType := AuthAuditEventPrincipalRevoked
-	metadata := map[string]any{}
-	if revokedBy.AgentID == agentID {
+	if input.Mode == RevocationModeSelf {
 		eventType = AuthAuditEventPrincipalSelfRevoked
-		metadata["revocation_mode"] = "self"
 	}
 	if err := s.recordAuthAuditEventTx(ctx, tx, AuthAuditEventInput{
 		EventType:      eventType,
 		OccurredAt:     now,
-		ActorAgentID:   revokedBy.AgentID,
-		ActorActorID:   revokedBy.ActorID,
+		ActorAgentID:   input.Actor.AgentID,
+		ActorActorID:   input.Actor.ActorID,
 		SubjectAgentID: agentID,
 		SubjectActorID: subjectActorID,
-		Metadata:       metadata,
+		Metadata: map[string]any{
+			"actor_username":    strings.TrimSpace(input.Actor.Username),
+			"revocation_mode":   string(input.Mode),
+			"force_last_active": usedForceLastActive,
+		},
 	}); err != nil {
 		_ = tx.Rollback()
-		return err
+		return RevokeAgentResult{}, err
+	}
+
+	principal, err := s.getPrincipalSummaryTx(ctx, tx, agentID)
+	if err != nil {
+		_ = tx.Rollback()
+		return RevokeAgentResult{}, err
 	}
 
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit revoke agent transaction: %w", err)
+		return RevokeAgentResult{}, fmt.Errorf("commit revoke agent transaction: %w", err)
 	}
 
-	return nil
+	result := RevokeAgentResult{Principal: principal}
+	result.Revocation.Mode = string(input.Mode)
+	result.Revocation.ForceLastActive = usedForceLastActive
+	return result, nil
+}
+
+func (s *Store) countActivePrincipalsTx(ctx context.Context, tx *sql.Tx) (int, error) {
+	var count int
+	if err := tx.QueryRowContext(
+		ctx,
+		`SELECT COUNT(1)
+		 FROM agents
+		 WHERE revoked_at IS NULL`,
+	).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count active principals: %w", err)
+	}
+	return count, nil
+}
+
+func (s *Store) getPrincipalSummaryTx(ctx context.Context, tx *sql.Tx, agentID string) (AuthPrincipalSummary, error) {
+	return s.getPrincipalSummaryQueryRow(ctx, tx.QueryRowContext, agentID)
+}
+
+func (s *Store) getPrincipalSummaryQueryRow(ctx context.Context, queryRow func(context.Context, string, ...any) *sql.Row, agentID string) (AuthPrincipalSummary, error) {
+	var (
+		item       AuthPrincipalSummary
+		revokedRaw sql.NullString
+	)
+	err := queryRow(
+		ctx,
+		`SELECT
+			a.id,
+			a.actor_id,
+			a.username,
+			CASE
+				WHEN EXISTS(SELECT 1 FROM passkey_credentials pc WHERE pc.agent_id = a.id LIMIT 1) THEN 'human'
+				ELSE 'agent'
+			END,
+			CASE
+				WHEN EXISTS(SELECT 1 FROM passkey_credentials pc WHERE pc.agent_id = a.id LIMIT 1) THEN 'passkey'
+				ELSE 'public_key'
+			END,
+			a.created_at,
+			a.updated_at,
+			a.revoked_at
+		 FROM agents a
+		 WHERE a.id = ?`,
+		agentID,
+	).Scan(
+		&item.AgentID,
+		&item.ActorID,
+		&item.Username,
+		&item.PrincipalKind,
+		&item.AuthMethod,
+		&item.CreatedAt,
+		&item.UpdatedAt,
+		&revokedRaw,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return AuthPrincipalSummary{}, ErrAgentNotFound
+		}
+		return AuthPrincipalSummary{}, fmt.Errorf("query auth principal summary: %w", err)
+	}
+	item.Revoked = revokedRaw.Valid
+	if revokedRaw.Valid {
+		item.RevokedAt = &revokedRaw.String
+	}
+	return item, nil
 }
 
 func (s *Store) issueTokenBundleTx(ctx context.Context, tx *sql.Tx, agentID string, now time.Time) (TokenBundle, string, error) {

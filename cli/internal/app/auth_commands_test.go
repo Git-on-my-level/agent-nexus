@@ -385,6 +385,43 @@ func TestAuthPrincipalsAndAuditList(t *testing.T) {
 	}
 }
 
+func TestAuthPrincipalsRevoke(t *testing.T) {
+	t.Parallel()
+
+	core := newFakeAuthCore(t)
+	core.principals = []map[string]any{{
+		"agent_id":       "agent-999",
+		"actor_id":       "actor-999",
+		"username":       "member.agent",
+		"principal_kind": "agent",
+		"auth_method":    "public_key",
+		"created_at":     "2026-03-19T00:00:00Z",
+		"updated_at":     "2026-03-19T01:00:00Z",
+		"revoked":        false,
+	}}
+	server := httptest.NewServer(http.HandlerFunc(core.handle))
+	defer server.Close()
+
+	home := t.TempDir()
+	env := map[string]string{}
+
+	_ = runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "register", "--username", "Agent.One"})
+
+	raw := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "principals", "revoke", "--agent-id", "agent-999", "--force-last-active"})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+	if data == nil {
+		t.Fatalf("unexpected auth principals revoke payload: %#v", payload)
+	}
+	revocation, _ := data["revocation"].(map[string]any)
+	if revocation == nil || strings.TrimSpace(anyStr(revocation["mode"])) != "admin" {
+		t.Fatalf("expected admin revocation payload, got %#v", payload)
+	}
+	if revocation["force_last_active"] != true {
+		t.Fatalf("expected force_last_active=true payload, got %#v", payload)
+	}
+}
+
 func runCLIForTest(t *testing.T, home string, env map[string]string, stdin io.Reader, args []string) string {
 	t.Helper()
 	if stdin == nil {
@@ -582,7 +619,62 @@ func (f *fakeAuthCore) handle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		f.revoked = true
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok": true,
+			"principal": map[string]any{
+				"agent_id":       f.agentID,
+				"actor_id":       f.actorID,
+				"username":       f.username,
+				"principal_kind": "agent",
+				"auth_method":    "public_key",
+				"created_at":     "2026-03-19T00:00:00Z",
+				"updated_at":     "2026-03-19T01:00:00Z",
+				"revoked":        true,
+				"revoked_at":     "2026-03-19T02:00:00Z",
+			},
+			"revocation": map[string]any{
+				"mode":              "self",
+				"already_revoked":   false,
+				"force_last_active": false,
+			},
+		})
+		return
+	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/auth/principals/") && strings.HasSuffix(r.URL.Path, "/revoke"):
+		if !f.requireAuth(w, r) {
+			return
+		}
+		agentID := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/auth/principals/"), "/revoke")
+		var req map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		principal := map[string]any{
+			"agent_id":       agentID,
+			"actor_id":       "actor-" + agentID,
+			"username":       "principal." + agentID,
+			"principal_kind": "agent",
+			"auth_method":    "public_key",
+			"created_at":     "2026-03-19T00:00:00Z",
+			"updated_at":     "2026-03-19T01:00:00Z",
+			"revoked":        true,
+			"revoked_at":     "2026-03-19T02:00:00Z",
+		}
+		if len(f.principals) > 0 {
+			for _, candidate := range f.principals {
+				if strings.TrimSpace(anyStr(candidate["agent_id"])) == agentID {
+					principal = candidate
+					principal["revoked"] = true
+					principal["revoked_at"] = "2026-03-19T02:00:00Z"
+				}
+			}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":        true,
+			"principal": principal,
+			"revocation": map[string]any{
+				"mode":              "admin",
+				"already_revoked":   false,
+				"force_last_active": req["force_last_active"] == true,
+			},
+		})
 		return
 	case r.Method == http.MethodGet && r.URL.Path == "/auth/invites":
 		if !f.requireAuth(w, r) {

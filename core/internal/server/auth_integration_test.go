@@ -334,7 +334,9 @@ func TestAgentAuthLifecycleAndActorCompatibility(t *testing.T) {
 		t.Fatalf("decode new assertion response: %v", err)
 	}
 
-	revokeResp := postJSONExpectStatusWithAuth(t, serverURL+"/agents/me/revoke", map[string]any{}, newAssertionPayload.Tokens.AccessToken, http.StatusOK)
+	revokeResp := postJSONExpectStatusWithAuth(t, serverURL+"/agents/me/revoke", map[string]any{
+		"force_last_active": true,
+	}, newAssertionPayload.Tokens.AccessToken, http.StatusOK)
 	defer revokeResp.Body.Close()
 
 	revokedRefreshResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/token", map[string]any{
@@ -761,6 +763,162 @@ func TestAuthAuditAndPrincipalInventoryVisibility(t *testing.T) {
 	}
 	if asString(selfRevokedEvent["actor_agent_id"]) != secondPayload.Agent.AgentID {
 		t.Fatalf("unexpected principal_self_revoked actor: %#v", selfRevokedEvent)
+	}
+	if asString(mapValue(selfRevokedEvent["metadata"], "revocation_mode")) != "self" {
+		t.Fatalf("unexpected principal_self_revoked metadata: %#v", selfRevokedEvent)
+	}
+	if force, ok := mapValue(selfRevokedEvent["metadata"], "force_last_active").(bool); !ok || force {
+		t.Fatalf("unexpected principal_self_revoked force metadata: %#v", selfRevokedEvent)
+	}
+}
+
+func TestAdminPrincipalRevocationAndLastActiveSafeguards(t *testing.T) {
+	t.Parallel()
+
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{bootstrapToken: testBootstrapToken})
+	serverURL := env.server.URL
+
+	adminResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/agents/register", map[string]any{
+		"username":        "admin.revoke",
+		"public_key":      mustGeneratePublicKey(t),
+		"bootstrap_token": testBootstrapToken,
+	}, "", http.StatusCreated)
+	defer adminResp.Body.Close()
+
+	var adminPayload struct {
+		Agent struct {
+			AgentID string `json:"agent_id"`
+			ActorID string `json:"actor_id"`
+		} `json:"agent"`
+		Tokens struct {
+			AccessToken string `json:"access_token"`
+		} `json:"tokens"`
+	}
+	if err := json.NewDecoder(adminResp.Body).Decode(&adminPayload); err != nil {
+		t.Fatalf("decode admin register response: %v", err)
+	}
+
+	memberInvite, memberToken := createInvite(t, serverURL, adminPayload.Tokens.AccessToken, map[string]any{
+		"kind": "agent",
+		"note": "member-revoke",
+	})
+	_ = memberInvite
+
+	memberResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/agents/register", map[string]any{
+		"username":     "member.revoke",
+		"public_key":   mustGeneratePublicKey(t),
+		"invite_token": memberToken,
+	}, "", http.StatusCreated)
+	defer memberResp.Body.Close()
+
+	var memberPayload struct {
+		Agent struct {
+			AgentID string `json:"agent_id"`
+			ActorID string `json:"actor_id"`
+		} `json:"agent"`
+	}
+	if err := json.NewDecoder(memberResp.Body).Decode(&memberPayload); err != nil {
+		t.Fatalf("decode member register response: %v", err)
+	}
+
+	unauthorizedResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/principals/"+memberPayload.Agent.AgentID+"/revoke", map[string]any{}, "", http.StatusUnauthorized)
+	defer unauthorizedResp.Body.Close()
+	assertErrorCode(t, unauthorizedResp, "auth_required")
+
+	revokeResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/principals/"+memberPayload.Agent.AgentID+"/revoke", map[string]any{}, adminPayload.Tokens.AccessToken, http.StatusOK)
+	defer revokeResp.Body.Close()
+	var revokePayload map[string]any
+	if err := json.NewDecoder(revokeResp.Body).Decode(&revokePayload); err != nil {
+		t.Fatalf("decode admin revoke response: %v", err)
+	}
+	if !asBool(revokePayload["ok"]) {
+		t.Fatalf("expected ok response, got %#v", revokePayload)
+	}
+	principalObj, _ := revokePayload["principal"].(map[string]any)
+	if principalObj == nil || !asBool(principalObj["revoked"]) {
+		t.Fatalf("expected revoked principal in response, got %#v", revokePayload)
+	}
+	if asString(principalObj["agent_id"]) != memberPayload.Agent.AgentID {
+		t.Fatalf("unexpected revoked principal id: %#v", revokePayload)
+	}
+	revocationObj, _ := revokePayload["revocation"].(map[string]any)
+	if revocationObj == nil || asString(revocationObj["mode"]) != "admin" {
+		t.Fatalf("unexpected admin revocation metadata: %#v", revokePayload)
+	}
+	if asBool(revocationObj["already_revoked"]) {
+		t.Fatalf("expected first admin revoke not to be idempotent: %#v", revokePayload)
+	}
+
+	secondRevokeResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/principals/"+memberPayload.Agent.AgentID+"/revoke", map[string]any{}, adminPayload.Tokens.AccessToken, http.StatusOK)
+	defer secondRevokeResp.Body.Close()
+	var secondRevokePayload map[string]any
+	if err := json.NewDecoder(secondRevokeResp.Body).Decode(&secondRevokePayload); err != nil {
+		t.Fatalf("decode second admin revoke response: %v", err)
+	}
+	secondRevocationObj, _ := secondRevokePayload["revocation"].(map[string]any)
+	if secondRevocationObj == nil || !asBool(secondRevocationObj["already_revoked"]) {
+		t.Fatalf("expected idempotent admin revoke response, got %#v", secondRevokePayload)
+	}
+
+	lastActiveResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/principals/"+adminPayload.Agent.AgentID+"/revoke", map[string]any{}, adminPayload.Tokens.AccessToken, http.StatusConflict)
+	defer lastActiveResp.Body.Close()
+	assertErrorCode(t, lastActiveResp, "last_active_principal")
+
+	forcedResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/principals/"+adminPayload.Agent.AgentID+"/revoke", map[string]any{
+		"force_last_active": true,
+	}, adminPayload.Tokens.AccessToken, http.StatusOK)
+	defer forcedResp.Body.Close()
+	var forcedPayload map[string]any
+	if err := json.NewDecoder(forcedResp.Body).Decode(&forcedPayload); err != nil {
+		t.Fatalf("decode forced admin revoke response: %v", err)
+	}
+	forcedRevocationObj, _ := forcedPayload["revocation"].(map[string]any)
+	if forcedRevocationObj == nil || !asBool(forcedRevocationObj["force_last_active"]) {
+		t.Fatalf("expected forced admin revoke metadata, got %#v", forcedPayload)
+	}
+
+	events, _, err := env.authStore.ListAuditEvents(context.Background(), auth.AuthAuditListFilter{})
+	if err != nil {
+		t.Fatalf("list auth audit events after admin revoke flow: %v", err)
+	}
+
+	adminRevokedCount := 0
+	forcedAdminEventSeen := false
+	for _, event := range events {
+		if event.EventType != auth.AuthAuditEventPrincipalRevoked {
+			continue
+		}
+		if event.SubjectAgentID == nil {
+			continue
+		}
+		switch *event.SubjectAgentID {
+		case memberPayload.Agent.AgentID:
+			adminRevokedCount++
+			if event.ActorAgentID == nil || *event.ActorAgentID != adminPayload.Agent.AgentID {
+				t.Fatalf("unexpected admin revoke actor: %#v", event)
+			}
+			if mode, _ := event.Metadata["revocation_mode"].(string); mode != "admin" {
+				t.Fatalf("unexpected admin revoke metadata: %#v", event)
+			}
+		case adminPayload.Agent.AgentID:
+			if event.ActorAgentID == nil || *event.ActorAgentID != adminPayload.Agent.AgentID {
+				t.Fatalf("unexpected forced admin revoke actor: %#v", event)
+			}
+			if mode, _ := event.Metadata["revocation_mode"].(string); mode != "admin" {
+				t.Fatalf("unexpected forced admin revoke metadata: %#v", event)
+			}
+			force, _ := event.Metadata["force_last_active"].(bool)
+			if !force {
+				t.Fatalf("expected force_last_active=true for forced admin revoke: %#v", event)
+			}
+			forcedAdminEventSeen = true
+		}
+	}
+	if adminRevokedCount != 1 {
+		t.Fatalf("expected exactly one audit event for member admin revoke, got %d in %#v", adminRevokedCount, events)
+	}
+	if !forcedAdminEventSeen {
+		t.Fatalf("expected forced admin revoke audit event in %#v", events)
 	}
 }
 

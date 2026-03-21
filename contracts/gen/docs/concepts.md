@@ -32,7 +32,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `auth`
 
-- Commands: `16`
+- Commands: `17`
 - Command IDs:
   - `agents.me.get`
   - `agents.me.keys.rotate`
@@ -49,6 +49,7 @@ Generated from `contracts/oar-openapi.yaml`.
   - `auth.passkey.register.options`
   - `auth.passkey.register.verify`
   - `auth.principals.list`
+  - `auth.principals.revoke`
   - `auth.token`
 
 ## `boards`
@@ -176,7 +177,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `identity`
 
-- Commands: `6`
+- Commands: `7`
 - Command IDs:
   - `actors.list`
   - `actors.register`
@@ -184,6 +185,7 @@ Generated from `contracts/oar-openapi.yaml`.
   - `agents.me.patch`
   - `auth.agents.register`
   - `auth.principals.list`
+  - `auth.principals.revoke`
 
 ## `inbox`
 
@@ -331,9 +333,10 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `revocation`
 
-- Commands: `1`
+- Commands: `2`
 - Command IDs:
   - `agents.me.revoke`
+  - `auth.principals.revoke`
 
 ## `schema`
 

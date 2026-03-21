@@ -180,6 +180,7 @@ var defaultMetadataByCode = map[string]Metadata{
 	"invalid_request":               {Recoverable: true, Hint: "Review required fields and request shape, then retry."},
 	"invalid_token":                 {Recoverable: true, Hint: "Run `oar --agent <agent> auth token-status` then `oar --agent <agent> auth rotate` if needed."},
 	"key_mismatch":                  {Recoverable: true, Hint: "Rotate the agent key (`oar --agent <agent> auth rotate`) and retry token minting."},
+	"last_active_principal":         {Recoverable: true, Hint: "Retry only with `--force-last-active` for explicit break-glass recovery; it can leave the workspace without any active principal."},
 	"method_not_allowed":            {Recoverable: true, Hint: "Use the HTTP method documented for this endpoint."},
 	"network_error":                 {Recoverable: true, Hint: "Check network/core availability and retry with backoff."},
 	"not_found":                     {Recoverable: true, Hint: "Verify the target id/path exists and retry."},

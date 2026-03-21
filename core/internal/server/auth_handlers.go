@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -229,13 +230,22 @@ func handleRevokeCurrentAgent(w http.ResponseWriter, r *http.Request, opts handl
 		return
 	}
 
-	err := opts.authStore.RevokeAgent(r.Context(), principal.AgentID, *principal)
+	req, ok := decodeRevokePrincipalRequest(w, r)
+	if !ok {
+		return
+	}
+
+	result, err := opts.authStore.RevokeAgent(r.Context(), principal.AgentID, auth.RevokeAgentInput{
+		Actor:           *principal,
+		Mode:            auth.RevocationModeSelf,
+		ForceLastActive: req.ForceLastActive,
+	})
 	if err != nil {
 		switch {
-		case errors.Is(err, auth.ErrAgentRevoked):
-			writeError(w, http.StatusForbidden, "agent_revoked", "agent has been revoked")
 		case errors.Is(err, auth.ErrAgentNotFound):
 			writeError(w, http.StatusUnauthorized, "invalid_token", "authenticated agent no longer exists")
+		case errors.Is(err, auth.ErrLastActivePrincipal):
+			writeError(w, http.StatusConflict, "last_active_principal", "refusing to revoke the last active principal without force_last_active=true")
 		case errors.Is(err, auth.ErrAuthRequired):
 			writeError(w, http.StatusUnauthorized, "auth_required", "authorization header is required")
 		default:
@@ -244,7 +254,67 @@ func handleRevokeCurrentAgent(w http.ResponseWriter, r *http.Request, opts handl
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	writeRevokePrincipalResponse(w, result)
+}
+
+func handleRevokePrincipal(w http.ResponseWriter, r *http.Request, opts handlerOptions, agentID string) {
+	principal, ok := requireAuthenticatedPrincipal(w, r, opts)
+	if !ok {
+		return
+	}
+
+	req, ok := decodeRevokePrincipalRequest(w, r)
+	if !ok {
+		return
+	}
+
+	result, err := opts.authStore.RevokeAgent(r.Context(), agentID, auth.RevokeAgentInput{
+		Actor:           *principal,
+		Mode:            auth.RevocationModeAdmin,
+		ForceLastActive: req.ForceLastActive,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, auth.ErrAgentNotFound):
+			writeError(w, http.StatusNotFound, "not_found", "principal not found")
+		case errors.Is(err, auth.ErrLastActivePrincipal):
+			writeError(w, http.StatusConflict, "last_active_principal", "refusing to revoke the last active principal without force_last_active=true")
+		case errors.Is(err, auth.ErrAuthRequired):
+			writeError(w, http.StatusUnauthorized, "auth_required", "authorization header is required")
+		default:
+			writeError(w, http.StatusInternalServerError, "internal_error", "failed to revoke principal")
+		}
+		return
+	}
+
+	writeRevokePrincipalResponse(w, result)
+}
+
+func decodeRevokePrincipalRequest(w http.ResponseWriter, r *http.Request) (struct {
+	ForceLastActive bool `json:"force_last_active"`
+}, bool) {
+	var req struct {
+		ForceLastActive bool `json:"force_last_active"`
+	}
+	if r == nil || r.Body == nil {
+		return req, true
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if errors.Is(err, io.EOF) {
+			return req, true
+		}
+		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+		return req, false
+	}
+	return req, true
+}
+
+func writeRevokePrincipalResponse(w http.ResponseWriter, result auth.RevokeAgentResult) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":         true,
+		"principal":  result.Principal,
+		"revocation": result.Revocation,
+	})
 }
 
 func requireAuthenticatedPrincipal(w http.ResponseWriter, r *http.Request, opts handlerOptions) (*auth.Principal, bool) {

@@ -100,6 +100,17 @@ type ListPrincipalsResult struct {
 	NextCursor string      `json:"next_cursor,omitempty"`
 }
 
+type Revocation struct {
+	Mode            string `json:"mode"`
+	AlreadyRevoked  bool   `json:"already_revoked"`
+	ForceLastActive bool   `json:"force_last_active"`
+}
+
+type RevokePrincipalResult struct {
+	Principal  Principal  `json:"principal"`
+	Revocation Revocation `json:"revocation"`
+}
+
 type AuditEvent struct {
 	EventID        string         `json:"event_id"`
 	EventType      string         `json:"event_type"`
@@ -354,20 +365,16 @@ func (s *Service) RotateKey(ctx context.Context) (WhoAmIResult, error) {
 }
 
 func (s *Service) Revoke(ctx context.Context) (WhoAmIResult, error) {
-	prof, err := s.ensureAccessToken(ctx)
+	result, err := s.RevokeCurrentPrincipal(ctx, false)
 	if err != nil {
 		return WhoAmIResult{}, err
 	}
-	client, err := s.newClient(prof.AccessToken)
-	if err != nil {
-		return WhoAmIResult{}, errnorm.Wrap(errnorm.KindLocal, "http_client_init_failed", "failed to initialize HTTP client", err)
+	prof, ok, loadErr := profile.Load(s.cfg.ProfilePath)
+	if loadErr != nil {
+		return WhoAmIResult{}, errnorm.Wrap(errnorm.KindLocal, "profile_read_failed", "failed to read profile", loadErr)
 	}
-	resp, err := client.RawCall(ctx, httpclient.RawRequest{Method: http.MethodPost, Path: "/agents/me/revoke", Body: []byte(`{}`)})
-	if err != nil {
-		return WhoAmIResult{}, errnorm.Wrap(errnorm.KindNetwork, "request_failed", "revoke request failed", err)
-	}
-	if resp.StatusCode >= http.StatusBadRequest {
-		return WhoAmIResult{}, errnorm.FromHTTPFailure(resp.StatusCode, resp.Body)
+	if !ok {
+		return WhoAmIResult{}, errnorm.Local("profile_not_found", "profile not found; run `oar auth register` first")
 	}
 	prof.Revoked = true
 	prof.AccessToken = ""
@@ -376,7 +383,73 @@ func (s *Service) Revoke(ctx context.Context) (WhoAmIResult, error) {
 	if err := profile.Save(s.cfg.ProfilePath, prof); err != nil {
 		return WhoAmIResult{}, errnorm.Wrap(errnorm.KindLocal, "profile_persist_failed", "failed to persist revoked profile", err)
 	}
-	return WhoAmIResult{Profile: prof, Server: map[string]any{"ok": true}}, nil
+	return WhoAmIResult{
+		Profile: prof,
+		Server: map[string]any{
+			"ok":         true,
+			"principal":  result.Principal,
+			"revocation": result.Revocation,
+		},
+	}, nil
+}
+
+func (s *Service) RevokeCurrentPrincipal(ctx context.Context, forceLastActive bool) (RevokePrincipalResult, error) {
+	prof, err := s.ensureAccessToken(ctx)
+	if err != nil {
+		return RevokePrincipalResult{}, err
+	}
+	client, err := s.newClient(prof.AccessToken)
+	if err != nil {
+		return RevokePrincipalResult{}, errnorm.Wrap(errnorm.KindLocal, "http_client_init_failed", "failed to initialize HTTP client", err)
+	}
+	body, _ := json.Marshal(map[string]any{"force_last_active": forceLastActive})
+	resp, err := client.RawCall(ctx, httpclient.RawRequest{Method: http.MethodPost, Path: "/agents/me/revoke", Body: body})
+	if err != nil {
+		return RevokePrincipalResult{}, errnorm.Wrap(errnorm.KindNetwork, "request_failed", "revoke request failed", err)
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		return RevokePrincipalResult{}, errnorm.FromHTTPFailure(resp.StatusCode, resp.Body)
+	}
+	var payload struct {
+		Principal  Principal  `json:"principal"`
+		Revocation Revocation `json:"revocation"`
+	}
+	if err := json.Unmarshal(resp.Body, &payload); err != nil {
+		return RevokePrincipalResult{}, errnorm.Wrap(errnorm.KindRemote, "invalid_response", "revoke response is not valid JSON", err)
+	}
+	return RevokePrincipalResult{Principal: payload.Principal, Revocation: payload.Revocation}, nil
+}
+
+func (s *Service) RevokePrincipal(ctx context.Context, agentID string, forceLastActive bool) (RevokePrincipalResult, error) {
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" {
+		return RevokePrincipalResult{}, errnorm.Usage("invalid_request", "agent-id is required")
+	}
+	prof, err := s.ensureAccessToken(ctx)
+	if err != nil {
+		return RevokePrincipalResult{}, err
+	}
+	client, err := s.newClient(prof.AccessToken)
+	if err != nil {
+		return RevokePrincipalResult{}, errnorm.Wrap(errnorm.KindLocal, "http_client_init_failed", "failed to initialize HTTP client", err)
+	}
+	body, _ := json.Marshal(map[string]any{"force_last_active": forceLastActive})
+	path := "/auth/principals/" + agentID + "/revoke"
+	resp, err := client.RawCall(ctx, httpclient.RawRequest{Method: http.MethodPost, Path: path, Body: body})
+	if err != nil {
+		return RevokePrincipalResult{}, errnorm.Wrap(errnorm.KindNetwork, "request_failed", "revoke principal request failed", err)
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		return RevokePrincipalResult{}, errnorm.FromHTTPFailure(resp.StatusCode, resp.Body)
+	}
+	var payload struct {
+		Principal  Principal  `json:"principal"`
+		Revocation Revocation `json:"revocation"`
+	}
+	if err := json.Unmarshal(resp.Body, &payload); err != nil {
+		return RevokePrincipalResult{}, errnorm.Wrap(errnorm.KindRemote, "invalid_response", "revoke principal response is not valid JSON", err)
+	}
+	return RevokePrincipalResult{Principal: payload.Principal, Revocation: payload.Revocation}, nil
 }
 
 func (s *Service) TokenStatus(ctx context.Context) (TokenStatusResult, error) {

@@ -571,6 +571,7 @@ Local auth lifecycle helpers:
   auth update-username    Update the current principal username and sync the local profile.
   auth rotate             Rotate the active agent key and refresh stored credentials.
   auth revoke             Revoke the active agent and mark the local profile revoked.
+  auth principals revoke  Revoke another principal by id, with an explicit break-glass flag for the last active principal.
   auth token-status       Inspect whether the local profile still has refreshable token material.
   Tip: use `oar auth bootstrap status` before first registration, `oar auth register --username <username> --bootstrap-token <token>` for the first principal, and `oar auth invites create --kind human|agent` before later registrations.
 
@@ -946,7 +947,7 @@ Generated Help: auth register
 - Error codes: `invalid_json`, `invalid_request`, `invalid_token`, `username_taken`
 - Concepts: `auth`, `identity`
 - Agent notes: Bootstrap is accepted only for the first successful principal registration. Later registrations require an invite token.
-- Adjacent commands: `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth token`
+- Adjacent commands: `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 - Examples:
   - Bootstrap first agent: `oar auth register --username agent.one --bootstrap-token <token> --json`
   - Register invited agent: `oar auth register --username agent.two --invite-token <token> --json`
@@ -978,7 +979,7 @@ Generated Help: auth invites list
 - Error codes: `auth_required`, `invalid_token`, `agent_revoked`
 - Concepts: `auth`, `onboarding`
 - Agent notes: Requires Bearer access token. Returned invites contain metadata only, never raw tokens.
-- Adjacent commands: `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites revoke`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth register`, `auth token`
+- Adjacent commands: `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites revoke`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth register`, `auth token`
 - Examples:
   - List invites: `oar auth invites list --json`
 
@@ -1006,7 +1007,7 @@ Generated Help: auth invites create
 - Error codes: `auth_required`, `invalid_json`, `invalid_request`, `invalid_token`, `agent_revoked`
 - Concepts: `auth`, `onboarding`
 - Agent notes: Requires Bearer access token. `kind` may be `human`, `agent`, or `any`.
-- Adjacent commands: `auth audit list`, `auth bootstrap status`, `auth invites list`, `auth invites revoke`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth register`, `auth token`
+- Adjacent commands: `auth audit list`, `auth bootstrap status`, `auth invites list`, `auth invites revoke`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth register`, `auth token`
 - Examples:
   - Create agent invite: `oar auth invites create --kind agent --note 'ops bot' --json`
 
@@ -1038,7 +1039,7 @@ Generated Help: auth invites revoke
 - Error codes: `auth_required`, `invalid_token`, `agent_revoked`, `not_found`
 - Concepts: `auth`, `onboarding`
 - Agent notes: Requires Bearer access token.
-- Adjacent commands: `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth register`, `auth token`
+- Adjacent commands: `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth register`, `auth token`
 - Examples:
   - Revoke invite: `oar auth invites revoke --invite-id invite_123 --json`
 
@@ -1065,7 +1066,7 @@ Generated Help: auth bootstrap status
 - Output: Returns `{ bootstrap_registration_available }` without exposing token material.
 - Concepts: `auth`, `onboarding`
 - Agent notes: This endpoint is intentionally non-enumerating beyond the single bootstrap availability boolean.
-- Adjacent commands: `auth audit list`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth register`, `auth token`
+- Adjacent commands: `auth audit list`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth register`, `auth token`
 - Examples:
   - Read bootstrap status: `oar auth bootstrap status --json`
 

@@ -33,6 +33,7 @@ var authSubcommandSpec = subcommandSpec{
 		"oar auth invites create --kind agent --note 'ops bot'",
 		"oar auth bootstrap status",
 		"oar auth principals list",
+		"oar auth principals revoke --agent-id <agent-id>",
 		"oar auth audit list",
 	},
 	aliases: map[string]string{
@@ -59,8 +60,8 @@ var authBootstrapSubcommandSpec = subcommandSpec{
 
 var authPrincipalsSubcommandSpec = subcommandSpec{
 	command:  "auth principals",
-	valid:    []string{"list"},
-	examples: []string{"oar auth principals list", "oar auth principals list --limit 20"},
+	valid:    []string{"list", "revoke"},
+	examples: []string{"oar auth principals list", "oar auth principals list --limit 20", "oar auth principals revoke --agent-id <agent-id>", "oar auth principals revoke --agent-id <agent-id> --force-last-active"},
 	aliases: map[string]string{
 		"ls": "list",
 	},
