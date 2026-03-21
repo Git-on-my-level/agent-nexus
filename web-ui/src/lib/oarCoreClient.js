@@ -511,6 +511,13 @@ export function createOarCoreClient(options = {}) {
       invokeJSON("auth.principals.list", () =>
         generated.authPrincipalsList({ query: filters }),
       ),
+    revokePrincipal: (agentId, payload = {}) =>
+      invokeJSON("auth.principals.revoke", () =>
+        generated.authPrincipalsRevoke(
+          { agent_id: String(agentId) },
+          { body: payload },
+        ),
+      ),
     listAuthAudit: (filters) =>
       invokeJSON("auth.audit.list", () =>
         generated.authAuditList({ query: filters }),

@@ -15,6 +15,14 @@
   let invites = $state([]);
   let auditEvents = $state([]);
 
+  let principalsCursor = $state("");
+  let principalsHasMore = $state(false);
+  let loadingMorePrincipals = $state(false);
+
+  let auditCursor = $state("");
+  let auditHasMore = $state(false);
+  let loadingMoreAudit = $state(false);
+
   let creatingInvite = $state(false);
   let inviteError = $state("");
   let newInviteNote = $state("");
@@ -26,6 +34,12 @@
 
   let revokingInviteId = $state("");
   let revokeError = $state("");
+
+  let principalRevokeTarget = $state(null);
+  let principalRevokeConfirming = $state(false);
+  let principalRevokeForcing = $state(false);
+  let principalRevokeError = $state("");
+  let principalRevokeRequiresForce = $state(false);
 
   const SECTION_IDLE = "idle";
   const SECTION_READY = "ready";
@@ -69,7 +83,10 @@
     }
 
     if (principalsResult.status === "fulfilled") {
-      principals = principalsResult.value?.principals ?? [];
+      const data = principalsResult.value;
+      principals = data?.principals ?? [];
+      principalsCursor = data?.next_cursor ?? "";
+      principalsHasMore = Boolean(data?.next_cursor);
       principalsState = { status: SECTION_READY, error: "" };
     } else {
       principalsState = {
@@ -95,7 +112,10 @@
     }
 
     if (auditResult.status === "fulfilled") {
-      auditEvents = auditResult.value?.events ?? [];
+      const data = auditResult.value;
+      auditEvents = data?.events ?? [];
+      auditCursor = data?.next_cursor ?? "";
+      auditHasMore = Boolean(data?.next_cursor);
       auditState = { status: SECTION_READY, error: "" };
     } else {
       auditState = {
@@ -108,6 +128,49 @@
     }
 
     loading = false;
+  }
+
+  async function loadMorePrincipals() {
+    if (loadingMorePrincipals || !principalsCursor) return;
+    loadingMorePrincipals = true;
+
+    try {
+      const result = await coreClient.listPrincipals({
+        limit: 50,
+        cursor: principalsCursor,
+      });
+      const newPrincipals = result?.principals ?? [];
+      principals = [...principals, ...newPrincipals];
+      principalsCursor = result?.next_cursor ?? "";
+      principalsHasMore = Boolean(result?.next_cursor);
+    } catch (error) {
+      pageError = extractErrorMessage(error, "Failed to load more principals");
+    } finally {
+      loadingMorePrincipals = false;
+    }
+  }
+
+  async function loadMoreAudit() {
+    if (loadingMoreAudit || !auditCursor) return;
+    loadingMoreAudit = true;
+
+    try {
+      const result = await coreClient.listAuthAudit({
+        limit: 50,
+        cursor: auditCursor,
+      });
+      const newEvents = result?.events ?? [];
+      auditEvents = [...auditEvents, ...newEvents];
+      auditCursor = result?.next_cursor ?? "";
+      auditHasMore = Boolean(result?.next_cursor);
+    } catch (error) {
+      pageError = extractErrorMessage(
+        error,
+        "Failed to load more audit events",
+      );
+    } finally {
+      loadingMoreAudit = false;
+    }
   }
 
   async function handleCreateInvite() {
@@ -147,6 +210,70 @@
       revokeError = extractErrorMessage(error, "Failed to revoke invite");
     } finally {
       revokingInviteId = "";
+    }
+  }
+
+  function startPrincipalRevoke(principal) {
+    principalRevokeTarget = principal;
+    principalRevokeConfirming = false;
+    principalRevokeForcing = false;
+    principalRevokeError = "";
+    principalRevokeRequiresForce = false;
+  }
+
+  function cancelPrincipalRevoke() {
+    principalRevokeTarget = null;
+    principalRevokeConfirming = false;
+    principalRevokeForcing = false;
+    principalRevokeError = "";
+    principalRevokeRequiresForce = false;
+  }
+
+  async function confirmPrincipalRevoke() {
+    if (!principalRevokeTarget) return;
+
+    const agentId = principalRevokeTarget.agent_id;
+    principalRevokeConfirming = true;
+    principalRevokeError = "";
+    principalRevokeRequiresForce = false;
+
+    try {
+      await coreClient.revokePrincipal(agentId, {});
+      cancelPrincipalRevoke();
+      await loadAccessData();
+    } catch (error) {
+      const details = error?.details ?? "";
+      if (details.includes("last_active_principal") || error?.status === 409) {
+        principalRevokeRequiresForce = true;
+        principalRevokeConfirming = false;
+      } else {
+        principalRevokeError = extractErrorMessage(
+          error,
+          "Failed to revoke principal",
+        );
+        principalRevokeConfirming = false;
+      }
+    }
+  }
+
+  async function forcePrincipalRevoke() {
+    if (!principalRevokeTarget) return;
+
+    principalRevokeForcing = true;
+    principalRevokeError = "";
+
+    try {
+      await coreClient.revokePrincipal(principalRevokeTarget.agent_id, {
+        force_last_active: true,
+      });
+      cancelPrincipalRevoke();
+      await loadAccessData();
+    } catch (error) {
+      principalRevokeError = extractErrorMessage(
+        error,
+        "Failed to revoke principal",
+      );
+      principalRevokeForcing = false;
     }
   }
 
@@ -194,31 +321,85 @@
     return { label: "Pending", class: "bg-amber-500/10 text-amber-400" };
   }
 
+  function principalLabel(principal) {
+    const parts = [];
+    if (principal?.username) {
+      parts.push(principal.username);
+    }
+    const kind = principal?.principal_kind ?? "principal";
+    const method = principal?.auth_method ?? "auth";
+    parts.push(`${kind} via ${method}`);
+    return parts.join(" \u2022 ");
+  }
+
+  function auditActorLabel(event) {
+    const username = event?.actor_username;
+    const agentId = event?.actor_agent_id;
+    const actorId = event?.actor_actor_id;
+    if (username) {
+      return { primary: username, secondary: agentId ?? actorId };
+    }
+    const id = agentId ?? actorId ?? "unknown";
+    return { primary: id, secondary: null };
+  }
+
+  function auditSubjectLabel(event) {
+    const username = event?.subject_username;
+    const agentId = event?.subject_agent_id;
+    const actorId = event?.subject_actor_id;
+    if (username) {
+      return { primary: username, secondary: agentId ?? actorId };
+    }
+    const id = agentId ?? actorId;
+    return { primary: id ?? null, secondary: null };
+  }
+
   function auditEventDescription(event) {
     const kind = event?.event_type ?? "";
-    const actorLabel =
-      event?.actor_agent_id ?? event?.actor_actor_id ?? "unknown";
-    const subjectLabel =
-      event?.subject_agent_id ?? event?.subject_actor_id ?? actorLabel;
-    const inviteLabel = event?.invite_id ?? "invite";
+    const actor = auditActorLabel(event);
+    const subject = auditSubjectLabel(event);
+    const inviteId = event?.invite_id;
+    const inviteLabel = inviteId ? inviteId.slice(0, 12) + "\u2026" : "invite";
+
+    const actorDisplay = actor.primary;
+    const subjectDisplay = subject.primary ?? actor.primary;
+
     switch (kind) {
       case "bootstrap_consumed":
-        return `Bootstrap consumed by ${subjectLabel}`;
+        return `Bootstrap consumed by ${subjectDisplay}`;
       case "principal_registered":
-        return `Principal ${subjectLabel} registered`;
+        return `Principal ${subjectDisplay} registered`;
       case "invite_created":
-        return `${inviteLabel} created by ${actorLabel}`;
+        return `${inviteLabel} created by ${actorDisplay}`;
       case "invite_consumed":
-        return `${inviteLabel} consumed by ${subjectLabel}`;
+        return `${inviteLabel} consumed by ${subjectDisplay}`;
       case "invite_revoked":
-        return `${inviteLabel} revoked by ${actorLabel}`;
+        return `${inviteLabel} revoked by ${actorDisplay}`;
       case "principal_revoked":
-        return `Principal ${subjectLabel} revoked by ${actorLabel}`;
+        return `Principal ${subjectDisplay} revoked by ${actorDisplay}`;
       case "principal_self_revoked":
-        return `Principal ${subjectLabel} self-revoked`;
+        return `Principal ${subjectDisplay} self-revoked`;
       default:
-        return `${kind || "unknown"} (${actorLabel})`;
+        return `${kind || "unknown"} (${actorDisplay})`;
     }
+  }
+
+  function auditEventSecondary(event) {
+    const actor = auditActorLabel(event);
+    const subject = auditSubjectLabel(event);
+    const parts = [];
+
+    if (actor.secondary) {
+      parts.push(`actor: ${actor.secondary}`);
+    }
+    if (subject.secondary && subject.secondary !== actor.secondary) {
+      parts.push(`subject: ${subject.secondary}`);
+    }
+    if (event?.event_id) {
+      parts.push(`id: ${event.event_id}`);
+    }
+
+    return parts.join(" \u2022 ");
   }
 </script>
 
@@ -546,22 +727,144 @@
                   <p
                     class="truncate text-[13px] font-medium text-[var(--ui-text)]"
                   >
-                    {principal.username || principal.actor_id}
+                    {principal.username || principal.agent_id}
                   </p>
                   <p class="text-[11px] text-[var(--ui-text-muted)]">
-                    {principal.actor_id} - {principal.principal_kind} via{" "}
-                    {principal.auth_method}
+                    {principalLabel(principal)}
+                  </p>
+                  <p
+                    class="mt-0.5 font-mono text-[10px] text-[var(--ui-text-muted)]"
+                  >
+                    {principal.agent_id}
                   </p>
                 </div>
                 <span class="text-[11px] text-[var(--ui-text-muted)]">
                   {formatTimestamp(principal.created_at)}
                 </span>
+                {#if !principal.revoked}
+                  <button
+                    class="shrink-0 cursor-pointer rounded px-2 py-1 text-[11px] font-medium text-red-400 hover:bg-red-400/10 disabled:opacity-50"
+                    disabled={principalRevokeConfirming ||
+                      principalRevokeForcing}
+                    onclick={() => startPrincipalRevoke(principal)}
+                    type="button"
+                  >
+                    Revoke
+                  </button>
+                {/if}
               </div>
             {/each}
           </div>
+          {#if principalsHasMore}
+            <div class="mt-2 flex justify-center">
+              <button
+                class="cursor-pointer rounded-md border border-[var(--ui-border)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)] disabled:opacity-50"
+                disabled={loadingMorePrincipals}
+                onclick={loadMorePrincipals}
+                type="button"
+              >
+                {loadingMorePrincipals ? "Loading..." : "Load more"}
+              </button>
+            </div>
+          {/if}
         {/if}
       {/if}
     </section>
+
+    {#if principalRevokeTarget}
+      <div
+        class="rounded-md border border-red-500/30 bg-red-500/10 px-4 py-3"
+        role="alert"
+      >
+        <div class="flex items-start gap-3">
+          <div class="flex-1">
+            {#if principalRevokeRequiresForce}
+              <p class="text-[13px] font-medium text-red-400">
+                Warning: This is the last active principal
+              </p>
+              <p class="mt-1 text-[11px] text-[var(--ui-text-muted)]">
+                Revoking the last active principal will lock everyone out of
+                this workspace. Only proceed if you have a recovery path (e.g.
+                bootstrap token or direct database access).
+              </p>
+              <p class="mt-1 text-[11px] text-[var(--ui-text-muted)]">
+                Principal: <strong
+                  >{principalRevokeTarget.username ||
+                    principalRevokeTarget.agent_id}</strong
+                >
+              </p>
+            {:else}
+              <p class="text-[13px] font-medium text-red-400">
+                Confirm revoke principal?
+              </p>
+              <p class="mt-1 text-[11px] text-[var(--ui-text-muted)]">
+                This will revoke access for <strong
+                  >{principalRevokeTarget.username ||
+                    principalRevokeTarget.agent_id}</strong
+                >. This action is audit-logged.
+              </p>
+            {/if}
+            {#if principalRevokeError}
+              <p
+                class="mt-2 rounded bg-red-500/20 px-2 py-1 text-[11px] text-red-300"
+              >
+                {principalRevokeError}
+              </p>
+            {/if}
+            <div class="mt-3 flex items-center gap-2">
+              {#if principalRevokeRequiresForce}
+                <button
+                  class="cursor-pointer rounded bg-red-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-red-500 disabled:opacity-50"
+                  disabled={principalRevokeForcing}
+                  onclick={forcePrincipalRevoke}
+                  type="button"
+                >
+                  {principalRevokeForcing
+                    ? "Revoking..."
+                    : "Force revoke (break-glass)"}
+                </button>
+              {:else}
+                <button
+                  class="cursor-pointer rounded bg-red-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-red-500 disabled:opacity-50"
+                  disabled={principalRevokeConfirming}
+                  onclick={confirmPrincipalRevoke}
+                  type="button"
+                >
+                  {principalRevokeConfirming ? "Revoking..." : "Confirm revoke"}
+                </button>
+              {/if}
+              <button
+                class="cursor-pointer rounded border border-[var(--ui-border)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]"
+                onclick={cancelPrincipalRevoke}
+                type="button"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+          <button
+            aria-label="Dismiss confirmation"
+            class="shrink-0 cursor-pointer text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]"
+            onclick={cancelPrincipalRevoke}
+            type="button"
+          >
+            <svg
+              class="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        </div>
+      </div>
+    {/if}
 
     <section>
       <h2 class="mb-2 text-[13px] font-semibold text-[var(--ui-text)]">
@@ -595,7 +898,7 @@
                     {auditEventDescription(event)}
                   </p>
                   <p class="text-[11px] text-[var(--ui-text-muted)]">
-                    {event.event_id}
+                    {auditEventSecondary(event)}
                   </p>
                 </div>
                 <span class="text-[11px] text-[var(--ui-text-muted)]">
@@ -604,6 +907,18 @@
               </div>
             {/each}
           </div>
+          {#if auditHasMore}
+            <div class="mt-2 flex justify-center">
+              <button
+                class="cursor-pointer rounded-md border border-[var(--ui-border)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)] disabled:opacity-50"
+                disabled={loadingMoreAudit}
+                onclick={loadMoreAudit}
+                type="button"
+              >
+                {loadingMoreAudit ? "Loading..." : "Load more"}
+              </button>
+            </div>
+          {/if}
         {/if}
       {/if}
     </section>
