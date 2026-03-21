@@ -71,7 +71,10 @@ async function refreshAndRetry(event, coreBaseUrl, workspaceSlug, targetUrl) {
   const requestInit = buildProxyRequestInit(event);
   requestInit.headers.delete("cookie");
   requestInit.headers.delete("authorization");
-  requestInit.headers.set("authorization", `Bearer ${refreshedSession.accessToken}`);
+  requestInit.headers.set(
+    "authorization",
+    `Bearer ${refreshedSession.accessToken}`,
+  );
 
   try {
     return await fetch(targetUrl, requestInit);
