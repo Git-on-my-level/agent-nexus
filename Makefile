@@ -6,6 +6,7 @@ WEB_UI_DIR := web-ui
 
 CORE_HOST ?= 127.0.0.1
 CORE_PORT ?= 8000
+CONTROL_PLANE_PORT ?= 8100
 WEB_UI_PORT ?= 5173
 CORE_BASE_URL ?= http://$(CORE_HOST):$(CORE_PORT)
 SEED_CORE ?= 1
@@ -13,7 +14,7 @@ FORCE_SEED ?= 0
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup check serve lint test format contract-gen contract-check e2e-smoke hosted-smoke hosted-ops-test hosted-ops-smoke cli-check cli-test cli-build cli-integration-test core-% web-ui-%
+.PHONY: help setup check serve serve-control-plane lint test format contract-gen contract-check e2e-smoke hosted-smoke hosted-ops-test hosted-ops-smoke cli-check cli-test cli-build cli-integration-test core-% web-ui-%
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z0-9_.-]+:.*##/ {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -90,6 +91,9 @@ serve: ## Start core, seed mock dataset into core, then start web-ui
 	OAR_CORE_BASE_URL="$(CORE_BASE_URL)" $(MAKE) -C $(WEB_UI_DIR) serve PORT="$(WEB_UI_PORT)" & \
 	ui_pid=$$!; \
 	wait $$core_pid $$ui_pid
+
+serve-control-plane: ## Start the SaaS control-plane service locally
+	$(MAKE) -C $(CORE_DIR) serve-control-plane HOST="$(CORE_HOST)" PORT="$(CONTROL_PLANE_PORT)"
 
 core-%: ## Pass-through target to core Makefile
 	$(MAKE) -C $(CORE_DIR) $*

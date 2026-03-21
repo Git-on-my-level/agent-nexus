@@ -2,6 +2,11 @@
 
 This runbook covers reproducible local and production-like operation for `oar-core`.
 
+The same Go module also ships `oar-control-plane`, the SaaS control-plane service
+for human accounts, organizations, workspace registry, invites, provisioning
+jobs, and audit history. Its local workflow is documented in a short section
+below so it can run alongside the existing core + web-ui development loop.
+
 ## Prerequisites
 
 - Go toolchain (for source runs)
@@ -66,6 +71,61 @@ Starting the server against an empty workspace root is enough to initialize stor
 ```bash
 ./scripts/dev
 ```
+
+## Control-plane local development run
+
+Run the control plane in a second terminal when working on SaaS-v-next flows:
+
+```bash
+make serve-control-plane PORT=8100 WORKSPACE_ROOT="$(pwd)/.oar-control-plane"
+```
+
+Or invoke the helper script directly:
+
+```bash
+./scripts/dev-control-plane
+```
+
+Relevant control-plane configuration:
+
+| Purpose | Flag | Env | Default |
+|---|---|---|---|
+| Workspace root (SQLite state) | `--workspace-root` | `OAR_CONTROL_PLANE_WORKSPACE_ROOT` | `.oar-control-plane` |
+| Listen host | `--host` | `OAR_CONTROL_PLANE_HOST` | `127.0.0.1` |
+| Listen port | `--port` | `OAR_CONTROL_PLANE_PORT` | `8100` |
+| Full listen address (overrides host+port) | `--listen-addr` | `OAR_CONTROL_PLANE_LISTEN_ADDR` | unset |
+| WebAuthn RP ID | `--webauthn-rpid` | `OAR_CONTROL_PLANE_WEBAUTHN_RPID` | derived from browser origin |
+| WebAuthn origin | `--webauthn-origin` | `OAR_CONTROL_PLANE_WEBAUTHN_ORIGIN` | derived from browser origin |
+| Workspace URL template | `--workspace-url-template` | `OAR_CONTROL_PLANE_WORKSPACE_URL_TEMPLATE` | `http://127.0.0.1:8000/%s` |
+| Invite URL template | `--invite-url-template` | `OAR_CONTROL_PLANE_INVITE_URL_TEMPLATE` | `http://127.0.0.1:8100/invites/%s` |
+| Session TTL | `--session-ttl` | `OAR_CONTROL_PLANE_SESSION_TTL` | `12h` |
+| Ceremony TTL | `--ceremony-ttl` | `OAR_CONTROL_PLANE_CEREMONY_TTL` | `5m` |
+| Launch TTL | `--launch-ttl` | `OAR_CONTROL_PLANE_LAUNCH_TTL` | `10m` |
+| Invite TTL | `--invite-ttl` | `OAR_CONTROL_PLANE_INVITE_TTL` | `168h` |
+| Graceful shutdown timeout | `--shutdown-timeout` | `OAR_CONTROL_PLANE_SHUTDOWN_TIMEOUT` | `15s` |
+
+Useful control-plane endpoints:
+
+- `GET /health`
+- `GET /readyz`
+- `GET /organizations`
+- `GET /workspaces`
+- `GET /provisioning/jobs`
+- `GET /audit-events`
+
+Basic smoke check:
+
+```bash
+make smoke-control-plane PORT=18100 WORKSPACE_ROOT="$(mktemp -d)"
+```
+
+Typical local split:
+
+- Terminal 1: `make serve`
+- Terminal 2: `make serve-control-plane`
+
+This preserves the current workspace-core + web-ui loop while bringing up the
+new shared control-plane service beside it.
 
 ## Production-like source run
 

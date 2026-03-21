@@ -75,6 +75,17 @@ make contract-gen
 - web-ui: `http://127.0.0.1:5173`
 - before UI startup, `web-ui/scripts/seed-core-from-mock.mjs` populates core using the mock dataset
 
+For SaaS-v-next control-plane work, start the shared control plane in a second
+terminal:
+
+```bash
+make serve-control-plane
+```
+
+Defaults:
+
+- control plane: `http://127.0.0.1:8100`
+
 ## Installing the CLI
 
 Install the `oar` CLI on any Linux or macOS host:

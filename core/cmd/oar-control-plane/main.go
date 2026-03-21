@@ -1,0 +1,161 @@
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"net"
+	"net/http"
+	"os"
+	"os/signal"
+	"strconv"
+	"strings"
+	"syscall"
+	"time"
+
+	"organization-autorunner-core/internal/controlplane"
+	cpserver "organization-autorunner-core/internal/controlplane/server"
+	cpstorage "organization-autorunner-core/internal/controlplane/storage"
+)
+
+const (
+	defaultHost             = "127.0.0.1"
+	defaultPort             = 8100
+	defaultWorkspaceRoot    = ".oar-control-plane"
+	defaultShutdownTimeout  = 15 * time.Second
+	defaultWorkspaceURLTmpl = "http://127.0.0.1:8000/%s"
+	defaultInviteURLTmpl    = "http://127.0.0.1:8100/invites/%s"
+)
+
+func main() {
+	var (
+		host                 = envString("OAR_CONTROL_PLANE_HOST", defaultHost)
+		port                 = envInt("OAR_CONTROL_PLANE_PORT", defaultPort)
+		listenAddress        = envString("OAR_CONTROL_PLANE_LISTEN_ADDR", "")
+		workspaceRoot        = envString("OAR_CONTROL_PLANE_WORKSPACE_ROOT", defaultWorkspaceRoot)
+		webAuthnRPID         = envString("OAR_CONTROL_PLANE_WEBAUTHN_RPID", "")
+		webAuthnOrigin       = envString("OAR_CONTROL_PLANE_WEBAUTHN_ORIGIN", "")
+		workspaceURLTemplate = envString("OAR_CONTROL_PLANE_WORKSPACE_URL_TEMPLATE", defaultWorkspaceURLTmpl)
+		inviteURLTemplate    = envString("OAR_CONTROL_PLANE_INVITE_URL_TEMPLATE", defaultInviteURLTmpl)
+		sessionTTL           = envDuration("OAR_CONTROL_PLANE_SESSION_TTL", 12*time.Hour)
+		ceremonyTTL          = envDuration("OAR_CONTROL_PLANE_CEREMONY_TTL", 5*time.Minute)
+		launchTTL            = envDuration("OAR_CONTROL_PLANE_LAUNCH_TTL", 10*time.Minute)
+		inviteTTL            = envDuration("OAR_CONTROL_PLANE_INVITE_TTL", 7*24*time.Hour)
+		shutdownTimeout      = envDuration("OAR_CONTROL_PLANE_SHUTDOWN_TIMEOUT", defaultShutdownTimeout)
+	)
+
+	flag.StringVar(&host, "host", host, "host interface to bind")
+	flag.IntVar(&port, "port", port, "port to listen on")
+	flag.StringVar(&listenAddress, "listen-addr", listenAddress, "full listen address host:port; overrides --host/--port")
+	flag.StringVar(&workspaceRoot, "workspace-root", workspaceRoot, "root directory for control-plane sqlite workspace")
+	flag.StringVar(&webAuthnRPID, "webauthn-rpid", webAuthnRPID, "explicit WebAuthn RP ID")
+	flag.StringVar(&webAuthnOrigin, "webauthn-origin", webAuthnOrigin, "explicit WebAuthn origin")
+	flag.StringVar(&workspaceURLTemplate, "workspace-url-template", workspaceURLTemplate, "workspace base URL template containing optional %s slug placeholder")
+	flag.StringVar(&inviteURLTemplate, "invite-url-template", inviteURLTemplate, "invite URL template containing optional %s token placeholder")
+	flag.DurationVar(&sessionTTL, "session-ttl", sessionTTL, "issued control-plane session TTL")
+	flag.DurationVar(&ceremonyTTL, "ceremony-ttl", ceremonyTTL, "passkey ceremony TTL")
+	flag.DurationVar(&launchTTL, "launch-ttl", launchTTL, "workspace launch grant TTL")
+	flag.DurationVar(&inviteTTL, "invite-ttl", inviteTTL, "organization invite TTL")
+	flag.DurationVar(&shutdownTimeout, "shutdown-timeout", shutdownTimeout, "graceful shutdown timeout")
+	flag.Parse()
+
+	addr := listenAddress
+	if strings.TrimSpace(addr) == "" {
+		addr = net.JoinHostPort(host, strconv.Itoa(port))
+	}
+
+	workspace, err := cpstorage.InitializeWorkspace(context.Background(), workspaceRoot)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to initialize control-plane workspace: %v\n", err)
+		os.Exit(1)
+	}
+	defer workspace.Close()
+
+	service := controlplane.NewService(workspace, controlplane.Config{
+		SessionTTL:           sessionTTL,
+		CeremonyTTL:          ceremonyTTL,
+		LaunchTTL:            launchTTL,
+		InviteTTL:            inviteTTL,
+		WorkspaceURLTemplate: workspaceURLTemplate,
+		InviteURLTemplate:    inviteURLTemplate,
+	})
+
+	handler := cpserver.NewHandler(service, cpserver.Config{
+		HealthCheck: workspace.Ping,
+		WebAuthnConfig: cpserver.WebAuthnConfig{
+			RPID:     webAuthnRPID,
+			RPOrigin: webAuthnOrigin,
+		},
+	})
+
+	httpServer := &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+
+	shutdownSignals := make(chan os.Signal, 1)
+	signal.Notify(shutdownSignals, syscall.SIGINT, syscall.SIGTERM)
+
+	serverErr := make(chan error, 1)
+	go func() {
+		fmt.Printf("oar-control-plane listening on http://%s\n", addr)
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			serverErr <- err
+		}
+		close(serverErr)
+	}()
+
+	select {
+	case err := <-serverErr:
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "server error: %v\n", err)
+			os.Exit(1)
+		}
+	case sig := <-shutdownSignals:
+		fmt.Printf("\nreceived %s, shutting down gracefully...\n", sig)
+		ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancel()
+		if err := httpServer.Shutdown(ctx); err != nil {
+			fmt.Fprintf(os.Stderr, "graceful shutdown failed: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("server stopped")
+	}
+}
+
+func envString(name string, fallback string) string {
+	value := strings.TrimSpace(os.Getenv(name))
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func envInt(name string, fallback int) int {
+	value := strings.TrimSpace(os.Getenv(name))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "invalid integer value for %s: %q\n", name, value)
+		os.Exit(1)
+	}
+	return parsed
+}
+
+func envDuration(name string, fallback time.Duration) time.Duration {
+	value := strings.TrimSpace(os.Getenv(name))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := time.ParseDuration(value)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "invalid duration value for %s: %q\n", name, value)
+		os.Exit(1)
+	}
+	return parsed
+}
