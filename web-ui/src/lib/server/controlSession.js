@@ -237,6 +237,20 @@ export async function loadControlSession(event) {
     return null;
   }
 
+  if (account) {
+    try {
+      const client = createControlClient(accessToken);
+      await client.validateSession();
+    } catch (error) {
+      if (error?.status === 401) {
+        clearControlAccessToken(event);
+        clearControlAccount(event);
+        clearControlSessionState();
+        return null;
+      }
+    }
+  }
+
   setControlSessionState(accessToken, account);
   return { accessToken, account };
 }

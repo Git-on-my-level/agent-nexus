@@ -21,11 +21,14 @@ const (
 	defaultAuthRequestBodyLimit    int64 = 256 << 10
 	defaultContentRequestBodyLimit int64 = 8 << 20
 
-	defaultAuthRequestsPerMinute  = 600
-	defaultAuthRequestsBurst      = 100
-	defaultWriteRequestsPerMinute = 1200
-	defaultWriteRequestsBurst     = 200
-	requestTooLargeRetryAfterSecs = 1
+	defaultAuthRequestsPerMinute   = 600
+	defaultAuthRequestsBurst       = 100
+	defaultWriteRequestsPerMinute  = 1200
+	defaultWriteRequestsBurst      = 200
+	requestTooLargeRetryAfterSecs  = 1
+	defaultRouteRateLimitMaxKeys   = 4096
+	defaultRouteRateLimitBucketTTL = 15 * time.Minute
+	routeRateLimitPruneInterval    = time.Minute
 )
 
 type RequestBodyLimits struct {
@@ -71,20 +74,26 @@ func (l RouteRateLimits) normalize() RouteRateLimits {
 }
 
 type routeRateLimiter struct {
-	mu      sync.Mutex
-	buckets map[string]*rateLimitBucket
-	limits  RouteRateLimits
+	mu        sync.Mutex
+	buckets   map[string]*rateLimitBucket
+	limits    RouteRateLimits
+	maxKeys   int
+	bucketTTL time.Duration
+	lastPrune time.Time
 }
 
 type rateLimitBucket struct {
 	tokens     float64
 	lastRefill time.Time
+	lastSeen   time.Time
 }
 
 func newRouteRateLimiter(limits RouteRateLimits) *routeRateLimiter {
 	return &routeRateLimiter{
-		buckets: make(map[string]*rateLimitBucket, 2),
-		limits:  limits.normalize(),
+		buckets:   make(map[string]*rateLimitBucket, 2),
+		limits:    limits.normalize(),
+		maxKeys:   defaultRouteRateLimitMaxKeys,
+		bucketTTL: defaultRouteRateLimitBucketTTL,
 	}
 }
 
@@ -101,6 +110,8 @@ func (l *routeRateLimiter) allow(bucket string, scope string, now time.Time) (bo
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
+	l.pruneBuckets(now)
+
 	stateKey := bucket
 	scope = strings.TrimSpace(scope)
 	if scope != "" {
@@ -109,12 +120,15 @@ func (l *routeRateLimiter) allow(bucket string, scope string, now time.Time) (bo
 
 	state, ok := l.buckets[stateKey]
 	if !ok {
+		l.evictOldestBucketIfFull()
 		state = &rateLimitBucket{
 			tokens:     float64(burst),
 			lastRefill: now,
+			lastSeen:   now,
 		}
 		l.buckets[stateKey] = state
 	}
+	state.lastSeen = now
 
 	if now.Before(state.lastRefill) {
 		state.lastRefill = now
@@ -152,6 +166,48 @@ func (l *routeRateLimiter) limitForBucket(bucket string) (int, int) {
 		return l.limits.WriteRequestsPerMinute, l.limits.WriteBurst
 	default:
 		return 0, 0
+	}
+}
+
+func (l *routeRateLimiter) pruneBuckets(now time.Time) {
+	if l == nil || len(l.buckets) == 0 {
+		return
+	}
+	if now.Sub(l.lastPrune) < routeRateLimitPruneInterval && len(l.buckets) < l.maxKeys {
+		return
+	}
+	if l.bucketTTL > 0 {
+		for key, bucket := range l.buckets {
+			lastTouched := bucket.lastSeen
+			if lastTouched.Before(bucket.lastRefill) {
+				lastTouched = bucket.lastRefill
+			}
+			if now.Sub(lastTouched) >= l.bucketTTL {
+				delete(l.buckets, key)
+			}
+		}
+	}
+	l.lastPrune = now
+}
+
+func (l *routeRateLimiter) evictOldestBucketIfFull() {
+	if l == nil || l.maxKeys <= 0 || len(l.buckets) < l.maxKeys {
+		return
+	}
+	var oldestKey string
+	var oldestSeen time.Time
+	for key, bucket := range l.buckets {
+		lastTouched := bucket.lastSeen
+		if lastTouched.Before(bucket.lastRefill) {
+			lastTouched = bucket.lastRefill
+		}
+		if oldestKey == "" || lastTouched.Before(oldestSeen) {
+			oldestKey = key
+			oldestSeen = lastTouched
+		}
+	}
+	if oldestKey != "" {
+		delete(l.buckets, oldestKey)
 	}
 }
 
@@ -229,11 +285,7 @@ func routeRateLimitScopeForRequest(r *http.Request) string {
 	if principal, ok := cachedAuthenticatedPrincipal(r); ok {
 		return routeRateLimitScopeForPrincipal(principal)
 	}
-	host, _, err := net.SplitHostPort(strings.TrimSpace(r.RemoteAddr))
-	if err != nil {
-		host = strings.TrimSpace(r.RemoteAddr)
-	}
-	host = strings.Trim(host, "[]")
+	host := requestClientHost(r)
 	if host != "" {
 		return "addr:" + host
 	}
@@ -251,6 +303,82 @@ func routeRateLimitScopeForPrincipal(principal *auth.Principal) string {
 		return "actor:" + actorID
 	}
 	return "anonymous"
+}
+
+func requestClientHost(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	if peerIP := requestPeerIP(r); peerIP != nil && peerIP.IsLoopback() {
+		if forwarded := forwardedClientHost(r); forwarded != "" {
+			return forwarded
+		}
+	}
+	return requestRemoteHost(r)
+}
+
+func requestPeerIP(r *http.Request) net.IP {
+	host := requestRemoteHost(r)
+	if host == "" {
+		return nil
+	}
+	return net.ParseIP(host)
+}
+
+func requestRemoteHost(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	host, _, err := net.SplitHostPort(strings.TrimSpace(r.RemoteAddr))
+	if err != nil {
+		host = strings.TrimSpace(r.RemoteAddr)
+	}
+	return strings.Trim(host, "[]")
+}
+
+func forwardedClientHost(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	if host := parseForwardedFor(firstHeaderValue(r.Header.Get("X-Forwarded-For"))); host != "" {
+		return host
+	}
+	forwarded := firstHeaderValue(r.Header.Get("Forwarded"))
+	if forwarded == "" {
+		return ""
+	}
+	for _, field := range strings.Split(forwarded, ";") {
+		name, value, ok := strings.Cut(strings.TrimSpace(field), "=")
+		if !ok || !strings.EqualFold(strings.TrimSpace(name), "for") {
+			continue
+		}
+		return parseForwardedFor(value)
+	}
+	return ""
+}
+
+func parseForwardedFor(raw string) string {
+	raw = strings.TrimSpace(strings.Trim(raw, `"`))
+	if raw == "" || strings.EqualFold(raw, "unknown") {
+		return ""
+	}
+	if strings.HasPrefix(raw, "[") {
+		host, _, err := net.SplitHostPort(raw)
+		if err == nil {
+			return strings.Trim(host, "[]")
+		}
+	}
+	if ip := net.ParseIP(strings.Trim(raw, "[]")); ip != nil {
+		return ip.String()
+	}
+	if host, _, err := net.SplitHostPort(raw); err == nil {
+		raw = host
+	}
+	raw = strings.Trim(raw, "[]")
+	if net.ParseIP(raw) == nil {
+		return ""
+	}
+	return raw
 }
 
 func routeRateLimitBucketForRequest(path string, method string, requirement routeAccessRequirement) string {

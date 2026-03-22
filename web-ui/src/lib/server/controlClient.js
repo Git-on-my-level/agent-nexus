@@ -89,6 +89,14 @@ export function createControlClient(accessToken) {
       return parseResponseBody(result);
     },
 
+    async validateSession() {
+      const result = await client.controlOrganizationsList({ headers });
+      if (!result.status || result.status >= 400) {
+        throw createControlError(result, "Failed to validate session");
+      }
+      return true;
+    },
+
     async listOrganizations() {
       const result = await client.controlOrganizationsList({ headers });
       if (!result.status || result.status >= 400) {

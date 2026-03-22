@@ -83,7 +83,7 @@ func requestOrigin(r *http.Request) (string, error) {
 
 	forwardedProto := firstHeaderValue(r.Header.Get("X-Forwarded-Proto"))
 	forwardedHost := firstHeaderValue(r.Header.Get("X-Forwarded-Host"))
-	if forwardedProto != "" && forwardedHost != "" {
+	if requestPeerIP(r) != nil && requestPeerIP(r).IsLoopback() && forwardedProto != "" && forwardedHost != "" {
 		return normalizeOrigin(fmt.Sprintf("%s://%s", forwardedProto, forwardedHost))
 	}
 

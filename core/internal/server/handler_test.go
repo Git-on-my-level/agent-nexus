@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"organization-autorunner-core/internal/auth"
 	"organization-autorunner-core/internal/storage"
@@ -286,7 +287,7 @@ func TestAuthRouteRateLimitingReturnsRateLimited(t *testing.T) {
 	}
 }
 
-func TestAuthRouteRateLimitingScopesByRemoteAddr(t *testing.T) {
+func TestAuthRouteRateLimitingScopesByForwardedClientAddrWhenProxyIsLoopback(t *testing.T) {
 	t.Parallel()
 
 	handler := NewHandler(
@@ -300,17 +301,66 @@ func TestAuthRouteRateLimitingScopesByRemoteAddr(t *testing.T) {
 	)
 
 	req1 := httptest.NewRequest(http.MethodPost, "/auth/token", strings.NewReader(`{"grant_type":"refresh_token","refresh_token":"token"}`))
-	req1.RemoteAddr = "203.0.113.10:1234"
+	req1.RemoteAddr = "127.0.0.1:1234"
+	req1.Header.Set("X-Forwarded-For", "203.0.113.10")
 	rr1 := httptest.NewRecorder()
 	handler.ServeHTTP(rr1, req1)
 
 	req2 := httptest.NewRequest(http.MethodPost, "/auth/token", strings.NewReader(`{"grant_type":"refresh_token","refresh_token":"token"}`))
-	req2.RemoteAddr = "203.0.113.11:1234"
+	req2.RemoteAddr = "127.0.0.1:1235"
+	req2.Header.Set("X-Forwarded-For", "203.0.113.11")
 	rr2 := httptest.NewRecorder()
 	handler.ServeHTTP(rr2, req2)
 
 	if rr2.Code == http.StatusTooManyRequests {
 		t.Fatalf("expected different callers to get separate auth rate limits, got 429 with body %s", rr2.Body.String())
+	}
+}
+
+func TestRouteRateLimitScopeForRequestIgnoresSpoofedForwardedClientAddr(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest(http.MethodPost, "/auth/token", strings.NewReader(`{"grant_type":"refresh_token","refresh_token":"token"}`))
+	req.RemoteAddr = "198.51.100.10:4321"
+	req.Header.Set("X-Forwarded-For", "203.0.113.10")
+
+	bucket, scope := routeRateLimitForRequest(req, routeAccessRequirement{
+		bucket:    routeAccessPublicAuthCeremony,
+		supported: true,
+	})
+	if bucket != "auth" {
+		t.Fatalf("expected auth bucket, got %q", bucket)
+	}
+	if scope != "addr:198.51.100.10" {
+		t.Fatalf("expected limiter to ignore untrusted forwarded address, got %q", scope)
+	}
+}
+
+func TestRouteRateLimiterEvictsOldScopesWhenFull(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	limiter := &routeRateLimiter{
+		buckets:   make(map[string]*rateLimitBucket),
+		limits:    RouteRateLimits{AuthRequestsPerMinute: 60, AuthBurst: 1},
+		maxKeys:   2,
+		bucketTTL: time.Hour,
+	}
+
+	if allowed, _ := limiter.allow("auth", "addr:one", now); !allowed {
+		t.Fatal("expected first scope to be allowed")
+	}
+	if allowed, _ := limiter.allow("auth", "addr:two", now.Add(time.Second)); !allowed {
+		t.Fatal("expected second scope to be allowed")
+	}
+	if allowed, _ := limiter.allow("auth", "addr:three", now.Add(2*time.Second)); !allowed {
+		t.Fatal("expected third scope to be allowed")
+	}
+	if len(limiter.buckets) != 2 {
+		t.Fatalf("expected limiter to stay bounded at 2 scopes, got %d", len(limiter.buckets))
+	}
+	if _, ok := limiter.buckets["auth:addr:one"]; ok {
+		t.Fatalf("expected oldest scope to be evicted, buckets=%#v", limiter.buckets)
 	}
 }
 
