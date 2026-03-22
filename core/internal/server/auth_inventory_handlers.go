@@ -37,7 +37,16 @@ func handleListAuthPrincipals(w http.ResponseWriter, r *http.Request, opts handl
 		return
 	}
 
-	response := map[string]any{"principals": principals}
+	activeHumanCount, err := opts.authStore.CountActiveHumanPrincipals(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to count active human principals")
+		return
+	}
+
+	response := map[string]any{
+		"principals":                   principals,
+		"active_human_principal_count": activeHumanCount,
+	}
 	if nextCursor != "" {
 		response["next_cursor"] = nextCursor
 	}

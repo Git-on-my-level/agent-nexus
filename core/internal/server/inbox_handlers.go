@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"sort"
@@ -167,8 +166,7 @@ func handleRebuildDerived(w http.ResponseWriter, r *http.Request, opts handlerOp
 	var req struct {
 		ActorID string `json:"actor_id"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
@@ -209,8 +207,7 @@ func handleAckInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		ThreadID    string `json:"thread_id"`
 		InboxItemID string `json:"inbox_item_id"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 

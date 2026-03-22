@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -37,8 +36,7 @@ func handleCreateThread(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		RequestKey string         `json:"request_key"`
 		Thread     map[string]any `json:"thread"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
@@ -150,8 +148,7 @@ func handlePatchThread(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		Patch       map[string]any `json:"patch"`
 		IfUpdatedAt *string        `json:"if_updated_at"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 

@@ -164,6 +164,61 @@ func TestPrimitivesCRUDRoundTrip(t *testing.T) {
 	}
 }
 
+func TestPrimitivesCRUDRoundTripWithObjectBackend(t *testing.T) {
+	t.Parallel()
+
+	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+	primitiveStore := primitives.NewStore(
+		workspace.DB(),
+		blob.NewObjectStoreBackend(workspace.Layout().ArtifactContentDir),
+		workspace.Layout().ArtifactContentDir,
+	)
+	h := newPrimitivesTestServerWithStore(t, workspace, primitiveStore)
+
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	artifactResp := postJSONExpectStatus(t, h.baseURL+"/artifacts", `{
+		"actor_id":"actor-1",
+		"artifact":{
+			"kind":"my_custom_artifact",
+			"refs":["thread:thread-1"],
+			"summary":"object store artifact"
+		},
+		"content":"object-store content",
+		"content_type":"text"
+	}`, http.StatusCreated)
+	defer artifactResp.Body.Close()
+
+	var created map[string]map[string]any
+	if err := json.NewDecoder(artifactResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode object-backend create response: %v", err)
+	}
+	artifactID := asString(created["artifact"]["id"])
+	if artifactID == "" {
+		t.Fatal("expected object-backend artifact id")
+	}
+
+	contentResp, err := http.Get(h.baseURL + "/artifacts/" + artifactID + "/content")
+	if err != nil {
+		t.Fatalf("GET object-backend artifact content: %v", err)
+	}
+	defer contentResp.Body.Close()
+	if contentResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected object-backend content status: %d", contentResp.StatusCode)
+	}
+	body, err := io.ReadAll(contentResp.Body)
+	if err != nil {
+		t.Fatalf("read object-backend content: %v", err)
+	}
+	if string(body) != "object-store content" {
+		t.Fatalf("unexpected object-backend content: %q", string(body))
+	}
+}
+
 func TestArtifactsListBySecondaryThreadRef(t *testing.T) {
 	t.Parallel()
 

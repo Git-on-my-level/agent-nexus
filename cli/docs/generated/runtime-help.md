@@ -12,7 +12,7 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 - `auth list` (manual): List local CLI profiles and the active profile.
 - `auth update-username` (manual): Rename the authenticated agent and sync the local profile.
 - `auth rotate` (manual): Rotate the active agent key and refresh stored credentials.
-- `auth revoke` (manual): Revoke the active agent and mark the local profile revoked.
+- `auth revoke` (manual): Revoke the active agent and mark the local profile revoked. Use explicit human-lockout flags only for break-glass recovery.
 - `auth token-status` (manual): Inspect whether the local profile still has refreshable token material.
 - `import` (manual): Prescriptive import guide for building low-duplication, discoverable OAR graphs from external material.
 - `actors` (group): List and register actor identities
@@ -435,7 +435,7 @@ Global flags:
 
 ## `auth revoke`
 
-Revoke the active agent and mark the local profile revoked.
+Revoke the active agent and mark the local profile revoked. Use explicit human-lockout flags only for break-glass recovery.
 
 ```text
 Local Help: auth revoke
@@ -570,8 +570,8 @@ Local auth lifecycle helpers:
   auth list               List local CLI profiles and which one is active.
   auth update-username    Update the current principal username and sync the local profile.
   auth rotate             Rotate the active agent key and refresh stored credentials.
-  auth revoke             Revoke the active agent and mark the local profile revoked.
-  auth principals revoke  Revoke another principal by id, with an explicit break-glass flag for the last active principal.
+  auth revoke             Revoke the active agent and mark the local profile revoked. Use explicit human-lockout flags only for break-glass recovery.
+  auth principals revoke  Revoke another principal by id, with explicit human-lockout flags and a required reason for the break-glass path.
   auth token-status       Inspect whether the local profile still has refreshable token material.
   Tip: use `oar auth bootstrap status` before first registration, `oar auth register --username <username> --bootstrap-token <token>` for the first principal, and `oar auth invites create --kind human|agent` before later registrations.
 

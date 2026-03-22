@@ -148,6 +148,10 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 	if s.blob == nil {
 		return nil, nil, fmt.Errorf("blob backend is not configured")
 	}
+	if s.quota.enabled() {
+		s.quotaMu.Lock()
+		defer s.quotaMu.Unlock()
+	}
 	actorID = strings.TrimSpace(actorID)
 	if actorID == "" {
 		return nil, nil, invalidDocumentRequest("actorID is required")
@@ -206,6 +210,9 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 	artifactID := uuid.NewString()
 	revisionID := artifactID
 	contentHash := sha256Hex(encodedContent)
+	if err := s.checkWorkspaceWriteQuota(ctx, int64(len(encodedContent)), contentHash, quotaWriteDelta{artifacts: 1, documents: 1, revisions: 1}); err != nil {
+		return nil, nil, err
+	}
 
 	revisionRefs := append([]string(nil), refs...)
 	if threadID != "" {
@@ -419,6 +426,10 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 	if s.blob == nil {
 		return nil, nil, fmt.Errorf("blob backend is not configured")
 	}
+	if s.quota.enabled() {
+		s.quotaMu.Lock()
+		defer s.quotaMu.Unlock()
+	}
 	actorID = strings.TrimSpace(actorID)
 	if actorID == "" {
 		return nil, nil, invalidDocumentRequest("actorID is required")
@@ -496,6 +507,9 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 	revisionID := artifactID
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	contentHash := sha256Hex(encodedContent)
+	if err := s.checkWorkspaceWriteQuota(ctx, int64(len(encodedContent)), contentHash, quotaWriteDelta{artifacts: 1, revisions: 1}); err != nil {
+		return nil, nil, err
+	}
 
 	revisionRefs := append([]string(nil), refs...)
 	if nextThreadID != "" {

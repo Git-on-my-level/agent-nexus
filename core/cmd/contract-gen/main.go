@@ -263,13 +263,24 @@ type metaOutput struct {
 	Commands        []command `json:"commands"`
 }
 
+type generatorConfig struct {
+	SourceLabel       string
+	GoModule          string
+	TSPackage         string
+	EmitEventRefRules bool
+}
+
 var pathParamPattern = regexp.MustCompile(`\{([^{}]+)\}`)
 
 func main() {
 	var (
-		openAPIPath = flag.String("openapi", "../contracts/oar-openapi.yaml", "path to root OpenAPI contract")
-		schemaPath  = flag.String("schema", "../contracts/oar-schema.yaml", "path to root domain schema contract")
-		outDir      = flag.String("out", "../contracts/gen", "output directory for generated artifacts")
+		openAPIPath       = flag.String("openapi", "../contracts/oar-openapi.yaml", "path to root OpenAPI contract")
+		schemaPath        = flag.String("schema", "../contracts/oar-schema.yaml", "path to root domain schema contract")
+		outDir            = flag.String("out", "../contracts/gen", "output directory for generated artifacts")
+		sourceLabel       = flag.String("source-label", "contracts/oar-openapi.yaml", "display label for generated docs")
+		goModule          = flag.String("go-module", "organization-autorunner-contracts-go-client", "Go module path for generated Go client")
+		tsPackage         = flag.String("ts-package", "organization-autorunner-contracts-ts-client", "package name for generated TS client")
+		emitEventRefRules = flag.Bool("emit-event-ref-rules", true, "whether to emit event reference rules metadata from the schema contract")
 	)
 	flag.Parse()
 
@@ -301,7 +312,23 @@ func main() {
 		exitf("no x-oar commands found in openapi document")
 	}
 
-	if err := generateAll(*outDir, doc, commands, schemaDoc); err != nil {
+	config := generatorConfig{
+		SourceLabel:       strings.TrimSpace(*sourceLabel),
+		GoModule:          strings.TrimSpace(*goModule),
+		TSPackage:         strings.TrimSpace(*tsPackage),
+		EmitEventRefRules: *emitEventRefRules,
+	}
+	if config.SourceLabel == "" {
+		config.SourceLabel = filepath.Clean(*openAPIPath)
+	}
+	if config.GoModule == "" {
+		config.GoModule = "organization-autorunner-contracts-go-client"
+	}
+	if config.TSPackage == "" {
+		config.TSPackage = "organization-autorunner-contracts-ts-client"
+	}
+
+	if err := generateAll(*outDir, doc, commands, schemaDoc, config); err != nil {
 		exitf("generate artifacts: %v", err)
 	}
 }
@@ -876,7 +903,7 @@ func sortedUniqueStrings(values []string) []string {
 	return out
 }
 
-func generateAll(outDir string, doc openAPIDocument, commands []command, schemaDoc oarSchemaDocument) error {
+func generateAll(outDir string, doc openAPIDocument, commands []command, schemaDoc oarSchemaDocument, config generatorConfig) error {
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return err
 	}
@@ -890,25 +917,27 @@ func generateAll(outDir string, doc openAPIDocument, commands []command, schemaD
 	if err := writeHelpMeta(filepath.Join(outDir, "meta", "help.json"), doc, commands); err != nil {
 		return err
 	}
-	if err := writeEventRefRulesMeta(filepath.Join(outDir, "meta", "event_ref_rules.json"), doc, schemaDoc); err != nil {
+	if config.EmitEventRefRules {
+		if err := writeEventRefRulesMeta(filepath.Join(outDir, "meta", "event_ref_rules.json"), doc, schemaDoc); err != nil {
+			return err
+		}
+	}
+	if err := writeMarkdown(filepath.Join(outDir, "docs", "commands.md"), doc, commands, config.SourceLabel); err != nil {
 		return err
 	}
-	if err := writeMarkdown(filepath.Join(outDir, "docs", "commands.md"), doc, commands); err != nil {
+	if err := writeGroupsMarkdown(filepath.Join(outDir, "docs", "command-groups.md"), doc, commands, config.SourceLabel); err != nil {
 		return err
 	}
-	if err := writeGroupsMarkdown(filepath.Join(outDir, "docs", "command-groups.md"), doc, commands); err != nil {
-		return err
-	}
-	if err := writeConceptsMarkdown(filepath.Join(outDir, "docs", "concepts.md"), doc, commands); err != nil {
+	if err := writeConceptsMarkdown(filepath.Join(outDir, "docs", "concepts.md"), doc, commands, config.SourceLabel); err != nil {
 		return err
 	}
 	if err := writeXOARAuthoringMarkdown(filepath.Join(outDir, "docs", "x-oar-authoring.md")); err != nil {
 		return err
 	}
-	if err := writeGoClient(filepath.Join(outDir, "go"), commands); err != nil {
+	if err := writeGoClient(filepath.Join(outDir, "go"), commands, config.GoModule); err != nil {
 		return err
 	}
-	if err := writeTSClient(filepath.Join(outDir, "ts"), commands); err != nil {
+	if err := writeTSClient(filepath.Join(outDir, "ts"), commands, config.TSPackage); err != nil {
 		return err
 	}
 
@@ -1015,14 +1044,14 @@ func writeEventRefRulesMeta(path string, doc openAPIDocument, schemaDoc oarSchem
 	return os.WriteFile(path, b, 0o644)
 }
 
-func writeMarkdown(path string, doc openAPIDocument, commands []command) error {
+func writeMarkdown(path string, doc openAPIDocument, commands []command, sourceLabel string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
 
 	var b strings.Builder
 	b.WriteString("# OAR Command Registry\n\n")
-	b.WriteString("Generated from `contracts/oar-openapi.yaml`.\n\n")
+	b.WriteString(fmt.Sprintf("Generated from `%s`.\n\n", sourceLabel))
 	b.WriteString(fmt.Sprintf("- OpenAPI version: `%s`\n", doc.OpenAPI))
 	b.WriteString(fmt.Sprintf("- Contract version: `%s`\n", strings.TrimSpace(doc.Info.Version)))
 	b.WriteString(fmt.Sprintf("- Commands: `%d`\n\n", len(commands)))
@@ -1074,7 +1103,7 @@ func writeMarkdown(path string, doc openAPIDocument, commands []command) error {
 	return os.WriteFile(path, []byte(b.String()), 0o644)
 }
 
-func writeGroupsMarkdown(path string, doc openAPIDocument, commands []command) error {
+func writeGroupsMarkdown(path string, doc openAPIDocument, commands []command, sourceLabel string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
@@ -1086,7 +1115,7 @@ func writeGroupsMarkdown(path string, doc openAPIDocument, commands []command) e
 
 	var b strings.Builder
 	b.WriteString("# OAR Command Groups\n\n")
-	b.WriteString("Generated from `contracts/oar-openapi.yaml`.\n\n")
+	b.WriteString(fmt.Sprintf("Generated from `%s`.\n\n", sourceLabel))
 	b.WriteString(fmt.Sprintf("- OpenAPI version: `%s`\n", doc.OpenAPI))
 	b.WriteString(fmt.Sprintf("- Contract version: `%s`\n", strings.TrimSpace(doc.Info.Version)))
 	b.WriteString(fmt.Sprintf("- Groups: `%d`\n\n", len(groups)))
@@ -1105,7 +1134,7 @@ func writeGroupsMarkdown(path string, doc openAPIDocument, commands []command) e
 	return os.WriteFile(path, []byte(b.String()), 0o644)
 }
 
-func writeConceptsMarkdown(path string, doc openAPIDocument, commands []command) error {
+func writeConceptsMarkdown(path string, doc openAPIDocument, commands []command, sourceLabel string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
@@ -1113,7 +1142,7 @@ func writeConceptsMarkdown(path string, doc openAPIDocument, commands []command)
 
 	var b strings.Builder
 	b.WriteString("# OAR Concepts\n\n")
-	b.WriteString("Generated from `contracts/oar-openapi.yaml`.\n\n")
+	b.WriteString(fmt.Sprintf("Generated from `%s`.\n\n", sourceLabel))
 	b.WriteString(fmt.Sprintf("- OpenAPI version: `%s`\n", doc.OpenAPI))
 	b.WriteString(fmt.Sprintf("- Contract version: `%s`\n", strings.TrimSpace(doc.Info.Version)))
 	b.WriteString(fmt.Sprintf("- Concepts: `%d`\n\n", len(concepts)))
@@ -1169,13 +1198,13 @@ Surface classification:
 	return os.WriteFile(path, []byte(content), 0o644)
 }
 
-func writeGoClient(goOutDir string, commands []command) error {
+func writeGoClient(goOutDir string, commands []command, modulePath string) error {
 	clientDir := filepath.Join(goOutDir, "client")
 	if err := os.MkdirAll(clientDir, 0o755); err != nil {
 		return err
 	}
 
-	goMod := "module organization-autorunner-contracts-go-client\n\ngo 1.23.0\n"
+	goMod := fmt.Sprintf("module %s\n\ngo 1.23.0\n", modulePath)
 	if err := os.WriteFile(filepath.Join(goOutDir, "go.mod"), []byte(goMod), 0o644); err != nil {
 		return err
 	}
@@ -1416,7 +1445,7 @@ func writeGoClient(goOutDir string, commands []command) error {
 	return os.WriteFile(filepath.Join(clientDir, "client_gen.go"), formatted, 0o644)
 }
 
-func writeTSClient(tsOutDir string, commands []command) error {
+func writeTSClient(tsOutDir string, commands []command, packageName string) error {
 	if err := os.MkdirAll(tsOutDir, 0o755); err != nil {
 		return err
 	}
@@ -1582,7 +1611,7 @@ func writeTSClient(tsOutDir string, commands []command) error {
 	}
 
 	pkg := `{
-  "name": "organization-autorunner-contracts-ts-client",
+  "name": "` + packageName + `",
   "private": true,
   "type": "module"
 }

@@ -47,6 +47,12 @@
     }
   });
 
+  $effect(() => {
+    if ($authenticatedAgent) {
+      goto(workspacePath(workspaceSlug));
+    }
+  });
+
   async function handleRegistration() {
     if (!registrationName.trim()) {
       registrationError = "Display name is required.";
@@ -83,12 +89,7 @@
         verifyPayload[tokenKey] = registrationTokenValue;
       }
       const result = await coreClient.passkeyRegisterVerify(verifyPayload);
-      completeAuthSession(
-        result.agent,
-        result.tokens,
-        sessionStorage,
-        workspaceSlug,
-      );
+      completeAuthSession(result.agent, workspaceSlug);
       await goto(workspacePath(workspaceSlug));
     } catch (error) {
       registrationError =
@@ -110,12 +111,7 @@
         session_id: options.session_id,
         credential,
       });
-      completeAuthSession(
-        result.agent,
-        result.tokens,
-        sessionStorage,
-        workspaceSlug,
-      );
+      completeAuthSession(result.agent, workspaceSlug);
       await goto(workspacePath(workspaceSlug));
     } catch (error) {
       loginError =

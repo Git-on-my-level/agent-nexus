@@ -2,117 +2,103 @@ import { get } from "svelte/store";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
-  REFRESH_TOKEN_STORAGE_KEY,
   authenticatedAgent,
   clearAuthSession,
   completeAuthSession,
-  loadStoredRefreshToken,
-  refreshTokenStorageKey,
-  refreshAuthSession,
+  initializeAuthSession,
+  isAuthenticated,
+  logoutAuthSession,
 } from "../../src/lib/authSession.js";
-
-function createMemoryStorage() {
-  const data = new Map();
-
-  return {
-    getItem(key) {
-      return data.has(key) ? data.get(key) : null;
-    },
-    setItem(key, value) {
-      data.set(key, String(value));
-    },
-    removeItem(key) {
-      data.delete(key);
-    },
-  };
-}
+import { WORKSPACE_HEADER } from "../../src/lib/workspacePaths.js";
 
 afterEach(() => {
-  clearAuthSession(createMemoryStorage());
+  clearAuthSession("local");
+  clearAuthSession("alpha");
 });
 
 describe("authSession", () => {
-  it("stores the refresh token in session storage and keeps the agent in memory", () => {
-    const storage = createMemoryStorage();
-    const storageKey = refreshTokenStorageKey();
-
+  it("keeps the authenticated agent in memory", () => {
     completeAuthSession(
       { agent_id: "agent-1", actor_id: "actor-1", username: "passkey.user" },
-      {
-        access_token: "access-1",
-        refresh_token: "refresh-1",
-      },
-      storage,
+      "local",
     );
 
-    expect(loadStoredRefreshToken(storage)).toBe("refresh-1");
-    expect(storage.getItem(storageKey)).toBe("refresh-1");
-    expect(storage.getItem(REFRESH_TOKEN_STORAGE_KEY)).toBe(null);
+    expect(isAuthenticated("local")).toBe(true);
     expect(get(authenticatedAgent)).toMatchObject({
       agent_id: "agent-1",
       actor_id: "actor-1",
     });
   });
 
-  it("refreshes tokens and reloads the current agent profile", async () => {
-    const storage = createMemoryStorage();
-    storage.setItem(refreshTokenStorageKey(), "refresh-old");
-
+  it("loads the current agent from the same-origin session endpoint", async () => {
     const calls = [];
-    const result = await refreshAuthSession({
-      storage,
+
+    const agent = await initializeAuthSession({
+      workspaceSlug: "alpha",
       fetchFn: async (url, options = {}) => {
         calls.push({
           url: String(url),
           method: options.method,
           headers: new Headers(options.headers),
-          body: options.body ? JSON.parse(options.body) : null,
         });
 
-        if (String(url).endsWith("/auth/token")) {
-          return new Response(
-            JSON.stringify({
-              tokens: {
-                access_token: "access-new",
-                refresh_token: "refresh-new",
-              },
-            }),
-            {
-              status: 200,
-              headers: { "content-type": "application/json" },
+        return new Response(
+          JSON.stringify({
+            authenticated: true,
+            agent: {
+              agent_id: "agent-2",
+              actor_id: "actor-2",
+              username: "passkey.agent",
             },
-          );
-        }
-
-        if (String(url).endsWith("/agents/me")) {
-          return new Response(
-            JSON.stringify({
-              agent: {
-                agent_id: "agent-2",
-                actor_id: "actor-2",
-                username: "passkey.agent",
-              },
-            }),
-            {
-              status: 200,
-              headers: { "content-type": "application/json" },
-            },
-          );
-        }
-
-        return new Response("not found", { status: 404 });
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        );
       },
     });
 
-    expect(result).toMatchObject({
-      agent: { agent_id: "agent-2", actor_id: "actor-2" },
-      tokens: { access_token: "access-new", refresh_token: "refresh-new" },
+    expect(agent).toMatchObject({
+      agent_id: "agent-2",
+      actor_id: "actor-2",
     });
-    expect(loadStoredRefreshToken(storage)).toBe("refresh-new");
-    expect(
-      calls
-        .find((call) => call.url.endsWith("/agents/me"))
-        .headers.get("authorization"),
-    ).toBe("Bearer access-new");
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url.endsWith("/auth/session")).toBe(true);
+    expect(calls[0].method).toBe("GET");
+    expect(calls[0].headers.get(WORKSPACE_HEADER)).toBe("alpha");
+    expect(get(authenticatedAgent)).toMatchObject({
+      agent_id: "agent-2",
+      actor_id: "actor-2",
+    });
+  });
+
+  it("logs out through the same-origin session endpoint", async () => {
+    const calls = [];
+    completeAuthSession(
+      { agent_id: "agent-3", actor_id: "actor-3", username: "passkey.user" },
+      "alpha",
+    );
+
+    await logoutAuthSession({
+      workspaceSlug: "alpha",
+      fetchFn: async (url, options = {}) => {
+        calls.push({
+          url: String(url),
+          method: options.method,
+          headers: new Headers(options.headers),
+        });
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      },
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url.endsWith("/auth/session")).toBe(true);
+    expect(calls[0].method).toBe("DELETE");
+    expect(calls[0].headers.get(WORKSPACE_HEADER)).toBe("alpha");
+    expect(isAuthenticated("alpha")).toBe(false);
   });
 });

@@ -27,6 +27,7 @@ func TestWebAuthnConfigBuildForRequestUsesForwardedHostWhenOriginMissing(t *test
 	t.Parallel()
 
 	req := httptest.NewRequest("POST", "http://127.0.0.1:8000/auth/passkey/login/options", nil)
+	req.RemoteAddr = "127.0.0.1:9000"
 	req.Header.Set("X-Forwarded-Proto", "https")
 	req.Header.Set("X-Forwarded-Host", "login.example.test")
 
@@ -38,6 +39,27 @@ func TestWebAuthnConfigBuildForRequestUsesForwardedHostWhenOriginMissing(t *test
 		t.Fatalf("expected forwarded host RP ID, got %q", got)
 	}
 	if got := webAuthn.Config.RPOrigins; len(got) != 1 || got[0] != "https://login.example.test" {
+		t.Fatalf("unexpected RP origins: %#v", got)
+	}
+}
+
+func TestWebAuthnConfigBuildForRequestIgnoresForwardedHostFromUntrustedPeer(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest("POST", "http://127.0.0.1:8000/auth/passkey/login/options", nil)
+	req.RemoteAddr = "198.51.100.20:9000"
+	req.Host = "workspace.example.test"
+	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Header.Set("X-Forwarded-Host", "login.example.test")
+
+	webAuthn, err := (WebAuthnConfig{RPDisplayName: "OAR"}).buildForRequest(req)
+	if err != nil {
+		t.Fatalf("build WebAuthn config: %v", err)
+	}
+	if got := webAuthn.Config.RPID; got != "workspace.example.test" {
+		t.Fatalf("expected direct host RP ID, got %q", got)
+	}
+	if got := webAuthn.Config.RPOrigins; len(got) != 1 || got[0] != "http://workspace.example.test" {
 		t.Fatalf("unexpected RP origins: %#v", got)
 	}
 }

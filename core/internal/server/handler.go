@@ -14,6 +14,7 @@ import (
 
 	"organization-autorunner-core/internal/actors"
 	"organization-autorunner-core/internal/auth"
+	"organization-autorunner-core/internal/controlplaneauth"
 	"organization-autorunner-core/internal/primitives"
 	"organization-autorunner-core/internal/schema"
 )
@@ -34,6 +35,7 @@ type PrimitiveStore interface {
 	GetArtifact(ctx context.Context, id string) (map[string]any, error)
 	GetArtifactContent(ctx context.Context, id string) ([]byte, string, error)
 	ListArtifacts(ctx context.Context, filter primitives.ArtifactListFilter) ([]map[string]any, error)
+	GetWorkspaceUsageSummary(ctx context.Context) (primitives.WorkspaceUsageSummary, error)
 	GetIdempotencyReplay(ctx context.Context, scope string, actorID string, requestKey string) (primitives.IdempotencyReplay, error)
 	PutIdempotencyReplay(ctx context.Context, scope string, actorID string, requestKey string, requestHash string, status int, response map[string]any) error
 	ListDerivedInboxItems(ctx context.Context, filter primitives.DerivedInboxListFilter) ([]primitives.DerivedInboxItem, error)
@@ -109,6 +111,12 @@ type handlerOptions struct {
 	streamPollInterval             time.Duration
 	corsAllowedOrigins             []string
 	projectionMaintainer           *ProjectionMaintainer
+	requestBodyLimits              RequestBodyLimits
+	routeRateLimits                RouteRateLimits
+	rateLimiter                    *routeRateLimiter
+	humanAuthMode                  string
+	controlPlaneHumanVerifier      *controlplaneauth.WorkspaceHumanVerifier
+	workspaceServiceIdentity       *controlplaneauth.WorkspaceServiceIdentity
 }
 
 func WithHealthCheck(healthCheck HealthCheckFunc) HandlerOption {
@@ -248,6 +256,36 @@ func WithProjectionMaintainer(maintainer *ProjectionMaintainer) HandlerOption {
 	}
 }
 
+func WithHumanAuthMode(mode string) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.humanAuthMode = strings.TrimSpace(mode)
+	}
+}
+
+func WithControlPlaneHumanVerifier(verifier *controlplaneauth.WorkspaceHumanVerifier) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.controlPlaneHumanVerifier = verifier
+	}
+}
+
+func WithWorkspaceServiceIdentity(identity *controlplaneauth.WorkspaceServiceIdentity) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.workspaceServiceIdentity = identity
+	}
+}
+
+func WithRequestBodyLimits(limits RequestBodyLimits) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.requestBodyLimits = limits
+	}
+}
+
+func WithRouteRateLimits(limits RouteRateLimits) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.routeRateLimits = limits
+	}
+}
+
 type routeAccessBucket string
 
 const (
@@ -381,6 +419,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		coreInstanceID:             "core-local",
 		streamPollInterval:         time.Second,
 		allowUnauthenticatedWrites: false,
+		humanAuthMode:              controlplaneauth.HumanAuthModeWorkspaceLocal,
 	}
 	for _, option := range options {
 		option(&opts)
@@ -403,12 +442,28 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 	if opts.streamPollInterval <= 0 {
 		opts.streamPollInterval = time.Second
 	}
+	if opts.humanAuthMode == "" {
+		opts.humanAuthMode = controlplaneauth.HumanAuthModeWorkspaceLocal
+	}
+	opts.requestBodyLimits = opts.requestBodyLimits.normalize()
+	opts.routeRateLimits = opts.routeRateLimits.normalize()
+	opts.rateLimiter = newRouteRateLimiter(opts.routeRateLimits)
 
 	mux := http.NewServeMux()
 	registerRoute := func(pattern string, classify routeAccessClassifier, handler http.HandlerFunc) {
 		mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
-			if !enforceRouteAccess(w, r, opts, classify(r)) {
+			requirement := classify(r)
+			if !enforceRouteAccess(w, r, opts, requirement) {
 				return
+			}
+			if bucket, scope := routeRateLimitForRequest(r, requirement); bucket != "" {
+				if ok, retryAfter := opts.rateLimiter.allow(bucket, scope, time.Now().UTC()); !ok {
+					writeRateLimitedError(w, bucket, retryAfter)
+					return
+				}
+			}
+			if limit := requestBodyLimitForRequest(r.URL.Path, r.Method, requirement, opts.requestBodyLimits); limit > 0 {
+				r.Body = http.MaxBytesReader(w, r.Body, limit)
 			}
 			handler(w, r)
 		})
@@ -459,6 +514,14 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			return
 		}
 		writeJSON(w, http.StatusOK, payload)
+	})
+
+	registerRoute("/ops/usage-summary", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+			return
+		}
+		handleGetUsageSummary(w, r, opts)
 	})
 
 	registerRoute("/version", exactRouteAccess(routeAccessAlwaysPublic, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
@@ -1397,8 +1460,7 @@ func handleRegisterActor(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		} `json:"actor"`
 	}
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
@@ -1528,7 +1590,7 @@ func shouldEnforceCLIVersion(path string) bool {
 		return false
 	}
 	switch path {
-	case "/health", "/livez", "/readyz", "/ops/health", "/version", "/meta/handshake", "/auth/token", "/auth/agents/register", "/auth/bootstrap/status":
+	case "/health", "/livez", "/readyz", "/ops/health", "/ops/usage-summary", "/version", "/meta/handshake", "/auth/token", "/auth/agents/register", "/auth/bootstrap/status":
 		return false
 	}
 	if strings.HasPrefix(path, "/auth/passkey/") {

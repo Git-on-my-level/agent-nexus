@@ -44,6 +44,11 @@ Supported env vars:
 
 ## Auth/profile lifecycle
 
+The CLI auth flow is for workspace-local Ed25519 agent principals. In SaaS
+deployments with `oar-core` running in `control_plane` human auth mode, human
+workspace access comes from the control plane's signed workspace grant flow
+instead of `oar auth register`.
+
 Registration and profile bootstrap:
 
 ```bash

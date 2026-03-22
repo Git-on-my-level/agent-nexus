@@ -12,6 +12,7 @@
 
   let bootstrapStatus = $state(null);
   let principals = $state([]);
+  let activeHumanPrincipalCount = $state(0);
   let invites = $state([]);
   let auditEvents = $state([]);
 
@@ -39,7 +40,9 @@
   let principalRevokeConfirming = $state(false);
   let principalRevokeForcing = $state(false);
   let principalRevokeError = $state("");
-  let principalRevokeRequiresForce = $state(false);
+  let principalRevokeTypedConfirmation = $state("");
+  let principalRevokeHumanLockoutReason = $state("");
+  let principalRevokeRequiresHumanLockout = $state(false);
 
   const SECTION_IDLE = "idle";
   const SECTION_READY = "ready";
@@ -86,6 +89,7 @@
     if (principalsResult.status === "fulfilled") {
       const data = principalsResult.value;
       principals = data?.principals ?? [];
+      activeHumanPrincipalCount = data?.active_human_principal_count ?? 0;
       principalsCursor = data?.next_cursor ?? "";
       principalsHasMore = Boolean(data?.next_cursor);
       principalsState = { status: SECTION_READY, error: "" };
@@ -142,6 +146,8 @@
       });
       const newPrincipals = result?.principals ?? [];
       principals = [...principals, ...newPrincipals];
+      activeHumanPrincipalCount =
+        result?.active_human_principal_count ?? activeHumanPrincipalCount;
       principalsCursor = result?.next_cursor ?? "";
       principalsHasMore = Boolean(result?.next_cursor);
     } catch (error) {
@@ -222,7 +228,9 @@
     principalRevokeConfirming = false;
     principalRevokeForcing = false;
     principalRevokeError = "";
-    principalRevokeRequiresForce = false;
+    principalRevokeTypedConfirmation = "";
+    principalRevokeHumanLockoutReason = "";
+    principalRevokeRequiresHumanLockout = isLastActiveHumanPrincipal(principal);
   }
 
   function cancelPrincipalRevoke() {
@@ -230,16 +238,17 @@
     principalRevokeConfirming = false;
     principalRevokeForcing = false;
     principalRevokeError = "";
-    principalRevokeRequiresForce = false;
+    principalRevokeTypedConfirmation = "";
+    principalRevokeHumanLockoutReason = "";
+    principalRevokeRequiresHumanLockout = false;
   }
 
   async function confirmPrincipalRevoke() {
-    if (!principalRevokeTarget) return;
+    if (!principalRevokeTarget || principalRevokeRequiresHumanLockout) return;
 
     const agentId = principalRevokeTarget.agent_id;
     principalRevokeConfirming = true;
     principalRevokeError = "";
-    principalRevokeRequiresForce = false;
 
     try {
       await coreClient.revokePrincipal(agentId, {});
@@ -248,7 +257,7 @@
     } catch (error) {
       const details = error?.details ?? "";
       if (details.includes("last_active_principal") || error?.status === 409) {
-        principalRevokeRequiresForce = true;
+        principalRevokeRequiresHumanLockout = true;
         principalRevokeConfirming = false;
       } else {
         principalRevokeError = extractErrorMessage(
@@ -261,14 +270,24 @@
   }
 
   async function forcePrincipalRevoke() {
-    if (!principalRevokeTarget) return;
+    if (!principalRevokeTarget || !principalRevokeRequiresHumanLockout) return;
+    if (
+      principalRevokeTypedConfirmation.trim() !==
+        principalRevokeTarget.agent_id ||
+      principalRevokeHumanLockoutReason.trim() === ""
+    ) {
+      principalRevokeError =
+        "Type the agent ID and provide a human-lockout reason before using break-glass revoke.";
+      return;
+    }
 
     principalRevokeForcing = true;
     principalRevokeError = "";
 
     try {
       await coreClient.revokePrincipal(principalRevokeTarget.agent_id, {
-        force_last_active: true,
+        allow_human_lockout: true,
+        human_lockout_reason: principalRevokeHumanLockoutReason.trim(),
       });
       cancelPrincipalRevoke();
       await loadAccessData();
@@ -336,6 +355,24 @@
     return parts.join(" \u2022 ");
   }
 
+  function isLastActiveHumanPrincipal(principal) {
+    return Boolean(
+      principal?.principal_kind === "human" &&
+      !principal?.revoked &&
+      activeHumanPrincipalCount === 1,
+    );
+  }
+
+  function principalRevokeBreakGlassReady() {
+    return Boolean(
+      principalRevokeRequiresHumanLockout &&
+      principalRevokeTarget &&
+      principalRevokeTypedConfirmation.trim() ===
+        principalRevokeTarget.agent_id &&
+      principalRevokeHumanLockoutReason.trim() !== "",
+    );
+  }
+
   function auditActorLabel(event) {
     const username = event?.actor_username;
     const agentId = event?.actor_agent_id;
@@ -383,6 +420,8 @@
         return `Principal ${subjectDisplay} revoked by ${actorDisplay}`;
       case "principal_self_revoked":
         return `Principal ${subjectDisplay} self-revoked`;
+      case "principal_human_lockout_revoked":
+        return `Principal ${subjectDisplay} revoked under human lockout by ${actorDisplay}`;
       default:
         return `${kind || "unknown"} (${actorDisplay})`;
     }
@@ -753,6 +792,7 @@
                   {formatTimestamp(principal.created_at)}
                 </span>
                 {#if !principal.revoked && !isCurrentPrincipal(principal)}
+                  {@const lastHuman = isLastActiveHumanPrincipal(principal)}
                   <button
                     class="shrink-0 cursor-pointer rounded px-2 py-1 text-[11px] font-medium text-red-400 hover:bg-red-400/10 disabled:opacity-50"
                     disabled={principalRevokeConfirming ||
@@ -760,7 +800,7 @@
                     onclick={() => startPrincipalRevoke(principal)}
                     type="button"
                   >
-                    Revoke
+                    {lastHuman ? "Break glass" : "Revoke"}
                   </button>
                 {:else if !principal.revoked}
                   <span
@@ -795,14 +835,14 @@
       >
         <div class="flex items-start gap-3">
           <div class="flex-1">
-            {#if principalRevokeRequiresForce}
+            {#if principalRevokeRequiresHumanLockout}
               <p class="text-[13px] font-medium text-red-400">
-                Warning: This is the last active principal
+                Warning: this is the last active human principal
               </p>
               <p class="mt-1 text-[11px] text-[var(--ui-text-muted)]">
-                Revoking the last active principal will lock everyone out of
-                this workspace. Only proceed if you have a recovery path (e.g.
-                bootstrap token or direct database access).
+                Revoking it will lock every human principal out of this
+                workspace. Type the agent ID and provide a reason before the
+                break-glass path becomes available.
               </p>
               <p class="mt-1 text-[11px] text-[var(--ui-text-muted)]">
                 Principal: <strong
@@ -810,6 +850,38 @@
                     principalRevokeTarget.agent_id}</strong
                 >
               </p>
+              <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label
+                    class="mb-1 block text-[11px] font-medium text-[var(--ui-text-muted)]"
+                    for="principal-lockout-confirmation"
+                  >
+                    Type agent ID to confirm
+                  </label>
+                  <input
+                    bind:value={principalRevokeTypedConfirmation}
+                    class="w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-2 py-1.5 font-mono text-[12px] text-[var(--ui-text)]"
+                    id="principal-lockout-confirmation"
+                    placeholder={principalRevokeTarget.agent_id}
+                    type="text"
+                  />
+                </div>
+                <div>
+                  <label
+                    class="mb-1 block text-[11px] font-medium text-[var(--ui-text-muted)]"
+                    for="principal-lockout-reason"
+                  >
+                    Human lockout reason
+                  </label>
+                  <input
+                    bind:value={principalRevokeHumanLockoutReason}
+                    class="w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-2 py-1.5 text-[12px] text-[var(--ui-text)]"
+                    id="principal-lockout-reason"
+                    placeholder="Explain the recovery path"
+                    type="text"
+                  />
+                </div>
+              </div>
             {:else}
               <p class="text-[13px] font-medium text-red-400">
                 Confirm revoke principal?
@@ -829,16 +901,17 @@
               </p>
             {/if}
             <div class="mt-3 flex items-center gap-2">
-              {#if principalRevokeRequiresForce}
+              {#if principalRevokeRequiresHumanLockout}
                 <button
                   class="cursor-pointer rounded bg-red-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-red-500 disabled:opacity-50"
-                  disabled={principalRevokeForcing}
+                  disabled={principalRevokeForcing ||
+                    !principalRevokeBreakGlassReady()}
                   onclick={forcePrincipalRevoke}
                   type="button"
                 >
                   {principalRevokeForcing
                     ? "Revoking..."
-                    : "Force revoke (break-glass)"}
+                    : "Allow human lockout and revoke"}
                 </button>
               {:else}
                 <button

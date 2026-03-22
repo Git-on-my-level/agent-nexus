@@ -42,7 +42,7 @@ var runtimeHelpManualDocTopics = []runtimeHelpDocTopic{
 	{Path: "auth list", Kind: "manual", Summary: "List local CLI profiles and the active profile."},
 	{Path: "auth update-username", Kind: "manual", Summary: "Rename the authenticated agent and sync the local profile."},
 	{Path: "auth rotate", Kind: "manual", Summary: "Rotate the active agent key and refresh stored credentials."},
-	{Path: "auth revoke", Kind: "manual", Summary: "Revoke the active agent and mark the local profile revoked."},
+	{Path: "auth revoke", Kind: "manual", Summary: "Revoke the active agent and mark the local profile revoked. Use explicit human-lockout flags only for break-glass recovery."},
 	{Path: "auth token-status", Kind: "manual", Summary: "Inspect whether the local profile still has refreshable token material."},
 }
 

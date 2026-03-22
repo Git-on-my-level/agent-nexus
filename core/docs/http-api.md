@@ -16,6 +16,10 @@ The schema of objects is defined by `../contracts/oar-schema.yaml`.
 - `refs` values MUST be typed ref strings per `ref_format`.
 - Error responses use a stable envelope:
   - `{ "error": { "code": "...", "message": "...", "recoverable": <bool>, "hint": "..." } }`
+- Request-size, quota, and abuse-control failures use explicit stable codes:
+  - `request_too_large` with HTTP `413` and a `request_body.limit_bytes` detail when the request body exceeds the configured limit.
+  - `workspace_quota_exceeded` with HTTP `507` and a `quota` detail object containing `metric`, `limit`, `current`, and `projected` when a workspace write would exceed configured storage or count limits.
+  - `rate_limited` with HTTP `429`, a `Retry-After` header, and a `rate_limit` detail object containing `bucket` and `retry_after_seconds`.
 - Create-heavy write endpoints accept optional `request_key` for replay-safe retries.
   - Reusing the same `request_key` with the same request body replays the original successful response instead of creating duplicates.
   - Reusing the same `request_key` with a different request body returns `409 Conflict`.
@@ -50,7 +54,7 @@ Each endpoint is classified with an `x-oar-surface` extension indicating its rol
 
 - **`projection`**: Operator convenience surfaces that aggregate multiple canonical resources into workspace-friendly bundles. Examples: `threads.context`, `threads.workspace`, `boards.workspace`, `inbox.list/get/stream/ack`. **Do not build durable automation directly on projection payload shapes.** Use canonical APIs or CLI commands for durable substrate.
 
-- **`utility`**: Infrastructure endpoints for liveness, readiness, version, meta discovery, auth bootstrap, and maintenance. Examples: `/health`, `/livez`, `/readyz`, `/ops/health`, `/version`, `/meta/*`, `/auth/*`, `/actors`, `/derived/rebuild`.
+- **`utility`**: Infrastructure endpoints for liveness, readiness, version, meta discovery, auth bootstrap, maintenance, and workspace telemetry. Examples: `/health`, `/livez`, `/readyz`, `/ops/health`, `/ops/usage-summary`, `/version`, `/meta/*`, `/auth/*`, `/actors`, `/derived/rebuild`.
 
 Projection endpoints return a `section_kinds` field to distinguish canonical vs derived sections, and a `generated_at` timestamp indicating when the projection was generated.
 
@@ -74,7 +78,7 @@ Projection endpoints return a `section_kinds` field to distinguish canonical vs 
 
 - CLI version gate:
   - Clients MAY send `X-OAR-CLI-Version`.
-  - When provided and below minimum compatibility (except on `/health`, `/livez`, `/readyz`, `/ops/health`, `/version`, `/meta/handshake`, `/auth/agents/register`, `/auth/token`), response is:
+  - When provided and below minimum compatibility (except on `/health`, `/livez`, `/readyz`, `/ops/health`, `/ops/usage-summary`, `/version`, `/meta/handshake`, `/auth/agents/register`, `/auth/token`), response is:
     - HTTP `426 Upgrade Required`
     - `{ "error": { "code": "cli_outdated", ... }, "upgrade": { "min_cli_version", "recommended_cli_version", "cli_download_url" } }`
 
@@ -350,6 +354,11 @@ Projection endpoints return a `section_kinds` field to distinguish canonical vs 
 - `POST /derived/rebuild`
   - Body: `{ "actor_id": "..." }`
   - Response: `{ "ok": true }`
+
+- `GET /ops/usage-summary`
+  - Auth: workspace auth required
+  - Response: `{ "summary": { "usage": { "blob_bytes", "blob_objects", "artifact_count", "document_count", "document_revision_count" }, "quota": { "max_blob_bytes", "max_artifacts", "max_documents", "max_document_revisions", "max_upload_bytes" }, "generated_at": "..." } }`
+  - Purpose: expose workspace usage and quota envelopes for control-plane polling without leaking backend-specific blob paths.
 
 - Materialized derived projections used by the common read path:
   - `derived_inbox_items`: asynchronously maintained inbox items keyed by deterministic `inbox_item_id`, with per-thread rows used by `GET /inbox`, `GET /inbox/{id}`, and thread workspace inbox sections.

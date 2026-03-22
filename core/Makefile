@@ -1,4 +1,4 @@
-.PHONY: help serve build-prod run-prod fmt vet test check lint ci-smoke smoke
+.PHONY: help serve serve-control-plane build-prod run-prod fmt vet test check lint ci-smoke smoke smoke-control-plane smoke-control-plane-human
 
 HOST ?= 127.0.0.1
 PORT ?= 8000
@@ -12,6 +12,7 @@ SCHEMA_PATH ?= $(CURDIR)/../contracts/oar-schema.yaml
 help:
 	@echo "Common targets:"
 	@echo "  make serve      - run oar-core locally (development mode)"
+	@echo "  make serve-control-plane - run oar-control-plane locally"
 	@echo "  make check      - run formatting + cheap checks"
 	@echo "  make fmt        - format Go files in-place"
 	@echo "  make vet        - run go vet"
@@ -19,6 +20,8 @@ help:
 	@echo "  make lint       - run repository lint script"
 	@echo "  make ci-smoke   - run CI smoke test script"
 	@echo "  make smoke      - run end-to-end API smoke script"
+	@echo "  make smoke-control-plane - start the control plane and verify /health"
+	@echo "  make smoke-control-plane-human - verify a signed control-plane human workspace request"
 	@echo "  make build-prod - build production binary"
 	@echo "  make run-prod   - build+run production-like binary locally"
 
@@ -31,6 +34,12 @@ serve:
 	WORKSPACE_ROOT="$(WORKSPACE_ROOT)" \
 	SCHEMA_PATH="$(SCHEMA_PATH)" \
 	./scripts/dev
+
+serve-control-plane:
+	@HOST="$(HOST)" \
+	PORT="$(PORT)" \
+	CONTROL_PLANE_WORKSPACE_ROOT="$(WORKSPACE_ROOT)" \
+	./scripts/dev-control-plane
 
 run-prod: build-prod
 	@WORKSPACE_ROOT="$(WORKSPACE_ROOT)" \
@@ -63,3 +72,14 @@ ci-smoke:
 
 smoke:
 	@./scripts/smoke
+
+smoke-control-plane:
+	@HOST="$(HOST)" \
+	PORT="$(PORT)" \
+	CONTROL_PLANE_WORKSPACE_ROOT="$(WORKSPACE_ROOT)" \
+	./scripts/smoke-control-plane
+
+smoke-control-plane-human:
+	@PORT="$(PORT)" \
+	WORKSPACE_ROOT="$(WORKSPACE_ROOT)" \
+	./scripts/smoke-control-plane-human

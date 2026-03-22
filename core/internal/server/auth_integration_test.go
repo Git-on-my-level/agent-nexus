@@ -5,7 +5,10 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/sha256"
+	"database/sql"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,6 +23,7 @@ import (
 	"organization-autorunner-core/internal/actors"
 	"organization-autorunner-core/internal/auth"
 	"organization-autorunner-core/internal/blob"
+	"organization-autorunner-core/internal/controlplaneauth"
 	"organization-autorunner-core/internal/primitives"
 	"organization-autorunner-core/internal/schema"
 	"organization-autorunner-core/internal/storage"
@@ -35,6 +39,9 @@ type authIntegrationOptions struct {
 	enableDevActorMode         bool
 	allowUnauthenticatedWrites bool
 	webAuthnConfig             WebAuthnConfig
+	humanAuthMode              string
+	controlPlaneVerifier       *controlplaneauth.WorkspaceHumanVerifier
+	workspaceServiceIdentity   *controlplaneauth.WorkspaceServiceIdentity
 }
 
 type authIntegrationEnv struct {
@@ -43,6 +50,17 @@ type authIntegrationEnv struct {
 	authStore           *auth.Store
 	passkeySessionStore *auth.PasskeySessionStore
 	server              *httptest.Server
+}
+
+type controlPlaneAuthFixture struct {
+	issuer          string
+	audience        string
+	workspaceID     string
+	publicKey       ed25519.PublicKey
+	signer          *controlplaneauth.WorkspaceHumanGrantSigner
+	verifier        *controlplaneauth.WorkspaceHumanVerifier
+	serviceIdentity *controlplaneauth.WorkspaceServiceIdentity
+	now             time.Time
 }
 
 func newAuthIntegrationEnv(t *testing.T, options authIntegrationOptions) authIntegrationEnv {
@@ -84,6 +102,9 @@ func newAuthIntegrationEnv(t *testing.T, options authIntegrationOptions) authInt
 		WithPrimitiveStore(primitiveStore),
 		WithSchemaContract(contract),
 		WithWebAuthnConfig(options.webAuthnConfig),
+		WithHumanAuthMode(options.humanAuthMode),
+		WithControlPlaneHumanVerifier(options.controlPlaneVerifier),
+		WithWorkspaceServiceIdentity(options.workspaceServiceIdentity),
 		WithEnableDevActorMode(options.enableDevActorMode),
 		WithAllowUnauthenticatedWrites(options.allowUnauthenticatedWrites),
 	)
@@ -334,9 +355,7 @@ func TestAgentAuthLifecycleAndActorCompatibility(t *testing.T) {
 		t.Fatalf("decode new assertion response: %v", err)
 	}
 
-	revokeResp := postJSONExpectStatusWithAuth(t, serverURL+"/agents/me/revoke", map[string]any{
-		"force_last_active": true,
-	}, newAssertionPayload.Tokens.AccessToken, http.StatusOK)
+	revokeResp := postJSONExpectStatusWithAuth(t, serverURL+"/agents/me/revoke", map[string]any{}, newAssertionPayload.Tokens.AccessToken, http.StatusOK)
 	defer revokeResp.Body.Close()
 
 	revokedRefreshResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/token", map[string]any{
@@ -349,6 +368,234 @@ func TestAgentAuthLifecycleAndActorCompatibility(t *testing.T) {
 	revokedMeResp := getJSONExpectStatusWithAuth(t, serverURL+"/agents/me", newAssertionPayload.Tokens.AccessToken, http.StatusForbidden)
 	defer revokedMeResp.Body.Close()
 	assertErrorCode(t, revokedMeResp, "agent_revoked")
+}
+
+func TestControlPlaneHumanWorkspaceTokenAcceptedAndShadowPrincipalStable(t *testing.T) {
+	t.Parallel()
+
+	fixture := newControlPlaneAuthFixture(t, "https://control.example.test", "oar-core", "ws_controlplane")
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{
+		bootstrapToken:           testBootstrapToken,
+		humanAuthMode:            controlplaneauth.HumanAuthModeControlPlane,
+		controlPlaneVerifier:     fixture.verifier,
+		workspaceServiceIdentity: fixture.serviceIdentity,
+	})
+	serverURL := env.server.URL
+
+	passkeyResp := postJSONExpectStatusWithHeaders(t, serverURL+"/auth/passkey/register/options", map[string]any{
+		"display_name": "Casey Human",
+	}, nil, http.StatusServiceUnavailable)
+	defer passkeyResp.Body.Close()
+	assertErrorCode(t, passkeyResp, "auth_unavailable")
+
+	firstToken := mintControlPlaneGrant(t, fixture, "acct_123", "casey@example.com", "Casey Human", "launch_1", "", "org_123")
+	firstThreadResp := postJSONExpectStatusWithAuth(t, serverURL+"/threads", map[string]any{
+		"thread": map[string]any{
+			"title":            "Control-plane auth thread",
+			"type":             "incident",
+			"status":           "active",
+			"priority":         "p1",
+			"tags":             []string{"control-plane"},
+			"cadence":          "daily",
+			"next_check_in_at": "2030-01-01T00:00:00Z",
+			"current_summary":  "created by control-plane human token",
+			"next_actions":     []string{"verify shadow principal"},
+			"key_artifacts":    []string{},
+			"provenance":       map[string]any{"sources": []string{"inferred"}},
+		},
+	}, firstToken, http.StatusCreated)
+	defer firstThreadResp.Body.Close()
+
+	var firstThreadPayload struct {
+		Thread map[string]any `json:"thread"`
+	}
+	if err := json.NewDecoder(firstThreadResp.Body).Decode(&firstThreadPayload); err != nil {
+		t.Fatalf("decode first control-plane thread response: %v", err)
+	}
+	firstActorID := asString(firstThreadPayload.Thread["updated_by"])
+	if firstActorID == "" {
+		t.Fatalf("expected updated_by in control-plane thread payload: %#v", firstThreadPayload.Thread)
+	}
+
+	secondToken := mintControlPlaneGrant(t, fixture, "acct_123", "casey@example.com", "Casey Renamed", "launch_2", "", "org_123")
+	secondThreadResp := postJSONExpectStatusWithAuth(t, serverURL+"/threads", map[string]any{
+		"thread": map[string]any{
+			"title":            "Control-plane auth thread 2",
+			"type":             "incident",
+			"status":           "active",
+			"priority":         "p2",
+			"tags":             []string{"control-plane"},
+			"cadence":          "weekly",
+			"next_check_in_at": "2030-01-02T00:00:00Z",
+			"current_summary":  "second request same shadow principal",
+			"next_actions":     []string{"confirm stable mapping"},
+			"key_artifacts":    []string{},
+			"provenance":       map[string]any{"sources": []string{"inferred"}},
+		},
+	}, secondToken, http.StatusCreated)
+	defer secondThreadResp.Body.Close()
+
+	var secondThreadPayload struct {
+		Thread map[string]any `json:"thread"`
+	}
+	if err := json.NewDecoder(secondThreadResp.Body).Decode(&secondThreadPayload); err != nil {
+		t.Fatalf("decode second control-plane thread response: %v", err)
+	}
+	if got := asString(secondThreadPayload.Thread["updated_by"]); got != firstActorID {
+		t.Fatalf("expected stable shadow principal actor_id %q, got %q", firstActorID, got)
+	}
+
+	principals, _, err := env.authStore.ListPrincipals(context.Background(), auth.AuthPrincipalListFilter{})
+	if err != nil {
+		t.Fatalf("list principals: %v", err)
+	}
+	if len(principals) != 1 {
+		t.Fatalf("expected 1 hydrated control-plane principal, got %#v", principals)
+	}
+	if principals[0].PrincipalKind != "human" || principals[0].AuthMethod != auth.AuthMethodControlPlane {
+		t.Fatalf("unexpected hydrated control-plane principal: %#v", principals[0])
+	}
+
+	auditEvents, _, err := env.authStore.ListAuditEvents(context.Background(), auth.AuthAuditListFilter{})
+	if err != nil {
+		t.Fatalf("list auth audit events: %v", err)
+	}
+	foundControlPlaneRegistration := false
+	for _, event := range auditEvents {
+		if event.EventType != auth.AuthAuditEventPrincipalRegistered {
+			continue
+		}
+		if asString(event.Metadata["auth_method"]) != auth.AuthMethodControlPlane {
+			continue
+		}
+		if asString(event.Metadata["onboarding_mode"]) != "control_plane_shadow" {
+			continue
+		}
+		foundControlPlaneRegistration = true
+	}
+	if !foundControlPlaneRegistration {
+		t.Fatalf("expected auth audit to include control-plane shadow registration: %#v", auditEvents)
+	}
+
+	handshakeResp, err := http.Get(serverURL + "/meta/handshake")
+	if err != nil {
+		t.Fatalf("GET /meta/handshake: %v", err)
+	}
+	defer handshakeResp.Body.Close()
+	var handshake map[string]any
+	if err := json.NewDecoder(handshakeResp.Body).Decode(&handshake); err != nil {
+		t.Fatalf("decode handshake payload: %v", err)
+	}
+	if got := asString(handshake["human_auth_mode"]); got != controlplaneauth.HumanAuthModeControlPlane {
+		t.Fatalf("expected human_auth_mode=%q, got %#v", controlplaneauth.HumanAuthModeControlPlane, handshake["human_auth_mode"])
+	}
+	if got := asString(handshake["workspace_service_identity_id"]); got != fixture.serviceIdentity.ID() {
+		t.Fatalf("expected workspace_service_identity_id=%q, got %#v", fixture.serviceIdentity.ID(), handshake["workspace_service_identity_id"])
+	}
+}
+
+func TestControlPlaneHumanWorkspaceTokenRejectedForWrongWorkspaceOrIssuer(t *testing.T) {
+	t.Parallel()
+
+	t.Run("wrong workspace", func(t *testing.T) {
+		fixture := newControlPlaneAuthFixture(t, "https://control.example.test", "oar-core", "ws_expected")
+		env := newAuthIntegrationEnv(t, authIntegrationOptions{
+			humanAuthMode:            controlplaneauth.HumanAuthModeControlPlane,
+			controlPlaneVerifier:     fixture.verifier,
+			workspaceServiceIdentity: fixture.serviceIdentity,
+		})
+
+		wrongWorkspaceToken := mintControlPlaneGrant(t, fixture, "acct_123", "wrong@example.com", "Wrong Workspace", "launch_wrong_workspace", "ws_other", "org_123")
+		resp := getJSONExpectStatusWithAuth(t, env.server.URL+"/threads", wrongWorkspaceToken, http.StatusUnauthorized)
+		defer resp.Body.Close()
+		assertErrorCode(t, resp, "invalid_token")
+	})
+
+	t.Run("wrong issuer", func(t *testing.T) {
+		fixture := newControlPlaneAuthFixture(t, "https://control.example.test", "oar-core", "ws_expected")
+		env := newAuthIntegrationEnv(t, authIntegrationOptions{
+			humanAuthMode: controlplaneauth.HumanAuthModeControlPlane,
+			controlPlaneVerifier: func() *controlplaneauth.WorkspaceHumanVerifier {
+				verifier, err := controlplaneauth.NewWorkspaceHumanVerifier(controlplaneauth.WorkspaceHumanVerifierConfig{
+					Issuer:      "https://other-control.example.test",
+					Audience:    fixture.audience,
+					WorkspaceID: fixture.workspaceID,
+					PublicKey:   fixture.publicKey,
+					Now:         func() time.Time { return fixture.now },
+				})
+				if err != nil {
+					t.Fatalf("new wrong-issuer verifier: %v", err)
+				}
+				return verifier
+			}(),
+			workspaceServiceIdentity: fixture.serviceIdentity,
+		})
+
+		wrongIssuerToken := mintControlPlaneGrant(t, fixture, "acct_123", "issuer@example.com", "Wrong Issuer", "launch_wrong_issuer", "", "org_123")
+		resp := getJSONExpectStatusWithAuth(t, env.server.URL+"/threads", wrongIssuerToken, http.StatusUnauthorized)
+		defer resp.Body.Close()
+		assertErrorCode(t, resp, "invalid_token")
+	})
+}
+
+func TestWorkspaceLocalAgentAuthStillSucceedsWhenControlPlaneHumanAuthEnabled(t *testing.T) {
+	t.Parallel()
+
+	fixture := newControlPlaneAuthFixture(t, "https://control.example.test", "oar-core", "ws_agents")
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{
+		bootstrapToken:           testBootstrapToken,
+		humanAuthMode:            controlplaneauth.HumanAuthModeControlPlane,
+		controlPlaneVerifier:     fixture.verifier,
+		workspaceServiceIdentity: fixture.serviceIdentity,
+	})
+	serverURL := env.server.URL
+
+	publicKey, _ := generateKeyPair(t)
+	registerResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/agents/register", map[string]any{
+		"username":        "agent.controlplane.mode",
+		"public_key":      publicKey,
+		"bootstrap_token": testBootstrapToken,
+	}, "", http.StatusCreated)
+	defer registerResp.Body.Close()
+
+	var registerPayload struct {
+		Agent struct {
+			ActorID string `json:"actor_id"`
+		} `json:"agent"`
+		Tokens struct {
+			AccessToken string `json:"access_token"`
+		} `json:"tokens"`
+	}
+	if err := json.NewDecoder(registerResp.Body).Decode(&registerPayload); err != nil {
+		t.Fatalf("decode register response: %v", err)
+	}
+
+	threadResp := postJSONExpectStatusWithAuth(t, serverURL+"/threads", map[string]any{
+		"thread": map[string]any{
+			"title":            "Agent thread while control-plane human auth enabled",
+			"type":             "incident",
+			"status":           "active",
+			"priority":         "p1",
+			"tags":             []string{"agent"},
+			"cadence":          "daily",
+			"next_check_in_at": "2030-01-03T00:00:00Z",
+			"current_summary":  "agent auth still works",
+			"next_actions":     []string{"ship"},
+			"key_artifacts":    []string{},
+			"provenance":       map[string]any{"sources": []string{"inferred"}},
+		},
+	}, registerPayload.Tokens.AccessToken, http.StatusCreated)
+	defer threadResp.Body.Close()
+
+	var threadPayload struct {
+		Thread map[string]any `json:"thread"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&threadPayload); err != nil {
+		t.Fatalf("decode thread payload: %v", err)
+	}
+	if got := asString(threadPayload.Thread["updated_by"]); got != registerPayload.Agent.ActorID {
+		t.Fatalf("expected updated_by=%q for workspace-local agent, got %#v", registerPayload.Agent.ActorID, threadPayload.Thread["updated_by"])
+	}
 }
 
 func TestBootstrapAndInviteGatedRegistrationFlow(t *testing.T) {
@@ -767,8 +1014,11 @@ func TestAuthAuditAndPrincipalInventoryVisibility(t *testing.T) {
 	if asString(mapValue(selfRevokedEvent["metadata"], "revocation_mode")) != "self" {
 		t.Fatalf("unexpected principal_self_revoked metadata: %#v", selfRevokedEvent)
 	}
-	if force, ok := mapValue(selfRevokedEvent["metadata"], "force_last_active").(bool); !ok || force {
-		t.Fatalf("unexpected principal_self_revoked force metadata: %#v", selfRevokedEvent)
+	if allow, ok := mapValue(selfRevokedEvent["metadata"], "allow_human_lockout").(bool); !ok || allow {
+		t.Fatalf("unexpected principal_self_revoked allow_human_lockout metadata: %#v", selfRevokedEvent)
+	}
+	if reason := asString(mapValue(selfRevokedEvent["metadata"], "human_lockout_reason")); reason != "" {
+		t.Fatalf("unexpected principal_self_revoked human_lockout_reason metadata: %#v", selfRevokedEvent)
 	}
 }
 
@@ -848,6 +1098,9 @@ func TestAdminPrincipalRevocationAndLastActiveSafeguards(t *testing.T) {
 	if asBool(revocationObj["already_revoked"]) {
 		t.Fatalf("expected first admin revoke not to be idempotent: %#v", revokePayload)
 	}
+	if asBool(revocationObj["allow_human_lockout"]) {
+		t.Fatalf("unexpected human lockout metadata on ordinary revoke: %#v", revokePayload)
+	}
 
 	secondRevokeResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/principals/"+memberPayload.Agent.AgentID+"/revoke", map[string]any{}, adminPayload.Tokens.AccessToken, http.StatusOK)
 	defer secondRevokeResp.Body.Close()
@@ -860,30 +1113,12 @@ func TestAdminPrincipalRevocationAndLastActiveSafeguards(t *testing.T) {
 		t.Fatalf("expected idempotent admin revoke response, got %#v", secondRevokePayload)
 	}
 
-	lastActiveResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/principals/"+adminPayload.Agent.AgentID+"/revoke", map[string]any{}, adminPayload.Tokens.AccessToken, http.StatusConflict)
-	defer lastActiveResp.Body.Close()
-	assertErrorCode(t, lastActiveResp, "last_active_principal")
-
-	forcedResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/principals/"+adminPayload.Agent.AgentID+"/revoke", map[string]any{
-		"force_last_active": true,
-	}, adminPayload.Tokens.AccessToken, http.StatusOK)
-	defer forcedResp.Body.Close()
-	var forcedPayload map[string]any
-	if err := json.NewDecoder(forcedResp.Body).Decode(&forcedPayload); err != nil {
-		t.Fatalf("decode forced admin revoke response: %v", err)
-	}
-	forcedRevocationObj, _ := forcedPayload["revocation"].(map[string]any)
-	if forcedRevocationObj == nil || !asBool(forcedRevocationObj["force_last_active"]) {
-		t.Fatalf("expected forced admin revoke metadata, got %#v", forcedPayload)
-	}
-
 	events, _, err := env.authStore.ListAuditEvents(context.Background(), auth.AuthAuditListFilter{})
 	if err != nil {
 		t.Fatalf("list auth audit events after admin revoke flow: %v", err)
 	}
 
 	adminRevokedCount := 0
-	forcedAdminEventSeen := false
 	for _, event := range events {
 		if event.EventType != auth.AuthAuditEventPrincipalRevoked {
 			continue
@@ -900,25 +1135,118 @@ func TestAdminPrincipalRevocationAndLastActiveSafeguards(t *testing.T) {
 			if mode, _ := event.Metadata["revocation_mode"].(string); mode != "admin" {
 				t.Fatalf("unexpected admin revoke metadata: %#v", event)
 			}
-		case adminPayload.Agent.AgentID:
-			if event.ActorAgentID == nil || *event.ActorAgentID != adminPayload.Agent.AgentID {
-				t.Fatalf("unexpected forced admin revoke actor: %#v", event)
-			}
-			if mode, _ := event.Metadata["revocation_mode"].(string); mode != "admin" {
-				t.Fatalf("unexpected forced admin revoke metadata: %#v", event)
-			}
-			force, _ := event.Metadata["force_last_active"].(bool)
-			if !force {
-				t.Fatalf("expected force_last_active=true for forced admin revoke: %#v", event)
-			}
-			forcedAdminEventSeen = true
 		}
 	}
 	if adminRevokedCount != 1 {
 		t.Fatalf("expected exactly one audit event for member admin revoke, got %d in %#v", adminRevokedCount, events)
 	}
-	if !forcedAdminEventSeen {
-		t.Fatalf("expected forced admin revoke audit event in %#v", events)
+}
+
+func TestHumanPrincipalRevocationSafeguards(t *testing.T) {
+	t.Parallel()
+
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{bootstrapToken: testBootstrapToken})
+	serverURL := env.server.URL
+	ctx := context.Background()
+
+	adminResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/agents/register", map[string]any{
+		"username":        "lockout-admin",
+		"public_key":      mustGeneratePublicKey(t),
+		"bootstrap_token": testBootstrapToken,
+	}, "", http.StatusCreated)
+	defer adminResp.Body.Close()
+
+	var adminPayload struct {
+		Agent struct {
+			AgentID string `json:"agent_id"`
+			ActorID string `json:"actor_id"`
+		} `json:"agent"`
+		Tokens struct {
+			AccessToken string `json:"access_token"`
+		} `json:"tokens"`
+	}
+	if err := json.NewDecoder(adminResp.Body).Decode(&adminPayload); err != nil {
+		t.Fatalf("decode admin register response: %v", err)
+	}
+
+	seededMachine := seedMachinePrincipalForLockoutTest(t, ctx, env.workspace.DB(), "agent-machine-lockout", "actor-machine-lockout", "machine.lockout", "machine-lockout-token")
+	seededHumanOne := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "agent-human-lockout-1", "actor-human-lockout-1", "human.lockout.one", "human-lockout-one-token")
+
+	blockedResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/principals/"+seededHumanOne.AgentID+"/revoke", map[string]any{}, adminPayload.Tokens.AccessToken, http.StatusConflict)
+	defer blockedResp.Body.Close()
+	assertErrorCode(t, blockedResp, "last_active_principal")
+
+	machineResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/principals/"+seededMachine.AgentID+"/revoke", map[string]any{}, adminPayload.Tokens.AccessToken, http.StatusOK)
+	defer machineResp.Body.Close()
+	var machinePayload map[string]any
+	if err := json.NewDecoder(machineResp.Body).Decode(&machinePayload); err != nil {
+		t.Fatalf("decode machine revoke response: %v", err)
+	}
+	machineRevocation, _ := machinePayload["revocation"].(map[string]any)
+	if machineRevocation == nil || asBool(machineRevocation["allow_human_lockout"]) {
+		t.Fatalf("unexpected machine revoke payload: %#v", machinePayload)
+	}
+
+	seededHumanTwo := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "agent-human-lockout-2", "actor-human-lockout-2", "human.lockout.two", "human-lockout-two-token")
+
+	allowedResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/principals/"+seededHumanOne.AgentID+"/revoke", map[string]any{}, adminPayload.Tokens.AccessToken, http.StatusOK)
+	defer allowedResp.Body.Close()
+	var allowedPayload map[string]any
+	if err := json.NewDecoder(allowedResp.Body).Decode(&allowedPayload); err != nil {
+		t.Fatalf("decode allowed revoke response: %v", err)
+	}
+	allowedRevocation, _ := allowedPayload["revocation"].(map[string]any)
+	if allowedRevocation == nil || asBool(allowedRevocation["allow_human_lockout"]) {
+		t.Fatalf("expected ordinary revoke response for first human, got %#v", allowedPayload)
+	}
+
+	lastHumanBlockedResp := postJSONExpectStatusWithAuth(t, serverURL+"/agents/me/revoke", map[string]any{}, seededHumanTwo.AccessToken, http.StatusConflict)
+	defer lastHumanBlockedResp.Body.Close()
+	assertErrorCode(t, lastHumanBlockedResp, "last_active_principal")
+
+	breakGlassResp := postJSONExpectStatusWithAuth(t, serverURL+"/agents/me/revoke", map[string]any{
+		"allow_human_lockout":  true,
+		"human_lockout_reason": "restore workspace access",
+	}, seededHumanTwo.AccessToken, http.StatusOK)
+	defer breakGlassResp.Body.Close()
+	var breakGlassPayload map[string]any
+	if err := json.NewDecoder(breakGlassResp.Body).Decode(&breakGlassPayload); err != nil {
+		t.Fatalf("decode break-glass self revoke response: %v", err)
+	}
+	breakGlassRevocation, _ := breakGlassPayload["revocation"].(map[string]any)
+	if breakGlassRevocation == nil || !asBool(breakGlassRevocation["allow_human_lockout"]) {
+		t.Fatalf("expected break-glass self revoke metadata, got %#v", breakGlassPayload)
+	}
+
+	events, _, err := env.authStore.ListAuditEvents(context.Background(), auth.AuthAuditListFilter{})
+	if err != nil {
+		t.Fatalf("list auth audit events after human revoke flow: %v", err)
+	}
+
+	humanLockoutEventSeen := false
+	for _, event := range events {
+		if event.EventType != auth.AuthAuditEventPrincipalHumanLockoutRevoked {
+			continue
+		}
+		if event.SubjectAgentID == nil || *event.SubjectAgentID != seededHumanTwo.AgentID {
+			continue
+		}
+		humanLockoutEventSeen = true
+		if event.ActorAgentID == nil || *event.ActorAgentID != seededHumanTwo.AgentID {
+			t.Fatalf("unexpected human lockout actor: %#v", event)
+		}
+		if mode, _ := event.Metadata["revocation_mode"].(string); mode != "self" {
+			t.Fatalf("unexpected human lockout metadata: %#v", event)
+		}
+		if reason, _ := event.Metadata["human_lockout_reason"].(string); reason != "restore workspace access" {
+			t.Fatalf("unexpected human lockout reason metadata: %#v", event)
+		}
+		if allow, _ := event.Metadata["allow_human_lockout"].(bool); !allow {
+			t.Fatalf("expected allow_human_lockout metadata in %#v", event)
+		}
+	}
+	if !humanLockoutEventSeen {
+		t.Fatalf("expected principal_human_lockout_revoked audit event in %#v", events)
 	}
 }
 
@@ -1139,6 +1467,10 @@ func TestHostedModeProtectsWorkspaceReadsAndBlocksLegacyActorFlows(t *testing.T)
 	defer opsHealthResp.Body.Close()
 	assertErrorCode(t, opsHealthResp, "auth_required")
 
+	usageResp := getJSONExpectStatusWithAuth(t, serverURL+"/ops/usage-summary", "", http.StatusUnauthorized)
+	defer usageResp.Body.Close()
+	assertErrorCode(t, usageResp, "auth_required")
+
 	createActorResp := postJSONExpectStatusWithAuth(t, serverURL+"/actors", map[string]any{
 		"actor": map[string]any{
 			"id":           "legacy-actor",
@@ -1174,6 +1506,18 @@ func TestHostedModeProtectsWorkspaceReadsAndBlocksLegacyActorFlows(t *testing.T)
 
 	authedOpsHealthResp := getJSONExpectStatusWithAuth(t, serverURL+"/ops/health", registerPayload.Tokens.AccessToken, http.StatusOK)
 	authedOpsHealthResp.Body.Close()
+
+	authedUsageResp := getJSONExpectStatusWithAuth(t, serverURL+"/ops/usage-summary", registerPayload.Tokens.AccessToken, http.StatusOK)
+	var usagePayload struct {
+		Summary map[string]any `json:"summary"`
+	}
+	if err := json.NewDecoder(authedUsageResp.Body).Decode(&usagePayload); err != nil {
+		t.Fatalf("decode usage summary response: %v", err)
+	}
+	authedUsageResp.Body.Close()
+	if usagePayload.Summary == nil {
+		t.Fatal("expected usage summary payload")
+	}
 }
 
 func TestExplicitDevModeKeepsLegacyActorFlowAndAnonymousWorkspaceAccess(t *testing.T) {
@@ -1442,6 +1786,146 @@ func listAuthAuditPage(t *testing.T, serverURL string, accessToken string, limit
 	return payload
 }
 
+type lockoutPrincipalSeed struct {
+	AgentID     string
+	ActorID     string
+	Username    string
+	AccessToken string
+}
+
+func seedMachinePrincipalForLockoutTest(t *testing.T, ctx context.Context, db *sql.DB, agentID string, actorID string, username string, accessToken string) lockoutPrincipalSeed {
+	t.Helper()
+
+	seed := lockoutPrincipalSeed{
+		AgentID:     agentID,
+		ActorID:     actorID,
+		Username:    username,
+		AccessToken: accessToken,
+	}
+	now := time.Date(2026, 3, 21, 10, 0, 0, 0, time.UTC).Format(time.RFC3339Nano)
+	if _, err := db.ExecContext(
+		ctx,
+		`INSERT INTO actors(id, display_name, tags_json, created_at, metadata_json)
+		 VALUES (?, ?, ?, ?, '{}')`,
+		actorID,
+		username,
+		`["agent"]`,
+		now,
+	); err != nil {
+		t.Fatalf("insert machine actor: %v", err)
+	}
+	if _, err := db.ExecContext(
+		ctx,
+		`INSERT INTO agents(id, username, actor_id, created_at, updated_at, revoked_at, metadata_json)
+		 VALUES (?, ?, ?, ?, ?, NULL, '{}')`,
+		agentID,
+		username,
+		actorID,
+		now,
+		now,
+	); err != nil {
+		t.Fatalf("insert machine agent: %v", err)
+	}
+	insertAuthAccessTokenForLockoutTest(t, ctx, db, agentID, accessToken, now)
+	return seed
+}
+
+func seedHumanPrincipalForLockoutTest(t *testing.T, ctx context.Context, db *sql.DB, agentID string, actorID string, username string, accessToken string) lockoutPrincipalSeed {
+	t.Helper()
+
+	seed := lockoutPrincipalSeed{
+		AgentID:     agentID,
+		ActorID:     actorID,
+		Username:    username,
+		AccessToken: accessToken,
+	}
+	now := time.Date(2026, 3, 21, 10, 0, 0, 0, time.UTC).Format(time.RFC3339Nano)
+	publicKeyB64, _ := generateKeyPair(t)
+	publicKey, err := base64.StdEncoding.DecodeString(publicKeyB64)
+	if err != nil {
+		t.Fatalf("decode public key: %v", err)
+	}
+	if _, err := db.ExecContext(
+		ctx,
+		`INSERT INTO actors(id, display_name, tags_json, created_at, metadata_json)
+		 VALUES (?, ?, ?, ?, '{}')`,
+		actorID,
+		username,
+		`["agent","human","passkey"]`,
+		now,
+	); err != nil {
+		t.Fatalf("insert human actor: %v", err)
+	}
+	if _, err := db.ExecContext(
+		ctx,
+		`INSERT INTO agents(id, username, actor_id, created_at, updated_at, revoked_at, metadata_json)
+		 VALUES (?, ?, ?, ?, ?, NULL, '{}')`,
+		agentID,
+		username,
+		actorID,
+		now,
+		now,
+	); err != nil {
+		t.Fatalf("insert human agent: %v", err)
+	}
+	if _, err := db.ExecContext(
+		ctx,
+		`INSERT INTO passkey_credentials(
+			credential_id,
+			agent_id,
+			user_handle,
+			public_key,
+			attestation_type,
+			transport,
+			sign_count,
+			backup_eligible,
+			backup_state,
+			aaguid,
+			attachment,
+			created_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"credential-"+agentID,
+		agentID,
+		[]byte("user-"+agentID),
+		publicKey,
+		"none",
+		"",
+		0,
+		0,
+		0,
+		[]byte{},
+		"",
+		now,
+	); err != nil {
+		t.Fatalf("insert human passkey credential: %v", err)
+	}
+	insertAuthAccessTokenForLockoutTest(t, ctx, db, agentID, accessToken, now)
+	return seed
+}
+
+func insertAuthAccessTokenForLockoutTest(t *testing.T, ctx context.Context, db *sql.DB, agentID string, accessToken string, now string) {
+	t.Helper()
+
+	expiresAt := time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC).Format(time.RFC3339Nano)
+	if _, err := db.ExecContext(
+		ctx,
+		`INSERT INTO auth_access_tokens(id, agent_id, token_hash, created_at, expires_at, revoked_at)
+		 VALUES (?, ?, ?, ?, ?, NULL)`,
+		"access-"+agentID,
+		agentID,
+		authHashTokenForLockoutTest(accessToken),
+		now,
+		expiresAt,
+	); err != nil {
+		t.Fatalf("insert access token: %v", err)
+	}
+}
+
+func authHashTokenForLockoutTest(raw string) string {
+	sum := sha256.Sum256([]byte(raw))
+	return hex.EncodeToString(sum[:])
+}
+
 func mustGeneratePublicKey(t *testing.T) string {
 	t.Helper()
 	publicKey, _ := generateKeyPair(t)
@@ -1529,6 +2013,76 @@ func patchJSONExpectStatusWithAuth(t *testing.T, url string, payload any, access
 		t.Fatalf("PATCH %s unexpected status: got %d want %d body=%#v", url, response.StatusCode, expectedStatus, body)
 	}
 	return response
+}
+
+func newControlPlaneAuthFixture(t *testing.T, issuer string, audience string, workspaceID string) controlPlaneAuthFixture {
+	t.Helper()
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate control-plane auth key: %v", err)
+	}
+	now := time.Date(2026, time.March, 21, 10, 0, 0, 0, time.UTC)
+	signer, err := controlplaneauth.NewWorkspaceHumanGrantSigner(controlplaneauth.WorkspaceHumanGrantSignerConfig{
+		Issuer:     issuer,
+		Audience:   audience,
+		PrivateKey: privateKey,
+		Now:        func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("new workspace human signer: %v", err)
+	}
+	verifier, err := controlplaneauth.NewWorkspaceHumanVerifier(controlplaneauth.WorkspaceHumanVerifierConfig{
+		Issuer:      issuer,
+		Audience:    audience,
+		WorkspaceID: workspaceID,
+		PublicKey:   publicKey,
+		Now:         func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("new workspace human verifier: %v", err)
+	}
+	_, servicePrivateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate workspace service key: %v", err)
+	}
+	serviceIdentity, err := controlplaneauth.NewWorkspaceServiceIdentity(controlplaneauth.WorkspaceServiceIdentityConfig{
+		ID:         "svc_" + workspaceID,
+		PrivateKey: servicePrivateKey,
+		Now:        func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("new workspace service identity: %v", err)
+	}
+	return controlPlaneAuthFixture{
+		issuer:          issuer,
+		audience:        audience,
+		workspaceID:     workspaceID,
+		publicKey:       publicKey,
+		signer:          signer,
+		verifier:        verifier,
+		serviceIdentity: serviceIdentity,
+		now:             now,
+	}
+}
+
+func mintControlPlaneGrant(t *testing.T, fixture controlPlaneAuthFixture, accountID string, email string, displayName string, launchID string, workspaceID string, organizationID string) string {
+	t.Helper()
+	if workspaceID == "" {
+		workspaceID = fixture.workspaceID
+	}
+	token, _, err := fixture.signer.Sign(controlplaneauth.WorkspaceHumanGrantInput{
+		AccountID:      accountID,
+		WorkspaceID:    workspaceID,
+		OrganizationID: organizationID,
+		Email:          email,
+		DisplayName:    displayName,
+		LaunchID:       launchID,
+		TTL:            10 * time.Minute,
+	})
+	if err != nil {
+		t.Fatalf("sign control-plane grant: %v", err)
+	}
+	return token
 }
 
 func postJSONExpectStatusWithHeaders(t *testing.T, url string, payload any, headers map[string]string, expectedStatus int) *http.Response {

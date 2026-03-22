@@ -6,16 +6,7 @@ import {
   getCurrentWorkspaceSlug,
   currentWorkspaceSlug,
 } from "./workspaceContext.js";
-import {
-  DEFAULT_WORKSPACE_SLUG,
-  appPath,
-  buildWorkspaceStorageKey,
-  workspacePath,
-} from "./workspacePaths.js";
-import { buildLegacyProjectStorageKey } from "./compat/workspaceCompat.js";
-
-export const REFRESH_TOKEN_STORAGE_KEY = "oar_ui_refresh_token";
-export const LEGACY_REFRESH_TOKEN_KEY = "oar_ui_refresh_token";
+import { WORKSPACE_HEADER, appPath } from "./workspacePaths.js";
 
 export const authSessionReady = writable(false);
 export const authenticatedAgent = writable(null);
@@ -29,7 +20,6 @@ function createEmptyAuthState() {
     ready: false,
     accessToken: "",
     authenticatedAgent: null,
-    refreshPromise: undefined,
   };
 }
 
@@ -81,14 +71,14 @@ function createErrorFromResponse(status, details) {
 
 async function requestJSON(
   pathname,
-  { fetchFn, method = "GET", body, token, baseUrl } = {},
+  { fetchFn, method = "GET", body, baseUrl, headers } = {},
 ) {
   const response = await resolveFetch(fetchFn)(buildUrl(pathname, baseUrl), {
     method,
     headers: {
       accept: "application/json",
       ...(body ? { "content-type": "application/json" } : {}),
-      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...(headers ?? {}),
     },
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -109,112 +99,8 @@ async function requestJSON(
   return payload;
 }
 
-function migrateProjectStorageKey(storage, workspaceSlug) {
-  const oldKey = buildLegacyProjectStorageKey(
-    REFRESH_TOKEN_STORAGE_KEY,
-    workspaceSlug,
-  );
-  const newKey = buildWorkspaceStorageKey(
-    REFRESH_TOKEN_STORAGE_KEY,
-    workspaceSlug,
-  );
-
-  if (oldKey === newKey) return;
-
-  const oldValue = storage.getItem(oldKey);
-  if (oldValue && !storage.getItem(newKey)) {
-    storage.setItem(newKey, oldValue);
-  }
-}
-
-export function refreshTokenStorageKey(
-  workspaceSlug = getCurrentWorkspaceSlug(),
-) {
-  return buildWorkspaceStorageKey(REFRESH_TOKEN_STORAGE_KEY, workspaceSlug);
-}
-
 export function getAccessToken(workspaceSlug = getCurrentWorkspaceSlug()) {
   return ensureAuthState(workspaceSlug).accessToken;
-}
-
-export function loadStoredRefreshToken(
-  storage = sessionStorage,
-  workspaceSlug = getCurrentWorkspaceSlug(),
-) {
-  migrateProjectStorageKey(storage, workspaceSlug);
-
-  const scopedRefreshToken = storage.getItem(
-    refreshTokenStorageKey(workspaceSlug),
-  );
-  if (scopedRefreshToken) {
-    return scopedRefreshToken;
-  }
-
-  const normalizedWorkspaceSlug = String(workspaceSlug ?? "").trim();
-  if (
-    !normalizedWorkspaceSlug ||
-    normalizedWorkspaceSlug === DEFAULT_WORKSPACE_SLUG
-  ) {
-    return storage.getItem(REFRESH_TOKEN_STORAGE_KEY) ?? "";
-  }
-
-  return "";
-}
-
-export function saveRefreshToken(
-  refreshToken,
-  storage = sessionStorage,
-  workspaceSlug = getCurrentWorkspaceSlug(),
-) {
-  const normalized = String(refreshToken ?? "").trim();
-  const storageKey = refreshTokenStorageKey(workspaceSlug);
-  if (!normalized) {
-    storage.removeItem(storageKey);
-    storage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
-    return "";
-  }
-
-  storage.setItem(storageKey, normalized);
-  return normalized;
-}
-
-export function clearAuthSession(
-  storage = browser ? sessionStorage : undefined,
-  workspaceSlug = getCurrentWorkspaceSlug(),
-  options = {},
-) {
-  const clearActor = Boolean(options.clearActor);
-  const state = ensureAuthState(workspaceSlug);
-  state.accessToken = "";
-  state.authenticatedAgent = null;
-  state.refreshPromise = undefined;
-  state.ready = true;
-  if (storage) {
-    storage.removeItem(refreshTokenStorageKey(workspaceSlug));
-    storage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
-  }
-  if (browser && clearActor) {
-    clearSelectedActor(localStorage, workspaceSlug);
-  }
-  syncCurrentAuthStores(workspaceSlug);
-}
-
-export function completeAuthSession(
-  agent,
-  tokens,
-  storage = sessionStorage,
-  workspaceSlug = getCurrentWorkspaceSlug(),
-) {
-  const state = ensureAuthState(workspaceSlug);
-  state.accessToken = String(tokens?.access_token ?? "").trim();
-  saveRefreshToken(tokens?.refresh_token, storage, workspaceSlug);
-  state.authenticatedAgent = agent ?? null;
-  state.ready = true;
-  syncCurrentAuthStores(workspaceSlug);
-  return {
-    agent: agent ?? null,
-    tokens,
-  };
 }
 
 export function getAuthenticatedAgent(
@@ -237,74 +123,42 @@ export function isAuthenticated(workspaceSlug = getCurrentWorkspaceSlug()) {
   return Boolean(getAuthenticatedAgent(workspaceSlug)?.agent_id);
 }
 
-export async function refreshAuthSession({
-  fetchFn,
-  storage = sessionStorage,
-  baseUrl = "",
+export function completeAuthSession(
+  agent,
   workspaceSlug = getCurrentWorkspaceSlug(),
-  redirectOnFailure = false,
-} = {}) {
+) {
   const state = ensureAuthState(workspaceSlug);
-  const refreshToken = loadStoredRefreshToken(storage, workspaceSlug);
-  if (!refreshToken) {
-    clearAuthSession(storage, workspaceSlug);
-    return null;
+  state.accessToken = "";
+  state.authenticatedAgent = agent ?? null;
+  state.ready = true;
+  syncCurrentAuthStores(workspaceSlug);
+  return {
+    agent: agent ?? null,
+  };
+}
+
+export function clearAuthSession(
+  workspaceSlug = getCurrentWorkspaceSlug(),
+  options = {},
+) {
+  const clearActor = Boolean(options.clearActor);
+  const state = ensureAuthState(workspaceSlug);
+  state.accessToken = "";
+  state.authenticatedAgent = null;
+  state.ready = true;
+  if (browser && clearActor) {
+    clearSelectedActor(localStorage, workspaceSlug);
   }
-
-  if (!state.refreshPromise) {
-    state.refreshPromise = (async () => {
-      const tokenResponse = await requestJSON("/auth/token", {
-        fetchFn,
-        baseUrl,
-        method: "POST",
-        body: {
-          grant_type: "refresh_token",
-          refresh_token: refreshToken,
-        },
-      });
-      const nextTokens = tokenResponse.tokens ?? {};
-      state.accessToken = String(nextTokens.access_token ?? "").trim();
-      saveRefreshToken(nextTokens.refresh_token, storage, workspaceSlug);
-
-      const meResponse = await requestJSON("/agents/me", {
-        fetchFn,
-        baseUrl,
-        token: nextTokens.access_token,
-      });
-
-      state.authenticatedAgent = meResponse.agent ?? null;
-      state.ready = true;
-      if (workspaceSlug === getCurrentWorkspaceSlug()) {
-        syncCurrentAuthStores(workspaceSlug);
-      }
-      return {
-        agent: meResponse.agent ?? null,
-        tokens: nextTokens,
-      };
-    })()
-      .catch((error) => {
-        clearAuthSession(storage, workspaceSlug);
-        if (redirectOnFailure && browser) {
-          window.location.assign(workspacePath(workspaceSlug, "/login"));
-        }
-        throw error;
-      })
-      .finally(() => {
-        state.refreshPromise = undefined;
-      });
-  }
-
-  return state.refreshPromise;
+  syncCurrentAuthStores(workspaceSlug);
 }
 
 export async function initializeAuthSession({
   fetchFn,
-  storage = browser ? sessionStorage : undefined,
   baseUrl = "",
   workspaceSlug = getCurrentWorkspaceSlug(),
 } = {}) {
   const state = ensureAuthState(workspaceSlug);
-  if (!browser || !storage) {
+  if (!browser && typeof fetchFn !== "function") {
     state.ready = true;
     syncCurrentAuthStores(workspaceSlug);
     return null;
@@ -314,16 +168,17 @@ export async function initializeAuthSession({
   syncCurrentAuthStores(workspaceSlug);
 
   try {
-    const result = await refreshAuthSession({
+    const result = await requestJSON("/auth/session", {
       fetchFn,
-      storage,
       baseUrl,
-      workspaceSlug,
-      redirectOnFailure: false,
+      headers: {
+        [WORKSPACE_HEADER]: workspaceSlug,
+      },
     });
+    state.authenticatedAgent = result.agent ?? null;
     state.ready = true;
     syncCurrentAuthStores(workspaceSlug);
-    return result;
+    return result.agent ?? null;
   } catch {
     state.ready = true;
     syncCurrentAuthStores(workspaceSlug);
@@ -331,33 +186,41 @@ export async function initializeAuthSession({
   }
 }
 
-export function createAuthTokenProvider(fetchFn, options = {}) {
-  const workspaceSlugProvider =
-    options.workspaceSlugProvider ?? (() => getCurrentWorkspaceSlug());
-  const baseUrl = options.baseUrl ?? "";
-
-  return {
-    getAccessToken() {
-      return getAccessToken(workspaceSlugProvider());
-    },
-    hasRefreshToken(storage = sessionStorage) {
-      return Boolean(loadStoredRefreshToken(storage, workspaceSlugProvider()));
-    },
-    async refreshAccessToken() {
-      const result = await refreshAuthSession({
+export async function logoutAuthSession({
+  fetchFn,
+  baseUrl = "",
+  workspaceSlug = getCurrentWorkspaceSlug(),
+  clearActor = false,
+} = {}) {
+  if (browser || typeof fetchFn === "function") {
+    try {
+      await requestJSON("/auth/session", {
         fetchFn,
         baseUrl,
-        workspaceSlug: workspaceSlugProvider(),
-        redirectOnFailure: true,
+        method: "DELETE",
+        headers: {
+          [WORKSPACE_HEADER]: workspaceSlug,
+        },
       });
-      return result?.tokens?.access_token ?? "";
+    } catch {
+      // Fall through to local cleanup. Logout should be best-effort.
+    }
+  }
+
+  clearAuthSession(workspaceSlug, { clearActor });
+}
+
+export function createAuthTokenProvider() {
+  return {
+    getAccessToken() {
+      return "";
     },
-    async handleRefreshFailure() {
-      const workspaceSlug = workspaceSlugProvider();
-      clearAuthSession(undefined, workspaceSlug);
-      if (browser) {
-        window.location.assign(workspacePath(workspaceSlug, "/login"));
-      }
+    hasRefreshToken() {
+      return false;
     },
+    async refreshAccessToken() {
+      return "";
+    },
+    async handleRefreshFailure() {},
   };
 }

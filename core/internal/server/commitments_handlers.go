@@ -1,7 +1,6 @@
 package server
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -28,8 +27,7 @@ func handleCreateCommitment(w http.ResponseWriter, r *http.Request, opts handler
 		RequestKey string         `json:"request_key"`
 		Commitment map[string]any `json:"commitment"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
@@ -140,8 +138,7 @@ func handlePatchCommitment(w http.ResponseWriter, r *http.Request, opts handlerO
 		Refs        []string       `json:"refs"`
 		IfUpdatedAt *string        `json:"if_updated_at"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 

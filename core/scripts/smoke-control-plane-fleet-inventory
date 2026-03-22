@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BASE_URL="${CONTROL_PLANE_BASE_URL:-http://127.0.0.1:8100}"
+ORGANIZATION_ID="${CONTROL_PLANE_ORGANIZATION_ID:-}"
+TOKEN="${CONTROL_PLANE_TOKEN:-}"
+LIMIT="${CONTROL_PLANE_INVENTORY_LIMIT:-50}"
+
+usage() {
+  cat <<'EOF'
+Usage: CONTROL_PLANE_BASE_URL=... CONTROL_PLANE_ORGANIZATION_ID=... CONTROL_PLANE_TOKEN=... core/scripts/smoke-control-plane-fleet-inventory
+
+Queries the control-plane workspace inventory endpoint and prints a compact
+summary for operators and smoke checks.
+EOF
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+if [[ -z "$ORGANIZATION_ID" ]]; then
+  echo "CONTROL_PLANE_ORGANIZATION_ID is required" >&2
+  exit 2
+fi
+if [[ -z "$TOKEN" ]]; then
+  echo "CONTROL_PLANE_TOKEN is required" >&2
+  exit 2
+fi
+
+response="$(curl -fsS \
+  -H "Authorization: Bearer ${TOKEN}" \
+  "${BASE_URL}/organizations/${ORGANIZATION_ID}/workspace-inventory?limit=${LIMIT}")"
+
+python3 - "$response" <<'PY'
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+workspaces = payload.get("workspaces", [])
+print(f"organization_id={payload.get('organization_id', '')}")
+print(f"workspace_count={len(workspaces)}")
+for item in workspaces:
+    workspace = item.get("workspace", {})
+    failed = item.get("open_failed_job_count", 0)
+    print(
+        "workspace="
+        + workspace.get("slug", "")
+        + " status="
+        + workspace.get("status", "")
+        + " version="
+        + workspace.get("deployed_version", "")
+        + " last_heartbeat_at="
+        + str(workspace.get("last_heartbeat_at", ""))
+        + " last_backup="
+        + str(workspace.get("last_successful_backup_at", ""))
+        + " failed_jobs="
+        + str(failed)
+    )
+PY

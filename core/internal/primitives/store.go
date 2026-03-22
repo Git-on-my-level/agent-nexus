@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -76,6 +77,8 @@ type Store struct {
 	db       *sql.DB
 	blob     blob.Backend
 	blobRoot string
+	quota    WorkspaceQuota
+	quotaMu  sync.Mutex
 }
 
 type eventExec interface {
@@ -100,8 +103,12 @@ type PatchSnapshotResult struct {
 	Event    map[string]any
 }
 
-func NewStore(db *sql.DB, blobBackend blob.Backend, blobRoot string) *Store {
-	return &Store{db: db, blob: blobBackend, blobRoot: blobRoot}
+func NewStore(db *sql.DB, blobBackend blob.Backend, blobRoot string, options ...Option) *Store {
+	store := &Store{db: db, blob: blobBackend, blobRoot: blobRoot}
+	for _, option := range options {
+		option(store)
+	}
+	return store
 }
 
 func (s *Store) AppendEvent(ctx context.Context, actorID string, event map[string]any) (map[string]any, error) {
@@ -187,6 +194,10 @@ func (s *Store) CreateArtifact(ctx context.Context, actorID string, artifact map
 	if s.blob == nil {
 		return nil, fmt.Errorf("blob backend is not configured")
 	}
+	if s.quota.enabled() {
+		s.quotaMu.Lock()
+		defer s.quotaMu.Unlock()
+	}
 
 	kind, ok := artifact["kind"].(string)
 	if !ok || strings.TrimSpace(kind) == "" {
@@ -212,6 +223,9 @@ func (s *Store) CreateArtifact(ctx context.Context, actorID string, artifact map
 		return nil, fmt.Errorf("%w: %v", ErrInvalidArtifactID, err)
 	}
 	contentHash := sha256Hex(encodedContent)
+	if err := s.checkWorkspaceWriteQuota(ctx, int64(len(encodedContent)), contentHash, quotaWriteDelta{artifacts: 1}); err != nil {
+		return nil, err
+	}
 
 	metadata["id"] = artifactID
 	metadata["created_at"] = time.Now().UTC().Format(time.RFC3339Nano)
@@ -282,6 +296,10 @@ func (s *Store) CreateArtifactAndEvent(ctx context.Context, actorID string, arti
 	if s.blob == nil {
 		return nil, nil, fmt.Errorf("blob backend is not configured")
 	}
+	if s.quota.enabled() {
+		s.quotaMu.Lock()
+		defer s.quotaMu.Unlock()
+	}
 
 	kind, ok := artifact["kind"].(string)
 	if !ok || strings.TrimSpace(kind) == "" {
@@ -307,6 +325,9 @@ func (s *Store) CreateArtifactAndEvent(ctx context.Context, actorID string, arti
 		return nil, nil, fmt.Errorf("%w: %v", ErrInvalidArtifactID, err)
 	}
 	contentHash := sha256Hex(encodedContent)
+	if err := s.checkWorkspaceWriteQuota(ctx, int64(len(encodedContent)), contentHash, quotaWriteDelta{artifacts: 1}); err != nil {
+		return nil, nil, err
+	}
 
 	metadata["id"] = artifactID
 	metadata["created_at"] = time.Now().UTC().Format(time.RFC3339Nano)

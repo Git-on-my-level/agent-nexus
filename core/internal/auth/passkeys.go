@@ -70,29 +70,41 @@ func (s *Store) RegisterPasskeyAgent(ctx context.Context, input RegisterPasskeyA
 		return Agent{}, TokenBundle{}, err
 	}
 
+	agentMetadataJSON, err := principalMetadataJSON(PrincipalKindHuman, AuthMethodPasskey, nil)
+	if err != nil {
+		_ = tx.Rollback()
+		return Agent{}, TokenBundle{}, fmt.Errorf("encode passkey agent metadata: %w", err)
+	}
 	_, err = tx.ExecContext(
 		ctx,
 		`INSERT INTO agents(id, username, actor_id, created_at, updated_at, revoked_at, metadata_json)
-		 VALUES (?, ?, ?, ?, ?, NULL, '{}')`,
+		 VALUES (?, ?, ?, ?, ?, NULL, ?)`,
 		agentID,
 		username,
 		actorID,
 		nowText,
 		nowText,
+		agentMetadataJSON,
 	)
 	if err != nil {
 		_ = tx.Rollback()
 		return Agent{}, TokenBundle{}, fmt.Errorf("insert passkey agent: %w", err)
 	}
 
+	actorMetadataValue, err := actorMetadataJSON(PrincipalKindHuman, AuthMethodPasskey, nil)
+	if err != nil {
+		_ = tx.Rollback()
+		return Agent{}, TokenBundle{}, fmt.Errorf("encode passkey actor metadata: %w", err)
+	}
 	_, err = tx.ExecContext(
 		ctx,
 		`INSERT INTO actors(id, display_name, tags_json, created_at, metadata_json)
-		 VALUES (?, ?, ?, ?, '{}')`,
+		 VALUES (?, ?, ?, ?, ?)`,
 		actorID,
 		displayName,
 		`["agent","human","passkey"]`,
 		nowText,
+		actorMetadataValue,
 	)
 	if err != nil {
 		_ = tx.Rollback()
@@ -118,7 +130,7 @@ func (s *Store) RegisterPasskeyAgent(ctx context.Context, input RegisterPasskeyA
 		Metadata: map[string]any{
 			"username":        username,
 			"principal_kind":  "human",
-			"auth_method":     "passkey",
+			"auth_method":     AuthMethodPasskey,
 			"onboarding_mode": string(claim.Mode),
 		},
 	}); err != nil {
@@ -145,7 +157,7 @@ func (s *Store) RegisterPasskeyAgent(ctx context.Context, input RegisterPasskeyA
 		CreatedAt:     nowText,
 		UpdatedAt:     nowText,
 		PrincipalKind: ptrString("human"),
-		AuthMethod:    ptrString("passkey"),
+		AuthMethod:    ptrString(AuthMethodPasskey),
 	}, tokens, nil
 }
 

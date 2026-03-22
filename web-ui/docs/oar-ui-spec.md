@@ -45,6 +45,7 @@ oar-ui does **not**:
   - Ed25519 key registration creates a linked actor with `principal_kind=agent`, `auth_method=public_key`.
   - When `dev_actor_mode=false` (default), the UI MUST NOT show the legacy actor picker/creator flow.
   - When `dev_actor_mode=true` (development convenience), the legacy actor picker/creator flow MAY be shown, clearly labeled as development-only.
+  - Browser session state is cookie-backed and same-origin; refresh tokens MUST NOT be written to script-readable browser storage.
 
 ### 1.5 Provenance visibility
 

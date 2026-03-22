@@ -59,6 +59,9 @@ func TestMetaHandshakeAndGeneratedMetaEndpoints(t *testing.T) {
 	if handshake["dev_actor_mode"] != true {
 		t.Fatalf("expected dev_actor_mode=true for test harness, got %v", handshake["dev_actor_mode"])
 	}
+	if handshake["human_auth_mode"] != "workspace_local" {
+		t.Fatalf("expected default human_auth_mode=workspace_local, got %#v", handshake["human_auth_mode"])
+	}
 
 	commandsResp, err := http.Get(h.baseURL + "/meta/commands")
 	if err != nil {

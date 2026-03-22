@@ -1,0 +1,583 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+source "${SCRIPT_DIR}/hosted/common.sh"
+
+ARTIFACT_DIR="${SAAS_SMOKE_ARTIFACT_DIR:-$REPO_ROOT/.tmp/saas-smoke}"
+CONTROL_PLANE_PORT="${CONTROL_PLANE_PORT:-18100}"
+CONTROL_PLANE_HOST="127.0.0.1"
+CONTROL_PLANE_BASE_URL="http://${CONTROL_PLANE_HOST}:${CONTROL_PLANE_PORT}"
+SMOKE_TIMEOUT_SECONDS="${SAAS_SMOKE_TIMEOUT_SECONDS:-120}"
+
+mkdir -p "$ARTIFACT_DIR"
+TMP_DIR="$(mktemp -d "$ARTIFACT_DIR/run.XXXXXX")"
+CONTROL_PLANE_LOG="$TMP_DIR/control-plane.log"
+WORKSPACE1_LOG="$TMP_DIR/workspace1.log"
+WORKSPACE2_LOG="$TMP_DIR/workspace2.log"
+CONTROL_PLANE_ROOT="$TMP_DIR/control-plane-root"
+WORKSPACE1_ROOT="$TMP_DIR/workspace1-root"
+WORKSPACE2_ROOT="$TMP_DIR/workspace2-root"
+
+cleanup() {
+  local code=$?
+  stop_background_process "${WORKSPACE2_PID:-}"
+  stop_background_process "${WORKSPACE1_PID:-}"
+  stop_background_process "${CONTROL_PLANE_PID:-}"
+
+  if [[ $code -ne 0 ]]; then
+    echo "saas smoke failed; artifacts kept at: $TMP_DIR" >&2
+    echo "control-plane log: $CONTROL_PLANE_LOG" >&2
+    echo "workspace1 log: $WORKSPACE1_LOG" >&2
+    echo "workspace2 log: $WORKSPACE2_LOG" >&2
+  else
+    echo "saas smoke artifacts: $TMP_DIR"
+  fi
+}
+trap cleanup EXIT INT TERM
+
+require_command curl go python3
+
+assert_http_status() {
+  local expected_status="$1"
+  local actual_status="$2"
+  local context="$3"
+  if [[ "$expected_status" != "$actual_status" ]]; then
+    echo "assertion failed: expected HTTP $expected_status, got $actual_status ($context)" >&2
+    exit 1
+  fi
+}
+
+json_get() {
+  local json="$1"
+  local path="$2"
+  python3 "${REPO_ROOT}/scripts/hosted/json-tool.py" get "$path" <<<"$json"
+}
+
+json_get_first() {
+  local json="$1"
+  shift
+  local path value
+  for path in "$@"; do
+    if value="$(json_get "$json" "$path" 2>/dev/null)"; then
+      printf '%s\n' "$value"
+      return 0
+    fi
+  done
+  return 1
+}
+
+invite_token_from_url() {
+  local invite_url="$1"
+  python3 -c '
+import sys
+from urllib.parse import urlparse
+
+path = urlparse(sys.argv[1]).path.rstrip("/")
+prefix = "/invites/"
+if not path.startswith(prefix):
+    raise SystemExit(1)
+print(path[len(prefix):])
+' "$invite_url"
+}
+
+generate_ed25519_key_base64() {
+  local go_file
+  go_file="$(mktemp "${TMP_DIR}/genkey.XXXXXX.go")"
+  cat >"$go_file" <<'EOF'
+package main
+import (
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
+	"fmt"
+	"os"
+)
+func main() {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to generate key: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println(base64.StdEncoding.EncodeToString(publicKey))
+	fmt.Println(base64.StdEncoding.EncodeToString(privateKey))
+}
+EOF
+  go run "$go_file"
+  rm -f "$go_file"
+}
+
+echo "Building core binary..."
+CORE_BIN="$(build_core_binary "$TMP_DIR/oar-core")"
+SCHEMA_PATH="$(resolve_schema_path)"
+
+echo "Generating workspace service identity key pair..."
+KEYS=$(generate_ed25519_key_base64)
+SERVICE_PUBLIC_KEY=$(echo "$KEYS" | sed -n '1p')
+SERVICE_PRIVATE_KEY=$(echo "$KEYS" | sed -n '2p')
+
+echo "Starting control plane..."
+mkdir -p "$CONTROL_PLANE_ROOT"
+(
+  export OAR_CONTROL_PLANE_WEBAUTHN_RPID="localhost"
+  export OAR_CONTROL_PLANE_WEBAUTHN_ORIGIN="http://localhost:5173"
+  export OAR_CONTROL_PLANE_WORKSPACE_GRANT_ISSUER="$CONTROL_PLANE_BASE_URL"
+  export OAR_CONTROL_PLANE_WORKSPACE_GRANT_AUDIENCE="oar-core"
+  export OAR_CONTROL_PLANE_WORKSPACE_GRANT_SIGNING_KEY="$SERVICE_PRIVATE_KEY"
+  export OAR_CONTROL_PLANE_WORKSPACE_URL_TEMPLATE="http://127.0.0.1/%s"
+  export OAR_CONTROL_PLANE_INVITE_URL_TEMPLATE="${CONTROL_PLANE_BASE_URL}/invites/%s"
+  cd "$REPO_ROOT/core"
+  go run ./cmd/oar-control-plane \
+    --listen-addr "${CONTROL_PLANE_HOST}:${CONTROL_PLANE_PORT}" \
+    --workspace-root "$CONTROL_PLANE_ROOT" \
+    >"$CONTROL_PLANE_LOG" 2>&1
+) &
+CONTROL_PLANE_PID=$!
+
+if ! wait_for_http_ok "$CONTROL_PLANE_BASE_URL/readyz" "$SMOKE_TIMEOUT_SECONDS"; then
+  echo "control plane did not become healthy" >&2
+  cat "$CONTROL_PLANE_LOG" >&2 || true
+  exit 1
+fi
+
+echo "✓ Control plane started"
+
+echo ""
+echo "=== Test 1: Account registration (mock passkey) ==="
+
+MOCK_EMAIL="saas-owner@example.com"
+MOCK_DISPLAY_NAME="SaaS Owner"
+
+START_REG_RESPONSE=$(curl -sS \
+  -H "content-type: application/json" \
+  -H "origin: http://localhost:5173" \
+  -X POST \
+  -d "{\"email\":\"$MOCK_EMAIL\",\"display_name\":\"$MOCK_DISPLAY_NAME\"}" \
+  "$CONTROL_PLANE_BASE_URL/account/passkeys/registrations/start")
+
+REG_SESSION_ID="$(json_get_first "$START_REG_RESPONSE" registration_session_id id || true)"
+if [[ -z "$REG_SESSION_ID" ]]; then
+  echo "failed to extract registration session id" >&2
+  echo "response: $START_REG_RESPONSE" >&2
+  exit 1
+fi
+
+REG_OPTIONS="$(json_get "$START_REG_RESPONSE" public_key_options || true)"
+CHALLENGE="$(json_get "$REG_OPTIONS" challenge || true)"
+REG_USER_ID="$(json_get_first "$REG_OPTIONS" user.id id || true)"
+if [[ -z "$CHALLENGE" ]] || [[ -z "$REG_USER_ID" ]]; then
+  echo "failed to extract challenge or user id from registration options" >&2
+  echo "options: $REG_OPTIONS" >&2
+  exit 1
+fi
+
+MOCK_CREDENTIAL_ID="saas-cred-$(generate_token 8)"
+CLIENT_DATA=$(python3 -c "
+import json, base64
+data = {'challenge': '$CHALLENGE', 'origin': 'http://localhost:5173', 'type': 'webauthn.create'}
+print(base64.urlsafe_b64encode(json.dumps(data).encode()).decode().rstrip('='))
+")
+
+FINISH_REG_RESPONSE=$(curl -sS \
+  -H "content-type: application/json" \
+  -H "origin: http://localhost:5173" \
+  -X POST \
+  -d "{\"registration_session_id\":\"$REG_SESSION_ID\",\"credential\":{\"id\":\"$MOCK_CREDENTIAL_ID\",\"rawId\":\"$MOCK_CREDENTIAL_ID\",\"type\":\"public-key\",\"response\":{\"clientDataJSON\":\"$CLIENT_DATA\",\"userHandle\":\"$REG_USER_ID\"}}}" \
+  "$CONTROL_PLANE_BASE_URL/account/passkeys/registrations/finish")
+
+OWNER_TOKEN="$(json_get_first "$FINISH_REG_RESPONSE" session.access_token access_token tokens.access_token || true)"
+if [[ -z "$OWNER_TOKEN" ]]; then
+  echo "failed to extract access token from registration" >&2
+  echo "response: $FINISH_REG_RESPONSE" >&2
+  exit 1
+fi
+
+echo "✓ Account registration works"
+
+echo ""
+echo "=== Test 2: Organization creation ==="
+
+CREATE_ORG_RESPONSE=$(curl -sS \
+  -H "content-type: application/json" \
+  -H "authorization: Bearer $OWNER_TOKEN" \
+  -X POST \
+  -d '{"slug":"saas-test-org","display_name":"SaaS Test Org","plan_tier":"team"}' \
+  "$CONTROL_PLANE_BASE_URL/organizations")
+
+ORG_ID="$(json_get_first "$CREATE_ORG_RESPONSE" organization.id id || true)"
+if [[ -z "$ORG_ID" ]]; then
+  echo "failed to extract organization id" >&2
+  echo "response: $CREATE_ORG_RESPONSE" >&2
+  exit 1
+fi
+
+echo "✓ Organization created (id=$ORG_ID)"
+
+echo ""
+echo "=== Test 3: First workspace provisioning ==="
+
+WORKSPACE1_PORT="18101"
+WORKSPACE1_SERVICE_IDENTITY_ID="saas-smoke-ws1-service"
+CREATE_WS1_RESPONSE=$(curl -sS \
+  -H "content-type: application/json" \
+  -H "authorization: Bearer $OWNER_TOKEN" \
+  -X POST \
+  -d "{\"organization_id\":\"$ORG_ID\",\"slug\":\"workspace-1\",\"display_name\":\"Workspace 1\",\"region\":\"us-central1\",\"workspace_tier\":\"standard\",\"service_identity_id\":\"$WORKSPACE1_SERVICE_IDENTITY_ID\",\"service_identity_public_key\":\"$SERVICE_PUBLIC_KEY\"}" \
+  "$CONTROL_PLANE_BASE_URL/workspaces")
+
+WS1_ID="$(json_get_first "$CREATE_WS1_RESPONSE" workspace.id id || true)"
+WS1_DEPLOYMENT_ROOT="$(json_get_first "$CREATE_WS1_RESPONSE" workspace.deployment_root deployment_root || true)"
+WS1_JOB_ID="$(json_get_first "$CREATE_WS1_RESPONSE" provisioning_job.id job_id || true)"
+if [[ -z "$WS1_ID" ]] || [[ -z "$WS1_DEPLOYMENT_ROOT" ]]; then
+  echo "failed to extract workspace id or deployment root" >&2
+  echo "response: $CREATE_WS1_RESPONSE" >&2
+  exit 1
+fi
+
+WS1_STATUS="$(json_get_first "$CREATE_WS1_RESPONSE" workspace.status status || true)"
+if [[ "$WS1_STATUS" != "provisioned" ]] && [[ "$WS1_STATUS" != "active" ]] && [[ "$WS1_STATUS" != "ready" ]]; then
+  echo "workspace 1 provisioning did not reach active state: $WS1_STATUS" >&2
+  printf '%s\n' "$CREATE_WS1_RESPONSE" >&2
+  exit 1
+fi
+
+echo "✓ Workspace 1 provisioned (id=$WS1_ID, deployment_root=$WS1_DEPLOYMENT_ROOT)"
+
+echo ""
+echo "=== Test 4: Second workspace provisioning (multi-workspace) ==="
+
+WORKSPACE2_PORT="18102"
+WORKSPACE2_SERVICE_IDENTITY_ID="saas-smoke-ws2-service"
+CREATE_WS2_RESPONSE=$(curl -sS \
+  -H "content-type: application/json" \
+  -H "authorization: Bearer $OWNER_TOKEN" \
+  -X POST \
+  -d "{\"organization_id\":\"$ORG_ID\",\"slug\":\"workspace-2\",\"display_name\":\"Workspace 2\",\"region\":\"us-east1\",\"workspace_tier\":\"plus\",\"service_identity_id\":\"$WORKSPACE2_SERVICE_IDENTITY_ID\",\"service_identity_public_key\":\"$SERVICE_PUBLIC_KEY\"}" \
+  "$CONTROL_PLANE_BASE_URL/workspaces")
+
+WS2_ID="$(json_get_first "$CREATE_WS2_RESPONSE" workspace.id id || true)"
+WS2_DEPLOYMENT_ROOT="$(json_get_first "$CREATE_WS2_RESPONSE" workspace.deployment_root deployment_root || true)"
+if [[ -z "$WS2_ID" ]] || [[ -z "$WS2_DEPLOYMENT_ROOT" ]]; then
+  echo "failed to extract second workspace id or deployment root" >&2
+  echo "response: $CREATE_WS2_RESPONSE" >&2
+  exit 1
+fi
+
+echo "✓ Workspace 2 provisioned (id=$WS2_ID)"
+
+echo ""
+echo "=== Test 5: Starting isolated workspace cores ==="
+
+mkdir -p "$WORKSPACE1_ROOT"
+mkdir -p "$WORKSPACE2_ROOT"
+
+BOOTSTRAP_TOKEN1="saas-smoke-ws1-$(generate_token 16)"
+export OAR_HUMAN_AUTH_MODE="control_plane"
+export OAR_CONTROL_PLANE_TOKEN_ISSUER="$CONTROL_PLANE_BASE_URL"
+export OAR_CONTROL_PLANE_TOKEN_AUDIENCE="oar-core"
+export OAR_CONTROL_PLANE_TOKEN_PUBLIC_KEY="$SERVICE_PUBLIC_KEY"
+export OAR_CONTROL_PLANE_WORKSPACE_ID="$WS1_ID"
+export OAR_WORKSPACE_SERVICE_ID="$WORKSPACE1_SERVICE_IDENTITY_ID"
+export OAR_WORKSPACE_SERVICE_PRIVATE_KEY="$SERVICE_PRIVATE_KEY"
+
+start_core_server \
+  WORKSPACE1_PID \
+  "$CORE_BIN" \
+  "$WS1_DEPLOYMENT_ROOT/workspace" \
+  "$SCHEMA_PATH" \
+  "$CONTROL_PLANE_HOST" \
+  "$WORKSPACE1_PORT" \
+  "$WORKSPACE1_LOG" \
+  "ws1-instance" \
+  set \
+  "$BOOTSTRAP_TOKEN1" \
+  false \
+  false \
+  false
+
+BOOTSTRAP_TOKEN2="saas-smoke-ws2-$(generate_token 16)"
+export OAR_CONTROL_PLANE_WORKSPACE_ID="$WS2_ID"
+export OAR_WORKSPACE_SERVICE_ID="$WORKSPACE2_SERVICE_IDENTITY_ID"
+export OAR_WORKSPACE_SERVICE_PRIVATE_KEY="$SERVICE_PRIVATE_KEY"
+
+start_core_server \
+  WORKSPACE2_PID \
+  "$CORE_BIN" \
+  "$WS2_DEPLOYMENT_ROOT/workspace" \
+  "$SCHEMA_PATH" \
+  "$CONTROL_PLANE_HOST" \
+  "$WORKSPACE2_PORT" \
+  "$WORKSPACE2_LOG" \
+  "ws2-instance" \
+  set \
+  "$BOOTSTRAP_TOKEN2" \
+  false \
+  false \
+  false
+
+WS1_BASE_URL="http://${CONTROL_PLANE_HOST}:${WORKSPACE1_PORT}"
+WS2_BASE_URL="http://${CONTROL_PLANE_HOST}:${WORKSPACE2_PORT}"
+
+if ! wait_for_http_ok "$WS1_BASE_URL/readyz" 30; then
+  echo "workspace 1 did not become healthy" >&2
+  cat "$WORKSPACE1_LOG" >&2 || true
+  exit 1
+fi
+
+if ! wait_for_http_ok "$WS2_BASE_URL/readyz" 30; then
+  echo "workspace 2 did not become healthy" >&2
+  cat "$WORKSPACE2_LOG" >&2 || true
+  exit 1
+fi
+
+unset OAR_HUMAN_AUTH_MODE
+unset OAR_CONTROL_PLANE_TOKEN_ISSUER
+unset OAR_CONTROL_PLANE_TOKEN_AUDIENCE
+unset OAR_CONTROL_PLANE_TOKEN_PUBLIC_KEY
+unset OAR_CONTROL_PLANE_WORKSPACE_ID
+unset OAR_WORKSPACE_SERVICE_ID
+unset OAR_WORKSPACE_SERVICE_PRIVATE_KEY
+
+echo "✓ Both workspace cores started and healthy"
+
+echo ""
+echo "=== Test 6: Invite creation and acceptance ==="
+
+CREATE_INVITE_RESPONSE=$(curl -sS \
+  -H "content-type: application/json" \
+  -H "authorization: Bearer $OWNER_TOKEN" \
+  -X POST \
+  -d '{"email":"member@example.com","role":"member"}' \
+  "$CONTROL_PLANE_BASE_URL/organizations/$ORG_ID/invites")
+
+INVITE_URL="$(json_get_first "$CREATE_INVITE_RESPONSE" invite_url url || true)"
+if [[ -z "$INVITE_URL" ]]; then
+  echo "failed to extract invite url" >&2
+  echo "response: $CREATE_INVITE_RESPONSE" >&2
+  exit 1
+fi
+INVITE_TOKEN="$(invite_token_from_url "$INVITE_URL" || true)"
+if [[ -z "$INVITE_TOKEN" ]]; then
+  echo "failed to extract invite token from invite url" >&2
+  echo "invite_url: $INVITE_URL" >&2
+  exit 1
+fi
+
+echo "Member invite created"
+
+START_MEMBER_REG_RESPONSE=$(curl -sS \
+  -H "content-type: application/json" \
+  -H "origin: http://localhost:5173" \
+  -X POST \
+  -d '{"email":"member@example.com","display_name":"Member User"}' \
+  "$CONTROL_PLANE_BASE_URL/account/passkeys/registrations/start")
+
+MEMBER_REG_SESSION_ID="$(json_get_first "$START_MEMBER_REG_RESPONSE" registration_session_id id || true)"
+MEMBER_REG_OPTIONS="$(json_get "$START_MEMBER_REG_RESPONSE" public_key_options || true)"
+MEMBER_CHALLENGE="$(json_get "$MEMBER_REG_OPTIONS" challenge || true)"
+MEMBER_USER_ID="$(json_get_first "$MEMBER_REG_OPTIONS" user.id id || true)"
+
+MEMBER_CREDENTIAL_ID="member-cred-$(generate_token 8)"
+MEMBER_CLIENT_DATA=$(python3 -c "
+import json, base64
+data = {'challenge': '$MEMBER_CHALLENGE', 'origin': 'http://localhost:5173', 'type': 'webauthn.create'}
+print(base64.urlsafe_b64encode(json.dumps(data).encode()).decode().rstrip('='))
+")
+
+FINISH_MEMBER_REG_RESPONSE=$(curl -sS \
+  -H "content-type: application/json" \
+  -H "origin: http://localhost:5173" \
+  -X POST \
+  -d "{\"registration_session_id\":\"$MEMBER_REG_SESSION_ID\",\"invite_token\":\"$INVITE_TOKEN\",\"credential\":{\"id\":\"$MEMBER_CREDENTIAL_ID\",\"rawId\":\"$MEMBER_CREDENTIAL_ID\",\"type\":\"public-key\",\"response\":{\"clientDataJSON\":\"$MEMBER_CLIENT_DATA\",\"userHandle\":\"$MEMBER_USER_ID\"}}}" \
+  "$CONTROL_PLANE_BASE_URL/account/passkeys/registrations/finish")
+
+MEMBER_TOKEN="$(json_get_first "$FINISH_MEMBER_REG_RESPONSE" session.access_token access_token tokens.access_token || true)"
+if [[ -z "$MEMBER_TOKEN" ]]; then
+  echo "failed to extract member access token" >&2
+  echo "response: $FINISH_MEMBER_REG_RESPONSE" >&2
+  exit 1
+fi
+
+MEMBER_ORGS_RESPONSE=$(curl -sS \
+  -H "authorization: Bearer $MEMBER_TOKEN" \
+  "$CONTROL_PLANE_BASE_URL/organizations")
+
+MEMBER_ORG_COUNT=$(python3 "${REPO_ROOT}/scripts/hosted/json-tool.py" count-key-value id "$ORG_ID" <<<"$MEMBER_ORGS_RESPONSE" 2>/dev/null || echo "0")
+if [[ "$MEMBER_ORG_COUNT" -lt 1 ]]; then
+  echo "member should see invited organization" >&2
+  echo "response: $MEMBER_ORGS_RESPONSE" >&2
+  exit 1
+fi
+
+echo "✓ Invite accepted, member sees organization"
+
+echo ""
+echo "=== Test 7: Workspace launch and session exchange ==="
+
+LAUNCH_RESPONSE=$(curl -sS \
+  -H "content-type: application/json" \
+  -H "authorization: Bearer $MEMBER_TOKEN" \
+  -X POST \
+  -d '{"return_path":"/workspace-1"}' \
+  "$CONTROL_PLANE_BASE_URL/workspaces/$WS1_ID/launch-sessions")
+
+EXCHANGE_TOKEN="$(json_get_first "$LAUNCH_RESPONSE" launch_session.exchange_token exchange_token || true)"
+LAUNCH_WORKSPACE_URL="$(json_get_first "$LAUNCH_RESPONSE" launch_session.workspace_url workspace_url || true)"
+if [[ -z "$EXCHANGE_TOKEN" ]]; then
+  echo "failed to extract exchange token from launch session" >&2
+  echo "response: $LAUNCH_RESPONSE" >&2
+  exit 1
+fi
+
+echo "Launch session created"
+
+EXCHANGE_RESPONSE=$(curl -sS \
+  -H "content-type: application/json" \
+  -X POST \
+  -d "{\"exchange_token\":\"$EXCHANGE_TOKEN\"}" \
+  "$CONTROL_PLANE_BASE_URL/workspaces/$WS1_ID/session-exchange")
+
+WORKSPACE_GRANT_TOKEN="$(json_get_first "$EXCHANGE_RESPONSE" grant.bearer_token bearer_token access_token || true)"
+WORKSPACE_GRANT_SCOPE="$(json_get_first "$EXCHANGE_RESPONSE" grant.scope scope || true)"
+if [[ -z "$WORKSPACE_GRANT_TOKEN" ]]; then
+  echo "failed to extract workspace grant token" >&2
+  echo "response: $EXCHANGE_RESPONSE" >&2
+  exit 1
+fi
+
+echo "✓ Session exchange complete, workspace grant issued (scope=$WORKSPACE_GRANT_SCOPE)"
+
+echo ""
+echo "=== Test 8: Authenticated workspace read/write ==="
+
+THREAD_RESPONSE=$(curl -sS \
+  -H "content-type: application/json" \
+  -H "authorization: Bearer $WORKSPACE_GRANT_TOKEN" \
+  -X POST \
+  -d '{
+    "thread":{
+      "title":"SaaS smoke thread",
+      "type":"incident",
+      "status":"active",
+      "priority":"p1",
+      "tags":["saas","smoke"],
+      "cadence":"daily",
+      "current_summary":"saas smoke test",
+      "next_actions":["verify"],
+      "key_artifacts":[],
+      "provenance":{"sources":["actor_statement:saas-smoke"]}
+    }
+  }' \
+  "$WS1_BASE_URL/threads")
+
+THREAD_ID="$(json_get_first "$THREAD_RESPONSE" thread_id id thread.thread_id thread.id || true)"
+if [[ -z "$THREAD_ID" ]]; then
+  echo "failed to extract thread id" >&2
+  echo "response: $THREAD_RESPONSE" >&2
+  exit 1
+fi
+
+THREADS_READ_STATUS=$(curl -sS -o /dev/null -w '%{http_code}' \
+  -H "authorization: Bearer $WORKSPACE_GRANT_TOKEN" \
+  "$WS1_BASE_URL/threads" || true)
+assert_http_status "200" "$THREADS_READ_STATUS" "authenticated /threads read"
+
+THREAD_READ_STATUS=$(curl -sS -o /dev/null -w '%{http_code}' \
+  -H "authorization: Bearer $WORKSPACE_GRANT_TOKEN" \
+  "$WS1_BASE_URL/threads/$THREAD_ID" || true)
+assert_http_status "200" "$THREAD_READ_STATUS" "authenticated thread read"
+
+echo "✓ Workspace read/write works"
+
+echo ""
+echo "=== Test 9: Quota and usage visibility ==="
+
+USAGE_RESPONSE=$(curl -sS \
+  -H "authorization: Bearer $OWNER_TOKEN" \
+  "$CONTROL_PLANE_BASE_URL/organizations/$ORG_ID/usage-summary")
+
+USAGE_WORKSPACE_COUNT="$(json_get_first "$USAGE_RESPONSE" summary.usage.workspace_count workspace_count || true)"
+if [[ "$USAGE_WORKSPACE_COUNT" != "2" ]]; then
+  echo "expected workspace count 2, got: $USAGE_WORKSPACE_COUNT" >&2
+  echo "response: $USAGE_RESPONSE" >&2
+  exit 1
+fi
+
+echo "✓ Usage summary shows 2 workspaces"
+
+echo ""
+echo "=== Test 10: Workspace inventory ==="
+
+INVENTORY_RESPONSE=$(curl -sS \
+  -H "authorization: Bearer $OWNER_TOKEN" \
+  "$CONTROL_PLANE_BASE_URL/organizations/$ORG_ID/workspace-inventory")
+
+INVENTORY_ORG_ID="$(json_get_first "$INVENTORY_RESPONSE" organization_id id || true)"
+if [[ "$INVENTORY_ORG_ID" != "$ORG_ID" ]]; then
+  echo "inventory organization_id mismatch" >&2
+  echo "response: $INVENTORY_RESPONSE" >&2
+  exit 1
+fi
+
+echo "✓ Workspace inventory accessible"
+
+echo ""
+echo "=== Test 11: Provisioning job status ==="
+
+JOB_RESPONSE=$(curl -sS \
+  -H "authorization: Bearer $OWNER_TOKEN" \
+  "$CONTROL_PLANE_BASE_URL/provisioning/jobs/$WS1_JOB_ID")
+
+JOB_STATUS="$(json_get_first "$JOB_RESPONSE" job.status status || true)"
+if [[ "$JOB_STATUS" != "succeeded" ]] && [[ "$JOB_STATUS" != "completed" ]]; then
+  echo "expected job status succeeded/completed, got: $JOB_STATUS" >&2
+  echo "response: $JOB_RESPONSE" >&2
+  exit 1
+fi
+
+echo "✓ Provisioning job status readable"
+
+echo ""
+echo "=== Test 12: Audit events ==="
+
+AUDIT_RESPONSE=$(curl -sS \
+  -H "authorization: Bearer $OWNER_TOKEN" \
+  "$CONTROL_PLANE_BASE_URL/audit-events?organization_id=$ORG_ID&limit=10")
+
+AUDIT_EVENTS_COUNT=$(python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+events = data.get('events', [])
+print(len(events))
+" <<<"$AUDIT_RESPONSE" 2>/dev/null || echo "0")
+
+if [[ "$AUDIT_EVENTS_COUNT" -lt 1 ]]; then
+  echo "expected at least one audit event" >&2
+  echo "response: $AUDIT_RESPONSE" >&2
+  exit 1
+fi
+
+echo "✓ Audit events recorded ($AUDIT_EVENTS_COUNT events)"
+
+echo ""
+cat >"$TMP_DIR/summary.txt" <<SUMMARY
+control_plane_base_url=${CONTROL_PLANE_BASE_URL}
+organization_id=${ORG_ID}
+workspace_1_id=${WS1_ID}
+workspace_1_base_url=${WS1_BASE_URL}
+workspace_2_id=${WS2_ID}
+workspace_2_base_url=${WS2_BASE_URL}
+owner_email=${MOCK_EMAIL}
+member_email=member@example.com
+thread_id=${THREAD_ID}
+usage_workspace_count=${USAGE_WORKSPACE_COUNT}
+audit_event_count=${AUDIT_EVENTS_COUNT}
+coverage=control-plane,account,organization,workspace-provisioning,multi-workspace,invite,launch,session-exchange,workspace-rw,usage,inventory,jobs,audit
+artifacts_dir=${TMP_DIR}
+SUMMARY
+
+echo ""
+echo "=== SaaS smoke completed successfully ==="
+cat "$TMP_DIR/summary.txt"

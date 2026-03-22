@@ -34,6 +34,7 @@ var authSubcommandSpec = subcommandSpec{
 		"oar auth bootstrap status",
 		"oar auth principals list",
 		"oar auth principals revoke --agent-id <agent-id>",
+		"oar auth principals revoke --agent-id <agent-id> --allow-human-lockout --human-lockout-reason 'incident recovery'",
 		"oar auth audit list",
 	},
 	aliases: map[string]string{
@@ -61,7 +62,7 @@ var authBootstrapSubcommandSpec = subcommandSpec{
 var authPrincipalsSubcommandSpec = subcommandSpec{
 	command:  "auth principals",
 	valid:    []string{"list", "revoke"},
-	examples: []string{"oar auth principals list", "oar auth principals list --limit 20", "oar auth principals revoke --agent-id <agent-id>", "oar auth principals revoke --agent-id <agent-id> --force-last-active"},
+	examples: []string{"oar auth principals list", "oar auth principals list --limit 20", "oar auth principals revoke --agent-id <agent-id>", "oar auth principals revoke --agent-id <agent-id> --allow-human-lockout --human-lockout-reason 'incident recovery'"},
 	aliases: map[string]string{
 		"ls": "list",
 	},

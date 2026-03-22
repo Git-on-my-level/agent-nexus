@@ -94,7 +94,7 @@ Generated from `contracts/oar-openapi.yaml`.
 - Concepts: `auth`, `revocation`
 - Error codes: `auth_required`, `invalid_token`, `agent_revoked`, `last_active_principal`
 - Output: Returns `{ ok, principal, revocation }`; repeated calls after successful self-revoke require a fresh principal because the revoked caller can no longer authenticate.
-- Agent notes: Requires Bearer access token. `force_last_active=true` is an explicit break-glass path that can leave the workspace without an active principal.
+- Agent notes: Requires Bearer access token. `allow_human_lockout=true` is an explicit break-glass path that can leave the workspace without an active human principal; include a non-empty `human_lockout_reason`.
 - Examples:
   - Revoke self: `oar agents me revoke --json`
 
@@ -319,7 +319,7 @@ Generated from `contracts/oar-openapi.yaml`.
 - Why: Inspect the current workspace principal inventory, including revoked principals, without direct database access.
 - Concepts: `auth`, `identity`
 - Error codes: `auth_required`, `invalid_token`, `agent_revoked`, `invalid_request`
-- Output: Returns `{ principals, next_cursor? }` ordered by create time descending.
+- Output: Returns `{ principals, active_human_principal_count, next_cursor? }` ordered by create time descending.
 - Agent notes: Requires Bearer access token. Pagination is bounded from the start with `limit` and `cursor`.
 - Examples:
   - List principals: `oar auth principals list --json`
@@ -335,10 +335,10 @@ Generated from `contracts/oar-openapi.yaml`.
 - Concepts: `auth`, `identity`, `revocation`
 - Error codes: `auth_required`, `invalid_token`, `agent_revoked`, `not_found`, `last_active_principal`
 - Output: Returns `{ ok, principal, revocation }` and is idempotent when the target principal is already revoked.
-- Agent notes: Requires Bearer access token. Set `force_last_active=true` only for explicit break-glass recovery work.
+- Agent notes: Requires Bearer access token. Set `allow_human_lockout=true` only for explicit break-glass recovery work and include a non-empty `human_lockout_reason`.
 - Examples:
   - Revoke a principal: `oar auth principals revoke --agent-id agent_123 --json`
-  - Force revoke the last active principal: `oar auth principals revoke --agent-id agent_123 --force-last-active --json`
+  - Break glass to revoke the last active human principal: `oar auth principals revoke --agent-id agent_123 --allow-human-lockout --human-lockout-reason "incident recovery" --json`
 
 ## `auth.token`
 

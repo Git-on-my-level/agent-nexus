@@ -2,6 +2,11 @@
 
 This runbook covers reproducible local and production-like operation for `oar-core`.
 
+The same Go module also ships `oar-control-plane`, the SaaS control-plane service
+for human accounts, organizations, workspace registry, invites, provisioning
+jobs, and audit history. Its local workflow is documented in a short section
+below so it can run alongside the existing core + web-ui development loop.
+
 ## Prerequisites
 
 - Go toolchain (for source runs)
@@ -26,7 +31,26 @@ This runbook covers reproducible local and production-like operation for `oar-co
 | WebAuthn RP ID | n/a | `OAR_WEBAUTHN_RPID` | derived from browser origin host |
 | WebAuthn origin | n/a | `OAR_WEBAUTHN_ORIGIN` | derived from browser request origin |
 | WebAuthn RP display name | n/a | `OAR_WEBAUTHN_RP_DISPLAY_NAME` | `OAR` |
+| Human auth mode | n/a | `OAR_HUMAN_AUTH_MODE` | `workspace_local` |
+| Control-plane token issuer | n/a | `OAR_CONTROL_PLANE_TOKEN_ISSUER` | unset |
+| Control-plane token audience | n/a | `OAR_CONTROL_PLANE_TOKEN_AUDIENCE` | unset |
+| Control-plane workspace identifier | n/a | `OAR_CONTROL_PLANE_WORKSPACE_ID` | unset |
+| Control-plane token public key (base64 Ed25519) | n/a | `OAR_CONTROL_PLANE_TOKEN_PUBLIC_KEY` | unset |
+| Workspace service identity id | n/a | `OAR_WORKSPACE_SERVICE_ID` | unset |
+| Workspace service private key (base64 Ed25519) | n/a | `OAR_WORKSPACE_SERVICE_PRIVATE_KEY` | unset |
 | CORS allowed origins | n/a | `OAR_CORS_ALLOWED_ORIGINS` | unset (CORS disabled) |
+| Workspace blob quota | n/a | `OAR_WORKSPACE_MAX_BLOB_BYTES` | `1073741824` |
+| Workspace artifact quota | n/a | `OAR_WORKSPACE_MAX_ARTIFACTS` | `100000` |
+| Workspace document quota | n/a | `OAR_WORKSPACE_MAX_DOCUMENTS` | `50000` |
+| Workspace revision quota | n/a | `OAR_WORKSPACE_MAX_DOCUMENT_REVISIONS` | `250000` |
+| Max upload size per workspace write | n/a | `OAR_WORKSPACE_MAX_UPLOAD_BYTES` | `8388608` |
+| Default JSON request body cap | n/a | `OAR_REQUEST_BODY_LIMIT_BYTES` | `1048576` |
+| Auth request body cap | n/a | `OAR_AUTH_REQUEST_BODY_LIMIT_BYTES` | `262144` |
+| Large content request body cap | n/a | `OAR_CONTENT_REQUEST_BODY_LIMIT_BYTES` | `8388608` |
+| Auth route rate limit per minute | n/a | `OAR_AUTH_ROUTE_RATE_LIMIT_PER_MINUTE` | `600` |
+| Auth route burst | n/a | `OAR_AUTH_ROUTE_RATE_BURST` | `100` |
+| Write route rate limit per minute | n/a | `OAR_WRITE_ROUTE_RATE_LIMIT_PER_MINUTE` | `1200` |
+| Write route burst | n/a | `OAR_WRITE_ROUTE_RATE_BURST` | `200` |
 | Graceful shutdown timeout | n/a | `OAR_SHUTDOWN_TIMEOUT` | `15s` |
 
 ## Workspace layout
@@ -54,6 +78,75 @@ Starting the server against an empty workspace root is enough to initialize stor
 ```bash
 ./scripts/dev
 ```
+
+## Control-plane local development run
+
+Run the control plane in a second terminal when working on SaaS-v-next flows:
+
+```bash
+make serve-control-plane PORT=8100 WORKSPACE_ROOT="$(pwd)/.oar-control-plane"
+```
+
+Or invoke the helper script directly:
+
+```bash
+./scripts/dev-control-plane
+```
+
+Relevant control-plane configuration:
+
+| Purpose | Flag | Env | Default |
+|---|---|---|---|
+| Workspace root (SQLite state) | `--workspace-root` | `OAR_CONTROL_PLANE_WORKSPACE_ROOT` | `.oar-control-plane` |
+| Listen host | `--host` | `OAR_CONTROL_PLANE_HOST` | `127.0.0.1` |
+| Listen port | `--port` | `OAR_CONTROL_PLANE_PORT` | `8100` |
+| Full listen address (overrides host+port) | `--listen-addr` | `OAR_CONTROL_PLANE_LISTEN_ADDR` | unset |
+| WebAuthn RP ID | `--webauthn-rpid` | `OAR_CONTROL_PLANE_WEBAUTHN_RPID` | derived from browser origin |
+| WebAuthn origin | `--webauthn-origin` | `OAR_CONTROL_PLANE_WEBAUTHN_ORIGIN` | derived from browser origin |
+| Workspace URL template | `--workspace-url-template` | `OAR_CONTROL_PLANE_WORKSPACE_URL_TEMPLATE` | `http://127.0.0.1:8000/%s` |
+| Invite URL template | `--invite-url-template` | `OAR_CONTROL_PLANE_INVITE_URL_TEMPLATE` | `http://127.0.0.1:8100/invites/%s` |
+| Workspace grant issuer | `--workspace-grant-issuer` | `OAR_CONTROL_PLANE_WORKSPACE_GRANT_ISSUER` | listen URL when signing is enabled |
+| Workspace grant audience | `--workspace-grant-audience` | `OAR_CONTROL_PLANE_WORKSPACE_GRANT_AUDIENCE` | unset |
+| Workspace grant signing key (base64 Ed25519 private key) | n/a | `OAR_CONTROL_PLANE_WORKSPACE_GRANT_SIGNING_KEY` | unset |
+| Session TTL | `--session-ttl` | `OAR_CONTROL_PLANE_SESSION_TTL` | `12h` |
+| Ceremony TTL | `--ceremony-ttl` | `OAR_CONTROL_PLANE_CEREMONY_TTL` | `5m` |
+| Launch TTL | `--launch-ttl` | `OAR_CONTROL_PLANE_LAUNCH_TTL` | `10m` |
+| Invite TTL | `--invite-ttl` | `OAR_CONTROL_PLANE_INVITE_TTL` | `168h` |
+| Backup maintenance interval | `--backup-maintenance-interval` | `OAR_CONTROL_PLANE_BACKUP_MAINTENANCE_INTERVAL` | `5m` |
+| Graceful shutdown timeout | `--shutdown-timeout` | `OAR_CONTROL_PLANE_SHUTDOWN_TIMEOUT` | `15s` |
+
+Useful control-plane endpoints:
+
+- `GET /health`
+- `GET /readyz`
+- `GET /organizations`
+- `GET /workspaces`
+- `GET /provisioning/jobs`
+- `GET /audit-events`
+
+The control plane seeds per-workspace backup schedules, runs due backups on the
+maintenance interval, and prunes expired backup bundles using the recorded
+retention metadata.
+
+Basic smoke check:
+
+```bash
+make smoke-control-plane PORT=18100 WORKSPACE_ROOT="$(mktemp -d)"
+```
+
+Signed control-plane-human workspace smoke check:
+
+```bash
+make smoke-control-plane-human PORT=18102
+```
+
+Typical local split:
+
+- Terminal 1: `make serve`
+- Terminal 2: `make serve-control-plane`
+
+This preserves the current workspace-core + web-ui loop while bringing up the
+new shared control-plane service beside it.
 
 ## Production-like source run
 
@@ -83,6 +176,11 @@ hostname or WebAuthn ceremonies will be rejected.
 workflows keep working. Production-like runs should leave both unset unless an
 explicitly open local workflow is required.
 
+`OAR_HUMAN_AUTH_MODE=control_plane` enables the SaaS-v-next split. In that
+mode, workspace-local passkey human auth is disabled, workspace-local Ed25519
+agent auth remains enabled, and startup fails closed unless the
+`OAR_CONTROL_PLANE_TOKEN_*` and `OAR_WORKSPACE_SERVICE_*` settings are valid.
+
 ## Verify server health
 
 ```bash
@@ -104,6 +202,11 @@ the readiness check passes, it also includes projection maintenance status:
 - `oldest_dirty_at` / `oldest_dirty_lag_seconds`: lag indicator for the oldest queued projection refresh.
 - `last_successful_stale_scan_at`: last successful background stale-thread scan.
 - `last_error`: last maintenance failure, if one has occurred since the most recent successful pass.
+
+`/ops/usage-summary` is the workspace usage envelope for control-plane polling.
+It reports blob bytes, blob object count, canonical artifact/document/revision counts,
+and the configured quota limits. Use it when you need an explicit storage/usage snapshot
+without scraping filesystem layout.
 
 Background projection maintenance is driven by:
 
@@ -148,7 +251,9 @@ workspace and the primary thread timeline.
 1. Start server with a workspace root.
 2. Create a small object (for example, register an actor).
 3. Stop and restart server with the same workspace root.
-4. Confirm object still exists (data persisted in `state.sqlite` / artifact files).
+4. Confirm object still exists (data persisted in `state.sqlite` plus the configured blob backend root).
+
+If `OAR_BLOB_BACKEND=object`, the content objects live under the configured blob root in an object-style layout rather than a flat content directory. Backup and restore workflows must capture the database and the blob backend together.
 
 ## Packet Convenience Atomicity
 
@@ -188,6 +293,35 @@ When running behind a reverse proxy (nginx, Caddy, etc.):
 - Terminate TLS at the proxy; core listens plain HTTP.
 - Set `OAR_WEBAUTHN_RPID` and `OAR_WEBAUTHN_ORIGIN` explicitly when the
   proxy hostname differs from the core listen address.
+
+Core already enforces request-body limits, workspace quotas, and route-class
+throttles. Edge limits should be complementary, not a replacement. A minimal
+nginx example:
+
+```nginx
+http {
+  limit_req_zone $binary_remote_addr zone=oar_auth:10m rate=30r/m;
+  limit_req_zone $binary_remote_addr zone=oar_write:10m rate=300r/m;
+
+  server {
+    location /auth/ {
+      limit_req zone=oar_auth burst=10 nodelay;
+      proxy_pass http://127.0.0.1:8000;
+    }
+
+    location ~ ^/(threads|commitments|boards|docs|artifacts|events|work_orders|receipts|reviews|inbox/ack|derived/rebuild) {
+      limit_req zone=oar_write burst=100 nodelay;
+      proxy_pass http://127.0.0.1:8000;
+    }
+  }
+}
+```
+
+When these limits trip, clients should expect:
+
+- `413 request_too_large` for oversized request bodies
+- `507 workspace_quota_exceeded` for storage or count quota exhaustion
+- `429 rate_limited` with `Retry-After` for route-class throttling
 
 ### CORS
 

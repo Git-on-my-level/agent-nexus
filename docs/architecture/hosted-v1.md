@@ -1,12 +1,14 @@
 # Hosted v1
 
 Hosted v1 is a managed hosted offering built from one isolated workspace
-deployment per customer/workspace. This document is the authoritative cut line
-for the current ticket pack.
+deployment per customer/workspace. It is not the same thing as SaaS v-next.
+This document is the authoritative cut line for the current hosted-v1 pack.
 
 ## Status
 
-This is the shipped hosted-v1 cut line for the current branch.
+This is the shipped hosted-v1 cut line for the current branch. If a feature
+needs shared organizations, self-serve workspace creation, launch brokering, or
+quota envelopes, that belongs in `saas-v-next.md`, not here.
 
 ## Hosted cut line
 
@@ -14,8 +16,8 @@ This is the shipped hosted-v1 cut line for the current branch.
 - Hosted v1 does not introduce shared row-level multitenancy.
 - Hosted v1 does not require a self-service control plane. Provisioning is
   managed by operators using deployment and recovery scripts.
-- A future control plane may wrap this later, but it is explicitly outside this
-  ticket pack.
+- SaaS v-next may wrap isolated workspaces with a control plane later, but that
+  is explicitly outside this hosted-v1 ticket pack.
 
 ## Auth and onboarding
 
@@ -24,11 +26,14 @@ This is the shipped hosted-v1 cut line for the current branch.
   flows are development-only escape hatches.
 - Hosted v1 is not open signup. New principals enter through managed bootstrap
   or invite-gated onboarding.
-- Passkey-authenticated humans and Ed25519 key-pair agents are both workspace
-  principals.
+- Hosted v1 may keep passkey-authenticated humans and Ed25519 key-pair agents
+  as workspace principals inside the isolated workspace.
 - Hosted v1 intentionally has no fine-grained RBAC. Any authenticated
   principal has the same workspace authority, including invite issuance and
   invite revocation.
+- This is the auth split from SaaS v-next: SaaS v-next moves human identity to
+  the control plane and uses workspace-scoped grants/tokens after launch,
+  while agents remain workspace-local in both tracks.
 
 ## Client and data contract
 
@@ -49,4 +54,5 @@ This is the shipped hosted-v1 cut line for the current branch.
   required control plane that does not exist yet.
 
 See `hosted-gate.md` for the short assumption list that downstream tickets
-should treat as fixed.
+should treat as fixed, and `saas-v-next.md` for the separate self-serve SaaS
+direction.

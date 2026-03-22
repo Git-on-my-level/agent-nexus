@@ -17,13 +17,14 @@ import (
 var ErrInvalidCursor = errors.New("invalid_cursor")
 
 const (
-	AuthAuditEventBootstrapConsumed    = "bootstrap_consumed"
-	AuthAuditEventInviteCreated        = "invite_created"
-	AuthAuditEventInviteRevoked        = "invite_revoked"
-	AuthAuditEventInviteConsumed       = "invite_consumed"
-	AuthAuditEventPrincipalRegistered  = "principal_registered"
-	AuthAuditEventPrincipalRevoked     = "principal_revoked"
-	AuthAuditEventPrincipalSelfRevoked = "principal_self_revoked"
+	AuthAuditEventBootstrapConsumed            = "bootstrap_consumed"
+	AuthAuditEventInviteCreated                = "invite_created"
+	AuthAuditEventInviteRevoked                = "invite_revoked"
+	AuthAuditEventInviteConsumed               = "invite_consumed"
+	AuthAuditEventPrincipalRegistered          = "principal_registered"
+	AuthAuditEventPrincipalHumanLockoutRevoked = "principal_human_lockout_revoked"
+	AuthAuditEventPrincipalRevoked             = "principal_revoked"
+	AuthAuditEventPrincipalSelfRevoked         = "principal_self_revoked"
 )
 
 type AuthPrincipalListFilter struct {
@@ -85,14 +86,8 @@ func (s *Store) ListPrincipals(ctx context.Context, filter AuthPrincipalListFilt
 		a.id,
 		a.actor_id,
 		a.username,
-		CASE
-			WHEN EXISTS(SELECT 1 FROM passkey_credentials pc WHERE pc.agent_id = a.id LIMIT 1) THEN 'human'
-			ELSE 'agent'
-		END,
-		CASE
-			WHEN EXISTS(SELECT 1 FROM passkey_credentials pc WHERE pc.agent_id = a.id LIMIT 1) THEN 'passkey'
-			ELSE 'public_key'
-		END,
+		` + principalKindExpr("a") + `,
+		` + authMethodExpr("a") + `,
 		a.created_at,
 		a.updated_at,
 		a.revoked_at

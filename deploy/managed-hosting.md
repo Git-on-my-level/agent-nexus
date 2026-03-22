@@ -6,6 +6,29 @@ workspace. This document is the operator runbook for that model.
 It is intentionally not a self-service control plane. Provisioning, bootstrap,
 backup, restore, and restore verification are all operator-driven steps.
 
+## Hosted v1 vs SaaS v-next
+
+Hosted v1 and SaaS v-next are separate deployment models:
+
+**Hosted v1** (this document):
+- One isolated deployment per workspace/customer
+- Operator-driven provisioning and lifecycle
+- No shared control plane
+- Workspace-local auth for both humans and agents
+- Manual backup scheduling and DR drills
+- No fine-grained RBAC (authenticated principals share authority)
+
+**SaaS v-next** (see `docs/architecture/saas-v-next.md`):
+- One shared control plane for accounts, organizations, workspace registry
+- Self-serve workspace creation and onboarding
+- Control-plane-managed human auth with workspace-scoped launch grants
+- Workspace-local agent auth (unchanged)
+- Automated backup scheduling and fleet operations
+- Per-organization quota and usage envelopes
+
+The hosted v1 scripts under `scripts/hosted/` are intentionally separate from
+the SaaS control-plane paths. Do not mix these models in a single deployment.
+
 ## What the bundle does
 
 The hosted ops bundle lives under `scripts/hosted/`:
@@ -89,6 +112,37 @@ The generated env file sets:
 
 For source-run or launchd deployments, use the same values from
 `config/env.production` when configuring the process.
+
+## Reverse proxy edge limits
+
+Core already enforces request-size limits, workspace quotas, and in-process
+route-class throttles. The reverse proxy should add complementary edge limits
+so abusive traffic is rejected before it reaches the workspace instance.
+
+Example nginx configuration:
+
+```nginx
+http {
+  limit_req_zone $binary_remote_addr zone=oar_auth:10m rate=30r/m;
+  limit_req_zone $binary_remote_addr zone=oar_write:10m rate=300r/m;
+
+  server {
+    location /auth/ {
+      limit_req zone=oar_auth burst=10 nodelay;
+      proxy_pass http://127.0.0.1:8001;
+    }
+
+    location ~ ^/(threads|commitments|boards|docs|artifacts|events|work_orders|receipts|reviews|inbox/ack|derived/rebuild) {
+      limit_req zone=oar_write burst=100 nodelay;
+      proxy_pass http://127.0.0.1:8001;
+    }
+  }
+}
+```
+
+If the edge limit trips, clients should see `429` responses before the core
+workload is consumed. Core still returns explicit `request_too_large`,
+`workspace_quota_exceeded`, and `rate_limited` payloads when requests reach it.
 
 ### 3. Confirm the empty deployment is healthy
 

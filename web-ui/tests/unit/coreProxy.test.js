@@ -14,6 +14,8 @@ describe("buildProxyRequestInit", () => {
             origin: "http://localhost:5173",
             host: "localhost:5173",
             "content-type": "application/json",
+            cookie: "oar_ui_session_local=refresh-token",
+            authorization: "Bearer token",
           },
           body: JSON.stringify({ display_name: "Alex Chen" }),
         },
@@ -28,6 +30,8 @@ describe("buildProxyRequestInit", () => {
     expect(requestInit.headers.get("x-forwarded-host")).toBe("localhost:5173");
     expect(requestInit.headers.get("x-forwarded-proto")).toBe("http");
     expect(requestInit.headers.get("host")).toBeNull();
+    expect(requestInit.headers.get("cookie")).toBeNull();
+    expect(requestInit.headers.get("authorization")).toBeNull();
   });
 
   it("omits body for GET requests", () => {

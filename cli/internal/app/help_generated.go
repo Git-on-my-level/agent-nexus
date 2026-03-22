@@ -567,8 +567,8 @@ func localGroupHelpSupplement(topic string) string {
   auth list               List local CLI profiles and which one is active.
   auth update-username    Update the current principal username and sync the local profile.
   auth rotate             Rotate the active agent key and refresh stored credentials.
-  auth revoke             Revoke the active agent and mark the local profile revoked.
-  auth principals revoke  Revoke another principal by id, with an explicit break-glass flag for the last active principal.
+  auth revoke             Revoke the active agent and mark the local profile revoked. Use explicit human-lockout flags only for break-glass recovery.
+  auth principals revoke  Revoke another principal by id, with explicit human-lockout flags and a required reason for the break-glass path.
   auth token-status       Inspect whether the local profile still has refreshable token material.
   Tip: use ` + "`oar auth bootstrap status`" + ` before first registration, ` + "`oar auth register --username <username> --bootstrap-token <token>`" + ` for the first principal, and ` + "`oar auth invites create --kind human|agent`" + ` before later registrations.`)
 	default:

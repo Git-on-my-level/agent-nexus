@@ -7,6 +7,12 @@ info:
 
     This OpenAPI contract is the monorepo source of truth for generated clients,
     CLI command registry metadata, and command docs.
+
+    Core request/abuse controls are surfaced explicitly: oversized requests use
+    `request_too_large`, workspace storage exhaustion uses
+    `workspace_quota_exceeded`, and route-class throttling uses `rate_limited`.
+    When present, the JSON error payload includes `request_body`, `quota`, or
+    `rate_limit` detail objects so clients can react without guessing.
 servers:
   - url: http://127.0.0.1:8000
 x-oar-extension-vocabulary:
@@ -17,7 +23,7 @@ x-oar-extension-vocabulary:
   x-oar-input-mode: "none | json-body | raw-stream | file-and-body"
   x-oar-streaming: "Streaming characteristics for this operation"
   x-oar-output-envelope: "Output shape and stability notes"
-  x-oar-error-codes: "Stable semantic error codes surfaced by core"
+  x-oar-error-codes: "Stable semantic error codes surfaced by core, including request_too_large, workspace_quota_exceeded, and rate_limited"
   x-oar-concepts: "Concept tags for docs/help grouping"
   x-oar-stability: "experimental | beta | stable"
   x-oar-surface: "Surface classification: canonical, projection, or utility"
@@ -698,7 +704,7 @@ paths:
           command: oar auth principals list --json
       x-oar-input-mode: "none"
       x-oar-streaming: { mode: none }
-      x-oar-output-envelope: "Returns `{ principals, next_cursor? }` ordered by create time descending."
+      x-oar-output-envelope: "Returns `{ principals, active_human_principal_count, next_cursor? }` ordered by create time descending."
       x-oar-error-codes: [auth_required, invalid_token, agent_revoked, invalid_request]
       x-oar-concepts: [auth, identity]
       x-oar-stability: "beta"
@@ -738,15 +744,15 @@ paths:
       x-oar-examples:
         - title: Revoke a principal
           command: oar auth principals revoke --agent-id agent_123 --json
-        - title: Force revoke the last active principal
-          command: oar auth principals revoke --agent-id agent_123 --force-last-active --json
+        - title: Break glass to revoke the last active human principal
+          command: oar auth principals revoke --agent-id agent_123 --allow-human-lockout --human-lockout-reason "incident recovery" --json
       x-oar-input-mode: "json-body"
       x-oar-streaming: { mode: none }
       x-oar-output-envelope: "Returns `{ ok, principal, revocation }` and is idempotent when the target principal is already revoked."
       x-oar-error-codes: [auth_required, invalid_token, agent_revoked, not_found, last_active_principal]
       x-oar-concepts: [auth, identity, revocation]
       x-oar-stability: "beta"
-      x-oar-agent-notes: "Requires Bearer access token. Set `force_last_active=true` only for explicit break-glass recovery work."
+      x-oar-agent-notes: "Requires Bearer access token. Set `allow_human_lockout=true` only for explicit break-glass recovery work and include a non-empty `human_lockout_reason`."
       parameters:
         - name: agent_id
           in: path
@@ -1014,7 +1020,7 @@ paths:
       x-oar-error-codes: [auth_required, invalid_token, agent_revoked, last_active_principal]
       x-oar-concepts: [auth, revocation]
       x-oar-stability: "beta"
-      x-oar-agent-notes: "Requires Bearer access token. `force_last_active=true` is an explicit break-glass path that can leave the workspace without an active principal."
+      x-oar-agent-notes: "Requires Bearer access token. `allow_human_lockout=true` is an explicit break-glass path that can leave the workspace without an active human principal; include a non-empty `human_lockout_reason`."
       requestBody:
         required: false
         content:
@@ -3149,17 +3155,24 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AuthPrincipalSummary'
+        active_human_principal_count:
+          type: integer
+          description: "Number of active human principals in the workspace."
         next_cursor:
           type: string
           description: "Opaque pagination cursor for fetching the next page of results. Omitted when there are no more results."
-      required: [principals]
+      required: [principals, active_human_principal_count]
 
     RevokePrincipalRequest:
       type: object
       properties:
-        force_last_active:
+        allow_human_lockout:
           type: boolean
-          description: "Break-glass override that allows revoking the final active principal in the workspace."
+          description: "Break-glass override that allows revoking the final active human principal in the workspace."
+        human_lockout_reason:
+          type: string
+          minLength: 1
+          description: "Required when allow_human_lockout is true. Explain why the last active human principal must be revoked."
 
     PrincipalRevocationSummary:
       type: object
@@ -3169,10 +3182,10 @@ components:
           enum: [self, admin]
         already_revoked:
           type: boolean
-        force_last_active:
+        allow_human_lockout:
           type: boolean
-          description: "Whether the last-active safeguard was explicitly bypassed for this successful revoke."
-      required: [mode, already_revoked, force_last_active]
+          description: "Whether the last-active-human safeguard was explicitly bypassed for this successful revoke."
+      required: [mode, already_revoked, allow_human_lockout]
 
     RevokePrincipalResponse:
       type: object
@@ -3196,6 +3209,7 @@ components:
             - invite_revoked
             - invite_consumed
             - principal_registered
+            - principal_human_lockout_revoked
             - principal_revoked
             - principal_self_revoked
         occurred_at: { type: string, format: date-time }

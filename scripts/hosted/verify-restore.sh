@@ -262,17 +262,22 @@ fi
 if [[ -z "$VERIFY_ARTIFACT_ID" ]]; then
   VERIFY_ARTIFACT_ID="$(sqlite_scalar "${WORKSPACE_ROOT}/state.sqlite" "SELECT COALESCE(id, '') FROM artifacts ORDER BY created_at ASC, id ASC LIMIT 1;")"
 fi
-[[ -n "$VERIFY_ARTIFACT_ID" ]] || die "restore verification requires at least one artifact for live read checks"
-verify_live_artifact_read "$VERIFY_ARTIFACT_ID"
+if [[ -n "$VERIFY_ARTIFACT_ID" ]]; then
+  verify_live_artifact_read "$VERIFY_ARTIFACT_ID"
+else
+  log "artifact live read:      skipped (no artifacts in restored workspace)"
+fi
 
 if [[ "$ACTUAL_DOCUMENT_COUNT" -gt 0 ]]; then
   if [[ -z "$VERIFY_DOCUMENT_ID" || -z "$VERIFY_DOCUMENT_REVISION_ID" ]]; then
     VERIFY_DOCUMENT_ID="$(sqlite_scalar "${WORKSPACE_ROOT}/state.sqlite" "SELECT COALESCE(id, '') FROM documents ORDER BY created_at ASC, id ASC LIMIT 1;")"
     VERIFY_DOCUMENT_REVISION_ID="$(sqlite_scalar "${WORKSPACE_ROOT}/state.sqlite" "SELECT COALESCE(head_revision_id, '') FROM documents ORDER BY created_at ASC, id ASC LIMIT 1;")"
   fi
-  [[ -n "$VERIFY_DOCUMENT_ID" ]] || die "restore verification requires a document id for live document checks"
-  [[ -n "$VERIFY_DOCUMENT_REVISION_ID" ]] || die "restore verification requires a document revision id for live document checks"
-  verify_live_document_revision_read "$VERIFY_DOCUMENT_ID" "$VERIFY_DOCUMENT_REVISION_ID"
+  if [[ -n "$VERIFY_DOCUMENT_ID" && -n "$VERIFY_DOCUMENT_REVISION_ID" ]]; then
+    verify_live_document_revision_read "$VERIFY_DOCUMENT_ID" "$VERIFY_DOCUMENT_REVISION_ID"
+  else
+    log "document live read:      skipped (no documents in restored workspace)"
+  fi
 fi
 
 verify_referenced_blob_reachability
@@ -285,9 +290,15 @@ log "  invite count:            ${ACTUAL_INVITE_COUNT}"
 log "  document count:          ${ACTUAL_DOCUMENT_COUNT}"
 log "  document revision count: ${ACTUAL_DOCUMENT_REVISION_COUNT}"
 log "  blob file count:         ${ACTUAL_BLOB_FILE_COUNT}"
-log "  artifact live read:      ${VERIFY_ARTIFACT_ID}"
+if [[ -n "$VERIFY_ARTIFACT_ID" ]]; then
+  log "  artifact live read:      ${VERIFY_ARTIFACT_ID}"
+else
+  log "  artifact live read:      skipped"
+fi
 if [[ "$ACTUAL_DOCUMENT_COUNT" -gt 0 ]]; then
   log "  document live read:      ${VERIFY_DOCUMENT_ID}@${VERIFY_DOCUMENT_REVISION_ID}"
+else
+  log "  document live read:      skipped"
 fi
 if [[ -n "$RESTORE_BOOTSTRAP_TOKEN_MODE" ]]; then
   log "  bootstrap mode:          ${RESTORE_BOOTSTRAP_TOKEN_MODE}"

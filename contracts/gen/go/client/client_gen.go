@@ -415,8 +415,8 @@ var CommandRegistry = []CommandSpec{
 				Command: "oar auth principals revoke --agent-id agent_123 --json",
 			},
 			{
-				Title:   "Force revoke the last active principal",
-				Command: "oar auth principals revoke --agent-id agent_123 --force-last-active --json",
+				Title:   "Break glass to revoke the last active human principal",
+				Command: "oar auth principals revoke --agent-id agent_123 --allow-human-lockout --human-lockout-reason \"incident recovery\" --json",
 			},
 		},
 	},

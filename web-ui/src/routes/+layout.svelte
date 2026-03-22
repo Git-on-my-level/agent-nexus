@@ -19,8 +19,8 @@
   import {
     authenticatedAgent,
     authSessionReady,
-    clearAuthSession,
     initializeAuthSession,
+    logoutAuthSession,
   } from "$lib/authSession";
   import { coreClient } from "$lib/coreClient";
   import { getShellContentConfig, navigationItems } from "$lib/navigation";
@@ -209,13 +209,16 @@
     chooseActor(actorId, localStorage, activeWorkspaceSlug);
   }
 
-  function switchIdentity() {
+  async function switchIdentity() {
     if (!activeWorkspaceSlug) {
       return;
     }
 
     if ($authenticatedAgent) {
-      clearAuthSession(undefined, activeWorkspaceSlug, { clearActor: true });
+      await logoutAuthSession({
+        workspaceSlug: activeWorkspaceSlug,
+        clearActor: true,
+      });
       window.location.assign(workspaceHref("/login"));
       return;
     }

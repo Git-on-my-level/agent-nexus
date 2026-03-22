@@ -1,22 +1,16 @@
+import { JSDOM } from "jsdom";
+import DOMPurify from "dompurify";
 import { Marked } from "marked";
+
+const window = new JSDOM("").window;
+const purify = DOMPurify(window);
 
 const marked = new Marked({
   gfm: true,
   breaks: false,
 });
 
-/**
- * Render markdown string to sanitized HTML.
- * Uses marked with GFM (tables, strikethrough, task lists, autolinks).
- * Output is post-processed to strip dangerous tags/attributes.
- */
-export function renderMarkdown(source, { inline = false } = {}) {
-  if (!source || typeof source !== "string") return "";
-  const raw = inline ? marked.parseInline(source) : marked.parse(source);
-  return sanitizeHtml(raw);
-}
-
-const ALLOWED_TAGS = new Set([
+const ALLOWED_TAGS = [
   "h1",
   "h2",
   "h3",
@@ -48,9 +42,9 @@ const ALLOWED_TAGS = new Set([
   "div",
   "sup",
   "sub",
-]);
+];
 
-const ALLOWED_ATTRS = new Set([
+const ALLOWED_ATTRS = [
   "href",
   "title",
   "alt",
@@ -61,53 +55,46 @@ const ALLOWED_ATTRS = new Set([
   "checked",
   "disabled",
   "align",
-]);
+];
 
-const VOID_TAGS = new Set(["br", "hr", "img", "input"]);
+const purifyConfig = {
+  ALLOWED_TAGS,
+  ALLOWED_ATTR: ALLOWED_ATTRS,
+  ALLOW_DATA_ATTR: false,
+  ADD_ATTR: ["target"],
+  FORBID_TAGS: ["script", "iframe", "object", "embed", "form"],
+  FORBID_ATTR: [
+    "onerror",
+    "onload",
+    "onclick",
+    "onmouseover",
+    "onfocus",
+    "onblur",
+  ],
+  ALLOWED_URI_REGEXP:
+    /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
+};
 
 function sanitizeHtml(html) {
-  return html.replace(
-    /<\/?([a-zA-Z][a-zA-Z0-9]*)\b([^>]*)?\/?>/g,
-    (match, tag, attrs) => {
-      const lower = tag.toLowerCase();
-      if (!ALLOWED_TAGS.has(lower)) return "";
+  const sanitized = purify.sanitize(html, purifyConfig);
 
-      if (match.startsWith("</")) return `</${lower}>`;
+  return sanitized.replace(/<a\b([^>]*)>/gi, (match, attrs) => {
+    let updated = attrs;
 
-      let safeAttrs = "";
-      if (attrs) {
-        const attrRegex =
-          /([a-zA-Z][a-zA-Z0-9-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|(\S+))/g;
-        let attrMatch;
-        while ((attrMatch = attrRegex.exec(attrs)) !== null) {
-          const name = attrMatch[1].toLowerCase();
-          const value = attrMatch[2] ?? attrMatch[3] ?? attrMatch[4] ?? "";
-          if (!ALLOWED_ATTRS.has(name)) continue;
-          if (name === "href" || name === "src") {
-            if (/^\s*javascript:/i.test(value)) continue;
-          }
-          safeAttrs += ` ${name}="${value.replace(/"/g, "&quot;")}"`;
-        }
-        const boolAttrs = /\b(checked|disabled)\b/g;
-        let boolMatch;
-        while ((boolMatch = boolAttrs.exec(attrs)) !== null) {
-          if (!safeAttrs.includes(boolMatch[1])) {
-            safeAttrs += ` ${boolMatch[1]}`;
-          }
-        }
-      }
+    if (!/\brel\s*=/.test(updated)) {
+      updated += ' rel="noopener noreferrer"';
+    }
 
-      if (lower === "a") {
-        if (!safeAttrs.includes("rel=")) {
-          safeAttrs += ' rel="noopener noreferrer"';
-        }
-        if (!safeAttrs.includes("target=")) {
-          safeAttrs += ' target="_blank"';
-        }
-      }
+    if (!/\btarget\s*=/.test(updated)) {
+      updated += ' target="_blank"';
+    }
 
-      const selfClose = VOID_TAGS.has(lower) ? " /" : "";
-      return `<${lower}${safeAttrs}${selfClose}>`;
-    },
-  );
+    return `<a${updated}>`;
+  });
+}
+
+export function renderMarkdown(source, { inline = false } = {}) {
+  if (!source || typeof source !== "string") return "";
+  const raw = inline ? marked.parseInline(source) : marked.parse(source);
+  return sanitizeHtml(raw);
 }

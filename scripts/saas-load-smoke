@@ -1,0 +1,409 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+source "${SCRIPT_DIR}/hosted/common.sh"
+
+ARTIFACT_DIR="${SAAS_LOAD_ARTIFACT_DIR:-$REPO_ROOT/.tmp/saas-load-smoke}"
+CONTROL_PLANE_PORT="${CONTROL_PLANE_PORT:-18120}"
+CONTROL_PLANE_HOST="127.0.0.1"
+CONTROL_PLANE_BASE_URL="http://${CONTROL_PLANE_HOST}:${CONTROL_PLANE_PORT}"
+LOAD_TIMEOUT_SECONDS="${SAAS_LOAD_TIMEOUT_SECONDS:-180}"
+NUM_WORKSPACES="${SAAS_LOAD_NUM_WORKSPACES:-3}"
+NUM_THREADS_PER_WORKSPACE="${SAAS_LOAD_NUM_THREADS:-5}"
+NUM_CONCURRENT_REQUESTS="${SAAS_LOAD_CONCURRENT:-3}"
+
+mkdir -p "$ARTIFACT_DIR"
+TMP_DIR="$(mktemp -d "$ARTIFACT_DIR/run.XXXXXX")"
+CONTROL_PLANE_LOG="$TMP_DIR/control-plane.log"
+CONTROL_PLANE_ROOT="$TMP_DIR/control-plane-root"
+WORKSPACE_LOGS_DIR="$TMP_DIR/workspace-logs"
+mkdir -p "$WORKSPACE_LOGS_DIR"
+
+declare -a WORKSPACE_PIDS
+declare -a WORKSPACE_PORTS
+declare -a WORKSPACE_IDS
+declare -a WORKSPACE_BASE_URLS
+
+cleanup() {
+  local code=$?
+  for pid in "${WORKSPACE_PIDS[@]:-}"; do
+    stop_background_process "$pid"
+  done
+  stop_background_process "${CONTROL_PLANE_PID:-}"
+
+  if [[ $code -ne 0 ]]; then
+    echo "saas load smoke failed; artifacts kept at: $TMP_DIR" >&2
+    echo "control-plane log: $CONTROL_PLANE_LOG" >&2
+  else
+    echo "saas load smoke artifacts: $TMP_DIR"
+  fi
+}
+trap cleanup EXIT INT TERM
+
+require_command curl go python3
+
+json_get() {
+  local json="$1"
+  local path="$2"
+  python3 "${REPO_ROOT}/scripts/hosted/json-tool.py" get "$path" <<<"$json"
+}
+
+json_get_first() {
+  local json="$1"
+  shift
+  local path value
+  for path in "$@"; do
+    if value="$(json_get "$json" "$path" 2>/dev/null)"; then
+      printf '%s\n' "$value"
+      return 0
+    fi
+  done
+  return 1
+}
+
+generate_ed25519_key_base64() {
+  local go_file
+  go_file="$(mktemp "${TMP_DIR}/genkey.XXXXXX.go")"
+  cat >"$go_file" <<'EOF'
+package main
+import (
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
+	"fmt"
+	"os"
+)
+func main() {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to generate key: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println(base64.StdEncoding.EncodeToString(publicKey))
+	fmt.Println(base64.StdEncoding.EncodeToString(privateKey))
+}
+EOF
+  go run "$go_file"
+  rm -f "$go_file"
+}
+
+echo "SaaS Load Smoke Test"
+echo "===================="
+echo "Workspaces: $NUM_WORKSPACES"
+echo "Threads per workspace: $NUM_THREADS_PER_WORKSPACE"
+echo "Concurrent requests: $NUM_CONCURRENT_REQUESTS"
+echo ""
+
+echo "Building core binary..."
+CORE_BIN="$(build_core_binary "$TMP_DIR/oar-core")"
+SCHEMA_PATH="$(resolve_schema_path)"
+
+echo "Generating workspace service identity key pair..."
+KEYS=$(generate_ed25519_key_base64)
+SERVICE_PUBLIC_KEY=$(echo "$KEYS" | sed -n '1p')
+SERVICE_PRIVATE_KEY=$(echo "$KEYS" | sed -n '2p')
+
+echo "Starting control plane..."
+mkdir -p "$CONTROL_PLANE_ROOT"
+(
+  export OAR_CONTROL_PLANE_WEBAUTHN_RPID="localhost"
+  export OAR_CONTROL_PLANE_WEBAUTHN_ORIGIN="http://localhost:5173"
+  export OAR_CONTROL_PLANE_WORKSPACE_GRANT_ISSUER="$CONTROL_PLANE_BASE_URL"
+  export OAR_CONTROL_PLANE_WORKSPACE_GRANT_AUDIENCE="oar-core"
+  export OAR_CONTROL_PLANE_WORKSPACE_GRANT_SIGNING_KEY="$SERVICE_PRIVATE_KEY"
+  export OAR_CONTROL_PLANE_WORKSPACE_URL_TEMPLATE="http://127.0.0.1/%s"
+  export OAR_CONTROL_PLANE_INVITE_URL_TEMPLATE="${CONTROL_PLANE_BASE_URL}/invites/%s"
+  cd "$REPO_ROOT/core"
+  go run ./cmd/oar-control-plane \
+    --listen-addr "${CONTROL_PLANE_HOST}:${CONTROL_PLANE_PORT}" \
+    --workspace-root "$CONTROL_PLANE_ROOT" \
+    >"$CONTROL_PLANE_LOG" 2>&1
+) &
+CONTROL_PLANE_PID=$!
+
+if ! wait_for_http_ok "$CONTROL_PLANE_BASE_URL/readyz" "$LOAD_TIMEOUT_SECONDS"; then
+  echo "control plane did not become healthy" >&2
+  cat "$CONTROL_PLANE_LOG" >&2 || true
+  exit 1
+fi
+
+echo "✓ Control plane started"
+
+echo ""
+echo "=== Setting up test account and organization ==="
+
+START_REG_RESPONSE=$(curl -sS \
+  -H "content-type: application/json" \
+  -H "origin: http://localhost:5173" \
+  -X POST \
+  -d '{"email":"load-test@example.com","display_name":"Load Test User"}' \
+  "$CONTROL_PLANE_BASE_URL/account/passkeys/registrations/start")
+
+REG_SESSION_ID="$(json_get_first "$START_REG_RESPONSE" registration_session_id id || true)"
+REG_OPTIONS="$(json_get "$START_REG_RESPONSE" public_key_options || true)"
+CHALLENGE="$(json_get "$REG_OPTIONS" challenge || true)"
+REG_USER_ID="$(json_get_first "$REG_OPTIONS" user.id id || true)"
+
+CREDENTIAL_ID="load-cred-$(generate_token 8)"
+CLIENT_DATA=$(python3 -c "
+import json, base64
+data = {'challenge': '$CHALLENGE', 'origin': 'http://localhost:5173', 'type': 'webauthn.create'}
+print(base64.urlsafe_b64encode(json.dumps(data).encode()).decode().rstrip('='))
+")
+
+FINISH_REG_RESPONSE=$(curl -sS \
+  -H "content-type: application/json" \
+  -H "origin: http://localhost:5173" \
+  -X POST \
+  -d "{\"registration_session_id\":\"$REG_SESSION_ID\",\"credential\":{\"id\":\"$CREDENTIAL_ID\",\"rawId\":\"$CREDENTIAL_ID\",\"type\":\"public-key\",\"response\":{\"clientDataJSON\":\"$CLIENT_DATA\",\"userHandle\":\"$REG_USER_ID\"}}}" \
+  "$CONTROL_PLANE_BASE_URL/account/passkeys/registrations/finish")
+
+OWNER_TOKEN="$(json_get_first "$FINISH_REG_RESPONSE" session.access_token access_token || true)"
+if [[ -z "$OWNER_TOKEN" ]]; then
+  echo "failed to get owner token" >&2
+  exit 1
+fi
+
+CREATE_ORG_RESPONSE=$(curl -sS \
+  -H "content-type: application/json" \
+  -H "authorization: Bearer $OWNER_TOKEN" \
+  -X POST \
+  -d '{"slug":"load-org","display_name":"Load Test Org","plan_tier":"team"}' \
+  "$CONTROL_PLANE_BASE_URL/organizations")
+
+ORG_ID="$(json_get_first "$CREATE_ORG_RESPONSE" organization.id id || true)"
+echo "✓ Organization created (id=$ORG_ID)"
+
+echo ""
+echo "=== Provisioning $NUM_WORKSPACES workspaces ==="
+
+START_TIME=$(date +%s.%N)
+
+for i in $(seq 1 "$NUM_WORKSPACES"); do
+  PORT=$((18200 + i))
+  WORKSPACE_PORTS+=("$PORT")
+  WORKSPACE_SERVICE_IDENTITY_ID="saas-load-ws${i}-service"
+
+  CREATE_WS_RESPONSE=$(curl -sS \
+    -H "content-type: application/json" \
+    -H "authorization: Bearer $OWNER_TOKEN" \
+    -X POST \
+    -d "{\"organization_id\":\"$ORG_ID\",\"slug\":\"load-ws-$i\",\"display_name\":\"Load Workspace $i\",\"region\":\"us-central1\",\"workspace_tier\":\"standard\",\"service_identity_id\":\"$WORKSPACE_SERVICE_IDENTITY_ID\",\"service_identity_public_key\":\"$SERVICE_PUBLIC_KEY\"}" \
+    "$CONTROL_PLANE_BASE_URL/workspaces")
+
+  WS_ID="$(json_get_first "$CREATE_WS_RESPONSE" workspace.id id || true)"
+  WS_DEPLOYMENT_ROOT="$(json_get_first "$CREATE_WS_RESPONSE" workspace.deployment_root deployment_root || true)"
+
+  WORKSPACE_IDS+=("$WS_ID")
+  WORKSPACE_BASE_URLS+=("http://${CONTROL_PLANE_HOST}:${PORT}")
+
+  BOOTSTRAP_TOKEN="load-ws${i}-$(generate_token 16)"
+  WORKSPACE_LOG="${WORKSPACE_LOGS_DIR}/ws-${i}.log"
+  export OAR_HUMAN_AUTH_MODE="control_plane"
+  export OAR_CONTROL_PLANE_TOKEN_ISSUER="$CONTROL_PLANE_BASE_URL"
+  export OAR_CONTROL_PLANE_TOKEN_AUDIENCE="oar-core"
+  export OAR_CONTROL_PLANE_TOKEN_PUBLIC_KEY="$SERVICE_PUBLIC_KEY"
+  export OAR_CONTROL_PLANE_WORKSPACE_ID="$WS_ID"
+  export OAR_WORKSPACE_SERVICE_ID="$WORKSPACE_SERVICE_IDENTITY_ID"
+  export OAR_WORKSPACE_SERVICE_PRIVATE_KEY="$SERVICE_PRIVATE_KEY"
+
+  start_core_server \
+    WS_PID \
+    "$CORE_BIN" \
+    "$WS_DEPLOYMENT_ROOT/workspace" \
+    "$SCHEMA_PATH" \
+    "$CONTROL_PLANE_HOST" \
+    "$PORT" \
+    "$WORKSPACE_LOG" \
+    "load-ws${i}-instance" \
+    set \
+    "$BOOTSTRAP_TOKEN" \
+    false \
+    false \
+    false
+
+  WORKSPACE_PIDS+=("$WS_PID")
+
+  if ! wait_for_http_ok "http://${CONTROL_PLANE_HOST}:${PORT}/readyz" 30; then
+    echo "workspace $i did not become healthy" >&2
+    cat "$WORKSPACE_LOG" >&2 || true
+    exit 1
+  fi
+
+  echo "  Workspace $i: id=$WS_ID, port=$PORT"
+done
+
+unset OAR_HUMAN_AUTH_MODE
+unset OAR_CONTROL_PLANE_TOKEN_ISSUER
+unset OAR_CONTROL_PLANE_TOKEN_AUDIENCE
+unset OAR_CONTROL_PLANE_TOKEN_PUBLIC_KEY
+unset OAR_CONTROL_PLANE_WORKSPACE_ID
+unset OAR_WORKSPACE_SERVICE_ID
+unset OAR_WORKSPACE_SERVICE_PRIVATE_KEY
+
+END_TIME=$(date +%s.%N)
+PROVISION_TIME=$(python3 -c "print(f'{$END_TIME - $START_TIME:.2f}')")
+echo "✓ All $NUM_WORKSPACES workspaces provisioned and running (${PROVISION_TIME}s)"
+
+echo ""
+echo "=== Launching sessions for all workspaces ==="
+
+declare -a GRANT_TOKENS
+
+START_TIME=$(date +%s.%N)
+
+for i in "${!WORKSPACE_IDS[@]}"; do
+  WS_ID="${WORKSPACE_IDS[$i]}"
+  BASE_URL="${WORKSPACE_BASE_URLS[$i]}"
+
+  LAUNCH_RESPONSE=$(curl -sS \
+    -H "content-type: application/json" \
+    -H "authorization: Bearer $OWNER_TOKEN" \
+    -X POST \
+    -d "{\"return_path\":\"/ws-$i\"}" \
+    "$CONTROL_PLANE_BASE_URL/workspaces/$WS_ID/launch-sessions")
+
+  EXCHANGE_TOKEN="$(json_get_first "$LAUNCH_RESPONSE" launch_session.exchange_token exchange_token || true)"
+
+  EXCHANGE_RESPONSE=$(curl -sS \
+    -H "content-type: application/json" \
+    -X POST \
+    -d "{\"exchange_token\":\"$EXCHANGE_TOKEN\"}" \
+    "$CONTROL_PLANE_BASE_URL/workspaces/$WS_ID/session-exchange")
+
+  GRANT_TOKEN="$(json_get_first "$EXCHANGE_RESPONSE" grant.bearer_token bearer_token || true)"
+  GRANT_TOKENS+=("$GRANT_TOKEN")
+done
+
+END_TIME=$(date +%s.%N)
+LAUNCH_TIME=$(python3 -c "print(f'{$END_TIME - $START_TIME:.2f}')")
+echo "✓ All sessions launched (${LAUNCH_TIME}s)"
+
+echo ""
+echo "=== Load test: Creating $NUM_THREADS_PER_WORKSPACE threads per workspace ==="
+
+START_TIME=$(date +%s.%N)
+TOTAL_THREADS=0
+FAILED_THREADS=0
+
+for i in "${!WORKSPACE_IDS[@]}"; do
+  BASE_URL="${WORKSPACE_BASE_URLS[$i]}"
+  GRANT_TOKEN="${GRANT_TOKENS[$i]}"
+
+  for j in $(seq 1 "$NUM_THREADS_PER_WORKSPACE"); do
+    THREAD_RESPONSE=$(curl -sS \
+      -H "content-type: application/json" \
+      -H "authorization: Bearer $GRANT_TOKEN" \
+      -X POST \
+      -d "{
+        \"thread\":{
+          \"title\":\"Load thread $i-$j\",
+          \"type\":\"incident\",
+          \"status\":\"active\",
+          \"priority\":\"p2\",
+          \"tags\":[\"load\",\"ws$i\"],
+          \"cadence\":\"daily\",
+          \"current_summary\":\"load test thread $i-$j\",
+          \"next_actions\":[\"verify\"],
+          \"key_artifacts\":[],
+          \"provenance\":{\"sources\":[\"actor_statement:load-test\"]}
+        }
+      }" \
+      "$BASE_URL/threads" 2>/dev/null || true)
+
+    if [[ -n "$THREAD_RESPONSE" ]]; then
+      TOTAL_THREADS=$((TOTAL_THREADS + 1))
+    else
+      FAILED_THREADS=$((FAILED_THREADS + 1))
+    fi
+  done
+done
+
+END_TIME=$(date +%s.%N)
+WRITE_TIME=$(python3 -c "print(f'{$END_TIME - $START_TIME:.2f}')")
+
+echo "✓ Thread creation: $TOTAL_THREADS created, $FAILED_THREADS failed (${WRITE_TIME}s)"
+
+echo ""
+echo "=== Load test: Concurrent reads across all workspaces ==="
+
+START_TIME=$(date +%s.%N)
+TOTAL_READS=0
+FAILED_READS=0
+
+for i in "${!WORKSPACE_IDS[@]}"; do
+  BASE_URL="${WORKSPACE_BASE_URLS[$i]}"
+  GRANT_TOKEN="${GRANT_TOKENS[$i]}"
+
+  for j in $(seq 1 "$NUM_CONCURRENT_REQUESTS"); do
+    READ_STATUS=$(curl -sS -o /dev/null -w '%{http_code}' \
+      -H "authorization: Bearer $GRANT_TOKEN" \
+      "$BASE_URL/threads" 2>/dev/null || echo "000")
+
+    if [[ "$READ_STATUS" == "200" ]]; then
+      TOTAL_READS=$((TOTAL_READS + 1))
+    else
+      FAILED_READS=$((FAILED_READS + 1))
+    fi
+  done
+done
+
+END_TIME=$(date +%s.%N)
+READ_TIME=$(python3 -c "print(f'{$END_TIME - $START_TIME:.2f}')")
+
+echo "✓ Concurrent reads: $TOTAL_READS successful, $FAILED_READS failed (${READ_TIME}s)"
+
+echo ""
+echo "=== Verifying usage summary ==="
+
+USAGE_RESPONSE=$(curl -sS \
+  -H "authorization: Bearer $OWNER_TOKEN" \
+  "$CONTROL_PLANE_BASE_URL/organizations/$ORG_ID/usage-summary")
+
+USAGE_WORKSPACE_COUNT="$(json_get_first "$USAGE_RESPONSE" summary.usage.workspace_count workspace_count || true)"
+echo "✓ Usage shows $USAGE_WORKSPACE_COUNT workspaces"
+
+echo ""
+echo "=== Checking workspace inventory ==="
+
+INVENTORY_RESPONSE=$(curl -sS \
+  -H "authorization: Bearer $OWNER_TOKEN" \
+  "$CONTROL_PLANE_BASE_URL/organizations/$ORG_ID/workspace-inventory")
+
+INVENTORY_WS_COUNT=$(python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+workspaces = data.get('workspaces', [])
+print(len(workspaces))
+" <<<"$INVENTORY_RESPONSE" 2>/dev/null || echo "0")
+
+echo "✓ Inventory shows $INVENTORY_WS_COUNT workspaces"
+
+if [[ "$INVENTORY_WS_COUNT" != "$NUM_WORKSPACES" ]]; then
+  echo "WARNING: inventory workspace count mismatch (expected $NUM_WORKSPACES)" >&2
+fi
+
+echo ""
+cat >"$TMP_DIR/summary.txt" <<SUMMARY
+control_plane_base_url=${CONTROL_PLANE_BASE_URL}
+organization_id=${ORG_ID}
+num_workspaces=${NUM_WORKSPACES}
+num_threads_per_workspace=${NUM_THREADS_PER_WORKSPACE}
+num_concurrent_requests=${NUM_CONCURRENT_REQUESTS}
+provision_time_seconds=${PROVISION_TIME}
+launch_time_seconds=${LAUNCH_TIME}
+write_time_seconds=${WRITE_TIME}
+read_time_seconds=${READ_TIME}
+total_threads_created=${TOTAL_THREADS}
+total_reads_successful=${TOTAL_READS}
+usage_workspace_count=${USAGE_WORKSPACE_COUNT}
+inventory_workspace_count=${INVENTORY_WS_COUNT}
+artifacts_dir=${TMP_DIR}
+SUMMARY
+
+echo ""
+echo "=== SaaS load smoke completed successfully ==="
+cat "$TMP_DIR/summary.txt"

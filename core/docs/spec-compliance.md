@@ -1,6 +1,6 @@
 # oar-core Spec Compliance (v0.2.2)
 
-Last updated: 2026-03-13
+Last updated: 2026-03-22
 
 This checklist maps key requirements from:
 - `docs/oar-core-spec.md`
@@ -17,7 +17,8 @@ For each item, it points to implementation code, validating tests, and any known
 
 | Requirement | Source | Implementation | Tests | Status / Gap |
 |---|---|---|---|---|
-| Workspace init creates SQLite + filesystem layout and is idempotent | Spec §2.1 | `internal/storage/workspace.go`, `internal/storage/migrations.go` | `internal/storage/workspace_test.go` | Implemented |
+| Workspace init creates SQLite + blob layout and is idempotent | Spec §2.1 | `internal/storage/workspace.go`, `internal/storage/migrations.go` | `internal/storage/workspace_test.go` | Implemented |
+| Blob backend seam supports filesystem and object-style backends, with backend-reported usage accounting | Spec §2.1, §3.3 | `internal/blob/*.go`, `internal/primitives/quota.go`, `cmd/oar-core/main.go` | `internal/blob/filesystem_test.go`, `internal/blob/object_test.go`, `internal/primitives/store_test.go` | Implemented |
 | Health/version endpoints expose local readiness + schema version | Spec §7, §11 | `internal/server/handler.go`, `cmd/oar-core/main.go` | `internal/server/handler_test.go`, `internal/storage/workspace_test.go` | Implemented |
 | Compatibility handshake + version headers + generated metadata discovery endpoints (`/meta/handshake`, `/meta/commands*`, `/meta/concepts*`) | CLI spec draft §2.1–§2.4 | `internal/server/handler.go`, `internal/server/meta_handlers.go`, `cmd/oar-core/main.go` | `internal/server/meta_stream_integration_test.go` | Implemented |
 | SSE streaming endpoints (`/events/stream`, `/inbox/stream`) with `Last-Event-ID` resume | CLI spec draft §1.1, §2.4 | `internal/server/handler.go`, `internal/server/stream_handlers.go` | `internal/server/meta_stream_integration_test.go` | Implemented |
@@ -53,6 +54,7 @@ For each item, it points to implementation code, validating tests, and any known
 | Inbox and thread derived views are asynchronously materialized, GET paths stay side-effect free, and responses surface freshness metadata (`current`/`pending`/`missing`/`error`) | Spec §7.4; schema `derived.inbox_item`, `derived.inbox_derivation_rules` | `internal/server/inbox_handlers.go`, `internal/server/derived_projections.go`, `internal/server/projection_worker.go`, `internal/primitives/derived_store.go` | `internal/server/inbox_logic_test.go`, `internal/server/inbox_integration_test.go`, `internal/server/derived_projection_integration_test.go`, `internal/server/api_comprehensive_integration_test.go` | Implemented |
 | Staleness detection uses an explicit collaboration activity set (messages, decisions, work orders/receipts/reviews, document lifecycle events, commitment progress, and non-create user snapshot edits) while excluding coordination noise such as inbox ack, exception notifications, thread creation, and derived `open_commitments` maintenance | Spec §9 | `internal/server/staleness.go`, `internal/server/derived_projections.go`, `internal/primitives/derived_store.go`, `internal/primitives/store.go` | `internal/server/staleness_test.go`, `internal/server/staleness_integration_test.go`, `internal/server/commitments_integration_test.go`, `internal/server/derived_projection_integration_test.go` | Implemented |
 | Background projection maintainer runs scheduled stale scans, refreshes a durable dirty queue, and exposes lag/scan health through protected `/ops/health` while public probes stay minimal | Spec §7.4, §9 | `internal/server/projection_maintenance.go`, `internal/server/handler.go`, `internal/server/derived_projections.go`, `internal/primitives/derived_store.go` | `internal/server/projection_maintenance_integration_test.go`, `internal/server/handler_test.go` | Implemented |
+| Workspace usage summary endpoint exposes blob bytes, object count, canonical row counts, and configured quota envelope for control-plane polling | Spec §2.1, §7.1 | `internal/server/primitives_handlers.go`, `internal/server/handler.go`, `internal/primitives/quota.go` | `internal/server/auth_integration_test.go`, `internal/primitives/store_test.go` | Implemented |
 | Derived rebuild endpoint is idempotent, repairs stale exceptions, and rebuilds materialized projections | Spec §7.4 | `internal/server/inbox_handlers.go` (`handleRebuildDerived`), `internal/server/derived_projections.go` | `internal/server/derived_rebuild_integration_test.go` | Implemented |
 | Full end-to-end API workflow remains green in one integration path | Spec §7, §8, §10 | Multiple server/store modules | `internal/server/api_comprehensive_integration_test.go` | Implemented |
 

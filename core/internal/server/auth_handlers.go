@@ -2,14 +2,13 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 
 	"organization-autorunner-core/internal/auth"
+	"organization-autorunner-core/internal/controlplaneauth"
 )
 
 type principalContextKey struct{}
@@ -45,8 +44,7 @@ func handleRegisterAgent(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		BootstrapToken string `json:"bootstrap_token"`
 		InviteToken    string `json:"invite_token"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
@@ -94,8 +92,7 @@ func handleIssueAuthToken(w http.ResponseWriter, r *http.Request, opts handlerOp
 		SignedAt     string `json:"signed_at"`
 		Signature    string `json:"signature"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
@@ -165,12 +162,15 @@ func handlePatchCurrentAgent(w http.ResponseWriter, r *http.Request, opts handle
 	if !ok {
 		return
 	}
+	if principal.AuthMethod == auth.AuthMethodControlPlane {
+		writeError(w, http.StatusForbidden, "access_denied", "control-plane-backed principals cannot modify workspace-local auth state")
+		return
+	}
 
 	var req struct {
 		Username string `json:"username"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
@@ -197,12 +197,15 @@ func handleRotateCurrentAgentKey(w http.ResponseWriter, r *http.Request, opts ha
 	if !ok {
 		return
 	}
+	if principal.AuthMethod == auth.AuthMethodControlPlane {
+		writeError(w, http.StatusForbidden, "access_denied", "control-plane-backed principals cannot rotate workspace-local keys")
+		return
+	}
 
 	var req struct {
 		PublicKey string `json:"public_key"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
@@ -229,6 +232,10 @@ func handleRevokeCurrentAgent(w http.ResponseWriter, r *http.Request, opts handl
 	if !ok {
 		return
 	}
+	if principal.AuthMethod == auth.AuthMethodControlPlane {
+		writeError(w, http.StatusForbidden, "access_denied", "control-plane-backed principals cannot be revoked locally")
+		return
+	}
 
 	req, ok := decodeRevokePrincipalRequest(w, r)
 	if !ok {
@@ -236,16 +243,19 @@ func handleRevokeCurrentAgent(w http.ResponseWriter, r *http.Request, opts handl
 	}
 
 	result, err := opts.authStore.RevokeAgent(r.Context(), principal.AgentID, auth.RevokeAgentInput{
-		Actor:           *principal,
-		Mode:            auth.RevocationModeSelf,
-		ForceLastActive: req.ForceLastActive,
+		Actor:              *principal,
+		Mode:               auth.RevocationModeSelf,
+		AllowHumanLockout:  req.AllowHumanLockout,
+		HumanLockoutReason: req.HumanLockoutReason,
 	})
 	if err != nil {
 		switch {
 		case errors.Is(err, auth.ErrAgentNotFound):
 			writeError(w, http.StatusUnauthorized, "invalid_token", "authenticated agent no longer exists")
 		case errors.Is(err, auth.ErrLastActivePrincipal):
-			writeError(w, http.StatusConflict, "last_active_principal", "refusing to revoke the last active principal without force_last_active=true")
+			writeError(w, http.StatusConflict, "last_active_principal", "refusing to revoke the last active human principal without allow_human_lockout=true and human_lockout_reason")
+		case errors.Is(err, auth.ErrInvalidRequest):
+			writeError(w, http.StatusBadRequest, "invalid_request", sanitizeAuthError(err))
 		case errors.Is(err, auth.ErrAuthRequired):
 			writeError(w, http.StatusUnauthorized, "auth_required", "authorization header is required")
 		default:
@@ -269,16 +279,19 @@ func handleRevokePrincipal(w http.ResponseWriter, r *http.Request, opts handlerO
 	}
 
 	result, err := opts.authStore.RevokeAgent(r.Context(), agentID, auth.RevokeAgentInput{
-		Actor:           *principal,
-		Mode:            auth.RevocationModeAdmin,
-		ForceLastActive: req.ForceLastActive,
+		Actor:              *principal,
+		Mode:               auth.RevocationModeAdmin,
+		AllowHumanLockout:  req.AllowHumanLockout,
+		HumanLockoutReason: req.HumanLockoutReason,
 	})
 	if err != nil {
 		switch {
 		case errors.Is(err, auth.ErrAgentNotFound):
 			writeError(w, http.StatusNotFound, "not_found", "principal not found")
 		case errors.Is(err, auth.ErrLastActivePrincipal):
-			writeError(w, http.StatusConflict, "last_active_principal", "refusing to revoke the last active principal without force_last_active=true")
+			writeError(w, http.StatusConflict, "last_active_principal", "refusing to revoke the last active human principal without allow_human_lockout=true and human_lockout_reason")
+		case errors.Is(err, auth.ErrInvalidRequest):
+			writeError(w, http.StatusBadRequest, "invalid_request", sanitizeAuthError(err))
 		case errors.Is(err, auth.ErrAuthRequired):
 			writeError(w, http.StatusUnauthorized, "auth_required", "authorization header is required")
 		default:
@@ -291,19 +304,17 @@ func handleRevokePrincipal(w http.ResponseWriter, r *http.Request, opts handlerO
 }
 
 func decodeRevokePrincipalRequest(w http.ResponseWriter, r *http.Request) (struct {
-	ForceLastActive bool `json:"force_last_active"`
+	AllowHumanLockout  bool   `json:"allow_human_lockout"`
+	HumanLockoutReason string `json:"human_lockout_reason"`
 }, bool) {
 	var req struct {
-		ForceLastActive bool `json:"force_last_active"`
+		AllowHumanLockout  bool   `json:"allow_human_lockout"`
+		HumanLockoutReason string `json:"human_lockout_reason"`
 	}
 	if r == nil || r.Body == nil {
 		return req, true
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		if errors.Is(err, io.EOF) {
-			return req, true
-		}
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	if !decodeJSONBodyAllowEmpty(w, r, &req) {
 		return req, false
 	}
 	return req, true
@@ -360,6 +371,27 @@ func authenticatePrincipalFromHeader(w http.ResponseWriter, r *http.Request, opt
 
 	principal, err := opts.authStore.AuthenticateAccessToken(r.Context(), token)
 	if err != nil {
+		if errors.Is(err, auth.ErrInvalidToken) && opts.controlPlaneHumanVerifier != nil {
+			identity, verifyErr := opts.controlPlaneHumanVerifier.Verify(token)
+			if verifyErr == nil {
+				hydratedPrincipal, hydrateErr := opts.authStore.EnsureControlPlanePrincipal(r.Context(), auth.EnsureControlPlanePrincipalInput{
+					Issuer:         identity.Issuer,
+					Subject:        identity.Subject,
+					WorkspaceID:    identity.WorkspaceID,
+					OrganizationID: identity.OrganizationID,
+					Email:          identity.Email,
+					DisplayName:    identity.DisplayName,
+					LaunchID:       identity.LaunchID,
+				})
+				if hydrateErr != nil {
+					writeError(w, http.StatusInternalServerError, "internal_error", "failed to hydrate control-plane principal")
+					return nil, false
+				}
+				principalCopy := hydratedPrincipal
+				cacheAuthenticatedPrincipal(r, &principalCopy)
+				return &principalCopy, true
+			}
+		}
 		switch {
 		case errors.Is(err, auth.ErrInvalidToken):
 			writeError(w, http.StatusUnauthorized, "invalid_token", "token is invalid, expired, or revoked")
@@ -395,7 +427,7 @@ func resolveWriteActorID(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		return principal.ActorID, true
 	}
 	if requestedActorID != principal.ActorID {
-		writeError(w, http.StatusForbidden, "key_mismatch", "actor_id does not match authenticated agent principal")
+		writeError(w, http.StatusForbidden, "key_mismatch", "actor_id does not match authenticated principal")
 		return "", false
 	}
 
@@ -473,4 +505,8 @@ func onboardingRequiredMessage(err error) string {
 
 func isOnboardingTokenError(err error) bool {
 	return errors.Is(err, auth.ErrInvalidToken) || errors.Is(err, auth.ErrInviteKindMismatch)
+}
+
+func controlPlaneHumanAuthEnabled(opts handlerOptions) bool {
+	return strings.TrimSpace(opts.humanAuthMode) == controlplaneauth.HumanAuthModeControlPlane
 }

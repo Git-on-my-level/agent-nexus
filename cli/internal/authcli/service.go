@@ -96,14 +96,20 @@ type Principal struct {
 }
 
 type ListPrincipalsResult struct {
-	Principals []Principal `json:"principals"`
-	NextCursor string      `json:"next_cursor,omitempty"`
+	Principals                []Principal `json:"principals"`
+	ActiveHumanPrincipalCount int         `json:"active_human_principal_count"`
+	NextCursor                string      `json:"next_cursor,omitempty"`
 }
 
 type Revocation struct {
-	Mode            string `json:"mode"`
-	AlreadyRevoked  bool   `json:"already_revoked"`
-	ForceLastActive bool   `json:"force_last_active"`
+	Mode              string `json:"mode"`
+	AlreadyRevoked    bool   `json:"already_revoked"`
+	AllowHumanLockout bool   `json:"allow_human_lockout"`
+}
+
+type RevokeOptions struct {
+	AllowHumanLockout  bool   `json:"allow_human_lockout"`
+	HumanLockoutReason string `json:"human_lockout_reason,omitempty"`
 }
 
 type RevokePrincipalResult struct {
@@ -365,7 +371,7 @@ func (s *Service) RotateKey(ctx context.Context) (WhoAmIResult, error) {
 }
 
 func (s *Service) Revoke(ctx context.Context) (WhoAmIResult, error) {
-	result, err := s.RevokeCurrentPrincipal(ctx, false)
+	result, err := s.RevokeCurrentPrincipal(ctx, RevokeOptions{})
 	if err != nil {
 		return WhoAmIResult{}, err
 	}
@@ -393,7 +399,7 @@ func (s *Service) Revoke(ctx context.Context) (WhoAmIResult, error) {
 	}, nil
 }
 
-func (s *Service) RevokeCurrentPrincipal(ctx context.Context, forceLastActive bool) (RevokePrincipalResult, error) {
+func (s *Service) RevokeCurrentPrincipal(ctx context.Context, opts RevokeOptions) (RevokePrincipalResult, error) {
 	prof, err := s.ensureAccessToken(ctx)
 	if err != nil {
 		return RevokePrincipalResult{}, err
@@ -402,7 +408,10 @@ func (s *Service) RevokeCurrentPrincipal(ctx context.Context, forceLastActive bo
 	if err != nil {
 		return RevokePrincipalResult{}, errnorm.Wrap(errnorm.KindLocal, "http_client_init_failed", "failed to initialize HTTP client", err)
 	}
-	body, _ := json.Marshal(map[string]any{"force_last_active": forceLastActive})
+	body, _ := json.Marshal(map[string]any{
+		"allow_human_lockout":  opts.AllowHumanLockout,
+		"human_lockout_reason": strings.TrimSpace(opts.HumanLockoutReason),
+	})
 	resp, err := client.RawCall(ctx, httpclient.RawRequest{Method: http.MethodPost, Path: "/agents/me/revoke", Body: body})
 	if err != nil {
 		return RevokePrincipalResult{}, errnorm.Wrap(errnorm.KindNetwork, "request_failed", "revoke request failed", err)
@@ -420,7 +429,7 @@ func (s *Service) RevokeCurrentPrincipal(ctx context.Context, forceLastActive bo
 	return RevokePrincipalResult{Principal: payload.Principal, Revocation: payload.Revocation}, nil
 }
 
-func (s *Service) RevokePrincipal(ctx context.Context, agentID string, forceLastActive bool) (RevokePrincipalResult, error) {
+func (s *Service) RevokePrincipal(ctx context.Context, agentID string, opts RevokeOptions) (RevokePrincipalResult, error) {
 	agentID = strings.TrimSpace(agentID)
 	if agentID == "" {
 		return RevokePrincipalResult{}, errnorm.Usage("invalid_request", "agent-id is required")
@@ -436,7 +445,10 @@ func (s *Service) RevokePrincipal(ctx context.Context, agentID string, forceLast
 	if err != nil {
 		return RevokePrincipalResult{}, errnorm.Wrap(errnorm.KindLocal, "http_client_init_failed", "failed to initialize HTTP client", err)
 	}
-	body, _ := json.Marshal(map[string]any{"force_last_active": forceLastActive})
+	body, _ := json.Marshal(map[string]any{
+		"allow_human_lockout":  opts.AllowHumanLockout,
+		"human_lockout_reason": strings.TrimSpace(opts.HumanLockoutReason),
+	})
 	path := "/auth/principals/" + agentID + "/revoke"
 	resp, err := client.RawCall(ctx, httpclient.RawRequest{Method: http.MethodPost, Path: path, Body: body})
 	if err != nil {
@@ -627,13 +639,18 @@ func (s *Service) ListPrincipals(ctx context.Context, limit int, cursor string) 
 	}
 
 	var payload struct {
-		Principals []Principal `json:"principals"`
-		NextCursor string      `json:"next_cursor"`
+		Principals                []Principal `json:"principals"`
+		ActiveHumanPrincipalCount int         `json:"active_human_principal_count"`
+		NextCursor                string      `json:"next_cursor"`
 	}
 	if err := json.Unmarshal(resp.Body, &payload); err != nil {
 		return ListPrincipalsResult{}, errnorm.Wrap(errnorm.KindRemote, "invalid_response", "list principals response is not valid JSON", err)
 	}
-	return ListPrincipalsResult{Principals: payload.Principals, NextCursor: payload.NextCursor}, nil
+	return ListPrincipalsResult{
+		Principals:                payload.Principals,
+		ActiveHumanPrincipalCount: payload.ActiveHumanPrincipalCount,
+		NextCursor:                payload.NextCursor,
+	}, nil
 }
 
 func (s *Service) ListAudit(ctx context.Context, limit int, cursor string) (ListAuditResult, error) {

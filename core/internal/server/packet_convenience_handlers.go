@@ -1,7 +1,6 @@
 package server
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -83,8 +82,7 @@ func createPacketArtifactAndEvent(w http.ResponseWriter, r *http.Request, opts h
 		Artifact   map[string]any `json:"artifact"`
 		Packet     map[string]any `json:"packet"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 	if req.Artifact == nil {
@@ -167,6 +165,9 @@ func createPacketArtifactAndEvent(w http.ResponseWriter, r *http.Request, opts h
 
 	artifact, storedEvent, err := opts.primitiveStore.CreateArtifactAndEvent(r.Context(), actorID, req.Artifact, req.Packet, "structured", event)
 	if err != nil {
+		if writePrimitiveQuotaViolationError(w, err) {
+			return
+		}
 		if errors.Is(err, primitives.ErrConflict) && strings.TrimSpace(req.RequestKey) != "" {
 			existingArtifact, artifactErr := opts.primitiveStore.GetArtifact(r.Context(), artifactID)
 			existingEvent, eventErr := opts.primitiveStore.GetEvent(r.Context(), firstNonEmptyString(event["id"]))

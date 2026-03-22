@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"sort"
@@ -81,8 +80,7 @@ func handleCreateBoard(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		RequestKey string         `json:"request_key"`
 		Board      map[string]any `json:"board"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 	if req.Board == nil {
@@ -197,8 +195,7 @@ func handleUpdateBoard(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		IfUpdatedAt *string        `json:"if_updated_at"`
 		Patch       map[string]any `json:"patch"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 	if req.IfUpdatedAt == nil {
@@ -311,8 +308,7 @@ func handleAddBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		AfterThreadID    string  `json:"after_thread_id"`
 		PinnedDocumentID *string `json:"pinned_document_id"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 	threadID := strings.TrimSpace(req.ThreadID)
@@ -418,8 +414,7 @@ func handleUpdateBoardCard(w http.ResponseWriter, r *http.Request, opts handlerO
 		IfBoardUpdatedAt *string        `json:"if_board_updated_at"`
 		Patch            map[string]any `json:"patch"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 	if req.IfBoardUpdatedAt == nil {
@@ -507,8 +502,7 @@ func handleMoveBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		BeforeThreadID   string  `json:"before_thread_id"`
 		AfterThreadID    string  `json:"after_thread_id"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 	if req.IfBoardUpdatedAt == nil {
@@ -578,8 +572,7 @@ func handleRemoveBoardCard(w http.ResponseWriter, r *http.Request, opts handlerO
 		ActorID          string  `json:"actor_id"`
 		IfBoardUpdatedAt *string `json:"if_board_updated_at"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 	if req.IfBoardUpdatedAt == nil {

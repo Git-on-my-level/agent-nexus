@@ -4,7 +4,7 @@
 
 oar-core is the canonical state and evidence system for Organization Autorunner (OAR).
 
-OAR is a manager and executive operating system, not a generic work-management tool. The product foundation and architecture decisions are documented in [docs/architecture/foundation.md](../../docs/architecture/foundation.md). oar-core implements the canonical runtime truth (SQLite + filesystem blobs) and owns the institutional memory — the durable truth, the evidence trail, the coordination artifacts. It has no opinion on how actors are instantiated, orchestrated, or upgraded. An actor authenticates with an ID, reads state, does work, writes back. Whether that actor is a human, a Claude agent, an open-source agent framework, or something that doesn't exist yet is outside oar-core's scope.
+OAR is a manager and executive operating system, not a generic work-management tool. The product foundation and architecture decisions are documented in [docs/architecture/foundation.md](../../docs/architecture/foundation.md). oar-core implements the canonical runtime truth (SQLite plus a blob backend seam) and owns the institutional memory — the durable truth, the evidence trail, the coordination artifacts. It has no opinion on how actors are instantiated, orchestrated, or upgraded. An actor authenticates with an ID, reads state, does work, writes back. Whether that actor is a human, a Claude agent, an open-source agent framework, or something that doesn't exist yet is outside oar-core's scope.
 
 oar-core:
 - Maintains durable organizational state (events, snapshots, artifacts, documents, boards).
@@ -39,7 +39,7 @@ oar-core does **not**:
 
 ### 1.5 Implementation baseline (v0)
 - The reference backend implementation is Go-first.
-- Language choice MUST NOT change the external contract: HTTP/JSON API + SQLite/filesystem storage remain the system boundary.
+- Language choice MUST NOT change the external contract: HTTP/JSON API + SQLite-backed canonical state plus a replaceable blob backend remain the system boundary.
 
 ---
 
@@ -47,7 +47,7 @@ oar-core does **not**:
 
 ### 2.1 SQLite + blob backend seam
 - **SQLite** stores events (rows), snapshots (rows), artifact metadata (rows), documents (rows), document_revisions (rows), actor registry (rows), and derived views (rows).
-- **Blob storage** stores artifact content. The first backend is the local filesystem, but canonical artifact/document identity is content-addressed by `content_hash` and `content_type`, not by a filesystem path.
+- **Blob storage** stores artifact content. The first backend is the local filesystem, but canonical artifact/document identity is content-addressed by `content_hash` and `content_type`, not by a backend-specific path.
 - Hosted deployments MUST treat blob storage as a replaceable backend seam rather than a client-visible contract.
 - Clients and agents SHOULD prefer the API, CLI, and generated clients over direct filesystem access.
 
@@ -200,6 +200,12 @@ access in v1 — any authenticated principal can perform any operation. The
 registry exists for display, attribution, and future evolution (authority
 tiers, reliability scores, invite lifecycle metadata, etc.).
 
+SaaS-v-next introduces a second human-auth mode. In `control_plane` human auth
+mode, the workspace trusts signed control-plane-issued workspace grants,
+hydrates a stable local shadow principal on first access, and preserves that
+the human auth method is `control_plane` in auth inventory/audit metadata.
+Workspace-local Ed25519 agent auth remains unchanged in both modes.
+
 **Fields:** per `oar-schema.yaml` → `actor.registry_fields`
 
 - Actor IDs are referenced by `actor_id` on events, `updated_by` on snapshots, and `created_by` on artifacts.
@@ -221,10 +227,11 @@ authenticated principal that resolves to one.
 - Get thread timeline (events + referenced snapshots/artifacts, ordered by time)
 - Get snapshot by ID
 - List commitments (filters: thread, owner, status, due date range)
-- Get artifact by ID (metadata + content path)
+- Get artifact by ID (metadata + content hash)
 - List artifacts (filters: kind, thread, time range)
 - List documents, get document head, get document history, get document revision
 - Get inbox items (grouped by category, sorted by time/due date)
+- Get workspace usage summary for control-plane consumption
 
 ### 7.2 Write / mutate
 - Register actor

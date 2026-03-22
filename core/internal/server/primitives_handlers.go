@@ -1,7 +1,6 @@
 package server
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -26,8 +25,7 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		RequestKey string         `json:"request_key"`
 		Event      map[string]any `json:"event"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
@@ -172,8 +170,7 @@ func handleCreateArtifact(w http.ResponseWriter, r *http.Request, opts handlerOp
 		Content     any            `json:"content"`
 		ContentType string         `json:"content_type"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
@@ -235,6 +232,9 @@ func handleCreateArtifact(w http.ResponseWriter, r *http.Request, opts handlerOp
 
 	artifact, err := opts.primitiveStore.CreateArtifact(r.Context(), actorID, req.Artifact, req.Content, req.ContentType)
 	if err != nil {
+		if writePrimitiveQuotaViolationError(w, err) {
+			return
+		}
 		if errors.Is(err, primitives.ErrConflict) {
 			writeError(w, http.StatusConflict, "conflict", "artifact already exists")
 			return
@@ -298,6 +298,21 @@ func handleGetArtifactContent(w http.ResponseWriter, r *http.Request, opts handl
 
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(content)
+}
+
+func handleGetUsageSummary(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+
+	summary, err := opts.primitiveStore.GetWorkspaceUsageSummary(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load workspace usage summary")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"summary": summary})
 }
 
 func handleListArtifacts(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
@@ -404,8 +419,7 @@ func handleTombstoneArtifact(w http.ResponseWriter, r *http.Request, opts handle
 		ActorID string `json:"actor_id"`
 		Reason  string `json:"reason"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 

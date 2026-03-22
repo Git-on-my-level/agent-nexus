@@ -2,12 +2,14 @@
 
 Use these as fixed assumptions for the hosted-v1 ticket pack:
 
-- managed hosted offering now, control plane later
+- managed hosted offering now; SaaS v-next may add a control plane, but
+  hosted-v1 work does not depend on it
 - one isolated workspace deployment per customer/workspace
 - no shared row-level multitenancy
 - auth required on workspace data routes outside development mode
 - public registration closed; onboarding is bootstrap/invite-gated
-- passkey humans and Ed25519 key-pair agents are both workspace principals
+- hosted v1 may keep passkey humans and Ed25519 key-pair agents as workspace
+  principals
 - no fine-grained RBAC in v1
 - any authenticated principal may issue and revoke invites in v1
 - agents prefer CLI/generated clients over hand-authored HTTP

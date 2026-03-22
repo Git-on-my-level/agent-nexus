@@ -194,3 +194,41 @@ func TestFilesystemBackendPromoteSkipsExisting(t *testing.T) {
 		t.Fatalf("Data was overwritten: got %q, want %q", string(readData), string(originalData))
 	}
 }
+
+func TestFilesystemBackendUsageCountsFilesAndBytes(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	root := t.TempDir()
+	backend := NewFilesystemBackend(root)
+
+	first := []byte("alpha")
+	second := []byte("bravo-charlie")
+
+	staged, err := backend.Write(ctx, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", first)
+	if err != nil {
+		t.Fatalf("Write first: %v", err)
+	}
+	if err := staged.Promote(); err != nil {
+		t.Fatalf("Promote first: %v", err)
+	}
+
+	staged, err = backend.Write(ctx, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", second)
+	if err != nil {
+		t.Fatalf("Write second: %v", err)
+	}
+	if err := staged.Promote(); err != nil {
+		t.Fatalf("Promote second: %v", err)
+	}
+
+	usage, err := backend.Usage(ctx)
+	if err != nil {
+		t.Fatalf("Usage: %v", err)
+	}
+	if usage.Objects != 2 {
+		t.Fatalf("expected 2 objects, got %d", usage.Objects)
+	}
+	if usage.Bytes != int64(len(first)+len(second)) {
+		t.Fatalf("expected %d bytes, got %d", len(first)+len(second), usage.Bytes)
+	}
+}

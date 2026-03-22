@@ -6,6 +6,7 @@ WEB_UI_DIR := web-ui
 
 CORE_HOST ?= 127.0.0.1
 CORE_PORT ?= 8000
+CONTROL_PLANE_PORT ?= 8100
 WEB_UI_PORT ?= 5173
 CORE_BASE_URL ?= http://$(CORE_HOST):$(CORE_PORT)
 SEED_CORE ?= 1
@@ -13,7 +14,7 @@ FORCE_SEED ?= 0
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup check serve lint test format contract-gen contract-check e2e-smoke hosted-smoke hosted-ops-test hosted-ops-smoke cli-check cli-test cli-build cli-integration-test core-% web-ui-%
+.PHONY: help setup check serve serve-control-plane lint test format contract-gen contract-check e2e-smoke hosted-smoke hosted-ops-test hosted-ops-smoke saas-smoke saas-e2e saas-load-smoke cli-check cli-test cli-build cli-integration-test core-% web-ui-%
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z0-9_.-]+:.*##/ {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -77,6 +78,15 @@ hosted-ops-test: ## Run hosted provisioning/backup/restore verification tests
 hosted-ops-smoke: ## Run one hosted provisioning/backup/restore smoke flow
 	./scripts/hosted/smoke-test.sh
 
+saas-smoke: ## Run SaaS control-plane multi-workspace smoke test (account, org, workspaces, invite, launch, session-exchange, workspace-rw)
+	./scripts/saas-smoke
+
+saas-e2e: ## Run extended SaaS e2e flow (multi-workspace isolation, backup, session revocation)
+	./scripts/saas-e2e
+
+saas-load-smoke: ## Run SaaS load smoke test (multiple workspaces with concurrent reads/writes)
+	./scripts/saas-load-smoke
+
 serve: ## Start core, seed mock dataset into core, then start web-ui
 	@set -euo pipefail; \
 	trap 'for pid in $$(jobs -p); do kill "$$pid" 2>/dev/null || true; done' EXIT INT TERM; \
@@ -90,6 +100,9 @@ serve: ## Start core, seed mock dataset into core, then start web-ui
 	OAR_CORE_BASE_URL="$(CORE_BASE_URL)" $(MAKE) -C $(WEB_UI_DIR) serve PORT="$(WEB_UI_PORT)" & \
 	ui_pid=$$!; \
 	wait $$core_pid $$ui_pid
+
+serve-control-plane: ## Start the SaaS control-plane service locally
+	$(MAKE) -C $(CORE_DIR) serve-control-plane HOST="$(CORE_HOST)" PORT="$(CONTROL_PLANE_PORT)"
 
 core-%: ## Pass-through target to core Makefile
 	$(MAKE) -C $(CORE_DIR) $*

@@ -1,8 +1,5 @@
 import { browser } from "$app/environment";
-import {
-  createAuthTokenProvider,
-  getAuthenticatedActorId,
-} from "$lib/authSession";
+import { getAuthenticatedActorId } from "$lib/authSession";
 import { getSelectedActorId } from "$lib/actorSession";
 import { createOarCoreClient } from "$lib/oarCoreClient";
 import { getCurrentWorkspaceSlug } from "$lib/workspaceContext";
@@ -22,9 +19,6 @@ function resolveBrowserClient() {
     browserClient = createOarCoreClient({
       actorIdProvider: () => getAuthenticatedActorId() || getSelectedActorId(),
       lockActorIdProvider: () => Boolean(getAuthenticatedActorId()),
-      tokenProvider: createAuthTokenProvider(fetchFn, {
-        workspaceSlugProvider: () => getCurrentWorkspaceSlug(),
-      }),
       requestContextHeadersProvider: () => ({
         [WORKSPACE_HEADER]: getCurrentWorkspaceSlug(),
       }),

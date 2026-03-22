@@ -1,6 +1,8 @@
-export function buildProxyRequestInit(event) {
+export function buildProxyRequestInit(event, { body } = {}) {
   const headers = new Headers(event.request.headers);
   headers.delete("host");
+  headers.delete("cookie");
+  headers.delete("authorization");
   headers.set("x-forwarded-host", event.url.host);
   headers.set("x-forwarded-proto", event.url.protocol.replace(/:$/, ""));
 
@@ -11,7 +13,7 @@ export function buildProxyRequestInit(event) {
   };
 
   if (method !== "GET" && method !== "HEAD") {
-    requestInit.body = event.request.body;
+    requestInit.body = body ?? event.request.body;
     requestInit.duplex = "half";
   }
 

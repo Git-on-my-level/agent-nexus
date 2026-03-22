@@ -418,7 +418,7 @@
       ],
       "stability": "beta",
       "surface": "utility",
-      "agent_notes": "Requires Bearer access token. `force_last_active=true` is an explicit break-glass path that can leave the workspace without an active principal.",
+      "agent_notes": "Requires Bearer access token. `allow_human_lockout=true` is an explicit break-glass path that can leave the workspace without an active human principal; include a non-empty `human_lockout_reason`.",
       "examples": [
         {
           "title": "Revoke self",
@@ -428,8 +428,12 @@
       "body_schema": {
         "optional": [
           {
-            "name": "force_last_active",
+            "name": "allow_human_lockout",
             "type": "boolean"
+          },
+          {
+            "name": "human_lockout_reason",
+            "type": "string"
           }
         ]
       },
@@ -1280,7 +1284,7 @@
       "streaming": {
         "mode": "none"
       },
-      "output_envelope": "Returns `{ principals, next_cursor? }` ordered by create time descending.",
+      "output_envelope": "Returns `{ principals, active_human_principal_count, next_cursor? }` ordered by create time descending.",
       "error_codes": [
         "auth_required",
         "invalid_token",
@@ -1344,22 +1348,26 @@
       ],
       "stability": "beta",
       "surface": "utility",
-      "agent_notes": "Requires Bearer access token. Set `force_last_active=true` only for explicit break-glass recovery work.",
+      "agent_notes": "Requires Bearer access token. Set `allow_human_lockout=true` only for explicit break-glass recovery work and include a non-empty `human_lockout_reason`.",
       "examples": [
         {
           "title": "Revoke a principal",
           "command": "oar auth principals revoke --agent-id agent_123 --json"
         },
         {
-          "title": "Force revoke the last active principal",
-          "command": "oar auth principals revoke --agent-id agent_123 --force-last-active --json"
+          "title": "Break glass to revoke the last active human principal",
+          "command": "oar auth principals revoke --agent-id agent_123 --allow-human-lockout --human-lockout-reason \"incident recovery\" --json"
         }
       ],
       "body_schema": {
         "optional": [
           {
-            "name": "force_last_active",
+            "name": "allow_human_lockout",
             "type": "boolean"
+          },
+          {
+            "name": "human_lockout_reason",
+            "type": "string"
           }
         ]
       },

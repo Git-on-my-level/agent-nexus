@@ -407,7 +407,7 @@ func TestAuthPrincipalsRevoke(t *testing.T) {
 
 	_ = runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "register", "--username", "Agent.One"})
 
-	raw := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "principals", "revoke", "--agent-id", "agent-999", "--force-last-active"})
+	raw := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "principals", "revoke", "--agent-id", "agent-999", "--allow-human-lockout", "--human-lockout-reason", "incident recovery"})
 	payload := assertEnvelopeOK(t, raw)
 	data, _ := payload["data"].(map[string]any)
 	if data == nil {
@@ -417,8 +417,8 @@ func TestAuthPrincipalsRevoke(t *testing.T) {
 	if revocation == nil || strings.TrimSpace(anyStr(revocation["mode"])) != "admin" {
 		t.Fatalf("expected admin revocation payload, got %#v", payload)
 	}
-	if revocation["force_last_active"] != true {
-		t.Fatalf("expected force_last_active=true payload, got %#v", payload)
+	if revocation["allow_human_lockout"] != true {
+		t.Fatalf("expected allow_human_lockout=true payload, got %#v", payload)
 	}
 }
 
@@ -650,6 +650,8 @@ func (f *fakeAuthCore) handle(w http.ResponseWriter, r *http.Request) {
 		if !f.requireAuth(w, r) {
 			return
 		}
+		var req map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&req)
 		f.revoked = true
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"ok": true,
@@ -665,9 +667,9 @@ func (f *fakeAuthCore) handle(w http.ResponseWriter, r *http.Request) {
 				"revoked_at":     "2026-03-19T02:00:00Z",
 			},
 			"revocation": map[string]any{
-				"mode":              "self",
-				"already_revoked":   false,
-				"force_last_active": false,
+				"mode":                "self",
+				"already_revoked":     false,
+				"allow_human_lockout": req["allow_human_lockout"] == true,
 			},
 		})
 		return
@@ -702,9 +704,9 @@ func (f *fakeAuthCore) handle(w http.ResponseWriter, r *http.Request) {
 			"ok":        true,
 			"principal": principal,
 			"revocation": map[string]any{
-				"mode":              "admin",
-				"already_revoked":   false,
-				"force_last_active": req["force_last_active"] == true,
+				"mode":                "admin",
+				"already_revoked":     false,
+				"allow_human_lockout": req["allow_human_lockout"] == true,
 			},
 		})
 		return

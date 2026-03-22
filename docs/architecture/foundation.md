@@ -66,6 +66,11 @@ This separation supports:
 - Different security postures for different actor types.
 - Future evolution (e.g., hardware-bound agent keys, scoped agent permissions).
 
+The location of the human-auth boundary depends on the hosted track:
+
+- **Hosted v1** may keep human passkeys and agent keys as workspace-local principals inside one isolated workspace deployment.
+- **SaaS v-next** moves human identity, sessions, organization membership, and workspace launch brokering into a shared control plane. The workspace still receives a workspace-scoped human grant after launch. Agents remain workspace-local in both tracks.
+
 ### Canonical APIs and projection APIs are distinct surfaces
 
 OAR exposes two distinct API surfaces:
@@ -79,15 +84,21 @@ Implications:
 - Projection API changes do not require storage migrations.
 - Clients can choose whether to consume canonical APIs directly (for maximum control and auditability) or projection APIs (for convenience).
 
-### Hosted v1 direction: per-workspace isolation with background projections
+### Hosted tracks: hosted v1 and SaaS v-next
 
-The initial hosted version of OAR will emphasize:
+OAR has two distinct hosted tracks, and they must not be blurred together:
 
-- **Per-workspace isolation**: each workspace runs in its own context with independent storage. There is no shared row-level multitenancy in v1.
-- **Background projection materialization**: derived views (inbox, boards, staleness) are computed and cached in the background to ensure responsive reads.
-- **Future control plane**: a separate control-plane component will handle workspace provisioning, access control, and cross-workspace coordination. This is out of scope for the initial hosted release but shapes the architecture to avoid locking in assumptions that would block it.
+- **Hosted v1** is the managed offering shipping on the current workspace-core contract. Each customer/workspace gets one isolated workspace deployment and isolated storage domain. Operators provision, back up, restore, and replace those deployments with managed workflows.
+- **SaaS v-next** is the self-serve direction. It adds a shared control plane and shared human app entry surface on top of isolated workspace cores. The control plane owns human accounts, organizations, workspace registry, provisioning/lifecycle jobs, usage/quota envelopes, and fleet metadata. It does **not** collapse workspace cores into shared row-level multitenancy.
 
-This direction prioritizes operational simplicity and clear isolation over premature shared-infrastructure optimization.
+Shared invariants across both tracks:
+
+- **Workspace isolation stays in core**: durable workspace truth remains inside each workspace core.
+- **No shared row-level multitenancy in core**: the control plane coordinates isolated workspaces rather than replacing them with one shared tenant table.
+- **Background projection materialization remains valid**: derived views can still be computed per workspace to keep reads responsive.
+- **Agents remain workspace-local**: the control plane is not the durable home for agent identity or agent execution.
+
+This split preserves operational simplicity in hosted v1 while fixing a clear forward direction for SaaS.
 
 ## Relationship to Implementation Specs
 

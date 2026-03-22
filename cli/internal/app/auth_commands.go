@@ -35,7 +35,7 @@ func (a *App) runAuth(ctx context.Context, args []string, cfg config.Resolved) (
 		result, err := a.runAuthRotate(ctx, service)
 		return result, "auth rotate", err
 	case "revoke":
-		result, err := a.runAuthRevoke(ctx, service)
+		result, err := a.runAuthRevoke(ctx, service, args[1:])
 		return result, "auth revoke", err
 	case "token-status":
 		result, err := a.runAuthTokenStatus(ctx, service)
@@ -211,7 +211,11 @@ func (a *App) runAuthPrincipalsList(ctx context.Context, service *authcli.Servic
 		return nil, err
 	}
 	if len(result.Principals) == 0 {
-		data := map[string]any{"principals": []any{}, "count": 0}
+		data := map[string]any{
+			"principals":                   []any{},
+			"count":                        0,
+			"active_human_principal_count": result.ActiveHumanPrincipalCount,
+		}
 		if result.NextCursor != "" {
 			data["next_cursor"] = result.NextCursor
 		}
@@ -230,7 +234,11 @@ func (a *App) runAuthPrincipalsList(ctx context.Context, service *authcli.Servic
 		)
 	}
 	text := fmt.Sprintf("Principals (%d):\n%s", len(result.Principals), strings.Join(lines, "\n"))
-	data := map[string]any{"principals": result.Principals, "count": len(result.Principals)}
+	data := map[string]any{
+		"principals":                   result.Principals,
+		"count":                        len(result.Principals),
+		"active_human_principal_count": result.ActiveHumanPrincipalCount,
+	}
 	if result.NextCursor != "" {
 		text += "\n\nNext cursor: " + result.NextCursor
 		data["next_cursor"] = result.NextCursor
@@ -238,24 +246,45 @@ func (a *App) runAuthPrincipalsList(ctx context.Context, service *authcli.Servic
 	return &commandResult{Text: text, Data: data}, nil
 }
 
+func (a *App) runAuthRevoke(ctx context.Context, service *authcli.Service, args []string) (*commandResult, error) {
+	opts, err := parseSelfRevokeOptions("auth revoke", args)
+	if err != nil {
+		return nil, err
+	}
+	result, err := service.RevokeCurrentPrincipal(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	cfg := service.Config()
+	prof, ok, err := profile.Load(cfg.ProfilePath)
+	if err != nil {
+		return nil, errnorm.Wrap(errnorm.KindLocal, "profile_read_failed", "failed to read profile", err)
+	}
+	if !ok {
+		return nil, errnorm.Local("profile_not_found", "profile not found; run `oar auth register` first")
+	}
+	prof.Revoked = true
+	prof.AccessToken = ""
+	prof.RefreshToken = ""
+	prof.AccessTokenExpiresAt = ""
+	if err := profile.Save(cfg.ProfilePath, prof); err != nil {
+		return nil, errnorm.Wrap(errnorm.KindLocal, "profile_persist_failed", "failed to persist revoked profile", err)
+	}
+	text := "Revoked agent profile and cleared local tokens."
+	if result.Revocation.AllowHumanLockout {
+		text += " Break-glass human lockout was used."
+	}
+	data := map[string]any{"profile": prof, "revocation": result.Revocation}
+	return &commandResult{Text: text, Data: data}, nil
+}
+
 func (a *App) runAuthPrincipalsRevoke(ctx context.Context, service *authcli.Service, args []string) (*commandResult, error) {
-	fs := newSilentFlagSet("auth principals revoke")
-	var agentIDFlag trackedString
-	var forceLastActiveFlag trackedBool
-	fs.Var(&agentIDFlag, "agent-id", "Principal agent ID to revoke")
-	fs.Var(&forceLastActiveFlag, "force-last-active", "Break-glass override to revoke the last active principal")
-	if err := fs.Parse(args); err != nil {
-		return nil, errnorm.Usage("invalid_auth_principals_revoke_flags", err.Error())
-	}
-	if len(fs.Args()) > 0 {
-		return nil, errnorm.Usage("invalid_auth_principals_revoke_args", "unexpected positional arguments")
-	}
-	agentID := strings.TrimSpace(agentIDFlag.value)
-	if agentID == "" {
-		return nil, errnorm.Usage("agent_id_required", "agent-id is required")
+	agentID, opts, err := parsePrincipalRevokeOptions("auth principals revoke", args)
+	if err != nil {
+		return nil, err
 	}
 
-	result, err := service.RevokePrincipal(ctx, agentID, forceLastActiveFlag.value)
+	result, err := service.RevokePrincipal(ctx, agentID, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -265,8 +294,8 @@ func (a *App) runAuthPrincipalsRevoke(ctx context.Context, service *authcli.Serv
 		status = "already-revoked"
 	}
 	text := fmt.Sprintf("Principal %s %s.", result.Principal.AgentID, status)
-	if result.Revocation.ForceLastActive {
-		text += " Break-glass last-active override was used."
+	if result.Revocation.AllowHumanLockout {
+		text += " Break-glass human lockout was used."
 	}
 	return &commandResult{
 		Text: text,
@@ -274,6 +303,64 @@ func (a *App) runAuthPrincipalsRevoke(ctx context.Context, service *authcli.Serv
 			"principal":  result.Principal,
 			"revocation": result.Revocation,
 		},
+	}, nil
+}
+
+func parseSelfRevokeOptions(commandName string, args []string) (authcli.RevokeOptions, error) {
+	fs := newSilentFlagSet(commandName)
+	var allowHumanLockoutFlag trackedBool
+	var humanLockoutReasonFlag trackedString
+	fs.Var(&allowHumanLockoutFlag, "allow-human-lockout", "Explicit break-glass override to revoke the last active human principal")
+	fs.Var(&humanLockoutReasonFlag, "human-lockout-reason", "Required reason when using --allow-human-lockout")
+	if err := fs.Parse(args); err != nil {
+		return authcli.RevokeOptions{}, errnorm.Usage("invalid_auth_revoke_flags", err.Error())
+	}
+	if len(fs.Args()) > 0 {
+		return authcli.RevokeOptions{}, errnorm.Usage("invalid_auth_revoke_args", "unexpected positional arguments")
+	}
+	allowHumanLockout := allowHumanLockoutFlag.value
+	humanLockoutReason := strings.TrimSpace(humanLockoutReasonFlag.value)
+	if allowHumanLockout && humanLockoutReason == "" {
+		return authcli.RevokeOptions{}, errnorm.Usage("human_lockout_reason_required", "human-lockout-reason is required when allow-human-lockout is set")
+	}
+	if !allowHumanLockout && humanLockoutReason != "" {
+		return authcli.RevokeOptions{}, errnorm.Usage("human_lockout_reason_requires_allow", "human-lockout-reason requires --allow-human-lockout")
+	}
+	return authcli.RevokeOptions{
+		AllowHumanLockout:  allowHumanLockout,
+		HumanLockoutReason: humanLockoutReason,
+	}, nil
+}
+
+func parsePrincipalRevokeOptions(commandName string, args []string) (string, authcli.RevokeOptions, error) {
+	fs := newSilentFlagSet(commandName)
+	var agentIDFlag trackedString
+	var allowHumanLockoutFlag trackedBool
+	var humanLockoutReasonFlag trackedString
+	fs.Var(&agentIDFlag, "agent-id", "Principal agent ID to revoke")
+	fs.Var(&allowHumanLockoutFlag, "allow-human-lockout", "Explicit break-glass override to revoke the last active human principal")
+	fs.Var(&humanLockoutReasonFlag, "human-lockout-reason", "Required reason when using --allow-human-lockout")
+	if err := fs.Parse(args); err != nil {
+		return "", authcli.RevokeOptions{}, errnorm.Usage("invalid_auth_principals_revoke_flags", err.Error())
+	}
+	if len(fs.Args()) > 0 {
+		return "", authcli.RevokeOptions{}, errnorm.Usage("invalid_auth_principals_revoke_args", "unexpected positional arguments")
+	}
+	agentID := strings.TrimSpace(agentIDFlag.value)
+	if agentID == "" {
+		return "", authcli.RevokeOptions{}, errnorm.Usage("agent_id_required", "agent-id is required")
+	}
+	allowHumanLockout := allowHumanLockoutFlag.value
+	humanLockoutReason := strings.TrimSpace(humanLockoutReasonFlag.value)
+	if allowHumanLockout && humanLockoutReason == "" {
+		return "", authcli.RevokeOptions{}, errnorm.Usage("human_lockout_reason_required", "human-lockout-reason is required when allow-human-lockout is set")
+	}
+	if !allowHumanLockout && humanLockoutReason != "" {
+		return "", authcli.RevokeOptions{}, errnorm.Usage("human_lockout_reason_requires_allow", "human-lockout-reason requires --allow-human-lockout")
+	}
+	return agentID, authcli.RevokeOptions{
+		AllowHumanLockout:  allowHumanLockout,
+		HumanLockoutReason: humanLockoutReason,
 	}, nil
 }
 
@@ -479,16 +566,6 @@ func (a *App) runAuthRotate(ctx context.Context, service *authcli.Service) (*com
 		"Key ID: " + result.Profile.KeyID,
 		"Key path: " + result.Profile.PrivateKeyPath,
 	}, "\n")
-	data := map[string]any{"profile": result.Profile, "server": result.Server}
-	return &commandResult{Text: text, Data: data}, nil
-}
-
-func (a *App) runAuthRevoke(ctx context.Context, service *authcli.Service) (*commandResult, error) {
-	result, err := service.Revoke(ctx)
-	if err != nil {
-		return nil, err
-	}
-	text := "Revoked agent profile and cleared local tokens."
 	data := map[string]any{"profile": result.Profile, "server": result.Server}
 	return &commandResult{Text: text, Data: data}, nil
 }

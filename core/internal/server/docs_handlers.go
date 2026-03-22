@@ -1,7 +1,6 @@
 package server
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"path/filepath"
@@ -75,8 +74,7 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 		ContentType string         `json:"content_type"`
 		Refs        any            `json:"refs"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 	if req.Document == nil {
@@ -129,6 +127,9 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 
 	document, revision, err := opts.primitiveStore.CreateDocument(r.Context(), actorID, req.Document, req.Content, req.ContentType, refs)
 	if err != nil {
+		if writePrimitiveQuotaViolationError(w, err) {
+			return
+		}
 		if errors.Is(err, primitives.ErrConflict) && strings.TrimSpace(req.RequestKey) != "" {
 			documentID := firstNonEmptyString(req.Document["document_id"], req.Document["id"])
 			existingDocument, existingRevision, loadErr := opts.primitiveStore.GetDocument(r.Context(), documentID)
@@ -224,8 +225,7 @@ func handleUpdateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 		ContentType    string         `json:"content_type"`
 		Refs           any            `json:"refs"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 	req.IfBaseRevision = strings.TrimSpace(req.IfBaseRevision)
@@ -280,6 +280,8 @@ func handleUpdateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 	)
 	if err != nil {
 		switch {
+		case writePrimitiveQuotaViolationError(w, err):
+			return
 		case errors.Is(err, primitives.ErrNotFound):
 			writeError(w, http.StatusNotFound, "not_found", "document not found")
 		case errors.Is(err, primitives.ErrInvalidDocumentRequest):
@@ -415,8 +417,7 @@ func handleTombstoneDocument(w http.ResponseWriter, r *http.Request, opts handle
 		ActorID string `json:"actor_id"`
 		Reason  string `json:"reason"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
