@@ -286,6 +286,55 @@ func TestAuthRouteRateLimitingReturnsRateLimited(t *testing.T) {
 	}
 }
 
+func TestAuthRouteRateLimitingScopesByRemoteAddr(t *testing.T) {
+	t.Parallel()
+
+	handler := NewHandler(
+		"0.2.2",
+		WithRouteRateLimits(RouteRateLimits{
+			AuthRequestsPerMinute:  1,
+			AuthBurst:              1,
+			WriteRequestsPerMinute: 1,
+			WriteBurst:             1,
+		}),
+	)
+
+	req1 := httptest.NewRequest(http.MethodPost, "/auth/token", strings.NewReader(`{"grant_type":"refresh_token","refresh_token":"token"}`))
+	req1.RemoteAddr = "203.0.113.10:1234"
+	rr1 := httptest.NewRecorder()
+	handler.ServeHTTP(rr1, req1)
+
+	req2 := httptest.NewRequest(http.MethodPost, "/auth/token", strings.NewReader(`{"grant_type":"refresh_token","refresh_token":"token"}`))
+	req2.RemoteAddr = "203.0.113.11:1234"
+	rr2 := httptest.NewRecorder()
+	handler.ServeHTTP(rr2, req2)
+
+	if rr2.Code == http.StatusTooManyRequests {
+		t.Fatalf("expected different callers to get separate auth rate limits, got 429 with body %s", rr2.Body.String())
+	}
+}
+
+func TestRouteRateLimitForRequestScopesWritesByPrincipal(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest(http.MethodPost, "/threads", strings.NewReader(`{"title":"x"}`))
+	cacheAuthenticatedPrincipal(req, &auth.Principal{
+		AgentID: "agent_123",
+		ActorID: "actor_123",
+	})
+
+	bucket, scope := routeRateLimitForRequest(req, routeAccessRequirement{
+		bucket:    routeAccessWorkspaceBusiness,
+		supported: true,
+	})
+	if bucket != "write" {
+		t.Fatalf("expected write bucket, got %q", bucket)
+	}
+	if scope != "principal:agent_123" {
+		t.Fatalf("expected principal-scoped limiter key, got %q", scope)
+	}
+}
+
 func TestReadyzEndpointStorageError(t *testing.T) {
 	t.Parallel()
 

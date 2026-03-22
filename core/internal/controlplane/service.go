@@ -324,6 +324,16 @@ func (s *Service) FinishPasskeyRegistration(ctx context.Context, sessionID strin
 
 	now := s.now()
 	nowText := now.Format(time.RFC3339Nano)
+	if err := consumePasskeyCeremonyTx(
+		ctx,
+		tx,
+		ceremony.ID,
+		nowText,
+		"failed to consume registration ceremony",
+		"registration session is invalid or expired",
+	); err != nil {
+		return Account{}, Session{}, err
+	}
 	if _, err := tx.ExecContext(
 		ctx,
 		`INSERT INTO passkey_credentials(
@@ -360,10 +370,6 @@ func (s *Service) FinishPasskeyRegistration(ctx context.Context, sessionID strin
 
 	if err := s.acceptPendingInvitesTx(ctx, tx, account, now); err != nil {
 		return Account{}, Session{}, err
-	}
-
-	if _, err := tx.ExecContext(ctx, `UPDATE passkey_ceremonies SET consumed_at = ? WHERE id = ?`, nowText, ceremony.ID); err != nil {
-		return Account{}, Session{}, internalError("failed to consume registration ceremony")
 	}
 
 	session, err := issueSessionTx(ctx, tx, account.ID, now, s.sessionTTL)
@@ -536,6 +542,16 @@ func (s *Service) FinishAccountSession(ctx context.Context, sessionID string, cr
 
 	now := s.now()
 	nowText := now.Format(time.RFC3339Nano)
+	if err := consumePasskeyCeremonyTx(
+		ctx,
+		tx,
+		ceremony.ID,
+		nowText,
+		"failed to consume login ceremony",
+		"session is invalid or expired",
+	); err != nil {
+		return Account{}, Session{}, err
+	}
 	if _, err := tx.ExecContext(
 		ctx,
 		`UPDATE passkey_credentials SET last_used_at = ? WHERE account_id = ? AND credential_id = ?`,
@@ -544,9 +560,6 @@ func (s *Service) FinishAccountSession(ctx context.Context, sessionID string, cr
 		credentialID,
 	); err != nil {
 		return Account{}, Session{}, internalError("failed to update passkey usage")
-	}
-	if _, err := tx.ExecContext(ctx, `UPDATE passkey_ceremonies SET consumed_at = ? WHERE id = ?`, nowText, ceremony.ID); err != nil {
-		return Account{}, Session{}, internalError("failed to consume login ceremony")
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE accounts SET last_login_at = ? WHERE id = ?`, nowText, account.ID); err != nil {
 		return Account{}, Session{}, internalError("failed to update last login")
@@ -646,13 +659,21 @@ func (s *Service) AuthenticateAccessToken(ctx context.Context, rawToken string) 
 
 func (s *Service) RevokeCurrentSession(ctx context.Context, identity RequestIdentity) error {
 	nowText := s.now().Format(time.RFC3339Nano)
-	if _, err := s.db.ExecContext(
+	result, err := s.db.ExecContext(
 		ctx,
 		`UPDATE account_sessions SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL`,
 		nowText,
 		identity.Session.ID,
-	); err != nil {
+	)
+	if err != nil {
 		return internalError("failed to revoke session")
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return internalError("failed to confirm session revocation")
+	}
+	if rowsAffected == 0 {
+		return &APIError{Status: http.StatusUnauthorized, Code: "invalid_token", Message: "authorization token is invalid or expired"}
 	}
 	if err := insertAuditEvent(ctx, s.db, AuditEvent{
 		ID:         "audit_" + uuid.NewString(),
@@ -740,6 +761,29 @@ func loadCeremonyTx(ctx context.Context, tx *sql.Tx, id string) (storedCeremony,
 	}
 	ceremony.ConsumedAt = nullableString(consumedAt)
 	return ceremony, nil
+}
+
+func consumePasskeyCeremonyTx(ctx context.Context, tx *sql.Tx, ceremonyID string, consumedAt string, internalMessage string, expiredMessage string) error {
+	result, err := tx.ExecContext(
+		ctx,
+		`UPDATE passkey_ceremonies
+		 SET consumed_at = ?
+		 WHERE id = ?
+		   AND consumed_at IS NULL`,
+		consumedAt,
+		ceremonyID,
+	)
+	if err != nil {
+		return internalError(internalMessage)
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return internalError(internalMessage)
+	}
+	if rowsAffected == 0 {
+		return &APIError{Status: http.StatusUnauthorized, Code: "session_expired", Message: expiredMessage}
+	}
+	return nil
 }
 
 func issueSessionTx(ctx context.Context, tx *sql.Tx, accountID string, now time.Time, ttl time.Duration) (Session, error) {

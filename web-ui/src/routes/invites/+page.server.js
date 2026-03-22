@@ -24,7 +24,7 @@ export async function load(event) {
       const client = getControlClient(event);
       const response = await client.listOrganizationInvites(organizationId);
       const pendingInvites = (response.invites ?? []).filter(
-        (item) => item.status === "pending" || item.status === "sent",
+        (item) => item.status === "pending",
       );
       if (pendingInvites.length === 0) {
         inviteError = "No pending invites found for this organization.";

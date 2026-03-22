@@ -88,13 +88,7 @@ func (s *Service) CreateWorkspace(ctx context.Context, identity RequestIdentity,
 	if _, err := controlplaneauth.ParseEd25519PublicKeyBase64(serviceIdentityPublicKey); err != nil {
 		return Workspace{}, ProvisioningJob{}, invalidRequest("service_identity_public_key is invalid")
 	}
-	usageSummary, err := s.GetUsageSummary(ctx, identity, organizationID)
-	if err != nil {
-		return Workspace{}, ProvisioningJob{}, err
-	}
-	if usageSummary.Quota.WorkspacesRemaining <= 0 {
-		return Workspace{}, ProvisioningJob{}, &APIError{Status: http.StatusUnprocessableEntity, Code: "quota_exceeded", Message: "workspace quota has been reached for this organization"}
-	}
+	plan := planForTier(organization.PlanTier)
 
 	nowText := s.now().Format(time.RFC3339Nano)
 	workspaceID := "ws_" + uuid.NewString()
@@ -156,7 +150,7 @@ func (s *Service) CreateWorkspace(ctx context.Context, identity RequestIdentity,
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.ExecContext(
+	result, err := tx.ExecContext(
 		ctx,
 		`INSERT INTO workspaces(
 			id, organization_id, slug, display_name, status, region, workspace_tier, workspace_path, base_url,
@@ -165,7 +159,9 @@ func (s *Service) CreateWorkspace(ctx context.Context, identity RequestIdentity,
 			last_heartbeat_at, heartbeat_version, heartbeat_build, heartbeat_health_summary_json,
 			heartbeat_projection_maintenance_summary_json, heartbeat_usage_summary_json, last_successful_backup_at,
 			routing_manifest_json, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		)
+		SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+		WHERE (SELECT COUNT(1) FROM workspaces WHERE organization_id = ?) < ?`,
 		workspace.ID,
 		workspace.OrganizationID,
 		workspace.Slug,
@@ -197,11 +193,21 @@ func (s *Service) CreateWorkspace(ctx context.Context, identity RequestIdentity,
 		"{}",
 		workspace.CreatedAt,
 		workspace.UpdatedAt,
-	); err != nil {
+		organization.ID,
+		plan.WorkspaceLimit,
+	)
+	if err != nil {
 		if isSQLiteConstraint(err) {
 			return Workspace{}, ProvisioningJob{}, conflict("slug_conflict", "workspace slug is already in use for this organization")
 		}
 		return Workspace{}, ProvisioningJob{}, internalError("failed to create workspace")
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return Workspace{}, ProvisioningJob{}, internalError("failed to confirm workspace creation")
+	}
+	if rowsAffected == 0 {
+		return Workspace{}, ProvisioningJob{}, &APIError{Status: http.StatusUnprocessableEntity, Code: "quota_exceeded", Message: "workspace quota has been reached for this organization"}
 	}
 	if err := s.insertProvisioningJob(ctx, tx, job); err != nil {
 		return Workspace{}, ProvisioningJob{}, internalError("failed to create provisioning job")
@@ -337,6 +343,9 @@ func (s *Service) GetProvisioningJob(ctx context.Context, identity RequestIdenti
 	if _, _, err := s.requireOrganizationAccess(ctx, identity, job.OrganizationID, false); err != nil {
 		return ProvisioningJob{}, err
 	}
+	if _, _, err := s.requireWorkspaceAccess(ctx, identity, job.WorkspaceID, false); err != nil {
+		return ProvisioningJob{}, err
+	}
 	return job, nil
 }
 
@@ -345,6 +354,12 @@ func (s *Service) ListProvisioningJobs(ctx context.Context, identity RequestIden
 	sortAt, sortID, err := decodeCursor(filter.Page.Cursor)
 	if err != nil {
 		return Page[ProvisioningJob]{}, invalidRequest("cursor is invalid")
+	}
+	workspaceID := strings.TrimSpace(filter.WorkspaceID)
+	if workspaceID != "" {
+		if _, _, err := s.requireWorkspaceAccess(ctx, identity, workspaceID, false); err != nil {
+			return Page[ProvisioningJob]{}, err
+		}
 	}
 
 	query := `SELECT j.id, j.organization_id, j.workspace_id, j.kind, j.status, j.requested_at, j.started_at, j.finished_at, j.failure_reason, j.progress_message, j.stdout_tail, j.stderr_tail, j.retryable, j.parameters_json, j.result_json
@@ -356,9 +371,9 @@ func (s *Service) ListProvisioningJobs(ctx context.Context, identity RequestIden
 		query += ` AND j.organization_id = ?`
 		args = append(args, filter.OrganizationID)
 	}
-	if strings.TrimSpace(filter.WorkspaceID) != "" {
+	if workspaceID != "" {
 		query += ` AND j.workspace_id = ?`
-		args = append(args, filter.WorkspaceID)
+		args = append(args, workspaceID)
 	}
 	if sortAt != "" {
 		query += ` AND (j.requested_at > ? OR (j.requested_at = ? AND j.id > ?))`
@@ -590,8 +605,24 @@ func (s *Service) ExchangeWorkspaceSession(ctx context.Context, workspaceID stri
 
 	now := s.now()
 	nowText := now.Format(time.RFC3339Nano)
-	if _, err := tx.ExecContext(ctx, `UPDATE launch_sessions SET consumed_at = ? WHERE id = ?`, nowText, launchID); err != nil {
+	result, err := tx.ExecContext(
+		ctx,
+		`UPDATE launch_sessions
+		 SET consumed_at = ?
+		 WHERE id = ?
+		   AND consumed_at IS NULL`,
+		nowText,
+		launchID,
+	)
+	if err != nil {
 		return Workspace{}, WorkspaceGrant{}, internalError("failed to consume launch session")
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return Workspace{}, WorkspaceGrant{}, internalError("failed to confirm launch session consumption")
+	}
+	if rowsAffected == 0 {
+		return Workspace{}, WorkspaceGrant{}, &APIError{Status: http.StatusConflict, Code: "exchange_invalid", Message: "exchange token has already been used"}
 	}
 	account, _, err := loadAccountByIDTx(ctx, tx, accountID)
 	if err != nil {

@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 
+	"organization-autorunner-core/internal/auth"
 	"organization-autorunner-core/internal/primitives"
 )
 
@@ -86,7 +88,7 @@ func newRouteRateLimiter(limits RouteRateLimits) *routeRateLimiter {
 	}
 }
 
-func (l *routeRateLimiter) allow(bucket string, now time.Time) (bool, time.Duration) {
+func (l *routeRateLimiter) allow(bucket string, scope string, now time.Time) (bool, time.Duration) {
 	if l == nil || strings.TrimSpace(bucket) == "" {
 		return true, 0
 	}
@@ -99,13 +101,19 @@ func (l *routeRateLimiter) allow(bucket string, now time.Time) (bool, time.Durat
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	state, ok := l.buckets[bucket]
+	stateKey := bucket
+	scope = strings.TrimSpace(scope)
+	if scope != "" {
+		stateKey = bucket + ":" + scope
+	}
+
+	state, ok := l.buckets[stateKey]
 	if !ok {
 		state = &rateLimitBucket{
 			tokens:     float64(burst),
 			lastRefill: now,
 		}
-		l.buckets[bucket] = state
+		l.buckets[stateKey] = state
 	}
 
 	if now.Before(state.lastRefill) {
@@ -182,11 +190,26 @@ func requestBodyLimitForRequest(path string, method string, bucket routeAccessRe
 	return limits.Default
 }
 
-func routeRateLimitBucketForRequest(path string, method string, requirement routeAccessRequirement) string {
-	method = strings.ToUpper(strings.TrimSpace(method))
-	if method == http.MethodGet || method == http.MethodHead || method == http.MethodOptions {
-		return ""
+func routeRateLimitForRequest(r *http.Request, requirement routeAccessRequirement) (string, string) {
+	if r == nil {
+		return "", ""
 	}
+	method := strings.ToUpper(strings.TrimSpace(r.Method))
+	if method == http.MethodGet || method == http.MethodHead || method == http.MethodOptions {
+		return "", ""
+	}
+	path := strings.TrimSpace(r.URL.Path)
+	if path == "" {
+		return "", ""
+	}
+	bucket := routeRateLimitBucketForPath(path, requirement)
+	if bucket == "" {
+		return "", ""
+	}
+	return bucket, routeRateLimitScopeForRequest(r)
+}
+
+func routeRateLimitBucketForPath(path string, requirement routeAccessRequirement) string {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return ""
@@ -200,6 +223,42 @@ func routeRateLimitBucketForRequest(path string, method string, requirement rout
 	default:
 		return ""
 	}
+}
+
+func routeRateLimitScopeForRequest(r *http.Request) string {
+	if principal, ok := cachedAuthenticatedPrincipal(r); ok {
+		return routeRateLimitScopeForPrincipal(principal)
+	}
+	host, _, err := net.SplitHostPort(strings.TrimSpace(r.RemoteAddr))
+	if err != nil {
+		host = strings.TrimSpace(r.RemoteAddr)
+	}
+	host = strings.Trim(host, "[]")
+	if host != "" {
+		return "addr:" + host
+	}
+	return "anonymous"
+}
+
+func routeRateLimitScopeForPrincipal(principal *auth.Principal) string {
+	if principal == nil {
+		return "anonymous"
+	}
+	if agentID := strings.TrimSpace(principal.AgentID); agentID != "" {
+		return "principal:" + agentID
+	}
+	if actorID := strings.TrimSpace(principal.ActorID); actorID != "" {
+		return "actor:" + actorID
+	}
+	return "anonymous"
+}
+
+func routeRateLimitBucketForRequest(path string, method string, requirement routeAccessRequirement) string {
+	method = strings.ToUpper(strings.TrimSpace(method))
+	if method == http.MethodGet || method == http.MethodHead || method == http.MethodOptions {
+		return ""
+	}
+	return routeRateLimitBucketForPath(path, requirement)
 }
 
 func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {

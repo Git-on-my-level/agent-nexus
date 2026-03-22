@@ -9,8 +9,51 @@ import {
   startControlRegistration,
 } from "$lib/server/controlSession.js";
 
+function jsonControlError(
+  error,
+  fallbackCode,
+  fallbackMessage,
+  fallbackStatus,
+) {
+  if (typeof error?.status === "number" && error.body) {
+    return json(error.body, { status: error.status });
+  }
+
+  return json(
+    {
+      error: {
+        code: fallbackCode,
+        message: error instanceof Error ? error.message : fallbackMessage,
+      },
+    },
+    { status: fallbackStatus },
+  );
+}
+
+async function readRequestBody(event) {
+  try {
+    const body = await event.request.json();
+    return body && typeof body === "object" ? body : {};
+  } catch {
+    return null;
+  }
+}
+
 export async function POST(event) {
-  const body = await event.request.json();
+  const body = await readRequestBody(event);
+
+  if (body === null) {
+    return json(
+      {
+        error: {
+          code: "invalid_json",
+          message: "Request body must be valid JSON.",
+        },
+      },
+      { status: 400 },
+    );
+  }
+
   const action = body.action;
 
   if (action === "register-start") {
@@ -34,17 +77,11 @@ export async function POST(event) {
 
       return json(result);
     } catch (error) {
-      return json(
-        {
-          error: {
-            code: "registration_start_failed",
-            message:
-              error instanceof Error
-                ? error.message
-                : "Failed to start registration",
-          },
-        },
-        { status: 400 },
+      return jsonControlError(
+        error,
+        "registration_start_failed",
+        "Failed to start registration",
+        error?.status ?? 502,
       );
     }
   }
@@ -72,21 +109,13 @@ export async function POST(event) {
         credential,
       );
 
-      return json({
-        account: result.account,
-      });
+      return json(result);
     } catch (error) {
-      return json(
-        {
-          error: {
-            code: "registration_finish_failed",
-            message:
-              error instanceof Error
-                ? error.message
-                : "Failed to finish registration",
-          },
-        },
-        { status: 400 },
+      return jsonControlError(
+        error,
+        "registration_finish_failed",
+        "Failed to finish registration",
+        error?.status ?? 502,
       );
     }
   }
@@ -106,15 +135,11 @@ export async function POST(event) {
 
       return json(result);
     } catch (error) {
-      return json(
-        {
-          error: {
-            code: "login_start_failed",
-            message:
-              error instanceof Error ? error.message : "Failed to start login",
-          },
-        },
-        { status: 400 },
+      return jsonControlError(
+        error,
+        "login_start_failed",
+        "Failed to start login",
+        error?.status ?? 502,
       );
     }
   }
@@ -138,19 +163,13 @@ export async function POST(event) {
     try {
       const result = await finishControlLogin(event, sessionId, credential);
 
-      return json({
-        account: result.account,
-      });
+      return json(result);
     } catch (error) {
-      return json(
-        {
-          error: {
-            code: "login_finish_failed",
-            message:
-              error instanceof Error ? error.message : "Failed to finish login",
-          },
-        },
-        { status: 400 },
+      return jsonControlError(
+        error,
+        "login_finish_failed",
+        "Failed to finish login",
+        error?.status ?? 502,
       );
     }
   }

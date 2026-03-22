@@ -15,6 +15,7 @@
     getPasskeyAssertion,
   } from "$lib/passkeyBrowser.js";
 
+  let loginEmail = $state("");
   let registrationEmail = $state("");
   let registrationDisplayName = $state("");
   let registrationError = $state("");
@@ -25,6 +26,14 @@
   function resolveRedirectPath() {
     const redirectPath = $page.url.searchParams.get("redirect") || "/dashboard";
     return redirectPath.startsWith("/") ? redirectPath : "/dashboard";
+  }
+
+  function requireAuthResponse(result, label) {
+    if (!result?.account || !result?.session) {
+      throw new Error(`${label} returned an unexpected response.`);
+    }
+
+    return result;
   }
 
   onMount(async () => {
@@ -67,11 +76,10 @@
         registration_session_id: options.registration_session_id,
         credential,
       });
+      requireAuthResponse(result, "Registration");
 
-      if (result.account) {
-        completeControlSession(result.account);
-        goto(resolveRedirectPath());
-      }
+      completeControlSession(result.account);
+      goto(resolveRedirectPath());
     } catch (error) {
       registrationError =
         error instanceof Error ? error.message : "Registration failed.";
@@ -81,7 +89,7 @@
   }
 
   async function handleLogin() {
-    if (!registrationEmail.trim()) {
+    if (!loginEmail.trim()) {
       loginError = "Email is required.";
       return;
     }
@@ -92,18 +100,17 @@
 
     try {
       const options = await controlClient.startSession({
-        email: registrationEmail.trim(),
+        email: loginEmail.trim(),
       });
       const credential = await getPasskeyAssertion(options.public_key_options);
       const result = await controlClient.finishSession({
         session_id: options.session_id,
         credential,
       });
+      requireAuthResponse(result, "Login");
 
-      if (result.account) {
-        completeControlSession(result.account);
-        goto(resolveRedirectPath());
-      }
+      completeControlSession(result.account);
+      goto(resolveRedirectPath());
     } catch (error) {
       loginError = error instanceof Error ? error.message : "Sign in failed.";
     } finally {
@@ -171,7 +178,7 @@
                 Email
               </label>
               <input
-                bind:value={registrationEmail}
+                bind:value={loginEmail}
                 class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-[13px] text-[var(--ui-text)]"
                 id="login-email"
                 placeholder="you@example.com"

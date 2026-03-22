@@ -355,24 +355,6 @@ func (s *Service) CreateOrganizationInvite(ctx context.Context, identity Request
 		return OrganizationInvite{}, "", err
 	}
 
-	var pendingExists bool
-	if err := s.db.QueryRowContext(
-		ctx,
-		`SELECT EXISTS(
-			SELECT 1 FROM organization_invites
-			WHERE organization_id = ? AND email = ? AND status = 'pending' AND expires_at > ?
-			LIMIT 1
-		)`,
-		organizationID,
-		email,
-		s.now().Format(time.RFC3339Nano),
-	).Scan(&pendingExists); err != nil {
-		return OrganizationInvite{}, "", internalError("failed to inspect existing invites")
-	}
-	if pendingExists {
-		return OrganizationInvite{}, "", conflict("invite_conflict", "a pending invite already exists for that email")
-	}
-
 	now := s.now()
 	nowText := now.Format(time.RFC3339Nano)
 	expiresAt := now.Add(s.inviteTTL).Format(time.RFC3339Nano)
@@ -389,7 +371,43 @@ func (s *Service) CreateOrganizationInvite(ctx context.Context, identity Request
 		CreatedAt:      nowText,
 		ExpiresAt:      expiresAt,
 	}
-	if _, err := s.db.ExecContext(
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return OrganizationInvite{}, "", internalError("failed to begin invite creation transaction")
+	}
+	defer tx.Rollback()
+	if err := requireOrganizationManageAccessTx(ctx, tx, organizationID, identity.Account.ID, true, "organization invites require owner or admin access"); err != nil {
+		return OrganizationInvite{}, "", err
+	}
+	if _, err := tx.ExecContext(
+		ctx,
+		`UPDATE organization_invites
+		 SET status = 'expired'
+		 WHERE organization_id = ? AND email = ? AND status = 'pending' AND expires_at <= ?`,
+		organizationID,
+		email,
+		nowText,
+	); err != nil {
+		return OrganizationInvite{}, "", internalError("failed to expire stale invites")
+	}
+	var pendingExists bool
+	if err := tx.QueryRowContext(
+		ctx,
+		`SELECT EXISTS(
+			SELECT 1 FROM organization_invites
+			WHERE organization_id = ? AND email = ? AND status = 'pending' AND expires_at > ?
+			LIMIT 1
+		)`,
+		organizationID,
+		email,
+		nowText,
+	).Scan(&pendingExists); err != nil {
+		return OrganizationInvite{}, "", internalError("failed to inspect existing invites")
+	}
+	if pendingExists {
+		return OrganizationInvite{}, "", conflict("invite_conflict", "a pending invite already exists for that email")
+	}
+	if _, err := tx.ExecContext(
 		ctx,
 		`INSERT INTO organization_invites(
 			id, organization_id, email, role, status, token_hash, created_at, expires_at, accepted_at, accepted_by_account_id, revoked_at, revoked_by_account_id
@@ -403,9 +421,12 @@ func (s *Service) CreateOrganizationInvite(ctx context.Context, identity Request
 		invite.CreatedAt,
 		invite.ExpiresAt,
 	); err != nil {
+		if isSQLiteConstraint(err) {
+			return OrganizationInvite{}, "", conflict("invite_conflict", "a pending invite already exists for that email")
+		}
 		return OrganizationInvite{}, "", internalError("failed to create invite")
 	}
-	if err := insertAuditEvent(ctx, s.db, AuditEvent{
+	if err := insertAuditEventTx(ctx, tx, AuditEvent{
 		ID:             "audit_" + uuid.NewString(),
 		EventType:      "organization_invite_created",
 		OrganizationID: stringPtr(organization.ID),
@@ -418,6 +439,9 @@ func (s *Service) CreateOrganizationInvite(ctx context.Context, identity Request
 		},
 	}, stringPtr(identity.Account.ID)); err != nil {
 		return OrganizationInvite{}, "", err
+	}
+	if err := tx.Commit(); err != nil {
+		return OrganizationInvite{}, "", internalError("failed to commit invite creation")
 	}
 	return invite, formatTemplateURL(s.inviteURLTemplate, token), nil
 }
@@ -628,6 +652,47 @@ func loadMembership(ctx context.Context, db *sql.DB, organizationID string, memb
 		membershipID,
 	).Scan(&membership.ID, &membership.OrganizationID, &membership.AccountID, &membership.Role, &membership.Status, &membership.CreatedAt)
 	return membership, err
+}
+
+func requireOrganizationManageAccessTx(ctx context.Context, tx *sql.Tx, organizationID string, accountID string, includeSuspended bool, deniedMessage string) error {
+	organizationID = strings.TrimSpace(organizationID)
+	accountID = strings.TrimSpace(accountID)
+	if organizationID == "" {
+		return invalidRequest("organization_id is required")
+	}
+	if accountID == "" {
+		return invalidRequest("account_id is required")
+	}
+
+	var (
+		organizationStatus string
+		membershipRole     string
+		membershipStatus   string
+	)
+	if err := tx.QueryRowContext(
+		ctx,
+		`SELECT o.status, m.role, m.status
+		 FROM organizations o
+		 JOIN organization_memberships m ON m.organization_id = o.id
+		 WHERE o.id = ? AND m.account_id = ?`,
+		organizationID,
+		accountID,
+	).Scan(&organizationStatus, &membershipRole, &membershipStatus); err != nil {
+		if err == sql.ErrNoRows {
+			return notFound("organization not found")
+		}
+		return internalError("failed to load organization access")
+	}
+	if membershipStatus != "active" {
+		return accessDenied("organization membership is disabled")
+	}
+	if !includeSuspended && organizationStatus != "active" {
+		return accessDenied("organization is not active")
+	}
+	if !membershipCanManage(membershipRole) {
+		return accessDenied(deniedMessage)
+	}
+	return nil
 }
 
 func loadInvite(ctx context.Context, db *sql.DB, organizationID string, inviteID string, now time.Time) (OrganizationInvite, error) {

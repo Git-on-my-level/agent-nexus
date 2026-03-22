@@ -8,7 +8,11 @@ import {
   getControlClient,
   loadControlSession,
 } from "$lib/server/controlSession.js";
-import { normalizeWorkspaceSlug, workspacePath } from "$lib/workspacePaths";
+import {
+  appPath,
+  normalizeAppPath,
+  normalizeWorkspaceSlug,
+} from "$lib/workspacePaths";
 
 export async function POST(event) {
   const session = await loadControlSession(event);
@@ -26,15 +30,14 @@ export async function POST(event) {
 
   const body = await event.request.json().catch(() => ({}));
   const workspaceId = String(body.workspace_id ?? "").trim();
-  const workspaceSlug = normalizeWorkspaceSlug(body.workspace_slug);
   const returnPath = String(body.return_path ?? "/").trim() || "/";
 
-  if (!workspaceId || !workspaceSlug) {
+  if (!workspaceId) {
     return json(
       {
         error: {
           code: "invalid_request",
-          message: "workspace_id and workspace_slug are required.",
+          message: "workspace_id is required.",
         },
       },
       { status: 400 },
@@ -54,29 +57,11 @@ export async function POST(event) {
 
   try {
     const client = getControlClient(event);
-    const workspaceResponse = await client.getWorkspace(workspaceId);
-    const workspace = workspaceResponse.workspace ?? workspaceResponse;
-    const resolvedWorkspaceSlug = normalizeWorkspaceSlug(workspace?.slug);
-    if (!resolvedWorkspaceSlug || resolvedWorkspaceSlug !== workspaceSlug) {
-      return json(
-        {
-          error: {
-            code: "invalid_request",
-            message: "workspace_id does not match workspace_slug.",
-          },
-        },
-        { status: 400 },
-      );
-    }
-
     const launchResponse = await client.createLaunchSession(workspaceId, {
       return_path: returnPath,
     });
-    const exchangeToken = String(
-      launchResponse?.launch_session?.exchange_token ??
-        launchResponse?.exchange_token ??
-        "",
-    ).trim();
+    const launchSession = launchResponse?.launch_session;
+    const exchangeToken = String(launchSession?.exchange_token ?? "").trim();
     if (!exchangeToken) {
       return json(
         {
@@ -88,16 +73,30 @@ export async function POST(event) {
         { status: 502 },
       );
     }
+    const workspaceBasePath = normalizeAppPath(
+      launchSession?.workspace_path ?? "",
+    );
+    const workspaceSlug = normalizeWorkspaceSlug(
+      workspaceBasePath.split("/").filter(Boolean)[0],
+    );
+    if (!workspaceSlug) {
+      return json(
+        {
+          error: {
+            code: "launch_failed",
+            message: "Control plane returned an invalid workspace path.",
+          },
+        },
+        { status: 502 },
+      );
+    }
 
     const exchangeResponse = await client.exchangeWorkspaceSession(
       workspaceId,
       exchangeToken,
     );
     const accessToken = String(
-      exchangeResponse?.grant?.bearer_token ??
-        exchangeResponse?.bearer_token ??
-        exchangeResponse?.access_token ??
-        "",
+      exchangeResponse?.grant?.bearer_token ?? "",
     ).trim();
     if (!accessToken) {
       return json(
@@ -114,8 +113,15 @@ export async function POST(event) {
     clearWorkspaceRefreshToken(event, workspaceSlug);
     writeWorkspaceAccessToken(event, workspaceSlug, accessToken);
 
+    const workspaceReturnPath = normalizeAppPath(
+      launchSession?.return_path ?? returnPath,
+    );
     return json({
-      redirect_to: workspacePath(workspaceSlug, returnPath),
+      redirect_to: appPath(
+        workspaceReturnPath === "/"
+          ? workspaceBasePath
+          : `${workspaceBasePath}${workspaceReturnPath}`,
+      ),
     });
   } catch (error) {
     return json(

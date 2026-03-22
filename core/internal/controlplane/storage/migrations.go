@@ -261,6 +261,13 @@ var migrations = []migration{
 			`CREATE INDEX IF NOT EXISTS idx_workspace_backup_runs_retention ON workspace_backup_runs (retention_expires_at, pruned_at, status);`,
 		},
 	},
+	{
+		Version: 5,
+		Statements: []string{
+			`CREATE UNIQUE INDEX IF NOT EXISTS idx_organization_invites_pending_unique ON organization_invites (organization_id, email) WHERE status = 'pending';`,
+			`CREATE UNIQUE INDEX IF NOT EXISTS idx_provisioning_jobs_workspace_backup_running ON provisioning_jobs (workspace_id) WHERE kind = 'workspace_backup' AND status = 'running';`,
+		},
+	},
 }
 
 func applyMigrations(ctx context.Context, db *sql.DB) error {

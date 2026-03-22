@@ -2,6 +2,7 @@ package controlplane
 
 import (
 	"context"
+	"database/sql"
 	"strings"
 	"time"
 
@@ -99,6 +100,9 @@ func (s *Service) transitionWorkspaceState(ctx context.Context, identity Request
 		return Workspace{}, ProvisioningJob{}, internalError("failed to begin workspace state transition")
 	}
 	defer tx.Rollback()
+	if err := requireWorkspaceLifecycleAccessTx(ctx, tx, workspace.ID, identity.Account.ID, "lifecycle changes"); err != nil {
+		return Workspace{}, ProvisioningJob{}, err
+	}
 	if err := s.insertProvisioningJob(ctx, tx, job); err != nil {
 		return Workspace{}, ProvisioningJob{}, internalError("failed to create workspace lifecycle job")
 	}
@@ -178,6 +182,9 @@ func (s *Service) restoreOrReplaceWorkspace(ctx context.Context, identity Reques
 		return Workspace{}, ProvisioningJob{}, internalError("failed to begin restore job")
 	}
 	defer tx.Rollback()
+	if err := requireWorkspaceLifecycleAccessTx(ctx, tx, workspace.ID, identity.Account.ID, "restore and replace"); err != nil {
+		return Workspace{}, ProvisioningJob{}, err
+	}
 	if err := s.insertProvisioningJob(ctx, tx, job); err != nil {
 		return Workspace{}, ProvisioningJob{}, internalError("failed to create restore job")
 	}
@@ -246,6 +253,10 @@ func (s *Service) restoreOrReplaceWorkspace(ctx context.Context, identity Reques
 		}
 	}
 
+	if _, err := s.requireWorkspaceLifecycleAccess(ctx, identity, workspaceID, "restore and replace"); err != nil {
+		return s.finalizeWorkspaceLifecycleJobAccessDenied(ctx, identity, workspace, job, backupDir, restoreResult, verifyResult, kind, err)
+	}
+
 	tx, err = s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Workspace{}, ProvisioningJob{}, internalError("failed to begin restore job finalization")
@@ -277,4 +288,112 @@ func (s *Service) restoreOrReplaceWorkspace(ctx context.Context, identity Reques
 		return Workspace{}, ProvisioningJob{}, internalError("failed to commit restore job finalization")
 	}
 	return workspace, job, nil
+}
+
+func (s *Service) requireWorkspaceLifecycleAccess(ctx context.Context, identity RequestIdentity, workspaceID string, deniedAction string) (Workspace, error) {
+	workspace, membership, err := s.requireWorkspaceAccess(ctx, identity, workspaceID, true)
+	if err != nil {
+		return Workspace{}, err
+	}
+	if membership.Status != "active" {
+		return Workspace{}, accessDenied("workspace membership is disabled")
+	}
+	if !membershipCanManage(membership.Role) {
+		return Workspace{}, accessDenied("workspace " + deniedAction + " requires owner or admin access")
+	}
+	return workspace, nil
+}
+
+func (s *Service) finalizeWorkspaceLifecycleJobAccessDenied(ctx context.Context, identity RequestIdentity, workspace Workspace, job ProvisioningJob, backupDir string, restoreResult scriptResult, verifyResult scriptResult, kind string, accessErr error) (Workspace, ProvisioningJob, error) {
+	nowText := s.now().Format(time.RFC3339Nano)
+	job.Status = "failed"
+	job.FinishedAt = stringPtr(nowText)
+	job.FailureReason = stringPtr(strings.TrimSpace(accessErr.Error()))
+	job.ProgressMessage = "workspace " + strings.ReplaceAll(strings.TrimPrefix(kind, "workspace_"), "_", " ") + " aborted"
+	job.StdoutTail = restoreResult.StdoutTail
+	job.StderrTail = restoreResult.StderrTail
+	if verifyResult.StdoutTail != "" || verifyResult.StderrTail != "" {
+		if job.StdoutTail != "" {
+			job.StdoutTail += "\n"
+		}
+		job.StdoutTail += verifyResult.StdoutTail
+		if job.StderrTail != "" {
+			job.StderrTail += "\n"
+		}
+		job.StderrTail += verifyResult.StderrTail
+	}
+	job.Retryable = false
+	job.Result = map[string]any{
+		"backup_dir":        backupDir,
+		"finalization":      "access_denied",
+		"restore_exit_code": restoreResult.ExitCode,
+		"verify_exit_code":  verifyResult.ExitCode,
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Workspace{}, ProvisioningJob{}, internalError("failed to begin restore job finalization")
+	}
+	defer tx.Rollback()
+	if err := s.updateProvisioningJob(ctx, tx, job); err != nil {
+		return Workspace{}, ProvisioningJob{}, internalError("failed to update restore job")
+	}
+	if err := insertAuditEventTx(ctx, tx, AuditEvent{
+		ID:             "audit_" + uuid.NewString(),
+		EventType:      kind + "_finished",
+		OrganizationID: stringPtr(workspace.OrganizationID),
+		WorkspaceID:    stringPtr(workspace.ID),
+		TargetType:     "provisioning_job",
+		TargetID:       job.ID,
+		OccurredAt:     nowText,
+		Metadata: map[string]any{
+			"status":       job.Status,
+			"kind":         job.Kind,
+			"backup_dir":   backupDir,
+			"finalization": "access_denied",
+		},
+	}, stringPtr(identity.Account.ID)); err != nil {
+		return Workspace{}, ProvisioningJob{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Workspace{}, ProvisioningJob{}, internalError("failed to commit restore job finalization")
+	}
+	return Workspace{}, ProvisioningJob{}, accessErr
+}
+
+func requireWorkspaceLifecycleAccessTx(ctx context.Context, tx *sql.Tx, workspaceID string, accountID string, deniedAction string) error {
+	workspaceID = strings.TrimSpace(workspaceID)
+	accountID = strings.TrimSpace(accountID)
+	if workspaceID == "" {
+		return invalidRequest("workspace_id is required")
+	}
+	if accountID == "" {
+		return invalidRequest("account_id is required")
+	}
+
+	var (
+		membershipRole   string
+		membershipStatus string
+	)
+	if err := tx.QueryRowContext(
+		ctx,
+		`SELECT m.role, m.status
+		 FROM workspaces w
+		 JOIN organization_memberships m ON m.organization_id = w.organization_id
+		 WHERE w.id = ? AND m.account_id = ?`,
+		workspaceID,
+		accountID,
+	).Scan(&membershipRole, &membershipStatus); err != nil {
+		if err == sql.ErrNoRows {
+			return notFound("workspace not found")
+		}
+		return internalError("failed to load workspace access")
+	}
+	if membershipStatus != "active" {
+		return accessDenied("workspace membership is disabled")
+	}
+	if !membershipCanManage(membershipRole) {
+		return accessDenied("workspace " + deniedAction + " requires owner or admin access")
+	}
+	return nil
 }

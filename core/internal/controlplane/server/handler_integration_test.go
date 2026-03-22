@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -286,6 +287,111 @@ func TestControlPlaneSessionExchangeRequiresActiveMembership(t *testing.T) {
 	}
 }
 
+func TestControlPlaneSessionExchangeConsumesLaunchTokensAtomically(t *testing.T) {
+	env := newControlPlaneTestEnv(t, "")
+	defer env.Close()
+
+	_, ownerSession := registerAccount(t, env, "owner-launch-race@example.com", "Owner Launch Race", "cred-owner-launch-race")
+	ownerToken := asString(t, ownerSession["access_token"])
+
+	createOrganizationResp := requestJSON(t, http.MethodPost, env.server.URL+"/organizations", map[string]any{
+		"slug":         "launch-race",
+		"display_name": "Launch Race",
+		"plan_tier":    "team",
+	}, http.StatusCreated, authHeaders(ownerToken))
+	organizationID := asString(t, asMap(t, createOrganizationResp["organization"])["id"])
+
+	requestJSON(t, http.MethodPost, env.server.URL+"/organizations/"+organizationID+"/invites", map[string]any{
+		"email": "member-launch-race@example.com",
+		"role":  "member",
+	}, http.StatusCreated, authHeaders(ownerToken))
+
+	_, memberSession := registerAccount(t, env, "member-launch-race@example.com", "Member Launch Race", "cred-member-launch-race")
+	memberToken := asString(t, memberSession["access_token"])
+
+	createWorkspaceResp := requestJSON(t, http.MethodPost, env.server.URL+"/workspaces", workspaceCreatePayload(t, organizationID, "race", "Race Workspace", "us-central1", "standard"), http.StatusCreated, authHeaders(ownerToken))
+	workspaceID := asString(t, asMap(t, createWorkspaceResp["workspace"])["id"])
+
+	launchResp := requestJSON(t, http.MethodPost, env.server.URL+"/workspaces/"+workspaceID+"/launch-sessions", map[string]any{
+		"return_path": "/",
+	}, http.StatusOK, authHeaders(memberToken))
+	exchangeToken := asString(t, asMap(t, launchResp["launch_session"])["exchange_token"])
+
+	type result struct {
+		status int
+		body   string
+		err    error
+	}
+
+	results := make(chan result, 2)
+	client := &http.Client{Timeout: 10 * time.Second}
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+
+			payload, err := json.Marshal(map[string]any{"exchange_token": exchangeToken})
+			if err != nil {
+				results <- result{err: err}
+				return
+			}
+			req, err := http.NewRequest(http.MethodPost, env.server.URL+"/workspaces/"+workspaceID+"/session-exchange", bytes.NewReader(payload))
+			if err != nil {
+				results <- result{err: err}
+				return
+			}
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := client.Do(req)
+			if err != nil {
+				results <- result{err: err}
+				return
+			}
+			defer resp.Body.Close()
+
+			rawBody, readErr := io.ReadAll(resp.Body)
+			if readErr != nil {
+				results <- result{err: readErr}
+				return
+			}
+			results <- result{status: resp.StatusCode, body: string(rawBody)}
+		}()
+	}
+
+	close(start)
+	wg.Wait()
+	close(results)
+
+	var okCount int
+	var conflictCount int
+	for result := range results {
+		if result.err != nil {
+			t.Fatalf("exchange request failed: %v", result.err)
+		}
+		switch result.status {
+		case http.StatusOK:
+			okCount++
+		case http.StatusConflict:
+			conflictCount++
+			var payload map[string]any
+			if err := json.Unmarshal([]byte(result.body), &payload); err != nil {
+				t.Fatalf("decode conflict payload: %v", err)
+			}
+			if got := asString(t, asMap(t, payload["error"])["code"]); got != "exchange_invalid" {
+				t.Fatalf("expected exchange_invalid, got %q with body %s", got, result.body)
+			}
+		default:
+			t.Fatalf("unexpected status %d body=%s", result.status, result.body)
+		}
+	}
+	if okCount != 1 || conflictCount != 1 {
+		t.Fatalf("expected one successful exchange and one conflict, got ok=%d conflict=%d", okCount, conflictCount)
+	}
+}
+
 func TestControlPlaneWorkspaceLifecycleMutationsRequireManageRoleAndPersistState(t *testing.T) {
 	env := newControlPlaneTestEnv(t, "")
 	defer env.Close()
@@ -372,6 +478,109 @@ func TestControlPlaneCreateWorkspaceRequiresServiceIdentity(t *testing.T) {
 	}
 	if got := asString(t, errPayload["message"]); got != "service_identity_id and service_identity_public_key are required" {
 		t.Fatalf("expected service identity validation message, got %q", got)
+	}
+}
+
+func TestControlPlaneCreateWorkspaceEnforcesQuotaInsideInsert(t *testing.T) {
+	env := newControlPlaneTestEnv(t, "")
+	defer env.Close()
+
+	_, ownerSession := registerAccount(t, env, "owner-quota-race@example.com", "Owner Quota Race", "cred-owner-quota-race")
+	ownerToken := asString(t, ownerSession["access_token"])
+
+	createOrganizationResp := requestJSON(t, http.MethodPost, env.server.URL+"/organizations", map[string]any{
+		"slug":         "quota-race",
+		"display_name": "Quota Race",
+		"plan_tier":    "starter",
+	}, http.StatusCreated, authHeaders(ownerToken))
+	organizationID := asString(t, asMap(t, createOrganizationResp["organization"])["id"])
+
+	type result struct {
+		status int
+		body   string
+		err    error
+	}
+
+	inputs := []map[string]any{
+		workspaceCreatePayload(t, organizationID, "alpha", "Alpha", "us-central1", "standard"),
+		workspaceCreatePayload(t, organizationID, "beta", "Beta", "us-east1", "standard"),
+	}
+
+	results := make(chan result, len(inputs))
+	client := &http.Client{Timeout: 15 * time.Second}
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for _, payload := range inputs {
+		wg.Add(1)
+		go func(payload map[string]any) {
+			defer wg.Done()
+			<-start
+
+			rawPayload, err := json.Marshal(payload)
+			if err != nil {
+				results <- result{err: err}
+				return
+			}
+			req, err := http.NewRequest(http.MethodPost, env.server.URL+"/workspaces", bytes.NewReader(rawPayload))
+			if err != nil {
+				results <- result{err: err}
+				return
+			}
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", "Bearer "+ownerToken)
+
+			resp, err := client.Do(req)
+			if err != nil {
+				results <- result{err: err}
+				return
+			}
+			defer resp.Body.Close()
+
+			rawBody, readErr := io.ReadAll(resp.Body)
+			if readErr != nil {
+				results <- result{err: readErr}
+				return
+			}
+			results <- result{status: resp.StatusCode, body: string(rawBody)}
+		}(payload)
+	}
+
+	close(start)
+	wg.Wait()
+	close(results)
+
+	var createdCount int
+	var quotaCount int
+	for result := range results {
+		if result.err != nil {
+			t.Fatalf("create workspace request failed: %v", result.err)
+		}
+		switch result.status {
+		case http.StatusCreated:
+			createdCount++
+		case http.StatusUnprocessableEntity:
+			quotaCount++
+			var payload map[string]any
+			if err := json.Unmarshal([]byte(result.body), &payload); err != nil {
+				t.Fatalf("decode quota payload: %v", err)
+			}
+			if got := asString(t, asMap(t, payload["error"])["code"]); got != "quota_exceeded" {
+				t.Fatalf("expected quota_exceeded, got %q with body %s", got, result.body)
+			}
+		default:
+			t.Fatalf("unexpected status %d body=%s", result.status, result.body)
+		}
+	}
+	if createdCount != 1 || quotaCount != 1 {
+		t.Fatalf("expected one created workspace and one quota rejection, got created=%d quota=%d", createdCount, quotaCount)
+	}
+
+	var workspaceCount int
+	if err := env.workspace.DB().QueryRowContext(context.Background(), `SELECT COUNT(1) FROM workspaces WHERE organization_id = ?`, organizationID).Scan(&workspaceCount); err != nil {
+		t.Fatalf("count workspaces: %v", err)
+	}
+	if workspaceCount != 1 {
+		t.Fatalf("expected exactly one persisted workspace, got %d", workspaceCount)
 	}
 }
 
@@ -866,6 +1075,214 @@ func TestControlPlaneCeremoniesAndSessionsSurviveRestart(t *testing.T) {
 		t.Fatalf("expected organization %q after restarted login, got %q", organizationID, got)
 	}
 	env3.Close()
+}
+
+func TestControlPlanePasskeyRegistrationConsumesCeremoniesAtomically(t *testing.T) {
+	env := newControlPlaneTestEnv(t, "")
+	defer env.Close()
+
+	startResp := requestJSON(t, http.MethodPost, env.server.URL+"/account/passkeys/registrations/start", map[string]any{
+		"email":        "registration-race@example.com",
+		"display_name": "Registration Race",
+	}, http.StatusOK, originHeaders())
+	registrationSessionID := asString(t, startResp["registration_session_id"])
+	options := asMap(t, startResp["public_key_options"])
+	user := asMap(t, options["user"])
+
+	type result struct {
+		status int
+		body   string
+		err    error
+	}
+
+	inputs := []map[string]any{
+		{
+			"registration_session_id": registrationSessionID,
+			"credential": registrationCredential(
+				t,
+				options,
+				"cred-registration-race-a",
+				asString(t, user["id"]),
+			),
+		},
+		{
+			"registration_session_id": registrationSessionID,
+			"credential": registrationCredential(
+				t,
+				options,
+				"cred-registration-race-b",
+				asString(t, user["id"]),
+			),
+		},
+	}
+
+	results := make(chan result, len(inputs))
+	client := &http.Client{Timeout: 10 * time.Second}
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for _, payload := range inputs {
+		wg.Add(1)
+		go func(payload map[string]any) {
+			defer wg.Done()
+			<-start
+
+			rawPayload, err := json.Marshal(payload)
+			if err != nil {
+				results <- result{err: err}
+				return
+			}
+			req, err := http.NewRequest(http.MethodPost, env.server.URL+"/account/passkeys/registrations/finish", bytes.NewReader(rawPayload))
+			if err != nil {
+				results <- result{err: err}
+				return
+			}
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Origin", testOrigin)
+
+			resp, err := client.Do(req)
+			if err != nil {
+				results <- result{err: err}
+				return
+			}
+			defer resp.Body.Close()
+
+			rawBody, readErr := io.ReadAll(resp.Body)
+			if readErr != nil {
+				results <- result{err: readErr}
+				return
+			}
+			results <- result{status: resp.StatusCode, body: string(rawBody)}
+		}(payload)
+	}
+
+	close(start)
+	wg.Wait()
+	close(results)
+
+	var okCount int
+	var expiredCount int
+	for result := range results {
+		if result.err != nil {
+			t.Fatalf("finish registration request failed: %v", result.err)
+		}
+		switch result.status {
+		case http.StatusOK:
+			okCount++
+		case http.StatusUnauthorized:
+			expiredCount++
+			var payload map[string]any
+			if err := json.Unmarshal([]byte(result.body), &payload); err != nil {
+				t.Fatalf("decode registration race payload: %v", err)
+			}
+			if got := asString(t, asMap(t, payload["error"])["code"]); got != "session_expired" {
+				t.Fatalf("expected session_expired, got %q with body %s", got, result.body)
+			}
+		default:
+			t.Fatalf("unexpected status %d body=%s", result.status, result.body)
+		}
+	}
+	if okCount != 1 || expiredCount != 1 {
+		t.Fatalf("expected one successful registration and one expired response, got ok=%d expired=%d", okCount, expiredCount)
+	}
+
+	var credentialCount int
+	if err := env.workspace.DB().QueryRowContext(context.Background(), `SELECT COUNT(1) FROM passkey_credentials`).Scan(&credentialCount); err != nil {
+		t.Fatalf("count passkey credentials: %v", err)
+	}
+	if credentialCount != 1 {
+		t.Fatalf("expected exactly one persisted passkey credential, got %d", credentialCount)
+	}
+}
+
+func TestControlPlaneAccountSessionsConsumeCeremoniesAtomically(t *testing.T) {
+	env := newControlPlaneTestEnv(t, "")
+	defer env.Close()
+
+	_, _ = registerAccount(t, env, "login-race@example.com", "Login Race", "cred-login-race")
+
+	startResp := requestJSON(t, http.MethodPost, env.server.URL+"/account/sessions/start", map[string]any{
+		"email": "login-race@example.com",
+	}, http.StatusOK, originHeaders())
+	sessionID := asString(t, startResp["session_id"])
+	options := asMap(t, startResp["public_key_options"])
+
+	type result struct {
+		status int
+		body   string
+		err    error
+	}
+
+	results := make(chan result, 2)
+	client := &http.Client{Timeout: 10 * time.Second}
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+
+			rawPayload, err := json.Marshal(map[string]any{
+				"session_id": sessionID,
+				"credential": assertionCredential(t, options, "cred-login-race"),
+			})
+			if err != nil {
+				results <- result{err: err}
+				return
+			}
+			req, err := http.NewRequest(http.MethodPost, env.server.URL+"/account/sessions/finish", bytes.NewReader(rawPayload))
+			if err != nil {
+				results <- result{err: err}
+				return
+			}
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Origin", testOrigin)
+
+			resp, err := client.Do(req)
+			if err != nil {
+				results <- result{err: err}
+				return
+			}
+			defer resp.Body.Close()
+
+			rawBody, readErr := io.ReadAll(resp.Body)
+			if readErr != nil {
+				results <- result{err: readErr}
+				return
+			}
+			results <- result{status: resp.StatusCode, body: string(rawBody)}
+		}()
+	}
+
+	close(start)
+	wg.Wait()
+	close(results)
+
+	var okCount int
+	var expiredCount int
+	for result := range results {
+		if result.err != nil {
+			t.Fatalf("finish session request failed: %v", result.err)
+		}
+		switch result.status {
+		case http.StatusOK:
+			okCount++
+		case http.StatusUnauthorized:
+			expiredCount++
+			var payload map[string]any
+			if err := json.Unmarshal([]byte(result.body), &payload); err != nil {
+				t.Fatalf("decode login race payload: %v", err)
+			}
+			if got := asString(t, asMap(t, payload["error"])["code"]); got != "session_expired" {
+				t.Fatalf("expected session_expired, got %q with body %s", got, result.body)
+			}
+		default:
+			t.Fatalf("unexpected status %d body=%s", result.status, result.body)
+		}
+	}
+	if okCount != 1 || expiredCount != 1 {
+		t.Fatalf("expected one successful login and one expired response, got ok=%d expired=%d", okCount, expiredCount)
+	}
 }
 
 func newControlPlaneTestEnv(t *testing.T, root string) *controlPlaneTestEnv {

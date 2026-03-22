@@ -456,8 +456,8 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			if !enforceRouteAccess(w, r, opts, requirement) {
 				return
 			}
-			if bucket := routeRateLimitBucketForRequest(r.URL.Path, r.Method, requirement); bucket != "" {
-				if ok, retryAfter := opts.rateLimiter.allow(bucket, time.Now().UTC()); !ok {
+			if bucket, scope := routeRateLimitForRequest(r, requirement); bucket != "" {
+				if ok, retryAfter := opts.rateLimiter.allow(bucket, scope, time.Now().UTC()); !ok {
 					writeRateLimitedError(w, bucket, retryAfter)
 					return
 				}

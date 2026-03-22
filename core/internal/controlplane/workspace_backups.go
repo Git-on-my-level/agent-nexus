@@ -307,6 +307,9 @@ func (s *Service) runWorkspaceBackupJob(ctx context.Context, workspace Workspace
 	}
 	defer tx.Rollback()
 	if err := s.insertProvisioningJob(ctx, tx, job); err != nil {
+		if isSQLiteConstraint(err) {
+			return Workspace{}, ProvisioningJob{}, &APIError{Status: http.StatusConflict, Code: "backup_in_progress", Message: "workspace backup is already running"}
+		}
 		return Workspace{}, ProvisioningJob{}, internalError("failed to create backup job")
 	}
 	if err := s.insertWorkspaceBackupRunTx(ctx, tx, run); err != nil {
