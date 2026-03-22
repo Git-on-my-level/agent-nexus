@@ -2,13 +2,11 @@
   import { goto } from "$app/navigation";
 
   import { logoutControlSession } from "$lib/controlSession.js";
-  import { controlClient } from "$lib/controlClient.js";
 
   let { data } = $props();
 
   let organizationId = $derived(data.organizationId ?? "");
   let invite = $state(null);
-  let accepting = $state(false);
   let error = $state("");
   let expired = $state(false);
 
@@ -17,24 +15,6 @@
     error = data.inviteError ?? "";
     expired = Boolean(data.expired);
   });
-
-  async function handleAcceptInvite() {
-    if (!invite || !organizationId) {
-      return;
-    }
-
-    accepting = true;
-    error = "";
-
-    try {
-      await controlClient.acceptOrganizationInvite(organizationId, invite.id);
-      goto("/dashboard");
-    } catch (e) {
-      error = e instanceof Error ? e.message : "Failed to accept invite";
-    } finally {
-      accepting = false;
-    }
-  }
 
   async function handleLogout() {
     await logoutControlSession({});
@@ -154,7 +134,8 @@
             You've been invited!
           </h2>
           <p class="mt-2 text-[var(--ui-text-muted)]">
-            You have been invited to join this organization.
+            Organization invites are applied through the control-plane
+            registration flow, not with an extra accept step in the web UI.
           </p>
           {#if invite.role}
             <p class="mt-1 text-[12px] text-[var(--ui-text-muted)]">
@@ -164,14 +145,12 @@
         </div>
 
         <div class="mt-6 flex gap-3">
-          <button
-            class="flex-1 rounded-md bg-indigo-600 px-4 py-2 text-[13px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
-            disabled={accepting}
-            onclick={handleAcceptInvite}
-            type="button"
+          <a
+            class="flex-1 rounded-md bg-indigo-600 px-4 py-2 text-center text-[13px] font-medium text-white hover:bg-indigo-500"
+            href="/dashboard"
           >
-            {accepting ? "Accepting..." : "Accept Invite"}
-          </button>
+            Continue to Dashboard
+          </a>
           <a
             class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-4 py-2 text-[13px] font-medium text-[var(--ui-text)] hover:bg-[var(--ui-border-subtle)]"
             href="/dashboard"

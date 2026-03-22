@@ -10,6 +10,7 @@
   let workspaces = $derived(data.workspaces ?? []);
   let error = $state("");
   let creatingOrg = $state(false);
+  let launchingWorkspaceId = $state("");
   let newOrgSlug = $state("");
   let newOrgDisplayName = $state("");
 
@@ -77,11 +78,28 @@
     }
   }
 
-  function launchWorkspace(workspace) {
+  async function launchWorkspace(workspace) {
     if (workspace.status === "provisioning") {
       return;
     }
-    goto(workspace.workspace_path || `/${workspace.slug}`);
+
+    launchingWorkspaceId = workspace.id;
+    error = "";
+
+    try {
+      const response = await controlClient.launchWorkspace(
+        workspace.id,
+        workspace.slug,
+      );
+      await goto(
+        response.redirect_to ||
+          (workspace.workspace_path ?? `/${workspace.slug}`),
+      );
+    } catch (e) {
+      error = e instanceof Error ? e.message : "Failed to launch workspace";
+    } finally {
+      launchingWorkspaceId = "";
+    }
   }
 </script>
 
@@ -282,10 +300,13 @@
                       {:else}
                         <button
                           class="rounded-md bg-indigo-600 px-3 py-1 text-[12px] font-medium text-white hover:bg-indigo-500"
+                          disabled={launchingWorkspaceId === ws.id}
                           onclick={() => launchWorkspace(ws)}
                           type="button"
                         >
-                          Launch
+                          {launchingWorkspaceId === ws.id
+                            ? "Launching..."
+                            : "Launch"}
                         </button>
                       {/if}
                     </div>

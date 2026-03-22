@@ -156,24 +156,6 @@ export const controlClient = {
     );
   },
 
-  async acceptOrganizationInvite(
-    organizationId,
-    inviteId,
-    { fetchFn, baseUrl = "" } = {},
-  ) {
-    return requestJSON(
-      controlApiPath(
-        `/organizations/${encodeURIComponent(organizationId)}/invites/${encodeURIComponent(inviteId)}/accept`,
-      ),
-      {
-        fetchFn,
-        baseUrl,
-        method: "POST",
-        body: {},
-      },
-    );
-  },
-
   async listWorkspaces(organizationId, { fetchFn, baseUrl = "" } = {}) {
     const query = organizationId
       ? `?organization_id=${encodeURIComponent(organizationId)}`
@@ -190,6 +172,23 @@ export const controlClient = {
       baseUrl,
       method: "POST",
       body,
+    });
+  },
+
+  async launchWorkspace(
+    workspaceId,
+    workspaceSlug,
+    { fetchFn, baseUrl = "", returnPath = "/" } = {},
+  ) {
+    return requestJSON("/dashboard/launch", {
+      fetchFn,
+      baseUrl,
+      method: "POST",
+      body: {
+        workspace_id: workspaceId,
+        workspace_slug: workspaceSlug,
+        return_path: returnPath,
+      },
     });
   },
 };

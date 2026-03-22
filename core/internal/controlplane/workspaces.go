@@ -605,6 +605,22 @@ func (s *Service) ExchangeWorkspaceSession(ctx context.Context, workspaceID stri
 		}
 		return Workspace{}, WorkspaceGrant{}, internalError("failed to load launch account")
 	}
+	var membershipStatus string
+	if err := tx.QueryRowContext(
+		ctx,
+		`SELECT status FROM organization_memberships WHERE organization_id = ? AND account_id = ?`,
+		organizationID,
+		accountID,
+	).Scan(&membershipStatus); err != nil {
+		if err == sql.ErrNoRows {
+			return Workspace{}, WorkspaceGrant{}, accessDenied("workspace access requires an active organization membership")
+		}
+		return Workspace{}, WorkspaceGrant{}, internalError("failed to verify organization membership")
+	}
+	if strings.TrimSpace(membershipStatus) != "active" {
+		return Workspace{}, WorkspaceGrant{}, accessDenied("workspace membership is disabled")
+	}
+
 	grantToken, grantExpiresAt, err := s.workspaceGrantSigner.Sign(controlplaneauth.WorkspaceHumanGrantInput{
 		AccountID:      account.ID,
 		WorkspaceID:    workspace.ID,

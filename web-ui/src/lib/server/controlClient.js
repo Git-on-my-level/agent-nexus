@@ -182,17 +182,6 @@ export function createControlClient(accessToken) {
       return parseResponseBody(result);
     },
 
-    async acceptOrganizationInvite(organizationId, inviteId) {
-      const result = await client.controlOrganizationsInvitesAccept(
-        { organization_id: organizationId, invite_id: inviteId },
-        { headers },
-      );
-      if (!result.status || result.status >= 400) {
-        throw createControlError(result, "Failed to accept invite");
-      }
-      return parseResponseBody(result);
-    },
-
     async getOrganizationUsageSummary(organizationId) {
       const result = await client.controlOrganizationsUsageSummaryGet(
         { organization_id: organizationId },

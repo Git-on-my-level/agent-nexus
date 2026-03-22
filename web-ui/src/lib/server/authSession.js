@@ -231,54 +231,55 @@ export async function loadWorkspaceAuthenticatedAgent({
   }
 
   const refreshToken = readWorkspaceRefreshToken(event, workspaceSlug);
+  let accessToken = readWorkspaceAccessToken(event, workspaceSlug);
 
-  if (!refreshToken) {
+  if (!refreshToken && !accessToken) {
     clearWorkspaceAuthSession(event, workspaceSlug);
     return null;
   }
 
-  async function fetchCurrentAgent() {
-    let accessToken = readWorkspaceAccessToken(event, workspaceSlug);
-    if (!accessToken) {
-      await refreshWorkspaceAuthSession({
-        event,
-        workspaceSlug,
-        coreBaseUrl,
-      });
-      accessToken = readWorkspaceAccessToken(event, workspaceSlug);
-    }
-
-    if (!accessToken) {
-      return null;
-    }
-
+  async function fetchCurrentAgent(token) {
     const agentResponse = await requestCoreJSON(coreBaseUrl, "/agents/me", {
-      token: accessToken,
+      token,
     });
     return agentResponse.agent ?? null;
   }
 
-  try {
-    return await fetchCurrentAgent();
-  } catch (error) {
-    if (error?.status !== 401) {
-      throw error;
+  if (accessToken) {
+    try {
+      return await fetchCurrentAgent(accessToken);
+    } catch (error) {
+      if (error?.status !== 401) {
+        throw error;
+      }
+      if (!refreshToken) {
+        clearWorkspaceAuthSession(event, workspaceSlug);
+        return null;
+      }
     }
+  }
 
+  if (!refreshToken) {
+    return null;
+  }
+
+  try {
     await refreshWorkspaceAuthSession({
       event,
       workspaceSlug,
       coreBaseUrl,
     });
-    const accessToken = readWorkspaceAccessToken(event, workspaceSlug);
+    accessToken = readWorkspaceAccessToken(event, workspaceSlug);
     if (!accessToken) {
       return null;
     }
-
-    const agentResponse = await requestCoreJSON(coreBaseUrl, "/agents/me", {
-      token: accessToken,
-    });
-    return agentResponse.agent ?? null;
+    return await fetchCurrentAgent(accessToken);
+  } catch (error) {
+    if (error?.status === 401) {
+      clearWorkspaceAuthSession(event, workspaceSlug);
+      return null;
+    }
+    throw error;
   }
 }
 

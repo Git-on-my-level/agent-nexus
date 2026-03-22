@@ -255,6 +255,61 @@ func TestControlPlaneWorkspaceProvisioningProducesReachableDeploymentAndRoutingM
 	_ = coreCmd
 }
 
+func TestControlPlaneSessionExchangeRequiresActiveMembership(t *testing.T) {
+	env := newControlPlaneTestEnv(t, "")
+	defer env.Close()
+
+	_, ownerSession := registerAccount(t, env, "owner-launch@example.com", "Owner Launch", "cred-owner-launch")
+	ownerToken := asString(t, ownerSession["access_token"])
+
+	createOrganizationResp := requestJSON(t, http.MethodPost, env.server.URL+"/organizations", map[string]any{
+		"slug":         "launch-guard",
+		"display_name": "Launch Guard",
+		"plan_tier":    "team",
+	}, http.StatusCreated, authHeaders(ownerToken))
+	organizationID := asString(t, asMap(t, createOrganizationResp["organization"])["id"])
+
+	requestJSON(t, http.MethodPost, env.server.URL+"/organizations/"+organizationID+"/invites", map[string]any{
+		"email": "member-launch@example.com",
+		"role":  "member",
+	}, http.StatusCreated, authHeaders(ownerToken))
+
+	memberAccount, memberSession := registerAccount(t, env, "member-launch@example.com", "Member Launch", "cred-member-launch")
+	memberToken := asString(t, memberSession["access_token"])
+
+	createWorkspaceResp := requestJSON(t, http.MethodPost, env.server.URL+"/workspaces", map[string]any{
+		"organization_id": organizationID,
+		"slug":            "ops",
+		"display_name":    "Ops",
+		"region":          "us-central1",
+		"workspace_tier":  "standard",
+	}, http.StatusCreated, authHeaders(ownerToken))
+	workspaceID := asString(t, asMap(t, createWorkspaceResp["workspace"])["id"])
+
+	launchResp := requestJSON(t, http.MethodPost, env.server.URL+"/workspaces/"+workspaceID+"/launch-sessions", map[string]any{
+		"return_path": "/",
+	}, http.StatusOK, authHeaders(memberToken))
+	launchSession := asMap(t, launchResp["launch_session"])
+
+	if _, err := env.workspace.DB().ExecContext(
+		context.Background(),
+		`UPDATE organization_memberships SET status = ? WHERE organization_id = ? AND account_id = ?`,
+		"suspended",
+		organizationID,
+		asString(t, memberAccount["id"]),
+	); err != nil {
+		t.Fatalf("suspend membership: %v", err)
+	}
+
+	exchangeResp := requestJSON(t, http.MethodPost, env.server.URL+"/workspaces/"+workspaceID+"/session-exchange", map[string]any{
+		"exchange_token": asString(t, launchSession["exchange_token"]),
+	}, http.StatusForbidden, nil)
+
+	if got := asString(t, asMap(t, exchangeResp["error"])["code"]); got != "access_denied" {
+		t.Fatalf("expected access_denied, got %q", got)
+	}
+}
+
 func TestControlPlaneWorkspaceBackupMaintenanceAndRetentionSweep(t *testing.T) {
 	env := newControlPlaneTestEnv(t, "")
 	defer env.Close()

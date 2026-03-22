@@ -639,13 +639,18 @@ func (s *Service) ListPrincipals(ctx context.Context, limit int, cursor string) 
 	}
 
 	var payload struct {
-		Principals []Principal `json:"principals"`
-		NextCursor string      `json:"next_cursor"`
+		Principals                []Principal `json:"principals"`
+		ActiveHumanPrincipalCount int         `json:"active_human_principal_count"`
+		NextCursor                string      `json:"next_cursor"`
 	}
 	if err := json.Unmarshal(resp.Body, &payload); err != nil {
 		return ListPrincipalsResult{}, errnorm.Wrap(errnorm.KindRemote, "invalid_response", "list principals response is not valid JSON", err)
 	}
-	return ListPrincipalsResult{Principals: payload.Principals, NextCursor: payload.NextCursor}, nil
+	return ListPrincipalsResult{
+		Principals:                payload.Principals,
+		ActiveHumanPrincipalCount: payload.ActiveHumanPrincipalCount,
+		NextCursor:                payload.NextCursor,
+	}, nil
 }
 
 func (s *Service) ListAudit(ctx context.Context, limit int, cursor string) (ListAuditResult, error) {
