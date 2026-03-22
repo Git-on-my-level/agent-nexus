@@ -1,26 +1,29 @@
 name: CI
 
 on:
+  pull_request:
   push:
-  workflow_dispatch:
-    inputs:
-      run_e2e_smoke:
-        description: Run end-to-end smoke validation
-        required: false
-        default: false
-        type: boolean
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
+      automation: ${{ steps.filter.outputs.automation }}
+      go_shared: ${{ steps.filter.outputs.go_shared }}
+      node_shared: ${{ steps.filter.outputs.node_shared }}
+      contracts: ${{ steps.filter.outputs.contracts }}
       core: ${{ steps.filter.outputs.core }}
       cli: ${{ steps.filter.outputs.cli }}
       web_ui: ${{ steps.filter.outputs.web_ui }}
-      root: ${{ steps.filter.outputs.root }}
-      contracts: ${{ steps.filter.outputs.contracts }}
-      hosted: ${{ steps.filter.outputs.hosted }}
-      saas: ${{ steps.filter.outputs.saas }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,9 +33,14 @@ jobs:
         uses: dorny/paths-filter@v3
         with:
           filters: |
-            root:
-              - '.github/workflows/**'
-              - 'Makefile'
+            automation:
+              - '.github/**'
+            go_shared:
+              - '.github/actions/setup-go/**'
+              - '.github/workflows/ci.yml'
+            node_shared:
+              - '.github/actions/setup-node-pnpm/**'
+              - '.github/workflows/ci.yml'
               - 'package.json'
               - 'pnpm-workspace.yaml'
               - 'pnpm-lock.yaml'
@@ -46,263 +54,94 @@ jobs:
               - 'cli/**'
             web_ui:
               - 'web-ui/**'
-            e2e:
-              - 'scripts/e2e-smoke'
-            hosted:
-              - 'core/**'
-              - 'contracts/**'
-              - 'web-ui/**'
-              - 'scripts/hosted/**'
-              - 'scripts/hosted-smoke'
-              - 'deploy/**'
-              - '.github/workflows/ci.yml'
-            saas:
-              - 'core/**'
-              - 'contracts/**'
-              - 'web-ui/**'
-              - 'scripts/**'
-              - 'deploy/**'
-              - 'docs/**'
-              - 'runbooks/**'
-              - '.github/workflows/ci.yml'
-              - 'Makefile'
+
+  workflow-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: changes
+    if: needs.changes.outputs.automation == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node And pnpm
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Check GitHub automation formatting
+        run: pnpm -C web-ui exec prettier --check "../.github/**/*.{yml,yaml}"
 
   contracts-check:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: changes
-    if: needs.changes.outputs.contracts == 'true' || needs.changes.outputs.root == 'true'
+    if: needs.changes.outputs.contracts == 'true' || needs.changes.outputs.go_shared == 'true' || needs.changes.outputs.node_shared == 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: ./.github/actions/setup-go
         with:
           go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Setup Node And pnpm
+        uses: ./.github/actions/setup-node-pnpm
 
       - name: Verify generated contracts
-        run: make contract-check
+        run: ./scripts/contract-check
 
   core-checks:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: changes
-    if: needs.changes.outputs.core == 'true' || needs.changes.outputs.root == 'true' || needs.changes.outputs.contracts == 'true'
+    if: needs.changes.outputs.core == 'true' || needs.changes.outputs.contracts == 'true' || needs.changes.outputs.go_shared == 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: ./.github/actions/setup-go
         with:
           go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
 
       - name: Run core check
-        run: make -C core check
+        run: make -C core check-ci
 
   cli-checks:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: changes
-    if: needs.changes.outputs.cli == 'true' || needs.changes.outputs.root == 'true' || needs.changes.outputs.contracts == 'true'
+    if: needs.changes.outputs.cli == 'true' || needs.changes.outputs.contracts == 'true' || needs.changes.outputs.go_shared == 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: ./.github/actions/setup-go
         with:
           go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
 
       - name: Run CLI check
-        run: make cli-check
+        working-directory: cli
+        run: go test ./...
 
   web-ui-checks:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: changes
-    if: needs.changes.outputs.web_ui == 'true' || needs.changes.outputs.root == 'true' || needs.changes.outputs.contracts == 'true'
+    if: needs.changes.outputs.web_ui == 'true' || needs.changes.outputs.contracts == 'true' || needs.changes.outputs.node_shared == 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Setup Node And pnpm
+        uses: ./.github/actions/setup-node-pnpm
 
       - name: Run web-ui check
         run: make -C web-ui check
 
       - name: Build web-ui
         run: pnpm -C web-ui run build
-
-  e2e-smoke:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    if: github.event_name == 'workflow_dispatch' && inputs.run_e2e_smoke
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: core/go.mod
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run end-to-end smoke
-        env:
-          SMOKE_ARTIFACT_DIR: ${{ github.workspace }}/.tmp/e2e-smoke
-        run: make e2e-smoke
-
-      - name: Upload smoke artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: e2e-smoke-artifacts
-          path: .tmp/e2e-smoke/**
-          if-no-files-found: ignore
-
-  hosted-checks:
-    name: ${{ matrix.name }}
-    runs-on: ubuntu-latest
-    timeout-minutes: ${{ matrix.timeout_minutes }}
-    needs: changes
-    if: needs.changes.outputs.hosted == 'true' || needs.changes.outputs.root == 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: hosted-ops-test
-            timeout_minutes: 15
-            make_target: hosted-ops-test
-            artifact_name: ""
-            artifact_path: ""
-          - name: hosted-smoke
-            timeout_minutes: 20
-            make_target: hosted-smoke
-            artifact_name: hosted-smoke-artifacts
-            artifact_path: .tmp/hosted-smoke/**
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: core/go.mod
-
-      - name: Run ${{ matrix.name }}
-        env:
-          HOSTED_SMOKE_ARTIFACT_DIR: ${{ github.workspace }}/.tmp/hosted-smoke
-        run: make ${{ matrix.make_target }}
-
-      - name: Upload hosted artifacts
-        if: always() && matrix.artifact_path != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact_name }}
-          path: ${{ matrix.artifact_path }}
-          if-no-files-found: ignore
-
-  saas-checks:
-    name: ${{ matrix.name }}
-    runs-on: ubuntu-latest
-    timeout-minutes: ${{ matrix.timeout_minutes }}
-    needs: changes
-    if: needs.changes.outputs.saas == 'true' || needs.changes.outputs.root == 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: saas-smoke
-            timeout_minutes: 20
-            make_target: saas-smoke
-            artifact_name: saas-smoke-artifacts
-            artifact_path: .tmp/saas-smoke/**
-          - name: saas-e2e
-            timeout_minutes: 25
-            make_target: saas-e2e
-            artifact_name: saas-e2e-artifacts
-            artifact_path: .tmp/saas-e2e/**
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: core/go.mod
-
-      - name: Run ${{ matrix.name }}
-        env:
-          SAAS_SMOKE_ARTIFACT_DIR: ${{ github.workspace }}/.tmp/saas-smoke
-          SAAS_E2E_ARTIFACT_DIR: ${{ github.workspace }}/.tmp/saas-e2e
-        run: make ${{ matrix.make_target }}
-
-      - name: Upload SaaS artifacts
-        if: always() && matrix.artifact_path != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact_name }}
-          path: ${{ matrix.artifact_path }}
-          if-no-files-found: ignore
-
-  saas-load-smoke:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    needs: changes
-    if: needs.changes.outputs.saas == 'true' || needs.changes.outputs.root == 'true'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: core/go.mod
-
-      - name: Run saas-load-smoke
-        env:
-          SAAS_LOAD_ARTIFACT_DIR: ${{ github.workspace }}/.tmp/saas-load-smoke
-          SAAS_LOAD_NUM_WORKSPACES: 2
-          SAAS_LOAD_NUM_THREADS: 3
-          SAAS_LOAD_CONCURRENT: 2
-        run: make saas-load-smoke
-
-      - name: Upload saas-load-smoke artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: saas-load-smoke-artifacts
-          path: .tmp/saas-load-smoke/**
-          if-no-files-found: ignore

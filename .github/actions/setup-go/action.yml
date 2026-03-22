@@ -1,0 +1,20 @@
+name: Setup Go
+description: Set up Go with module cache support for this monorepo.
+
+inputs:
+  go-version-file:
+    description: Path to the go.mod file that controls the Go version.
+    required: true
+  cache-dependency-path:
+    description: Path to the go.sum file used for Go module cache keys.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: ${{ inputs.go-version-file }}
+        cache: true
+        cache-dependency-path: ${{ inputs.cache-dependency-path }}

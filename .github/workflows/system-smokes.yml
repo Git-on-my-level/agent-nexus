@@ -1,0 +1,235 @@
+name: System Smokes
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/actions/setup-go/**"
+      - ".github/workflows/system-smokes.yml"
+      - "Makefile"
+      - "core/**"
+      - "contracts/**"
+      - "deploy/**"
+      - "scripts/hosted/**"
+      - "scripts/hosted-smoke"
+      - "scripts/saas-smoke"
+      - "scripts/saas-e2e"
+      - "scripts/saas-load-smoke"
+  schedule:
+    - cron: "23 4 * * *"
+  workflow_dispatch:
+    inputs:
+      run_e2e_smoke:
+        description: Run the end-to-end smoke flow in addition to the baseline system smokes.
+        required: false
+        default: false
+        type: boolean
+      run_saas_load_smoke:
+        description: Run the SaaS load smoke in addition to the baseline system smokes.
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: system-smokes-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      hosted: ${{ steps.filter.outputs.hosted || steps.defaults.outputs.hosted }}
+      saas: ${{ steps.filter.outputs.saas || steps.defaults.outputs.saas }}
+      e2e: ${{ steps.defaults.outputs.e2e }}
+    steps:
+      - name: Default to full baseline suite
+        id: defaults
+        if: github.event_name != 'push'
+        run: |
+          echo "hosted=true" >> "$GITHUB_OUTPUT"
+          echo "saas=true" >> "$GITHUB_OUTPUT"
+          echo "e2e=true" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        if: github.event_name == 'push'
+        uses: actions/checkout@v4
+
+      - name: Detect push changes
+        id: filter
+        if: github.event_name == 'push'
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            hosted:
+              - '.github/actions/setup-go/**'
+              - '.github/workflows/system-smokes.yml'
+              - 'Makefile'
+              - 'core/**'
+              - 'contracts/**'
+              - 'deploy/**'
+              - 'scripts/hosted/**'
+              - 'scripts/hosted-smoke'
+            saas:
+              - '.github/actions/setup-go/**'
+              - '.github/workflows/system-smokes.yml'
+              - 'Makefile'
+              - 'core/**'
+              - 'contracts/**'
+              - 'deploy/**'
+              - 'scripts/hosted/**'
+              - 'scripts/saas-smoke'
+              - 'scripts/saas-e2e'
+              - 'scripts/saas-load-smoke'
+
+  hosted-smokes:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ matrix.timeout_minutes }}
+    needs: changes
+    if: needs.changes.outputs.hosted == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: hosted-ops-test
+            timeout_minutes: 15
+            make_target: hosted-ops-test
+            artifact_name: ""
+            artifact_path: ""
+          - name: hosted-smoke
+            timeout_minutes: 20
+            make_target: hosted-smoke
+            artifact_name: hosted-smoke-artifacts
+            artifact_path: .tmp/hosted-smoke/**
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: ./.github/actions/setup-go
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
+
+      - name: Run ${{ matrix.name }}
+        env:
+          HOSTED_SMOKE_ARTIFACT_DIR: ${{ github.workspace }}/.tmp/hosted-smoke
+        run: make ${{ matrix.make_target }}
+
+      - name: Upload hosted artifacts
+        if: always() && matrix.artifact_path != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_path }}
+          if-no-files-found: ignore
+
+  saas-smokes:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ matrix.timeout_minutes }}
+    needs: changes
+    if: needs.changes.outputs.saas == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: saas-smoke
+            timeout_minutes: 20
+            make_target: saas-smoke
+            artifact_name: saas-smoke-artifacts
+            artifact_path: .tmp/saas-smoke/**
+          - name: saas-e2e
+            timeout_minutes: 25
+            make_target: saas-e2e
+            artifact_name: saas-e2e-artifacts
+            artifact_path: .tmp/saas-e2e/**
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: ./.github/actions/setup-go
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
+
+      - name: Run ${{ matrix.name }}
+        env:
+          SAAS_SMOKE_ARTIFACT_DIR: ${{ github.workspace }}/.tmp/saas-smoke
+          SAAS_E2E_ARTIFACT_DIR: ${{ github.workspace }}/.tmp/saas-e2e
+        run: make ${{ matrix.make_target }}
+
+      - name: Upload SaaS artifacts
+        if: always() && matrix.artifact_path != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_path }}
+          if-no-files-found: ignore
+
+  saas-load-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' && inputs.run_saas_load_smoke
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: ./.github/actions/setup-go
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
+
+      - name: Run saas-load-smoke
+        env:
+          SAAS_LOAD_ARTIFACT_DIR: ${{ github.workspace }}/.tmp/saas-load-smoke
+          SAAS_LOAD_NUM_WORKSPACES: 2
+          SAAS_LOAD_NUM_THREADS: 3
+          SAAS_LOAD_CONCURRENT: 2
+        run: make saas-load-smoke
+
+      - name: Upload saas-load-smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: saas-load-smoke-artifacts
+          path: .tmp/saas-load-smoke/**
+          if-no-files-found: ignore
+
+  e2e-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' && inputs.run_e2e_smoke
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: ./.github/actions/setup-go
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
+
+      - name: Setup Node And pnpm
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Run end-to-end smoke
+        env:
+          SMOKE_ARTIFACT_DIR: ${{ github.workspace }}/.tmp/e2e-smoke
+        run: make e2e-smoke
+
+      - name: Upload e2e artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-smoke-artifacts
+          path: .tmp/e2e-smoke/**
+          if-no-files-found: ignore

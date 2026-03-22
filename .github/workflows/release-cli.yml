@@ -3,84 +3,64 @@ name: Release CLI
 on:
   push:
     tags:
-      - 'v*'
-      - 'oar-cli-v*'
+      - "v*"
+      - "oar-cli-v*"
 
 permissions:
   contents: write
 
 jobs:
-  build:
+  release:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        goos: [linux, darwin, windows]
-        goarch: [amd64, arm64]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: ./.github/actions/setup-go
         with:
           go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
 
-      - name: Build CLI archive
-        id: build
+      - name: Build release archives
         shell: bash
         run: |
           set -euo pipefail
 
           VERSION="${GITHUB_REF_NAME}"
-          GOOS="${{ matrix.goos }}"
-          GOARCH="${{ matrix.goarch }}"
-          TARGET="oar_${VERSION}_${GOOS}_${GOARCH}"
-
           mkdir -p dist
-          STAGE_DIR="dist/${TARGET}"
-          mkdir -p "$STAGE_DIR"
 
-          BIN_NAME="oar"
-          BIN_EXT=""
-          if [[ "$GOOS" == "windows" ]]; then
-            BIN_EXT=".exe"
-          fi
+          for GOOS in linux darwin windows; do
+            for GOARCH in amd64 arm64; do
+              TARGET="oar_${VERSION}_${GOOS}_${GOARCH}"
+              STAGE_DIR="dist/${TARGET}"
+              mkdir -p "$STAGE_DIR"
 
-          (
-            cd cli
-            CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" go build -trimpath -ldflags="-s -w -X organization-autorunner-cli/internal/httpclient.CLIVersion=${VERSION}" -o "../${STAGE_DIR}/${BIN_NAME}${BIN_EXT}" ./cmd/oar
-          )
+              BIN_NAME="oar"
+              BIN_EXT=""
+              if [[ "$GOOS" == "windows" ]]; then
+                BIN_EXT=".exe"
+              fi
 
-          if [[ "$GOOS" == "windows" ]]; then
-            ARCHIVE="dist/${TARGET}.zip"
-            (
-              cd "$STAGE_DIR"
-              zip -q "../$(basename "$ARCHIVE")" "${BIN_NAME}${BIN_EXT}"
-            )
-          else
-            ARCHIVE="dist/${TARGET}.tar.gz"
-            tar -C "$STAGE_DIR" -czf "$ARCHIVE" "${BIN_NAME}${BIN_EXT}"
-          fi
+              (
+                cd cli
+                CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" go build \
+                  -trimpath \
+                  -ldflags="-s -w -X organization-autorunner-cli/internal/httpclient.CLIVersion=${VERSION}" \
+                  -o "../${STAGE_DIR}/${BIN_NAME}${BIN_EXT}" \
+                  ./cmd/oar
+              )
 
-          echo "archive=${ARCHIVE}" >> "$GITHUB_OUTPUT"
-
-      - name: Upload archive
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.goos }}-${{ matrix.goarch }}
-          path: ${{ steps.build.outputs.archive }}
-          compression-level: 0
-
-  publish:
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Download release artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist
-          merge-multiple: true
+              if [[ "$GOOS" == "windows" ]]; then
+                (
+                  cd "$STAGE_DIR"
+                  zip -q "../${TARGET}.zip" "${BIN_NAME}${BIN_EXT}"
+                )
+              else
+                tar -C "$STAGE_DIR" -czf "dist/${TARGET}.tar.gz" "${BIN_NAME}${BIN_EXT}"
+              fi
+            done
+          done
 
       - name: Generate checksums
         shell: bash
