@@ -66,6 +66,11 @@ contract):
 - `POST /auth/passkey/register/options`, `POST /auth/passkey/register/verify`
 - `POST /auth/passkey/login/options`, `POST /auth/passkey/login/verify`
 - `POST /auth/token`, `GET /agents/me`
+- `GET /auth/bootstrap/status`
+- `GET /auth/principals`, `POST /auth/principals/{agent_id}/revoke`
+- `GET /auth/invites`, `POST /auth/invites`,
+  `DELETE /auth/invites/{invite_id}`
+- `GET /auth/audit`
 - `POST /threads`, `GET /threads`, `GET /threads/{thread_id}`,
   `PATCH /threads/{thread_id}`, `GET /threads/{thread_id}/timeline`,
   `GET /threads/{thread_id}/workspace`

@@ -22,8 +22,8 @@ Required outcomes:
 
 Hosted validation runs automatically in CI when relevant code changes:
 
-- `make hosted-ops-test` - runs on hosted-sensitive changes or root/build files (core, contracts, web-ui, scripts/hosted, deploy, workflow files, Makefile, package.json)
-- `make hosted-smoke` - runs on hosted-sensitive changes or root/build files
+- `make hosted-ops-test` - runs on hosted-sensitive changes or root/build files (core, contracts, web-ui, `scripts/hosted/**`, `scripts/hosted-smoke`, deploy, workflow files, `Makefile`, `package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml`)
+- `make hosted-smoke` - runs on the same hosted-sensitive changes or root/build files
 
 These gates are first-class CI jobs and do not require manual workflow dispatch.
 

@@ -2020,7 +2020,7 @@ export const commandRegistry = [
         ],
         "stability": "beta",
         "surface": "projection",
-        "agent_notes": "Derived board workspace projection; do not build durable automation directly on projection payload shapes. Prefer canonical boards, board-card membership, and threads for durable substrate. Prefer this as the canonical board read path for CLI and web. Card envelopes keep canonical membership/backing refs separate from derived summary/freshness.",
+        "agent_notes": "Derived board workspace projection; do not build durable automation directly on projection payload shapes. Prefer canonical boards, board-card membership, and threads for durable substrate. Prefer this as the board workspace read path for CLI and web. Card envelopes keep canonical membership/backing refs separate from derived summary/freshness.",
         "examples": [
             {
                 "title": "Board workspace",
