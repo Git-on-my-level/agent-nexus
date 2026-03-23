@@ -208,7 +208,7 @@ class WakeRouter:
                 "thread_id": thread_id,
                 "summary": summary,
                 "refs": [f"thread:{thread_id}", f"event:{event_id}"],
-                "payload": {"code": code, "handle": handle},
+                "payload": {"subtype": code, "code": code, "handle": handle},
                 "provenance": {"sources": [f"actor_statement:{event_id}"]},
             },
             request_key=request_key,

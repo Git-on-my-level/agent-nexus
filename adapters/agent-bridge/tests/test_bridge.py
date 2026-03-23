@@ -1,7 +1,10 @@
+import pytest
+
 from pathlib import Path
 
 from oar_agent_bridge.bridge import AgentBridge
 from oar_agent_bridge.config import AdapterConfig, AgentConfig, LoadedConfig, OARConfig
+from oar_agent_bridge.oar_client import OARClientError
 
 
 class StubState:
@@ -81,3 +84,14 @@ def test_bridge_does_not_advance_cursor_when_handle_fails():
         pass
 
     assert state.last_event_id is None
+
+
+def test_claim_wakeup_returns_false_on_conflict():
+    bridge, _state = build_bridge([])
+
+    def raise_conflict(**_kwargs):
+        raise OARClientError(409, "conflict", "duplicate request key")
+
+    bridge.client.create_event = raise_conflict
+
+    assert bridge._claim_wakeup("wake-1", "thread-1", "actor-1", "event-1") is False

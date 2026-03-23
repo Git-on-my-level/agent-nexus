@@ -18,7 +18,7 @@ from .models import (
     failure_request_key,
     message_request_key,
 )
-from .oar_client import OARClient
+from .oar_client import OARClient, OARClientError
 from .prompts import build_wake_prompt
 from .state_store import JSONStateStore
 from .util import compact_text
@@ -138,21 +138,27 @@ class AgentBridge:
             raise
 
     def _claim_wakeup(self, wakeup_id: str, thread_id: str, target_actor_id: str, request_event_id: str) -> bool:
-        response = self.client.create_event(
-            event={
-                "type": WAKE_CLAIMED_EVENT,
-                "thread_id": thread_id,
-                "summary": f"Wakeup {wakeup_id} claimed by @{self.handle}",
-                "refs": [f"thread:{thread_id}", f"event:{request_event_id}", f"artifact:{wakeup_id}"],
-                "payload": {
-                    "wakeup_id": wakeup_id,
-                    "target_handle": self.handle,
-                    "bridge_instance_id": self.state.bridge_instance_id,
+        try:
+            response = self.client.create_event(
+                event={
+                    "type": WAKE_CLAIMED_EVENT,
+                    "thread_id": thread_id,
+                    "summary": f"Wakeup {wakeup_id} claimed by @{self.handle}",
+                    "refs": [f"thread:{thread_id}", f"event:{request_event_id}", f"artifact:{wakeup_id}"],
+                    "payload": {
+                        "wakeup_id": wakeup_id,
+                        "target_handle": self.handle,
+                        "bridge_instance_id": self.state.bridge_instance_id,
+                    },
+                    "provenance": {"sources": [f"artifact:{wakeup_id}"]},
                 },
-                "provenance": {"sources": [f"artifact:{wakeup_id}"]},
-            },
-            request_key=claim_request_key(wakeup_id, target_actor_id or self.handle),
-        )
+                request_key=claim_request_key(wakeup_id, target_actor_id or self.handle),
+            )
+        except OARClientError as exc:
+            if exc.status_code == 409:
+                LOGGER.info("Skipping wakeup %s because another bridge instance already claimed it", wakeup_id)
+                return False
+            raise
         event_payload = ((response or {}).get("event") or {}).get("payload") or {}
         owner = str(event_payload.get("bridge_instance_id", "")).strip()
         if owner and owner != self.state.bridge_instance_id:
