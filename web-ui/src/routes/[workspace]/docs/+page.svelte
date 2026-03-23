@@ -1,6 +1,7 @@
 <script>
-  import { page } from "$app/stores";
+  import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
+  import { page } from "$app/stores";
   import SearchableEntityPicker from "$lib/components/SearchableEntityPicker.svelte";
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
@@ -18,6 +19,41 @@
     String($page.url.searchParams.get("thread_id") ?? "").trim(),
   );
   let actorName = $derived((id) => lookupActorDisplayName(id, $actorRegistry));
+
+  let groupByLabel = $state(
+    browser && localStorage.getItem("oar-docs-group-by-label") === "true",
+  );
+  let collapsedGroups = $state(new Set());
+
+  let groupedDocs = $derived.by(() => {
+    if (!groupByLabel) return null;
+    /** @type {Record<string, typeof documents>} */
+    const groups = {};
+    for (const doc of documents) {
+      const label = (doc.labels ?? [])[0] || "__ungrouped__";
+      if (!groups[label]) groups[label] = [];
+      groups[label].push(doc);
+    }
+    return Object.entries(groups).sort(([a], [b]) => {
+      if (a === "__ungrouped__") return 1;
+      if (b === "__ungrouped__") return -1;
+      return a.localeCompare(b);
+    });
+  });
+
+  function toggleGrouping() {
+    groupByLabel = !groupByLabel;
+    collapsedGroups = new Set();
+    if (browser)
+      localStorage.setItem("oar-docs-group-by-label", String(groupByLabel));
+  }
+
+  function toggleGroup(label) {
+    const next = new Set(collapsedGroups);
+    if (next.has(label)) next.delete(label);
+    else next.add(label);
+    collapsedGroups = next;
+  }
 
   let createOpen = $state(false);
   let creating = $state(false);
@@ -167,12 +203,15 @@
       </p>
     {/if}
   </div>
-  <button
-    class="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text)] transition-colors hover:bg-[var(--ui-border)]"
-    onclick={toggleCreate}
-    type="button"
-  >
-    {#if !createOpen}
+  <div class="flex items-center gap-1.5">
+    <button
+      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium transition-colors {groupByLabel
+        ? 'bg-[var(--ui-accent-strong)] text-white'
+        : 'bg-[var(--ui-panel)] text-[var(--ui-text-muted)] hover:bg-[var(--ui-border)]'}"
+      onclick={toggleGrouping}
+      type="button"
+      title="Group by label"
+    >
       <svg
         class="h-3.5 w-3.5"
         fill="none"
@@ -183,12 +222,33 @@
         <path
           stroke-linecap="round"
           stroke-linejoin="round"
-          d="M12 4v16m8-8H4"
+          d="M3 7h4m0 0V3m0 4L3 3m18 4h-4m0 0V3m0 4l4-4M3 17h4m0 0v4m0-4L3 21m18-4h-4m0 0v4m0-4l4 4"
         />
       </svg>
-    {/if}
-    {createOpen ? "Cancel" : "New doc"}
-  </button>
+    </button>
+    <button
+      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text)] transition-colors hover:bg-[var(--ui-border)]"
+      onclick={toggleCreate}
+      type="button"
+    >
+      {#if !createOpen}
+        <svg
+          class="h-3.5 w-3.5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M12 4v16m8-8H4"
+          />
+        </svg>
+      {/if}
+      {createOpen ? "Cancel" : "New doc"}
+    </button>
+  </div>
 </div>
 
 {#if scopedThreadId}
@@ -351,58 +411,108 @@
   </div>
 {/if}
 
-{#if !loading && documents.length > 0}
-  <div
-    class="space-y-px rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] overflow-hidden"
+{#snippet docRow(doc, showBorderTop)}
+  <a
+    class="block px-4 py-3 transition-colors hover:bg-[var(--ui-border-subtle)] {showBorderTop
+      ? 'border-t border-[var(--ui-border)]'
+      : ''}"
+    href={workspaceHref(`/docs/${doc.id}`)}
   >
-    {#each documents as doc, i}
-      <a
-        class="block px-4 py-3 transition-colors hover:bg-[var(--ui-border-subtle)] {i >
-        0
-          ? 'border-t border-[var(--ui-border)]'
-          : ''}"
-        href={workspaceHref(`/docs/${doc.id}`)}
-      >
-        <div class="flex items-start justify-between gap-3">
-          <div class="min-w-0 flex-1">
-            <div class="flex flex-wrap items-center gap-2">
-              {#if doc.status}
-                <span
-                  class="inline-flex rounded px-1.5 py-0.5 text-[11px] font-semibold {statusColor(
-                    doc.status,
-                  )}">{DOC_STATUS_LABELS[doc.status] ?? doc.status}</span
-                >
-              {/if}
-              {#each (doc.labels ?? []).slice(0, 3) as label}
-                <span
-                  class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[10px] text-[var(--ui-text-muted)]"
-                  >{label}</span
-                >
-              {/each}
-            </div>
-            <p
-              class="mt-1 truncate text-[13px] font-medium text-[var(--ui-text)]"
+    <div class="flex items-start justify-between gap-3">
+      <div class="min-w-0 flex-1">
+        <div class="flex flex-wrap items-center gap-2">
+          {#if doc.status}
+            <span
+              class="inline-flex rounded px-1.5 py-0.5 text-[11px] font-semibold {statusColor(
+                doc.status,
+              )}">{DOC_STATUS_LABELS[doc.status] ?? doc.status}</span
             >
-              {doc.title || doc.id}
-            </p>
-            <p class="text-[11px] text-[var(--ui-text-muted)]">
-              Head v{doc.head_revision_number} · Updated {formatTimestamp(
-                doc.updated_at,
-              ) || "—"} by {actorName(doc.updated_by)}
-            </p>
-            {#if doc.thread_id && !scopedThreadId}
-              <p class="mt-0.5 text-[11px] text-[var(--ui-text-subtle)]">
-                Linked thread: {doc.thread_id}
-              </p>
-            {/if}
-          </div>
-          <span class="shrink-0 text-[11px] text-[var(--ui-text-subtle)]">
-            {doc.head_revision_number} revision{doc.head_revision_number === 1
-              ? ""
-              : "s"}
-          </span>
+          {/if}
+          {#each (doc.labels ?? []).slice(0, 3) as label}
+            <span
+              class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[10px] text-[var(--ui-text-muted)]"
+              >{label}</span
+            >
+          {/each}
         </div>
-      </a>
-    {/each}
-  </div>
+        <p class="mt-1 truncate text-[13px] font-medium text-[var(--ui-text)]">
+          {doc.title || doc.id}
+        </p>
+        <p class="text-[11px] text-[var(--ui-text-muted)]">
+          Head v{doc.head_revision_number} · Updated {formatTimestamp(
+            doc.updated_at,
+          ) || "—"} by {actorName(doc.updated_by)}
+        </p>
+        {#if doc.thread_id && !scopedThreadId}
+          <p class="mt-0.5 text-[11px] text-[var(--ui-text-subtle)]">
+            Linked thread: {doc.thread_id}
+          </p>
+        {/if}
+      </div>
+      <span class="shrink-0 text-[11px] text-[var(--ui-text-subtle)]">
+        {doc.head_revision_number} revision{doc.head_revision_number === 1
+          ? ""
+          : "s"}
+      </span>
+    </div>
+  </a>
+{/snippet}
+
+{#if !loading && documents.length > 0}
+  {#if groupByLabel && groupedDocs}
+    <div class="space-y-2">
+      {#each groupedDocs as [label, docs]}
+        {@const collapsed = collapsedGroups.has(label)}
+        {@const displayLabel =
+          label === "__ungrouped__"
+            ? "Ungrouped"
+            : label.charAt(0).toUpperCase() + label.slice(1)}
+        <div
+          class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] overflow-hidden"
+        >
+          <button
+            class="cursor-pointer flex w-full items-center gap-2 px-4 py-2 text-left transition-colors hover:bg-[var(--ui-border-subtle)]"
+            onclick={() => toggleGroup(label)}
+            type="button"
+          >
+            <svg
+              class="h-3 w-3 text-[var(--ui-text-subtle)] transition-transform {collapsed
+                ? ''
+                : 'rotate-90'}"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M9 5l7 7-7 7"
+              />
+            </svg>
+            <span class="text-[12px] font-medium text-[var(--ui-text)]"
+              >{displayLabel}</span
+            >
+            <span
+              class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[10px] text-[var(--ui-text-muted)]"
+              >{docs.length}</span
+            >
+          </button>
+          {#if !collapsed}
+            {#each docs as doc, i}
+              {@render docRow(doc, i > 0)}
+            {/each}
+          {/if}
+        </div>
+      {/each}
+    </div>
+  {:else}
+    <div
+      class="space-y-px rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] overflow-hidden"
+    >
+      {#each documents as doc, i}
+        {@render docRow(doc, i > 0)}
+      {/each}
+    </div>
+  {/if}
 {/if}

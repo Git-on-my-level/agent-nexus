@@ -36,6 +36,8 @@
   let addingCard = $state(false);
   let expandedCardId = $state("");
   let mutatingCardId = $state("");
+  let backlogOpen = $state(false);
+  let doneOpen = $state(false);
 
   let boardTitle = $state("");
   let boardStatus = $state("active");
@@ -459,6 +461,11 @@
   {@const boardWarnings = workspace.warnings?.items ?? []}
 
   {@const boardFreshness = workspace.projection_freshness}
+  {@const activeColumns = board.column_schema.filter(
+    (c) => c.key !== "backlog" && c.key !== "done",
+  )}
+  {@const backlogCards = cardsByColumn["backlog"] ?? []}
+  {@const doneCards = cardsByColumn["done"] ?? []}
 
   <div class="mb-3">
     <div class="flex items-center gap-2 text-[12px]">
@@ -492,6 +499,7 @@
           class="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium {freshnessStatusTone(
             boardFreshness?.status,
           )}"
+          title={`${boardProjectionMessage(boardFreshness)} Generated ${formatTimestamp(workspace.generated_at) || "—"}.`}
         >
           {freshnessStatusLabel(boardFreshness?.status)}
         </span>
@@ -547,30 +555,6 @@
       {/if}
     </div>
   </div>
-
-  <section
-    class="mb-4 rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] px-4 py-3"
-  >
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <div>
-        <h2 class="text-[13px] font-medium text-[var(--ui-text)]">
-          Trusted board scan
-        </h2>
-        <p class="mt-1 text-[12px] text-[var(--ui-text-muted)]">
-          {boardProjectionMessage(boardFreshness)}
-        </p>
-      </div>
-      <div class="text-right text-[11px] text-[var(--ui-text-subtle)]">
-        <div>Generated {formatTimestamp(workspace.generated_at) || "—"}</div>
-        <div>
-          Tracking {boardFreshness?.thread_count ?? 0} thread{boardFreshness?.thread_count ===
-          1
-            ? ""
-            : "s"}
-        </div>
-      </div>
-    </div>
-  </section>
 
   <!-- Notification alerts -->
   {#if mutationNotice || conflictWarning || mutationError}
@@ -794,6 +778,270 @@
     </section>
   {/if}
 
+  {#snippet renderCard(cardItem, index, cards)}
+    {@const membership = cardItem.membership}
+    {@const backing = cardItem.backing}
+    {@const derived = cardItem.derived}
+    {@const thread = backing?.thread}
+    {@const threadId = membership.thread_id}
+    {@const threadStatus = getThreadStatus(thread)}
+    {@const cardFreshness = derived?.freshness}
+    {@const derivedCurrent = isFreshnessCurrent(cardFreshness)}
+    {@const summary = derived?.summary}
+    <div
+      class="group rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] transition-colors hover:border-[var(--ui-border-strong)]"
+    >
+      <div class="px-2.5 py-2">
+        <div class="flex items-start gap-2">
+          <span
+            class="mt-[5px] h-2 w-2 shrink-0 rounded-full {threadStatusDotClass(
+              threadStatus,
+            )}"
+          ></span>
+          <a
+            class="block min-w-0 flex-1 text-[13px] font-medium leading-snug transition-colors hover:text-indigo-300 {threadStatusColor(
+              threadStatus,
+            )}"
+            href={workspaceHref(`/threads/${encodeURIComponent(threadId)}`)}
+          >
+            {thread?.title || threadId}
+          </a>
+        </div>
+
+        <div class="mt-1 pl-4 text-[11px] text-[var(--ui-text-muted)]">
+          {thread?.status ?? "—"} · {thread?.priority ?? "—"} · Added {formatTimestamp(
+            membership.created_at,
+          )}
+        </div>
+
+        <div class="mt-1.5 flex flex-wrap gap-1 pl-4">
+          <span
+            class="rounded px-1 py-0.5 text-[11px] {freshnessStatusTone(
+              cardFreshness?.status,
+            )}"
+          >
+            {freshnessStatusLabel(cardFreshness?.status)}
+          </span>
+          {#if derivedCurrent}
+            {#if (summary?.open_commitment_count ?? 0) > 0}
+              <span
+                class="rounded bg-[var(--ui-border)] px-1 py-0.5 text-[11px] text-[var(--ui-text-muted)]"
+              >
+                {summary.open_commitment_count} commit.
+              </span>
+            {/if}
+            {#if (summary?.inbox_count ?? 0) > 0}
+              <span
+                class="rounded bg-amber-500/10 px-1 py-0.5 text-[11px] text-amber-400"
+              >
+                {summary.inbox_count} inbox
+              </span>
+            {/if}
+            {#if (summary?.decision_request_count ?? 0) > 0}
+              <span
+                class="rounded bg-indigo-500/10 px-1 py-0.5 text-[11px] text-indigo-400"
+              >
+                {summary.decision_request_count} decisions
+              </span>
+            {/if}
+            <span
+              class="rounded px-1 py-0.5 text-[11px] {staleBadgeClass(
+                Boolean(summary?.stale),
+              )}"
+            >
+              {summary?.stale ? "Thread stale" : "Fresh check-in"}
+            </span>
+          {:else}
+            <span
+              class="rounded bg-[var(--ui-border)] px-1 py-0.5 text-[11px] text-[var(--ui-text-subtle)]"
+            >
+              Derived counts hidden until refresh completes
+            </span>
+          {/if}
+        </div>
+
+        {#if backing?.pinned_document}
+          <div class="mt-1.5 pl-4">
+            <a
+              aria-label={`Pinned doc ${backing.pinned_document.title || backing.pinned_document.id}`}
+              class="inline-block rounded bg-indigo-500/10 px-1.5 py-0.5 text-[11px] text-indigo-300 transition-colors hover:text-indigo-200"
+              href={workspaceHref(
+                `/docs/${encodeURIComponent(backing.pinned_document.id)}`,
+              )}
+            >
+              {backing.pinned_document.title || backing.pinned_document.id}
+            </a>
+          </div>
+        {/if}
+
+        <div class="mt-2 flex justify-end">
+          <button
+            aria-label={`Manage ${thread?.title || threadId}`}
+            class="rounded px-1.5 py-1.5 text-[11px] text-[var(--ui-text-subtle)] transition-colors hover:bg-[var(--ui-border)] hover:text-[var(--ui-text-muted)]"
+            onclick={() => openCardManager(cardItem)}
+            type="button"
+          >
+            {expandedCardId === threadId ? "Close" : "Actions"}
+          </button>
+        </div>
+      </div>
+
+      {#if expandedCardId === threadId}
+        {@const thisCommitments = cardCommitments(threadId)}
+        {@const thisInbox = cardInboxItems(threadId)}
+        {@const thisDocs = cardDocuments(threadId)}
+        <div
+          class="border-t border-[var(--ui-border)] bg-[var(--ui-panel-muted)]"
+        >
+          {#if thisCommitments.length > 0}
+            <div class="border-b border-[var(--ui-border)] px-2.5 py-1.5">
+              <p
+                class="text-[11px] font-semibold uppercase tracking-wide text-[var(--ui-text-subtle)]"
+              >
+                Commitments
+              </p>
+              {#each thisCommitments as c}
+                <div class="mt-1 text-[11px]">
+                  <span class="text-[var(--ui-text)]">
+                    {c.title || ""}{#if !c.title}<span
+                        class="font-mono text-[var(--ui-text-subtle)]"
+                        >{c.id}</span
+                      >{/if}
+                  </span>
+                  <span class="text-[var(--ui-text-subtle)]">
+                    · {c.status ?? "—"} · Due {formatTimestamp(c.due_at) || "—"}
+                  </span>
+                </div>
+              {/each}
+            </div>
+          {/if}
+
+          {#if thisInbox.length > 0}
+            <div class="border-b border-[var(--ui-border)] px-2.5 py-1.5">
+              <p
+                class="text-[11px] font-semibold uppercase tracking-wide text-[var(--ui-text-subtle)]"
+              >
+                Inbox
+              </p>
+              {#each thisInbox as item}
+                <div class="mt-1 text-[11px]">
+                  <span class="text-amber-400">{item.urgency_label}</span>
+                  <span class="text-[var(--ui-text)]">
+                    {item.title || item.summary || item.id}
+                  </span>
+                </div>
+              {/each}
+            </div>
+          {/if}
+
+          {#if thisDocs.length > 0}
+            <div class="border-b border-[var(--ui-border)] px-2.5 py-1.5">
+              <p
+                class="text-[11px] font-semibold uppercase tracking-wide text-[var(--ui-text-subtle)]"
+              >
+                Documents
+              </p>
+              {#each thisDocs as doc}
+                <div class="mt-1">
+                  <a
+                    class="text-[11px] text-indigo-300 transition-colors hover:text-indigo-200"
+                    href={workspaceHref(`/docs/${encodeURIComponent(doc.id)}`)}
+                  >
+                    {doc.title || doc.id}
+                  </a>
+                </div>
+              {/each}
+            </div>
+          {/if}
+
+          <div class="space-y-2 px-2.5 py-2">
+            <div class="flex items-end gap-1.5">
+              <label
+                class="min-w-0 flex-1 text-[11px] text-[var(--ui-text-muted)]"
+              >
+                Move to column
+                <select
+                  bind:value={manageMoveColumnKey}
+                  class="mt-0.5 w-full rounded border border-[var(--ui-border)] bg-[var(--ui-panel)] px-2 py-1 text-[12px] text-[var(--ui-text)]"
+                >
+                  {#each board.column_schema as moveColumn}
+                    <option value={moveColumn.key}>
+                      {moveColumn.title ||
+                        boardColumnTitle(moveColumn.key, board.column_schema)}
+                    </option>
+                  {/each}
+                </select>
+              </label>
+              <button
+                class="rounded bg-indigo-600 px-2.5 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-40"
+                disabled={mutatingCardId === threadId}
+                onclick={() =>
+                  moveCard(
+                    cardItem,
+                    { column_key: manageMoveColumnKey },
+                    "Card moved.",
+                  )}
+                type="button"
+              >
+                Move to column
+              </button>
+            </div>
+
+            <SearchableEntityPicker
+              bind:value={managePinnedDocumentId}
+              advancedLabel="Use a manual pinned document ID"
+              helperText="Update the canonical pinned doc lineage for this card."
+              label="Pinned document"
+              manualLabel="Pinned document ID"
+              manualPlaceholder="doc-lineage-id"
+              placeholder="Search documents by title, ID, or thread"
+              searchFn={searchDocumentOptions}
+            />
+            <div class="flex justify-end">
+              <button
+                class="rounded border border-[var(--ui-border)] bg-[var(--ui-panel)] px-2.5 py-1.5 text-[11px] text-[var(--ui-text-muted)] transition-colors hover:text-[var(--ui-text)] disabled:opacity-40"
+                disabled={mutatingCardId === threadId}
+                onclick={() => saveCardPinnedDocument(cardItem)}
+                type="button"
+              >
+                Save pinned doc
+              </button>
+            </div>
+
+            <div class="flex items-center gap-1">
+              <button
+                class="rounded border border-[var(--ui-border)] bg-[var(--ui-panel)] px-2 py-1.5 text-[11px] text-[var(--ui-text-muted)] transition-colors hover:text-[var(--ui-text)] disabled:opacity-40"
+                disabled={index === 0 || mutatingCardId === threadId}
+                onclick={() => reorderCard(cardItem, cards, index, "up")}
+                type="button"
+              >
+                Move up
+              </button>
+              <button
+                class="rounded border border-[var(--ui-border)] bg-[var(--ui-panel)] px-2 py-1.5 text-[11px] text-[var(--ui-text-muted)] transition-colors hover:text-[var(--ui-text)] disabled:opacity-40"
+                disabled={index === cards.length - 1 ||
+                  mutatingCardId === threadId}
+                onclick={() => reorderCard(cardItem, cards, index, "down")}
+                type="button"
+              >
+                Move down
+              </button>
+              <div class="flex-1"></div>
+              <button
+                class="rounded border border-red-500/20 bg-red-500/10 px-2 py-1.5 text-[11px] text-red-400 transition-colors hover:bg-red-500/15 disabled:opacity-40"
+                disabled={mutatingCardId === threadId}
+                onclick={() => removeCard(cardItem)}
+                type="button"
+              >
+                Remove card
+              </button>
+            </div>
+          </div>
+        </div>
+      {/if}
+    </div>
+  {/snippet}
+
   <section class="mb-3">
     <div class="mb-2 flex items-baseline justify-between gap-3">
       <div>
@@ -807,8 +1055,48 @@
       </div>
     </div>
 
+    <div
+      class="mb-3 rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]"
+    >
+      <button
+        class="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--ui-border-subtle)]"
+        onclick={() => {
+          backlogOpen = !backlogOpen;
+        }}
+        type="button"
+      >
+        <svg
+          class="h-3.5 w-3.5 shrink-0 text-[var(--ui-text-muted)] transition-transform {backlogOpen
+            ? 'rotate-90'
+            : ''}"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          stroke-width="2"><path d="M9 5l7 7-7 7" /></svg
+        >
+        <span class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+          >Backlog</span
+        >
+        <span
+          class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] text-[var(--ui-text-subtle)]"
+          >{backlogCards.length}</span
+        >
+      </button>
+      {#if backlogOpen}
+        <div class="space-y-2 border-t border-[var(--ui-border)] px-3 py-2">
+          {#if backlogCards.length === 0}
+            <p class="text-[11px] text-[var(--ui-text-subtle)]">No cards</p>
+          {:else}
+            {#each backlogCards as cardItem, index}
+              {@render renderCard(cardItem, index, backlogCards)}
+            {/each}
+          {/if}
+        </div>
+      {/if}
+    </div>
+
     <div class="flex gap-3 overflow-x-auto pb-4">
-      {#each board.column_schema as column}
+      {#each activeColumns as column}
         {@const cards = cardsByColumn[column.key] ?? []}
         <div
           class="flex min-w-[260px] flex-1 flex-col rounded-md bg-[var(--ui-panel-muted)]"
@@ -826,7 +1114,6 @@
               {cards.length}
             </span>
           </div>
-
           <div
             class="flex-1 space-y-2 overflow-y-auto px-2 pb-2"
             style="max-height: calc(100vh - 260px); min-height: 120px;"
@@ -839,295 +1126,52 @@
               </div>
             {:else}
               {#each cards as cardItem, index}
-                {@const membership = cardItem.membership}
-                {@const backing = cardItem.backing}
-                {@const derived = cardItem.derived}
-                {@const thread = backing?.thread}
-                {@const threadId = membership.thread_id}
-                {@const threadStatus = getThreadStatus(thread)}
-                {@const cardFreshness = derived?.freshness}
-                {@const derivedCurrent = isFreshnessCurrent(cardFreshness)}
-                {@const summary = derived?.summary}
-
-                <div
-                  class="group rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] transition-colors hover:border-[var(--ui-border-strong)]"
-                >
-                  <div class="px-2.5 py-2">
-                    <div class="flex items-start gap-2">
-                      <span
-                        class="mt-[5px] h-2 w-2 shrink-0 rounded-full {threadStatusDotClass(
-                          threadStatus,
-                        )}"
-                      ></span>
-                      <a
-                        class="block min-w-0 flex-1 text-[13px] font-medium leading-snug transition-colors hover:text-indigo-300 {threadStatusColor(
-                          threadStatus,
-                        )}"
-                        href={workspaceHref(
-                          `/threads/${encodeURIComponent(threadId)}`,
-                        )}
-                      >
-                        {thread?.title || threadId}
-                      </a>
-                    </div>
-
-                    <div
-                      class="mt-1 pl-4 text-[11px] text-[var(--ui-text-muted)]"
-                    >
-                      {thread?.status ?? "\u2014"} · {thread?.priority ?? "—"} · Added
-                      {formatTimestamp(membership.created_at)}
-                    </div>
-
-                    <div class="mt-1.5 flex flex-wrap gap-1 pl-4">
-                      <span
-                        class="rounded px-1 py-0.5 text-[11px] {freshnessStatusTone(
-                          cardFreshness?.status,
-                        )}"
-                      >
-                        {freshnessStatusLabel(cardFreshness?.status)}
-                      </span>
-                      {#if derivedCurrent}
-                        {#if (summary?.open_commitment_count ?? 0) > 0}
-                          <span
-                            class="rounded bg-[var(--ui-border)] px-1 py-0.5 text-[11px] text-[var(--ui-text-muted)]"
-                          >
-                            {summary.open_commitment_count} commit.
-                          </span>
-                        {/if}
-                        {#if (summary?.inbox_count ?? 0) > 0}
-                          <span
-                            class="rounded bg-amber-500/10 px-1 py-0.5 text-[11px] text-amber-400"
-                          >
-                            {summary.inbox_count} inbox
-                          </span>
-                        {/if}
-                        {#if (summary?.decision_request_count ?? 0) > 0}
-                          <span
-                            class="rounded bg-indigo-500/10 px-1 py-0.5 text-[11px] text-indigo-400"
-                          >
-                            {summary.decision_request_count} decisions
-                          </span>
-                        {/if}
-                        <span
-                          class="rounded px-1 py-0.5 text-[11px] {staleBadgeClass(
-                            Boolean(summary?.stale),
-                          )}"
-                        >
-                          {summary?.stale ? "Thread stale" : "Fresh check-in"}
-                        </span>
-                      {:else}
-                        <span
-                          class="rounded bg-[var(--ui-border)] px-1 py-0.5 text-[11px] text-[var(--ui-text-subtle)]"
-                        >
-                          Derived counts hidden until refresh completes
-                        </span>
-                      {/if}
-                    </div>
-
-                    {#if backing?.pinned_document}
-                      <div class="mt-1.5 pl-4">
-                        <a
-                          aria-label={`Pinned doc ${backing.pinned_document.title || backing.pinned_document.id}`}
-                          class="inline-block rounded bg-indigo-500/10 px-1.5 py-0.5 text-[11px] text-indigo-300 transition-colors hover:text-indigo-200"
-                          href={workspaceHref(
-                            `/docs/${encodeURIComponent(backing.pinned_document.id)}`,
-                          )}
-                        >
-                          {backing.pinned_document.title ||
-                            backing.pinned_document.id}
-                        </a>
-                      </div>
-                    {/if}
-
-                    <div class="mt-2 flex justify-end">
-                      <button
-                        aria-label={`Manage ${thread?.title || threadId}`}
-                        class="rounded px-1.5 py-1.5 text-[11px] text-[var(--ui-text-subtle)] transition-colors hover:bg-[var(--ui-border)] hover:text-[var(--ui-text-muted)]"
-                        onclick={() => openCardManager(cardItem)}
-                        type="button"
-                      >
-                        {expandedCardId === threadId ? "Close" : "Actions"}
-                      </button>
-                    </div>
-                  </div>
-
-                  {#if expandedCardId === threadId}
-                    {@const thisCommitments = cardCommitments(threadId)}
-                    {@const thisInbox = cardInboxItems(threadId)}
-                    {@const thisDocs = cardDocuments(threadId)}
-                    <div
-                      class="border-t border-[var(--ui-border)] bg-[var(--ui-panel-muted)]"
-                    >
-                      {#if thisCommitments.length > 0}
-                        <div
-                          class="border-b border-[var(--ui-border)] px-2.5 py-1.5"
-                        >
-                          <p
-                            class="text-[11px] font-semibold uppercase tracking-wide text-[var(--ui-text-subtle)]"
-                          >
-                            Commitments
-                          </p>
-                          {#each thisCommitments as c}
-                            <div class="mt-1 text-[11px]">
-                              <span class="text-[var(--ui-text)]">
-                                {c.title || ""}{#if !c.title}<span
-                                    class="font-mono text-[var(--ui-text-subtle)]"
-                                    >{c.id}</span
-                                  >{/if}
-                              </span>
-                              <span class="text-[var(--ui-text-subtle)]">
-                                · {c.status ?? "\u2014"} · Due {formatTimestamp(
-                                  c.due_at,
-                                ) || "—"}
-                              </span>
-                            </div>
-                          {/each}
-                        </div>
-                      {/if}
-
-                      {#if thisInbox.length > 0}
-                        <div
-                          class="border-b border-[var(--ui-border)] px-2.5 py-1.5"
-                        >
-                          <p
-                            class="text-[11px] font-semibold uppercase tracking-wide text-[var(--ui-text-subtle)]"
-                          >
-                            Inbox
-                          </p>
-                          {#each thisInbox as item}
-                            <div class="mt-1 text-[11px]">
-                              <span class="text-amber-400"
-                                >{item.urgency_label}</span
-                              >
-                              <span class="text-[var(--ui-text)]">
-                                {item.title || item.summary || item.id}
-                              </span>
-                            </div>
-                          {/each}
-                        </div>
-                      {/if}
-
-                      {#if thisDocs.length > 0}
-                        <div
-                          class="border-b border-[var(--ui-border)] px-2.5 py-1.5"
-                        >
-                          <p
-                            class="text-[11px] font-semibold uppercase tracking-wide text-[var(--ui-text-subtle)]"
-                          >
-                            Documents
-                          </p>
-                          {#each thisDocs as doc}
-                            <div class="mt-1">
-                              <a
-                                class="text-[11px] text-indigo-300 transition-colors hover:text-indigo-200"
-                                href={workspaceHref(
-                                  `/docs/${encodeURIComponent(doc.id)}`,
-                                )}
-                              >
-                                {doc.title || doc.id}
-                              </a>
-                            </div>
-                          {/each}
-                        </div>
-                      {/if}
-
-                      <div class="space-y-2 px-2.5 py-2">
-                        <div class="flex items-end gap-1.5">
-                          <label
-                            class="min-w-0 flex-1 text-[11px] text-[var(--ui-text-muted)]"
-                          >
-                            Move to column
-                            <select
-                              bind:value={manageMoveColumnKey}
-                              class="mt-0.5 w-full rounded border border-[var(--ui-border)] bg-[var(--ui-panel)] px-2 py-1 text-[12px] text-[var(--ui-text)]"
-                            >
-                              {#each board.column_schema as moveColumn}
-                                <option value={moveColumn.key}>
-                                  {moveColumn.title ||
-                                    boardColumnTitle(
-                                      moveColumn.key,
-                                      board.column_schema,
-                                    )}
-                                </option>
-                              {/each}
-                            </select>
-                          </label>
-                          <button
-                            class="rounded bg-indigo-600 px-2.5 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-40"
-                            disabled={mutatingCardId === threadId}
-                            onclick={() =>
-                              moveCard(
-                                cardItem,
-                                { column_key: manageMoveColumnKey },
-                                "Card moved.",
-                              )}
-                            type="button"
-                          >
-                            Move to column
-                          </button>
-                        </div>
-
-                        <SearchableEntityPicker
-                          bind:value={managePinnedDocumentId}
-                          advancedLabel="Use a manual pinned document ID"
-                          helperText="Update the canonical pinned doc lineage for this card."
-                          label="Pinned document"
-                          manualLabel="Pinned document ID"
-                          manualPlaceholder="doc-lineage-id"
-                          placeholder="Search documents by title, ID, or thread"
-                          searchFn={searchDocumentOptions}
-                        />
-                        <div class="flex justify-end">
-                          <button
-                            class="rounded border border-[var(--ui-border)] bg-[var(--ui-panel)] px-2.5 py-1.5 text-[11px] text-[var(--ui-text-muted)] transition-colors hover:text-[var(--ui-text)] disabled:opacity-40"
-                            disabled={mutatingCardId === threadId}
-                            onclick={() => saveCardPinnedDocument(cardItem)}
-                            type="button"
-                          >
-                            Save pinned doc
-                          </button>
-                        </div>
-
-                        <div class="flex items-center gap-1">
-                          <button
-                            class="rounded border border-[var(--ui-border)] bg-[var(--ui-panel)] px-2 py-1.5 text-[11px] text-[var(--ui-text-muted)] transition-colors hover:text-[var(--ui-text)] disabled:opacity-40"
-                            disabled={index === 0 ||
-                              mutatingCardId === threadId}
-                            onclick={() =>
-                              reorderCard(cardItem, cards, index, "up")}
-                            type="button"
-                          >
-                            Move up
-                          </button>
-                          <button
-                            class="rounded border border-[var(--ui-border)] bg-[var(--ui-panel)] px-2 py-1.5 text-[11px] text-[var(--ui-text-muted)] transition-colors hover:text-[var(--ui-text)] disabled:opacity-40"
-                            disabled={index === cards.length - 1 ||
-                              mutatingCardId === threadId}
-                            onclick={() =>
-                              reorderCard(cardItem, cards, index, "down")}
-                            type="button"
-                          >
-                            Move down
-                          </button>
-                          <div class="flex-1"></div>
-                          <button
-                            class="rounded border border-red-500/20 bg-red-500/10 px-2 py-1.5 text-[11px] text-red-400 transition-colors hover:bg-red-500/15 disabled:opacity-40"
-                            disabled={mutatingCardId === threadId}
-                            onclick={() => removeCard(cardItem)}
-                            type="button"
-                          >
-                            Remove card
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  {/if}
-                </div>
+                {@render renderCard(cardItem, index, cards)}
               {/each}
             {/if}
           </div>
         </div>
       {/each}
+    </div>
+
+    <div
+      class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]"
+    >
+      <button
+        class="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--ui-border-subtle)]"
+        onclick={() => {
+          doneOpen = !doneOpen;
+        }}
+        type="button"
+      >
+        <svg
+          class="h-3.5 w-3.5 shrink-0 text-[var(--ui-text-muted)] transition-transform {doneOpen
+            ? 'rotate-90'
+            : ''}"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          stroke-width="2"><path d="M9 5l7 7-7 7" /></svg
+        >
+        <span class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+          >Done</span
+        >
+        <span
+          class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] text-[var(--ui-text-subtle)]"
+          >{doneCards.length}</span
+        >
+      </button>
+      {#if doneOpen}
+        <div class="space-y-2 border-t border-[var(--ui-border)] px-3 py-2">
+          {#if doneCards.length === 0}
+            <p class="text-[11px] text-[var(--ui-text-subtle)]">No cards</p>
+          {:else}
+            {#each doneCards as cardItem, index}
+              {@render renderCard(cardItem, index, doneCards)}
+            {/each}
+          {/if}
+        </div>
+      {/if}
     </div>
   </section>
 

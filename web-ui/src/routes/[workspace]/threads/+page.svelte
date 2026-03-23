@@ -189,6 +189,24 @@
 <div class="flex items-center justify-between mb-4">
   <h1 class="text-lg font-semibold text-[var(--ui-text)]">Threads</h1>
   <div class="flex items-center gap-1.5">
+    <span
+      class="inline-flex items-center gap-1 rounded border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2 py-1 text-[11px] text-[var(--ui-text-muted)]"
+    >
+      <svg
+        class="h-3 w-3"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        stroke-width="2"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+        />
+      </svg>
+      <kbd class="font-mono text-[10px]">⌘K</kbd>
+    </span>
     <button
       class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)]"
       onclick={() => (filtersOpen = !filtersOpen)}

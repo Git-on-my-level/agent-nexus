@@ -37,6 +37,7 @@
   let saving = $state(false);
   let saveError = $state("");
   let loadingSelectedRevisionKey = $state("");
+  let metadataExpanded = $state(false);
 
   let displayedContent = $derived(
     selectedRevision?.content ?? headRevision?.content ?? "",
@@ -378,105 +379,61 @@
 
   <div class="flex gap-4">
     <div class="min-w-0 flex-1">
-      <section
-        class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-4"
-      >
-        <div class="flex items-start justify-between gap-3">
-          <div>
-            <h1 class="text-lg font-semibold text-[var(--ui-text)]">
-              {document.title || ""}{#if !document.title}<span
-                  class="font-mono text-[var(--ui-text-subtle)]"
-                  >{document.id}</span
-                >{/if}
-            </h1>
-            <p class="mt-1 text-[12px] text-[var(--ui-text-muted)]">
-              Living doc lineage. The head revision is mutable, and every prior
-              revision stays in the lineage history.
-            </p>
-            <div class="mt-1 flex flex-wrap items-center gap-2 text-[12px]">
-              {#if document.status}
-                <span
-                  class="rounded px-1.5 py-0.5 font-medium text-emerald-400 bg-emerald-500/10"
-                  >{{ draft: "Draft", active: "Active" }[document.status] ??
-                    document.status}</span
-                >
-              {/if}
-              {#each document.labels ?? [] as label}
-                <span
-                  class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[10px] text-[var(--ui-text-muted)]"
-                  >{label}</span
-                >
-              {/each}
-              <span class="text-[var(--ui-text-muted)]"
-                >v{displayedRevision?.revision_number ?? "\u2014"}</span
-              >
-              <span class="text-[var(--ui-text-muted)]"
-                >{formatTimestamp(displayedRevision?.created_at) || "—"}</span
-              >
-              <span class="text-[var(--ui-text-muted)]"
-                >by {actorName(displayedRevision?.created_by)}</span
-              >
-            </div>
-            {#if document.thread_id}
-              <div class="mt-1 text-[12px] text-[var(--ui-text-muted)]">
-                <span class="text-[var(--ui-text-subtle)]">Linked thread</span>
-                <a
-                  class="ml-1 text-indigo-400 transition-colors hover:text-indigo-300"
-                  href={workspaceHref(
-                    `/threads/${encodeURIComponent(document.thread_id)}`,
-                  )}
-                >
-                  {document.thread_id}
-                </a>
-              </div>
-            {/if}
-          </div>
-          <div class="flex shrink-0 items-center gap-1.5">
-            {#if !document.tombstoned_at && isTextEditable}
-              <button
-                class="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-2.5 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500"
-                onclick={openEdit}
-                type="button"
-              >
-                <svg
-                  class="h-3.5 w-3.5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  stroke-width="2"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                  />
-                </svg>
-                New revision
-              </button>
-            {:else if !document.tombstoned_at}
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0 flex-1">
+          <h1 class="text-lg font-semibold text-[var(--ui-text)]">
+            {document.title || ""}{#if !document.title}<span
+                class="font-mono text-[var(--ui-text-subtle)]"
+                >{document.id}</span
+              >{/if}
+          </h1>
+          <div class="mt-1 flex flex-wrap items-center gap-1.5 text-[12px]">
+            {#if document.status}
               <span
-                class="inline-flex items-center gap-1 rounded-md border border-[var(--ui-border)] px-2.5 py-1.5 text-[12px] text-[var(--ui-text-subtle)]"
-                title="Content type '{headContentType}' can only be updated via the CLI or API"
+                class="rounded px-1.5 py-0.5 font-medium {document.status ===
+                'active'
+                  ? 'text-emerald-400 bg-emerald-500/10'
+                  : 'text-amber-400 bg-amber-500/10'}"
+                >{{ draft: "Draft", active: "Active" }[document.status] ??
+                  document.status}</span
               >
-                <svg
-                  class="h-3.5 w-3.5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  stroke-width="2"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-                {headContentType} — edit via CLI
-              </span>
             {/if}
+            {#each document.labels ?? [] as label}
+              <span
+                class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[10px] text-[var(--ui-text-muted)]"
+                >{label}</span
+              >
+            {/each}
+            <span class="text-[var(--ui-text-subtle)]">·</span>
+            <span class="text-[var(--ui-text-muted)]"
+              >v{displayedRevision?.revision_number ?? "\u2014"}</span
+            >
+            <span class="text-[var(--ui-text-subtle)]">·</span>
+            <span class="text-[var(--ui-text-muted)]"
+              >{formatTimestamp(displayedRevision?.created_at) || "—"}</span
+            >
+            <span class="text-[var(--ui-text-subtle)]">·</span>
+            <span class="text-[var(--ui-text-muted)]"
+              >by {actorName(displayedRevision?.created_by)}</span
+            >
+          </div>
+          {#if document.thread_id}
+            <p class="mt-0.5 text-[12px] text-[var(--ui-text-muted)]">
+              Linked thread:
+              <a
+                class="text-indigo-400 transition-colors hover:text-indigo-300"
+                href={workspaceHref(
+                  `/threads/${encodeURIComponent(document.thread_id)}`,
+                )}>{document.thread_id}</a
+              >
+            </p>
+          {/if}
+        </div>
+        <div class="flex shrink-0 items-center gap-1.5">
+          {#if !document.tombstoned_at && isTextEditable}
             <button
-              class="cursor-pointer shrink-0 inline-flex items-center gap-1.5 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)]"
-              onclick={loadHistory}
+              class="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-2.5 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500"
+              onclick={openEdit}
               type="button"
             >
               <svg
@@ -489,92 +446,154 @@
                 <path
                   stroke-linecap="round"
                   stroke-linejoin="round"
-                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
                 />
               </svg>
-              Revision history
+              New revision
             </button>
-          </div>
+          {:else if !document.tombstoned_at}
+            <span
+              class="inline-flex items-center gap-1 rounded-md border border-[var(--ui-border)] px-2.5 py-1.5 text-[12px] text-[var(--ui-text-subtle)]"
+              title="Content type '{headContentType}' can only be updated via the CLI or API"
+            >
+              <svg
+                class="h-3.5 w-3.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+              {headContentType} — edit via CLI
+            </span>
+          {/if}
+          <button
+            class="cursor-pointer shrink-0 inline-flex items-center gap-1.5 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)]"
+            onclick={loadHistory}
+            type="button"
+          >
+            <svg
+              class="h-3.5 w-3.5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+            Revision history
+          </button>
         </div>
-      </section>
+      </div>
 
       {#if editOpen}
         <div
           class="mt-3 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-4"
         >
-          <h2 class="mb-3 text-[13px] font-semibold text-[var(--ui-text)]">
-            New revision
-          </h2>
-
-          <div class="grid gap-3 sm:grid-cols-2">
-            <label class="sm:col-span-2">
+          <div class="mb-3">
+            <button
+              class="cursor-pointer flex w-full items-center gap-2 text-left"
+              onclick={() => (metadataExpanded = !metadataExpanded)}
+              type="button"
+            >
+              <svg
+                class="h-3 w-3 text-[var(--ui-text-subtle)] transition-transform {metadataExpanded
+                  ? 'rotate-90'
+                  : ''}"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M9 5l7 7-7 7"
+                />
+              </svg>
               <span class="text-[12px] font-medium text-[var(--ui-text-muted)]"
-                >Title</span
+                >Metadata</span
               >
-              <input
-                bind:value={editDraft.title}
-                class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-3 py-1.5 text-[13px] text-[var(--ui-text)]"
-                type="text"
-              />
-            </label>
-            <label>
-              <span class="text-[12px] font-medium text-[var(--ui-text-muted)]"
-                >Status</span
+            </button>
+            {#if !metadataExpanded}
+              <p
+                class="mt-1 ml-5 truncate text-[11px] text-[var(--ui-text-subtle)]"
               >
-              <select
-                bind:value={editDraft.status}
-                class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-2.5 py-1.5 text-[13px] text-[var(--ui-text)]"
-              >
-                <option value="draft">draft</option>
-                <option value="active">active</option>
-              </select>
-            </label>
-            <label>
-              <span class="text-[12px] font-medium text-[var(--ui-text-muted)]"
-                >Labels (comma-separated)</span
-              >
-              <input
-                bind:value={editDraft.labels}
-                class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-3 py-1.5 text-[13px] text-[var(--ui-text)] placeholder:text-[var(--ui-text-subtle)]"
-                placeholder="ops, runbook"
-                type="text"
-              />
-            </label>
-            <SearchableEntityPicker
-              bind:value={editDraft.thread_id}
-              advancedLabel="Use a manual thread ID"
-              helperText="Update the canonical thread linkage for this doc lineage."
-              label="Thread linkage"
-              manualLabel="Thread ID"
-              manualPlaceholder="thread-..."
-              placeholder="Search threads by title, ID, or tags"
-              searchFn={searchThreadOptions}
-            />
-            <label class="sm:col-span-2">
-              <span class="text-[12px] font-medium text-[var(--ui-text-muted)]"
-                >Content (Markdown) <span class="text-red-400">*</span></span
-              >
-              <textarea
-                bind:value={editDraft.content}
-                class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-3 py-2 text-[13px] text-[var(--ui-text)] font-mono leading-relaxed resize-y"
-                rows="14"
-              ></textarea>
-            </label>
+                Title: {editDraft.title || "—"} · Status: {editDraft.status ||
+                  "—"} · Labels: {editDraft.labels || "none"}
+              </p>
+            {/if}
+            {#if metadataExpanded}
+              <div class="mt-2 ml-5 grid gap-3 sm:grid-cols-2">
+                <label class="sm:col-span-2">
+                  <span
+                    class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+                    >Title</span
+                  >
+                  <input
+                    bind:value={editDraft.title}
+                    class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-3 py-1.5 text-[13px] text-[var(--ui-text)]"
+                    type="text"
+                  />
+                </label>
+                <label>
+                  <span
+                    class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+                    >Status</span
+                  >
+                  <select
+                    bind:value={editDraft.status}
+                    class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-2.5 py-1.5 text-[13px] text-[var(--ui-text)]"
+                  >
+                    <option value="draft">draft</option>
+                    <option value="active">active</option>
+                  </select>
+                </label>
+                <label>
+                  <span
+                    class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+                    >Labels (comma-separated)</span
+                  >
+                  <input
+                    bind:value={editDraft.labels}
+                    class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-3 py-1.5 text-[13px] text-[var(--ui-text)] placeholder:text-[var(--ui-text-subtle)]"
+                    placeholder="ops, runbook"
+                    type="text"
+                  />
+                </label>
+                <SearchableEntityPicker
+                  bind:value={editDraft.thread_id}
+                  advancedLabel="Use a manual thread ID"
+                  helperText="Update the canonical thread linkage for this doc lineage."
+                  label="Thread linkage"
+                  manualLabel="Thread ID"
+                  manualPlaceholder="thread-..."
+                  placeholder="Search threads by title, ID, or tags"
+                  searchFn={searchThreadOptions}
+                />
+              </div>
+            {/if}
           </div>
 
-          {#if saveError}
-            <div
-              class="mt-3 rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
-              role="alert"
+          <label>
+            <span class="text-[12px] font-medium text-[var(--ui-text-muted)]"
+              >Content (Markdown) <span class="text-red-400">*</span></span
             >
-              {saveError}
-            </div>
-          {/if}
-          <p class="mt-2 text-[11px] text-[var(--ui-text-subtle)]">
-            Base revision: <span class="font-mono"
-              >{headRevision?.revision_id ?? "—"}</span
-            > — optimistic concurrency is enforced.
-          </p>
+            <textarea
+              bind:value={editDraft.content}
+              class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-3 py-2 text-[13px] text-[var(--ui-text)] font-mono leading-relaxed resize-y"
+              rows="20"
+            ></textarea>
+          </label>
 
           <div class="mt-3 flex items-center gap-2">
             <button
@@ -593,6 +612,20 @@
               Cancel
             </button>
           </div>
+
+          {#if saveError}
+            <div
+              class="mt-3 rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
+              role="alert"
+            >
+              {saveError}
+            </div>
+          {/if}
+          <p class="mt-2 text-[11px] text-[var(--ui-text-subtle)]">
+            Base revision: <span class="font-mono"
+              >{headRevision?.revision_id ?? "—"}</span
+            > — optimistic concurrency is enforced.
+          </p>
         </div>
       {/if}
 
@@ -628,61 +661,69 @@
         </div>
       </div>
 
-      {#if displayedRevision?.content_hash || displayedRevision?.revision_hash}
+      <div class="mt-6 border-t border-[var(--ui-border)] pt-4">
+        <p
+          class="mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--ui-text-subtle)]"
+        >
+          Technical details
+        </p>
+
+        {#if displayedRevision?.content_hash || displayedRevision?.revision_hash}
+          <details
+            class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)]"
+          >
+            <summary
+              class="cursor-pointer px-4 py-2.5 text-[11px] text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]"
+              >Integrity hashes</summary
+            >
+            <div class="px-4 pb-3 pt-1 space-y-2">
+              {#if displayedRevision.content_hash}
+                <div>
+                  <p
+                    class="text-[11px] uppercase tracking-[0.12em] text-[var(--ui-text-subtle)]"
+                  >
+                    Content hash
+                  </p>
+                  <p
+                    class="mt-1 break-all font-mono text-[12px] text-[var(--ui-text-muted)]"
+                  >
+                    {displayedRevision.content_hash}
+                  </p>
+                </div>
+              {/if}
+              {#if displayedRevision.revision_hash}
+                <div>
+                  <p
+                    class="text-[11px] uppercase tracking-[0.12em] text-[var(--ui-text-subtle)]"
+                  >
+                    Revision hash
+                  </p>
+                  <p
+                    class="mt-1 break-all font-mono text-[12px] text-[var(--ui-text-muted)]"
+                  >
+                    {displayedRevision.revision_hash}
+                  </p>
+                </div>
+              {/if}
+            </div>
+          </details>
+        {/if}
+
         <details
-          class="mt-3 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)]"
+          class="mt-2 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)]"
         >
           <summary
             class="cursor-pointer px-4 py-2.5 text-[11px] text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]"
-            >Integrity hashes</summary
+            >Raw metadata JSON</summary
           >
-          <div class="px-4 pb-3 pt-1 space-y-2">
-            {#if displayedRevision.content_hash}
-              <div>
-                <p
-                  class="text-[11px] uppercase tracking-[0.12em] text-[var(--ui-text-subtle)]"
-                >
-                  Content hash
-                </p>
-                <p
-                  class="mt-1 break-all font-mono text-[12px] text-[var(--ui-text-muted)]"
-                >
-                  {displayedRevision.content_hash}
-                </p>
-              </div>
-            {/if}
-            {#if displayedRevision.revision_hash}
-              <div>
-                <p
-                  class="text-[11px] uppercase tracking-[0.12em] text-[var(--ui-text-subtle)]"
-                >
-                  Revision hash
-                </p>
-                <p
-                  class="mt-1 break-all font-mono text-[12px] text-[var(--ui-text-muted)]"
-                >
-                  {displayedRevision.revision_hash}
-                </p>
-              </div>
-            {/if}
-          </div>
+          <pre
+            class="overflow-auto px-4 pb-3 text-[11px] text-[var(--ui-text-muted)]">{JSON.stringify(
+              document,
+              null,
+              2,
+            )}</pre>
         </details>
-      {/if}
-
-      <details
-        class="mt-3 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)]"
-      >
-        <summary
-          class="cursor-pointer px-4 py-2.5 text-[11px] text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]"
-          >Raw metadata JSON</summary
-        >
-        <pre
-          class="overflow-auto px-4 pb-3 text-[11px] text-[var(--ui-text-muted)]">{JSON.stringify(
-            document,
-            null,
-            2,
-          )}</pre>
-      </details>
+      </div>
     </div>
 
     {#if historyOpen}

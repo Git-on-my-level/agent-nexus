@@ -7,7 +7,6 @@
     buildInboxCategorySummary,
     buildThreadHealthSummary,
     inboxSummarySentence,
-    selectRecentArtifacts,
     selectRecentlyUpdatedThreads,
     threadHealthSentence,
   } from "$lib/dashboardSummary";
@@ -15,6 +14,7 @@
   import { getInboxCategoryLabel, sortInboxItems } from "$lib/inboxUtils";
   import { workspacePath } from "$lib/workspacePaths";
   import { getPriorityLabel } from "$lib/threadFilters";
+  import { BOARD_STATUS_LABELS } from "$lib/boardUtils";
 
   const emptySectionState = {
     status: "idle",
@@ -22,11 +22,14 @@
     items: [],
   };
 
+  const DOC_STATUS_LABELS = { draft: "Draft", active: "Active" };
+
   let loading = $state(true);
   let refreshedAt = $state("");
   let inboxState = $state({ ...emptySectionState });
   let threadsState = $state({ ...emptySectionState });
-  let artifactsState = $state({ ...emptySectionState });
+  let boardsState = $state({ ...emptySectionState });
+  let docsState = $state({ ...emptySectionState });
   let workspaceSlug = $derived($page.params.workspace);
 
   let inboxSummary = $derived(buildInboxCategorySummary(inboxState.items));
@@ -36,8 +39,24 @@
   let recentThreads = $derived(
     selectRecentlyUpdatedThreads(threadsState.items, 5),
   );
-  let recentArtifacts = $derived(
-    selectRecentArtifacts(artifactsState.items, 5),
+
+  let recentBoards = $derived(
+    boardsState.items
+      .filter((entry) => entry?.board?.status === "active")
+      .slice(0, 5),
+  );
+
+  let recentDocs = $derived(
+    [...docsState.items]
+      .sort((a, b) => {
+        const ta = Date.parse(a?.updated_at ?? "");
+        const tb = Date.parse(b?.updated_at ?? "");
+        if (Number.isFinite(tb) && Number.isFinite(ta)) return tb - ta;
+        if (Number.isFinite(tb)) return 1;
+        if (Number.isFinite(ta)) return -1;
+        return 0;
+      })
+      .slice(0, 5),
   );
 
   const POLL_INTERVAL_MS = 30_000;
@@ -56,11 +75,12 @@
     const isInitial = !refreshedAt;
     if (isInitial) loading = true;
 
-    const [inboxResult, threadResult, artifactResult] =
+    const [inboxResult, threadResult, boardsResult, docsResult] =
       await Promise.allSettled([
         coreClient.listInboxItems({ view: "items" }),
         coreClient.listThreads({}),
-        coreClient.listArtifacts({}),
+        coreClient.listBoards({}),
+        coreClient.listDocuments({}),
       ]);
 
     inboxState = toSectionState(inboxResult, "items", "Failed to load inbox");
@@ -69,11 +89,12 @@
       "threads",
       "Failed to load threads",
     );
-    artifactsState = toSectionState(
-      artifactResult,
-      "artifacts",
-      "Failed to load artifacts",
+    boardsState = toSectionState(
+      boardsResult,
+      "boards",
+      "Failed to load boards",
     );
+    docsState = toSectionState(docsResult, "documents", "Failed to load docs");
 
     refreshedAt = new Date().toISOString();
     loading = false;
@@ -119,6 +140,19 @@
       p3: "text-gray-400",
     };
     return styles[priority] ?? "text-gray-400";
+  }
+
+  function boardStatusColor(status) {
+    if (status === "active") return "text-emerald-400 bg-emerald-500/10";
+    if (status === "paused") return "text-amber-300 bg-amber-500/10";
+    if (status === "closed") return "text-slate-300 bg-slate-500/10";
+    return "text-[var(--ui-text-muted)] bg-[var(--ui-border)]";
+  }
+
+  function docStatusColor(status) {
+    if (status === "active") return "text-emerald-400 bg-emerald-500/10";
+    if (status === "draft") return "text-amber-400 bg-amber-500/10";
+    return "text-[var(--ui-text-muted)] bg-[var(--ui-border)]";
   }
 </script>
 
@@ -380,82 +414,165 @@
     </section>
   </div>
 
-  <section>
-    <div class="flex items-center justify-between gap-2 mb-2">
-      <h2 class="text-[13px] font-semibold text-[var(--ui-text)]">
-        Recent artifacts
-      </h2>
-      <a
-        class="text-[12px] font-medium text-[var(--ui-text-muted)] hover:text-[var(--ui-text)] transition-colors"
-        href={workspaceHref("/artifacts")}>View all</a
-      >
-    </div>
+  <div class="grid gap-5 lg:grid-cols-2">
+    <section>
+      <div class="flex items-center justify-between gap-2 mb-2">
+        <h2 class="text-[13px] font-semibold text-[var(--ui-text)]">
+          Active boards
+        </h2>
+        <a
+          class="text-[12px] font-medium text-[var(--ui-text-muted)] hover:text-[var(--ui-text)] transition-colors"
+          href={workspaceHref("/boards")}>View all</a
+        >
+      </div>
 
-    {#if loading && artifactsState.status === "idle"}
-      <div
-        class="flex items-center gap-2 py-6 text-[13px] text-[var(--ui-text-muted)]"
-      >
-        <svg class="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-          <circle
-            class="opacity-25"
-            cx="12"
-            cy="12"
-            r="10"
-            stroke="currentColor"
-            stroke-width="4"
-          ></circle>
-          <path
-            class="opacity-75"
-            fill="currentColor"
-            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-          ></path>
-        </svg>
-        Loading...
-      </div>
-    {:else if artifactsState.status === "error"}
-      <p class="rounded-md bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
-        {artifactsState.error}
-      </p>
-    {:else if artifactsState.items.length === 0}
-      <p class="text-[13px] text-[var(--ui-text-muted)] py-3">
-        No artifacts yet. Work orders and receipts will show up here.
-      </p>
-    {:else}
-      <div
-        class="space-y-px rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] overflow-hidden"
-      >
-        {#each recentArtifacts as artifact, i}
-          <a
-            class="flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--ui-border-subtle)] {i >
-            0
-              ? 'border-t border-[var(--ui-border)]'
-              : ''}"
-            href={workspaceHref(`/artifacts/${artifact.id}`)}
-          >
-            <span
-              class="shrink-0 rounded bg-[var(--ui-panel)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--ui-text-muted)]"
-              >{artifact.kind}</span
+      {#if loading && boardsState.status === "idle"}
+        <div
+          class="flex items-center gap-2 py-6 text-[13px] text-[var(--ui-text-muted)]"
+        >
+          <svg class="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle
+              class="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              stroke-width="4"
+            ></circle>
+            <path
+              class="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+            ></path>
+          </svg>
+          Loading...
+        </div>
+      {:else if boardsState.status === "error"}
+        <p class="rounded-md bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
+          {boardsState.error}
+        </p>
+      {:else if recentBoards.length === 0}
+        <p class="text-[13px] text-[var(--ui-text-muted)] py-3">
+          No active boards yet.
+        </p>
+      {:else}
+        <div
+          class="space-y-px rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] overflow-hidden"
+        >
+          {#each recentBoards as entry, i}
+            {@const board = entry.board}
+            {@const summary = entry.summary}
+            <a
+              class="flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--ui-border-subtle)] {i >
+              0
+                ? 'border-t border-[var(--ui-border)]'
+                : ''}"
+              href={workspaceHref(`/boards/${board.id}`)}
             >
-            {#if artifact.isUpdate}
               <span
-                class="shrink-0 rounded bg-[var(--ui-border-subtle)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--ui-text-muted)] border border-[var(--ui-border)]"
-                title="{artifact.versionCount} versions"
-                >updated{artifact.versionCount > 1
-                  ? ` · v${artifact.versionCount}`
-                  : ""}</span
+                class="shrink-0 inline-flex rounded px-1.5 py-0.5 text-[11px] font-semibold {boardStatusColor(
+                  board.status,
+                )}"
               >
-            {/if}
-            <div class="min-w-0 flex-1">
-              <p class="truncate text-[13px] font-medium text-[var(--ui-text)]">
-                {artifact.summary || artifact.id}
-              </p>
-            </div>
-            <span class="text-[11px] text-[var(--ui-text-muted)]"
-              >{formatTimestamp(artifact.created_at)}</span
-            >
-          </a>
-        {/each}
+                {BOARD_STATUS_LABELS[board.status] ?? board.status}
+              </span>
+              <div class="min-w-0 flex-1">
+                <p
+                  class="truncate text-[13px] font-medium text-[var(--ui-text)]"
+                >
+                  {board.title || board.id}
+                </p>
+                <p class="text-[11px] text-[var(--ui-text-muted)]">
+                  {#if summary?.card_count != null}
+                    {summary.card_count} card{summary.card_count === 1
+                      ? ""
+                      : "s"} ·
+                  {/if}
+                  Updated {formatTimestamp(board.updated_at) || "—"}
+                </p>
+              </div>
+            </a>
+          {/each}
+        </div>
+      {/if}
+    </section>
+
+    <section>
+      <div class="flex items-center justify-between gap-2 mb-2">
+        <h2 class="text-[13px] font-semibold text-[var(--ui-text)]">
+          Recent docs
+        </h2>
+        <a
+          class="text-[12px] font-medium text-[var(--ui-text-muted)] hover:text-[var(--ui-text)] transition-colors"
+          href={workspaceHref("/docs")}>View all</a
+        >
       </div>
-    {/if}
-  </section>
+
+      {#if loading && docsState.status === "idle"}
+        <div
+          class="flex items-center gap-2 py-6 text-[13px] text-[var(--ui-text-muted)]"
+        >
+          <svg class="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle
+              class="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              stroke-width="4"
+            ></circle>
+            <path
+              class="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+            ></path>
+          </svg>
+          Loading...
+        </div>
+      {:else if docsState.status === "error"}
+        <p class="rounded-md bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
+          {docsState.error}
+        </p>
+      {:else if recentDocs.length === 0}
+        <p class="text-[13px] text-[var(--ui-text-muted)] py-3">No docs yet.</p>
+      {:else}
+        <div
+          class="space-y-px rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] overflow-hidden"
+        >
+          {#each recentDocs as doc, i}
+            <a
+              class="flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--ui-border-subtle)] {i >
+              0
+                ? 'border-t border-[var(--ui-border)]'
+                : ''}"
+              href={workspaceHref(`/docs/${doc.id}`)}
+            >
+              <span
+                class="shrink-0 inline-flex rounded px-1.5 py-0.5 text-[11px] font-semibold {docStatusColor(
+                  doc.status,
+                )}"
+              >
+                {DOC_STATUS_LABELS[doc.status] ?? doc.status}
+              </span>
+              <div class="min-w-0 flex-1">
+                <p
+                  class="truncate text-[13px] font-medium text-[var(--ui-text)]"
+                >
+                  {doc.title || doc.id}
+                </p>
+                <p class="text-[11px] text-[var(--ui-text-muted)]">
+                  v{doc.head_revision_number} · Updated {formatTimestamp(
+                    doc.updated_at,
+                  ) || "—"}
+                  {#if (doc.labels ?? []).length > 0}
+                    · {doc.labels.slice(0, 2).join(", ")}
+                  {/if}
+                </p>
+              </div>
+            </a>
+          {/each}
+        </div>
+      {/if}
+    </section>
+  </div>
 </div>

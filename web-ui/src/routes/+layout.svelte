@@ -22,6 +22,7 @@
     initializeAuthSession,
     logoutAuthSession,
   } from "$lib/authSession";
+  import CommandPalette from "$lib/components/CommandPalette.svelte";
   import { coreClient } from "$lib/coreClient";
   import { getShellContentConfig, navigationItems } from "$lib/navigation";
   import {
@@ -60,6 +61,7 @@
   let mobileNavOpen = $state(false);
   let hydratedWorkspaceSlug = $state("");
   let workspacePickerOpen = $state(false);
+  let commandPaletteOpen = $state(false);
 
   let activeWorkspace = $derived($page.data.workspace ?? null);
   let activeWorkspaceSlug = $derived(activeWorkspace?.slug ?? "");
@@ -322,6 +324,13 @@
   }
 
   function handleWindowKeydown(event) {
+    if (event.key === "k" && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
+      if (activeWorkspaceSlug) {
+        commandPaletteOpen = !commandPaletteOpen;
+      }
+      return;
+    }
     if (event.key === "Escape") {
       if (workspacePickerOpen) closeWorkspacePicker();
       if (mobileNavOpen) closeMobileNav();
@@ -561,6 +570,27 @@
           {/each}
         </nav>
 
+        <button
+          class="shell-search-trigger"
+          onclick={() => (commandPaletteOpen = true)}
+          type="button"
+        >
+          <svg
+            class="shell-search-trigger-icon"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              fill-rule="evenodd"
+              d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z"
+              clip-rule="evenodd"
+            />
+          </svg>
+          <span>Search</span>
+          <kbd class="shell-search-kbd">⌘K</kbd>
+        </button>
+
         <div class="shell-actor-panel">
           <p class="shell-actor-label">
             {$authenticatedAgent ? "Authenticated principal" : "Signed in as"}
@@ -737,5 +767,12 @@
         </main>
       </div>
     </div>
+  {/if}
+
+  {#if activeWorkspaceSlug}
+    <CommandPalette
+      bind:open={commandPaletteOpen}
+      workspaceSlug={activeWorkspaceSlug}
+    />
   {/if}
 </div>

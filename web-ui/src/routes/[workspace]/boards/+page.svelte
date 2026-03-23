@@ -455,29 +455,26 @@
                 <span>Derived scan details are still catching up</span>
               {/if}
             </div>
-          </div>
 
-          <div class="shrink-0 text-[11px] text-[var(--ui-text-subtle)]">
             {#if isFreshnessCurrent(projectionFreshness)}
-              <div class="flex gap-1">
-                {#each CANONICAL_BOARD_COLUMNS as column}
+              <div
+                class="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px]"
+              >
+                {#each CANONICAL_BOARD_COLUMNS as column, ci}
+                  {@const count = counts[column.key]}
                   <span
-                    class="rounded bg-[var(--ui-border)] px-1.5 py-0.5"
-                    title={`${column.title}: ${counts[column.key]} cards`}
+                    class={column.key === "blocked" && count > 0
+                      ? "text-amber-400"
+                      : "text-[var(--ui-text-subtle)]"}
                   >
-                    {counts[column.key]}
+                    <span class="font-medium uppercase">{column.title}</span>
+                    {count}
                   </span>
+                  {#if ci < CANONICAL_BOARD_COLUMNS.length - 1}
+                    <span class="text-[var(--ui-border)]">·</span>
+                  {/if}
                 {/each}
               </div>
-              <p
-                class="mt-1 text-right text-[10px] text-[var(--ui-text-subtle)]"
-              >
-                {summary?.card_count ?? 0} cards by column
-              </p>
-            {:else}
-              <p class="text-right text-[10px] text-[var(--ui-text-subtle)]">
-                Waiting for a current derived card scan
-              </p>
             {/if}
           </div>
         </div>

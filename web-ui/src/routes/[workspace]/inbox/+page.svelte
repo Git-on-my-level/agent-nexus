@@ -26,6 +26,10 @@
   let urgencyFilter = $state("all");
   let workspaceSlug = $derived($page.params.workspace);
 
+  let threadContextCache = $state({});
+  let threadContextLoading = $state({});
+  let threadContextErrors = $state({});
+
   let totalItems = $derived(items.length);
   let enrichedItems = $derived(items.map((item) => enrichInboxItem(item)));
   let urgencySummary = $derived(summarizeInboxUrgency(items));
@@ -93,6 +97,35 @@
         open,
       },
     };
+
+    if (open && item.thread_id) {
+      loadThreadContext(item.thread_id);
+    }
+  }
+
+  async function loadThreadContext(threadId) {
+    if (!threadId || threadContextCache[threadId]) return;
+    threadContextLoading = { ...threadContextLoading, [threadId]: true };
+    try {
+      const [threadResponse, commitmentsResponse] = await Promise.all([
+        coreClient.getThread(threadId),
+        coreClient.listCommitments({ thread_id: threadId, status: "active" }),
+      ]);
+      threadContextCache = {
+        ...threadContextCache,
+        [threadId]: {
+          thread: threadResponse.thread,
+          commitments: commitmentsResponse.commitments ?? [],
+        },
+      };
+    } catch (e) {
+      threadContextErrors = {
+        ...threadContextErrors,
+        [threadId]: e.message || String(e),
+      };
+    } finally {
+      threadContextLoading = { ...threadContextLoading, [threadId]: false };
+    }
   }
 
   function setDecisionFormError(itemId, message) {
@@ -526,70 +559,210 @@
               {/if}
 
               {#if getDecisionForm(item.id).open}
-                <form
-                  class="mt-3 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-3"
-                  data-testid={`decision-form-${item.id}`}
-                  onsubmit={(event) => {
-                    event.preventDefault();
-                    void recordDecision(item);
-                  }}
+                <div
+                  class="mt-3 grid grid-cols-1 md:grid-cols-[3fr_2fr] gap-3"
+                  data-testid={`decision-panel-${item.id}`}
                 >
-                  <label
-                    class="block text-[12px] font-medium text-[var(--ui-text-muted)]"
-                    for={`decision-summary-${item.id}`}
-                  >
-                    Your decision
-                  </label>
-                  <input
-                    class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-[13px] transition-colors"
-                    id={`decision-summary-${item.id}`}
-                    oninput={(event) =>
-                      updateDecisionField(
-                        item.id,
-                        "summary",
-                        event.currentTarget.value,
-                      )}
-                    placeholder="e.g., Approved emergency reorder of 500 units"
-                    value={getDecisionForm(item.id).summary}
-                  />
-                  {#if getDecisionFormError(item.id)}
-                    <p class="mt-1 text-[11px] text-red-400">
-                      {getDecisionFormError(item.id)}
-                    </p>
+                  {#if item.thread_id}
+                    <div
+                      class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] p-3 min-w-0"
+                    >
+                      {#if threadContextLoading[item.thread_id]}
+                        <div
+                          class="flex items-center gap-2 text-[12px] text-[var(--ui-text-muted)] py-4 justify-center"
+                        >
+                          <svg
+                            class="h-3.5 w-3.5 animate-spin"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                          >
+                            <circle
+                              class="opacity-25"
+                              cx="12"
+                              cy="12"
+                              r="10"
+                              stroke="currentColor"
+                              stroke-width="4"
+                            ></circle>
+                            <path
+                              class="opacity-75"
+                              fill="currentColor"
+                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                            ></path>
+                          </svg>
+                          Loading thread context…
+                        </div>
+                      {:else if threadContextErrors[item.thread_id]}
+                        <div class="text-[12px] text-red-400 py-2">
+                          Failed to load thread: {threadContextErrors[
+                            item.thread_id
+                          ]}
+                        </div>
+                      {:else if threadContextCache[item.thread_id]}
+                        {@const ctx = threadContextCache[item.thread_id]}
+                        {@const thread = ctx.thread}
+                        {@const commitments = ctx.commitments}
+                        <div class="flex items-center gap-2 mb-2">
+                          <h4
+                            class="text-[13px] font-semibold text-[var(--ui-text)] truncate min-w-0"
+                          >
+                            {thread.title ?? thread.id}
+                          </h4>
+                          <span
+                            class="shrink-0 rounded-md border border-[var(--ui-border)] px-1.5 py-0.5 text-[11px] font-medium capitalize {thread.status ===
+                            'active'
+                              ? 'text-emerald-400'
+                              : thread.status === 'paused'
+                                ? 'text-amber-400'
+                                : 'text-[var(--ui-text-muted)]'}"
+                          >
+                            {thread.status ?? "unknown"}
+                          </span>
+                          {#if thread.priority}
+                            <span
+                              class="shrink-0 text-[11px] font-medium text-[var(--ui-text-muted)] uppercase"
+                              >{thread.priority}</span
+                            >
+                          {/if}
+                        </div>
+
+                        {#if thread.current_summary}
+                          <div
+                            class="mb-2 text-[12px] text-[var(--ui-text)] leading-relaxed"
+                          >
+                            <MarkdownRenderer
+                              source={thread.current_summary}
+                              class="text-[12px]"
+                            />
+                          </div>
+                        {/if}
+
+                        {#if commitments.length > 0}
+                          <div
+                            class="border-t border-[var(--ui-border)] pt-2 mt-2"
+                          >
+                            <p
+                              class="text-[11px] font-medium text-[var(--ui-text-muted)] uppercase tracking-wide mb-1.5"
+                            >
+                              Active commitments
+                            </p>
+                            <div class="space-y-1.5">
+                              {#each commitments as commitment}
+                                <div
+                                  class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[12px]"
+                                >
+                                  <div class="flex items-center gap-2">
+                                    <span
+                                      class="font-medium text-[var(--ui-text)] truncate min-w-0"
+                                      >{commitment.description ??
+                                        commitment.id}</span
+                                    >
+                                    <span
+                                      class="shrink-0 rounded px-1 py-0.5 text-[10px] font-medium capitalize border border-[var(--ui-border)] text-[var(--ui-text-muted)]"
+                                      >{commitment.status ?? "open"}</span
+                                    >
+                                  </div>
+                                  <div
+                                    class="flex items-center gap-3 mt-0.5 text-[11px] text-[var(--ui-text-muted)]"
+                                  >
+                                    {#if commitment.owner}
+                                      <span>Owner: {commitment.owner}</span>
+                                    {/if}
+                                    {#if commitment.due_by}
+                                      <span
+                                        >Due: {formatTimestamp(
+                                          commitment.due_by,
+                                        )}</span
+                                      >
+                                    {/if}
+                                  </div>
+                                </div>
+                              {/each}
+                            </div>
+                          </div>
+                        {/if}
+
+                        <div
+                          class="border-t border-[var(--ui-border)] pt-2 mt-2"
+                        >
+                          <a
+                            class="inline-flex items-center gap-1 text-[12px] font-medium text-[var(--ui-accent)] hover:text-[var(--ui-accent-strong)] transition-colors"
+                            href={workspaceHref("/threads/" + item.thread_id)}
+                          >
+                            View full thread &rarr;
+                          </a>
+                        </div>
+                      {/if}
+                    </div>
                   {/if}
-                  <label
-                    class="mt-2 block text-[12px] font-medium text-[var(--ui-text-muted)]"
-                    for={`decision-notes-${item.id}`}
+
+                  <form
+                    class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-3 {item.thread_id
+                      ? ''
+                      : 'md:col-span-2'}"
+                    data-testid={`decision-form-${item.id}`}
+                    onsubmit={(event) => {
+                      event.preventDefault();
+                      void recordDecision(item);
+                    }}
                   >
-                    Rationale <span
-                      class="font-normal text-[var(--ui-text-muted)]"
-                      >optional</span
+                    <label
+                      class="block text-[12px] font-medium text-[var(--ui-text-muted)]"
+                      for={`decision-summary-${item.id}`}
                     >
-                  </label>
-                  <textarea
-                    class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-[13px] transition-colors"
-                    id={`decision-notes-${item.id}`}
-                    oninput={(event) =>
-                      updateDecisionField(
-                        item.id,
-                        "notes",
-                        event.currentTarget.value,
-                      )}
-                    placeholder="Why this choice? Any constraints, trade-offs, or follow-ups..."
-                    rows="2">{getDecisionForm(item.id).notes}</textarea
-                  >
-                  <div class="mt-2 flex justify-end">
-                    <button
-                      class="cursor-pointer rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
-                      disabled={Boolean(decisionInFlightById[item.id])}
-                      type="submit"
+                      Your decision
+                    </label>
+                    <input
+                      class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-[13px] transition-colors"
+                      id={`decision-summary-${item.id}`}
+                      oninput={(event) =>
+                        updateDecisionField(
+                          item.id,
+                          "summary",
+                          event.currentTarget.value,
+                        )}
+                      placeholder="e.g., Approved emergency reorder of 500 units"
+                      value={getDecisionForm(item.id).summary}
+                    />
+                    {#if getDecisionFormError(item.id)}
+                      <p class="mt-1 text-[11px] text-red-400">
+                        {getDecisionFormError(item.id)}
+                      </p>
+                    {/if}
+                    <label
+                      class="mt-2 block text-[12px] font-medium text-[var(--ui-text-muted)]"
+                      for={`decision-notes-${item.id}`}
                     >
-                      {decisionInFlightById[item.id]
-                        ? "Recording..."
-                        : "Submit decision"}
-                    </button>
-                  </div>
-                </form>
+                      Rationale <span
+                        class="font-normal text-[var(--ui-text-muted)]"
+                        >optional</span
+                      >
+                    </label>
+                    <textarea
+                      class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-[13px] transition-colors"
+                      id={`decision-notes-${item.id}`}
+                      oninput={(event) =>
+                        updateDecisionField(
+                          item.id,
+                          "notes",
+                          event.currentTarget.value,
+                        )}
+                      placeholder="Why this choice? Any constraints, trade-offs, or follow-ups..."
+                      rows="2">{getDecisionForm(item.id).notes}</textarea
+                    >
+                    <div class="mt-2 flex justify-end">
+                      <button
+                        class="cursor-pointer rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+                        disabled={Boolean(decisionInFlightById[item.id])}
+                        type="submit"
+                      >
+                        {decisionInFlightById[item.id]
+                          ? "Recording..."
+                          : "Submit decision"}
+                      </button>
+                    </div>
+                  </form>
+                </div>
               {/if}
             </article>
           {/each}

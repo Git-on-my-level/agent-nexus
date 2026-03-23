@@ -31,3 +31,11 @@ export async function searchBoards(query, limit = 20) {
   });
   return response.boards || [];
 }
+
+export async function searchArtifacts(query, limit = 20) {
+  const response = await coreClient.listArtifacts({
+    q: query,
+    limit,
+  });
+  return response.artifacts || [];
+}
