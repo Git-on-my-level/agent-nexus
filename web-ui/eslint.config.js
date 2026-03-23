@@ -26,4 +26,21 @@ export default [
       },
     },
   },
+  {
+    files: ["src/**/*.{js,svelte}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "jsdom",
+              message:
+                "jsdom is Node-only and must not be imported from UI code that ships to the browser. Use isomorphic-dompurify or a server-only module under src/lib/server/.",
+            },
+          ],
+        },
+      ],
+    },
+  },
 ];

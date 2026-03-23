@@ -32,9 +32,9 @@ importers:
       '@sveltejs/kit':
         specifier: ^2.5.18
         version: 2.53.4(@sveltejs/vite-plugin-svelte@4.0.4(svelte@5.53.7)(vite@5.4.21(@types/node@25.3.5)))(svelte@5.53.7)(typescript@5.9.3)(vite@5.4.21(@types/node@25.3.5))
-      dompurify:
-        specifier: ^3.3.3
-        version: 3.3.3
+      isomorphic-dompurify:
+        specifier: ^3.6.0
+        version: 3.6.0
       marked:
         specifier: ^17.0.4
         version: 17.0.4
@@ -63,9 +63,6 @@ importers:
       globals:
         specifier: ^16.0.0
         version: 16.5.0
-      jsdom:
-        specifier: ^29.0.1
-        version: 29.0.1
       postcss:
         specifier: ^8.5.3
         version: 8.5.8
@@ -1788,6 +1785,10 @@ packages:
 
   isexe@2.0.0:
     resolution: {integrity: sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw==}
+
+  isomorphic-dompurify@3.6.0:
+    resolution: {integrity: sha512-0dF93ZF/7SgzdnCjXTsqSteJmhlR5PNhq/mJXRMQtnFdaGdG94ul6mYF80hSKfh6VfmLsaGKBd0Eye4eUHyeWA==}
+    engines: {node: ^20.19.0 || ^22.13.0 || >=24.0.0}
 
   jackspeak@3.4.3:
     resolution: {integrity: sha512-OGlZQpz2yfahA/Rd1Y8Cd9SIEsqvXkLVoSw/cgwhnhFMDbsQFeZYoJJ7bIZBS9BcamUW96asq/npPWugM+RQBw==}
@@ -4668,6 +4669,14 @@ snapshots:
       '@types/estree': 1.0.8
 
   isexe@2.0.0: {}
+
+  isomorphic-dompurify@3.6.0:
+    dependencies:
+      dompurify: 3.3.3
+      jsdom: 29.0.1
+    transitivePeerDependencies:
+      - '@noble/hashes'
+      - canvas
 
   jackspeak@3.4.3:
     dependencies:

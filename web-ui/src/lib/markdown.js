@@ -1,9 +1,5 @@
-import { JSDOM } from "jsdom";
-import DOMPurify from "dompurify";
+import DOMPurify from "isomorphic-dompurify";
 import { Marked } from "marked";
-
-const window = new JSDOM("").window;
-const purify = DOMPurify(window);
 
 const marked = new Marked({
   gfm: true,
@@ -76,7 +72,7 @@ const purifyConfig = {
 };
 
 function sanitizeHtml(html) {
-  const sanitized = purify.sanitize(html, purifyConfig);
+  const sanitized = DOMPurify.sanitize(html, purifyConfig);
 
   return sanitized.replace(/<a\b([^>]*)>/gi, (match, attrs) => {
     let updated = attrs;
