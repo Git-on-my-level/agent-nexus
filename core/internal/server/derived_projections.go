@@ -146,10 +146,8 @@ func deriveThreadInboxItems(ctx context.Context, opts handlerOptions, threadID s
 			if isSuppressedByAck(item, ackedAt) {
 				continue
 			}
-			if eventType == "decision_needed" {
-				if _, decided := decidedIDs[item.ID]; decided {
-					continue
-				}
+			if _, decided := decidedIDs[item.ID]; decided {
+				continue
 			}
 			items = append(items, item)
 		}
@@ -162,6 +160,9 @@ func deriveThreadInboxItems(ctx context.Context, opts handlerOptions, threadID s
 	for _, commitment := range commitments {
 		item, ok := deriveCommitmentRiskInboxItem(commitment, now, riskHorizon)
 		if !ok || isSuppressedByAck(item, ackedAt) {
+			continue
+		}
+		if _, decided := decidedIDs[item.ID]; decided {
 			continue
 		}
 		items = append(items, item)

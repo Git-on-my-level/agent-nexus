@@ -344,10 +344,8 @@ func deriveInboxItemsNoStaleEmission(ctx context.Context, opts handlerOptions, n
 			if isSuppressedByAck(item, ackedAt) {
 				continue
 			}
-			if eventType == "decision_needed" {
-				if _, decided := decidedIDs[item.ID]; decided {
-					continue
-				}
+			if _, decided := decidedIDs[item.ID]; decided {
+				continue
 			}
 			items = append(items, item)
 		}
@@ -364,6 +362,9 @@ func deriveInboxItemsNoStaleEmission(ctx context.Context, opts handlerOptions, n
 			continue
 		}
 		if isSuppressedByAck(item, ackedAt) {
+			continue
+		}
+		if _, decided := decidedIDs[item.ID]; decided {
 			continue
 		}
 		items = append(items, item)
