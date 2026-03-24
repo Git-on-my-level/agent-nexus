@@ -1,5 +1,8 @@
 import { redirectToDefaultWorkspace } from "$lib/server/workspaceRedirect";
 
-export function load({ params }) {
-  redirectToDefaultWorkspace(`/artifacts/${params.artifactId}`);
+export async function load(event) {
+  await redirectToDefaultWorkspace(
+    event,
+    `/artifacts/${event.params.artifactId}`,
+  );
 }

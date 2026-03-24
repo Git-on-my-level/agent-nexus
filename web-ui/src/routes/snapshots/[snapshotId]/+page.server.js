@@ -1,5 +1,8 @@
 import { redirectToDefaultWorkspace } from "$lib/server/workspaceRedirect";
 
-export function load({ params }) {
-  redirectToDefaultWorkspace(`/snapshots/${params.snapshotId}`);
+export async function load(event) {
+  await redirectToDefaultWorkspace(
+    event,
+    `/snapshots/${event.params.snapshotId}`,
+  );
 }

@@ -19,7 +19,6 @@
     getInboxUrgencyLabel,
     groupInboxItems,
     summarizeInboxUrgency,
-    summarizeInboxByCategory,
   } from "$lib/inboxUtils";
 
   let loading = $state(false);
@@ -43,7 +42,6 @@
   let totalItems = $derived(items.length);
   let enrichedItems = $derived(items.map((item) => enrichInboxItem(item)));
   let urgencySummary = $derived(summarizeInboxUrgency(items));
-  let categorySummary = $derived(summarizeInboxByCategory(items));
   let filteredItems = $derived(
     enrichedItems.filter((item) => {
       if (
@@ -91,14 +89,14 @@
     const rawCategory = String(params.get("category") ?? "").trim();
     const rawUrgency = String(params.get("urgency") ?? "").trim();
 
-    categoryFilter = rawCategory && INBOX_CATEGORY_ORDER.includes(rawCategory)
-      ? rawCategory
-      : "all";
+    categoryFilter =
+      rawCategory && INBOX_CATEGORY_ORDER.includes(rawCategory)
+        ? rawCategory
+        : "all";
 
     const validUrgencies = [...INBOX_URGENCY_LEVELS, "aging"];
-    urgencyFilter = rawUrgency && validUrgencies.includes(rawUrgency)
-      ? rawUrgency
-      : "all";
+    urgencyFilter =
+      rawUrgency && validUrgencies.includes(rawUrgency) ? rawUrgency : "all";
 
     if (rawCategory || rawUrgency) {
       filtersOpen = true;
@@ -346,7 +344,8 @@
 
   function urgencyCardClass(level) {
     const active = urgencyFilter === level;
-    if (active) return "ring-1 ring-[var(--ui-accent)] border-[var(--ui-accent)]";
+    if (active)
+      return "ring-1 ring-[var(--ui-accent)] border-[var(--ui-accent)]";
     return "border-[var(--ui-border)] hover:border-[var(--ui-text-subtle)]";
   }
 
@@ -402,7 +401,7 @@
     data-testid="inbox-active-filters-summary"
   >
     <span class="font-medium text-[var(--ui-text)]">Active filters</span>
-    {#each activeFilterSummaryParts as part, i}
+    {#each activeFilterSummaryParts as part}
       <span class="text-[var(--ui-text-subtle)]">&middot;</span>
       <span>{part}</span>
     {/each}
@@ -420,7 +419,10 @@
         <select
           class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
           value={categoryFilter}
-          onchange={(e) => { categoryFilter = e.currentTarget.value; applyFilters(); }}
+          onchange={(e) => {
+            categoryFilter = e.currentTarget.value;
+            applyFilters();
+          }}
           data-testid="inbox-category-filter"
         >
           <option value="all">All categories</option>
@@ -436,7 +438,10 @@
         <select
           class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
           value={urgencyFilter}
-          onchange={(e) => { urgencyFilter = e.currentTarget.value; applyFilters(); }}
+          onchange={(e) => {
+            urgencyFilter = e.currentTarget.value;
+            applyFilters();
+          }}
           data-testid="inbox-urgency-filter"
         >
           <option value="all">All urgency levels</option>
@@ -470,7 +475,9 @@
 
 <div class="flex gap-2 mb-4" data-testid="urgency-summary-strip">
   <button
-    class="cursor-pointer flex-1 rounded-md border bg-[var(--ui-bg-soft)] px-3 py-2 text-left transition-colors {urgencyCardClass('immediate')}"
+    class="cursor-pointer flex-1 rounded-md border bg-[var(--ui-bg-soft)] px-3 py-2 text-left transition-colors {urgencyCardClass(
+      'immediate',
+    )}"
     onclick={() => setUrgencyFromCard("immediate")}
     type="button"
     data-testid="urgency-summary-immediate"
@@ -481,7 +488,9 @@
     </p>
   </button>
   <button
-    class="cursor-pointer flex-1 rounded-md border bg-[var(--ui-bg-soft)] px-3 py-2 text-left transition-colors {urgencyCardClass('high')}"
+    class="cursor-pointer flex-1 rounded-md border bg-[var(--ui-bg-soft)] px-3 py-2 text-left transition-colors {urgencyCardClass(
+      'high',
+    )}"
     onclick={() => setUrgencyFromCard("high")}
     type="button"
     data-testid="urgency-summary-high"
@@ -492,7 +501,9 @@
     </p>
   </button>
   <button
-    class="cursor-pointer flex-1 rounded-md border bg-[var(--ui-bg-soft)] px-3 py-2 text-left transition-colors {urgencyCardClass('normal')}"
+    class="cursor-pointer flex-1 rounded-md border bg-[var(--ui-bg-soft)] px-3 py-2 text-left transition-colors {urgencyCardClass(
+      'normal',
+    )}"
     onclick={() => setUrgencyFromCard("normal")}
     type="button"
     data-testid="urgency-summary-normal"
@@ -580,7 +591,9 @@
       <section data-testid={`inbox-group-${group.category}`}>
         <div class="mb-2 flex items-center gap-2">
           <h2
-            class="text-[12px] font-semibold uppercase tracking-wide {categoryBadgeClass(group.category)}"
+            class="text-[12px] font-semibold uppercase tracking-wide {categoryBadgeClass(
+              group.category,
+            )}"
           >
             {getInboxCategoryLabel(group.category)}
           </h2>

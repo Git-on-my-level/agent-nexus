@@ -1,9 +1,5 @@
-import { redirect } from "@sveltejs/kit";
+import { redirectToDefaultWorkspace } from "$lib/server/workspaceRedirect";
 
-import { workspacePath } from "$lib/workspacePaths";
-import { loadWorkspaceCatalog } from "$lib/server/workspaceCatalog";
-
-export function load() {
-  const catalog = loadWorkspaceCatalog();
-  throw redirect(307, workspacePath(catalog.defaultWorkspace.slug));
+export async function load(event) {
+  await redirectToDefaultWorkspace(event);
 }

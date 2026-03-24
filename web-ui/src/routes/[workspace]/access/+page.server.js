@@ -1,9 +1,11 @@
-import { loadWorkspaceCatalog } from "$lib/server/workspaceCatalog";
 import { normalizeWorkspaceSlug } from "$lib/workspacePaths";
+import { resolveWorkspaceBySlug } from "$lib/server/workspaceResolver";
 
 export async function load(event) {
-  const catalog = loadWorkspaceCatalog();
   const workspaceSlug = normalizeWorkspaceSlug(event.params.workspace);
-  const workspace = catalog.workspaceBySlug.get(workspaceSlug);
-  return { coreBaseUrl: workspace?.coreBaseUrl ?? "" };
+  const resolved = await resolveWorkspaceBySlug({
+    event,
+    workspaceSlug,
+  });
+  return { coreBaseUrl: resolved.workspace?.coreBaseUrl ?? "" };
 }

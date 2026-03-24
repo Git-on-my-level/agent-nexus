@@ -12,6 +12,7 @@ Canonical runtime config is `OAR_WORKSPACES`.
 - Accepts a JSON array or object.
 - Each entry needs a workspace slug and a core base URL.
 - Optional fields: `label`, `description`.
+- This is the authoritative routing source for self-host and local/dev.
 
 Example:
 
@@ -54,6 +55,19 @@ Single-core fallback:
   `local` workspace for dev/integration use.
 - If neither variable is set, the default `local` workspace uses same-origin mock
   routes.
+
+### SaaS packed-host workspace routing
+
+- In SaaS packed-host mode, a signed-in control-plane session can resolve
+  `/:workspace/...` routes dynamically from the control plane.
+- This allows newly created control-plane-managed workspaces to load through the
+  shared UI without editing `OAR_WORKSPACES` or restarting `oar-ui`.
+- The UI keeps a short-lived in-memory cache of control-plane workspace routing
+  metadata so proxied requests do not re-query the control plane every time.
+- If no control-plane session is present, the UI stays on the static
+  `OAR_WORKSPACES` or `OAR_CORE_BASE_URL` path.
+- If a SaaS workspace is missing, revoked, or still provisioning, the UI returns
+  an explicit routing error instead of a generic upstream proxy failure.
 
 ### Required oar-core endpoints
 

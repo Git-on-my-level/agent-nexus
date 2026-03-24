@@ -1,8 +1,6 @@
-import {
-  loadWorkspaceCatalog,
-  toPublicWorkspaceCatalog,
-} from "$lib/server/workspaceCatalog";
+import { toPublicWorkspaceCatalog } from "$lib/server/workspaceCatalog";
+import { resolveWorkspaceCatalog } from "$lib/server/workspaceResolver";
 
-export function load() {
-  return toPublicWorkspaceCatalog(loadWorkspaceCatalog());
+export async function load(event) {
+  return toPublicWorkspaceCatalog(await resolveWorkspaceCatalog(event));
 }

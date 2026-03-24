@@ -69,17 +69,14 @@ function fallbackSingleWorkspace(env) {
   ];
 }
 
-export function loadWorkspaceCatalog(env = privateEnv) {
-  const resolved = resolveWorkspaceEnv(env);
-  const configuredWorkspaces = parseWorkspaceEntries(resolved.OAR_WORKSPACES);
-  const workspaces =
-    configuredWorkspaces.length > 0
-      ? configuredWorkspaces
-      : fallbackSingleWorkspace(env);
+export function createWorkspaceCatalog({
+  workspaces,
+  defaultWorkspaceSlug = "",
+  devActorMode = false,
+  usesSyntheticDefaultWorkspace = false,
+}) {
   const defaultCandidate = normalizeWorkspaceSlug(
-    resolved.OAR_DEFAULT_WORKSPACE ||
-      workspaces[0]?.slug ||
-      DEFAULT_WORKSPACE_SLUG,
+    defaultWorkspaceSlug || workspaces[0]?.slug || DEFAULT_WORKSPACE_SLUG,
   );
   const defaultWorkspace =
     workspaces.find((workspace) => workspace.slug === defaultCandidate) ??
@@ -89,8 +86,6 @@ export function loadWorkspaceCatalog(env = privateEnv) {
     throw new Error("At least one OAR workspace must be configured.");
   }
 
-  const devActorMode =
-    env.OAR_DEV_ACTOR_MODE === "true" || env.OAR_DEV_ACTOR_MODE === "1";
   return {
     defaultWorkspace,
     workspaces,
@@ -98,7 +93,26 @@ export function loadWorkspaceCatalog(env = privateEnv) {
       workspaces.map((workspace) => [workspace.slug, workspace]),
     ),
     devActorMode,
+    usesSyntheticDefaultWorkspace,
   };
+}
+
+export function loadWorkspaceCatalog(env = privateEnv) {
+  const resolved = resolveWorkspaceEnv(env);
+  const configuredWorkspaces = parseWorkspaceEntries(resolved.OAR_WORKSPACES);
+  const workspaces =
+    configuredWorkspaces.length > 0
+      ? configuredWorkspaces
+      : fallbackSingleWorkspace(env);
+  const devActorMode =
+    env.OAR_DEV_ACTOR_MODE === "true" || env.OAR_DEV_ACTOR_MODE === "1";
+
+  return createWorkspaceCatalog({
+    workspaces,
+    defaultWorkspaceSlug: resolved.OAR_DEFAULT_WORKSPACE,
+    devActorMode,
+    usesSyntheticDefaultWorkspace: configuredWorkspaces.length === 0,
+  });
 }
 
 export function getWorkspaceBySlug(workspaceSlug, env = privateEnv) {

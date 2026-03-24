@@ -7,7 +7,7 @@ import {
 } from "$lib/server/authSession";
 
 export async function GET(event) {
-  const resolved = resolveWorkspaceSlugFromEvent(event);
+  const resolved = await resolveWorkspaceSlugFromEvent(event);
   if (resolved.error) {
     return json(resolved.error.payload, { status: resolved.error.status });
   }
@@ -50,7 +50,7 @@ export async function GET(event) {
 }
 
 export async function DELETE(event) {
-  const resolved = resolveWorkspaceSlugFromEvent(event);
+  const resolved = await resolveWorkspaceSlugFromEvent(event);
   if (resolved.error) {
     return json(resolved.error.payload, { status: resolved.error.status });
   }

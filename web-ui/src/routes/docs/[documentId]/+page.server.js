@@ -1,5 +1,5 @@
 import { redirectToDefaultWorkspace } from "$lib/server/workspaceRedirect";
 
-export function load({ params }) {
-  redirectToDefaultWorkspace(`/docs/${params.documentId}`);
+export async function load(event) {
+  await redirectToDefaultWorkspace(event, `/docs/${event.params.documentId}`);
 }

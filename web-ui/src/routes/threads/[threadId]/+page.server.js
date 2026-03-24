@@ -1,6 +1,6 @@
 import { redirectToDefaultWorkspace } from "$lib/server/workspaceRedirect";
 
-export function load({ params, url }) {
-  const pathname = `/threads/${params.threadId}${url.search}`;
-  redirectToDefaultWorkspace(pathname);
+export async function load(event) {
+  const pathname = `/threads/${event.params.threadId}${event.url.search}`;
+  await redirectToDefaultWorkspace(event, pathname);
 }
