@@ -102,6 +102,33 @@ validate_bootstrap_token_mode() {
   esac
 }
 
+validate_blob_backend() {
+  local backend="$1"
+  case "$backend" in
+    filesystem|object|s3)
+      ;;
+    *)
+      die "blob backend must be one of: filesystem, object, s3"
+      ;;
+  esac
+}
+
+normalize_bool_value() {
+  local value="${1:-}"
+  value="$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')"
+  case "$value" in
+    1|true|yes|on)
+      printf 'true\n'
+      ;;
+    0|false|no|off|"")
+      printf 'false\n'
+      ;;
+    *)
+      die "boolean value must be one of: true, false, 1, 0, yes, no, on, off"
+      ;;
+  esac
+}
+
 validate_origin() {
   local origin="$1"
   [[ "$origin" =~ ^https?://[^/]+$ ]] || die "origin must be an absolute http(s) origin with no path: $origin"
@@ -132,6 +159,208 @@ origin_host() {
     authority="${authority%%:*}"
   fi
   printf '%s\n' "$authority"
+}
+
+canonicalize_path_allow_missing() {
+  local raw_path="$1"
+  [[ -n "$raw_path" ]] || return 0
+  local base_name parent_dir
+  base_name="$(basename "$raw_path")"
+  parent_dir="$(dirname "$raw_path")"
+  mkdir -p "$parent_dir"
+  parent_dir="$(cd "$parent_dir" && pwd -P)"
+  printf '%s/%s\n' "$parent_dir" "$base_name"
+}
+
+path_is_within_base() {
+  local path="$1"
+  local base="$2"
+  [[ -n "$path" && -n "$base" ]] || return 1
+  [[ "$path" == "$base" || "$path" == "$base/"* ]]
+}
+
+remap_path_between_roots() {
+  local source_path="$1"
+  local source_base="$2"
+  local target_base="$3"
+  [[ -n "$source_path" && -n "$source_base" && -n "$target_base" ]] || return 1
+  path_is_within_base "$source_path" "$source_base" || return 1
+  if [[ "$source_path" == "$source_base" ]]; then
+    printf '%s\n' "$target_base"
+    return 0
+  fi
+  printf '%s/%s\n' "$target_base" "${source_path#"$source_base"/}"
+}
+
+blob_storage_mode() {
+  local backend="${1:-filesystem}"
+  case "$backend" in
+    s3)
+      printf 'remote\n'
+      ;;
+    *)
+      printf 'local\n'
+      ;;
+  esac
+}
+
+blob_backup_mode() {
+  local backend="${1:-filesystem}"
+  case "$backend" in
+    s3)
+      printf 'reference\n'
+      ;;
+    *)
+      printf 'copy\n'
+      ;;
+  esac
+}
+
+blob_bundle_path() {
+  local backend="${1:-filesystem}"
+  if [[ "$(blob_storage_mode "$backend")" == "local" ]]; then
+    printf 'workspace/blob-store\n'
+    return 0
+  fi
+  printf '\n'
+}
+
+blob_effective_local_root() {
+  local workspace_root="$1"
+  local backend="${2:-filesystem}"
+  local configured_root="${3:-}"
+  if [[ "$backend" == "s3" ]]; then
+    printf '\n'
+    return 0
+  fi
+  if [[ -n "$configured_root" ]]; then
+    printf '%s\n' "$configured_root"
+    return 0
+  fi
+  printf '%s/artifacts/content\n' "$workspace_root"
+}
+
+blob_effective_location() {
+  local workspace_root="$1"
+  local backend="${2:-filesystem}"
+  local configured_root="${3:-}"
+  local s3_bucket="${4:-}"
+  local s3_prefix="${5:-}"
+  case "$backend" in
+    s3)
+      if [[ -n "$s3_prefix" ]]; then
+        printf 's3://%s/%s\n' "$s3_bucket" "$s3_prefix"
+      else
+        printf 's3://%s\n' "$s3_bucket"
+      fi
+      ;;
+    *)
+      blob_effective_local_root "$workspace_root" "$backend" "$configured_root"
+      ;;
+  esac
+}
+
+blob_key_format() {
+  local backend="${1:-filesystem}"
+  case "$backend" in
+    filesystem)
+      printf 'sha256-hex-filename\n'
+      ;;
+    object|s3)
+      printf 'sha256-hex-sharded-object-key\n'
+      ;;
+    *)
+      printf 'unknown\n'
+      ;;
+  esac
+}
+
+blob_s3_inline_credentials_present() {
+  local access_key_id="${1:-}"
+  local secret_access_key="${2:-}"
+  local session_token="${3:-}"
+  if [[ -n "$access_key_id" || -n "$secret_access_key" || -n "$session_token" ]]; then
+    printf 'true\n'
+    return 0
+  fi
+  printf 'false\n'
+}
+
+emit_blob_env_lines() {
+  local backend="$1"
+  local blob_root="$2"
+  local s3_bucket="$3"
+  local s3_prefix="$4"
+  local s3_region="$5"
+  local s3_endpoint="$6"
+  local s3_access_key_id="$7"
+  local s3_secret_access_key="$8"
+  local s3_session_token="$9"
+  local s3_force_path_style="${10:-false}"
+
+  cat <<EOF
+OAR_BLOB_BACKEND=${backend}
+OAR_BLOB_ROOT=${blob_root}
+OAR_BLOB_S3_BUCKET=${s3_bucket}
+OAR_BLOB_S3_PREFIX=${s3_prefix}
+OAR_BLOB_S3_REGION=${s3_region}
+OAR_BLOB_S3_ENDPOINT=${s3_endpoint}
+OAR_BLOB_S3_ACCESS_KEY_ID=${s3_access_key_id}
+OAR_BLOB_S3_SECRET_ACCESS_KEY=${s3_secret_access_key}
+OAR_BLOB_S3_SESSION_TOKEN=${s3_session_token}
+OAR_BLOB_S3_FORCE_PATH_STYLE=${s3_force_path_style}
+EOF
+}
+
+emit_blob_metadata_lines() {
+  local workspace_root="$1"
+  local backend="$2"
+  local blob_root="$3"
+  local s3_bucket="$4"
+  local s3_prefix="$5"
+  local s3_region="$6"
+  local s3_endpoint="$7"
+  local s3_access_key_id="$8"
+  local s3_secret_access_key="$9"
+  local s3_session_token="${10}"
+  local s3_force_path_style="${11:-false}"
+  local effective_location
+  local inline_credentials_present
+
+  effective_location="$(blob_effective_location "$workspace_root" "$backend" "$blob_root" "$s3_bucket" "$s3_prefix")"
+  inline_credentials_present="$(blob_s3_inline_credentials_present "$s3_access_key_id" "$s3_secret_access_key" "$s3_session_token")"
+
+  cat <<EOF
+BLOB_BACKEND=${backend}
+BLOB_STORAGE_MODE=$(blob_storage_mode "$backend")
+BLOB_BACKUP_MODE=$(blob_backup_mode "$backend")
+BLOB_ROOT=${blob_root}
+BLOB_EFFECTIVE_LOCATION=${effective_location}
+BLOB_KEY_FORMAT=$(blob_key_format "$backend")
+BLOB_S3_BUCKET=${s3_bucket}
+BLOB_S3_PREFIX=${s3_prefix}
+BLOB_S3_REGION=${s3_region}
+BLOB_S3_ENDPOINT=${s3_endpoint}
+BLOB_S3_FORCE_PATH_STYLE=${s3_force_path_style}
+BLOB_S3_INLINE_CREDENTIALS_PRESENT=${inline_credentials_present}
+EOF
+}
+
+remap_local_blob_root_for_target() {
+  local source_blob_root="${1:-}"
+  local source_instance_root="${2:-}"
+  local source_workspace_root="${3:-}"
+  local target_instance_root="${4:-}"
+  local target_workspace_root="${5:-}"
+  [[ -n "$source_blob_root" ]] || return 0
+
+  if remap_path_between_roots "$source_blob_root" "$source_workspace_root" "$target_workspace_root"; then
+    return 0
+  fi
+  if remap_path_between_roots "$source_blob_root" "$source_instance_root" "$target_instance_root"; then
+    return 0
+  fi
+  printf '%s\n' "$source_blob_root"
 }
 
 generate_token() {

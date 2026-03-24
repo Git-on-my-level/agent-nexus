@@ -164,10 +164,13 @@ Minimum production expectation:
 - at least one recent verified restore per release train
 
 Filesystem blobs:
-- back up SQLite + blob files + metadata
+- back up SQLite + the hosted bundle's copied local blob store + metadata
 
 S3-compatible blobs:
-- back up SQLite + manifest + bucket/prefix state according to the backend-aware backup ticket
+- back up SQLite + the hosted manifest/receipt material and keep operator
+  ownership of the referenced bucket/prefix state
+- if the bundle does not include inline S3 credentials, restore drills must run
+  with ambient AWS-compatible credentials or instance identity on the target
 
 ## Restore drills
 
@@ -176,6 +179,7 @@ A deployment is not production-ready until a restore drill has been run on the s
 - restore source
 - restore destination
 - restore verification result
+- active blob backend and effective blob location
 - operator date/time
 
 ## When to add a second host

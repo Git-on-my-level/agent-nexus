@@ -288,6 +288,15 @@ If `OAR_BLOB_BACKEND=object`, the content objects still live on the local filesy
 
 If `OAR_BLOB_BACKEND=s3`, blob bytes live in the configured bucket/prefix instead of the local workspace tree. Self-host deployments do not require this. Packed-host SaaS can opt into S3-compatible storage when off-host blob durability or storage expansion is worth the added operator surface. Backup and restore workflows must capture `state.sqlite` plus the matching bucket/prefix state together.
 
+The hosted-v1 scripts under `scripts/hosted/` are backend-aware:
+
+- local backends (`filesystem`, `object`) are backed up as `workspace/blob-store/`
+  inside the bundle and restored into the target's effective local blob root
+- `s3` bundles record the active bucket/prefix in `manifest.env` and restore the
+  target env/metadata to that same remote namespace
+- restore verification validates live artifact/document reads through the active
+  backend instead of only checking database row counts
+
 ## Packet Convenience Atomicity
 
 `POST /work_orders`, `POST /receipts`, and `POST /reviews` persist packet artifact data and the emitted event atomically.
@@ -435,8 +444,9 @@ docker compose --env-file /srv/oar/team-alpha/config/env.production up -d
 This starts both `core` (port 8000) and `web-ui` (port 3000). The web-ui
 proxies API calls to core over the internal Docker network. The generated env
 file also carries `HOST_OAR_WORKSPACE_ROOT`, `OAR_CORE_INSTANCE_ID`, and
-`OAR_BOOTSTRAP_TOKEN` so the Compose example matches the hosted-v1 managed-ops
-story instead of a generic shared volume.
+`OAR_BOOTSTRAP_TOKEN`, plus explicit blob backend settings, so the Compose
+example matches the hosted-v1 managed-ops story instead of a generic shared
+volume.
 
 ## CI smoke
 

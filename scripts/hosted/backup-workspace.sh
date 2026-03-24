@@ -14,7 +14,8 @@ Create a portable hosted-v1 backup bundle containing:
   - manifest.env
   - SHA256SUMS
   - workspace/state.sqlite
-  - workspace/artifacts/content/
+  - workspace/blob-store/ for local blob backends
+  - remote blob reference metadata for S3-backed workspaces
   - metadata/ (if present)
 
 By default, config/env.production is NOT included in the backup bundle for
@@ -54,10 +55,26 @@ METADATA_DIR="${INSTANCE_ROOT}/metadata"
 ENV_FILE="${CONFIG_DIR}/env.production"
 INSTANCE_METADATA_FILE="${METADATA_DIR}/instance.env"
 DB_PATH="${WORKSPACE_ROOT}/state.sqlite"
-BLOB_DIR="${WORKSPACE_ROOT}/artifacts/content"
 
 [[ -d "$WORKSPACE_ROOT" ]] || die "workspace directory not found: $WORKSPACE_ROOT"
 [[ -f "$DB_PATH" ]] || die "workspace database not found: $DB_PATH (start oar-core once before backing up)"
+
+ACTIVE_BLOB_BACKEND="$(dotenv_get "$ENV_FILE" OAR_BLOB_BACKEND || true)"
+ACTIVE_BLOB_ROOT="$(dotenv_get "$ENV_FILE" OAR_BLOB_ROOT || true)"
+ACTIVE_BLOB_S3_BUCKET="$(dotenv_get "$ENV_FILE" OAR_BLOB_S3_BUCKET || true)"
+ACTIVE_BLOB_S3_PREFIX="$(dotenv_get "$ENV_FILE" OAR_BLOB_S3_PREFIX || true)"
+ACTIVE_BLOB_S3_REGION="$(dotenv_get "$ENV_FILE" OAR_BLOB_S3_REGION || true)"
+ACTIVE_BLOB_S3_ENDPOINT="$(dotenv_get "$ENV_FILE" OAR_BLOB_S3_ENDPOINT || true)"
+ACTIVE_BLOB_S3_ACCESS_KEY_ID="$(dotenv_get "$ENV_FILE" OAR_BLOB_S3_ACCESS_KEY_ID || true)"
+ACTIVE_BLOB_S3_SECRET_ACCESS_KEY="$(dotenv_get "$ENV_FILE" OAR_BLOB_S3_SECRET_ACCESS_KEY || true)"
+ACTIVE_BLOB_S3_SESSION_TOKEN="$(dotenv_get "$ENV_FILE" OAR_BLOB_S3_SESSION_TOKEN || true)"
+ACTIVE_BLOB_S3_FORCE_PATH_STYLE="$(normalize_bool_value "$(dotenv_get "$ENV_FILE" OAR_BLOB_S3_FORCE_PATH_STYLE || true)")"
+[[ -n "$ACTIVE_BLOB_BACKEND" ]] || ACTIVE_BLOB_BACKEND="filesystem"
+validate_blob_backend "$ACTIVE_BLOB_BACKEND"
+ACTIVE_LOCAL_BLOB_ROOT="$(blob_effective_local_root "$WORKSPACE_ROOT" "$ACTIVE_BLOB_BACKEND" "$ACTIVE_BLOB_ROOT")"
+ACTIVE_BLOB_STORAGE_MODE="$(blob_storage_mode "$ACTIVE_BLOB_BACKEND")"
+ACTIVE_BLOB_BACKUP_MODE="$(blob_backup_mode "$ACTIVE_BLOB_BACKEND")"
+BACKUP_BLOB_RELATIVE_PATH="$(blob_bundle_path "$ACTIVE_BLOB_BACKEND")"
 
 if [[ -z "$OUTPUT_DIR" ]]; then
   local_name="$(basename "$INSTANCE_ROOT")"
@@ -69,16 +86,24 @@ OUTPUT_DIR="$(cd "$OUTPUT_DIR" && pwd -P)"
 ensure_empty_or_forced_target "$OUTPUT_DIR" 0
 
 BACKUP_DB_DIR="${OUTPUT_DIR}/workspace"
-BACKUP_BLOB_DIR="${OUTPUT_DIR}/workspace/artifacts/content"
 BACKUP_CONFIG_DIR="${OUTPUT_DIR}/config"
 BACKUP_METADATA_DIR="${OUTPUT_DIR}/metadata"
 MANIFEST_FILE="${OUTPUT_DIR}/manifest.env"
 CHECKSUM_FILE="${OUTPUT_DIR}/SHA256SUMS"
+BACKUP_BLOB_DIR=""
+if [[ -n "$BACKUP_BLOB_RELATIVE_PATH" ]]; then
+  BACKUP_BLOB_DIR="${OUTPUT_DIR}/${BACKUP_BLOB_RELATIVE_PATH}"
+fi
 
-mkdir -p "$BACKUP_DB_DIR" "$BACKUP_BLOB_DIR" "$BACKUP_CONFIG_DIR" "$BACKUP_METADATA_DIR"
+mkdir -p "$BACKUP_DB_DIR" "$BACKUP_CONFIG_DIR" "$BACKUP_METADATA_DIR"
+if [[ -n "$BACKUP_BLOB_DIR" ]]; then
+  mkdir -p "$BACKUP_BLOB_DIR"
+fi
 
 sqlite3 "$DB_PATH" ".timeout 5000" ".backup '${BACKUP_DB_DIR}/state.sqlite'"
-copy_tree_contents "$BLOB_DIR" "$BACKUP_BLOB_DIR"
+if [[ "$ACTIVE_BLOB_STORAGE_MODE" == "local" ]]; then
+  copy_tree_contents "$ACTIVE_LOCAL_BLOB_ROOT" "$BACKUP_BLOB_DIR"
+fi
 if [[ "$INCLUDE_CONFIG_SECRETS" -eq 1 && ! -f "$ENV_FILE" ]]; then
   die "--include-config-secrets requires ${ENV_FILE} to exist"
 fi
@@ -109,8 +134,13 @@ INVITE_COUNT="$(sqlite_scalar "$DB_PATH" "SELECT COUNT(*) FROM auth_invites;")"
 DOCUMENT_COUNT="$(sqlite_scalar "$DB_PATH" "SELECT COUNT(*) FROM documents;")"
 DOCUMENT_REVISION_COUNT="$(sqlite_scalar "$DB_PATH" "SELECT COUNT(*) FROM document_revisions;")"
 BLOB_HASH_COUNT="$(sqlite_scalar "$DB_PATH" "SELECT COUNT(DISTINCT content_hash) FROM artifacts WHERE TRIM(content_hash) <> '';")"
-BLOB_FILE_COUNT="$(count_files "$BLOB_DIR")"
-BLOB_TOTAL_BYTES="$(directory_size_bytes "$BLOB_DIR")"
+if [[ "$ACTIVE_BLOB_STORAGE_MODE" == "local" ]]; then
+  BLOB_FILE_COUNT="$(count_files "$ACTIVE_LOCAL_BLOB_ROOT")"
+  BLOB_TOTAL_BYTES="$(directory_size_bytes "$ACTIVE_LOCAL_BLOB_ROOT")"
+else
+  BLOB_FILE_COUNT="0"
+  BLOB_TOTAL_BYTES="0"
+fi
 SQLITE_BACKUP_SHA256="$(sha256_file "${BACKUP_DB_DIR}/state.sqlite")"
 SQLITE_SCHEMA_VERSION="$(sqlite_scalar "$DB_PATH" "PRAGMA schema_version;")"
 SQLITE_USER_VERSION="$(sqlite_scalar "$DB_PATH" "PRAGMA user_version;")"
@@ -140,9 +170,9 @@ SQLITE_BACKUP_STRATEGY=sqlite3_dot_backup
 SQLITE_BACKUP_SHA256=${SQLITE_BACKUP_SHA256}
 SQLITE_SCHEMA_VERSION=${SQLITE_SCHEMA_VERSION}
 SQLITE_USER_VERSION=${SQLITE_USER_VERSION}
-BLOB_DIR_PATH=workspace/artifacts/content
-BLOB_BACKEND=filesystem
-BLOB_KEY_FORMAT=sha256-hex-filename
+$(emit_blob_metadata_lines "$WORKSPACE_ROOT" "$ACTIVE_BLOB_BACKEND" "$ACTIVE_BLOB_ROOT" "$ACTIVE_BLOB_S3_BUCKET" "$ACTIVE_BLOB_S3_PREFIX" "$ACTIVE_BLOB_S3_REGION" "$ACTIVE_BLOB_S3_ENDPOINT" "$ACTIVE_BLOB_S3_ACCESS_KEY_ID" "$ACTIVE_BLOB_S3_SECRET_ACCESS_KEY" "$ACTIVE_BLOB_S3_SESSION_TOKEN" "$ACTIVE_BLOB_S3_FORCE_PATH_STYLE")
+BLOB_DIR_PATH=${BACKUP_BLOB_RELATIVE_PATH}
+BLOB_BUNDLE_PATH=${BACKUP_BLOB_RELATIVE_PATH}
 CONFIG_INCLUDED=${CONFIG_INCLUDED}
 CONFIG_ENV_PATH=${CONFIG_ENV_PATH}
 METADATA_DIR_PATH=metadata
@@ -172,4 +202,8 @@ EOF
 log "Backup bundle created at ${OUTPUT_DIR}"
 log "  manifest: ${MANIFEST_FILE}"
 log "  sqlite:   ${BACKUP_DB_DIR}/state.sqlite"
-log "  blobs:    ${BACKUP_BLOB_DIR}"
+if [[ "$ACTIVE_BLOB_STORAGE_MODE" == "local" ]]; then
+  log "  blobs:    ${BACKUP_BLOB_DIR} (copied from ${ACTIVE_LOCAL_BLOB_ROOT})"
+else
+  log "  blobs:    remote reference to $(blob_effective_location "$WORKSPACE_ROOT" "$ACTIVE_BLOB_BACKEND" "$ACTIVE_BLOB_ROOT" "$ACTIVE_BLOB_S3_BUCKET" "$ACTIVE_BLOB_S3_PREFIX")"
+fi
