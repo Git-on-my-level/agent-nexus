@@ -91,6 +91,7 @@ class ACPProcessClient:
             except Exception:
                 try:
                     proc.kill()
+                    proc.wait(timeout=5)
                 except Exception:
                     pass
 

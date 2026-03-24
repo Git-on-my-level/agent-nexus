@@ -33,8 +33,15 @@ def ensure_dir(path: Path) -> Path:
 def atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
     ensure_dir(path.parent)
     temp = path.with_suffix(path.suffix + ".tmp")
-    temp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    temp.replace(path)
+    fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+        temp.replace(path)
+        os.chmod(path, 0o600)
+    finally:
+        if temp.exists():
+            temp.unlink()
 
 
 def read_json_file(path: Path) -> dict[str, Any]:
