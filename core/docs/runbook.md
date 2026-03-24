@@ -20,6 +20,8 @@ below so it can run alongside the existing core + web-ui development loop.
 | Purpose | Flag | Env | Default |
 |---|---|---|---|
 | Workspace root (SQLite + artifacts) | `--workspace-root` | `OAR_WORKSPACE_ROOT` | `.oar-workspace` |
+| Blob backend selector | `--blob-backend` | `OAR_BLOB_BACKEND` | `filesystem` |
+| Filesystem/object blob root | `--blob-root` | `OAR_BLOB_ROOT` | workspace `artifacts/content/` |
 | Listen host | `--host` | `OAR_HOST` | `127.0.0.1` |
 | Listen port | `--port` | `OAR_PORT` | `8000` |
 | Full listen address (overrides host+port) | `--listen-addr` | `OAR_LISTEN_ADDR` | unset |
@@ -53,12 +55,25 @@ below so it can run alongside the existing core + web-ui development loop.
 | Write route burst | n/a | `OAR_WRITE_ROUTE_RATE_BURST` | `200` |
 | Graceful shutdown timeout | n/a | `OAR_SHUTDOWN_TIMEOUT` | `15s` |
 
+Filesystem blobs remain the default for self-hosted and first packed-host deployments.
+Set `OAR_BLOB_BACKEND=s3` only when you explicitly want S3-compatible object storage.
+When `OAR_BLOB_BACKEND=s3`, configure:
+
+- `OAR_BLOB_S3_BUCKET`
+- `OAR_BLOB_S3_PREFIX`
+- `OAR_BLOB_S3_REGION`
+- `OAR_BLOB_S3_ENDPOINT` for custom providers such as R2 or MinIO
+- `OAR_BLOB_S3_ACCESS_KEY_ID`
+- `OAR_BLOB_S3_SECRET_ACCESS_KEY`
+- `OAR_BLOB_S3_SESSION_TOKEN` when temporary credentials are in use
+- `OAR_BLOB_S3_FORCE_PATH_STYLE` when the provider requires path-style requests
+
 ## Workspace layout
 
 The workspace root contains:
 
 - `state.sqlite`: canonical structured data (events, snapshots, artifacts metadata, actors, derived views)
-- `artifacts/content/`: artifact bytes
+- `artifacts/content/`: artifact bytes when `OAR_BLOB_BACKEND=filesystem` or `object`
 - `logs/`, `tmp/`: operational directories
 
 ## Migrations / initialization
@@ -267,7 +282,11 @@ workspace and the primary thread timeline.
 3. Stop and restart server with the same workspace root.
 4. Confirm object still exists (data persisted in `state.sqlite` plus the configured blob backend root).
 
-If `OAR_BLOB_BACKEND=object`, the content objects live under the configured blob root in an object-style layout rather than a flat content directory. Backup and restore workflows must capture the database and the blob backend together.
+If `OAR_BLOB_BACKEND=filesystem`, blob bytes stay under `workspace/artifacts/content/` by default and should be backed up with `state.sqlite`.
+
+If `OAR_BLOB_BACKEND=object`, the content objects still live on the local filesystem but in an object-style sharded layout under the configured blob root. Backup and restore workflows must still capture the database and that blob root together.
+
+If `OAR_BLOB_BACKEND=s3`, blob bytes live in the configured bucket/prefix instead of the local workspace tree. Self-host deployments do not require this. Packed-host SaaS can opt into S3-compatible storage when off-host blob durability or storage expansion is worth the added operator surface. Backup and restore workflows must capture `state.sqlite` plus the matching bucket/prefix state together.
 
 ## Packet Convenience Atomicity
 

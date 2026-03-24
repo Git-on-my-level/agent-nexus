@@ -5,7 +5,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 type FilesystemBackend struct {
@@ -221,11 +220,7 @@ func (b *ObjectStoreBackend) Usage(ctx context.Context) (Usage, error) {
 }
 
 func (b *ObjectStoreBackend) objectPath(hash string) string {
-	hash = strings.TrimSpace(hash)
-	if len(hash) < 4 {
-		return filepath.Join(b.rootDir, hash)
-	}
-	return filepath.Join(b.rootDir, hash[:2], hash[2:4], hash)
+	return contentAddressedFilesystemPath(b.rootDir, hash)
 }
 
 type objectStoreStagedWrite struct {

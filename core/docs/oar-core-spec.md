@@ -47,7 +47,7 @@ oar-core does **not**:
 
 ### 2.1 SQLite + blob backend seam
 - **SQLite** stores events (rows), snapshots (rows), artifact metadata (rows), documents (rows), document_revisions (rows), actor registry (rows), and derived views (rows).
-- **Blob storage** stores artifact content. The first backend is the local filesystem, but canonical artifact/document identity is content-addressed by `content_hash` and `content_type`, not by a backend-specific path.
+- **Blob storage** stores artifact content. The default backend is the local filesystem; optional deployments can switch to an S3-compatible object store without changing canonical artifact/document identity, which remains content-addressed by `content_hash` and `content_type` rather than a backend-specific path.
 - Hosted deployments MUST treat blob storage as a replaceable backend seam rather than a client-visible contract.
 - Clients and agents SHOULD prefer the API, CLI, and generated clients over direct filesystem access.
 

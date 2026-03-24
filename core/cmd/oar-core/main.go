@@ -55,6 +55,14 @@ func main() {
 		workspaceRoot              = envString("OAR_WORKSPACE_ROOT", defaultWorkspaceRoot)
 		blobBackend                = envString("OAR_BLOB_BACKEND", "filesystem")
 		blobRoot                   = envString("OAR_BLOB_ROOT", "")
+		blobS3Bucket               = envString("OAR_BLOB_S3_BUCKET", "")
+		blobS3Prefix               = envString("OAR_BLOB_S3_PREFIX", "")
+		blobS3Region               = envString("OAR_BLOB_S3_REGION", "")
+		blobS3Endpoint             = envString("OAR_BLOB_S3_ENDPOINT", "")
+		blobS3AccessKeyID          = envString("OAR_BLOB_S3_ACCESS_KEY_ID", "")
+		blobS3SecretAccessKey      = envString("OAR_BLOB_S3_SECRET_ACCESS_KEY", "")
+		blobS3SessionToken         = envString("OAR_BLOB_S3_SESSION_TOKEN", "")
+		blobS3ForcePathStyle       = envBool("OAR_BLOB_S3_FORCE_PATH_STYLE", false)
 		coreVersion                = envString("OAR_CORE_VERSION", "")
 		apiVersion                 = envString("OAR_API_VERSION", defaultAPIVersion)
 		minCLIVersion              = envString("OAR_MIN_CLI_VERSION", defaultMinCLIVersion)
@@ -107,8 +115,8 @@ func main() {
 	flag.StringVar(&listenAddress, "listen-addr", listenAddress, "full listen address host:port; overrides --host/--port")
 	flag.StringVar(&schemaPath, "schema-path", schemaPath, "path to ../contracts/oar-schema.yaml")
 	flag.StringVar(&workspaceRoot, "workspace-root", workspaceRoot, "root directory for sqlite/filesystem workspace")
-	flag.StringVar(&blobBackend, "blob-backend", blobBackend, "blob storage backend (filesystem|object)")
-	flag.StringVar(&blobRoot, "blob-root", blobRoot, "root directory for blob storage (defaults to workspace artifacts/content)")
+	flag.StringVar(&blobBackend, "blob-backend", blobBackend, "blob storage backend (filesystem|object|s3)")
+	flag.StringVar(&blobRoot, "blob-root", blobRoot, "root directory for filesystem/object blob storage (defaults to workspace artifacts/content)")
 	flag.StringVar(&coreVersion, "core-version", coreVersion, "core version reported in handshake/version headers (defaults to schema version)")
 	flag.StringVar(&apiVersion, "api-version", apiVersion, "api version reported in handshake/version headers")
 	flag.StringVar(&minCLIVersion, "min-cli-version", minCLIVersion, "minimum compatible CLI version")
@@ -153,19 +161,22 @@ func main() {
 		streamPollInterval = time.Second
 	}
 
-	effectiveBlobRoot := blobRoot
-	if effectiveBlobRoot == "" {
-		effectiveBlobRoot = workspace.Layout().ArtifactContentDir
-	}
-
-	var blobBackendImpl blob.Backend
-	switch blobBackend {
-	case "filesystem":
-		blobBackendImpl = blob.NewFilesystemBackend(effectiveBlobRoot)
-	case "object":
-		blobBackendImpl = blob.NewObjectStoreBackend(effectiveBlobRoot)
-	default:
-		fmt.Fprintf(os.Stderr, "unknown blob backend: %s (supported: filesystem, object)\n", blobBackend)
+	blobBackendImpl, effectiveBlobRoot, err := buildBlobBackend(context.Background(), workspace.Layout(), blobBackendConfig{
+		Backend: blobBackend,
+		Root:    blobRoot,
+		S3: blob.S3BackendConfig{
+			Bucket:          blobS3Bucket,
+			Prefix:          blobS3Prefix,
+			Region:          blobS3Region,
+			Endpoint:        blobS3Endpoint,
+			AccessKeyID:     blobS3AccessKeyID,
+			SecretAccessKey: blobS3SecretAccessKey,
+			SessionToken:    blobS3SessionToken,
+			ForcePathStyle:  blobS3ForcePathStyle,
+		},
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "invalid blob backend configuration: %v\n", err)
 		os.Exit(1)
 	}
 
