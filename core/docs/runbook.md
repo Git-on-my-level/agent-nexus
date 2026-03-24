@@ -7,6 +7,13 @@ for human accounts, organizations, workspace registry, invites, provisioning
 jobs, and audit history. Its local workflow is documented in a short section
 below so it can run alongside the existing core + web-ui development loop.
 
+For packed-host SaaS operations, see:
+- Architecture: [`../docs/architecture/saas-packed-host-v1.md`](../docs/architecture/saas-packed-host-v1.md)
+- Configuration: [`../runbooks/packed-host-configuration.md`](../runbooks/packed-host-configuration.md)
+- Backup/restore: [`../runbooks/packed-host-backup-restore.md`](../runbooks/packed-host-backup-restore.md)
+- Blob backends: [`../runbooks/blob-backend-operations.md`](../runbooks/blob-backend-operations.md)
+- Projection maintenance: [`../runbooks/projection-maintenance.md`](../runbooks/projection-maintenance.md)
+
 ## Prerequisites
 
 - Go toolchain (for source runs)

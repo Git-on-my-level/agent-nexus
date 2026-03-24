@@ -9,6 +9,14 @@ This runbook is for the recommended PMF-friendly SaaS shape:
 
 It assumes the implementation tickets in this pack are complete.
 
+Related docs:
+- Architecture: [`../docs/architecture/saas-packed-host-v1.md`](../docs/architecture/saas-packed-host-v1.md)
+- Configuration: [`../runbooks/packed-host-configuration.md`](../runbooks/packed-host-configuration.md)
+- Launch checklist: [`../runbooks/packed-host-launch-checklist.md`](../runbooks/packed-host-launch-checklist.md)
+- Backup/restore: [`../runbooks/packed-host-backup-restore.md`](../runbooks/packed-host-backup-restore.md)
+- Blob backends: [`../runbooks/blob-backend-operations.md`](../runbooks/blob-backend-operations.md)
+- Projection maintenance: [`../runbooks/projection-maintenance.md`](../runbooks/projection-maintenance.md)
+
 ## Target host layout
 
 ```text

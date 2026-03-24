@@ -3,6 +3,11 @@
 This runbook covers local integration and production-like serving for the
 workspace-aware `oar-ui`.
 
+For packed-host SaaS operations, see:
+- Architecture: [`../docs/architecture/saas-packed-host-v1.md`](../docs/architecture/saas-packed-host-v1.md)
+- Configuration: [`../runbooks/packed-host-configuration.md`](../runbooks/packed-host-configuration.md)
+- Linux deployment: [`../deploy/linux-packed-host.md`](../deploy/linux-packed-host.md)
+
 ## Configuration
 
 ### Workspace catalog

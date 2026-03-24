@@ -6,6 +6,25 @@ This is the recommended PMF deployment shape for Organization Autorunner given t
 
 Launch SaaS without forking the product into a separate multitenant core, without paying for a large idle fleet, and without forcing early shared-row multitenancy into `oar-core`.
 
+## Self-host vs SaaS packed-host
+
+| Aspect | Self-host | SaaS packed-host |
+|---|---|---|
+| Human auth | Workspace-local passkeys | Control-plane managed with workspace launch grants |
+| Workspace count | One or few, statically configured | Many, dynamically provisioned |
+| Workspace routing | Static `OAR_WORKSPACES` in web-ui | Dynamic control-plane resolution |
+| Onboarding | Operator-driven bootstrap + invites | Self-serve account signup + org invites |
+| Control plane | Not required | Required |
+| Billing/quota | Not in product | Control-plane envelope per org |
+| Backup orchestration | Per-workspace scripts | Control-plane scheduled + monitored |
+
+The same `oar-core` binary serves both models:
+
+- Self-host: `OAR_HUMAN_AUTH_MODE=workspace_local` or unset
+- SaaS packed-host: `OAR_HUMAN_AUTH_MODE=control_plane` plus control-plane token settings
+
+For self-host single-workspace operations, see [`hosted-v1.md`](hosted-v1.md) and [`../../deploy/managed-hosting.md`](../../deploy/managed-hosting.md).
+
 ## Shape
 
 - one shared `oar-control-plane`
@@ -93,3 +112,14 @@ When one host fills up:
 2. Extend the control-plane placement table, not the `oar-core` product model.
 3. Keep one workspace = one core process = one workspace root.
 4. Add more automation only after operator repetition makes it worthwhile.
+
+## Operational docs
+
+- Configuration: [`../../runbooks/packed-host-configuration.md`](../../runbooks/packed-host-configuration.md)
+- Linux deployment: [`../../deploy/linux-packed-host.md`](../../deploy/linux-packed-host.md)
+- Launch checklist: [`../../runbooks/packed-host-launch-checklist.md`](../../runbooks/packed-host-launch-checklist.md)
+- Backup/restore: [`../../runbooks/packed-host-backup-restore.md`](../../runbooks/packed-host-backup-restore.md)
+- Blob backends: [`../../runbooks/blob-backend-operations.md`](../../runbooks/blob-backend-operations.md)
+- Projection maintenance: [`../../runbooks/projection-maintenance.md`](../../runbooks/projection-maintenance.md)
+- Core runbook: [`../../core/docs/runbook.md`](../../core/docs/runbook.md)
+- Web UI runbook: [`../../web-ui/docs/runbook.md`](../../web-ui/docs/runbook.md)

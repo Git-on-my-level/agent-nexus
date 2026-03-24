@@ -2,6 +2,14 @@
 
 Use this checklist before the first real production deployment.
 
+Related docs:
+- Architecture: [`../docs/architecture/saas-packed-host-v1.md`](../docs/architecture/saas-packed-host-v1.md)
+- Configuration: [`packed-host-configuration.md`](packed-host-configuration.md)
+- Linux deployment: [`../deploy/linux-packed-host.md`](../deploy/linux-packed-host.md)
+- Backup/restore: [`packed-host-backup-restore.md`](packed-host-backup-restore.md)
+- Blob backends: [`blob-backend-operations.md`](blob-backend-operations.md)
+- Projection maintenance: [`projection-maintenance.md`](projection-maintenance.md)
+
 ## Platform
 - [ ] Linux host is patched and reachable only through intended ingress.
 - [ ] `caddy` is the only public-facing OAR listener.

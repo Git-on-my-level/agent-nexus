@@ -2,6 +2,8 @@
 
 This runbook describes the repository-level release and verification process for `oar-core`, `oar`, and `oar-ui` contract compatibility.
 
+For packed-host SaaS operations, see [`packed-host-configuration.md`](packed-host-configuration.md) and related runbooks.
+
 ## Pre-release checks
 
 Run from repo root:
