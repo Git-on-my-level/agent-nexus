@@ -71,6 +71,7 @@ func main() {
 		coreInstanceID             = envString("OAR_CORE_INSTANCE_ID", defaultInstanceID)
 		metaCommandsPath           = envString("OAR_META_COMMANDS_PATH", "")
 		streamPollInterval         = envDuration("OAR_STREAM_POLL_INTERVAL", time.Second)
+		projectionMode             = envString("OAR_PROJECTION_MODE", server.ProjectionModeBackground)
 		projectionPollInterval     = envDuration("OAR_PROJECTION_MAINTENANCE_INTERVAL", 5*time.Second)
 		staleScanInterval          = envDuration("OAR_PROJECTION_STALE_SCAN_INTERVAL", 30*time.Second)
 		projectionBatchSize        = envInt("OAR_PROJECTION_MAINTENANCE_BATCH_SIZE", 50)
@@ -125,10 +126,18 @@ func main() {
 	flag.StringVar(&coreInstanceID, "core-instance-id", coreInstanceID, "stable core instance identifier for handshake metadata")
 	flag.StringVar(&metaCommandsPath, "meta-commands-path", metaCommandsPath, "path to generated commands metadata JSON")
 	flag.DurationVar(&streamPollInterval, "stream-poll-interval", streamPollInterval, "poll interval used by SSE stream endpoints")
+	flag.StringVar(&projectionMode, "projection-mode", projectionMode, "projection maintenance mode (background|manual)")
 	flag.DurationVar(&projectionPollInterval, "projection-maintenance-interval", projectionPollInterval, "poll interval used by background projection maintenance")
 	flag.DurationVar(&staleScanInterval, "projection-stale-scan-interval", staleScanInterval, "interval used by background stale-thread scanning")
 	flag.IntVar(&projectionBatchSize, "projection-maintenance-batch-size", projectionBatchSize, "max dirty thread projections refreshed per maintenance pass")
 	flag.Parse()
+
+	parsedProjectionMode, err := server.ParseProjectionMode(projectionMode)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+	projectionMode = parsedProjectionMode
 
 	workspace, err := storage.InitializeWorkspace(context.Background(), workspaceRoot)
 	if err != nil {
@@ -236,6 +245,7 @@ func main() {
 	projectionMaintainer := server.NewProjectionMaintainer(server.ProjectionMaintainerConfig{
 		PrimitiveStore:    primitiveStore,
 		Contract:          contract,
+		Mode:              projectionMode,
 		PollInterval:      projectionPollInterval,
 		StaleScanInterval: staleScanInterval,
 		DirtyBatchSize:    projectionBatchSize,
@@ -287,9 +297,12 @@ func main() {
 	serverErr := make(chan error, 1)
 	maintenanceCtx, maintenanceCancel := context.WithCancel(context.Background())
 	defer maintenanceCancel()
-	go projectionMaintainer.Run(maintenanceCtx)
+	if projectionMode == server.ProjectionModeBackground {
+		go projectionMaintainer.Run(maintenanceCtx)
+	}
 	go func() {
 		fmt.Printf("oar-core listening on http://%s\n", addr)
+		fmt.Printf("  projection mode: %s\n", projectionMode)
 		if enableDevActorMode {
 			fmt.Println("  WARNING: dev actor mode enabled (anonymous workspace reads and legacy actor flows)")
 		}

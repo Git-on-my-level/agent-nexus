@@ -216,9 +216,13 @@ is treated as ready.
 `/ops/health` is for authenticated or loopback-only operator diagnostics. When
 the readiness check passes, it also includes projection maintenance status:
 
+- `mode`: `background` when the async maintainer loop is running, `manual` when
+  writes only queue dirty projections and operators are expected to trigger
+  rebuilds explicitly.
 - `pending_dirty_count`: thread projections queued for refresh.
 - `oldest_dirty_at` / `oldest_dirty_lag_seconds`: lag indicator for the oldest queued projection refresh.
-- `last_successful_stale_scan_at`: last successful background stale-thread scan.
+- `last_successful_stale_scan_at`: last successful stale-thread scan, whether it
+  came from the background loop or an explicit rebuild.
 - `last_error`: last maintenance failure, if one has occurred since the most recent successful pass.
 
 `/ops/usage-summary` is the workspace usage envelope for control-plane polling.
@@ -237,15 +241,22 @@ blob existence/size checks. The response includes:
 - `blob_bytes` / `blob_objects`: rebuilt totals now stored in the ledger
 - `rebuilt_at`: reconciliation timestamp
 
-Background projection maintenance is driven by:
+Projection maintenance mode is controlled by:
+
+- `OAR_PROJECTION_MODE=background|manual` (`background` by default)
+
+Background mode is further driven by:
 
 - `OAR_PROJECTION_MAINTENANCE_INTERVAL`
 - `OAR_PROJECTION_STALE_SCAN_INTERVAL`
 - `OAR_PROJECTION_MAINTENANCE_BATCH_SIZE`
 
-Normal operations should allow the worker to catch up asynchronously. `POST /derived/rebuild`
-is still the explicit repair tool when the queue is badly behind, after operator intervention,
-or after a code/data fix that requires a full recompute from canonical state.
+Normal operations should allow the worker to catch up asynchronously in
+`background` mode. In `manual` mode, writes still queue dirty projection work
+but the background loop stays off; use `POST /derived/rebuild` or
+`scripts/hosted/rebuild-derived.sh` to clear the backlog after operator
+intervention, during packed-host maintenance windows, or after a code/data fix
+that requires a full recompute from canonical state.
 
 ## Board surface quick check
 

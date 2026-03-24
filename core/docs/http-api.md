@@ -354,6 +354,15 @@ Projection endpoints return a `section_kinds` field to distinguish canonical vs 
 - `POST /derived/rebuild`
   - Body: `{ "actor_id": "..." }`
   - Response: `{ "ok": true }`
+  - Purpose: deterministic operator repair path for derived inbox/thread
+    projections. This remains the explicit rebuild endpoint in both
+    `background` and `manual` projection modes.
+
+- `GET /ops/health`
+  - Auth: workspace auth required
+  - Response: `{ "ok": true, "projection_maintenance": { "mode": "background|manual", "pending_dirty_count": <int>, "oldest_dirty_at": "...", "oldest_dirty_lag_seconds": <int>, "last_successful_stale_scan_at": "...", "last_error": { "at": "...", "message": "...", "operation": "..." } } }`
+  - Purpose: operator diagnostics for workspace readiness plus projection queue
+    and maintenance mode state.
 
 - `GET /ops/usage-summary`
   - Auth: workspace auth required

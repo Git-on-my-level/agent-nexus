@@ -28,6 +28,11 @@ type projectionMaintenanceTestHarness struct {
 
 func newProjectionMaintenanceTestServer(t *testing.T) projectionMaintenanceTestHarness {
 	t.Helper()
+	return newProjectionMaintenanceTestServerWithMode(t, ProjectionModeBackground)
+}
+
+func newProjectionMaintenanceTestServerWithMode(t *testing.T, mode string) projectionMaintenanceTestHarness {
+	t.Helper()
 
 	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
 	if err != nil {
@@ -45,6 +50,7 @@ func newProjectionMaintenanceTestServer(t *testing.T) projectionMaintenanceTestH
 	maintainer := NewProjectionMaintainer(ProjectionMaintainerConfig{
 		PrimitiveStore:    primitiveStore,
 		Contract:          contract,
+		Mode:              mode,
 		StaleScanInterval: time.Second,
 		DirtyBatchSize:    20,
 		SystemActorID:     "oar-core",
@@ -289,6 +295,9 @@ func TestOpsHealthEndpointReportsProjectionMaintenanceLag(t *testing.T) {
 	}`, http.StatusCreated).Body.Close()
 
 	before := getProjectionMaintenanceHealth(t, h.baseURL, "/ops/health")
+	if before.Mode != ProjectionModeBackground {
+		t.Fatalf("expected background projection mode before maintainer step, got %#v", before)
+	}
 	if before.PendingDirtyCount == 0 {
 		t.Fatalf("expected pending dirty count before maintainer step, got %#v", before)
 	}
@@ -299,6 +308,9 @@ func TestOpsHealthEndpointReportsProjectionMaintenanceLag(t *testing.T) {
 	h.step(t, time.Date(2026, 3, 18, 10, 0, 0, 0, time.UTC))
 
 	after := getProjectionMaintenanceHealth(t, h.baseURL, "/ops/health")
+	if after.Mode != ProjectionModeBackground {
+		t.Fatalf("expected background projection mode after maintainer step, got %#v", after)
+	}
 	if after.PendingDirtyCount != 0 {
 		t.Fatalf("expected pending dirty count to clear after maintainer step, got %#v", after)
 	}
@@ -307,6 +319,122 @@ func TestOpsHealthEndpointReportsProjectionMaintenanceLag(t *testing.T) {
 	}
 	if after.LastError != nil {
 		t.Fatalf("did not expect maintenance error after successful step, got %#v", after)
+	}
+}
+
+func TestProjectionMaintainerManualModeRunExitsWithoutProcessingQueue(t *testing.T) {
+	t.Parallel()
+
+	h := newProjectionMaintenanceTestServerWithMode(t, ProjectionModeManual)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
+
+	postJSONExpectStatus(t, h.baseURL+"/threads", `{
+		"actor_id":"actor-1",
+		"thread":{
+			"id":"manual-mode-thread",
+			"title":"Manual mode projection thread",
+			"type":"incident",
+			"status":"active",
+			"priority":"p1",
+			"tags":["ops"],
+			"cadence":"reactive",
+			"current_summary":"summary",
+			"next_actions":["follow up"],
+			"key_artifacts":[],
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated).Body.Close()
+
+	before, err := h.store.GetDerivedThreadProjectionQueueStats(context.Background())
+	if err != nil {
+		t.Fatalf("load projection queue stats before manual run: %v", err)
+	}
+	if before.PendingCount == 0 {
+		t.Fatalf("expected pending dirty count before manual run, got %#v", before)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		h.maintainer.Run(ctx)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("expected manual-mode Run to exit immediately")
+	}
+
+	after, err := h.store.GetDerivedThreadProjectionQueueStats(context.Background())
+	if err != nil {
+		t.Fatalf("load projection queue stats after manual run: %v", err)
+	}
+	if after.PendingCount == 0 {
+		t.Fatalf("expected manual mode to leave queued projection work pending, got %#v", after)
+	}
+}
+
+func TestManualModeDerivedRebuildClearsPendingProjectionWork(t *testing.T) {
+	t.Parallel()
+
+	h := newProjectionMaintenanceTestServerWithMode(t, ProjectionModeManual)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
+
+	createResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
+		"actor_id":"actor-1",
+		"thread":{
+			"title":"Manual rebuild thread",
+			"type":"incident",
+			"status":"active",
+			"priority":"p1",
+			"tags":["ops"],
+			"cadence":"daily",
+			"next_check_in_at":"2020-01-01T00:00:00Z",
+			"current_summary":"summary",
+			"next_actions":["follow up"],
+			"key_artifacts":[],
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated)
+	defer createResp.Body.Close()
+
+	var created struct {
+		Thread map[string]any `json:"thread"`
+	}
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode thread response: %v", err)
+	}
+	threadID := asString(created.Thread["id"])
+	if threadID == "" {
+		t.Fatal("expected thread id")
+	}
+
+	before := getProjectionMaintenanceHealth(t, h.baseURL, "/ops/health")
+	if before.Mode != ProjectionModeManual {
+		t.Fatalf("expected manual projection mode before explicit rebuild, got %#v", before)
+	}
+	if before.PendingDirtyCount == 0 {
+		t.Fatalf("expected pending dirty count before explicit rebuild, got %#v", before)
+	}
+
+	postJSONExpectStatus(t, h.baseURL+"/derived/rebuild", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
+
+	after := getProjectionMaintenanceHealth(t, h.baseURL, "/ops/health")
+	if after.Mode != ProjectionModeManual {
+		t.Fatalf("expected manual projection mode after explicit rebuild, got %#v", after)
+	}
+	if after.PendingDirtyCount != 0 {
+		t.Fatalf("expected explicit rebuild to clear queued projection work, got %#v", after)
+	}
+
+	if count := countStaleThreadExceptions(t, h.baseURL, threadID); count != 1 {
+		t.Fatalf("expected rebuild to emit exactly one stale exception, got %d", count)
+	}
+	if !threadListedAsStale(t, h.baseURL, threadID) {
+		t.Fatalf("expected explicit rebuild to refresh stale projection for thread %s", threadID)
 	}
 }
 

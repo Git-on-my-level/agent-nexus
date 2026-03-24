@@ -146,6 +146,19 @@ sudo systemctl status oar-core@ws_example
 curl -fsS http://127.0.0.1:18001/readyz
 ```
 
+Projection maintenance defaults to `OAR_PROJECTION_MODE=background`. If a
+packed host should rely on operator-driven rebuilds instead, change the
+workspace env file to `OAR_PROJECTION_MODE=manual`, restart the instance, and
+use the hosted helper with an authenticated bearer token when you need to flush
+queued projection work:
+
+```bash
+sudo systemctl restart oar-core@ws_example
+OAR_CORE_BASE_URL=http://127.0.0.1:18001 \
+OAR_AUTH_TOKEN=REPLACE_WITH_WORKSPACE_TOKEN \
+scripts/hosted/rebuild-derived.sh --actor-id operator_ws_example
+```
+
 ## Heartbeats
 
 After the heartbeat reporter ticket is complete, the workspace core should update control-plane status automatically. Verify in the control plane:
