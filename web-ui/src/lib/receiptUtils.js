@@ -70,3 +70,40 @@ export function validateReceiptDraft(draft, options = {}) {
     },
   };
 }
+
+export function buildReceiptPayload(draft, options = {}) {
+  const validation = validateReceiptDraft(draft, options);
+  if (!validation.valid) {
+    return {
+      ...validation,
+      packet: null,
+      artifact: null,
+    };
+  }
+
+  const packet = {
+    work_order_id: validation.normalized.work_order_id,
+    outputs: validation.normalized.outputs,
+    verification_evidence: validation.normalized.verification_evidence,
+    changes_summary: validation.normalized.changes_summary,
+    known_gaps: validation.normalized.known_gaps,
+  };
+
+  return {
+    valid: true,
+    errors: [],
+    fieldErrors: validation.fieldErrors,
+    normalized: validation.normalized,
+    packet,
+    artifact: {
+      id: String(options.receiptId ?? "").trim(),
+      kind: "receipt",
+      thread_id: validation.normalized.thread_id,
+      summary: `Receipt for ${validation.normalized.work_order_id}`,
+      refs: [
+        `thread:${validation.normalized.thread_id}`,
+        `artifact:${validation.normalized.work_order_id}`,
+      ],
+    },
+  };
+}

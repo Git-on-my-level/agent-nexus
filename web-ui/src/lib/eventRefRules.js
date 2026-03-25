@@ -135,8 +135,30 @@ export function validateEventRefRule(eventType, refs, payload = {}) {
       if (valid) {
         continue;
       }
+      if (
+        eventType === "commitment_status_changed" &&
+        cond.when.payload_field === "to_status" &&
+        cond.when.equals === "done"
+      ) {
+        return {
+          valid: false,
+          error:
+            'event.refs must include artifact:<receipt_id> or event:<decision_event_id> when event.type="commitment_status_changed" and payload.to_status="done"',
+        };
+      }
+      if (
+        eventType === "commitment_status_changed" &&
+        cond.when.payload_field === "to_status" &&
+        cond.when.equals === "canceled"
+      ) {
+        return {
+          valid: false,
+          error:
+            'event.refs must include event:<decision_event_id> when event.type="commitment_status_changed" and payload.to_status="canceled"',
+        };
+      }
       const required = cond.must_have
-        .map((r) => `${r.prefix} prefix`)
+        .map((r) => `${r.prefix}:<id>`)
         .join(mode === "or" ? " or " : " and ");
       return {
         valid: false,

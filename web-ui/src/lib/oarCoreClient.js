@@ -256,21 +256,27 @@ function normalizeRequestError(error, { target, commandId, method, path }) {
   );
 }
 
-async function parseRawErrorResponse(response, fallbackStatusText) {
-  const rawDetails = await response.text().catch(() => "");
-  const details = extractErrorMessage(rawDetails);
+function buildRawRequestError({ status, details }, { target, method, path }) {
   const detailSuffix = details ? ` - ${details}` : "";
   const guidanceSuffix =
-    response.status >= 500
+    status >= 500
       ? " oar-core may be unavailable; verify backend startup and base URL."
       : "";
-
   const requestError = new Error(
-    `oar-core request failed: (${response.status} ${fallbackStatusText})${detailSuffix}${guidanceSuffix}`,
+    `oar-core request failed at ${target}: ${method} ${path} (${status})${detailSuffix}${guidanceSuffix}`,
   );
-  requestError.status = response.status;
+  requestError.status = status;
   requestError.details = details;
-  throw requestError;
+  return requestError;
+}
+
+async function parseRawErrorResponse(response) {
+  const rawDetails = await response.text().catch(() => "");
+  const details = extractErrorMessage(rawDetails);
+  return {
+    status: response.status,
+    details,
+  };
 }
 
 export function createOarCoreClient(options = {}) {
@@ -422,19 +428,11 @@ export function createOarCoreClient(options = {}) {
     }
 
     if (!response.ok) {
-      try {
-        await parseRawErrorResponse(response, response.statusText);
-      } catch (error) {
-        if (error instanceof Error) {
-          const wrapped = new Error(
-            `oar-core request failed at ${target}: ${command.method} ${command.path} (${response.status})${error.details ? ` - ${error.details}` : ""}${response.status >= 500 ? " oar-core may be unavailable; verify backend startup and base URL." : ""}`,
-          );
-          wrapped.status = response.status;
-          wrapped.details = error.details;
-          throw wrapped;
-        }
-        throw error;
-      }
+      throw buildRawRequestError(await parseRawErrorResponse(response), {
+        target,
+        method: command.method,
+        path: command.path,
+      });
     }
 
     return response;
@@ -757,20 +755,16 @@ export async function verifyCoreSchemaVersion(
   try {
     version = await client.getHandshake();
   } catch (error) {
-    if (error?.status === 404) {
-      try {
-        version = await client.getVersion();
-      } catch (fallbackError) {
-        const reason =
-          fallbackError instanceof Error
-            ? fallbackError.message
-            : String(fallbackError);
-        throw new Error(
-          `Unable to verify oar-core schema version at ${target}: ${reason}`,
-        );
-      }
+    const candidateVersion =
+      error?.status === 404 ? await client.getVersion().catch((e) => e) : error;
+
+    if (!(candidateVersion instanceof Error)) {
+      version = candidateVersion;
     } else {
-      const reason = error instanceof Error ? error.message : String(error);
+      const reason =
+        candidateVersion instanceof Error
+          ? candidateVersion.message
+          : String(candidateVersion);
       throw new Error(
         `Unable to verify oar-core schema version at ${target}: ${reason}`,
       );

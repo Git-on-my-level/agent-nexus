@@ -1,15 +1,19 @@
 import { json } from "@sveltejs/kit";
 
 import { createMockWorkOrder } from "$lib/mockCoreData";
-import { guardMockRoute } from "$lib/server/mockGuard";
+import { assertMockModeEnabled, readMockJsonBody } from "$lib/server/mockGuard";
 
 export async function POST({ request, url }) {
-  const guardResponse = guardMockRoute(url.pathname);
+  const guardResponse = assertMockModeEnabled(url.pathname);
   if (guardResponse) {
     return guardResponse;
   }
 
-  const body = await request.json();
+  const parsed = await readMockJsonBody(request);
+  if (!parsed.ok) {
+    return parsed.response;
+  }
+  const body = parsed.body;
 
   if (!body?.actor_id || !body?.artifact || !body?.packet) {
     return json(
@@ -23,8 +27,11 @@ export async function POST({ request, url }) {
     return json({ error: result.message }, { status: 400 });
   }
 
-  return json({
-    artifact: result.artifact,
-    event: result.event,
-  });
+  return json(
+    {
+      artifact: result.artifact,
+      event: result.event,
+    },
+    { status: 201 },
+  );
 }

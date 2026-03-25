@@ -1,4 +1,5 @@
 import { base } from "$app/paths";
+import { normalizeAppPath, normalizeBasePath } from "./pathUtils.js";
 
 export const DEFAULT_WORKSPACE_SLUG = "local";
 export const WORKSPACE_HEADER = "x-oar-workspace-slug";
@@ -10,21 +11,6 @@ export function normalizeWorkspaceSlug(value) {
     .replace(/[^a-z0-9-]+/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-+|-+$/g, "");
-}
-
-export function normalizeAppPath(pathname = "/") {
-  const raw = String(pathname ?? "").trim() || "/";
-  const normalized = raw.startsWith("/") ? raw : `/${raw}`;
-  if (normalized.length > 1 && normalized.endsWith("/")) {
-    return normalized.slice(0, -1);
-  }
-
-  return normalized;
-}
-
-export function normalizeBasePath(pathname = "") {
-  const normalized = normalizeAppPath(pathname);
-  return normalized === "/" ? "" : normalized;
 }
 
 export const APP_BASE_PATH = normalizeBasePath(base);

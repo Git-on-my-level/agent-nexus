@@ -1,18 +1,9 @@
 import { expect, test } from "@playwright/test";
+import { normalizeBasePath } from "../../src/lib/pathUtils.js";
 
 const APP_BASE_PATH = normalizeBasePath(
   process.env.PLAYWRIGHT_APP_BASE_PATH ?? "/oar",
 );
-
-function normalizeBasePath(value = "") {
-  const trimmed = String(value ?? "").trim();
-  if (!trimmed || trimmed === "/") {
-    return "";
-  }
-
-  const normalized = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
-  return normalized.replace(/\/+$/, "");
-}
 
 function appPath(pathname = "/") {
   const normalizedPathname =

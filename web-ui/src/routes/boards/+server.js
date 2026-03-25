@@ -1,10 +1,14 @@
 import { json } from "@sveltejs/kit";
 
 import { listMockBoards, createMockBoard } from "$lib/mockCoreData";
-import { guardMockRoute, mockResultToResponse } from "$lib/server/mockGuard";
+import {
+  assertMockModeEnabled,
+  mockResultToResponse,
+  readMockJsonBody,
+} from "$lib/server/mockGuard";
 
 export function GET({ url }) {
-  const guardResponse = guardMockRoute(url.pathname);
+  const guardResponse = assertMockModeEnabled(url.pathname);
   if (guardResponse) {
     return guardResponse;
   }
@@ -22,12 +26,16 @@ export function GET({ url }) {
 }
 
 export async function POST({ request, url }) {
-  const guardResponse = guardMockRoute(url.pathname);
+  const guardResponse = assertMockModeEnabled(url.pathname);
   if (guardResponse) {
     return guardResponse;
   }
 
-  const body = await request.json();
+  const parsed = await readMockJsonBody(request);
+  if (!parsed.ok) {
+    return parsed.response;
+  }
+  const body = parsed.body;
 
   if (!body?.actor_id) {
     return json({ error: "actor_id is required." }, { status: 400 });

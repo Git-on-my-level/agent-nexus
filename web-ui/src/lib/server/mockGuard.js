@@ -1,10 +1,9 @@
 import { json } from "@sveltejs/kit";
 import { env } from "$env/dynamic/private";
+import { normalizeBaseUrl } from "$lib/config.js";
 
-function normalizeCoreBaseUrl(value) {
-  return String(value ?? "")
-    .trim()
-    .replace(/\/+$/, "");
+function invalidMockJsonResponse() {
+  return json({ error: "Invalid JSON body." }, { status: 400 });
 }
 
 export function mockResultToResponse(result, successStatus = 200) {
@@ -23,8 +22,22 @@ export function mockResultToResponse(result, successStatus = 200) {
   return json(result, { status: successStatus });
 }
 
-export function guardMockRoute(pathname) {
-  const coreBaseUrl = normalizeCoreBaseUrl(env.OAR_CORE_BASE_URL);
+export async function readMockJsonBody(request) {
+  try {
+    return {
+      ok: true,
+      body: await request.json(),
+    };
+  } catch {
+    return {
+      ok: false,
+      response: invalidMockJsonResponse(),
+    };
+  }
+}
+
+export function assertMockModeEnabled(pathname) {
+  const coreBaseUrl = normalizeBaseUrl(env.OAR_CORE_BASE_URL);
 
   if (!coreBaseUrl) {
     return null;
@@ -45,3 +58,5 @@ export function guardMockRoute(pathname) {
     },
   );
 }
+
+export const guardMockRoute = assertMockModeEnabled;

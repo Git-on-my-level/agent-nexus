@@ -37,3 +37,7 @@ The CLI supports a small exact-token compatibility layer for high-value command-
 These aliases are explicit and exact only; unknown command paths still fail when no compatibility alias matches.
 
 See `docs/runbook.md` for command, integration-test, and Pi dogfood details.
+
+The manual agent-ergonomics dogfood lane lives under `dogfood/pi/`. It is an
+intentional CLI-owned support package with its own docs, scenario seed data,
+and runner tests; it is not part of the shipped `oar` runtime surface.

@@ -1,9 +1,13 @@
 import { json } from "@sveltejs/kit";
 import { listMockDocuments, createMockDocument } from "$lib/mockCoreData";
-import { guardMockRoute, mockResultToResponse } from "$lib/server/mockGuard";
+import {
+  assertMockModeEnabled,
+  mockResultToResponse,
+  readMockJsonBody,
+} from "$lib/server/mockGuard";
 
 export function GET({ url }) {
-  const guardResponse = guardMockRoute(url.pathname);
+  const guardResponse = assertMockModeEnabled(url.pathname);
   if (guardResponse) return guardResponse;
   const params = url.searchParams;
   const filters = {
@@ -14,15 +18,14 @@ export function GET({ url }) {
 }
 
 export async function POST({ url, request }) {
-  const guardResponse = guardMockRoute(url.pathname);
+  const guardResponse = assertMockModeEnabled(url.pathname);
   if (guardResponse) return guardResponse;
 
-  let body;
-  try {
-    body = await request.json();
-  } catch {
-    return json({ error: "Invalid JSON body." }, { status: 400 });
+  const parsed = await readMockJsonBody(request);
+  if (!parsed.ok) {
+    return parsed.response;
   }
+  const body = parsed.body;
 
   const { actor_id, document, content, content_type } = body ?? {};
 

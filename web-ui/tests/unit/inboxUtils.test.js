@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   deriveInboxUrgency,
   enrichInboxItem,
+  getInboxUrgencyLabel,
   groupInboxItems,
   summarizeInboxUrgency,
 } from "../../src/lib/inboxUtils.js";
@@ -132,6 +133,11 @@ describe("inbox urgency derivation", () => {
       high: 1,
       normal: 1,
     });
+  });
+
+  it("keeps unknown urgency labels inspectable", () => {
+    expect(getInboxUrgencyLabel("needs_triage")).toBe("needs_triage");
+    expect(getInboxUrgencyLabel("")).toBe("Unknown");
   });
 });
 

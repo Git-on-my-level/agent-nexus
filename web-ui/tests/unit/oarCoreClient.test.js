@@ -62,6 +62,22 @@ describe("oarCoreClient error messaging", () => {
     );
   });
 
+  it("reports raw-response failures once with command context", async () => {
+    const client = createOarCoreClient({
+      baseUrl: "http://core.test",
+      fetchFn: async () =>
+        new Response(JSON.stringify({ error: "bad actor filter" }), {
+          status: 400,
+          statusText: "Bad Request",
+          headers: { "content-type": "application/json" },
+        }),
+    });
+
+    await expect(client.listActors()).rejects.toThrow(
+      "oar-core request failed at http://core.test: GET /actors (400) - bad actor filter",
+    );
+  });
+
   it("verifies schema via handshake when available", async () => {
     const expectedDigest = await getExpectedCommandRegistryDigest();
     const client = createOarCoreClient({

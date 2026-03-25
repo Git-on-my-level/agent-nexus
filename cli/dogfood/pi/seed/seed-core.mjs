@@ -1,5 +1,11 @@
 #!/usr/bin/env node
 
+import {
+  failWithPrefix,
+  normalizeBaseUrl,
+  requestJson,
+  waitForCore,
+} from "../../../../scripts/seed-core-lib.mjs";
 import { getPilotRescueSeedData } from "./pilot-rescue-data.mjs";
 
 const coreBaseUrl = normalizeBaseUrl(
@@ -10,7 +16,10 @@ const skipIfPresent = process.env.OAR_SEED_SKIP_IF_PRESENT !== "0";
 const waitTimeoutMs = Number(process.env.OAR_CORE_WAIT_TIMEOUT_MS ?? 20000);
 
 if (!coreBaseUrl) {
-  fail("OAR_CORE_BASE_URL must be set or defaultable.");
+  failWithPrefix(
+    "cli pi seed failed",
+    "OAR_CORE_BASE_URL must be set or defaultable.",
+  );
 }
 
 const seed = getPilotRescueSeedData();
@@ -20,7 +29,7 @@ const snapshotIdMap = new Map();
 
 main().catch((error) => {
   const reason = error instanceof Error ? error.message : String(error);
-  fail(reason);
+  failWithPrefix("cli pi seed failed", reason);
 });
 
 async function main() {
@@ -285,63 +294,5 @@ function normalizeEventRefs(type, refs, mappedThreadId) {
 }
 
 async function request(method, requestPath, body, okStatuses = [200, 201]) {
-  const response = await fetch(`${coreBaseUrl}${requestPath}`, {
-    method,
-    headers: {
-      accept: "application/json",
-      "content-type": "application/json",
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-
-  const rawText = await response.text();
-  const parsed = parseJson(rawText);
-  if (!okStatuses.includes(response.status)) {
-    const message = parsed?.error?.message ?? rawText ?? `${method} ${requestPath} failed`;
-    throw new Error(`${method} ${requestPath} -> ${response.status}: ${message}`);
-  }
-  return parsed;
-}
-
-async function waitForCore(baseUrl, timeoutMs) {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    try {
-      const response = await fetch(`${baseUrl}/version`);
-      if (response.ok) {
-        return;
-      }
-    } catch {
-      // Ignore until timeout.
-    }
-    await sleep(500);
-  }
-  throw new Error(`Timed out waiting for oar-core at ${baseUrl} after ${timeoutMs}ms.`);
-}
-
-function normalizeBaseUrl(value) {
-  return String(value ?? "").trim().replace(/\/+$/, "");
-}
-
-function parseJson(value) {
-  const text = String(value ?? "").trim();
-  if (!text) {
-    return {};
-  }
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { raw: text };
-  }
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
-function fail(message) {
-  console.error(`cli pi seed failed: ${message}`);
-  process.exit(1);
+  return requestJson(coreBaseUrl, method, requestPath, body, okStatuses);
 }

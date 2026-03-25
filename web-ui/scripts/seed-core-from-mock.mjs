@@ -1,5 +1,12 @@
 #!/usr/bin/env node
 
+import {
+  failWithPrefix,
+  normalizeBaseUrl,
+  requestJson,
+  sleep,
+  waitForCore,
+} from "../../scripts/seed-core-lib.mjs";
 import { getMockSeedData } from "../src/lib/mockCoreData.js";
 
 const coreBaseUrl = normalizeBaseUrl(
@@ -10,7 +17,10 @@ const skipIfPresent = process.env.OAR_SEED_SKIP_IF_PRESENT !== "0";
 const waitTimeoutMs = Number(process.env.OAR_CORE_WAIT_TIMEOUT_MS ?? 20000);
 
 if (!coreBaseUrl) {
-  fail("OAR_CORE_BASE_URL must be set or defaultable.");
+  failWithPrefix(
+    "seed-core-from-mock failed",
+    "OAR_CORE_BASE_URL must be set or defaultable.",
+  );
 }
 
 const seed = getMockSeedData();
@@ -23,11 +33,13 @@ const snapshotIdMap = new Map();
 
 main().catch((error) => {
   const reason = error instanceof Error ? error.message : String(error);
-  fail(reason);
+  failWithPrefix("seed-core-from-mock failed", reason);
 });
 
 async function main() {
-  await waitForCore(coreBaseUrl, waitTimeoutMs);
+  await waitForCore(coreBaseUrl, waitTimeoutMs, {
+    probes: ["/version", "/readyz"],
+  });
 
   if (skipIfPresent && !forceSeed) {
     const alreadySeeded = await detectSeededState();
@@ -719,25 +731,7 @@ function normalizeEventRefs(type, refs, mappedThreadId) {
 }
 
 async function request(method, path, body, okStatuses = [200, 201]) {
-  const response = await fetch(`${coreBaseUrl}${path}`, {
-    method,
-    headers: {
-      accept: "application/json",
-      "content-type": "application/json",
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-
-  const rawText = await response.text();
-  const parsed = parseJson(rawText);
-
-  if (!okStatuses.includes(response.status)) {
-    const message =
-      parsed?.error?.message ?? rawText ?? `${method} ${path} failed`;
-    throw new Error(`${method} ${path} -> ${response.status}: ${message}`);
-  }
-
-  return parsed;
+  return requestJson(coreBaseUrl, method, path, body, okStatuses);
 }
 
 /** Retries POSTs that fail with 5xx (e.g. brief SQLite contention right after core startup). */
@@ -763,58 +757,4 @@ async function requestRetryOnServerError(
     }
   }
   throw lastError;
-}
-
-async function waitForCore(baseUrl, timeoutMs) {
-  const start = Date.now();
-
-  while (Date.now() - start < timeoutMs) {
-    try {
-      const [versionResponse, readyResponse] = await Promise.all([
-        fetch(`${baseUrl}/version`),
-        fetch(`${baseUrl}/readyz`),
-      ]);
-      if (versionResponse.ok && readyResponse.ok) {
-        return;
-      }
-    } catch {
-      // Ignore until timeout.
-    }
-
-    await sleep(500);
-  }
-
-  throw new Error(
-    `Timed out waiting for oar-core at ${baseUrl} after ${timeoutMs}ms.`,
-  );
-}
-
-function normalizeBaseUrl(value) {
-  return String(value ?? "")
-    .trim()
-    .replace(/\/+$/, "");
-}
-
-function parseJson(value) {
-  const text = String(value ?? "").trim();
-  if (!text) {
-    return {};
-  }
-
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { raw: text };
-  }
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
-function fail(message) {
-  console.error(`seed-core-from-mock failed: ${message}`);
-  process.exit(1);
 }

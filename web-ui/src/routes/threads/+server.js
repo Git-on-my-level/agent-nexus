@@ -1,10 +1,10 @@
 import { json } from "@sveltejs/kit";
 
 import { createMockThread, listMockThreads } from "$lib/mockCoreData";
-import { guardMockRoute } from "$lib/server/mockGuard";
+import { assertMockModeEnabled, readMockJsonBody } from "$lib/server/mockGuard";
 
 export function GET({ url }) {
-  const guardResponse = guardMockRoute(url.pathname);
+  const guardResponse = assertMockModeEnabled(url.pathname);
   if (guardResponse) {
     return guardResponse;
   }
@@ -24,12 +24,16 @@ export function GET({ url }) {
 }
 
 export async function POST({ request, url }) {
-  const guardResponse = guardMockRoute(url.pathname);
+  const guardResponse = assertMockModeEnabled(url.pathname);
   if (guardResponse) {
     return guardResponse;
   }
 
-  const body = await request.json();
+  const parsed = await readMockJsonBody(request);
+  if (!parsed.ok) {
+    return parsed.response;
+  }
+  const body = parsed.body;
 
   if (!body?.actor_id || !body?.thread?.title) {
     return json(
@@ -49,5 +53,5 @@ export async function POST({ request, url }) {
   }
 
   const created = createMockThread(body);
-  return json({ thread: created });
+  return json({ thread: created }, { status: 201 });
 }

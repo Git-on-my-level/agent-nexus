@@ -1,3 +1,5 @@
+import { parseTimestampMs } from "./dateUtils.js";
+
 export const INBOX_CATEGORY_ORDER = [
   "decision_needed",
   "exception",
@@ -35,7 +37,10 @@ const INBOX_CATEGORY_URGENCY_BASE = {
 };
 
 export function getInboxUrgencyLabel(level) {
-  return INBOX_URGENCY_LABELS[level] ?? "Normal";
+  const normalizedLevel = String(level ?? "").trim();
+  return (
+    INBOX_URGENCY_LABELS[normalizedLevel] ?? (normalizedLevel || "Unknown")
+  );
 }
 
 export function readSourceEventTime(item) {
@@ -45,14 +50,6 @@ export function readSourceEventTime(item) {
     item?.source_event?.ts ??
     null
   );
-}
-
-function parseTimestamp(value) {
-  if (!value) {
-    return Number.NaN;
-  }
-
-  return Date.parse(String(value));
 }
 
 function getItemTitle(item) {
@@ -71,7 +68,7 @@ function readNowTimestamp(options = {}) {
     return numericNow;
   }
 
-  const parsedNow = parseTimestamp(now);
+  const parsedNow = parseTimestampMs(now);
   return Number.isFinite(parsedNow) ? parsedNow : Date.now();
 }
 
@@ -94,7 +91,7 @@ function formatAgeLabel(ageHours) {
 export function deriveInboxUrgency(item, options = {}) {
   const nowTs = readNowTimestamp(options);
   const sourceEventTime = readSourceEventTime(item);
-  const sourceEventTs = parseTimestamp(sourceEventTime);
+  const sourceEventTs = parseTimestampMs(sourceEventTime);
   const hasSourceEventTime = Number.isFinite(sourceEventTs);
   const ageHours = hasSourceEventTime
     ? Math.max(0, (nowTs - sourceEventTs) / (60 * 60 * 1000))
@@ -158,35 +155,43 @@ export function summarizeInboxUrgency(items = [], options = {}) {
 
 export function sortInboxItems(items, options = {}) {
   const nowTs = readNowTimestamp(options);
+  const decoratedItems = [...items].map((item) => ({
+    item,
+    urgency: deriveInboxUrgency(item, { now: nowTs }),
+    sourceEventTs: parseTimestampMs(readSourceEventTime(item)),
+    title: getItemTitle(item),
+    id: String(item?.id ?? ""),
+  }));
 
-  return [...items].sort((left, right) => {
-    const leftUrgency = deriveInboxUrgency(left, { now: nowTs });
-    const rightUrgency = deriveInboxUrgency(right, { now: nowTs });
+  return decoratedItems
+    .sort((left, right) => {
+      if (left.urgency.score !== right.urgency.score) {
+        return right.urgency.score - left.urgency.score;
+      }
 
-    if (leftUrgency.score !== rightUrgency.score) {
-      return rightUrgency.score - leftUrgency.score;
-    }
+      const leftHasTs = Number.isFinite(left.sourceEventTs);
+      const rightHasTs = Number.isFinite(right.sourceEventTs);
 
-    const leftTs = parseTimestamp(readSourceEventTime(left));
-    const rightTs = parseTimestamp(readSourceEventTime(right));
-    const leftHasTs = Number.isFinite(leftTs);
-    const rightHasTs = Number.isFinite(rightTs);
+      if (
+        leftHasTs &&
+        rightHasTs &&
+        left.sourceEventTs !== right.sourceEventTs
+      ) {
+        return left.sourceEventTs - right.sourceEventTs;
+      }
 
-    if (leftHasTs && rightHasTs && leftTs !== rightTs) {
-      return leftTs - rightTs;
-    }
+      if (leftHasTs !== rightHasTs) {
+        return leftHasTs ? -1 : 1;
+      }
 
-    if (leftHasTs !== rightHasTs) {
-      return leftHasTs ? -1 : 1;
-    }
+      const titleCompare = left.title.localeCompare(right.title);
+      if (titleCompare !== 0) {
+        return titleCompare;
+      }
 
-    const titleCompare = getItemTitle(left).localeCompare(getItemTitle(right));
-    if (titleCompare !== 0) {
-      return titleCompare;
-    }
-
-    return String(left?.id ?? "").localeCompare(String(right?.id ?? ""));
-  });
+      return left.id.localeCompare(right.id);
+    })
+    .map(({ item }) => item);
 }
 
 export function groupInboxItems(items = [], options = {}) {

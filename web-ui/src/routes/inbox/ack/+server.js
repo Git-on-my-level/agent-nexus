@@ -1,15 +1,19 @@
 import { json } from "@sveltejs/kit";
 
 import { ackMockInboxItem, createMockEvent } from "$lib/mockCoreData";
-import { guardMockRoute } from "$lib/server/mockGuard";
+import { assertMockModeEnabled, readMockJsonBody } from "$lib/server/mockGuard";
 
 export async function POST({ request, url }) {
-  const guardResponse = guardMockRoute(url.pathname);
+  const guardResponse = assertMockModeEnabled(url.pathname);
   if (guardResponse) {
     return guardResponse;
   }
 
-  const body = await request.json();
+  const parsed = await readMockJsonBody(request);
+  if (!parsed.ok) {
+    return parsed.response;
+  }
+  const body = parsed.body;
 
   if (!body?.actor_id || !body?.thread_id || !body?.inbox_item_id) {
     return json(
