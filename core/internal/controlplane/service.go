@@ -1356,6 +1356,17 @@ func isSQLiteConstraint(err error) bool {
 	return strings.Contains(strings.ToLower(err.Error()), "constraint")
 }
 
+func isWorkspaceSlugConstraint(err error) bool {
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "workspaces.organization_id, workspaces.slug")
+}
+
+func isWorkspaceListenPortConstraint(err error) bool {
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "workspaces.host_id, workspaces.listen_port") ||
+		strings.Contains(message, "idx_workspaces_host_listen_port_unique")
+}
+
 func isSQLiteBusyError(err error) bool {
 	if err == nil {
 		return false

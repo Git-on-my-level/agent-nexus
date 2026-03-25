@@ -12,6 +12,8 @@ import (
 	"github.com/google/uuid"
 )
 
+const createWorkspacePlacementAttempts = 5
+
 func (s *Service) ListWorkspaces(ctx context.Context, identity RequestIdentity, organizationID string, page PageRequest) (Page[Workspace], error) {
 	limit := normalizePageLimit(page.Limit)
 	sortAt, sortID, err := decodeCursor(page.Cursor)
@@ -120,154 +122,176 @@ func (s *Service) CreateWorkspace(ctx context.Context, identity RequestIdentity,
 	}
 	workspace.InstanceID = workspace.ID
 
-	placement, err := s.allocateWorkspacePlacement(ctx, workspace)
-	if err != nil {
-		return Workspace{}, ProvisioningJob{}, err
-	}
-	workspace.HostID = placement.HostID
-	workspace.HostLabel = placement.HostLabel
-	workspace.WorkspaceRoot = placement.WorkspaceRoot
-	workspace.ListenPort = placement.ListenPort
-	workspace.CoreOrigin = s.workspaceCoreOrigin(workspace)
-	workspace.DeploymentRoot = s.workspaceDeploymentRoot(workspace)
-	workspace.RoutingManifestPath = s.workspaceRoutingManifestPath(workspace)
-	if err := ensureWorkspaceDeploymentDirs(workspace); err != nil {
-		return Workspace{}, ProvisioningJob{}, err
-	}
-	job := ProvisioningJob{
-		ID:              "job_" + uuid.NewString(),
-		OrganizationID:  organizationID,
-		WorkspaceID:     workspace.ID,
-		Kind:            "workspace_create",
-		Status:          "running",
-		RequestedAt:     nowText,
-		StartedAt:       stringPtr(nowText),
-		ProgressMessage: "provisioning hosted workspace deployment root",
-		Retryable:       true,
-		Parameters: map[string]any{
-			"organization_id":  organizationID,
-			"slug":             slug,
-			"display_name":     displayName,
-			"region":           region,
-			"workspace_tier":   workspaceTier,
-			"host_id":          workspace.HostID,
-			"workspace_root":   workspace.WorkspaceRoot,
-			"listen_port":      workspace.ListenPort,
-			"instance_root":    workspace.DeploymentRoot,
-			"public_origin":    workspace.PublicOrigin,
-			"core_instance_id": workspace.InstanceID,
-		},
-	}
-
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return Workspace{}, ProvisioningJob{}, internalError("failed to begin create workspace transaction")
-	}
-	defer tx.Rollback()
-
-	result, err := tx.ExecContext(
-		ctx,
-		`INSERT INTO workspaces(
-			id, organization_id, slug, display_name, status, region, workspace_tier, workspace_path, base_url,
-			public_origin, core_origin, host_id, host_label, workspace_root, listen_port, deployment_root, instance_id, service_identity_id, service_identity_public_key,
-			desired_state, desired_version, quota_config_ref, quota_envelope_ref, deployed_version, routing_manifest_path,
-			last_heartbeat_at, heartbeat_version, heartbeat_build, heartbeat_health_summary_json,
-			heartbeat_projection_maintenance_summary_json, heartbeat_usage_summary_json, last_successful_backup_at,
-			routing_manifest_json, created_at, updated_at
-		)
-		SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-		WHERE (SELECT COUNT(1) FROM workspaces WHERE organization_id = ?) < ?`,
-		workspace.ID,
-		workspace.OrganizationID,
-		workspace.Slug,
-		workspace.DisplayName,
-		workspace.Status,
-		workspace.Region,
-		workspace.WorkspaceTier,
-		workspace.WorkspacePath,
-		workspace.BaseURL,
-		workspace.PublicOrigin,
-		workspace.CoreOrigin,
-		workspace.HostID,
-		workspace.HostLabel,
-		workspace.WorkspaceRoot,
-		workspace.ListenPort,
-		workspace.DeploymentRoot,
-		workspace.InstanceID,
-		workspace.ServiceIdentityID,
-		workspace.ServiceIdentityPublicKey,
-		workspace.DesiredState,
-		workspace.DesiredVersion,
-		workspace.QuotaConfigRef,
-		workspace.QuotaEnvelopeRef,
-		workspace.DeployedVersion,
-		workspace.RoutingManifestPath,
-		nil,
-		"",
-		"",
-		"{}",
-		"{}",
-		"{}",
-		nil,
-		"{}",
-		workspace.CreatedAt,
-		workspace.UpdatedAt,
-		organization.ID,
-		plan.WorkspaceLimit,
-	)
-	if err != nil {
-		if isSQLiteConstraint(err) {
-			return Workspace{}, ProvisioningJob{}, conflict("slug_conflict", "workspace slug is already in use for this organization")
+	var job ProvisioningJob
+	created := false
+	for attempt := 0; attempt < createWorkspacePlacementAttempts; attempt++ {
+		placement, err := s.allocateWorkspacePlacement(ctx, workspace)
+		if err != nil {
+			return Workspace{}, ProvisioningJob{}, err
 		}
-		return Workspace{}, ProvisioningJob{}, internalError("failed to create workspace")
-	}
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return Workspace{}, ProvisioningJob{}, internalError("failed to confirm workspace creation")
-	}
-	if rowsAffected == 0 {
-		return Workspace{}, ProvisioningJob{}, &APIError{Status: http.StatusUnprocessableEntity, Code: "quota_exceeded", Message: "workspace quota has been reached for this organization"}
-	}
-	if err := s.insertProvisioningJob(ctx, tx, job); err != nil {
-		return Workspace{}, ProvisioningJob{}, internalError("failed to create provisioning job")
-	}
-	if err := s.insertWorkspaceBackupScheduleTx(ctx, tx, workspace, nowText); err != nil {
-		return Workspace{}, ProvisioningJob{}, internalError("failed to create workspace backup schedule")
-	}
-	if err := insertAuditEventTx(ctx, tx, AuditEvent{
-		ID:             "audit_" + uuid.NewString(),
-		EventType:      "workspace_created",
-		OrganizationID: stringPtr(organization.ID),
-		WorkspaceID:    stringPtr(workspace.ID),
-		TargetType:     "workspace",
-		TargetID:       workspace.ID,
-		OccurredAt:     nowText,
-		Metadata: map[string]any{
-			"slug":           workspace.Slug,
-			"region":         workspace.Region,
-			"workspace_tier": workspace.WorkspaceTier,
-		},
-	}, stringPtr(identity.Account.ID)); err != nil {
-		return Workspace{}, ProvisioningJob{}, err
-	}
-	if err := insertAuditEventTx(ctx, tx, AuditEvent{
-		ID:             "audit_" + uuid.NewString(),
-		EventType:      "provisioning_job_recorded",
-		OrganizationID: stringPtr(organization.ID),
-		WorkspaceID:    stringPtr(workspace.ID),
-		TargetType:     "provisioning_job",
-		TargetID:       job.ID,
-		OccurredAt:     nowText,
-		Metadata: map[string]any{
-			"status": job.Status,
-			"kind":   job.Kind,
-		},
-	}, stringPtr(identity.Account.ID)); err != nil {
-		return Workspace{}, ProvisioningJob{}, err
-	}
+		workspace.HostID = placement.HostID
+		workspace.HostLabel = placement.HostLabel
+		workspace.WorkspaceRoot = placement.WorkspaceRoot
+		workspace.ListenPort = placement.ListenPort
+		workspace.CoreOrigin = s.workspaceCoreOrigin(workspace)
+		workspace.DeploymentRoot = s.workspaceDeploymentRoot(workspace)
+		workspace.RoutingManifestPath = s.workspaceRoutingManifestPath(workspace)
+		if err := ensureWorkspaceDeploymentDirs(workspace); err != nil {
+			return Workspace{}, ProvisioningJob{}, err
+		}
+		job = ProvisioningJob{
+			ID:              "job_" + uuid.NewString(),
+			OrganizationID:  organizationID,
+			WorkspaceID:     workspace.ID,
+			Kind:            "workspace_create",
+			Status:          "running",
+			RequestedAt:     nowText,
+			StartedAt:       stringPtr(nowText),
+			ProgressMessage: "provisioning hosted workspace deployment root",
+			Retryable:       true,
+			Parameters: map[string]any{
+				"organization_id":  organizationID,
+				"slug":             slug,
+				"display_name":     displayName,
+				"region":           region,
+				"workspace_tier":   workspaceTier,
+				"host_id":          workspace.HostID,
+				"workspace_root":   workspace.WorkspaceRoot,
+				"listen_port":      workspace.ListenPort,
+				"instance_root":    workspace.DeploymentRoot,
+				"public_origin":    workspace.PublicOrigin,
+				"core_instance_id": workspace.InstanceID,
+			},
+		}
 
-	if err := tx.Commit(); err != nil {
-		return Workspace{}, ProvisioningJob{}, internalError("failed to commit workspace creation")
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			return Workspace{}, ProvisioningJob{}, internalError("failed to begin create workspace transaction")
+		}
+
+		result, err := tx.ExecContext(
+			ctx,
+			`INSERT INTO workspaces(
+				id, organization_id, slug, display_name, status, region, workspace_tier, workspace_path, base_url,
+				public_origin, core_origin, host_id, host_label, workspace_root, listen_port, deployment_root, instance_id, service_identity_id, service_identity_public_key,
+				desired_state, desired_version, quota_config_ref, quota_envelope_ref, deployed_version, routing_manifest_path,
+				last_heartbeat_at, heartbeat_version, heartbeat_build, heartbeat_health_summary_json,
+				heartbeat_projection_maintenance_summary_json, heartbeat_usage_summary_json, last_successful_backup_at,
+				routing_manifest_json, created_at, updated_at
+			)
+			SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+			WHERE (SELECT COUNT(1) FROM workspaces WHERE organization_id = ?) < ?`,
+			workspace.ID,
+			workspace.OrganizationID,
+			workspace.Slug,
+			workspace.DisplayName,
+			workspace.Status,
+			workspace.Region,
+			workspace.WorkspaceTier,
+			workspace.WorkspacePath,
+			workspace.BaseURL,
+			workspace.PublicOrigin,
+			workspace.CoreOrigin,
+			workspace.HostID,
+			workspace.HostLabel,
+			workspace.WorkspaceRoot,
+			workspace.ListenPort,
+			workspace.DeploymentRoot,
+			workspace.InstanceID,
+			workspace.ServiceIdentityID,
+			workspace.ServiceIdentityPublicKey,
+			workspace.DesiredState,
+			workspace.DesiredVersion,
+			workspace.QuotaConfigRef,
+			workspace.QuotaEnvelopeRef,
+			workspace.DeployedVersion,
+			workspace.RoutingManifestPath,
+			nil,
+			"",
+			"",
+			"{}",
+			"{}",
+			"{}",
+			nil,
+			"{}",
+			workspace.CreatedAt,
+			workspace.UpdatedAt,
+			organization.ID,
+			plan.WorkspaceLimit,
+		)
+		if err != nil {
+			_ = tx.Rollback()
+			if isWorkspaceListenPortConstraint(err) {
+				continue
+			}
+			if isWorkspaceSlugConstraint(err) {
+				return Workspace{}, ProvisioningJob{}, conflict("slug_conflict", "workspace slug is already in use for this organization")
+			}
+			if isSQLiteConstraint(err) {
+				return Workspace{}, ProvisioningJob{}, conflict("slug_conflict", "workspace slug is already in use for this organization")
+			}
+			return Workspace{}, ProvisioningJob{}, internalError("failed to create workspace")
+		}
+		rowsAffected, err := result.RowsAffected()
+		if err != nil {
+			_ = tx.Rollback()
+			return Workspace{}, ProvisioningJob{}, internalError("failed to confirm workspace creation")
+		}
+		if rowsAffected == 0 {
+			_ = tx.Rollback()
+			return Workspace{}, ProvisioningJob{}, &APIError{Status: http.StatusUnprocessableEntity, Code: "quota_exceeded", Message: "workspace quota has been reached for this organization"}
+		}
+		if err := s.insertProvisioningJob(ctx, tx, job); err != nil {
+			_ = tx.Rollback()
+			return Workspace{}, ProvisioningJob{}, internalError("failed to create provisioning job")
+		}
+		if err := s.insertWorkspaceBackupScheduleTx(ctx, tx, workspace, nowText); err != nil {
+			_ = tx.Rollback()
+			return Workspace{}, ProvisioningJob{}, internalError("failed to create workspace backup schedule")
+		}
+		if err := insertAuditEventTx(ctx, tx, AuditEvent{
+			ID:             "audit_" + uuid.NewString(),
+			EventType:      "workspace_created",
+			OrganizationID: stringPtr(organization.ID),
+			WorkspaceID:    stringPtr(workspace.ID),
+			TargetType:     "workspace",
+			TargetID:       workspace.ID,
+			OccurredAt:     nowText,
+			Metadata: map[string]any{
+				"slug":           workspace.Slug,
+				"region":         workspace.Region,
+				"workspace_tier": workspace.WorkspaceTier,
+			},
+		}, stringPtr(identity.Account.ID)); err != nil {
+			_ = tx.Rollback()
+			return Workspace{}, ProvisioningJob{}, err
+		}
+		if err := insertAuditEventTx(ctx, tx, AuditEvent{
+			ID:             "audit_" + uuid.NewString(),
+			EventType:      "provisioning_job_recorded",
+			OrganizationID: stringPtr(organization.ID),
+			WorkspaceID:    stringPtr(workspace.ID),
+			TargetType:     "provisioning_job",
+			TargetID:       job.ID,
+			OccurredAt:     nowText,
+			Metadata: map[string]any{
+				"status": job.Status,
+				"kind":   job.Kind,
+			},
+		}, stringPtr(identity.Account.ID)); err != nil {
+			_ = tx.Rollback()
+			return Workspace{}, ProvisioningJob{}, err
+		}
+
+		if err := tx.Commit(); err != nil {
+			_ = tx.Rollback()
+			return Workspace{}, ProvisioningJob{}, internalError("failed to commit workspace creation")
+		}
+		created = true
+		break
+	}
+	if !created {
+		return Workspace{}, ProvisioningJob{}, conflict("placement_conflict", "workspace placement changed concurrently; retry workspace creation")
 	}
 
 	provisionResult, provisionErr := s.runProvisionWorkspaceScript(ctx, workspace)
@@ -308,18 +332,18 @@ func (s *Service) CreateWorkspace(ctx context.Context, identity RequestIdentity,
 		}
 	}
 
-	tx, err = s.db.BeginTx(ctx, nil)
+	finalizeTx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Workspace{}, ProvisioningJob{}, internalError("failed to begin workspace finalization")
 	}
-	defer tx.Rollback()
-	if err := s.persistWorkspaceRoutingManifest(ctx, tx, workspace); err != nil {
+	defer finalizeTx.Rollback()
+	if err := s.persistWorkspaceRoutingManifest(ctx, finalizeTx, workspace); err != nil {
 		return Workspace{}, ProvisioningJob{}, err
 	}
-	if err := s.updateProvisioningJob(ctx, tx, job); err != nil {
+	if err := s.updateProvisioningJob(ctx, finalizeTx, job); err != nil {
 		return Workspace{}, ProvisioningJob{}, internalError("failed to update provisioning job")
 	}
-	if err := insertAuditEventTx(ctx, tx, AuditEvent{
+	if err := insertAuditEventTx(ctx, finalizeTx, AuditEvent{
 		ID:             "audit_" + uuid.NewString(),
 		EventType:      "workspace_provisioning_job_finished",
 		OrganizationID: stringPtr(organization.ID),
@@ -334,7 +358,7 @@ func (s *Service) CreateWorkspace(ctx context.Context, identity RequestIdentity,
 	}, stringPtr(identity.Account.ID)); err != nil {
 		return Workspace{}, ProvisioningJob{}, err
 	}
-	if err := tx.Commit(); err != nil {
+	if err := finalizeTx.Commit(); err != nil {
 		return Workspace{}, ProvisioningJob{}, internalError("failed to commit workspace finalization")
 	}
 	return workspace, job, nil

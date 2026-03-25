@@ -300,6 +300,12 @@ var migrations = []migration{
 					END;`,
 		},
 	},
+	{
+		Version: 7,
+		Statements: []string{
+			`CREATE UNIQUE INDEX IF NOT EXISTS idx_workspaces_host_listen_port_unique ON workspaces (host_id, listen_port) WHERE listen_port > 0;`,
+		},
+	},
 }
 
 func applyMigrations(ctx context.Context, db *sql.DB) error {

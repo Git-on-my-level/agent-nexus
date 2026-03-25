@@ -26,6 +26,7 @@ vi.mock("../../src/lib/server/controlSession.js", () => ({
 
 import {
   clearWorkspaceResolutionCache,
+  getWorkspaceResolutionCacheSize,
   resolveWorkspaceCatalog,
   resolveProxyWorkspaceTarget,
   resolveWorkspaceBySlug,
@@ -205,6 +206,57 @@ describe("workspaceResolver", () => {
       },
     });
     expect(mockState.listWorkspaces).not.toHaveBeenCalled();
+  });
+
+  it("prunes expired control-plane workspace cache entries as tokens rotate", async () => {
+    const nowSpy = vi.spyOn(Date, "now");
+    nowSpy.mockReturnValue(0);
+
+    mockState.accessToken = "control-token-a";
+    mockState.listWorkspaces.mockResolvedValueOnce({
+      workspaces: [
+        {
+          workspace_id: "ws-123",
+          organization_id: "org-1",
+          slug: "alpha",
+          display_name: "Alpha",
+          workspace_path: "/alpha",
+          public_origin: "https://app.example.test/alpha",
+          core_origin: "https://alpha-core.example.test/",
+        },
+      ],
+    });
+
+    await resolveWorkspaceBySlug({
+      event: createEvent(),
+      workspaceSlug: "alpha",
+    });
+    expect(getWorkspaceResolutionCacheSize()).toBe(1);
+
+    nowSpy.mockReturnValue(6000);
+    mockState.accessToken = "control-token-b";
+    mockState.listWorkspaces.mockResolvedValueOnce({
+      workspaces: [
+        {
+          workspace_id: "ws-456",
+          organization_id: "org-1",
+          slug: "beta",
+          display_name: "Beta",
+          workspace_path: "/beta",
+          public_origin: "https://app.example.test/beta",
+          core_origin: "https://beta-core.example.test/",
+        },
+      ],
+    });
+
+    await resolveWorkspaceBySlug({
+      event: createEvent(),
+      workspaceSlug: "beta",
+    });
+
+    expect(getWorkspaceResolutionCacheSize()).toBe(1);
+    expect(mockState.listWorkspaces).toHaveBeenCalledTimes(2);
+    nowSpy.mockRestore();
   });
 
   it("clears stale control auth and reports an explicit session error", async () => {

@@ -19,6 +19,14 @@ import {
 const CONTROL_WORKSPACE_CACHE_TTL_MS = 5000;
 const controlWorkspaceCache = new Map();
 
+function pruneExpiredControlWorkspaceCache(now = Date.now()) {
+  for (const [accessToken, cacheEntry] of controlWorkspaceCache.entries()) {
+    if (!cacheEntry || cacheEntry.expiresAt <= now) {
+      controlWorkspaceCache.delete(accessToken);
+    }
+  }
+}
+
 function createWorkspaceNotConfiguredError(rawSlug) {
   const requestedSlug = String(rawSlug ?? "").trim();
   return {
@@ -131,8 +139,10 @@ function mergeWorkspaceCatalog(staticCatalog, controlWorkspaces) {
 }
 
 async function loadControlWorkspaces(event, accessToken) {
-  const cacheEntry = controlWorkspaceCache.get(accessToken);
   const now = Date.now();
+  pruneExpiredControlWorkspaceCache(now);
+
+  const cacheEntry = controlWorkspaceCache.get(accessToken);
   if (cacheEntry && cacheEntry.expiresAt > now) {
     return cacheEntry.workspaces;
   }
@@ -325,4 +335,8 @@ export async function resolveProxyWorkspaceTarget({ event, workspaceSlug }) {
 
 export function clearWorkspaceResolutionCache() {
   controlWorkspaceCache.clear();
+}
+
+export function getWorkspaceResolutionCacheSize() {
+  return controlWorkspaceCache.size;
 }
