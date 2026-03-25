@@ -3,6 +3,7 @@ import { normalizeAppPath, normalizeBasePath } from "./pathUtils.js";
 
 export const DEFAULT_WORKSPACE_SLUG = "local";
 export const WORKSPACE_HEADER = "x-oar-workspace-slug";
+export { normalizeAppPath, normalizeBasePath };
 
 export function normalizeWorkspaceSlug(value) {
   return String(value ?? "")
