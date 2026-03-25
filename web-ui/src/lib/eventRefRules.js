@@ -20,7 +20,7 @@ function threadIdIsRequired(rule) {
   const requirement = String(rule?.thread_id ?? "")
     .trim()
     .toLowerCase();
-  return requirement === "required" || requirement.startsWith("required if ");
+  return requirement === "required";
 }
 
 export function validateEventRefRule(eventType, refs, payload = {}) {

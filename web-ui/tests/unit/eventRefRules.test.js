@@ -47,14 +47,14 @@ describe("eventRefRules", () => {
       expect(result.error).toContain("thread_id is required");
     });
 
-    it("treats generated conditional thread_id requirements as mandatory", () => {
+    it("does not treat generated conditional thread_id requirements as unconditional", () => {
       const result = validateEventRefRule(
         "snapshot_updated",
         ["snapshot:snapshot-1"],
         {},
       );
-      expect(result.valid).toBe(false);
-      expect(result.error).toContain("thread_id is required");
+      expect(result.valid).toBe(true);
+      expect(result.error).toBe("");
     });
 
     it("rejects non-array refs input", () => {
