@@ -81,7 +81,10 @@ export function buildReceiptPayload(draft, options = {}) {
     };
   }
 
+  const receiptId = String(options.receiptId ?? "").trim();
   const packet = {
+    ...(receiptId ? { receipt_id: receiptId } : {}),
+    thread_id: validation.normalized.thread_id,
     work_order_id: validation.normalized.work_order_id,
     outputs: validation.normalized.outputs,
     verification_evidence: validation.normalized.verification_evidence,
@@ -96,7 +99,7 @@ export function buildReceiptPayload(draft, options = {}) {
     normalized: validation.normalized,
     packet,
     artifact: {
-      id: String(options.receiptId ?? "").trim(),
+      ...(receiptId ? { id: receiptId } : {}),
       kind: "receipt",
       thread_id: validation.normalized.thread_id,
       summary: `Receipt for ${validation.normalized.work_order_id}`,

@@ -2,10 +2,10 @@ import { json } from "@sveltejs/kit";
 
 import { getExpectedCommandRegistryDigest } from "$lib/commandRegistryDigest";
 import { EXPECTED_SCHEMA_VERSION } from "$lib/config";
-import { guardMockRoute } from "$lib/server/mockGuard";
+import { assertMockModeEnabled } from "$lib/server/mockGuard";
 
 export async function GET({ url }) {
-  const guardResponse = guardMockRoute(url.pathname);
+  const guardResponse = assertMockModeEnabled(url.pathname);
   if (guardResponse) {
     return guardResponse;
   }

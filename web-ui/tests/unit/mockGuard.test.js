@@ -45,20 +45,13 @@ describe("mockGuard", () => {
     });
   });
 
-  it("exposes the clearer mock-mode guard name while preserving the legacy alias", async () => {
-    const { assertMockModeEnabled, guardMockRoute } =
-      await loadMockGuard("http://core.test/");
+  it("exposes the clearer mock-mode guard name", async () => {
+    const { assertMockModeEnabled } = await loadMockGuard("http://core.test/");
 
     const direct = assertMockModeEnabled("/threads");
-    const legacy = guardMockRoute("/threads");
 
     expect(direct.status).toBe(500);
     expect(await direct.json()).toMatchObject({
-      error: {
-        code: "mock_route_disabled",
-      },
-    });
-    expect(await legacy.json()).toMatchObject({
       error: {
         code: "mock_route_disabled",
       },

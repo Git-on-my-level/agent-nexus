@@ -1,10 +1,10 @@
 import { json } from "@sveltejs/kit";
 
 import { getMockArtifactContent } from "$lib/mockCoreData";
-import { guardMockRoute } from "$lib/server/mockGuard";
+import { assertMockModeEnabled } from "$lib/server/mockGuard";
 
 export function GET({ params, url }) {
-  const guardResponse = guardMockRoute(url.pathname);
+  const guardResponse = assertMockModeEnabled(url.pathname);
   if (guardResponse) {
     return guardResponse;
   }

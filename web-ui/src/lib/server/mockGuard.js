@@ -58,5 +58,3 @@ export function assertMockModeEnabled(pathname) {
     },
   );
 }
-
-export const guardMockRoute = assertMockModeEnabled;

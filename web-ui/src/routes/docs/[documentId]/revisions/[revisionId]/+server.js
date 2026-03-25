@@ -1,9 +1,9 @@
 import { json } from "@sveltejs/kit";
 import { getMockDocumentRevision } from "$lib/mockCoreData";
-import { guardMockRoute } from "$lib/server/mockGuard";
+import { assertMockModeEnabled } from "$lib/server/mockGuard";
 
 export function GET({ url, params }) {
-  const guardResponse = guardMockRoute(url.pathname);
+  const guardResponse = assertMockModeEnabled(url.pathname);
   if (guardResponse) return guardResponse;
   const revision = getMockDocumentRevision(
     params.documentId,

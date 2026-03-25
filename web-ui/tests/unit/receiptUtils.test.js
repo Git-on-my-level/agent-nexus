@@ -93,6 +93,8 @@ describe("receipt draft validation", () => {
 
     expect(result.valid).toBe(true);
     expect(result.packet).toEqual({
+      receipt_id: "artifact-receipt-1",
+      thread_id: "thread-1",
       work_order_id: "artifact-work-order-1",
       outputs: ["artifact:artifact-output-1"],
       verification_evidence: ["artifact:artifact-test-log"],

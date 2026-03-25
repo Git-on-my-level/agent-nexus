@@ -162,6 +162,24 @@ describe("oarCoreClient error messaging", () => {
     });
   });
 
+  it("surfaces non-Error /version fallback failures directly", async () => {
+    const client = {
+      baseUrl: "http://core.test",
+      async getHandshake() {
+        const error = new Error("not found");
+        error.status = 404;
+        throw error;
+      },
+      async getVersion() {
+        throw "version probe exploded";
+      },
+    };
+
+    await expect(verifyCoreSchemaVersion(client)).rejects.toThrow(
+      "Unable to verify oar-core schema version at http://core.test: version probe exploded",
+    );
+  });
+
   it("rejects when the deployed core advertises a different command registry", async () => {
     const client = createOarCoreClient({
       baseUrl: "http://core.test",

@@ -753,22 +753,12 @@ export async function verifyCoreSchemaVersion(
 
   let version;
   try {
-    version = await client.getHandshake();
+    version = await getHandshakeOrVersion(client);
   } catch (error) {
-    const candidateVersion =
-      error?.status === 404 ? await client.getVersion().catch((e) => e) : error;
-
-    if (!(candidateVersion instanceof Error)) {
-      version = candidateVersion;
-    } else {
-      const reason =
-        candidateVersion instanceof Error
-          ? candidateVersion.message
-          : String(candidateVersion);
-      throw new Error(
-        `Unable to verify oar-core schema version at ${target}: ${reason}`,
-      );
-    }
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Unable to verify oar-core schema version at ${target}: ${reason}`,
+    );
   }
 
   if (
@@ -797,4 +787,16 @@ export async function verifyCoreSchemaVersion(
   }
 
   return version;
+}
+
+async function getHandshakeOrVersion(client) {
+  try {
+    return await client.getHandshake();
+  } catch (error) {
+    if (error?.status !== 404) {
+      throw error;
+    }
+  }
+
+  return client.getVersion();
 }
