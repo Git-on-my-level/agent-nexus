@@ -185,6 +185,28 @@ describe("workspaceResolver", () => {
     );
   });
 
+  it("keeps invalid provided slugs invalid instead of resolving the default workspace", async () => {
+    mockState.env.OAR_WORKSPACES =
+      '[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"}]';
+
+    const resolved = await resolveWorkspaceBySlug({
+      event: createEvent(),
+      workspaceSlug: "@@@",
+    });
+
+    expect(resolved.workspace).toBeNull();
+    expect(resolved.workspaceSlug).toBe("@@@");
+    expect(resolved.error).toMatchObject({
+      status: 404,
+      payload: {
+        error: {
+          code: "workspace_not_configured",
+        },
+      },
+    });
+    expect(mockState.listWorkspaces).not.toHaveBeenCalled();
+  });
+
   it("clears stale control auth and reports an explicit session error", async () => {
     mockState.accessToken = "expired-token";
     mockState.listWorkspaces.mockRejectedValue(

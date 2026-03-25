@@ -2,13 +2,12 @@ import { redirect } from "@sveltejs/kit";
 
 import { loadWorkspaceAuthenticatedAgent } from "$lib/server/authSession";
 import { resolveWorkspaceBySlug } from "$lib/server/workspaceResolver";
-import { workspacePath, normalizeWorkspaceSlug } from "$lib/workspacePaths";
+import { workspacePath } from "$lib/workspacePaths";
 
 export async function load(event) {
-  const workspaceSlug = normalizeWorkspaceSlug(event.params.workspace);
   const resolved = await resolveWorkspaceBySlug({
     event,
-    workspaceSlug,
+    workspaceSlug: event.params.workspace,
   });
   const workspace = resolved.workspace;
 

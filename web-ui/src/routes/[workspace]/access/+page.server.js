@@ -1,11 +1,9 @@
-import { normalizeWorkspaceSlug } from "$lib/workspacePaths";
 import { resolveWorkspaceBySlug } from "$lib/server/workspaceResolver";
 
 export async function load(event) {
-  const workspaceSlug = normalizeWorkspaceSlug(event.params.workspace);
   const resolved = await resolveWorkspaceBySlug({
     event,
-    workspaceSlug,
+    workspaceSlug: event.params.workspace,
   });
   return { coreBaseUrl: resolved.workspace?.coreBaseUrl ?? "" };
 }

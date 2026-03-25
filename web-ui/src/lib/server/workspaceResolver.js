@@ -185,10 +185,23 @@ export async function resolveWorkspaceCatalog(event) {
 export async function resolveWorkspaceBySlug({ event, workspaceSlug }) {
   const staticCatalog = loadWorkspaceCatalog();
   const rawSlug = String(workspaceSlug ?? "").trim();
-  const normalizedSlug =
-    normalizeWorkspaceSlug(rawSlug) || DEFAULT_WORKSPACE_SLUG;
-  const staticWorkspace = staticCatalog.workspaceBySlug.get(normalizedSlug);
   const hasControlSession = Boolean(readControlAccessToken(event));
+  const normalizedSlug =
+    rawSlug === "" ? DEFAULT_WORKSPACE_SLUG : normalizeWorkspaceSlug(rawSlug);
+
+  if (!normalizedSlug) {
+    return {
+      catalog: staticCatalog,
+      workspaceSlug: rawSlug,
+      workspace: null,
+      coreBaseUrl: "",
+      error: hasControlSession
+        ? createControlWorkspaceUnavailableError(rawSlug)
+        : createWorkspaceNotConfiguredError(rawSlug),
+    };
+  }
+
+  const staticWorkspace = staticCatalog.workspaceBySlug.get(normalizedSlug);
 
   if (staticWorkspace) {
     if (!hasControlSession) {

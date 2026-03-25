@@ -275,7 +275,15 @@ var migrations = []migration{
 			`ALTER TABLE workspaces ADD COLUMN host_label TEXT NOT NULL DEFAULT 'Local packed host';`,
 			`ALTER TABLE workspaces ADD COLUMN workspace_root TEXT NOT NULL DEFAULT '';`,
 			`ALTER TABLE workspaces ADD COLUMN listen_port INTEGER NOT NULL DEFAULT 8000;`,
-			`UPDATE workspaces
+			`WITH ranked_workspaces AS (
+				SELECT id,
+					8000 + ((ROW_NUMBER() OVER (
+						PARTITION BY CASE WHEN TRIM(host_id) = '' THEN 'host_local' ELSE host_id END
+						ORDER BY created_at ASC, id ASC
+					) - 1) * 10) AS derived_listen_port
+				FROM workspaces
+			)
+			UPDATE workspaces
 				SET host_id = CASE WHEN TRIM(host_id) = '' THEN 'host_local' ELSE host_id END,
 					host_label = CASE WHEN TRIM(host_label) = '' THEN 'Local packed host' ELSE host_label END,
 					workspace_root = CASE
@@ -283,7 +291,13 @@ var migrations = []migration{
 						WHEN TRIM(deployment_root) != '' THEN deployment_root || '/workspace'
 						ELSE ''
 					END,
-					listen_port = CASE WHEN listen_port > 0 THEN listen_port ELSE 8000 END;`,
+					listen_port = CASE
+						WHEN listen_port > 0 AND listen_port != 8000 THEN listen_port
+						ELSE COALESCE(
+							(SELECT derived_listen_port FROM ranked_workspaces WHERE ranked_workspaces.id = workspaces.id),
+							8000
+						)
+					END;`,
 		},
 	},
 }
