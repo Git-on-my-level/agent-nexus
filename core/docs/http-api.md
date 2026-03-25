@@ -54,7 +54,7 @@ Each endpoint is classified with an `x-oar-surface` extension indicating its rol
 
 - **`projection`**: Operator convenience surfaces that aggregate multiple canonical resources into workspace-friendly bundles. Examples: `threads.context`, `threads.workspace`, `boards.workspace`, `inbox.list/get/stream/ack`. **Do not build durable automation directly on projection payload shapes.** Use canonical APIs or CLI commands for durable substrate.
 
-- **`utility`**: Infrastructure endpoints for liveness, readiness, version, meta discovery, auth bootstrap, maintenance, and workspace telemetry. Examples: `/health`, `/livez`, `/readyz`, `/ops/health`, `/ops/usage-summary`, `/version`, `/meta/*`, `/auth/*`, `/actors`, `/derived/rebuild`.
+- **`utility`**: Infrastructure endpoints for liveness, readiness, version, meta discovery, auth bootstrap, maintenance, and workspace telemetry. Examples: `/health`, `/livez`, `/readyz`, `/ops/health`, `/ops/usage-summary`, `/ops/blob-usage/rebuild`, `/version`, `/meta/*`, `/auth/*`, `/actors`, `/derived/rebuild`.
 
 Projection endpoints return a `section_kinds` field to distinguish canonical vs derived sections, and a `generated_at` timestamp indicating when the projection was generated.
 
@@ -78,7 +78,7 @@ Projection endpoints return a `section_kinds` field to distinguish canonical vs 
 
 - CLI version gate:
   - Clients MAY send `X-OAR-CLI-Version`.
-  - When provided and below minimum compatibility (except on `/health`, `/livez`, `/readyz`, `/ops/health`, `/ops/usage-summary`, `/version`, `/meta/handshake`, `/auth/agents/register`, `/auth/token`), response is:
+  - When provided and below minimum compatibility (except on `/health`, `/livez`, `/readyz`, `/ops/health`, `/ops/usage-summary`, `/ops/blob-usage/rebuild`, `/version`, `/meta/handshake`, `/auth/agents/register`, `/auth/token`), response is:
     - HTTP `426 Upgrade Required`
     - `{ "error": { "code": "cli_outdated", ... }, "upgrade": { "min_cli_version", "recommended_cli_version", "cli_download_url" } }`
 
@@ -354,11 +354,25 @@ Projection endpoints return a `section_kinds` field to distinguish canonical vs 
 - `POST /derived/rebuild`
   - Body: `{ "actor_id": "..." }`
   - Response: `{ "ok": true }`
+  - Purpose: deterministic operator repair path for derived inbox/thread
+    projections. This remains the explicit rebuild endpoint in both
+    `background` and `manual` projection modes.
+
+- `GET /ops/health`
+  - Auth: workspace auth required
+  - Response: `{ "ok": true, "projection_maintenance": { "mode": "background|manual", "pending_dirty_count": <int>, "oldest_dirty_at": "...", "oldest_dirty_lag_seconds": <int>, "last_successful_stale_scan_at": "...", "last_error": { "at": "...", "message": "...", "operation": "..." } } }`
+  - Purpose: operator diagnostics for workspace readiness plus projection queue
+    and maintenance mode state.
 
 - `GET /ops/usage-summary`
   - Auth: workspace auth required
   - Response: `{ "summary": { "usage": { "blob_bytes", "blob_objects", "artifact_count", "document_count", "document_revision_count" }, "quota": { "max_blob_bytes", "max_artifacts", "max_documents", "max_document_revisions", "max_upload_bytes" }, "generated_at": "..." } }`
   - Purpose: expose workspace usage and quota envelopes for control-plane polling without leaking backend-specific blob paths.
+
+- `POST /ops/blob-usage/rebuild`
+  - Auth: workspace auth required
+  - Response: `{ "rebuild": { "canonical_hash_count", "missing_blob_objects", "blob_bytes", "blob_objects", "rebuilt_at" } }`
+  - Purpose: rebuild the DB-maintained blob usage ledger from canonical artifact metadata plus backend object existence/size checks after operator repair, backend drift, or historical migration.
 
 - Materialized derived projections used by the common read path:
   - `derived_inbox_items`: asynchronously maintained inbox items keyed by deterministic `inbox_item_id`, with per-thread rows used by `GET /inbox`, `GET /inbox/{id}`, and thread workspace inbox sections.

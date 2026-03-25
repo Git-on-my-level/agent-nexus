@@ -165,7 +165,7 @@ func (s *Service) restoreOrReplaceWorkspace(ctx context.Context, identity Reques
 		Retryable:       true,
 		Parameters: map[string]any{
 			"backup_dir":       backupDir,
-			"instance_root":    workspace.DeploymentRoot,
+			"instance_root":    s.workspaceDeploymentRoot(workspace),
 			"public_origin":    s.workspacePublicOrigin(workspace),
 			"workspace_path":   workspace.WorkspacePath,
 			"workspace_status": workspace.Status,

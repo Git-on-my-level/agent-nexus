@@ -1,13 +1,12 @@
 import { json } from "@sveltejs/kit";
 
 import { buildProxyRequestInit } from "./coreProxy.js";
-import { loadWorkspaceCatalog } from "./workspaceCatalog.js";
+import { resolveWorkspaceFromEvent } from "./workspaceResolver.js";
 import {
   DEFAULT_WORKSPACE_SLUG,
   WORKSPACE_HEADER,
   normalizeWorkspaceSlug,
 } from "../workspacePaths.js";
-import { getWorkspaceHeader } from "../compat/workspaceCompat.js";
 
 function getWorkspaceSlug(value) {
   return normalizeWorkspaceSlug(value) || DEFAULT_WORKSPACE_SLUG;
@@ -142,37 +141,11 @@ export function clearWorkspaceRefreshToken(event, workspaceSlug) {
   });
 }
 
-export function resolveWorkspaceSlugFromEvent(event) {
-  const catalog = loadWorkspaceCatalog();
-  const headerSlug = getWorkspaceHeader(event.request.headers);
-  const rawSlug = headerSlug || event.params?.workspace || "";
-  const workspaceSlug = getWorkspaceSlug(rawSlug);
-
-  if (!catalog.workspaceBySlug.has(workspaceSlug)) {
-    return {
-      catalog,
-      workspaceSlug,
-      workspace: null,
-      coreBaseUrl: "",
-      error: {
-        status: 404,
-        payload: {
-          error: {
-            code: "workspace_not_configured",
-            message: `Workspace '${String(rawSlug ?? "").trim()}' is not configured in OAR_WORKSPACES.`,
-          },
-        },
-      },
-    };
-  }
-
-  const workspace = catalog.workspaceBySlug.get(workspaceSlug);
+export async function resolveWorkspaceSlugFromEvent(event) {
+  const resolved = await resolveWorkspaceFromEvent(event);
   return {
-    catalog,
-    workspaceSlug,
-    workspace,
-    coreBaseUrl: workspace.coreBaseUrl,
-    error: null,
+    ...resolved,
+    workspaceSlug: getWorkspaceSlug(resolved.workspaceSlug),
   };
 }
 

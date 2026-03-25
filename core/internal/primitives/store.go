@@ -225,7 +225,11 @@ func (s *Store) CreateArtifact(ctx context.Context, actorID string, artifact map
 		return nil, fmt.Errorf("%w: %v", ErrInvalidArtifactID, err)
 	}
 	contentHash := sha256Hex(encodedContent)
-	if err := s.checkWorkspaceWriteQuota(ctx, int64(len(encodedContent)), contentHash, quotaWriteDelta{artifacts: 1}); err != nil {
+	blobPlan, err := s.prepareBlobLedgerWritePlan(ctx, contentHash, int64(len(encodedContent)))
+	if err != nil {
+		return nil, err
+	}
+	if err := s.checkWorkspaceWriteQuota(ctx, int64(len(encodedContent)), quotaWriteDelta{artifacts: 1}, blobPlan); err != nil {
 		return nil, err
 	}
 
@@ -278,6 +282,11 @@ func (s *Store) CreateArtifact(ctx context.Context, actorID string, artifact map
 		return nil, fmt.Errorf("insert artifact: %w", err)
 	}
 
+	if err := s.applyBlobLedgerWritePlanTx(ctx, tx, blobPlan); err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+
 	if err := stagedContent.Promote(); err != nil {
 		_ = tx.Rollback()
 		return nil, fmt.Errorf("finalize artifact content: %w", err)
@@ -327,7 +336,11 @@ func (s *Store) CreateArtifactAndEvent(ctx context.Context, actorID string, arti
 		return nil, nil, fmt.Errorf("%w: %v", ErrInvalidArtifactID, err)
 	}
 	contentHash := sha256Hex(encodedContent)
-	if err := s.checkWorkspaceWriteQuota(ctx, int64(len(encodedContent)), contentHash, quotaWriteDelta{artifacts: 1}); err != nil {
+	blobPlan, err := s.prepareBlobLedgerWritePlan(ctx, contentHash, int64(len(encodedContent)))
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := s.checkWorkspaceWriteQuota(ctx, int64(len(encodedContent)), quotaWriteDelta{artifacts: 1}, blobPlan); err != nil {
 		return nil, nil, err
 	}
 
@@ -385,6 +398,11 @@ func (s *Store) CreateArtifactAndEvent(ctx context.Context, actorID string, arti
 	}
 
 	if err := insertPreparedEvent(ctx, tx, preparedEvent); err != nil {
+		_ = tx.Rollback()
+		return nil, nil, err
+	}
+
+	if err := s.applyBlobLedgerWritePlanTx(ctx, tx, blobPlan); err != nil {
 		_ = tx.Rollback()
 		return nil, nil, err
 	}

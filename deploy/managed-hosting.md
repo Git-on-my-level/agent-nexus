@@ -36,10 +36,11 @@ The hosted ops bundle lives under `scripts/hosted/`:
 - `provision-workspace.sh`: scaffold one deployment root with `workspace/`,
   `config/env.production`, `metadata/instance.env`, and `backups/`
 - `backup-workspace.sh`: create a portable backup bundle with a manifest,
-  SQLite backup, blob copy, and checksums
+  SQLite backup, backend-aware blob copy/reference metadata, and checksums
 - `restore-workspace.sh`: restore a bundle into an empty target by default
 - `verify-restore.sh`: start `oar-core` against the restored workspace on a
-  loopback port, verify `/readyz`, and compare restored counts to the manifest
+  loopback port, verify `/readyz`, and validate live blob reads through the
+  restored backend config
 - `smoke-test.sh`: local end-to-end provision → backup → restore → verify path
 
 Minimum operator dependencies:
@@ -108,6 +109,8 @@ The generated env file sets:
 - `HOST_OAR_WORKSPACE_ROOT` for a bind-mounted workspace
 - `OAR_CORE_INSTANCE_ID`
 - `OAR_BOOTSTRAP_TOKEN`
+- `OAR_BLOB_BACKEND` plus either the effective local blob root or the active
+  S3 bucket/prefix settings
 - WebAuthn origin/RP values for the workspace domain
 
 For source-run or launchd deployments, use the same values from
@@ -219,7 +222,10 @@ The backup bundle contains:
 - `manifest.env`
 - `SHA256SUMS`
 - `workspace/state.sqlite`
-- `workspace/artifacts/content/`
+- `workspace/blob-store/` when the active blob backend is local (`filesystem`
+  or `object`)
+- explicit remote blob reference metadata in `manifest.env` when the active
+  backend is `s3`
 - `metadata/` if present
 
 By default, `config/env.production` is **not** included in the backup bundle. This
@@ -227,7 +233,15 @@ makes the default backup safer to store, transfer, and share because it contains
 no deployment secrets (bootstrap tokens, etc.).
 
 The manifest records whether config was included via `CONFIG_INCLUDED` and
-`CONFIG_ENV_PATH` fields, making it unambiguous whether a bundle contains secrets.
+`CONFIG_ENV_PATH` fields, making it unambiguous whether a bundle contains
+secrets. It also records the active blob backend, effective blob location,
+bundle mode (`copy` vs `reference`), and S3 storage parameters when relevant.
+
+For `OAR_BLOB_BACKEND=s3`, the default backup path is intentionally a remote
+reference, not a second independent object snapshot. The manifest tells the
+operator exactly which bucket/prefix the restored workspace will read from.
+If inline S3 credentials are not included in the bundle, restore verification
+relies on ambient AWS-compatible credentials or instance identity on the target.
 
 ### Secret-inclusive backups
 
@@ -275,7 +289,10 @@ Verify the restored workspace before directing real traffic at it:
 Verification checks:
 
 - `GET /readyz` succeeds against a loopback-only temporary server
-- artifact, agent, invite, and blob counts still match the backup manifest
+- artifact, agent, invite, and document counts still match the backup manifest
+- live artifact/document blob reads succeed through the active backend config
+- local-backend restores still match the copied blob object count from the
+  manifest
 
 Use `GET /ops/health` only for authenticated or loopback-only operator diagnostics such as projection-maintenance lag.
 
@@ -298,7 +315,8 @@ Automated by the bundle:
 - deployment-root scaffolding
 - env/metadata scaffolding
 - SQLite backup creation
-- blob copying and checksum emission
+- local-backend blob copying and checksum emission
+- backend-aware manifest generation for local and S3 blob stores
 - restore guardrails on unsafe targets
 - restore verification on a temporary loopback server
 
@@ -308,5 +326,6 @@ Not automated in hosted v1:
 - DNS and certificate management
 - secret escrow or HSM integration
 - backup scheduling and retention policy
+- independent S3 object snapshotting or bucket/prefix migration
 - invite delivery to end users
 - any self-service tenant control plane

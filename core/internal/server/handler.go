@@ -36,6 +36,7 @@ type PrimitiveStore interface {
 	GetArtifactContent(ctx context.Context, id string) ([]byte, string, error)
 	ListArtifacts(ctx context.Context, filter primitives.ArtifactListFilter) ([]map[string]any, error)
 	GetWorkspaceUsageSummary(ctx context.Context) (primitives.WorkspaceUsageSummary, error)
+	RebuildBlobUsageLedger(ctx context.Context) (primitives.BlobUsageLedgerRebuildResult, error)
 	GetIdempotencyReplay(ctx context.Context, scope string, actorID string, requestKey string) (primitives.IdempotencyReplay, error)
 	PutIdempotencyReplay(ctx context.Context, scope string, actorID string, requestKey string, requestHash string, status int, response map[string]any) error
 	ListDerivedInboxItems(ctx context.Context, filter primitives.DerivedInboxListFilter) ([]primitives.DerivedInboxItem, error)
@@ -522,6 +523,14 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			return
 		}
 		handleGetUsageSummary(w, r, opts)
+	})
+
+	registerRoute("/ops/blob-usage/rebuild", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+			return
+		}
+		handleRebuildBlobUsageLedger(w, r, opts)
 	})
 
 	registerRoute("/version", exactRouteAccess(routeAccessAlwaysPublic, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
@@ -1590,7 +1599,7 @@ func shouldEnforceCLIVersion(path string) bool {
 		return false
 	}
 	switch path {
-	case "/health", "/livez", "/readyz", "/ops/health", "/ops/usage-summary", "/version", "/meta/handshake", "/auth/token", "/auth/agents/register", "/auth/bootstrap/status":
+	case "/health", "/livez", "/readyz", "/ops/health", "/ops/usage-summary", "/ops/blob-usage/rebuild", "/version", "/meta/handshake", "/auth/token", "/auth/agents/register", "/auth/bootstrap/status":
 		return false
 	}
 	if strings.HasPrefix(path, "/auth/passkey/") {

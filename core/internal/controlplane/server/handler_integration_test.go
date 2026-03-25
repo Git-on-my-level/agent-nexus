@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -109,6 +110,21 @@ func TestControlPlaneAccountOrganizationWorkspaceInviteJobAuditFlow(t *testing.T
 	secondWorkspaceCreate := requestJSON(t, http.MethodPost, env.server.URL+"/workspaces", workspaceCreatePayload(t, organizationID, "eng", "Engineering", "us-east1", "plus"), http.StatusCreated, authHeaders(ownerToken))
 	secondWorkspace := asMap(t, secondWorkspaceCreate["workspace"])
 	secondJob := asMap(t, secondWorkspaceCreate["provisioning_job"])
+	if got := asString(t, firstWorkspace["host_id"]); got == "" {
+		t.Fatal("expected host_id on first workspace")
+	}
+	if got := asString(t, firstWorkspace["workspace_root"]); got == "" {
+		t.Fatal("expected workspace_root on first workspace")
+	}
+	if got := int(asFloat(t, firstWorkspace["listen_port"])); got <= 0 {
+		t.Fatalf("expected positive listen_port on first workspace, got %d", got)
+	}
+	if got := asString(t, secondWorkspace["host_id"]); got != asString(t, firstWorkspace["host_id"]) {
+		t.Fatalf("expected second workspace on same packed host, got %q vs %q", got, asString(t, firstWorkspace["host_id"]))
+	}
+	if got := int(asFloat(t, secondWorkspace["listen_port"])); got == int(asFloat(t, firstWorkspace["listen_port"])) {
+		t.Fatalf("expected distinct listen ports, got %d", got)
+	}
 
 	workspacesPage := requestJSON(t, http.MethodGet, env.server.URL+"/workspaces?organization_id="+url.QueryEscape(organizationID)+"&limit=1", nil, http.StatusOK, authHeaders(ownerToken))
 	if got := len(asSlice(t, workspacesPage["workspaces"])); got != 1 {
@@ -217,9 +233,26 @@ func TestControlPlaneWorkspaceProvisioningProducesReachableDeploymentAndRoutingM
 	createWorkspaceResp := requestJSON(t, http.MethodPost, env.server.URL+"/workspaces", workspaceCreatePayload(t, organizationID, "route", "Route Workspace", "us-central1", "standard"), http.StatusCreated, authHeaders(ownerToken))
 	t.Log("provisioning response received")
 	workspace := asMap(t, createWorkspaceResp["workspace"])
+	workspaceRoot := asString(t, workspace["workspace_root"])
+	if workspaceRoot == "" {
+		t.Fatal("expected workspace_root in workspace response")
+	}
+	if got := asString(t, workspace["host_id"]); got == "" {
+		t.Fatal("expected host_id in workspace response")
+	}
+	listenPort := int(asFloat(t, workspace["listen_port"]))
+	if listenPort <= 0 {
+		t.Fatalf("expected positive listen_port in workspace response, got %d", listenPort)
+	}
+	if got := asString(t, workspace["core_origin"]); got != fmt.Sprintf("http://127.0.0.1:%d", listenPort) {
+		t.Fatalf("expected core_origin %q, got %q", fmt.Sprintf("http://127.0.0.1:%d", listenPort), got)
+	}
 	deploymentRoot := asString(t, workspace["deployment_root"])
 	if deploymentRoot == "" {
 		t.Fatal("expected deployment_root in workspace response")
+	}
+	if got := workspaceRoot; got != filepath.Join(deploymentRoot, "workspace") {
+		t.Fatalf("expected workspace_root %q, got %q", filepath.Join(deploymentRoot, "workspace"), got)
 	}
 	if got := asString(t, workspace["routing_manifest_path"]); got == "" {
 		t.Fatal("expected routing_manifest_path in workspace response")
@@ -228,6 +261,18 @@ func TestControlPlaneWorkspaceProvisioningProducesReachableDeploymentAndRoutingM
 	manifestResp := requestJSON(t, http.MethodGet, env.server.URL+"/workspaces/"+asString(t, workspace["id"])+"/routing-manifest", nil, http.StatusOK, authHeaders(ownerToken))
 	t.Log("routing manifest response received")
 	manifest := asMap(t, manifestResp["routing_manifest"])
+	if got := asString(t, manifest["host_id"]); got != asString(t, workspace["host_id"]) {
+		t.Fatalf("expected routing manifest host_id %q, got %q", asString(t, workspace["host_id"]), got)
+	}
+	if got := asString(t, manifest["workspace_root"]); got != workspaceRoot {
+		t.Fatalf("expected routing manifest workspace_root %q, got %q", workspaceRoot, got)
+	}
+	if got := int(asFloat(t, manifest["listen_port"])); got != listenPort {
+		t.Fatalf("expected routing manifest listen_port %d, got %d", listenPort, got)
+	}
+	if got := asString(t, manifest["core_origin"]); got != fmt.Sprintf("http://127.0.0.1:%d", listenPort) {
+		t.Fatalf("expected routing manifest core_origin %q, got %q", fmt.Sprintf("http://127.0.0.1:%d", listenPort), got)
+	}
 	if got := asString(t, manifest["deployment_root"]); got != deploymentRoot {
 		t.Fatalf("expected routing manifest deployment_root %q, got %q", deploymentRoot, got)
 	}
@@ -490,6 +535,30 @@ func TestControlPlaneCreateWorkspaceRequiresServiceIdentity(t *testing.T) {
 	}
 	if got := asString(t, errPayload["message"]); got != "service_identity_id and service_identity_public_key are required" {
 		t.Fatalf("expected service identity validation message, got %q", got)
+	}
+}
+
+func TestControlPlaneCreateWorkspaceRejectsReservedSlug(t *testing.T) {
+	env := newControlPlaneTestEnv(t, "")
+	defer env.Close()
+
+	_, ownerSession := registerAccount(t, env, "owner-reserved@example.com", "Owner Reserved", "cred-owner-reserved")
+	ownerToken := asString(t, ownerSession["access_token"])
+
+	createOrganizationResp := requestJSON(t, http.MethodPost, env.server.URL+"/organizations", map[string]any{
+		"slug":         "reserved-org",
+		"display_name": "Reserved Org",
+		"plan_tier":    "team",
+	}, http.StatusCreated, authHeaders(ownerToken))
+	organizationID := asString(t, asMap(t, createOrganizationResp["organization"])["id"])
+
+	resp := requestJSON(t, http.MethodPost, env.server.URL+"/workspaces", workspaceCreatePayload(t, organizationID, "dashboard", "Reserved Workspace", "us-central1", "standard"), http.StatusBadRequest, authHeaders(ownerToken))
+	errPayload := asMap(t, resp["error"])
+	if got := asString(t, errPayload["code"]); got != "invalid_request" {
+		t.Fatalf("expected invalid_request, got %q", got)
+	}
+	if got := asString(t, errPayload["message"]); !strings.Contains(got, "reserved") {
+		t.Fatalf("expected reserved-slug message, got %q", got)
 	}
 }
 

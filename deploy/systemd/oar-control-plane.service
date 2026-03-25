@@ -1,0 +1,36 @@
+[Unit]
+Description=OAR control plane
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=oar
+Group=oar
+EnvironmentFile=/etc/oar/control-plane.env
+WorkingDirectory=/opt/oar
+ExecStart=/usr/bin/env bash -lc '/opt/oar/bin/oar-control-plane \
+  --listen-addr "${OAR_CONTROL_PLANE_LISTEN_ADDR}" \
+  --workspace-root "${OAR_CONTROL_PLANE_WORKSPACE_ROOT}" \
+  --webauthn-rpid "${OAR_CONTROL_PLANE_WEBAUTHN_RPID}" \
+  --webauthn-origin "${OAR_CONTROL_PLANE_WEBAUTHN_ORIGIN}" \
+  --workspace-url-template "${OAR_CONTROL_PLANE_WORKSPACE_URL_TEMPLATE}" \
+  --invite-url-template "${OAR_CONTROL_PLANE_INVITE_URL_TEMPLATE}" \
+  --workspace-grant-issuer "${OAR_CONTROL_PLANE_WORKSPACE_GRANT_ISSUER}" \
+  --workspace-grant-audience "${OAR_CONTROL_PLANE_WORKSPACE_GRANT_AUDIENCE}" \
+  --session-ttl "${OAR_CONTROL_PLANE_SESSION_TTL}" \
+  --ceremony-ttl "${OAR_CONTROL_PLANE_CEREMONY_TTL}" \
+  --launch-ttl "${OAR_CONTROL_PLANE_LAUNCH_TTL}" \
+  --invite-ttl "${OAR_CONTROL_PLANE_INVITE_TTL}" \
+  --backup-maintenance-interval "${OAR_CONTROL_PLANE_BACKUP_MAINTENANCE_INTERVAL}" \
+  --shutdown-timeout "${OAR_CONTROL_PLANE_SHUTDOWN_TIMEOUT}"'
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/oar/control-plane
+
+[Install]
+WantedBy=multi-user.target

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 type FilesystemBackend struct {
@@ -62,15 +61,30 @@ func (b *FilesystemBackend) Read(ctx context.Context, hash string) ([]byte, erro
 }
 
 func (b *FilesystemBackend) Exists(ctx context.Context, hash string) (bool, error) {
-	path := b.blobPath(hash)
-	_, err := os.Stat(path)
+	_, err := b.Stat(ctx, hash)
+	if errors.Is(err, ErrBlobNotFound) {
+		return false, nil
+	}
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return false, nil
-		}
 		return false, err
 	}
 	return true, nil
+}
+
+func (b *FilesystemBackend) Stat(ctx context.Context, hash string) (Stat, error) {
+	_ = ctx
+	path := b.blobPath(hash)
+	info, err := os.Stat(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return Stat{}, ErrBlobNotFound
+		}
+		return Stat{}, err
+	}
+	if info.IsDir() {
+		return Stat{}, ErrBlobNotFound
+	}
+	return Stat{Bytes: info.Size()}, nil
 }
 
 func (b *FilesystemBackend) Usage(ctx context.Context) (Usage, error) {
@@ -174,16 +188,30 @@ func (b *ObjectStoreBackend) Read(ctx context.Context, hash string) ([]byte, err
 }
 
 func (b *ObjectStoreBackend) Exists(ctx context.Context, hash string) (bool, error) {
-	_ = ctx
-	path := b.objectPath(hash)
-	_, err := os.Stat(path)
+	_, err := b.Stat(ctx, hash)
+	if errors.Is(err, ErrBlobNotFound) {
+		return false, nil
+	}
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return false, nil
-		}
 		return false, err
 	}
 	return true, nil
+}
+
+func (b *ObjectStoreBackend) Stat(ctx context.Context, hash string) (Stat, error) {
+	_ = ctx
+	path := b.objectPath(hash)
+	info, err := os.Stat(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return Stat{}, ErrBlobNotFound
+		}
+		return Stat{}, err
+	}
+	if info.IsDir() {
+		return Stat{}, ErrBlobNotFound
+	}
+	return Stat{Bytes: info.Size()}, nil
 }
 
 func (b *ObjectStoreBackend) Usage(ctx context.Context) (Usage, error) {
@@ -192,11 +220,7 @@ func (b *ObjectStoreBackend) Usage(ctx context.Context) (Usage, error) {
 }
 
 func (b *ObjectStoreBackend) objectPath(hash string) string {
-	hash = strings.TrimSpace(hash)
-	if len(hash) < 4 {
-		return filepath.Join(b.rootDir, hash)
-	}
-	return filepath.Join(b.rootDir, hash[:2], hash[2:4], hash)
+	return contentAddressedFilesystemPath(b.rootDir, hash)
 }
 
 type objectStoreStagedWrite struct {

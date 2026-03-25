@@ -33,9 +33,30 @@ const (
 )
 
 var (
-	slugPattern        = regexp.MustCompile(`^[a-z0-9]+(?:[-][a-z0-9]+)*$`)
-	emailSpacePattern  = regexp.MustCompile(`\s+`)
-	displayNamePattern = regexp.MustCompile(`\s+`)
+	slugPattern            = regexp.MustCompile(`^[a-z0-9]+(?:[-][a-z0-9]+)*$`)
+	emailSpacePattern      = regexp.MustCompile(`\s+`)
+	displayNamePattern     = regexp.MustCompile(`\s+`)
+	reservedWorkspaceSlugs = map[string]struct{}{
+		"actors":      {},
+		"api":         {},
+		"artifacts":   {},
+		"auth":        {},
+		"boards":      {},
+		"commitments": {},
+		"control":     {},
+		"dashboard":   {},
+		"docs":        {},
+		"events":      {},
+		"inbox":       {},
+		"invites":     {},
+		"login":       {},
+		"meta":        {},
+		"receipts":    {},
+		"reviews":     {},
+		"snapshots":   {},
+		"threads":     {},
+		"version":     {},
+	}
 )
 
 type Config struct {
@@ -45,6 +66,7 @@ type Config struct {
 	InviteTTL            time.Duration
 	WorkspaceURLTemplate string
 	InviteURLTemplate    string
+	PackedHosts          []PackedHost
 	WorkspaceGrantSigner *controlplaneauth.WorkspaceHumanGrantSigner
 	HostedScriptsDir     string
 	VerifyCoreBinaryPath string
@@ -61,6 +83,7 @@ type Service struct {
 	inviteTTL            time.Duration
 	workspaceURLTemplate string
 	inviteURLTemplate    string
+	packedHosts          []PackedHost
 	workspaceGrantSigner *controlplaneauth.WorkspaceHumanGrantSigner
 	hostedScriptsDir     string
 	verifyCoreBinaryPath string
@@ -129,6 +152,16 @@ func NewService(workspace *cpstorage.Workspace, config Config) *Service {
 	if verifySchemaPath == "" {
 		verifySchemaPath = detectSchemaPath()
 	}
+	packedHosts := config.PackedHosts
+	if len(packedHosts) == 0 {
+		packedHosts = []PackedHost{defaultPackedHost(workspace.Layout().RootDir)}
+	} else {
+		normalized := make([]PackedHost, 0, len(packedHosts))
+		for _, host := range packedHosts {
+			normalized = append(normalized, normalizePackedHost(host, workspace.Layout().RootDir))
+		}
+		packedHosts = normalized
+	}
 	return &Service{
 		db:                   workspace.DB(),
 		workspaceRoot:        workspace.Layout().RootDir,
@@ -138,6 +171,7 @@ func NewService(workspace *cpstorage.Workspace, config Config) *Service {
 		inviteTTL:            inviteTTL,
 		workspaceURLTemplate: workspaceURLTemplate,
 		inviteURLTemplate:    inviteURLTemplate,
+		packedHosts:          packedHosts,
 		workspaceGrantSigner: config.WorkspaceGrantSigner,
 		hostedScriptsDir:     hostedScriptsDir,
 		verifyCoreBinaryPath: verifyCoreBinaryPath,
@@ -1046,6 +1080,13 @@ func normalizeSlug(raw string) (string, error) {
 	return slug, nil
 }
 
+func validateReservedWorkspaceSlug(slug string) error {
+	if _, reserved := reservedWorkspaceSlugs[slug]; reserved {
+		return invalidRequest("workspace slug is reserved for control-plane routes")
+	}
+	return nil
+}
+
 func normalizeWebAuthnInputs(rpID string, origin string) (string, string, error) {
 	rpID = strings.ToLower(strings.TrimSpace(rpID))
 	if rpID == "" {
@@ -1313,6 +1354,17 @@ func credentialSafeEmail(email string) string {
 
 func isSQLiteConstraint(err error) bool {
 	return strings.Contains(strings.ToLower(err.Error()), "constraint")
+}
+
+func isWorkspaceSlugConstraint(err error) bool {
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "workspaces.organization_id, workspaces.slug")
+}
+
+func isWorkspaceListenPortConstraint(err error) bool {
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "workspaces.host_id, workspaces.listen_port") ||
+		strings.Contains(message, "idx_workspaces_host_listen_port_unique")
 }
 
 func isSQLiteBusyError(err error) bool {

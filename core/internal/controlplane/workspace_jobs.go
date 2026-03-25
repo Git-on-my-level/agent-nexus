@@ -90,6 +90,10 @@ func scanWorkspaceRow(scanner rowScanner) (Workspace, error) {
 		&workspace.BaseURL,
 		&workspace.PublicOrigin,
 		&workspace.CoreOrigin,
+		&workspace.HostID,
+		&workspace.HostLabel,
+		&workspace.WorkspaceRoot,
+		&workspace.ListenPort,
 		&workspace.DeploymentRoot,
 		&workspace.InstanceID,
 		&workspace.ServiceIdentityID,
@@ -271,7 +275,11 @@ func (s *Service) workspaceDeploymentRoot(workspace Workspace) string {
 	if strings.TrimSpace(workspace.DeploymentRoot) != "" {
 		return workspace.DeploymentRoot
 	}
-	return filepath.Join(s.workspaceRoot, "deployments", workspace.OrganizationID, workspace.ID)
+	placement := s.workspacePlacement(workspace)
+	if strings.TrimSpace(placement.WorkspaceRoot) == "" {
+		return ""
+	}
+	return filepath.Dir(placement.WorkspaceRoot)
 }
 
 func (s *Service) workspacePublicOrigin(workspace Workspace) string {
@@ -284,6 +292,9 @@ func (s *Service) workspacePublicOrigin(workspace Workspace) string {
 func (s *Service) workspaceCoreOrigin(workspace Workspace) string {
 	if strings.TrimSpace(workspace.CoreOrigin) != "" {
 		return normalizeWorkspaceOrigin(workspace.CoreOrigin)
+	}
+	if listenPort := s.workspacePlacement(workspace).ListenPort; listenPort > 0 {
+		return fmt.Sprintf("http://127.0.0.1:%d", listenPort)
 	}
 	return normalizeWorkspaceOrigin(s.workspacePublicOrigin(workspace))
 }
@@ -312,6 +323,7 @@ func (s *Service) workspaceRoutingManifestPath(workspace Workspace) string {
 
 func (s *Service) workspaceRoutingManifest(workspace Workspace) WorkspaceRoutingManifest {
 	publicOrigin := s.workspacePublicOrigin(workspace)
+	placement := s.workspacePlacement(workspace)
 	return WorkspaceRoutingManifest{
 		WorkspaceID:         workspace.ID,
 		OrganizationID:      workspace.OrganizationID,
@@ -320,6 +332,10 @@ func (s *Service) workspaceRoutingManifest(workspace Workspace) WorkspaceRouting
 		PublicOrigin:        publicOrigin,
 		BaseURL:             workspace.BaseURL,
 		CoreOrigin:          s.workspaceCoreOrigin(workspace),
+		HostID:              placement.HostID,
+		HostLabel:           placement.HostLabel,
+		WorkspaceRoot:       placement.WorkspaceRoot,
+		ListenPort:          placement.ListenPort,
 		DeploymentRoot:      s.workspaceDeploymentRoot(workspace),
 		InstanceID:          workspace.InstanceID,
 		CurrentState:        workspace.Status,
@@ -367,6 +383,12 @@ func (s *Service) persistWorkspaceRoutingManifest(ctx context.Context, tx *sql.T
 	if err := os.WriteFile(routingManifestPath, rawManifest, 0o644); err != nil {
 		return internalError("failed to write routing manifest")
 	}
+	placement := s.workspacePlacement(workspace)
+	workspace.HostID = placement.HostID
+	workspace.HostLabel = placement.HostLabel
+	workspace.WorkspaceRoot = placement.WorkspaceRoot
+	workspace.ListenPort = placement.ListenPort
+	workspace.DeploymentRoot = manifest.DeploymentRoot
 	workspace.RoutingManifestPath = routingManifestPath
 	workspace.UpdatedAt = manifest.GeneratedAt
 	return s.updateWorkspaceRow(ctx, tx, workspace, rawManifest)
@@ -376,7 +398,7 @@ func (s *Service) updateWorkspaceRow(ctx context.Context, tx *sql.Tx, workspace 
 	_, err := tx.ExecContext(
 		ctx,
 		`UPDATE workspaces
-		 SET status = ?, region = ?, workspace_tier = ?, workspace_path = ?, base_url = ?, public_origin = ?, core_origin = ?, deployment_root = ?, instance_id = ?, service_identity_id = ?, service_identity_public_key = ?, desired_state = ?, desired_version = ?, quota_config_ref = ?, quota_envelope_ref = ?, deployed_version = ?, routing_manifest_path = ?, last_heartbeat_at = ?, heartbeat_version = ?, heartbeat_build = ?, heartbeat_health_summary_json = ?, heartbeat_projection_maintenance_summary_json = ?, heartbeat_usage_summary_json = ?, last_successful_backup_at = ?, routing_manifest_json = ?, updated_at = ?
+		 SET status = ?, region = ?, workspace_tier = ?, workspace_path = ?, base_url = ?, public_origin = ?, core_origin = ?, host_id = ?, host_label = ?, workspace_root = ?, listen_port = ?, deployment_root = ?, instance_id = ?, service_identity_id = ?, service_identity_public_key = ?, desired_state = ?, desired_version = ?, quota_config_ref = ?, quota_envelope_ref = ?, deployed_version = ?, routing_manifest_path = ?, last_heartbeat_at = ?, heartbeat_version = ?, heartbeat_build = ?, heartbeat_health_summary_json = ?, heartbeat_projection_maintenance_summary_json = ?, heartbeat_usage_summary_json = ?, last_successful_backup_at = ?, routing_manifest_json = ?, updated_at = ?
 		 WHERE id = ?`,
 		workspace.Status,
 		workspace.Region,
@@ -385,6 +407,10 @@ func (s *Service) updateWorkspaceRow(ctx context.Context, tx *sql.Tx, workspace 
 		workspace.BaseURL,
 		workspace.PublicOrigin,
 		workspace.CoreOrigin,
+		workspace.HostID,
+		workspace.HostLabel,
+		workspace.WorkspaceRoot,
+		workspace.ListenPort,
 		workspace.DeploymentRoot,
 		workspace.InstanceID,
 		workspace.ServiceIdentityID,
@@ -492,17 +518,17 @@ func (s *Service) runHostedScript(ctx context.Context, scriptName string, args .
 func (s *Service) runProvisionWorkspaceScript(ctx context.Context, workspace Workspace) (scriptResult, error) {
 	args := []string{
 		"--instance", workspace.InstanceID,
-		"--instance-root", workspace.DeploymentRoot,
+		"--instance-root", s.workspaceDeploymentRoot(workspace),
 		"--public-origin", s.workspacePublicOrigin(workspace),
-		"--listen-port", "8000",
-		"--web-ui-port", "3000",
+		"--listen-port", fmt.Sprintf("%d", s.workspacePlacement(workspace).ListenPort),
+		"--web-ui-port", fmt.Sprintf("%d", s.workspaceWebUIPort(workspace)),
 		"--core-instance-id", workspace.InstanceID,
 	}
 	return s.runHostedScript(ctx, "provision-workspace.sh", args...)
 }
 
 func (s *Service) runRestoreWorkspaceScript(ctx context.Context, workspace Workspace, backupDir string) (scriptResult, error) {
-	return s.runRestoreWorkspaceScriptTo(ctx, workspace, backupDir, workspace.DeploymentRoot, workspace.InstanceID)
+	return s.runRestoreWorkspaceScriptTo(ctx, workspace, backupDir, s.workspaceDeploymentRoot(workspace), workspace.InstanceID)
 }
 
 func (s *Service) runRestoreWorkspaceScriptTo(ctx context.Context, workspace Workspace, backupDir string, targetInstanceRoot string, instanceName string) (scriptResult, error) {
@@ -511,8 +537,8 @@ func (s *Service) runRestoreWorkspaceScriptTo(ctx context.Context, workspace Wor
 		"--target-instance-root", targetInstanceRoot,
 		"--instance", instanceName,
 		"--public-origin", s.workspacePublicOrigin(workspace),
-		"--listen-port", "8000",
-		"--web-ui-port", "3000",
+		"--listen-port", fmt.Sprintf("%d", s.workspacePlacement(workspace).ListenPort),
+		"--web-ui-port", fmt.Sprintf("%d", s.workspaceWebUIPort(workspace)),
 		"--core-instance-id", instanceName,
 		"--force",
 	}
@@ -521,7 +547,7 @@ func (s *Service) runRestoreWorkspaceScriptTo(ctx context.Context, workspace Wor
 
 func (s *Service) runBackupWorkspaceScript(ctx context.Context, workspace Workspace, outputDir string) (scriptResult, error) {
 	args := []string{
-		"--instance-root", workspace.DeploymentRoot,
+		"--instance-root", s.workspaceDeploymentRoot(workspace),
 		"--output-dir", outputDir,
 	}
 	return s.runHostedScript(ctx, "backup-workspace.sh", args...)
@@ -543,7 +569,7 @@ func (s *Service) runVerifyRestoreScript(ctx context.Context, workspace Workspac
 		return scriptResult{}, nil
 	}
 	args := []string{
-		"--instance-root", workspace.DeploymentRoot,
+		"--instance-root", s.workspaceDeploymentRoot(workspace),
 		"--core-bin", coreBinary,
 		"--schema-path", schemaPath,
 	}

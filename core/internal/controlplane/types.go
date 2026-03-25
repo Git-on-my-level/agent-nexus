@@ -65,6 +65,10 @@ type Workspace struct {
 	BaseURL                               string         `json:"base_url"`
 	PublicOrigin                          string         `json:"public_origin"`
 	CoreOrigin                            string         `json:"core_origin"`
+	HostID                                string         `json:"host_id"`
+	HostLabel                             string         `json:"host_label"`
+	WorkspaceRoot                         string         `json:"workspace_root"`
+	ListenPort                            int            `json:"listen_port"`
 	DeploymentRoot                        string         `json:"deployment_root"`
 	InstanceID                            string         `json:"instance_id"`
 	ServiceIdentityID                     string         `json:"service_identity_id,omitempty"`
@@ -112,6 +116,10 @@ type WorkspaceRoutingManifest struct {
 	PublicOrigin        string `json:"public_origin"`
 	BaseURL             string `json:"base_url"`
 	CoreOrigin          string `json:"core_origin"`
+	HostID              string `json:"host_id"`
+	HostLabel           string `json:"host_label"`
+	WorkspaceRoot       string `json:"workspace_root"`
+	ListenPort          int    `json:"listen_port"`
 	DeploymentRoot      string `json:"deployment_root"`
 	InstanceID          string `json:"instance_id"`
 	CurrentState        string `json:"current_state"`

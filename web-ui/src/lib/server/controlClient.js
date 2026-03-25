@@ -28,11 +28,18 @@ function createControlError(result, message) {
   return error;
 }
 
-export function createControlClient(accessToken) {
+export function createControlClient(accessToken, extraHeaders = {}) {
   const baseUrl = getControlBaseUrl();
   const client = new OarClient(baseUrl, fetch);
 
-  const headers = accessToken ? { authorization: `Bearer ${accessToken}` } : {};
+  const headers = {
+    ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
+    ...Object.fromEntries(
+      Object.entries(extraHeaders).filter(([, value]) => {
+        return String(value ?? "").trim() !== "";
+      }),
+    ),
+  };
 
   return {
     async startPasskeyRegistration(body) {

@@ -9,6 +9,13 @@ const controlSessionState = {
   account: null,
 };
 
+function getControlRequestHeaders(event) {
+  const origin =
+    event?.request?.headers?.get?.("origin") ||
+    String(event?.url?.origin ?? "").trim();
+  return origin ? { origin } : {};
+}
+
 function isSecureCookieRequest(event) {
   return event.url.protocol === "https:";
 }
@@ -157,7 +164,10 @@ export async function loadControlAccount(event) {
 }
 
 export async function startControlLogin(event, email) {
-  const client = createControlClient();
+  const client = createControlClient(
+    undefined,
+    getControlRequestHeaders(event),
+  );
   const response = await client.startSession({ email });
   return response;
 }
@@ -168,7 +178,10 @@ export async function finishControlLogin(
   credential,
   inviteToken = "",
 ) {
-  const client = createControlClient();
+  const client = createControlClient(
+    undefined,
+    getControlRequestHeaders(event),
+  );
   const response = await client.finishSession({
     session_id: sessionId,
     credential,
@@ -192,7 +205,10 @@ export async function finishControlLogin(
 }
 
 export async function startControlRegistration(event, email, displayName) {
-  const client = createControlClient();
+  const client = createControlClient(
+    undefined,
+    getControlRequestHeaders(event),
+  );
   const response = await client.startPasskeyRegistration({
     email,
     display_name: displayName,
@@ -206,7 +222,10 @@ export async function finishControlRegistration(
   credential,
   inviteToken = "",
 ) {
-  const client = createControlClient();
+  const client = createControlClient(
+    undefined,
+    getControlRequestHeaders(event),
+  );
   const response = await client.finishPasskeyRegistration({
     registration_session_id: registrationSessionId,
     credential,

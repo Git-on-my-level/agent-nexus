@@ -324,6 +324,7 @@ func (s *Service) RunWorkspaceRestoreDrill(ctx context.Context, identity Request
 		return Workspace{}, ProvisioningJob{}, internalError("failed to create restore drill workspace")
 	}
 	drillWorkspace := workspace
+	drillWorkspace.WorkspaceRoot = filepath.Join(drillRoot, "workspace")
 	drillWorkspace.DeploymentRoot = drillRoot
 	drillWorkspace.InstanceID = workspace.InstanceID + "-drill-" + uuid.NewString()
 
@@ -454,7 +455,7 @@ func (s *Service) loadWorkspaceByID(ctx context.Context, workspaceID string) (Wo
 	}
 	row := s.db.QueryRowContext(
 		ctx,
-		`SELECT id, organization_id, slug, display_name, status, region, workspace_tier, workspace_path, base_url, public_origin, core_origin, deployment_root, instance_id, service_identity_id, service_identity_public_key, desired_state, desired_version, quota_config_ref, quota_envelope_ref, deployed_version, routing_manifest_path, last_heartbeat_at, heartbeat_version, heartbeat_build, heartbeat_health_summary_json, heartbeat_projection_maintenance_summary_json, heartbeat_usage_summary_json, last_successful_backup_at, created_at, updated_at
+		`SELECT id, organization_id, slug, display_name, status, region, workspace_tier, workspace_path, base_url, public_origin, core_origin, host_id, host_label, workspace_root, listen_port, deployment_root, instance_id, service_identity_id, service_identity_public_key, desired_state, desired_version, quota_config_ref, quota_envelope_ref, deployed_version, routing_manifest_path, last_heartbeat_at, heartbeat_version, heartbeat_build, heartbeat_health_summary_json, heartbeat_projection_maintenance_summary_json, heartbeat_usage_summary_json, last_successful_backup_at, created_at, updated_at
 		 FROM workspaces WHERE id = ?`,
 		workspaceID,
 	)

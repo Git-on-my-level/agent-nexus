@@ -78,7 +78,7 @@ type WorkspaceUsage struct {
 	Revisions   int64 `json:"document_revision_count"`
 }
 
-func (s *Store) checkWorkspaceWriteQuota(ctx context.Context, uploadBytes int64, contentHash string, delta quotaWriteDelta) error {
+func (s *Store) checkWorkspaceWriteQuota(ctx context.Context, uploadBytes int64, delta quotaWriteDelta, blobPlan blobLedgerWritePlan) error {
 	if s == nil || !s.quota.enabled() {
 		return nil
 	}
@@ -98,22 +98,8 @@ func (s *Store) checkWorkspaceWriteQuota(ctx context.Context, uploadBytes int64,
 		return err
 	}
 
-	growth := int64(0)
-	if uploadBytes > 0 {
-		growth = uploadBytes
-	}
-	if contentHash != "" && s.blob != nil {
-		exists, err := s.blob.Exists(ctx, contentHash)
-		if err != nil {
-			return fmt.Errorf("check blob existence: %w", err)
-		}
-		if exists {
-			growth = 0
-		}
-	}
-
 	if s.quota.MaxBlobBytes > 0 {
-		projected := usage.blobBytes + growth
+		projected := usage.blobBytes + blobPlan.growthBytes()
 		if projected > s.quota.MaxBlobBytes {
 			return &QuotaViolation{
 				Code:      "workspace_quota_exceeded",
@@ -171,10 +157,7 @@ func (s *Store) currentWorkspaceUsage(ctx context.Context, includeBlobBytes bool
 
 	usage := workspaceUsage{}
 	if includeBlobBytes {
-		if s.blob == nil {
-			return workspaceUsage{}, fmt.Errorf("blob backend is not configured")
-		}
-		blobUsage, err := s.blob.Usage(ctx)
+		blobUsage, err := s.loadBlobUsageTotals(ctx)
 		if err != nil {
 			return workspaceUsage{}, fmt.Errorf("measure blob usage: %w", err)
 		}

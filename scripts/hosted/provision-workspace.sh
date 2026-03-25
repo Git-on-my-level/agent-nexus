@@ -26,6 +26,16 @@ Optional:
   --listen-port PORT        Local/core host port hint (default: 8000)
   --web-ui-port PORT        Host port hint for web-ui example flows (default: 3000)
   --core-instance-id ID     Runtime core instance id (default: instance name)
+  --blob-backend BACKEND    filesystem|object|s3 (default: filesystem)
+  --blob-root DIR           Explicit local blob root for filesystem/object backends
+  --blob-s3-bucket NAME     Required when --blob-backend s3
+  --blob-s3-prefix PREFIX   Optional prefix when --blob-backend s3
+  --blob-s3-region REGION   Required when --blob-backend s3
+  --blob-s3-endpoint URL    Optional custom S3 endpoint
+  --blob-s3-access-key-id ID
+  --blob-s3-secret-access-key KEY
+  --blob-s3-session-token TOKEN
+  --blob-s3-force-path-style true|false
   --bootstrap-token TOKEN   Write the provided bootstrap token into env.production
   --clear-bootstrap-token   Write an empty bootstrap token into env.production
   --generate-bootstrap-token
@@ -42,6 +52,16 @@ LISTEN_HOST="127.0.0.1"
 LISTEN_PORT="8000"
 WEB_UI_PORT="3000"
 CORE_INSTANCE_ID=""
+BLOB_BACKEND="filesystem"
+BLOB_ROOT=""
+BLOB_S3_BUCKET=""
+BLOB_S3_PREFIX=""
+BLOB_S3_REGION=""
+BLOB_S3_ENDPOINT=""
+BLOB_S3_ACCESS_KEY_ID=""
+BLOB_S3_SECRET_ACCESS_KEY=""
+BLOB_S3_SESSION_TOKEN=""
+BLOB_S3_FORCE_PATH_STYLE="false"
 BOOTSTRAP_TOKEN=""
 CLEAR_BOOTSTRAP_TOKEN=0
 GENERATE_BOOTSTRAP_TOKEN=0
@@ -56,6 +76,16 @@ while [[ $# -gt 0 ]]; do
     --listen-port) LISTEN_PORT="$2"; shift 2 ;;
     --web-ui-port) WEB_UI_PORT="$2"; shift 2 ;;
     --core-instance-id) CORE_INSTANCE_ID="$2"; shift 2 ;;
+    --blob-backend) BLOB_BACKEND="$2"; shift 2 ;;
+    --blob-root) BLOB_ROOT="$2"; shift 2 ;;
+    --blob-s3-bucket) BLOB_S3_BUCKET="$2"; shift 2 ;;
+    --blob-s3-prefix) BLOB_S3_PREFIX="$2"; shift 2 ;;
+    --blob-s3-region) BLOB_S3_REGION="$2"; shift 2 ;;
+    --blob-s3-endpoint) BLOB_S3_ENDPOINT="$2"; shift 2 ;;
+    --blob-s3-access-key-id) BLOB_S3_ACCESS_KEY_ID="$2"; shift 2 ;;
+    --blob-s3-secret-access-key) BLOB_S3_SECRET_ACCESS_KEY="$2"; shift 2 ;;
+    --blob-s3-session-token) BLOB_S3_SESSION_TOKEN="$2"; shift 2 ;;
+    --blob-s3-force-path-style) BLOB_S3_FORCE_PATH_STYLE="$(normalize_bool_value "$2")"; shift 2 ;;
     --bootstrap-token) BOOTSTRAP_TOKEN="$2"; shift 2 ;;
     --clear-bootstrap-token) CLEAR_BOOTSTRAP_TOKEN=1; shift ;;
     --generate-bootstrap-token) GENERATE_BOOTSTRAP_TOKEN=1; shift ;;
@@ -82,6 +112,7 @@ validate_host "$LISTEN_HOST"
 validate_port "$LISTEN_PORT"
 validate_port "$WEB_UI_PORT"
 validate_origin "$PUBLIC_ORIGIN"
+validate_blob_backend "$BLOB_BACKEND"
 
 mkdir -p "$INSTANCE_ROOT"
 INSTANCE_ROOT="$(cd "$INSTANCE_ROOT" && pwd -P)"
@@ -93,6 +124,26 @@ ENV_FILE="${CONFIG_DIR}/env.production"
 INSTANCE_METADATA_FILE="${METADATA_DIR}/instance.env"
 WEBAUTHN_RPID="$(origin_host "$PUBLIC_ORIGIN")"
 
+case "$BLOB_BACKEND" in
+  filesystem|object)
+    if [[ -n "$BLOB_S3_BUCKET" || -n "$BLOB_S3_PREFIX" || -n "$BLOB_S3_REGION" || -n "$BLOB_S3_ENDPOINT" || -n "$BLOB_S3_ACCESS_KEY_ID" || -n "$BLOB_S3_SECRET_ACCESS_KEY" || -n "$BLOB_S3_SESSION_TOKEN" || "$BLOB_S3_FORCE_PATH_STYLE" != "false" ]]; then
+      die "S3 blob settings are only supported when --blob-backend s3"
+    fi
+    if [[ -n "$BLOB_ROOT" ]]; then
+      if [[ "$BLOB_ROOT" != /* ]]; then
+        BLOB_ROOT="${INSTANCE_ROOT}/${BLOB_ROOT}"
+      fi
+      BLOB_ROOT="$(canonicalize_path_allow_missing "$BLOB_ROOT")"
+    fi
+    ;;
+  s3)
+    [[ -z "$BLOB_ROOT" ]] || die "--blob-root is not supported when --blob-backend s3"
+    [[ -n "$BLOB_S3_BUCKET" ]] || die "--blob-s3-bucket is required when --blob-backend s3"
+    [[ -n "$BLOB_S3_REGION" ]] || die "--blob-s3-region is required when --blob-backend s3"
+    ;;
+esac
+EFFECTIVE_LOCAL_BLOB_ROOT="$(blob_effective_local_root "$WORKSPACE_ROOT" "$BLOB_BACKEND" "$BLOB_ROOT")"
+
 if [[ "$GENERATE_BOOTSTRAP_TOKEN" -eq 1 ]]; then
   BOOTSTRAP_TOKEN="$(generate_token 24)"
 fi
@@ -103,12 +154,14 @@ elif [[ -z "$BOOTSTRAP_TOKEN" ]]; then
 fi
 
 mkdir -p \
-  "$WORKSPACE_ROOT/artifacts/content" \
   "$WORKSPACE_ROOT/logs" \
   "$WORKSPACE_ROOT/tmp" \
   "$CONFIG_DIR" \
   "$METADATA_DIR" \
   "$BACKUPS_DIR"
+if [[ -n "$EFFECTIVE_LOCAL_BLOB_ROOT" ]]; then
+  mkdir -p "$EFFECTIVE_LOCAL_BLOB_ROOT"
+fi
 
 if [[ -f "$ENV_FILE" && "$FORCE" -ne 1 ]]; then
   log "preserving existing ${ENV_FILE}"
@@ -128,6 +181,7 @@ OAR_CORS_ALLOWED_ORIGINS=
 OAR_CORE_INSTANCE_ID=${CORE_INSTANCE_ID}
 OAR_BOOTSTRAP_TOKEN=${BOOTSTRAP_TOKEN}
 OAR_SHUTDOWN_TIMEOUT=15s
+$(emit_blob_env_lines "$BLOB_BACKEND" "$BLOB_ROOT" "$BLOB_S3_BUCKET" "$BLOB_S3_PREFIX" "$BLOB_S3_REGION" "$BLOB_S3_ENDPOINT" "$BLOB_S3_ACCESS_KEY_ID" "$BLOB_S3_SECRET_ACCESS_KEY" "$BLOB_S3_SESSION_TOKEN" "$BLOB_S3_FORCE_PATH_STYLE")
 EOF
   chmod 600 "$ENV_FILE"
   log "wrote ${ENV_FILE}"
@@ -150,6 +204,7 @@ PUBLIC_ORIGIN=${PUBLIC_ORIGIN}
 WEBAUTHN_RPID=${WEBAUTHN_RPID}
 CORE_INSTANCE_ID=${CORE_INSTANCE_ID}
 BOOTSTRAP_TOKEN_CONFIGURED=$(bootstrap_token_configured_state "$BOOTSTRAP_TOKEN")
+$(emit_blob_metadata_lines "$WORKSPACE_ROOT" "$BLOB_BACKEND" "$BLOB_ROOT" "$BLOB_S3_BUCKET" "$BLOB_S3_PREFIX" "$BLOB_S3_REGION" "$BLOB_S3_ENDPOINT" "$BLOB_S3_ACCESS_KEY_ID" "$BLOB_S3_SECRET_ACCESS_KEY" "$BLOB_S3_SESSION_TOKEN" "$BLOB_S3_FORCE_PATH_STYLE")
 EOF
   chmod 644 "$INSTANCE_METADATA_FILE"
   log "wrote ${INSTANCE_METADATA_FILE}"
@@ -162,6 +217,7 @@ log "  root:       ${INSTANCE_ROOT}"
 log "  workspace:  ${WORKSPACE_ROOT}"
 log "  env file:   ${ENV_FILE}"
 log "  metadata:   ${INSTANCE_METADATA_FILE}"
+log "  blob:       $(blob_effective_location "$WORKSPACE_ROOT" "$BLOB_BACKEND" "$BLOB_ROOT" "$BLOB_S3_BUCKET" "$BLOB_S3_PREFIX") (${BLOB_BACKEND})"
 if [[ -z "$BOOTSTRAP_TOKEN" ]]; then
   log "  bootstrap:  cleared in env.production"
 elif [[ "$BOOTSTRAP_TOKEN" == "$HOSTED_BOOTSTRAP_PLACEHOLDER" ]]; then

@@ -210,7 +210,11 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 	artifactID := uuid.NewString()
 	revisionID := artifactID
 	contentHash := sha256Hex(encodedContent)
-	if err := s.checkWorkspaceWriteQuota(ctx, int64(len(encodedContent)), contentHash, quotaWriteDelta{artifacts: 1, documents: 1, revisions: 1}); err != nil {
+	blobPlan, err := s.prepareBlobLedgerWritePlan(ctx, contentHash, int64(len(encodedContent)))
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := s.checkWorkspaceWriteQuota(ctx, int64(len(encodedContent)), quotaWriteDelta{artifacts: 1, documents: 1, revisions: 1}, blobPlan); err != nil {
 		return nil, nil, err
 	}
 
@@ -355,6 +359,11 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		return nil, nil, err
 	}
 	if err := insertPreparedEvent(ctx, tx, lifecycleEvent); err != nil {
+		_ = tx.Rollback()
+		return nil, nil, err
+	}
+
+	if err := s.applyBlobLedgerWritePlanTx(ctx, tx, blobPlan); err != nil {
 		_ = tx.Rollback()
 		return nil, nil, err
 	}
@@ -507,7 +516,11 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 	revisionID := artifactID
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	contentHash := sha256Hex(encodedContent)
-	if err := s.checkWorkspaceWriteQuota(ctx, int64(len(encodedContent)), contentHash, quotaWriteDelta{artifacts: 1, revisions: 1}); err != nil {
+	blobPlan, err := s.prepareBlobLedgerWritePlan(ctx, contentHash, int64(len(encodedContent)))
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := s.checkWorkspaceWriteQuota(ctx, int64(len(encodedContent)), quotaWriteDelta{artifacts: 1, revisions: 1}, blobPlan); err != nil {
 		return nil, nil, err
 	}
 
@@ -680,6 +693,11 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 	if affected == 0 {
 		_ = tx.Rollback()
 		return nil, nil, ErrConflict
+	}
+
+	if err := s.applyBlobLedgerWritePlanTx(ctx, tx, blobPlan); err != nil {
+		_ = tx.Rollback()
+		return nil, nil, err
 	}
 
 	if err := stagedContent.Promote(); err != nil {

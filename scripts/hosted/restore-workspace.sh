@@ -100,6 +100,31 @@ SOURCE_BOOTSTRAP_TOKEN=""
 if [[ "$SOURCE_CONFIG_INCLUDED" == "true" && -f "$SOURCE_ENV_FILE" ]]; then
   SOURCE_BOOTSTRAP_TOKEN="$(dotenv_get "$SOURCE_ENV_FILE" OAR_BOOTSTRAP_TOKEN || true)"
 fi
+SOURCE_BLOB_BACKEND="$(manifest_get "$SOURCE_MANIFEST" BLOB_BACKEND || true)"
+SOURCE_BLOB_ROOT="$(manifest_get "$SOURCE_MANIFEST" BLOB_ROOT || true)"
+SOURCE_BLOB_STORAGE_MODE="$(manifest_get "$SOURCE_MANIFEST" BLOB_STORAGE_MODE || true)"
+SOURCE_BLOB_BACKUP_MODE="$(manifest_get "$SOURCE_MANIFEST" BLOB_BACKUP_MODE || true)"
+SOURCE_BLOB_BUNDLE_PATH="$(manifest_get "$SOURCE_MANIFEST" BLOB_BUNDLE_PATH || true)"
+SOURCE_BLOB_S3_BUCKET="$(manifest_get "$SOURCE_MANIFEST" BLOB_S3_BUCKET || true)"
+SOURCE_BLOB_S3_PREFIX="$(manifest_get "$SOURCE_MANIFEST" BLOB_S3_PREFIX || true)"
+SOURCE_BLOB_S3_REGION="$(manifest_get "$SOURCE_MANIFEST" BLOB_S3_REGION || true)"
+SOURCE_BLOB_S3_ENDPOINT="$(manifest_get "$SOURCE_MANIFEST" BLOB_S3_ENDPOINT || true)"
+SOURCE_BLOB_S3_FORCE_PATH_STYLE="$(normalize_bool_value "$(manifest_get "$SOURCE_MANIFEST" BLOB_S3_FORCE_PATH_STYLE || true)")"
+[[ -n "$SOURCE_BLOB_BACKEND" ]] || SOURCE_BLOB_BACKEND="filesystem"
+validate_blob_backend "$SOURCE_BLOB_BACKEND"
+[[ -n "$SOURCE_BLOB_STORAGE_MODE" ]] || SOURCE_BLOB_STORAGE_MODE="$(blob_storage_mode "$SOURCE_BLOB_BACKEND")"
+[[ -n "$SOURCE_BLOB_BACKUP_MODE" ]] || SOURCE_BLOB_BACKUP_MODE="$(blob_backup_mode "$SOURCE_BLOB_BACKEND")"
+if [[ -z "$SOURCE_BLOB_BUNDLE_PATH" && "$SOURCE_BLOB_STORAGE_MODE" == "local" ]]; then
+  SOURCE_BLOB_BUNDLE_PATH="workspace/artifacts/content"
+fi
+SOURCE_BLOB_S3_ACCESS_KEY_ID=""
+SOURCE_BLOB_S3_SECRET_ACCESS_KEY=""
+SOURCE_BLOB_S3_SESSION_TOKEN=""
+if [[ "$SOURCE_CONFIG_INCLUDED" == "true" && -f "$SOURCE_ENV_FILE" ]]; then
+  SOURCE_BLOB_S3_ACCESS_KEY_ID="$(dotenv_get "$SOURCE_ENV_FILE" OAR_BLOB_S3_ACCESS_KEY_ID || true)"
+  SOURCE_BLOB_S3_SECRET_ACCESS_KEY="$(dotenv_get "$SOURCE_ENV_FILE" OAR_BLOB_S3_SECRET_ACCESS_KEY || true)"
+  SOURCE_BLOB_S3_SESSION_TOKEN="$(dotenv_get "$SOURCE_ENV_FILE" OAR_BLOB_S3_SESSION_TOKEN || true)"
+fi
 
 if [[ -d "$TARGET_INSTANCE_ROOT" ]]; then
   TARGET_INSTANCE_ROOT="$(cd "$TARGET_INSTANCE_ROOT" && pwd -P)"
@@ -120,19 +145,17 @@ SOURCE_INSTANCE_NAME="$(manifest_get "$SOURCE_MANIFEST" INSTANCE_NAME || true)"
 SOURCE_INSTANCE_ROOT="$(manifest_get "$SOURCE_MANIFEST" SOURCE_INSTANCE_ROOT || true)"
 SOURCE_WORKSPACE_ROOT="$(manifest_get "$SOURCE_MANIFEST" SOURCE_WORKSPACE_ROOT || true)"
 SOURCE_PUBLIC_ORIGIN="$(manifest_get "$SOURCE_MANIFEST" PUBLIC_ORIGIN || true)"
+TARGET_BLOB_ROOT=""
+if [[ "$SOURCE_BLOB_STORAGE_MODE" == "local" ]]; then
+  TARGET_BLOB_ROOT="$(remap_local_blob_root_for_target "$SOURCE_BLOB_ROOT" "$SOURCE_INSTANCE_ROOT" "$SOURCE_WORKSPACE_ROOT" "$TARGET_INSTANCE_ROOT" "${TARGET_INSTANCE_ROOT}/workspace")"
+fi
 
 mkdir -p \
-  "${TARGET_WORKSPACE_ROOT}/artifacts/content" \
   "${TARGET_WORKSPACE_ROOT}/logs" \
   "${TARGET_WORKSPACE_ROOT}/tmp" \
   "$TARGET_CONFIG_DIR" \
   "$TARGET_METADATA_DIR" \
   "$TARGET_BACKUPS_DIR"
-
-cp "${BACKUP_DIR}/workspace/state.sqlite" "${TARGET_WORKSPACE_ROOT}/state.sqlite"
-rm -rf "${TARGET_WORKSPACE_ROOT}/artifacts/content"
-mkdir -p "${TARGET_WORKSPACE_ROOT}/artifacts/content"
-copy_tree_contents "${BACKUP_DIR}/workspace/artifacts/content" "${TARGET_WORKSPACE_ROOT}/artifacts/content"
 
 provision_args=(
   --instance "$INSTANCE_NAME"
@@ -142,8 +165,30 @@ provision_args=(
   --listen-port "$LISTEN_PORT"
   --web-ui-port "$WEB_UI_PORT"
   --core-instance-id "$CORE_INSTANCE_ID"
+  --blob-backend "$SOURCE_BLOB_BACKEND"
   --force
 )
+if [[ -n "$TARGET_BLOB_ROOT" ]]; then
+  provision_args+=(--blob-root "$TARGET_BLOB_ROOT")
+fi
+if [[ "$SOURCE_BLOB_BACKEND" == "s3" ]]; then
+  provision_args+=(
+    --blob-s3-bucket "$SOURCE_BLOB_S3_BUCKET"
+    --blob-s3-prefix "$SOURCE_BLOB_S3_PREFIX"
+    --blob-s3-region "$SOURCE_BLOB_S3_REGION"
+    --blob-s3-endpoint "$SOURCE_BLOB_S3_ENDPOINT"
+    --blob-s3-force-path-style "$SOURCE_BLOB_S3_FORCE_PATH_STYLE"
+  )
+  if [[ -n "$SOURCE_BLOB_S3_ACCESS_KEY_ID" ]]; then
+    provision_args+=(--blob-s3-access-key-id "$SOURCE_BLOB_S3_ACCESS_KEY_ID")
+  fi
+  if [[ -n "$SOURCE_BLOB_S3_SECRET_ACCESS_KEY" ]]; then
+    provision_args+=(--blob-s3-secret-access-key "$SOURCE_BLOB_S3_SECRET_ACCESS_KEY")
+  fi
+  if [[ -n "$SOURCE_BLOB_S3_SESSION_TOKEN" ]]; then
+    provision_args+=(--blob-s3-session-token "$SOURCE_BLOB_S3_SESSION_TOKEN")
+  fi
+fi
 
 case "$BOOTSTRAP_TOKEN_MODE" in
   placeholder)
@@ -180,6 +225,20 @@ esac
 [[ -f "$TARGET_ENV_FILE" ]] || die "provisioning did not produce ${TARGET_ENV_FILE}"
 [[ -f "$TARGET_INSTANCE_METADATA_FILE" ]] || die "provisioning did not produce ${TARGET_INSTANCE_METADATA_FILE}"
 
+cp "${BACKUP_DIR}/workspace/state.sqlite" "${TARGET_WORKSPACE_ROOT}/state.sqlite"
+
+TARGET_EFFECTIVE_BLOB_LOCATION="$(blob_effective_location "$TARGET_WORKSPACE_ROOT" "$SOURCE_BLOB_BACKEND" "$TARGET_BLOB_ROOT" "$SOURCE_BLOB_S3_BUCKET" "$SOURCE_BLOB_S3_PREFIX")"
+TARGET_EFFECTIVE_LOCAL_BLOB_ROOT="$(blob_effective_local_root "$TARGET_WORKSPACE_ROOT" "$SOURCE_BLOB_BACKEND" "$TARGET_BLOB_ROOT")"
+TARGET_BLOB_RESTORE_ACTION="reference-remote-blob-store"
+if [[ "$SOURCE_BLOB_STORAGE_MODE" == "local" ]]; then
+  TARGET_BLOB_RESTORE_ACTION="copied-local-blob-store"
+  rm -rf "$TARGET_EFFECTIVE_LOCAL_BLOB_ROOT"
+  mkdir -p "$TARGET_EFFECTIVE_LOCAL_BLOB_ROOT"
+  copy_tree_contents "${BACKUP_DIR}/${SOURCE_BLOB_BUNDLE_PATH}" "$TARGET_EFFECTIVE_LOCAL_BLOB_ROOT"
+elif [[ "$SOURCE_BLOB_BACKEND" == "s3" && "$SOURCE_CONFIG_INCLUDED" != "true" ]]; then
+  warn "restored S3 backend config without bundled inline credentials; verification/startup relies on ambient AWS credentials or instance identity"
+fi
+
 cp "$SOURCE_MANIFEST" "${TARGET_METADATA_DIR}/restore-source-manifest.env"
 
 cat >"${TARGET_METADATA_DIR}/restore-receipt.env" <<EOF
@@ -197,6 +256,18 @@ TARGET_LISTEN_HOST=${LISTEN_HOST}
 TARGET_LISTEN_PORT=${LISTEN_PORT}
 TARGET_WEB_UI_PORT=${WEB_UI_PORT}
 TARGET_CORE_INSTANCE_ID=${CORE_INSTANCE_ID}
+TARGET_BLOB_BACKEND=${SOURCE_BLOB_BACKEND}
+TARGET_BLOB_STORAGE_MODE=${SOURCE_BLOB_STORAGE_MODE}
+TARGET_BLOB_ROOT=${TARGET_BLOB_ROOT}
+TARGET_BLOB_EFFECTIVE_LOCATION=${TARGET_EFFECTIVE_BLOB_LOCATION}
+TARGET_BLOB_BUNDLE_PATH=${SOURCE_BLOB_BUNDLE_PATH}
+TARGET_BLOB_RESTORE_ACTION=${TARGET_BLOB_RESTORE_ACTION}
+TARGET_BLOB_S3_BUCKET=${SOURCE_BLOB_S3_BUCKET}
+TARGET_BLOB_S3_PREFIX=${SOURCE_BLOB_S3_PREFIX}
+TARGET_BLOB_S3_REGION=${SOURCE_BLOB_S3_REGION}
+TARGET_BLOB_S3_ENDPOINT=${SOURCE_BLOB_S3_ENDPOINT}
+TARGET_BLOB_S3_FORCE_PATH_STYLE=${SOURCE_BLOB_S3_FORCE_PATH_STYLE}
+TARGET_BLOB_S3_INLINE_CREDENTIALS_PRESENT=$(blob_s3_inline_credentials_present "$SOURCE_BLOB_S3_ACCESS_KEY_ID" "$SOURCE_BLOB_S3_SECRET_ACCESS_KEY" "$SOURCE_BLOB_S3_SESSION_TOKEN")
 BOOTSTRAP_TOKEN_MODE=${BOOTSTRAP_TOKEN_MODE}
 EXPECTED_ACTIVE_BOOTSTRAP_STATE=${EXPECTED_ACTIVE_BOOTSTRAP_STATE}
 FORCE_MODE=$([[ "$FORCE" -eq 1 ]] && printf 'true' || printf 'false')
@@ -208,5 +279,6 @@ log "  target root: ${TARGET_INSTANCE_ROOT}"
 log "  workspace:   ${TARGET_WORKSPACE_ROOT}"
 log "  env file:    ${TARGET_ENV_FILE}"
 log "  metadata:    ${TARGET_INSTANCE_METADATA_FILE}"
+log "  blob:        ${TARGET_EFFECTIVE_BLOB_LOCATION} (${SOURCE_BLOB_BACKEND})"
 log "  manifest:    ${TARGET_METADATA_DIR}/restore-source-manifest.env"
 log "  receipt:     ${TARGET_METADATA_DIR}/restore-receipt.env"

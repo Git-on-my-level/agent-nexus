@@ -1,5 +1,5 @@
 import { redirectToDefaultWorkspace } from "$lib/server/workspaceRedirect";
 
-export function load() {
-  redirectToDefaultWorkspace("/inbox");
+export async function load(event) {
+  await redirectToDefaultWorkspace(event, "/inbox");
 }

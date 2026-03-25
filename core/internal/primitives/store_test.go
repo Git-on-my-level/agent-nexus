@@ -6,6 +6,7 @@ import (
 	"errors"
 	"organization-autorunner-core/internal/blob"
 	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -268,7 +269,7 @@ func TestCreateArtifactConflictDoesNotLeakStagedContent(t *testing.T) {
 	}
 }
 
-func TestWorkspaceUsageSummaryUsesBackendUsageAndCountsRows(t *testing.T) {
+func TestWorkspaceUsageSummaryInitializesBlobLedgerFromCanonicalState(t *testing.T) {
 	t.Parallel()
 
 	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
@@ -297,6 +298,13 @@ func TestWorkspaceUsageSummaryUsesBackendUsageAndCountsRows(t *testing.T) {
 		t.Fatalf("create document: %v", err)
 	}
 
+	if _, err := workspace.DB().Exec(`DELETE FROM blob_usage_ledger`); err != nil {
+		t.Fatalf("clear blob usage ledger: %v", err)
+	}
+	if _, err := workspace.DB().Exec(`DELETE FROM blob_usage_totals`); err != nil {
+		t.Fatalf("clear blob usage totals: %v", err)
+	}
+
 	summary, err := store.GetWorkspaceUsageSummary(context.Background())
 	if err != nil {
 		t.Fatalf("get workspace usage summary: %v", err)
@@ -315,6 +323,164 @@ func TestWorkspaceUsageSummaryUsesBackendUsageAndCountsRows(t *testing.T) {
 	}
 	if summary.Usage.BlobBytes != int64(len("alpha")+len("bravo")) {
 		t.Fatalf("unexpected blob bytes: got %d", summary.Usage.BlobBytes)
+	}
+}
+
+func TestWorkspaceUsageSummaryDeduplicatesDuplicateBlobContent(t *testing.T) {
+	t.Parallel()
+
+	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	store := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+
+	for _, artifactID := range []string{"artifact-duplicate-1", "artifact-duplicate-2"} {
+		if _, err := store.CreateArtifact(context.Background(), "actor-1", map[string]any{
+			"id":   artifactID,
+			"kind": "doc",
+			"refs": []string{"thread:thread-1"},
+		}, "same-content", "text"); err != nil {
+			t.Fatalf("create duplicate artifact %s: %v", artifactID, err)
+		}
+	}
+
+	summary, err := store.GetWorkspaceUsageSummary(context.Background())
+	if err != nil {
+		t.Fatalf("get workspace usage summary: %v", err)
+	}
+	if summary.Usage.Artifacts != 2 {
+		t.Fatalf("expected 2 artifacts, got %d", summary.Usage.Artifacts)
+	}
+	if summary.Usage.BlobObjects != 1 {
+		t.Fatalf("expected 1 blob object, got %d", summary.Usage.BlobObjects)
+	}
+	if summary.Usage.BlobBytes != int64(len("same-content")) {
+		t.Fatalf("expected %d blob bytes, got %d", len("same-content"), summary.Usage.BlobBytes)
+	}
+}
+
+func TestWorkspaceUsageSummaryTracksCreateAndUpdateFlows(t *testing.T) {
+	t.Parallel()
+
+	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	store := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+
+	document, revision, err := store.CreateDocument(context.Background(), "actor-1", map[string]any{
+		"id":    "doc-update-summary",
+		"title": "Summary doc",
+	}, "bravo", "text", nil)
+	if err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+
+	if _, _, err := store.UpdateDocument(context.Background(), "actor-2", document["id"].(string), map[string]any{
+		"title": "Summary doc updated",
+	}, revision["revision_id"].(string), "charlie", "text", nil); err != nil {
+		t.Fatalf("update document: %v", err)
+	}
+
+	summary, err := store.GetWorkspaceUsageSummary(context.Background())
+	if err != nil {
+		t.Fatalf("get workspace usage summary: %v", err)
+	}
+	if summary.Usage.Artifacts != 2 {
+		t.Fatalf("expected 2 artifacts, got %d", summary.Usage.Artifacts)
+	}
+	if summary.Usage.Documents != 1 {
+		t.Fatalf("expected 1 document, got %d", summary.Usage.Documents)
+	}
+	if summary.Usage.Revisions != 2 {
+		t.Fatalf("expected 2 document revisions, got %d", summary.Usage.Revisions)
+	}
+	if summary.Usage.BlobObjects != 2 {
+		t.Fatalf("expected 2 blob objects, got %d", summary.Usage.BlobObjects)
+	}
+	if summary.Usage.BlobBytes != int64(len("bravo")+len("charlie")) {
+		t.Fatalf("unexpected blob bytes: got %d", summary.Usage.BlobBytes)
+	}
+}
+
+func TestRebuildBlobUsageLedgerRepairsDrift(t *testing.T) {
+	t.Parallel()
+
+	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	store := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+
+	firstArtifact, err := store.CreateArtifact(context.Background(), "actor-1", map[string]any{
+		"id":   "artifact-rebuild-1",
+		"kind": "doc",
+		"refs": []string{"thread:thread-1"},
+	}, "alpha", "text")
+	if err != nil {
+		t.Fatalf("create first artifact: %v", err)
+	}
+	secondArtifact, err := store.CreateArtifact(context.Background(), "actor-1", map[string]any{
+		"id":   "artifact-rebuild-2",
+		"kind": "doc",
+		"refs": []string{"thread:thread-1"},
+	}, "bravo", "text")
+	if err != nil {
+		t.Fatalf("create second artifact: %v", err)
+	}
+
+	if _, err := workspace.DB().Exec(`DELETE FROM blob_usage_ledger`); err != nil {
+		t.Fatalf("clear blob usage ledger: %v", err)
+	}
+	if _, err := workspace.DB().Exec(`DELETE FROM blob_usage_totals`); err != nil {
+		t.Fatalf("clear blob usage totals: %v", err)
+	}
+
+	secondHash, _ := secondArtifact["content_hash"].(string)
+	if err := os.Remove(filepath.Join(workspace.Layout().ArtifactContentDir, secondHash)); err != nil {
+		t.Fatalf("remove second blob content: %v", err)
+	}
+
+	rebuild, err := store.RebuildBlobUsageLedger(context.Background())
+	if err != nil {
+		t.Fatalf("rebuild blob usage ledger: %v", err)
+	}
+	if rebuild.CanonicalHashes != 2 {
+		t.Fatalf("expected 2 canonical hashes, got %d", rebuild.CanonicalHashes)
+	}
+	if rebuild.MissingBlobObjects != 1 {
+		t.Fatalf("expected 1 missing blob object, got %d", rebuild.MissingBlobObjects)
+	}
+	if rebuild.BlobObjects != 1 {
+		t.Fatalf("expected 1 rebuilt blob object, got %d", rebuild.BlobObjects)
+	}
+	if rebuild.BlobBytes != int64(len("alpha")) {
+		t.Fatalf("expected %d rebuilt blob bytes, got %d", len("alpha"), rebuild.BlobBytes)
+	}
+
+	summary, err := store.GetWorkspaceUsageSummary(context.Background())
+	if err != nil {
+		t.Fatalf("get workspace usage summary after rebuild: %v", err)
+	}
+	if summary.Usage.Artifacts != 2 {
+		t.Fatalf("expected 2 artifacts after rebuild, got %d", summary.Usage.Artifacts)
+	}
+	if summary.Usage.BlobObjects != 1 {
+		t.Fatalf("expected 1 blob object after rebuild, got %d", summary.Usage.BlobObjects)
+	}
+	if summary.Usage.BlobBytes != int64(len("alpha")) {
+		t.Fatalf("expected %d blob bytes after rebuild, got %d", len("alpha"), summary.Usage.BlobBytes)
+	}
+
+	if _, _, err := store.GetArtifactContent(context.Background(), firstArtifact["id"].(string)); err != nil {
+		t.Fatalf("get surviving artifact content: %v", err)
 	}
 }
 

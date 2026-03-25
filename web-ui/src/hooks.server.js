@@ -1,5 +1,4 @@
 import { dev } from "$app/environment";
-import { env } from "$env/dynamic/private";
 import { isProxyableCommand } from "$lib/coreRouteCatalog";
 import { getWorkspaceHeader } from "$lib/compat/workspaceCompat";
 import { stripBasePath } from "$lib/workspacePaths";
@@ -9,7 +8,6 @@ import {
   readWorkspaceRefreshToken,
   refreshWorkspaceAuthSession,
 } from "$lib/server/authSession";
-import { loadWorkspaceCatalog } from "$lib/server/workspaceCatalog";
 import { buildProxyRequestInit } from "$lib/server/coreProxy";
 import { resolveProxyTarget } from "$lib/server/proxyWorkspaceTarget";
 
@@ -26,15 +24,6 @@ function isDocumentNavigationRequest(request) {
 
   const accept = request.headers.get("accept") ?? "";
   return accept.includes("text/html");
-}
-
-function resolveWorkspaceTarget(event) {
-  const catalog = loadWorkspaceCatalog(env);
-  const workspaceSlug = getWorkspaceHeader(event.request.headers);
-  return resolveProxyTarget({
-    catalog,
-    workspaceSlug,
-  });
 }
 
 function shouldBypassProxy(pathname, method) {
@@ -201,7 +190,10 @@ export async function handle({ event, resolve }) {
     !shouldBypassProxy(pathname, method);
 
   if (proxyableRequest) {
-    const target = resolveWorkspaceTarget(event);
+    const target = await resolveProxyTarget({
+      event,
+      workspaceSlug: getWorkspaceHeader(event.request.headers),
+    });
     if (target.status) {
       return new Response(JSON.stringify(target.payload), {
         status: target.status,

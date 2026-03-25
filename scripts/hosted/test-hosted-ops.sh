@@ -123,6 +123,22 @@ seed_workspace_fixture() {
   local listen_port="$4"
   local log_file="$5"
   local server_pid
+  local instance_root env_file
+  local saved_blob_backend saved_blob_root saved_blob_bucket saved_blob_prefix saved_blob_region saved_blob_endpoint saved_blob_access_key_id saved_blob_secret_access_key saved_blob_session_token saved_blob_force_path_style
+
+  instance_root="$(dirname "$workspace_root")"
+  env_file="${instance_root}/config/env.production"
+  saved_blob_backend="${OAR_BLOB_BACKEND-__unset__}"
+  saved_blob_root="${OAR_BLOB_ROOT-__unset__}"
+  saved_blob_bucket="${OAR_BLOB_S3_BUCKET-__unset__}"
+  saved_blob_prefix="${OAR_BLOB_S3_PREFIX-__unset__}"
+  saved_blob_region="${OAR_BLOB_S3_REGION-__unset__}"
+  saved_blob_endpoint="${OAR_BLOB_S3_ENDPOINT-__unset__}"
+  saved_blob_access_key_id="${OAR_BLOB_S3_ACCESS_KEY_ID-__unset__}"
+  saved_blob_secret_access_key="${OAR_BLOB_S3_SECRET_ACCESS_KEY-__unset__}"
+  saved_blob_session_token="${OAR_BLOB_S3_SESSION_TOKEN-__unset__}"
+  saved_blob_force_path_style="${OAR_BLOB_S3_FORCE_PATH_STYLE-__unset__}"
+  load_dotenv_file "$env_file"
   start_core_server \
     server_pid \
     "$core_bin" \
@@ -160,6 +176,23 @@ seed_workspace_fixture() {
 
   stop_background_process "$server_pid"
   trap - RETURN
+  for env_name in \
+    OAR_BLOB_BACKEND OAR_BLOB_ROOT OAR_BLOB_S3_BUCKET OAR_BLOB_S3_PREFIX OAR_BLOB_S3_REGION \
+    OAR_BLOB_S3_ENDPOINT OAR_BLOB_S3_ACCESS_KEY_ID OAR_BLOB_S3_SECRET_ACCESS_KEY \
+    OAR_BLOB_S3_SESSION_TOKEN OAR_BLOB_S3_FORCE_PATH_STYLE
+  do
+    unset "$env_name"
+  done
+  [[ "$saved_blob_backend" == "__unset__" ]] || export OAR_BLOB_BACKEND="$saved_blob_backend"
+  [[ "$saved_blob_root" == "__unset__" ]] || export OAR_BLOB_ROOT="$saved_blob_root"
+  [[ "$saved_blob_bucket" == "__unset__" ]] || export OAR_BLOB_S3_BUCKET="$saved_blob_bucket"
+  [[ "$saved_blob_prefix" == "__unset__" ]] || export OAR_BLOB_S3_PREFIX="$saved_blob_prefix"
+  [[ "$saved_blob_region" == "__unset__" ]] || export OAR_BLOB_S3_REGION="$saved_blob_region"
+  [[ "$saved_blob_endpoint" == "__unset__" ]] || export OAR_BLOB_S3_ENDPOINT="$saved_blob_endpoint"
+  [[ "$saved_blob_access_key_id" == "__unset__" ]] || export OAR_BLOB_S3_ACCESS_KEY_ID="$saved_blob_access_key_id"
+  [[ "$saved_blob_secret_access_key" == "__unset__" ]] || export OAR_BLOB_S3_SECRET_ACCESS_KEY="$saved_blob_secret_access_key"
+  [[ "$saved_blob_session_token" == "__unset__" ]] || export OAR_BLOB_S3_SESSION_TOKEN="$saved_blob_session_token"
+  [[ "$saved_blob_force_path_style" == "__unset__" ]] || export OAR_BLOB_S3_FORCE_PATH_STYLE="$saved_blob_force_path_style"
 }
 
 restore_bundle() {
@@ -178,14 +211,27 @@ restore_bundle() {
     --core-instance-id "$core_instance_id"
 }
 
+instance_local_blob_root() {
+  local instance_root="$1"
+  local workspace_root="${instance_root}/workspace"
+  local env_file="${instance_root}/config/env.production"
+  local blob_backend blob_root
+  blob_backend="$(dotenv_get "$env_file" OAR_BLOB_BACKEND || true)"
+  blob_root="$(dotenv_get "$env_file" OAR_BLOB_ROOT || true)"
+  [[ -n "$blob_backend" ]] || blob_backend="filesystem"
+  blob_effective_local_root "$workspace_root" "$blob_backend" "$blob_root"
+}
+
 replace_blob_with_dummy() {
-  local workspace_root="$1"
+  local instance_root="$1"
   local missing_hash="$2"
   local dummy_name="$3"
   local expected_count="$4"
-  rm -f "${workspace_root}/artifacts/content/${missing_hash}"
-  printf 'placeholder-%s\n' "$dummy_name" >"${workspace_root}/artifacts/content/${dummy_name}"
-  assert_equals "$expected_count" "$(count_files "${workspace_root}/artifacts/content")" "blob file count after ${dummy_name} mutation"
+  local blob_root
+  blob_root="$(instance_local_blob_root "$instance_root")"
+  rm -f "${blob_root}/${missing_hash}"
+  printf 'placeholder-%s\n' "$dummy_name" >"${blob_root}/${dummy_name}"
+  assert_equals "$expected_count" "$(count_files "$blob_root")" "blob file count after ${dummy_name} mutation"
 }
 
 TMP_ROOT="$(mktemp -d)"
@@ -198,6 +244,12 @@ INSTANCE_ROOT="${TMP_ROOT}/source/team-alpha"
 BACKUP_DIR="${TMP_ROOT}/backup-bundle"
 RESTORE_ROOT="${TMP_ROOT}/restored/team-beta"
 NON_EMPTY_RESTORE_ROOT="${TMP_ROOT}/restored/non-empty"
+OBJECT_INSTANCE_ROOT="${TMP_ROOT}/source/team-object"
+OBJECT_BACKUP_DIR="${TMP_ROOT}/backup-object-bundle"
+OBJECT_RESTORE_ROOT="${TMP_ROOT}/restored/team-object-restore"
+S3_SOURCE_ROOT="${TMP_ROOT}/source/team-s3"
+S3_BACKUP_DIR="${TMP_ROOT}/backup-s3-bundle"
+S3_RESTORE_ROOT="${TMP_ROOT}/restored/team-s3-restore"
 RESTORE_INSTANCE_NAME="team-beta"
 RESTORE_PUBLIC_ORIGIN="https://team-beta.example.test"
 RESTORE_CORE_INSTANCE_ID="team-beta-core"
@@ -226,7 +278,7 @@ BACKUP_DIR="$(cd "$BACKUP_DIR" && pwd -P)"
 assert_file_exists "${BACKUP_DIR}/manifest.env"
 assert_file_exists "${BACKUP_DIR}/SHA256SUMS"
 assert_file_exists "${BACKUP_DIR}/workspace/state.sqlite"
-assert_dir_exists "${BACKUP_DIR}/workspace/artifacts/content"
+assert_dir_exists "${BACKUP_DIR}/workspace/blob-store"
 assert_path_missing "${BACKUP_DIR}/config/env.production"
 assert_file_exists "${BACKUP_DIR}/metadata/instance.env"
 
@@ -242,7 +294,10 @@ assert_equals "2" "$(manifest_get "${BACKUP_DIR}/manifest.env" BLOB_FILE_COUNT)"
 assert_file_contains "${BACKUP_DIR}/manifest.env" "SQLITE_SCHEMA_VERSION=" "manifest sqlite schema version"
 assert_file_contains "${BACKUP_DIR}/manifest.env" "SQLITE_USER_VERSION=" "manifest sqlite user version"
 assert_equals "filesystem" "$(manifest_get "${BACKUP_DIR}/manifest.env" BLOB_BACKEND)" "manifest blob backend"
+assert_equals "local" "$(manifest_get "${BACKUP_DIR}/manifest.env" BLOB_STORAGE_MODE)" "manifest blob storage mode"
+assert_equals "copy" "$(manifest_get "${BACKUP_DIR}/manifest.env" BLOB_BACKUP_MODE)" "manifest blob backup mode"
 assert_equals "sha256-hex-filename" "$(manifest_get "${BACKUP_DIR}/manifest.env" BLOB_KEY_FORMAT)" "manifest blob key format"
+assert_equals "workspace/blob-store" "$(manifest_get "${BACKUP_DIR}/manifest.env" BLOB_BUNDLE_PATH)" "manifest blob bundle path"
 [[ -n "$(manifest_get "${BACKUP_DIR}/manifest.env" VERIFY_ARTIFACT_ID)" ]] || die "expected manifest verify artifact id"
 assert_equals "ops-runbook" "$(manifest_get "${BACKUP_DIR}/manifest.env" VERIFY_DOCUMENT_ID)" "manifest verify document id"
 [[ -n "$(manifest_get "${BACKUP_DIR}/manifest.env" VERIFY_DOCUMENT_REVISION_ID)" ]] || die "expected manifest verify document revision id"
@@ -259,7 +314,7 @@ BACKUP_WITH_SECRETS_DIR="$(cd "$BACKUP_WITH_SECRETS_DIR" && pwd -P)"
 assert_file_exists "${BACKUP_WITH_SECRETS_DIR}/manifest.env"
 assert_file_exists "${BACKUP_WITH_SECRETS_DIR}/SHA256SUMS"
 assert_file_exists "${BACKUP_WITH_SECRETS_DIR}/workspace/state.sqlite"
-assert_dir_exists "${BACKUP_WITH_SECRETS_DIR}/workspace/artifacts/content"
+assert_dir_exists "${BACKUP_WITH_SECRETS_DIR}/workspace/blob-store"
 assert_file_exists "${BACKUP_WITH_SECRETS_DIR}/config/env.production"
 assert_file_exists "${BACKUP_WITH_SECRETS_DIR}/metadata/instance.env"
 
@@ -322,12 +377,15 @@ assert_equals "$RESTORE_PUBLIC_ORIGIN" "$(dotenv_get "${RESTORE_ROOT}/config/env
 assert_equals "$RESTORE_PUBLIC_ORIGIN" "$(dotenv_get "${RESTORE_ROOT}/config/env.production" OAR_WEBAUTHN_ORIGIN)" "restored webauthn origin"
 assert_equals "$RESTORE_CORE_INSTANCE_ID" "$(dotenv_get "${RESTORE_ROOT}/config/env.production" OAR_CORE_INSTANCE_ID)" "restored core instance id"
 assert_equals "$HOSTED_BOOTSTRAP_PLACEHOLDER" "$(dotenv_get "${RESTORE_ROOT}/config/env.production" OAR_BOOTSTRAP_TOKEN)" "restored bootstrap token default"
+assert_equals "filesystem" "$(dotenv_get "${RESTORE_ROOT}/config/env.production" OAR_BLOB_BACKEND)" "restored blob backend"
 assert_equals "$RESTORE_INSTANCE_NAME" "$(dotenv_get "${RESTORE_ROOT}/metadata/instance.env" INSTANCE_NAME)" "restored instance name"
 assert_equals "$RESTORE_ROOT" "$(dotenv_get "${RESTORE_ROOT}/metadata/instance.env" INSTANCE_ROOT)" "restored metadata instance root"
 assert_equals "${RESTORE_ROOT}/workspace" "$(dotenv_get "${RESTORE_ROOT}/metadata/instance.env" WORKSPACE_ROOT)" "restored metadata workspace root"
 assert_equals "$RESTORE_PUBLIC_ORIGIN" "$(dotenv_get "${RESTORE_ROOT}/metadata/instance.env" PUBLIC_ORIGIN)" "restored metadata public origin"
 assert_equals "$RESTORE_CORE_INSTANCE_ID" "$(dotenv_get "${RESTORE_ROOT}/metadata/instance.env" CORE_INSTANCE_ID)" "restored metadata core instance id"
 assert_equals "placeholder" "$(dotenv_get "${RESTORE_ROOT}/metadata/instance.env" BOOTSTRAP_TOKEN_CONFIGURED)" "restored metadata bootstrap state"
+assert_equals "filesystem" "$(dotenv_get "${RESTORE_ROOT}/metadata/instance.env" BLOB_BACKEND)" "restored metadata blob backend"
+assert_equals "copied-local-blob-store" "$(dotenv_get "${RESTORE_ROOT}/metadata/restore-receipt.env" TARGET_BLOB_RESTORE_ACTION)" "restore receipt blob action"
 assert_equals "placeholder" "$(dotenv_get "${RESTORE_ROOT}/metadata/restore-receipt.env" BOOTSTRAP_TOKEN_MODE)" "restore receipt bootstrap mode"
 assert_equals "disabled" "$(dotenv_get "${RESTORE_ROOT}/metadata/restore-receipt.env" EXPECTED_ACTIVE_BOOTSTRAP_STATE)" "restore receipt expected bootstrap state"
 assert_equals "$(manifest_get "${BACKUP_DIR}/manifest.env" PUBLIC_ORIGIN)" "$(dotenv_get "${RESTORE_ROOT}/metadata/restore-source-manifest.env" PUBLIC_ORIGIN)" "source manifest preserved"
@@ -348,7 +406,7 @@ restore_bundle "$BACKUP_DIR" "$MISSING_BLOB_ROOT" 8014 3014 "team-beta-core-miss
 MISSING_BLOB_ROOT="$(cd "$MISSING_BLOB_ROOT" && pwd -P)"
 MISSING_ARTIFACT_HASH="$(sqlite_scalar "${MISSING_BLOB_ROOT}/workspace/state.sqlite" "SELECT COALESCE(content_hash, '') FROM artifacts WHERE kind != 'doc' ORDER BY created_at ASC, id ASC LIMIT 1;")"
 [[ -n "$MISSING_ARTIFACT_HASH" ]] || die "expected non-document artifact hash in restored fixture"
-replace_blob_with_dummy "${MISSING_BLOB_ROOT}/workspace" "$MISSING_ARTIFACT_HASH" "placeholder-artifact-blob" "$EXPECTED_BLOB_FILE_COUNT"
+replace_blob_with_dummy "$MISSING_BLOB_ROOT" "$MISSING_ARTIFACT_HASH" "placeholder-artifact-blob" "$EXPECTED_BLOB_FILE_COUNT"
 MISSING_BLOB_ERR="${TMP_ROOT}/missing-blob.err"
 assert_command_fails "$MISSING_BLOB_ERR" \
   "${SCRIPT_DIR}/verify-restore.sh" \
@@ -362,7 +420,7 @@ restore_bundle "$BACKUP_DIR" "$MISSING_DOC_ROOT" 8015 3015 "team-beta-core-missi
 MISSING_DOC_ROOT="$(cd "$MISSING_DOC_ROOT" && pwd -P)"
 MISSING_DOC_HASH="$(sqlite_scalar "${MISSING_DOC_ROOT}/workspace/state.sqlite" "SELECT COALESCE(a.content_hash, '') FROM document_revisions dr JOIN artifacts a ON a.id = dr.artifact_id ORDER BY dr.revision_number ASC, dr.revision_id ASC LIMIT 1;")"
 [[ -n "$MISSING_DOC_HASH" ]] || die "expected document revision hash in restored fixture"
-replace_blob_with_dummy "${MISSING_DOC_ROOT}/workspace" "$MISSING_DOC_HASH" "placeholder-document-blob" "$EXPECTED_BLOB_FILE_COUNT"
+replace_blob_with_dummy "$MISSING_DOC_ROOT" "$MISSING_DOC_HASH" "placeholder-document-blob" "$EXPECTED_BLOB_FILE_COUNT"
 MISSING_DOC_ERR="${TMP_ROOT}/missing-doc.err"
 assert_command_fails "$MISSING_DOC_ERR" \
   "${SCRIPT_DIR}/verify-restore.sh" \
@@ -390,6 +448,115 @@ RESTORE_WITH_SECRETS_ROOT="$(cd "$RESTORE_WITH_SECRETS_ROOT" && pwd -P)"
 assert_equals "${RESTORE_WITH_SECRETS_ROOT}/workspace" "$(dotenv_get "${RESTORE_WITH_SECRETS_ROOT}/config/env.production" HOST_OAR_WORKSPACE_ROOT)" "restore with secrets workspace root"
 assert_equals "team-gamma-core" "$(dotenv_get "${RESTORE_WITH_SECRETS_ROOT}/config/env.production" OAR_CORE_INSTANCE_ID)" "restore with secrets instance id"
 assert_equals "$HOSTED_BOOTSTRAP_PLACEHOLDER" "$(dotenv_get "${RESTORE_WITH_SECRETS_ROOT}/config/env.production" OAR_BOOTSTRAP_TOKEN)" "restore with secrets bootstrap token default"
+assert_equals "filesystem" "$(dotenv_get "${RESTORE_WITH_SECRETS_ROOT}/config/env.production" OAR_BLOB_BACKEND)" "restore with secrets blob backend"
+
+"${SCRIPT_DIR}/provision-workspace.sh" \
+  --instance team-object \
+  --instance-root "$OBJECT_INSTANCE_ROOT" \
+  --public-origin https://team-object.example.test \
+  --listen-port 8020 \
+  --web-ui-port 3020 \
+  --blob-backend object \
+  --blob-root blob-store \
+  --generate-bootstrap-token
+OBJECT_INSTANCE_ROOT="$(cd "$OBJECT_INSTANCE_ROOT" && pwd -P)"
+
+seed_workspace_fixture "${OBJECT_INSTANCE_ROOT}/workspace" "$CORE_BIN" "$SCHEMA_PATH" "$(pick_loopback_port)" "${TMP_ROOT}/seed-object.log"
+
+"${SCRIPT_DIR}/backup-workspace.sh" \
+  --instance-root "$OBJECT_INSTANCE_ROOT" \
+  --output-dir "$OBJECT_BACKUP_DIR"
+OBJECT_BACKUP_DIR="$(cd "$OBJECT_BACKUP_DIR" && pwd -P)"
+
+assert_dir_exists "${OBJECT_BACKUP_DIR}/workspace/blob-store"
+assert_equals "object" "$(manifest_get "${OBJECT_BACKUP_DIR}/manifest.env" BLOB_BACKEND)" "object manifest blob backend"
+assert_equals "local" "$(manifest_get "${OBJECT_BACKUP_DIR}/manifest.env" BLOB_STORAGE_MODE)" "object manifest blob storage mode"
+assert_equals "copy" "$(manifest_get "${OBJECT_BACKUP_DIR}/manifest.env" BLOB_BACKUP_MODE)" "object manifest blob backup mode"
+assert_equals "${OBJECT_INSTANCE_ROOT}/blob-store" "$(manifest_get "${OBJECT_BACKUP_DIR}/manifest.env" BLOB_ROOT)" "object manifest blob root"
+assert_equals "workspace/blob-store" "$(manifest_get "${OBJECT_BACKUP_DIR}/manifest.env" BLOB_BUNDLE_PATH)" "object manifest blob bundle path"
+
+"${SCRIPT_DIR}/restore-workspace.sh" \
+  --backup-dir "$OBJECT_BACKUP_DIR" \
+  --target-instance-root "$OBJECT_RESTORE_ROOT" \
+  --instance "team-object-restore" \
+  --public-origin "https://team-object-restore.example.test" \
+  --listen-port 8021 \
+  --web-ui-port 3021 \
+  --core-instance-id "team-object-restore-core"
+OBJECT_RESTORE_ROOT="$(cd "$OBJECT_RESTORE_ROOT" && pwd -P)"
+
+"${SCRIPT_DIR}/verify-restore.sh" \
+  --instance-root "$OBJECT_RESTORE_ROOT" \
+  --core-bin "$CORE_BIN" \
+  --schema-path "$SCHEMA_PATH"
+
+assert_equals "object" "$(dotenv_get "${OBJECT_RESTORE_ROOT}/config/env.production" OAR_BLOB_BACKEND)" "object restore env blob backend"
+assert_equals "${OBJECT_RESTORE_ROOT}/blob-store" "$(dotenv_get "${OBJECT_RESTORE_ROOT}/config/env.production" OAR_BLOB_ROOT)" "object restore env blob root"
+assert_equals "object" "$(dotenv_get "${OBJECT_RESTORE_ROOT}/metadata/instance.env" BLOB_BACKEND)" "object restore metadata blob backend"
+assert_equals "${OBJECT_RESTORE_ROOT}/blob-store" "$(dotenv_get "${OBJECT_RESTORE_ROOT}/metadata/instance.env" BLOB_ROOT)" "object restore metadata blob root"
+assert_equals "copied-local-blob-store" "$(dotenv_get "${OBJECT_RESTORE_ROOT}/metadata/restore-receipt.env" TARGET_BLOB_RESTORE_ACTION)" "object restore receipt blob action"
+
+"${SCRIPT_DIR}/provision-workspace.sh" \
+  --instance team-s3 \
+  --instance-root "$S3_SOURCE_ROOT" \
+  --public-origin https://team-s3.example.test \
+  --listen-port 8022 \
+  --web-ui-port 3022 \
+  --generate-bootstrap-token
+S3_SOURCE_ROOT="$(cd "$S3_SOURCE_ROOT" && pwd -P)"
+
+seed_workspace_fixture "${S3_SOURCE_ROOT}/workspace" "$CORE_BIN" "$SCHEMA_PATH" "$(pick_loopback_port)" "${TMP_ROOT}/seed-s3-synthetic.log"
+
+"${SCRIPT_DIR}/provision-workspace.sh" \
+  --instance team-s3 \
+  --instance-root "$S3_SOURCE_ROOT" \
+  --public-origin https://team-s3.example.test \
+  --listen-port 8022 \
+  --web-ui-port 3022 \
+  --blob-backend s3 \
+  --blob-s3-bucket oar-test-blobs \
+  --blob-s3-prefix workspaces/team-s3/ \
+  --blob-s3-region auto \
+  --blob-s3-endpoint https://r2.example.test \
+  --blob-s3-force-path-style true \
+  --force
+
+"${SCRIPT_DIR}/backup-workspace.sh" \
+  --instance-root "$S3_SOURCE_ROOT" \
+  --output-dir "$S3_BACKUP_DIR"
+S3_BACKUP_DIR="$(cd "$S3_BACKUP_DIR" && pwd -P)"
+
+assert_path_missing "${S3_BACKUP_DIR}/workspace/blob-store"
+assert_equals "s3" "$(manifest_get "${S3_BACKUP_DIR}/manifest.env" BLOB_BACKEND)" "s3 manifest blob backend"
+assert_equals "remote" "$(manifest_get "${S3_BACKUP_DIR}/manifest.env" BLOB_STORAGE_MODE)" "s3 manifest blob storage mode"
+assert_equals "reference" "$(manifest_get "${S3_BACKUP_DIR}/manifest.env" BLOB_BACKUP_MODE)" "s3 manifest blob backup mode"
+assert_equals "0" "$(manifest_get "${S3_BACKUP_DIR}/manifest.env" BLOB_FILE_COUNT)" "s3 manifest blob file count"
+assert_equals "" "$(manifest_get "${S3_BACKUP_DIR}/manifest.env" BLOB_BUNDLE_PATH)" "s3 manifest blob bundle path"
+assert_equals "oar-test-blobs" "$(manifest_get "${S3_BACKUP_DIR}/manifest.env" BLOB_S3_BUCKET)" "s3 manifest bucket"
+assert_equals "workspaces/team-s3/" "$(manifest_get "${S3_BACKUP_DIR}/manifest.env" BLOB_S3_PREFIX)" "s3 manifest prefix"
+assert_equals "auto" "$(manifest_get "${S3_BACKUP_DIR}/manifest.env" BLOB_S3_REGION)" "s3 manifest region"
+assert_equals "https://r2.example.test" "$(manifest_get "${S3_BACKUP_DIR}/manifest.env" BLOB_S3_ENDPOINT)" "s3 manifest endpoint"
+assert_equals "true" "$(manifest_get "${S3_BACKUP_DIR}/manifest.env" BLOB_S3_FORCE_PATH_STYLE)" "s3 manifest force path style"
+
+"${SCRIPT_DIR}/restore-workspace.sh" \
+  --backup-dir "$S3_BACKUP_DIR" \
+  --target-instance-root "$S3_RESTORE_ROOT" \
+  --instance "team-s3-restore" \
+  --public-origin "https://team-s3-restore.example.test" \
+  --listen-port 8023 \
+  --web-ui-port 3023 \
+  --core-instance-id "team-s3-restore-core"
+S3_RESTORE_ROOT="$(cd "$S3_RESTORE_ROOT" && pwd -P)"
+
+assert_equals "s3" "$(dotenv_get "${S3_RESTORE_ROOT}/config/env.production" OAR_BLOB_BACKEND)" "s3 restore env blob backend"
+assert_equals "oar-test-blobs" "$(dotenv_get "${S3_RESTORE_ROOT}/config/env.production" OAR_BLOB_S3_BUCKET)" "s3 restore env bucket"
+assert_equals "workspaces/team-s3/" "$(dotenv_get "${S3_RESTORE_ROOT}/config/env.production" OAR_BLOB_S3_PREFIX)" "s3 restore env prefix"
+assert_equals "auto" "$(dotenv_get "${S3_RESTORE_ROOT}/config/env.production" OAR_BLOB_S3_REGION)" "s3 restore env region"
+assert_equals "https://r2.example.test" "$(dotenv_get "${S3_RESTORE_ROOT}/config/env.production" OAR_BLOB_S3_ENDPOINT)" "s3 restore env endpoint"
+assert_equals "true" "$(dotenv_get "${S3_RESTORE_ROOT}/config/env.production" OAR_BLOB_S3_FORCE_PATH_STYLE)" "s3 restore env force path style"
+assert_equals "s3" "$(dotenv_get "${S3_RESTORE_ROOT}/metadata/instance.env" BLOB_BACKEND)" "s3 restore metadata blob backend"
+assert_equals "reference-remote-blob-store" "$(dotenv_get "${S3_RESTORE_ROOT}/metadata/restore-receipt.env" TARGET_BLOB_RESTORE_ACTION)" "s3 restore receipt blob action"
+assert_equals "s3://oar-test-blobs/workspaces/team-s3/" "$(dotenv_get "${S3_RESTORE_ROOT}/metadata/restore-receipt.env" TARGET_BLOB_EFFECTIVE_LOCATION)" "s3 restore receipt blob location"
 
 KEEP_SOURCE_ERR="${TMP_ROOT}/keep-source-err"
 if "${SCRIPT_DIR}/restore-workspace.sh" \

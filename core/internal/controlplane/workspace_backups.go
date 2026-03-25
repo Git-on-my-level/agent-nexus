@@ -268,7 +268,8 @@ func (s *Service) runWorkspaceBackupJob(ctx context.Context, workspace Workspace
 
 	now := s.now().UTC()
 	nowText := now.Format(time.RFC3339Nano)
-	outputDir := filepath.Join(workspace.DeploymentRoot, "backups", fmt.Sprintf("%s-%s", workspace.Slug, now.Format("20060102T150405Z")))
+	deploymentRoot := s.workspaceDeploymentRoot(workspace)
+	outputDir := filepath.Join(deploymentRoot, "backups", fmt.Sprintf("%s-%s", workspace.Slug, now.Format("20060102T150405Z")))
 	job := ProvisioningJob{
 		ID:              "job_" + uuid.NewString(),
 		OrganizationID:  workspace.OrganizationID,
@@ -283,7 +284,7 @@ func (s *Service) runWorkspaceBackupJob(ctx context.Context, workspace Workspace
 			"backup_dir":     outputDir,
 			"schedule_name":  scheduleName,
 			"retention_days": retentionDays,
-			"instance_root":  workspace.DeploymentRoot,
+			"instance_root":  deploymentRoot,
 		},
 	}
 	run := workspaceBackupRunRow{

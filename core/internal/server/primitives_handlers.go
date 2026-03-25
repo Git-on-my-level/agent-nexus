@@ -316,6 +316,21 @@ func handleGetUsageSummary(w http.ResponseWriter, r *http.Request, opts handlerO
 	writeJSON(w, http.StatusOK, map[string]any{"summary": summary})
 }
 
+func handleRebuildBlobUsageLedger(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+
+	result, err := opts.primitiveStore.RebuildBlobUsageLedger(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to rebuild blob usage ledger")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"rebuild": result})
+}
+
 func handleListArtifacts(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")

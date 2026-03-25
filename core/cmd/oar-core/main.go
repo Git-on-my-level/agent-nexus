@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"syscall"
@@ -17,6 +19,7 @@ import (
 	"organization-autorunner-core/internal/auth"
 	"organization-autorunner-core/internal/blob"
 	"organization-autorunner-core/internal/controlplaneauth"
+	"organization-autorunner-core/internal/controlplaneauth/heartbeat"
 	"organization-autorunner-core/internal/primitives"
 	"organization-autorunner-core/internal/schema"
 	"organization-autorunner-core/internal/server"
@@ -55,6 +58,14 @@ func main() {
 		workspaceRoot              = envString("OAR_WORKSPACE_ROOT", defaultWorkspaceRoot)
 		blobBackend                = envString("OAR_BLOB_BACKEND", "filesystem")
 		blobRoot                   = envString("OAR_BLOB_ROOT", "")
+		blobS3Bucket               = envString("OAR_BLOB_S3_BUCKET", "")
+		blobS3Prefix               = envString("OAR_BLOB_S3_PREFIX", "")
+		blobS3Region               = envString("OAR_BLOB_S3_REGION", "")
+		blobS3Endpoint             = envString("OAR_BLOB_S3_ENDPOINT", "")
+		blobS3AccessKeyID          = envString("OAR_BLOB_S3_ACCESS_KEY_ID", "")
+		blobS3SecretAccessKey      = envString("OAR_BLOB_S3_SECRET_ACCESS_KEY", "")
+		blobS3SessionToken         = envString("OAR_BLOB_S3_SESSION_TOKEN", "")
+		blobS3ForcePathStyle       = envBool("OAR_BLOB_S3_FORCE_PATH_STYLE", false)
 		coreVersion                = envString("OAR_CORE_VERSION", "")
 		apiVersion                 = envString("OAR_API_VERSION", defaultAPIVersion)
 		minCLIVersion              = envString("OAR_MIN_CLI_VERSION", defaultMinCLIVersion)
@@ -63,6 +74,7 @@ func main() {
 		coreInstanceID             = envString("OAR_CORE_INSTANCE_ID", defaultInstanceID)
 		metaCommandsPath           = envString("OAR_META_COMMANDS_PATH", "")
 		streamPollInterval         = envDuration("OAR_STREAM_POLL_INTERVAL", time.Second)
+		projectionMode             = envString("OAR_PROJECTION_MODE", server.ProjectionModeBackground)
 		projectionPollInterval     = envDuration("OAR_PROJECTION_MAINTENANCE_INTERVAL", 5*time.Second)
 		staleScanInterval          = envDuration("OAR_PROJECTION_STALE_SCAN_INTERVAL", 30*time.Second)
 		projectionBatchSize        = envInt("OAR_PROJECTION_MAINTENANCE_BATCH_SIZE", 50)
@@ -74,6 +86,8 @@ func main() {
 		webAuthnOrigin             = envString("OAR_WEBAUTHN_ORIGIN", "")
 		webAuthnDisplayName        = envString("OAR_WEBAUTHN_RP_DISPLAY_NAME", "OAR")
 		humanAuthMode              = envString("OAR_HUMAN_AUTH_MODE", controlplaneauth.HumanAuthModeWorkspaceLocal)
+		controlPlaneBaseURL        = envString("OAR_CONTROL_PLANE_BASE_URL", "")
+		controlPlaneHeartbeatIntvl = envDuration("OAR_CONTROL_PLANE_HEARTBEAT_INTERVAL", heartbeat.DefaultInterval)
 		controlPlaneTokenIssuer    = envString("OAR_CONTROL_PLANE_TOKEN_ISSUER", "")
 		controlPlaneTokenAudience  = envString("OAR_CONTROL_PLANE_TOKEN_AUDIENCE", "")
 		controlPlaneWorkspaceID    = envString("OAR_CONTROL_PLANE_WORKSPACE_ID", "")
@@ -107,8 +121,8 @@ func main() {
 	flag.StringVar(&listenAddress, "listen-addr", listenAddress, "full listen address host:port; overrides --host/--port")
 	flag.StringVar(&schemaPath, "schema-path", schemaPath, "path to ../contracts/oar-schema.yaml")
 	flag.StringVar(&workspaceRoot, "workspace-root", workspaceRoot, "root directory for sqlite/filesystem workspace")
-	flag.StringVar(&blobBackend, "blob-backend", blobBackend, "blob storage backend (filesystem|object)")
-	flag.StringVar(&blobRoot, "blob-root", blobRoot, "root directory for blob storage (defaults to workspace artifacts/content)")
+	flag.StringVar(&blobBackend, "blob-backend", blobBackend, "blob storage backend (filesystem|object|s3)")
+	flag.StringVar(&blobRoot, "blob-root", blobRoot, "root directory for filesystem/object blob storage (defaults to workspace artifacts/content)")
 	flag.StringVar(&coreVersion, "core-version", coreVersion, "core version reported in handshake/version headers (defaults to schema version)")
 	flag.StringVar(&apiVersion, "api-version", apiVersion, "api version reported in handshake/version headers")
 	flag.StringVar(&minCLIVersion, "min-cli-version", minCLIVersion, "minimum compatible CLI version")
@@ -117,10 +131,18 @@ func main() {
 	flag.StringVar(&coreInstanceID, "core-instance-id", coreInstanceID, "stable core instance identifier for handshake metadata")
 	flag.StringVar(&metaCommandsPath, "meta-commands-path", metaCommandsPath, "path to generated commands metadata JSON")
 	flag.DurationVar(&streamPollInterval, "stream-poll-interval", streamPollInterval, "poll interval used by SSE stream endpoints")
+	flag.StringVar(&projectionMode, "projection-mode", projectionMode, "projection maintenance mode (background|manual)")
 	flag.DurationVar(&projectionPollInterval, "projection-maintenance-interval", projectionPollInterval, "poll interval used by background projection maintenance")
 	flag.DurationVar(&staleScanInterval, "projection-stale-scan-interval", staleScanInterval, "interval used by background stale-thread scanning")
 	flag.IntVar(&projectionBatchSize, "projection-maintenance-batch-size", projectionBatchSize, "max dirty thread projections refreshed per maintenance pass")
 	flag.Parse()
+
+	parsedProjectionMode, err := server.ParseProjectionMode(projectionMode)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+	projectionMode = parsedProjectionMode
 
 	workspace, err := storage.InitializeWorkspace(context.Background(), workspaceRoot)
 	if err != nil {
@@ -153,19 +175,22 @@ func main() {
 		streamPollInterval = time.Second
 	}
 
-	effectiveBlobRoot := blobRoot
-	if effectiveBlobRoot == "" {
-		effectiveBlobRoot = workspace.Layout().ArtifactContentDir
-	}
-
-	var blobBackendImpl blob.Backend
-	switch blobBackend {
-	case "filesystem":
-		blobBackendImpl = blob.NewFilesystemBackend(effectiveBlobRoot)
-	case "object":
-		blobBackendImpl = blob.NewObjectStoreBackend(effectiveBlobRoot)
-	default:
-		fmt.Fprintf(os.Stderr, "unknown blob backend: %s (supported: filesystem, object)\n", blobBackend)
+	blobBackendImpl, effectiveBlobRoot, err := buildBlobBackend(context.Background(), workspace.Layout(), blobBackendConfig{
+		Backend: blobBackend,
+		Root:    blobRoot,
+		S3: blob.S3BackendConfig{
+			Bucket:          blobS3Bucket,
+			Prefix:          blobS3Prefix,
+			Region:          blobS3Region,
+			Endpoint:        blobS3Endpoint,
+			AccessKeyID:     blobS3AccessKeyID,
+			SecretAccessKey: blobS3SecretAccessKey,
+			SessionToken:    blobS3SessionToken,
+			ForcePathStyle:  blobS3ForcePathStyle,
+		},
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "invalid blob backend configuration: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -186,6 +211,7 @@ func main() {
 		controlPlaneVerifier *controlplaneauth.WorkspaceHumanVerifier
 		serviceIdentity      *controlplaneauth.WorkspaceServiceIdentity
 	)
+	needsWorkspaceServiceIdentity := strings.TrimSpace(humanAuthMode) == controlplaneauth.HumanAuthModeControlPlane || strings.TrimSpace(controlPlaneBaseURL) != ""
 	switch strings.TrimSpace(humanAuthMode) {
 	case controlplaneauth.HumanAuthModeWorkspaceLocal:
 	case controlplaneauth.HumanAuthModeControlPlane:
@@ -204,6 +230,11 @@ func main() {
 			fmt.Fprintf(os.Stderr, "invalid control-plane human auth configuration: %v\n", err)
 			os.Exit(1)
 		}
+	default:
+		fmt.Fprintf(os.Stderr, "invalid OAR_HUMAN_AUTH_MODE %q (supported: %s, %s)\n", humanAuthMode, controlplaneauth.HumanAuthModeWorkspaceLocal, controlplaneauth.HumanAuthModeControlPlane)
+		os.Exit(1)
+	}
+	if needsWorkspaceServiceIdentity {
 		servicePrivateKey, err := controlplaneauth.ParseEd25519PrivateKeyBase64(workspaceServicePrivateKey)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "invalid OAR_WORKSPACE_SERVICE_PRIVATE_KEY: %v\n", err)
@@ -217,19 +248,58 @@ func main() {
 			fmt.Fprintf(os.Stderr, "invalid workspace service identity configuration: %v\n", err)
 			os.Exit(1)
 		}
-	default:
-		fmt.Fprintf(os.Stderr, "invalid OAR_HUMAN_AUTH_MODE %q (supported: %s, %s)\n", humanAuthMode, controlplaneauth.HumanAuthModeWorkspaceLocal, controlplaneauth.HumanAuthModeControlPlane)
-		os.Exit(1)
 	}
 	primitiveStore := primitives.NewStore(workspace.DB(), blobBackendImpl, effectiveBlobRoot, primitives.WithWorkspaceQuota(workspaceQuota))
 	projectionMaintainer := server.NewProjectionMaintainer(server.ProjectionMaintainerConfig{
 		PrimitiveStore:    primitiveStore,
 		Contract:          contract,
+		Mode:              projectionMode,
 		PollInterval:      projectionPollInterval,
 		StaleScanInterval: staleScanInterval,
 		DirtyBatchSize:    projectionBatchSize,
 		SystemActorID:     "oar-core",
 	})
+	var heartbeatReporter *heartbeat.Reporter
+	if strings.TrimSpace(controlPlaneBaseURL) != "" {
+		heartbeatReporter, err = heartbeat.NewReporter(heartbeat.ReporterConfig{
+			BaseURL:     controlPlaneBaseURL,
+			WorkspaceID: controlPlaneWorkspaceID,
+			Interval:    controlPlaneHeartbeatIntvl,
+			Version:     coreVersion,
+			Build:       detectBuildString(coreInstanceID, coreVersion),
+			Identity:    serviceIdentity,
+			ReadinessSummary: func(ctx context.Context) map[string]any {
+				if err := workspace.Ping(ctx); err != nil {
+					return map[string]any{
+						"ok": false,
+						"error": map[string]any{
+							"code":    "storage_unavailable",
+							"message": "storage health check failed",
+						},
+					}
+				}
+				return map[string]any{"ok": true}
+			},
+			ProjectionMaintenanceSummary: func(ctx context.Context, now time.Time) map[string]any {
+				return toStringAnyMap(projectionMaintainer.Snapshot(ctx, now))
+			},
+			UsageSummary: func(ctx context.Context) (map[string]any, error) {
+				summary, err := primitiveStore.GetWorkspaceUsageSummary(ctx)
+				if err != nil {
+					return nil, err
+				}
+				return toStringAnyMap(summary), nil
+			},
+			LastSuccessfulBackupAt: func(ctx context.Context) (*string, error) {
+				_ = ctx
+				return heartbeat.DiscoverLastSuccessfulBackupAt(workspace.Layout().RootDir)
+			},
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "invalid heartbeat reporter configuration: %v\n", err)
+			os.Exit(1)
+		}
+	}
 	handler := server.NewHandler(
 		contract.Version,
 		server.WithHealthCheck(workspace.Ping),
@@ -276,9 +346,18 @@ func main() {
 	serverErr := make(chan error, 1)
 	maintenanceCtx, maintenanceCancel := context.WithCancel(context.Background())
 	defer maintenanceCancel()
-	go projectionMaintainer.Run(maintenanceCtx)
+	if projectionMode == server.ProjectionModeBackground {
+		go projectionMaintainer.Run(maintenanceCtx)
+	}
+	if heartbeatReporter != nil {
+		go heartbeatReporter.Run(maintenanceCtx)
+	}
 	go func() {
 		fmt.Printf("oar-core listening on http://%s\n", addr)
+		fmt.Printf("  projection mode: %s\n", projectionMode)
+		if heartbeatReporter != nil {
+			fmt.Printf("  control-plane heartbeat: %s (workspace_id=%s, interval=%s)\n", controlPlaneBaseURL, controlPlaneWorkspaceID, controlPlaneHeartbeatIntvl)
+		}
 		if enableDevActorMode {
 			fmt.Println("  WARNING: dev actor mode enabled (anonymous workspace reads and legacy actor flows)")
 		}
@@ -376,4 +455,54 @@ func envBool(name string, fallback bool) bool {
 		os.Exit(1)
 	}
 	return parsed
+}
+
+func toStringAnyMap(value any) map[string]any {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return map[string]any{}
+	}
+	out := map[string]any{}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return map[string]any{}
+	}
+	return out
+}
+
+func detectBuildString(coreInstanceID string, coreVersion string) string {
+	parts := make([]string, 0, 3)
+	if info, ok := debug.ReadBuildInfo(); ok {
+		if version := strings.TrimSpace(info.Main.Version); version != "" && version != "(devel)" {
+			parts = append(parts, version)
+		}
+		revision := ""
+		modified := false
+		for _, setting := range info.Settings {
+			switch setting.Key {
+			case "vcs.revision":
+				revision = strings.TrimSpace(setting.Value)
+			case "vcs.modified":
+				modified = strings.TrimSpace(setting.Value) == "true"
+			}
+		}
+		if len(revision) > 12 {
+			revision = revision[:12]
+		}
+		if revision != "" {
+			parts = append(parts, revision)
+		}
+		if modified {
+			parts = append(parts, "dirty")
+		}
+	}
+	if len(parts) > 0 {
+		return strings.Join(parts, "+")
+	}
+	if strings.TrimSpace(coreInstanceID) != "" {
+		return strings.TrimSpace(coreInstanceID)
+	}
+	if strings.TrimSpace(coreVersion) != "" {
+		return strings.TrimSpace(coreVersion)
+	}
+	return "oar-core"
 }

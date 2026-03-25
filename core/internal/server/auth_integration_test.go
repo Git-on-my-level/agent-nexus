@@ -1471,6 +1471,10 @@ func TestHostedModeProtectsWorkspaceReadsAndBlocksLegacyActorFlows(t *testing.T)
 	defer usageResp.Body.Close()
 	assertErrorCode(t, usageResp, "auth_required")
 
+	rebuildBlobUsageResp := postJSONExpectStatusWithAuth(t, serverURL+"/ops/blob-usage/rebuild", map[string]any{}, "", http.StatusUnauthorized)
+	defer rebuildBlobUsageResp.Body.Close()
+	assertErrorCode(t, rebuildBlobUsageResp, "auth_required")
+
 	createActorResp := postJSONExpectStatusWithAuth(t, serverURL+"/actors", map[string]any{
 		"actor": map[string]any{
 			"id":           "legacy-actor",
@@ -1517,6 +1521,18 @@ func TestHostedModeProtectsWorkspaceReadsAndBlocksLegacyActorFlows(t *testing.T)
 	authedUsageResp.Body.Close()
 	if usagePayload.Summary == nil {
 		t.Fatal("expected usage summary payload")
+	}
+
+	authedRebuildBlobUsageResp := postJSONExpectStatusWithAuth(t, serverURL+"/ops/blob-usage/rebuild", map[string]any{}, registerPayload.Tokens.AccessToken, http.StatusOK)
+	var rebuildPayload struct {
+		Rebuild map[string]any `json:"rebuild"`
+	}
+	if err := json.NewDecoder(authedRebuildBlobUsageResp.Body).Decode(&rebuildPayload); err != nil {
+		t.Fatalf("decode blob usage rebuild response: %v", err)
+	}
+	authedRebuildBlobUsageResp.Body.Close()
+	if rebuildPayload.Rebuild == nil {
+		t.Fatal("expected blob usage rebuild payload")
 	}
 }
 

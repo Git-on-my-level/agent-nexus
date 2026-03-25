@@ -506,6 +506,24 @@ var migrations = []migration{
 		Statements: nil,
 		Apply:      applyThreadProjectionGenerationMigration,
 	},
+	{
+		Version: 21,
+		Statements: []string{
+			`CREATE TABLE IF NOT EXISTS blob_usage_ledger (
+				content_hash TEXT PRIMARY KEY,
+				size_bytes INTEGER NOT NULL,
+				created_at TEXT NOT NULL,
+				updated_at TEXT NOT NULL
+			);`,
+			`CREATE TABLE IF NOT EXISTS blob_usage_totals (
+				id INTEGER PRIMARY KEY CHECK (id = 1),
+				blob_bytes INTEGER NOT NULL DEFAULT 0,
+				blob_objects INTEGER NOT NULL DEFAULT 0,
+				rebuilt_at TEXT NOT NULL,
+				updated_at TEXT NOT NULL
+			);`,
+		},
+	},
 }
 
 func applyMigrations(ctx context.Context, db *sql.DB) error {

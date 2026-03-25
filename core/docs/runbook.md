@@ -7,6 +7,13 @@ for human accounts, organizations, workspace registry, invites, provisioning
 jobs, and audit history. Its local workflow is documented in a short section
 below so it can run alongside the existing core + web-ui development loop.
 
+For packed-host SaaS operations, see:
+- Architecture: [`../docs/architecture/saas-packed-host-v1.md`](../docs/architecture/saas-packed-host-v1.md)
+- Configuration: [`../runbooks/packed-host-configuration.md`](../runbooks/packed-host-configuration.md)
+- Backup/restore: [`../runbooks/packed-host-backup-restore.md`](../runbooks/packed-host-backup-restore.md)
+- Blob backends: [`../runbooks/blob-backend-operations.md`](../runbooks/blob-backend-operations.md)
+- Projection maintenance: [`../runbooks/projection-maintenance.md`](../runbooks/projection-maintenance.md)
+
 ## Prerequisites
 
 - Go toolchain (for source runs)
@@ -20,6 +27,8 @@ below so it can run alongside the existing core + web-ui development loop.
 | Purpose | Flag | Env | Default |
 |---|---|---|---|
 | Workspace root (SQLite + artifacts) | `--workspace-root` | `OAR_WORKSPACE_ROOT` | `.oar-workspace` |
+| Blob backend selector | `--blob-backend` | `OAR_BLOB_BACKEND` | `filesystem` |
+| Filesystem/object blob root | `--blob-root` | `OAR_BLOB_ROOT` | workspace `artifacts/content/` |
 | Listen host | `--host` | `OAR_HOST` | `127.0.0.1` |
 | Listen port | `--port` | `OAR_PORT` | `8000` |
 | Full listen address (overrides host+port) | `--listen-addr` | `OAR_LISTEN_ADDR` | unset |
@@ -32,6 +41,8 @@ below so it can run alongside the existing core + web-ui development loop.
 | WebAuthn origin | n/a | `OAR_WEBAUTHN_ORIGIN` | derived from browser request origin |
 | WebAuthn RP display name | n/a | `OAR_WEBAUTHN_RP_DISPLAY_NAME` | `OAR` |
 | Human auth mode | n/a | `OAR_HUMAN_AUTH_MODE` | `workspace_local` |
+| Control-plane heartbeat base URL | n/a | `OAR_CONTROL_PLANE_BASE_URL` | unset |
+| Control-plane heartbeat interval | n/a | `OAR_CONTROL_PLANE_HEARTBEAT_INTERVAL` | `30s` |
 | Control-plane token issuer | n/a | `OAR_CONTROL_PLANE_TOKEN_ISSUER` | unset |
 | Control-plane token audience | n/a | `OAR_CONTROL_PLANE_TOKEN_AUDIENCE` | unset |
 | Control-plane workspace identifier | n/a | `OAR_CONTROL_PLANE_WORKSPACE_ID` | unset |
@@ -53,12 +64,25 @@ below so it can run alongside the existing core + web-ui development loop.
 | Write route burst | n/a | `OAR_WRITE_ROUTE_RATE_BURST` | `200` |
 | Graceful shutdown timeout | n/a | `OAR_SHUTDOWN_TIMEOUT` | `15s` |
 
+Filesystem blobs remain the default for self-hosted and first packed-host deployments.
+Set `OAR_BLOB_BACKEND=s3` only when you explicitly want S3-compatible object storage.
+When `OAR_BLOB_BACKEND=s3`, configure:
+
+- `OAR_BLOB_S3_BUCKET`
+- `OAR_BLOB_S3_PREFIX`
+- `OAR_BLOB_S3_REGION`
+- `OAR_BLOB_S3_ENDPOINT` for custom providers such as R2 or MinIO
+- `OAR_BLOB_S3_ACCESS_KEY_ID`
+- `OAR_BLOB_S3_SECRET_ACCESS_KEY`
+- `OAR_BLOB_S3_SESSION_TOKEN` when temporary credentials are in use
+- `OAR_BLOB_S3_FORCE_PATH_STYLE` when the provider requires path-style requests
+
 ## Workspace layout
 
 The workspace root contains:
 
 - `state.sqlite`: canonical structured data (events, snapshots, artifacts metadata, actors, derived views)
-- `artifacts/content/`: artifact bytes
+- `artifacts/content/`: artifact bytes when `OAR_BLOB_BACKEND=filesystem` or `object`
 - `logs/`, `tmp/`: operational directories
 
 ## Migrations / initialization
@@ -181,6 +205,21 @@ mode, workspace-local passkey human auth is disabled, workspace-local Ed25519
 agent auth remains enabled, and startup fails closed unless the
 `OAR_CONTROL_PLANE_TOKEN_*` and `OAR_WORKSPACE_SERVICE_*` settings are valid.
 
+Set `OAR_CONTROL_PLANE_BASE_URL` to enable the workspace heartbeat reporter.
+When enabled, `oar-core` reuses `OAR_WORKSPACE_SERVICE_ID` and
+`OAR_WORKSPACE_SERVICE_PRIVATE_KEY` to sign a `purpose=heartbeat` workspace
+service assertion and POST a background heartbeat to the control plane every
+`OAR_CONTROL_PLANE_HEARTBEAT_INTERVAL` (default `30s`). Heartbeat delivery
+failures are logged and retried; they do not stop the workspace core. The
+heartbeat payload includes:
+
+- core version plus build identity
+- readiness summary
+- projection maintenance summary
+- usage summary
+- last successful backup timestamp when a standard hosted backup manifest is
+  discoverable near the workspace root
+
 ## Verify server health
 
 ```bash
@@ -201,25 +240,47 @@ is treated as ready.
 `/ops/health` is for authenticated or loopback-only operator diagnostics. When
 the readiness check passes, it also includes projection maintenance status:
 
+- `mode`: `background` when the async maintainer loop is running, `manual` when
+  writes only queue dirty projections and operators are expected to trigger
+  rebuilds explicitly.
 - `pending_dirty_count`: thread projections queued for refresh.
 - `oldest_dirty_at` / `oldest_dirty_lag_seconds`: lag indicator for the oldest queued projection refresh.
-- `last_successful_stale_scan_at`: last successful background stale-thread scan.
+- `last_successful_stale_scan_at`: last successful stale-thread scan, whether it
+  came from the background loop or an explicit rebuild.
 - `last_error`: last maintenance failure, if one has occurred since the most recent successful pass.
 
 `/ops/usage-summary` is the workspace usage envelope for control-plane polling.
 It reports blob bytes, blob object count, canonical artifact/document/revision counts,
-and the configured quota limits. Use it when you need an explicit storage/usage snapshot
-without scraping filesystem layout.
+and the configured quota limits. Those blob totals now come from the workspace DB's
+blob usage ledger rather than a live filesystem walk or object-store listing. Use it
+when you need an explicit storage/usage snapshot without scraping filesystem layout.
 
-Background projection maintenance is driven by:
+`POST /ops/blob-usage/rebuild` is the explicit blob-ledger repair tool. Use it after
+operator blob cleanup, backend drift, or older-workspace migration issues when the
+ledger must be reconciled against canonical `artifacts.content_hash` rows plus backend
+blob existence/size checks. The response includes:
+
+- `canonical_hash_count`: unique canonical content hashes considered from the DB
+- `missing_blob_objects`: hashes still referenced canonically but missing in the backend
+- `blob_bytes` / `blob_objects`: rebuilt totals now stored in the ledger
+- `rebuilt_at`: reconciliation timestamp
+
+Projection maintenance mode is controlled by:
+
+- `OAR_PROJECTION_MODE=background|manual` (`background` by default)
+
+Background mode is further driven by:
 
 - `OAR_PROJECTION_MAINTENANCE_INTERVAL`
 - `OAR_PROJECTION_STALE_SCAN_INTERVAL`
 - `OAR_PROJECTION_MAINTENANCE_BATCH_SIZE`
 
-Normal operations should allow the worker to catch up asynchronously. `POST /derived/rebuild`
-is still the explicit repair tool when the queue is badly behind, after operator intervention,
-or after a code/data fix that requires a full recompute from canonical state.
+Normal operations should allow the worker to catch up asynchronously in
+`background` mode. In `manual` mode, writes still queue dirty projection work
+but the background loop stays off; use `POST /derived/rebuild` or
+`scripts/hosted/rebuild-derived.sh` to clear the backlog after operator
+intervention, during packed-host maintenance windows, or after a code/data fix
+that requires a full recompute from canonical state.
 
 ## Board surface quick check
 
@@ -256,7 +317,20 @@ workspace and the primary thread timeline.
 3. Stop and restart server with the same workspace root.
 4. Confirm object still exists (data persisted in `state.sqlite` plus the configured blob backend root).
 
-If `OAR_BLOB_BACKEND=object`, the content objects live under the configured blob root in an object-style layout rather than a flat content directory. Backup and restore workflows must capture the database and the blob backend together.
+If `OAR_BLOB_BACKEND=filesystem`, blob bytes stay under `workspace/artifacts/content/` by default and should be backed up with `state.sqlite`.
+
+If `OAR_BLOB_BACKEND=object`, the content objects still live on the local filesystem but in an object-style sharded layout under the configured blob root. Backup and restore workflows must still capture the database and that blob root together.
+
+If `OAR_BLOB_BACKEND=s3`, blob bytes live in the configured bucket/prefix instead of the local workspace tree. Self-host deployments do not require this. Packed-host SaaS can opt into S3-compatible storage when off-host blob durability or storage expansion is worth the added operator surface. Backup and restore workflows must capture `state.sqlite` plus the matching bucket/prefix state together.
+
+The hosted-v1 scripts under `scripts/hosted/` are backend-aware:
+
+- local backends (`filesystem`, `object`) are backed up as `workspace/blob-store/`
+  inside the bundle and restored into the target's effective local blob root
+- `s3` bundles record the active bucket/prefix in `manifest.env` and restore the
+  target env/metadata to that same remote namespace
+- restore verification validates live artifact/document reads through the active
+  backend instead of only checking database row counts
 
 ## Packet Convenience Atomicity
 
@@ -405,8 +479,9 @@ docker compose --env-file /srv/oar/team-alpha/config/env.production up -d
 This starts both `core` (port 8000) and `web-ui` (port 3000). The web-ui
 proxies API calls to core over the internal Docker network. The generated env
 file also carries `HOST_OAR_WORKSPACE_ROOT`, `OAR_CORE_INSTANCE_ID`, and
-`OAR_BOOTSTRAP_TOKEN` so the Compose example matches the hosted-v1 managed-ops
-story instead of a generic shared volume.
+`OAR_BOOTSTRAP_TOKEN`, plus explicit blob backend settings, so the Compose
+example matches the hosted-v1 managed-ops story instead of a generic shared
+volume.
 
 ## CI smoke
 

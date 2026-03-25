@@ -15,6 +15,8 @@ const (
 	defaultProjectionMaintenancePollInterval = 5 * time.Second
 	defaultProjectionStaleScanInterval       = 30 * time.Second
 	defaultProjectionMaintenanceBatchSize    = 50
+	ProjectionModeBackground                 = "background"
+	ProjectionModeManual                     = "manual"
 )
 
 type ProjectionMaintainerConfig struct {
@@ -25,6 +27,7 @@ type ProjectionMaintainerConfig struct {
 	StaleScanInterval time.Duration
 	DirtyBatchSize    int
 	SystemActorID     string
+	Mode              string
 }
 
 type ProjectionMaintenanceErrorSnapshot struct {
@@ -34,6 +37,7 @@ type ProjectionMaintenanceErrorSnapshot struct {
 }
 
 type ProjectionMaintenanceSnapshot struct {
+	Mode                      string                              `json:"mode"`
 	PendingDirtyCount         int                                 `json:"pending_dirty_count"`
 	OldestDirtyAt             string                              `json:"oldest_dirty_at,omitempty"`
 	OldestDirtyLagSeconds     int64                               `json:"oldest_dirty_lag_seconds,omitempty"`
@@ -43,6 +47,7 @@ type ProjectionMaintenanceSnapshot struct {
 
 type ProjectionMaintainer struct {
 	opts              handlerOptions
+	mode              string
 	pollInterval      time.Duration
 	staleScanInterval time.Duration
 	dirtyBatchSize    int
@@ -60,9 +65,24 @@ type projectionMaintenanceState struct {
 	lastError                 *ProjectionMaintenanceErrorSnapshot
 }
 
+func ParseProjectionMode(raw string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", ProjectionModeBackground:
+		return ProjectionModeBackground, nil
+	case ProjectionModeManual:
+		return ProjectionModeManual, nil
+	default:
+		return "", fmt.Errorf("invalid projection mode %q (supported: %s, %s)", raw, ProjectionModeBackground, ProjectionModeManual)
+	}
+}
+
 func NewProjectionMaintainer(config ProjectionMaintainerConfig) *ProjectionMaintainer {
 	if config.PrimitiveStore == nil {
 		return nil
+	}
+	mode, err := ParseProjectionMode(config.Mode)
+	if err != nil {
+		mode = ProjectionModeBackground
 	}
 
 	pollInterval := config.PollInterval
@@ -84,6 +104,7 @@ func NewProjectionMaintainer(config ProjectionMaintainerConfig) *ProjectionMaint
 			contract:         config.Contract,
 			inboxRiskHorizon: config.InboxRiskHorizon,
 		},
+		mode:              mode,
 		pollInterval:      pollInterval,
 		staleScanInterval: staleScanInterval,
 		dirtyBatchSize:    dirtyBatchSize,
@@ -93,7 +114,7 @@ func NewProjectionMaintainer(config ProjectionMaintainerConfig) *ProjectionMaint
 }
 
 func (m *ProjectionMaintainer) Run(ctx context.Context) {
-	if m == nil {
+	if m == nil || m.mode != ProjectionModeBackground {
 		return
 	}
 
@@ -210,7 +231,7 @@ func (m *ProjectionMaintainer) Snapshot(ctx context.Context, now time.Time) Proj
 	}
 
 	stats, err := m.opts.primitiveStore.GetDerivedThreadProjectionQueueStats(ctx)
-	snapshot := ProjectionMaintenanceSnapshot{}
+	snapshot := ProjectionMaintenanceSnapshot{Mode: m.mode}
 	if err == nil {
 		snapshot.PendingDirtyCount = stats.PendingCount
 		snapshot.OldestDirtyAt = strings.TrimSpace(stats.OldestDirtyAt)

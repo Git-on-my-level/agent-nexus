@@ -84,7 +84,22 @@ EXPECTED_AGENT_COUNT="$(manifest_get "$MANIFEST_PATH" AGENT_COUNT)"
 EXPECTED_INVITE_COUNT="$(manifest_get "$MANIFEST_PATH" INVITE_COUNT)"
 EXPECTED_DOCUMENT_COUNT="$(manifest_get "$MANIFEST_PATH" DOCUMENT_COUNT || true)"
 EXPECTED_DOCUMENT_REVISION_COUNT="$(manifest_get "$MANIFEST_PATH" DOCUMENT_REVISION_COUNT || true)"
-EXPECTED_BLOB_FILE_COUNT="$(manifest_get "$MANIFEST_PATH" BLOB_FILE_COUNT)"
+EXPECTED_BLOB_FILE_COUNT="$(manifest_get "$MANIFEST_PATH" BLOB_FILE_COUNT || true)"
+EXPECTED_BLOB_BACKEND="$(manifest_get "$MANIFEST_PATH" BLOB_BACKEND || true)"
+EXPECTED_BLOB_STORAGE_MODE="$(manifest_get "$MANIFEST_PATH" BLOB_STORAGE_MODE || true)"
+EXPECTED_BLOB_BACKUP_MODE="$(manifest_get "$MANIFEST_PATH" BLOB_BACKUP_MODE || true)"
+EXPECTED_BLOB_ROOT="$(manifest_get "$MANIFEST_PATH" BLOB_ROOT || true)"
+EXPECTED_BLOB_EFFECTIVE_LOCATION="$(manifest_get "$MANIFEST_PATH" BLOB_EFFECTIVE_LOCATION || true)"
+EXPECTED_BLOB_BUNDLE_PATH="$(manifest_get "$MANIFEST_PATH" BLOB_BUNDLE_PATH || true)"
+EXPECTED_BLOB_S3_BUCKET="$(manifest_get "$MANIFEST_PATH" BLOB_S3_BUCKET || true)"
+EXPECTED_BLOB_S3_PREFIX="$(manifest_get "$MANIFEST_PATH" BLOB_S3_PREFIX || true)"
+EXPECTED_BLOB_S3_REGION="$(manifest_get "$MANIFEST_PATH" BLOB_S3_REGION || true)"
+EXPECTED_BLOB_S3_ENDPOINT="$(manifest_get "$MANIFEST_PATH" BLOB_S3_ENDPOINT || true)"
+EXPECTED_BLOB_S3_FORCE_PATH_STYLE="$(normalize_bool_value "$(manifest_get "$MANIFEST_PATH" BLOB_S3_FORCE_PATH_STYLE || true)")"
+[[ -n "$EXPECTED_BLOB_BACKEND" ]] || EXPECTED_BLOB_BACKEND="filesystem"
+validate_blob_backend "$EXPECTED_BLOB_BACKEND"
+[[ -n "$EXPECTED_BLOB_STORAGE_MODE" ]] || EXPECTED_BLOB_STORAGE_MODE="$(blob_storage_mode "$EXPECTED_BLOB_BACKEND")"
+[[ -n "$EXPECTED_BLOB_BACKUP_MODE" ]] || EXPECTED_BLOB_BACKUP_MODE="$(blob_backup_mode "$EXPECTED_BLOB_BACKEND")"
 EXPECTED_CORE_INSTANCE_ID="$(manifest_get "$MANIFEST_PATH" CORE_INSTANCE_ID || true)"
 EXPECTED_BOOTSTRAP_STATE="$(manifest_get "$MANIFEST_PATH" BOOTSTRAP_STATE || true)"
 VERIFY_ARTIFACT_ID="$(manifest_get "$MANIFEST_PATH" VERIFY_ARTIFACT_ID || true)"
@@ -97,18 +112,47 @@ TARGET_CORE_INSTANCE_ID="$(dotenv_get "$ENV_FILE" OAR_CORE_INSTANCE_ID || true)"
 TARGET_WORKSPACE_ROOT="$(dotenv_get "$ENV_FILE" HOST_OAR_WORKSPACE_ROOT || true)"
 TARGET_WEB_UI_ORIGIN="$(dotenv_get "$ENV_FILE" OAR_WEB_UI_ORIGIN || true)"
 TARGET_WEBAUTHN_ORIGIN="$(dotenv_get "$ENV_FILE" OAR_WEBAUTHN_ORIGIN || true)"
+TARGET_BLOB_BACKEND="$(dotenv_get "$ENV_FILE" OAR_BLOB_BACKEND || true)"
+TARGET_BLOB_ROOT="$(dotenv_get "$ENV_FILE" OAR_BLOB_ROOT || true)"
+TARGET_BLOB_S3_BUCKET="$(dotenv_get "$ENV_FILE" OAR_BLOB_S3_BUCKET || true)"
+TARGET_BLOB_S3_PREFIX="$(dotenv_get "$ENV_FILE" OAR_BLOB_S3_PREFIX || true)"
+TARGET_BLOB_S3_REGION="$(dotenv_get "$ENV_FILE" OAR_BLOB_S3_REGION || true)"
+TARGET_BLOB_S3_ENDPOINT="$(dotenv_get "$ENV_FILE" OAR_BLOB_S3_ENDPOINT || true)"
+TARGET_BLOB_S3_FORCE_PATH_STYLE="$(normalize_bool_value "$(dotenv_get "$ENV_FILE" OAR_BLOB_S3_FORCE_PATH_STYLE || true)")"
+[[ -n "$TARGET_BLOB_BACKEND" ]] || TARGET_BLOB_BACKEND="filesystem"
+validate_blob_backend "$TARGET_BLOB_BACKEND"
+TARGET_BLOB_STORAGE_MODE="$(blob_storage_mode "$TARGET_BLOB_BACKEND")"
+TARGET_EFFECTIVE_BLOB_LOCATION="$(blob_effective_location "$WORKSPACE_ROOT" "$TARGET_BLOB_BACKEND" "$TARGET_BLOB_ROOT" "$TARGET_BLOB_S3_BUCKET" "$TARGET_BLOB_S3_PREFIX")"
+TARGET_EFFECTIVE_LOCAL_BLOB_ROOT="$(blob_effective_local_root "$WORKSPACE_ROOT" "$TARGET_BLOB_BACKEND" "$TARGET_BLOB_ROOT")"
 METADATA_INSTANCE_ROOT="$(dotenv_get "$INSTANCE_METADATA_FILE" INSTANCE_ROOT || true)"
 METADATA_WORKSPACE_ROOT="$(dotenv_get "$INSTANCE_METADATA_FILE" WORKSPACE_ROOT || true)"
 METADATA_BACKUPS_DIR="$(dotenv_get "$INSTANCE_METADATA_FILE" BACKUPS_DIR || true)"
 METADATA_PUBLIC_ORIGIN="$(dotenv_get "$INSTANCE_METADATA_FILE" PUBLIC_ORIGIN || true)"
 METADATA_CORE_INSTANCE_ID="$(dotenv_get "$INSTANCE_METADATA_FILE" CORE_INSTANCE_ID || true)"
+METADATA_BLOB_BACKEND="$(dotenv_get "$INSTANCE_METADATA_FILE" BLOB_BACKEND || true)"
+METADATA_BLOB_STORAGE_MODE="$(dotenv_get "$INSTANCE_METADATA_FILE" BLOB_STORAGE_MODE || true)"
+METADATA_BLOB_ROOT="$(dotenv_get "$INSTANCE_METADATA_FILE" BLOB_ROOT || true)"
+METADATA_BLOB_EFFECTIVE_LOCATION="$(dotenv_get "$INSTANCE_METADATA_FILE" BLOB_EFFECTIVE_LOCATION || true)"
+METADATA_BLOB_S3_BUCKET="$(dotenv_get "$INSTANCE_METADATA_FILE" BLOB_S3_BUCKET || true)"
+METADATA_BLOB_S3_PREFIX="$(dotenv_get "$INSTANCE_METADATA_FILE" BLOB_S3_PREFIX || true)"
+METADATA_BLOB_S3_REGION="$(dotenv_get "$INSTANCE_METADATA_FILE" BLOB_S3_REGION || true)"
+METADATA_BLOB_S3_ENDPOINT="$(dotenv_get "$INSTANCE_METADATA_FILE" BLOB_S3_ENDPOINT || true)"
+METADATA_BLOB_S3_FORCE_PATH_STYLE="$(normalize_bool_value "$(dotenv_get "$INSTANCE_METADATA_FILE" BLOB_S3_FORCE_PATH_STYLE || true)")"
 EXPECTED_TARGET_WORKSPACE_ROOT="${INSTANCE_ROOT}/workspace"
 EXPECTED_TARGET_BACKUPS_DIR="${INSTANCE_ROOT}/backups"
 EXPECTED_ACTIVE_BOOTSTRAP_STATE=""
 RESTORE_BOOTSTRAP_TOKEN_MODE=""
+RECEIPT_TARGET_BLOB_BACKEND=""
+RECEIPT_TARGET_BLOB_ROOT=""
+RECEIPT_TARGET_BLOB_EFFECTIVE_LOCATION=""
+RECEIPT_TARGET_BLOB_RESTORE_ACTION=""
 if [[ -f "$RECEIPT_PATH" ]]; then
   EXPECTED_ACTIVE_BOOTSTRAP_STATE="$(dotenv_get "$RECEIPT_PATH" EXPECTED_ACTIVE_BOOTSTRAP_STATE || true)"
   RESTORE_BOOTSTRAP_TOKEN_MODE="$(dotenv_get "$RECEIPT_PATH" BOOTSTRAP_TOKEN_MODE || true)"
+  RECEIPT_TARGET_BLOB_BACKEND="$(dotenv_get "$RECEIPT_PATH" TARGET_BLOB_BACKEND || true)"
+  RECEIPT_TARGET_BLOB_ROOT="$(dotenv_get "$RECEIPT_PATH" TARGET_BLOB_ROOT || true)"
+  RECEIPT_TARGET_BLOB_EFFECTIVE_LOCATION="$(dotenv_get "$RECEIPT_PATH" TARGET_BLOB_EFFECTIVE_LOCATION || true)"
+  RECEIPT_TARGET_BLOB_RESTORE_ACTION="$(dotenv_get "$RECEIPT_PATH" TARGET_BLOB_RESTORE_ACTION || true)"
 fi
 
 SERVER_LOG_DIR="${WORKSPACE_ROOT}/logs"
@@ -166,13 +210,11 @@ verify_live_document_revision_read() {
 }
 
 verify_referenced_blob_reachability() {
-  local content_hash artifact_ids
-  while IFS='|' read -r content_hash artifact_ids; do
-    [[ -n "$content_hash" ]] || continue
-    if [[ ! -f "${WORKSPACE_ROOT}/artifacts/content/${content_hash}" ]]; then
-      die "referenced blob missing for content hash ${content_hash} (artifact ids: ${artifact_ids})"
-    fi
-  done < <(sqlite3 -noheader -batch -separator '|' "${WORKSPACE_ROOT}/state.sqlite" "SELECT content_hash, group_concat(id, ',') FROM artifacts WHERE TRIM(content_hash) <> '' GROUP BY content_hash ORDER BY content_hash;")
+  local artifact_id content_hash
+  while IFS='|' read -r artifact_id content_hash; do
+    [[ -n "$artifact_id" && -n "$content_hash" ]] || continue
+    verify_live_artifact_read "$artifact_id"
+  done < <(sqlite3 -noheader -batch -separator '|' "${WORKSPACE_ROOT}/state.sqlite" "SELECT MIN(id), content_hash FROM artifacts WHERE TRIM(content_hash) <> '' GROUP BY content_hash ORDER BY content_hash;")
 }
 
 cleanup() {
@@ -205,7 +247,10 @@ ACTUAL_AGENT_COUNT="$(sqlite_scalar "${WORKSPACE_ROOT}/state.sqlite" "SELECT COU
 ACTUAL_INVITE_COUNT="$(sqlite_scalar "${WORKSPACE_ROOT}/state.sqlite" "SELECT COUNT(*) FROM auth_invites;")"
 ACTUAL_DOCUMENT_COUNT="$(sqlite_scalar "${WORKSPACE_ROOT}/state.sqlite" "SELECT COUNT(*) FROM documents;")"
 ACTUAL_DOCUMENT_REVISION_COUNT="$(sqlite_scalar "${WORKSPACE_ROOT}/state.sqlite" "SELECT COUNT(*) FROM document_revisions;")"
-ACTUAL_BLOB_FILE_COUNT="$(count_files "${WORKSPACE_ROOT}/artifacts/content")"
+ACTUAL_BLOB_FILE_COUNT=""
+if [[ "$TARGET_BLOB_STORAGE_MODE" == "local" ]]; then
+  ACTUAL_BLOB_FILE_COUNT="$(count_files "$TARGET_EFFECTIVE_LOCAL_BLOB_ROOT")"
+fi
 ACTUAL_BOOTSTRAP_STATE="disabled"
 if [[ -n "${OAR_BOOTSTRAP_TOKEN:-}" && "${OAR_BOOTSTRAP_TOKEN}" != "$HOSTED_BOOTSTRAP_PLACEHOLDER" ]]; then
   ACTUAL_BOOTSTRAP_STATE="available"
@@ -224,7 +269,23 @@ fi
 if [[ -n "$EXPECTED_DOCUMENT_REVISION_COUNT" ]]; then
   [[ "$ACTUAL_DOCUMENT_REVISION_COUNT" == "$EXPECTED_DOCUMENT_REVISION_COUNT" ]] || die "document revision count mismatch: expected ${EXPECTED_DOCUMENT_REVISION_COUNT}, got ${ACTUAL_DOCUMENT_REVISION_COUNT}"
 fi
-[[ "$ACTUAL_BLOB_FILE_COUNT" == "$EXPECTED_BLOB_FILE_COUNT" ]] || die "blob file count mismatch: expected ${EXPECTED_BLOB_FILE_COUNT}, got ${ACTUAL_BLOB_FILE_COUNT}"
+[[ "$TARGET_BLOB_BACKEND" == "$EXPECTED_BLOB_BACKEND" ]] || die "blob backend mismatch: manifest=${EXPECTED_BLOB_BACKEND} env=${TARGET_BLOB_BACKEND}"
+[[ "$METADATA_BLOB_BACKEND" == "$TARGET_BLOB_BACKEND" ]] || die "active metadata/blob backend mismatch: env=${TARGET_BLOB_BACKEND} metadata=${METADATA_BLOB_BACKEND:-<unset>}"
+[[ "$METADATA_BLOB_STORAGE_MODE" == "$TARGET_BLOB_STORAGE_MODE" ]] || die "active metadata/blob storage mode mismatch: env=${TARGET_BLOB_STORAGE_MODE} metadata=${METADATA_BLOB_STORAGE_MODE:-<unset>}"
+[[ "$METADATA_BLOB_ROOT" == "$TARGET_BLOB_ROOT" ]] || die "active metadata/blob root mismatch: env=${TARGET_BLOB_ROOT:-<unset>} metadata=${METADATA_BLOB_ROOT:-<unset>}"
+[[ "$METADATA_BLOB_EFFECTIVE_LOCATION" == "$TARGET_EFFECTIVE_BLOB_LOCATION" ]] || die "active metadata/blob location mismatch: env=${TARGET_EFFECTIVE_BLOB_LOCATION} metadata=${METADATA_BLOB_EFFECTIVE_LOCATION:-<unset>}"
+if [[ -n "$RECEIPT_TARGET_BLOB_BACKEND" ]]; then
+  [[ "$RECEIPT_TARGET_BLOB_BACKEND" == "$TARGET_BLOB_BACKEND" ]] || die "restore receipt/blob backend mismatch: receipt=${RECEIPT_TARGET_BLOB_BACKEND} env=${TARGET_BLOB_BACKEND}"
+fi
+if [[ -n "$RECEIPT_TARGET_BLOB_ROOT" || -n "$TARGET_BLOB_ROOT" ]]; then
+  [[ "$RECEIPT_TARGET_BLOB_ROOT" == "$TARGET_BLOB_ROOT" ]] || die "restore receipt/blob root mismatch: receipt=${RECEIPT_TARGET_BLOB_ROOT:-<unset>} env=${TARGET_BLOB_ROOT:-<unset>}"
+fi
+if [[ -n "$RECEIPT_TARGET_BLOB_EFFECTIVE_LOCATION" ]]; then
+  [[ "$RECEIPT_TARGET_BLOB_EFFECTIVE_LOCATION" == "$TARGET_EFFECTIVE_BLOB_LOCATION" ]] || die "restore receipt/blob location mismatch: receipt=${RECEIPT_TARGET_BLOB_EFFECTIVE_LOCATION} env=${TARGET_EFFECTIVE_BLOB_LOCATION}"
+fi
+if [[ "$TARGET_BLOB_STORAGE_MODE" == "local" && -n "$EXPECTED_BLOB_FILE_COUNT" ]]; then
+  [[ "$ACTUAL_BLOB_FILE_COUNT" == "$EXPECTED_BLOB_FILE_COUNT" ]] || die "blob file count mismatch: expected ${EXPECTED_BLOB_FILE_COUNT}, got ${ACTUAL_BLOB_FILE_COUNT}"
+fi
 [[ "$TARGET_WORKSPACE_ROOT" == "$EXPECTED_TARGET_WORKSPACE_ROOT" ]] || die "active env workspace root mismatch: expected ${EXPECTED_TARGET_WORKSPACE_ROOT}, got ${TARGET_WORKSPACE_ROOT:-<unset>}"
 [[ "$METADATA_INSTANCE_ROOT" == "$INSTANCE_ROOT" ]] || die "active metadata instance root mismatch: expected ${INSTANCE_ROOT}, got ${METADATA_INSTANCE_ROOT:-<unset>}"
 [[ "$METADATA_WORKSPACE_ROOT" == "$EXPECTED_TARGET_WORKSPACE_ROOT" ]] || die "active metadata workspace root mismatch: expected ${EXPECTED_TARGET_WORKSPACE_ROOT}, got ${METADATA_WORKSPACE_ROOT:-<unset>}"
@@ -240,11 +301,31 @@ if [[ -n "$SOURCE_WORKSPACE_ROOT" && "$SOURCE_WORKSPACE_ROOT" != "$EXPECTED_TARG
   [[ "$TARGET_WORKSPACE_ROOT" != "$SOURCE_WORKSPACE_ROOT" ]] || die "active env leaked source workspace root"
   [[ "$METADATA_WORKSPACE_ROOT" != "$SOURCE_WORKSPACE_ROOT" ]] || die "active metadata leaked source workspace root"
 fi
+if [[ "$TARGET_BLOB_STORAGE_MODE" == "local" && -n "$SOURCE_INSTANCE_ROOT" && "$SOURCE_INSTANCE_ROOT" != "$INSTANCE_ROOT" ]]; then
+  [[ "$TARGET_EFFECTIVE_BLOB_LOCATION" != "$SOURCE_INSTANCE_ROOT" ]] || die "active env leaked source blob root"
+fi
 if [[ -n "$SOURCE_PUBLIC_ORIGIN" && "$SOURCE_PUBLIC_ORIGIN" != "$TARGET_WEB_UI_ORIGIN" ]]; then
   [[ "$TARGET_WEB_UI_ORIGIN" != "$SOURCE_PUBLIC_ORIGIN" ]] || die "active env leaked source public origin"
   [[ "$TARGET_WEBAUTHN_ORIGIN" != "$SOURCE_PUBLIC_ORIGIN" ]] || die "active env leaked source webauthn origin"
   [[ "$METADATA_PUBLIC_ORIGIN" != "$SOURCE_PUBLIC_ORIGIN" ]] || die "active metadata leaked source public origin"
 fi
+case "$TARGET_BLOB_BACKEND" in
+  filesystem|object)
+    [[ "$EXPECTED_BLOB_STORAGE_MODE" == "local" ]] || die "manifest blob storage mode mismatch for local backend: ${EXPECTED_BLOB_STORAGE_MODE}"
+    ;;
+  s3)
+    [[ "$TARGET_BLOB_S3_BUCKET" == "$EXPECTED_BLOB_S3_BUCKET" ]] || die "blob bucket mismatch: manifest=${EXPECTED_BLOB_S3_BUCKET} env=${TARGET_BLOB_S3_BUCKET:-<unset>}"
+    [[ "$TARGET_BLOB_S3_PREFIX" == "$EXPECTED_BLOB_S3_PREFIX" ]] || die "blob prefix mismatch: manifest=${EXPECTED_BLOB_S3_PREFIX:-<unset>} env=${TARGET_BLOB_S3_PREFIX:-<unset>}"
+    [[ "$TARGET_BLOB_S3_REGION" == "$EXPECTED_BLOB_S3_REGION" ]] || die "blob region mismatch: manifest=${EXPECTED_BLOB_S3_REGION} env=${TARGET_BLOB_S3_REGION:-<unset>}"
+    [[ "$TARGET_BLOB_S3_ENDPOINT" == "$EXPECTED_BLOB_S3_ENDPOINT" ]] || die "blob endpoint mismatch: manifest=${EXPECTED_BLOB_S3_ENDPOINT:-<unset>} env=${TARGET_BLOB_S3_ENDPOINT:-<unset>}"
+    [[ "$TARGET_BLOB_S3_FORCE_PATH_STYLE" == "$EXPECTED_BLOB_S3_FORCE_PATH_STYLE" ]] || die "blob force-path-style mismatch: manifest=${EXPECTED_BLOB_S3_FORCE_PATH_STYLE} env=${TARGET_BLOB_S3_FORCE_PATH_STYLE}"
+    [[ "$METADATA_BLOB_S3_BUCKET" == "$TARGET_BLOB_S3_BUCKET" ]] || die "active metadata/blob bucket mismatch: env=${TARGET_BLOB_S3_BUCKET:-<unset>} metadata=${METADATA_BLOB_S3_BUCKET:-<unset>}"
+    [[ "$METADATA_BLOB_S3_PREFIX" == "$TARGET_BLOB_S3_PREFIX" ]] || die "active metadata/blob prefix mismatch: env=${TARGET_BLOB_S3_PREFIX:-<unset>} metadata=${METADATA_BLOB_S3_PREFIX:-<unset>}"
+    [[ "$METADATA_BLOB_S3_REGION" == "$TARGET_BLOB_S3_REGION" ]] || die "active metadata/blob region mismatch: env=${TARGET_BLOB_S3_REGION:-<unset>} metadata=${METADATA_BLOB_S3_REGION:-<unset>}"
+    [[ "$METADATA_BLOB_S3_ENDPOINT" == "$TARGET_BLOB_S3_ENDPOINT" ]] || die "active metadata/blob endpoint mismatch: env=${TARGET_BLOB_S3_ENDPOINT:-<unset>} metadata=${METADATA_BLOB_S3_ENDPOINT:-<unset>}"
+    [[ "$METADATA_BLOB_S3_FORCE_PATH_STYLE" == "$TARGET_BLOB_S3_FORCE_PATH_STYLE" ]] || die "active metadata/blob force-path-style mismatch: env=${TARGET_BLOB_S3_FORCE_PATH_STYLE} metadata=${METADATA_BLOB_S3_FORCE_PATH_STYLE}"
+    ;;
+esac
 if [[ -n "$EXPECTED_ACTIVE_BOOTSTRAP_STATE" ]]; then
   [[ "$ACTUAL_BOOTSTRAP_STATE" == "$EXPECTED_ACTIVE_BOOTSTRAP_STATE" ]] || die "bootstrap state mismatch: expected ${EXPECTED_ACTIVE_BOOTSTRAP_STATE}, got ${ACTUAL_BOOTSTRAP_STATE}"
 elif [[ -n "$EXPECTED_BOOTSTRAP_STATE" ]]; then
@@ -289,7 +370,16 @@ log "  agent count:             ${ACTUAL_AGENT_COUNT}"
 log "  invite count:            ${ACTUAL_INVITE_COUNT}"
 log "  document count:          ${ACTUAL_DOCUMENT_COUNT}"
 log "  document revision count: ${ACTUAL_DOCUMENT_REVISION_COUNT}"
-log "  blob file count:         ${ACTUAL_BLOB_FILE_COUNT}"
+log "  blob backend:            ${TARGET_BLOB_BACKEND}"
+log "  blob location:           ${TARGET_EFFECTIVE_BLOB_LOCATION}"
+if [[ -n "$RECEIPT_TARGET_BLOB_RESTORE_ACTION" ]]; then
+  log "  blob restore action:     ${RECEIPT_TARGET_BLOB_RESTORE_ACTION}"
+fi
+if [[ "$TARGET_BLOB_STORAGE_MODE" == "local" ]]; then
+  log "  blob file count:         ${ACTUAL_BLOB_FILE_COUNT}"
+else
+  log "  blob file count:         n/a (${TARGET_BLOB_STORAGE_MODE})"
+fi
 if [[ -n "$VERIFY_ARTIFACT_ID" ]]; then
   log "  artifact live read:      ${VERIFY_ARTIFACT_ID}"
 else

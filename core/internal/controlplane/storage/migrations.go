@@ -268,6 +268,44 @@ var migrations = []migration{
 			`CREATE UNIQUE INDEX IF NOT EXISTS idx_provisioning_jobs_workspace_backup_running ON provisioning_jobs (workspace_id) WHERE kind = 'workspace_backup' AND status = 'running';`,
 		},
 	},
+	{
+		Version: 6,
+		Statements: []string{
+			`ALTER TABLE workspaces ADD COLUMN host_id TEXT NOT NULL DEFAULT 'host_local';`,
+			`ALTER TABLE workspaces ADD COLUMN host_label TEXT NOT NULL DEFAULT 'Local packed host';`,
+			`ALTER TABLE workspaces ADD COLUMN workspace_root TEXT NOT NULL DEFAULT '';`,
+			`ALTER TABLE workspaces ADD COLUMN listen_port INTEGER NOT NULL DEFAULT 8000;`,
+			`WITH ranked_workspaces AS (
+				SELECT id,
+					8000 + ((ROW_NUMBER() OVER (
+						PARTITION BY CASE WHEN TRIM(host_id) = '' THEN 'host_local' ELSE host_id END
+						ORDER BY created_at ASC, id ASC
+					) - 1) * 10) AS derived_listen_port
+				FROM workspaces
+			)
+			UPDATE workspaces
+				SET host_id = CASE WHEN TRIM(host_id) = '' THEN 'host_local' ELSE host_id END,
+					host_label = CASE WHEN TRIM(host_label) = '' THEN 'Local packed host' ELSE host_label END,
+					workspace_root = CASE
+						WHEN TRIM(workspace_root) != '' THEN workspace_root
+						WHEN TRIM(deployment_root) != '' THEN deployment_root || '/workspace'
+						ELSE ''
+					END,
+					listen_port = CASE
+						WHEN listen_port > 0 AND listen_port != 8000 THEN listen_port
+						ELSE COALESCE(
+							(SELECT derived_listen_port FROM ranked_workspaces WHERE ranked_workspaces.id = workspaces.id),
+							8000
+						)
+					END;`,
+		},
+	},
+	{
+		Version: 7,
+		Statements: []string{
+			`CREATE UNIQUE INDEX IF NOT EXISTS idx_workspaces_host_listen_port_unique ON workspaces (host_id, listen_port) WHERE listen_port > 0;`,
+		},
+	},
 }
 
 func applyMigrations(ctx context.Context, db *sql.DB) error {

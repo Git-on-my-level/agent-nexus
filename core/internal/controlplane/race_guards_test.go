@@ -220,6 +220,83 @@ func TestWorkspaceBackupRunningUniqueIndexRejectsConcurrentInsert(t *testing.T) 
 	_ = identity
 }
 
+func TestWorkspaceListenPortUniqueIndexRejectsConcurrentInsert(t *testing.T) {
+	_, service, now := newRaceTestService(t)
+	db := service.db
+
+	_, organizationID := seedOrganizationAccess(t, db, now)
+	tx1 := mustBeginTx(t, db)
+	workspaceA := seededWorkspaceRecord(t, organizationID, "ws_port_a", "port-a", now, defaultPackedHostPortStart)
+	insertWorkspaceRecordTx(t, tx1, workspaceA)
+
+	errCh := make(chan error, 1)
+	go func() {
+		tx2, err := db.BeginTx(context.Background(), nil)
+		if err != nil {
+			errCh <- err
+			return
+		}
+		workspaceB := seededWorkspaceRecord(t, organizationID, "ws_port_b", "port-b", now.Add(time.Minute), defaultPackedHostPortStart)
+		_, err = tx2.ExecContext(context.Background(), workspaceInsertSQL,
+			workspaceB.ID,
+			workspaceB.OrganizationID,
+			workspaceB.Slug,
+			workspaceB.DisplayName,
+			workspaceB.Status,
+			workspaceB.Region,
+			workspaceB.WorkspaceTier,
+			workspaceB.WorkspacePath,
+			workspaceB.BaseURL,
+			workspaceB.PublicOrigin,
+			workspaceB.CoreOrigin,
+			workspaceB.HostID,
+			workspaceB.HostLabel,
+			workspaceB.WorkspaceRoot,
+			workspaceB.ListenPort,
+			workspaceB.DeploymentRoot,
+			workspaceB.InstanceID,
+			workspaceB.ServiceIdentityID,
+			workspaceB.ServiceIdentityPublicKey,
+			workspaceB.DesiredState,
+			workspaceB.DesiredVersion,
+			workspaceB.QuotaConfigRef,
+			workspaceB.QuotaEnvelopeRef,
+			workspaceB.DeployedVersion,
+			workspaceB.RoutingManifestPath,
+			"",
+			"",
+			"{}",
+			"{}",
+			"{}",
+			"{}",
+			workspaceB.CreatedAt,
+			workspaceB.UpdatedAt,
+		)
+		if err == nil {
+			err = tx2.Commit()
+		} else {
+			_ = tx2.Rollback()
+		}
+		errCh <- err
+	}()
+
+	time.Sleep(100 * time.Millisecond)
+	if err := tx1.Commit(); err != nil {
+		t.Fatalf("commit first workspace tx: %v", err)
+	}
+
+	err := <-errCh
+	if err == nil {
+		t.Fatal("expected duplicate listen_port insert to fail")
+	}
+	if !isSQLiteConstraint(err) {
+		t.Fatalf("expected sqlite constraint error, got %v", err)
+	}
+	if !isWorkspaceListenPortConstraint(err) {
+		t.Fatalf("expected listen_port constraint error, got %v", err)
+	}
+}
+
 func newRaceTestService(t *testing.T) (*cpstorage.Workspace, *Service, time.Time) {
 	t.Helper()
 
@@ -276,42 +353,8 @@ func seedOrganizationAccess(t *testing.T, db *sql.DB, now time.Time) (RequestIde
 func seedWorkspace(t *testing.T, db *sql.DB, organizationID string, now time.Time) Workspace {
 	t.Helper()
 
-	workspaceID := "ws_race"
-	deploymentRoot := filepath.Join(t.TempDir(), "deployment")
-	nowText := now.Format(time.RFC3339Nano)
-	workspace := Workspace{
-		ID:                       workspaceID,
-		OrganizationID:           organizationID,
-		Slug:                     "race",
-		DisplayName:              "Race Workspace",
-		Status:                   "ready",
-		Region:                   "us-central1",
-		WorkspaceTier:            "standard",
-		WorkspacePath:            "/race",
-		BaseURL:                  "https://race.example.test/race",
-		PublicOrigin:             "https://race.example.test",
-		CoreOrigin:               "https://core.race.example.test",
-		DeploymentRoot:           deploymentRoot,
-		InstanceID:               workspaceID,
-		ServiceIdentityID:        "svc_race",
-		ServiceIdentityPublicKey: "race-public-key",
-		DesiredState:             "ready",
-		DesiredVersion:           hostedInstanceVersion,
-		QuotaConfigRef:           "plan:team",
-		QuotaEnvelopeRef:         "organization:" + organizationID + ":quota",
-		DeployedVersion:          hostedInstanceVersion,
-		RoutingManifestPath:      filepath.Join(deploymentRoot, "routing-manifest.json"),
-		CreatedAt:                nowText,
-		UpdatedAt:                nowText,
-	}
-	mustExec(t, db, `INSERT INTO workspaces(
-		id, organization_id, slug, display_name, status, region, workspace_tier, workspace_path, base_url,
-		public_origin, core_origin, deployment_root, instance_id, service_identity_id, service_identity_public_key,
-		desired_state, desired_version, quota_config_ref, quota_envelope_ref, deployed_version, routing_manifest_path,
-		last_heartbeat_at, heartbeat_version, heartbeat_build, heartbeat_health_summary_json,
-		heartbeat_projection_maintenance_summary_json, heartbeat_usage_summary_json, last_successful_backup_at,
-		routing_manifest_json, created_at, updated_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
+	workspace := seededWorkspaceRecord(t, organizationID, "ws_race", "race", now, defaultPackedHostPortStart)
+	mustExec(t, db, workspaceInsertSQL,
 		workspace.ID,
 		workspace.OrganizationID,
 		workspace.Slug,
@@ -323,6 +366,10 @@ func seedWorkspace(t *testing.T, db *sql.DB, organizationID string, now time.Tim
 		workspace.BaseURL,
 		workspace.PublicOrigin,
 		workspace.CoreOrigin,
+		workspace.HostID,
+		workspace.HostLabel,
+		workspace.WorkspaceRoot,
+		workspace.ListenPort,
 		workspace.DeploymentRoot,
 		workspace.InstanceID,
 		workspace.ServiceIdentityID,
@@ -343,6 +390,91 @@ func seedWorkspace(t *testing.T, db *sql.DB, organizationID string, now time.Tim
 		workspace.UpdatedAt,
 	)
 	return workspace
+}
+
+const workspaceInsertSQL = `INSERT INTO workspaces(
+	id, organization_id, slug, display_name, status, region, workspace_tier, workspace_path, base_url,
+	public_origin, core_origin, host_id, host_label, workspace_root, listen_port, deployment_root, instance_id, service_identity_id, service_identity_public_key,
+	desired_state, desired_version, quota_config_ref, quota_envelope_ref, deployed_version, routing_manifest_path,
+	last_heartbeat_at, heartbeat_version, heartbeat_build, heartbeat_health_summary_json,
+	heartbeat_projection_maintenance_summary_json, heartbeat_usage_summary_json, last_successful_backup_at,
+	routing_manifest_json, created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`
+
+func seededWorkspaceRecord(t *testing.T, organizationID string, workspaceID string, slug string, now time.Time, listenPort int) Workspace {
+	t.Helper()
+
+	deploymentRoot := filepath.Join(t.TempDir(), workspaceID)
+	nowText := now.Format(time.RFC3339Nano)
+	return Workspace{
+		ID:                       workspaceID,
+		OrganizationID:           organizationID,
+		Slug:                     slug,
+		DisplayName:              slug,
+		Status:                   "ready",
+		Region:                   "us-central1",
+		WorkspaceTier:            "standard",
+		WorkspacePath:            "/" + slug,
+		BaseURL:                  "https://race.example.test/" + slug,
+		PublicOrigin:             "https://race.example.test",
+		CoreOrigin:               "https://core.race.example.test",
+		HostID:                   defaultPackedHostID,
+		HostLabel:                defaultPackedHostLabel,
+		WorkspaceRoot:            filepath.Join(deploymentRoot, "workspace"),
+		ListenPort:               listenPort,
+		DeploymentRoot:           deploymentRoot,
+		InstanceID:               workspaceID,
+		ServiceIdentityID:        "svc_" + slug,
+		ServiceIdentityPublicKey: slug + "-public-key",
+		DesiredState:             "ready",
+		DesiredVersion:           hostedInstanceVersion,
+		QuotaConfigRef:           "plan:team",
+		QuotaEnvelopeRef:         "organization:" + organizationID + ":quota",
+		DeployedVersion:          hostedInstanceVersion,
+		RoutingManifestPath:      filepath.Join(deploymentRoot, "routing-manifest.json"),
+		CreatedAt:                nowText,
+		UpdatedAt:                nowText,
+	}
+}
+
+func insertWorkspaceRecordTx(t *testing.T, tx *sql.Tx, workspace Workspace) {
+	t.Helper()
+
+	mustExecTx(t, tx, workspaceInsertSQL,
+		workspace.ID,
+		workspace.OrganizationID,
+		workspace.Slug,
+		workspace.DisplayName,
+		workspace.Status,
+		workspace.Region,
+		workspace.WorkspaceTier,
+		workspace.WorkspacePath,
+		workspace.BaseURL,
+		workspace.PublicOrigin,
+		workspace.CoreOrigin,
+		workspace.HostID,
+		workspace.HostLabel,
+		workspace.WorkspaceRoot,
+		workspace.ListenPort,
+		workspace.DeploymentRoot,
+		workspace.InstanceID,
+		workspace.ServiceIdentityID,
+		workspace.ServiceIdentityPublicKey,
+		workspace.DesiredState,
+		workspace.DesiredVersion,
+		workspace.QuotaConfigRef,
+		workspace.QuotaEnvelopeRef,
+		workspace.DeployedVersion,
+		workspace.RoutingManifestPath,
+		"",
+		"",
+		"{}",
+		"{}",
+		"{}",
+		"{}",
+		workspace.CreatedAt,
+		workspace.UpdatedAt,
+	)
 }
 
 func mustBeginTx(t *testing.T, db *sql.DB) *sql.Tx {

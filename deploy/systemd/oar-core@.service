@@ -1,0 +1,27 @@
+[Unit]
+Description=OAR workspace core (%i)
+After=network-online.target oar-control-plane.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=oar
+Group=oar
+EnvironmentFile=/etc/oar/workspaces/%i.env
+WorkingDirectory=/opt/oar
+ExecStart=/usr/bin/env bash -lc '/opt/oar/bin/oar-core \
+  --listen-addr "${OAR_LISTEN_ADDR}" \
+  --workspace-root "${OAR_WORKSPACE_ROOT}" \
+  --schema-path "${OAR_SCHEMA_PATH}" \
+  --meta-commands-path "${OAR_META_COMMANDS_PATH}" \
+  --core-instance-id "${OAR_CORE_INSTANCE_ID}"'
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=${OAR_WORKSPACE_ROOT}
+
+[Install]
+WantedBy=multi-user.target
