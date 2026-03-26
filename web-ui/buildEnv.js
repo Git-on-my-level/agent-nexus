@@ -1,17 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { normalizeBasePath as sharedNormalizeBasePath } from "./src/lib/pathUtils.js";
+
 export const BUILD_ENV_FILENAMES = [".env.build", ".env.build.local"];
-
-export function normalizeBasePath(value = "") {
-  const trimmed = String(value ?? "").trim();
-  if (!trimmed || trimmed === "/") {
-    return "";
-  }
-
-  const normalized = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
-  return normalized.replace(/\/+$/, "");
-}
+export const normalizeBasePath = sharedNormalizeBasePath;
 
 export function parseBuildEnvFile(contents = "") {
   const parsed = {};

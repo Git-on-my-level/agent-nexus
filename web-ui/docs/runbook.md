@@ -133,6 +133,8 @@ Identity is workspace-scoped.
 - Actor-selection mode (dev only):
   - Selected actor is stored in `localStorage` per workspace.
   - Only available when `dev_actor_mode=true`.
+  - Same-origin mock write routes trust the submitted `actor_id` in this mode.
+  - This is a local-development convenience only; it is not an auth boundary.
 
 Switching from `/dtrinity/...` to `/scalingforever/...` preserves each workspace's
 own auth and actor state independently.

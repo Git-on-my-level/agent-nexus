@@ -1,3 +1,5 @@
+import { normalizeStringList, stringListsEqual } from "./listUtils.js";
+
 const LIST_FIELDS = new Set(["tags", "next_actions", "key_artifacts"]);
 const EDITABLE_FIELDS = [
   "title",
@@ -11,14 +13,6 @@ const EDITABLE_FIELDS = [
   "next_actions",
   "key_artifacts",
 ];
-
-function normalizeList(value) {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value.map((item) => String(item).trim()).filter(Boolean);
-}
 
 function normalizeScalar(key, value) {
   if (key === "next_check_in_at") {
@@ -36,12 +30,10 @@ export function buildThreadPatch(originalSnapshot = {}, draftSnapshot = {}) {
     const draftValue = draftSnapshot[field];
 
     if (LIST_FIELDS.has(field)) {
-      const normalizedOriginal = normalizeList(originalValue);
-      const normalizedDraft = normalizeList(draftValue);
+      const normalizedOriginal = normalizeStringList(originalValue);
+      const normalizedDraft = normalizeStringList(draftValue);
 
-      if (
-        JSON.stringify(normalizedOriginal) !== JSON.stringify(normalizedDraft)
-      ) {
+      if (!stringListsEqual(normalizedOriginal, normalizedDraft)) {
         patch[field] = normalizedDraft;
       }
       continue;

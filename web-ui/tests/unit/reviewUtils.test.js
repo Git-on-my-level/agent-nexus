@@ -95,4 +95,18 @@ describe("review draft/payload builder", () => {
       "Invalid typed refs in evidence_refs: bad-ref",
     ]);
   });
+
+  it("returns null packet and artifact for invalid review payloads", () => {
+    const result = buildReviewPayload(
+      {
+        outcome: "unknown",
+        notes: "",
+      },
+      baseOptions,
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.packet).toBeNull();
+    expect(result.artifact).toBeNull();
+  });
 });

@@ -79,6 +79,7 @@ UNQUOTED=value # inline comment
     });
 
     expect(normalizeBasePath("/")).toBe("");
+    expect(normalizeBasePath(" /oar/// ")).toBe("/oar");
   });
 
   it("defaults to the node adapter when ADAPTER is unset", () => {

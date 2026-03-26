@@ -1,7 +1,7 @@
-import { guardMockRoute } from "$lib/server/mockGuard";
+import { assertMockModeEnabled } from "$lib/server/mockGuard";
 
 export async function GET({ url }) {
-  const guardResponse = guardMockRoute(url.pathname);
+  const guardResponse = assertMockModeEnabled(url.pathname);
   if (guardResponse) {
     return guardResponse;
   }

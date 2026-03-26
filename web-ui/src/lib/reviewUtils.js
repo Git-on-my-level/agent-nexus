@@ -72,7 +72,11 @@ export function validateReviewDraft(draft, options = {}) {
 export function buildReviewPayload(draft, options = {}) {
   const validation = validateReviewDraft(draft, options);
   if (!validation.valid) {
-    return validation;
+    return {
+      ...validation,
+      packet: null,
+      artifact: null,
+    };
   }
 
   const packet = {
@@ -87,6 +91,8 @@ export function buildReviewPayload(draft, options = {}) {
   return {
     valid: true,
     errors: [],
+    fieldErrors: validation.fieldErrors,
+    normalized: validation.normalized,
     packet,
     artifact: {
       id: validation.normalized.review_id,

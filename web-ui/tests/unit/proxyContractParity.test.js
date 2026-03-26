@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  isProxyableCommand,
-  getCommandInfo,
+  getCatalogEntries,
   getAllProxyablePaths,
-  catalogByPath,
+  getCommandInfo,
+  isProxyableCommand,
 } from "../../src/lib/coreRouteCatalog.js";
 
 describe("proxyContractParity", () => {
@@ -92,13 +92,13 @@ describe("proxyContractParity", () => {
     });
   });
 
-  describe("catalogByPath", () => {
+  describe("getCatalogEntries", () => {
     it("contains expected number of entries", () => {
-      expect(catalogByPath.size).toBeGreaterThan(20);
+      expect(getCatalogEntries().size).toBeGreaterThan(20);
     });
 
     it("has all proxy-only commands in catalog", () => {
-      const entries = Array.from(catalogByPath.values());
+      const entries = Array.from(getCatalogEntries().values());
       const methods = entries.map((e) => e.method);
       const paths = entries.map((e) => e.path);
 

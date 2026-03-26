@@ -1,5 +1,6 @@
 import { parseRef } from "./typedRefs.js";
 import { validateCommitmentStatusRef } from "./eventRefRules.js";
+import { normalizeStringList, stringListsEqual } from "./listUtils.js";
 
 const LIST_FIELDS = new Set(["definition_of_done", "links"]);
 const EDITABLE_FIELDS = [
@@ -10,14 +11,6 @@ const EDITABLE_FIELDS = [
   "definition_of_done",
   "links",
 ];
-
-function normalizeList(value) {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value.map((item) => String(item).trim()).filter(Boolean);
-}
 
 function normalizeScalar(value) {
   return value ?? "";
@@ -34,12 +27,10 @@ export function buildCommitmentPatch(
     const draftValue = draftSnapshot[field];
 
     if (LIST_FIELDS.has(field)) {
-      const normalizedOriginal = normalizeList(originalValue);
-      const normalizedDraft = normalizeList(draftValue);
+      const normalizedOriginal = normalizeStringList(originalValue);
+      const normalizedDraft = normalizeStringList(draftValue);
 
-      if (
-        JSON.stringify(normalizedOriginal) !== JSON.stringify(normalizedDraft)
-      ) {
+      if (!stringListsEqual(normalizedOriginal, normalizedDraft)) {
         patch[field] = normalizedDraft;
       }
       continue;

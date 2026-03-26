@@ -1,10 +1,10 @@
 import { json } from "@sveltejs/kit";
 
 import { createMockActor, listMockActors } from "$lib/mockCoreData";
-import { guardMockRoute } from "$lib/server/mockGuard";
+import { assertMockModeEnabled, readMockJsonBody } from "$lib/server/mockGuard";
 
 export function GET({ url }) {
-  const guardResponse = guardMockRoute(url.pathname);
+  const guardResponse = assertMockModeEnabled(url.pathname);
   if (guardResponse) {
     return guardResponse;
   }
@@ -13,12 +13,16 @@ export function GET({ url }) {
 }
 
 export async function POST({ request, url }) {
-  const guardResponse = guardMockRoute(url.pathname);
+  const guardResponse = assertMockModeEnabled(url.pathname);
   if (guardResponse) {
     return guardResponse;
   }
 
-  const body = await request.json();
+  const parsed = await readMockJsonBody(request);
+  if (!parsed.ok) {
+    return parsed.response;
+  }
+  const body = parsed.body;
   const actor = body?.actor;
 
   if (!actor?.id || !actor?.display_name || !actor?.created_at) {
@@ -37,5 +41,5 @@ export async function POST({ request, url }) {
     created_at: actor.created_at,
   });
 
-  return json({ actor: created });
+  return json({ actor: created }, { status: 201 });
 }

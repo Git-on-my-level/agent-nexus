@@ -1,10 +1,14 @@
 import { json } from "@sveltejs/kit";
 
 import { getMockThread, updateMockThread } from "$lib/mockCoreData";
-import { guardMockRoute, mockResultToResponse } from "$lib/server/mockGuard";
+import {
+  assertMockModeEnabled,
+  mockResultToResponse,
+  readMockJsonBody,
+} from "$lib/server/mockGuard";
 
 export function GET({ params, url }) {
-  const guardResponse = guardMockRoute(url.pathname);
+  const guardResponse = assertMockModeEnabled(url.pathname);
   if (guardResponse) {
     return guardResponse;
   }
@@ -19,12 +23,16 @@ export function GET({ params, url }) {
 }
 
 export async function PATCH({ params, request, url }) {
-  const guardResponse = guardMockRoute(url.pathname);
+  const guardResponse = assertMockModeEnabled(url.pathname);
   if (guardResponse) {
     return guardResponse;
   }
 
-  const body = await request.json();
+  const parsed = await readMockJsonBody(request);
+  if (!parsed.ok) {
+    return parsed.response;
+  }
+  const body = parsed.body;
 
   if (!body?.actor_id || !body?.patch) {
     return json({ error: "actor_id and patch are required." }, { status: 400 });

@@ -76,7 +76,7 @@ export function cadencePresetFromValue(value) {
     return "monthly";
   }
 
-  if (cadence === "custom" || isLikelyCronExpression(cadence)) {
+  if (isLikelyCronExpression(cadence)) {
     return "custom";
   }
 

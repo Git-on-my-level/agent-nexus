@@ -2,7 +2,7 @@ import { json } from "@sveltejs/kit";
 
 import { getExpectedCommandRegistryDigest } from "$lib/commandRegistryDigest";
 import { EXPECTED_SCHEMA_VERSION } from "$lib/config";
-import { guardMockRoute } from "$lib/server/mockGuard";
+import { assertMockModeEnabled } from "$lib/server/mockGuard";
 
 const MOCK_CORE_VERSION = "dev-mock";
 const MOCK_API_VERSION = "0.2";
@@ -13,7 +13,7 @@ const MOCK_INSTANCE_ID = "web-ui-mock-instance";
 const MOCK_DEV_ACTOR_MODE = true;
 
 export async function GET({ url }) {
-  const guardResponse = guardMockRoute(url.pathname);
+  const guardResponse = assertMockModeEnabled(url.pathname);
   if (guardResponse) {
     return guardResponse;
   }

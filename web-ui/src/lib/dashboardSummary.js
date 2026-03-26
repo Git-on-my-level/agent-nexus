@@ -1,17 +1,10 @@
+import { parseTimestampMs } from "./dateUtils.js";
 import { INBOX_CATEGORY_ORDER, getInboxCategoryLabel } from "./inboxUtils";
 import { computeStaleness } from "./threadFilters";
 
-function parseTimestamp(value) {
-  if (!value) {
-    return Number.NaN;
-  }
-
-  return Date.parse(String(value));
-}
-
 function compareByTimestampDesc(leftValue, rightValue) {
-  const leftTs = parseTimestamp(leftValue);
-  const rightTs = parseTimestamp(rightValue);
+  const leftTs = parseTimestampMs(leftValue);
+  const rightTs = parseTimestampMs(rightValue);
   const leftHasTs = Number.isFinite(leftTs);
   const rightHasTs = Number.isFinite(rightTs);
 

@@ -1,20 +1,6 @@
 import { commandRegistry } from "../../../contracts/gen/ts/dist/client.js";
 
-export const catalogByPath = new Map();
-
-for (const command of commandRegistry) {
-  const normalizedPath = command.path.endsWith("/")
-    ? command.path.slice(0, -1)
-    : command.path;
-  const key = `${command.method}:${normalizedPath}`;
-  catalogByPath.set(key, {
-    commandId: command.command_id,
-    method: command.method,
-    path: command.path,
-    group: command.group,
-    stability: command.stability,
-  });
-}
+let catalogByPath;
 
 function matchPath(pattern, pathname) {
   if (pattern === pathname) {
@@ -40,49 +26,47 @@ function matchPath(pattern, pathname) {
   return true;
 }
 
-export function isProxyableCommand(method, pathname) {
-  const normalizedPath = pathname.endsWith("/")
-    ? pathname.slice(0, -1)
-    : pathname;
-
-  const key = `${method.toUpperCase()}:${normalizedPath}`;
-  if (catalogByPath.has(key)) {
-    return true;
-  }
-
-  for (const [catalogKey, info] of catalogByPath) {
-    if (!catalogKey.startsWith(`${method.toUpperCase()}:`)) {
-      continue;
-    }
-    const pattern = info.path.endsWith("/")
-      ? info.path.slice(0, -1)
-      : info.path;
-    if (matchPath(pattern, normalizedPath)) {
-      return true;
-    }
-  }
-
-  return false;
+function normalizeCatalogPath(pathname) {
+  return pathname.endsWith("/") ? pathname.slice(0, -1) : pathname;
 }
 
-export function getCommandInfo(method, pathname) {
-  const normalizedPath = pathname.endsWith("/")
-    ? pathname.slice(0, -1)
-    : pathname;
+function catalogKey(method, pathname) {
+  return `${method.toUpperCase()}:${normalizeCatalogPath(pathname)}`;
+}
 
-  const key = `${method.toUpperCase()}:${normalizedPath}`;
-  if (catalogByPath.has(key)) {
-    return catalogByPath.get(key);
+function getCatalogByPath() {
+  if (!catalogByPath) {
+    catalogByPath = new Map(
+      commandRegistry.map((command) => [
+        catalogKey(command.method, command.path),
+        {
+          commandId: command.command_id,
+          method: command.method,
+          path: command.path,
+          group: command.group,
+          stability: command.stability,
+        },
+      ]),
+    );
   }
 
-  for (const [catalogKey, info] of catalogByPath) {
-    if (!catalogKey.startsWith(`${method.toUpperCase()}:`)) {
+  return catalogByPath;
+}
+
+function findCatalogEntry(method, pathname) {
+  const catalog = getCatalogByPath();
+  const key = catalogKey(method, pathname);
+  if (catalog.has(key)) {
+    return catalog.get(key);
+  }
+
+  const methodPrefix = `${String(method).toUpperCase()}:`;
+  const normalizedPath = normalizeCatalogPath(pathname);
+  for (const [entryKey, info] of catalog) {
+    if (!entryKey.startsWith(methodPrefix)) {
       continue;
     }
-    const pattern = info.path.endsWith("/")
-      ? info.path.slice(0, -1)
-      : info.path;
-    if (matchPath(pattern, normalizedPath)) {
+    if (matchPath(normalizeCatalogPath(info.path), normalizedPath)) {
       return info;
     }
   }
@@ -90,11 +74,23 @@ export function getCommandInfo(method, pathname) {
   return null;
 }
 
+export function isProxyableCommand(method, pathname) {
+  return Boolean(findCatalogEntry(method, pathname));
+}
+
+export function getCommandInfo(method, pathname) {
+  return findCatalogEntry(method, pathname);
+}
+
 export function getAllProxyablePaths() {
-  return Array.from(catalogByPath.values()).map((info) => ({
+  return Array.from(getCatalogByPath().values()).map((info) => ({
     method: info.method,
     path: info.path,
   }));
+}
+
+export function getCatalogEntries() {
+  return getCatalogByPath();
 }
 
 export const proxyOnlyCommands = [

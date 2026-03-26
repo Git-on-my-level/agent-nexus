@@ -1,9 +1,13 @@
 import { json } from "@sveltejs/kit";
 import { getMockDocument, updateMockDocument } from "$lib/mockCoreData";
-import { guardMockRoute, mockResultToResponse } from "$lib/server/mockGuard";
+import {
+  assertMockModeEnabled,
+  mockResultToResponse,
+  readMockJsonBody,
+} from "$lib/server/mockGuard";
 
 export function GET({ url, params }) {
-  const guardResponse = guardMockRoute(url.pathname);
+  const guardResponse = assertMockModeEnabled(url.pathname);
   if (guardResponse) return guardResponse;
   const result = getMockDocument(params.documentId);
   if (!result) return json({ error: "document not found" }, { status: 404 });
@@ -11,15 +15,14 @@ export function GET({ url, params }) {
 }
 
 export async function PATCH({ url, params, request }) {
-  const guardResponse = guardMockRoute(url.pathname);
+  const guardResponse = assertMockModeEnabled(url.pathname);
   if (guardResponse) return guardResponse;
 
-  let body;
-  try {
-    body = await request.json();
-  } catch {
-    return json({ error: "Invalid JSON body." }, { status: 400 });
+  const parsed = await readMockJsonBody(request);
+  if (!parsed.ok) {
+    return parsed.response;
   }
+  const body = parsed.body;
 
   const { actor_id, content, content_type, if_base_revision, document } =
     body ?? {};
