@@ -1,4 +1,5 @@
 import { dev } from "$app/environment";
+import { env as privateEnv } from "$env/dynamic/private";
 import { isProxyableCommand } from "$lib/coreRouteCatalog";
 import { getWorkspaceHeader } from "$lib/compat/workspaceCompat";
 import { stripBasePath } from "$lib/workspacePaths";
@@ -155,18 +156,50 @@ async function proxyToCore(event, coreBaseUrl, workspaceSlug) {
 const GOOGLE_FONTS_STYLE = "https://fonts.googleapis.com";
 const GOOGLE_FONTS_FONT = "https://fonts.gstatic.com";
 
-function buildCSPDirectives() {
+function parseCSPExtraSources(rawValue) {
+  return String(rawValue ?? "")
+    .split(/[\s,]+/)
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+function mergeCSPDirectiveSources(baseSources, extraSourcesRaw) {
+  return [
+    ...new Set([...baseSources, ...parseCSPExtraSources(extraSourcesRaw)]),
+  ];
+}
+
+function buildCSPDirectives(env = privateEnv) {
   const scriptSrc = dev
     ? ["'self'", "'unsafe-inline'", "'unsafe-eval'"]
     : ["'self'"];
 
   return {
     "default-src": ["'self'"],
-    "script-src": scriptSrc,
-    "style-src": ["'self'", "'unsafe-inline'", GOOGLE_FONTS_STYLE],
-    "img-src": ["'self'", "data:", "https:"],
-    "font-src": ["'self'", "data:", GOOGLE_FONTS_FONT],
-    "connect-src": ["'self'"],
+    "script-src": mergeCSPDirectiveSources(
+      scriptSrc,
+      env.OAR_UI_CSP_SCRIPT_SRC_EXTRA,
+    ),
+    "style-src": mergeCSPDirectiveSources(
+      ["'self'", "'unsafe-inline'", GOOGLE_FONTS_STYLE],
+      env.OAR_UI_CSP_STYLE_SRC_EXTRA,
+    ),
+    "img-src": mergeCSPDirectiveSources(
+      ["'self'", "data:", "https:"],
+      env.OAR_UI_CSP_IMG_SRC_EXTRA,
+    ),
+    "font-src": mergeCSPDirectiveSources(
+      ["'self'", "data:", GOOGLE_FONTS_FONT],
+      env.OAR_UI_CSP_FONT_SRC_EXTRA,
+    ),
+    "connect-src": mergeCSPDirectiveSources(
+      ["'self'"],
+      env.OAR_UI_CSP_CONNECT_SRC_EXTRA,
+    ),
+    "manifest-src": mergeCSPDirectiveSources(
+      ["'self'"],
+      env.OAR_UI_CSP_MANIFEST_SRC_EXTRA,
+    ),
     "frame-ancestors": ["'none'"],
     "base-uri": ["'self'"],
     "form-action": ["'self'"],

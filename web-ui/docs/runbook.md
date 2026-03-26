@@ -4,6 +4,7 @@ This runbook covers local integration and production-like serving for the
 workspace-aware `oar-ui`.
 
 For packed-host SaaS operations, see:
+
 - Architecture: [`../docs/architecture/saas-packed-host-v1.md`](../docs/architecture/saas-packed-host-v1.md)
 - Configuration: [`../runbooks/packed-host-configuration.md`](../runbooks/packed-host-configuration.md)
 - Linux deployment: [`../deploy/linux-packed-host.md`](../deploy/linux-packed-host.md)
@@ -333,6 +334,42 @@ When deploying behind a reverse proxy (Caddy, nginx, Cloudflare, etc.):
 4. **TLS considerations**: The CSP assumes TLS in production. If the proxy
    terminates TLS, ensure it forwards `https://` URLs to the UI so `connect-src
 'self'` resolves correctly.
+
+### Cloudflare Zero Trust and injected resources
+
+Cloudflare products such as Access and Web Analytics can inject additional
+browser resources into HTML responses. With the default strict UI CSP, those
+resources will be blocked unless you explicitly allow them.
+
+Supported runtime overrides:
+
+- `OAR_UI_CSP_SCRIPT_SRC_EXTRA`
+- `OAR_UI_CSP_STYLE_SRC_EXTRA`
+- `OAR_UI_CSP_IMG_SRC_EXTRA`
+- `OAR_UI_CSP_FONT_SRC_EXTRA`
+- `OAR_UI_CSP_CONNECT_SRC_EXTRA`
+- `OAR_UI_CSP_MANIFEST_SRC_EXTRA`
+
+Each variable accepts a whitespace- or comma-separated list of additional CSP
+sources appended to that directive.
+
+Example for a Cloudflare Access + Web Analytics deployment:
+
+```bash
+OAR_UI_CSP_SCRIPT_SRC_EXTRA="https://static.cloudflareinsights.com 'sha256-<inline-script-hash-from-browser-console>'" \
+OAR_UI_CSP_CONNECT_SRC_EXTRA="https://cloudflareinsights.com" \
+OAR_UI_CSP_MANIFEST_SRC_EXTRA="https://scalingforever.cloudflareaccess.com" \
+./scripts/serve
+```
+
+Notes:
+
+- The inline script hash is tenant-dependent. Copy the exact `sha256-...` value
+  reported by the browser CSP error for your Access-injected inline script.
+- Prefer explicit hashes or host allowlists over adding `'unsafe-inline'` to
+  `script-src`.
+- If you do not need Cloudflare Web Analytics automatic injection, disabling it
+  at Cloudflare is tighter than broadening the app CSP.
 
 ### Testing CSP in production
 

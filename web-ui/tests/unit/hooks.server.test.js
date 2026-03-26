@@ -4,6 +4,8 @@ const authSessionState = {
   currentSession: { accessToken: "expired-token" },
 };
 
+const envState = vi.hoisted(() => ({}));
+
 const authSessionMocks = vi.hoisted(() => ({
   clearWorkspaceAuthSession: vi.fn(),
   getWorkspaceAuthSession: vi.fn(() => authSessionState.currentSession),
@@ -18,7 +20,7 @@ vi.mock("$app/environment", () => ({
 }));
 
 vi.mock("$env/dynamic/private", () => ({
-  env: {},
+  env: envState,
 }));
 
 vi.mock("$lib/coreRouteCatalog", () => ({
@@ -70,6 +72,9 @@ describe("hooks proxy retry", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     authSessionState.currentSession = { accessToken: "expired-token" };
+    for (const key of Object.keys(envState)) {
+      delete envState[key];
+    }
   });
 
   it("replays the original request body after refreshing workspace auth", async () => {
@@ -122,6 +127,44 @@ describe("hooks proxy retry", () => {
     expect(secondInit.headers.get("authorization")).toBe("Bearer fresh-token");
     expect(authSessionMocks.refreshWorkspaceAuthSession).toHaveBeenCalledTimes(
       1,
+    );
+  });
+
+  it("adds configured CSP sources to document navigation responses", async () => {
+    envState.OAR_UI_CSP_SCRIPT_SRC_EXTRA =
+      "https://static.cloudflareinsights.com 'sha256-examplehash='";
+    envState.OAR_UI_CSP_CONNECT_SRC_EXTRA = "https://cloudflareinsights.com";
+    envState.OAR_UI_CSP_MANIFEST_SRC_EXTRA =
+      "https://scalingforever.cloudflareaccess.com";
+
+    const response = await handle({
+      event: {
+        url: new URL("https://oar.example.test/dtrinity"),
+        request: new Request("https://oar.example.test/dtrinity", {
+          method: "GET",
+          headers: {
+            accept: "text/html",
+          },
+        }),
+      },
+      resolve: vi.fn(
+        () =>
+          new Response("<!doctype html><html><body>ok</body></html>", {
+            status: 200,
+            headers: {
+              "content-type": "text/html",
+            },
+          }),
+      ),
+    });
+
+    const csp = response.headers.get("Content-Security-Policy");
+    expect(csp).toContain(
+      "script-src 'self' https://static.cloudflareinsights.com 'sha256-examplehash='",
+    );
+    expect(csp).toContain("connect-src 'self' https://cloudflareinsights.com");
+    expect(csp).toContain(
+      "manifest-src 'self' https://scalingforever.cloudflareaccess.com",
     );
   });
 });
