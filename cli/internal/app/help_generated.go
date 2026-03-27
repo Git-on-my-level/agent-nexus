@@ -355,6 +355,7 @@ Usage:
 Core Commands:
   version       Print CLI/runtime version details
   doctor        Validate local and network preconditions
+  update        Replace the installed CLI binary with the recommended or requested release
   auth          Manage agent registration, profile auth, and token lifecycle
   import        Bootstrap a precision-first workspace import and run local import helpers
   draft         Stage write requests locally and commit them later
@@ -410,6 +411,9 @@ func helpTopicText(topic string) (string, bool) {
 	}
 	if topic == "onboarding" {
 		return onboardingHelpText(), true
+	}
+	if topic == "update" {
+		return updateUsageText() + "\n", true
 	}
 	if topic == "agent-guide" {
 		return agentGuideText(), true

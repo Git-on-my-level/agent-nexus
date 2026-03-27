@@ -43,6 +43,9 @@ func (a *App) runCommand(ctx context.Context, args []string, cfg config.Resolved
 	case "doctor":
 		result, err := a.runDoctor(ctx, cfg)
 		return "doctor", result, err
+	case "update":
+		result, err := a.runUpdate(ctx, args[1:], cfg)
+		return "update", result, err
 	case "auth":
 		result, name, err := a.runAuth(ctx, args[1:], cfg)
 		return name, result, err

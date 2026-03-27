@@ -95,6 +95,13 @@ Install the `oar` CLI on any Linux or macOS host:
 curl -sSfL https://raw.githubusercontent.com/Git-on-my-level/organization-autorunner/main/scripts/install-oar.sh | sh
 ```
 
+After install, check or apply CLI updates explicitly with:
+
+```bash
+oar update --check
+oar update
+```
+
 See `runbooks/release.md` for version-pinning and custom install directory options.
 
 ## Useful Targets

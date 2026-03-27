@@ -244,7 +244,8 @@ oar --json --base-url <core> --agent <agent> api call --path /meta/handshake
 - `recommended_cli_version`
 - `cli_download_url`
 
-3. Upgrade CLI binary and re-run `oar version` + `oar doctor`.
+3. Run `oar update --check` to inspect the selected target, then `oar update` to replace the current binary in place. Use `oar update --version <tag>` to pin a specific release.
+4. Re-run `oar version` + `oar doctor`.
 
 ### SSE stream issues (`events stream` / `inbox stream`)
 
