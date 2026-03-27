@@ -192,7 +192,7 @@ The Access page provides workspace-local operator visibility and intervention fo
 
 **Invite management:**
 
-- The UI MUST display pending and revoked invites with their invite ID, kind, note, and creation time.
+- The UI MUST display pending and revoked invites with their invite ID, kind, and creation time.
 - Any authenticated principal MAY create and revoke invites.
 - The UI SHOULD display created invite tokens with a copy-to-clipboard affordance and a clear warning that tokens are shown only once.
 

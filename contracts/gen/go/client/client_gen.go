@@ -298,7 +298,7 @@ var CommandRegistry = []CommandSpec{
 		Examples: []Example{
 			{
 				Title:   "Create agent invite",
-				Command: "oar auth invites create --kind agent --note 'ops bot' --json",
+				Command: "oar auth invites create --kind agent --json",
 			},
 		},
 	},

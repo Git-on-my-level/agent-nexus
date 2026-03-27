@@ -25,8 +25,6 @@ const (
 	defaultWorkspaceRoot             = ".oar-control-plane"
 	defaultShutdownTimeout           = 15 * time.Second
 	defaultBackupMaintenanceInterval = 5 * time.Minute
-	defaultWorkspaceURLTmpl          = "http://127.0.0.1:8000/%s"
-	defaultInviteURLTmpl             = "http://127.0.0.1:8100/invites/%s"
 )
 
 func main() {
@@ -35,10 +33,11 @@ func main() {
 		port                      = envInt("OAR_CONTROL_PLANE_PORT", defaultPort)
 		listenAddress             = envString("OAR_CONTROL_PLANE_LISTEN_ADDR", "")
 		workspaceRoot             = envString("OAR_CONTROL_PLANE_WORKSPACE_ROOT", defaultWorkspaceRoot)
+		publicBaseURL             = envString("OAR_CONTROL_PLANE_PUBLIC_BASE_URL", "")
 		webAuthnRPID              = envString("OAR_CONTROL_PLANE_WEBAUTHN_RPID", "")
 		webAuthnOrigin            = envString("OAR_CONTROL_PLANE_WEBAUTHN_ORIGIN", "")
-		workspaceURLTemplate      = envString("OAR_CONTROL_PLANE_WORKSPACE_URL_TEMPLATE", defaultWorkspaceURLTmpl)
-		inviteURLTemplate         = envString("OAR_CONTROL_PLANE_INVITE_URL_TEMPLATE", defaultInviteURLTmpl)
+		workspaceURLTemplate      = envString("OAR_CONTROL_PLANE_WORKSPACE_URL_TEMPLATE", "")
+		inviteURLTemplate         = envString("OAR_CONTROL_PLANE_INVITE_URL_TEMPLATE", "")
 		workspaceGrantIssuer      = envString("OAR_CONTROL_PLANE_WORKSPACE_GRANT_ISSUER", "")
 		workspaceGrantAudience    = envString("OAR_CONTROL_PLANE_WORKSPACE_GRANT_AUDIENCE", "")
 		workspaceGrantSigningKey  = envString("OAR_CONTROL_PLANE_WORKSPACE_GRANT_SIGNING_KEY", "")
@@ -54,6 +53,7 @@ func main() {
 	flag.IntVar(&port, "port", port, "port to listen on")
 	flag.StringVar(&listenAddress, "listen-addr", listenAddress, "full listen address host:port; overrides --host/--port")
 	flag.StringVar(&workspaceRoot, "workspace-root", workspaceRoot, "root directory for control-plane sqlite workspace")
+	flag.StringVar(&publicBaseURL, "public-base-url", publicBaseURL, "public browser-facing base URL for control-plane routes; used as the default base for workspace URLs, invite URLs, workspace-grant issuer, and WebAuthn origin")
 	flag.StringVar(&webAuthnRPID, "webauthn-rpid", webAuthnRPID, "explicit WebAuthn RP ID")
 	flag.StringVar(&webAuthnOrigin, "webauthn-origin", webAuthnOrigin, "explicit WebAuthn origin")
 	flag.StringVar(&workspaceURLTemplate, "workspace-url-template", workspaceURLTemplate, "workspace base URL template containing optional %s slug placeholder")
@@ -72,10 +72,26 @@ func main() {
 	if strings.TrimSpace(addr) == "" {
 		addr = net.JoinHostPort(host, strconv.Itoa(port))
 	}
+	normalizedPublicBaseURL, err := controlplane.NormalizePublicBaseURL(publicBaseURL)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "invalid OAR_CONTROL_PLANE_PUBLIC_BASE_URL: %v\n", err)
+		os.Exit(1)
+	}
+	if strings.TrimSpace(webAuthnOrigin) == "" && normalizedPublicBaseURL != "" {
+		webAuthnOrigin, err = controlplane.PublicBaseOrigin(normalizedPublicBaseURL)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "invalid control-plane public base URL origin: %v\n", err)
+			os.Exit(1)
+		}
+	}
 	var workspaceGrantSigner *controlplaneauth.WorkspaceHumanGrantSigner
 	if strings.TrimSpace(workspaceGrantSigningKey) != "" || strings.TrimSpace(workspaceGrantAudience) != "" || strings.TrimSpace(workspaceGrantIssuer) != "" {
 		if strings.TrimSpace(workspaceGrantIssuer) == "" {
-			workspaceGrantIssuer = "http://" + addr
+			if normalizedPublicBaseURL != "" {
+				workspaceGrantIssuer = normalizedPublicBaseURL
+			} else {
+				workspaceGrantIssuer = "http://" + addr
+			}
 		}
 		privateKey, err := controlplaneauth.ParseEd25519PrivateKeyBase64(workspaceGrantSigningKey)
 		if err != nil {
@@ -101,6 +117,7 @@ func main() {
 	defer workspace.Close()
 
 	service := controlplane.NewService(workspace, controlplane.Config{
+		PublicBaseURL:        normalizedPublicBaseURL,
 		SessionTTL:           sessionTTL,
 		CeremonyTTL:          ceremonyTTL,
 		LaunchTTL:            launchTTL,

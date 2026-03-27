@@ -93,11 +93,7 @@ func (a *App) runAuthInvitesList(ctx context.Context, service *authcli.Service) 
 		} else if invite.ConsumedAt != "" {
 			status = "consumed"
 		}
-		line := fmt.Sprintf("  %s  kind=%s  status=%s", invite.ID, invite.Kind, status)
-		if invite.Note != "" {
-			line += "  note=" + invite.Note
-		}
-		lines = append(lines, line)
+		lines = append(lines, fmt.Sprintf("  %s  kind=%s  status=%s", invite.ID, invite.Kind, status))
 	}
 	header := fmt.Sprintf("Invites (%d):", len(result.Invites))
 	text := header + "\n" + strings.Join(lines, "\n")
@@ -107,9 +103,7 @@ func (a *App) runAuthInvitesList(ctx context.Context, service *authcli.Service) 
 func (a *App) runAuthInvitesCreate(ctx context.Context, service *authcli.Service, args []string) (*commandResult, error) {
 	fs := newSilentFlagSet("auth invites create")
 	var kindFlag trackedString
-	var noteFlag trackedString
 	fs.Var(&kindFlag, "kind", "Invite kind (human, agent, or any)")
-	fs.Var(&noteFlag, "note", "Optional note describing the invite")
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_auth_invites_flags", err.Error())
 	}
@@ -123,7 +117,7 @@ func (a *App) runAuthInvitesCreate(ctx context.Context, service *authcli.Service
 	if kind != "human" && kind != "agent" && kind != "any" {
 		return nil, errnorm.Usage("invalid_invite_kind", "kind must be human, agent, or any")
 	}
-	result, err := service.CreateInvite(ctx, kind, strings.TrimSpace(noteFlag.value))
+	result, err := service.CreateInvite(ctx, kind)
 	if err != nil {
 		return nil, err
 	}

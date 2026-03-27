@@ -56,7 +56,6 @@ type TokenStatusResult struct {
 type Invite struct {
 	ID                string `json:"id"`
 	Kind              string `json:"kind"`
-	Note              string `json:"note,omitempty"`
 	CreatedAt         string `json:"created_at"`
 	ConsumedAt        string `json:"consumed_at,omitempty"`
 	ConsumedByAgentID string `json:"consumed_by_agent_id,omitempty"`
@@ -527,7 +526,7 @@ func (s *Service) ListInvites(ctx context.Context) (ListInvitesResult, error) {
 	return ListInvitesResult{Invites: payload.Invites}, nil
 }
 
-func (s *Service) CreateInvite(ctx context.Context, kind, note string) (CreateInviteResult, error) {
+func (s *Service) CreateInvite(ctx context.Context, kind string) (CreateInviteResult, error) {
 	prof, err := s.ensureAccessToken(ctx)
 	if err != nil {
 		return CreateInviteResult{}, err
@@ -538,7 +537,6 @@ func (s *Service) CreateInvite(ctx context.Context, kind, note string) (CreateIn
 	}
 	body, _ := json.Marshal(map[string]any{
 		"kind": kind,
-		"note": note,
 	})
 	resp, err := client.RawCall(ctx, httpclient.RawRequest{Method: http.MethodPost, Path: "/auth/invites", Body: body})
 	if err != nil {

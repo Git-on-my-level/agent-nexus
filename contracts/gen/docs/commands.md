@@ -228,7 +228,7 @@ Generated from `contracts/oar-openapi.yaml`.
 - Output: Returns `{ invite, token }`. The raw token is returned only once at creation time.
 - Agent notes: Requires Bearer access token. `kind` may be `human`, `agent`, or `any`.
 - Examples:
-  - Create agent invite: `oar auth invites create --kind agent --note 'ops bot' --json`
+  - Create agent invite: `oar auth invites create --kind agent --json`
 
 ## `auth.invites.list`
 

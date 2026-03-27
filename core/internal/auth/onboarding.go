@@ -45,7 +45,6 @@ type Invite struct {
 	Kind              string  `json:"kind"`
 	CreatedByAgentID  string  `json:"created_by_agent_id"`
 	CreatedByActorID  string  `json:"created_by_actor_id"`
-	Note              string  `json:"note"`
 	CreatedAt         string  `json:"created_at"`
 	ExpiresAt         *string `json:"expires_at,omitempty"`
 	ConsumedAt        *string `json:"consumed_at,omitempty"`
@@ -58,7 +57,6 @@ type Invite struct {
 
 type CreateInviteInput struct {
 	Kind      string
-	Note      string
 	ExpiresAt *time.Time
 }
 
@@ -161,11 +159,6 @@ func (s *Store) CreateInvite(ctx context.Context, createdBy Principal, input Cre
 		return Invite{}, "", fmt.Errorf("%w: authenticated principal is required", ErrAuthRequired)
 	}
 
-	note := strings.TrimSpace(input.Note)
-	if len(note) > 240 {
-		return Invite{}, "", fmt.Errorf("%w: note must be 240 characters or fewer", ErrInvalidRequest)
-	}
-
 	var expiresAtText *string
 	if input.ExpiresAt != nil {
 		expiresAt := input.ExpiresAt.UTC()
@@ -213,7 +206,7 @@ func (s *Store) CreateInvite(ctx context.Context, createdBy Principal, input Cre
 		string(kind),
 		createdBy.AgentID,
 		createdBy.ActorID,
-		note,
+		"",
 		nowText,
 		expiresAtText,
 	)
@@ -223,9 +216,6 @@ func (s *Store) CreateInvite(ctx context.Context, createdBy Principal, input Cre
 	}
 
 	metadata := map[string]any{"kind": string(kind)}
-	if note != "" {
-		metadata["note"] = note
-	}
 	if expiresAtText != nil {
 		metadata["expires_at"] = *expiresAtText
 	}
@@ -251,7 +241,6 @@ func (s *Store) CreateInvite(ctx context.Context, createdBy Principal, input Cre
 		Kind:             string(kind),
 		CreatedByAgentID: createdBy.AgentID,
 		CreatedByActorID: createdBy.ActorID,
-		Note:             note,
 		CreatedAt:        nowText,
 		ExpiresAt:        expiresAtText,
 	}, token, nil
@@ -579,6 +568,7 @@ type inviteScanner interface {
 func scanInvite(scanner inviteScanner) (Invite, error) {
 	var (
 		invite            Invite
+		ignoredNote       string
 		expiresAt         sql.NullString
 		consumedAt        sql.NullString
 		consumedByAgentID sql.NullString
@@ -592,7 +582,7 @@ func scanInvite(scanner inviteScanner) (Invite, error) {
 		&invite.Kind,
 		&invite.CreatedByAgentID,
 		&invite.CreatedByActorID,
-		&invite.Note,
+		&ignoredNote,
 		&invite.CreatedAt,
 		&expiresAt,
 		&consumedAt,

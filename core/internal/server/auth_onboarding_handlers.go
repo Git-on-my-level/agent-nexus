@@ -34,7 +34,6 @@ func handleCreateInvite(w http.ResponseWriter, r *http.Request, opts handlerOpti
 
 	var req struct {
 		Kind      string `json:"kind"`
-		Note      string `json:"note"`
 		ExpiresAt string `json:"expires_at"`
 	}
 	if !decodeJSONBody(w, r, &req) {
@@ -54,7 +53,6 @@ func handleCreateInvite(w http.ResponseWriter, r *http.Request, opts handlerOpti
 
 	invite, token, err := opts.authStore.CreateInvite(r.Context(), *principal, auth.CreateInviteInput{
 		Kind:      req.Kind,
-		Note:      req.Note,
 		ExpiresAt: expiresAt,
 	})
 	if err != nil {

@@ -35,10 +35,11 @@ Required settings:
 |---|---|
 | `OAR_CONTROL_PLANE_LISTEN_ADDR` | Loopback bind address, e.g. `127.0.0.1:8100` |
 | `OAR_CONTROL_PLANE_WORKSPACE_ROOT` | Persistent state directory for control-plane DB |
+| `OAR_CONTROL_PLANE_PUBLIC_BASE_URL` | Public browser-facing base URL used for workspace URLs, invite URLs, and launch-grant issuer defaults |
 | `OAR_CONTROL_PLANE_WEBAUTHN_RPID` | Public hostname for passkey ceremonies |
-| `OAR_CONTROL_PLANE_WEBAUTHN_ORIGIN` | Full origin including `https://` |
-| `OAR_CONTROL_PLANE_WORKSPACE_URL_TEMPLATE` | Pattern for workspace URLs, `%s` = workspace slug |
-| `OAR_CONTROL_PLANE_INVITE_URL_TEMPLATE` | Pattern for invite acceptance URLs |
+| `OAR_CONTROL_PLANE_WEBAUTHN_ORIGIN` | Full origin including `https://`; defaults to the origin of `OAR_CONTROL_PLANE_PUBLIC_BASE_URL` when set |
+| `OAR_CONTROL_PLANE_WORKSPACE_URL_TEMPLATE` | Optional override pattern for workspace URLs, `%s` = workspace path |
+| `OAR_CONTROL_PLANE_INVITE_URL_TEMPLATE` | Optional override pattern for invite acceptance URLs |
 | `OAR_CONTROL_PLANE_WORKSPACE_GRANT_SIGNING_KEY` | Base64 Ed25519 private key for signing launch grants |
 
 Placement defaults for packed-host:

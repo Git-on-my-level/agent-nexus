@@ -193,7 +193,6 @@ func TestAgentAuthLifecycleAndActorCompatibility(t *testing.T) {
 
 	inviteToken := createInviteToken(t, serverURL, registerPayload.Tokens.AccessToken, map[string]any{
 		"kind": "agent",
-		"note": "duplicate-username-check",
 	})
 
 	dupResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/agents/register", map[string]any{
@@ -659,7 +658,6 @@ func TestBootstrapAndInviteGatedRegistrationFlow(t *testing.T) {
 
 	invite, inviteToken := createInvite(t, serverURL, firstPayload.Tokens.AccessToken, map[string]any{
 		"kind": "agent",
-		"note": "second-agent",
 	})
 	if invite["token"] != nil {
 		t.Fatalf("invite metadata unexpectedly included token: %#v", invite)
@@ -684,9 +682,6 @@ func TestBootstrapAndInviteGatedRegistrationFlow(t *testing.T) {
 		matched = true
 		if asString(listed["kind"]) != "agent" {
 			t.Fatalf("unexpected invite kind: %#v", listed)
-		}
-		if asString(listed["note"]) != "second-agent" {
-			t.Fatalf("unexpected invite note: %#v", listed)
 		}
 		if listed["token"] != nil {
 			t.Fatalf("listed invite unexpectedly exposed token: %#v", listed)
@@ -724,7 +719,6 @@ func TestInviteLifecycleRejectsExpiredRevokedWrongKindAndReuse(t *testing.T) {
 
 	singleUseInvite, singleUseToken := createInvite(t, serverURL, bootstrapPayload.Tokens.AccessToken, map[string]any{
 		"kind": "agent",
-		"note": "single-use",
 	})
 	firstUseResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/agents/register", map[string]any{
 		"username":     "single.use",
@@ -743,7 +737,6 @@ func TestInviteLifecycleRejectsExpiredRevokedWrongKindAndReuse(t *testing.T) {
 
 	wrongKindInvite, wrongKindToken := createInvite(t, serverURL, bootstrapPayload.Tokens.AccessToken, map[string]any{
 		"kind": "human",
-		"note": "wrong-kind",
 	})
 	wrongKindResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/agents/register", map[string]any{
 		"username":     "wrong.kind",
@@ -755,7 +748,6 @@ func TestInviteLifecycleRejectsExpiredRevokedWrongKindAndReuse(t *testing.T) {
 
 	revokedInvite, revokedToken := createInvite(t, serverURL, bootstrapPayload.Tokens.AccessToken, map[string]any{
 		"kind": "agent",
-		"note": "revoked",
 	})
 	revokeResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/invites/"+asString(revokedInvite["id"])+"/revoke", map[string]any{}, bootstrapPayload.Tokens.AccessToken, http.StatusOK)
 	defer revokeResp.Body.Close()
@@ -770,7 +762,6 @@ func TestInviteLifecycleRejectsExpiredRevokedWrongKindAndReuse(t *testing.T) {
 
 	expiredInvite, expiredToken := createInvite(t, serverURL, bootstrapPayload.Tokens.AccessToken, map[string]any{
 		"kind": "agent",
-		"note": "expired",
 	})
 	if _, err := env.workspace.DB().ExecContext(
 		context.Background(),
@@ -821,7 +812,6 @@ func TestAuthAuditAndPrincipalInventoryVisibility(t *testing.T) {
 
 	consumedInvite, consumedToken := createInvite(t, serverURL, adminPayload.Tokens.AccessToken, map[string]any{
 		"kind": "agent",
-		"note": "consumed-invite",
 	})
 
 	secondResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/agents/register", map[string]any{
@@ -846,7 +836,6 @@ func TestAuthAuditAndPrincipalInventoryVisibility(t *testing.T) {
 
 	revokedInvite, _ := createInvite(t, serverURL, adminPayload.Tokens.AccessToken, map[string]any{
 		"kind": "agent",
-		"note": "revoked-invite",
 	})
 	revokeInviteResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/invites/"+asString(revokedInvite["id"])+"/revoke", map[string]any{}, adminPayload.Tokens.AccessToken, http.StatusOK)
 	revokeInviteResp.Body.Close()
@@ -1050,7 +1039,6 @@ func TestAdminPrincipalRevocationAndLastActiveSafeguards(t *testing.T) {
 
 	memberInvite, memberToken := createInvite(t, serverURL, adminPayload.Tokens.AccessToken, map[string]any{
 		"kind": "agent",
-		"note": "member-revoke",
 	})
 	_ = memberInvite
 
@@ -1632,7 +1620,7 @@ func TestConcurrentFreshAuthRegistrationsSucceed(t *testing.T) {
 		inputs = append(inputs, input{
 			username:    fmt.Sprintf("user-%d", i+1),
 			publicKey:   publicKey,
-			inviteToken: createInviteToken(t, serverURL, initialPayload.Tokens.AccessToken, map[string]any{"kind": "agent", "note": fmt.Sprintf("concurrent-%d", i+1)}),
+			inviteToken: createInviteToken(t, serverURL, initialPayload.Tokens.AccessToken, map[string]any{"kind": "agent"}),
 		})
 	}
 

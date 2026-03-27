@@ -75,8 +75,9 @@ Key smoke outcomes from that run:
 - Loopback ports are chosen dynamically during `scripts/packed-host-smoke`.
 - `OAR_CONTROL_PLANE_WEBAUTHN_ORIGIN` is set to
   `http://localhost:<ui-port>` for the local smoke browser origin.
-- `OAR_CONTROL_PLANE_WORKSPACE_URL_TEMPLATE` is set to
-  `http://localhost:<ui-port>/%s` for the local shared-UI route shape.
+- `OAR_CONTROL_PLANE_PUBLIC_BASE_URL` is set to `http://localhost:<ui-port>`
+  so shared control-plane invite URLs and workspace URLs use the same local
+  browser-facing base.
 - The local smoke builds the shared UI with `web-ui/scripts/build` before it
   starts the Node adapter server.
 - The local smoke serves the shared UI with `web-ui/scripts/serve` and sets

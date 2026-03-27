@@ -765,7 +765,7 @@ export const commandRegistry: CommandSpec[] = [
     "examples": [
       {
         "title": "Create agent invite",
-        "command": "oar auth invites create --kind agent --note 'ops bot' --json"
+        "command": "oar auth invites create --kind agent --json"
       }
     ],
     "body_schema": {
@@ -784,10 +784,6 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "expires_at",
           "type": "datetime"
-        },
-        {
-          "name": "note",
-          "type": "string"
         }
       ]
     },

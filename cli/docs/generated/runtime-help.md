@@ -1009,11 +1009,11 @@ Generated Help: auth invites create
 - Agent notes: Requires Bearer access token. `kind` may be `human`, `agent`, or `any`.
 - Adjacent commands: `auth audit list`, `auth bootstrap status`, `auth invites list`, `auth invites revoke`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth register`, `auth token`
 - Examples:
-  - Create agent invite: `oar auth invites create --kind agent --note 'ops bot' --json`
+  - Create agent invite: `oar auth invites create --kind agent --json`
 
 Body schema:
   Required: kind (string)
-  Optional: expires_at (datetime), note (string)
+  Optional: expires_at (datetime)
   Enum values: kind: agent, any, human
 
 Global flags:

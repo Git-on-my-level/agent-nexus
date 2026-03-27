@@ -60,6 +60,7 @@ var (
 )
 
 type Config struct {
+	PublicBaseURL        string
 	SessionTTL           time.Duration
 	CeremonyTTL          time.Duration
 	LaunchTTL            time.Duration
@@ -135,13 +136,31 @@ func NewService(workspace *cpstorage.Workspace, config Config) *Service {
 	if nowFn == nil {
 		nowFn = func() time.Time { return time.Now().UTC() }
 	}
+	publicBaseURL, err := NormalizePublicBaseURL(config.PublicBaseURL)
+	if err != nil {
+		panic(fmt.Sprintf("invalid control-plane public base URL: %v", err))
+	}
 	workspaceURLTemplate := strings.TrimSpace(config.WorkspaceURLTemplate)
 	if workspaceURLTemplate == "" {
-		workspaceURLTemplate = defaultWorkspaceURL
+		if publicBaseURL != "" {
+			workspaceURLTemplate, err = WorkspaceURLTemplateFromPublicBase(publicBaseURL)
+			if err != nil {
+				panic(fmt.Sprintf("invalid control-plane public base URL: %v", err))
+			}
+		} else {
+			workspaceURLTemplate = defaultWorkspaceURL
+		}
 	}
 	inviteURLTemplate := strings.TrimSpace(config.InviteURLTemplate)
 	if inviteURLTemplate == "" {
-		inviteURLTemplate = defaultInviteURL
+		if publicBaseURL != "" {
+			inviteURLTemplate, err = InviteURLTemplateFromPublicBase(publicBaseURL)
+			if err != nil {
+				panic(fmt.Sprintf("invalid control-plane public base URL: %v", err))
+			}
+		} else {
+			inviteURLTemplate = defaultInviteURL
+		}
 	}
 	hostedScriptsDir := strings.TrimSpace(config.HostedScriptsDir)
 	if hostedScriptsDir == "" {

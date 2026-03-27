@@ -125,11 +125,12 @@ Relevant control-plane configuration:
 | Listen host | `--host` | `OAR_CONTROL_PLANE_HOST` | `127.0.0.1` |
 | Listen port | `--port` | `OAR_CONTROL_PLANE_PORT` | `8100` |
 | Full listen address (overrides host+port) | `--listen-addr` | `OAR_CONTROL_PLANE_LISTEN_ADDR` | unset |
+| Public base URL | `--public-base-url` | `OAR_CONTROL_PLANE_PUBLIC_BASE_URL` | unset |
 | WebAuthn RP ID | `--webauthn-rpid` | `OAR_CONTROL_PLANE_WEBAUTHN_RPID` | derived from browser origin |
-| WebAuthn origin | `--webauthn-origin` | `OAR_CONTROL_PLANE_WEBAUTHN_ORIGIN` | derived from browser origin |
-| Workspace URL template | `--workspace-url-template` | `OAR_CONTROL_PLANE_WORKSPACE_URL_TEMPLATE` | `http://127.0.0.1:8000/%s` |
-| Invite URL template | `--invite-url-template` | `OAR_CONTROL_PLANE_INVITE_URL_TEMPLATE` | `http://127.0.0.1:8100/invites/%s` |
-| Workspace grant issuer | `--workspace-grant-issuer` | `OAR_CONTROL_PLANE_WORKSPACE_GRANT_ISSUER` | listen URL when signing is enabled |
+| WebAuthn origin | `--webauthn-origin` | `OAR_CONTROL_PLANE_WEBAUTHN_ORIGIN` | derived from browser origin or `public-base-url` origin |
+| Workspace URL template | `--workspace-url-template` | `OAR_CONTROL_PLANE_WORKSPACE_URL_TEMPLATE` | `<public-base-url>/%s`, else `http://127.0.0.1:8000/%s` |
+| Invite URL template | `--invite-url-template` | `OAR_CONTROL_PLANE_INVITE_URL_TEMPLATE` | `<public-base-url>/invites/%s`, else `http://127.0.0.1:8100/invites/%s` |
+| Workspace grant issuer | `--workspace-grant-issuer` | `OAR_CONTROL_PLANE_WORKSPACE_GRANT_ISSUER` | `public-base-url` when signing is enabled, else listen URL |
 | Workspace grant audience | `--workspace-grant-audience` | `OAR_CONTROL_PLANE_WORKSPACE_GRANT_AUDIENCE` | unset |
 | Workspace grant signing key (base64 Ed25519 private key) | n/a | `OAR_CONTROL_PLANE_WORKSPACE_GRANT_SIGNING_KEY` | unset |
 | Session TTL | `--session-ttl` | `OAR_CONTROL_PLANE_SESSION_TTL` | `12h` |

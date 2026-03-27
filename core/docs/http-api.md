@@ -135,7 +135,7 @@ Projection endpoints return a `section_kinds` field to distinguish canonical vs 
 
 - `POST /auth/invites`
   - Auth: bearer token required
-  - Body: `{ "kind": "human" | "agent" | "any", "note"?: "..." }`
+  - Body: `{ "kind": "human" | "agent" | "any" }`
   - Response: `{ "invite": <invite>, "token": "<raw_token_once>" }`
 
 - `POST /auth/invites/{invite_id}/revoke`

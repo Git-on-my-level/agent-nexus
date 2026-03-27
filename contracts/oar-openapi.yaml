@@ -626,7 +626,7 @@ paths:
       x-oar-why: "Mint a single-use invite token for a future human or agent registration."
       x-oar-examples:
         - title: Create agent invite
-          command: oar auth invites create --kind agent --note 'ops bot' --json
+          command: oar auth invites create --kind agent --json
       x-oar-input-mode: "json-body"
       x-oar-streaming: { mode: none }
       x-oar-output-envelope: "Returns `{ invite, token }`. The raw token is returned only once at creation time."
@@ -3127,7 +3127,6 @@ components:
           enum: [human, agent, any]
         created_by_agent_id: { type: string }
         created_by_actor_id: { type: string }
-        note: { type: string }
         created_at: { type: string, format: date-time }
         expires_at: { type: string, format: date-time }
         consumed_at: { type: string, format: date-time }
@@ -3136,7 +3135,7 @@ components:
         revoked_at: { type: string, format: date-time }
         revoked_by_agent_id: { type: string }
         revoked_by_actor_id: { type: string }
-      required: [id, kind, created_by_agent_id, created_by_actor_id, note, created_at]
+      required: [id, kind, created_by_agent_id, created_by_actor_id, created_at]
 
     AuthPrincipalSummary:
       type: object
@@ -3326,7 +3325,6 @@ components:
         kind:
           type: string
           enum: [human, agent, any]
-        note: { type: string }
         expires_at: { type: string, format: date-time }
       required: [kind]
 

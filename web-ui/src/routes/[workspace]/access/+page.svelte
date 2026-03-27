@@ -4,6 +4,7 @@
   import { authenticatedAgent } from "$lib/authSession";
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
+  import { buildRegistrationMessage } from "$lib/inviteRegistrationMessage";
   import { workspacePath } from "$lib/workspacePaths";
 
   let { data } = $props();
@@ -27,11 +28,14 @@
 
   let creatingInvite = $state(false);
   let inviteError = $state("");
-  let newInviteNote = $state("");
   let newInviteKind = $state("agent");
+  let newInviteAgentName = $state("");
+  let newInviteUsername = $state("");
 
   let createdToken = $state("");
   let createdInviteKind = $state("");
+  let createdInviteAgentName = $state("");
+  let createdInviteUsername = $state("");
   let tokenCopied = $state(false);
   let messageCopied = $state(false);
   let tokenDismissed = $state(false);
@@ -181,13 +185,13 @@
       const payload = {
         kind: newInviteKind,
       };
-      if (newInviteNote.trim()) {
-        payload.note = newInviteNote.trim();
-      }
       const result = await coreClient.createInvite(payload);
       createdToken = result.token ?? "";
       createdInviteKind = newInviteKind;
-      newInviteNote = "";
+      createdInviteAgentName = newInviteAgentName.trim();
+      createdInviteUsername = newInviteUsername.trim();
+      newInviteAgentName = "";
+      newInviteUsername = "";
       await loadAccessData();
     } catch (error) {
       inviteError = extractErrorMessage(error, "Failed to create invite");
@@ -301,24 +305,16 @@
     }
   }
 
-  function buildRegistrationMessage(token, baseUrl) {
-    const url = baseUrl || "<CORE_API_URL>";
-    return [
-      "Register with this OAR workspace using the invite token below.",
-      "",
-      "Run the following command (replace <agent-name> with a profile name and <username> with your desired username):",
-      "",
-      `  oar --base-url ${url} --agent <agent-name> auth register --username <username> --invite-token ${token}`,
-      "",
-      "This invite token is single-use.",
-    ].join("\n");
-  }
-
   async function copyRegistrationMessage() {
     if (!createdToken) return;
     try {
       await navigator.clipboard.writeText(
-        buildRegistrationMessage(createdToken, data.coreBaseUrl),
+        buildRegistrationMessage(
+          createdToken,
+          data.registrationBaseUrl,
+          createdInviteAgentName,
+          createdInviteUsername,
+        ),
       );
       messageCopied = true;
     } catch {
@@ -330,6 +326,8 @@
     tokenDismissed = true;
     createdToken = "";
     createdInviteKind = "";
+    createdInviteAgentName = "";
+    createdInviteUsername = "";
   }
 
   function extractErrorMessage(error, fallback) {
@@ -666,21 +664,38 @@
                 <option value="any">Any</option>
               </select>
             </div>
-            <div class="flex-[2] min-w-[240px]">
-              <label
-                class="mb-1 block text-[11px] font-medium text-[var(--ui-text-muted)]"
-                for="invite-note"
-              >
-                Note (optional)
-              </label>
-              <input
-                bind:value={newInviteNote}
-                class="w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-2 py-1.5 text-[13px] text-[var(--ui-text)]"
-                id="invite-note"
-                placeholder="e.g. 'ops bot for CI'"
-                type="text"
-              />
-            </div>
+            {#if newInviteKind === "agent" || newInviteKind === "any"}
+              <div class="flex-[2] min-w-[240px]">
+                <label
+                  class="mb-1 block text-[11px] font-medium text-[var(--ui-text-muted)]"
+                  for="invite-agent-name"
+                >
+                  Agent name (optional)
+                </label>
+                <input
+                  bind:value={newInviteAgentName}
+                  class="w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-2 py-1.5 text-[13px] text-[var(--ui-text)]"
+                  id="invite-agent-name"
+                  placeholder="e.g. hermes-prod"
+                  type="text"
+                />
+              </div>
+              <div class="flex-[2] min-w-[240px]">
+                <label
+                  class="mb-1 block text-[11px] font-medium text-[var(--ui-text-muted)]"
+                  for="invite-username"
+                >
+                  Username (optional)
+                </label>
+                <input
+                  bind:value={newInviteUsername}
+                  class="w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-2 py-1.5 text-[13px] text-[var(--ui-text)]"
+                  id="invite-username"
+                  placeholder="e.g. hermes.prod"
+                  type="text"
+                />
+              </div>
+            {/if}
             <button
               class="cursor-pointer rounded-md bg-indigo-600 px-3 py-1.5 text-[13px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
               disabled={creatingInvite}
@@ -731,7 +746,7 @@
                     {invite.id}
                   </p>
                   <p class="text-[11px] text-[var(--ui-text-muted)]">
-                    {invite.kind} - {invite.note || "No note"}
+                    {invite.kind}
                   </p>
                 </div>
                 <span class="text-[11px] text-[var(--ui-text-muted)]">
