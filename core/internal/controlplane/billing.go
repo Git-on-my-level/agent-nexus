@@ -344,7 +344,7 @@ func (s *Service) ReceiveStripeWebhook(ctx context.Context, payload []byte, sign
 	stripeSubscriptionID := extractStripeSubscriptionID(envelope.Type, envelope.Data.Object)
 	stripePriceID := extractStripePriceID(envelope.Data.Object)
 	stripeSubscriptionStatus := stringValueFromMap(envelope.Data.Object, "status")
-	cancelAtPeriodEnd := boolValueFromAny(envelope.Data.Object["cancel_at_period_end"])
+	cancelAtPeriodEnd := optionalBoolValueFromMap(envelope.Data.Object, "cancel_at_period_end")
 	currentPeriodEnd := formatStripeTimestamp(envelope.Data.Object["current_period_end"])
 
 	if organizationID == "" {
@@ -629,7 +629,7 @@ func (s *Service) markStripeWebhookFailed(ctx context.Context, eventID string, o
 	return nil
 }
 
-func (s *Service) applyStripeWebhookToBilling(ctx context.Context, organizationID string, stripeCustomerID string, stripeSubscriptionID string, stripePriceID string, stripeSubscriptionStatus string, currentPeriodEnd *string, cancelAtPeriodEnd bool, eventID string, eventType string, receivedAt string) error {
+func (s *Service) applyStripeWebhookToBilling(ctx context.Context, organizationID string, stripeCustomerID string, stripeSubscriptionID string, stripePriceID string, stripeSubscriptionStatus string, currentPeriodEnd *string, cancelAtPeriodEnd *bool, eventID string, eventType string, receivedAt string) error {
 	account, err := s.ensureOrganizationBilling(ctx, organizationID)
 	if err != nil {
 		return err
@@ -645,12 +645,16 @@ func (s *Service) applyStripeWebhookToBilling(ctx context.Context, organizationI
 	}
 	if strings.TrimSpace(stripeSubscriptionStatus) != "" {
 		account.StripeSubscriptionStatus = strings.TrimSpace(stripeSubscriptionStatus)
-		account.BillingStatus = billingStatusForStripeSubscription(account.StripeSubscriptionStatus)
+		if billingStatus, ok := billingStatusForStripeSubscription(account.StripeSubscriptionStatus); ok {
+			account.BillingStatus = billingStatus
+		}
 	}
 	if currentPeriodEnd != nil {
 		account.CurrentPeriodEnd = currentPeriodEnd
 	}
-	account.CancelAtPeriodEnd = cancelAtPeriodEnd
+	if cancelAtPeriodEnd != nil {
+		account.CancelAtPeriodEnd = *cancelAtPeriodEnd
+	}
 	account.LastWebhookEventID = eventID
 	account.LastWebhookEventType = eventType
 	account.LastWebhookReceivedAt = &receivedAt
@@ -725,14 +729,14 @@ func (s *Service) planTierForStripeSubscription(stripePriceID string, stripeSubs
 	return ""
 }
 
-func billingStatusForStripeSubscription(subscriptionStatus string) string {
+func billingStatusForStripeSubscription(subscriptionStatus string) (string, bool) {
 	switch strings.TrimSpace(subscriptionStatus) {
 	case "trialing", "active", "past_due", "canceled", "incomplete", "incomplete_expired", "unpaid", "paused":
-		return subscriptionStatus
-	case "":
-		return "free"
+		return strings.TrimSpace(subscriptionStatus), true
+	case "free", "not_started":
+		return strings.TrimSpace(subscriptionStatus), true
 	default:
-		return subscriptionStatus
+		return "", false
 	}
 }
 
@@ -935,6 +939,15 @@ func boolValueFromAny(value any) bool {
 	default:
 		return false
 	}
+}
+
+func optionalBoolValueFromMap(source map[string]any, key string) *bool {
+	raw, ok := source[key]
+	if !ok {
+		return nil
+	}
+	value := boolValueFromAny(raw)
+	return &value
 }
 
 func boolInt(value bool) int {

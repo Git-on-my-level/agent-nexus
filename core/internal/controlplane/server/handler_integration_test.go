@@ -592,9 +592,11 @@ func TestControlPlaneStripeWebhookFallsBackToSubscriptionLookup(t *testing.T) {
 	if _, err := env.workspace.DB().ExecContext(
 		context.Background(),
 		`UPDATE organization_billing
-			SET stripe_subscription_id = ?, updated_at = ?
+			SET stripe_subscription_id = ?, billing_status = ?, cancel_at_period_end = ?, updated_at = ?
 		WHERE organization_id = ?`,
 		"sub_lookup_fallback",
+		"active",
+		1,
 		time.Now().UTC().Format(time.RFC3339Nano),
 		organizationID,
 	); err != nil {
@@ -606,11 +608,10 @@ func TestControlPlaneStripeWebhookFallsBackToSubscriptionLookup(t *testing.T) {
 		"type": "invoice.paid",
 		"data": map[string]any{
 			"object": map[string]any{
-				"subscription":         "sub_lookup_fallback",
-				"customer":             "cus_missing_lookup",
-				"status":               "active",
-				"cancel_at_period_end": false,
-				"current_period_end":   float64(1775000000),
+				"subscription":       "sub_lookup_fallback",
+				"customer":           "cus_missing_lookup",
+				"status":             "paid",
+				"current_period_end": float64(1775000000),
 				"lines": map[string]any{
 					"data": []any{
 						map[string]any{
@@ -632,6 +633,12 @@ func TestControlPlaneStripeWebhookFallsBackToSubscriptionLookup(t *testing.T) {
 	billingAccount := asMap(t, billingSummary["billing_account"])
 	if got := asString(t, billingAccount["stripe_customer_id"]); got != "cus_missing_lookup" {
 		t.Fatalf("expected fallback webhook to update stripe customer id, got %q", got)
+	}
+	if got := asString(t, billingAccount["billing_status"]); got != "active" {
+		t.Fatalf("expected unsupported invoice status to preserve active billing status, got %q", got)
+	}
+	if got := billingAccount["cancel_at_period_end"]; got != true {
+		t.Fatalf("expected sparse webhook to preserve cancel_at_period_end=true, got %#v", got)
 	}
 }
 
