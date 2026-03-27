@@ -56,12 +56,12 @@ jobs:
 
       - name: Checkout
         if: github.event_name == 'push'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6.0.2
 
       - name: Detect push changes
         id: filter
         if: github.event_name == 'push'
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v4.0.1
         with:
           filters: |
             hosted:
@@ -107,7 +107,7 @@ jobs:
             artifact_path: .tmp/hosted-smoke/**
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6.0.2
 
       - name: Setup Go
         uses: ./.github/actions/setup-go
@@ -122,7 +122,7 @@ jobs:
 
       - name: Upload hosted artifacts
         if: always() && matrix.artifact_path != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.0
         with:
           name: ${{ matrix.artifact_name }}
           path: ${{ matrix.artifact_path }}
@@ -150,7 +150,7 @@ jobs:
             artifact_path: .tmp/saas-e2e/**
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6.0.2
 
       - name: Setup Go
         uses: ./.github/actions/setup-go
@@ -166,7 +166,7 @@ jobs:
 
       - name: Upload SaaS artifacts
         if: always() && matrix.artifact_path != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.0
         with:
           name: ${{ matrix.artifact_name }}
           path: ${{ matrix.artifact_path }}
@@ -179,7 +179,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && inputs.run_saas_load_smoke
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6.0.2
 
       - name: Setup Go
         uses: ./.github/actions/setup-go
@@ -197,7 +197,7 @@ jobs:
 
       - name: Upload saas-load-smoke artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.0
         with:
           name: saas-load-smoke-artifacts
           path: .tmp/saas-load-smoke/**
@@ -210,7 +210,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && inputs.run_e2e_smoke
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6.0.2
 
       - name: Setup Go
         uses: ./.github/actions/setup-go
@@ -228,7 +228,7 @@ jobs:
 
       - name: Upload e2e artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.0
         with:
           name: e2e-smoke-artifacts
           path: .tmp/e2e-smoke/**
