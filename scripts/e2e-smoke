@@ -207,7 +207,19 @@ if [[ "$(json_get "$TMP_DIR/core-handshake.json" 'recommended_cli_version')" != 
   cat "$TMP_DIR/core-handshake.json" >&2 || true
   exit 1
 fi
-if ! grep -Eiq "^x-oar-ui-version: ${EXPECTED_VERSION}\r?$" "$TMP_DIR/ui-shell-headers.txt"; then
+
+UI_VERSION_HEADER="$(
+  awk -F': *' '
+    BEGIN { IGNORECASE = 1 }
+    tolower($1) == "x-oar-ui-version" {
+      value = $2
+      sub(/\r$/, "", value)
+      print value
+      exit
+    }
+  ' "$TMP_DIR/ui-shell-headers.txt"
+)"
+if [[ "$UI_VERSION_HEADER" != "$EXPECTED_VERSION" ]]; then
   echo "ui version header mismatch" >&2
   cat "$TMP_DIR/ui-shell-headers.txt" >&2 || true
   exit 1
