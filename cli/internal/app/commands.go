@@ -46,6 +46,9 @@ func (a *App) runCommand(ctx context.Context, args []string, cfg config.Resolved
 	case "update":
 		result, err := a.runUpdate(ctx, args[1:], cfg)
 		return "update", result, err
+	case "bridge":
+		result, name, err := a.runBridgeCommand(ctx, args[1:], cfg)
+		return name, result, err
 	case "auth":
 		result, name, err := a.runAuth(ctx, args[1:], cfg)
 		return name, result, err

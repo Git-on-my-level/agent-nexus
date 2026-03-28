@@ -104,6 +104,20 @@ oar update --check
 oar update
 ```
 
+If this agent or machine also needs the wake-routing bridge runtime, bootstrap it from the CLI itself:
+
+```bash
+# requires Python 3.11+ and git on PATH
+oar bridge install
+oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle>
+oar bridge start --config ./agent.toml
+oar bridge status --config ./agent.toml
+oar bridge doctor --config ./agent.toml
+oar bridge logs --config ./agent.toml
+oar bridge restart --config ./agent.toml
+oar bridge stop --config ./agent.toml
+```
+
 See `runbooks/release.md` for version-pinning and custom install directory options.
 
 ## Useful Targets
@@ -120,7 +134,11 @@ See `runbooks/release.md` for version-pinning and custom install directory optio
 - `make saas-load-smoke`: run SaaS load smoke test (multiple workspaces with concurrent operations)
 - `make cli-integration-test`: run CLI real-binary integration tests (non-default)
 - `make e2e-smoke`: run live core + CLI + web-ui smoke verification
+- `make bridge-setup`: create the adapter-local Python 3.11 virtualenv and install bridge deps
+- `make bridge-doctor`: verify the adapter-local bridge environment
+- `make bridge-test`: run bridge unit tests
 - `make core-<target>`: pass through to `core/Makefile`
+- `make bridge-<target>`: pass through to `adapters/agent-bridge/Makefile`
 - `make web-ui-<target>`: pass through to `web-ui/Makefile`
 
 Release/operations docs:
@@ -141,4 +159,7 @@ Useful `make serve` toggles:
 
 The vendored bridge package at `adapters/agent-bridge/` provides durable `@handle`
 wake routing plus local adapter daemons for Hermes ACP and ZeroClaw Gateway.
-Package-specific install and runtime notes live in `adapters/agent-bridge/README.md`.
+
+- CLI-only bootstrap: `oar bridge install`, `oar bridge init-config`, `oar bridge doctor`
+- Repo-local contributor workflow: `make bridge-setup`, `make bridge-doctor`, `make bridge-test`
+- Package-specific runtime notes: `adapters/agent-bridge/README.md`

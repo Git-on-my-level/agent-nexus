@@ -12,28 +12,31 @@ Organization Autorunner is split into a small set of modules with different jobs
 - `core/`: canonical state and evidence service. Owns durable organizational truth and evidence-safe mutations.
 - `cli/`: agent-first command-line runtime. Optimized for non-interactive, script-safe, text/JSON-friendly workflows.
 - `web-ui/`: human-operator control surface. Optimized for glanceable visibility, triage, and explicit human intervention.
+- `adapters/`: optional runtime integrations that connect external agents or services to OAR.
 - `runbooks/`: operational and release guidance.
 
 ## Progressive Discovery
 1. Read [README.md](README.md) for repo layout and root targets.
-2. Identify blast radius: `contracts/`, `core/`, `cli/`, `web-ui/`.
+2. Identify blast radius: `contracts/`, `core/`, `cli/`, `web-ui/`, `adapters/`.
 3. Open the nearest relevant guide before editing behavior:
 - [contracts/AGENTS.md](contracts/AGENTS.md)
 - [core/AGENTS.md](core/AGENTS.md)
 - [cli/AGENTS.md](cli/AGENTS.md)
 - [web-ui/AGENTS.md](web-ui/AGENTS.md)
+- `adapters/agent-bridge/AGENTS.md`
 4. If a subdirectory has its own `AGENTS.md`, treat it as a narrower local guide that supplements, rather than replaces, the parent module guide.
 5. Plan validation from component scope outward to repo-level gates.
 
 ## Source Of Truth
 - Contracts are authoritative: HTTP/API in `contracts/oar-openapi.yaml`, domain/schema in `contracts/oar-schema.yaml`.
 - Generated artifacts are derived outputs. Regenerate with `make contract-gen` and verify drift with `make contract-check`.
-- Runtime behavior in `core`, `cli`, and `web-ui` must remain contract-compatible.
+- Runtime behavior in `core`, `cli`, `web-ui`, and adapter integrations must remain contract-compatible.
 
 ## Cross-Module Boundaries
 - `core` is the system of record. Durable truth lives there, not in the CLI or UI.
 - `cli` is the automation and agent surface. Preserve deterministic, non-interactive behavior and stable machine-facing output.
 - `web-ui` is the human surface. Preserve readability, provenance visibility, and safe human intervention rather than agent orchestration.
+- `adapters` own integration-side runtime behavior. Keep install/setup discoverable, but do not move durable truth out of OAR primitives.
 - `contracts` defines the handshake between modules. Change it first when shared behavior or data shape changes.
 
 ## Change Routing
@@ -41,6 +44,7 @@ Organization Autorunner is split into a small set of modules with different jobs
 - Core behavior change: follow [core/AGENTS.md](core/AGENTS.md).
 - CLI behavior or output change: follow [cli/AGENTS.md](cli/AGENTS.md).
 - UI integration or operator workflow change: follow [web-ui/AGENTS.md](web-ui/AGENTS.md).
+- Adapter runtime/install/setup change: follow `adapters/agent-bridge/AGENTS.md`.
 
 ## Validation Ladder
 Run the smallest relevant checks first:
@@ -66,6 +70,7 @@ Before handoff on cross-module work:
 - [core/docs/runbook.md](core/docs/runbook.md)
 - [cli/docs/runbook.md](cli/docs/runbook.md)
 - [web-ui/docs/runbook.md](web-ui/docs/runbook.md)
+- `adapters/agent-bridge/README.md`
 
 ## Common Pitfalls
 - Do not edit generated artifacts by hand when the canonical source is under `contracts/`.

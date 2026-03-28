@@ -21,6 +21,12 @@ var apiSubcommandSpec = subcommandSpec{
 	examples: []string{"oar api call --method GET --path /readyz"},
 }
 
+var bridgeSubcommandSpec = subcommandSpec{
+	command:  "bridge",
+	valid:    []string{"install", "init-config", "start", "stop", "restart", "status", "logs", "doctor"},
+	examples: []string{"oar bridge install", "oar bridge init-config --kind hermes --output ./agent.toml --workspace-id ws_main", "oar bridge start --config ./agent.toml", "oar bridge status --config ./agent.toml"},
+}
+
 var authSubcommandSpec = subcommandSpec{
 	command: "auth",
 	valid:   []string{"register", "whoami", "list", "update-username", "rotate", "revoke", "token-status", "invites", "bootstrap", "principals", "audit"},

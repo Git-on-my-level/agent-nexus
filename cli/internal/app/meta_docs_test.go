@@ -90,8 +90,8 @@ func TestRunMetaDocPrintsAgentBridgeMarkdown(t *testing.T) {
 	if !strings.Contains(output, "oar-agent-bridge --version") {
 		t.Fatalf("expected install verification guidance output=%s", output)
 	}
-	if !strings.Contains(output, "Minimal router config") || !strings.Contains(output, "Minimal Hermes bridge config") {
-		t.Fatalf("expected first-run config guidance output=%s", output)
+	if !strings.Contains(output, "oar bridge init-config") || !strings.Contains(output, "oar bridge doctor --config ./agent.toml") {
+		t.Fatalf("expected first-run bootstrap guidance output=%s", output)
 	}
 }
 
@@ -120,7 +120,7 @@ func TestRunMetaDocPrintsWakeRoutingMarkdown(t *testing.T) {
 	if !strings.Contains(output, "oar-agent-bridge registration apply --config <agent.toml>") {
 		t.Fatalf("expected bridge registration shortcut output=%s", output)
 	}
-	if !strings.Contains(output, "oar.workspace_id") || !strings.Contains(output, "ws_main") {
+	if !strings.Contains(output, "[oar] workspace_id") || !strings.Contains(output, "ws_main") {
 		t.Fatalf("expected workspace-id discovery guidance output=%s", output)
 	}
 	if !strings.Contains(output, "docs create` returns `conflict`") {
@@ -129,8 +129,8 @@ func TestRunMetaDocPrintsWakeRoutingMarkdown(t *testing.T) {
 	if !strings.Contains(output, "server actor id as `<actor-id>`") {
 		t.Fatalf("expected actor-id sourcing guidance output=%s", output)
 	}
-	if !strings.Contains(output, "`updated_at` is advisory metadata") {
-		t.Fatalf("expected updated_at semantics output=%s", output)
+	if !strings.Contains(output, "Do not hand-edit `status = \"active\"`") {
+		t.Fatalf("expected bridge readiness lifecycle warning output=%s", output)
 	}
 }
 

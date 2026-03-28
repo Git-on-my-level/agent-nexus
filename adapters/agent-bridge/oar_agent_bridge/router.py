@@ -9,7 +9,9 @@ from typing import Any
 from .config import LoadedConfig
 from .mentions import extract_mentions
 from .models import (
+    AgentBridgeCheckin,
     AgentRegistration,
+    BRIDGE_CHECKED_IN_EVENT,
     MESSAGE_POSTED_EVENT,
     WAKE_ARTIFACT_KIND,
     WAKE_REQUEST_EVENT,
@@ -20,7 +22,7 @@ from .models import (
 )
 from .oar_client import OARClient, OARClientError
 from .state_store import JSONStateStore
-from .util import compact_text
+from .util import compact_text, verify_bridge_checkin_signature
 
 LOGGER = logging.getLogger(__name__)
 
@@ -120,6 +122,88 @@ class WakeRouter:
         if not registration.supports_workspace(self.config.oar.workspace_id):
             self._emit_exception(thread_id, event_id, handle, "agent_not_bound_to_workspace", f"Tagged agent @{handle} is not enabled for workspace {self.config.oar.workspace_id}")
             return
+        if registration.status != "active":
+            self._emit_exception(
+                thread_id,
+                event_id,
+                handle,
+                "agent_bridge_not_ready",
+                f"Tagged agent @{handle} is registered but not wakeable until its bridge checks in",
+            )
+            return
+        if not registration.bridge_checkin_event_id:
+            self._emit_exception(
+                thread_id,
+                event_id,
+                handle,
+                "agent_bridge_not_checked_in",
+                f"Tagged agent @{handle} has no bridge check-in event yet",
+            )
+            return
+        checkin = self._load_bridge_checkin(registration.bridge_checkin_event_id)
+        if checkin is None:
+            self._emit_exception(
+                thread_id,
+                event_id,
+                handle,
+                "agent_bridge_not_checked_in",
+                f"Tagged agent @{handle} has no valid bridge check-in event yet",
+            )
+            return
+        if checkin.handle and checkin.handle != handle:
+            self._emit_exception(
+                thread_id,
+                event_id,
+                handle,
+                "agent_bridge_handle_mismatch",
+                f"Tagged agent @{handle} bridge check-in handle does not match registration",
+            )
+            return
+        if not registration.bridge_signing_public_key_spki_b64:
+            self._emit_exception(
+                thread_id,
+                event_id,
+                handle,
+                "agent_bridge_proof_missing",
+                f"Tagged agent @{handle} registration is missing its bridge proof key",
+            )
+            return
+        if not verify_bridge_checkin_signature(
+            registration.bridge_signing_public_key_spki_b64,
+            checkin.proof_signature_b64,
+            checkin.handle,
+            checkin.actor_id,
+            checkin.workspace_id,
+            checkin.bridge_instance_id,
+            checkin.checked_in_at,
+            checkin.expires_at,
+        ):
+            self._emit_exception(
+                thread_id,
+                event_id,
+                handle,
+                "agent_bridge_proof_invalid",
+                f"Tagged agent @{handle} has an invalid bridge readiness proof",
+            )
+            return
+        if checkin.actor_id != registration.actor_id:
+            self._emit_exception(
+                thread_id,
+                event_id,
+                handle,
+                "agent_bridge_actor_mismatch",
+                f"Tagged agent @{handle} bridge check-in actor does not match registration actor",
+            )
+            return
+        if not checkin.is_ready_for_workspace(self.config.oar.workspace_id):
+            self._emit_exception(
+                thread_id,
+                event_id,
+                handle,
+                "agent_bridge_checkin_stale",
+                f"Tagged agent @{handle} has a stale bridge check-in and is not wakeable right now",
+            )
+            return
 
         workspace = self.client.get_thread_workspace(thread_id)
         thread = workspace.get("thread") or {}
@@ -199,6 +283,21 @@ class WakeRouter:
         if not isinstance(content, dict):
             return None
         return AgentRegistration.from_content(content)
+
+    def _load_bridge_checkin(self, event_id: str) -> AgentBridgeCheckin | None:
+        try:
+            payload = self.client.get_event(event_id)
+        except OARClientError as exc:
+            if exc.status_code == 404:
+                return None
+            raise
+        event = payload.get("event") if isinstance(payload, dict) else None
+        content = (event or {}).get("payload") if isinstance(event, dict) else None
+        if str((event or {}).get("type", "")).strip() != BRIDGE_CHECKED_IN_EVENT:
+            return None
+        if not isinstance(content, dict):
+            return None
+        return AgentBridgeCheckin.from_content(content)
 
     def _emit_exception(self, thread_id: str, event_id: str, handle: str, code: str, summary: str) -> None:
         request_key = f"exc-{code}-{handle}-{event_id}"

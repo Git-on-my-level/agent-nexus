@@ -15,7 +15,9 @@ adapter_kind = "hermes_acp"
 state_dir = ".state/hermes"
 workspace_bindings = ["ws_main"]
 resume_policy = "resume_or_create"
-status = "active"
+status = "pending"
+checkin_interval_seconds = 60
+checkin_ttl_seconds = 300
 
 [adapter]
 kind = "hermes_acp"

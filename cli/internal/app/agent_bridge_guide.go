@@ -8,147 +8,102 @@ func agentBridgeGuideText() string {
 
 Use this when you want the preferred bridge-backed path for wake registration and live <<tick>>@handle<<tick>> delivery.
 
-What this package is
+What changed
 
-- <<tick>>oar-agent-bridge<<tick>> is shipped in this repo as a Python package under <<tick>>adapters/agent-bridge<<tick>>.
-- The package exposes the console script <<tick>>oar-agent-bridge<<tick>>.
-- This repo does not document a Homebrew, npm, cargo, or standalone release-binary install path today.
-- Python <<tick>>3.11+<<tick>> is required.
+- The main CLI now owns the bootstrap path for fresh machines:
+  - <<tick>>oar bridge install<<tick>>
+  - <<tick>>oar bridge init-config<<tick>>
+  - <<tick>>oar bridge start|stop|restart|status|logs<<tick>>
+  - <<tick>>oar bridge doctor<<tick>>
+- The Python package still owns runtime behavior:
+  - <<tick>>oar-agent-bridge auth register<<tick>>
+  - <<tick>>oar-agent-bridge router run<<tick>> and <<tick>>bridge run<<tick>> under the hood
+- Registrations are not wakeable until the bridge has actually checked in.
 
-Install on a fresh machine
+Install on a fresh machine with only <<tick>>oar<<tick>>
 
-POSIX shells:
+1. Install the bridge runtime into a managed Python <<tick>>3.11+<<tick>> virtualenv:
 
-  cd adapters/agent-bridge
-  python3 -m venv .venv
-  source .venv/bin/activate
-  python -m pip install --upgrade pip
-  python -m pip install -e .
+  oar bridge install
 
-Windows PowerShell:
+  By default, this installs from <<tick>>main<<tick>> and writes the launcher into <<tick>>~/.local/bin<<tick>>. Override with <<tick>>--ref<<tick>> or <<tick>>--bin-dir<<tick>> if needed. The current bootstrap path also requires <<tick>>git<<tick>> on PATH.
 
-  cd adapters/agent-bridge
-  py -3.11 -m venv .venv
-  .\.venv\Scripts\Activate.ps1
-  python -m pip install --upgrade pip
-  python -m pip install -e .
+2. If you need bridge test dependencies on the same machine:
 
-Verify install
+  oar bridge install --with-dev
 
-  oar-agent-bridge --help
+3. Verify the wrapper works:
+
   oar-agent-bridge --version
-  python -m pip show oar-agent-bridge
 
-PATH note
+Contributor path from a repo checkout
 
-- The console script is installed into the active virtualenv's <<tick>>bin/<<tick>> directory on POSIX or <<tick>>Scripts\<<tick>> on Windows.
-- If you see <<tick>>oar-agent-bridge: command not found<<tick>>, activate the virtualenv first or add that directory to your PATH.
+- For local development inside this repo, prefer:
+  - <<tick>>make bridge-setup<<tick>>
+  - <<tick>>make bridge-doctor<<tick>>
+  - <<tick>>make bridge-test<<tick>>
+- Local contributor rules for the adapter live in <<tick>>adapters/agent-bridge/AGENTS.md<<tick>>.
 
-Canonical example configs
+Config generation
 
-- <<tick>>adapters/agent-bridge/examples/router.toml<<tick>>
-- <<tick>>adapters/agent-bridge/examples/hermes.toml<<tick>>
-- <<tick>>adapters/agent-bridge/examples/zeroclaw.toml<<tick>>
+Generate minimal configs from the CLI:
 
-Required config contract
+  oar bridge init-config --kind router --output ./router.toml --workspace-id <workspace-id>
+  oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle>
+  oar bridge init-config --kind zeroclaw --output ./zeroclaw.toml --workspace-id <workspace-id> --handle <handle>
 
-- Every config needs:
-  - <<tick>>[oar] base_url<<tick>>
-  - <<tick>>[oar] workspace_id<<tick>>
-  - <<tick>>[oar] workspace_name<<tick>>
-- Optional but common <<tick>>[oar]<<tick>> fields are:
-  - <<tick>>workspace_url<<tick>>
-  - <<tick>>verify_ssl<<tick>>
-- <<tick>>[auth] state_path<<tick>> is optional; when omitted it defaults under <<tick>>.state/<<tick>>.
-- Router runs require a <<tick>>[router]<<tick>> section.
-- Bridge runs require an <<tick>>[agent]<<tick>> section with at least:
-  - <<tick>>handle<<tick>>
-  - <<tick>>state_dir<<tick>>
-  - <<tick>>workspace_bindings<<tick>>
-- Hermes ACP bridges also require:
-  - <<tick>>[adapter] kind = "hermes_acp"<<tick>>
-  - <<tick>>command<<tick>>
-  - <<tick>>cwd_default<<tick>>
-  - <<tick>>[adapter.workspace_map]<<tick>>
-- ZeroClaw bridges also require:
-  - <<tick>>[adapter] kind = "zeroclaw_gateway"<<tick>>
-  - <<tick>>base_url<<tick>>
-  - <<tick>>bearer_token<<tick>>
+These templates intentionally default the agent lifecycle to:
 
-Minimal router config
+- <<tick>>status = "pending"<<tick>>
+- <<tick>>checkin_interval_seconds = 60<<tick>>
+- <<tick>>checkin_ttl_seconds = 300<<tick>>
 
-  [oar]
-  base_url = "https://oar.example"
-  workspace_id = "<workspace-id>"
-  workspace_name = "Main"
-
-  [auth]
-  state_path = ".state/router-auth.json"
-
-  [router]
-  state_path = ".state/router-state.json"
-
-  [adapter]
-  kind = "none"
-
-Minimal Hermes bridge config
-
-  [oar]
-  base_url = "https://oar.example"
-  workspace_id = "<workspace-id>"
-  workspace_name = "Main"
-
-  [auth]
-  state_path = ".state/hermes-auth.json"
-
-  [agent]
-  handle = "<handle>"
-  driver_kind = "acp"
-  adapter_kind = "hermes_acp"
-  state_dir = ".state/hermes"
-  workspace_bindings = ["<workspace-id>"]
-
-  [adapter]
-  kind = "hermes_acp"
-  command = ["hermes", "acp"]
-  cwd_default = "/absolute/path/to/your/hermes/workspace"
-
-  [adapter.workspace_map]
-  "<workspace-id>" = "/absolute/path/to/your/hermes/workspace"
+That is the guardrail: humans should not tag an agent until the bridge has checked in and moved the registration to an active, fresh state.
 
 Workspace id source of truth
 
 - <<tick>><workspace-id><<tick>> must be the durable router workspace id, not a slug and not a UI path segment.
-- If you are bringing up a new router, the source of truth is the value you choose and set at <<tick>>[oar] workspace_id<<tick>> in the router config. Use the same value in each agent bridge config.
+- If you are bringing up a new router, the source of truth is the value you choose and set at <<tick>>[oar] workspace_id<<tick>> in the router config. Use the same value in every bridge config.
 - If a router already exists, inspect that deployed router config and copy its <<tick>>[oar] workspace_id<<tick>> exactly.
-- If your deployment is driven by control-plane workspace records, copy the durable <<tick>>workspace_id<<tick>> from that workspace record, not the slug.
-- The bundled example value <<tick>>ws_main<<tick>> is only an example.
-- If you still do not know the real workspace id for your deployment, stop and ask the operator. Do not guess. The current CLI does not expose a dedicated workspace-id discovery command.
-
-Token choice
-
-- Use <<tick>>--bootstrap-token<<tick>> when bootstrapping the very first principal in an environment.
-- Use <<tick>>--invite-token<<tick>> for later principals after an invite has been created.
+- If the deployment is driven by control-plane workspace records, copy the durable <<tick>>workspace_id<<tick>> from that workspace record, not the slug.
+- The bundled example value <<tick>>ws_main<<tick>> is only a sample.
+- If you still do not know the real workspace id for your deployment, stop and ask the operator. Do not guess.
 
 First-time operator path
 
-1. Install the package and verify <<tick>>oar-agent-bridge --help<<tick>> works.
-2. Copy or edit the example configs for your router and bridge.
-3. Set <<tick>>[oar] base_url<<tick>>, <<tick>>workspace_id<<tick>>, and <<tick>>workspace_name<<tick>> correctly.
-4. Register the router principal. Use <<tick>>--bootstrap-token<<tick>> only when bootstrapping the first principal in a fresh environment; in an existing environment use an invite instead:
+1. Install the runtime:
 
-  oar-agent-bridge auth register --config examples/router.toml --bootstrap-token <token>
+  oar bridge install
 
-5. Register the target bridge principal and write its registration in one step:
+2. Render config files:
 
-  oar-agent-bridge auth register --config examples/hermes.toml --invite-token <token> --apply-registration
+  oar bridge init-config --kind router --output ./router.toml --workspace-id <workspace-id>
+  oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle>
 
-6. Start the router and the bridge:
+3. Register the router principal. Use <<tick>>--bootstrap-token<<tick>> only for the very first principal in a fresh environment:
 
-  oar-agent-bridge router run --config examples/router.toml
-  oar-agent-bridge bridge run --config examples/hermes.toml
+  oar-agent-bridge auth register --config ./router.toml --bootstrap-token <token>
+
+4. Register the target bridge principal and write the initial pending registration:
+
+  oar-agent-bridge auth register --config ./agent.toml --invite-token <token> --apply-registration
+
+5. Start the managed router and bridge daemons from the main CLI:
+
+  oar bridge start --config ./router.toml
+  oar bridge start --config ./agent.toml
+
+6. Confirm the process and readiness state before humans use <<tick>>@handle<<tick>>:
+
+  oar bridge status --config ./agent.toml
+  oar bridge doctor --config ./agent.toml
+
+  Use <<tick>>oar bridge logs --config ./agent.toml<<tick>> when you need the recent daemon output, and <<tick>>oar bridge restart --config ./agent.toml<<tick>> if you change config or recover from a stale process.
+
+  The doctor should report both adapter readiness and the registration as wakeable. If it still says pending, stale, or adapter probe failed, fix that first.
 
 7. Post a test wake message containing <<tick>>@<handle><<tick>>.
+
 8. Confirm the durable trace:
   - <<tick>>message_posted<<tick>>
   - <<tick>>agent_wakeup_requested<<tick>>
@@ -156,21 +111,30 @@ First-time operator path
   - bridge reply <<tick>>message_posted<<tick>>
   - <<tick>>agent_wakeup_completed<<tick>>
 
+Lifecycle note
+
+- <<tick>>oar-agent-bridge registration apply<<tick>> writes the registration document, but that alone does not make the agent taggable.
+- The bridge runtime refreshes registration readiness on check-in.
+- If the bridge stops checking in, the registration becomes stale and routing stops treating it as wakeable.
+- The preferred operational path is to manage the router/bridge daemons with <<tick>>oar bridge start|stop|restart|status|logs<<tick>>, not ad hoc shell backgrounding.
+
 Troubleshooting
 
 - <<tick>>oar-agent-bridge: command not found<<tick>>:
-  - install is missing, the virtualenv is not activated, or the script directory is not on PATH
-- <<tick>>docs create conflict<<tick>> for <<tick>>agentreg.<handle><<tick>>:
-  - inspect the existing document and use the update path or <<tick>>oar-agent-bridge registration apply<<tick>>
+  - run <<tick>>oar bridge install<<tick>> or add the managed wrapper directory to PATH
+- bridge doctor says registration is pending:
+  - the bridge has not checked in yet; start <<tick>>oar bridge start --config ./agent.toml<<tick>>
+- bridge doctor says registration is stale:
+  - the bridge stopped checking in; run <<tick>>oar bridge restart --config ./agent.toml<<tick>> and verify the config points at the right workspace
 - wake request is durable but never claimed:
   - the router or bridge is offline, or <<tick>>workspace_id<<tick>> is wrong
 - principal exists but wake still fails:
-  - inspect <<tick>>agentreg.<handle><<tick>> for actor mismatch, disabled status, or missing workspace binding
+  - inspect <<tick>>agentreg.<handle><<tick>> for actor mismatch, disabled status, stale check-in, or missing workspace binding
 
 Related docs
 
+  oar help bridge
   oar meta doc wake-routing
-  oar help docs create
-  oar help docs update`)
+  oar bridge doctor --config ./agent.toml`)
 	return strings.ReplaceAll(guide, tickToken, "`")
 }

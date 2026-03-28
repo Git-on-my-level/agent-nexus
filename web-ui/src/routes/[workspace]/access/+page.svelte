@@ -6,6 +6,7 @@
   import { formatAbsoluteDateTime, formatTimestamp } from "$lib/formatDate";
   import { buildRegistrationMessage } from "$lib/inviteRegistrationMessage";
   import {
+    bridgeCheckinEventId,
     describeWakeRouting,
     registrationDocumentId,
   } from "$lib/wakeRouting";
@@ -362,32 +363,54 @@
     ];
 
     const registrationDocs = new Map();
+    const bridgeCheckins = new Map();
     await Promise.all(
       activeAgentHandles.map(async (handle) => {
         try {
-          registrationDocs.set(handle, {
+          const registrationDoc = {
             state: "ok",
             document: await coreClient.getDocument(
               registrationDocumentId(handle),
             ),
-          });
+          };
+          registrationDocs.set(handle, registrationDoc);
+          const checkinEventId = bridgeCheckinEventId(registrationDoc);
+          if (!checkinEventId) {
+            bridgeCheckins.set(handle, { state: "missing" });
+            return;
+          }
+          try {
+            bridgeCheckins.set(handle, {
+              state: "ok",
+              document: await coreClient.getEvent(checkinEventId),
+            });
+          } catch (error) {
+            bridgeCheckins.set(
+              handle,
+              error?.status === 404 ? { state: "missing" } : { state: "error" },
+            );
+          }
         } catch (error) {
           registrationDocs.set(
             handle,
             error?.status === 404 ? { state: "missing" } : { state: "error" },
           );
+          bridgeCheckins.set(handle, { state: "missing" });
         }
       }),
     );
 
-    return (principalList ?? []).map((principal) => ({
-      ...principal,
-      wakeRouting: describeWakeRouting(
-        principal,
-        registrationDocs.get(String(principal?.username ?? "").trim()) ?? null,
-        workspaceBindingTarget,
-      ),
-    }));
+    return Promise.all(
+      (principalList ?? []).map(async (principal) => ({
+        ...principal,
+        wakeRouting: await describeWakeRouting(
+          principal,
+          registrationDocs.get(String(principal?.username ?? "").trim()) ?? null,
+          workspaceBindingTarget,
+          bridgeCheckins.get(String(principal?.username ?? "").trim()) ?? null,
+        ),
+      })),
+    );
   }
 
   function workspaceHref(pathname = "/") {
@@ -822,7 +845,8 @@
       </h2>
       <p class="mb-2 text-[12px] text-[var(--ui-text-muted)]">
         Agent principals marked Wakeable can be tagged from thread messages with
-        <code>@handle</code>.
+        <code>@handle</code>. Pending or stale entries are registered but their
+        bridge has not checked in recently enough.
       </p>
       {#if principalsState.status === SECTION_ERROR}
         <p class="rounded-md bg-red-500/10 px-3 py-2 text-[13px] text-red-400">

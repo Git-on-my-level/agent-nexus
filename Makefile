@@ -3,6 +3,7 @@ SHELL := /usr/bin/env bash
 CORE_DIR := core
 CLI_DIR := cli
 WEB_UI_DIR := web-ui
+BRIDGE_DIR := adapters/agent-bridge
 
 CORE_HOST ?= 127.0.0.1
 CORE_PORT ?= 8000
@@ -20,7 +21,7 @@ FORCE_SEED ?= 0
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup check serve serve-control-plane lint test format contract-gen contract-check workflow-check version-sync version-check e2e-smoke hosted-smoke hosted-ops-test hosted-ops-smoke saas-smoke saas-e2e saas-load-smoke packed-host-smoke cli-check cli-test cli-build cli-integration-test core-% web-ui-%
+.PHONY: help setup check serve serve-control-plane lint test format contract-gen contract-check workflow-check version-sync version-check e2e-smoke hosted-smoke hosted-ops-test hosted-ops-smoke saas-smoke saas-e2e saas-load-smoke packed-host-smoke cli-check cli-test cli-build cli-integration-test bridge-setup bridge-doctor bridge-test core-% bridge-% web-ui-%
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z0-9_.-]+:.*##/ {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -86,6 +87,15 @@ cli-build: ## Build CLI binary
 cli-integration-test: ## Run CLI real-binary integration tests (non-default)
 	cd $(CLI_DIR) && go test -tags=integration ./integration/...
 
+bridge-setup: ## Set up the bridge-local Python 3.11 virtualenv and deps
+	$(MAKE) -C $(BRIDGE_DIR) setup
+
+bridge-doctor: ## Verify the bridge-local Python/runtime setup
+	$(MAKE) -C $(BRIDGE_DIR) doctor
+
+bridge-test: ## Run bridge unit tests
+	$(MAKE) -C $(BRIDGE_DIR) test
+
 e2e-smoke: ## Run end-to-end core + CLI + web-ui smoke flow
 	./scripts/e2e-smoke
 
@@ -127,6 +137,9 @@ serve-control-plane: ## Start the SaaS control-plane service locally
 
 core-%: ## Pass-through target to core Makefile
 	$(MAKE) -C $(CORE_DIR) $*
+
+bridge-%: ## Pass-through target to adapter bridge Makefile
+	$(MAKE) -C $(BRIDGE_DIR) $*
 
 web-ui-%: ## Pass-through target to web-ui Makefile
 	$(MAKE) -C $(WEB_UI_DIR) $*

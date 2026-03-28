@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 from pathlib import Path
 
 from ..models import WakePacket
@@ -29,6 +30,33 @@ class HermesACPAdapter:
         self.auto_select_permission = auto_select_permission
         self.permission_option_id = permission_option_id
         self._client: ACPProcessClient | None = None
+
+    def doctor(self) -> dict[str, str | int]:
+        if not self.command:
+            raise ValueError("Hermes ACP command is required")
+        executable = self.command[0]
+        if os.path.sep in executable:
+            if not Path(executable).exists():
+                raise ValueError(f"Hermes ACP executable path does not exist: {executable}")
+        elif shutil.which(executable) is None:
+            raise ValueError(f"Hermes ACP executable not found on PATH: {executable}")
+        default_path = Path(self.cwd_default)
+        if not default_path.is_absolute():
+            raise ValueError(f"Hermes ACP cwd_default must be absolute, got {self.cwd_default!r}")
+        if not default_path.exists():
+            raise ValueError(f"Hermes ACP cwd_default does not exist: {self.cwd_default}")
+        for workspace_id, path_value in self.workspace_map.items():
+            path = Path(path_value)
+            if not path.is_absolute():
+                raise ValueError(f"Hermes workspace path must be absolute for {workspace_id}: {path_value!r}")
+            if not path.exists():
+                raise ValueError(f"Hermes workspace path does not exist for {workspace_id}: {path_value}")
+        return {
+            "adapter_kind": "hermes_acp",
+            "command": " ".join(self.command),
+            "cwd_default": self.cwd_default,
+            "workspace_map_entries": len(self.workspace_map),
+        }
 
     def _cwd_for(self, packet: WakePacket) -> str:
         return self.workspace_map.get(packet.workspace_id, self.cwd_default)

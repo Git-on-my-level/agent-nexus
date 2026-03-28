@@ -7,8 +7,14 @@ import os
 import re
 import threading
 import time
+import base64
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec
 
 LOGGER = logging.getLogger("oar_agent_bridge")
 
@@ -23,6 +29,31 @@ def configure_logging(verbose: bool = False) -> None:
 
 def utc_now_iso() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def utc_now_datetime() -> datetime:
+    return datetime.now(UTC)
+
+
+def utc_after_seconds_iso(seconds: int) -> str:
+    seconds = max(0, int(seconds))
+    return datetime_to_utc_iso(utc_now_datetime() + timedelta(seconds=seconds))
+
+
+def datetime_to_utc_iso(value: datetime) -> str:
+    return value.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def parse_utc_iso(value: Any) -> datetime | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        if raw.endswith("Z"):
+            return datetime.fromisoformat(raw.replace("Z", "+00:00")).astimezone(UTC)
+        return datetime.fromisoformat(raw).astimezone(UTC)
+    except ValueError:
+        return None
 
 
 def ensure_dir(path: Path) -> Path:
@@ -59,6 +90,88 @@ def sha256_text(*parts: str, length: int | None = None) -> str:
 
 def stable_json_dumps(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+def generate_bridge_proof_keypair() -> tuple[str, str]:
+    private_key = ec.generate_private_key(ec.SECP256R1())
+    public_key = private_key.public_key()
+    public_bytes = public_key.public_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    private_bytes = private_key.private_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    return (
+        base64.b64encode(public_bytes).decode("ascii"),
+        base64.b64encode(private_bytes).decode("ascii"),
+    )
+
+
+def bridge_checkin_proof_message(
+    handle: str,
+    actor_id: str,
+    workspace_id: str,
+    bridge_instance_id: str,
+    checked_in_at: str,
+    expires_at: str,
+) -> bytes:
+    return stable_json_dumps(
+        {
+            "v": "agent-bridge-checkin-proof/v1",
+            "handle": handle,
+            "actor_id": actor_id,
+            "workspace_id": workspace_id,
+            "bridge_instance_id": bridge_instance_id,
+            "checked_in_at": checked_in_at,
+            "expires_at": expires_at,
+        }
+    ).encode("utf-8")
+
+
+def sign_bridge_checkin(
+    private_key_b64: str,
+    handle: str,
+    actor_id: str,
+    workspace_id: str,
+    bridge_instance_id: str,
+    checked_in_at: str,
+    expires_at: str,
+) -> str:
+    private_key = serialization.load_der_private_key(base64.b64decode(private_key_b64), password=None)
+    if not isinstance(private_key, ec.EllipticCurvePrivateKey):
+        raise ValueError("bridge proof private key is not an EC key")
+    signature = private_key.sign(
+        bridge_checkin_proof_message(handle, actor_id, workspace_id, bridge_instance_id, checked_in_at, expires_at),
+        ec.ECDSA(hashes.SHA256()),
+    )
+    return base64.b64encode(signature).decode("ascii")
+
+
+def verify_bridge_checkin_signature(
+    public_key_b64: str,
+    signature_b64: str,
+    handle: str,
+    actor_id: str,
+    workspace_id: str,
+    bridge_instance_id: str,
+    checked_in_at: str,
+    expires_at: str,
+) -> bool:
+    try:
+        public_key = serialization.load_der_public_key(base64.b64decode(public_key_b64))
+        if not isinstance(public_key, ec.EllipticCurvePublicKey):
+            return False
+        public_key.verify(
+            base64.b64decode(signature_b64),
+            bridge_checkin_proof_message(handle, actor_id, workspace_id, bridge_instance_id, checked_in_at, expires_at),
+            ec.ECDSA(hashes.SHA256()),
+        )
+        return True
+    except (ValueError, InvalidSignature):
+        return False
 
 
 def parse_bool(value: Any, default: bool = False) -> bool:
