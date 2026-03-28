@@ -10,6 +10,7 @@ const envState = vi.hoisted(() => ({}));
 const authSessionMocks = vi.hoisted(() => ({
   clearWorkspaceAuthSession: vi.fn(),
   getWorkspaceAuthSession: vi.fn(() => authSessionState.currentSession),
+  isLikelyStaleWorkspaceRefreshFailure: vi.fn((error) => error?.status === 401),
   readWorkspaceRefreshToken: vi.fn(() => "refresh-token"),
   refreshWorkspaceAuthSession: vi.fn(async () => {
     authSessionState.currentSession = { accessToken: "fresh-token" };
@@ -39,6 +40,8 @@ vi.mock("$lib/workspacePaths", () => ({
 vi.mock("$lib/server/authSession", () => ({
   clearWorkspaceAuthSession: authSessionMocks.clearWorkspaceAuthSession,
   getWorkspaceAuthSession: authSessionMocks.getWorkspaceAuthSession,
+  isLikelyStaleWorkspaceRefreshFailure:
+    authSessionMocks.isLikelyStaleWorkspaceRefreshFailure,
   readWorkspaceRefreshToken: authSessionMocks.readWorkspaceRefreshToken,
   refreshWorkspaceAuthSession: authSessionMocks.refreshWorkspaceAuthSession,
 }));
@@ -73,6 +76,9 @@ describe("hooks proxy retry", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     authSessionState.currentSession = { accessToken: "expired-token" };
+    authSessionMocks.isLikelyStaleWorkspaceRefreshFailure.mockImplementation(
+      (error) => error?.status === 401,
+    );
     for (const key of Object.keys(envState)) {
       delete envState[key];
     }
@@ -128,6 +134,88 @@ describe("hooks proxy retry", () => {
     expect(secondInit.headers.get("authorization")).toBe("Bearer fresh-token");
     expect(authSessionMocks.refreshWorkspaceAuthSession).toHaveBeenCalledTimes(
       1,
+    );
+  });
+
+  it("preserves the workspace session on stale rotated refresh failures", async () => {
+    authSessionMocks.refreshWorkspaceAuthSession.mockRejectedValueOnce(
+      Object.assign(new Error("stale rotated refresh token"), {
+        status: 401,
+        details: {
+          error: {
+            code: "invalid_token",
+          },
+        },
+      }),
+    );
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: { code: "invalid_token" } }), {
+        status: 401,
+        headers: {
+          "content-type": "application/json",
+        },
+      }),
+    );
+    globalThis.fetch = fetchMock;
+
+    const response = await handle({
+      event: {
+        url: new URL("https://oar.example.test/api/threads"),
+        request: new Request("https://oar.example.test/api/threads", {
+          method: "GET",
+          headers: {
+            accept: "application/json",
+          },
+        }),
+      },
+      resolve: vi.fn(),
+    });
+
+    expect(response.status).toBe(401);
+    expect(authSessionMocks.clearWorkspaceAuthSession).not.toHaveBeenCalled();
+  });
+
+  it("clears the workspace session on non-race refresh failures", async () => {
+    authSessionMocks.isLikelyStaleWorkspaceRefreshFailure.mockReturnValue(
+      false,
+    );
+    authSessionMocks.refreshWorkspaceAuthSession.mockRejectedValueOnce(
+      Object.assign(new Error("agent revoked"), {
+        status: 403,
+        details: {
+          error: {
+            code: "agent_revoked",
+          },
+        },
+      }),
+    );
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: { code: "invalid_token" } }), {
+        status: 401,
+        headers: {
+          "content-type": "application/json",
+        },
+      }),
+    );
+    globalThis.fetch = fetchMock;
+
+    const response = await handle({
+      event: {
+        url: new URL("https://oar.example.test/api/threads"),
+        request: new Request("https://oar.example.test/api/threads", {
+          method: "GET",
+          headers: {
+            accept: "application/json",
+          },
+        }),
+      },
+      resolve: vi.fn(),
+    });
+
+    expect(response.status).toBe(401);
+    expect(authSessionMocks.clearWorkspaceAuthSession).toHaveBeenCalledWith(
+      expect.anything(),
+      "ops",
     );
   });
 

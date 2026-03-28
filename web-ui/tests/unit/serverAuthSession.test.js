@@ -5,6 +5,7 @@ import {
   clearWorkspaceRefreshToken,
   getRecentRefreshResultCountForTests,
   handleWorkspaceAuthVerifyResponse,
+  loadWorkspaceAuthenticatedAgent,
   refreshWorkspaceAuthSession,
   resetWorkspaceAuthRefreshStateForTests,
   writeWorkspaceAccessToken,
@@ -78,6 +79,7 @@ describe("server auth session helpers", () => {
       value: "refresh-token",
       options: {
         httpOnly: true,
+        maxAge: 30 * 24 * 60 * 60,
         sameSite: "lax",
         secure: true,
         path: "/",
@@ -100,6 +102,7 @@ describe("server auth session helpers", () => {
       value: "access-token",
       options: {
         httpOnly: true,
+        maxAge: 15 * 60,
         sameSite: "lax",
         secure: true,
         path: "/",
@@ -188,6 +191,7 @@ describe("server auth session helpers", () => {
         value: "refresh-token",
         options: {
           httpOnly: true,
+          maxAge: 30 * 24 * 60 * 60,
           sameSite: "lax",
           secure: true,
           path: "/",
@@ -198,6 +202,7 @@ describe("server auth session helpers", () => {
         value: "access-token",
         options: {
           httpOnly: true,
+          maxAge: 15 * 60,
           sameSite: "lax",
           secure: true,
           path: "/",
@@ -342,7 +347,7 @@ describe("server auth session helpers", () => {
     });
     expect(getRecentRefreshResultCountForTests()).toBe(1);
 
-    vi.advanceTimersByTime(5_001);
+    vi.advanceTimersByTime(60_001);
 
     await refreshWorkspaceAuthSession({
       event: second.event,
@@ -351,5 +356,57 @@ describe("server auth session helpers", () => {
     });
 
     expect(getRecentRefreshResultCountForTests()).toBe(1);
+  });
+
+  it("preserves cookies when a stale rotated refresh token is rejected", async () => {
+    const { event, recorder } = createSessionEvent({
+      refreshToken: "refresh-token",
+      accessToken: "expired-access-token",
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "invalid_token",
+              message: "expired access token",
+            },
+          }),
+          {
+            status: 401,
+            headers: { "content-type": "application/json" },
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "invalid_token",
+              message: "stale rotated refresh token",
+            },
+          }),
+          {
+            status: 401,
+            headers: { "content-type": "application/json" },
+          },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      loadWorkspaceAuthenticatedAgent({
+        event,
+        workspaceSlug: "alpha",
+        coreBaseUrl: "https://core.example.com",
+      }),
+    ).resolves.toBeNull();
+
+    expect(recorder.values.get("oar_ui_session_alpha")).toBe("refresh-token");
+    expect(recorder.values.get("oar_ui_access_alpha")).toBe(
+      "expired-access-token",
+    );
+    expect(recorder.deleteCalls).toEqual([]);
   });
 });

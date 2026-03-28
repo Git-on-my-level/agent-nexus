@@ -12,7 +12,9 @@ function getWorkspaceSlug(value) {
   return normalizeWorkspaceSlug(value) || DEFAULT_WORKSPACE_SLUG;
 }
 
-const REFRESH_REPLAY_WINDOW_MS = 5_000;
+const ACCESS_TOKEN_COOKIE_MAX_AGE_SECONDS = 15 * 60;
+const REFRESH_TOKEN_COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
+const REFRESH_REPLAY_WINDOW_MS = 60_000;
 const inFlightRefreshes = new Map();
 const recentRefreshResults = new Map();
 
@@ -28,12 +30,13 @@ function isSecureCookieRequest(event) {
   return event.url.protocol === "https:";
 }
 
-function buildAuthSessionCookieOptions(event) {
+function buildAuthSessionCookieOptions(event, { maxAge } = {}) {
   return {
     httpOnly: true,
     sameSite: "lax",
     secure: isSecureCookieRequest(event),
     path: "/",
+    ...(Number.isFinite(maxAge) ? { maxAge } : {}),
   };
 }
 
@@ -138,7 +141,9 @@ export function writeWorkspaceAccessToken(event, workspaceSlug, accessToken) {
   event.cookies.set(
     getAuthAccessCookieName(workspaceSlug),
     normalized,
-    buildAuthSessionCookieOptions(event),
+    buildAuthSessionCookieOptions(event, {
+      maxAge: ACCESS_TOKEN_COOKIE_MAX_AGE_SECONDS,
+    }),
   );
 }
 
@@ -180,7 +185,9 @@ export function writeWorkspaceRefreshToken(event, workspaceSlug, refreshToken) {
   event.cookies.set(
     getAuthSessionCookieName(workspaceSlug),
     normalized,
-    buildAuthSessionCookieOptions(event),
+    buildAuthSessionCookieOptions(event, {
+      maxAge: REFRESH_TOKEN_COOKIE_MAX_AGE_SECONDS,
+    }),
   );
 }
 
@@ -259,6 +266,12 @@ export async function refreshWorkspaceAuthSession({
   return applyRefreshResult(event, workspaceSlug, await refreshPromise);
 }
 
+export function isLikelyStaleWorkspaceRefreshFailure(error) {
+  return (
+    error?.status === 401 && error?.details?.error?.code === "invalid_token"
+  );
+}
+
 export async function loadWorkspaceAuthenticatedAgent({
   event,
   workspaceSlug,
@@ -313,8 +326,11 @@ export async function loadWorkspaceAuthenticatedAgent({
     }
     return await fetchCurrentAgent(accessToken);
   } catch (error) {
-    if (error?.status === 401) {
+    if (error?.status === 401 && !isLikelyStaleWorkspaceRefreshFailure(error)) {
       clearWorkspaceAuthSession(event, workspaceSlug);
+      return null;
+    }
+    if (isLikelyStaleWorkspaceRefreshFailure(error)) {
       return null;
     }
     throw error;

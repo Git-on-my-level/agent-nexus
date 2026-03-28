@@ -7,6 +7,7 @@ import { stripBasePath } from "$lib/workspacePaths";
 import {
   clearWorkspaceAuthSession,
   getWorkspaceAuthSession,
+  isLikelyStaleWorkspaceRefreshFailure,
   readWorkspaceRefreshToken,
   refreshWorkspaceAuthSession,
 } from "$lib/server/authSession";
@@ -54,8 +55,10 @@ async function refreshAndRetry(
       workspaceSlug,
       coreBaseUrl,
     });
-  } catch {
-    clearWorkspaceAuthSession(event, workspaceSlug);
+  } catch (error) {
+    if (!isLikelyStaleWorkspaceRefreshFailure(error)) {
+      clearWorkspaceAuthSession(event, workspaceSlug);
+    }
     return null;
   }
 
