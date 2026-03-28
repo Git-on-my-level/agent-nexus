@@ -78,6 +78,18 @@ VERSION="$(./scripts/read-version.sh)"
 ./scripts/build-cli-release-artifacts.sh "$VERSION"
 ```
 
+Prepare the repo version before tagging. Either update it locally:
+
+```bash
+./scripts/set-version.sh v0.0.4
+git add VERSION cli/internal/buildinfo/version_generated.go
+git commit -m "Prepare CLI release v0.0.4"
+git push
+```
+
+Or use the manual GitHub workflow `.github/workflows/prepare-cli-release.yml`
+to open a draft PR that stages the requested version bump for review.
+
 This produces:
 
 - linux/darwin/windows archives for `amd64` + `arm64`
@@ -91,7 +103,7 @@ git tag -a "$VERSION" -m "Release $VERSION"
 git push origin "$VERSION"
 ```
 
-The workflow fails if the pushed tag does not match the committed [`VERSION`](../VERSION) file.
+The workflow fails if the pushed tag does not match the committed [`VERSION`](../VERSION) file or if generated CLI version metadata is stale.
 
 Then watch the GitHub workflow and confirm the published release:
 

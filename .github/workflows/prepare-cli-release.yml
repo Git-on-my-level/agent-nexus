@@ -1,0 +1,94 @@
+name: Prepare CLI Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version to stage in VERSION before tagging (for example v0.0.4).
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: prepare-cli-release-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Resolve release branch
+        id: branch
+        run: |
+          branch="release/prepare-${{ inputs.version }}"
+          echo "name=${branch}" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --heads origin "${branch}" >/dev/null 2>&1; then
+            git fetch origin "${branch}:${branch}"
+            git switch "${branch}"
+          else
+            git switch -c "${branch}"
+          fi
+
+      - name: Stage release version
+        run: ./scripts/set-version.sh "${{ inputs.version }}"
+
+      - name: Commit release prep
+        id: commit
+        run: |
+          if git diff --quiet -- VERSION cli/internal/buildinfo/version_generated.go; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git add VERSION cli/internal/buildinfo/version_generated.go
+          git commit -m "Prepare CLI release ${{ inputs.version }}"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Push release branch
+        if: steps.commit.outputs.changed == 'true'
+        run: git push -u origin "${{ steps.branch.outputs.name }}"
+
+      - name: Open draft PR
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          body_file="$(mktemp)"
+          trap 'rm -f "${body_file}"' EXIT
+          cat > "${body_file}" <<EOF
+          ## Summary
+
+          - bump \`VERSION\` to \`${{ inputs.version }}\`
+          - sync generated CLI build metadata from the canonical repo version
+          - stage the repo for the tag-driven CLI release workflow
+
+          ## Validation
+
+          - \`./scripts/set-version.sh ${{ inputs.version }}\`
+          EOF
+
+          existing_pr="$(gh pr list --head "${{ steps.branch.outputs.name }}" --base "${{ github.ref_name }}" --state open --json url --jq '.[0].url')"
+          if [[ -n "${existing_pr}" ]]; then
+            echo "Open PR already exists: ${existing_pr}"
+            exit 0
+          fi
+
+          gh pr create \
+            --draft \
+            --base "${{ github.ref_name }}" \
+            --head "${{ steps.branch.outputs.name }}" \
+            --title "Prepare CLI release ${{ inputs.version }}" \
+            --body-file "${body_file}"

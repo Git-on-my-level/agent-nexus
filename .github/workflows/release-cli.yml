@@ -22,22 +22,24 @@ jobs:
           cache-dependency-path: cli/go.sum
 
       - name: Verify release version
-        run: |
-          VERSION="$(./scripts/read-version.sh)"
-          if [[ "${GITHUB_REF_NAME}" != "${VERSION}" ]]; then
-            echo "release tag ${GITHUB_REF_NAME} does not match repo VERSION ${VERSION}" >&2
-            exit 1
-          fi
-          ./scripts/sync-version.sh --check
+        run: ./scripts/set-version.sh --check "${GITHUB_REF_NAME}"
 
       - name: Build release artifacts
         run: ./scripts/build-cli-release-artifacts.sh "${GITHUB_REF_NAME}" dist
 
       - name: Publish GitHub release
-        uses: softprops/action-gh-release@v2.6.1
-        with:
-          generate_release_notes: true
-          files: |
-            dist/*.tar.gz
-            dist/*.zip
-            dist/checksums.txt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          shopt -s nullglob
+          assets=(dist/*.tar.gz dist/*.zip dist/checksums.txt)
+          if [[ ${#assets[@]} -eq 0 ]]; then
+            echo "no release artifacts found in dist/" >&2
+            exit 1
+          fi
+
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" "${assets[@]}" --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" "${assets[@]}" --generate-notes --verify-tag
+          fi
