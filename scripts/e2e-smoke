@@ -141,6 +141,41 @@ run_cli_json() {
   HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" "$@" >"$outfile"
 }
 
+board_create_attempt() {
+  printf '{"board":{"id":"%s","title":"Smoke Board","status":"active","labels":["smoke","board"],"primary_thread_id":"%s","primary_document_id":"%s","pinned_refs":["thread:%s","artifact:%s"]}}\n' \
+    "$BOARD_ID" "$THREAD_ID" "$PRIMARY_DOC_ID" "$THREAD_ID" "$WORK_ORDER_ID" \
+    | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" boards create >"$TMP_DIR/board-create.json"
+}
+
+ensure_board_created() {
+  local max_attempts="${1:-2}"
+  local attempt error_code status_code
+
+  for attempt in $(seq 1 "$max_attempts"); do
+    if board_create_attempt; then
+      return 0
+    fi
+
+    # GitHub-hosted runners occasionally surface a transient 500 here even
+    # though the preceding authenticated board setup succeeded locally and in
+    # repeated stress runs. Probe for the board first, then retry once before
+    # failing the full smoke flow.
+    if run_cli_json "$TMP_DIR/board-get.json" boards get --board-id "$BOARD_ID"; then
+      return 0
+    fi
+
+    error_code="$(json_get "$TMP_DIR/board-create.json" 'error.code' || true)"
+    status_code="$(json_get "$TMP_DIR/board-create.json" 'error.details.status' || true)"
+    if [[ "$attempt" -lt "$max_attempts" && "$error_code" == "internal_error" && "$status_code" == "500" ]]; then
+      sleep 0.5
+      continue
+    fi
+    return 1
+  done
+
+  return 1
+}
+
 require_cmd curl
 require_cmd go
 require_cmd node
@@ -332,16 +367,27 @@ printf '{"document":{"id":"%s","title":"Smoke Board Card Doc","status":"active",
   | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" docs create >"$TMP_DIR/board-card-doc-create.json"
 
 BOARD_ID="board-smoke"
-printf '{"board":{"id":"%s","title":"Smoke Board","status":"active","labels":["smoke","board"],"primary_thread_id":"%s","primary_document_id":"%s","pinned_refs":["thread:%s","artifact:%s"]}}\n' "$BOARD_ID" "$THREAD_ID" "$PRIMARY_DOC_ID" "$THREAD_ID" "$WORK_ORDER_ID" \
-  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" boards create >"$TMP_DIR/board-create.json"
+if ! ensure_board_created 2; then
+  echo "failed to create board after retry" >&2
+  cat "$TMP_DIR/board-create.json" >&2 || true
+  exit 1
+fi
 
 BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-create.json" 'data.board.updated_at' || true)"
 if [[ -z "$BOARD_UPDATED_AT" ]]; then
   BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-create.json" 'data.body.board.updated_at' || true)"
 fi
 if [[ -z "$BOARD_UPDATED_AT" ]]; then
+  run_cli_json "$TMP_DIR/board-get.json" boards get --board-id "$BOARD_ID"
+  BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-get.json" 'data.board.updated_at' || true)"
+fi
+if [[ -z "$BOARD_UPDATED_AT" ]]; then
+  BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-get.json" 'data.body.board.updated_at' || true)"
+fi
+if [[ -z "$BOARD_UPDATED_AT" ]]; then
   echo "failed to parse board updated_at after create" >&2
   cat "$TMP_DIR/board-create.json" >&2 || true
+  cat "$TMP_DIR/board-get.json" >&2 || true
   exit 1
 fi
 
