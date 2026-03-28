@@ -36,6 +36,12 @@ Optional:
   --blob-s3-secret-access-key KEY
   --blob-s3-session-token TOKEN
   --blob-s3-force-path-style true|false
+  --max-blob-bytes BYTES     Workspace blob storage quota
+  --max-artifacts COUNT      Workspace artifact count quota
+  --max-documents COUNT      Workspace document count quota
+  --max-document-revisions COUNT
+                            Workspace document revision count quota
+  --max-upload-bytes BYTES   Workspace per-upload size quota
   --bootstrap-token TOKEN   Write the provided bootstrap token into env.production
   --clear-bootstrap-token   Write an empty bootstrap token into env.production
   --generate-bootstrap-token
@@ -62,6 +68,11 @@ BLOB_S3_ACCESS_KEY_ID=""
 BLOB_S3_SECRET_ACCESS_KEY=""
 BLOB_S3_SESSION_TOKEN=""
 BLOB_S3_FORCE_PATH_STYLE="false"
+MAX_BLOB_BYTES=""
+MAX_ARTIFACTS=""
+MAX_DOCUMENTS=""
+MAX_DOCUMENT_REVISIONS=""
+MAX_UPLOAD_BYTES=""
 BOOTSTRAP_TOKEN=""
 CLEAR_BOOTSTRAP_TOKEN=0
 GENERATE_BOOTSTRAP_TOKEN=0
@@ -86,6 +97,11 @@ while [[ $# -gt 0 ]]; do
     --blob-s3-secret-access-key) BLOB_S3_SECRET_ACCESS_KEY="$2"; shift 2 ;;
     --blob-s3-session-token) BLOB_S3_SESSION_TOKEN="$2"; shift 2 ;;
     --blob-s3-force-path-style) BLOB_S3_FORCE_PATH_STYLE="$(normalize_bool_value "$2")"; shift 2 ;;
+    --max-blob-bytes) MAX_BLOB_BYTES="$2"; shift 2 ;;
+    --max-artifacts) MAX_ARTIFACTS="$2"; shift 2 ;;
+    --max-documents) MAX_DOCUMENTS="$2"; shift 2 ;;
+    --max-document-revisions) MAX_DOCUMENT_REVISIONS="$2"; shift 2 ;;
+    --max-upload-bytes) MAX_UPLOAD_BYTES="$2"; shift 2 ;;
     --bootstrap-token) BOOTSTRAP_TOKEN="$2"; shift 2 ;;
     --clear-bootstrap-token) CLEAR_BOOTSTRAP_TOKEN=1; shift ;;
     --generate-bootstrap-token) GENERATE_BOOTSTRAP_TOKEN=1; shift ;;
@@ -113,6 +129,11 @@ validate_port "$LISTEN_PORT"
 validate_port "$WEB_UI_PORT"
 validate_origin "$PUBLIC_ORIGIN"
 validate_blob_backend "$BLOB_BACKEND"
+[[ -z "$MAX_BLOB_BYTES" ]] || validate_non_negative_integer "$MAX_BLOB_BYTES" "--max-blob-bytes"
+[[ -z "$MAX_ARTIFACTS" ]] || validate_non_negative_integer "$MAX_ARTIFACTS" "--max-artifacts"
+[[ -z "$MAX_DOCUMENTS" ]] || validate_non_negative_integer "$MAX_DOCUMENTS" "--max-documents"
+[[ -z "$MAX_DOCUMENT_REVISIONS" ]] || validate_non_negative_integer "$MAX_DOCUMENT_REVISIONS" "--max-document-revisions"
+[[ -z "$MAX_UPLOAD_BYTES" ]] || validate_non_negative_integer "$MAX_UPLOAD_BYTES" "--max-upload-bytes"
 
 mkdir -p "$INSTANCE_ROOT"
 INSTANCE_ROOT="$(cd "$INSTANCE_ROOT" && pwd -P)"
@@ -165,6 +186,15 @@ fi
 
 if [[ -f "$ENV_FILE" && "$FORCE" -ne 1 ]]; then
   log "preserving existing ${ENV_FILE}"
+  if [[ -n "$MAX_BLOB_BYTES" || -n "$MAX_ARTIFACTS" || -n "$MAX_DOCUMENTS" || -n "$MAX_DOCUMENT_REVISIONS" || -n "$MAX_UPLOAD_BYTES" ]]; then
+    upsert_env_var "$ENV_FILE" "OAR_WORKSPACE_MAX_BLOB_BYTES" "$MAX_BLOB_BYTES"
+    upsert_env_var "$ENV_FILE" "OAR_WORKSPACE_MAX_ARTIFACTS" "$MAX_ARTIFACTS"
+    upsert_env_var "$ENV_FILE" "OAR_WORKSPACE_MAX_DOCUMENTS" "$MAX_DOCUMENTS"
+    upsert_env_var "$ENV_FILE" "OAR_WORKSPACE_MAX_DOCUMENT_REVISIONS" "$MAX_DOCUMENT_REVISIONS"
+    upsert_env_var "$ENV_FILE" "OAR_WORKSPACE_MAX_UPLOAD_BYTES" "$MAX_UPLOAD_BYTES"
+    chmod 600 "$ENV_FILE"
+    log "updated workspace quota env vars in ${ENV_FILE}"
+  fi
 else
   cat >"$ENV_FILE" <<EOF
 # Managed hosted-v1 env file for ${INSTANCE_NAME}.
@@ -182,6 +212,7 @@ OAR_CORE_INSTANCE_ID=${CORE_INSTANCE_ID}
 OAR_BOOTSTRAP_TOKEN=${BOOTSTRAP_TOKEN}
 OAR_SHUTDOWN_TIMEOUT=15s
 $(emit_blob_env_lines "$BLOB_BACKEND" "$BLOB_ROOT" "$BLOB_S3_BUCKET" "$BLOB_S3_PREFIX" "$BLOB_S3_REGION" "$BLOB_S3_ENDPOINT" "$BLOB_S3_ACCESS_KEY_ID" "$BLOB_S3_SECRET_ACCESS_KEY" "$BLOB_S3_SESSION_TOKEN" "$BLOB_S3_FORCE_PATH_STYLE")
+$(emit_workspace_quota_env_lines "$MAX_BLOB_BYTES" "$MAX_ARTIFACTS" "$MAX_DOCUMENTS" "$MAX_DOCUMENT_REVISIONS" "$MAX_UPLOAD_BYTES")
 EOF
   chmod 600 "$ENV_FILE"
   log "wrote ${ENV_FILE}"
@@ -189,6 +220,15 @@ fi
 
 if [[ -f "$INSTANCE_METADATA_FILE" && "$FORCE" -ne 1 ]]; then
   log "preserving existing ${INSTANCE_METADATA_FILE}"
+  if [[ -n "$MAX_BLOB_BYTES" || -n "$MAX_ARTIFACTS" || -n "$MAX_DOCUMENTS" || -n "$MAX_DOCUMENT_REVISIONS" || -n "$MAX_UPLOAD_BYTES" ]]; then
+    upsert_env_var "$INSTANCE_METADATA_FILE" "WORKSPACE_MAX_BLOB_BYTES" "$MAX_BLOB_BYTES"
+    upsert_env_var "$INSTANCE_METADATA_FILE" "WORKSPACE_MAX_ARTIFACTS" "$MAX_ARTIFACTS"
+    upsert_env_var "$INSTANCE_METADATA_FILE" "WORKSPACE_MAX_DOCUMENTS" "$MAX_DOCUMENTS"
+    upsert_env_var "$INSTANCE_METADATA_FILE" "WORKSPACE_MAX_DOCUMENT_REVISIONS" "$MAX_DOCUMENT_REVISIONS"
+    upsert_env_var "$INSTANCE_METADATA_FILE" "WORKSPACE_MAX_UPLOAD_BYTES" "$MAX_UPLOAD_BYTES"
+    chmod 644 "$INSTANCE_METADATA_FILE"
+    log "updated workspace quota metadata in ${INSTANCE_METADATA_FILE}"
+  fi
 else
   cat >"$INSTANCE_METADATA_FILE" <<EOF
 FORMAT_VERSION=${HOSTED_INSTANCE_FORMAT_VERSION}
@@ -205,6 +245,7 @@ WEBAUTHN_RPID=${WEBAUTHN_RPID}
 CORE_INSTANCE_ID=${CORE_INSTANCE_ID}
 BOOTSTRAP_TOKEN_CONFIGURED=$(bootstrap_token_configured_state "$BOOTSTRAP_TOKEN")
 $(emit_blob_metadata_lines "$WORKSPACE_ROOT" "$BLOB_BACKEND" "$BLOB_ROOT" "$BLOB_S3_BUCKET" "$BLOB_S3_PREFIX" "$BLOB_S3_REGION" "$BLOB_S3_ENDPOINT" "$BLOB_S3_ACCESS_KEY_ID" "$BLOB_S3_SECRET_ACCESS_KEY" "$BLOB_S3_SESSION_TOKEN" "$BLOB_S3_FORCE_PATH_STYLE")
+$(emit_workspace_quota_metadata_lines "$MAX_BLOB_BYTES" "$MAX_ARTIFACTS" "$MAX_DOCUMENTS" "$MAX_DOCUMENT_REVISIONS" "$MAX_UPLOAD_BYTES")
 EOF
   chmod 644 "$INSTANCE_METADATA_FILE"
   log "wrote ${INSTANCE_METADATA_FILE}"

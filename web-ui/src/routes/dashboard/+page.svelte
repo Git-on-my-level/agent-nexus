@@ -7,10 +7,13 @@
   let { data } = $props();
 
   let organizations = $derived(data.organizations ?? []);
+  let billingByOrganization = $derived(data.billingByOrganization ?? {});
   let workspaces = $derived(data.workspaces ?? []);
   let error = $state("");
   let creatingOrg = $state(false);
   let launchingWorkspaceId = $state("");
+  let billingActionOrganizationId = $state("");
+  let billingActionMode = $state("");
   let newOrgSlug = $state("");
   let newOrgDisplayName = $state("");
 
@@ -99,6 +102,80 @@
       error = e instanceof Error ? e.message : "Failed to launch workspace";
     } finally {
       launchingWorkspaceId = "";
+    }
+  }
+
+  function getBillingSummary(org) {
+    return billingByOrganization?.[org.id] ?? null;
+  }
+
+  function humanizeBillingValue(value) {
+    return String(value ?? "")
+      .replaceAll("_", " ")
+      .replace(/\b\w/g, (match) => match.toUpperCase());
+  }
+
+  function recommendedBillingPlan(org) {
+    if (org.plan_tier === "starter") {
+      return "team";
+    }
+    if (org.plan_tier === "team") {
+      return "team";
+    }
+    if (org.plan_tier === "scale") {
+      return "scale";
+    }
+    return "";
+  }
+
+  async function handleStartBilling(org, planTier) {
+    if (!planTier) {
+      return;
+    }
+
+    billingActionOrganizationId = org.id;
+    billingActionMode = `checkout:${planTier}`;
+    error = "";
+
+    try {
+      const response =
+        await controlClient.createOrganizationBillingCheckoutSession(org.id, {
+          plan_tier: planTier,
+        });
+      const session = response?.session ?? {};
+      if (!session.url) {
+        throw new Error(
+          session.note || "Billing checkout URL was not returned",
+        );
+      }
+      window.location.assign(session.url);
+    } catch (e) {
+      error = e instanceof Error ? e.message : "Failed to start billing";
+      billingActionOrganizationId = "";
+      billingActionMode = "";
+    }
+  }
+
+  async function handleManageBilling(org) {
+    billingActionOrganizationId = org.id;
+    billingActionMode = "portal";
+    error = "";
+
+    try {
+      const response =
+        await controlClient.createOrganizationBillingCustomerPortalSession(
+          org.id,
+          {},
+        );
+      const session = response?.session ?? {};
+      if (!session.url) {
+        throw new Error(session.note || "Billing portal URL was not returned");
+      }
+      window.location.assign(session.url);
+    } catch (e) {
+      error = e instanceof Error ? e.message : "Failed to open billing";
+      billingActionOrganizationId = "";
+      billingActionMode = "";
     }
   }
 </script>
@@ -241,6 +318,156 @@
             </div>
 
             <div class="px-4 py-3">
+              {#if getBillingSummary(org)}
+                {@const billing = getBillingSummary(org)}
+                <div
+                  class="mb-4 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-3 py-3"
+                >
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span
+                      class="rounded-md bg-indigo-600/15 px-2 py-1 text-[11px] font-medium text-indigo-300"
+                    >
+                      Billing: {humanizeBillingValue(
+                        billing.billing_account?.billing_status ?? "free",
+                      )}
+                    </span>
+                    <span
+                      class="rounded-md bg-[var(--ui-bg-soft)] px-2 py-1 text-[11px] font-medium text-[var(--ui-text-muted)]"
+                    >
+                      Stripe customer: {billing.billing_account
+                        ?.stripe_customer_id || "not linked"}
+                    </span>
+                    <span
+                      class="rounded-md bg-[var(--ui-bg-soft)] px-2 py-1 text-[11px] font-medium text-[var(--ui-text-muted)]"
+                    >
+                      Webhook: {billing.configuration?.webhook_secret_configured
+                        ? "configured"
+                        : "missing"}
+                    </span>
+                  </div>
+
+                  <div class="mt-3 grid gap-3 md:grid-cols-3">
+                    <div
+                      class="rounded-md border border-[var(--ui-border)] px-3 py-2"
+                    >
+                      <p
+                        class="text-[11px] uppercase tracking-wide text-[var(--ui-text-muted)]"
+                      >
+                        Usage
+                      </p>
+                      <p class="mt-1 text-[13px] text-[var(--ui-text)]">
+                        {billing.usage_summary?.usage?.workspace_count ?? 0} workspaces
+                      </p>
+                      <p class="text-[12px] text-[var(--ui-text-muted)]">
+                        {billing.usage_summary?.usage?.storage_gb ?? 0} GB tracked
+                      </p>
+                      <p class="text-[12px] text-[var(--ui-text-muted)]">
+                        {billing.usage_summary?.usage?.monthly_launch_count ??
+                          0} launches this month
+                      </p>
+                    </div>
+
+                    <div
+                      class="rounded-md border border-[var(--ui-border)] px-3 py-2"
+                    >
+                      <p
+                        class="text-[11px] uppercase tracking-wide text-[var(--ui-text-muted)]"
+                      >
+                        Entitlement
+                      </p>
+                      <p class="mt-1 text-[13px] text-[var(--ui-text)]">
+                        {billing.plan_tier} plan
+                      </p>
+                      <p class="text-[12px] text-[var(--ui-text-muted)]">
+                        {billing.usage_summary?.quota?.workspaces_remaining ??
+                          0}
+                        workspaces remaining
+                      </p>
+                      <p class="text-[12px] text-[var(--ui-text-muted)]">
+                        {billing.usage_summary?.quota?.storage_gb_remaining ??
+                          0}
+                        GB remaining
+                      </p>
+                    </div>
+
+                    <div
+                      class="rounded-md border border-[var(--ui-border)] px-3 py-2"
+                    >
+                      <p
+                        class="text-[11px] uppercase tracking-wide text-[var(--ui-text-muted)]"
+                      >
+                        Stripe Billing
+                      </p>
+                      <p class="mt-1 text-[13px] text-[var(--ui-text)]">
+                        {billing.configuration?.configured
+                          ? "Config looks complete"
+                          : "Review and fill values"}
+                      </p>
+                      <p class="text-[12px] text-[var(--ui-text-muted)]">
+                        Publishable key: {billing.configuration
+                          ?.publishable_key_configured
+                          ? "set"
+                          : "missing"}
+                      </p>
+                      <p class="text-[12px] text-[var(--ui-text-muted)]">
+                        Checkout: {billing.configuration?.checkout_configured
+                          ? "ready"
+                          : "not ready"}
+                      </p>
+                      <div class="mt-3 flex flex-wrap gap-2">
+                        {#if billing.billing_account?.stripe_customer_id}
+                          <button
+                            class="rounded-md bg-indigo-600 px-3 py-1 text-[11px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+                            disabled={billingActionOrganizationId === org.id}
+                            onclick={() => handleManageBilling(org)}
+                            type="button"
+                          >
+                            {billingActionOrganizationId === org.id &&
+                            billingActionMode === "portal"
+                              ? "Opening..."
+                              : "Manage Billing"}
+                          </button>
+                        {:else if recommendedBillingPlan(org)}
+                          <button
+                            class="rounded-md bg-indigo-600 px-3 py-1 text-[11px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+                            disabled={billingActionOrganizationId === org.id}
+                            onclick={() =>
+                              handleStartBilling(
+                                org,
+                                recommendedBillingPlan(org),
+                              )}
+                            type="button"
+                          >
+                            {billingActionOrganizationId === org.id &&
+                            billingActionMode ===
+                              `checkout:${recommendedBillingPlan(org)}`
+                              ? "Opening..."
+                              : `Start ${humanizeBillingValue(
+                                  recommendedBillingPlan(org),
+                                )} Billing`}
+                          </button>
+                        {/if}
+                      </div>
+                    </div>
+                  </div>
+
+                  {#if (billing.configuration?.missing_configuration ?? []).length > 0}
+                    <div
+                      class="mt-3 rounded-md bg-amber-500/10 px-3 py-2 text-[12px] text-amber-300"
+                    >
+                      Missing Stripe values:
+                      {#each billing.configuration.missing_configuration as missing, index}
+                        <span
+                          >{index === 0 ? " " : ", "}{humanizeBillingValue(
+                            missing,
+                          )}</span
+                        >
+                      {/each}
+                    </div>
+                  {/if}
+                </div>
+              {/if}
+
               {#if workspaces.filter((ws) => ws.organization_id === org.id).length === 0}
                 <div class="py-4 text-center">
                   <svg

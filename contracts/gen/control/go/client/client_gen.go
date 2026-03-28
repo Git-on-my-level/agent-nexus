@@ -118,6 +118,76 @@ var CommandRegistry = []CommandSpec{
 		},
 	},
 	{
+		CommandID: "control.billing.webhooks.stripe.receive",
+		CLIPath:   "billing webhooks stripe receive",
+		Group:     "billing",
+		Method:    "POST",
+		Path:      "/billing/webhooks/stripe",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"billing", "webhooks", "subscriptions"},
+		Examples: []Example{
+			{
+				Title:   "Stripe webhook",
+				Command: "curl -X POST https://control.oar.example/billing/webhooks/stripe -H 'Stripe-Signature: <signature>' -H 'Content-Type: application/json' --data-binary @event.json",
+			},
+		},
+	},
+	{
+		CommandID:  "control.organizations.billing.checkout-session.create",
+		CLIPath:    "organizations billing checkout-session create",
+		Group:      "organizations",
+		Method:     "POST",
+		Path:       "/organizations/{organization_id}/billing/checkout-session",
+		PathParams: []string{"organization_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"organizations", "billing", "checkout"},
+		Adjacent:   []string{"control.organizations.billing.customer-portal-session.create", "control.organizations.billing.get", "control.organizations.create", "control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.usage-summary.get", "control.organizations.workspace-inventory.list"},
+		Examples: []Example{
+			{
+				Title:   "Create checkout session",
+				Command: "oar api call --base-url https://control.oar.example --method POST --path /organizations/org_123/billing/checkout-session --body '{\"plan_tier\":\"team\"}' --header 'Authorization: Bearer <control-session>'",
+			},
+		},
+	},
+	{
+		CommandID:  "control.organizations.billing.customer-portal-session.create",
+		CLIPath:    "organizations billing customer-portal-session create",
+		Group:      "organizations",
+		Method:     "POST",
+		Path:       "/organizations/{organization_id}/billing/customer-portal-session",
+		PathParams: []string{"organization_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"organizations", "billing", "portal"},
+		Adjacent:   []string{"control.organizations.billing.checkout-session.create", "control.organizations.billing.get", "control.organizations.create", "control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.usage-summary.get", "control.organizations.workspace-inventory.list"},
+		Examples: []Example{
+			{
+				Title:   "Create customer portal session",
+				Command: "oar api call --base-url https://control.oar.example --method POST --path /organizations/org_123/billing/customer-portal-session --body '{}' --header 'Authorization: Bearer <control-session>'",
+			},
+		},
+	},
+	{
+		CommandID:  "control.organizations.billing.get",
+		CLIPath:    "organizations billing get",
+		Group:      "organizations",
+		Method:     "GET",
+		Path:       "/organizations/{organization_id}/billing",
+		PathParams: []string{"organization_id"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"organizations", "billing", "plans"},
+		Adjacent:   []string{"control.organizations.billing.checkout-session.create", "control.organizations.billing.customer-portal-session.create", "control.organizations.create", "control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.usage-summary.get", "control.organizations.workspace-inventory.list"},
+		Examples: []Example{
+			{
+				Title:   "Get billing summary",
+				Command: "oar api call --base-url https://control.oar.example --method GET --path /organizations/org_123/billing --header 'Authorization: Bearer <control-session>'",
+			},
+		},
+	},
+	{
 		CommandID: "control.organizations.create",
 		CLIPath:   "organizations create",
 		Group:     "organizations",
@@ -126,7 +196,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"organizations", "tenancy", "billing"},
-		Adjacent:  []string{"control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.usage-summary.get", "control.organizations.workspace-inventory.list"},
+		Adjacent:  []string{"control.organizations.billing.checkout-session.create", "control.organizations.billing.customer-portal-session.create", "control.organizations.billing.get", "control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.usage-summary.get", "control.organizations.workspace-inventory.list"},
 		Examples: []Example{
 			{
 				Title:   "Create organization",
@@ -144,7 +214,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"organizations", "tenancy"},
-		Adjacent:   []string{"control.organizations.create", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.usage-summary.get", "control.organizations.workspace-inventory.list"},
+		Adjacent:   []string{"control.organizations.billing.checkout-session.create", "control.organizations.billing.customer-portal-session.create", "control.organizations.billing.get", "control.organizations.create", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.usage-summary.get", "control.organizations.workspace-inventory.list"},
 		Examples: []Example{
 			{
 				Title:   "Get organization",
@@ -162,7 +232,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"organizations", "invites", "access"},
-		Adjacent:   []string{"control.organizations.create", "control.organizations.get", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.usage-summary.get", "control.organizations.workspace-inventory.list"},
+		Adjacent:   []string{"control.organizations.billing.checkout-session.create", "control.organizations.billing.customer-portal-session.create", "control.organizations.billing.get", "control.organizations.create", "control.organizations.get", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.usage-summary.get", "control.organizations.workspace-inventory.list"},
 		Examples: []Example{
 			{
 				Title:   "Invite organization admin",
@@ -180,7 +250,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"organizations", "invites", "access"},
-		Adjacent:   []string{"control.organizations.create", "control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.usage-summary.get", "control.organizations.workspace-inventory.list"},
+		Adjacent:   []string{"control.organizations.billing.checkout-session.create", "control.organizations.billing.customer-portal-session.create", "control.organizations.billing.get", "control.organizations.create", "control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.usage-summary.get", "control.organizations.workspace-inventory.list"},
 		Examples: []Example{
 			{
 				Title:   "List org invites",
@@ -198,7 +268,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"organizations", "invites", "access"},
-		Adjacent:   []string{"control.organizations.create", "control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.usage-summary.get", "control.organizations.workspace-inventory.list"},
+		Adjacent:   []string{"control.organizations.billing.checkout-session.create", "control.organizations.billing.customer-portal-session.create", "control.organizations.billing.get", "control.organizations.create", "control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.usage-summary.get", "control.organizations.workspace-inventory.list"},
 		Examples: []Example{
 			{
 				Title:   "Revoke org invite",
@@ -215,7 +285,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"organizations", "tenancy"},
-		Adjacent:  []string{"control.organizations.create", "control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.usage-summary.get", "control.organizations.workspace-inventory.list"},
+		Adjacent:  []string{"control.organizations.billing.checkout-session.create", "control.organizations.billing.customer-portal-session.create", "control.organizations.billing.get", "control.organizations.create", "control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.usage-summary.get", "control.organizations.workspace-inventory.list"},
 		Examples: []Example{
 			{
 				Title:   "List organizations",
@@ -233,7 +303,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"organizations", "memberships", "access"},
-		Adjacent:   []string{"control.organizations.create", "control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.usage-summary.get", "control.organizations.workspace-inventory.list"},
+		Adjacent:   []string{"control.organizations.billing.checkout-session.create", "control.organizations.billing.customer-portal-session.create", "control.organizations.billing.get", "control.organizations.create", "control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.usage-summary.get", "control.organizations.workspace-inventory.list"},
 		Examples: []Example{
 			{
 				Title:   "List memberships",
@@ -251,7 +321,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"organizations", "memberships", "access"},
-		Adjacent:   []string{"control.organizations.create", "control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.update", "control.organizations.usage-summary.get", "control.organizations.workspace-inventory.list"},
+		Adjacent:   []string{"control.organizations.billing.checkout-session.create", "control.organizations.billing.customer-portal-session.create", "control.organizations.billing.get", "control.organizations.create", "control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.update", "control.organizations.usage-summary.get", "control.organizations.workspace-inventory.list"},
 		Examples: []Example{
 			{
 				Title:   "Promote organization member",
@@ -269,7 +339,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"organizations", "billing", "lifecycle"},
-		Adjacent:   []string{"control.organizations.create", "control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.usage-summary.get", "control.organizations.workspace-inventory.list"},
+		Adjacent:   []string{"control.organizations.billing.checkout-session.create", "control.organizations.billing.customer-portal-session.create", "control.organizations.billing.get", "control.organizations.create", "control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.usage-summary.get", "control.organizations.workspace-inventory.list"},
 		Examples: []Example{
 			{
 				Title:   "Update organization plan",
@@ -287,7 +357,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"usage", "plans", "quotas"},
-		Adjacent:   []string{"control.organizations.create", "control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.workspace-inventory.list"},
+		Adjacent:   []string{"control.organizations.billing.checkout-session.create", "control.organizations.billing.customer-portal-session.create", "control.organizations.billing.get", "control.organizations.create", "control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.workspace-inventory.list"},
 		Examples: []Example{
 			{
 				Title:   "Get usage summary",
@@ -305,7 +375,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"workspaces", "inventory", "operations"},
-		Adjacent:   []string{"control.organizations.create", "control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.usage-summary.get"},
+		Adjacent:   []string{"control.organizations.billing.checkout-session.create", "control.organizations.billing.customer-portal-session.create", "control.organizations.billing.get", "control.organizations.create", "control.organizations.get", "control.organizations.invites.create", "control.organizations.invites.list", "control.organizations.invites.revoke", "control.organizations.list", "control.organizations.memberships.list", "control.organizations.memberships.update", "control.organizations.update", "control.organizations.usage-summary.get"},
 		Examples: []Example{
 			{
 				Title:   "List workspace inventory",
@@ -734,6 +804,22 @@ func (c *Client) ControlAccountsSessionsRevokeCurrent(ctx context.Context, opts 
 
 func (c *Client) ControlAccountsSessionsStart(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "control.accounts.sessions.start", nil, opts)
+}
+
+func (c *Client) ControlBillingWebhooksStripeReceive(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "control.billing.webhooks.stripe.receive", nil, opts)
+}
+
+func (c *Client) ControlOrganizationsBillingCheckoutSessionCreate(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "control.organizations.billing.checkout-session.create", pathParams, opts)
+}
+
+func (c *Client) ControlOrganizationsBillingCustomerPortalSessionCreate(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "control.organizations.billing.customer-portal-session.create", pathParams, opts)
+}
+
+func (c *Client) ControlOrganizationsBillingGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "control.organizations.billing.get", pathParams, opts)
 }
 
 func (c *Client) ControlOrganizationsCreate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {

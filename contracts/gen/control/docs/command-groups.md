@@ -4,7 +4,7 @@ Generated from `contracts/oar-control-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.1.0`
-- Groups: `4`
+- Groups: `5`
 
 ## `accounts`
 
@@ -16,10 +16,19 @@ Generated from `contracts/oar-control-openapi.yaml`.
   - `control.accounts.sessions.revoke-current` (`accounts sessions revoke-current`)
   - `control.accounts.sessions.start` (`accounts sessions start`)
 
+## `billing`
+
+- Commands: `1`
+- Command IDs:
+  - `control.billing.webhooks.stripe.receive` (`billing webhooks stripe receive`)
+
 ## `organizations`
 
-- Commands: `11`
+- Commands: `14`
 - Command IDs:
+  - `control.organizations.billing.checkout-session.create` (`organizations billing checkout-session create`)
+  - `control.organizations.billing.customer-portal-session.create` (`organizations billing customer-portal-session create`)
+  - `control.organizations.billing.get` (`organizations billing get`)
   - `control.organizations.create` (`organizations create`)
   - `control.organizations.get` (`organizations get`)
   - `control.organizations.invites.create` (`organizations invites create`)

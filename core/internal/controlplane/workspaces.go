@@ -94,6 +94,7 @@ func (s *Service) CreateWorkspace(ctx context.Context, identity RequestIdentity,
 		return Workspace{}, ProvisioningJob{}, invalidRequest("service_identity_public_key is invalid")
 	}
 	plan := planForTier(organization.PlanTier)
+	workspaceQuota := workspaceQuotaForPlanTier(organization.PlanTier)
 
 	nowText := s.now().Format(time.RFC3339Nano)
 	workspaceID := "ws_" + uuid.NewString()
@@ -161,6 +162,14 @@ func (s *Service) CreateWorkspace(ctx context.Context, identity RequestIdentity,
 				"instance_root":    workspace.DeploymentRoot,
 				"public_origin":    workspace.PublicOrigin,
 				"core_instance_id": workspace.InstanceID,
+				"plan_tier":        organization.PlanTier,
+				"workspace_quota": map[string]any{
+					"max_blob_bytes":         workspaceQuota.MaxBlobBytes,
+					"max_artifacts":          workspaceQuota.MaxArtifacts,
+					"max_documents":          workspaceQuota.MaxDocuments,
+					"max_document_revisions": workspaceQuota.MaxDocumentRevisions,
+					"max_upload_bytes":       workspaceQuota.MaxUploadBytes,
+				},
 			},
 		}
 
@@ -294,7 +303,7 @@ func (s *Service) CreateWorkspace(ctx context.Context, identity RequestIdentity,
 		return Workspace{}, ProvisioningJob{}, conflict("placement_conflict", "workspace placement changed concurrently; retry workspace creation")
 	}
 
-	provisionResult, provisionErr := s.runProvisionWorkspaceScript(ctx, workspace)
+	provisionResult, provisionErr := s.runProvisionWorkspaceScript(ctx, workspace, workspaceQuota)
 	if provisionErr == nil {
 		workspace.Status = "ready"
 		workspace.UpdatedAt = s.now().Format(time.RFC3339Nano)

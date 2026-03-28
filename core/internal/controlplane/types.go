@@ -32,6 +32,61 @@ type Organization struct {
 	UpdatedAt   string `json:"updated_at"`
 }
 
+type BillingAccount struct {
+	OrganizationID           string  `json:"organization_id"`
+	Provider                 string  `json:"provider"`
+	BillingStatus            string  `json:"billing_status"`
+	StripeCustomerID         string  `json:"stripe_customer_id"`
+	StripeSubscriptionID     string  `json:"stripe_subscription_id"`
+	StripePriceID            string  `json:"stripe_price_id"`
+	StripeSubscriptionStatus string  `json:"stripe_subscription_status"`
+	CurrentPeriodEnd         *string `json:"current_period_end,omitempty"`
+	CancelAtPeriodEnd        bool    `json:"cancel_at_period_end"`
+	LastWebhookEventID       string  `json:"last_webhook_event_id"`
+	LastWebhookEventType     string  `json:"last_webhook_event_type"`
+	LastWebhookReceivedAt    *string `json:"last_webhook_received_at,omitempty"`
+	CreatedAt                string  `json:"created_at"`
+	UpdatedAt                string  `json:"updated_at"`
+}
+
+type BillingConfiguration struct {
+	Provider                 string            `json:"provider"`
+	Configured               bool              `json:"configured"`
+	PublishableKeyConfigured bool              `json:"publishable_key_configured"`
+	SecretKeyConfigured      bool              `json:"secret_key_configured"`
+	WebhookSecretConfigured  bool              `json:"webhook_secret_configured"`
+	CheckoutConfigured       bool              `json:"checkout_configured"`
+	CustomerPortalConfigured bool              `json:"customer_portal_configured"`
+	PlanPriceIDs             map[string]string `json:"plan_price_ids"`
+	MissingConfiguration     []string          `json:"missing_configuration"`
+}
+
+type BillingSummary struct {
+	OrganizationID string               `json:"organization_id"`
+	PlanTier       string               `json:"plan_tier"`
+	BillingAccount BillingAccount       `json:"billing_account"`
+	UsageSummary   UsageSummary         `json:"usage_summary"`
+	Configuration  BillingConfiguration `json:"configuration"`
+}
+
+type BillingActionSession struct {
+	Provider             string   `json:"provider"`
+	Mode                 string   `json:"mode"`
+	Status               string   `json:"status"`
+	PlanTier             string   `json:"plan_tier,omitempty"`
+	URL                  string   `json:"url,omitempty"`
+	MissingConfiguration []string `json:"missing_configuration"`
+	Note                 string   `json:"note,omitempty"`
+}
+
+type StripeWebhookReceipt struct {
+	Received           bool   `json:"received"`
+	EventID            string `json:"event_id"`
+	EventType          string `json:"event_type"`
+	VerificationStatus string `json:"verification_status"`
+	OrganizationID     string `json:"organization_id,omitempty"`
+}
+
 type Membership struct {
 	ID             string `json:"id"`
 	OrganizationID string `json:"organization_id"`

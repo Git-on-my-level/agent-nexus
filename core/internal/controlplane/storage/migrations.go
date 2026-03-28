@@ -306,6 +306,53 @@ var migrations = []migration{
 			`CREATE UNIQUE INDEX IF NOT EXISTS idx_workspaces_host_listen_port_unique ON workspaces (host_id, listen_port) WHERE listen_port > 0;`,
 		},
 	},
+	{
+		Version: 8,
+		Statements: []string{
+			`CREATE TABLE IF NOT EXISTS organization_billing (
+				organization_id TEXT PRIMARY KEY,
+				provider TEXT NOT NULL DEFAULT 'stripe',
+				billing_status TEXT NOT NULL DEFAULT 'free',
+				stripe_customer_id TEXT NOT NULL DEFAULT '',
+				stripe_subscription_id TEXT NOT NULL DEFAULT '',
+				stripe_price_id TEXT NOT NULL DEFAULT '',
+				stripe_subscription_status TEXT NOT NULL DEFAULT 'not_started',
+				current_period_end TEXT,
+				cancel_at_period_end INTEGER NOT NULL DEFAULT 0,
+				last_webhook_event_id TEXT NOT NULL DEFAULT '',
+				last_webhook_event_type TEXT NOT NULL DEFAULT '',
+				last_webhook_received_at TEXT,
+				created_at TEXT NOT NULL,
+				updated_at TEXT NOT NULL,
+				FOREIGN KEY(organization_id) REFERENCES organizations(id)
+			);`,
+			`CREATE INDEX IF NOT EXISTS idx_organization_billing_customer ON organization_billing (stripe_customer_id) WHERE stripe_customer_id != '';`,
+			`CREATE INDEX IF NOT EXISTS idx_organization_billing_subscription ON organization_billing (stripe_subscription_id) WHERE stripe_subscription_id != '';`,
+			`INSERT OR IGNORE INTO organization_billing(
+				organization_id, provider, billing_status, stripe_customer_id, stripe_subscription_id, stripe_price_id,
+				stripe_subscription_status, current_period_end, cancel_at_period_end, last_webhook_event_id,
+				last_webhook_event_type, last_webhook_received_at, created_at, updated_at
+			)
+			SELECT id, 'stripe', 'free', '', '', '', 'not_started', NULL, 0, '', '', NULL, created_at, updated_at
+			FROM organizations;`,
+			`CREATE TABLE IF NOT EXISTS stripe_webhook_events (
+				event_id TEXT PRIMARY KEY,
+				event_type TEXT NOT NULL,
+				verification_status TEXT NOT NULL,
+				organization_id TEXT NOT NULL DEFAULT '',
+				stripe_customer_id TEXT NOT NULL DEFAULT '',
+				stripe_subscription_id TEXT NOT NULL DEFAULT '',
+				received_at TEXT NOT NULL,
+				processed_at TEXT,
+				payload_json TEXT NOT NULL DEFAULT '{}',
+				signature_header TEXT NOT NULL DEFAULT '',
+				processing_error TEXT NOT NULL DEFAULT ''
+			);`,
+			`CREATE INDEX IF NOT EXISTS idx_stripe_webhook_events_org_received ON stripe_webhook_events (organization_id, received_at DESC, event_id DESC);`,
+			`CREATE INDEX IF NOT EXISTS idx_stripe_webhook_events_customer_received ON stripe_webhook_events (stripe_customer_id, received_at DESC, event_id DESC) WHERE stripe_customer_id != '';`,
+			`CREATE INDEX IF NOT EXISTS idx_stripe_webhook_events_subscription_received ON stripe_webhook_events (stripe_subscription_id, received_at DESC, event_id DESC) WHERE stripe_subscription_id != '';`,
+		},
+	},
 }
 
 func applyMigrations(ctx context.Context, db *sql.DB) error {

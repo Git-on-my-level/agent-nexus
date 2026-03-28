@@ -91,6 +91,12 @@ validate_port() {
   (( port >= 1 && port <= 65535 )) || die "port must be between 1 and 65535: $port"
 }
 
+validate_non_negative_integer() {
+  local value="$1"
+  local name="${2:-value}"
+  [[ "$value" =~ ^[0-9]+$ ]] || die "${name} must be a non-negative integer: ${value}"
+}
+
 validate_bootstrap_token_mode() {
   local mode="$1"
   case "$mode" in
@@ -346,6 +352,38 @@ BLOB_S3_INLINE_CREDENTIALS_PRESENT=${inline_credentials_present}
 EOF
 }
 
+emit_workspace_quota_env_lines() {
+  local max_blob_bytes="$1"
+  local max_artifacts="$2"
+  local max_documents="$3"
+  local max_document_revisions="$4"
+  local max_upload_bytes="$5"
+
+  cat <<EOF
+OAR_WORKSPACE_MAX_BLOB_BYTES=${max_blob_bytes}
+OAR_WORKSPACE_MAX_ARTIFACTS=${max_artifacts}
+OAR_WORKSPACE_MAX_DOCUMENTS=${max_documents}
+OAR_WORKSPACE_MAX_DOCUMENT_REVISIONS=${max_document_revisions}
+OAR_WORKSPACE_MAX_UPLOAD_BYTES=${max_upload_bytes}
+EOF
+}
+
+emit_workspace_quota_metadata_lines() {
+  local max_blob_bytes="$1"
+  local max_artifacts="$2"
+  local max_documents="$3"
+  local max_document_revisions="$4"
+  local max_upload_bytes="$5"
+
+  cat <<EOF
+WORKSPACE_MAX_BLOB_BYTES=${max_blob_bytes}
+WORKSPACE_MAX_ARTIFACTS=${max_artifacts}
+WORKSPACE_MAX_DOCUMENTS=${max_documents}
+WORKSPACE_MAX_DOCUMENT_REVISIONS=${max_document_revisions}
+WORKSPACE_MAX_UPLOAD_BYTES=${max_upload_bytes}
+EOF
+}
+
 remap_local_blob_root_for_target() {
   local source_blob_root="${1:-}"
   local source_instance_root="${2:-}"
@@ -417,6 +455,29 @@ manifest_get() {
 
 dotenv_get() {
   manifest_get "$1" "$2"
+}
+
+upsert_env_var() {
+  local file="$1"
+  local key="$2"
+  local value="$3"
+  local tmp_file
+  tmp_file="$(mktemp)"
+  awk -F= -v key="$key" -v value="$value" '
+    BEGIN { replaced = 0 }
+    $1 == key {
+      print key "=" value
+      replaced = 1
+      next
+    }
+    { print $0 }
+    END {
+      if (replaced == 0) {
+        print key "=" value
+      }
+    }
+  ' "$file" >"$tmp_file"
+  mv "$tmp_file" "$file"
 }
 
 verify_backup_checksums() {

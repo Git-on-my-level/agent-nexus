@@ -515,7 +515,7 @@ func (s *Service) runHostedScript(ctx context.Context, scriptName string, args .
 	return result, err
 }
 
-func (s *Service) runProvisionWorkspaceScript(ctx context.Context, workspace Workspace) (scriptResult, error) {
+func (s *Service) runProvisionWorkspaceScript(ctx context.Context, workspace Workspace, quota WorkspaceQuota) (scriptResult, error) {
 	args := []string{
 		"--instance", workspace.InstanceID,
 		"--instance-root", s.workspaceDeploymentRoot(workspace),
@@ -523,6 +523,11 @@ func (s *Service) runProvisionWorkspaceScript(ctx context.Context, workspace Wor
 		"--listen-port", fmt.Sprintf("%d", s.workspacePlacement(workspace).ListenPort),
 		"--web-ui-port", fmt.Sprintf("%d", s.workspaceWebUIPort(workspace)),
 		"--core-instance-id", workspace.InstanceID,
+		"--max-blob-bytes", fmt.Sprintf("%d", quota.MaxBlobBytes),
+		"--max-artifacts", fmt.Sprintf("%d", quota.MaxArtifacts),
+		"--max-documents", fmt.Sprintf("%d", quota.MaxDocuments),
+		"--max-document-revisions", fmt.Sprintf("%d", quota.MaxDocumentRevisions),
+		"--max-upload-bytes", fmt.Sprintf("%d", quota.MaxUploadBytes),
 	}
 	return s.runHostedScript(ctx, "provision-workspace.sh", args...)
 }
@@ -574,6 +579,35 @@ func (s *Service) runVerifyRestoreScript(ctx context.Context, workspace Workspac
 		"--schema-path", schemaPath,
 	}
 	return s.runHostedScript(ctx, "verify-restore.sh", args...)
+}
+
+func (s *Service) applyWorkspaceQuotaConfigForOrganization(ctx context.Context, organizationID string, planTier string) error {
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT id, organization_id, slug, display_name, status, region, workspace_tier, workspace_path, base_url, public_origin, core_origin, host_id, host_label, workspace_root, listen_port, deployment_root, instance_id, service_identity_id, service_identity_public_key, desired_state, desired_version, quota_config_ref, quota_envelope_ref, deployed_version, routing_manifest_path, last_heartbeat_at, heartbeat_version, heartbeat_build, heartbeat_health_summary_json, heartbeat_projection_maintenance_summary_json, heartbeat_usage_summary_json, last_successful_backup_at, created_at, updated_at
+		FROM workspaces
+		WHERE organization_id = ?`,
+		organizationID,
+	)
+	if err != nil {
+		return internalError("failed to list workspaces for quota refresh")
+	}
+	defer rows.Close()
+
+	quota := workspaceQuotaForPlanTier(planTier)
+	for rows.Next() {
+		workspace, err := scanWorkspaceRow(rows)
+		if err != nil {
+			return internalError("failed to scan workspace for quota refresh")
+		}
+		if _, err := s.runProvisionWorkspaceScript(ctx, workspace, quota); err != nil {
+			return internalError(fmt.Sprintf("failed to refresh workspace quota config for %s", workspace.ID))
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return internalError("failed to iterate workspaces for quota refresh")
+	}
+	return nil
 }
 
 func workspaceOperationRetryable(kind string, err error) bool {

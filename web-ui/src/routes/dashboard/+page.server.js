@@ -16,9 +16,22 @@ export async function load(event) {
     const client = getControlClient(event);
     const organizations = await client.listOrganizations();
     const workspaces = await client.listWorkspaces();
+    const billingSummaries = await Promise.all(
+      (organizations.organizations ?? []).map(async (organization) => {
+        try {
+          const response = await client.getOrganizationBillingSummary(
+            organization.id,
+          );
+          return [organization.id, response.summary ?? null];
+        } catch {
+          return [organization.id, null];
+        }
+      }),
+    );
 
     return {
       organizations: organizations.organizations ?? [],
+      billingByOrganization: Object.fromEntries(billingSummaries),
       workspaces: (workspaces.workspaces ?? []).map((workspace) => ({
         ...workspace,
         organization:
@@ -31,6 +44,7 @@ export async function load(event) {
   } catch {
     return {
       organizations: [],
+      billingByOrganization: {},
       workspaces: [],
       account: session.account,
     };

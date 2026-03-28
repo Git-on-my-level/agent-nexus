@@ -141,6 +141,57 @@ export const controlClient = {
     );
   },
 
+  async getOrganizationBillingSummary(
+    organizationId,
+    { fetchFn, baseUrl = "" } = {},
+  ) {
+    return requestJSON(
+      controlApiPath(
+        `/organizations/${encodeURIComponent(organizationId)}/billing`,
+      ),
+      {
+        fetchFn,
+        baseUrl,
+      },
+    );
+  },
+
+  async createOrganizationBillingCheckoutSession(
+    organizationId,
+    body,
+    { fetchFn, baseUrl = "" } = {},
+  ) {
+    return requestJSON(
+      controlApiPath(
+        `/organizations/${encodeURIComponent(organizationId)}/billing/checkout-session`,
+      ),
+      {
+        fetchFn,
+        baseUrl,
+        method: "POST",
+        body,
+      },
+    );
+  },
+
+  async createOrganizationBillingCustomerPortalSession(
+    organizationId,
+    body = {},
+    { fetchFn, baseUrl = "" } = {},
+  ) {
+    return requestJSON(
+      controlApiPath(
+        `/organizations/${encodeURIComponent(organizationId)}/billing/customer-portal-session`,
+      ),
+      {
+        fetchFn,
+        baseUrl,
+        method: "POST",
+        body,
+      },
+    );
+  },
+
   async listOrganizationInvites(
     organizationId,
     { fetchFn, baseUrl = "" } = {},

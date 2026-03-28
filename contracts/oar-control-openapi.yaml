@@ -1166,6 +1166,156 @@ paths:
         '404':
           $ref: '#/components/responses/ErrorResponse'
 
+  /organizations/{organization_id}/billing:
+    get:
+      operationId: getControlOrganizationBilling
+      summary: Get organization billing summary
+      tags: [billing]
+      x-oar-surface: "projection"
+      x-oar-command-id: "control.organizations.billing.get"
+      x-oar-cli-path: "organizations billing get"
+      x-oar-why: "Expose org-scoped billing state and Stripe configuration readiness without overloading usage summaries."
+      x-oar-examples:
+        - title: Get billing summary
+          command: "oar api call --base-url https://control.oar.example --method GET --path /organizations/org_123/billing --header 'Authorization: Bearer <control-session>'"
+      x-oar-input-mode: "none"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ summary }` with billing state, usage summary, and Stripe configuration readiness."
+      x-oar-error-codes: [auth_required, invalid_token, not_found]
+      x-oar-concepts: [organizations, billing, plans]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Safe and idempotent. This is an entitlement and billing control-plane view, not an invoice feed."
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+      responses:
+        '200':
+          description: Billing summary found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BillingSummaryResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /organizations/{organization_id}/billing/checkout-session:
+    post:
+      operationId: createControlOrganizationBillingCheckoutSession
+      summary: Create organization billing checkout session
+      tags: [billing]
+      x-oar-surface: "canonical"
+      x-oar-command-id: "control.organizations.billing.checkout-session.create"
+      x-oar-cli-path: "organizations billing checkout-session create"
+      x-oar-why: "Create an org-scoped Stripe checkout flow while keeping product entitlements inside the control plane."
+      x-oar-examples:
+        - title: Create checkout session
+          command: "oar api call --base-url https://control.oar.example --method POST --path /organizations/org_123/billing/checkout-session --body '{\"plan_tier\":\"team\"}' --header 'Authorization: Bearer <control-session>'"
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ session }` with a Stripe checkout URL or missing configuration details."
+      x-oar-error-codes: [auth_required, invalid_token, invalid_json, invalid_request, not_found, access_denied]
+      x-oar-concepts: [organizations, billing, checkout]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Owner/admin only. Stripe manages payment collection, but entitlements still live in the control plane."
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBillingCheckoutSessionRequest'
+      responses:
+        '200':
+          description: Checkout session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BillingActionSessionResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /organizations/{organization_id}/billing/customer-portal-session:
+    post:
+      operationId: createControlOrganizationBillingCustomerPortalSession
+      summary: Create organization billing customer portal session
+      tags: [billing]
+      x-oar-surface: "canonical"
+      x-oar-command-id: "control.organizations.billing.customer-portal-session.create"
+      x-oar-cli-path: "organizations billing customer-portal-session create"
+      x-oar-why: "Create an org-scoped Stripe customer portal flow without moving entitlement logic out of the control plane."
+      x-oar-examples:
+        - title: Create customer portal session
+          command: "oar api call --base-url https://control.oar.example --method POST --path /organizations/org_123/billing/customer-portal-session --body '{}' --header 'Authorization: Bearer <control-session>'"
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ session }` with a Stripe customer-portal URL or missing configuration details."
+      x-oar-error-codes: [auth_required, invalid_token, invalid_json, invalid_request, not_found, access_denied]
+      x-oar-concepts: [organizations, billing, portal]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Owner/admin only. Stripe manages the portal surface, but entitlements still live in the control plane."
+      parameters:
+        - $ref: '#/components/parameters/OrganizationID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBillingCustomerPortalSessionRequest'
+      responses:
+        '200':
+          description: Customer portal session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BillingActionSessionResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /billing/webhooks/stripe:
+    post:
+      operationId: receiveControlStripeWebhook
+      summary: Receive Stripe webhook
+      tags: [billing]
+      x-oar-surface: "canonical"
+      x-oar-command-id: "control.billing.webhooks.stripe.receive"
+      x-oar-cli-path: "billing webhooks stripe receive"
+      x-oar-why: "Accept Stripe subscription events into the control plane so billing state can map cleanly onto org entitlements."
+      x-oar-examples:
+        - title: Stripe webhook
+          command: "curl -X POST https://control.oar.example/billing/webhooks/stripe -H 'Stripe-Signature: <signature>' -H 'Content-Type: application/json' --data-binary @event.json"
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ webhook }` with receipt details for the accepted event."
+      x-oar-error-codes: [invalid_json, invalid_request, invalid_signature]
+      x-oar-concepts: [billing, webhooks, subscriptions]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Public endpoint. Stripe signature verification should be enabled before production traffic."
+      responses:
+        '200':
+          description: Stripe webhook accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StripeWebhookReceiptResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
   /organizations/{organization_id}/workspace-inventory:
     get:
       operationId: listControlWorkspaceInventory
@@ -1327,6 +1477,123 @@ components:
           type: string
           format: date-time
       required: [id, slug, display_name, plan_tier, status, created_at, updated_at]
+
+    BillingAccount:
+      type: object
+      properties:
+        organization_id: { type: string }
+        provider:
+          type: string
+          enum: [stripe]
+        billing_status:
+          type: string
+          enum: [free, not_started, trialing, active, past_due, canceled, incomplete, incomplete_expired, unpaid, paused]
+        stripe_customer_id: { type: string }
+        stripe_subscription_id: { type: string }
+        stripe_price_id: { type: string }
+        stripe_subscription_status: { type: string }
+        current_period_end:
+          type: string
+          format: date-time
+        cancel_at_period_end:
+          type: boolean
+        last_webhook_event_id: { type: string }
+        last_webhook_event_type: { type: string }
+        last_webhook_received_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required: [organization_id, provider, billing_status, stripe_customer_id, stripe_subscription_id, stripe_price_id, stripe_subscription_status, cancel_at_period_end, last_webhook_event_id, last_webhook_event_type, created_at, updated_at]
+
+    BillingConfiguration:
+      type: object
+      properties:
+        provider:
+          type: string
+          enum: [stripe]
+        configured:
+          type: boolean
+        publishable_key_configured:
+          type: boolean
+        secret_key_configured:
+          type: boolean
+        webhook_secret_configured:
+          type: boolean
+        checkout_configured:
+          type: boolean
+        customer_portal_configured:
+          type: boolean
+        plan_price_ids:
+          type: object
+          additionalProperties:
+            type: string
+        missing_configuration:
+          type: array
+          items:
+            type: string
+      required: [provider, configured, publishable_key_configured, secret_key_configured, webhook_secret_configured, checkout_configured, customer_portal_configured, plan_price_ids, missing_configuration]
+
+    BillingSummary:
+      type: object
+      properties:
+        organization_id: { type: string }
+        plan_tier:
+          type: string
+          enum: [starter, team, scale, enterprise]
+        billing_account:
+          $ref: '#/components/schemas/BillingAccount'
+        usage_summary:
+          $ref: '#/components/schemas/UsageSummary'
+        configuration:
+          $ref: '#/components/schemas/BillingConfiguration'
+      required: [organization_id, plan_tier, billing_account, usage_summary, configuration]
+
+    BillingActionSession:
+      type: object
+      properties:
+        provider:
+          type: string
+          enum: [stripe]
+        mode:
+          type: string
+          enum: [checkout, customer_portal]
+        status:
+          type: string
+          enum: [configuration_required, created]
+        plan_tier:
+          type: string
+          enum: [starter, team, scale, enterprise]
+        url:
+          type: string
+          format: uri
+        missing_configuration:
+          type: array
+          items:
+            type: string
+        note:
+          type: string
+      required: [provider, mode, status, missing_configuration]
+
+    StripeWebhookReceipt:
+      type: object
+      properties:
+        received:
+          type: boolean
+        event_id:
+          type: string
+        event_type:
+          type: string
+        verification_status:
+          type: string
+          enum: [skipped, verified]
+        organization_id:
+          type: string
+      required: [received, event_id, event_type, verification_status]
 
     Membership:
       type: object
@@ -1758,6 +2025,18 @@ components:
           type: string
           enum: [active, suspended]
 
+    CreateBillingCheckoutSessionRequest:
+      type: object
+      properties:
+        plan_tier:
+          type: string
+          enum: [starter, team, scale, enterprise]
+      required: [plan_tier]
+
+    CreateBillingCustomerPortalSessionRequest:
+      type: object
+      properties: {}
+
     OrganizationResponse:
       type: object
       properties:
@@ -1995,3 +2274,24 @@ components:
         summary:
           $ref: '#/components/schemas/UsageSummary'
       required: [summary]
+
+    BillingSummaryResponse:
+      type: object
+      properties:
+        summary:
+          $ref: '#/components/schemas/BillingSummary'
+      required: [summary]
+
+    BillingActionSessionResponse:
+      type: object
+      properties:
+        session:
+          $ref: '#/components/schemas/BillingActionSession'
+      required: [session]
+
+    StripeWebhookReceiptResponse:
+      type: object
+      properties:
+        webhook:
+          $ref: '#/components/schemas/StripeWebhookReceipt'
+      required: [webhook]

@@ -110,6 +110,9 @@ func (s *Service) CreateOrganization(ctx context.Context, identity RequestIdenti
 	if err := upsertMembershipTx(ctx, tx, membership); err != nil {
 		return Organization{}, Membership{}, err
 	}
+	if err := insertOrganizationBillingTx(ctx, tx, organization.ID, nowText); err != nil {
+		return Organization{}, Membership{}, err
+	}
 	if err := insertAuditEventTx(ctx, tx, AuditEvent{
 		ID:             "audit_" + uuid.NewString(),
 		EventType:      "organization_created",
@@ -144,6 +147,7 @@ func (s *Service) UpdateOrganization(ctx context.Context, identity RequestIdenti
 	if !membershipCanManage(membership.Role) {
 		return Organization{}, accessDenied("organization updates require owner or admin access")
 	}
+	originalPlanTier := organization.PlanTier
 
 	if displayName != nil {
 		value, err := normalizeDisplayName(*displayName)
@@ -163,6 +167,11 @@ func (s *Service) UpdateOrganization(ctx context.Context, identity RequestIdenti
 			return Organization{}, err
 		}
 		organization.Status = *status
+	}
+	if organization.PlanTier != originalPlanTier {
+		if err := s.applyWorkspaceQuotaConfigForOrganization(ctx, organization.ID, organization.PlanTier); err != nil {
+			return Organization{}, err
+		}
 	}
 	organization.UpdatedAt = s.now().Format(time.RFC3339Nano)
 
@@ -520,8 +529,11 @@ func (s *Service) GetUsageSummary(ctx context.Context, identity RequestIdentity,
 	if err != nil {
 		return UsageSummary{}, err
 	}
-	plan := planForTier(organization.PlanTier)
+	return s.getUsageSummaryForOrganization(ctx, organization.ID, organization.PlanTier)
+}
 
+func (s *Service) getUsageSummaryForOrganization(ctx context.Context, organizationID string, planTier string) (UsageSummary, error) {
+	plan := planForTier(planTier)
 	var workspaceCount int
 	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM workspaces WHERE organization_id = ?`, organizationID).Scan(&workspaceCount); err != nil {
 		return UsageSummary{}, internalError("failed to count workspaces")
@@ -829,13 +841,55 @@ func validateMembershipStatus(status string) error {
 func planForTier(planTier string) UsagePlan {
 	switch planTier {
 	case "starter":
-		return UsagePlan{ID: "starter", DisplayName: "Starter", WorkspaceLimit: 1, HumanSeatLimit: 5, IncludedStorageGB: 10}
+		return UsagePlan{ID: "starter", DisplayName: "Free", WorkspaceLimit: 1, HumanSeatLimit: 1000, IncludedStorageGB: 1}
 	case "scale":
-		return UsagePlan{ID: "scale", DisplayName: "Scale", WorkspaceLimit: 25, HumanSeatLimit: 200, IncludedStorageGB: 1000}
+		return UsagePlan{ID: "scale", DisplayName: "Scale", WorkspaceLimit: 25, HumanSeatLimit: 20000, IncludedStorageGB: 250}
 	case "enterprise":
-		return UsagePlan{ID: "enterprise", DisplayName: "Enterprise", WorkspaceLimit: 100, HumanSeatLimit: 1000, IncludedStorageGB: 5000}
+		return UsagePlan{ID: "enterprise", DisplayName: "Enterprise", WorkspaceLimit: 100, HumanSeatLimit: 100000, IncludedStorageGB: 1000}
 	default:
-		return UsagePlan{ID: "team", DisplayName: "Team", WorkspaceLimit: 5, HumanSeatLimit: 25, IncludedStorageGB: 100}
+		return UsagePlan{ID: "team", DisplayName: "Team", WorkspaceLimit: 5, HumanSeatLimit: 5000, IncludedStorageGB: 25}
+	}
+}
+
+func workspaceQuotaForPlanTier(planTier string) WorkspaceQuota {
+	const (
+		mib int64 = 1024 * 1024
+		gib int64 = 1024 * 1024 * 1024
+	)
+
+	switch strings.TrimSpace(planTier) {
+	case "starter":
+		return WorkspaceQuota{
+			MaxBlobBytes:         250 * mib,
+			MaxArtifacts:         1000,
+			MaxDocuments:         2500,
+			MaxDocumentRevisions: 25000,
+			MaxUploadBytes:       8 * mib,
+		}
+	case "scale":
+		return WorkspaceQuota{
+			MaxBlobBytes:         250 * gib,
+			MaxArtifacts:         100000,
+			MaxDocuments:         250000,
+			MaxDocumentRevisions: 1000000,
+			MaxUploadBytes:       64 * mib,
+		}
+	case "enterprise":
+		return WorkspaceQuota{
+			MaxBlobBytes:         1000 * gib,
+			MaxArtifacts:         1000000,
+			MaxDocuments:         1000000,
+			MaxDocumentRevisions: 5000000,
+			MaxUploadBytes:       128 * mib,
+		}
+	default:
+		return WorkspaceQuota{
+			MaxBlobBytes:         25 * gib,
+			MaxArtifacts:         25000,
+			MaxDocuments:         50000,
+			MaxDocumentRevisions: 250000,
+			MaxUploadBytes:       32 * mib,
+		}
 	}
 }
 

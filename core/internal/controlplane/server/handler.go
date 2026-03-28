@@ -45,6 +45,25 @@ func NewHandler(service *controlplane.Service, config Config) http.Handler {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 	})
 
+	mux.HandleFunc("POST /billing/webhooks/stripe", func(w http.ResponseWriter, r *http.Request) {
+		if r.Body == nil {
+			writeError(w, http.StatusBadRequest, "invalid_json", "request body is required")
+			return
+		}
+		defer r.Body.Close()
+		payload, err := io.ReadAll(io.LimitReader(r.Body, jsonBodyLimit))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+			return
+		}
+		webhook, err := service.ReceiveStripeWebhook(r.Context(), payload, strings.TrimSpace(r.Header.Get("Stripe-Signature")))
+		if err != nil {
+			writeServiceError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"webhook": webhook})
+	})
+
 	mux.HandleFunc("POST /account/passkeys/registrations/start", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Email       string `json:"email"`
@@ -357,6 +376,55 @@ func NewHandler(service *controlplane.Service, config Config) http.Handler {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"summary": summary})
+	})
+
+	mux.HandleFunc("GET /organizations/{organization_id}/billing", func(w http.ResponseWriter, r *http.Request) {
+		identity, ok := requireIdentity(w, r, service)
+		if !ok {
+			return
+		}
+		summary, err := service.GetBillingSummary(r.Context(), identity, r.PathValue("organization_id"))
+		if err != nil {
+			writeServiceError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"summary": summary})
+	})
+
+	mux.HandleFunc("POST /organizations/{organization_id}/billing/checkout-session", func(w http.ResponseWriter, r *http.Request) {
+		identity, ok := requireIdentity(w, r, service)
+		if !ok {
+			return
+		}
+		var body struct {
+			PlanTier string `json:"plan_tier"`
+		}
+		if !decodeJSONBody(w, r, &body) {
+			return
+		}
+		session, err := service.CreateBillingCheckoutSession(r.Context(), identity, r.PathValue("organization_id"), body.PlanTier)
+		if err != nil {
+			writeServiceError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"session": session})
+	})
+
+	mux.HandleFunc("POST /organizations/{organization_id}/billing/customer-portal-session", func(w http.ResponseWriter, r *http.Request) {
+		identity, ok := requireIdentity(w, r, service)
+		if !ok {
+			return
+		}
+		var body map[string]any
+		if !decodeJSONBody(w, r, &body) {
+			return
+		}
+		session, err := service.CreateBillingCustomerPortalSession(r.Context(), identity, r.PathValue("organization_id"))
+		if err != nil {
+			writeServiceError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"session": session})
 	})
 
 	mux.HandleFunc("GET /organizations/{organization_id}/workspace-inventory", func(w http.ResponseWriter, r *http.Request) {

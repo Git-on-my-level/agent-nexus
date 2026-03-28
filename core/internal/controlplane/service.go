@@ -72,6 +72,7 @@ type Config struct {
 	HostedScriptsDir     string
 	VerifyCoreBinaryPath string
 	VerifySchemaPath     string
+	Stripe               StripeConfig
 	Now                  func() time.Time
 }
 
@@ -89,6 +90,7 @@ type Service struct {
 	hostedScriptsDir     string
 	verifyCoreBinaryPath string
 	verifySchemaPath     string
+	stripe               StripeConfig
 	now                  func() time.Time
 }
 
@@ -195,6 +197,7 @@ func NewService(workspace *cpstorage.Workspace, config Config) *Service {
 		hostedScriptsDir:     hostedScriptsDir,
 		verifyCoreBinaryPath: verifyCoreBinaryPath,
 		verifySchemaPath:     verifySchemaPath,
+		stripe:               normalizeStripeConfig(config.Stripe),
 		now:                  nowFn,
 	}
 }

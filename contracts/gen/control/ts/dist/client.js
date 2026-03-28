@@ -267,6 +267,224 @@ export const commandRegistry = [
         "ts_method": "controlAccountsSessionsStart"
     },
     {
+        "command_id": "control.billing.webhooks.stripe.receive",
+        "cli_path": "billing webhooks stripe receive",
+        "group": "billing",
+        "method": "POST",
+        "path": "/billing/webhooks/stripe",
+        "operation_id": "receiveControlStripeWebhook",
+        "summary": "Receive Stripe webhook",
+        "why": "Accept Stripe subscription events into the control plane so billing state can map cleanly onto org entitlements.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ webhook }` with receipt details for the accepted event.",
+        "error_codes": [
+            "invalid_json",
+            "invalid_request",
+            "invalid_signature"
+        ],
+        "concepts": [
+            "billing",
+            "webhooks",
+            "subscriptions"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Public endpoint. Stripe signature verification should be enabled before production traffic.",
+        "examples": [
+            {
+                "title": "Stripe webhook",
+                "command": "curl -X POST https://control.oar.example/billing/webhooks/stripe -H 'Stripe-Signature: \u003csignature\u003e' -H 'Content-Type: application/json' --data-binary @event.json"
+            }
+        ],
+        "go_method": "ControlBillingWebhooksStripeReceive",
+        "ts_method": "controlBillingWebhooksStripeReceive"
+    },
+    {
+        "command_id": "control.organizations.billing.checkout-session.create",
+        "cli_path": "organizations billing checkout-session create",
+        "group": "organizations",
+        "method": "POST",
+        "path": "/organizations/{organization_id}/billing/checkout-session",
+        "operation_id": "createControlOrganizationBillingCheckoutSession",
+        "summary": "Create organization billing checkout scaffold session",
+        "why": "Prepare an org-scoped Stripe checkout flow while keeping product entitlements inside the control plane.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ session }` with Stripe readiness details and any missing configuration values.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "invalid_json",
+            "invalid_request",
+            "not_found",
+            "access_denied"
+        ],
+        "concepts": [
+            "organizations",
+            "billing",
+            "checkout"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Owner/admin only. This scaffold does not change entitlements by itself.",
+        "examples": [
+            {
+                "title": "Prepare checkout session",
+                "command": "oar api call --base-url https://control.oar.example --method POST --path /organizations/org_123/billing/checkout-session --body '{\"plan_tier\":\"team\"}' --header 'Authorization: Bearer \u003ccontrol-session\u003e'"
+            }
+        ],
+        "body_schema": {
+            "required": [
+                {
+                    "name": "plan_tier",
+                    "type": "string",
+                    "enum_values": [
+                        "enterprise",
+                        "scale",
+                        "starter",
+                        "team"
+                    ]
+                }
+            ]
+        },
+        "path_params": [
+            "organization_id"
+        ],
+        "adjacent_commands": [
+            "control.organizations.billing.customer-portal-session.create",
+            "control.organizations.billing.get",
+            "control.organizations.create",
+            "control.organizations.get",
+            "control.organizations.invites.create",
+            "control.organizations.invites.list",
+            "control.organizations.invites.revoke",
+            "control.organizations.list",
+            "control.organizations.memberships.list",
+            "control.organizations.memberships.update",
+            "control.organizations.update",
+            "control.organizations.usage-summary.get",
+            "control.organizations.workspace-inventory.list"
+        ],
+        "go_method": "ControlOrganizationsBillingCheckoutSessionCreate",
+        "ts_method": "controlOrganizationsBillingCheckoutSessionCreate"
+    },
+    {
+        "command_id": "control.organizations.billing.customer-portal-session.create",
+        "cli_path": "organizations billing customer-portal-session create",
+        "group": "organizations",
+        "method": "POST",
+        "path": "/organizations/{organization_id}/billing/customer-portal-session",
+        "operation_id": "createControlOrganizationBillingCustomerPortalSession",
+        "summary": "Create organization billing customer portal scaffold session",
+        "why": "Prepare an org-scoped Stripe customer portal flow without moving entitlement logic out of the control plane.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ session }` with Stripe portal readiness details and any missing configuration values.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "invalid_json",
+            "invalid_request",
+            "not_found",
+            "access_denied"
+        ],
+        "concepts": [
+            "organizations",
+            "billing",
+            "portal"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Owner/admin only. This scaffold does not change entitlements by itself.",
+        "examples": [
+            {
+                "title": "Prepare customer portal session",
+                "command": "oar api call --base-url https://control.oar.example --method POST --path /organizations/org_123/billing/customer-portal-session --body '{}' --header 'Authorization: Bearer \u003ccontrol-session\u003e'"
+            }
+        ],
+        "path_params": [
+            "organization_id"
+        ],
+        "adjacent_commands": [
+            "control.organizations.billing.checkout-session.create",
+            "control.organizations.billing.get",
+            "control.organizations.create",
+            "control.organizations.get",
+            "control.organizations.invites.create",
+            "control.organizations.invites.list",
+            "control.organizations.invites.revoke",
+            "control.organizations.list",
+            "control.organizations.memberships.list",
+            "control.organizations.memberships.update",
+            "control.organizations.update",
+            "control.organizations.usage-summary.get",
+            "control.organizations.workspace-inventory.list"
+        ],
+        "go_method": "ControlOrganizationsBillingCustomerPortalSessionCreate",
+        "ts_method": "controlOrganizationsBillingCustomerPortalSessionCreate"
+    },
+    {
+        "command_id": "control.organizations.billing.get",
+        "cli_path": "organizations billing get",
+        "group": "organizations",
+        "method": "GET",
+        "path": "/organizations/{organization_id}/billing",
+        "operation_id": "getControlOrganizationBilling",
+        "summary": "Get organization billing summary",
+        "why": "Expose org-scoped billing state and Stripe configuration readiness without overloading usage summaries.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ summary }` with billing state, usage summary, and Stripe configuration readiness.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "not_found"
+        ],
+        "concepts": [
+            "organizations",
+            "billing",
+            "plans"
+        ],
+        "stability": "beta",
+        "surface": "projection",
+        "agent_notes": "Safe and idempotent. This is an entitlement and billing control-plane view, not an invoice feed.",
+        "examples": [
+            {
+                "title": "Get billing summary",
+                "command": "oar api call --base-url https://control.oar.example --method GET --path /organizations/org_123/billing --header 'Authorization: Bearer \u003ccontrol-session\u003e'"
+            }
+        ],
+        "path_params": [
+            "organization_id"
+        ],
+        "adjacent_commands": [
+            "control.organizations.billing.checkout-session.create",
+            "control.organizations.billing.customer-portal-session.create",
+            "control.organizations.create",
+            "control.organizations.get",
+            "control.organizations.invites.create",
+            "control.organizations.invites.list",
+            "control.organizations.invites.revoke",
+            "control.organizations.list",
+            "control.organizations.memberships.list",
+            "control.organizations.memberships.update",
+            "control.organizations.update",
+            "control.organizations.usage-summary.get",
+            "control.organizations.workspace-inventory.list"
+        ],
+        "go_method": "ControlOrganizationsBillingGet",
+        "ts_method": "controlOrganizationsBillingGet"
+    },
+    {
         "command_id": "control.organizations.create",
         "cli_path": "organizations create",
         "group": "organizations",
@@ -324,6 +542,9 @@ export const commandRegistry = [
             ]
         },
         "adjacent_commands": [
+            "control.organizations.billing.checkout-session.create",
+            "control.organizations.billing.customer-portal-session.create",
+            "control.organizations.billing.get",
             "control.organizations.get",
             "control.organizations.invites.create",
             "control.organizations.invites.list",
@@ -374,6 +595,9 @@ export const commandRegistry = [
             "organization_id"
         ],
         "adjacent_commands": [
+            "control.organizations.billing.checkout-session.create",
+            "control.organizations.billing.customer-portal-session.create",
+            "control.organizations.billing.get",
             "control.organizations.create",
             "control.organizations.invites.create",
             "control.organizations.invites.list",
@@ -445,6 +669,9 @@ export const commandRegistry = [
             "organization_id"
         ],
         "adjacent_commands": [
+            "control.organizations.billing.checkout-session.create",
+            "control.organizations.billing.customer-portal-session.create",
+            "control.organizations.billing.get",
             "control.organizations.create",
             "control.organizations.get",
             "control.organizations.invites.list",
@@ -496,6 +723,9 @@ export const commandRegistry = [
             "organization_id"
         ],
         "adjacent_commands": [
+            "control.organizations.billing.checkout-session.create",
+            "control.organizations.billing.customer-portal-session.create",
+            "control.organizations.billing.get",
             "control.organizations.create",
             "control.organizations.get",
             "control.organizations.invites.create",
@@ -548,6 +778,9 @@ export const commandRegistry = [
             "invite_id"
         ],
         "adjacent_commands": [
+            "control.organizations.billing.checkout-session.create",
+            "control.organizations.billing.customer-portal-session.create",
+            "control.organizations.billing.get",
             "control.organizations.create",
             "control.organizations.get",
             "control.organizations.invites.create",
@@ -594,6 +827,9 @@ export const commandRegistry = [
             }
         ],
         "adjacent_commands": [
+            "control.organizations.billing.checkout-session.create",
+            "control.organizations.billing.customer-portal-session.create",
+            "control.organizations.billing.get",
             "control.organizations.create",
             "control.organizations.get",
             "control.organizations.invites.create",
@@ -645,6 +881,9 @@ export const commandRegistry = [
             "organization_id"
         ],
         "adjacent_commands": [
+            "control.organizations.billing.checkout-session.create",
+            "control.organizations.billing.customer-portal-session.create",
+            "control.organizations.billing.get",
             "control.organizations.create",
             "control.organizations.get",
             "control.organizations.invites.create",
@@ -721,6 +960,9 @@ export const commandRegistry = [
             "membership_id"
         ],
         "adjacent_commands": [
+            "control.organizations.billing.checkout-session.create",
+            "control.organizations.billing.customer-portal-session.create",
+            "control.organizations.billing.get",
             "control.organizations.create",
             "control.organizations.get",
             "control.organizations.invites.create",
@@ -800,6 +1042,9 @@ export const commandRegistry = [
             "organization_id"
         ],
         "adjacent_commands": [
+            "control.organizations.billing.checkout-session.create",
+            "control.organizations.billing.customer-portal-session.create",
+            "control.organizations.billing.get",
             "control.organizations.create",
             "control.organizations.get",
             "control.organizations.invites.create",
@@ -851,6 +1096,9 @@ export const commandRegistry = [
             "organization_id"
         ],
         "adjacent_commands": [
+            "control.organizations.billing.checkout-session.create",
+            "control.organizations.billing.customer-portal-session.create",
+            "control.organizations.billing.get",
             "control.organizations.create",
             "control.organizations.get",
             "control.organizations.invites.create",
@@ -901,6 +1149,9 @@ export const commandRegistry = [
             "organization_id"
         ],
         "adjacent_commands": [
+            "control.organizations.billing.checkout-session.create",
+            "control.organizations.billing.customer-portal-session.create",
+            "control.organizations.billing.get",
             "control.organizations.create",
             "control.organizations.get",
             "control.organizations.invites.create",
@@ -2047,6 +2298,18 @@ export class OarClient {
     }
     controlAccountsSessionsStart(options = {}) {
         return this.invoke("control.accounts.sessions.start", {}, options);
+    }
+    controlBillingWebhooksStripeReceive(options = {}) {
+        return this.invoke("control.billing.webhooks.stripe.receive", {}, options);
+    }
+    controlOrganizationsBillingCheckoutSessionCreate(pathParams, options = {}) {
+        return this.invoke("control.organizations.billing.checkout-session.create", pathParams, options);
+    }
+    controlOrganizationsBillingCustomerPortalSessionCreate(pathParams, options = {}) {
+        return this.invoke("control.organizations.billing.customer-portal-session.create", pathParams, options);
+    }
+    controlOrganizationsBillingGet(pathParams, options = {}) {
+        return this.invoke("control.organizations.billing.get", pathParams, options);
     }
     controlOrganizationsCreate(options = {}) {
         return this.invoke("control.organizations.create", {}, options);

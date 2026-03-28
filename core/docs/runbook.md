@@ -139,12 +139,40 @@ Relevant control-plane configuration:
 | Invite TTL | `--invite-ttl` | `OAR_CONTROL_PLANE_INVITE_TTL` | `168h` |
 | Backup maintenance interval | `--backup-maintenance-interval` | `OAR_CONTROL_PLANE_BACKUP_MAINTENANCE_INTERVAL` | `5m` |
 | Graceful shutdown timeout | `--shutdown-timeout` | `OAR_CONTROL_PLANE_SHUTDOWN_TIMEOUT` | `15s` |
+| Stripe API base URL override | n/a | `OAR_CONTROL_PLANE_STRIPE_API_BASE_URL` | `https://api.stripe.com` |
+| Stripe publishable key | n/a | `OAR_CONTROL_PLANE_STRIPE_PUBLISHABLE_KEY` | unset |
+| Stripe secret key | n/a | `OAR_CONTROL_PLANE_STRIPE_SECRET_KEY` | unset |
+| Stripe webhook signing secret | n/a | `OAR_CONTROL_PLANE_STRIPE_WEBHOOK_SECRET` | unset |
+| Stripe checkout success URL | n/a | `OAR_CONTROL_PLANE_STRIPE_CHECKOUT_SUCCESS_URL` | unset |
+| Stripe checkout cancel URL | n/a | `OAR_CONTROL_PLANE_STRIPE_CHECKOUT_CANCEL_URL` | unset |
+| Stripe billing portal return URL | n/a | `OAR_CONTROL_PLANE_STRIPE_PORTAL_RETURN_URL` | unset |
+| Stripe starter price id | n/a | `OAR_CONTROL_PLANE_STRIPE_PRICE_STARTER` | unset |
+| Stripe team price id | n/a | `OAR_CONTROL_PLANE_STRIPE_PRICE_TEAM` | unset |
+| Stripe scale price id | n/a | `OAR_CONTROL_PLANE_STRIPE_PRICE_SCALE` | unset |
+| Stripe enterprise price id | n/a | `OAR_CONTROL_PLANE_STRIPE_PRICE_ENTERPRISE` | unset (optional when enterprise stays sales-led) |
+
+The control plane keeps entitlements in the control plane and treats Stripe as the payment event source. Filling the Stripe env values above enables:
+
+- live Stripe Checkout session creation for paid plan starts
+- live Stripe Billing Portal session creation for linked customers
+- webhook-driven billing-state sync back into org billing records and plan tiers
+
+Hosted control-plane provisioning now writes plan-based workspace quota env vars into each deployment root. Current defaults are:
+
+- `starter`: 1 workspace, 250 MiB, 1,000 artifacts
+- `team`: 5 workspaces, 25 GiB, 25,000 artifacts
+- `scale`: 25 workspaces, 250 GiB, 100,000 artifacts
+- `enterprise`: higher custom/default caps
 
 Useful control-plane endpoints:
 
 - `GET /health`
 - `GET /readyz`
 - `GET /organizations`
+- `GET /organizations/{organization_id}/billing`
+- `POST /organizations/{organization_id}/billing/checkout-session`
+- `POST /organizations/{organization_id}/billing/customer-portal-session`
+- `POST /billing/webhooks/stripe`
 - `GET /workspaces`
 - `GET /provisioning/jobs`
 - `GET /audit-events`

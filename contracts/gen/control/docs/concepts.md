@@ -4,7 +4,7 @@ Generated from `contracts/oar-control-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.1.0`
-- Concepts: `27`
+- Concepts: `31`
 
 ## `access`
 
@@ -31,10 +31,20 @@ Generated from `contracts/oar-control-openapi.yaml`.
 
 ## `billing`
 
-- Commands: `2`
+- Commands: `6`
 - Command IDs:
+  - `control.billing.webhooks.stripe.receive`
+  - `control.organizations.billing.checkout-session.create`
+  - `control.organizations.billing.customer-portal-session.create`
+  - `control.organizations.billing.get`
   - `control.organizations.create`
   - `control.organizations.update`
+
+## `checkout`
+
+- Commands: `1`
+- Command IDs:
+  - `control.organizations.billing.checkout-session.create`
 
 ## `control-auth`
 
@@ -114,8 +124,11 @@ Generated from `contracts/oar-control-openapi.yaml`.
 
 ## `organizations`
 
-- Commands: `9`
+- Commands: `12`
 - Command IDs:
+  - `control.organizations.billing.checkout-session.create`
+  - `control.organizations.billing.customer-portal-session.create`
+  - `control.organizations.billing.get`
   - `control.organizations.create`
   - `control.organizations.get`
   - `control.organizations.invites.create`
@@ -137,9 +150,16 @@ Generated from `contracts/oar-control-openapi.yaml`.
 
 ## `plans`
 
+- Commands: `2`
+- Command IDs:
+  - `control.organizations.billing.get`
+  - `control.organizations.usage-summary.get`
+
+## `portal`
+
 - Commands: `1`
 - Command IDs:
-  - `control.organizations.usage-summary.get`
+  - `control.organizations.billing.customer-portal-session.create`
 
 ## `provisioning`
 
@@ -191,6 +211,12 @@ Generated from `contracts/oar-control-openapi.yaml`.
   - `control.accounts.sessions.revoke-current`
   - `control.accounts.sessions.start`
 
+## `subscriptions`
+
+- Commands: `1`
+- Command IDs:
+  - `control.billing.webhooks.stripe.receive`
+
 ## `tenancy`
 
 - Commands: `4`
@@ -211,6 +237,12 @@ Generated from `contracts/oar-control-openapi.yaml`.
 - Commands: `1`
 - Command IDs:
   - `control.organizations.usage-summary.get`
+
+## `webhooks`
+
+- Commands: `1`
+- Command IDs:
+  - `control.billing.webhooks.stripe.receive`
 
 ## `workspaces`
 

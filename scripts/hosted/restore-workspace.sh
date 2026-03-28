@@ -110,6 +110,11 @@ SOURCE_BLOB_S3_PREFIX="$(manifest_get "$SOURCE_MANIFEST" BLOB_S3_PREFIX || true)
 SOURCE_BLOB_S3_REGION="$(manifest_get "$SOURCE_MANIFEST" BLOB_S3_REGION || true)"
 SOURCE_BLOB_S3_ENDPOINT="$(manifest_get "$SOURCE_MANIFEST" BLOB_S3_ENDPOINT || true)"
 SOURCE_BLOB_S3_FORCE_PATH_STYLE="$(normalize_bool_value "$(manifest_get "$SOURCE_MANIFEST" BLOB_S3_FORCE_PATH_STYLE || true)")"
+SOURCE_WORKSPACE_MAX_BLOB_BYTES="$(manifest_get "$SOURCE_MANIFEST" WORKSPACE_MAX_BLOB_BYTES || true)"
+SOURCE_WORKSPACE_MAX_ARTIFACTS="$(manifest_get "$SOURCE_MANIFEST" WORKSPACE_MAX_ARTIFACTS || true)"
+SOURCE_WORKSPACE_MAX_DOCUMENTS="$(manifest_get "$SOURCE_MANIFEST" WORKSPACE_MAX_DOCUMENTS || true)"
+SOURCE_WORKSPACE_MAX_DOCUMENT_REVISIONS="$(manifest_get "$SOURCE_MANIFEST" WORKSPACE_MAX_DOCUMENT_REVISIONS || true)"
+SOURCE_WORKSPACE_MAX_UPLOAD_BYTES="$(manifest_get "$SOURCE_MANIFEST" WORKSPACE_MAX_UPLOAD_BYTES || true)"
 [[ -n "$SOURCE_BLOB_BACKEND" ]] || SOURCE_BLOB_BACKEND="filesystem"
 validate_blob_backend "$SOURCE_BLOB_BACKEND"
 [[ -n "$SOURCE_BLOB_STORAGE_MODE" ]] || SOURCE_BLOB_STORAGE_MODE="$(blob_storage_mode "$SOURCE_BLOB_BACKEND")"
@@ -168,6 +173,21 @@ provision_args=(
   --blob-backend "$SOURCE_BLOB_BACKEND"
   --force
 )
+if [[ -n "$SOURCE_WORKSPACE_MAX_BLOB_BYTES" ]]; then
+  provision_args+=(--max-blob-bytes "$SOURCE_WORKSPACE_MAX_BLOB_BYTES")
+fi
+if [[ -n "$SOURCE_WORKSPACE_MAX_ARTIFACTS" ]]; then
+  provision_args+=(--max-artifacts "$SOURCE_WORKSPACE_MAX_ARTIFACTS")
+fi
+if [[ -n "$SOURCE_WORKSPACE_MAX_DOCUMENTS" ]]; then
+  provision_args+=(--max-documents "$SOURCE_WORKSPACE_MAX_DOCUMENTS")
+fi
+if [[ -n "$SOURCE_WORKSPACE_MAX_DOCUMENT_REVISIONS" ]]; then
+  provision_args+=(--max-document-revisions "$SOURCE_WORKSPACE_MAX_DOCUMENT_REVISIONS")
+fi
+if [[ -n "$SOURCE_WORKSPACE_MAX_UPLOAD_BYTES" ]]; then
+  provision_args+=(--max-upload-bytes "$SOURCE_WORKSPACE_MAX_UPLOAD_BYTES")
+fi
 if [[ -n "$TARGET_BLOB_ROOT" ]]; then
   provision_args+=(--blob-root "$TARGET_BLOB_ROOT")
 fi

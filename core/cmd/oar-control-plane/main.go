@@ -41,6 +41,17 @@ func main() {
 		workspaceGrantIssuer      = envString("OAR_CONTROL_PLANE_WORKSPACE_GRANT_ISSUER", "")
 		workspaceGrantAudience    = envString("OAR_CONTROL_PLANE_WORKSPACE_GRANT_AUDIENCE", "")
 		workspaceGrantSigningKey  = envString("OAR_CONTROL_PLANE_WORKSPACE_GRANT_SIGNING_KEY", "")
+		stripeAPIBaseURL          = envString("OAR_CONTROL_PLANE_STRIPE_API_BASE_URL", "")
+		stripePublishableKey      = envString("OAR_CONTROL_PLANE_STRIPE_PUBLISHABLE_KEY", "")
+		stripeSecretKey           = envString("OAR_CONTROL_PLANE_STRIPE_SECRET_KEY", "")
+		stripeWebhookSecret       = envString("OAR_CONTROL_PLANE_STRIPE_WEBHOOK_SECRET", "")
+		stripeCheckoutSuccessURL  = envString("OAR_CONTROL_PLANE_STRIPE_CHECKOUT_SUCCESS_URL", "")
+		stripeCheckoutCancelURL   = envString("OAR_CONTROL_PLANE_STRIPE_CHECKOUT_CANCEL_URL", "")
+		stripePortalReturnURL     = envString("OAR_CONTROL_PLANE_STRIPE_PORTAL_RETURN_URL", "")
+		stripeStarterPriceID      = envString("OAR_CONTROL_PLANE_STRIPE_PRICE_STARTER", "")
+		stripeTeamPriceID         = envString("OAR_CONTROL_PLANE_STRIPE_PRICE_TEAM", "")
+		stripeScalePriceID        = envString("OAR_CONTROL_PLANE_STRIPE_PRICE_SCALE", "")
+		stripeEnterprisePriceID   = envString("OAR_CONTROL_PLANE_STRIPE_PRICE_ENTERPRISE", "")
 		sessionTTL                = envDuration("OAR_CONTROL_PLANE_SESSION_TTL", 12*time.Hour)
 		ceremonyTTL               = envDuration("OAR_CONTROL_PLANE_CEREMONY_TTL", 5*time.Minute)
 		launchTTL                 = envDuration("OAR_CONTROL_PLANE_LAUNCH_TTL", 10*time.Minute)
@@ -125,6 +136,21 @@ func main() {
 		WorkspaceURLTemplate: workspaceURLTemplate,
 		InviteURLTemplate:    inviteURLTemplate,
 		WorkspaceGrantSigner: workspaceGrantSigner,
+		Stripe: controlplane.StripeConfig{
+			APIBaseURL:         stripeAPIBaseURL,
+			PublishableKey:     stripePublishableKey,
+			SecretKey:          stripeSecretKey,
+			WebhookSecret:      stripeWebhookSecret,
+			CheckoutSuccessURL: stripeCheckoutSuccessURL,
+			CheckoutCancelURL:  stripeCheckoutCancelURL,
+			PortalReturnURL:    stripePortalReturnURL,
+			PlanPriceIDs: map[string]string{
+				"starter":    stripeStarterPriceID,
+				"team":       stripeTeamPriceID,
+				"scale":      stripeScalePriceID,
+				"enterprise": stripeEnterprisePriceID,
+			},
+		},
 	})
 
 	backupMaintenanceCtx, cancelBackupMaintenance := context.WithCancel(context.Background())

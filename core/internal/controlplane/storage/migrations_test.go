@@ -153,6 +153,55 @@ func TestMigrationVersion6BackfillsUniqueListenPorts(t *testing.T) {
 	}
 }
 
+func TestMigrationVersion8BackfillsOrganizationBilling(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "control-plane.sqlite")
+	db, err := sql.Open("sqlite", sqliteDSN(dbPath))
+	if err != nil {
+		t.Fatalf("open sqlite db: %v", err)
+	}
+	defer db.Close()
+
+	if err := applyMigrationsUpTo(ctx, db, 7); err != nil {
+		t.Fatalf("apply migrations up to v7: %v", err)
+	}
+
+	now := time.Date(2026, 3, 27, 9, 0, 0, 0, time.UTC).Format(time.RFC3339Nano)
+	if _, err := db.ExecContext(ctx, `INSERT INTO organizations(id, slug, display_name, plan_tier, status, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		"org_billing",
+		"billing-org",
+		"Billing Org",
+		"starter",
+		"active",
+		now,
+		now,
+	); err != nil {
+		t.Fatalf("insert organization: %v", err)
+	}
+
+	if err := applyMigrations(ctx, db); err != nil {
+		t.Fatalf("apply migrations: %v", err)
+	}
+
+	var provider string
+	var billingStatus string
+	var stripeSubscriptionStatus string
+	if err := db.QueryRowContext(ctx, `SELECT provider, billing_status, stripe_subscription_status
+		FROM organization_billing WHERE organization_id = ?`, "org_billing").Scan(&provider, &billingStatus, &stripeSubscriptionStatus); err != nil {
+		t.Fatalf("load organization billing: %v", err)
+	}
+	if provider != "stripe" {
+		t.Fatalf("provider = %q, want stripe", provider)
+	}
+	if billingStatus != "free" {
+		t.Fatalf("billing_status = %q, want free", billingStatus)
+	}
+	if stripeSubscriptionStatus != "not_started" {
+		t.Fatalf("stripe_subscription_status = %q, want not_started", stripeSubscriptionStatus)
+	}
+}
+
 func applyMigrationsUpTo(ctx context.Context, db *sql.DB, maxVersion int) error {
 	if _, err := db.ExecContext(ctx, createMigrationsTableSQL); err != nil {
 		return err

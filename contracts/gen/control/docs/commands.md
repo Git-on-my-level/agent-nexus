@@ -4,7 +4,7 @@ Generated from `contracts/oar-control-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.1.0`
-- Commands: `32`
+- Commands: `36`
 
 ## `control.accounts.passkeys.register.finish`
 
@@ -80,6 +80,66 @@ Generated from `contracts/oar-control-openapi.yaml`.
 - Agent notes: Use only for human account sign-in. Agents remain workspace-local and do not use this flow.
 - Examples:
   - Start control-plane sign-in: `oar api call --base-url https://control.oar.example --method POST --path /account/sessions/start --body '{"email":"ops@example.com"}'`
+
+## `control.billing.webhooks.stripe.receive`
+
+- CLI path: `billing webhooks stripe receive`
+- HTTP: `POST /billing/webhooks/stripe`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Accept Stripe subscription events into the control plane so billing state can map cleanly onto org entitlements.
+- Concepts: `billing`, `webhooks`, `subscriptions`
+- Error codes: `invalid_json`, `invalid_request`, `invalid_signature`
+- Output: Returns `{ webhook }` with receipt details for the accepted event.
+- Agent notes: Public endpoint. Stripe signature verification should be enabled before production traffic.
+- Examples:
+  - Stripe webhook: `curl -X POST https://control.oar.example/billing/webhooks/stripe -H 'Stripe-Signature: <signature>' -H 'Content-Type: application/json' --data-binary @event.json`
+
+## `control.organizations.billing.checkout-session.create`
+
+- CLI path: `organizations billing checkout-session create`
+- HTTP: `POST /organizations/{organization_id}/billing/checkout-session`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Create an org-scoped Stripe checkout flow while keeping product entitlements inside the control plane.
+- Concepts: `organizations`, `billing`, `checkout`
+- Error codes: `auth_required`, `invalid_token`, `invalid_json`, `invalid_request`, `not_found`, `access_denied`
+- Output: Returns `{ session }` with a Stripe checkout URL or missing configuration details.
+- Agent notes: Owner/admin only. Stripe manages payment collection, but entitlements still live in the control plane.
+- Examples:
+  - Create checkout session: `oar api call --base-url https://control.oar.example --method POST --path /organizations/org_123/billing/checkout-session --body '{"plan_tier":"team"}' --header 'Authorization: Bearer <control-session>'`
+
+## `control.organizations.billing.customer-portal-session.create`
+
+- CLI path: `organizations billing customer-portal-session create`
+- HTTP: `POST /organizations/{organization_id}/billing/customer-portal-session`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Create an org-scoped Stripe customer portal flow without moving entitlement logic out of the control plane.
+- Concepts: `organizations`, `billing`, `portal`
+- Error codes: `auth_required`, `invalid_token`, `invalid_json`, `invalid_request`, `not_found`, `access_denied`
+- Output: Returns `{ session }` with a Stripe customer-portal URL or missing configuration details.
+- Agent notes: Owner/admin only. Stripe manages the portal surface, but entitlements still live in the control plane.
+- Examples:
+  - Create customer portal session: `oar api call --base-url https://control.oar.example --method POST --path /organizations/org_123/billing/customer-portal-session --body '{}' --header 'Authorization: Bearer <control-session>'`
+
+## `control.organizations.billing.get`
+
+- CLI path: `organizations billing get`
+- HTTP: `GET /organizations/{organization_id}/billing`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `none`
+- Why: Expose org-scoped billing state and Stripe configuration readiness without overloading usage summaries.
+- Concepts: `organizations`, `billing`, `plans`
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Output: Returns `{ summary }` with billing state, usage summary, and Stripe configuration readiness.
+- Agent notes: Safe and idempotent. This is an entitlement and billing control-plane view, not an invoice feed.
+- Examples:
+  - Get billing summary: `oar api call --base-url https://control.oar.example --method GET --path /organizations/org_123/billing --header 'Authorization: Bearer <control-session>'`
 
 ## `control.organizations.create`
 

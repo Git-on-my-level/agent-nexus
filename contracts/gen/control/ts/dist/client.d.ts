@@ -49,6 +49,10 @@ export declare class OarClient {
     controlAccountsSessionsFinish(options?: RequestOptions): Promise<InvokeResult>;
     controlAccountsSessionsRevokeCurrent(options?: RequestOptions): Promise<InvokeResult>;
     controlAccountsSessionsStart(options?: RequestOptions): Promise<InvokeResult>;
+    controlBillingWebhooksStripeReceive(options?: RequestOptions): Promise<InvokeResult>;
+    controlOrganizationsBillingCheckoutSessionCreate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    controlOrganizationsBillingCustomerPortalSessionCreate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    controlOrganizationsBillingGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     controlOrganizationsCreate(options?: RequestOptions): Promise<InvokeResult>;
     controlOrganizationsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     controlOrganizationsInvitesCreate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;

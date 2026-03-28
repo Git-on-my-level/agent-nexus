@@ -208,6 +208,44 @@ export function createControlClient(accessToken, extraHeaders = {}) {
       return parseResponseBody(result);
     },
 
+    async getOrganizationBillingSummary(organizationId) {
+      const result = await client.controlOrganizationsBillingGet(
+        { organization_id: organizationId },
+        { headers },
+      );
+      if (!result.status || result.status >= 400) {
+        throw createControlError(result, "Failed to get billing summary");
+      }
+      return parseResponseBody(result);
+    },
+
+    async createOrganizationBillingCheckoutSession(organizationId, body) {
+      const result =
+        await client.controlOrganizationsBillingCheckoutSessionCreate(
+          { organization_id: organizationId },
+          { body, headers },
+        );
+      if (!result.status || result.status >= 400) {
+        throw createControlError(result, "Failed to prepare checkout session");
+      }
+      return parseResponseBody(result);
+    },
+
+    async createOrganizationBillingCustomerPortalSession(organizationId, body) {
+      const result =
+        await client.controlOrganizationsBillingCustomerPortalSessionCreate(
+          { organization_id: organizationId },
+          { body, headers },
+        );
+      if (!result.status || result.status >= 400) {
+        throw createControlError(
+          result,
+          "Failed to prepare customer portal session",
+        );
+      }
+      return parseResponseBody(result);
+    },
+
     async listWorkspaces(organizationId) {
       const result = await client.controlWorkspacesList({
         query: organizationId ? { organization_id: organizationId } : undefined,
