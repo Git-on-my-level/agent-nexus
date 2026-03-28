@@ -35,4 +35,27 @@ describe("access route", () => {
         "https://m2-internal.scalingforever.com/oar/scalingforever",
     });
   });
+
+  it("falls back to the configured public origin when the request origin is loopback", async () => {
+    workspaceResolverMocks.resolveWorkspaceBySlug.mockResolvedValue({
+      workspaceSlug: "scalingforever",
+      workspace: {
+        coreBaseUrl: "http://127.0.0.1:8002",
+        publicOrigin: "https://m2-internal.tail7e1eb.ts.net",
+      },
+    });
+
+    const result = await load({
+      params: {
+        workspace: "scalingforever",
+      },
+      url: new URL("http://127.0.0.1:4173/oar/scalingforever/access"),
+    });
+
+    expect(result).toEqual({
+      coreBaseUrl: "http://127.0.0.1:8002",
+      registrationBaseUrl:
+        "https://m2-internal.tail7e1eb.ts.net/oar/scalingforever",
+    });
+  });
 });
