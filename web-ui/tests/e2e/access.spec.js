@@ -61,3 +61,78 @@ test("reads the cookie-backed session from the same-origin endpoint", async ({
     },
   });
 });
+
+test("does not repeat the username in principal rows", async ({ page }) => {
+  await page.context().addCookies([
+    {
+      name: "oar_ui_session_local",
+      value: "test-refresh-token",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+    },
+  ]);
+
+  await page.route("**/auth/session", async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        authenticated: true,
+        agent: {
+          agent_id: "agent-ops-ai",
+          actor_id: "actor-ops-ai",
+          username: "ops-ai",
+        },
+      }),
+    });
+  });
+
+  await page.route("**/auth/principals?**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        principals: [
+          {
+            agent_id: "agent-ops-ai",
+            actor_id: "actor-ops-ai",
+            username: "m4-hermes",
+            principal_kind: "agent",
+            auth_method: "public_key",
+            created_at: "2026-03-28T10:00:00Z",
+            updated_at: "2026-03-28T10:00:00Z",
+            revoked: false,
+          },
+        ],
+        active_human_principal_count: 0,
+      }),
+    });
+  });
+
+  await page.route("**/auth/invites", async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ invites: [] }),
+    });
+  });
+
+  await page.route("**/auth/audit?**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ events: [] }),
+    });
+  });
+
+  await page.goto("/local/access");
+
+  await expect(page.getByText("m4-hermes", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("agent via public_key", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("m4-hermes • agent via public_key", { exact: true }),
+  ).toHaveCount(0);
+});

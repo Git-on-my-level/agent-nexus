@@ -360,14 +360,9 @@
   }
 
   function principalLabel(principal) {
-    const parts = [];
-    if (principal?.username) {
-      parts.push(principal.username);
-    }
     const kind = principal?.principal_kind ?? "principal";
     const method = principal?.auth_method ?? "auth";
-    parts.push(`${kind} via ${method}`);
-    return parts.join(" \u2022 ");
+    return `${kind} via ${method}`;
   }
 
   function isLastActiveHumanPrincipal(principal) {
