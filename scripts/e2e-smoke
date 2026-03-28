@@ -147,10 +147,12 @@ require_cmd rg
   go build -o "$CLI_BIN" ./cmd/oar
 )
 
+CLI_VERSION="$("${ROOT_DIR}/scripts/read-version.sh" | sed 's/^v//')"
+
 # Start core.
 (
   cd "$ROOT_DIR/core"
-  OAR_BOOTSTRAP_TOKEN="$BOOTSTRAP_TOKEN" go run ./cmd/oar-core \
+  OAR_BOOTSTRAP_TOKEN="$BOOTSTRAP_TOKEN" OAR_MIN_CLI_VERSION="$CLI_VERSION" OAR_RECOMMENDED_CLI_VERSION="$CLI_VERSION" go run ./cmd/oar-core \
     --listen-addr "${CORE_HOST}:${CORE_PORT}" \
     --workspace-root "$TMP_DIR/workspace" \
     --schema-path "$ROOT_DIR/contracts/oar-schema.yaml" \

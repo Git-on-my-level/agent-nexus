@@ -93,15 +93,15 @@ async function proxyToCore(event, coreBaseUrl, workspaceSlug) {
     requestBody = payload.byteLength > 0 ? payload : undefined;
   }
 
+  const incomingAuth = event.request.headers.get("authorization");
   const requestInit = buildProxyRequestInit(event, {
     body: requestBody,
   });
-  requestInit.headers.delete("cookie");
-  requestInit.headers.delete("authorization");
-
   const session = getWorkspaceAuthSession(event, workspaceSlug);
   if (session?.accessToken) {
     requestInit.headers.set("authorization", `Bearer ${session.accessToken}`);
+  } else if (incomingAuth) {
+    requestInit.headers.set("authorization", incomingAuth);
   }
 
   let upstreamResponse;
