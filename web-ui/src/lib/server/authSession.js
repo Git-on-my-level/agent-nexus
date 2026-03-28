@@ -12,6 +12,10 @@ function getWorkspaceSlug(value) {
   return normalizeWorkspaceSlug(value) || DEFAULT_WORKSPACE_SLUG;
 }
 
+const REFRESH_REPLAY_WINDOW_MS = 5_000;
+const inFlightRefreshes = new Map();
+const recentRefreshResults = new Map();
+
 export function getAuthSessionCookieName(workspaceSlug) {
   return `oar_ui_session_${getWorkspaceSlug(workspaceSlug)}`;
 }
@@ -73,6 +77,51 @@ async function requestCoreJSON(coreBaseUrl, pathname, options = {}) {
   }
 
   return payload;
+}
+
+function getRefreshDeduplicationKey(workspaceSlug, refreshToken) {
+  return `${getWorkspaceSlug(workspaceSlug)}:${String(refreshToken ?? "").trim()}`;
+}
+
+function purgeExpiredRecentRefreshResults(now = Date.now()) {
+  for (const [key, cached] of recentRefreshResults.entries()) {
+    if (now >= cached.expiresAt) {
+      recentRefreshResults.delete(key);
+    }
+  }
+}
+
+function readRecentRefreshResult(key) {
+  const cached = recentRefreshResults.get(key);
+  if (!cached) {
+    return null;
+  }
+  if (Date.now() >= cached.expiresAt) {
+    recentRefreshResults.delete(key);
+    return null;
+  }
+  return cached.result;
+}
+
+function applyRefreshResult(event, workspaceSlug, tokens) {
+  if (!tokens) {
+    return null;
+  }
+  if (tokens.refreshToken) {
+    writeWorkspaceRefreshToken(event, workspaceSlug, tokens.refreshToken);
+  }
+  if (tokens.accessToken) {
+    writeWorkspaceAccessToken(event, workspaceSlug, tokens.accessToken);
+  }
+  return tokens;
+}
+
+function cacheRecentRefreshResult(key, tokens) {
+  purgeExpiredRecentRefreshResults();
+  recentRefreshResults.set(key, {
+    expiresAt: Date.now() + REFRESH_REPLAY_WINDOW_MS,
+    result: tokens,
+  });
 }
 
 export function readWorkspaceAccessToken(event, workspaceSlug) {
@@ -164,34 +213,50 @@ export async function refreshWorkspaceAuthSession({
     return null;
   }
 
-  const tokenResponse = await requestCoreJSON(coreBaseUrl, "/auth/token", {
+  const dedupeKey = getRefreshDeduplicationKey(workspaceSlug, refreshToken);
+  const recentResult = readRecentRefreshResult(dedupeKey);
+  if (recentResult) {
+    return applyRefreshResult(event, workspaceSlug, recentResult);
+  }
+
+  const inFlightRefresh = inFlightRefreshes.get(dedupeKey);
+  if (inFlightRefresh) {
+    return applyRefreshResult(event, workspaceSlug, await inFlightRefresh);
+  }
+
+  const refreshPromise = requestCoreJSON(coreBaseUrl, "/auth/token", {
     method: "POST",
     body: {
       grant_type: "refresh_token",
       refresh_token: refreshToken,
     },
-  });
+  })
+    .then((tokenResponse) => {
+      const nextTokens = tokenResponse.tokens ?? {};
+      const nextRefreshToken =
+        String(nextTokens.refresh_token ?? "").trim() || refreshToken;
+      const accessToken = String(nextTokens.access_token ?? "").trim();
 
-  const nextTokens = tokenResponse.tokens ?? {};
-  const nextRefreshToken =
-    String(nextTokens.refresh_token ?? "").trim() || refreshToken;
-  const accessToken = String(nextTokens.access_token ?? "").trim();
+      if (!accessToken) {
+        throw createRequestError(502, {
+          message: "oar-core returned an empty access token.",
+        });
+      }
 
-  if (!accessToken) {
-    throw createRequestError(502, {
-      message: "oar-core returned an empty access token.",
+      const issuedTokens = {
+        refreshToken: nextRefreshToken,
+        accessToken,
+      };
+      cacheRecentRefreshResult(dedupeKey, issuedTokens);
+      return issuedTokens;
+    })
+    .finally(() => {
+      inFlightRefreshes.delete(dedupeKey);
     });
-  }
 
-  if (nextRefreshToken !== refreshToken) {
-    writeWorkspaceRefreshToken(event, workspaceSlug, nextRefreshToken);
-  }
-  writeWorkspaceAccessToken(event, workspaceSlug, accessToken);
+  inFlightRefreshes.set(dedupeKey, refreshPromise);
 
-  return {
-    refreshToken: nextRefreshToken,
-    accessToken,
-  };
+  return applyRefreshResult(event, workspaceSlug, await refreshPromise);
 }
 
 export async function loadWorkspaceAuthenticatedAgent({
@@ -322,4 +387,14 @@ export async function proxyWorkspaceAuthVerify({
     workspaceSlug,
     upstreamResponse,
   });
+}
+
+export function resetWorkspaceAuthRefreshStateForTests() {
+  inFlightRefreshes.clear();
+  recentRefreshResults.clear();
+}
+
+export function getRecentRefreshResultCountForTests() {
+  purgeExpiredRecentRefreshResults();
+  return recentRefreshResults.size;
 }
