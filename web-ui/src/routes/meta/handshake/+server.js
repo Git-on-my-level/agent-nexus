@@ -2,12 +2,13 @@ import { json } from "@sveltejs/kit";
 
 import { getExpectedCommandRegistryDigest } from "$lib/commandRegistryDigest";
 import { EXPECTED_SCHEMA_VERSION } from "$lib/config";
+import { CURRENT_VERSION } from "$lib/generated/version";
 import { assertMockModeEnabled } from "$lib/server/mockGuard";
 
-const MOCK_CORE_VERSION = "dev-mock";
+const MOCK_CORE_VERSION = CURRENT_VERSION;
 const MOCK_API_VERSION = "0.2";
-const MOCK_MIN_CLI_VERSION = "0.0.0";
-const MOCK_RECOMMENDED_CLI_VERSION = "0.0.0";
+const MOCK_MIN_CLI_VERSION = CURRENT_VERSION;
+const MOCK_RECOMMENDED_CLI_VERSION = CURRENT_VERSION;
 const MOCK_DOWNLOAD_URL = "https://example.invalid/oar-cli";
 const MOCK_INSTANCE_ID = "web-ui-mock-instance";
 const MOCK_DEV_ACTOR_MODE = true;

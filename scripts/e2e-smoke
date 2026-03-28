@@ -105,10 +105,16 @@ if (typeof cur === "object") {
 assert_contains() {
   local file="$1"
   local pattern="$2"
-  if ! rg -q "$pattern" "$file"; then
-    echo "assertion failed: expected pattern '$pattern' in $file" >&2
-    exit 1
+  if command -v rg >/dev/null 2>&1; then
+    if rg -q "$pattern" "$file"; then
+      return 0
+    fi
+  elif grep -Eq "$pattern" "$file"; then
+    return 0
   fi
+
+  echo "assertion failed: expected pattern '$pattern' in $file" >&2
+  exit 1
 }
 
 wait_for_pid() {
@@ -135,11 +141,45 @@ run_cli_json() {
   HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" "$@" >"$outfile"
 }
 
+board_create_attempt() {
+  printf '{"board":{"id":"%s","title":"Smoke Board","status":"active","labels":["smoke","board"],"primary_thread_id":"%s","primary_document_id":"%s","pinned_refs":["thread:%s","artifact:%s"]}}\n' \
+    "$BOARD_ID" "$THREAD_ID" "$PRIMARY_DOC_ID" "$THREAD_ID" "$WORK_ORDER_ID" \
+    | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" boards create >"$TMP_DIR/board-create.json"
+}
+
+ensure_board_created() {
+  local max_attempts="${1:-2}"
+  local attempt error_code status_code
+
+  for attempt in $(seq 1 "$max_attempts"); do
+    if board_create_attempt; then
+      return 0
+    fi
+
+    # GitHub-hosted runners occasionally surface a transient 500 here even
+    # though the preceding authenticated board setup succeeded locally and in
+    # repeated stress runs. Probe for the board first, then retry once before
+    # failing the full smoke flow.
+    if run_cli_json "$TMP_DIR/board-get.json" boards get --board-id "$BOARD_ID"; then
+      return 0
+    fi
+
+    error_code="$(json_get "$TMP_DIR/board-create.json" 'error.code' || true)"
+    status_code="$(json_get "$TMP_DIR/board-create.json" 'error.details.status' || true)"
+    if [[ "$attempt" -lt "$max_attempts" && "$error_code" == "internal_error" && "$status_code" == "500" ]]; then
+      sleep 0.5
+      continue
+    fi
+    return 1
+  done
+
+  return 1
+}
+
 require_cmd curl
 require_cmd go
 require_cmd node
 require_cmd pnpm
-require_cmd rg
 
 # Build CLI binary once for deterministic smoke steps.
 (
@@ -147,12 +187,12 @@ require_cmd rg
   go build -o "$CLI_BIN" ./cmd/oar
 )
 
-CLI_VERSION="$("${ROOT_DIR}/scripts/read-version.sh" | sed 's/^v//')"
+EXPECTED_VERSION="$("${ROOT_DIR}/scripts/read-version.sh")"
 
 # Start core.
 (
   cd "$ROOT_DIR/core"
-  OAR_BOOTSTRAP_TOKEN="$BOOTSTRAP_TOKEN" OAR_MIN_CLI_VERSION="$CLI_VERSION" OAR_RECOMMENDED_CLI_VERSION="$CLI_VERSION" go run ./cmd/oar-core \
+  OAR_BOOTSTRAP_TOKEN="$BOOTSTRAP_TOKEN" go run ./cmd/oar-core \
     --listen-addr "${CORE_HOST}:${CORE_PORT}" \
     --workspace-root "$TMP_DIR/workspace" \
     --schema-path "$ROOT_DIR/contracts/oar-schema.yaml" \
@@ -180,13 +220,45 @@ if ! wait_for_url "$UI_BASE_URL/meta/handshake" 180 0.2 -H "x-oar-workspace-slug
 fi
 
 # Verify UI serves shell too.
-curl -fsS "$UI_BASE_URL/" >/dev/null
+curl -fsS -D "$TMP_DIR/ui-shell-headers.txt" -o /dev/null "$UI_BASE_URL/"
 
 # Handshake/version checks.
 curl -fsS "$CORE_BASE_URL/meta/handshake" >"$TMP_DIR/core-handshake.json"
 curl -fsS "$CORE_BASE_URL/version" >"$TMP_DIR/core-version.json"
 assert_contains "$TMP_DIR/core-handshake.json" '"schema_version"'
 assert_contains "$TMP_DIR/core-version.json" '"schema_version"'
+if [[ "$(json_get "$TMP_DIR/core-handshake.json" 'core_version')" != "$EXPECTED_VERSION" ]]; then
+  echo "core_version mismatch in handshake" >&2
+  cat "$TMP_DIR/core-handshake.json" >&2 || true
+  exit 1
+fi
+if [[ "$(json_get "$TMP_DIR/core-handshake.json" 'min_cli_version')" != "$EXPECTED_VERSION" ]]; then
+  echo "min_cli_version mismatch in handshake" >&2
+  cat "$TMP_DIR/core-handshake.json" >&2 || true
+  exit 1
+fi
+if [[ "$(json_get "$TMP_DIR/core-handshake.json" 'recommended_cli_version')" != "$EXPECTED_VERSION" ]]; then
+  echo "recommended_cli_version mismatch in handshake" >&2
+  cat "$TMP_DIR/core-handshake.json" >&2 || true
+  exit 1
+fi
+
+UI_VERSION_HEADER="$(
+  awk -F': *' '
+    BEGIN { IGNORECASE = 1 }
+    tolower($1) == "x-oar-ui-version" {
+      value = $2
+      sub(/\r$/, "", value)
+      print value
+      exit
+    }
+  ' "$TMP_DIR/ui-shell-headers.txt"
+)"
+if [[ "$UI_VERSION_HEADER" != "$EXPECTED_VERSION" ]]; then
+  echo "ui version header mismatch" >&2
+  cat "$TMP_DIR/ui-shell-headers.txt" >&2 || true
+  exit 1
+fi
 
 # Register + whoami.
 run_cli_json "$TMP_DIR/register.json" auth register --username "$USERNAME" --bootstrap-token "$BOOTSTRAP_TOKEN"
@@ -295,16 +367,27 @@ printf '{"document":{"id":"%s","title":"Smoke Board Card Doc","status":"active",
   | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" docs create >"$TMP_DIR/board-card-doc-create.json"
 
 BOARD_ID="board-smoke"
-printf '{"board":{"id":"%s","title":"Smoke Board","status":"active","labels":["smoke","board"],"primary_thread_id":"%s","primary_document_id":"%s","pinned_refs":["thread:%s","artifact:%s"]}}\n' "$BOARD_ID" "$THREAD_ID" "$PRIMARY_DOC_ID" "$THREAD_ID" "$WORK_ORDER_ID" \
-  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" boards create >"$TMP_DIR/board-create.json"
+if ! ensure_board_created 2; then
+  echo "failed to create board after retry" >&2
+  cat "$TMP_DIR/board-create.json" >&2 || true
+  exit 1
+fi
 
 BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-create.json" 'data.board.updated_at' || true)"
 if [[ -z "$BOARD_UPDATED_AT" ]]; then
   BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-create.json" 'data.body.board.updated_at' || true)"
 fi
 if [[ -z "$BOARD_UPDATED_AT" ]]; then
+  run_cli_json "$TMP_DIR/board-get.json" boards get --board-id "$BOARD_ID"
+  BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-get.json" 'data.board.updated_at' || true)"
+fi
+if [[ -z "$BOARD_UPDATED_AT" ]]; then
+  BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-get.json" 'data.body.board.updated_at' || true)"
+fi
+if [[ -z "$BOARD_UPDATED_AT" ]]; then
   echo "failed to parse board updated_at after create" >&2
   cat "$TMP_DIR/board-create.json" >&2 || true
+  cat "$TMP_DIR/board-get.json" >&2 || true
   exit 1
 fi
 

@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Validate or update the repo VERSION file and generated CLI build metadata.
+Validate or update the repo VERSION file and generated cli/core/web version metadata.
 
 Usage:
   ./scripts/set-version.sh <version>
