@@ -258,7 +258,9 @@ Example Caddy config for external URLs like
 
 ```caddy
 m2-internal.scalingforever.com {
-  handle /oar* {
+  redir /oar /oar/ 301
+
+  route /oar/* {
     reverse_proxy 127.0.0.1:4173
   }
 }
@@ -269,6 +271,14 @@ server. The reverse proxy must preserve `/oar` so SvelteKit can route and
 generate links under the configured base path. The UI server then proxies API
 traffic to the matching `oar-core` from `OAR_WORKSPACES`. Core instances do not
 need to be internet-exposed.
+
+Use `route`, not `handle`, for base-path proxy blocks. In Caddy, `handle`
+blocks imported from separate snippet files can be auto-grouped as mutually
+exclusive handlers, which can produce silent `200 OK` empty-body `NOP`
+responses when another imported `handle` or `handle_path` block wins first.
+Keep the `/oar/*` proxy block in the main Caddyfile, or verify with
+`caddy adapt --config Caddyfile | jq` that the generated route does not include
+a `group` field.
 
 ## Content Security Policy and Security Headers
 
