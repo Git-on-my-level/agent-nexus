@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   clearWorkspaceAccessToken,
   clearWorkspaceRefreshToken,
+  getRecentRefreshResultCountForTests,
   handleWorkspaceAuthVerifyResponse,
   refreshWorkspaceAuthSession,
   resetWorkspaceAuthRefreshStateForTests,
@@ -56,6 +57,7 @@ function createSessionEvent({
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   resetWorkspaceAuthRefreshStateForTests();
 });
@@ -309,5 +311,45 @@ describe("server auth session helpers", () => {
     expect(second.recorder.values.get("oar_ui_access_alpha")).toBe(
       "next-access-token",
     );
+  });
+
+  it("evicts expired replay entries when caching newer refresh results", async () => {
+    vi.useFakeTimers();
+    const first = createSessionEvent({ refreshToken: "refresh-token-1" });
+    const second = createSessionEvent({ refreshToken: "refresh-token-2" });
+    let accessTokenCounter = 0;
+    const fetchMock = vi.fn(async () => {
+      accessTokenCounter += 1;
+      return new Response(
+        JSON.stringify({
+          tokens: {
+            access_token: `next-access-token-${accessTokenCounter}`,
+            refresh_token: `next-refresh-token-${accessTokenCounter}`,
+          },
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await refreshWorkspaceAuthSession({
+      event: first.event,
+      workspaceSlug: "alpha",
+      coreBaseUrl: "https://core.example.com",
+    });
+    expect(getRecentRefreshResultCountForTests()).toBe(1);
+
+    vi.advanceTimersByTime(5_001);
+
+    await refreshWorkspaceAuthSession({
+      event: second.event,
+      workspaceSlug: "alpha",
+      coreBaseUrl: "https://core.example.com",
+    });
+
+    expect(getRecentRefreshResultCountForTests()).toBe(1);
   });
 });

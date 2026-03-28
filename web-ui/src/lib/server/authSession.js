@@ -83,6 +83,14 @@ function getRefreshDeduplicationKey(workspaceSlug, refreshToken) {
   return `${getWorkspaceSlug(workspaceSlug)}:${String(refreshToken ?? "").trim()}`;
 }
 
+function purgeExpiredRecentRefreshResults(now = Date.now()) {
+  for (const [key, cached] of recentRefreshResults.entries()) {
+    if (now >= cached.expiresAt) {
+      recentRefreshResults.delete(key);
+    }
+  }
+}
+
 function readRecentRefreshResult(key) {
   const cached = recentRefreshResults.get(key);
   if (!cached) {
@@ -109,6 +117,7 @@ function applyRefreshResult(event, workspaceSlug, tokens) {
 }
 
 function cacheRecentRefreshResult(key, tokens) {
+  purgeExpiredRecentRefreshResults();
   recentRefreshResults.set(key, {
     expiresAt: Date.now() + REFRESH_REPLAY_WINDOW_MS,
     result: tokens,
@@ -383,4 +392,9 @@ export async function proxyWorkspaceAuthVerify({
 export function resetWorkspaceAuthRefreshStateForTests() {
   inFlightRefreshes.clear();
   recentRefreshResults.clear();
+}
+
+export function getRecentRefreshResultCountForTests() {
+  purgeExpiredRecentRefreshResults();
+  return recentRefreshResults.size;
 }
