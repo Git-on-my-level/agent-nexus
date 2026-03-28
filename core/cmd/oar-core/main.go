@@ -18,6 +18,7 @@ import (
 	"organization-autorunner-core/internal/actors"
 	"organization-autorunner-core/internal/auth"
 	"organization-autorunner-core/internal/blob"
+	"organization-autorunner-core/internal/buildinfo"
 	"organization-autorunner-core/internal/controlplaneauth"
 	"organization-autorunner-core/internal/controlplaneauth/heartbeat"
 	"organization-autorunner-core/internal/primitives"
@@ -32,7 +33,6 @@ const (
 	defaultSchemaPath    = "../contracts/oar-schema.yaml"
 	defaultWorkspaceRoot = ".oar-workspace"
 	defaultAPIVersion    = "v0"
-	defaultMinCLIVersion = "0.1.0"
 	defaultInstanceID    = "core-local"
 
 	defaultWorkspaceMaxBlobBytes         int64 = 1 << 30
@@ -66,10 +66,10 @@ func main() {
 		blobS3SecretAccessKey      = envString("OAR_BLOB_S3_SECRET_ACCESS_KEY", "")
 		blobS3SessionToken         = envString("OAR_BLOB_S3_SESSION_TOKEN", "")
 		blobS3ForcePathStyle       = envBool("OAR_BLOB_S3_FORCE_PATH_STYLE", false)
-		coreVersion                = envString("OAR_CORE_VERSION", "")
+		coreVersion                = envString("OAR_CORE_VERSION", buildinfo.Current)
 		apiVersion                 = envString("OAR_API_VERSION", defaultAPIVersion)
-		minCLIVersion              = envString("OAR_MIN_CLI_VERSION", defaultMinCLIVersion)
-		recommendedCLIVersion      = envString("OAR_RECOMMENDED_CLI_VERSION", defaultMinCLIVersion)
+		minCLIVersion              = envString("OAR_MIN_CLI_VERSION", buildinfo.Current)
+		recommendedCLIVersion      = envString("OAR_RECOMMENDED_CLI_VERSION", buildinfo.Current)
 		cliDownloadURL             = envString("OAR_CLI_DOWNLOAD_URL", "")
 		coreInstanceID             = envString("OAR_CORE_INSTANCE_ID", defaultInstanceID)
 		metaCommandsPath           = envString("OAR_META_COMMANDS_PATH", "")
@@ -123,7 +123,7 @@ func main() {
 	flag.StringVar(&workspaceRoot, "workspace-root", workspaceRoot, "root directory for sqlite/filesystem workspace")
 	flag.StringVar(&blobBackend, "blob-backend", blobBackend, "blob storage backend (filesystem|object|s3)")
 	flag.StringVar(&blobRoot, "blob-root", blobRoot, "root directory for filesystem/object blob storage (defaults to workspace artifacts/content)")
-	flag.StringVar(&coreVersion, "core-version", coreVersion, "core version reported in handshake/version headers (defaults to schema version)")
+	flag.StringVar(&coreVersion, "core-version", coreVersion, "core version reported in handshake/version headers (defaults to repo VERSION)")
 	flag.StringVar(&apiVersion, "api-version", apiVersion, "api version reported in handshake/version headers")
 	flag.StringVar(&minCLIVersion, "min-cli-version", minCLIVersion, "minimum compatible CLI version")
 	flag.StringVar(&recommendedCLIVersion, "recommended-cli-version", recommendedCLIVersion, "recommended CLI version")
@@ -156,14 +156,8 @@ func main() {
 		fmt.Fprintf(os.Stderr, "failed to load schema: %v\n", err)
 		os.Exit(1)
 	}
-	if strings.TrimSpace(coreVersion) == "" {
-		coreVersion = contract.Version
-	}
 	if strings.TrimSpace(apiVersion) == "" {
 		apiVersion = defaultAPIVersion
-	}
-	if strings.TrimSpace(minCLIVersion) == "" {
-		minCLIVersion = defaultMinCLIVersion
 	}
 	if strings.TrimSpace(recommendedCLIVersion) == "" {
 		recommendedCLIVersion = minCLIVersion

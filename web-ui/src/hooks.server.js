@@ -2,6 +2,7 @@ import { dev } from "$app/environment";
 import { env as privateEnv } from "$env/dynamic/private";
 import { isProxyableCommand } from "$lib/coreRouteCatalog";
 import { getWorkspaceHeader } from "$lib/compat/workspaceCompat";
+import { CURRENT_VERSION } from "$lib/generated/version";
 import { stripBasePath } from "$lib/workspacePaths";
 import {
   clearWorkspaceAuthSession,
@@ -121,6 +122,7 @@ async function proxyToCore(event, coreBaseUrl, workspaceSlug) {
         status: 503,
         headers: {
           "content-type": "application/json",
+          "X-OAR-UI-Version": CURRENT_VERSION,
         },
       },
     );
@@ -232,16 +234,24 @@ export async function handle({ event, resolve }) {
         status: target.status,
         headers: {
           "content-type": "application/json",
+          "X-OAR-UI-Version": CURRENT_VERSION,
         },
       });
     }
 
     if (target.coreBaseUrl) {
-      return proxyToCore(event, target.coreBaseUrl, target.workspace.slug);
+      const response = await proxyToCore(
+        event,
+        target.coreBaseUrl,
+        target.workspace.slug,
+      );
+      response.headers.set("X-OAR-UI-Version", CURRENT_VERSION);
+      return response;
     }
   }
 
   const response = await resolve(event);
+  response.headers.set("X-OAR-UI-Version", CURRENT_VERSION);
 
   if (documentNavigation) {
     response.headers.set("Content-Security-Policy", buildCSPHeader());

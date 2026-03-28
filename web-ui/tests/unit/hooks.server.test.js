@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { CURRENT_VERSION } from "../../src/lib/generated/version.js";
 
 const authSessionState = {
   currentSession: { accessToken: "expired-token" },
@@ -166,5 +167,6 @@ describe("hooks proxy retry", () => {
     expect(csp).toContain(
       "manifest-src 'self' https://scalingforever.cloudflareaccess.com",
     );
+    expect(response.headers.get("X-OAR-UI-Version")).toBe(CURRENT_VERSION);
   });
 });

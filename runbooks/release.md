@@ -78,11 +78,11 @@ VERSION="$(./scripts/read-version.sh)"
 ./scripts/build-cli-release-artifacts.sh "$VERSION"
 ```
 
-Prepare the repo version before tagging. Either update it locally:
+Prepare the repo version before tagging. `./scripts/set-version.sh` is the canonical release-prep step: it updates [`VERSION`](../VERSION), syncs generated CLI/core/web version metadata, and keeps `web-ui/package.json` aligned automatically. Either update it locally:
 
 ```bash
 ./scripts/set-version.sh v0.0.4
-git add VERSION cli/internal/buildinfo/version_generated.go
+git add VERSION cli/internal/buildinfo/version_generated.go core/internal/buildinfo/version_generated.go web-ui/src/lib/generated/version.js web-ui/package.json
 git commit -m "Prepare CLI release v0.0.4"
 git push
 ```
@@ -104,6 +104,19 @@ git push origin "$VERSION"
 ```
 
 The workflow fails if the pushed tag does not match the committed [`VERSION`](../VERSION) file or if generated CLI version metadata is stale.
+
+### Painpoint status
+
+Resolved:
+
+- PR-time auth/smoke coverage runs automatically for auth-sensitive and contract-sensitive changes
+- release-prep reruns reopen or reuse the staged draft PR instead of silently succeeding without a review path
+- rerunning CLI release publication no longer risks deleting existing GitHub release assets on upload failure
+- repo release prep now aligns CLI, core, and web-ui version metadata from the single `VERSION` source of truth
+
+Still not solved:
+
+- the tag-driven GitHub workflow publishes CLI binaries only; core deployment publication and web deployment rollout remain outside this automation path
 
 Then watch the GitHub workflow and confirm the published release:
 

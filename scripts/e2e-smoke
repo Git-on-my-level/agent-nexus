@@ -147,12 +147,12 @@ require_cmd rg
   go build -o "$CLI_BIN" ./cmd/oar
 )
 
-CLI_VERSION="$("${ROOT_DIR}/scripts/read-version.sh" | sed 's/^v//')"
+EXPECTED_VERSION="$("${ROOT_DIR}/scripts/read-version.sh")"
 
 # Start core.
 (
   cd "$ROOT_DIR/core"
-  OAR_BOOTSTRAP_TOKEN="$BOOTSTRAP_TOKEN" OAR_MIN_CLI_VERSION="$CLI_VERSION" OAR_RECOMMENDED_CLI_VERSION="$CLI_VERSION" go run ./cmd/oar-core \
+  OAR_BOOTSTRAP_TOKEN="$BOOTSTRAP_TOKEN" go run ./cmd/oar-core \
     --listen-addr "${CORE_HOST}:${CORE_PORT}" \
     --workspace-root "$TMP_DIR/workspace" \
     --schema-path "$ROOT_DIR/contracts/oar-schema.yaml" \
@@ -180,13 +180,33 @@ if ! wait_for_url "$UI_BASE_URL/meta/handshake" 180 0.2 -H "x-oar-workspace-slug
 fi
 
 # Verify UI serves shell too.
-curl -fsS "$UI_BASE_URL/" >/dev/null
+curl -fsS -D "$TMP_DIR/ui-shell-headers.txt" -o /dev/null "$UI_BASE_URL/"
 
 # Handshake/version checks.
 curl -fsS "$CORE_BASE_URL/meta/handshake" >"$TMP_DIR/core-handshake.json"
 curl -fsS "$CORE_BASE_URL/version" >"$TMP_DIR/core-version.json"
 assert_contains "$TMP_DIR/core-handshake.json" '"schema_version"'
 assert_contains "$TMP_DIR/core-version.json" '"schema_version"'
+if [[ "$(json_get "$TMP_DIR/core-handshake.json" 'core_version')" != "$EXPECTED_VERSION" ]]; then
+  echo "core_version mismatch in handshake" >&2
+  cat "$TMP_DIR/core-handshake.json" >&2 || true
+  exit 1
+fi
+if [[ "$(json_get "$TMP_DIR/core-handshake.json" 'min_cli_version')" != "$EXPECTED_VERSION" ]]; then
+  echo "min_cli_version mismatch in handshake" >&2
+  cat "$TMP_DIR/core-handshake.json" >&2 || true
+  exit 1
+fi
+if [[ "$(json_get "$TMP_DIR/core-handshake.json" 'recommended_cli_version')" != "$EXPECTED_VERSION" ]]; then
+  echo "recommended_cli_version mismatch in handshake" >&2
+  cat "$TMP_DIR/core-handshake.json" >&2 || true
+  exit 1
+fi
+if ! grep -Eiq "^x-oar-ui-version: ${EXPECTED_VERSION}\r?$" "$TMP_DIR/ui-shell-headers.txt"; then
+  echo "ui version header mismatch" >&2
+  cat "$TMP_DIR/ui-shell-headers.txt" >&2 || true
+  exit 1
+fi
 
 # Register + whoami.
 run_cli_json "$TMP_DIR/register.json" auth register --username "$USERNAME" --bootstrap-token "$BOOTSTRAP_TOKEN"

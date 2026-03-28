@@ -50,12 +50,12 @@ jobs:
       - name: Commit release prep
         id: commit
         run: |
-          if git diff --quiet -- VERSION cli/internal/buildinfo/version_generated.go; then
+          if git diff --quiet -- VERSION cli/internal/buildinfo/version_generated.go core/internal/buildinfo/version_generated.go web-ui/src/lib/generated/version.js web-ui/package.json; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          git add VERSION cli/internal/buildinfo/version_generated.go
+          git add VERSION cli/internal/buildinfo/version_generated.go core/internal/buildinfo/version_generated.go web-ui/src/lib/generated/version.js web-ui/package.json
           git commit -m "Prepare CLI release ${{ inputs.version }}"
           echo "changed=true" >> "$GITHUB_OUTPUT"
 
@@ -74,7 +74,7 @@ jobs:
           ## Summary
 
           - bump \`VERSION\` to \`${{ inputs.version }}\`
-          - sync generated CLI build metadata from the canonical repo version
+          - sync generated cli/core/web version metadata from the canonical repo version
           - stage the repo for the tag-driven CLI release workflow
 
           ## Validation
