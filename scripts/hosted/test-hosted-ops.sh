@@ -259,16 +259,30 @@ SEED_PORT="$(pick_loopback_port)"
   --instance team-alpha \
   --instance-root "$INSTANCE_ROOT" \
   --public-origin https://team-alpha.example.test \
+  --allowed-origins "https://team-alpha.example.test, https://nested.team-alpha.example.test" \
   --listen-port 8001 \
   --web-ui-port 3001 \
   --generate-bootstrap-token
 INSTANCE_ROOT="$(cd "$INSTANCE_ROOT" && pwd -P)"
 
+INVALID_ALLOWED_ORIGINS_ERR="${TMP_ROOT}/invalid-allowed-origins.err"
+assert_command_fails "$INVALID_ALLOWED_ORIGINS_ERR" \
+  "${SCRIPT_DIR}/provision-workspace.sh" \
+  --instance invalid-allowed-origins \
+  --instance-root "${TMP_ROOT}/source/invalid-allowed-origins" \
+  --public-origin https://team-alpha.example.test \
+  --allowed-origins "https://team-alpha.example.test,https://other.example.net" \
+  --listen-port 8091 \
+  --web-ui-port 3091
+assert_file_contains "$INVALID_ALLOWED_ORIGINS_ERR" "must equal or be a suffix of origin host other.example.net" "invalid allowed origins failure"
+
 seed_workspace_fixture "${INSTANCE_ROOT}/workspace" "$CORE_BIN" "$SCHEMA_PATH" "$SEED_PORT" "${TMP_ROOT}/seed.log"
 
 SOURCE_BOOTSTRAP_TOKEN="$(dotenv_get "${INSTANCE_ROOT}/config/env.production" OAR_BOOTSTRAP_TOKEN || true)"
+SOURCE_ALLOWED_ORIGINS="$(dotenv_get "${INSTANCE_ROOT}/config/env.production" OAR_WEBAUTHN_ALLOWED_ORIGINS || true)"
 [[ -n "$SOURCE_BOOTSTRAP_TOKEN" ]] || die "expected source bootstrap token to be configured"
 assert_not_equals "$HOSTED_BOOTSTRAP_PLACEHOLDER" "$SOURCE_BOOTSTRAP_TOKEN" "source bootstrap token"
+assert_equals "https://team-alpha.example.test,https://nested.team-alpha.example.test" "$SOURCE_ALLOWED_ORIGINS" "source allowed origins"
 
 "${SCRIPT_DIR}/backup-workspace.sh" \
   --instance-root "$INSTANCE_ROOT" \

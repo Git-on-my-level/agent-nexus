@@ -167,6 +167,45 @@ origin_host() {
   printf '%s\n' "$authority"
 }
 
+normalize_hostname() {
+  local value="$1"
+  value="$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')"
+  value="${value%.}"
+  if [[ "$value" == \[*\] ]]; then
+    value="${value#[}"
+    value="${value%]}"
+  fi
+  printf '%s\n' "$value"
+}
+
+hostname_looks_like_ip() {
+  local host
+  host="$(normalize_hostname "$1")"
+  [[ "$host" == *:* || "$host" =~ ^[0-9.]+$ ]]
+}
+
+validate_webauthn_rpid_against_host() {
+  local rpid host normalized_rpid normalized_host
+  rpid="$1"
+  host="$2"
+  normalized_rpid="$(normalize_hostname "$rpid")"
+  normalized_host="$(normalize_hostname "$host")"
+  [[ -n "$normalized_rpid" && -n "$normalized_host" ]] || die "WebAuthn RP ID and host must be non-empty"
+  if [[ "$normalized_rpid" == "$normalized_host" ]]; then
+    return 0
+  fi
+  if hostname_looks_like_ip "$normalized_rpid" || hostname_looks_like_ip "$normalized_host"; then
+    die "WebAuthn RP ID ${normalized_rpid} must exactly match origin host ${normalized_host}"
+  fi
+  if [[ "$normalized_rpid" == "localhost" || "$normalized_host" == "localhost" ]]; then
+    die "WebAuthn RP ID ${normalized_rpid} must exactly match origin host ${normalized_host}"
+  fi
+  if [[ "$normalized_host" == *".${normalized_rpid}" ]]; then
+    return 0
+  fi
+  die "WebAuthn RP ID ${normalized_rpid} must equal or be a suffix of origin host ${normalized_host}"
+}
+
 canonicalize_path_allow_missing() {
   local raw_path="$1"
   [[ -n "$raw_path" ]] || return 0

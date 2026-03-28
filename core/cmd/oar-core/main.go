@@ -84,6 +84,7 @@ func main() {
 		bootstrapToken             = envString("OAR_BOOTSTRAP_TOKEN", "")
 		webAuthnRPID               = envString("OAR_WEBAUTHN_RPID", "")
 		webAuthnOrigin             = envString("OAR_WEBAUTHN_ORIGIN", "")
+		webAuthnAllowedOrigins     = envCSV("OAR_WEBAUTHN_ALLOWED_ORIGINS")
 		webAuthnDisplayName        = envString("OAR_WEBAUTHN_RP_DISPLAY_NAME", "OAR")
 		humanAuthMode              = envString("OAR_HUMAN_AUTH_MODE", controlplaneauth.HumanAuthModeWorkspaceLocal)
 		controlPlaneBaseURL        = envString("OAR_CONTROL_PLANE_BASE_URL", "")
@@ -303,9 +304,10 @@ func main() {
 		server.WithPrimitiveStore(primitiveStore),
 		server.WithSchemaContract(contract),
 		server.WithWebAuthnConfig(server.WebAuthnConfig{
-			RPDisplayName: webAuthnDisplayName,
-			RPID:          webAuthnRPID,
-			RPOrigin:      webAuthnOrigin,
+			RPDisplayName:  webAuthnDisplayName,
+			RPID:           webAuthnRPID,
+			RPOrigin:       webAuthnOrigin,
+			AllowedOrigins: webAuthnAllowedOrigins,
 		}),
 		server.WithHumanAuthMode(humanAuthMode),
 		server.WithControlPlaneHumanVerifier(controlPlaneVerifier),
@@ -393,6 +395,23 @@ func envString(name string, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func envCSV(name string) []string {
+	value := strings.TrimSpace(os.Getenv(name))
+	if value == "" {
+		return nil
+	}
+	parts := strings.Split(value, ",")
+	values := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		values = append(values, part)
+	}
+	return values
 }
 
 func envInt(name string, fallback int) int {

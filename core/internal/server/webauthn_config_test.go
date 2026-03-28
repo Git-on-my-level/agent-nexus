@@ -83,6 +83,50 @@ func TestWebAuthnConfigBuildForRequestRejectsConfiguredOriginMismatch(t *testing
 	}
 }
 
+func TestWebAuthnConfigBuildForRequestAllowsConfiguredAllowedOrigin(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest("POST", "http://127.0.0.1:8000/auth/passkey/register/options", nil)
+	req.Header.Set("Origin", "https://m2-internal.scalingforever.com")
+
+	webAuthn, err := (WebAuthnConfig{
+		RPDisplayName: "OAR",
+		RPID:          "scalingforever.com",
+		RPOrigin:      "https://ignored.example.test",
+		AllowedOrigins: []string{
+			"https://host.tail76ea03.ts.net",
+			"https://m2-internal.scalingforever.com",
+		},
+	}).buildForRequest(req)
+	if err != nil {
+		t.Fatalf("build WebAuthn config: %v", err)
+	}
+	if got := webAuthn.Config.RPID; got != "scalingforever.com" {
+		t.Fatalf("expected configured RP ID, got %q", got)
+	}
+	if got := webAuthn.Config.RPOrigins; len(got) != 1 || got[0] != "https://m2-internal.scalingforever.com" {
+		t.Fatalf("unexpected RP origins: %#v", got)
+	}
+}
+
+func TestWebAuthnConfigBuildForRequestRejectsOriginOutsideAllowedOrigins(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest("POST", "http://127.0.0.1:8000/auth/passkey/register/options", nil)
+	req.Header.Set("Origin", "https://untrusted.example.test")
+
+	_, err := (WebAuthnConfig{
+		RPDisplayName:  "OAR",
+		AllowedOrigins: []string{"https://m2-internal.scalingforever.com"},
+	}).buildForRequest(req)
+	if err == nil {
+		t.Fatal("expected allowlist mismatch error")
+	}
+	if got := err.Error(); got != `browser origin "https://untrusted.example.test" is not in configured WebAuthn allowed origins` {
+		t.Fatalf("unexpected error: %q", got)
+	}
+}
+
 func TestValidateRPIDAgainstHost(t *testing.T) {
 	t.Parallel()
 

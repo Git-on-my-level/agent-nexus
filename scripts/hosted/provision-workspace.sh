@@ -25,6 +25,7 @@ Optional:
   --listen-host HOST        Local bind host hint (default: 127.0.0.1)
   --listen-port PORT        Local/core host port hint (default: 8000)
   --web-ui-port PORT        Host port hint for web-ui example flows (default: 3000)
+  --allowed-origins LIST    Comma-separated WebAuthn origin allowlist
   --core-instance-id ID     Runtime core instance id (default: instance name)
   --blob-backend BACKEND    filesystem|object|s3 (default: filesystem)
   --blob-root DIR           Explicit local blob root for filesystem/object backends
@@ -57,6 +58,8 @@ PUBLIC_ORIGIN=""
 LISTEN_HOST="127.0.0.1"
 LISTEN_PORT="8000"
 WEB_UI_PORT="3000"
+ALLOWED_ORIGINS=""
+NORMALIZED_ALLOWED_ORIGINS=""
 CORE_INSTANCE_ID=""
 BLOB_BACKEND="filesystem"
 BLOB_ROOT=""
@@ -86,6 +89,7 @@ while [[ $# -gt 0 ]]; do
     --listen-host) LISTEN_HOST="$2"; shift 2 ;;
     --listen-port) LISTEN_PORT="$2"; shift 2 ;;
     --web-ui-port) WEB_UI_PORT="$2"; shift 2 ;;
+    --allowed-origins) ALLOWED_ORIGINS="$2"; shift 2 ;;
     --core-instance-id) CORE_INSTANCE_ID="$2"; shift 2 ;;
     --blob-backend) BLOB_BACKEND="$2"; shift 2 ;;
     --blob-root) BLOB_ROOT="$2"; shift 2 ;;
@@ -128,6 +132,19 @@ validate_host "$LISTEN_HOST"
 validate_port "$LISTEN_PORT"
 validate_port "$WEB_UI_PORT"
 validate_origin "$PUBLIC_ORIGIN"
+if [[ -n "$ALLOWED_ORIGINS" ]]; then
+  IFS=',' read -r -a allowed_origin_values <<<"$ALLOWED_ORIGINS"
+  for allowed_origin in "${allowed_origin_values[@]}"; do
+    allowed_origin="${allowed_origin#"${allowed_origin%%[![:space:]]*}"}"
+    allowed_origin="${allowed_origin%"${allowed_origin##*[![:space:]]}"}"
+    [[ -n "$allowed_origin" ]] || continue
+    validate_origin "$allowed_origin"
+    if [[ -n "$NORMALIZED_ALLOWED_ORIGINS" ]]; then
+      NORMALIZED_ALLOWED_ORIGINS+=","
+    fi
+    NORMALIZED_ALLOWED_ORIGINS+="$allowed_origin"
+  done
+fi
 validate_blob_backend "$BLOB_BACKEND"
 [[ -z "$MAX_BLOB_BYTES" ]] || validate_non_negative_integer "$MAX_BLOB_BYTES" "--max-blob-bytes"
 [[ -z "$MAX_ARTIFACTS" ]] || validate_non_negative_integer "$MAX_ARTIFACTS" "--max-artifacts"
@@ -144,6 +161,12 @@ BACKUPS_DIR="${INSTANCE_ROOT}/backups"
 ENV_FILE="${CONFIG_DIR}/env.production"
 INSTANCE_METADATA_FILE="${METADATA_DIR}/instance.env"
 WEBAUTHN_RPID="$(origin_host "$PUBLIC_ORIGIN")"
+if [[ -n "$NORMALIZED_ALLOWED_ORIGINS" ]]; then
+  IFS=',' read -r -a normalized_allowed_origin_values <<<"$NORMALIZED_ALLOWED_ORIGINS"
+  for allowed_origin in "${normalized_allowed_origin_values[@]}"; do
+    validate_webauthn_rpid_against_host "$WEBAUTHN_RPID" "$(origin_host "$allowed_origin")"
+  done
+fi
 
 case "$BLOB_BACKEND" in
   filesystem|object)
@@ -206,6 +229,7 @@ OAR_WEB_UI_ORIGIN=${PUBLIC_ORIGIN}
 OAR_ALLOW_UNAUTHENTICATED_WRITES=false
 OAR_WEBAUTHN_RPID=${WEBAUTHN_RPID}
 OAR_WEBAUTHN_ORIGIN=${PUBLIC_ORIGIN}
+OAR_WEBAUTHN_ALLOWED_ORIGINS=${NORMALIZED_ALLOWED_ORIGINS}
 OAR_WEBAUTHN_RP_DISPLAY_NAME=OAR
 OAR_CORS_ALLOWED_ORIGINS=
 OAR_CORE_INSTANCE_ID=${CORE_INSTANCE_ID}

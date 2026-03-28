@@ -14,9 +14,10 @@ import (
 const defaultWebAuthnDisplayName = "OAR"
 
 type WebAuthnConfig struct {
-	RPDisplayName string
-	RPID          string
-	RPOrigin      string
+	RPDisplayName  string
+	RPID           string
+	RPOrigin       string
+	AllowedOrigins []string
 }
 
 func (c WebAuthnConfig) buildForRequest(r *http.Request) (*webauthnlib.WebAuthn, error) {
@@ -25,21 +26,9 @@ func (c WebAuthnConfig) buildForRequest(r *http.Request) (*webauthnlib.WebAuthn,
 		return nil, err
 	}
 
-	configuredOrigin, err := normalizeOrigin(c.RPOrigin)
+	effectiveOrigin, err := c.resolveOrigin(requestedOrigin)
 	if err != nil {
-		return nil, fmt.Errorf("normalize configured WebAuthn origin: %w", err)
-	}
-	if configuredOrigin != "" && requestedOrigin != "" && configuredOrigin != requestedOrigin {
-		return nil, fmt.Errorf(
-			"configured WebAuthn origin %q does not match browser origin %q",
-			configuredOrigin,
-			requestedOrigin,
-		)
-	}
-
-	effectiveOrigin := configuredOrigin
-	if effectiveOrigin == "" {
-		effectiveOrigin = requestedOrigin
+		return nil, err
 	}
 	if effectiveOrigin == "" {
 		return nil, fmt.Errorf("determine WebAuthn origin from request")
@@ -74,6 +63,41 @@ func (c WebAuthnConfig) buildForRequest(r *http.Request) (*webauthnlib.WebAuthn,
 			UserVerification: protocol.VerificationPreferred,
 		},
 	})
+}
+
+func (c WebAuthnConfig) resolveOrigin(requestedOrigin string) (string, error) {
+	allowedOrigins, err := normalizeOrigins(c.AllowedOrigins)
+	if err != nil {
+		return "", fmt.Errorf("normalize configured WebAuthn allowed origins: %w", err)
+	}
+	if len(allowedOrigins) > 0 {
+		if requestedOrigin == "" {
+			return "", fmt.Errorf("determine WebAuthn origin from request")
+		}
+		if !containsOrigin(allowedOrigins, requestedOrigin) {
+			return "", fmt.Errorf(
+				"browser origin %q is not in configured WebAuthn allowed origins",
+				requestedOrigin,
+			)
+		}
+		return requestedOrigin, nil
+	}
+
+	configuredOrigin, err := normalizeOrigin(c.RPOrigin)
+	if err != nil {
+		return "", fmt.Errorf("normalize configured WebAuthn origin: %w", err)
+	}
+	if configuredOrigin != "" && requestedOrigin != "" && configuredOrigin != requestedOrigin {
+		return "", fmt.Errorf(
+			"configured WebAuthn origin %q does not match browser origin %q",
+			configuredOrigin,
+			requestedOrigin,
+		)
+	}
+	if configuredOrigin != "" {
+		return configuredOrigin, nil
+	}
+	return requestedOrigin, nil
 }
 
 func requestOrigin(r *http.Request) (string, error) {
@@ -116,6 +140,30 @@ func normalizeOrigin(raw string) (string, error) {
 	}
 
 	return fmt.Sprintf("%s://%s", strings.ToLower(parsed.Scheme), strings.ToLower(parsed.Host)), nil
+}
+
+func normalizeOrigins(rawOrigins []string) ([]string, error) {
+	origins := make([]string, 0, len(rawOrigins))
+	for _, raw := range rawOrigins {
+		origin, err := normalizeOrigin(raw)
+		if err != nil {
+			return nil, err
+		}
+		if origin == "" {
+			continue
+		}
+		origins = append(origins, origin)
+	}
+	return origins, nil
+}
+
+func containsOrigin(origins []string, target string) bool {
+	for _, origin := range origins {
+		if origin == target {
+			return true
+		}
+	}
+	return false
 }
 
 func validateRPIDAgainstHost(rpID string, host string) error {

@@ -39,6 +39,7 @@ For packed-host SaaS operations, see:
 | Bootstrap token for first principal registration | n/a | `OAR_BOOTSTRAP_TOKEN` | unset |
 | WebAuthn RP ID | n/a | `OAR_WEBAUTHN_RPID` | derived from browser origin host |
 | WebAuthn origin | n/a | `OAR_WEBAUTHN_ORIGIN` | derived from browser request origin |
+| WebAuthn allowed origins | n/a | `OAR_WEBAUTHN_ALLOWED_ORIGINS` | unset |
 | WebAuthn RP display name | n/a | `OAR_WEBAUTHN_RP_DISPLAY_NAME` | `OAR` |
 | Human auth mode | n/a | `OAR_HUMAN_AUTH_MODE` | `workspace_local` |
 | Control-plane heartbeat base URL | n/a | `OAR_CONTROL_PLANE_BASE_URL` | unset |
@@ -215,14 +216,17 @@ Example with explicit config:
 OAR_WORKSPACE_ROOT=/var/lib/oar/workspace \
 OAR_LISTEN_ADDR=0.0.0.0:8000 \
 OAR_WEBAUTHN_RPID=oar.example.com \
-OAR_WEBAUTHN_ORIGIN=https://oar.example.com \
+OAR_WEBAUTHN_ALLOWED_ORIGINS=https://oar.example.com,https://oar.tailnet.ts.net \
 ./scripts/run-prod
 ```
 
-If `OAR_WEBAUTHN_RPID` and `OAR_WEBAUTHN_ORIGIN` are left unset, `oar-core`
-derives them per request from the browser origin forwarded by the UI proxy.
-If you set either value explicitly, the browser must access the UI on that same
-hostname or WebAuthn ceremonies will be rejected.
+If `OAR_WEBAUTHN_RPID`, `OAR_WEBAUTHN_ORIGIN`, and
+`OAR_WEBAUTHN_ALLOWED_ORIGINS` are left unset, `oar-core` derives them per
+request from the browser origin forwarded by the UI proxy. Set
+`OAR_WEBAUTHN_ORIGIN` for a single fixed browser origin, or
+`OAR_WEBAUTHN_ALLOWED_ORIGINS` for a comma-separated allowlist. When
+`OAR_WEBAUTHN_ALLOWED_ORIGINS` is set, it takes precedence over the single
+origin and the browser origin must be one of the configured values.
 
 `./scripts/dev` defaults `OAR_ENABLE_DEV_ACTOR_MODE=1` and
 `OAR_ALLOW_UNAUTHENTICATED_WRITES=1` so local actor-selection, reads, and seed
@@ -397,8 +401,10 @@ When running behind a reverse proxy (nginx, Caddy, etc.):
   origin derivation works correctly.
 - Do not buffer SSE responses (`X-Accel-Buffering: no` is set by core).
 - Terminate TLS at the proxy; core listens plain HTTP.
-- Set `OAR_WEBAUTHN_RPID` and `OAR_WEBAUTHN_ORIGIN` explicitly when the
-  proxy hostname differs from the core listen address.
+- Set `OAR_WEBAUTHN_RPID` plus either `OAR_WEBAUTHN_ORIGIN` or
+  `OAR_WEBAUTHN_ALLOWED_ORIGINS` explicitly when the proxy hostname differs
+  from the core listen address or when multiple trusted browser origins share
+  one core instance.
 
 Core already enforces request-body limits, workspace quotas, and route-class
 throttles. Edge limits should be complementary, not a replacement. A minimal
@@ -478,7 +484,7 @@ docker run -d --restart unless-stopped \
   -e OAR_ENABLE_DEV_ACTOR_MODE=false \
   -e OAR_ALLOW_UNAUTHENTICATED_WRITES=false \
   -e OAR_WEBAUTHN_RPID=oar.example.com \
-  -e OAR_WEBAUTHN_ORIGIN=https://oar.example.com \
+  -e OAR_WEBAUTHN_ALLOWED_ORIGINS=https://oar.example.com,https://oar.tailnet.ts.net \
   oar-core:local
 ```
 
@@ -498,6 +504,7 @@ From the repo root:
   --instance team-alpha \
   --instance-root /srv/oar/team-alpha \
   --public-origin https://team-alpha.oar.example.com \
+  --allowed-origins https://team-alpha.oar.example.com,https://team-alpha.tailnet.ts.net \
   --listen-port 8001 \
   --web-ui-port 3001 \
   --generate-bootstrap-token
