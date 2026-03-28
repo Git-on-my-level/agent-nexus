@@ -4,7 +4,6 @@ on:
   push:
     tags:
       - "v*"
-      - "oar-cli-v*"
 
 permissions:
   contents: write
@@ -21,6 +20,15 @@ jobs:
         with:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum
+
+      - name: Verify release version
+        run: |
+          VERSION="$(./scripts/read-version.sh)"
+          if [[ "${GITHUB_REF_NAME}" != "${VERSION}" ]]; then
+            echo "release tag ${GITHUB_REF_NAME} does not match repo VERSION ${VERSION}" >&2
+            exit 1
+          fi
+          ./scripts/sync-version.sh --check
 
       - name: Build release artifacts
         run: ./scripts/build-cli-release-artifacts.sh "${GITHUB_REF_NAME}" dist

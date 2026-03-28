@@ -74,7 +74,8 @@ Validate the packaging output locally before you push a tag:
 
 ```bash
 make cli-check
-./scripts/build-cli-release-artifacts.sh v0.0.1
+VERSION="$(./scripts/read-version.sh)"
+./scripts/build-cli-release-artifacts.sh "$VERSION"
 ```
 
 This produces:
@@ -85,15 +86,18 @@ This produces:
 Cut a release by pushing an annotated tag:
 
 ```bash
-git tag -a v0.0.1 -m "Release v0.0.1"
-git push origin v0.0.1
+VERSION="$(./scripts/read-version.sh)"
+git tag -a "$VERSION" -m "Release $VERSION"
+git push origin "$VERSION"
 ```
+
+The workflow fails if the pushed tag does not match the committed [`VERSION`](../VERSION) file.
 
 Then watch the GitHub workflow and confirm the published release:
 
 ```bash
 gh run watch --workflow "Release CLI"
-gh release view v0.0.1
+gh release view "$(./scripts/read-version.sh)"
 ```
 
 ## Installing the CLI on agent hosts
@@ -107,7 +111,7 @@ curl -sSfL https://raw.githubusercontent.com/Git-on-my-level/organization-autoru
 Pin a specific version:
 
 ```bash
-curl -sSfL https://raw.githubusercontent.com/Git-on-my-level/organization-autorunner/main/scripts/install-oar.sh | VERSION=v0.0.1 sh
+curl -sSfL https://raw.githubusercontent.com/Git-on-my-level/organization-autorunner/main/scripts/install-oar.sh | VERSION="$(./scripts/read-version.sh)" sh
 ```
 
 Custom install directory:

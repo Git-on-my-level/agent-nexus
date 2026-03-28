@@ -124,6 +124,9 @@ jobs:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum
 
+      - name: Verify version metadata
+        run: ./scripts/sync-version.sh --check
+
       - name: Run CLI check
         working-directory: cli
         run: go test ./...
