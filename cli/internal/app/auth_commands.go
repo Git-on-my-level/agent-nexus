@@ -489,6 +489,7 @@ func (a *App) runAuthRegister(ctx context.Context, service *authcli.Service, arg
 		"Agent ID: " + registered.Profile.AgentID,
 		"Username: " + registered.Profile.Username,
 		"Profile path: " + cfg.ProfilePath,
+		authWakeRoutingHint(registered.Profile.Username),
 	}, "\n")
 	data := map[string]any{
 		"profile":      registered.Profile,
@@ -505,12 +506,19 @@ func (a *App) runAuthWhoAmI(ctx context.Context, service *authcli.Service) (*com
 		return nil, err
 	}
 	serverAgent, _ := result.Server["agent"].(map[string]any)
+	hintHandle := strings.TrimSpace(anyString(serverAgent["username"]))
+	if hintHandle == "" {
+		hintHandle = result.Profile.Username
+	}
 	text := strings.Join([]string{
 		"Local profile: " + result.Profile.Agent,
 		"Local username: " + result.Profile.Username,
 		"Local agent ID: " + result.Profile.AgentID,
+		"Local actor ID: " + result.Profile.ActorID,
 		"Server username: " + anyString(serverAgent["username"]),
 		"Server agent ID: " + anyString(serverAgent["agent_id"]),
+		"Server actor ID: " + anyString(serverAgent["actor_id"]),
+		authWakeRoutingHint(hintHandle),
 	}, "\n")
 	redacted := result.Profile
 	redacted.AccessToken = ""
@@ -521,6 +529,17 @@ func (a *App) runAuthWhoAmI(ctx context.Context, service *authcli.Service) (*com
 		"server":  result.Server,
 	}
 	return &commandResult{Text: text, Data: data}, nil
+}
+
+func authWakeRoutingHint(username string) string {
+	handle := strings.TrimSpace(username)
+	if handle == "" {
+		return "Wake registration help: oar meta doc wake-routing; oar help docs create"
+	}
+	return fmt.Sprintf(
+		"Wake registration help: oar meta doc wake-routing; oar help docs create (document id: agentreg.%s)",
+		handle,
+	)
 }
 
 func (a *App) runAuthUpdateUsername(ctx context.Context, service *authcli.Service, args []string) (*commandResult, error) {

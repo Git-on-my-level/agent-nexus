@@ -36,10 +36,10 @@ var (
 var runtimeHelpManualDocTopics = []runtimeHelpDocTopic{
 	{Path: "onboarding", Kind: "manual", Summary: "Offline quick-start mental model and first command flow."},
 	{Path: "agent-guide", Kind: "manual", Summary: "Prescriptive agent guide for choosing OAR primitives, operating safely, and automating the CLI well."},
-	{Path: "wake-routing", Kind: "manual", Summary: "How `@handle` wake routing works, what counts as wakeable, and how to inspect registrations."},
+	{Path: "wake-routing", Kind: "manual", Summary: "How `@handle` wake routing works, including self-registration, verification, and troubleshooting."},
 	{Path: "draft", Kind: "manual", Summary: "Local draft staging, listing, commit, and discard workflow."},
 	{Path: "provenance", Kind: "manual", Summary: "Deterministic provenance walk reference and examples."},
-	{Path: "auth whoami", Kind: "manual", Summary: "Validate the active profile and print resolved identity metadata."},
+	{Path: "auth whoami", Kind: "manual", Summary: "Validate the active profile, print resolved identity metadata, and point agents at wake-registration next steps."},
 	{Path: "auth list", Kind: "manual", Summary: "List local CLI profiles and the active profile."},
 	{Path: "auth update-username", Kind: "manual", Summary: "Rename the authenticated agent and sync the local profile."},
 	{Path: "auth rotate", Kind: "manual", Summary: "Rotate the active agent key and refresh stored credentials."},

@@ -6,10 +6,10 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 
 - `onboarding` (manual): Offline quick-start mental model and first command flow.
 - `agent-guide` (manual): Prescriptive agent guide for choosing OAR primitives, operating safely, and automating the CLI well.
-- `wake-routing` (manual): How `@handle` wake routing works, what counts as wakeable, and how to inspect registrations.
+- `wake-routing` (manual): How `@handle` wake routing works, including self-registration, verification, and troubleshooting.
 - `draft` (manual): Local draft staging, listing, commit, and discard workflow.
 - `provenance` (manual): Deterministic provenance walk reference and examples.
-- `auth whoami` (manual): Validate the active profile and print resolved identity metadata.
+- `auth whoami` (manual): Validate the active profile, print resolved identity metadata, and point agents at wake-registration next steps.
 - `auth list` (manual): List local CLI profiles and the active profile.
 - `auth update-username` (manual): Rename the authenticated agent and sync the local profile.
 - `auth rotate` (manual): Rotate the active agent key and refresh stored credentials.
@@ -250,7 +250,7 @@ When starting in a new environment:
 3. Register the first principal with `oar auth register --username <username> --bootstrap-token <token>` or later principals with `--invite-token <token>`.
 4. Confirm identity.
 5. Run a cheap read command.
-6. If this agent should be tag-addressable from thread messages, read `oar meta doc wake-routing`.
+6. If this agent should be tag-addressable from thread messages, read `oar meta doc wake-routing` and create or verify `agentreg.<handle>` for the current workspace.
 
 When stuck:
 
@@ -269,7 +269,7 @@ Maintenance rule
 
 ## `wake-routing`
 
-How `@handle` wake routing works, what counts as wakeable, and how to inspect registrations.
+How `@handle` wake routing works, including self-registration, verification, and troubleshooting.
 
 ```text
 Wake routing
@@ -304,12 +304,135 @@ How agents discover it
 - Use `oar auth principals list --json` to inspect known agent principals.
 - Use `oar docs get --document-id agentreg.<handle> --json` to inspect a specific registration document.
 
+Self-serve registration
+
+Preferred path when you are using `oar-agent-bridge`
+
+- During initial auth, register and write the wake registration in one step:
+
+  oar-agent-bridge auth register --config <agent.toml> --invite-token <token> --apply-registration
+
+- After auth already exists, upsert the registration document again with:
+
+  oar-agent-bridge registration apply --config <agent.toml>
+
+Generic OAR CLI path
+
+1. Confirm the identity you are registering:
+
+  oar auth whoami
+
+  Use the server-resolved username from that output as `<handle>` and the server actor id as `<actor-id>`.
+
+2. Resolve the durable workspace id you want to enable:
+
+  - If you are using `oar-agent-bridge`, read `oar.workspace_id` from your agent or router config file.
+  - The bundled example bridge configs use `ws_main`.
+  - Do not use a workspace slug or URL path segment here.
+
+3. Create a file such as `wake-registration.json` with the exact registration payload:
+
+  {
+    "document": {
+      "document_id": "agentreg.<handle>",
+      "title": "Agent registration @<handle>",
+      "status": "active",
+      "labels": [
+        "agent-registration",
+        "handle:<handle>",
+        "actor:<actor-id>"
+      ]
+    },
+    "content_type": "structured",
+    "content": {
+      "version": "agent-registration/v1",
+      "handle": "<handle>",
+      "actor_id": "<actor-id>",
+      "delivery_mode": "pull",
+      "driver_kind": "custom",
+      "resume_policy": "resume_or_create",
+      "status": "active",
+      "adapter_kind": "custom",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "workspace_bindings": [
+        {
+          "workspace_id": "<workspace-id>",
+          "enabled": true
+        }
+      ]
+    }
+  }
+
+4. Create the document:
+
+  oar docs create --from-file wake-registration.json --json
+
+Registration schema
+
+- Durable document id must be `agentreg.<handle>`.
+- Fields required for routing correctness are:
+  - `content.handle` matching the principal username
+  - `content.actor_id` matching the principal actor id
+  - at least one enabled `content.workspace_bindings[].workspace_id` matching the router workspace id
+- Fields the bridge writes for compatibility and clarity are:
+  - `content.version` = `agent-registration/v1`
+  - `content.delivery_mode` = `pull`
+  - `content.driver_kind`
+  - `content.resume_policy` = `resume_or_create`
+  - `content.status` = `active`
+  - `content.adapter_kind`
+  - `content.updated_at`
+- `workspace_bindings[].enabled` defaults to true when omitted by bridge code, but setting it explicitly is clearer.
+- The workspace binding value must be the durable workspace id used by the router, typically `oar.workspace_id` in bridge config, not a URL slug or UI path segment.
+
+Verification flow
+
+1. Confirm your local and server identity:
+
+  oar auth whoami
+
+2. Confirm a principal exists for the target handle:
+
+  oar auth principals list --json
+
+3. Read the registration document:
+
+  oar docs get --document-id agentreg.<handle> --json
+
+4. Verify all of the following:
+  - principal kind is `agent`
+  - principal username is exactly `<handle>`
+  - principal actor id matches `content.actor_id`
+  - registration `content.status` is `active`
+  - `workspace_bindings` contains the current workspace id with `enabled: true`
+
+5. If you are using `oar-agent-bridge`, confirm the router and target bridge are running:
+
+  oar-agent-bridge router run --config <router.toml>
+  oar-agent-bridge bridge run --config <agent.toml>
+
+Concrete wake example
+
+1. Ensure the router and target bridge are running, then post a thread message containing `@<handle>`, for example:
+
+  @<handle> summarize the latest onboarding blockers.
+
+2. Expected durable trace:
+  - existing `message_posted`
+  - new `agent_wakeup_requested`
+  - new `agent_wakeup_claimed`
+  - new bridge reply `message_posted`
+  - new `agent_wakeup_completed`
+
+3. If the request is durable but never gets claimed, the registration may be valid while the router or bridge runtime is offline.
+
 Common failure modes
 
 - unknown handle: no matching agent principal username exists
 - missing registration: `agentreg.<handle>` does not exist
 - registration actor mismatch: the registration doc points at a different actor
 - workspace not bound: registration exists but is not enabled for this workspace
+- wrong workspace id: the registration uses a workspace slug or another id that does not match the router configuration
 - bridge offline: the wake request is durable in OAR, but no local bridge is consuming it
 
 Operational note
@@ -320,6 +443,7 @@ Next steps
 
   oar meta doc agent-guide
   oar auth whoami
+  oar help docs create
   oar auth principals list --json
 ```
 
@@ -409,12 +533,12 @@ Examples:
 
 ## `auth whoami`
 
-Validate the active profile and print resolved identity metadata.
+Validate the active profile, print resolved identity metadata, and point agents at wake-registration next steps.
 
 ```text
 Local Help: auth whoami
 
-Validate the active profile against the server and print resolved identity metadata.
+Validate the active profile against the server, print resolved identity metadata, and point to wake-registration next steps.
 
 Usage:
   oar auth whoami
@@ -422,6 +546,9 @@ Usage:
 Examples:
   oar auth whoami
   oar --json auth whoami
+
+Next steps:
+  If this agent should be wakeable by `@handle`, read `oar meta doc wake-routing`.
 
 Global flags:
   Global flags can appear before or after the command path.

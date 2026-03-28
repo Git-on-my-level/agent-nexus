@@ -988,7 +988,7 @@ func authLocalHelpText(topic string) (string, bool) {
 	}
 	topics := map[string]authTopic{
 		"auth whoami": {
-			summary:  "Validate the active profile against the server and print resolved identity metadata.",
+			summary:  "Validate the active profile against the server, print resolved identity metadata, and point to wake-registration next steps.",
 			usage:    "oar auth whoami",
 			examples: []string{"oar auth whoami", "oar --json auth whoami"},
 		},
@@ -1032,6 +1032,10 @@ func authLocalHelpText(topic string) (string, bool) {
 		for _, example := range entry.examples {
 			b.WriteString("  " + strings.TrimSpace(example) + "\n")
 		}
+	}
+	if strings.Join(strings.Fields(strings.TrimSpace(topic)), " ") == "auth whoami" {
+		b.WriteString("\nNext steps:\n")
+		b.WriteString("  If this agent should be wakeable by `@handle`, read `oar meta doc wake-routing`.\n")
 	}
 	b.WriteString("\n")
 	b.WriteString(formatGlobalFlagUsage(topic))

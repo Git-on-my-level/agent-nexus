@@ -57,6 +57,9 @@ func TestRunMetaDocPrintsLocalAuthLifecycleTopicMarkdown(t *testing.T) {
 	if !strings.Contains(output, "Local Help: auth whoami") {
 		t.Fatalf("expected embedded auth whoami help text output=%s", output)
 	}
+	if !strings.Contains(output, "oar meta doc wake-routing") {
+		t.Fatalf("expected wake-routing next step output=%s", output)
+	}
 }
 
 func TestRunMetaDocPrintsAgentGuideMarkdown(t *testing.T) {
@@ -86,6 +89,21 @@ func TestRunMetaDocPrintsWakeRoutingMarkdown(t *testing.T) {
 	}
 	if !strings.Contains(output, "`agentreg.<handle>`") {
 		t.Fatalf("expected registration doc guidance output=%s", output)
+	}
+	if !strings.Contains(output, "oar docs create --from-file wake-registration.json --json") {
+		t.Fatalf("expected docs create registration example output=%s", output)
+	}
+	if !strings.Contains(output, "agent-registration/v1") {
+		t.Fatalf("expected registration schema version output=%s", output)
+	}
+	if !strings.Contains(output, "oar-agent-bridge registration apply --config <agent.toml>") {
+		t.Fatalf("expected bridge registration shortcut output=%s", output)
+	}
+	if !strings.Contains(output, "oar.workspace_id") || !strings.Contains(output, "ws_main") {
+		t.Fatalf("expected workspace-id discovery guidance output=%s", output)
+	}
+	if !strings.Contains(output, "server actor id as `<actor-id>`") {
+		t.Fatalf("expected actor-id sourcing guidance output=%s", output)
 	}
 }
 

@@ -158,6 +158,78 @@ func TestAuthWhoAmIAutoRefreshesExpiredAccessToken(t *testing.T) {
 	}
 }
 
+func TestAuthTextOutputIncludesWakeRoutingNextSteps(t *testing.T) {
+	t.Parallel()
+
+	core := newFakeAuthCore(t)
+	server := httptest.NewServer(http.HandlerFunc(core.handle))
+	defer server.Close()
+
+	home := t.TempDir()
+	env := map[string]string{}
+
+	registerOut := runCLIForTest(t, home, env, nil, []string{
+		"--base-url", server.URL,
+		"--agent", "agent-text",
+		"auth", "register",
+		"--username", "agent.text",
+	})
+	if !strings.Contains(registerOut, "Wake registration help: oar meta doc wake-routing; oar help docs create (document id: agentreg.agent.text)") {
+		t.Fatalf("expected wake registration hint in register output=%s", registerOut)
+	}
+
+	whoamiOut := runCLIForTest(t, home, env, nil, []string{
+		"--base-url", server.URL,
+		"--agent", "agent-text",
+		"auth", "whoami",
+	})
+	if !strings.Contains(whoamiOut, "Wake registration help: oar meta doc wake-routing; oar help docs create (document id: agentreg.agent.text)") {
+		t.Fatalf("expected wake registration hint in whoami output=%s", whoamiOut)
+	}
+	if !strings.Contains(whoamiOut, "Server actor ID: agent-123") {
+		t.Fatalf("expected server actor id in whoami output=%s", whoamiOut)
+	}
+}
+
+func TestAuthWhoAmIHintUsesServerResolvedUsername(t *testing.T) {
+	t.Parallel()
+
+	core := newFakeAuthCore(t)
+	server := httptest.NewServer(http.HandlerFunc(core.handle))
+	defer server.Close()
+
+	home := t.TempDir()
+	env := map[string]string{}
+
+	_ = runCLIForTest(t, home, env, nil, []string{
+		"--json", "--base-url", server.URL,
+		"--agent", "agent-renamed",
+		"auth", "register",
+		"--username", "server.name",
+	})
+
+	profilePath := filepath.Join(home, ".config", "oar", "profiles", "agent-renamed.json")
+	storedProfile, ok, err := profile.Load(profilePath)
+	if err != nil || !ok {
+		t.Fatalf("load profile after register: ok=%t err=%v", ok, err)
+	}
+	storedProfile.Username = "local-stale-name"
+	jsonDisabled := false
+	storedProfile.JSON = &jsonDisabled
+	if err := profile.Save(profilePath, storedProfile); err != nil {
+		t.Fatalf("save stale profile username: %v", err)
+	}
+
+	whoamiOut := runCLIForTest(t, home, env, nil, []string{
+		"--base-url", server.URL,
+		"--agent", "agent-renamed",
+		"auth", "whoami",
+	})
+	if !strings.Contains(whoamiOut, "Wake registration help: oar meta doc wake-routing; oar help docs create (document id: agentreg.server.name)") {
+		t.Fatalf("expected server-resolved wake registration hint output=%s", whoamiOut)
+	}
+}
+
 func TestAuthRegisterPersistsProfileDefaults(t *testing.T) {
 	t.Parallel()
 
