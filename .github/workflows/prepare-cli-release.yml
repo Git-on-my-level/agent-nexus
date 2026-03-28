@@ -36,9 +36,11 @@ jobs:
           branch="release/prepare-${{ inputs.version }}"
           echo "name=${branch}" >> "$GITHUB_OUTPUT"
           if git ls-remote --exit-code --heads origin "${branch}" >/dev/null 2>&1; then
+            echo "remote_exists=true" >> "$GITHUB_OUTPUT"
             git fetch origin "${branch}:${branch}"
             git switch "${branch}"
           else
+            echo "remote_exists=false" >> "$GITHUB_OUTPUT"
             git switch -c "${branch}"
           fi
 
@@ -62,7 +64,7 @@ jobs:
         run: git push -u origin "${{ steps.branch.outputs.name }}"
 
       - name: Open draft PR
-        if: steps.commit.outputs.changed == 'true'
+        if: steps.commit.outputs.changed == 'true' || steps.branch.outputs.remote_exists == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -80,9 +82,40 @@ jobs:
           - \`./scripts/set-version.sh ${{ inputs.version }}\`
           EOF
 
-          existing_pr="$(gh pr list --head "${{ steps.branch.outputs.name }}" --base "${{ github.ref_name }}" --state open --json url --jq '.[0].url')"
+          existing_pr="$(
+            gh pr list \
+              --head "${{ steps.branch.outputs.name }}" \
+              --base "${{ github.ref_name }}" \
+              --state open \
+              --limit 1 \
+              --json url \
+              --jq 'if length == 0 then "" else .[0].url end'
+          )"
           if [[ -n "${existing_pr}" ]]; then
             echo "Open PR already exists: ${existing_pr}"
+            exit 0
+          fi
+
+          closed_pr_number="$(
+            gh pr list \
+              --head "${{ steps.branch.outputs.name }}" \
+              --base "${{ github.ref_name }}" \
+              --state closed \
+              --limit 1 \
+              --json number \
+              --jq 'if length == 0 then "" else .[0].number end'
+          )"
+          if [[ -n "${closed_pr_number}" ]]; then
+            gh pr reopen "${closed_pr_number}"
+            gh pr edit "${closed_pr_number}" \
+              --title "Prepare CLI release ${{ inputs.version }}" \
+              --body-file "${body_file}"
+            if [[ "$(
+              gh pr view "${closed_pr_number}" --json isDraft --jq '.isDraft'
+            )" != "true" ]]; then
+              gh pr ready "${closed_pr_number}" --undo
+            fi
+            echo "Reopened draft PR #${closed_pr_number}"
             exit 0
           fi
 

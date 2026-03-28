@@ -64,6 +64,8 @@ make serve
 make e2e-smoke
 ```
 
+`make setup` also installs the pinned local `actionlint` binary used by repo workflow checks into `.bin/`.
+
 Regenerate contract artifacts from the canonical OpenAPI contracts:
 
 ```bash
@@ -106,7 +108,8 @@ See `runbooks/release.md` for version-pinning and custom install directory optio
 
 ## Useful Targets
 
-- `make check`: run checks for both projects
+- `make check`: run repo, core, cli, and web-ui checks
+- `make workflow-check`: lint GitHub Actions workflows with the pinned repo-local `actionlint`
 - `make contract-check`: verify generated contract artifacts are up to date
 - `make cli-check`: run CLI tests
 - `make hosted-smoke`: run hosted-v1 production smoke suite (auth gate, onboarding, workspace access, staleness)

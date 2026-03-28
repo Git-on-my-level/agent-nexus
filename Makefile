@@ -9,6 +9,7 @@ CORE_PORT ?= 8000
 CONTROL_PLANE_PORT ?= 8100
 WEB_UI_PORT ?= 5173
 CORE_BASE_URL ?= http://$(CORE_HOST):$(CORE_PORT)
+ACTIONLINT_BIN := $(CURDIR)/.bin/actionlint
 # Local SQLite + artifacts for oar-core (same default as core/Makefile).
 CORE_WORKSPACE_ROOT ?= $(CURDIR)/$(CORE_DIR)/.oar-workspace
 # When 1 (default), `make serve` removes CORE_WORKSPACE_ROOT before starting core if SEED_CORE=1,
@@ -19,23 +20,26 @@ FORCE_SEED ?= 0
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup check serve serve-control-plane lint test format contract-gen contract-check version-sync version-check e2e-smoke hosted-smoke hosted-ops-test hosted-ops-smoke saas-smoke saas-e2e saas-load-smoke packed-host-smoke cli-check cli-test cli-build cli-integration-test core-% web-ui-%
+.PHONY: help setup check serve serve-control-plane lint test format contract-gen contract-check workflow-check version-sync version-check e2e-smoke hosted-smoke hosted-ops-test hosted-ops-smoke saas-smoke saas-e2e saas-load-smoke packed-host-smoke cli-check cli-test cli-build cli-integration-test core-% web-ui-%
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z0-9_.-]+:.*##/ {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-setup: ## Install dependencies for web-ui, core, and cli
+setup: ## Install repo tooling plus dependencies for web-ui, core, and cli
+	./scripts/install-actionlint.sh
 	pnpm install
 	cd $(CORE_DIR) && go mod download
 	cd $(CLI_DIR) && go mod download
 
-check: ## Run checks in both core and web-ui
+check: ## Run repo, core, cli, and web-ui checks
 	$(MAKE) contract-check
+	$(MAKE) workflow-check
 	$(MAKE) -C $(CORE_DIR) check
 	$(MAKE) cli-check
 	$(MAKE) -C $(WEB_UI_DIR) check
 
-lint: ## Run lint checks in both core and web-ui
+lint: ## Run lint checks for repo, core, and web-ui
+	$(MAKE) workflow-check
 	$(MAKE) -C $(CORE_DIR) lint
 	$(MAKE) -C $(WEB_UI_DIR) lint
 
@@ -53,6 +57,10 @@ contract-gen: ## Regenerate OpenAPI-derived contract artifacts
 
 contract-check: ## Verify generated contract artifacts are committed
 	./scripts/contract-check
+
+workflow-check: ## Lint GitHub Actions workflows
+	./scripts/install-actionlint.sh
+	$(ACTIONLINT_BIN)
 
 version-sync: ## Regenerate version-derived source files
 	./scripts/sync-version.sh

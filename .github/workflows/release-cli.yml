@@ -39,7 +39,28 @@ jobs:
           fi
 
           if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            gh release upload "${GITHUB_REF_NAME}" "${assets[@]}" --clobber
+            existing_assets="$(
+              gh release view "${GITHUB_REF_NAME}" \
+                --json assets \
+                --jq '.assets[].name'
+            )"
+
+            upload_assets=()
+            for asset in "${assets[@]}"; do
+              asset_name="$(basename "${asset}")"
+              if grep -Fxq "${asset_name}" <<< "${existing_assets}"; then
+                echo "Release asset already exists, leaving in place: ${asset_name}"
+                continue
+              fi
+              upload_assets+=("${asset}")
+            done
+
+            if [[ ${#upload_assets[@]} -eq 0 ]]; then
+              echo "All release assets already exist for ${GITHUB_REF_NAME}"
+              exit 0
+            fi
+
+            gh release upload "${GITHUB_REF_NAME}" "${upload_assets[@]}"
           else
             gh release create "${GITHUB_REF_NAME}" "${assets[@]}" --generate-notes --verify-tag
           fi
