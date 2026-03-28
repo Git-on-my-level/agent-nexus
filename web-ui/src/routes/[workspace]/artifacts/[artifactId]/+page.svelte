@@ -87,10 +87,6 @@
   let hasTextContent = $derived(
     typeof textContent === "string" && textContent.length > 0,
   );
-  let isPlainText = $derived(
-    artifactContentType === "text/plain" ||
-      artifactContentType.startsWith("text/plain;"),
-  );
   let artifactRefHints = $derived(buildArtifactRefHints());
   let reviewEvidenceSuggestions = $derived(
     buildRefSuggestions([
@@ -498,13 +494,6 @@
     >
       Content unavailable for this artifact.
     </div>
-  {:else if artifact.kind === "doc" && hasTextContent}
-    <div
-      class="mt-3 rounded-md bg-indigo-500/10 px-3 py-2 text-[12px] text-indigo-400"
-    >
-      Document artifacts render in readable mode below. Raw content remains
-      available in the debug panels.
-    </div>
   {/if}
 
   {#if !contentLoadError && !isKnownPacketArtifactKind && artifact.kind !== "doc" && !hasTextContent}
@@ -900,15 +889,8 @@
           >{artifactContentType}</span
         >
       </div>
-      {#if isPlainText}
-        <pre
-          class="max-h-[30rem] overflow-auto whitespace-pre-wrap break-words px-4 py-3 font-mono text-[12px] leading-relaxed text-[var(--ui-text)]">{textContent}</pre>
-      {:else}
-        <MarkdownRenderer
-          source={textContent}
-          class="max-h-[30rem] overflow-auto px-4 py-3 text-[13px] text-[var(--ui-text)]"
-        />
-      {/if}
+      <pre
+        class="max-h-[30rem] overflow-auto whitespace-pre-wrap break-words px-4 py-3 font-mono text-[12px] leading-relaxed text-[var(--ui-text)]">{textContent}</pre>
     </div>
   {/if}
 

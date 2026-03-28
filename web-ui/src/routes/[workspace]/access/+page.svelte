@@ -47,6 +47,7 @@
 
   let revokingInviteId = $state("");
   let revokeError = $state("");
+  let showResolvedInvites = $state(false);
 
   let principalRevokeTarget = $state(null);
   let principalRevokeConfirming = $state(false);
@@ -66,6 +67,16 @@
 
   let canManageAccess = $derived(Boolean($authenticatedAgent));
   let authenticatedAgentId = $derived($authenticatedAgent?.agent_id ?? "");
+
+  let pendingInvites = $derived(
+    invites.filter((i) => !i.revoked_at && !i.consumed_at),
+  );
+  let resolvedInvites = $derived(
+    invites.filter((i) => i.revoked_at || i.consumed_at),
+  );
+  let visibleInvites = $derived(showResolvedInvites ? invites : pendingInvites);
+
+  let wakePopoverTarget = $state(null);
 
   $effect(() => {
     if (!canManageAccess) return;
@@ -537,6 +548,15 @@
       principal.agent_id === authenticatedAgentId
     );
   }
+
+  function toggleWakePopover(agentId) {
+    wakePopoverTarget = wakePopoverTarget === agentId ? null : agentId;
+  }
+
+  function truncateId(id, maxLen = 20) {
+    if (!id || id.length <= maxLen) return id ?? "";
+    return id.slice(0, maxLen) + "\u2026";
+  }
 </script>
 
 <svelte:head>
@@ -780,29 +800,51 @@
     </section>
 
     <section>
-      <h2 class="mb-2 text-[13px] font-semibold text-[var(--ui-text)]">
-        Invites
-      </h2>
+      <div class="mb-2 flex items-baseline justify-between gap-2">
+        <h2 class="text-[13px] font-semibold text-[var(--ui-text)]">
+          Invites
+          {#if invitesState.status === SECTION_READY && pendingInvites.length > 0}
+            <span class="ml-1 font-normal text-[var(--ui-text-muted)]"
+              >{pendingInvites.length} pending</span
+            >
+          {/if}
+        </h2>
+        {#if resolvedInvites.length > 0}
+          <button
+            class="cursor-pointer text-[11px] font-medium text-[var(--ui-accent)] hover:text-indigo-300"
+            onclick={() => (showResolvedInvites = !showResolvedInvites)}
+            type="button"
+          >
+            {showResolvedInvites
+              ? "Hide resolved"
+              : `Show ${resolvedInvites.length} resolved`}
+          </button>
+        {/if}
+      </div>
       {#if invitesState.status === SECTION_ERROR}
         <p class="rounded-md bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
           {invitesState.error}
         </p>
       {:else if invitesState.status === SECTION_READY}
-        {#if invites.length === 0}
+        {#if visibleInvites.length === 0}
           <p
             class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-4 text-[13px] text-[var(--ui-text-muted)]"
           >
-            No invites yet. Create one above to onboard new principals.
+            {invites.length === 0
+              ? "No invites yet. Create one above to onboard new principals."
+              : "No pending invites."}
           </p>
         {:else}
           <div
             class="space-y-px rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] overflow-hidden"
           >
-            {#each invites as invite, i}
+            {#each visibleInvites as invite, i}
               {@const badge = inviteBadge(invite)}
               <div
-                class="flex items-center gap-3 px-3 py-2.5 {i > 0
+                class="flex items-center gap-3 px-3 py-2 {i > 0
                   ? 'border-t border-[var(--ui-border)]'
+                  : ''} {invite.revoked_at || invite.consumed_at
+                  ? 'opacity-60'
                   : ''}"
               >
                 <span
@@ -812,7 +854,7 @@
                 </span>
                 <div class="min-w-0 flex-1">
                   <p
-                    class="truncate text-[13px] font-medium text-[var(--ui-text)]"
+                    class="truncate font-mono text-[12px] text-[var(--ui-text)]"
                   >
                     {invite.id}
                   </p>
@@ -820,12 +862,14 @@
                     {invite.kind}
                   </p>
                 </div>
-                <span class="text-[11px] text-[var(--ui-text-muted)]">
+                <span
+                  class="hidden text-[11px] text-[var(--ui-text-muted)] sm:inline"
+                >
                   {formatTimestamp(invite.created_at)}
                 </span>
                 {#if !invite.revoked_at && !invite.consumed_at}
                   <button
-                    class="shrink-0 cursor-pointer rounded px-2 py-1.5 text-[11px] font-medium text-red-400 hover:bg-red-400/10 disabled:opacity-50"
+                    class="shrink-0 cursor-pointer rounded px-2 py-1 text-[11px] font-medium text-red-400 hover:bg-red-400/10 disabled:opacity-50"
                     disabled={revokingInviteId === invite.id}
                     onclick={() => handleRevokeInvite(invite.id)}
                     type="button"
@@ -841,13 +885,25 @@
     </section>
 
     <section>
-      <h2 class="mb-2 text-[13px] font-semibold text-[var(--ui-text)]">
+      <h2 class="mb-1 text-[13px] font-semibold text-[var(--ui-text)]">
         Principals
+        {#if principalsState.status === SECTION_READY && principals.length > 0}
+          <span class="ml-1 font-normal text-[var(--ui-text-muted)]"
+            >{principals.length}</span
+          >
+        {/if}
       </h2>
-      <p class="mb-2 text-[12px] text-[var(--ui-text-muted)]">
-        Agent principals marked Wakeable can be tagged from thread messages with
-        <code>@handle</code>. Pending or stale entries are registered but their
-        bridge has not checked in recently enough.
+      <p class="mb-2 text-[11px] text-[var(--ui-text-muted)]">
+        Agent principals marked <span
+          class="rounded bg-emerald-500/10 px-1 py-px text-[10px] font-medium text-emerald-400"
+          >Wakeable</span
+        >
+        can be tagged from thread messages with
+        <code class="rounded bg-[var(--ui-border)] px-1 py-px text-[10px]"
+          >@handle</code
+        >.
+        Pending or stale entries are registered but their bridge has not checked
+        in recently enough.
       </p>
       {#if principalsState.status === SECTION_ERROR}
         <p class="rounded-md bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
@@ -866,72 +922,128 @@
           >
             {#each principals as principal, i}
               {@const badge = principalBadge(principal)}
+              {@const isCurrent = isCurrentPrincipal(principal)}
               <div
-                class="flex items-center gap-3 px-3 py-2.5 {i > 0
+                class="group relative px-3 py-2 transition-colors hover:bg-[var(--ui-border-subtle)] {i >
+                0
                   ? 'border-t border-[var(--ui-border)]'
-                  : ''}"
+                  : ''} {principal.revoked ? 'opacity-50' : ''}"
               >
-                <span
-                  class="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium {badge.class}"
-                >
-                  {badge.label}
-                </span>
-                <div class="min-w-0 flex-1">
-                  <p
-                    class="truncate text-[13px] font-medium text-[var(--ui-text)]"
+                <div class="flex items-center gap-2.5 sm:gap-3">
+                  <span
+                    class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium {badge.class}"
                   >
-                    {principal.username || principal.agent_id}
-                  </p>
-                  <p class="text-[11px] text-[var(--ui-text-muted)]">
-                    {principalLabel(principal)}
-                  </p>
-                  {#if principal.wakeRouting?.applicable}
-                    <div class="mt-1 flex flex-wrap items-center gap-2">
+                    {badge.label}
+                  </span>
+                  <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-1.5">
                       <span
-                        class="rounded px-1.5 py-0.5 text-[10px] font-medium {principal
-                          .wakeRouting.badgeClass}"
+                        class="truncate text-[13px] font-medium text-[var(--ui-text)]"
                       >
-                        {principal.wakeRouting.badgeLabel}
+                        {principal.username ||
+                          truncateId(principal.agent_id, 24)}
                       </span>
-                      <span class="text-[11px] text-[var(--ui-text-muted)]">
-                        {principal.wakeRouting.summary}
+                      <span
+                        class="hidden shrink-0 text-[11px] text-[var(--ui-text-subtle)] sm:inline"
+                      >
+                        {principalLabel(principal)}
                       </span>
+                      {#if principal.wakeRouting?.applicable}
+                        <button
+                          class="relative shrink-0 cursor-pointer rounded px-1.5 py-0.5 text-[10px] font-medium {principal
+                            .wakeRouting
+                            .badgeClass} hover:brightness-125 focus:outline-none"
+                          onclick={() => toggleWakePopover(principal.agent_id)}
+                          type="button"
+                          title={principal.wakeRouting.summary}
+                        >
+                          {principal.wakeRouting.badgeLabel}
+                        </button>
+                        {#if wakePopoverTarget === principal.agent_id}
+                          <div
+                            class="absolute left-12 top-full z-30 mt-1 w-72 rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] px-3 py-2 shadow-lg sm:left-24"
+                            role="tooltip"
+                          >
+                            <div class="flex items-start justify-between gap-2">
+                              <div>
+                                <p
+                                  class="text-[11px] font-medium {principal
+                                    .wakeRouting.badgeClass}"
+                                >
+                                  {principal.wakeRouting.badgeLabel}
+                                </p>
+                                <p
+                                  class="mt-0.5 text-[11px] text-[var(--ui-text-muted)]"
+                                >
+                                  {principal.wakeRouting.summary}
+                                </p>
+                              </div>
+                              <button
+                                class="shrink-0 cursor-pointer text-[var(--ui-text-subtle)] hover:text-[var(--ui-text)]"
+                                onclick={() => (wakePopoverTarget = null)}
+                                type="button"
+                                aria-label="Close"
+                              >
+                                <svg
+                                  class="h-3 w-3"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                  stroke-width="2"
+                                >
+                                  <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    d="M6 18L18 6M6 6l12 12"
+                                  />
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
+                        {/if}
+                      {/if}
                     </div>
-                  {/if}
-                  <p
-                    class="mt-0.5 font-mono text-[10px] text-[var(--ui-text-muted)]"
+                    <p
+                      class="truncate font-mono text-[10px] text-[var(--ui-text-subtle)] sm:hidden"
+                    >
+                      {truncateId(principal.agent_id, 28)}
+                    </p>
+                  </div>
+                  <div
+                    class="hidden shrink-0 text-right text-[11px] leading-4 text-[var(--ui-text-muted)] sm:block"
                   >
-                    {principal.agent_id}
-                  </p>
+                    <p title={formatAbsoluteDateTime(principal.created_at)}>
+                      Joined {formatTimestamp(principal.created_at) || "\u2014"}
+                    </p>
+                    <p title={formatAbsoluteDateTime(principal.last_seen_at)}>
+                      Last seen {formatTimestamp(principal.last_seen_at) ||
+                        "\u2014"}
+                    </p>
+                  </div>
+                  {#if !principal.revoked && !isCurrent}
+                    {@const lastHuman = isLastActiveHumanPrincipal(principal)}
+                    <button
+                      class="shrink-0 cursor-pointer rounded px-2 py-1 text-[11px] font-medium text-red-400 hover:bg-red-400/10 disabled:opacity-50"
+                      disabled={principalRevokeConfirming ||
+                        principalRevokeForcing}
+                      onclick={() => startPrincipalRevoke(principal)}
+                      type="button"
+                    >
+                      {lastHuman ? "Break glass" : "Revoke"}
+                    </button>
+                  {:else if !principal.revoked}
+                    <span
+                      class="shrink-0 rounded bg-[var(--ui-border-subtle)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--ui-text-muted)]"
+                    >
+                      You
+                    </span>
+                  {/if}
                 </div>
                 <div
-                  class="shrink-0 min-w-[8.5rem] text-right text-[11px] leading-4 text-[var(--ui-text-muted)]"
+                  class="mt-0.5 hidden items-center gap-2 pl-[calc(theme(spacing.6)+0.625rem)] text-[10px] text-[var(--ui-text-subtle)] sm:flex"
                 >
-                  <p title={formatAbsoluteDateTime(principal.created_at)}>
-                    Joined {formatTimestamp(principal.created_at) || "—"}
-                  </p>
-                  <p title={formatAbsoluteDateTime(principal.last_seen_at)}>
-                    Last seen {formatTimestamp(principal.last_seen_at) || "—"}
-                  </p>
+                  <span class="truncate font-mono">{principal.agent_id}</span>
                 </div>
-                {#if !principal.revoked && !isCurrentPrincipal(principal)}
-                  {@const lastHuman = isLastActiveHumanPrincipal(principal)}
-                  <button
-                    class="shrink-0 cursor-pointer rounded px-2 py-1.5 text-[11px] font-medium text-red-400 hover:bg-red-400/10 disabled:opacity-50"
-                    disabled={principalRevokeConfirming ||
-                      principalRevokeForcing}
-                    onclick={() => startPrincipalRevoke(principal)}
-                    type="button"
-                  >
-                    {lastHuman ? "Break glass" : "Revoke"}
-                  </button>
-                {:else if !principal.revoked}
-                  <span
-                    class="shrink-0 text-[11px] font-medium text-[var(--ui-text-muted)]"
-                  >
-                    Current session
-                  </span>
-                {/if}
               </div>
             {/each}
           </div>
