@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("thread detail loads snapshot/timeline and posts reply message", async ({
+test("thread detail separates messages from timeline and nests replies", async ({
   page,
 }) => {
   const actorId = "actor-thread-detail-e2e";
@@ -215,7 +215,7 @@ test("thread detail loads snapshot/timeline and posts reply message", async ({
     "href",
     /\/docs\/doc-onboarding-runbook\?revision=rev-onboarding-runbook-2$/,
   );
-  await page.getByRole("button", { name: "Timeline" }).click();
+  await page.getByRole("tab", { name: "Messages" }).click();
 
   await expect(
     page.getByRole("heading", { name: "Customer Onboarding Workflow" }),
@@ -224,21 +224,30 @@ test("thread detail loads snapshot/timeline and posts reply message", async ({
     page.getByText("Initial timeline message", { exact: true }),
   ).toBeVisible();
   await expect(
-    page.locator("#event-evt-1001").getByRole("button", { name: "Reply" }),
+    page.locator("#message-evt-1001").getByRole("button", { name: "Reply" }),
   ).toBeVisible();
   await page
-    .locator("#event-evt-1001")
+    .locator("#message-evt-1001")
     .getByRole("button", { name: "Reply" })
     .click();
   await page.locator("#message-text").fill("Reply message from e2e");
-  await page.getByRole("button", { name: "Post" }).click();
+  await page.getByRole("button", { name: "Post message" }).click();
 
   await expect.poll(() => postedEvents).toBe(1);
 
   await expect(
+    page
+      .locator("#message-evt-1001")
+      .locator("#message-event-new-1")
+      .getByText("Reply message from e2e", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Timeline" })).toBeVisible();
+
+  await page.getByRole("tab", { name: "Timeline" }).click();
+  await expect(page.locator("#message-text")).toHaveCount(0);
+  await expect(
     page.getByText("Message: Reply message from e2e", { exact: true }),
   ).toBeVisible();
-  await expect(page.getByText("Reply target: evt-1001")).toHaveCount(0);
 });
 
 test("thread detail handles snapshot update conflict and retries after reload", async ({
@@ -657,12 +666,12 @@ test("thread detail updates workspace panels from another actor via event stream
     page.getByText("Remote Coordination Checklist", { exact: true }),
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "Work" }).click();
+  await page.getByRole("tab", { name: "Work" }).click();
   await expect(
     page.getByRole("combobox", { name: "Work order" }),
   ).toContainText("Remote follow-up work order");
 
-  await page.getByRole("button", { name: "Timeline" }).click();
+  await page.getByRole("tab", { name: "Timeline" }).click();
   await expect(
     page.getByText("Remote actor updated coordination context", {
       exact: true,

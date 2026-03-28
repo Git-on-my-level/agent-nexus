@@ -10,6 +10,7 @@
   import ThreadBoardsPanel from "$lib/components/thread-detail/ThreadBoardsPanel.svelte";
   import ThreadDocumentsPanel from "$lib/components/thread-detail/ThreadDocumentsPanel.svelte";
   import ThreadCommitmentsPanel from "$lib/components/thread-detail/ThreadCommitmentsPanel.svelte";
+  import ThreadMessagesTab from "$lib/components/thread-detail/ThreadMessagesTab.svelte";
   import ThreadWorkTab from "$lib/components/thread-detail/ThreadWorkTab.svelte";
   import ThreadTimelineTab from "$lib/components/thread-detail/ThreadTimelineTab.svelte";
 
@@ -185,7 +186,7 @@
   });
 
   $effect(() => {
-    if (activeTab === "timeline" && threadId) {
+    if ((activeTab === "messages" || activeTab === "timeline") && threadId) {
       void threadDetailStore.loadTimeline(threadId);
     }
   });
@@ -207,7 +208,7 @@
     aria-label="Thread sections"
     role="tablist"
   >
-    {#each [["overview", "Overview"], ["work", "Work"], ["timeline", "Timeline"]] as [tabId, tabLabel]}
+    {#each [["overview", "Overview"], ["work", "Work"], ["messages", "Messages"], ["timeline", "Timeline"]] as [tabId, tabLabel]}
       <button
         class={`relative cursor-pointer px-3 py-2 text-[13px] font-medium transition-colors ${activeTab === tabId ? "text-[var(--ui-text)]" : "text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]"}`}
         onclick={() => (activeTab = tabId)}
@@ -254,9 +255,15 @@
     </div>
   {/if}
 
+  {#if activeTab === "messages"}
+    <div role="tabpanel" tabindex="0">
+      <ThreadMessagesTab {threadId} onMessagePost={handleMessagePost} />
+    </div>
+  {/if}
+
   {#if activeTab === "timeline"}
     <div role="tabpanel" tabindex="0">
-      <ThreadTimelineTab {threadId} onMessagePost={handleMessagePost} />
+      <ThreadTimelineTab {threadId} />
     </div>
   {/if}
 {/if}

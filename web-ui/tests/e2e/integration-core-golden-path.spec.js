@@ -375,12 +375,9 @@ test("golden path integration runs against a real oar-core", async ({
 
   await openThreadDetailFromNav(page, threadTitle, threadId);
 
+  await page.getByRole("tab", { name: "Messages" }).click();
   await page.getByLabel("Message").fill(messageText);
-  const replyTarget = page.getByLabel("Reply to event (optional)");
-  await expect
-    .poll(async () => replyTarget.locator("option").count())
-    .toBeGreaterThan(1);
-  await replyTarget.selectOption({ index: 1 });
+  await page.getByRole("button", { name: "Reply" }).first().click();
 
   const postMessageResponsePromise = page.waitForResponse((response) => {
     const postData = response.request().postData() ?? "";
@@ -395,7 +392,7 @@ test("golden path integration runs against a real oar-core", async ({
   await postMessageResponsePromise;
 
   await expect(
-    page.locator("article", { hasText: `Message: ${messageText}` }).first(),
+    page.locator("article", { hasText: messageText }).first(),
   ).toBeVisible();
 
   await postCoreJson(request, coreBaseUrl, "/events", {
