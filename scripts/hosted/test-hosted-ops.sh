@@ -259,6 +259,7 @@ SEED_PORT="$(pick_loopback_port)"
   --instance team-alpha \
   --instance-root "$INSTANCE_ROOT" \
   --public-origin https://team-alpha.example.test \
+  --allowed-origins "https://team-alpha.example.test,https://team-alpha.tail76ea03.ts.net" \
   --listen-port 8001 \
   --web-ui-port 3001 \
   --generate-bootstrap-token
@@ -267,8 +268,10 @@ INSTANCE_ROOT="$(cd "$INSTANCE_ROOT" && pwd -P)"
 seed_workspace_fixture "${INSTANCE_ROOT}/workspace" "$CORE_BIN" "$SCHEMA_PATH" "$SEED_PORT" "${TMP_ROOT}/seed.log"
 
 SOURCE_BOOTSTRAP_TOKEN="$(dotenv_get "${INSTANCE_ROOT}/config/env.production" OAR_BOOTSTRAP_TOKEN || true)"
+SOURCE_ALLOWED_ORIGINS="$(dotenv_get "${INSTANCE_ROOT}/config/env.production" OAR_WEBAUTHN_ALLOWED_ORIGINS || true)"
 [[ -n "$SOURCE_BOOTSTRAP_TOKEN" ]] || die "expected source bootstrap token to be configured"
 assert_not_equals "$HOSTED_BOOTSTRAP_PLACEHOLDER" "$SOURCE_BOOTSTRAP_TOKEN" "source bootstrap token"
+assert_equals "https://team-alpha.example.test,https://team-alpha.tail76ea03.ts.net" "$SOURCE_ALLOWED_ORIGINS" "source allowed origins"
 
 "${SCRIPT_DIR}/backup-workspace.sh" \
   --instance-root "$INSTANCE_ROOT" \

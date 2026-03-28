@@ -25,6 +25,7 @@ Optional:
   --listen-host HOST        Local bind host hint (default: 127.0.0.1)
   --listen-port PORT        Local/core host port hint (default: 8000)
   --web-ui-port PORT        Host port hint for web-ui example flows (default: 3000)
+  --allowed-origins LIST    Comma-separated WebAuthn origin allowlist
   --core-instance-id ID     Runtime core instance id (default: instance name)
   --blob-backend BACKEND    filesystem|object|s3 (default: filesystem)
   --blob-root DIR           Explicit local blob root for filesystem/object backends
@@ -57,6 +58,7 @@ PUBLIC_ORIGIN=""
 LISTEN_HOST="127.0.0.1"
 LISTEN_PORT="8000"
 WEB_UI_PORT="3000"
+ALLOWED_ORIGINS=""
 CORE_INSTANCE_ID=""
 BLOB_BACKEND="filesystem"
 BLOB_ROOT=""
@@ -86,6 +88,7 @@ while [[ $# -gt 0 ]]; do
     --listen-host) LISTEN_HOST="$2"; shift 2 ;;
     --listen-port) LISTEN_PORT="$2"; shift 2 ;;
     --web-ui-port) WEB_UI_PORT="$2"; shift 2 ;;
+    --allowed-origins) ALLOWED_ORIGINS="$2"; shift 2 ;;
     --core-instance-id) CORE_INSTANCE_ID="$2"; shift 2 ;;
     --blob-backend) BLOB_BACKEND="$2"; shift 2 ;;
     --blob-root) BLOB_ROOT="$2"; shift 2 ;;
@@ -128,6 +131,15 @@ validate_host "$LISTEN_HOST"
 validate_port "$LISTEN_PORT"
 validate_port "$WEB_UI_PORT"
 validate_origin "$PUBLIC_ORIGIN"
+if [[ -n "$ALLOWED_ORIGINS" ]]; then
+  IFS=',' read -r -a allowed_origin_values <<<"$ALLOWED_ORIGINS"
+  for allowed_origin in "${allowed_origin_values[@]}"; do
+    allowed_origin="${allowed_origin#"${allowed_origin%%[![:space:]]*}"}"
+    allowed_origin="${allowed_origin%"${allowed_origin##*[![:space:]]}"}"
+    [[ -n "$allowed_origin" ]] || continue
+    validate_origin "$allowed_origin"
+  done
+fi
 validate_blob_backend "$BLOB_BACKEND"
 [[ -z "$MAX_BLOB_BYTES" ]] || validate_non_negative_integer "$MAX_BLOB_BYTES" "--max-blob-bytes"
 [[ -z "$MAX_ARTIFACTS" ]] || validate_non_negative_integer "$MAX_ARTIFACTS" "--max-artifacts"
@@ -206,6 +218,7 @@ OAR_WEB_UI_ORIGIN=${PUBLIC_ORIGIN}
 OAR_ALLOW_UNAUTHENTICATED_WRITES=false
 OAR_WEBAUTHN_RPID=${WEBAUTHN_RPID}
 OAR_WEBAUTHN_ORIGIN=${PUBLIC_ORIGIN}
+OAR_WEBAUTHN_ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
 OAR_WEBAUTHN_RP_DISPLAY_NAME=OAR
 OAR_CORS_ALLOWED_ORIGINS=
 OAR_CORE_INSTANCE_ID=${CORE_INSTANCE_ID}
