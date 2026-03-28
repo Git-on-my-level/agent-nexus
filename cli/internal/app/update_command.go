@@ -58,7 +58,7 @@ func (a *App) runUpdate(ctx context.Context, args []string, cfg config.Resolved)
 		versionFlag trackedString
 	)
 	fs.Var(&checkFlag, "check", "Report update availability without downloading or replacing the binary")
-	fs.Var(&versionFlag, "version", "Install a specific release tag (for example v0.0.1)")
+	fs.Var(&versionFlag, "version", "Install a specific release tag (for example v1.2.3)")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_update_flags", err.Error())
@@ -513,5 +513,5 @@ Examples:
   oar update --check
   oar --base-url https://example.com/oar/team-a update --check
   oar update
-  oar update --version v0.0.1`)
+  oar update --version v1.2.3`)
 }

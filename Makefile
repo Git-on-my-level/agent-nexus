@@ -19,7 +19,7 @@ FORCE_SEED ?= 0
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup check serve serve-control-plane lint test format contract-gen contract-check e2e-smoke hosted-smoke hosted-ops-test hosted-ops-smoke saas-smoke saas-e2e saas-load-smoke packed-host-smoke cli-check cli-test cli-build cli-integration-test core-% web-ui-%
+.PHONY: help setup check serve serve-control-plane lint test format contract-gen contract-check version-sync version-check e2e-smoke hosted-smoke hosted-ops-test hosted-ops-smoke saas-smoke saas-e2e saas-load-smoke packed-host-smoke cli-check cli-test cli-build cli-integration-test core-% web-ui-%
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z0-9_.-]+:.*##/ {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -54,19 +54,26 @@ contract-gen: ## Regenerate OpenAPI-derived contract artifacts
 contract-check: ## Verify generated contract artifacts are committed
 	./scripts/contract-check
 
+version-sync: ## Regenerate version-derived source files
+	./scripts/sync-version.sh
+
+version-check: ## Verify version-derived source files are current
+	./scripts/sync-version.sh --check
+
 docs-ref-audit: ## Audit agent-facing docs for broken local path references
 	./scripts/docs-ref-audit
 
 cli-check: ## Run CLI checks
+	$(MAKE) version-check
 	cd $(CLI_DIR) && go test ./...
 
 cli-test: ## Run CLI tests
 	cd $(CLI_DIR) && go test ./...
 
-CLI_VERSION ?= dev
+CLI_VERSION ?= $(shell ./scripts/read-version.sh)
 
 cli-build: ## Build CLI binary
-	cd $(CLI_DIR) && go build -ldflags='-X organization-autorunner-cli/internal/httpclient.CLIVersion=$(CLI_VERSION)' -o oar ./cmd/oar
+	cd $(CLI_DIR) && go build -ldflags='-X organization-autorunner-cli/internal/buildinfo.Current=$(CLI_VERSION)' -o oar ./cmd/oar
 
 cli-integration-test: ## Run CLI real-binary integration tests (non-default)
 	cd $(CLI_DIR) && go test -tags=integration ./integration/...

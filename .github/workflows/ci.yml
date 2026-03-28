@@ -52,6 +52,9 @@ jobs:
               - 'core/**'
             cli:
               - 'cli/**'
+              - 'VERSION'
+              - 'scripts/read-version.sh'
+              - 'scripts/sync-version.sh'
             web_ui:
               - 'web-ui/**'
 
@@ -123,6 +126,9 @@ jobs:
         with:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum
+
+      - name: Verify version metadata
+        run: ./scripts/sync-version.sh --check
 
       - name: Run CLI check
         working-directory: cli

@@ -185,7 +185,7 @@ Machine-facing notes for the targeted automation commands:
 CLI release artifacts are produced by GitHub workflow:
 
 - workflow: `.github/workflows/release-cli.yml`
-- trigger: push tag `v*` or `oar-cli-v*`
+- trigger: push tag `v*` that matches the repo `VERSION` file
 - outputs:
   - static binaries for linux/darwin/windows on amd64/arm64
   - release archives (`.tar.gz`/`.zip`)

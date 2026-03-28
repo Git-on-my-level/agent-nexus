@@ -6,27 +6,31 @@ usage() {
 Build release archives and checksums for the oar CLI.
 
 Usage:
-  ./scripts/build-cli-release-artifacts.sh <version> [output-dir]
+  ./scripts/build-cli-release-artifacts.sh [version] [output-dir]
 
 Examples:
-  ./scripts/build-cli-release-artifacts.sh v0.0.1
-  ./scripts/build-cli-release-artifacts.sh v0.0.1 dist
+  ./scripts/build-cli-release-artifacts.sh
+  ./scripts/build-cli-release-artifacts.sh v1.2.3 dist
 EOF
 }
 
-if [[ "${1:-}" == "" ]] || [[ "${1:-}" == "-h" ]] || [[ "${1:-}" == "--help" ]]; then
+if [[ "${1:-}" == "-h" ]] || [[ "${1:-}" == "--help" ]]; then
   usage
-  [[ "${1:-}" == "" ]] && exit 1
   exit 0
 fi
-
-VERSION="$1"
-OUTPUT_DIR="${2:-dist}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 CLI_DIR="${REPO_ROOT}/cli"
+EXPECTED_VERSION="$("${SCRIPT_DIR}/read-version.sh")"
+VERSION="${1:-${EXPECTED_VERSION}}"
+OUTPUT_DIR="${2:-dist}"
 DIST_DIR="${REPO_ROOT}/${OUTPUT_DIR}"
+
+if [[ "${VERSION}" != "${EXPECTED_VERSION}" ]]; then
+  echo "release version mismatch: requested ${VERSION}, repo VERSION is ${EXPECTED_VERSION}" >&2
+  exit 1
+fi
 
 checksum_file() {
   local file="$1"
@@ -62,7 +66,7 @@ for GOOS in linux darwin windows; do
       cd "${CLI_DIR}"
       CGO_ENABLED=0 GOOS="${GOOS}" GOARCH="${GOARCH}" go build \
         -trimpath \
-        -ldflags="-s -w -X organization-autorunner-cli/internal/httpclient.CLIVersion=${VERSION}" \
+        -ldflags="-s -w -X organization-autorunner-cli/internal/buildinfo.Current=${VERSION}" \
         -o "${STAGE_DIR}/${BIN_NAME}${BIN_EXT}" \
         ./cmd/oar
     )

@@ -13,10 +13,11 @@ import (
 
 	contractsclient "organization-autorunner-contracts-go-client/client"
 
+	"organization-autorunner-cli/internal/buildinfo"
 	"organization-autorunner-cli/internal/config"
 )
 
-var CLIVersion = "0.1.0-dev"
+var CLIVersion = buildinfo.Current
 
 type Client struct {
 	baseURL     string
