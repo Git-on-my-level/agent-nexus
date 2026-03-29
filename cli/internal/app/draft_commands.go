@@ -1290,6 +1290,10 @@ Examples:
 		b.WriteString("\n\n")
 		b.WriteString(schemaBlock)
 	}
+	if extra := formatCommandSpecificHelpBlock(cmd); strings.TrimSpace(extra) != "" {
+		b.WriteString("\n\n")
+		b.WriteString(extra)
+	}
 	return b.String() + "\n"
 }
 
