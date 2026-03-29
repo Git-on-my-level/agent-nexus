@@ -58,6 +58,36 @@ test("thread detail separates messages from timeline and nests replies", async (
   const actorId = "actor-thread-detail-e2e";
   const { publicKeyB64 } = await bridgeProofKeyPromise;
   let postedEvents = 0;
+  let streamLastEventId = "";
+  let timelineRequests = 0;
+  let allowFirstTimelineResponse;
+  const firstTimelineResponseGate = new Promise((resolve) => {
+    allowFirstTimelineResponse = resolve;
+  });
+  let recentEvents = [
+    {
+      id: "evt-1002",
+      ts: "2026-03-03T09:00:00.000Z",
+      type: "message_posted",
+      actor_id: actorId,
+      thread_id: "thread-onboarding",
+      refs: ["thread:thread-onboarding"],
+      summary: "Latest workspace message",
+      payload: { text: "Latest workspace message" },
+      provenance: { sources: ["actor_statement:event-1002"] },
+    },
+    {
+      id: "evt-1001",
+      ts: "2026-03-03T08:00:00.000Z",
+      type: "message_posted",
+      actor_id: actorId,
+      thread_id: "thread-onboarding",
+      refs: ["thread:thread-onboarding"],
+      summary: "Initial timeline message",
+      payload: { text: "Initial timeline message" },
+      provenance: { sources: ["actor_statement:event-1001"] },
+    },
+  ];
   let timeline = [
     {
       id: "evt-1001",
@@ -69,6 +99,17 @@ test("thread detail separates messages from timeline and nests replies", async (
       summary: "Initial timeline message",
       payload: { text: "Initial timeline message" },
       provenance: { sources: ["actor_statement:event-1001"] },
+    },
+    {
+      id: "evt-1002",
+      ts: "2026-03-03T09:00:00.000Z",
+      type: "message_posted",
+      actor_id: actorId,
+      thread_id: "thread-onboarding",
+      refs: ["thread:thread-onboarding"],
+      summary: "Latest workspace message",
+      payload: { text: "Latest workspace message" },
+      provenance: { sources: ["actor_statement:event-1002"] },
     },
   ];
 
@@ -321,7 +362,7 @@ test("thread detail separates messages from timeline and nests replies", async (
             provenance: { sources: ["actor_statement:event-1001"] },
           },
           context: {
-            recent_events: timeline,
+            recent_events: recentEvents,
             key_artifacts: [],
             open_commitments: [],
             documents: [
@@ -367,6 +408,10 @@ test("thread detail separates messages from timeline and nests replies", async (
   );
 
   await page.route(/\/threads\/thread-onboarding\/timeline$/, async (route) => {
+    timelineRequests += 1;
+    if (timelineRequests === 1) {
+      await firstTimelineResponseGate;
+    }
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -375,6 +420,8 @@ test("thread detail separates messages from timeline and nests replies", async (
   });
 
   await page.route(/\/events\/stream(\?.*)?$/, async (route) => {
+    streamLastEventId =
+      new URL(route.request().url()).searchParams.get("last_event_id") ?? "";
     await route.fulfill({
       status: 200,
       contentType: "text/event-stream",
@@ -419,7 +466,8 @@ test("thread detail separates messages from timeline and nests replies", async (
       actor_id: payload.actor_id,
       ...payload.event,
     };
-    timeline = [created, ...timeline];
+    recentEvents = [created, ...recentEvents];
+    timeline = [...timeline, created];
 
     await route.fulfill({
       status: 200,
@@ -429,6 +477,7 @@ test("thread detail separates messages from timeline and nests replies", async (
   });
 
   await page.goto("/threads/thread-onboarding");
+  await expect.poll(() => streamLastEventId).toBe("evt-1002");
 
   await expect(
     page.getByText("Thread-linked docs and current head revisions."),
@@ -451,6 +500,13 @@ test("thread detail separates messages from timeline and nests replies", async (
   await expect(page).toHaveURL(
     /\/local\/threads\/thread-onboarding\?tab=messages$/,
   );
+  await expect(
+    page.getByText("Initial timeline message", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Loading messages...", { exact: true }),
+  ).toHaveCount(0);
+  allowFirstTimelineResponse();
 
   await expect(
     page.getByRole("heading", { name: "Customer Onboarding Workflow" }),

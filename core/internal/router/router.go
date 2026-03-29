@@ -278,6 +278,9 @@ func (s *Service) routeMention(ctx context.Context, handle string, event map[str
 	if registration.ActorID != strings.TrimSpace(principal.ActorID) {
 		return false, s.emitException(ctx, threadID, eventID, handle, "registration_actor_mismatch", fmt.Sprintf("Tagged agent @%s registration actor does not match principal", handle))
 	}
+	if strings.TrimSpace(anyString(event["actor_id"])) == registration.ActorID {
+		return false, nil
+	}
 	if !registration.SupportsWorkspace(s.cfg.WorkspaceID) {
 		return false, s.emitException(ctx, threadID, eventID, handle, "agent_not_bound_to_workspace", fmt.Sprintf("Tagged agent @%s is not enabled for workspace %s", handle, s.cfg.WorkspaceID))
 	}

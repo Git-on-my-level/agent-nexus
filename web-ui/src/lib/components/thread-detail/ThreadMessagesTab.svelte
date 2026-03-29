@@ -35,6 +35,7 @@
   let actorName = $derived((id) => lookupActorDisplayName(id, $actorRegistry));
   let messageThreads = $derived(toMessageThreadView(timeline, { threadId }));
   let allMessages = $derived(flattenMessageThreadView(messageThreads));
+  let hasMessages = $derived(messageThreads.length > 0);
   let replyTargetMessage = $derived(
     replyToEventId
       ? (allMessages.find((message) => message.id === replyToEventId) ?? null)
@@ -355,15 +356,25 @@
   >
     Messages
   </h2>
-  {#if timelineLoading}
-    <p class="text-[13px] text-[var(--ui-text-muted)]">Loading messages...</p>
-  {:else if timelineError}
+  {#if timelineError && !hasMessages}
     <p class="rounded bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
       {timelineError}
     </p>
-  {:else if messageThreads.length === 0}
+  {:else if timelineLoading && !hasMessages}
+    <p class="text-[13px] text-[var(--ui-text-muted)]">Loading messages...</p>
+  {:else if !hasMessages}
     <p class="text-[13px] text-[var(--ui-text-muted)]">No messages yet.</p>
   {:else}
+    {#if timelineLoading}
+      <p class="mb-2 text-[12px] text-[var(--ui-text-muted)]">
+        Refreshing messages...
+      </p>
+    {/if}
+    {#if timelineError}
+      <p class="mb-2 rounded bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
+        {timelineError}
+      </p>
+    {/if}
     <div class="space-y-3">
       {#each messageThreads as message}
         <ThreadMessageItem

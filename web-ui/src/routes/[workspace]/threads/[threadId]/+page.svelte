@@ -1,6 +1,7 @@
 <script>
   import { goto } from "$app/navigation";
   import { onMount, onDestroy } from "svelte";
+  import { get } from "svelte/store";
   import { page } from "$app/stores";
 
   import { coreClient } from "$lib/coreClient";
@@ -45,9 +46,43 @@
     stopThreadStream: () => {},
   };
 
+  function getLatestKnownEventId(events) {
+    let latestEventId = "";
+    let latestEventTs = Number.NEGATIVE_INFINITY;
+
+    for (const event of Array.isArray(events) ? events : []) {
+      const eventId = String(event?.id ?? "").trim();
+      if (!eventId) continue;
+
+      const eventTs = Date.parse(String(event?.ts ?? ""));
+      if (!Number.isFinite(eventTs)) {
+        if (!latestEventId || eventId.localeCompare(latestEventId) > 0) {
+          latestEventId = eventId;
+        }
+        continue;
+      }
+
+      if (
+        eventTs > latestEventTs ||
+        (eventTs === latestEventTs && eventId.localeCompare(latestEventId) > 0)
+      ) {
+        latestEventId = eventId;
+        latestEventTs = eventTs;
+      }
+    }
+
+    return latestEventId;
+  }
+
   onMount(async () => {
     await threadDetailStore.fullRefresh(threadId);
-    liveCoordination.stopThreadStream = startThreadEventStream(threadId);
+    const latestKnownEventId = getLatestKnownEventId(
+      get(threadDetailStore).timeline,
+    );
+    liveCoordination.stopThreadStream = startThreadEventStream(
+      threadId,
+      latestKnownEventId,
+    );
     liveCoordination.reconcileTimer = setInterval(
       () =>
         threadDetailStore.queueRefreshThreadDetail(threadId, {
@@ -144,11 +179,11 @@
     });
   }
 
-  function startThreadEventStream(threadId) {
+  function startThreadEventStream(threadId, initialLastEventId = "") {
     let stopped = false;
     let reconnectTimer;
     let controller = null;
-    let lastEventId = "";
+    let lastEventId = String(initialLastEventId ?? "").trim();
 
     const connect = async () => {
       if (stopped) return;
