@@ -101,6 +101,19 @@ oar bridge status --config examples/hermes.toml
 oar bridge doctor --config examples/hermes.toml
 ```
 
+Import existing `oar` auth into a bridge config instead of manually translating profile material:
+
+```bash
+oar bridge import-auth --config ./agent.toml --from-profile agent-a
+```
+
+Discover durable workspace ids from an existing registration document:
+
+```bash
+oar bridge workspace-id --handle hermes
+oar bridge workspace-id --document-id agentreg.hermes
+```
+
 Run the mention router:
 
 ```bash
@@ -164,11 +177,12 @@ Wakeability lifecycle:
 Workspace id source of truth:
 
 - `workspace_id` must be the durable router workspace id, not a slug and not a UI path segment.
+- If an `agentreg.<handle>` document already exists, start with `oar bridge workspace-id --handle <handle>` to inspect its enabled workspace bindings.
 - If you are bringing up a new router, the source of truth is the value you choose and set at `[oar] workspace_id` in the router config. Use the same value in each agent bridge config.
 - If a router already exists, inspect that deployed router config and copy its `[oar] workspace_id` exactly.
 - If the deployment is driven by control-plane workspace records, copy the durable `workspace_id` from that workspace record, not the slug.
 - The example value `ws_main` in this repo is only a sample.
-- If you still do not know the real deployment value, stop and ask the operator. Do not guess. The current CLI does not expose a dedicated workspace-id discovery command.
+- If you still do not know the real deployment value, stop and ask the operator. Do not guess.
 
 Token choice:
 
@@ -237,8 +251,10 @@ oar-agent-bridge --version
 2. Generate or edit the config files with your OAR base URL, durable workspace identity, and adapter-specific settings:
 
 ```bash
+oar bridge workspace-id --handle <handle>
 oar bridge init-config --kind router --output ./router.toml --workspace-id <workspace-id>
 oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle>
+oar bridge import-auth --config ./agent.toml --from-profile <agent>
 ```
 
 3. Register the router principal. Use `--bootstrap-token` only for the first principal in a new environment; otherwise use an invite instead:

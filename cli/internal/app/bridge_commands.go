@@ -1,7 +1,10 @@
 package app
 
 import (
+	"bytes"
 	"context"
+	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -13,6 +16,7 @@ import (
 
 	"organization-autorunner-cli/internal/config"
 	"organization-autorunner-cli/internal/errnorm"
+	"organization-autorunner-cli/internal/profile"
 )
 
 const bridgeRepoURL = "https://github.com/Git-on-my-level/organization-autorunner.git"
@@ -62,6 +66,20 @@ func init() {
 			},
 		},
 		localHelperTopic{
+			Path:        "bridge import-auth",
+			Summary:     "Copy an existing `oar` profile and key into bridge auth state for one bridge config.",
+			JSONShape:   "`config_path`, `auth_state_path`, `profile_path`, `profile_agent`, `username`, `actor_id`, `agent_id`, `key_id`",
+			Composition: "Pure local helper. Reads an existing `oar` profile plus Ed25519 key material, converts it into bridge auth state, and writes it to the bridge config's `[auth].state_path`.",
+			Examples: []string{
+				"oar bridge import-auth --config ./agent.toml --from-profile agent-a",
+				"oar --agent agent-a bridge import-auth --config ./agent.toml",
+			},
+			Flags: []localHelperFlag{
+				{Name: "--config <path>", Description: "Bridge config whose auth state should be populated."},
+				{Name: "--from-profile <agent>", Description: "Existing `oar` profile name to import. Defaults to the active CLI profile."},
+			},
+		},
+		localHelperTopic{
 			Path:        "bridge init-config",
 			Summary:     "Write a minimal router or agent bridge TOML config with the pending-until-check-in lifecycle baked in.",
 			JSONShape:   "`kind`, `output`, `workspace_id`, `handle`, `content`",
@@ -75,6 +93,20 @@ func init() {
 				{Name: "--output <path>", Description: "Write the rendered TOML to a file. Omit to print it."},
 				{Name: "--workspace-id <id>", Description: "Durable OAR workspace id. Do not use a slug or UI path segment."},
 				{Name: "--handle <name>", Description: "Agent handle for bridge templates."},
+			},
+		},
+		localHelperTopic{
+			Path:        "bridge workspace-id",
+			Summary:     "Discover durable workspace ids from an existing agent registration document.",
+			JSONShape:   "`document_id`, `handle`, `actor_id`, `registration_status`, `workspace_ids`, `workspace_bindings`",
+			Composition: "Uses the active `oar` auth/profile to read `agentreg.<handle>` and extract enabled workspace bindings so bridge bootstrap can reuse the real durable workspace id instead of guessing.",
+			Examples: []string{
+				"oar --agent agent-a bridge workspace-id --handle hermes",
+				"oar bridge workspace-id --document-id agentreg.hermes",
+			},
+			Flags: []localHelperFlag{
+				{Name: "--handle <name>", Description: "Agent handle whose `agentreg.<handle>` document should be inspected."},
+				{Name: "--document-id <id>", Description: "Registration document id to inspect directly. Defaults to `agentreg.<handle>`."},
 			},
 		},
 		localHelperTopic{
@@ -105,9 +137,15 @@ func (a *App) runBridgeCommand(ctx context.Context, args []string, cfg config.Re
 	case "install":
 		result, err := a.runBridgeInstall(ctx, args[1:])
 		return result, "bridge install", err
+	case "import-auth":
+		result, err := a.runBridgeImportAuth(args[1:], cfg)
+		return result, "bridge import-auth", err
 	case "init-config":
 		result, err := a.runBridgeInitConfig(args[1:], cfg)
 		return result, "bridge init-config", err
+	case "workspace-id":
+		result, err := a.runBridgeWorkspaceID(ctx, args[1:], cfg)
+		return result, "bridge workspace-id", err
 	case "doctor":
 		result, err := a.runBridgeDoctor(ctx, args[1:])
 		return result, "bridge doctor", err
@@ -150,22 +188,26 @@ Lifecycle constraint
 Subcommands
 
   bridge install      Install or refresh the managed `+"`oar-agent-bridge`"+` virtualenv and wrapper
+  bridge import-auth  Copy an existing `+"`oar`"+` profile into bridge auth state
   bridge init-config  Render a minimal router or bridge TOML config
   bridge start        Start a managed router or bridge daemon for one config
   bridge stop         Stop a managed router or bridge daemon for one config
   bridge restart      Restart a managed router or bridge daemon for one config
   bridge status       Inspect managed process state for one config
   bridge logs         Read recent log lines for one config
+  bridge workspace-id Read workspace ids from an existing registration document
   bridge doctor       Validate install/config/readiness without starting daemons
 
 Recommended order
 
 1. `+"`oar bridge install`"+`
-2. `+"`oar bridge init-config --kind router --output ./router.toml --workspace-id <workspace-id>`"+`
-3. `+"`oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle>`"+`
-4. `+"`oar-agent-bridge auth register ...`"+` for the router and agent principal
-5. `+"`oar bridge start --config ./router.toml`"+` and `+"`oar bridge start --config ./agent.toml`"+`
-6. `+"`oar bridge status --config ./agent.toml`"+` and `+"`oar bridge doctor --config ./agent.toml`"+` before telling humans to tag `+"`@handle`"+`
+2. `+"`oar bridge workspace-id --handle <handle>`"+` if a registration doc already exists and you need the real durable workspace id
+3. `+"`oar bridge init-config --kind router --output ./router.toml --workspace-id <workspace-id>`"+`
+4. `+"`oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle>`"+`
+5. `+"`oar bridge import-auth --config ./agent.toml --from-profile <agent>`"+` when matching `+"`oar`"+` auth already exists
+6. `+"`oar-agent-bridge auth register ...`"+` for the router and agent principal when auth does not already exist
+7. `+"`oar bridge start --config ./router.toml`"+` and `+"`oar bridge start --config ./agent.toml`"+`
+8. `+"`oar bridge status --config ./agent.toml`"+` and `+"`oar bridge doctor --config ./agent.toml`"+` before telling humans to tag `+"`@handle`"+`
 `) + "\n"
 }
 
@@ -271,6 +313,119 @@ func (a *App) runBridgeInstall(ctx context.Context, args []string) (*commandResu
 	return &commandResult{Text: strings.Join(lines, "\n"), Data: data}, nil
 }
 
+func (a *App) runBridgeImportAuth(args []string, cfg config.Resolved) (*commandResult, error) {
+	fs := newSilentFlagSet("bridge import-auth")
+	var configFlag trackedString
+	var fromProfileFlag trackedString
+	fs.Var(&configFlag, "config", "Bridge config whose auth state should be populated")
+	fs.Var(&fromProfileFlag, "from-profile", "Existing oar profile name to import")
+	if err := fs.Parse(args); err != nil {
+		return nil, errnorm.Usage("invalid_flags", err.Error())
+	}
+	if len(fs.Args()) > 0 {
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar bridge import-auth`")
+	}
+	configPath := strings.TrimSpace(configFlag.value)
+	if configPath == "" {
+		return nil, errnorm.Usage("invalid_request", "--config is required")
+	}
+	configDetails, err := loadBridgeConfigDetails(configPath)
+	if err != nil {
+		return nil, err
+	}
+
+	profileAgent := strings.TrimSpace(fromProfileFlag.value)
+	profilePath := ""
+	if profileAgent == "" {
+		profileAgent = firstNonEmptyString(cfg.Agent, config.DefaultAgent)
+	}
+	if strings.TrimSpace(cfg.ProfilePath) != "" && profileAgent == strings.TrimSpace(cfg.Agent) {
+		profilePath = strings.TrimSpace(cfg.ProfilePath)
+	}
+	if profilePath == "" {
+		home, err := a.bridgeHome()
+		if err != nil {
+			return nil, err
+		}
+		profilePath = profile.ProfilePath(home, profileAgent)
+	}
+
+	prof, ok, err := profile.Load(profilePath)
+	if err != nil {
+		return nil, errnorm.Wrap(errnorm.KindLocal, "profile_read_failed", "failed to read source profile", err)
+	}
+	if !ok {
+		return nil, errnorm.Local("profile_not_found", "source profile not found at "+profilePath)
+	}
+	if prof.Revoked {
+		return nil, errnorm.Local("agent_revoked", "cannot import auth from a revoked profile")
+	}
+
+	username := firstNonEmptyString(prof.Username, configDetails.AgentHandle, prof.Agent)
+	if configDetails.AgentHandle != "" && username != "" && username != configDetails.AgentHandle {
+		return nil, errnorm.Local(
+			"bridge_auth_handle_mismatch",
+			fmt.Sprintf("profile username %q does not match bridge agent.handle %q", username, configDetails.AgentHandle),
+		)
+	}
+	if strings.TrimSpace(prof.AgentID) == "" || strings.TrimSpace(prof.ActorID) == "" || strings.TrimSpace(prof.KeyID) == "" {
+		return nil, errnorm.Local("profile_incomplete", "source profile is missing required agent_id/actor_id/key_id fields")
+	}
+	if strings.TrimSpace(prof.PrivateKeyPath) == "" {
+		return nil, errnorm.Local("profile_incomplete", "source profile is missing private_key_path")
+	}
+	privateKey, err := profile.LoadPrivateKey(strings.TrimSpace(prof.PrivateKeyPath))
+	if err != nil {
+		return nil, errnorm.Wrap(errnorm.KindLocal, "bridge_auth_key_failed", "failed to load source private key", err)
+	}
+	publicKey, ok := privateKey.Public().(ed25519.PublicKey)
+	if !ok || len(publicKey) != ed25519.PublicKeySize {
+		return nil, errnorm.Local("bridge_auth_key_failed", "source private key did not yield a valid Ed25519 public key")
+	}
+
+	expiresAtEpoch := 0.0
+	if expiry, ok := profile.ParseAccessTokenExpiry(strings.TrimSpace(prof.AccessTokenExpiresAt)); ok {
+		expiresAtEpoch = float64(expiry.Unix())
+	}
+	authState := map[string]any{
+		"username":         username,
+		"agent_id":         strings.TrimSpace(prof.AgentID),
+		"actor_id":         strings.TrimSpace(prof.ActorID),
+		"key_id":           strings.TrimSpace(prof.KeyID),
+		"public_key_b64":   base64.StdEncoding.EncodeToString(publicKey),
+		"private_key_b64":  base64.StdEncoding.EncodeToString(privateKey),
+		"access_token":     strings.TrimSpace(prof.AccessToken),
+		"refresh_token":    strings.TrimSpace(prof.RefreshToken),
+		"token_type":       firstNonEmptyString(strings.TrimSpace(prof.TokenType), "Bearer"),
+		"expires_at_epoch": expiresAtEpoch,
+	}
+	if err := writeBridgeJSONFile(configDetails.AuthStatePath, authState); err != nil {
+		return nil, err
+	}
+
+	lines := []string{
+		"Bridge auth imported.",
+		"Config: " + configDetails.ConfigPath,
+		"Auth state: " + configDetails.AuthStatePath,
+		"Source profile: " + profilePath,
+		"Username: " + username,
+		"Actor ID: " + strings.TrimSpace(prof.ActorID),
+	}
+	return &commandResult{
+		Text: strings.Join(lines, "\n"),
+		Data: map[string]any{
+			"config_path":     configDetails.ConfigPath,
+			"auth_state_path": configDetails.AuthStatePath,
+			"profile_path":    profilePath,
+			"profile_agent":   profileAgent,
+			"username":        username,
+			"actor_id":        strings.TrimSpace(prof.ActorID),
+			"agent_id":        strings.TrimSpace(prof.AgentID),
+			"key_id":          strings.TrimSpace(prof.KeyID),
+		},
+	}, nil
+}
+
 func (a *App) runBridgeInitConfig(args []string, cfg config.Resolved) (*commandResult, error) {
 	fs := newSilentFlagSet("bridge init-config")
 	var kindFlag trackedString
@@ -356,6 +511,116 @@ func (a *App) runBridgeInitConfig(args []string, cfg config.Resolved) (*commandR
 			"workspace_id": workspaceID,
 			"handle":       handle,
 			"content":      rendered,
+		},
+	}, nil
+}
+
+func (a *App) runBridgeWorkspaceID(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
+	fs := newSilentFlagSet("bridge workspace-id")
+	var handleFlag trackedString
+	var documentIDFlag trackedString
+	fs.Var(&handleFlag, "handle", "Agent handle whose registration should be inspected")
+	fs.Var(&documentIDFlag, "document-id", "Registration document id to inspect directly")
+	if err := fs.Parse(args); err != nil {
+		return nil, errnorm.Usage("invalid_flags", err.Error())
+	}
+	if len(fs.Args()) > 0 {
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar bridge workspace-id`")
+	}
+
+	handle := strings.TrimSpace(handleFlag.value)
+	documentID := strings.TrimSpace(documentIDFlag.value)
+	switch {
+	case documentID == "" && handle == "":
+		return nil, errnorm.Usage("invalid_request", "either --handle or --document-id is required")
+	case documentID != "" && handle != "":
+		return nil, errnorm.Usage("invalid_request", "--handle and --document-id cannot be combined")
+	case documentID == "":
+		documentID = "agentreg." + handle
+	}
+
+	result, err := a.invokeTypedJSON(ctx, cfg, "docs get", "docs.get", map[string]string{"document_id": documentID}, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	data, _ := result.Data.(map[string]any)
+	body := extractNestedMap(data, "body")
+	document := extractNestedMap(body, "document")
+	revision := extractNestedMap(body, "revision")
+	content := extractNestedMap(revision, "content")
+
+	if handle == "" {
+		handle = strings.TrimPrefix(firstNonEmptyString(anyString(content["handle"]), anyString(document["id"])), "agentreg.")
+	}
+	registrationStatus := firstNonEmptyString(anyString(content["status"]), anyString(document["status"]))
+	actorID := anyString(content["actor_id"])
+	workspaceBindingsRaw, _ := content["workspace_bindings"].([]any)
+	workspaceBindings := make([]map[string]any, 0, len(workspaceBindingsRaw))
+	workspaceIDs := make([]string, 0, len(workspaceBindingsRaw))
+	seen := map[string]struct{}{}
+	for _, item := range workspaceBindingsRaw {
+		binding, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		workspaceID := strings.TrimSpace(anyString(binding["workspace_id"]))
+		if workspaceID == "" {
+			continue
+		}
+		workspaceBindings = append(workspaceBindings, binding)
+		enabled := true
+		if _, exists := binding["enabled"]; exists {
+			enabled = asBool(binding["enabled"])
+		}
+		if !enabled {
+			continue
+		}
+		if _, exists := seen[workspaceID]; exists {
+			continue
+		}
+		seen[workspaceID] = struct{}{}
+		workspaceIDs = append(workspaceIDs, workspaceID)
+	}
+	if len(workspaceIDs) == 0 {
+		return nil, errnorm.WithDetails(
+			errnorm.Local("bridge_workspace_id_missing", "registration document does not contain any enabled workspace bindings"),
+			map[string]any{
+				"document_id":        documentID,
+				"handle":             handle,
+				"workspace_bindings": workspaceBindings,
+			},
+		)
+	}
+
+	lines := []string{
+		"Bridge workspace id discovery",
+		"Document: " + documentID,
+	}
+	if handle != "" {
+		lines = append(lines, "Handle: "+handle)
+	}
+	if actorID != "" {
+		lines = append(lines, "Actor ID: "+actorID)
+	}
+	if registrationStatus != "" {
+		lines = append(lines, "Registration status: "+registrationStatus)
+	}
+	lines = append(lines, "Workspace IDs:")
+	for _, workspaceID := range workspaceIDs {
+		lines = append(lines, "- "+workspaceID)
+	}
+	if handle != "" {
+		lines = append(lines, "Next step: oar bridge init-config --kind hermes --output ./agent.toml --workspace-id "+workspaceIDs[0]+" --handle "+handle)
+	}
+	return &commandResult{
+		Text: strings.Join(lines, "\n"),
+		Data: map[string]any{
+			"document_id":         documentID,
+			"handle":              handle,
+			"actor_id":            actorID,
+			"registration_status": registrationStatus,
+			"workspace_ids":       workspaceIDs,
+			"workspace_bindings":  workspaceBindings,
 		},
 	}, nil
 }
@@ -736,11 +1001,15 @@ func probeBridgeBinaryOutput(ctx context.Context, bridgeBinary string) (string, 
 
 func defaultBridgeCommandRun(ctx context.Context, name string, args ...string) (string, string, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
-	output, err := cmd.CombinedOutput()
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
 	if err != nil {
-		return "", string(output), err
+		return stdout.String(), stderr.String(), err
 	}
-	return string(output), "", nil
+	return stdout.String(), stderr.String(), nil
 }
 
 func bridgeWriteLauncher(path string, bridgeBinary string) error {
@@ -775,4 +1044,95 @@ func bridgePathContains(getenv func(string) string, dir string) bool {
 		}
 	}
 	return false
+}
+
+type bridgeConfigDetails struct {
+	ConfigPath    string
+	AuthStatePath string
+	AgentHandle   string
+}
+
+func loadBridgeConfigDetails(configPath string) (bridgeConfigDetails, error) {
+	absPath, err := filepath.Abs(configPath)
+	if err != nil {
+		return bridgeConfigDetails{}, errnorm.Wrap(errnorm.KindLocal, "bridge_config_resolve_failed", "failed to resolve bridge config path", err)
+	}
+	content, err := bridgeReadFile(absPath)
+	if err != nil {
+		return bridgeConfigDetails{}, errnorm.Wrap(errnorm.KindLocal, "bridge_config_read_failed", "failed to read bridge config", err)
+	}
+	authStatePath := bridgeConfigStringValue(string(content), "auth", "state_path")
+	if authStatePath == "" {
+		authStatePath = ".state/auth.json"
+	}
+	if !filepath.IsAbs(authStatePath) {
+		authStatePath = filepath.Join(filepath.Dir(absPath), authStatePath)
+	}
+	return bridgeConfigDetails{
+		ConfigPath:    absPath,
+		AuthStatePath: authStatePath,
+		AgentHandle:   bridgeConfigStringValue(string(content), "agent", "handle"),
+	}, nil
+}
+
+func bridgeConfigStringValue(content string, section string, key string) string {
+	currentSection := ""
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if matches := bridgeSectionHeaderPattern.FindStringSubmatch(line); len(matches) == 2 {
+			currentSection = matches[1]
+			continue
+		}
+		if currentSection != section {
+			continue
+		}
+		name, rawValue, ok := parseBridgeConfigAssignment(line)
+		if !ok || name != key {
+			continue
+		}
+		return rawValue
+	}
+	return ""
+}
+
+func parseBridgeConfigAssignment(line string) (string, string, bool) {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+		return "", "", false
+	}
+	idx := strings.Index(trimmed, "=")
+	if idx <= 0 {
+		return "", "", false
+	}
+	name := strings.TrimSpace(trimmed[:idx])
+	rawValue := strings.TrimSpace(trimmed[idx+1:])
+	if commentIdx := strings.Index(rawValue, "#"); commentIdx >= 0 {
+		rawValue = strings.TrimSpace(rawValue[:commentIdx])
+	}
+	if len(rawValue) >= 2 && strings.HasPrefix(rawValue, "\"") && strings.HasSuffix(rawValue, "\"") {
+		if unquoted, err := strconv.Unquote(rawValue); err == nil {
+			rawValue = unquoted
+		}
+	}
+	if name == "" || rawValue == "" {
+		return "", "", false
+	}
+	return name, rawValue, true
+}
+
+func writeBridgeJSONFile(path string, payload map[string]any) error {
+	if err := bridgeMkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return errnorm.Wrap(errnorm.KindLocal, "bridge_auth_dir_failed", "failed to create bridge auth directory", err)
+	}
+	encoded, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return errnorm.Wrap(errnorm.KindLocal, "bridge_auth_encode_failed", "failed to encode bridge auth state", err)
+	}
+	if err := bridgeWriteFile(path, append(encoded, '\n'), 0o600); err != nil {
+		return errnorm.Wrap(errnorm.KindLocal, "bridge_auth_write_failed", "failed to write bridge auth state", err)
+	}
+	return nil
 }

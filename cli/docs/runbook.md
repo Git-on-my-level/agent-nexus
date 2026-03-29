@@ -49,8 +49,10 @@ If an agent/operator only has the `oar` binary installed and needs the wake-rout
 ```bash
 # requires Python 3.11+ and git on PATH
 oar bridge install
+oar bridge workspace-id --handle <handle>
 oar bridge init-config --kind router --output ./router.toml --workspace-id <workspace-id>
 oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle>
+oar bridge import-auth --config ./agent.toml --from-profile <agent>
 oar bridge start --config ./router.toml
 oar bridge start --config ./agent.toml
 oar bridge status --config ./agent.toml

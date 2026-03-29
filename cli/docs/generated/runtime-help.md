@@ -108,7 +108,9 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 - `docs apply` (local-helper): Apply a previously staged document update proposal.
 - `meta skill` (local-helper): Render a bundled editor-specific skill file from the canonical OAR agent guide.
 - `bridge install` (local-helper): Install `oar-agent-bridge` into a dedicated Python 3.11+ virtualenv and expose a PATH wrapper.
+- `bridge import-auth` (local-helper): Copy an existing `oar` profile and key into bridge auth state for one bridge config.
 - `bridge init-config` (local-helper): Write a minimal router or agent bridge TOML config with the pending-until-check-in lifecycle baked in.
+- `bridge workspace-id` (local-helper): Discover durable workspace ids from an existing agent registration document.
 - `bridge doctor` (local-helper): Validate bridge install, config presence, and registration readiness without starting the daemon.
 - `bridge start` (local-helper): Start a managed bridge or router daemon for one config file.
 - `bridge stop` (local-helper): Stop a managed bridge or router daemon for one config file.
@@ -290,8 +292,10 @@ What changed
 
 - The main CLI now owns the bootstrap path for fresh machines:
   - `oar bridge install`
+  - `oar bridge import-auth`
   - `oar bridge init-config`
   - `oar bridge start|stop|restart|status|logs`
+  - `oar bridge workspace-id`
   - `oar bridge doctor`
 - The Python package still owns runtime behavior:
   - `oar-agent-bridge auth register`
@@ -341,6 +345,7 @@ That is the guardrail: humans should not tag an agent until the bridge has check
 Workspace id source of truth
 
 - `<workspace-id>` must be the durable router workspace id, not a slug and not a UI path segment.
+- If an `agentreg.<handle>` document already exists, use `oar bridge workspace-id --handle <handle>` to read its enabled workspace bindings first.
 - If you are bringing up a new router, the source of truth is the value you choose and set at `[oar] workspace_id` in the router config. Use the same value in every bridge config.
 - If a router already exists, inspect that deployed router config and copy its `[oar] workspace_id` exactly.
 - If the deployment is driven by control-plane workspace records, copy the durable `workspace_id` from that workspace record, not the slug.
@@ -358,20 +363,24 @@ First-time operator path
   oar bridge init-config --kind router --output ./router.toml --workspace-id <workspace-id>
   oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle>
 
-3. Register the router principal. Use `--bootstrap-token` only for the very first principal in a fresh environment:
+3. If a matching `oar` profile already exists for the target principal, import it into the bridge config:
+
+  oar bridge import-auth --config ./agent.toml --from-profile <agent>
+
+4. Register the router principal. Use `--bootstrap-token` only for the very first principal in a fresh environment:
 
   oar-agent-bridge auth register --config ./router.toml --bootstrap-token <token>
 
-4. Register the target bridge principal and write the initial pending registration:
+5. Register the target bridge principal and write the initial pending registration when auth does not already exist:
 
   oar-agent-bridge auth register --config ./agent.toml --invite-token <token> --apply-registration
 
-5. Start the managed router and bridge daemons from the main CLI:
+6. Start the managed router and bridge daemons from the main CLI:
 
   oar bridge start --config ./router.toml
   oar bridge start --config ./agent.toml
 
-6. Confirm the process and readiness state before humans use `@handle`:
+7. Confirm the process and readiness state before humans use `@handle`:
 
   oar bridge status --config ./agent.toml
   oar bridge doctor --config ./agent.toml
@@ -380,9 +389,9 @@ First-time operator path
 
   The doctor should report both adapter readiness and the registration as wakeable. If it still says pending, stale, or adapter probe failed, fix that first.
 
-7. Post a test wake message containing `@<handle>`.
+8. Post a test wake message containing `@<handle>`.
 
-8. Confirm the durable trace:
+9. Confirm the durable trace:
   - `message_posted`
   - `agent_wakeup_requested`
   - `agent_wakeup_claimed`
@@ -461,6 +470,8 @@ How agents discover it
 - Read this topic with `oar meta doc wake-routing`.
 - Read the preferred runtime path with `oar meta doc agent-bridge`.
 - Use `oar help bridge` to bootstrap the runtime from the main CLI.
+- Use `oar bridge workspace-id --handle <handle>` when an existing registration doc is the easiest source of truth for the durable workspace id.
+- Use `oar bridge import-auth --config ./agent.toml --from-profile <agent>` when matching `oar` auth already exists.
 - Use `oar auth whoami` to confirm your current username and actor id.
 - Use `oar docs get --document-id agentreg.<handle> --json` to inspect a registration document directly.
 
@@ -475,7 +486,11 @@ Preferred path when you are using `oar-agent-bridge`
   oar bridge init-config --kind router --output ./router.toml --workspace-id <workspace-id>
   oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle>
 
-3. Register auth and write the initial pending registration:
+3. If matching `oar` auth already exists, import it into the bridge config:
+
+  oar bridge import-auth --config ./agent.toml --from-profile <agent>
+
+4. Register auth and write the initial pending registration when auth does not already exist:
 
   oar-agent-bridge auth register --config ./agent.toml --invite-token <token> --apply-registration
 
@@ -483,12 +498,12 @@ Preferred path when you are using `oar-agent-bridge`
 
   oar-agent-bridge registration apply --config <agent.toml>
 
-4. Start the router and target bridge:
+5. Start the router and target bridge:
 
   oar bridge start --config ./router.toml
   oar bridge start --config ./agent.toml
 
-5. Verify the bridge has checked in before telling humans to use `@handle`:
+6. Verify the bridge has checked in before telling humans to use `@handle`:
 
   oar bridge status --config ./agent.toml
   oar bridge doctor --config ./agent.toml
@@ -506,6 +521,7 @@ If you are writing the document manually, only create the pending registration s
 
 2. Resolve the durable workspace id you want to enable:
 
+  - If an existing registration doc is available, start with `oar bridge workspace-id --handle <handle>` or `oar bridge workspace-id --document-id agentreg.<handle>`.
   - If you are configuring the router yourself, the source of truth is `[oar] workspace_id` in the router config.
   - If a router already exists, inspect that deployed router config and copy its `workspace_id` exactly.
   - If your deployment is driven by control-plane workspace records, copy the durable workspace id from that record, not the slug.
@@ -876,22 +892,26 @@ Lifecycle constraint
 Subcommands
 
   bridge install      Install or refresh the managed `oar-agent-bridge` virtualenv and wrapper
+  bridge import-auth  Copy an existing `oar` profile into bridge auth state
   bridge init-config  Render a minimal router or bridge TOML config
   bridge start        Start a managed router or bridge daemon for one config
   bridge stop         Stop a managed router or bridge daemon for one config
   bridge restart      Restart a managed router or bridge daemon for one config
   bridge status       Inspect managed process state for one config
   bridge logs         Read recent log lines for one config
+  bridge workspace-id Read workspace ids from an existing registration document
   bridge doctor       Validate install/config/readiness without starting daemons
 
 Recommended order
 
 1. `oar bridge install`
-2. `oar bridge init-config --kind router --output ./router.toml --workspace-id <workspace-id>`
-3. `oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle>`
-4. `oar-agent-bridge auth register ...` for the router and agent principal
-5. `oar bridge start --config ./router.toml` and `oar bridge start --config ./agent.toml`
-6. `oar bridge status --config ./agent.toml` and `oar bridge doctor --config ./agent.toml` before telling humans to tag `@handle`
+2. `oar bridge workspace-id --handle <handle>` if a registration doc already exists and you need the real durable workspace id
+3. `oar bridge init-config --kind router --output ./router.toml --workspace-id <workspace-id>`
+4. `oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle>`
+5. `oar bridge import-auth --config ./agent.toml --from-profile <agent>` when matching `oar` auth already exists
+6. `oar-agent-bridge auth register ...` for the router and agent principal when auth does not already exist
+7. `oar bridge start --config ./router.toml` and `oar bridge start --config ./agent.toml`
+8. `oar bridge status --config ./agent.toml` and `oar bridge doctor --config ./agent.toml` before telling humans to tag `@handle`
 ```
 
 ## `import`
@@ -3524,6 +3544,32 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
+## `bridge import-auth`
+
+Copy an existing `oar` profile and key into bridge auth state for one bridge config.
+
+```text
+Local Help: bridge import-auth
+
+- Kind: `local helper`
+- Summary: Copy an existing `oar` profile and key into bridge auth state for one bridge config.
+- Composition: Pure local helper. Reads an existing `oar` profile plus Ed25519 key material, converts it into bridge auth state, and writes it to the bridge config's `[auth].state_path`.
+- JSON body: `config_path`, `auth_state_path`, `profile_path`, `profile_agent`, `username`, `actor_id`, `agent_id`, `key_id`
+- Examples:
+  - `oar bridge import-auth --config ./agent.toml --from-profile agent-a`
+  - `oar --agent agent-a bridge import-auth --config ./agent.toml`
+
+Flags:
+  --config <path>              Bridge config whose auth state should be populated.
+  --from-profile <agent>       Existing `oar` profile name to import. Defaults to the active CLI profile.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json bridge import-auth ... ; oar bridge import-auth ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
 ## `bridge init-config`
 
 Write a minimal router or agent bridge TOML config with the pending-until-check-in lifecycle baked in.
@@ -3549,6 +3595,32 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: oar --json bridge init-config ... ; oar bridge init-config ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `bridge workspace-id`
+
+Discover durable workspace ids from an existing agent registration document.
+
+```text
+Local Help: bridge workspace-id
+
+- Kind: `local helper`
+- Summary: Discover durable workspace ids from an existing agent registration document.
+- Composition: Uses the active `oar` auth/profile to read `agentreg.<handle>` and extract enabled workspace bindings so bridge bootstrap can reuse the real durable workspace id instead of guessing.
+- JSON body: `document_id`, `handle`, `actor_id`, `registration_status`, `workspace_ids`, `workspace_bindings`
+- Examples:
+  - `oar --agent agent-a bridge workspace-id --handle hermes`
+  - `oar bridge workspace-id --document-id agentreg.hermes`
+
+Flags:
+  --handle <name>              Agent handle whose `agentreg.<handle>` document should be inspected.
+  --document-id <id>           Registration document id to inspect directly. Defaults to `agentreg.<handle>`.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json bridge workspace-id ... ; oar bridge workspace-id ... --json
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
