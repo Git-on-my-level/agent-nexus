@@ -512,6 +512,7 @@ async function seedEvents() {
       mapRefs(sourceEvent.refs),
       mappedThreadId,
     );
+    const sourceId = String(sourceEvent.id ?? "").trim();
     const eventPayload = {
       type: sourceEvent.type,
       thread_id: mappedThreadId,
@@ -519,6 +520,7 @@ async function seedEvents() {
       summary: sourceEvent.summary,
       payload,
       provenance: sourceEvent.provenance,
+      ...(sourceId ? { id: sourceId } : {}),
     };
 
     try {

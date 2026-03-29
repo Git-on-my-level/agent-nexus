@@ -316,7 +316,7 @@ const events = [
     type: "message_posted",
     actor_id: "actor-ops-ai",
     thread_id: "thread-lemon-shortage",
-    refs: ["thread:thread-lemon-shortage"],
+    refs: ["thread:thread-lemon-shortage", "event:evt-supply-001"],
     summary:
       "OpsAI instructed SqueezeBot to half-batch mode and escalated priority to P0.",
     payload: {
@@ -345,7 +345,7 @@ const events = [
     type: "message_posted",
     actor_id: "actor-supply-rover",
     thread_id: "thread-lemon-shortage",
-    refs: ["thread:thread-lemon-shortage"],
+    refs: ["thread:thread-lemon-shortage", "event:evt-supply-002"],
     summary:
       "LocalGrove Bot now online — recommending 100-unit order at $0.31/lemon.",
     payload: {

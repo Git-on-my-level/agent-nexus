@@ -27,15 +27,41 @@ function compareEventsNewestFirst(a, b) {
   return String(b.id ?? "").localeCompare(String(a.id ?? ""));
 }
 
-function extractParentEventId(event) {
+function collectEventRefIds(event) {
   const refs = Array.isArray(event?.refs) ? event.refs : [];
+  const ids = [];
   for (const ref of refs) {
-    const value = String(ref ?? "");
+    const value = String(ref ?? "").trim();
     if (value.startsWith("event:")) {
-      return value.slice("event:".length);
+      const id = value.slice("event:".length).trim();
+      if (id) {
+        ids.push(id);
+      }
     }
   }
-  return "";
+  return ids;
+}
+
+/**
+ * Parent for a reply is conveyed as `event:<parent_event_id>` in refs (see oar-schema
+ * message_posted). Messages may include multiple `event:` refs (e.g. citations); the
+ * parent is the ref that points at another message_posted in this thread when possible.
+ */
+function extractParentEventId(event, messageIdsInThread) {
+  const candidates = collectEventRefIds(event);
+  if (candidates.length === 0) {
+    return "";
+  }
+  const idSet =
+    messageIdsInThread instanceof Set
+      ? messageIdsInThread
+      : new Set(messageIdsInThread ?? []);
+  for (const id of candidates) {
+    if (idSet.has(id)) {
+      return id;
+    }
+  }
+  return candidates[0];
 }
 
 function stripMessagePrefix(value) {
@@ -57,7 +83,8 @@ function extractMessageText(event) {
 
 function decorateMessageEvent(event, options = {}) {
   const view = toTimelineViewEvent(event, options);
-  const parentEventId = extractParentEventId(event);
+  const messageIdsInThread = options.messageIdsInThread;
+  const parentEventId = extractParentEventId(event, messageIdsInThread);
   const threadId = String(options.threadId ?? event?.thread_id ?? "").trim();
 
   return {
@@ -78,12 +105,17 @@ function decorateMessageEvent(event, options = {}) {
 }
 
 export function toMessageThreadView(events = [], options = {}) {
-  const messages = Array.isArray(events)
-    ? events
-        .filter((event) => String(event?.type ?? "") === "message_posted")
-        .map((event) => decorateMessageEvent(event, options))
-        .sort(compareEventsOldestFirst)
+  const rawMessages = Array.isArray(events)
+    ? events.filter((event) => String(event?.type ?? "") === "message_posted")
     : [];
+  const messageIdsInThread = new Set(
+    rawMessages.map((e) => String(e?.id ?? "").trim()).filter(Boolean),
+  );
+  const messages = rawMessages
+    .map((event) =>
+      decorateMessageEvent(event, { ...options, messageIdsInThread }),
+    )
+    .sort(compareEventsOldestFirst);
 
   const nodesById = new Map(
     messages.map((message) => [message.id, { ...message, children: [] }]),

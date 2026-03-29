@@ -53,6 +53,34 @@ describe("message thread utils", () => {
     ]);
   });
 
+  it("picks the parent event ref that points to another message when multiple event refs exist", () => {
+    const threads = toMessageThreadView(
+      [
+        {
+          id: "root-1",
+          ts: "2026-03-03T10:00:00.000Z",
+          type: "message_posted",
+          thread_id: "thread-1",
+          refs: ["thread:thread-1"],
+          summary: "Message: root",
+        },
+        {
+          id: "reply-1",
+          ts: "2026-03-03T10:01:00.000Z",
+          type: "message_posted",
+          thread_id: "thread-1",
+          refs: ["thread:thread-1", "event:unrelated-event", "event:root-1"],
+          summary: "Message: reply",
+        },
+      ],
+      { threadId: "thread-1" },
+    );
+
+    expect(threads).toHaveLength(1);
+    expect(threads[0].id).toBe("root-1");
+    expect(threads[0].children.map((c) => c.id)).toEqual(["reply-1"]);
+  });
+
   it("keeps orphan replies as top-level messages and strips structural refs", () => {
     const threads = toMessageThreadView(
       [

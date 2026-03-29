@@ -39,7 +39,12 @@
   {/if}
 
   {#if message.children.length > 0}
-    <div class="mt-3 space-y-3 border-l border-[var(--ui-border)] pl-4 sm:pl-5">
+    <!-- -mx-4 cancels this article's horizontal padding so nested rows use the full card
+         width; only the left border + pl indent the thread. Reply buttons stay on the
+         same right edge as the root message. -->
+    <div
+      class="mt-3 -mx-4 space-y-2 border-l border-[var(--ui-border)] pl-2.5 sm:pl-3"
+    >
       {#each message.children as child}
         <Self
           message={child}
