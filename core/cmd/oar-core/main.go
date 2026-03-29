@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -22,8 +23,10 @@ import (
 	"organization-autorunner-core/internal/controlplaneauth"
 	"organization-autorunner-core/internal/controlplaneauth/heartbeat"
 	"organization-autorunner-core/internal/primitives"
+	"organization-autorunner-core/internal/router"
 	"organization-autorunner-core/internal/schema"
 	"organization-autorunner-core/internal/server"
+	"organization-autorunner-core/internal/sidecar"
 	"organization-autorunner-core/internal/storage"
 )
 
@@ -67,6 +70,7 @@ func main() {
 		blobS3SessionToken         = envString("OAR_BLOB_S3_SESSION_TOKEN", "")
 		blobS3ForcePathStyle       = envBool("OAR_BLOB_S3_FORCE_PATH_STYLE", false)
 		coreVersion                = envString("OAR_CORE_VERSION", buildinfo.Current)
+		coreBaseURL                = envString("OAR_CORE_BASE_URL", "")
 		apiVersion                 = envString("OAR_API_VERSION", defaultAPIVersion)
 		minCLIVersion              = envString("OAR_MIN_CLI_VERSION", buildinfo.Current)
 		recommendedCLIVersion      = envString("OAR_RECOMMENDED_CLI_VERSION", buildinfo.Current)
@@ -92,10 +96,16 @@ func main() {
 		controlPlaneTokenIssuer    = envString("OAR_CONTROL_PLANE_TOKEN_ISSUER", "")
 		controlPlaneTokenAudience  = envString("OAR_CONTROL_PLANE_TOKEN_AUDIENCE", "")
 		controlPlaneWorkspaceID    = envString("OAR_CONTROL_PLANE_WORKSPACE_ID", "")
+		workspaceID                = envString("OAR_WORKSPACE_ID", "")
+		workspaceName              = envString("OAR_WORKSPACE_NAME", "Main")
 		controlPlaneTokenPublicKey = envString("OAR_CONTROL_PLANE_TOKEN_PUBLIC_KEY", "")
 		workspaceServiceID         = envString("OAR_WORKSPACE_SERVICE_ID", "")
 		workspaceServicePrivateKey = envString("OAR_WORKSPACE_SERVICE_PRIVATE_KEY", "")
 		corsAllowedOrigins         = envString("OAR_CORS_ALLOWED_ORIGINS", "")
+		sidecarRouterEnabled       = envBool("OAR_SIDECAR_ROUTER_ENABLED", true)
+		sidecarRouterStatePath     = envString("OAR_SIDECAR_ROUTER_STATE_PATH", "")
+		sidecarRouterPollInterval  = envDuration("OAR_SIDECAR_ROUTER_POLL_INTERVAL", time.Second)
+		sidecarRouterCacheTTL      = envDuration("OAR_SIDECAR_ROUTER_PRINCIPAL_CACHE_TTL", time.Minute)
 		shutdownTimeout            = envDuration("OAR_SHUTDOWN_TIMEOUT", 15*time.Second)
 		workspaceQuota             = primitives.WorkspaceQuota{
 			MaxBlobBytes:         envInt64("OAR_WORKSPACE_MAX_BLOB_BYTES", defaultWorkspaceMaxBlobBytes),
@@ -169,6 +179,25 @@ func main() {
 	if streamPollInterval <= 0 {
 		streamPollInterval = time.Second
 	}
+	addr := listenAddress
+	if addr == "" {
+		addr = net.JoinHostPort(host, strconv.Itoa(port))
+	}
+	if strings.TrimSpace(coreBaseURL) == "" {
+		coreBaseURL = defaultCoreBaseURL(addr)
+	}
+	if strings.TrimSpace(workspaceID) == "" {
+		workspaceID = strings.TrimSpace(controlPlaneWorkspaceID)
+	}
+	if strings.TrimSpace(workspaceID) == "" {
+		workspaceID = "ws_main"
+	}
+	if strings.TrimSpace(workspaceName) == "" {
+		workspaceName = "Main"
+	}
+	if strings.TrimSpace(sidecarRouterStatePath) == "" {
+		sidecarRouterStatePath = filepath.Join(workspace.Layout().RootDir, "router", "router-state.json")
+	}
 
 	blobBackendImpl, effectiveBlobRoot, err := buildBlobBackend(context.Background(), workspace.Layout(), blobBackendConfig{
 		Backend: blobBackend,
@@ -187,11 +216,6 @@ func main() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "invalid blob backend configuration: %v\n", err)
 		os.Exit(1)
-	}
-
-	addr := listenAddress
-	if addr == "" {
-		addr = net.JoinHostPort(host, strconv.Itoa(port))
 	}
 
 	actorRegistry := actors.NewStore(workspace.DB())
@@ -254,6 +278,60 @@ func main() {
 		DirtyBatchSize:    projectionBatchSize,
 		SystemActorID:     "oar-core",
 	})
+	routerState, err := router.NewStateStore(sidecarRouterStatePath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to initialize router state: %v\n", err)
+		os.Exit(1)
+	}
+	routerService := router.NewService(router.Config{
+		BaseURL:           coreBaseURL,
+		WorkspaceID:       workspaceID,
+		WorkspaceName:     workspaceName,
+		StatePath:         sidecarRouterStatePath,
+		PrincipalCacheTTL: sidecarRouterCacheTTL,
+		PollInterval:      sidecarRouterPollInterval,
+		ActorID:           "oar-core",
+	}, router.Dependencies{
+		ListPrincipals: func(ctx context.Context, limit int) ([]auth.AuthPrincipalSummary, error) {
+			filter := auth.AuthPrincipalListFilter{}
+			if limit > 0 {
+				filter.Limit = &limit
+			}
+			principals, _, err := authStore.ListPrincipals(ctx, filter)
+			return principals, err
+		},
+		ListMessagePostedAfter: func(ctx context.Context, cursor primitives.EventCursor, limit int) ([]map[string]any, error) {
+			return primitiveStore.ListEventsAfter(ctx, primitives.EventListFilter{Types: []string{router.MessagePostedEvent}}, cursor, limit)
+		},
+		GetRegistrationContent: func(ctx context.Context, documentID string) (map[string]any, error) {
+			_, revision, err := primitiveStore.GetDocument(ctx, documentID)
+			if err != nil {
+				return nil, err
+			}
+			content, ok := revision["content"].(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("document %s content is not structured", documentID)
+			}
+			return content, nil
+		},
+		GetEvent:  primitiveStore.GetEvent,
+		GetThread: primitiveStore.GetThread,
+		CreateArtifact: func(ctx context.Context, actorID string, artifact map[string]any, content any, contentType string) error {
+			_, err := primitiveStore.CreateArtifact(ctx, actorID, artifact, content, contentType)
+			return err
+		},
+		AppendEvent: func(ctx context.Context, actorID string, event map[string]any) error {
+			_, err := primitiveStore.AppendEvent(ctx, actorID, event)
+			return err
+		},
+		MarkThreadDirty: func(ctx context.Context, threadID string, queuedAt time.Time) error {
+			return primitiveStore.MarkThreadProjectionsDirty(ctx, []string{threadID}, queuedAt)
+		},
+	}, routerState)
+	sidecarHost := sidecar.NewHost(sidecar.Registration{
+		Service: routerService,
+		Enabled: sidecarRouterEnabled,
+	})
 	var heartbeatReporter *heartbeat.Reporter
 	if strings.TrimSpace(controlPlaneBaseURL) != "" {
 		heartbeatReporter, err = heartbeat.NewReporter(heartbeat.ReporterConfig{
@@ -273,7 +351,19 @@ func main() {
 						},
 					}
 				}
-				return map[string]any{"ok": true}
+				summary := map[string]any{"ok": true}
+				if err := sidecarHost.Ready(ctx); err != nil {
+					return map[string]any{
+						"ok": false,
+						"error": map[string]any{
+							"code":    "sidecar_unavailable",
+							"message": "sidecar readiness check failed",
+						},
+						"sidecars": sidecarHost.Snapshot(ctx),
+					}
+				}
+				summary["sidecars"] = sidecarHost.Snapshot(ctx)
+				return summary
 			},
 			ProjectionMaintenanceSummary: func(ctx context.Context, now time.Time) map[string]any {
 				return toStringAnyMap(projectionMaintainer.Snapshot(ctx, now))
@@ -298,6 +388,7 @@ func main() {
 	handler := server.NewHandler(
 		contract.Version,
 		server.WithHealthCheck(workspace.Ping),
+		server.WithReadinessCheck("sidecars", "sidecar_unavailable", "sidecar readiness check failed", sidecarHost.Ready),
 		server.WithActorRegistry(actorRegistry),
 		server.WithAuthStore(authStore),
 		server.WithPasskeySessionStore(passkeySessionStore),
@@ -325,6 +416,7 @@ func main() {
 		server.WithStreamPollInterval(streamPollInterval),
 		server.WithCORSAllowedOrigins(corsAllowedOrigins),
 		server.WithProjectionMaintainer(projectionMaintainer),
+		server.WithOpsHealthSection("sidecars", sidecarHost.Snapshot),
 		server.WithRequestBodyLimits(requestBodyLimits),
 		server.WithRouteRateLimits(routeRateLimits),
 	)
@@ -345,12 +437,14 @@ func main() {
 	if projectionMode == server.ProjectionModeBackground {
 		go projectionMaintainer.Run(maintenanceCtx)
 	}
+	sidecarHost.Run(maintenanceCtx)
 	if heartbeatReporter != nil {
 		go heartbeatReporter.Run(maintenanceCtx)
 	}
 	go func() {
 		fmt.Printf("oar-core listening on http://%s\n", addr)
 		fmt.Printf("  projection mode: %s\n", projectionMode)
+		fmt.Printf("  sidecars: router=%t (workspace_id=%s, workspace_name=%s)\n", sidecarRouterEnabled, workspaceID, workspaceName)
 		if heartbeatReporter != nil {
 			fmt.Printf("  control-plane heartbeat: %s (workspace_id=%s, interval=%s)\n", controlPlaneBaseURL, controlPlaneWorkspaceID, controlPlaneHeartbeatIntvl)
 		}
@@ -518,4 +612,21 @@ func detectBuildString(coreInstanceID string, coreVersion string) string {
 		return strings.TrimSpace(coreVersion)
 	}
 	return "oar-core"
+}
+
+func defaultCoreBaseURL(addr string) string {
+	addr = strings.TrimSpace(addr)
+	if addr == "" {
+		return "http://127.0.0.1:8000"
+	}
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return "http://" + addr
+	}
+	host = strings.Trim(strings.TrimSpace(host), "[]")
+	switch host {
+	case "", "0.0.0.0", "::":
+		host = "127.0.0.1"
+	}
+	return "http://" + net.JoinHostPort(host, port)
 }

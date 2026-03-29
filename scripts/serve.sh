@@ -16,7 +16,6 @@ SEED_CORE="${SEED_CORE:-1}"
 FORCE_SEED="${FORCE_SEED:-0}"
 
 CORE_PID=""
-ROUTER_PID=""
 UI_PID=""
 CLEANUP_DONE=0
 # After SIGTERM, how long to wait for oar-core (HTTP Shutdown + SQLite) and Vite before SIGKILL.
@@ -93,23 +92,17 @@ cleanup() {
 	fi
 
 	term_tree "${CORE_PID}"
-	term_tree "${ROUTER_PID}"
 	term_tree "${UI_PID}"
 
 	# Give oar-core time for graceful HTTP shutdown and DB close; Vite usually exits quickly.
 	wait_pid_exit "${CORE_PID}" "${CORE_TERM_WAIT_SEC}" || true
-	wait_pid_exit "${ROUTER_PID}" "${CORE_TERM_WAIT_SEC}" || true
 	wait_pid_exit "${UI_PID}" "${UI_TERM_WAIT_SEC}" || true
 
 	kill_tree "${CORE_PID}"
-	kill_tree "${ROUTER_PID}"
 	kill_tree "${UI_PID}"
 
 	if [ -n "${CORE_PID}" ]; then
 		wait "${CORE_PID}" 2>/dev/null || true
-	fi
-	if [ -n "${ROUTER_PID}" ]; then
-		wait "${ROUTER_PID}" 2>/dev/null || true
 	fi
 	if [ -n "${UI_PID}" ]; then
 		wait "${UI_PID}" 2>/dev/null || true
@@ -149,18 +142,10 @@ else
 	echo "Skipping core seed step (SEED_CORE=${SEED_CORE})."
 fi
 
-CORE_HOST="${CORE_HOST}" \
-CORE_PORT="${CORE_PORT}" \
-WORKSPACE_ROOT="${CORE_WORKSPACE_ROOT}" \
-OAR_ROUTER_WORKSPACE_ID="${OAR_ROUTER_WORKSPACE_ID:-ws_main}" \
-OAR_ROUTER_WORKSPACE_NAME="${OAR_ROUTER_WORKSPACE_NAME:-Main}" \
-	"${REPO_ROOT}/core/scripts/dev-router" &
-ROUTER_PID=$!
-
 (
 	cd "${REPO_ROOT}/web-ui"
 	PORT="${WEB_UI_PORT}" OAR_CORE_BASE_URL="${CORE_BASE_URL}" ./scripts/dev
 ) &
 UI_PID=$!
 
-wait "${CORE_PID}" "${ROUTER_PID}" "${UI_PID}"
+wait "${CORE_PID}" "${UI_PID}"

@@ -1,4 +1,4 @@
-.PHONY: help serve serve-router serve-control-plane build-prod run-prod run-prod-router fmt fmt-check vet test check check-ci lint ci-smoke smoke smoke-control-plane smoke-control-plane-human
+.PHONY: help serve serve-control-plane build-prod run-prod fmt fmt-check vet test check check-ci lint ci-smoke smoke smoke-control-plane smoke-control-plane-human
 
 HOST ?= 127.0.0.1
 PORT ?= 8000
@@ -12,7 +12,6 @@ SCHEMA_PATH ?= $(CURDIR)/../contracts/oar-schema.yaml
 help:
 	@echo "Common targets:"
 	@echo "  make serve      - run oar-core locally (development mode)"
-	@echo "  make serve-router - run oar-router locally (development mode)"
 	@echo "  make serve-control-plane - run oar-control-plane locally"
 	@echo "  make fmt        - format Go files in-place"
 	@echo "  make fmt-check  - verify Go files are gofmt-clean"
@@ -38,12 +37,6 @@ serve:
 	SCHEMA_PATH="$(SCHEMA_PATH)" \
 	./scripts/dev
 
-serve-router:
-	@CORE_HOST="$(HOST)" \
-	CORE_PORT="$(PORT)" \
-	WORKSPACE_ROOT="$(WORKSPACE_ROOT)" \
-	./scripts/dev-router
-
 serve-control-plane:
 	@HOST="$(HOST)" \
 	PORT="$(PORT)" \
@@ -55,11 +48,6 @@ run-prod: build-prod
 	SCHEMA_PATH="$(SCHEMA_PATH)" \
 	PORT="$(PORT)" \
 	./scripts/run-prod
-
-run-prod-router: build-prod
-	@WORKSPACE_ROOT="$(WORKSPACE_ROOT)" \
-	PORT="$(PORT)" \
-	./scripts/run-prod-router
 
 fmt:
 	@find . -type f -name '*.go' \

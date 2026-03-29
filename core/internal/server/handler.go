@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -20,6 +21,14 @@ import (
 )
 
 type HealthCheckFunc func(ctx context.Context) error
+type OpsHealthSectionFunc func(ctx context.Context) map[string]any
+
+type namedReadinessCheck struct {
+	Name    string
+	Code    string
+	Message string
+	Check   HealthCheckFunc
+}
 
 type ActorRegistry interface {
 	Register(ctx context.Context, actor actors.Actor) (actors.Actor, error)
@@ -118,11 +127,37 @@ type handlerOptions struct {
 	humanAuthMode                  string
 	controlPlaneHumanVerifier      *controlplaneauth.WorkspaceHumanVerifier
 	workspaceServiceIdentity       *controlplaneauth.WorkspaceServiceIdentity
+	readinessChecks                []namedReadinessCheck
+	opsHealthSections              map[string]OpsHealthSectionFunc
 }
 
 func WithHealthCheck(healthCheck HealthCheckFunc) HandlerOption {
 	return func(opts *handlerOptions) {
 		opts.healthCheck = healthCheck
+	}
+}
+
+func WithReadinessCheck(name string, code string, message string, check HealthCheckFunc) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.readinessChecks = append(opts.readinessChecks, namedReadinessCheck{
+			Name:    strings.TrimSpace(name),
+			Code:    strings.TrimSpace(code),
+			Message: strings.TrimSpace(message),
+			Check:   check,
+		})
+	}
+}
+
+func WithOpsHealthSection(name string, fn OpsHealthSectionFunc) HandlerOption {
+	return func(opts *handlerOptions) {
+		name = strings.TrimSpace(name)
+		if name == "" || fn == nil {
+			return
+		}
+		if opts.opsHealthSections == nil {
+			opts.opsHealthSections = make(map[string]OpsHealthSectionFunc)
+		}
+		opts.opsHealthSections[name] = fn
 	}
 }
 
@@ -361,6 +396,23 @@ func readinessErrorPayload(r *http.Request, opts handlerOptions) map[string]any 
 			}
 		}
 	}
+	for _, check := range opts.readinessChecks {
+		if check.Check == nil {
+			continue
+		}
+		if err := check.Check(r.Context()); err != nil {
+			code := firstNonEmptyString(check.Code, "service_unavailable")
+			message := firstNonEmptyString(check.Message, "readiness check failed")
+			return map[string]any{
+				"ok":    false,
+				"error": errorPayload(code, message),
+				"check": map[string]any{
+					"name":  check.Name,
+					"error": err.Error(),
+				},
+			}
+		}
+	}
 	return nil
 }
 
@@ -506,6 +558,16 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		payload := map[string]any{"ok": true}
 		if opts.projectionMaintainer != nil {
 			payload["projection_maintenance"] = opts.projectionMaintainer.Snapshot(r.Context(), time.Now().UTC())
+		}
+		if len(opts.opsHealthSections) > 0 {
+			keys := make([]string, 0, len(opts.opsHealthSections))
+			for key := range opts.opsHealthSections {
+				keys = append(keys, key)
+			}
+			sort.Strings(keys)
+			for _, key := range keys {
+				payload[key] = opts.opsHealthSections[key](r.Context())
+			}
 		}
 		if readinessPayload := readinessErrorPayload(r, opts); readinessPayload != nil {
 			for key, value := range readinessPayload {

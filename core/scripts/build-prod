@@ -6,12 +6,9 @@ cd "$ROOT_DIR"
 
 BIN_DIR="${BIN_DIR:-$ROOT_DIR/.bin}"
 BIN_PATH="${OAR_CORE_BIN:-$BIN_DIR/oar-core}"
-ROUTER_BIN_PATH="${OAR_ROUTER_BIN:-$BIN_DIR/oar-router}"
 
 mkdir -p "$(dirname "$BIN_PATH")"
 
 echo "Building oar-core → $BIN_PATH"
 go build -trimpath -ldflags='-s -w' -o "$BIN_PATH" ./cmd/oar-core
-echo "Building oar-router → $ROUTER_BIN_PATH"
-go build -trimpath -ldflags='-s -w' -o "$ROUTER_BIN_PATH" ./cmd/oar-router
 echo "Build complete: $BIN_PATH"

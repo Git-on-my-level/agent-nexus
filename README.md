@@ -75,7 +75,7 @@ make contract-gen
 `make serve` starts the default local workspace stack with the UI pointed at core:
 
 - core: `http://127.0.0.1:8000`
-- router: runs alongside core and tails the same workspace
+- embedded wake-routing sidecar: starts inside `oar-core` by default
 - web-ui: `http://127.0.0.1:5173`
 - before UI startup, `web-ui/scripts/seed-core-from-mock.mjs` populates core using the mock dataset
 
@@ -163,8 +163,8 @@ Useful `make serve` toggles:
 The vendored bridge package at `adapters/agent-bridge/` provides the per-agent
 bridge runtime and local adapter daemons for Hermes ACP and ZeroClaw Gateway.
 
-The workspace-owned `oar-router` service now lives under `core/` and runs
-alongside `oar-core` by default.
+The workspace-owned `oar-router` runtime now lives inside `oar-core` as an
+embedded sidecar and starts by default with the workspace core.
 
 - CLI-only bridge bootstrap: `oar bridge install`, `oar bridge init-config`, `oar bridge doctor`
 - Repo-local contributor workflow: `make bridge-setup`, `make bridge-doctor`, `make bridge-test`

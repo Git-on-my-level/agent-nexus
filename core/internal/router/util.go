@@ -40,6 +40,15 @@ func compactText(text string, limit int) string {
 	return strings.TrimSpace(text[:limit-1]) + "…"
 }
 
+func extractMessageText(event map[string]any) string {
+	if payload, ok := event["payload"].(map[string]any); ok {
+		if text := strings.TrimSpace(anyString(payload["text"])); text != "" {
+			return text
+		}
+	}
+	return strings.TrimSpace(anyString(event["summary"]))
+}
+
 func stableJSON(value any) ([]byte, error) {
 	return json.Marshal(value)
 }

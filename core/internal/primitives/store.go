@@ -67,6 +67,11 @@ type EventListFilter struct {
 	Types []string
 }
 
+type EventCursor struct {
+	TS string
+	ID string
+}
+
 type CommitmentListFilter struct {
 	ThreadID  string
 	Owner     string
@@ -1268,6 +1273,93 @@ func (s *Store) ListEvents(ctx context.Context, filter EventListFilter) ([]map[s
 		return nil, fmt.Errorf("iterate events: %w", err)
 	}
 
+	return events, nil
+}
+
+func (s *Store) ListEventsAfter(ctx context.Context, filter EventListFilter, cursor EventCursor, limit int) ([]map[string]any, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("primitives store database is not initialized")
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+
+	query := `SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json, body_json
+		FROM events
+		WHERE 1=1`
+	args := make([]any, 0, len(filter.Types)+3)
+
+	if len(filter.Types) > 0 {
+		placeholders := make([]string, 0, len(filter.Types))
+		for _, eventType := range filter.Types {
+			placeholders = append(placeholders, "?")
+			args = append(args, eventType)
+		}
+		query += ` AND type IN (` + strings.Join(placeholders, ",") + `)`
+	}
+	if strings.TrimSpace(cursor.TS) != "" {
+		query += ` AND (ts > ? OR (ts = ? AND id > ?))`
+		args = append(args, strings.TrimSpace(cursor.TS), strings.TrimSpace(cursor.TS), strings.TrimSpace(cursor.ID))
+	}
+	query += ` ORDER BY ts ASC, id ASC LIMIT ?`
+	args = append(args, limit)
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query events after cursor: %w", err)
+	}
+	defer rows.Close()
+
+	events := make([]map[string]any, 0)
+	for rows.Next() {
+		var (
+			eventID     string
+			typeValue   string
+			ts          string
+			actorID     string
+			thread      sql.NullString
+			refsJSON    string
+			payloadJSON string
+			bodyJSON    sql.NullString
+		)
+		if err := rows.Scan(&eventID, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON, &bodyJSON); err != nil {
+			return nil, fmt.Errorf("scan event after cursor: %w", err)
+		}
+
+		if bodyJSON.Valid && strings.TrimSpace(bodyJSON.String) != "" && bodyJSON.String != "{}" {
+			body := map[string]any{}
+			if err := json.Unmarshal([]byte(bodyJSON.String), &body); err != nil {
+				return nil, fmt.Errorf("decode event body after cursor: %w", err)
+			}
+			events = append(events, body)
+			continue
+		}
+
+		refs := make([]string, 0)
+		if err := json.Unmarshal([]byte(refsJSON), &refs); err != nil {
+			return nil, fmt.Errorf("decode event refs after cursor: %w", err)
+		}
+		payload := map[string]any{}
+		if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
+			return nil, fmt.Errorf("decode event payload after cursor: %w", err)
+		}
+
+		event := map[string]any{
+			"id":       eventID,
+			"type":     typeValue,
+			"ts":       ts,
+			"actor_id": actorID,
+			"refs":     refs,
+			"payload":  payload,
+		}
+		if thread.Valid {
+			event["thread_id"] = thread.String
+		}
+		events = append(events, event)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate events after cursor: %w", err)
+	}
 	return events, nil
 }
 

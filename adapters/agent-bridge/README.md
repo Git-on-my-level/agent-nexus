@@ -2,7 +2,7 @@
 
 Bridge adapters for Organization Autorunner (OAR).
 
-This package is bridge-only. Workspace `@handle` routing is owned by `oar-router`, which runs with the workspace deployment alongside `oar-core`. `oar-agent-bridge` assumes durable wake requests already exist in OAR and focuses on per-agent execution.
+This package is bridge-only. Workspace `@handle` routing is owned by the embedded `oar-router` sidecar inside `oar-core`. `oar-agent-bridge` assumes durable wake requests already exist in OAR and focuses on per-agent execution.
 
 This package implements three things:
 
@@ -169,7 +169,7 @@ Workspace identity:
 
 - `workspace_id` must be the durable workspace id, not a slug and not a UI path segment.
 - If an `agentreg.<handle>` document already exists, start with `oar bridge workspace-id --handle <handle>` to inspect its enabled workspace bindings.
-- If the workspace deployment already runs `oar-router`, copy its configured `workspace_id` exactly.
+- If the workspace deployment already documents its configured `workspace_id`, copy that exact value.
 - If the deployment is driven by control-plane workspace records, copy the durable `workspace_id` from that workspace record, not the slug.
 - The example value `ws_main` in this repo is only a sample.
 - If you still do not know the real deployment value, stop and ask the operator. Do not guess.
@@ -219,7 +219,7 @@ oar bridge install
 oar-agent-bridge --version
 ```
 
-2. Confirm the workspace deployment already runs `oar-router` and note the durable `workspace_id` it uses.
+2. Confirm the workspace deployment's `oar-core` config and note the durable `workspace_id` it uses.
 
 3. Generate or edit the agent config with your OAR base URL, durable workspace identity, and adapter-specific settings:
 

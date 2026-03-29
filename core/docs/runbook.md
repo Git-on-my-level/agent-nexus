@@ -1,7 +1,7 @@
 # oar-core Runbook
 
 This runbook covers reproducible local and production-like operation for
-`oar-core` and the workspace-owned `oar-router` service that now runs beside it.
+`oar-core`, including the embedded workspace-owned `oar-router` sidecar.
 
 The same Go module also ships `oar-control-plane`, the SaaS control-plane service
 for human accounts, organizations, workspace registry, invites, provisioning
@@ -35,6 +35,13 @@ For packed-host SaaS operations, see:
 | Full listen address (overrides host+port) | `--listen-addr` | `OAR_LISTEN_ADDR` | unset |
 | Schema path | `--schema-path` | `OAR_SCHEMA_PATH` | `../contracts/oar-schema.yaml` |
 | Core instance identifier | `--core-instance-id` | `OAR_CORE_INSTANCE_ID` | `core-local` |
+| Core base URL for wake-packet links | n/a | `OAR_CORE_BASE_URL` | derived from listen address |
+| Durable workspace id for wake routing | n/a | `OAR_WORKSPACE_ID` | `OAR_CONTROL_PLANE_WORKSPACE_ID`, else `ws_main` |
+| Workspace display name for wake packets | n/a | `OAR_WORKSPACE_NAME` | `Main` |
+| Enable embedded wake-routing sidecar | n/a | `OAR_SIDECAR_ROUTER_ENABLED` | `true` |
+| Embedded router state path | n/a | `OAR_SIDECAR_ROUTER_STATE_PATH` | `<workspace-root>/router/router-state.json` |
+| Embedded router poll interval | n/a | `OAR_SIDECAR_ROUTER_POLL_INTERVAL` | `1s` |
+| Embedded router principal cache TTL | n/a | `OAR_SIDECAR_ROUTER_PRINCIPAL_CACHE_TTL` | `60s` |
 | Enable dev actor mode | n/a | `OAR_ENABLE_DEV_ACTOR_MODE` | `false` |
 | Allow unauthenticated writes | n/a | `OAR_ALLOW_UNAUTHENTICATED_WRITES` | `false` |
 | Bootstrap token for first principal registration | n/a | `OAR_BOOTSTRAP_TOKEN` | unset |
@@ -65,18 +72,6 @@ For packed-host SaaS operations, see:
 | Write route rate limit per minute | n/a | `OAR_WRITE_ROUTE_RATE_LIMIT_PER_MINUTE` | `1200` |
 | Write route burst | n/a | `OAR_WRITE_ROUTE_RATE_BURST` | `200` |
 | Graceful shutdown timeout | n/a | `OAR_SHUTDOWN_TIMEOUT` | `15s` |
-
-`oar-router` is a separate workspace service. It reads its own flags/env vars:
-
-| Purpose | Flag | Env | Default |
-|---|---|---|---|
-| Core base URL | `--base-url` | `OAR_ROUTER_BASE_URL` | `http://127.0.0.1:8000` |
-| Durable workspace id | `--workspace-id` | `OAR_ROUTER_WORKSPACE_ID` | `ws_main` |
-| Workspace name | `--workspace-name` | `OAR_ROUTER_WORKSPACE_NAME` | `Main` |
-| Local router state path | `--state-path` | `OAR_ROUTER_STATE_PATH` | `.oar-workspace/router/router-state.json` |
-| Router auth state path | `--auth-state-path` | `OAR_ROUTER_AUTH_STATE_PATH` | `.oar-workspace/router/router-auth.json` |
-| Principal cache TTL | `--principal-cache-ttl` | `OAR_ROUTER_PRINCIPAL_CACHE_TTL` | `60s` |
-| Stream reconnect delay | `--reconnect-delay` | `OAR_ROUTER_RECONNECT_DELAY` | `3s` |
 
 Filesystem blobs remain the default for self-hosted and first packed-host deployments.
 Set `OAR_BLOB_BACKEND=s3` only when you explicitly want S3-compatible object storage.
@@ -115,12 +110,10 @@ Starting the server against an empty workspace root is enough to initialize stor
 
 ```bash
 ./scripts/dev
-./scripts/dev-router
 ```
 
-`make serve` from the repo root now starts `oar-core`, seeds the dev workspace,
-then starts `oar-router` and the web UI. Starting the router after the seed step
-avoids replaying wake-routing logic over mock bootstrap data.
+`make serve` from the repo root now starts `oar-core` with the embedded router
+enabled, seeds the dev workspace, and starts the web UI.
 
 ## Control-plane local development run
 
@@ -226,7 +219,6 @@ Use the production script (builds and runs the binary, no development `go run` l
 
 ```bash
 ./scripts/run-prod
-./scripts/run-prod-router
 ```
 
 Example with explicit config:
@@ -234,14 +226,11 @@ Example with explicit config:
 ```bash
 OAR_WORKSPACE_ROOT=/var/lib/oar/workspace \
 OAR_LISTEN_ADDR=0.0.0.0:8000 \
+OAR_WORKSPACE_ID=ws_example \
+OAR_WORKSPACE_NAME=Example \
 OAR_WEBAUTHN_RPID=oar.example.com \
 OAR_WEBAUTHN_ALLOWED_ORIGINS=https://oar.example.com,https://oar.tailnet.ts.net \
 ./scripts/run-prod
-
-OAR_ROUTER_BASE_URL=http://127.0.0.1:8000 \
-OAR_ROUTER_WORKSPACE_ID=ws_example \
-OAR_ROUTER_WORKSPACE_NAME="Example" \
-./scripts/run-prod-router
 ```
 
 If `OAR_WEBAUTHN_RPID`, `OAR_WEBAUTHN_ORIGIN`, and
@@ -279,7 +268,7 @@ heartbeat payload includes:
 
 ## Router responsibilities
 
-`oar-router` is the workspace-scoped service that:
+`oar-router` is the embedded workspace-scoped sidecar inside `oar-core` that:
 
 - tails `message_posted` from `oar-core`
 - resolves `@handle` mentions against registered agent principals
@@ -303,11 +292,12 @@ when the process is alive.
 
 `/livez` is an explicit liveness alias with the same minimal payload.
 
-`/readyz` performs the workspace storage connectivity check before the instance
-is treated as ready.
+`/readyz` performs the workspace storage connectivity check and embedded sidecar
+readiness checks before the instance is treated as ready.
 
 `/ops/health` is for authenticated or loopback-only operator diagnostics. When
-the readiness check passes, it also includes projection maintenance status:
+the readiness check passes, it also includes projection maintenance status and
+the embedded sidecar snapshot:
 
 - `mode`: `background` when the async maintainer loop is running, `manual` when
   writes only queue dirty projections and operators are expected to trigger

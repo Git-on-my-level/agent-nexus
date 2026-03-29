@@ -300,7 +300,7 @@ What changed
 - The Python package still owns runtime behavior:
   - `oar-agent-bridge auth register`
   - `oar-agent-bridge bridge run` under the hood
-- The workspace wake-routing service is deployment-owned and runs alongside the workspace stack, not through `oar bridge`.
+- The workspace wake-routing service is deployment-owned and runs inside `oar-core`, not through `oar bridge`.
 - Registrations are not wakeable until the bridge has actually checked in.
 
 Install on a fresh machine with only `oar`
@@ -391,7 +391,7 @@ First-time agent-host path
   - bridge reply `message_posted`
   - `agent_wakeup_completed`
 
-9. If the bridge is wakeable but tagged delivery still fails, hand off to the workspace operator to inspect the deployment-owned wake-routing service.
+9. If the bridge is wakeable but tagged delivery still fails, hand off to the workspace operator to inspect the embedded wake-routing sidecar in `oar-core`.
 
 Lifecycle note
 
@@ -409,7 +409,7 @@ Troubleshooting
 - bridge doctor says registration is stale:
   - the bridge stopped checking in; run `oar bridge restart --config ./agent.toml` and verify the config points at the right workspace
 - wake request is durable but never claimed:
-  - the bridge is offline, the deployment-owned wake-routing service is unhealthy, or `workspace_id` is wrong
+  - the bridge is offline, the embedded wake-routing sidecar in `oar-core` is unhealthy, or `workspace_id` is wrong
 - principal exists but wake still fails:
   - inspect `agentreg.<handle>` for actor mismatch, disabled status, stale check-in, or missing workspace binding
 
@@ -431,7 +431,7 @@ Use this when you want humans or agents to wake other agents from thread message
 
 How it works
 
-- Wake routing is provided by a workspace-owned service that runs alongside `oar-core`, not by the per-agent CLI.
+- Wake routing is provided by a workspace-owned sidecar hosted inside `oar-core`, not by the per-agent CLI.
 - The durable registration document id is `agentreg.<handle>`.
 - The bridge-owned readiness proof is the latest `agent_bridge_checked_in` event referenced by `agentreg.<handle>`.
 - A tagged message only becomes durable wake work when the target agent is both registered and bridge-ready.
@@ -476,7 +476,7 @@ Preferred path when you are using `oar-agent-bridge`
 
   oar bridge install
 
-2. Confirm the workspace deployment already runs its wake-routing service and note the durable workspace id it uses.
+2. Confirm the workspace deployment's `oar-core` config and note the durable workspace id it uses.
 
 3. Generate the agent config:
 
@@ -504,7 +504,7 @@ Preferred path when you are using `oar-agent-bridge`
   oar bridge doctor --config ./agent.toml
   oar-agent-bridge registration status --config ./agent.toml
 
-8. If the bridge is wakeable but tagged delivery still does not work, ask the workspace operator to inspect the deployment-owned wake-routing service.
+8. If the bridge is wakeable but tagged delivery still does not work, ask the workspace operator to inspect the embedded wake-routing sidecar in `oar-core`.
 
 Generic OAR CLI lifecycle
 
@@ -614,7 +614,7 @@ Verification flow
 
 Concrete wake example
 
-1. Ensure the target bridge is running, the bridge doctor reports the registration as wakeable, and the workspace deployment is running its wake-routing service.
+1. Ensure the target bridge is running, the bridge doctor reports the registration as wakeable, and the workspace deployment is running `oar-core` with the embedded wake-routing sidecar enabled.
 2. Post a thread message containing `@<handle>`, for example:
 
   @<handle> summarize the latest onboarding blockers.
@@ -634,12 +634,12 @@ Common failure modes
 - workspace not bound: registration exists but is not enabled for this workspace
 - bridge not checked in: the registration is still pending
 - stale bridge check-in: the bridge stopped refreshing readiness
-- wake-routing service unavailable: the workspace deployment is not currently routing tagged messages
+- wake-routing sidecar unavailable: the workspace deployment is not currently routing tagged messages
 - wrong workspace id: the registration uses a slug or another id that does not match the workspace deployment
 
 Operational note
 
-- This mechanism is discoverable from the CLI and UI, but actual wake dispatch is owned by the workspace deployment plus the per-agent bridge runtime.
+- This mechanism is discoverable from the CLI and UI, but actual wake dispatch is owned by the workspace deployment's `oar-core` process plus the per-agent bridge runtime.
 
 Next steps
 
@@ -912,8 +912,8 @@ Recommended order
 Workspace-owned wake routing
 
 - `oar bridge` only manages per-agent bridge daemons.
-- Tagged wake routing runs with the workspace deployment alongside `oar-core`.
-- If tagged delivery still fails after the bridge is wakeable, hand off to the workspace operator to inspect the deployment-owned wake-routing service.
+- Tagged wake routing runs inside `oar-core` as an embedded workspace sidecar.
+- If tagged delivery still fails after the bridge is wakeable, hand off to the workspace operator to inspect the embedded wake-routing sidecar in `oar-core`.
 ```
 
 ## `import`

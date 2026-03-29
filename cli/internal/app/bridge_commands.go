@@ -211,8 +211,8 @@ Recommended order
 Workspace-owned wake routing
 
 - `+"`oar bridge`"+` only manages per-agent bridge daemons.
-- Tagged wake routing runs with the workspace deployment alongside `+"`oar-core`"+`.
-- If tagged delivery still fails after the bridge is wakeable, hand off to the workspace operator to inspect the deployment-owned wake-routing service.
+- Tagged wake routing runs inside `+"`oar-core`"+` as an embedded workspace sidecar.
+- If tagged delivery still fails after the bridge is wakeable, hand off to the workspace operator to inspect the embedded wake-routing sidecar in `+"`oar-core`"+`.
 `) + "\n"
 }
 

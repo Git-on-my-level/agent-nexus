@@ -20,7 +20,7 @@ What changed
 - The Python package still owns runtime behavior:
   - <<tick>>oar-agent-bridge auth register<<tick>>
   - <<tick>>oar-agent-bridge bridge run<<tick>> under the hood
-- The workspace wake-routing service is deployment-owned and runs alongside the workspace stack, not through <<tick>>oar bridge<<tick>>.
+- The workspace wake-routing service is deployment-owned and runs inside <<tick>>oar-core<<tick>>, not through <<tick>>oar bridge<<tick>>.
 - Registrations are not wakeable until the bridge has actually checked in.
 
 Install on a fresh machine with only <<tick>>oar<<tick>>
@@ -111,7 +111,7 @@ First-time agent-host path
   - bridge reply <<tick>>message_posted<<tick>>
   - <<tick>>agent_wakeup_completed<<tick>>
 
-9. If the bridge is wakeable but tagged delivery still fails, hand off to the workspace operator to inspect the deployment-owned wake-routing service.
+9. If the bridge is wakeable but tagged delivery still fails, hand off to the workspace operator to inspect the embedded wake-routing sidecar in <<tick>>oar-core<<tick>>.
 
 Lifecycle note
 
@@ -129,7 +129,7 @@ Troubleshooting
 - bridge doctor says registration is stale:
   - the bridge stopped checking in; run <<tick>>oar bridge restart --config ./agent.toml<<tick>> and verify the config points at the right workspace
 - wake request is durable but never claimed:
-  - the bridge is offline, the deployment-owned wake-routing service is unhealthy, or <<tick>>workspace_id<<tick>> is wrong
+  - the bridge is offline, the embedded wake-routing sidecar in <<tick>>oar-core<<tick>> is unhealthy, or <<tick>>workspace_id<<tick>> is wrong
 - principal exists but wake still fails:
   - inspect <<tick>>agentreg.<handle><<tick>> for actor mismatch, disabled status, stale check-in, or missing workspace binding
 

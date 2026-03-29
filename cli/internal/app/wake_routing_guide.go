@@ -10,7 +10,7 @@ Use this when you want humans or agents to wake other agents from thread message
 
 How it works
 
-- Wake routing is provided by a workspace-owned service that runs alongside <<tick>>oar-core<<tick>>, not by the per-agent CLI.
+- Wake routing is provided by a workspace-owned sidecar hosted inside <<tick>>oar-core<<tick>>, not by the per-agent CLI.
 - The durable registration document id is <<tick>>agentreg.<handle><<tick>>.
 - The bridge-owned readiness proof is the latest <<tick>>agent_bridge_checked_in<<tick>> event referenced by <<tick>>agentreg.<handle><<tick>>.
 - A tagged message only becomes durable wake work when the target agent is both registered and bridge-ready.
@@ -55,7 +55,7 @@ Preferred path when you are using <<tick>>oar-agent-bridge<<tick>>
 
   oar bridge install
 
-2. Confirm the workspace deployment already runs its wake-routing service and note the durable workspace id it uses.
+2. Confirm the workspace deployment's <<tick>>oar-core<<tick>> config and note the durable workspace id it uses.
 
 3. Generate the agent config:
 
@@ -83,7 +83,7 @@ Preferred path when you are using <<tick>>oar-agent-bridge<<tick>>
   oar bridge doctor --config ./agent.toml
   oar-agent-bridge registration status --config ./agent.toml
 
-8. If the bridge is wakeable but tagged delivery still does not work, ask the workspace operator to inspect the deployment-owned wake-routing service.
+8. If the bridge is wakeable but tagged delivery still does not work, ask the workspace operator to inspect the embedded wake-routing sidecar in <<tick>>oar-core<<tick>>.
 
 Generic OAR CLI lifecycle
 
@@ -193,7 +193,7 @@ Verification flow
 
 Concrete wake example
 
-1. Ensure the target bridge is running, the bridge doctor reports the registration as wakeable, and the workspace deployment is running its wake-routing service.
+1. Ensure the target bridge is running, the bridge doctor reports the registration as wakeable, and the workspace deployment is running <<tick>>oar-core<<tick>> with the embedded wake-routing sidecar enabled.
 2. Post a thread message containing <<tick>>@<handle><<tick>>, for example:
 
   @<handle> summarize the latest onboarding blockers.
@@ -213,12 +213,12 @@ Common failure modes
 - workspace not bound: registration exists but is not enabled for this workspace
 - bridge not checked in: the registration is still pending
 - stale bridge check-in: the bridge stopped refreshing readiness
-- wake-routing service unavailable: the workspace deployment is not currently routing tagged messages
+- wake-routing sidecar unavailable: the workspace deployment is not currently routing tagged messages
 - wrong workspace id: the registration uses a slug or another id that does not match the workspace deployment
 
 Operational note
 
-- This mechanism is discoverable from the CLI and UI, but actual wake dispatch is owned by the workspace deployment plus the per-agent bridge runtime.
+- This mechanism is discoverable from the CLI and UI, but actual wake dispatch is owned by the workspace deployment's <<tick>>oar-core<<tick>> process plus the per-agent bridge runtime.
 
 Next steps
 

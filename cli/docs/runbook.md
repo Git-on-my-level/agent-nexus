@@ -60,7 +60,7 @@ oar bridge restart --config ./agent.toml
 oar bridge stop --config ./agent.toml
 ```
 
-The workspace wake-routing service is deployment-owned and runs alongside the workspace stack. `oar bridge ...` only manages the per-agent bridge process.
+Wake routing is owned by the workspace deployment and runs inside `oar-core` by default. `oar bridge ...` only manages the per-agent bridge process.
 
 Lifecycle guardrail:
 

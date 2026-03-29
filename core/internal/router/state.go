@@ -47,6 +47,19 @@ func (s *StateStore) SetLastEventID(value string) error {
 	return s.Update(map[string]any{"last_event_id": value})
 }
 
+func (s *StateStore) LastEventTS() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return anyString(s.values["last_event_ts"])
+}
+
+func (s *StateStore) SetLastEventCursor(ts string, id string) error {
+	return s.Update(map[string]any{
+		"last_event_ts": ts,
+		"last_event_id": id,
+	})
+}
+
 func (s *StateStore) Update(updates map[string]any) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -57,6 +70,16 @@ func (s *StateStore) Update(updates map[string]any) error {
 		s.values[key] = value
 	}
 	return s.saveLocked()
+}
+
+func (s *StateStore) Snapshot() map[string]any {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make(map[string]any, len(s.values))
+	for key, value := range s.values {
+		out[key] = value
+	}
+	return out
 }
 
 func (s *StateStore) saveLocked() error {

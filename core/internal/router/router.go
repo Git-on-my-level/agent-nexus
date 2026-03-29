@@ -2,10 +2,22 @@ package router
 
 import (
 	"context"
-	"encoding/json"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"fmt"
+	"log"
 	"strings"
+	"sync"
 	"time"
+
+	"organization-autorunner-core/internal/auth"
+	"organization-autorunner-core/internal/primitives"
+)
+
+const (
+	defaultPollInterval = time.Second
+	eventBatchSize      = 100
 )
 
 type Config struct {
@@ -13,102 +25,164 @@ type Config struct {
 	WorkspaceID       string
 	WorkspaceName     string
 	StatePath         string
-	AuthStatePath     string
-	Username          string
-	BootstrapToken    string
-	InviteToken       string
-	VerifyTLS         bool
 	PrincipalCacheTTL time.Duration
-	ReconnectDelay    time.Duration
+	PollInterval      time.Duration
+	ActorID           string
+}
+
+type Dependencies struct {
+	ListPrincipals         func(ctx context.Context, limit int) ([]auth.AuthPrincipalSummary, error)
+	ListMessagePostedAfter func(ctx context.Context, cursor primitives.EventCursor, limit int) ([]map[string]any, error)
+	GetRegistrationContent func(ctx context.Context, documentID string) (map[string]any, error)
+	GetEvent               func(ctx context.Context, eventID string) (map[string]any, error)
+	GetThread              func(ctx context.Context, threadID string) (map[string]any, error)
+	CreateArtifact         func(ctx context.Context, actorID string, artifact map[string]any, content any, contentType string) error
+	AppendEvent            func(ctx context.Context, actorID string, event map[string]any) error
+	MarkThreadDirty        func(ctx context.Context, threadID string, queuedAt time.Time) error
 }
 
 type principalCache struct {
 	loadedAt time.Time
-	byHandle map[string]map[string]any
+	byHandle map[string]auth.AuthPrincipalSummary
 }
 
 type Service struct {
-	cfg    Config
-	client *Client
-	state  *StateStore
+	cfg   Config
+	deps  Dependencies
+	state *StateStore
 
 	cache principalCache
+
+	mu         sync.RWMutex
+	ready      bool
+	lastError  string
+	lastPolled string
 }
 
-func NewService(cfg Config, client *Client, state *StateStore) *Service {
-	return &Service{
-		cfg:    cfg,
-		client: client,
-		state:  state,
-		cache: principalCache{
-			byHandle: map[string]map[string]any{},
-		},
+func NewService(cfg Config, deps Dependencies, state *StateStore) *Service {
+	if cfg.PrincipalCacheTTL <= 0 {
+		cfg.PrincipalCacheTTL = time.Minute
 	}
+	if cfg.PollInterval <= 0 {
+		cfg.PollInterval = defaultPollInterval
+	}
+	if strings.TrimSpace(cfg.WorkspaceName) == "" {
+		cfg.WorkspaceName = "Main"
+	}
+	if strings.TrimSpace(cfg.ActorID) == "" {
+		cfg.ActorID = "oar-core"
+	}
+	return &Service{
+		cfg:   cfg,
+		deps:  deps,
+		state: state,
+		cache: principalCache{byHandle: map[string]auth.AuthPrincipalSummary{}},
+	}
+}
+
+func (s *Service) Name() string {
+	return "router"
 }
 
 func (s *Service) Run(ctx context.Context) error {
-	if s.cfg.PrincipalCacheTTL <= 0 {
-		s.cfg.PrincipalCacheTTL = time.Minute
-	}
-	if s.cfg.ReconnectDelay <= 0 {
-		s.cfg.ReconnectDelay = 3 * time.Second
-	}
+	ticker := time.NewTicker(s.cfg.PollInterval)
+	defer ticker.Stop()
+
 	for {
+		if err := s.runOnce(ctx); err != nil {
+			s.recordFailure(err)
+			log.Printf("router sidecar poll failed: %v", err)
+		} else {
+			s.recordSuccess()
+		}
+
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		default:
-		}
-		lastEventID := s.state.LastEventID()
-		_ = s.state.Update(map[string]any{
-			"router_last_stream_connected_at":    utcNowISO(),
-			"router_stream_resume_from_event_id": lastEventID,
-		})
-		items, errs := s.client.StreamEvents(ctx, MessagePostedEvent, lastEventID)
-	streamLoop:
-		for {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case err, ok := <-errs:
-				if ok && err != nil && ctx.Err() == nil {
-					_ = s.state.Update(map[string]any{
-						"router_last_stream_error_at": utcNowISO(),
-						"router_last_stream_error":    err.Error(),
-					})
-					time.Sleep(s.cfg.ReconnectDelay)
-					break streamLoop
-				}
-				return ctx.Err()
-			case item, ok := <-items:
-				if !ok {
-					time.Sleep(s.cfg.ReconnectDelay)
-					break streamLoop
-				}
-				var wrapper map[string]any
-				if err := json.Unmarshal([]byte(item.Data), &wrapper); err != nil {
-					_ = s.state.Update(map[string]any{
-						"router_last_stream_error_at": utcNowISO(),
-						"router_last_stream_error":    err.Error(),
-					})
-					continue
-				}
-				event := eventFromStream(wrapper)
-				if event == nil {
-					continue
-				}
-				if err := s.handleEvent(ctx, event); err != nil {
-					_ = s.state.Update(map[string]any{
-						"router_last_stream_error_at": utcNowISO(),
-						"router_last_stream_error":    err.Error(),
-					})
-				}
-				if eventID := anyString(event["id"]); eventID != "" {
-					_ = s.state.SetLastEventID(eventID)
-				}
-			}
+		case <-ticker.C:
 		}
 	}
+}
+
+func (s *Service) Ready(context.Context) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if strings.TrimSpace(s.lastError) != "" {
+		return errors.New(s.lastError)
+	}
+	if !s.ready {
+		return errors.New("initial poll not completed")
+	}
+	return nil
+}
+
+func (s *Service) Snapshot(context.Context) map[string]any {
+	s.mu.RLock()
+	ready := s.ready
+	lastError := s.lastError
+	lastPolled := s.lastPolled
+	s.mu.RUnlock()
+
+	snapshot := s.state.Snapshot()
+	snapshot["ready"] = ready
+	if strings.TrimSpace(lastError) != "" {
+		snapshot["last_error"] = lastError
+	}
+	if strings.TrimSpace(lastPolled) != "" {
+		snapshot["last_polled_at"] = lastPolled
+	}
+	return snapshot
+}
+
+func (s *Service) runOnce(ctx context.Context) error {
+	cursor, err := s.resolveCursor(ctx)
+	if err != nil {
+		return err
+	}
+
+	for {
+		events, err := s.deps.ListMessagePostedAfter(ctx, cursor, eventBatchSize)
+		if err != nil {
+			return err
+		}
+		if len(events) == 0 {
+			return nil
+		}
+		for _, event := range events {
+			if err := s.handleEvent(ctx, event); err != nil {
+				return err
+			}
+			cursor = primitives.EventCursor{
+				TS: anyString(event["ts"]),
+				ID: anyString(event["id"]),
+			}
+			if err := s.state.SetLastEventCursor(cursor.TS, cursor.ID); err != nil {
+				return err
+			}
+		}
+		if len(events) < eventBatchSize {
+			return nil
+		}
+	}
+}
+
+func (s *Service) resolveCursor(ctx context.Context) (primitives.EventCursor, error) {
+	cursor := primitives.EventCursor{
+		TS: s.state.LastEventTS(),
+		ID: s.state.LastEventID(),
+	}
+	if strings.TrimSpace(cursor.TS) != "" || strings.TrimSpace(cursor.ID) == "" {
+		return cursor, nil
+	}
+	event, err := s.deps.GetEvent(ctx, cursor.ID)
+	if err != nil {
+		if errors.Is(err, primitives.ErrNotFound) {
+			return primitives.EventCursor{}, nil
+		}
+		return primitives.EventCursor{}, err
+	}
+	cursor.TS = anyString(event["ts"])
+	return cursor, nil
 }
 
 func (s *Service) handleEvent(ctx context.Context, event map[string]any) error {
@@ -125,7 +199,9 @@ func (s *Service) handleEvent(ctx context.Context, event map[string]any) error {
 		updates["router_last_tagged_handles"] = handles
 		updates["router_last_tagged_message_preview"] = compactText(text, 140)
 	}
-	_ = s.state.Update(updates)
+	if err := s.state.Update(updates); err != nil {
+		return err
+	}
 	if len(handles) == 0 {
 		return nil
 	}
@@ -136,7 +212,10 @@ func (s *Service) handleEvent(ctx context.Context, event map[string]any) error {
 	for _, handle := range handles {
 		ok, err := s.routeMention(ctx, handle, event, text)
 		if err != nil {
-			_ = s.emitException(ctx, anyString(event["thread_id"]), eventID, handle, "mention_routing_failed", fmt.Sprintf("Failed routing @%s", handle))
+			log.Printf("router sidecar failed routing @%s from event %s: %v", handle, eventID, err)
+			if emitErr := s.emitException(ctx, anyString(event["thread_id"]), eventID, handle, "mention_routing_failed", fmt.Sprintf("Failed routing @%s", handle)); emitErr != nil {
+				log.Printf("router sidecar failed to emit exception for @%s: %v", handle, emitErr)
+			}
 			continue
 		}
 		if ok {
@@ -154,28 +233,25 @@ func (s *Service) handleEvent(ctx context.Context, event map[string]any) error {
 }
 
 func (s *Service) loadPrincipals(ctx context.Context, force bool) error {
-	if !force && time.Since(s.cache.loadedAt) < s.cfg.PrincipalCacheTTL {
+	if !force && time.Since(s.cache.loadedAt) < s.cfg.PrincipalCacheTTL && len(s.cache.byHandle) > 0 {
 		return nil
 	}
-	principals, err := s.client.ListPrincipals(ctx, 200)
+	principals, err := s.deps.ListPrincipals(ctx, 200)
 	if err != nil {
 		return err
 	}
-	byHandle := map[string]map[string]any{}
+	byHandle := make(map[string]auth.AuthPrincipalSummary, len(principals))
 	for _, principal := range principals {
-		if revoked, _ := principal["revoked"].(bool); revoked {
+		if principal.Revoked || strings.TrimSpace(principal.PrincipalKind) != "agent" {
 			continue
 		}
-		if anyString(principal["principal_kind"]) != "agent" {
-			continue
-		}
-		username := anyString(principal["username"])
+		username := strings.ToLower(strings.TrimSpace(principal.Username))
 		if username == "" {
 			continue
 		}
 		byHandle[username] = principal
 	}
-	s.cache.loadedAt = time.Now()
+	s.cache.loadedAt = time.Now().UTC()
 	s.cache.byHandle = byHandle
 	return nil
 }
@@ -186,10 +262,12 @@ func (s *Service) routeMention(ctx context.Context, handle string, event map[str
 	if threadID == "" || eventID == "" {
 		return false, nil
 	}
-	principal := s.cache.byHandle[handle]
-	if principal == nil {
+
+	principal, ok := s.cache.byHandle[handle]
+	if !ok {
 		return false, s.emitException(ctx, threadID, eventID, handle, "unknown_agent_handle", fmt.Sprintf("Unknown tagged agent @%s", handle))
 	}
+
 	registration, err := s.loadRegistration(ctx, handle)
 	if err != nil {
 		return false, err
@@ -197,7 +275,7 @@ func (s *Service) routeMention(ctx context.Context, handle string, event map[str
 	if registration == nil {
 		return false, s.emitException(ctx, threadID, eventID, handle, "missing_agent_registration", fmt.Sprintf("Tagged agent @%s has no registration document", handle))
 	}
-	if registration.ActorID != anyString(principal["actor_id"]) {
+	if registration.ActorID != strings.TrimSpace(principal.ActorID) {
 		return false, s.emitException(ctx, threadID, eventID, handle, "registration_actor_mismatch", fmt.Sprintf("Tagged agent @%s registration actor does not match principal", handle))
 	}
 	if !registration.SupportsWorkspace(s.cfg.WorkspaceID) {
@@ -206,9 +284,10 @@ func (s *Service) routeMention(ctx context.Context, handle string, event map[str
 	if registration.Status != "active" {
 		return false, s.emitException(ctx, threadID, eventID, handle, "agent_bridge_not_ready", fmt.Sprintf("Tagged agent @%s is registered but not wakeable until its bridge checks in", handle))
 	}
-	if registration.BridgeCheckinEventID == "" {
+	if strings.TrimSpace(registration.BridgeCheckinEventID) == "" {
 		return false, s.emitException(ctx, threadID, eventID, handle, "agent_bridge_not_checked_in", fmt.Sprintf("Tagged agent @%s has no bridge check-in event yet", handle))
 	}
+
 	checkin, err := s.loadBridgeCheckin(ctx, registration.BridgeCheckinEventID)
 	if err != nil {
 		return false, err
@@ -219,7 +298,7 @@ func (s *Service) routeMention(ctx context.Context, handle string, event map[str
 	if checkin.Handle != "" && checkin.Handle != handle {
 		return false, s.emitException(ctx, threadID, eventID, handle, "agent_bridge_handle_mismatch", fmt.Sprintf("Tagged agent @%s bridge check-in handle does not match registration", handle))
 	}
-	if registration.BridgeSigningPublicKeySPKIB64 == "" {
+	if strings.TrimSpace(registration.BridgeSigningPublicKeySPKIB64) == "" {
 		return false, s.emitException(ctx, threadID, eventID, handle, "agent_bridge_proof_missing", fmt.Sprintf("Tagged agent @%s registration is missing its bridge proof key", handle))
 	}
 	if !VerifyBridgeCheckinSignature(registration.BridgeSigningPublicKeySPKIB64, *checkin) {
@@ -231,11 +310,11 @@ func (s *Service) routeMention(ctx context.Context, handle string, event map[str
 	if !checkin.ReadyForWorkspace(s.cfg.WorkspaceID, nowUTC()) {
 		return false, s.emitException(ctx, threadID, eventID, handle, "agent_bridge_checkin_stale", fmt.Sprintf("Tagged agent @%s has a stale bridge check-in and is not wakeable right now", handle))
 	}
-	workspace, err := s.client.GetThreadWorkspace(ctx, threadID)
+
+	thread, err := s.deps.GetThread(ctx, threadID)
 	if err != nil {
 		return false, err
 	}
-	thread, _ := workspace["thread"].(map[string]any)
 	wakeupID := WakeupArtifactID(s.cfg.WorkspaceID, threadID, eventID, registration.ActorID)
 	sessionKey := fmt.Sprintf("oar:%s:%s:%s", s.cfg.WorkspaceID, threadID, handle)
 	packet := WakePacket{
@@ -259,6 +338,7 @@ func (s *Service) routeMention(ctx context.Context, handle string, event map[str
 		CLIThreadInspect:     fmt.Sprintf("oar threads inspect --thread-id %s --json", threadID),
 		CLIThreadWorkspace:   fmt.Sprintf("oar threads workspace --thread-id %s --include-related-event-content --json", threadID),
 	}
+
 	artifact := map[string]any{
 		"id":              wakeupID,
 		"kind":            WakeArtifactKind,
@@ -269,12 +349,12 @@ func (s *Service) routeMention(ctx context.Context, handle string, event map[str
 		"workspace_id":    s.cfg.WorkspaceID,
 		"thread_id":       threadID,
 	}
-	if err := s.client.CreateArtifact(ctx, artifact, packet.ToContent(), "structured"); err != nil {
-		if apiErr, ok := err.(*Error); !ok || apiErr.StatusCode != 409 {
-			return false, err
-		}
+	if err := s.deps.CreateArtifact(ctx, s.cfg.ActorID, artifact, packet.ToContent(), "structured"); err != nil && !errors.Is(err, primitives.ErrConflict) {
+		return false, err
 	}
-	if err := s.client.CreateEvent(ctx, map[string]any{
+
+	requestKey := WakeupRequestKey(s.cfg.WorkspaceID, threadID, eventID, registration.ActorID)
+	eventBody := map[string]any{
 		"type":      WakeRequestEvent,
 		"thread_id": threadID,
 		"summary":   fmt.Sprintf("Wake requested for @%s", handle),
@@ -297,24 +377,20 @@ func (s *Service) routeMention(ctx context.Context, handle string, event map[str
 		"provenance": map[string]any{
 			"sources": []string{fmt.Sprintf("actor_statement:%s", eventID)},
 		},
-	}, WakeupRequestKey(s.cfg.WorkspaceID, threadID, eventID, registration.ActorID)); err != nil {
+	}
+	if err := s.appendThreadEvent(ctx, requestKey, eventBody); err != nil {
 		return false, err
 	}
 	return true, nil
 }
 
 func (s *Service) loadRegistration(ctx context.Context, handle string) (*AgentRegistration, error) {
-	payload, err := s.client.GetDocument(ctx, RegistrationDocumentID(handle))
+	content, err := s.deps.GetRegistrationContent(ctx, RegistrationDocumentID(handle))
 	if err != nil {
-		if apiErr, ok := err.(*Error); ok && apiErr.StatusCode == 404 {
+		if errors.Is(err, primitives.ErrNotFound) {
 			return nil, nil
 		}
 		return nil, err
-	}
-	revision, _ := payload["revision"].(map[string]any)
-	content, _ := revision["content"].(map[string]any)
-	if content == nil {
-		return nil, nil
 	}
 	registration, err := decodeIntoMap[AgentRegistration](content)
 	if err != nil {
@@ -324,22 +400,21 @@ func (s *Service) loadRegistration(ctx context.Context, handle string) (*AgentRe
 }
 
 func (s *Service) loadBridgeCheckin(ctx context.Context, eventID string) (*AgentBridgeCheckin, error) {
-	payload, err := s.client.GetEvent(ctx, eventID)
+	event, err := s.deps.GetEvent(ctx, eventID)
 	if err != nil {
-		if apiErr, ok := err.(*Error); ok && apiErr.StatusCode == 404 {
+		if errors.Is(err, primitives.ErrNotFound) {
 			return nil, nil
 		}
 		return nil, err
 	}
-	event, _ := payload["event"].(map[string]any)
 	if anyString(event["type"]) != BridgeCheckedInEvent {
 		return nil, nil
 	}
-	content, _ := event["payload"].(map[string]any)
-	if content == nil {
+	payload, ok := event["payload"].(map[string]any)
+	if !ok {
 		return nil, nil
 	}
-	checkin, err := decodeIntoMap[AgentBridgeCheckin](content)
+	checkin, err := decodeIntoMap[AgentBridgeCheckin](payload)
 	if err != nil {
 		return nil, err
 	}
@@ -348,7 +423,7 @@ func (s *Service) loadBridgeCheckin(ctx context.Context, eventID string) (*Agent
 
 func (s *Service) emitException(ctx context.Context, threadID string, eventID string, handle string, code string, summary string) error {
 	requestKey := fmt.Sprintf("exc-%s-%s-%s", code, handle, eventID)
-	return s.client.CreateEvent(ctx, map[string]any{
+	return s.appendThreadEvent(ctx, requestKey, map[string]any{
 		"type":      "exception_raised",
 		"thread_id": threadID,
 		"summary":   summary,
@@ -361,92 +436,45 @@ func (s *Service) emitException(ctx context.Context, threadID string, eventID st
 		"provenance": map[string]any{
 			"sources": []string{fmt.Sprintf("actor_statement:%s", eventID)},
 		},
-	}, requestKey)
+	})
 }
 
-type WakePacket struct {
-	WakeupID             string
-	Handle               string
-	ActorID              string
-	WorkspaceID          string
-	WorkspaceName        string
-	ThreadID             string
-	ThreadTitle          string
-	TriggerEventID       string
-	TriggerCreatedAt     string
-	TriggerAuthorActorID string
-	TriggerText          string
-	CurrentSummary       string
-	SessionKey           string
-	OARBaseURL           string
-	ThreadContextURL     string
-	ThreadWorkspaceURL   string
-	TriggerEventURL      string
-	CLIThreadInspect     string
-	CLIThreadWorkspace   string
-}
-
-func (p WakePacket) ToContent() map[string]any {
-	return map[string]any{
-		"version":   "agent-wake/v1",
-		"wakeup_id": p.WakeupID,
-		"target": map[string]any{
-			"handle":   p.Handle,
-			"actor_id": p.ActorID,
-		},
-		"workspace": map[string]any{
-			"id":   p.WorkspaceID,
-			"name": p.WorkspaceName,
-		},
-		"thread": map[string]any{
-			"id":    p.ThreadID,
-			"title": p.ThreadTitle,
-		},
-		"trigger": map[string]any{
-			"kind":             "mention",
-			"message_event_id": p.TriggerEventID,
-			"created_at":       p.TriggerCreatedAt,
-			"author_actor_id":  p.TriggerAuthorActorID,
-			"text":             p.TriggerText,
-		},
-		"context_inline": map[string]any{
-			"current_summary": p.CurrentSummary,
-		},
-		"session_key": p.SessionKey,
-		"context_fetch": map[string]any{
-			"preferred": "threads.workspace",
-			"cli":       []string{p.CLIThreadWorkspace, p.CLIThreadInspect},
-			"api": map[string]any{
-				"thread":        fmt.Sprintf("%s/threads/%s", strings.TrimRight(p.OARBaseURL, "/"), p.ThreadID),
-				"context":       p.ThreadContextURL,
-				"workspace":     p.ThreadWorkspaceURL,
-				"trigger_event": p.TriggerEventURL,
-			},
-		},
-		"reply_refs": []string{
-			fmt.Sprintf("thread:%s", p.ThreadID),
-			fmt.Sprintf("event:%s", p.TriggerEventID),
-			fmt.Sprintf("artifact:%s", p.WakeupID),
-		},
+func (s *Service) appendThreadEvent(ctx context.Context, requestKey string, event map[string]any) error {
+	if strings.TrimSpace(requestKey) != "" && strings.TrimSpace(anyString(event["id"])) == "" {
+		event["id"] = deriveRequestScopedID("events.create", s.cfg.ActorID, requestKey, "event")
 	}
-}
-
-func extractMessageText(event map[string]any) string {
-	payload, _ := event["payload"].(map[string]any)
-	for _, key := range []string{"text", "message", "body", "content"} {
-		if value := anyString(payload[key]); value != "" {
-			return value
+	err := s.deps.AppendEvent(ctx, s.cfg.ActorID, event)
+	if err != nil {
+		if errors.Is(err, primitives.ErrConflict) {
+			return nil
+		}
+		return err
+	}
+	threadID := anyString(event["thread_id"])
+	if strings.TrimSpace(threadID) != "" && s.deps.MarkThreadDirty != nil {
+		if err := s.deps.MarkThreadDirty(ctx, threadID, nowUTC()); err != nil {
+			return err
 		}
 	}
-	if body := anyString(event["body"]); body != "" {
-		return body
-	}
-	return anyString(event["summary"])
+	return nil
 }
 
-func eventFromStream(wrapper map[string]any) map[string]any {
-	if nested, ok := wrapper["event"].(map[string]any); ok {
-		return nested
-	}
-	return wrapper
+func (s *Service) recordSuccess() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ready = true
+	s.lastError = ""
+	s.lastPolled = utcNowISO()
+}
+
+func (s *Service) recordFailure(err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lastError = err.Error()
+	s.lastPolled = utcNowISO()
+}
+
+func deriveRequestScopedID(scope string, actorID string, requestKey string, label string) string {
+	sum := sha256.Sum256([]byte(scope + "\n" + actorID + "\n" + requestKey + "\n" + label))
+	return label + "-" + hex.EncodeToString(sum[:])[:20]
 }

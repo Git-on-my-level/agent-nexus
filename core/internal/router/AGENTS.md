@@ -3,14 +3,14 @@
 ## Scope
 Guide for work inside `core/internal/router/`.
 
-Read this after [core/AGENTS.md](../../AGENTS.md). This package owns the workspace-scoped wake-routing runtime that runs beside `oar-core`.
+Read this after [core/AGENTS.md](../../AGENTS.md). This package owns the workspace-scoped wake-routing runtime hosted inside `oar-core` as a sidecar.
 
 ## Package Purpose
 `oar-router` converts durable `message_posted` events into durable wake requests for bridge-managed agents.
 
 It should stay:
-- lightweight to deploy beside `oar-core`
-- bounded to documented OAR primitives and HTTP/SSE surfaces
+- lightweight to host inside `oar-core`
+- bounded to explicit internal dependencies and documented OAR primitives
 - explicit about workspace scope rather than host scope
 - easy for future agents to extend without re-reading the whole repo
 
@@ -19,7 +19,7 @@ It should stay:
 - Router state is local operational state only; canonical truth still lives in OAR primitives.
 - Wake eligibility must remain driven by registration plus fresh bridge check-ins, never registration alone.
 - Event handling must be idempotent across reconnects and duplicate deliveries.
-- Keep the router able to run as a separate process from both `oar-core` and the per-agent bridge.
+- Keep the router package independently testable even though the runtime is hosted in-process.
 
 ## Edit Routing
 - HTTP shape or auth semantics that affect other modules still start from contracts/core docs first.
@@ -27,6 +27,6 @@ It should stay:
 - If you add new operator-facing behavior, update `core/README.md` and `core/docs/runbook.md` in the same change.
 
 ## Validation
-- `go test ./internal/router/... ./cmd/oar-router/...`
+- `go test ./internal/router/... ./cmd/oar-core/...`
 - `./scripts/build-prod`
 - Relevant repo-level checks when the change crosses module boundaries.
