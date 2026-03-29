@@ -69,6 +69,15 @@ function createErrorFromResponse(status, details) {
   return error;
 }
 
+function shouldPreserveAuthenticatedAgentOnInitFailure(error) {
+  if (!error || typeof error !== "object") {
+    return true;
+  }
+
+  const status = Number(error.status);
+  return !Number.isFinite(status) || status >= 500;
+}
+
 async function requestJSON(
   pathname,
   { fetchFn, method = "GET", body, baseUrl, headers } = {},
@@ -158,6 +167,7 @@ export async function initializeAuthSession({
   workspaceSlug = getCurrentWorkspaceSlug(),
 } = {}) {
   const state = ensureAuthState(workspaceSlug);
+  const previousAgent = state.authenticatedAgent;
   if (!browser && typeof fetchFn !== "function") {
     state.ready = true;
     syncCurrentAuthStores(workspaceSlug);
@@ -179,10 +189,15 @@ export async function initializeAuthSession({
     state.ready = true;
     syncCurrentAuthStores(workspaceSlug);
     return result.agent ?? null;
-  } catch {
+  } catch (error) {
+    if (shouldPreserveAuthenticatedAgentOnInitFailure(error)) {
+      state.authenticatedAgent = previousAgent;
+    } else {
+      state.authenticatedAgent = null;
+    }
     state.ready = true;
     syncCurrentAuthStores(workspaceSlug);
-    return null;
+    return state.authenticatedAgent;
   }
 }
 

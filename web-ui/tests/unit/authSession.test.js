@@ -73,6 +73,57 @@ describe("authSession", () => {
     });
   });
 
+  it("preserves the current agent when session rehydration fails transiently", async () => {
+    completeAuthSession(
+      { agent_id: "agent-9", actor_id: "actor-9", username: "passkey.user" },
+      "alpha",
+    );
+
+    const agent = await initializeAuthSession({
+      workspaceSlug: "alpha",
+      fetchFn: async () => {
+        throw new Error("core temporarily unavailable");
+      },
+    });
+
+    expect(agent).toMatchObject({
+      agent_id: "agent-9",
+      actor_id: "actor-9",
+    });
+    expect(get(authenticatedAgent)).toMatchObject({
+      agent_id: "agent-9",
+      actor_id: "actor-9",
+    });
+  });
+
+  it("clears the current agent when session rehydration fails with a non-retryable response", async () => {
+    completeAuthSession(
+      { agent_id: "agent-10", actor_id: "actor-10", username: "passkey.user" },
+      "alpha",
+    );
+
+    const agent = await initializeAuthSession({
+      workspaceSlug: "alpha",
+      fetchFn: async () =>
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "auth_required",
+              message: "session expired",
+            },
+          }),
+          {
+            status: 401,
+            headers: { "content-type": "application/json" },
+          },
+        ),
+    });
+
+    expect(agent).toBeNull();
+    expect(isAuthenticated("alpha")).toBe(false);
+    expect(get(authenticatedAgent)).toBeNull();
+  });
+
   it("logs out through the same-origin session endpoint", async () => {
     const calls = [];
     completeAuthSession(

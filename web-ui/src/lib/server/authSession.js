@@ -12,8 +12,13 @@ function getWorkspaceSlug(value) {
   return normalizeWorkspaceSlug(value) || DEFAULT_WORKSPACE_SLUG;
 }
 
-const ACCESS_TOKEN_COOKIE_MAX_AGE_SECONDS = 15 * 60;
 const REFRESH_TOKEN_COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
+// Keep the access-token cookie around for the full refresh lifetime. The
+// token itself still expires in core after 15 minutes, but retaining the stale
+// value lets the UI distinguish a rotated-refresh race from a truly anonymous
+// request when multiple responses land out of order.
+const ACCESS_TOKEN_COOKIE_MAX_AGE_SECONDS =
+  REFRESH_TOKEN_COOKIE_MAX_AGE_SECONDS;
 const REFRESH_REPLAY_WINDOW_MS = 60_000;
 const inFlightRefreshes = new Map();
 const recentRefreshResults = new Map();

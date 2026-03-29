@@ -102,7 +102,7 @@ describe("server auth session helpers", () => {
       value: "access-token",
       options: {
         httpOnly: true,
-        maxAge: 15 * 60,
+        maxAge: 30 * 24 * 60 * 60,
         sameSite: "lax",
         secure: true,
         path: "/",
@@ -202,7 +202,7 @@ describe("server auth session helpers", () => {
         value: "access-token",
         options: {
           httpOnly: true,
-          maxAge: 15 * 60,
+          maxAge: 30 * 24 * 60 * 60,
           sameSite: "lax",
           secure: true,
           path: "/",
@@ -453,5 +453,79 @@ describe("server auth session helpers", () => {
         },
       },
     ]);
+  });
+
+  it("recovers the authenticated agent from a refresh-only session after the access token expired", async () => {
+    const { event, recorder } = createSessionEvent({
+      refreshToken: "refresh-token",
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            tokens: {
+              access_token: "next-access-token",
+              refresh_token: "next-refresh-token",
+            },
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            agent: {
+              agent_id: "agent-1",
+              actor_id: "actor-1",
+              username: "passkey.user",
+            },
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      loadWorkspaceAuthenticatedAgent({
+        event,
+        workspaceSlug: "alpha",
+        coreBaseUrl: "https://core.example.com",
+      }),
+    ).resolves.toEqual({
+      agent_id: "agent-1",
+      actor_id: "actor-1",
+      username: "passkey.user",
+    });
+
+    expect(recorder.values.get("oar_ui_session_alpha")).toBe(
+      "next-refresh-token",
+    );
+    expect(recorder.values.get("oar_ui_access_alpha")).toBe(
+      "next-access-token",
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://core.example.com/auth/token",
+      expect.objectContaining({
+        method: "POST",
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://core.example.com/agents/me",
+      expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({
+          authorization: "Bearer next-access-token",
+        }),
+      }),
+    );
   });
 });
