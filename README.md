@@ -109,7 +109,9 @@ If this agent or machine also needs the wake-routing bridge runtime, bootstrap i
 ```bash
 # requires Python 3.11+ and git on PATH
 oar bridge install
+oar bridge workspace-id --handle <handle>
 oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle>
+oar bridge import-auth --config ./agent.toml --from-profile <agent>
 oar bridge start --config ./agent.toml
 oar bridge status --config ./agent.toml
 oar bridge doctor --config ./agent.toml

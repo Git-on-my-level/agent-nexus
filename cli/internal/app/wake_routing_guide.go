@@ -44,6 +44,8 @@ How agents discover it
 - Read this topic with <<tick>>oar meta doc wake-routing<<tick>>.
 - Read the preferred runtime path with <<tick>>oar meta doc agent-bridge<<tick>>.
 - Use <<tick>>oar help bridge<<tick>> to bootstrap the runtime from the main CLI.
+- Use <<tick>>oar bridge workspace-id --handle <handle><<tick>> when an existing registration doc is the easiest source of truth for the durable workspace id.
+- Use <<tick>>oar bridge import-auth --config ./agent.toml --from-profile <agent><<tick>> when matching <<tick>>oar<<tick>> auth already exists.
 - Use <<tick>>oar auth whoami<<tick>> to confirm your current username and actor id.
 - Use <<tick>>oar docs get --document-id agentreg.<handle> --json<<tick>> to inspect a registration document directly.
 
@@ -58,7 +60,11 @@ Preferred path when you are using <<tick>>oar-agent-bridge<<tick>>
   oar bridge init-config --kind router --output ./router.toml --workspace-id <workspace-id>
   oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle>
 
-3. Register auth and write the initial pending registration:
+3. If matching <<tick>>oar<<tick>> auth already exists, import it into the bridge config:
+
+  oar bridge import-auth --config ./agent.toml --from-profile <agent>
+
+4. Register auth and write the initial pending registration when auth does not already exist:
 
   oar-agent-bridge auth register --config ./agent.toml --invite-token <token> --apply-registration
 
@@ -66,12 +72,12 @@ Preferred path when you are using <<tick>>oar-agent-bridge<<tick>>
 
   oar-agent-bridge registration apply --config <agent.toml>
 
-4. Start the router and target bridge:
+5. Start the router and target bridge:
 
   oar bridge start --config ./router.toml
   oar bridge start --config ./agent.toml
 
-5. Verify the bridge has checked in before telling humans to use <<tick>>@handle<<tick>>:
+6. Verify the bridge has checked in before telling humans to use <<tick>>@handle<<tick>>:
 
   oar bridge status --config ./agent.toml
   oar bridge doctor --config ./agent.toml
@@ -89,6 +95,7 @@ If you are writing the document manually, only create the pending registration s
 
 2. Resolve the durable workspace id you want to enable:
 
+  - If an existing registration doc is available, start with <<tick>>oar bridge workspace-id --handle <handle><<tick>> or <<tick>>oar bridge workspace-id --document-id agentreg.<handle><<tick>>.
   - If you are configuring the router yourself, the source of truth is <<tick>>[oar] workspace_id<<tick>> in the router config.
   - If a router already exists, inspect that deployed router config and copy its <<tick>>workspace_id<<tick>> exactly.
   - If your deployment is driven by control-plane workspace records, copy the durable workspace id from that record, not the slug.

@@ -23,8 +23,8 @@ var apiSubcommandSpec = subcommandSpec{
 
 var bridgeSubcommandSpec = subcommandSpec{
 	command:  "bridge",
-	valid:    []string{"install", "init-config", "start", "stop", "restart", "status", "logs", "doctor"},
-	examples: []string{"oar bridge install", "oar bridge init-config --kind hermes --output ./agent.toml --workspace-id ws_main", "oar bridge start --config ./agent.toml", "oar bridge status --config ./agent.toml"},
+	valid:    []string{"install", "import-auth", "init-config", "start", "stop", "restart", "status", "logs", "workspace-id", "doctor"},
+	examples: []string{"oar bridge install", "oar bridge import-auth --config ./agent.toml --from-profile agent-a", "oar bridge init-config --kind hermes --output ./agent.toml --workspace-id ws_main", "oar bridge workspace-id --handle hermes", "oar bridge start --config ./agent.toml", "oar bridge status --config ./agent.toml"},
 }
 
 var authSubcommandSpec = subcommandSpec{
