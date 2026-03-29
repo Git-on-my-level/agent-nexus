@@ -75,8 +75,8 @@ func init() {
 		localHelperTopic{
 			Path:        "bridge status",
 			Summary:     "Inspect managed process state for a bridge or router config.",
-			JSONShape:   "`kind`, `managed`, `running`, `pid`, `log_path`, `process_state_path`, `registration`",
-			Composition: "Pure local helper plus optional bridge CLI calls. Reports the background process state, log path, and for agent configs also includes registration readiness when available.",
+			JSONShape:   "`kind`, `managed`, `running`, `pid`, `log_path`, `process_state_path`, `registration`, `router`",
+			Composition: "Pure local helper plus optional bridge CLI calls. Reports the background process state, log path, agent registration readiness when available, and router stream health from the local router state file when inspecting a router config.",
 			Examples: []string{
 				"oar bridge status --config ./router.toml",
 				"oar bridge status --config ./agent.toml",
@@ -340,6 +340,12 @@ func (a *App) runBridgeStatus(ctx context.Context, args []string) (*commandResul
 			_ = json.Unmarshal([]byte(statusOut), &registrationData)
 		}
 	}
+	routerData := map[string]any{}
+	if managedConfig.RuntimeKind == "router" && strings.TrimSpace(managedConfig.RouterStatePath) != "" {
+		if content, err := bridgeReadFile(managedConfig.RouterStatePath); err == nil {
+			_ = json.Unmarshal(content, &routerData)
+		}
+	}
 
 	runtimeState, ok := loadManagedRuntimeState(managedConfig.ProcessStatePath)
 	if !ok {
@@ -362,6 +368,8 @@ func (a *App) runBridgeStatus(ctx context.Context, args []string) (*commandResul
 				"log_path":           managedConfig.LogPath,
 				"process_state_path": managedConfig.ProcessStatePath,
 				"registration":       registrationData,
+				"router":             routerData,
+				"router_state_path":  managedConfig.RouterStatePath,
 			},
 		}, nil
 	}
@@ -398,6 +406,29 @@ func (a *App) runBridgeStatus(ctx context.Context, args []string) (*commandResul
 			lines = append(lines, "Registration: unavailable because oar-agent-bridge is not installed or not on PATH")
 		}
 	}
+	if managedConfig.RuntimeKind == "router" {
+		if strings.TrimSpace(managedConfig.RouterStatePath) != "" {
+			lines = append(lines, "Router state: "+managedConfig.RouterStatePath)
+		}
+		if cursor := strings.TrimSpace(anyString(routerData["last_event_id"])); cursor != "" {
+			lines = append(lines, "Cursor: "+cursor)
+		}
+		if lastSeen := bridgeStatusMoment("Last tagged message", routerData["router_last_tagged_message_event_id"], routerData["router_last_tagged_message_seen_at"], routerData["router_last_tagged_handles"]); lastSeen != "" {
+			lines = append(lines, lastSeen)
+		}
+		if preview := strings.TrimSpace(anyString(routerData["router_last_tagged_message_preview"])); preview != "" {
+			lines = append(lines, "Mention preview: "+preview)
+		}
+		if lastRouted := bridgeStatusMoment("Last routed mention", routerData["router_last_routed_event_id"], routerData["router_last_routed_at"], routerData["router_last_routed_handles"]); lastRouted != "" {
+			lines = append(lines, lastRouted)
+		}
+		if errAt := strings.TrimSpace(anyString(routerData["router_last_stream_error_at"])); errAt != "" {
+			lines = append(lines, "Last stream error: "+errAt)
+			if errDetail := strings.TrimSpace(anyString(routerData["router_last_stream_error"])); errDetail != "" {
+				lines = append(lines, "Error detail: "+errDetail)
+			}
+		}
+	}
 	return &commandResult{
 		Text: strings.Join(lines, "\n"),
 		Data: map[string]any{
@@ -409,6 +440,8 @@ func (a *App) runBridgeStatus(ctx context.Context, args []string) (*commandResul
 			"log_path":           runtimeState.LogPath,
 			"process_state_path": runtimeState.ProcessStatePath,
 			"registration":       registrationData,
+			"router":             routerData,
+			"router_state_path":  managedConfig.RouterStatePath,
 		},
 	}, nil
 }
@@ -512,7 +545,62 @@ func loadBridgeManagedConfig(configPath string) (bridgeManagedConfig, error) {
 		ManagerDir:       managerDir,
 		ProcessStatePath: filepath.Join(managerDir, "process.json"),
 		LogPath:          filepath.Join(managerDir, "current.log"),
+		RouterStatePath:  resolvedBridgeRouterStatePath(absPath, string(content), runtimeKind),
 	}, nil
+}
+
+func resolvedBridgeRouterStatePath(configPath string, content string, runtimeKind string) string {
+	if runtimeKind != "router" {
+		return ""
+	}
+	statePath := bridgeConfigStringValue(content, "router", "state_path")
+	if statePath == "" {
+		statePath = ".state/router-state.json"
+	}
+	resolved, err := expandBridgePath(filepath.Dir(configPath), statePath)
+	if err != nil {
+		return ""
+	}
+	return resolved
+}
+
+func bridgeStatusMoment(label string, eventID any, seenAt any, handles any) string {
+	id := strings.TrimSpace(anyString(eventID))
+	if id == "" {
+		return ""
+	}
+	line := label + ": " + id
+	if at := strings.TrimSpace(anyString(seenAt)); at != "" {
+		line += " at " + at
+	}
+	if handlesText := bridgeStatusHandles(handles); handlesText != "" {
+		line += " for " + handlesText
+	}
+	return line
+}
+
+func bridgeStatusHandles(raw any) string {
+	values := make([]string, 0)
+	switch typed := raw.(type) {
+	case []string:
+		values = append(values, typed...)
+	case []any:
+		for _, item := range typed {
+			value := strings.TrimSpace(anyString(item))
+			if value != "" {
+				values = append(values, value)
+			}
+		}
+	}
+	if len(values) == 0 {
+		return ""
+	}
+	for index, value := range values {
+		if !strings.HasPrefix(value, "@") {
+			values[index] = "@" + value
+		}
+	}
+	return strings.Join(values, ", ")
 }
 
 func inferBridgeRuntimeKind(content string, configPath string) (runtimeKind string, runCommand string, displayName string, err error) {

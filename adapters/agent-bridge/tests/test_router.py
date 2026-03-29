@@ -15,7 +15,12 @@ class StubClient:
 
 
 class StubState:
-    last_event_id = None
+    def __init__(self):
+        self.last_event_id = None
+        self.values = {}
+
+    def update(self, updates):
+        self.values.update(updates)
 
 
 def test_emit_exception_includes_required_subtype():
@@ -115,3 +120,41 @@ def test_route_mention_rejects_invalid_bridge_proof():
 
     payload = client.recorded[0]["event"]["payload"]
     assert payload["subtype"] == "agent_bridge_proof_invalid"
+
+
+def test_router_replays_tagged_message_after_stream_decode_failure():
+    config = LoadedConfig(
+        oar=OARConfig(base_url="http://oar.test", workspace_id="ws_main", workspace_name="Main"),
+        agent=None,
+        router=RouterConfig(state_path=Path("/tmp/router-state.json"), reconnect_delay_seconds=0),
+        adapter=AdapterConfig(raw={}),
+        auth_state_path=Path("/tmp/router-auth.json"),
+    )
+    state = StubState()
+
+    class ReconnectingClient:
+        def __init__(self):
+            self.calls = 0
+
+        def stream_events(self, **_kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                yield {"data": '{"event":{"id":"evt-1","thread_id":"thread-1","payload":{"text":"@hermes help"}}'}
+                return
+            yield {"data": '{"event":{"id":"evt-1","thread_id":"thread-1","payload":{"text":"@hermes help"}}}'}
+            raise KeyboardInterrupt()
+
+    router = WakeRouter(config, ReconnectingClient(), state)
+    routed = []
+    router.handle_message_posted = lambda event: routed.append(event["id"])
+
+    try:
+        router.run_forever()
+    except KeyboardInterrupt:
+        pass
+
+    assert routed == ["evt-1"]
+    assert state.last_event_id == "evt-1"
+    assert state.values["router_last_tagged_message_event_id"] == "evt-1"
+    assert state.values["router_last_routed_event_id"] == "evt-1"
+    assert "JSONDecodeError" in state.values["router_last_stream_error"]

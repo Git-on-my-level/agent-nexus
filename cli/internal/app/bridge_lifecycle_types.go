@@ -40,4 +40,5 @@ type bridgeManagedConfig struct {
 	ManagerDir       string
 	ProcessStatePath string
 	LogPath          string
+	RouterStatePath  string
 }

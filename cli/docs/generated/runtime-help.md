@@ -3741,8 +3741,8 @@ Local Help: bridge status
 
 - Kind: `local helper`
 - Summary: Inspect managed process state for a bridge or router config.
-- Composition: Pure local helper plus optional bridge CLI calls. Reports the background process state, log path, and for agent configs also includes registration readiness when available.
-- JSON body: `kind`, `managed`, `running`, `pid`, `log_path`, `process_state_path`, `registration`
+- Composition: Pure local helper plus optional bridge CLI calls. Reports the background process state, log path, agent registration readiness when available, and router stream health from the local router state file when inspecting a router config.
+- JSON body: `kind`, `managed`, `running`, `pid`, `log_path`, `process_state_path`, `registration`, `router`
 - Examples:
   - `oar bridge status --config ./router.toml`
   - `oar bridge status --config ./agent.toml`
