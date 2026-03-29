@@ -224,6 +224,54 @@ func TestBridgeStatusReportsRouterHealthFromStateFile(t *testing.T) {
 	}
 }
 
+func TestBridgeStatusUsesDefaultRouterStatePathWhenConfigOmitsIt(t *testing.T) {
+	originalAlive := bridgeProcessAlive
+	originalCmdline := bridgeProcessCommandLine
+	t.Cleanup(func() {
+		bridgeProcessAlive = originalAlive
+		bridgeProcessCommandLine = originalCmdline
+	})
+	bridgeProcessAlive = func(pid int) bool { return pid == 4242 }
+	bridgeProcessCommandLine = func(pid int) (string, error) {
+		return "/usr/bin/python oar-agent-bridge router run --config /tmp/router.toml", nil
+	}
+
+	configDir := t.TempDir()
+	configPath := filepath.Join(configDir, "router.toml")
+	if err := os.WriteFile(configPath, []byte("[router]\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(configDir, ".state"), 0o755); err != nil {
+		t.Fatalf("mkdir router state dir: %v", err)
+	}
+	routerStatePath := filepath.Join(configDir, ".state", "router.json")
+	if err := os.WriteFile(routerStatePath, []byte(`{"last_event_id":"evt-42"}`), 0o600); err != nil {
+		t.Fatalf("write router state: %v", err)
+	}
+
+	runtimeState := bridgeManagedRuntime{
+		Kind:             "router",
+		ConfigPath:       configPath,
+		ManagerDir:       bridgeManagerDir(configPath),
+		ProcessStatePath: filepath.Join(bridgeManagerDir(configPath), "process.json"),
+		LogPath:          filepath.Join(bridgeManagerDir(configPath), "current.log"),
+		PID:              4242,
+		StartedAt:        "2026-03-29T07:15:00Z",
+	}
+	if err := writeManagedRuntimeState(runtimeState); err != nil {
+		t.Fatalf("write runtime state: %v", err)
+	}
+
+	app := New()
+	result, err := app.runBridgeStatus(context.Background(), []string{"--config", configPath})
+	if err != nil {
+		t.Fatalf("runBridgeStatus: %v", err)
+	}
+	if !strings.Contains(result.Text, "Cursor: evt-42") {
+		t.Fatalf("expected default router state path to be used output=%s", result.Text)
+	}
+}
+
 func TestBridgeManagedRuntimeRunningRejectsPIDReuse(t *testing.T) {
 	originalAlive := bridgeProcessAlive
 	originalCmdline := bridgeProcessCommandLine

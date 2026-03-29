@@ -146,7 +146,7 @@ def test_router_replays_tagged_message_after_stream_decode_failure():
 
     router = WakeRouter(config, ReconnectingClient(), state)
     routed = []
-    router.handle_message_posted = lambda event: routed.append(event["id"])
+    router.handle_message_posted = lambda event: routed.append(event["id"]) or ["hermes"]
 
     try:
         router.run_forever()
@@ -158,3 +158,26 @@ def test_router_replays_tagged_message_after_stream_decode_failure():
     assert state.values["router_last_tagged_message_event_id"] == "evt-1"
     assert state.values["router_last_routed_event_id"] == "evt-1"
     assert "JSONDecodeError" in state.values["router_last_stream_error"]
+
+
+def test_handle_message_posted_returns_only_successfully_routed_handles():
+    config = LoadedConfig(
+        oar=OARConfig(base_url="http://oar.test", workspace_id="ws_main", workspace_name="Main"),
+        agent=None,
+        router=RouterConfig(state_path=Path("/tmp/router-state.json")),
+        adapter=AdapterConfig(raw={}),
+        auth_state_path=Path("/tmp/router-auth.json"),
+    )
+    router = WakeRouter(config, StubClient(), StubState())
+    router._load_principals = lambda force=False: None
+
+    def route(handle, event, text):
+        return handle == "hermes"
+
+    router._route_mention = route
+
+    routed_handles = router.handle_message_posted(
+        {"id": "event-1", "thread_id": "thread-1", "payload": {"text": "@hermes @other help"}}
+    )
+
+    assert routed_handles == ["hermes"]

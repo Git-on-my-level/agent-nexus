@@ -555,7 +555,7 @@ func resolvedBridgeRouterStatePath(configPath string, content string, runtimeKin
 	}
 	statePath := bridgeConfigStringValue(content, "router", "state_path")
 	if statePath == "" {
-		statePath = ".state/router-state.json"
+		statePath = ".state/router.json"
 	}
 	resolved, err := expandBridgePath(filepath.Dir(configPath), statePath)
 	if err != nil {
