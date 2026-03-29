@@ -130,7 +130,7 @@ func agentGuideSections() []guideSection {
 				"3. Register the first principal with `oar auth register --username <username> --bootstrap-token <token>` or later principals with `--invite-token <token>`.",
 				"4. Confirm identity.",
 				"5. Run a cheap read command.",
-				"6. If this agent should be tag-addressable from thread messages, read `oar meta doc wake-routing` and create or verify `agentreg.<handle>` for the current workspace.",
+				"6. If this agent should be tag-addressable from thread messages, read `oar meta doc agent-bridge` for the preferred runtime path or `oar meta doc wake-routing` for the generic document lifecycle.",
 				"",
 				"When stuck:",
 				"",

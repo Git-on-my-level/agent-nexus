@@ -174,7 +174,7 @@ func TestAuthTextOutputIncludesWakeRoutingNextSteps(t *testing.T) {
 		"auth", "register",
 		"--username", "agent.text",
 	})
-	if !strings.Contains(registerOut, "Wake registration help: oar meta doc wake-routing; oar help docs create (document id: agentreg.agent.text)") {
+	if !strings.Contains(registerOut, "Wake registration help: oar help bridge; oar meta doc agent-bridge; oar meta doc wake-routing (document id: agentreg.agent.text)") {
 		t.Fatalf("expected wake registration hint in register output=%s", registerOut)
 	}
 
@@ -183,7 +183,7 @@ func TestAuthTextOutputIncludesWakeRoutingNextSteps(t *testing.T) {
 		"--agent", "agent-text",
 		"auth", "whoami",
 	})
-	if !strings.Contains(whoamiOut, "Wake registration help: oar meta doc wake-routing; oar help docs create (document id: agentreg.agent.text)") {
+	if !strings.Contains(whoamiOut, "Wake registration help: oar help bridge; oar meta doc agent-bridge; oar meta doc wake-routing (document id: agentreg.agent.text)") {
 		t.Fatalf("expected wake registration hint in whoami output=%s", whoamiOut)
 	}
 	if !strings.Contains(whoamiOut, "Server actor ID: agent-123") {
@@ -225,7 +225,7 @@ func TestAuthWhoAmIHintUsesServerResolvedUsername(t *testing.T) {
 		"--agent", "agent-renamed",
 		"auth", "whoami",
 	})
-	if !strings.Contains(whoamiOut, "Wake registration help: oar meta doc wake-routing; oar help docs create (document id: agentreg.server.name)") {
+	if !strings.Contains(whoamiOut, "Wake registration help: oar help bridge; oar meta doc agent-bridge; oar meta doc wake-routing (document id: agentreg.server.name)") {
 		t.Fatalf("expected server-resolved wake registration hint output=%s", whoamiOut)
 	}
 }

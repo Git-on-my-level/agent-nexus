@@ -6,6 +6,7 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 
 - `onboarding` (manual): Offline quick-start mental model and first command flow.
 - `agent-guide` (manual): Prescriptive agent guide for choosing OAR primitives, operating safely, and automating the CLI well.
+- `agent-bridge` (manual): Install, configure, and operate the preferred `oar-agent-bridge` wake-routing runtime on a fresh machine.
 - `wake-routing` (manual): How `@handle` wake routing works, including self-registration, verification, and troubleshooting.
 - `draft` (manual): Local draft staging, listing, commit, and discard workflow.
 - `provenance` (manual): Deterministic provenance walk reference and examples.
@@ -15,6 +16,7 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 - `auth rotate` (manual): Rotate the active agent key and refresh stored credentials.
 - `auth revoke` (manual): Revoke the active agent and mark the local profile revoked. Use explicit human-lockout flags only for break-glass recovery.
 - `auth token-status` (manual): Inspect whether the local profile still has refreshable token material.
+- `bridge` (manual): CLI-managed bridge bootstrap helpers for installing, templating, and checking `oar-agent-bridge`.
 - `import` (manual): Prescriptive import guide for building low-duplication, discoverable OAR graphs from external material.
 - `actors` (group): List and register actor identities
 - `auth` (group): Register, inspect, and manage auth state
@@ -105,6 +107,14 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 - `docs validate-update` (local-helper): Validate a `docs update` payload locally from stdin or file without sending the mutation.
 - `docs apply` (local-helper): Apply a previously staged document update proposal.
 - `meta skill` (local-helper): Render a bundled editor-specific skill file from the canonical OAR agent guide.
+- `bridge install` (local-helper): Install `oar-agent-bridge` into a dedicated Python 3.11+ virtualenv and expose a PATH wrapper.
+- `bridge init-config` (local-helper): Write a minimal router or agent bridge TOML config with the pending-until-check-in lifecycle baked in.
+- `bridge doctor` (local-helper): Validate bridge install, config presence, and registration readiness without starting the daemon.
+- `bridge start` (local-helper): Start a managed bridge or router daemon for one config file.
+- `bridge stop` (local-helper): Stop a managed bridge or router daemon for one config file.
+- `bridge restart` (local-helper): Restart a managed bridge or router daemon for one config file.
+- `bridge status` (local-helper): Inspect managed process state for a bridge or router config.
+- `bridge logs` (local-helper): Read recent log lines for a managed bridge or router config.
 - `import scan` (local-helper): Scan a folder or zip archive into a normalized inventory with text cache, repo-root hints, and cluster hints.
 - `import dedupe` (local-helper): Create exact and probable duplicate reports from a scan inventory with conservative skip recommendations.
 - `import plan` (local-helper): Build a conservative import plan that prefers collector threads, hub docs, dedupe-first writes, and low orphan rates.
@@ -250,7 +260,7 @@ When starting in a new environment:
 3. Register the first principal with `oar auth register --username <username> --bootstrap-token <token>` or later principals with `--invite-token <token>`.
 4. Confirm identity.
 5. Run a cheap read command.
-6. If this agent should be tag-addressable from thread messages, read `oar meta doc wake-routing` and create or verify `agentreg.<handle>` for the current workspace.
+6. If this agent should be tag-addressable from thread messages, read `oar meta doc agent-bridge` for the preferred runtime path or `oar meta doc wake-routing` for the generic document lifecycle.
 
 When stuck:
 
@@ -267,6 +277,145 @@ Maintenance rule
 - Mention examples of primitives and abstractions, but avoid implying the list is closed.
 ```
 
+## `agent-bridge`
+
+Install, configure, and operate the preferred `oar-agent-bridge` wake-routing runtime on a fresh machine.
+
+```text
+Agent bridge
+
+Use this when you want the preferred bridge-backed path for wake registration and live `@handle` delivery.
+
+What changed
+
+- The main CLI now owns the bootstrap path for fresh machines:
+  - `oar bridge install`
+  - `oar bridge init-config`
+  - `oar bridge start|stop|restart|status|logs`
+  - `oar bridge doctor`
+- The Python package still owns runtime behavior:
+  - `oar-agent-bridge auth register`
+  - `oar-agent-bridge router run` and `bridge run` under the hood
+- Registrations are not wakeable until the bridge has actually checked in.
+
+Install on a fresh machine with only `oar`
+
+1. Install the bridge runtime into a managed Python `3.11+` virtualenv:
+
+  oar bridge install
+
+  By default, this installs from `main` and writes the launcher into `~/.local/bin`. Override with `--ref` or `--bin-dir` if needed. The current bootstrap path also requires `git` on PATH.
+
+2. If you need bridge test dependencies on the same machine:
+
+  oar bridge install --with-dev
+
+3. Verify the wrapper works:
+
+  oar-agent-bridge --version
+
+Contributor path from a repo checkout
+
+- For local development inside this repo, prefer:
+  - `make bridge-setup`
+  - `make bridge-doctor`
+  - `make bridge-test`
+- Local contributor rules for the adapter live in `adapters/agent-bridge/AGENTS.md`.
+
+Config generation
+
+Generate minimal configs from the CLI:
+
+  oar bridge init-config --kind router --output ./router.toml --workspace-id <workspace-id>
+  oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle>
+  oar bridge init-config --kind zeroclaw --output ./zeroclaw.toml --workspace-id <workspace-id> --handle <handle>
+
+These templates intentionally default the agent lifecycle to:
+
+- `status = "pending"`
+- `checkin_interval_seconds = 60`
+- `checkin_ttl_seconds = 300`
+
+That is the guardrail: humans should not tag an agent until the bridge has checked in and moved the registration to an active, fresh state.
+
+Workspace id source of truth
+
+- `<workspace-id>` must be the durable router workspace id, not a slug and not a UI path segment.
+- If you are bringing up a new router, the source of truth is the value you choose and set at `[oar] workspace_id` in the router config. Use the same value in every bridge config.
+- If a router already exists, inspect that deployed router config and copy its `[oar] workspace_id` exactly.
+- If the deployment is driven by control-plane workspace records, copy the durable `workspace_id` from that workspace record, not the slug.
+- The bundled example value `ws_main` is only a sample.
+- If you still do not know the real workspace id for your deployment, stop and ask the operator. Do not guess.
+
+First-time operator path
+
+1. Install the runtime:
+
+  oar bridge install
+
+2. Render config files:
+
+  oar bridge init-config --kind router --output ./router.toml --workspace-id <workspace-id>
+  oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle>
+
+3. Register the router principal. Use `--bootstrap-token` only for the very first principal in a fresh environment:
+
+  oar-agent-bridge auth register --config ./router.toml --bootstrap-token <token>
+
+4. Register the target bridge principal and write the initial pending registration:
+
+  oar-agent-bridge auth register --config ./agent.toml --invite-token <token> --apply-registration
+
+5. Start the managed router and bridge daemons from the main CLI:
+
+  oar bridge start --config ./router.toml
+  oar bridge start --config ./agent.toml
+
+6. Confirm the process and readiness state before humans use `@handle`:
+
+  oar bridge status --config ./agent.toml
+  oar bridge doctor --config ./agent.toml
+
+  Use `oar bridge logs --config ./agent.toml` when you need the recent daemon output, and `oar bridge restart --config ./agent.toml` if you change config or recover from a stale process.
+
+  The doctor should report both adapter readiness and the registration as wakeable. If it still says pending, stale, or adapter probe failed, fix that first.
+
+7. Post a test wake message containing `@<handle>`.
+
+8. Confirm the durable trace:
+  - `message_posted`
+  - `agent_wakeup_requested`
+  - `agent_wakeup_claimed`
+  - bridge reply `message_posted`
+  - `agent_wakeup_completed`
+
+Lifecycle note
+
+- `oar-agent-bridge registration apply` writes the registration document, but that alone does not make the agent taggable.
+- The bridge runtime refreshes registration readiness on check-in.
+- If the bridge stops checking in, the registration becomes stale and routing stops treating it as wakeable.
+- The preferred operational path is to manage the router/bridge daemons with `oar bridge start|stop|restart|status|logs`, not ad hoc shell backgrounding.
+
+Troubleshooting
+
+- `oar-agent-bridge: command not found`:
+  - run `oar bridge install` or add the managed wrapper directory to PATH
+- bridge doctor says registration is pending:
+  - the bridge has not checked in yet; start `oar bridge start --config ./agent.toml`
+- bridge doctor says registration is stale:
+  - the bridge stopped checking in; run `oar bridge restart --config ./agent.toml` and verify the config points at the right workspace
+- wake request is durable but never claimed:
+  - the router or bridge is offline, or `workspace_id` is wrong
+- principal exists but wake still fails:
+  - inspect `agentreg.<handle>` for actor mismatch, disabled status, stale check-in, or missing workspace binding
+
+Related docs
+
+  oar help bridge
+  oar meta doc wake-routing
+  oar bridge doctor --config ./agent.toml
+```
+
 ## `wake-routing`
 
 How `@handle` wake routing works, including self-registration, verification, and troubleshooting.
@@ -279,8 +428,9 @@ Use this when you want humans or agents to wake other agents from thread message
 How it works
 
 - Wake routing is implemented by the adapter bridge layer, not by `oar-core` itself.
-- A tagged message becomes durable wake work only when the target agent has a registered handle and the router/bridge daemons are running.
 - The durable registration document id is `agentreg.<handle>`.
+- The bridge-owned readiness proof is the latest `agent_bridge_checked_in` event referenced by `agentreg.<handle>`.
+- A tagged message only becomes durable wake work when the target agent is both registered and bridge-ready.
 
 What counts as wakeable
 
@@ -289,54 +439,86 @@ What counts as wakeable
 - principal has a username/handle
 - registration document `agentreg.<handle>` exists
 - registration document `actor_id` matches the principal actor
-- registration status is active
 - registration has an enabled binding for the current workspace
+- registration status is `active`
+- registration records a bridge check-in event id
+- that `agent_bridge_checked_in` event exists, matches the same actor, and has a fresh bridge check-in window
+
+Important lifecycle rule
+
+- An agent must not become taggable before the bridge is actually running and has checked in.
+- Bridge-managed registrations therefore start as `pending`.
+- The bridge flips them to active/fresh on check-in.
+- If the bridge stops checking in, the registration becomes stale and routing stops treating it as wakeable.
 
 How humans discover it
 
 - In the web UI Access page, look for agent principals marked Wakeable and their `@handle`.
-- In a thread message composer, tagging `@handle` requests a wakeup for that agent.
+- If Access shows pending or stale bridge state, do not expect tagging to work yet.
 
 How agents discover it
 
 - Read this topic with `oar meta doc wake-routing`.
-- Use `oar auth whoami` to confirm your current username and agent id.
-- Use `oar auth principals list --json` to inspect known agent principals.
-- Use `oar docs get --document-id agentreg.<handle> --json` to inspect a specific registration document.
-
-Self-serve registration
+- Read the preferred runtime path with `oar meta doc agent-bridge`.
+- Use `oar help bridge` to bootstrap the runtime from the main CLI.
+- Use `oar auth whoami` to confirm your current username and actor id.
+- Use `oar docs get --document-id agentreg.<handle> --json` to inspect a registration document directly.
 
 Preferred path when you are using `oar-agent-bridge`
 
-- During initial auth, register and write the wake registration in one step:
+1. Install the runtime:
 
-  oar-agent-bridge auth register --config <agent.toml> --invite-token <token> --apply-registration
+  oar bridge install
 
-- After auth already exists, upsert the registration document again with:
+2. Generate configs:
+
+  oar bridge init-config --kind router --output ./router.toml --workspace-id <workspace-id>
+  oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle>
+
+3. Register auth and write the initial pending registration:
+
+  oar-agent-bridge auth register --config ./agent.toml --invite-token <token> --apply-registration
+
+  If auth already exists and you only need to rewrite the registration document:
 
   oar-agent-bridge registration apply --config <agent.toml>
 
-Generic OAR CLI path
+4. Start the router and target bridge:
+
+  oar bridge start --config ./router.toml
+  oar bridge start --config ./agent.toml
+
+5. Verify the bridge has checked in before telling humans to use `@handle`:
+
+  oar bridge status --config ./agent.toml
+  oar bridge doctor --config ./agent.toml
+  oar-agent-bridge registration status --config ./agent.toml
+
+Generic OAR CLI lifecycle
+
+If you are writing the document manually, only create the pending registration skeleton. Manual docs writes do not replace the live bridge-owned check-in event.
 
 1. Confirm the identity you are registering:
 
   oar auth whoami
 
-  Use the server-resolved username from that output as `<handle>` and the server actor id as `<actor-id>`.
+  Use the server-resolved username as `<handle>` and the server actor id as `<actor-id>`.
 
 2. Resolve the durable workspace id you want to enable:
 
-  - If you are using `oar-agent-bridge`, read `oar.workspace_id` from your agent or router config file.
-  - The bundled example bridge configs use `ws_main`.
-  - Do not use a workspace slug or URL path segment here.
+  - If you are configuring the router yourself, the source of truth is `[oar] workspace_id` in the router config.
+  - If a router already exists, inspect that deployed router config and copy its `workspace_id` exactly.
+  - If your deployment is driven by control-plane workspace records, copy the durable workspace id from that record, not the slug.
+  - The bundled example value `ws_main` is only a sample.
+  - Do not use a workspace slug or URL path segment. If you cannot determine the real value, stop and ask the operator.
 
-3. Create a file such as `wake-registration.json` with the exact registration payload:
+3. Create a first-time registration payload such as `wake-registration.json`:
 
   {
     "document": {
       "document_id": "agentreg.<handle>",
       "title": "Agent registration @<handle>",
-      "status": "active",
+      "status": "pending",
       "labels": [
         "agent-registration",
         "handle:<handle>",
@@ -351,9 +533,9 @@ Generic OAR CLI path
       "delivery_mode": "pull",
       "driver_kind": "custom",
       "resume_policy": "resume_or_create",
-      "status": "active",
+      "status": "pending",
       "adapter_kind": "custom",
-      "updated_at": "2026-01-01T00:00:00Z",
+      "updated_at": "<current-utc-timestamp>",
       "workspace_bindings": [
         {
           "workspace_id": "<workspace-id>",
@@ -363,27 +545,31 @@ Generic OAR CLI path
     }
   }
 
-4. Create the document:
+4. For first-time registration, create the document:
 
   oar docs create --from-file wake-registration.json --json
 
-Registration schema
+5. If `agentreg.<handle>` already exists, update it instead of retrying create:
 
-- Durable document id must be `agentreg.<handle>`.
+  oar docs get --document-id agentreg.<handle> --json
+  oar docs update --document-id agentreg.<handle> --from-file wake-registration-update.json --json
+
+6. If `docs create` returns `conflict`, inspect the existing document and update it instead of retrying create blindly.
+
+Registration schema notes
+
 - Fields required for routing correctness are:
   - `content.handle` matching the principal username
   - `content.actor_id` matching the principal actor id
   - at least one enabled `content.workspace_bindings[].workspace_id` matching the router workspace id
-- Fields the bridge writes for compatibility and clarity are:
-  - `content.version` = `agent-registration/v1`
-  - `content.delivery_mode` = `pull`
-  - `content.driver_kind`
-  - `content.resume_policy` = `resume_or_create`
-  - `content.status` = `active`
-  - `content.adapter_kind`
-  - `content.updated_at`
-- `workspace_bindings[].enabled` defaults to true when omitted by bridge code, but setting it explicitly is clearer.
-- The workspace binding value must be the durable workspace id used by the router, typically `oar.workspace_id` in bridge config, not a URL slug or UI path segment.
+- Bridge readiness fields are:
+  - `content.bridge_checkin_event_id` points at the latest `agent_bridge_checked_in` event
+  - `content.bridge_signing_public_key_spki_b64` stores the bridge-managed public proof key
+  - that event payload includes `bridge_instance_id`, `checked_in_at`, and `expires_at`
+  - that event payload also includes `proof_signature_b64`, which must verify against the registration's public proof key
+- `updated_at` is advisory metadata. Set it to the current UTC time when creating or updating the registration, or let bridge-managed flows populate it.
+- Do not hand-edit `status = "active"` before the bridge has actually checked in.
+- Do not try to hand-author the bridge readiness proof. The supported path is to let the running bridge emit `agent_bridge_checked_in` and rewrite the registration.
 
 Verification flow
 
@@ -403,28 +589,30 @@ Verification flow
   - principal kind is `agent`
   - principal username is exactly `<handle>`
   - principal actor id matches `content.actor_id`
-  - registration `content.status` is `active`
   - `workspace_bindings` contains the current workspace id with `enabled: true`
+  - `status` is `active`
+  - `bridge_checkin_event_id` is present on the registration
+  - `oar events get --event-id <bridge-checkin-event-id> --json` returns an `agent_bridge_checked_in` event
+  - that event actor id matches the principal actor
+  - that event `expires_at` is still in the future
 
-5. If you are using `oar-agent-bridge`, confirm the router and target bridge are running:
+5. If you are using `oar-agent-bridge`, prefer:
 
-  oar-agent-bridge router run --config <router.toml>
-  oar-agent-bridge bridge run --config <agent.toml>
+  oar bridge doctor --config ./agent.toml
 
 Concrete wake example
 
-1. Ensure the router and target bridge are running, then post a thread message containing `@<handle>`, for example:
+1. Ensure the router and target bridge are running, and the bridge doctor reports the registration as wakeable.
+2. Post a thread message containing `@<handle>`, for example:
 
   @<handle> summarize the latest onboarding blockers.
 
-2. Expected durable trace:
+3. Expected durable trace:
   - existing `message_posted`
   - new `agent_wakeup_requested`
   - new `agent_wakeup_claimed`
   - new bridge reply `message_posted`
   - new `agent_wakeup_completed`
-
-3. If the request is durable but never gets claimed, the registration may be valid while the router or bridge runtime is offline.
 
 Common failure modes
 
@@ -432,19 +620,19 @@ Common failure modes
 - missing registration: `agentreg.<handle>` does not exist
 - registration actor mismatch: the registration doc points at a different actor
 - workspace not bound: registration exists but is not enabled for this workspace
-- wrong workspace id: the registration uses a workspace slug or another id that does not match the router configuration
-- bridge offline: the wake request is durable in OAR, but no local bridge is consuming it
+- bridge not checked in: the registration is still pending
+- stale bridge check-in: the bridge stopped refreshing readiness
+- wrong workspace id: the registration uses a slug or another id that does not match the router configuration
 
 Operational note
 
-- This mechanism is discoverable from the CLI and UI, but actual wake dispatch is owned by the `adapters/agent-bridge` runtime.
+- This mechanism is discoverable from the CLI and UI, but actual wake dispatch is still owned by the `adapters/agent-bridge` runtime.
 
 Next steps
 
-  oar meta doc agent-guide
-  oar auth whoami
-  oar help docs create
-  oar auth principals list --json
+  oar help bridge
+  oar meta doc agent-bridge
+  oar bridge doctor --config ./agent.toml
 ```
 
 ## `draft`
@@ -663,6 +851,47 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: oar --json auth token-status ... ; oar auth token-status ... --json
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `bridge`
+
+CLI-managed bridge bootstrap helpers for installing, templating, and checking `oar-agent-bridge`.
+
+```text
+Bridge bootstrap
+
+Use `oar bridge` when you only have the main CLI installed and need to bootstrap, manage, or inspect the Python `oar-agent-bridge` runtime. This is the discoverable install/setup path for agents and operators. The bridge package still owns the runtime behavior; the main CLI installs it and acts as the local process manager.
+
+Bootstrap prerequisites
+
+- Python `3.11+`
+- `git` on PATH for the current GitHub-subdirectory install path
+
+Lifecycle constraint
+
+- A registration document alone is not enough to make an agent taggable.
+- Bridge-managed registrations stay `pending` until the bridge has checked in.
+- Humans should only expect `@handle` wakeups to work after `oar bridge doctor --config <agent.toml>` reports the registration as wakeable.
+
+Subcommands
+
+  bridge install      Install or refresh the managed `oar-agent-bridge` virtualenv and wrapper
+  bridge init-config  Render a minimal router or bridge TOML config
+  bridge start        Start a managed router or bridge daemon for one config
+  bridge stop         Stop a managed router or bridge daemon for one config
+  bridge restart      Restart a managed router or bridge daemon for one config
+  bridge status       Inspect managed process state for one config
+  bridge logs         Read recent log lines for one config
+  bridge doctor       Validate install/config/readiness without starting daemons
+
+Recommended order
+
+1. `oar bridge install`
+2. `oar bridge init-config --kind router --output ./router.toml --workspace-id <workspace-id>`
+3. `oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle>`
+4. `oar-agent-bridge auth register ...` for the router and agent principal
+5. `oar bridge start --config ./router.toml` and `oar bridge start --config ./agent.toml`
+6. `oar bridge status --config ./agent.toml` and `oar bridge doctor --config ./agent.toml` before telling humans to tag `@handle`
 ```
 
 ## `import`
@@ -3240,6 +3469,224 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: oar --json meta skill ... ; oar meta skill ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `bridge install`
+
+Install `oar-agent-bridge` into a dedicated Python 3.11+ virtualenv and expose a PATH wrapper.
+
+```text
+Local Help: bridge install
+
+- Kind: `local helper`
+- Summary: Install `oar-agent-bridge` into a dedicated Python 3.11+ virtualenv and expose a PATH wrapper.
+- Composition: Pure local bootstrap helper with network package download. Creates or reuses a venv, installs the bridge package from the GitHub subdirectory, and writes a thin launcher script.
+- JSON body: `install_dir`, `bin_dir`, `wrapper_path`, `python`, `bridge_binary`, `package_ref`
+- Examples:
+  - `oar bridge install`
+  - `oar bridge install --ref main --with-dev`
+
+Flags:
+  --python <exe>               Preferred Python executable. Default probes for Python 3.11+.
+  --install-dir <dir>          Root directory for the managed bridge virtualenv.
+  --bin-dir <dir>              Directory where the `oar-agent-bridge` wrapper should be written.
+  --ref <git-ref>              Git ref to install from. Defaults to `main` unless you pin a different branch or tag.
+  --with-dev                   Also install bridge test dependencies.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json bridge install ... ; oar bridge install ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `bridge init-config`
+
+Write a minimal router or agent bridge TOML config with the pending-until-check-in lifecycle baked in.
+
+```text
+Local Help: bridge init-config
+
+- Kind: `local helper`
+- Summary: Write a minimal router or agent bridge TOML config with the pending-until-check-in lifecycle baked in.
+- Composition: Pure local helper. Renders one minimal bridge config template with explicit workspace-id and readiness settings; optionally writes it to disk.
+- JSON body: `kind`, `output`, `workspace_id`, `handle`, `content`
+- Examples:
+  - `oar bridge init-config --kind router --output ./router.toml --workspace-id ws_main`
+  - `oar bridge init-config --kind hermes --output ./agent.toml --workspace-id ws_main --handle hermes`
+
+Flags:
+  --kind <router|hermes|zeroclaw> Template kind to render.
+  --output <path>              Write the rendered TOML to a file. Omit to print it.
+  --workspace-id <id>          Durable OAR workspace id. Do not use a slug or UI path segment.
+  --handle <name>              Agent handle for bridge templates.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json bridge init-config ... ; oar bridge init-config ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `bridge doctor`
+
+Validate bridge install, config presence, and registration readiness without starting the daemon.
+
+```text
+Local Help: bridge doctor
+
+- Kind: `local helper`
+- Summary: Validate bridge install, config presence, and registration readiness without starting the daemon.
+- Composition: Pure local helper plus optional bridge CLI calls. Probes Python, the managed install, and `registration status` for a supplied config.
+- JSON body: `checks`, `registration`, `bridge_binary`, `python`
+- Examples:
+  - `oar bridge doctor`
+  - `oar bridge doctor --config ./agent.toml`
+
+Flags:
+  --config <path>              Bridge config to validate with `registration status`.
+  --python <exe>               Preferred Python executable. Default probes for Python 3.11+.
+  --install-dir <dir>          Root directory for the managed bridge virtualenv.
+  --bin-dir <dir>              Directory where the managed `oar-agent-bridge` wrapper should exist.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json bridge doctor ... ; oar bridge doctor ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `bridge start`
+
+Start a managed bridge or router daemon for one config file.
+
+```text
+Local Help: bridge start
+
+- Kind: `local helper`
+- Summary: Start a managed bridge or router daemon for one config file.
+- Composition: Pure local helper. Resolves the installed `oar-agent-bridge` binary, infers the config role, launches the daemon in the background, and records pid/log metadata in a per-config manager directory.
+- JSON body: `kind`, `config_path`, `pid`, `log_path`, `process_state_path`, `command`
+- Examples:
+  - `oar bridge start --config ./router.toml`
+  - `oar bridge start --config ./agent.toml`
+
+Flags:
+  --config <path>              Bridge config to start. The role is inferred from `[router]` vs `[agent]`.
+  --install-dir <dir>          Root directory for the managed bridge virtualenv.
+  --bin-dir <dir>              Directory where the managed `oar-agent-bridge` wrapper should exist.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json bridge start ... ; oar bridge start ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `bridge stop`
+
+Stop a managed bridge or router daemon for one config file.
+
+```text
+Local Help: bridge stop
+
+- Kind: `local helper`
+- Summary: Stop a managed bridge or router daemon for one config file.
+- Composition: Pure local helper. Reads the per-config manager state, sends SIGTERM, and records the stopped timestamp once the daemon exits.
+- JSON body: `kind`, `config_path`, `pid`, `stopped_at`, `last_signal`
+- Examples:
+  - `oar bridge stop --config ./router.toml`
+  - `oar bridge stop --config ./agent.toml --force`
+
+Flags:
+  --config <path>              Managed config to stop.
+  --force                      Escalate to SIGKILL if SIGTERM does not stop the daemon before the timeout.
+  --timeout-seconds <n>        How long to wait after SIGTERM before failing or force-killing.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json bridge stop ... ; oar bridge stop ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `bridge restart`
+
+Restart a managed bridge or router daemon for one config file.
+
+```text
+Local Help: bridge restart
+
+- Kind: `local helper`
+- Summary: Restart a managed bridge or router daemon for one config file.
+- Composition: Pure local helper. Stops the existing managed process if one is present, then launches a fresh daemon and updates the manager state.
+- JSON body: `kind`, `config_path`, `pid`, `log_path`, `process_state_path`
+- Examples:
+  - `oar bridge restart --config ./router.toml`
+  - `oar bridge restart --config ./agent.toml`
+
+Flags:
+  --config <path>              Managed config to restart.
+  --force                      Force-kill during the stop phase if needed.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json bridge restart ... ; oar bridge restart ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `bridge status`
+
+Inspect managed process state for a bridge or router config.
+
+```text
+Local Help: bridge status
+
+- Kind: `local helper`
+- Summary: Inspect managed process state for a bridge or router config.
+- Composition: Pure local helper plus optional bridge CLI calls. Reports the background process state, log path, and for agent configs also includes registration readiness when available.
+- JSON body: `kind`, `managed`, `running`, `pid`, `log_path`, `process_state_path`, `registration`
+- Examples:
+  - `oar bridge status --config ./router.toml`
+  - `oar bridge status --config ./agent.toml`
+
+Flags:
+  --config <path>              Managed config to inspect.
+  --install-dir <dir>          Root directory for the managed bridge virtualenv.
+  --bin-dir <dir>              Directory where the managed `oar-agent-bridge` wrapper should exist.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json bridge status ... ; oar bridge status ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `bridge logs`
+
+Read recent log lines for a managed bridge or router config.
+
+```text
+Local Help: bridge logs
+
+- Kind: `local helper`
+- Summary: Read recent log lines for a managed bridge or router config.
+- Composition: Pure local helper. Reads the per-config managed log file and returns the last N lines without requiring direct shell access.
+- JSON body: `kind`, `config_path`, `log_path`, `lines`, `content`
+- Examples:
+  - `oar bridge logs --config ./router.toml`
+  - `oar bridge logs --config ./agent.toml --lines 200`
+
+Flags:
+  --config <path>              Managed config whose log should be tailed.
+  --lines <n>                  How many recent lines to return. Default is 80.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json bridge logs ... ; oar bridge logs ... --json
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 

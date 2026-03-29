@@ -4,17 +4,33 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from .util import LockedFile, SlidingSet, atomic_write_json, ensure_dir, read_json_file
+from .util import (
+    LockedFile,
+    SlidingSet,
+    atomic_write_json,
+    ensure_dir,
+    generate_bridge_proof_keypair,
+    read_json_file,
+)
 
 
 class JSONStateStore:
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, *, ensure_bridge_identity: bool = False) -> None:
         self.path = path
         ensure_dir(path.parent)
         self._guard = LockedFile()
         self._data = read_json_file(path)
-        if "bridge_instance_id" not in self._data:
-            self._data["bridge_instance_id"] = f"bridge_{uuid.uuid4()}"
+        mutated = False
+        if ensure_bridge_identity:
+            if "bridge_instance_id" not in self._data:
+                self._data["bridge_instance_id"] = f"bridge_{uuid.uuid4()}"
+                mutated = True
+            if "bridge_signing_public_key_spki_b64" not in self._data or "bridge_signing_private_key_pkcs8_b64" not in self._data:
+                public_key_b64, private_key_b64 = generate_bridge_proof_keypair()
+                self._data["bridge_signing_public_key_spki_b64"] = public_key_b64
+                self._data["bridge_signing_private_key_pkcs8_b64"] = private_key_b64
+                mutated = True
+        if mutated:
             self.flush()
 
     def get(self, key: str, default: Any = None) -> Any:
@@ -37,6 +53,14 @@ class JSONStateStore:
     @property
     def bridge_instance_id(self) -> str:
         return str(self.get("bridge_instance_id", ""))
+
+    @property
+    def bridge_signing_public_key_spki_b64(self) -> str:
+        return str(self.get("bridge_signing_public_key_spki_b64", ""))
+
+    @property
+    def bridge_signing_private_key_pkcs8_b64(self) -> str:
+        return str(self.get("bridge_signing_private_key_pkcs8_b64", ""))
 
     @property
     def last_event_id(self) -> str | None:

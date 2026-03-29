@@ -534,10 +534,10 @@ func (a *App) runAuthWhoAmI(ctx context.Context, service *authcli.Service) (*com
 func authWakeRoutingHint(username string) string {
 	handle := strings.TrimSpace(username)
 	if handle == "" {
-		return "Wake registration help: oar meta doc wake-routing; oar help docs create"
+		return "Wake registration help: oar help bridge; oar meta doc agent-bridge; oar meta doc wake-routing"
 	}
 	return fmt.Sprintf(
-		"Wake registration help: oar meta doc wake-routing; oar help docs create (document id: agentreg.%s)",
+		"Wake registration help: oar help bridge; oar meta doc agent-bridge; oar meta doc wake-routing (document id: agentreg.%s)",
 		handle,
 	)
 }

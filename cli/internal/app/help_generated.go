@@ -356,6 +356,7 @@ Core Commands:
   version       Print CLI/runtime version details
   doctor        Validate local and network preconditions
   update        Replace the installed CLI binary with the recommended or requested release
+  bridge        Install, manage, and inspect the Python wake-routing bridge runtime
   auth          Manage agent registration, profile auth, and token lifecycle
   import        Bootstrap a precision-first workspace import and run local import helpers
   draft         Stage write requests locally and commit them later
@@ -415,8 +416,14 @@ func helpTopicText(topic string) (string, bool) {
 	if topic == "update" {
 		return updateUsageText() + "\n", true
 	}
+	if topic == "bridge" {
+		return bridgeUsageText(), true
+	}
 	if topic == "agent-guide" {
 		return agentGuideText(), true
+	}
+	if topic == "agent-bridge" || topic == "agent bridge" {
+		return agentBridgeGuideText(), true
 	}
 	if topic == "wake-routing" || topic == "wake routing" {
 		return wakeRoutingGuideText(), true

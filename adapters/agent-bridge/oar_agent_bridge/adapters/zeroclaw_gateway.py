@@ -28,6 +28,22 @@ class ZeroClawGatewayAdapter:
         self.session_header_name = session_header_name
         self._http = httpx.Client(base_url=self.base_url, timeout=request_timeout_seconds)
 
+    def doctor(self) -> dict[str, str | int]:
+        headers = {"Authorization": f"Bearer {self.bearer_token}"}
+        if self.webhook_secret:
+            headers["X-Webhook-Secret"] = self.webhook_secret
+        try:
+            response = self._http.get("/", headers=headers, timeout=min(self.request_timeout_seconds, 10))
+        except httpx.HTTPError as exc:
+            raise RuntimeError(f"ZeroClaw gateway is not reachable: {exc}") from exc
+        if response.status_code >= 500:
+            raise RuntimeError(f"ZeroClaw gateway returned {response.status_code} during readiness probe")
+        return {
+            "adapter_kind": "zeroclaw_gateway",
+            "base_url": self.base_url,
+            "status_code": response.status_code,
+        }
+
     def dispatch(self, packet: WakePacket, prompt_text: str, session_key: str, existing_native_session_id: str | None = None) -> AdapterResult:
         native_session_id = existing_native_session_id or session_key
         headers = {

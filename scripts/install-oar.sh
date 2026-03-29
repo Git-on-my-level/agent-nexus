@@ -102,6 +102,7 @@ main() {
 
   printf '\nQuick start:\n'
   info "oar --base-url http://<core-host>:8000 --agent <name> auth register --username <username>"
+  info "oar bridge install"
   info "oar version"
 }
 

@@ -14,5 +14,8 @@ class AdapterResult:
 
 
 class Adapter(Protocol):
+    def doctor(self) -> dict:
+        ...
+
     def dispatch(self, packet: WakePacket, prompt_text: str, session_key: str, existing_native_session_id: str | None = None) -> AdapterResult:
         ...

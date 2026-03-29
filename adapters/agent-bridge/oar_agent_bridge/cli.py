@@ -5,15 +5,16 @@ import json
 import sys
 from pathlib import Path
 
+from . import __version__
 from .auth import AuthManager
 from .bridge import AgentBridge
 from .config import LoadedConfig, load_config
 from .oar_client import OARClient
-from .registry import apply_registration
+from .registry import apply_registration, registration_status
 from .router import WakeRouter
-from .util import configure_logging
-from .state_store import JSONStateStore
 from .adapters import HermesACPAdapter, ZeroClawGatewayAdapter
+from .state_store import JSONStateStore
+from .util import configure_logging
 
 
 def build_client(config: LoadedConfig, auth: AuthManager | None = None) -> OARClient:
@@ -96,6 +97,18 @@ def cmd_registration_apply(args: argparse.Namespace) -> int:
         client.close()
 
 
+def cmd_registration_status(args: argparse.Namespace) -> int:
+    config = load_config(args.config)
+    auth = AuthManager(config.auth_state_path)
+    client = build_client(config, auth)
+    try:
+        result = registration_status(config, auth, client)
+        print(json.dumps(result.__dict__, indent=2))
+        return 0
+    finally:
+        client.close()
+
+
 def cmd_router_run(args: argparse.Namespace) -> int:
     config = load_config(args.config)
     if config.router is None:
@@ -115,16 +128,37 @@ def cmd_bridge_run(args: argparse.Namespace) -> int:
     auth = AuthManager(config.auth_state_path)
     client = build_client(config, auth)
     state_path = config.agent.state_dir / "bridge-state.json"
-    state = JSONStateStore(state_path)
+    state = JSONStateStore(state_path, ensure_bridge_identity=True)
     adapter = build_adapter(config)
-    bridge = AgentBridge(config, client, state, adapter)
+    bridge = AgentBridge(config, auth, client, state, adapter)
     bridge.run_forever()
+    return 0
+
+
+def cmd_bridge_doctor(args: argparse.Namespace) -> int:
+    config = load_config(args.config)
+    if config.agent is None:
+        raise ValueError("bridge doctor requires an [agent] section")
+    auth = AuthManager(config.auth_state_path)
+    client = build_client(config, auth)
+    state_path = config.agent.state_dir / "bridge-state.json"
+    state = JSONStateStore(state_path, ensure_bridge_identity=True)
+    adapter = build_adapter(config)
+    bridge = AgentBridge(config, auth, client, state, adapter)
+    result = {
+        "handle": config.agent.handle,
+        "workspace_id": config.oar.workspace_id,
+        "bridge_instance_id": state.bridge_instance_id,
+        "adapter": bridge.doctor(),
+    }
+    print(json.dumps(result, indent=2))
     return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="oar-agent-bridge")
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument("--version", action="version", version=f"oar-agent-bridge {__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     auth_parser = subparsers.add_parser("auth")
@@ -147,6 +181,9 @@ def build_parser() -> argparse.ArgumentParser:
     reg_apply_parser = reg_sub.add_parser("apply")
     reg_apply_parser.add_argument("--config", required=True)
     reg_apply_parser.set_defaults(func=cmd_registration_apply)
+    reg_status_parser = reg_sub.add_parser("status")
+    reg_status_parser.add_argument("--config", required=True)
+    reg_status_parser.set_defaults(func=cmd_registration_status)
 
     router_parser = subparsers.add_parser("router")
     router_sub = router_parser.add_subparsers(dest="router_command", required=True)
@@ -159,6 +196,9 @@ def build_parser() -> argparse.ArgumentParser:
     bridge_run = bridge_sub.add_parser("run")
     bridge_run.add_argument("--config", required=True)
     bridge_run.set_defaults(func=cmd_bridge_run)
+    bridge_doctor = bridge_sub.add_parser("doctor")
+    bridge_doctor.add_argument("--config", required=True)
+    bridge_doctor.set_defaults(func=cmd_bridge_doctor)
 
     return parser
 

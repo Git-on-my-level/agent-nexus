@@ -26,7 +26,9 @@ class AgentConfig:
     state_dir: Path
     workspace_bindings: list[str] = field(default_factory=list)
     resume_policy: str = "resume_or_create"
-    status: str = "active"
+    status: str = "pending"
+    checkin_interval_seconds: int = 60
+    checkin_ttl_seconds: int = 300
 
 
 @dataclass(slots=True)
@@ -119,7 +121,9 @@ def load_config(path: str | os.PathLike[str]) -> LoadedConfig:
             state_dir=state_dir,
             workspace_bindings=[str(v).strip() for v in (agent_table.get("workspace_bindings") or []) if str(v).strip()],
             resume_policy=str(agent_table.get("resume_policy", "resume_or_create")).strip() or "resume_or_create",
-            status=str(agent_table.get("status", "active")).strip() or "active",
+            status=str(agent_table.get("status", "pending")).strip() or "pending",
+            checkin_interval_seconds=max(5, int(agent_table.get("checkin_interval_seconds", 60))),
+            checkin_ttl_seconds=max(30, int(agent_table.get("checkin_ttl_seconds", 300))),
         )
         if not agent_cfg.handle:
             raise ValueError("agent.handle is required when [agent] is present")

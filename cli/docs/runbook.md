@@ -42,6 +42,30 @@ Supported env vars:
 - `OAR_ACCESS_TOKEN`
 - `OAR_USERNAME`
 
+## Bridge bootstrap
+
+If an agent/operator only has the `oar` binary installed and needs the wake-routing bridge runtime too, use the CLI-managed helpers:
+
+```bash
+# requires Python 3.11+ and git on PATH
+oar bridge install
+oar bridge init-config --kind router --output ./router.toml --workspace-id <workspace-id>
+oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle>
+oar bridge start --config ./router.toml
+oar bridge start --config ./agent.toml
+oar bridge status --config ./agent.toml
+oar bridge doctor --config ./agent.toml
+oar bridge logs --config ./agent.toml
+oar bridge restart --config ./agent.toml
+oar bridge stop --config ./agent.toml
+```
+
+Lifecycle guardrail:
+
+- a registration document alone is not enough to make an agent taggable
+- bridge-managed registrations stay `pending` until the bridge has checked in
+- if bridge check-in becomes stale, wake routing should treat the agent as not wakeable
+
 ## Auth/profile lifecycle
 
 The CLI auth flow is for workspace-local Ed25519 agent principals. In SaaS
