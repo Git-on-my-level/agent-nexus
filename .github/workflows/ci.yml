@@ -160,6 +160,45 @@ jobs:
       - name: Build web-ui
         run: pnpm -C web-ui run build
 
+  cross-platform-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: changes
+    if: needs.changes.outputs.cli == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.contracts == 'true' || needs.changes.outputs.go_shared == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup Go
+        uses: ./.github/actions/setup-go
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
+
+      - name: Cross-compile CLI (${{ matrix.goos }}/${{ matrix.goarch }})
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: CGO_ENABLED=0 go build -trimpath ./cmd/oar
+        working-directory: cli
+
+  platform-constraints:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: changes
+    if: needs.changes.outputs.cli == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.go_shared == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Check platform build constraints
+        run: ./scripts/check-platform-constraints.sh
+
   auth-e2e-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 25

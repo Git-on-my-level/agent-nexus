@@ -15,6 +15,9 @@ BOOTSTRAP_TOKEN="${BOOTSTRAP_TOKEN:-smoke-bootstrap-token}"
 
 mkdir -p "$ARTIFACT_DIR"
 TMP_DIR="$(mktemp -d "$ARTIFACT_DIR/run.XXXXXX")"
+
+lsof -ti :${CORE_PORT} 2>/dev/null | xargs kill -9 2>/dev/null || true
+
 CORE_LOG="$TMP_DIR/core.log"
 UI_LOG="$TMP_DIR/web-ui.log"
 EVENTS_TAIL_OUT="$TMP_DIR/events-tail.jsonl"

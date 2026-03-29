@@ -21,7 +21,7 @@ FORCE_SEED ?= 0
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup check serve serve-control-plane lint test format contract-gen contract-check workflow-check version-sync version-check e2e-smoke hosted-smoke hosted-ops-test hosted-ops-smoke saas-smoke saas-e2e saas-load-smoke packed-host-smoke cli-check cli-test cli-build cli-integration-test bridge-setup bridge-doctor bridge-test core-% bridge-% web-ui-%
+.PHONY: help setup check serve serve-control-plane lint test format contract-gen contract-check workflow-check version-sync version-check e2e-smoke hosted-smoke hosted-ops-test hosted-ops-smoke saas-smoke saas-e2e saas-load-smoke packed-host-smoke cli-check cli-test cli-build cli-integration-test bridge-setup bridge-doctor bridge-test release-check platform-constraints core-% bridge-% web-ui-%
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z0-9_.-]+:.*##/ {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -98,6 +98,14 @@ bridge-test: ## Run bridge unit tests
 
 e2e-smoke: ## Run end-to-end core + CLI + web-ui smoke flow
 	./scripts/e2e-smoke
+
+platform-constraints: ## Check for Unix-only syscalls without build constraints
+	./scripts/check-platform-constraints.sh
+
+release-check: ## Validate release readiness (check + e2e + cross-platform build)
+	$(MAKE) check
+	$(MAKE) e2e-smoke
+	./scripts/build-cli-release-artifacts.sh "$(./scripts/read-version.sh)" /tmp/release-test
 
 hosted-smoke: ## Run hosted-v1 production smoke suite (auth gate, onboarding, workspace access, staleness)
 	./scripts/hosted-smoke
