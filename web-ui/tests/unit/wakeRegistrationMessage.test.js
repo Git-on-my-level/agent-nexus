@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { buildWakeRegistrationMessage } from "../../src/lib/wakeRegistrationMessage.js";
 
 describe("wakeRegistrationMessage", () => {
-  it("builds a bridge-based registration message for existing agent auth", () => {
+  it("builds an adapter-agnostic registration message for existing agent auth", () => {
     const message = buildWakeRegistrationMessage(
       "https://example.com/oar/team-alpha",
       "ws-team-alpha",
@@ -15,13 +15,16 @@ describe("wakeRegistrationMessage", () => {
     );
     expect(message).toContain("oar bridge install");
     expect(message).toContain(
-      "oar bridge init-config --kind hermes --output ./agent.toml --workspace-id ws-team-alpha --handle m4-hermes",
+      "oar bridge init-config --kind <bridge-kind> --output ./agent.toml --workspace-id ws-team-alpha --handle m4-hermes",
     );
     expect(message).toContain(
       "oar bridge import-auth --config ./agent.toml --from-profile <your-oar-profile>",
     );
     expect(message).toContain(
       "oar-agent-bridge registration apply --config ./agent.toml",
+    );
+    expect(message).toContain(
+      "Use the bridge kind your agent runtime supports.",
     );
     expect(message).toContain("This writes agentreg.m4-hermes");
   });
