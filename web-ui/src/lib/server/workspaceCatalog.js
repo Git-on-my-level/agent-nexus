@@ -24,6 +24,7 @@ function normalizeWorkspaceEntry(entry, index) {
     label: String(entry.label ?? slug).trim() || slug,
     description: String(entry.description ?? "").trim(),
     coreBaseUrl: normalizeBaseUrl(entry.coreBaseUrl ?? entry.core_base_url),
+    publicOrigin: normalizeBaseUrl(entry.publicOrigin ?? entry.public_origin),
   };
 }
 

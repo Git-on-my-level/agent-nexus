@@ -12,13 +12,16 @@ This package contains the SvelteKit web UI for Organization Autorunner.
 
 - Canonical config: `OAR_WORKSPACES`
   - JSON array or object mapping `workspace slug -> core base URL`
+  - Optional per-workspace `publicOrigin`/`public_origin` keeps copied links and
+    registration snippets pinned to the externally reachable workspace URL when
+    the UI itself is reverse-proxied or seen as loopback internally
   - Used directly for self-host and local/dev deployments
   - Example:
 
     ```bash
     export OAR_WORKSPACES='[
-      {"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"},
-      {"slug":"ops","label":"Ops","coreBaseUrl":"http://127.0.0.1:8001"}
+      {"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000","publicOrigin":"https://oar.tailnet.ts.net/oar/local"},
+      {"slug":"ops","label":"Ops","coreBaseUrl":"http://127.0.0.1:8001","publicOrigin":"https://oar.tailnet.ts.net/oar/ops"}
     ]'
     export OAR_DEFAULT_WORKSPACE=local
     ```

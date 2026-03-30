@@ -17,15 +17,19 @@ Canonical runtime config is `OAR_WORKSPACES`.
 
 - Accepts a JSON array or object.
 - Each entry needs a workspace slug and a core base URL.
-- Optional fields: `label`, `description`.
+- Optional fields: `label`, `description`, `publicOrigin`/`public_origin`.
+- Set `publicOrigin` to the externally reachable workspace URL when the UI is
+  reverse-proxied, mounted under a base path, or otherwise sees loopback
+  origins internally. Access-page copy and registration snippets use it as the
+  fallback public URL.
 - This is the authoritative routing source for self-host and local/dev.
 
 Example:
 
 ```bash
 export OAR_WORKSPACES='[
-  {"slug":"dtrinity","label":"DTrinity","coreBaseUrl":"http://127.0.0.1:8000"},
-  {"slug":"scalingforever","label":"Scaling Forever","coreBaseUrl":"http://127.0.0.1:8001"}
+  {"slug":"dtrinity","label":"DTrinity","coreBaseUrl":"http://127.0.0.1:8000","publicOrigin":"https://oar.tailnet.ts.net/oar/dtrinity"},
+  {"slug":"scalingforever","label":"Scaling Forever","coreBaseUrl":"http://127.0.0.1:8001","publicOrigin":"https://oar.tailnet.ts.net/oar/scalingforever"}
 ]'
 export OAR_DEFAULT_WORKSPACE=dtrinity
 ```
