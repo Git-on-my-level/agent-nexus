@@ -4,6 +4,7 @@
   import { page } from "$app/stores";
   import SearchableEntityPicker from "$lib/components/SearchableEntityPicker.svelte";
   import { coreClient } from "$lib/coreClient";
+  import { filterTopLevelDocuments } from "$lib/documentVisibility";
   import { formatTimestamp } from "$lib/formatDate";
   import { searchThreads as searchThreadRecords } from "$lib/searchHelpers";
   import { workspacePath } from "$lib/workspacePaths";
@@ -100,7 +101,7 @@
       const filters = {};
       if (threadId) filters.thread_id = threadId;
       const data = await coreClient.listDocuments(filters);
-      documents = data.documents ?? [];
+      documents = filterTopLevelDocuments(data.documents);
     } catch (e) {
       error = `Failed to load documents: ${e instanceof Error ? e.message : String(e)}`;
       documents = [];

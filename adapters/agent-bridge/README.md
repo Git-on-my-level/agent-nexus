@@ -6,8 +6,8 @@ This package is bridge-only. Workspace `@handle` routing is owned by the embedde
 
 This package implements three things:
 
-1. **Registration docs** stored in OAR documents (`agentreg.<handle>`)
-2. **Bridge readiness check-ins** stored in OAR events and reflected in the registration
+1. **Wake registration metadata** stored on the authenticated OAR principal
+2. **Bridge readiness check-ins** stored in OAR events and reflected in that registration
 3. **Local bridge adapters** that consume wake events and invoke concrete agents
 
 Included adapters:
@@ -19,7 +19,7 @@ Included adapters:
 
 The bridge uses OAR's existing canonical primitives instead of inventing a parallel state system:
 
-- registration = OAR document
+- registration = OAR auth principal metadata
 - bridge check-in = OAR event
 - wake request/claim/fail/complete = OAR events
 - wake packet = OAR artifact
@@ -87,7 +87,7 @@ Read the authenticated principal:
 oar-agent-bridge auth whoami --config examples/hermes.toml
 ```
 
-Upsert the registration document after auth already exists:
+Apply or refresh wake registration after auth already exists:
 
 ```bash
 oar-agent-bridge registration apply --config examples/hermes.toml
@@ -116,7 +116,7 @@ Import existing `oar` auth into a bridge config instead of manually translating 
 oar bridge import-auth --config ./agent.toml --from-profile agent-a
 ```
 
-Discover durable workspace ids from an existing registration document:
+Discover durable workspace ids from an existing registration:
 
 ```bash
 oar bridge workspace-id --handle hermes
@@ -167,7 +167,7 @@ Minimum config contract:
 
 Presence lifecycle:
 
-- Registration documents start `pending`.
+- Registrations start `pending`.
 - The bridge runtime publishes the live readiness check-in event and flips the registration to `active`.
 - The registration also records the bridge-generated public proof key and the latest check-in event id.
 - The workspace router only treats the agent as online when that event carries a valid bridge proof signature for the registered key.
@@ -177,7 +177,7 @@ Presence lifecycle:
 Workspace identity:
 
 - `workspace_id` must be the durable workspace id, not a slug and not a UI path segment.
-- If an `agentreg.<handle>` document already exists, start with `oar bridge workspace-id --handle <handle>` to inspect its enabled workspace bindings.
+- If an existing registration is available, start with `oar bridge workspace-id --handle <handle>` to inspect its enabled workspace bindings.
 - If the workspace deployment already documents its configured `workspace_id`, copy that exact value.
 - If the deployment is driven by control-plane workspace records, copy the durable `workspace_id` from that workspace record, not the slug.
 - The example value `ws_main` in this repo is only a sample.
@@ -238,7 +238,7 @@ oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <works
 oar bridge import-auth --config ./agent.toml --from-profile <agent>
 ```
 
-4. Register the agent and write its initial pending registration document in one step:
+4. Register the agent and write its initial pending wake registration in one step:
 
 ```bash
 oar-agent-bridge auth register --config ./agent.toml --invite-token <token> --apply-registration
@@ -268,32 +268,26 @@ The doctor path also probes the downstream adapter configuration before the brid
 - new `message_posted` from the bridge
 - new `agent_wakeup_completed`
 
-8. If the registration document already exists and you want a bridge-managed upsert, run:
+8. If the registration already exists and you want a bridge-managed refresh, run:
 
 ```bash
 oar-agent-bridge registration apply --config examples/hermes.toml
 ```
 
-If `oar docs create` or another manual write returns `conflict` for `agentreg.<handle>`, inspect the existing document and update it instead of retrying create blindly.
+If a registration apply returns a conflict or validation error, inspect the authenticated principal and update the bridge config instead of retrying blindly.
 
 If a human tags the agent before step 6 succeeds, the notification should still be queued as long as the registration and workspace binding are valid. The bridge will consume it after it comes back online.
 
 ## File layout
 
-- `oar_agent_bridge/registry.py` - registration doc upsert and check-in publication
+- `oar_agent_bridge/registry.py` - registration apply/status and check-in publication
 - `oar_agent_bridge/bridge.py` - wake claim, adapter dispatch, reply/failure writeback
 - `oar_agent_bridge/adapters/hermes_acp.py` - Hermes ACP adapter
 - `oar_agent_bridge/adapters/zeroclaw_gateway.py` - ZeroClaw Gateway adapter
 
 ## Event and artifact conventions
 
-### Registration document
-
-Document ID:
-
-```text
-agentreg.<handle>
-```
+### Wake registration
 
 Structured content version:
 

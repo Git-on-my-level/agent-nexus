@@ -272,12 +272,6 @@ class WakePacket:
             version=str(content.get("version", WAKE_PACKET_VERSION)).strip() or WAKE_PACKET_VERSION,
         )
 
-
-def registration_document_id(handle: str) -> str:
-    return f"agentreg.{handle.strip()}"
-
-
-
 def wakeup_request_key(workspace_id: str, thread_id: str, message_event_id: str, actor_id: str) -> str:
     return f"wake-req-{sha256_text(workspace_id, thread_id, message_event_id, actor_id, length=24)}"
 

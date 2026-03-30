@@ -1,4 +1,5 @@
 import { coreClient } from "./coreClient.js";
+import { filterTopLevelDocuments } from "./documentVisibility.js";
 
 export async function searchThreads(query, limit = 20) {
   const response = await coreClient.listThreads({
@@ -13,7 +14,7 @@ export async function searchDocuments(query, limit = 20) {
     q: query,
     limit,
   });
-  return response.documents || [];
+  return filterTopLevelDocuments(response.documents);
 }
 
 export async function searchActors(query, limit = 20) {
