@@ -36,8 +36,12 @@ validate_version() {
 }
 
 ensure_clean_worktree() {
+  local untracked_files
+
   git diff --quiet || die "working tree has unstaged changes; commit or stash them first"
   git diff --cached --quiet || die "working tree has staged changes; commit or stash them first"
+  untracked_files="$(git ls-files --others --exclude-standard)"
+  [[ -z "${untracked_files}" ]] || die "$(printf 'working tree has untracked files; commit, stash, or remove them first:\n%s' "${untracked_files}")"
 }
 
 next_patch_version() {
