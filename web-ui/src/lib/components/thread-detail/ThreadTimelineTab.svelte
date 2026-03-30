@@ -15,25 +15,38 @@
   let actorName = $derived((id) => lookupActorDisplayName(id, $actorRegistry));
 
   let timelineView = $derived(toTimelineView(timeline, { threadId }));
+  let hasTimelineEvents = $derived(timelineView.length > 0);
 </script>
 
 <div class="mt-4">
-  <h2
-    class="mb-3 text-[12px] font-semibold uppercase tracking-wider text-[var(--ui-text-muted)]"
-  >
-    Timeline
-  </h2>
-  {#if timelineLoading}
-    <p class="text-[13px] text-[var(--ui-text-muted)]">Loading timeline...</p>
-  {:else if timelineError}
+  <div class="mb-3 flex items-center justify-between gap-3">
+    <h2
+      class="text-[12px] font-semibold uppercase tracking-wider text-[var(--ui-text-muted)]"
+    >
+      Timeline
+    </h2>
+    <div class="min-h-[1rem] text-right" aria-live="polite">
+      {#if timelineLoading && hasTimelineEvents}
+        <p class="text-[11px] text-[var(--ui-text-muted)]">Syncing…</p>
+      {/if}
+    </div>
+  </div>
+  {#if timelineError && !hasTimelineEvents}
     <p class="rounded bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
       {timelineError}
     </p>
-  {:else if timelineView.length === 0}
+  {:else if timelineLoading && !hasTimelineEvents}
+    <p class="text-[13px] text-[var(--ui-text-muted)]">Loading timeline...</p>
+  {:else if !hasTimelineEvents}
     <p class="text-[13px] text-[var(--ui-text-muted)]">No events yet.</p>
   {:else}
+    {#if timelineError}
+      <p class="mb-2 rounded bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
+        {timelineError}
+      </p>
+    {/if}
     <div class="space-y-1">
-      {#each timelineView as event}
+      {#each timelineView as event (event.id)}
         <div
           class="group rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] px-4 py-2.5"
           id={`event-${event.id}`}

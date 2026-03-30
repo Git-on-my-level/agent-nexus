@@ -41,13 +41,22 @@ describe("threadDetailStore", () => {
     coreClientMocks.getThreadWorkspace.mockResolvedValueOnce({
       thread: { id: "thread-1", title: "Initial workspace" },
       context: {
-        recent_events: [],
+        recent_events: [{ id: "event-seed", type: "actor_statement" }],
         documents: [],
         open_commitments: [],
       },
     });
 
     await threadDetailStore.loadWorkspace("thread-1");
+
+    expect(get(threadDetailStore).timeline).toEqual([
+      { id: "event-seed", type: "actor_statement" },
+    ]);
+
+    coreClientMocks.listThreadTimeline.mockResolvedValueOnce({
+      events: [{ id: "event-full", type: "message_posted" }],
+    });
+    await threadDetailStore.loadTimeline("thread-1");
 
     const pendingRefresh = deferred();
     coreClientMocks.getThreadWorkspace.mockReturnValueOnce(
@@ -77,12 +86,56 @@ describe("threadDetailStore", () => {
 
     expect(get(threadDetailStore)).toMatchObject({
       snapshot: { id: "thread-1", title: "Refreshed workspace" },
-      timeline: [{ id: "event-1", type: "actor_statement" }],
+      timeline: [{ id: "event-full", type: "message_posted" }],
       documents: [{ id: "doc-1", title: "Doc 1" }],
       commitments: [{ id: "commit-1", status: "open" }],
       snapshotLoading: false,
       snapshotError: "",
       documentsError: "",
+    });
+  });
+
+  it("keeps the mounted timeline when a refresh fails", async () => {
+    coreClientMocks.listThreadTimeline.mockResolvedValueOnce({
+      events: [{ id: "event-1", type: "message_posted" }],
+    });
+
+    await threadDetailStore.loadTimeline("thread-1");
+
+    coreClientMocks.listThreadTimeline.mockRejectedValueOnce(
+      new Error("network down"),
+    );
+
+    await threadDetailStore.loadTimeline("thread-1");
+
+    expect(get(threadDetailStore)).toMatchObject({
+      timeline: [{ id: "event-1", type: "message_posted" }],
+      timelineError: "Failed to load timeline: network down",
+      timelineLoading: false,
+    });
+  });
+
+  it("ignores stale timeline failures after a newer request succeeds", async () => {
+    const firstRequest = deferred();
+
+    coreClientMocks.listThreadTimeline
+      .mockReturnValueOnce(firstRequest.promise)
+      .mockResolvedValueOnce({
+        events: [{ id: "event-new", type: "message_posted" }],
+      });
+
+    const firstLoad = threadDetailStore.loadTimeline("thread-1");
+    const secondLoad = threadDetailStore.loadTimeline("thread-1");
+
+    await secondLoad;
+
+    firstRequest.reject(new Error("old request failed"));
+    await expect(firstLoad).resolves.toBeUndefined();
+
+    expect(get(threadDetailStore)).toMatchObject({
+      timeline: [{ id: "event-new", type: "message_posted" }],
+      timelineError: "",
+      timelineLoading: false,
     });
   });
 

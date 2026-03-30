@@ -40,12 +40,12 @@
 
   {#if message.children.length > 0}
     <!-- -mx-4 cancels this article's horizontal padding so nested rows use the full card
-         width; only the left border + pl indent the thread. Reply buttons stay on the
+      width; only the left border + pl indent the thread. Reply buttons stay on the
          same right edge as the root message. -->
     <div
       class="mt-3 -mx-4 space-y-2 border-l border-[var(--ui-border)] pl-2.5 sm:pl-3"
     >
-      {#each message.children as child}
+      {#each message.children as child (child.id)}
         <Self
           message={child}
           {threadId}

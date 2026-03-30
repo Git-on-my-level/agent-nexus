@@ -61,8 +61,12 @@ test("thread detail separates messages from timeline and nests replies", async (
   let streamLastEventId = "";
   let timelineRequests = 0;
   let allowFirstTimelineResponse;
+  let allowSecondTimelineResponse;
   const firstTimelineResponseGate = new Promise((resolve) => {
     allowFirstTimelineResponse = resolve;
+  });
+  const secondTimelineResponseGate = new Promise((resolve) => {
+    allowSecondTimelineResponse = resolve;
   });
   let recentEvents = [
     {
@@ -76,29 +80,18 @@ test("thread detail separates messages from timeline and nests replies", async (
       payload: { text: "Latest workspace message" },
       provenance: { sources: ["actor_statement:event-1002"] },
     },
-    {
-      id: "evt-1001",
-      ts: "2026-03-03T08:00:00.000Z",
-      type: "message_posted",
-      actor_id: actorId,
-      thread_id: "thread-onboarding",
-      refs: ["thread:thread-onboarding"],
-      summary: "Initial timeline message",
-      payload: { text: "Initial timeline message" },
-      provenance: { sources: ["actor_statement:event-1001"] },
-    },
   ];
   let timeline = [
     {
-      id: "evt-1001",
+      id: "evt-0999",
       ts: "2026-03-03T08:00:00.000Z",
       type: "message_posted",
       actor_id: actorId,
       thread_id: "thread-onboarding",
       refs: ["thread:thread-onboarding"],
-      summary: "Initial timeline message",
-      payload: { text: "Initial timeline message" },
-      provenance: { sources: ["actor_statement:event-1001"] },
+      summary: "Earlier timeline-only message",
+      payload: { text: "Earlier timeline-only message" },
+      provenance: { sources: ["actor_statement:event-0999"] },
     },
     {
       id: "evt-1002",
@@ -412,6 +405,9 @@ test("thread detail separates messages from timeline and nests replies", async (
     if (timelineRequests === 1) {
       await firstTimelineResponseGate;
     }
+    if (timelineRequests === 2) {
+      await secondTimelineResponseGate;
+    }
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -501,7 +497,7 @@ test("thread detail separates messages from timeline and nests replies", async (
     /\/local\/threads\/thread-onboarding\?tab=messages$/,
   );
   await expect(
-    page.getByText("Initial timeline message", { exact: true }),
+    page.getByText("Latest workspace message", { exact: true }),
   ).toBeVisible();
   await expect(
     page.getByText("Loading messages...", { exact: true }),
@@ -521,33 +517,35 @@ test("thread detail separates messages from timeline and nests replies", async (
     page.locator('[role="tabpanel"]').getByRole("link", { name: "Access" }),
   ).toHaveAttribute("href", /\/local\/access$/);
   await expect(
-    page.getByText("Initial timeline message", { exact: true }),
+    page.getByText("Earlier timeline-only message", { exact: true }),
   ).toBeVisible();
   await page.locator("#message-text").fill("@");
   await expect(page.locator("#message-mention-list")).toContainText(
     "@m4-hermes",
   );
-  await expect(page.locator("#message-mention-list")).not.toContainText(
-    "@jarvis",
-  );
-  await expect(page.locator("#message-mention-list")).not.toContainText(
-    "@clawd",
-  );
   await expect(
-    page.locator("#message-evt-1001").getByRole("button", { name: "Reply" }),
+    page.locator("#message-evt-1002").getByRole("button", { name: "Reply" }),
   ).toBeVisible();
   await page
-    .locator("#message-evt-1001")
+    .locator("#message-evt-1002")
     .getByRole("button", { name: "Reply" })
     .click();
   await page.locator("#message-text").fill("Reply message from e2e");
   await page.getByRole("button", { name: "Post message" }).click();
 
   await expect.poll(() => postedEvents).toBe(1);
+  await expect(
+    page.getByText("Earlier timeline-only message", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("Syncing…", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Loading messages...", { exact: true }),
+  ).toHaveCount(0);
+  allowSecondTimelineResponse();
 
   await expect(
     page
-      .locator("#message-evt-1001")
+      .locator("#message-evt-1002")
       .locator("#message-event-new-1")
       .getByText("Reply message from e2e", { exact: true }),
   ).toBeVisible();

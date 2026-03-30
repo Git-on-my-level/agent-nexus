@@ -36,6 +36,7 @@
   let messageThreads = $derived(toMessageThreadView(timeline, { threadId }));
   let allMessages = $derived(flattenMessageThreadView(messageThreads));
   let hasMessages = $derived(messageThreads.length > 0);
+  let showSyncStatus = $derived(timelineLoading && hasMessages);
   let replyTargetMessage = $derived(
     replyToEventId
       ? (allMessages.find((message) => message.id === replyToEventId) ?? null)
@@ -357,11 +358,18 @@
 </div>
 
 <div class="mt-4">
-  <h2
-    class="mb-3 text-[12px] font-semibold uppercase tracking-wider text-[var(--ui-text-muted)]"
-  >
-    Messages
-  </h2>
+  <div class="mb-3 flex items-center justify-between gap-3">
+    <h2
+      class="text-[12px] font-semibold uppercase tracking-wider text-[var(--ui-text-muted)]"
+    >
+      Messages
+    </h2>
+    <div class="min-h-[1rem] text-right" aria-live="polite">
+      {#if showSyncStatus}
+        <p class="text-[11px] text-[var(--ui-text-muted)]">Syncing…</p>
+      {/if}
+    </div>
+  </div>
   {#if timelineError && !hasMessages}
     <p class="rounded bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
       {timelineError}
@@ -371,18 +379,13 @@
   {:else if !hasMessages}
     <p class="text-[13px] text-[var(--ui-text-muted)]">No messages yet.</p>
   {:else}
-    {#if timelineLoading}
-      <p class="mb-2 text-[12px] text-[var(--ui-text-muted)]">
-        Refreshing messages...
-      </p>
-    {/if}
     {#if timelineError}
       <p class="mb-2 rounded bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
         {timelineError}
       </p>
     {/if}
     <div class="space-y-3">
-      {#each messageThreads as message}
+      {#each messageThreads as message (message.id)}
         <ThreadMessageItem
           {message}
           {threadId}

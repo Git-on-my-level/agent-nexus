@@ -30,6 +30,7 @@ function createThreadDetailStore() {
   let queuedRefreshFlags = null;
   let queuedRefreshThreadId = "";
   let queuedRefreshPromise = null;
+  let timelineRequestSeq = 0;
 
   function mergeRefreshFlags(base, next) {
     const left = base ?? {};
@@ -91,9 +92,16 @@ function createThreadDetailStore() {
         ownedBoards: Array.isArray(ownedBoardsData.items)
           ? ownedBoardsData.items
           : [],
-        timeline: Array.isArray(context.recent_events)
-          ? context.recent_events
-          : [],
+        // Seed timeline from workspace context only before the dedicated
+        // timeline fetch has populated the full event history. Background
+        // workspace refreshes should not replace the mounted message list
+        // with the smaller recent-events slice.
+        timeline:
+          currentState.timeline.length > 0
+            ? currentState.timeline
+            : Array.isArray(context.recent_events)
+              ? context.recent_events
+              : [],
       });
       return workspace;
     } catch (error) {
@@ -126,18 +134,30 @@ function createThreadDetailStore() {
   }
 
   async function loadTimeline(threadId) {
+    const requestSeq = ++timelineRequestSeq;
+    const currentState = get(store);
     patchState({ timelineLoading: true, timelineError: "" });
     try {
+      const nextTimeline =
+        (await coreClient.listThreadTimeline(threadId)).events ?? [];
+      if (requestSeq !== timelineRequestSeq) {
+        return;
+      }
       patchState({
-        timeline: (await coreClient.listThreadTimeline(threadId)).events ?? [],
+        timeline: nextTimeline,
       });
     } catch (e) {
+      if (requestSeq !== timelineRequestSeq) {
+        return;
+      }
       patchState({
         timelineError: `Failed to load timeline: ${e instanceof Error ? e.message : String(e)}`,
-        timeline: [],
+        timeline: currentState.timeline,
       });
     } finally {
-      patchState({ timelineLoading: false });
+      if (requestSeq === timelineRequestSeq) {
+        patchState({ timelineLoading: false });
+      }
     }
   }
 
