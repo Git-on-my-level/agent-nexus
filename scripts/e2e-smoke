@@ -3,24 +3,17 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ARTIFACT_DIR="${SMOKE_ARTIFACT_DIR:-$ROOT_DIR/.tmp/e2e-smoke}"
-CORE_PORT="${CORE_PORT:-18080}"
-UI_PORT="${UI_PORT:-4179}"
+REQUESTED_CORE_PORT="${CORE_PORT:-18080}"
+REQUESTED_UI_PORT="${UI_PORT:-4179}"
+AUTO_SELECT_PORTS="${AUTO_SELECT_PORTS:-1}"
 CORE_HOST="127.0.0.1"
 UI_HOST="127.0.0.1"
-CORE_BASE_URL="http://${CORE_HOST}:${CORE_PORT}"
-UI_BASE_URL="http://${UI_HOST}:${UI_PORT}"
 UI_WORKSPACE_SLUG="${UI_WORKSPACE_SLUG:-${UI_PROJECT_SLUG:-local}}"
 SMOKE_TIMEOUT_SECONDS="${SMOKE_TIMEOUT_SECONDS:-25}"
 BOOTSTRAP_TOKEN="${BOOTSTRAP_TOKEN:-smoke-bootstrap-token}"
 
 mkdir -p "$ARTIFACT_DIR"
 TMP_DIR="$(mktemp -d "$ARTIFACT_DIR/run.XXXXXX")"
-
-if lsof -ti :${CORE_PORT} >/dev/null 2>&1; then
-  echo "port ${CORE_PORT} is already in use; aborting to avoid killing unrelated processes" >&2
-  lsof -i :${CORE_PORT} >&2 || true
-  exit 1
-fi
 
 CORE_LOG="$TMP_DIR/core.log"
 UI_LOG="$TMP_DIR/web-ui.log"
@@ -60,6 +53,49 @@ require_cmd() {
     echo "required command not found: $cmd" >&2
     exit 1
   }
+}
+
+pick_free_port() {
+  node -e '
+const net = require("net");
+const host = process.argv[1];
+const server = net.createServer();
+server.unref();
+server.on("error", (err) => {
+  console.error(err.message);
+  process.exit(1);
+});
+server.listen(0, host, () => {
+  const address = server.address();
+  if (!address || typeof address.port !== "number") {
+    console.error("failed to resolve a free port");
+    process.exit(1);
+  }
+  process.stdout.write(String(address.port));
+  server.close();
+});
+' "${1}"
+}
+
+resolve_port() {
+  local requested_port="$1"
+  local service_name="$2"
+
+  if ! lsof -ti :"${requested_port}" >/dev/null 2>&1; then
+    printf '%s\n' "${requested_port}"
+    return 0
+  fi
+
+  if [[ "${AUTO_SELECT_PORTS}" != "1" ]]; then
+    echo "port ${requested_port} is already in use; aborting to avoid killing unrelated processes" >&2
+    lsof -i :"${requested_port}" >&2 || true
+    exit 1
+  fi
+
+  local selected_port
+  selected_port="$(pick_free_port "${CORE_HOST}")"
+  echo "port ${requested_port} is already in use; using ${selected_port} for ${service_name}" >&2
+  printf '%s\n' "${selected_port}"
 }
 
 wait_for_url() {
@@ -187,6 +223,11 @@ require_cmd curl
 require_cmd go
 require_cmd node
 require_cmd pnpm
+
+CORE_PORT="$(resolve_port "${REQUESTED_CORE_PORT}" "oar-core")"
+UI_PORT="$(resolve_port "${REQUESTED_UI_PORT}" "web-ui")"
+CORE_BASE_URL="http://${CORE_HOST}:${CORE_PORT}"
+UI_BASE_URL="http://${UI_HOST}:${UI_PORT}"
 
 # Build CLI binary once for deterministic smoke steps.
 (

@@ -14,6 +14,9 @@ make check
 make e2e-smoke
 ```
 
+`make e2e-smoke` now auto-selects unused local ports if the default smoke ports are
+already occupied. Set `AUTO_SELECT_PORTS=0` to keep the old fail-fast behavior.
+
 Required outcomes:
 
 - contract drift check passes (`make contract-check`)
@@ -70,6 +73,28 @@ make saas-load-smoke
 
 Workflow: `.github/workflows/release-cli.yml`
 
+Preferred one-command path for a standard patch release from `origin/main`:
+
+```bash
+make release-patch
+```
+
+That flow:
+
+- fetches `origin/main` and tags
+- computes the next patch version from the latest tag on `origin/main`
+- verifies the checkout is clean and exactly matches `origin/main`
+- runs `make check`, `make e2e-smoke`, and local release artifact validation
+- updates version metadata, commits the release prep, pushes `main`, tags the release, and waits for the `Release CLI` workflow to publish it
+
+Useful variants:
+
+```bash
+./scripts/release-patch.sh --dry-run
+VERSION=v0.0.13 make release-patch
+RELEASE_ARGS="--no-wait" make release-patch
+```
+
 Validate the packaging output locally before you push a tag:
 
 ```bash
@@ -124,6 +149,9 @@ Then watch the GitHub workflow and confirm the published release:
 gh run watch --workflow "Release CLI"
 gh release view "$(./scripts/read-version.sh)"
 ```
+
+`make release-patch` already performs both of those confirmation steps unless you
+pass `RELEASE_ARGS="--no-wait"`.
 
 ## Installing the CLI on agent hosts
 
