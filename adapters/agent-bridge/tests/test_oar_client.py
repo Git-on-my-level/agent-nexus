@@ -1,6 +1,9 @@
+import httpx
+import pytest
+
 from types import SimpleNamespace
 
-from oar_agent_bridge.oar_client import OARClient
+from oar_agent_bridge.oar_client import OARClient, OARStreamDisconnected
 
 
 class DummyAuthManager:
@@ -70,3 +73,38 @@ def test_upsert_document_omits_document_id_on_patch(monkeypatch):
     assert captured["document_id"] == "doc-1"
     assert captured["kwargs"]["document"] == {"title": "Title", "status": "active"}
     assert captured["kwargs"]["if_base_revision"] == "rev-1"
+
+
+def test_stream_events_wraps_transport_disconnect(monkeypatch):
+    client = OARClient("http://oar.test", auth_manager=DummyAuthManager())
+
+    class BrokenResponse:
+        status_code = 200
+        headers = {"content-type": "text/event-stream"}
+
+        def iter_lines(self):
+            raise httpx.RemoteProtocolError("incomplete chunked read")
+
+    class BrokenStream:
+        def __enter__(self):
+            return BrokenResponse()
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr("oar_agent_bridge.oar_client.httpx.stream", lambda *args, **kwargs: BrokenStream())
+
+    with pytest.raises(OARStreamDisconnected, match="incomplete chunked read"):
+        list(client.stream_events())
+
+
+def test_stream_events_preserves_connect_error(monkeypatch):
+    client = OARClient("http://oar.test", auth_manager=DummyAuthManager())
+
+    def raise_connect_error(*args, **kwargs):
+        raise httpx.ConnectError("dial failed")
+
+    monkeypatch.setattr("oar_agent_bridge.oar_client.httpx.stream", raise_connect_error)
+
+    with pytest.raises(httpx.ConnectError, match="dial failed"):
+        list(client.stream_events())

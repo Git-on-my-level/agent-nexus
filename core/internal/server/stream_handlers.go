@@ -14,6 +14,8 @@ import (
 	"organization-autorunner-core/internal/primitives"
 )
 
+const sseWriteTimeout = 5 * time.Second
+
 func handleEventsStream(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
@@ -24,7 +26,7 @@ func handleEventsStream(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	eventTypes := parseEventTypeFilters(r)
 	lastEventID := resolveLastEventID(r)
 
-	flusher, ok := prepareSSE(w)
+	controller, flusher, ok := prepareSSE(w)
 	if !ok {
 		writeError(w, http.StatusInternalServerError, "stream_unavailable", "streaming is not supported by this server")
 		return
@@ -37,7 +39,7 @@ func handleEventsStream(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	for {
 		events, err := listEventsForStream(r, opts, threadID, eventTypes)
 		if err != nil {
-			writeSSEErrorEvent(w, flusher, "internal_error", "failed to load events for stream")
+			writeSSEErrorEvent(controller, w, flusher, "internal_error", "failed to load events for stream")
 			return
 		}
 
@@ -49,7 +51,8 @@ func handleEventsStream(w http.ResponseWriter, r *http.Request, opts handlerOpti
 			if eventID == "" {
 				continue
 			}
-			if err := writeSSEEvent(w, eventID, "event", map[string]any{"event": event}); err != nil {
+			if err := writeSSEEvent(controller, w, eventID, "event", map[string]any{"event": event}); err != nil {
+				clearSSEWriteDeadline(controller)
 				return
 			}
 			cursorEventID = eventID
@@ -57,11 +60,12 @@ func handleEventsStream(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		}
 
 		if !sentAny {
-			if _, err := io.WriteString(w, ": keepalive\n\n"); err != nil {
+			if err := writeSSEKeepalive(controller, w); err != nil {
+				clearSSEWriteDeadline(controller)
 				return
 			}
 		}
-		flusher.Flush()
+		flushSSE(controller, flusher)
 
 		select {
 		case <-r.Context().Done():
@@ -92,7 +96,7 @@ func handleInboxStream(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	}
 
 	lastEventID := resolveLastEventID(r)
-	flusher, ok := prepareSSE(w)
+	controller, flusher, ok := prepareSSE(w)
 	if !ok {
 		writeError(w, http.StatusInternalServerError, "stream_unavailable", "streaming is not supported by this server")
 		return
@@ -106,7 +110,7 @@ func handleInboxStream(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	for {
 		items, err := deriveInboxItemsNoStaleEmission(r.Context(), opts, time.Now().UTC(), horizon)
 		if err != nil {
-			writeSSEErrorEvent(w, flusher, "internal_error", "failed to derive inbox items for stream")
+			writeSSEErrorEvent(controller, w, flusher, "internal_error", "failed to derive inbox items for stream")
 			return
 		}
 		allRecords := buildInboxStreamRecords(items)
@@ -127,7 +131,8 @@ func handleInboxStream(w http.ResponseWriter, r *http.Request, opts handlerOptio
 				continue
 			}
 
-			if err := writeSSEEvent(w, record.eventID, "inbox_item", map[string]any{"item": record.data}); err != nil {
+			if err := writeSSEEvent(controller, w, record.eventID, "inbox_item", map[string]any{"item": record.data}); err != nil {
+				clearSSEWriteDeadline(controller)
 				return
 			}
 			sentAny = true
@@ -135,11 +140,12 @@ func handleInboxStream(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		lastDigestByItem = currentDigestByItem
 
 		if !sentAny {
-			if _, err := io.WriteString(w, ": keepalive\n\n"); err != nil {
+			if err := writeSSEKeepalive(controller, w); err != nil {
+				clearSSEWriteDeadline(controller)
 				return
 			}
 		}
-		flusher.Flush()
+		flushSSE(controller, flusher)
 
 		select {
 		case <-r.Context().Done():
@@ -293,21 +299,25 @@ func resolveLastEventID(r *http.Request) string {
 	return strings.TrimSpace(r.URL.Query().Get("last_event_id"))
 }
 
-func prepareSSE(w http.ResponseWriter) (http.Flusher, bool) {
+func prepareSSE(w http.ResponseWriter) (*http.ResponseController, http.Flusher, bool) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		return nil, false
+		return nil, nil, false
 	}
+	controller := http.NewResponseController(w)
+	clearSSEWriteDeadline(controller)
+	beginSSEWrite(controller)
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
-	flusher.Flush()
-	return flusher, true
+	flushSSE(controller, flusher)
+	return controller, flusher, true
 }
 
-func writeSSEEvent(w http.ResponseWriter, eventID string, eventName string, payload any) error {
+func writeSSEEvent(controller *http.ResponseController, w http.ResponseWriter, eventID string, eventName string, payload any) error {
+	beginSSEWrite(controller)
 	if strings.TrimSpace(eventID) != "" {
 		if _, err := io.WriteString(w, "id: "+eventID+"\n"); err != nil {
 			return err
@@ -329,10 +339,35 @@ func writeSSEEvent(w http.ResponseWriter, eventID string, eventName string, payl
 	return nil
 }
 
-func writeSSEErrorEvent(w http.ResponseWriter, flusher http.Flusher, code string, message string) {
+func writeSSEKeepalive(controller *http.ResponseController, w http.ResponseWriter) error {
+	beginSSEWrite(controller)
+	_, err := io.WriteString(w, ": keepalive\n\n")
+	return err
+}
+
+func writeSSEErrorEvent(controller *http.ResponseController, w http.ResponseWriter, flusher http.Flusher, code string, message string) {
 	errorObj := errorPayload(code, message)
-	_ = writeSSEEvent(w, "", "error", map[string]any{
+	_ = writeSSEEvent(controller, w, "", "error", map[string]any{
 		"error": errorObj,
 	})
+	flushSSE(controller, flusher)
+}
+
+func beginSSEWrite(controller *http.ResponseController) {
+	if controller == nil {
+		return
+	}
+	_ = controller.SetWriteDeadline(time.Now().Add(sseWriteTimeout))
+}
+
+func clearSSEWriteDeadline(controller *http.ResponseController) {
+	if controller == nil {
+		return
+	}
+	_ = controller.SetWriteDeadline(time.Time{})
+}
+
+func flushSSE(controller *http.ResponseController, flusher http.Flusher) {
 	flusher.Flush()
+	clearSSEWriteDeadline(controller)
 }

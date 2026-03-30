@@ -228,6 +228,29 @@ func TestEventsStreamResumesFromLastEventID(t *testing.T) {
 	}
 }
 
+func TestEventsStreamSurvivesServerWriteTimeout(t *testing.T) {
+	t.Parallel()
+
+	server := newMetaStreamTestServer(t, func(server *httptest.Server) {
+		server.Config.WriteTimeout = 150 * time.Millisecond
+		server.Config.IdleTimeout = time.Second
+	}, WithStreamPollInterval(20*time.Millisecond))
+
+	postJSONExpectStatus(t, server.URL+"/actors", `{"actor":{"id":"actor-timeout","display_name":"Actor Timeout","created_at":"2026-03-05T10:00:00Z"}}`, http.StatusCreated).Body.Close()
+
+	resp := openSSEStream(t, server.URL+"/events/stream?thread_id=thread-timeout-1", "")
+	reader, stop := startSSEReader(resp.Body)
+	defer stop()
+
+	time.Sleep(250 * time.Millisecond)
+
+	eventID := appendEventForTest(t, server.URL, "actor-timeout", "thread-timeout-1", "event after timeout window")
+	event := awaitSSEEvent(t, reader, 2*time.Second)
+	if event.ID != eventID {
+		t.Fatalf("expected stream to survive write timeout window and deliver %q, got %q", eventID, event.ID)
+	}
+}
+
 func TestEventsStreamEmitsDocumentLifecycleEventsForThread(t *testing.T) {
 	t.Parallel()
 
@@ -421,6 +444,13 @@ type metaStreamTestHarness struct {
 func newMetaStreamTestHarness(t *testing.T, options ...HandlerOption) metaStreamTestHarness {
 	t.Helper()
 
+	server := newMetaStreamTestServer(t, nil, options...)
+	return metaStreamTestHarness{baseURL: server.URL}
+}
+
+func newMetaStreamTestServer(t *testing.T, configure func(*httptest.Server), options ...HandlerOption) *httptest.Server {
+	t.Helper()
+
 	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("initialize workspace: %v", err)
@@ -450,13 +480,17 @@ func newMetaStreamTestHarness(t *testing.T, options ...HandlerOption) metaStream
 	}
 	baseOptions = append(baseOptions, options...)
 
-	server := httptest.NewServer(NewHandler(contract.Version, baseOptions...))
+	server := httptest.NewUnstartedServer(NewHandler(contract.Version, baseOptions...))
+	if configure != nil {
+		configure(server)
+	}
+	server.Start()
 	t.Cleanup(func() {
 		server.Close()
 		_ = workspace.Close()
 	})
 
-	return metaStreamTestHarness{baseURL: server.URL}
+	return server
 }
 
 func appendEventForTest(t *testing.T, baseURL string, actorID string, threadID string, summary string) string {

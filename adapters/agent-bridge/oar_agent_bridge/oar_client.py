@@ -20,6 +20,10 @@ class OARClientError(RuntimeError):
         super().__init__(message)
 
 
+class OARStreamDisconnected(RuntimeError):
+    pass
+
+
 @dataclass(slots=True)
 class SSEMessage:
     event_id: str | None
@@ -220,30 +224,33 @@ class OARClient:
             current_id: str | None = None
             current_event: str | None = None
             data_lines: list[str] = []
-            for raw_line in response.iter_lines():
-                line = raw_line if isinstance(raw_line, str) else raw_line.decode("utf-8")
-                if line == "":
-                    if data_lines:
-                        data = "\n".join(data_lines)
-                        yield {
-                            "id": current_id,
-                            "event": current_event,
-                            "data": data,
-                        }
-                    current_id = None
-                    current_event = None
-                    data_lines = []
-                    continue
-                if line.startswith(":"):
-                    continue
-                field, _, value = line.partition(":")
-                value = value.lstrip(" ")
-                if field == "id":
-                    current_id = value
-                elif field == "event":
-                    current_event = value
-                elif field == "data":
-                    data_lines.append(value)
+            try:
+                for raw_line in response.iter_lines():
+                    line = raw_line if isinstance(raw_line, str) else raw_line.decode("utf-8")
+                    if line == "":
+                        if data_lines:
+                            data = "\n".join(data_lines)
+                            yield {
+                                "id": current_id,
+                                "event": current_event,
+                                "data": data,
+                            }
+                        current_id = None
+                        current_event = None
+                        data_lines = []
+                        continue
+                    if line.startswith(":"):
+                        continue
+                    field, _, value = line.partition(":")
+                    value = value.lstrip(" ")
+                    if field == "id":
+                        current_id = value
+                    elif field == "event":
+                        current_event = value
+                    elif field == "data":
+                        data_lines.append(value)
+            except (httpx.ReadError, httpx.RemoteProtocolError) as exc:
+                raise OARStreamDisconnected(str(exc)) from exc
             if data_lines:
                 yield {"id": current_id, "event": current_event, "data": "\n".join(data_lines)}
 
