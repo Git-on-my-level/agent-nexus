@@ -30,6 +30,21 @@ describe("workspaceCatalog", () => {
     expect(catalog.defaultWorkspace.slug).toBe("ws2");
   });
 
+  it("should preserve public origin metadata from OAR_WORKSPACES entries", () => {
+    const env = {
+      OAR_WORKSPACES:
+        '[{"slug":"ws1","label":"Workspace 1","coreBaseUrl":"http://localhost:8000","publicOrigin":"https://ws1.tailnet.ts.net/oar/ws1"},{"slug":"ws2","label":"Workspace 2","coreBaseUrl":"http://localhost:8001","public_origin":"https://ws2.tailnet.ts.net/oar/ws2"}]',
+    };
+    const catalog = loadWorkspaceCatalog(env);
+
+    expect(catalog.workspaces[0].publicOrigin).toBe(
+      "https://ws1.tailnet.ts.net/oar/ws1",
+    );
+    expect(catalog.workspaces[1].publicOrigin).toBe(
+      "https://ws2.tailnet.ts.net/oar/ws2",
+    );
+  });
+
   it("should parse legacy OAR_PROJECTS env var", () => {
     const env = {
       OAR_PROJECTS:
