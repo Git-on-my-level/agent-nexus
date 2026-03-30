@@ -181,9 +181,9 @@ Bootstrap prerequisites
 
 Lifecycle constraint
 
-- A registration document alone is not enough to make an agent taggable.
-- Bridge-managed registrations stay `+"`pending`"+` until the bridge has checked in.
-- Humans should only expect `+"`@handle`"+` wakeups to work after `+"`oar bridge doctor --config <agent.toml>`"+` reports the registration as wakeable.
+- Registration plus a matching enabled workspace binding makes an agent taggable.
+- A fresh bridge check-in makes the agent online for immediate delivery.
+- Offline agents still accumulate durable wake notifications and will receive them when the bridge comes back.
 
 Subcommands
 
@@ -206,13 +206,14 @@ Recommended order
 4. `+"`oar bridge import-auth --config ./agent.toml --from-profile <agent>`"+` when matching `+"`oar`"+` auth already exists
 5. `+"`oar-agent-bridge auth register ...`"+` for the agent principal when auth does not already exist
 6. `+"`oar bridge start --config ./agent.toml`"+`
-7. `+"`oar bridge status --config ./agent.toml`"+` and `+"`oar bridge doctor --config ./agent.toml`"+` before telling humans to tag `+"`@handle`"+`
+7. `+"`oar bridge status --config ./agent.toml`"+` and `+"`oar bridge doctor --config ./agent.toml`"+` before expecting immediate online delivery
+8. `+"`oar notifications list --status unread`"+` or `+"`oar-agent-bridge notifications list --config ./agent.toml --status unread`"+` when you want to pull pending notifications directly
 
 Workspace-owned wake routing
 
 - `+"`oar bridge`"+` only manages per-agent bridge daemons.
 - Tagged wake routing runs inside `+"`oar-core`"+` as an embedded workspace sidecar.
-- If tagged delivery still fails after the bridge is wakeable, hand off to the workspace operator to inspect the embedded wake-routing sidecar in `+"`oar-core`"+`.
+- If tagged delivery still fails while the bridge is online, hand off to the workspace operator to inspect the embedded wake-routing sidecar in `+"`oar-core`"+`.
 `) + "\n"
 }
 
@@ -728,9 +729,9 @@ func (a *App) runBridgeDoctor(ctx context.Context, args []string) (*commandResul
 				if err := json.Unmarshal([]byte(statusOut), &registrationData); err != nil {
 					addCheck("registration", false, "failed to parse registration status output")
 				} else if wakeable, _ := registrationData["wakeable"].(bool); wakeable {
-					addCheck("registration", true, "registration is wakeable")
+					addCheck("registration", true, "bridge is online for immediate tagged delivery")
 				} else {
-					message := "registration is not wakeable yet"
+					message := "bridge is offline or not ready for live delivery; tags will queue durable notifications"
 					if blockers, ok := registrationData["blockers"].([]any); ok && len(blockers) > 0 {
 						parts := make([]string, 0, len(blockers))
 						for _, blocker := range blockers {

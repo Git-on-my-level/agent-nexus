@@ -2,6 +2,7 @@ import logging
 import pytest
 
 from pathlib import Path
+from types import SimpleNamespace
 
 from oar_agent_bridge.bridge import AgentBridge
 from oar_agent_bridge.config import AdapterConfig, AgentConfig, LoadedConfig, OARConfig
@@ -17,6 +18,7 @@ class StubState:
         self.bridge_signing_public_key_spki_b64 = public_key_b64
         self.bridge_signing_private_key_pkcs8_b64 = private_key_b64
         self._handled = set()
+        self._sessions = {}
 
     def handled_wakeup_ids(self):
         return self._handled
@@ -25,7 +27,10 @@ class StubState:
         self._handled.add(wakeup_id)
 
     def session_map(self):
-        return {}
+        return dict(self._sessions)
+
+    def set_session(self, session_key: str, session_id: str):
+        self._sessions[session_key] = session_id
 
 
 class StubClient:
@@ -33,6 +38,8 @@ class StubClient:
         self._events = list(events)
         self.upserts = []
         self.created_events = []
+        self.notification_reads = []
+        self.notifications = []
 
     def stream_events(self, **_kwargs):
         for event in self._events:
@@ -47,6 +54,38 @@ class StubClient:
         self.created_events.append(kwargs)
         return {"event": {"id": f"event-{len(self.created_events)}", **kwargs.get("event", {})}}
 
+    def list_agent_notifications(self, *, statuses=None, order="desc"):
+        return list(self.notifications)
+
+    def mark_agent_notification_read(self, wakeup_id):
+        self.notification_reads.append(wakeup_id)
+        return {"notification": {"wakeup_id": wakeup_id, "status": "read"}}
+
+    def get_artifact_content(self, _artifact_id):
+        return {
+            "wakeup_id": "wake-1",
+            "target": {"handle": "hermes", "actor_id": "actor-hermes"},
+            "workspace": {"id": "ws_main", "name": "Main"},
+            "thread": {"id": "thread-1", "title": "Thread"},
+            "trigger": {
+                "message_event_id": "evt-trigger",
+                "created_at": "2026-03-29T00:00:00Z",
+                "author_actor_id": "actor-human",
+                "text": "@hermes summarize",
+            },
+            "context_inline": {"current_summary": "summary"},
+            "session_key": "thread:thread-1",
+            "context_fetch": {
+                "cli": ["oar threads workspace --thread-id thread-1", "oar threads inspect --thread-id thread-1"],
+                "api": {
+                    "thread": "http://oar.test/threads/thread-1",
+                    "context": "http://oar.test/threads/thread-1/context",
+                    "workspace": "http://oar.test/threads/thread-1/workspace",
+                    "trigger_event": "http://oar.test/events/evt-trigger",
+                },
+            },
+        }
+
     def get_document(self, _document_id):
         raise OARClientError(404, "not_found", "missing")
 
@@ -54,6 +93,9 @@ class StubClient:
 class StubAdapter:
     def doctor(self):
         return {"adapter_kind": "stub"}
+
+    def dispatch(self, packet, _prompt_text, _session_key, existing_native_session_id=None):
+        return SimpleNamespace(response_text="done", native_session_id=existing_native_session_id or "native-1")
 
 
 class StubAuthState:
@@ -103,10 +145,10 @@ def test_bridge_does_not_advance_cursor_when_handle_fails():
         [{"data": '{"event":{"id":"evt-2","payload":{"target_handle":"hermes","wakeup_id":"wake-2"}}}'}]
     )
 
-    def fail(_event):
+    def fail():
         raise KeyboardInterrupt()
 
-    bridge._handle_wakeup = fail
+    bridge._drain_notifications = fail
 
     try:
         bridge.run_forever()
@@ -148,6 +190,22 @@ def test_bridge_logs_transport_disconnect_without_traceback(monkeypatch, caplog)
     assert state.last_event_id is None
     assert "Event stream interrupted; reconnecting" in caplog.text
     assert "Bridge loop failed; reconnecting" not in caplog.text
+
+
+def test_handle_notification_marks_read_after_dispatch():
+    bridge, _state, client = build_bridge([])
+
+    bridge._handle_notification(
+        {
+            "wakeup_id": "wake-1",
+            "target_actor_id": "actor-hermes",
+            "thread_id": "thread-1",
+            "request_event_id": "evt-request",
+            "trigger_event_id": "evt-trigger",
+        }
+    )
+
+    assert client.notification_reads == ["wake-1"]
 
 
 def test_bridge_checkin_upserts_active_registration():

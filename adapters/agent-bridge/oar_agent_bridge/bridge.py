@@ -42,8 +42,8 @@ class AgentBridge:
         self.handle = config.agent.handle
 
     def run_forever(self) -> None:
-        handled = self.state.handled_wakeup_ids()
         self._start_checkin_loop()
+        self._drain_notifications()
         while True:
             try:
                 for stream_message in self.client.stream_events(types=[WAKE_REQUEST_EVENT], last_event_id=self.state.last_event_id):
@@ -52,19 +52,11 @@ class AgentBridge:
                         continue
                     event_id = str(event.get("id", "")).strip()
                     payload = event.get("payload") or {}
-                    wakeup_id = str(payload.get("wakeup_id", "")).strip()
                     if not self._is_for_me(payload):
                         if event_id:
                             self.state.last_event_id = event_id
                         continue
-                    if wakeup_id and wakeup_id in handled:
-                        if event_id:
-                            self.state.last_event_id = event_id
-                        continue
-                    self._handle_wakeup(event)
-                    if wakeup_id:
-                        handled.add(wakeup_id)
-                        self.state.mark_wakeup_handled(wakeup_id)
+                    self._drain_notifications()
                     if event_id:
                         self.state.last_event_id = event_id
             except OARStreamDisconnected as exc:
@@ -140,14 +132,19 @@ class AgentBridge:
     def _is_for_me(self, payload: dict[str, Any]) -> bool:
         return str(payload.get("target_handle", "")).strip() == self.handle
 
-    def _handle_wakeup(self, event: dict[str, Any]) -> None:
-        payload = event.get("payload") or {}
-        wakeup_id = str(payload.get("wakeup_id", "")).strip()
-        target_actor_id = str(payload.get("target_actor_id", "")).strip()
-        thread_id = str(payload.get("thread_id", event.get("thread_id", ""))).strip()
+    def _drain_notifications(self) -> None:
+        notifications = self.client.list_agent_notifications(statuses=["unread"], order="asc")
+        for notification in notifications:
+            self._handle_notification(notification)
+
+    def _handle_notification(self, notification: dict[str, Any]) -> None:
+        wakeup_id = str(notification.get("wakeup_id", "")).strip()
+        target_actor_id = str(notification.get("target_actor_id", "")).strip()
+        thread_id = str(notification.get("thread_id", "")).strip()
+        request_event_id = str(notification.get("request_event_id", "")).strip()
         if not wakeup_id or not thread_id:
-            raise RuntimeError(f"Malformed wake event: {event}")
-        claimed = self._claim_wakeup(wakeup_id, thread_id, target_actor_id, str(event.get("id", "")).strip())
+            raise RuntimeError(f"Malformed agent notification: {notification}")
+        claimed = self._claim_wakeup(wakeup_id, thread_id, target_actor_id, request_event_id)
         if not claimed:
             return
         packet_content = self.client.get_artifact_content(wakeup_id)
@@ -161,6 +158,7 @@ class AgentBridge:
             result = self.adapter.dispatch(packet, prompt_text, packet.session_key, existing_native_session_id=existing_session_id)
             if result.native_session_id:
                 self.state.set_session(packet.session_key, result.native_session_id)
+            self.client.mark_agent_notification_read(packet.wakeup_id)
             if result.response_text.strip():
                 self._post_reply_message(packet, result.response_text.strip(), result.native_session_id)
             self.client.create_event(
@@ -185,7 +183,7 @@ class AgentBridge:
                     "type": WAKE_FAILED_EVENT,
                     "thread_id": thread_id,
                     "summary": f"Wakeup {wakeup_id} failed for @{self.handle}",
-                    "refs": [f"thread:{thread_id}", f"event:{packet.trigger_event_id if 'packet' in locals() else str(payload.get('trigger_event_id', ''))}", f"artifact:{wakeup_id}"],
+                    "refs": [f"thread:{thread_id}", f"event:{packet.trigger_event_id if 'packet' in locals() else str(notification.get('trigger_event_id', ''))}", f"artifact:{wakeup_id}"],
                     "payload": {
                         "wakeup_id": wakeup_id,
                         "target_handle": self.handle,

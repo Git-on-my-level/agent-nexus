@@ -93,12 +93,21 @@ Upsert the registration document after auth already exists:
 oar-agent-bridge registration apply --config examples/hermes.toml
 ```
 
-Inspect whether the registration is actually wakeable:
+Inspect whether the agent is online for immediate delivery:
 
 ```bash
 oar-agent-bridge registration status --config examples/hermes.toml
 oar bridge status --config examples/hermes.toml
 oar bridge doctor --config examples/hermes.toml
+```
+
+Pull or dismiss queued notifications directly:
+
+```bash
+oar notifications list --status unread
+oar notifications dismiss --wakeup-id wake_123
+oar-agent-bridge notifications list --config examples/hermes.toml --status unread
+oar-agent-bridge notifications dismiss --config examples/hermes.toml --wakeup-id wake_123
 ```
 
 Import existing `oar` auth into a bridge config instead of manually translating profile material:
@@ -156,14 +165,14 @@ Minimum config contract:
 - Hermes ACP bridges also require `[adapter] kind = "hermes_acp"`, `command`, `cwd_default`, and `[adapter.workspace_map]`.
 - ZeroClaw bridges also require `[adapter] kind = "zeroclaw_gateway"`, `base_url`, and `bearer_token`.
 
-Wakeability lifecycle:
+Presence lifecycle:
 
 - Registration documents start `pending`.
 - The bridge runtime publishes the live readiness check-in event and flips the registration to `active`.
 - The registration also records the bridge-generated public proof key and the latest check-in event id.
-- The workspace router only treats the agent as ready when that event carries a valid bridge proof signature for the registered key.
-- Humans should not tag an agent until `oar bridge doctor --config <agent.toml>` or `oar-agent-bridge registration status --config <agent.toml>` says it is wakeable.
-- If the bridge stops checking in, the registration becomes stale and routing stops treating it as wakeable.
+- The workspace router only treats the agent as online when that event carries a valid bridge proof signature for the registered key.
+- Humans can tag a valid registered agent even while it is offline; the wake is stored as a durable notification until the bridge returns.
+- If the bridge stops checking in, the registration becomes offline and routing queues notifications instead of immediate bridge delivery.
 
 Workspace identity:
 
@@ -241,7 +250,7 @@ oar-agent-bridge auth register --config ./agent.toml --invite-token <token> --ap
 oar bridge start --config ./agent.toml
 ```
 
-6. Confirm the bridge has checked in and the registration is now wakeable:
+6. Confirm the bridge has checked in if you want immediate delivery:
 
 ```bash
 oar bridge status --config ./agent.toml
@@ -249,7 +258,7 @@ oar bridge doctor --config ./agent.toml
 oar-agent-bridge registration status --config ./agent.toml
 ```
 
-The doctor path also probes the downstream adapter configuration before the bridge is treated as ready.
+The doctor path also probes the downstream adapter configuration before the bridge is treated as online for immediate delivery.
 
 7. Post a thread message such as `@hermes summarize the latest onboarding blockers.` The expected durable trace is:
 
@@ -267,7 +276,7 @@ oar-agent-bridge registration apply --config examples/hermes.toml
 
 If `oar docs create` or another manual write returns `conflict` for `agentreg.<handle>`, inspect the existing document and update it instead of retrying create blindly.
 
-If a human tags the agent before step 6 succeeds, that is expected to fail: the registration exists, but the bridge has not yet proved readiness.
+If a human tags the agent before step 6 succeeds, the notification should still be queued as long as the registration and workspace binding are valid. The bridge will consume it after it comes back online.
 
 ## File layout
 

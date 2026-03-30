@@ -378,7 +378,7 @@
     if (principal?.revoked) {
       return { label: "Revoked", class: "bg-red-500/10 text-red-400" };
     }
-    return { label: "Active", class: "bg-emerald-500/10 text-emerald-400" };
+    return null;
   }
 
   function inviteBadge(invite) {
@@ -603,14 +603,20 @@
         >
       </h2>
       <p class="mb-2 text-[11px] text-[var(--ui-text-muted)]">
-        Agent principals marked <span
-          class="rounded bg-emerald-500/10 px-1 py-px text-[10px] font-medium text-emerald-400"
-          >Wakeable</span
-        >
-        can be tagged from thread messages with
+        Registered agents can be tagged from thread messages with
         <code class="rounded bg-[var(--ui-border)] px-1 py-px text-[10px]"
           >@handle</code
         >.
+        <span
+          class="rounded bg-emerald-500/10 px-1 py-px text-[10px] font-medium text-emerald-400"
+          >Online</span
+        >
+        agents have a fresh bridge check-in, while
+        <span
+          class="rounded bg-amber-500/10 px-1 py-px text-[10px] font-medium text-amber-400"
+          >Offline</span
+        >
+        agents stay taggable and will receive wakes when they come back.
       </p>
       <div
         class="space-y-px rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] overflow-hidden"
@@ -624,11 +630,13 @@
               : ''} {principal.revoked ? 'opacity-50' : ''}"
           >
             <div class="flex items-center gap-2.5 sm:gap-3">
-              <span
-                class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium {badge.class}"
-              >
-                {badge.label}
-              </span>
+              {#if badge}
+                <span
+                  class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium {badge.class}"
+                >
+                  {badge.label}
+                </span>
+              {/if}
               <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-1.5">
                   <span
@@ -641,7 +649,7 @@
                   >
                     {principalLabel(principal)}
                   </span>
-                  {#if principal.wakeRouting?.applicable}
+                  {#if principal.wakeRouting?.applicable && principal.wakeRouting.state !== "revoked"}
                     <button
                       class="relative shrink-0 cursor-pointer rounded px-1.5 py-0.5 text-[10px] font-medium {principal
                         .wakeRouting
@@ -1087,15 +1095,20 @@
         {/if}
       </h2>
       <p class="mb-2 text-[11px] text-[var(--ui-text-muted)]">
-        Agent principals marked <span
-          class="rounded bg-emerald-500/10 px-1 py-px text-[10px] font-medium text-emerald-400"
-          >Wakeable</span
-        >
-        can be tagged from thread messages with
+        Registered agents can be tagged from thread messages with
         <code class="rounded bg-[var(--ui-border)] px-1 py-px text-[10px]"
           >@handle</code
-        >. Pending or stale entries are registered but their bridge has not
-        checked in recently enough.
+        >.
+        <span
+          class="rounded bg-emerald-500/10 px-1 py-px text-[10px] font-medium text-emerald-400"
+          >Online</span
+        >
+        agents have a fresh bridge check-in, while
+        <span
+          class="rounded bg-amber-500/10 px-1 py-px text-[10px] font-medium text-amber-400"
+          >Offline</span
+        >
+        agents stay taggable and will receive wakes when they come back.
       </p>
       {#if principalsState.status === SECTION_ERROR}
         <p class="rounded-md bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
@@ -1122,11 +1135,13 @@
                   : ''} {principal.revoked ? 'opacity-50' : ''}"
               >
                 <div class="flex items-center gap-2.5 sm:gap-3">
-                  <span
-                    class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium {badge.class}"
-                  >
-                    {badge.label}
-                  </span>
+                  {#if badge}
+                    <span
+                      class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium {badge.class}"
+                    >
+                      {badge.label}
+                    </span>
+                  {/if}
                   <div class="min-w-0 flex-1">
                     <div class="flex items-center gap-1.5">
                       <span
@@ -1140,7 +1155,7 @@
                       >
                         {principalLabel(principal)}
                       </span>
-                      {#if principal.wakeRouting?.applicable}
+                      {#if principal.wakeRouting?.applicable && principal.wakeRouting.state !== "revoked"}
                         <button
                           class="relative shrink-0 cursor-pointer rounded px-1.5 py-0.5 text-[10px] font-medium {principal
                             .wakeRouting

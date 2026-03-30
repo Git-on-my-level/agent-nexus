@@ -114,12 +114,13 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `derived-views`
 
-- Commands: `4`
+- Commands: `5`
 - Command IDs:
   - `derived.rebuild`
   - `inbox.get`
   - `inbox.list`
   - `inbox.stream`
+  - `notifications.list`
 
 ## `docs`
 
@@ -139,12 +140,15 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `events`
 
-- Commands: `7`
+- Commands: `10`
 - Command IDs:
   - `events.create`
   - `events.get`
   - `events.stream`
   - `inbox.ack`
+  - `notifications.dismiss`
+  - `notifications.list`
+  - `notifications.read`
   - `threads.context`
   - `threads.timeline`
   - `threads.workspace`

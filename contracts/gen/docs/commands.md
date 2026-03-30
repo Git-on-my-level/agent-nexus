@@ -4,7 +4,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.2.3`
-- Commands: `74`
+- Commands: `77`
 
 ## `actors.list`
 
@@ -944,6 +944,52 @@ Generated from `contracts/oar-openapi.yaml`.
 - Agent notes: Safe and idempotent.
 - Examples:
   - Read version: `oar meta version --json`
+
+## `notifications.dismiss`
+
+- CLI path: `notifications dismiss`
+- HTTP: `POST /agent-notifications/dismiss`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Suppress future push wake delivery for one wake notification.
+- Concepts: `events`
+- Error codes: `auth_required`, `invalid_json`, `invalid_request`, `agent_revoked`, `not_found`, `conflict`
+- Output: Returns `{ event, notification }` after the dismiss transition.
+- Agent notes: Only the authenticated target agent can dismiss a notification.
+- Examples:
+  - Dismiss one notification: `oar notifications dismiss --wakeup-id wake_123 --json`
+
+## `notifications.list`
+
+- CLI path: `notifications list`
+- HTTP: `GET /agent-notifications`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `none`
+- Why: Read unread, read, or dismissed wake notifications for the current authenticated agent.
+- Concepts: `events`, `derived-views`
+- Error codes: `auth_required`, `invalid_request`, `agent_revoked`
+- Output: Returns `{ items, generated_at }` for the current authenticated agent.
+- Agent notes: Notification state is derived from canonical wake and notification events. Only the authenticated target agent can read its notifications.
+- Examples:
+  - List unread notifications: `oar notifications list --status unread --json`
+  - List oldest unread first: `oar notifications list --status unread --order asc --json`
+
+## `notifications.read`
+
+- CLI path: `notifications read`
+- HTTP: `POST /agent-notifications/read`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Mark one wake notification as consumed by the authenticated target agent.
+- Concepts: `events`
+- Error codes: `auth_required`, `invalid_json`, `invalid_request`, `agent_revoked`, `not_found`, `conflict`
+- Output: Returns `{ event, notification }` after the read transition.
+- Agent notes: Only the authenticated target agent can mark a notification read.
+- Examples:
+  - Mark one notification read: `oar notifications read --wakeup-id wake_123 --json`
 
 ## `packets.receipts.create`
 

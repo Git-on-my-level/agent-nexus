@@ -39,6 +39,22 @@ def test_bridge_doctor_subcommand_is_available():
     assert args.config == "agent.toml"
 
 
+def test_notifications_subcommands_are_available():
+    parser = build_parser()
+
+    listed = parser.parse_args(["notifications", "list", "--config", "agent.toml", "--status", "unread"])
+    read = parser.parse_args(["notifications", "read", "--config", "agent.toml", "--wakeup-id", "wake_123"])
+    dismiss = parser.parse_args(["notifications", "dismiss", "--config", "agent.toml", "--wakeup-id", "wake_123"])
+
+    assert listed.command == "notifications"
+    assert listed.notifications_command == "list"
+    assert listed.status == ["unread"]
+    assert read.notifications_command == "read"
+    assert read.wakeup_id == "wake_123"
+    assert dismiss.notifications_command == "dismiss"
+    assert dismiss.wakeup_id == "wake_123"
+
+
 def test_router_subcommand_is_not_available():
     parser = build_parser()
 
@@ -84,3 +100,29 @@ def test_cmd_registration_status_serializes_slots_dataclass(monkeypatch, capsys)
     captured = capsys.readouterr()
     assert '"document_id": "agentreg.hermes"' in captured.out
     assert '"wakeable": true' in captured.out
+
+
+def test_cmd_notifications_list_serializes_payload(monkeypatch, capsys):
+    closed = {"value": False}
+    config = argparse.Namespace(auth_state_path="state.json")
+
+    class DummyClient:
+        def list_agent_notifications(self, *, statuses=None, order="desc"):
+            assert statuses == ["unread"]
+            assert order == "asc"
+            return [{"wakeup_id": "wake_123", "status": "unread"}]
+
+        def close(self):
+            closed["value"] = True
+
+    monkeypatch.setattr(cli_module, "load_config", lambda _path: config)
+    monkeypatch.setattr(cli_module, "AuthManager", lambda _path: object())
+    monkeypatch.setattr(cli_module, "build_client", lambda _config, _auth: DummyClient())
+
+    result = cli_module.cmd_notifications_list(
+        argparse.Namespace(config="agent.toml", status=["unread"], order="asc")
+    )
+
+    assert result == 0
+    assert closed["value"] is True
+    assert '"wakeup_id": "wake_123"' in capsys.readouterr().out

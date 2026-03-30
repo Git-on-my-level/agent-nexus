@@ -136,22 +136,38 @@ export async function describeWakeRouting(
   const base = {
     applicable: true,
     handle,
-    wakeable: false,
-    badgeLabel: "Not wakeable",
+    taggable: false,
+    online: false,
+    offline: false,
+    state: "offline",
+    badgeLabel: "Offline",
     badgeClass: "bg-amber-500/10 text-amber-400",
     summary: "",
   };
 
   if (principal?.revoked) {
-    return { ...base, summary: "Revoked agent principals are not wakeable." };
+    return {
+      ...base,
+      state: "revoked",
+      badgeLabel: "Revoked",
+      badgeClass: "bg-red-500/10 text-red-400",
+      summary: "Revoked agent principals cannot be tagged.",
+    };
   }
   if (!handle) {
-    return { ...base, summary: "No username is set for `@handle` routing." };
+    return {
+      ...base,
+      state: "unknown",
+      badgeLabel: "Unknown",
+      badgeClass: "bg-slate-500/10 text-slate-300",
+      summary: "No username is set for `@handle` routing.",
+    };
   }
 
   if (lookup.state === "error") {
     return {
       ...base,
+      state: "unknown",
       badgeLabel: "Unknown",
       badgeClass: "bg-slate-500/10 text-slate-300",
       summary: "Registration status is unavailable right now.",
@@ -161,6 +177,8 @@ export async function describeWakeRouting(
   if (lookup.state === "missing") {
     return {
       ...base,
+      state: "unregistered",
+      badgeLabel: "Unregistered",
       summary: `Missing registration document ${registrationDocumentId(handle)}.`,
     };
   }
@@ -172,6 +190,8 @@ export async function describeWakeRouting(
   ) {
     return {
       ...base,
+      state: "unregistered",
+      badgeLabel: "Unregistered",
       summary: "Registration document is tombstoned.",
     };
   }
@@ -180,6 +200,8 @@ export async function describeWakeRouting(
   if (!content) {
     return {
       ...base,
+      state: "unregistered",
+      badgeLabel: "Unregistered",
       summary: `Missing registration document ${registrationDocumentId(handle)}.`,
     };
   }
@@ -188,6 +210,9 @@ export async function describeWakeRouting(
   if (registeredHandle && registeredHandle !== handle) {
     return {
       ...base,
+      state: "unknown",
+      badgeLabel: "Unknown",
+      badgeClass: "bg-slate-500/10 text-slate-300",
       summary: `Registration doc handle does not match @${handle}.`,
     };
   }
@@ -196,22 +221,20 @@ export async function describeWakeRouting(
   if (!registeredActorId || registeredActorId !== actorId) {
     return {
       ...base,
+      state: "unknown",
+      badgeLabel: "Unknown",
+      badgeClass: "bg-slate-500/10 text-slate-300",
       summary: "Registration actor does not match the principal actor.",
     };
   }
 
   const status = String(content.status ?? "active").trim() || "active";
-  if (status !== "active") {
-    if (status === "pending") {
-      return {
-        ...base,
-        summary:
-          "Bridge has not checked in yet. Start the bridge before humans tag this agent.",
-      };
-    }
+  if (status === "disabled") {
     return {
       ...base,
-      summary: `Registration status is ${status}.`,
+      state: "disabled",
+      badgeLabel: "Disabled",
+      summary: "Registration is disabled.",
     };
   }
 
@@ -226,6 +249,8 @@ export async function describeWakeRouting(
   if (!bindingTarget && enabledBindings.length === 0) {
     return {
       ...base,
+      state: "unregistered",
+      badgeLabel: "Unregistered",
       summary: "Registration is not enabled for any workspace.",
     };
   }
@@ -237,6 +262,8 @@ export async function describeWakeRouting(
   if (bindingTarget && !matchingBinding) {
     return {
       ...base,
+      state: "unregistered",
+      badgeLabel: "Unregistered",
       summary: "Registration is not enabled for this workspace.",
     };
   }
@@ -244,33 +271,43 @@ export async function describeWakeRouting(
   if (bindingTarget && matchingBinding.enabled === false) {
     return {
       ...base,
+      state: "disabled",
+      badgeLabel: "Disabled",
       summary: "Registration is disabled for this workspace.",
     };
   }
+
+  const offline = {
+    ...base,
+    taggable: true,
+    offline: true,
+  };
 
   const bridgeProofKey = String(
     content.bridge_signing_public_key_spki_b64 ?? "",
   ).trim();
   if (!bridgeProofKey) {
     return {
-      ...base,
-      summary: "Registration is missing its bridge proof key.",
+      ...offline,
+      summary:
+        "Offline. The agent is registered for this workspace, but its bridge proof key is missing.",
     };
   }
 
   const checkinEventId = String(content.bridge_checkin_event_id ?? "").trim();
   if (!checkinEventId) {
     return {
-      ...base,
+      ...offline,
       summary:
-        "Bridge has not checked in yet. Start the bridge before humans tag this agent.",
+        "Offline. The agent is registered for this workspace, but no fresh bridge check-in is available yet.",
     };
   }
 
   const checkinLookup = registrationLookup(bridgeCheckinDoc);
   if (checkinLookup.state === "error") {
     return {
-      ...base,
+      ...offline,
+      state: "unknown",
       badgeLabel: "Unknown",
       badgeClass: "bg-slate-500/10 text-slate-300",
       summary: "Bridge check-in status is unavailable right now.",
@@ -278,15 +315,15 @@ export async function describeWakeRouting(
   }
   if (checkinLookup.state === "missing") {
     return {
-      ...base,
-      summary: `Missing bridge check-in event ${checkinEventId}.`,
+      ...offline,
+      summary: `Offline. Missing bridge check-in event ${checkinEventId}.`,
     };
   }
 
   const checkin = eventRecord(checkinLookup.document);
   if (String(checkin?.type ?? "").trim() !== "agent_bridge_checked_in") {
     return {
-      ...base,
+      ...offline,
       summary: `Bridge check-in event ${checkinEventId} is invalid.`,
     };
   }
@@ -294,7 +331,7 @@ export async function describeWakeRouting(
   const checkinContent = eventPayloadContent(checkinLookup.document);
   if (!checkinContent) {
     return {
-      ...base,
+      ...offline,
       summary: `Bridge check-in event ${checkinEventId} is invalid.`,
     };
   }
@@ -302,7 +339,7 @@ export async function describeWakeRouting(
   const checkinHandle = String(checkinContent.handle ?? "").trim();
   if (checkinHandle && checkinHandle !== handle) {
     return {
-      ...base,
+      ...offline,
       summary: `Bridge check-in handle does not match @${handle}.`,
     };
   }
@@ -310,7 +347,7 @@ export async function describeWakeRouting(
   const checkinActorId = String(checkinContent.actor_id ?? "").trim();
   if (!checkinActorId || checkinActorId !== actorId) {
     return {
-      ...base,
+      ...offline,
       summary: "Bridge check-in actor does not match the principal actor.",
     };
   }
@@ -318,7 +355,7 @@ export async function describeWakeRouting(
   const checkinWorkspaceId = String(checkinContent.workspace_id ?? "").trim();
   if (bindingTarget && checkinWorkspaceId !== bindingTarget) {
     return {
-      ...base,
+      ...offline,
       summary: "Bridge check-in is for a different workspace.",
     };
   }
@@ -330,7 +367,7 @@ export async function describeWakeRouting(
     )
   ) {
     return {
-      ...base,
+      ...offline,
       summary: "Bridge check-in is for an unbound workspace.",
     };
   }
@@ -340,14 +377,14 @@ export async function describeWakeRouting(
   ).trim();
   if (!bridgeInstanceId) {
     return {
-      ...base,
+      ...offline,
       summary:
         "Bridge instance identity is missing. Let the live bridge rewrite this registration.",
     };
   }
   if (!(await verifyBridgeProof(bridgeProofKey, checkinContent))) {
     return {
-      ...base,
+      ...offline,
       summary: "Bridge readiness proof is invalid.",
     };
   }
@@ -356,14 +393,15 @@ export async function describeWakeRouting(
   const expiresAt = parseTimestamp(checkinContent.expires_at);
   if (!checkedInAt) {
     return {
-      ...base,
+      ...offline,
       summary:
-        "Bridge has not checked in yet. Start the bridge before humans tag this agent.",
+        "Offline. The agent is registered for this workspace, but no fresh bridge check-in is available yet.",
     };
   }
   if (!expiresAt) {
     return {
-      ...base,
+      ...offline,
+      state: "unknown",
       badgeLabel: "Unknown",
       badgeClass: "bg-slate-500/10 text-slate-300",
       summary: "Bridge check-in metadata is incomplete right now.",
@@ -371,8 +409,9 @@ export async function describeWakeRouting(
   }
   if (expiresAt < Date.now()) {
     return {
-      ...base,
-      summary: "Bridge check-in is stale. Restart or reconnect the bridge.",
+      ...offline,
+      summary:
+        "Offline. The agent is registered for this workspace, but its last bridge check-in is stale.",
     };
   }
 
@@ -380,19 +419,25 @@ export async function describeWakeRouting(
     return {
       applicable: true,
       handle,
-      wakeable: true,
-      badgeLabel: "Wakeable",
+      taggable: true,
+      online: true,
+      offline: false,
+      state: "online",
+      badgeLabel: "Online",
       badgeClass: "bg-emerald-500/10 text-emerald-400",
-      summary: `Wakeable for bound workspace ${checkinWorkspaceId}, but this page has no durable workspace ID to confirm the current workspace match.`,
+      summary: `Online for bound workspace ${checkinWorkspaceId}, but this page has no durable workspace ID to confirm the current workspace match.`,
     };
   }
 
   return {
     applicable: true,
     handle,
-    wakeable: true,
-    badgeLabel: "Wakeable",
+    taggable: true,
+    online: true,
+    offline: false,
+    state: "online",
+    badgeLabel: "Online",
     badgeClass: "bg-emerald-500/10 text-emerald-400",
-    summary: `Wakeable as @${handle}.`,
+    summary: `Online as @${handle}.`,
   };
 }

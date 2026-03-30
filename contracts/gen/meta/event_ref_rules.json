@@ -2,8 +2,20 @@
   "openapi_version": "3.1.0",
   "contract_version": "0.2.3",
   "generated_by": "core/cmd/contract-gen",
-  "rule_count": 17,
+  "rule_count": 19,
   "rules": {
+    "agent_notification_dismissed": {
+      "thread_id": "required",
+      "refs_must_include": [
+        "artifact:\u003cwakeup_id\u003e"
+      ]
+    },
+    "agent_notification_read": {
+      "thread_id": "required",
+      "refs_must_include": [
+        "artifact:\u003cwakeup_id\u003e"
+      ]
+    },
     "board_card_added": {
       "thread_id": "required",
       "refs_must_include": [

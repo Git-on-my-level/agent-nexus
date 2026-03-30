@@ -17,7 +17,8 @@ It should stay:
 ## High-Value Invariants
 - Routing is workspace-scoped. Do not add host-local assumptions to wake decisions.
 - Router state is local operational state only; canonical truth still lives in OAR primitives.
-- Wake eligibility must remain driven by registration plus fresh bridge check-ins, never registration alone.
+- Taggability must remain driven by registration plus workspace binding, never by a transient live bridge check-in.
+- Bridge check-ins control online delivery semantics, not whether a valid registered agent can be tagged.
 - Event handling must be idempotent across reconnects and duplicate deliveries.
 - Keep the router package independently testable even though the runtime is hosted in-process.
 

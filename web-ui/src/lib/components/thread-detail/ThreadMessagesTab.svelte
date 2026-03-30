@@ -20,7 +20,7 @@
   import {
     filterMentionCandidates,
     parseActiveMention,
-    wakeableAgentHandlesFromPrincipals,
+    taggableAgentHandlesFromPrincipals,
   } from "$lib/threadMentionUtils.js";
   import { threadDetailStore } from "$lib/threadDetailStore";
   import { workspacePath } from "$lib/workspacePaths";
@@ -81,12 +81,12 @@
             client: coreClient,
           },
         );
-        mentionCandidates = wakeableAgentHandlesFromPrincipals(
+        mentionCandidates = taggableAgentHandlesFromPrincipals(
           principals,
           nameFn,
         );
       } else if (isAccessDevPreview) {
-        mentionCandidates = wakeableAgentHandlesFromPrincipals(
+        mentionCandidates = taggableAgentHandlesFromPrincipals(
           getAccessDevMockData().principals,
           nameFn,
         );
@@ -265,8 +265,8 @@
         {:else if mentionCandidates.length === 0}
           {#if mentionSignedIn}
             <p class="px-3 py-2 text-[12px] text-[var(--ui-text-muted)]">
-              No wakeable agents in this workspace. See Access to check bridge
-              status.
+              No registered agents are taggable in this workspace. See Access to
+              check registration and presence.
             </p>
           {:else}
             <p class="px-3 py-2 text-[12px] text-[var(--ui-text-muted)]">
@@ -299,6 +299,12 @@
               <span class="truncate text-[var(--ui-text-muted)]"
                 >{row.displayLabel}</span
               >
+              <span
+                class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium {row.presenceClass}"
+                title={row.presenceSummary}
+              >
+                {row.presenceLabel}
+              </span>
             </button>
           {/each}
         {/if}
@@ -317,7 +323,7 @@
         class="text-indigo-400 hover:text-indigo-300"
         href={workspacePath(workspaceSlug, "/access")}>Access</a
       >
-      for wakeable agents.
+      for agent presence and registration status.
     </p>
     <div
       class="flex shrink-0 flex-wrap items-center justify-end gap-2 sm:justify-end"

@@ -4,7 +4,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.2.3`
-- Groups: `14`
+- Groups: `15`
 
 ## `actors`
 
@@ -123,6 +123,14 @@ Generated from `contracts/oar-openapi.yaml`.
   - `meta.ops.health` (`meta ops health`)
   - `meta.readyz` (`meta readyz`)
   - `meta.version` (`meta version`)
+
+## `notifications`
+
+- Commands: `3`
+- Command IDs:
+  - `notifications.dismiss` (`notifications dismiss`)
+  - `notifications.list` (`notifications list`)
+  - `notifications.read` (`notifications read`)
 
 ## `packets`
 

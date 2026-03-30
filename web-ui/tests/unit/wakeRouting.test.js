@@ -97,7 +97,7 @@ describe("wakeRouting", () => {
     revoked: false,
   };
 
-  it("marks an agent wakeable when the durable workspace id is bound", async () => {
+  it("marks an agent online when the durable workspace id is bound", async () => {
     const { publicKeyB64 } = await bridgeProofKeyPromise;
     const result = await describeWakeRouting(
       principal,
@@ -132,9 +132,12 @@ describe("wakeRouting", () => {
     ).toBe("event-bridge-checkin-1");
     expect(result).toMatchObject({
       applicable: true,
-      wakeable: true,
-      badgeLabel: "Wakeable",
-      summary: "Wakeable as @m4-hermes.",
+      taggable: true,
+      online: true,
+      offline: false,
+      state: "online",
+      badgeLabel: "Online",
+      summary: "Online as @m4-hermes.",
     });
   });
 
@@ -143,8 +146,11 @@ describe("wakeRouting", () => {
       describeWakeRouting(principal, { state: "missing" }, "ws-123", null),
     ).resolves.toMatchObject({
       applicable: true,
-      wakeable: false,
-      badgeLabel: "Not wakeable",
+      taggable: false,
+      online: false,
+      offline: false,
+      state: "unregistered",
+      badgeLabel: "Unregistered",
       summary: "Missing registration document agentreg.m4-hermes.",
     });
 
@@ -152,7 +158,10 @@ describe("wakeRouting", () => {
       describeWakeRouting(principal, { state: "error" }, "ws-123", null),
     ).resolves.toMatchObject({
       applicable: true,
-      wakeable: false,
+      taggable: false,
+      online: false,
+      offline: false,
+      state: "unknown",
       badgeLabel: "Unknown",
       summary: "Registration status is unavailable right now.",
     });
@@ -174,13 +183,16 @@ describe("wakeRouting", () => {
       ),
     ).resolves.toMatchObject({
       applicable: true,
-      wakeable: false,
+      taggable: true,
+      online: false,
+      offline: true,
+      state: "unknown",
       badgeLabel: "Unknown",
       summary: "Bridge check-in status is unavailable right now.",
     });
   });
 
-  it("keeps healthy bridge registrations wakeable when page workspace context is missing", async () => {
+  it("keeps healthy bridge registrations online when page workspace context is missing", async () => {
     const { publicKeyB64 } = await bridgeProofKeyPromise;
     const result = await describeWakeRouting(
       principal,
@@ -205,20 +217,25 @@ describe("wakeRouting", () => {
 
     expect(result).toMatchObject({
       applicable: true,
-      wakeable: true,
-      badgeLabel: "Wakeable",
+      taggable: true,
+      online: true,
+      offline: false,
+      state: "online",
+      badgeLabel: "Online",
       summary:
-        "Wakeable for bound workspace ws-123, but this page has no durable workspace ID to confirm the current workspace match.",
+        "Online for bound workspace ws-123, but this page has no durable workspace ID to confirm the current workspace match.",
     });
   });
 
-  it("keeps pending registrations non-wakeable until the bridge checks in", async () => {
+  it("keeps registered agents taggable but offline until the bridge checks in", async () => {
+    const { publicKeyB64 } = await bridgeProofKeyPromise;
     const result = await describeWakeRouting(
       principal,
       registrationDoc({
         handle: "m4-hermes",
         actor_id: "actor-ops-ai",
         status: "pending",
+        bridge_signing_public_key_spki_b64: publicKeyB64,
         workspace_bindings: [{ workspace_id: "ws-123", enabled: true }],
       }),
       "ws-123",
@@ -227,14 +244,17 @@ describe("wakeRouting", () => {
 
     expect(result).toMatchObject({
       applicable: true,
-      wakeable: false,
-      badgeLabel: "Not wakeable",
+      taggable: true,
+      online: false,
+      offline: true,
+      state: "offline",
+      badgeLabel: "Offline",
       summary:
-        "Bridge has not checked in yet. Start the bridge before humans tag this agent.",
+        "Offline. The agent is registered for this workspace, but no fresh bridge check-in is available yet.",
     });
   });
 
-  it("treats stale bridge check-ins as not wakeable", async () => {
+  it("treats stale bridge check-ins as offline", async () => {
     const { publicKeyB64 } = await bridgeProofKeyPromise;
     const result = await describeWakeRouting(
       principal,
@@ -259,9 +279,13 @@ describe("wakeRouting", () => {
 
     expect(result).toMatchObject({
       applicable: true,
-      wakeable: false,
-      badgeLabel: "Not wakeable",
-      summary: "Bridge check-in is stale. Restart or reconnect the bridge.",
+      taggable: true,
+      online: false,
+      offline: true,
+      state: "offline",
+      badgeLabel: "Offline",
+      summary:
+        "Offline. The agent is registered for this workspace, but its last bridge check-in is stale.",
     });
   });
 });

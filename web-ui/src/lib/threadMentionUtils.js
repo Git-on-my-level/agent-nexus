@@ -43,14 +43,28 @@ export function filterMentionCandidates(candidates, query) {
 /**
  * @param {object[]} principals
  * @param {(actorId: string) => string} [displayNameForActor]
- * @returns {{ handle: string, actorId: string, displayLabel: string }[]}
+ * @returns {{
+ *   handle: string,
+ *   actorId: string,
+ *   displayLabel: string,
+ *   presenceLabel: string,
+ *   presenceClass: string,
+ *   presenceSummary: string
+ * }[]}
  */
-export function agentHandlesFromPrincipals(principals, displayNameForActor) {
+export function taggableAgentHandlesFromPrincipals(
+  principals,
+  displayNameForActor,
+) {
   const resolve =
     typeof displayNameForActor === "function" ? displayNameForActor : () => "";
   const rows = [];
   for (const p of principals ?? []) {
-    if (String(p?.principal_kind ?? "") !== "agent" || p?.revoked) {
+    if (
+      String(p?.principal_kind ?? "") !== "agent" ||
+      p?.revoked ||
+      !p?.wakeRouting?.taggable
+    ) {
       continue;
     }
     const handle = String(p?.username ?? "").trim();
@@ -63,23 +77,12 @@ export function agentHandlesFromPrincipals(principals, displayNameForActor) {
       handle,
       actorId,
       displayLabel: dn || handle,
+      presenceLabel: p?.wakeRouting?.badgeLabel ?? "Offline",
+      presenceClass:
+        p?.wakeRouting?.badgeClass ?? "bg-amber-500/10 text-amber-400",
+      presenceSummary: String(p?.wakeRouting?.summary ?? "").trim(),
     });
   }
   rows.sort((a, b) => a.handle.localeCompare(b.handle));
   return rows;
-}
-
-/**
- * @param {object[]} principals
- * @param {(actorId: string) => string} [displayNameForActor]
- * @returns {{ handle: string, actorId: string, displayLabel: string }[]}
- */
-export function wakeableAgentHandlesFromPrincipals(
-  principals,
-  displayNameForActor,
-) {
-  return agentHandlesFromPrincipals(
-    (principals ?? []).filter((principal) => principal?.wakeRouting?.wakeable),
-    displayNameForActor,
-  );
 }

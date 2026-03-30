@@ -386,9 +386,9 @@ func (a *App) runBridgeStatus(ctx context.Context, args []string) (*commandResul
 	}
 	if managedConfig.RuntimeKind == "agent" {
 		if wakeable, _ := registrationData["wakeable"].(bool); wakeable {
-			lines = append(lines, "Registration: wakeable")
+			lines = append(lines, "Presence: online for immediate delivery")
 		} else if len(registrationData) > 0 {
-			lines = append(lines, "Registration: not wakeable yet")
+			lines = append(lines, "Presence: offline or not ready for live delivery")
 		} else if bridgeBinary == "" {
 			lines = append(lines, "Registration: unavailable because oar-agent-bridge is not installed or not on PATH")
 		}

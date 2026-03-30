@@ -61,6 +61,8 @@
                 "name": "event.type",
                 "type": "string",
                 "enum_values": [
+                  "agent_notification_dismissed",
+                  "agent_notification_read",
                   "board_card_added",
                   "board_card_moved",
                   "board_card_removed",
@@ -3689,12 +3691,13 @@
     },
     {
       "name": "derived-views",
-      "command_count": 4,
+      "command_count": 5,
       "command_ids": [
         "derived.rebuild",
         "inbox.get",
         "inbox.list",
-        "inbox.stream"
+        "inbox.stream",
+        "notifications.list"
       ],
       "commands": [
         {
@@ -3865,6 +3868,49 @@
           ],
           "go_method": "InboxStream",
           "ts_method": "inboxStream"
+        },
+        {
+          "command_id": "notifications.list",
+          "cli_path": "notifications list",
+          "group": "notifications",
+          "method": "GET",
+          "path": "/agent-notifications",
+          "operation_id": "listAgentNotifications",
+          "summary": "List current agent notifications for the authenticated agent",
+          "why": "Read unread, read, or dismissed wake notifications for the current authenticated agent.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ items, generated_at }` for the current authenticated agent.",
+          "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "agent_revoked"
+          ],
+          "concepts": [
+            "events",
+            "derived-views"
+          ],
+          "stability": "beta",
+          "surface": "projection",
+          "agent_notes": "Notification state is derived from canonical wake and notification events. Only the authenticated target agent can read its notifications.",
+          "examples": [
+            {
+              "title": "List unread notifications",
+              "command": "oar notifications list --status unread --json"
+            },
+            {
+              "title": "List oldest unread first",
+              "command": "oar notifications list --status unread --order asc --json"
+            }
+          ],
+          "adjacent_commands": [
+            "notifications.dismiss",
+            "notifications.read"
+          ],
+          "go_method": "NotificationsList",
+          "ts_method": "notificationsList"
         }
       ]
     },
@@ -4528,12 +4574,15 @@
     },
     {
       "name": "events",
-      "command_count": 7,
+      "command_count": 10,
       "command_ids": [
         "events.create",
         "events.get",
         "events.stream",
         "inbox.ack",
+        "notifications.dismiss",
+        "notifications.list",
+        "notifications.read",
         "threads.context",
         "threads.timeline",
         "threads.workspace"
@@ -4589,6 +4638,8 @@
                 "name": "event.type",
                 "type": "string",
                 "enum_values": [
+                  "agent_notification_dismissed",
+                  "agent_notification_read",
                   "board_card_added",
                   "board_card_moved",
                   "board_card_removed",
@@ -4796,6 +4847,159 @@
           ],
           "go_method": "InboxAck",
           "ts_method": "inboxAck"
+        },
+        {
+          "command_id": "notifications.dismiss",
+          "cli_path": "notifications dismiss",
+          "group": "notifications",
+          "method": "POST",
+          "path": "/agent-notifications/dismiss",
+          "operation_id": "dismissAgentNotification",
+          "summary": "Dismiss an agent notification",
+          "why": "Suppress future push wake delivery for one wake notification.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ event, notification }` after the dismiss transition.",
+          "error_codes": [
+            "auth_required",
+            "invalid_json",
+            "invalid_request",
+            "agent_revoked",
+            "not_found",
+            "conflict"
+          ],
+          "concepts": [
+            "events"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Only the authenticated target agent can dismiss a notification.",
+          "examples": [
+            {
+              "title": "Dismiss one notification",
+              "command": "oar notifications dismiss --wakeup-id wake_123 --json"
+            }
+          ],
+          "body_schema": {
+            "required": [
+              {
+                "name": "wakeup_id",
+                "type": "string"
+              }
+            ],
+            "optional": [
+              {
+                "name": "actor_id",
+                "type": "string"
+              }
+            ]
+          },
+          "adjacent_commands": [
+            "notifications.list",
+            "notifications.read"
+          ],
+          "go_method": "NotificationsDismiss",
+          "ts_method": "notificationsDismiss"
+        },
+        {
+          "command_id": "notifications.list",
+          "cli_path": "notifications list",
+          "group": "notifications",
+          "method": "GET",
+          "path": "/agent-notifications",
+          "operation_id": "listAgentNotifications",
+          "summary": "List current agent notifications for the authenticated agent",
+          "why": "Read unread, read, or dismissed wake notifications for the current authenticated agent.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ items, generated_at }` for the current authenticated agent.",
+          "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "agent_revoked"
+          ],
+          "concepts": [
+            "events",
+            "derived-views"
+          ],
+          "stability": "beta",
+          "surface": "projection",
+          "agent_notes": "Notification state is derived from canonical wake and notification events. Only the authenticated target agent can read its notifications.",
+          "examples": [
+            {
+              "title": "List unread notifications",
+              "command": "oar notifications list --status unread --json"
+            },
+            {
+              "title": "List oldest unread first",
+              "command": "oar notifications list --status unread --order asc --json"
+            }
+          ],
+          "adjacent_commands": [
+            "notifications.dismiss",
+            "notifications.read"
+          ],
+          "go_method": "NotificationsList",
+          "ts_method": "notificationsList"
+        },
+        {
+          "command_id": "notifications.read",
+          "cli_path": "notifications read",
+          "group": "notifications",
+          "method": "POST",
+          "path": "/agent-notifications/read",
+          "operation_id": "markAgentNotificationRead",
+          "summary": "Mark an agent notification as read",
+          "why": "Mark one wake notification as consumed by the authenticated target agent.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ event, notification }` after the read transition.",
+          "error_codes": [
+            "auth_required",
+            "invalid_json",
+            "invalid_request",
+            "agent_revoked",
+            "not_found",
+            "conflict"
+          ],
+          "concepts": [
+            "events"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Only the authenticated target agent can mark a notification read.",
+          "examples": [
+            {
+              "title": "Mark one notification read",
+              "command": "oar notifications read --wakeup-id wake_123 --json"
+            }
+          ],
+          "body_schema": {
+            "required": [
+              {
+                "name": "wakeup_id",
+                "type": "string"
+              }
+            ],
+            "optional": [
+              {
+                "name": "actor_id",
+                "type": "string"
+              }
+            ]
+          },
+          "adjacent_commands": [
+            "notifications.dismiss",
+            "notifications.list"
+          ],
+          "go_method": "NotificationsRead",
+          "ts_method": "notificationsRead"
         },
         {
           "command_id": "threads.context",

@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  agentHandlesFromPrincipals,
   filterMentionCandidates,
   parseActiveMention,
-  wakeableAgentHandlesFromPrincipals,
+  taggableAgentHandlesFromPrincipals,
 } from "../../src/lib/threadMentionUtils.js";
 
 describe("parseActiveMention", () => {
@@ -47,15 +46,21 @@ describe("filterMentionCandidates", () => {
   });
 });
 
-describe("agentHandlesFromPrincipals", () => {
-  it("keeps non-revoked agents with usernames and sorts", () => {
-    const out = agentHandlesFromPrincipals(
+describe("taggableAgentHandlesFromPrincipals", () => {
+  it("keeps only taggable non-revoked agents with usernames and sorts", () => {
+    const out = taggableAgentHandlesFromPrincipals(
       [
         {
           principal_kind: "agent",
           username: "z.last",
           actor_id: "a1",
           revoked: false,
+          wakeRouting: {
+            taggable: true,
+            badgeLabel: "Offline",
+            badgeClass: "bg-amber-500/10 text-amber-400",
+            summary: "Offline but registered.",
+          },
         },
         {
           principal_kind: "human",
@@ -68,6 +73,12 @@ describe("agentHandlesFromPrincipals", () => {
           username: "a.first",
           actor_id: "a2",
           revoked: false,
+          wakeRouting: {
+            taggable: true,
+            badgeLabel: "Online",
+            badgeClass: "bg-emerald-500/10 text-emerald-400",
+            summary: "Online now.",
+          },
         },
         {
           principal_kind: "agent",
@@ -75,48 +86,37 @@ describe("agentHandlesFromPrincipals", () => {
           actor_id: "a3",
           revoked: true,
         },
+        {
+          principal_kind: "agent",
+          username: "not.taggable",
+          actor_id: "a4",
+          revoked: false,
+          wakeRouting: {
+            taggable: false,
+          },
+        },
       ],
       (id) => (id === "a2" ? "Display A" : ""),
     );
     expect(out.map((r) => r.handle)).toEqual(["a.first", "z.last"]);
     expect(out[0].displayLabel).toBe("Display A");
     expect(out[1].displayLabel).toBe("z.last");
-  });
-});
-
-describe("wakeableAgentHandlesFromPrincipals", () => {
-  it("keeps only wakeable agents", () => {
-    const out = wakeableAgentHandlesFromPrincipals(
-      [
-        {
-          principal_kind: "agent",
-          username: "wakeable.one",
-          actor_id: "a1",
-          revoked: false,
-          wakeRouting: { wakeable: true },
-        },
-        {
-          principal_kind: "agent",
-          username: "not-ready",
-          actor_id: "a2",
-          revoked: false,
-          wakeRouting: { wakeable: false },
-        },
-        {
-          principal_kind: "agent",
-          username: "unknown",
-          actor_id: "a3",
-          revoked: false,
-        },
-      ],
-      (id) => (id === "a1" ? "Wakeable One" : ""),
-    );
-
     expect(out).toEqual([
       {
-        handle: "wakeable.one",
+        handle: "a.first",
+        actorId: "a2",
+        displayLabel: "Display A",
+        presenceLabel: "Online",
+        presenceClass: "bg-emerald-500/10 text-emerald-400",
+        presenceSummary: "Online now.",
+      },
+      {
+        handle: "z.last",
         actorId: "a1",
-        displayLabel: "Wakeable One",
+        displayLabel: "z.last",
+        presenceLabel: "Offline",
+        presenceClass: "bg-amber-500/10 text-amber-400",
+        presenceSummary: "Offline but registered.",
       },
     ]);
   });

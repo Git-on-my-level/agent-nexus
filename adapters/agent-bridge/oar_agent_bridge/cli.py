@@ -143,6 +143,43 @@ def cmd_bridge_doctor(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_notifications_list(args: argparse.Namespace) -> int:
+    config = load_config(args.config)
+    auth = AuthManager(config.auth_state_path)
+    client = build_client(config, auth)
+    try:
+        statuses = [str(item).strip() for item in (args.status or []) if str(item).strip()]
+        payload = client.list_agent_notifications(statuses=statuses or None, order=args.order)
+        print(json.dumps({"items": payload}, indent=2))
+        return 0
+    finally:
+        client.close()
+
+
+def cmd_notifications_read(args: argparse.Namespace) -> int:
+    config = load_config(args.config)
+    auth = AuthManager(config.auth_state_path)
+    client = build_client(config, auth)
+    try:
+        payload = client.mark_agent_notification_read(args.wakeup_id)
+        print(json.dumps(payload, indent=2))
+        return 0
+    finally:
+        client.close()
+
+
+def cmd_notifications_dismiss(args: argparse.Namespace) -> int:
+    config = load_config(args.config)
+    auth = AuthManager(config.auth_state_path)
+    client = build_client(config, auth)
+    try:
+        payload = client.dismiss_agent_notification(args.wakeup_id)
+        print(json.dumps(payload, indent=2))
+        return 0
+    finally:
+        client.close()
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="oar-agent-bridge")
     parser.add_argument("--verbose", action="store_true")
@@ -181,6 +218,24 @@ def build_parser() -> argparse.ArgumentParser:
     bridge_doctor = bridge_sub.add_parser("doctor")
     bridge_doctor.add_argument("--config", required=True)
     bridge_doctor.set_defaults(func=cmd_bridge_doctor)
+
+    notifications_parser = subparsers.add_parser("notifications")
+    notifications_sub = notifications_parser.add_subparsers(dest="notifications_command", required=True)
+    notifications_list = notifications_sub.add_parser("list")
+    notifications_list.add_argument("--config", required=True)
+    notifications_list.add_argument("--status", action="append", choices=["unread", "read", "dismissed"])
+    notifications_list.add_argument("--order", choices=["asc", "desc"], default="desc")
+    notifications_list.set_defaults(func=cmd_notifications_list)
+
+    notifications_read = notifications_sub.add_parser("read")
+    notifications_read.add_argument("--config", required=True)
+    notifications_read.add_argument("--wakeup-id", required=True)
+    notifications_read.set_defaults(func=cmd_notifications_read)
+
+    notifications_dismiss = notifications_sub.add_parser("dismiss")
+    notifications_dismiss.add_argument("--config", required=True)
+    notifications_dismiss.add_argument("--wakeup-id", required=True)
+    notifications_dismiss.set_defaults(func=cmd_notifications_dismiss)
 
     return parser
 

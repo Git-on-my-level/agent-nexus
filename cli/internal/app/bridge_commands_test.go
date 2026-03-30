@@ -22,7 +22,7 @@ func TestBridgeHelpTopic(t *testing.T) {
 	if !strings.Contains(output, "bridge install") || !strings.Contains(output, "bridge doctor") || !strings.Contains(output, "bridge start") || !strings.Contains(output, "bridge status") {
 		t.Fatalf("expected bridge subcommands in help output=%s", output)
 	}
-	if !strings.Contains(output, "Bridge-managed registrations stay `pending`") {
+	if !strings.Contains(output, "Offline agents still accumulate durable wake notifications") {
 		t.Fatalf("expected readiness lifecycle guidance output=%s", output)
 	}
 	if strings.Contains(output, "router.toml") {

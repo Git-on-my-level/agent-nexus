@@ -49,10 +49,13 @@ export function getAccessDevMockData() {
       revoked: false,
       wakeRouting: {
         applicable: true,
-        badgeLabel: "Wakeable",
+        taggable: true,
+        online: true,
+        offline: false,
+        state: "online",
+        badgeLabel: "Online",
         badgeClass: "bg-emerald-500/10 text-emerald-400",
-        summary:
-          "Dev preview: synthetic wake routing for layout QA (not loaded from core).",
+        summary: "Dev preview: registered agent with a fresh bridge check-in.",
       },
     },
     {
@@ -67,10 +70,14 @@ export function getAccessDevMockData() {
       revoked: false,
       wakeRouting: {
         applicable: true,
-        badgeLabel: "Not wakeable",
+        taggable: true,
+        online: false,
+        offline: true,
+        state: "offline",
+        badgeLabel: "Offline",
         badgeClass: "bg-amber-500/10 text-amber-400",
         summary:
-          "Dev preview: agent without a complete registration binding (mock).",
+          "Dev preview: registered agent without a fresh bridge check-in.",
       },
     },
     {
