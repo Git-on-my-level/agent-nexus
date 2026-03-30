@@ -7,9 +7,10 @@ import { stripBasePath } from "$lib/workspacePaths";
 import {
   clearWorkspaceAuthSession,
   getWorkspaceAuthSession,
-  isLikelyStaleWorkspaceRefreshFailure,
+  isRetryableWorkspaceRefreshFailure,
   readWorkspaceRefreshToken,
   refreshWorkspaceAuthSession,
+  shouldClearWorkspaceAuthSessionAfterRetryableFailure,
 } from "$lib/server/authSession";
 import { buildProxyRequestInit } from "$lib/server/coreProxy";
 import { resolveProxyTarget } from "$lib/server/proxyWorkspaceTarget";
@@ -57,9 +58,24 @@ async function refreshAndRetry(
       coreBaseUrl,
     });
   } catch (error) {
-    if (!isLikelyStaleWorkspaceRefreshFailure(error, { hadAccessToken })) {
-      clearWorkspaceAuthSession(event, workspaceSlug);
+    if (
+      isRetryableWorkspaceRefreshFailure(error, {
+        hadAccessToken,
+        hadRefreshToken: true,
+      })
+    ) {
+      if (
+        shouldClearWorkspaceAuthSessionAfterRetryableFailure(
+          event,
+          workspaceSlug,
+        )
+      ) {
+        clearWorkspaceAuthSession(event, workspaceSlug);
+      }
+      return null;
     }
+
+    clearWorkspaceAuthSession(event, workspaceSlug);
     return null;
   }
 

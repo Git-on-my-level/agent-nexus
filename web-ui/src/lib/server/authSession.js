@@ -15,6 +15,9 @@ function getWorkspaceSlug(value) {
 const REFRESH_REPLAY_WINDOW_MS = 60_000;
 const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
 const REFRESH_TOKEN_COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
+const RETRYABLE_AUTH_SESSION_FAILURE_COOKIE_MAX_AGE_SECONDS = 2 * 60;
+const RETRYABLE_AUTH_SESSION_FAILURE_MAX_ATTEMPTS = 2;
+export const RETRYABLE_AUTH_SESSION_ERROR_CODE = "auth_session_retryable";
 // Retain the last access token only slightly beyond its real core TTL so
 // refresh-race detection can still tell "stale token after rotation" apart
 // from "no prior access token", without preserving stale-auth state for the
@@ -30,6 +33,10 @@ export function getAuthSessionCookieName(workspaceSlug) {
 
 export function getAuthAccessCookieName(workspaceSlug) {
   return `oar_ui_access_${getWorkspaceSlug(workspaceSlug)}`;
+}
+
+function getRetryableAuthFailureCookieName(workspaceSlug) {
+  return `oar_ui_auth_retry_${getWorkspaceSlug(workspaceSlug)}`;
 }
 
 function isSecureCookieRequest(event) {
@@ -66,6 +73,16 @@ function createRequestError(status, payload) {
   error.status = status;
   error.details = payload;
   return error;
+}
+
+function createRetryableAuthSessionError(error) {
+  const retryableError = new Error(
+    "Workspace authentication refresh is in progress. Retry shortly.",
+  );
+  retryableError.status = 503;
+  retryableError.code = RETRYABLE_AUTH_SESSION_ERROR_CODE;
+  retryableError.details = error?.details ?? null;
+  return retryableError;
 }
 
 async function requestCoreJSON(coreBaseUrl, pathname, options = {}) {
@@ -116,6 +133,7 @@ function applyRefreshResult(event, workspaceSlug, tokens) {
   if (!tokens) {
     return null;
   }
+  clearRetryableWorkspaceAuthFailureCount(event, workspaceSlug);
   if (tokens.refreshToken) {
     writeWorkspaceRefreshToken(event, workspaceSlug, tokens.refreshToken);
   }
@@ -175,6 +193,7 @@ export function getWorkspaceAuthSession(event, workspaceSlug) {
 export function clearWorkspaceAuthSession(event, workspaceSlug) {
   clearWorkspaceRefreshToken(event, workspaceSlug);
   clearWorkspaceAccessToken(event, workspaceSlug);
+  clearRetryableWorkspaceAuthFailureCount(event, workspaceSlug);
 }
 
 export function readWorkspaceRefreshToken(event, workspaceSlug) {
@@ -201,6 +220,50 @@ export function clearWorkspaceRefreshToken(event, workspaceSlug) {
   event.cookies.delete(getAuthSessionCookieName(workspaceSlug), {
     path: "/",
   });
+}
+
+function readRetryableWorkspaceAuthFailureCount(event, workspaceSlug) {
+  const raw = event.cookies.get(
+    getRetryableAuthFailureCookieName(workspaceSlug),
+  );
+  const count = Number.parseInt(String(raw ?? "").trim(), 10);
+  return Number.isFinite(count) && count > 0 ? count : 0;
+}
+
+function writeRetryableWorkspaceAuthFailureCount(event, workspaceSlug, count) {
+  if (!Number.isInteger(count) || count <= 0) {
+    clearRetryableWorkspaceAuthFailureCount(event, workspaceSlug);
+    return;
+  }
+
+  event.cookies.set(
+    getRetryableAuthFailureCookieName(workspaceSlug),
+    String(count),
+    buildAuthSessionCookieOptions(event, {
+      maxAge: RETRYABLE_AUTH_SESSION_FAILURE_COOKIE_MAX_AGE_SECONDS,
+    }),
+  );
+}
+
+export function clearRetryableWorkspaceAuthFailureCount(event, workspaceSlug) {
+  event.cookies.delete(getRetryableAuthFailureCookieName(workspaceSlug), {
+    path: "/",
+  });
+}
+
+export function shouldClearWorkspaceAuthSessionAfterRetryableFailure(
+  event,
+  workspaceSlug,
+) {
+  const nextCount =
+    readRetryableWorkspaceAuthFailureCount(event, workspaceSlug) + 1;
+  if (nextCount >= RETRYABLE_AUTH_SESSION_FAILURE_MAX_ATTEMPTS) {
+    clearRetryableWorkspaceAuthFailureCount(event, workspaceSlug);
+    return true;
+  }
+
+  writeRetryableWorkspaceAuthFailureCount(event, workspaceSlug, nextCount);
+  return false;
 }
 
 export async function resolveWorkspaceSlugFromEvent(event) {
@@ -283,6 +346,23 @@ export function isLikelyStaleWorkspaceRefreshFailure(
   );
 }
 
+export function isRetryableWorkspaceRefreshFailure(
+  error,
+  { hadAccessToken = false, hadRefreshToken = false } = {},
+) {
+  return (
+    error?.status === 401 &&
+    error?.details?.error?.code === "invalid_token" &&
+    (hadAccessToken || hadRefreshToken)
+  );
+}
+
+export function isRetryableWorkspaceAuthSessionError(error) {
+  return (
+    error?.status === 503 && error?.code === RETRYABLE_AUTH_SESSION_ERROR_CODE
+  );
+}
+
 export async function loadWorkspaceAuthenticatedAgent({
   event,
   workspaceSlug,
@@ -309,7 +389,9 @@ export async function loadWorkspaceAuthenticatedAgent({
 
   if (accessToken) {
     try {
-      return await fetchCurrentAgent(accessToken);
+      const agent = await fetchCurrentAgent(accessToken);
+      clearRetryableWorkspaceAuthFailureCount(event, workspaceSlug);
+      return agent;
     } catch (error) {
       if (error?.status !== 401) {
         throw error;
@@ -335,22 +417,29 @@ export async function loadWorkspaceAuthenticatedAgent({
     if (!accessToken) {
       return null;
     }
-    return await fetchCurrentAgent(accessToken);
+    const agent = await fetchCurrentAgent(accessToken);
+    clearRetryableWorkspaceAuthFailureCount(event, workspaceSlug);
+    return agent;
   } catch (error) {
     if (
-      error?.status === 401 &&
-      !isLikelyStaleWorkspaceRefreshFailure(error, {
+      isRetryableWorkspaceRefreshFailure(error, {
         hadAccessToken: Boolean(accessToken),
+        hadRefreshToken: Boolean(refreshToken),
       })
     ) {
-      clearWorkspaceAuthSession(event, workspaceSlug);
-      return null;
+      if (
+        shouldClearWorkspaceAuthSessionAfterRetryableFailure(
+          event,
+          workspaceSlug,
+        )
+      ) {
+        clearWorkspaceAuthSession(event, workspaceSlug);
+        return null;
+      }
+      throw createRetryableAuthSessionError(error);
     }
-    if (
-      isLikelyStaleWorkspaceRefreshFailure(error, {
-        hadAccessToken: Boolean(accessToken),
-      })
-    ) {
+    if (error?.status === 401) {
+      clearWorkspaceAuthSession(event, workspaceSlug);
       return null;
     }
     throw error;
@@ -391,6 +480,7 @@ export async function handleWorkspaceAuthVerifyResponse({
   if (accessToken) {
     writeWorkspaceAccessToken(event, workspaceSlug, accessToken);
   }
+  clearRetryableWorkspaceAuthFailureCount(event, workspaceSlug);
 
   const sanitizedPayload = {
     agent,

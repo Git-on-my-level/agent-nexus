@@ -12,6 +12,9 @@ export const authSessionReady = writable(false);
 export const authenticatedAgent = writable(null);
 
 const browser = typeof window !== "undefined";
+const AUTH_SESSION_RETRYABLE_ERROR_CODE = "auth_session_retryable";
+const AUTH_SESSION_INIT_MAX_ATTEMPTS = 2;
+const AUTH_SESSION_INIT_RETRY_DELAY_MS = 150;
 
 const authStateByWorkspace = new Map();
 
@@ -74,8 +77,25 @@ function shouldPreserveAuthenticatedAgentOnInitFailure(error) {
     return true;
   }
 
+  if (isRetryableAuthSessionFailure(error)) {
+    return false;
+  }
+
   const status = Number(error.status);
   return !Number.isFinite(status) || status >= 500;
+}
+
+function isRetryableAuthSessionFailure(error) {
+  return (
+    Number(error?.status) === 503 &&
+    error?.details?.error?.code === AUTH_SESSION_RETRYABLE_ERROR_CODE
+  );
+}
+
+function wait(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 async function requestJSON(
@@ -177,28 +197,47 @@ export async function initializeAuthSession({
   state.ready = false;
   syncCurrentAuthStores(workspaceSlug);
 
-  try {
-    const result = await requestJSON("/auth/session", {
-      fetchFn,
-      baseUrl,
-      headers: {
-        [WORKSPACE_HEADER]: workspaceSlug,
-      },
-    });
-    state.authenticatedAgent = result.agent ?? null;
-    state.ready = true;
-    syncCurrentAuthStores(workspaceSlug);
-    return result.agent ?? null;
-  } catch (error) {
-    if (shouldPreserveAuthenticatedAgentOnInitFailure(error)) {
-      state.authenticatedAgent = previousAgent;
-    } else {
-      state.authenticatedAgent = null;
+  for (
+    let attempt = 0;
+    attempt < AUTH_SESSION_INIT_MAX_ATTEMPTS;
+    attempt += 1
+  ) {
+    try {
+      const result = await requestJSON("/auth/session", {
+        fetchFn,
+        baseUrl,
+        headers: {
+          [WORKSPACE_HEADER]: workspaceSlug,
+        },
+      });
+      state.authenticatedAgent = result.agent ?? null;
+      state.ready = true;
+      syncCurrentAuthStores(workspaceSlug);
+      return result.agent ?? null;
+    } catch (error) {
+      if (
+        isRetryableAuthSessionFailure(error) &&
+        attempt < AUTH_SESSION_INIT_MAX_ATTEMPTS - 1
+      ) {
+        await wait(AUTH_SESSION_INIT_RETRY_DELAY_MS);
+        continue;
+      }
+
+      if (shouldPreserveAuthenticatedAgentOnInitFailure(error)) {
+        state.authenticatedAgent = previousAgent;
+      } else {
+        state.authenticatedAgent = null;
+      }
+      state.ready = true;
+      syncCurrentAuthStores(workspaceSlug);
+      return state.authenticatedAgent;
     }
-    state.ready = true;
-    syncCurrentAuthStores(workspaceSlug);
-    return state.authenticatedAgent;
   }
+
+  state.authenticatedAgent = null;
+  state.ready = true;
+  syncCurrentAuthStores(workspaceSlug);
+  return null;
 }
 
 export async function logoutAuthSession({
