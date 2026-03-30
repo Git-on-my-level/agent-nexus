@@ -111,6 +111,33 @@ func TestNotificationsListReadAndDismissAreTargetScoped(t *testing.T) {
 		t.Fatalf("expected unread notification, got %#v", notificationsPayload.Items[0])
 	}
 
+	postJSONExpectStatusWithAuth(t, env.server.URL+"/events", map[string]any{
+		"event": map[string]any{
+			"type":      agentNotificationReadEvent,
+			"thread_id": threadID,
+			"summary":   "forged read",
+			"refs": []string{
+				"thread:" + threadID,
+				"artifact:" + wakeupID,
+			},
+			"payload": map[string]any{
+				"wakeup_id":       wakeupID,
+				"target_handle":   target.Username,
+				"target_actor_id": target.ActorID,
+			},
+			"provenance": map[string]any{"sources": []string{"inferred"}},
+		},
+	}, sender.AccessToken, http.StatusCreated).Body.Close()
+
+	forgedResp := getJSONExpectStatusWithAuth(t, env.server.URL+"/agent-notifications?status=unread", target.AccessToken, http.StatusOK)
+	if err := json.NewDecoder(forgedResp.Body).Decode(&notificationsPayload); err != nil {
+		t.Fatalf("decode forged notifications response: %v", err)
+	}
+	forgedResp.Body.Close()
+	if len(notificationsPayload.Items) != 1 || asString(notificationsPayload.Items[0]["status"]) != notificationStatusUnread {
+		t.Fatalf("expected forged read to be ignored, got %#v", notificationsPayload.Items)
+	}
+
 	notFoundResp := postJSONExpectStatusWithAuth(t, env.server.URL+"/agent-notifications/dismiss", map[string]any{
 		"wakeup_id": wakeupID,
 	}, sender.AccessToken, http.StatusNotFound)

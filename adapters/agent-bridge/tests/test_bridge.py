@@ -208,6 +208,32 @@ def test_handle_notification_marks_read_after_dispatch():
     assert client.notification_reads == ["wake-1"]
 
 
+def test_handle_notification_leaves_notification_unread_when_completion_fails():
+    bridge, _state, client = build_bridge([])
+    original_create_event = client.create_event
+
+    def fail_completion(**kwargs):
+        event = kwargs.get("event") or {}
+        if event.get("type") == "agent_wakeup_completed":
+            raise RuntimeError("completion write failed")
+        return original_create_event(**kwargs)
+
+    client.create_event = fail_completion
+
+    with pytest.raises(RuntimeError, match="completion write failed"):
+        bridge._handle_notification(
+            {
+                "wakeup_id": "wake-1",
+                "target_actor_id": "actor-hermes",
+                "thread_id": "thread-1",
+                "request_event_id": "evt-request",
+                "trigger_event_id": "evt-trigger",
+            }
+        )
+
+    assert client.notification_reads == []
+
+
 def test_bridge_checkin_upserts_active_registration():
     bridge, _state, client = build_bridge([])
 

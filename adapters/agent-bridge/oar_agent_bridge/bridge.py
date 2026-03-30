@@ -158,7 +158,6 @@ class AgentBridge:
             result = self.adapter.dispatch(packet, prompt_text, packet.session_key, existing_native_session_id=existing_session_id)
             if result.native_session_id:
                 self.state.set_session(packet.session_key, result.native_session_id)
-            self.client.mark_agent_notification_read(packet.wakeup_id)
             if result.response_text.strip():
                 self._post_reply_message(packet, result.response_text.strip(), result.native_session_id)
             self.client.create_event(
@@ -176,6 +175,7 @@ class AgentBridge:
                 },
                 request_key=completion_request_key(packet.wakeup_id, target_actor_id),
             )
+            self.client.mark_agent_notification_read(packet.wakeup_id)
         except Exception as exc:
             LOGGER.exception("Wakeup %s failed", wakeup_id)
             self.client.create_event(

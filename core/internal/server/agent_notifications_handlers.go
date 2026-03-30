@@ -284,6 +284,7 @@ func deriveAgentNotifications(ctx context.Context, opts handlerOptions, actorID 
 		if wakeupID == "" {
 			continue
 		}
+		eventActorID := strings.TrimSpace(anyString(event["actor_id"]))
 		targetActorID := strings.TrimSpace(anyString(payload["target_actor_id"]))
 		switch strings.TrimSpace(anyString(event["type"])) {
 		case router.WakeRequestEvent:
@@ -312,6 +313,9 @@ func deriveAgentNotifications(ctx context.Context, opts handlerOptions, actorID 
 			if targetActorID != actorID {
 				continue
 			}
+			if eventActorID == "" || eventActorID != targetActorID {
+				continue
+			}
 			item, exists := itemsByWakeup[wakeupID]
 			if !exists {
 				continue
@@ -324,6 +328,9 @@ func deriveAgentNotifications(ctx context.Context, opts handlerOptions, actorID 
 			item.ReadEventID = strings.TrimSpace(anyString(event["id"]))
 		case agentNotificationDismissedEvent:
 			if targetActorID != actorID {
+				continue
+			}
+			if eventActorID == "" || eventActorID != targetActorID {
 				continue
 			}
 			item, exists := itemsByWakeup[wakeupID]
