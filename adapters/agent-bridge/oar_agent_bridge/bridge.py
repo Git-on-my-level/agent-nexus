@@ -20,7 +20,7 @@ from .models import (
     failure_request_key,
     message_request_key,
 )
-from .oar_client import OARClient, OARClientError
+from .oar_client import OARClient, OARClientError, OARStreamDisconnected
 from .prompts import build_wake_prompt
 from .registry import apply_registration, publish_bridge_checkin
 from .state_store import JSONStateStore
@@ -67,6 +67,9 @@ class AgentBridge:
                         self.state.mark_wakeup_handled(wakeup_id)
                     if event_id:
                         self.state.last_event_id = event_id
+            except OARStreamDisconnected as exc:
+                LOGGER.info("Event stream interrupted; reconnecting: %s", exc)
+                time.sleep(BRIDGE_RECONNECT_DELAY_SECONDS)
             except Exception:
                 LOGGER.exception("Bridge loop failed; reconnecting")
                 time.sleep(BRIDGE_RECONNECT_DELAY_SECONDS)

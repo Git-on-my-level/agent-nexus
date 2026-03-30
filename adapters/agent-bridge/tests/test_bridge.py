@@ -1,10 +1,11 @@
+import logging
 import pytest
 
 from pathlib import Path
 
 from oar_agent_bridge.bridge import AgentBridge
 from oar_agent_bridge.config import AdapterConfig, AgentConfig, LoadedConfig, OARConfig
-from oar_agent_bridge.oar_client import OARClientError
+from oar_agent_bridge.oar_client import OARClientError, OARStreamDisconnected
 from oar_agent_bridge.util import generate_bridge_proof_keypair
 
 
@@ -124,6 +125,29 @@ def test_claim_wakeup_returns_false_on_conflict():
     bridge.client.create_event = raise_conflict
 
     assert bridge._claim_wakeup("wake-1", "thread-1", "actor-1", "event-1") is False
+
+
+def test_bridge_logs_transport_disconnect_without_traceback(monkeypatch, caplog):
+    bridge, state, _client = build_bridge([])
+    caplog.set_level(logging.INFO)
+
+    monkeypatch.setattr(bridge, "_start_checkin_loop", lambda: None)
+
+    def raise_disconnect(**_kwargs):
+        raise OARStreamDisconnected("incomplete chunked read")
+
+    def stop_sleep(_seconds):
+        raise KeyboardInterrupt()
+
+    bridge.client.stream_events = raise_disconnect
+    monkeypatch.setattr("oar_agent_bridge.bridge.time.sleep", stop_sleep)
+
+    with pytest.raises(KeyboardInterrupt):
+        bridge.run_forever()
+
+    assert state.last_event_id is None
+    assert "Event stream interrupted; reconnecting" in caplog.text
+    assert "Bridge loop failed; reconnecting" not in caplog.text
 
 
 def test_bridge_checkin_upserts_active_registration():

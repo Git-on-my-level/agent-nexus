@@ -20,6 +20,10 @@ class OARClientError(RuntimeError):
         super().__init__(message)
 
 
+class OARStreamDisconnected(RuntimeError):
+    pass
+
+
 @dataclass(slots=True)
 class SSEMessage:
     event_id: str | None
@@ -214,38 +218,41 @@ class OARClient:
         if last_event_id:
             headers["Last-Event-ID"] = last_event_id
         timeout = httpx.Timeout(connect=10.0, read=heartbeat_timeout_seconds, write=10.0, pool=10.0)
-        with httpx.stream("GET", f"{self.base_url}{path}", headers=headers, verify=self.verify_ssl, timeout=timeout) as response:
-            if response.status_code >= 400:
-                raise self._decode_response(response)
-            current_id: str | None = None
-            current_event: str | None = None
-            data_lines: list[str] = []
-            for raw_line in response.iter_lines():
-                line = raw_line if isinstance(raw_line, str) else raw_line.decode("utf-8")
-                if line == "":
-                    if data_lines:
-                        data = "\n".join(data_lines)
-                        yield {
-                            "id": current_id,
-                            "event": current_event,
-                            "data": data,
-                        }
-                    current_id = None
-                    current_event = None
-                    data_lines = []
-                    continue
-                if line.startswith(":"):
-                    continue
-                field, _, value = line.partition(":")
-                value = value.lstrip(" ")
-                if field == "id":
-                    current_id = value
-                elif field == "event":
-                    current_event = value
-                elif field == "data":
-                    data_lines.append(value)
-            if data_lines:
-                yield {"id": current_id, "event": current_event, "data": "\n".join(data_lines)}
+        try:
+            with httpx.stream("GET", f"{self.base_url}{path}", headers=headers, verify=self.verify_ssl, timeout=timeout) as response:
+                if response.status_code >= 400:
+                    raise self._decode_response(response)
+                current_id: str | None = None
+                current_event: str | None = None
+                data_lines: list[str] = []
+                for raw_line in response.iter_lines():
+                    line = raw_line if isinstance(raw_line, str) else raw_line.decode("utf-8")
+                    if line == "":
+                        if data_lines:
+                            data = "\n".join(data_lines)
+                            yield {
+                                "id": current_id,
+                                "event": current_event,
+                                "data": data,
+                            }
+                        current_id = None
+                        current_event = None
+                        data_lines = []
+                        continue
+                    if line.startswith(":"):
+                        continue
+                    field, _, value = line.partition(":")
+                    value = value.lstrip(" ")
+                    if field == "id":
+                        current_id = value
+                    elif field == "event":
+                        current_event = value
+                    elif field == "data":
+                        data_lines.append(value)
+                if data_lines:
+                    yield {"id": current_id, "event": current_event, "data": "\n".join(data_lines)}
+        except httpx.TransportError as exc:
+            raise OARStreamDisconnected(str(exc)) from exc
 
 
 from typing import TYPE_CHECKING

@@ -298,6 +298,7 @@ func prepareSSE(w http.ResponseWriter) (http.Flusher, bool) {
 	if !ok {
 		return nil, false
 	}
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Time{})
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
