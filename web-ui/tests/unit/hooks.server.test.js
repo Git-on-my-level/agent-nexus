@@ -10,8 +10,10 @@ const envState = vi.hoisted(() => ({}));
 const authSessionMocks = vi.hoisted(() => ({
   clearWorkspaceAuthSession: vi.fn(),
   getWorkspaceAuthSession: vi.fn(() => authSessionState.currentSession),
-  isLikelyStaleWorkspaceRefreshFailure: vi.fn(
-    (error, options) => error?.status === 401 && options?.hadAccessToken,
+  isRetryableWorkspaceRefreshFailure: vi.fn(
+    (error, options) =>
+      error?.status === 401 &&
+      (options?.hadAccessToken || options?.hadRefreshToken),
   ),
   readWorkspaceRefreshToken: vi.fn(() => "refresh-token"),
   refreshWorkspaceAuthSession: vi.fn(async () => {
@@ -42,8 +44,8 @@ vi.mock("$lib/workspacePaths", () => ({
 vi.mock("$lib/server/authSession", () => ({
   clearWorkspaceAuthSession: authSessionMocks.clearWorkspaceAuthSession,
   getWorkspaceAuthSession: authSessionMocks.getWorkspaceAuthSession,
-  isLikelyStaleWorkspaceRefreshFailure:
-    authSessionMocks.isLikelyStaleWorkspaceRefreshFailure,
+  isRetryableWorkspaceRefreshFailure:
+    authSessionMocks.isRetryableWorkspaceRefreshFailure,
   readWorkspaceRefreshToken: authSessionMocks.readWorkspaceRefreshToken,
   refreshWorkspaceAuthSession: authSessionMocks.refreshWorkspaceAuthSession,
 }));
@@ -78,8 +80,10 @@ describe("hooks proxy retry", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     authSessionState.currentSession = { accessToken: "expired-token" };
-    authSessionMocks.isLikelyStaleWorkspaceRefreshFailure.mockImplementation(
-      (error, options) => error?.status === 401 && options?.hadAccessToken,
+    authSessionMocks.isRetryableWorkspaceRefreshFailure.mockImplementation(
+      (error, options) =>
+        error?.status === 401 &&
+        (options?.hadAccessToken || options?.hadRefreshToken),
     );
     for (const key of Object.keys(envState)) {
       delete envState[key];
@@ -178,9 +182,7 @@ describe("hooks proxy retry", () => {
   });
 
   it("clears the workspace session on non-race refresh failures", async () => {
-    authSessionMocks.isLikelyStaleWorkspaceRefreshFailure.mockReturnValue(
-      false,
-    );
+    authSessionMocks.isRetryableWorkspaceRefreshFailure.mockReturnValue(false);
     authSessionMocks.refreshWorkspaceAuthSession.mockRejectedValueOnce(
       Object.assign(new Error("agent revoked"), {
         status: 403,
@@ -221,7 +223,7 @@ describe("hooks proxy retry", () => {
     );
   });
 
-  it("clears the workspace session on invalid refresh failures when no access token was present", async () => {
+  it("preserves the workspace session on retryable refresh failures when no access token was present", async () => {
     authSessionState.currentSession = { accessToken: "" };
     authSessionMocks.refreshWorkspaceAuthSession.mockRejectedValueOnce(
       Object.assign(new Error("invalid refresh token"), {
@@ -258,14 +260,12 @@ describe("hooks proxy retry", () => {
 
     expect(response.status).toBe(401);
     expect(
-      authSessionMocks.isLikelyStaleWorkspaceRefreshFailure,
+      authSessionMocks.isRetryableWorkspaceRefreshFailure,
     ).toHaveBeenCalledWith(expect.anything(), {
       hadAccessToken: false,
+      hadRefreshToken: true,
     });
-    expect(authSessionMocks.clearWorkspaceAuthSession).toHaveBeenCalledWith(
-      expect.anything(),
-      "ops",
-    );
+    expect(authSessionMocks.clearWorkspaceAuthSession).not.toHaveBeenCalled();
   });
 
   it("adds configured CSP sources to document navigation responses", async () => {

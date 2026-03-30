@@ -15,6 +15,7 @@ function getWorkspaceSlug(value) {
 const REFRESH_REPLAY_WINDOW_MS = 60_000;
 const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
 const REFRESH_TOKEN_COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
+export const RETRYABLE_AUTH_SESSION_ERROR_CODE = "auth_session_retryable";
 // Retain the last access token only slightly beyond its real core TTL so
 // refresh-race detection can still tell "stale token after rotation" apart
 // from "no prior access token", without preserving stale-auth state for the
@@ -66,6 +67,16 @@ function createRequestError(status, payload) {
   error.status = status;
   error.details = payload;
   return error;
+}
+
+function createRetryableAuthSessionError(error) {
+  const retryableError = new Error(
+    "Workspace authentication refresh is in progress. Retry shortly.",
+  );
+  retryableError.status = 503;
+  retryableError.code = RETRYABLE_AUTH_SESSION_ERROR_CODE;
+  retryableError.details = error?.details ?? null;
+  return retryableError;
 }
 
 async function requestCoreJSON(coreBaseUrl, pathname, options = {}) {
@@ -283,6 +294,23 @@ export function isLikelyStaleWorkspaceRefreshFailure(
   );
 }
 
+export function isRetryableWorkspaceRefreshFailure(
+  error,
+  { hadAccessToken = false, hadRefreshToken = false } = {},
+) {
+  return (
+    error?.status === 401 &&
+    error?.details?.error?.code === "invalid_token" &&
+    (hadAccessToken || hadRefreshToken)
+  );
+}
+
+export function isRetryableWorkspaceAuthSessionError(error) {
+  return (
+    error?.status === 503 && error?.code === RETRYABLE_AUTH_SESSION_ERROR_CODE
+  );
+}
+
 export async function loadWorkspaceAuthenticatedAgent({
   event,
   workspaceSlug,
@@ -338,19 +366,15 @@ export async function loadWorkspaceAuthenticatedAgent({
     return await fetchCurrentAgent(accessToken);
   } catch (error) {
     if (
-      error?.status === 401 &&
-      !isLikelyStaleWorkspaceRefreshFailure(error, {
+      isRetryableWorkspaceRefreshFailure(error, {
         hadAccessToken: Boolean(accessToken),
+        hadRefreshToken: Boolean(refreshToken),
       })
     ) {
-      clearWorkspaceAuthSession(event, workspaceSlug);
-      return null;
+      throw createRetryableAuthSessionError(error);
     }
-    if (
-      isLikelyStaleWorkspaceRefreshFailure(error, {
-        hadAccessToken: Boolean(accessToken),
-      })
-    ) {
+    if (error?.status === 401) {
+      clearWorkspaceAuthSession(event, workspaceSlug);
       return null;
     }
     throw error;

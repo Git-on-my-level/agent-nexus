@@ -2,6 +2,7 @@ import { json } from "@sveltejs/kit";
 
 import {
   clearWorkspaceAuthSession,
+  isRetryableWorkspaceAuthSessionError,
   loadWorkspaceAuthenticatedAgent,
   resolveWorkspaceSlugFromEvent,
 } from "$lib/server/authSession";
@@ -31,6 +32,25 @@ export async function GET(event) {
       },
     );
   } catch (error) {
+    if (isRetryableWorkspaceAuthSessionError(error)) {
+      return json(
+        {
+          authenticated: false,
+          agent: null,
+          retryable: true,
+          error: {
+            code: error.code,
+            message: error.message,
+          },
+        },
+        {
+          headers: {
+            "cache-control": "no-store",
+          },
+          status: 503,
+        },
+      );
+    }
     if (error?.status === 401 || error?.status === 403) {
       clearWorkspaceAuthSession(event, resolved.workspaceSlug);
     }

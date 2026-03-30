@@ -358,7 +358,7 @@ describe("server auth session helpers", () => {
     expect(getRecentRefreshResultCountForTests()).toBe(1);
   });
 
-  it("preserves cookies when a stale rotated refresh token is rejected", async () => {
+  it("marks stale rotated refresh failures as retryable when the access token already expired", async () => {
     const { event, recorder } = createSessionEvent({
       refreshToken: "refresh-token",
       accessToken: "expired-access-token",
@@ -401,7 +401,10 @@ describe("server auth session helpers", () => {
         workspaceSlug: "alpha",
         coreBaseUrl: "https://core.example.com",
       }),
-    ).resolves.toBeNull();
+    ).rejects.toMatchObject({
+      status: 503,
+      code: "auth_session_retryable",
+    });
 
     expect(recorder.values.get("oar_ui_session_alpha")).toBe("refresh-token");
     expect(recorder.values.get("oar_ui_access_alpha")).toBe(
@@ -410,7 +413,42 @@ describe("server auth session helpers", () => {
     expect(recorder.deleteCalls).toEqual([]);
   });
 
-  it("clears cookies when refresh fails with invalid_token and no access token was present", async () => {
+  it("marks refresh-only invalid_token failures as retryable instead of clearing cookies", async () => {
+    const { event, recorder } = createSessionEvent({
+      refreshToken: "refresh-token",
+    });
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "invalid_token",
+            message: "stale rotated refresh token",
+          },
+        }),
+        {
+          status: 401,
+          headers: { "content-type": "application/json" },
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      loadWorkspaceAuthenticatedAgent({
+        event,
+        workspaceSlug: "alpha",
+        coreBaseUrl: "https://core.example.com",
+      }),
+    ).rejects.toMatchObject({
+      status: 503,
+      code: "auth_session_retryable",
+    });
+
+    expect(recorder.values.get("oar_ui_session_alpha")).toBe("refresh-token");
+    expect(recorder.deleteCalls).toEqual([]);
+  });
+
+  it("treats refresh-only invalid_token failures as retryable until session rehydration retries settle", async () => {
     const { event, recorder } = createSessionEvent({
       refreshToken: "refresh-token",
     });
@@ -436,23 +474,13 @@ describe("server auth session helpers", () => {
         workspaceSlug: "alpha",
         coreBaseUrl: "https://core.example.com",
       }),
-    ).resolves.toBeNull();
+    ).rejects.toMatchObject({
+      status: 503,
+      code: "auth_session_retryable",
+    });
 
-    expect(recorder.values.get("oar_ui_session_alpha")).toBeUndefined();
-    expect(recorder.deleteCalls).toEqual([
-      {
-        name: "oar_ui_session_alpha",
-        options: {
-          path: "/",
-        },
-      },
-      {
-        name: "oar_ui_access_alpha",
-        options: {
-          path: "/",
-        },
-      },
-    ]);
+    expect(recorder.values.get("oar_ui_session_alpha")).toBe("refresh-token");
+    expect(recorder.deleteCalls).toEqual([]);
   });
 
   it("recovers the authenticated agent from a refresh-only session after the access token expired", async () => {

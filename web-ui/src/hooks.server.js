@@ -7,7 +7,7 @@ import { stripBasePath } from "$lib/workspacePaths";
 import {
   clearWorkspaceAuthSession,
   getWorkspaceAuthSession,
-  isLikelyStaleWorkspaceRefreshFailure,
+  isRetryableWorkspaceRefreshFailure,
   readWorkspaceRefreshToken,
   refreshWorkspaceAuthSession,
 } from "$lib/server/authSession";
@@ -57,7 +57,12 @@ async function refreshAndRetry(
       coreBaseUrl,
     });
   } catch (error) {
-    if (!isLikelyStaleWorkspaceRefreshFailure(error, { hadAccessToken })) {
+    if (
+      !isRetryableWorkspaceRefreshFailure(error, {
+        hadAccessToken,
+        hadRefreshToken: true,
+      })
+    ) {
       clearWorkspaceAuthSession(event, workspaceSlug);
     }
     return null;
