@@ -18,9 +18,9 @@ It does not own workspace routing. `@handle` mention routing lives in the worksp
 It does not own canonical OAR state. The durable truth still lives in OAR primitives.
 
 ## High-Value Invariants
-- A registration document alone must not make an agent taggable.
+- Durable taggability is driven by a valid registration plus workspace binding, not bridge uptime.
 - Bridge-managed registrations stay `pending` until the bridge has checked in.
-- Routing must treat stale or missing bridge check-ins as not wakeable.
+- Routing must treat stale or missing bridge check-ins as offline for immediate delivery, while leaving durable notifications queueable.
 - Workspace binding must use the durable `workspace_id`, never a slug or UI path segment.
 - Keep the runtime working with only documented OAR primitives: docs, events, artifacts, auth principals.
 

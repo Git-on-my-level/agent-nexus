@@ -200,6 +200,38 @@ class OARClient:
         }
         return self.raw_request("GET", f"/threads/{thread_id}/workspace", params=params)
 
+    def list_agent_notifications(self, *, statuses: Iterable[str] | None = None, order: str = "desc") -> list[dict[str, Any]]:
+        params: list[tuple[str, str]] = []
+        if statuses:
+            for status in statuses:
+                normalized = str(status).strip()
+                if normalized:
+                    params.append(("status", normalized))
+        if order:
+            params.append(("order", str(order).strip()))
+        path = "/agent-notifications"
+        if params:
+            path = f"{path}?{urlencode(params)}"
+        payload = self.raw_request("GET", path)
+        items = payload.get("items") if isinstance(payload, dict) else None
+        if not isinstance(items, list):
+            return []
+        return [item for item in items if isinstance(item, dict)]
+
+    def mark_agent_notification_read(self, wakeup_id: str) -> dict[str, Any]:
+        body: dict[str, Any] = {"wakeup_id": wakeup_id}
+        actor_id = self._actor_id()
+        if actor_id:
+            body["actor_id"] = actor_id
+        return self.raw_request("POST", "/agent-notifications/read", json_body=body)
+
+    def dismiss_agent_notification(self, wakeup_id: str) -> dict[str, Any]:
+        body: dict[str, Any] = {"wakeup_id": wakeup_id}
+        actor_id = self._actor_id()
+        if actor_id:
+            body["actor_id"] = actor_id
+        return self.raw_request("POST", "/agent-notifications/dismiss", json_body=body)
+
     def stream_events(self, *, types: Iterable[str] | None = None, thread_id: str | None = None, last_event_id: str | None = None, heartbeat_timeout_seconds: int = 120) -> Iterator[dict[str, Any]]:
         params_list: list[tuple[str, str]] = []
         if thread_id:

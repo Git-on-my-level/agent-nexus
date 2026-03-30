@@ -48,6 +48,10 @@ enums:
     enum_policy: strict
     values: [decision_needed, exception, commitment_risk]
 
+  agent_notification_status:
+    enum_policy: strict
+    values: [unread, read, dismissed]
+
   board_status:
     enum_policy: strict
     values: [active, paused, closed]
@@ -85,6 +89,8 @@ enums:
       - board_card_updated
       - board_card_moved
       - board_card_removed
+      - agent_notification_read
+      - agent_notification_dismissed
 
   artifact_kind:
     enum_policy: open
@@ -477,6 +483,16 @@ reference_conventions:
       thread_id: required
       refs_must_include: ["inbox:<inbox_item_id>"]
 
+    agent_notification_read:
+      thread_id: required
+      refs_must_include: ["artifact:<wakeup_id>"]
+      refs_optional: ["event:<wake_request_event_id>"]
+
+    agent_notification_dismissed:
+      thread_id: required
+      refs_must_include: ["artifact:<wakeup_id>"]
+      refs_optional: ["event:<wake_request_event_id>"]
+
     board_created:
       thread_id: required
       refs_must_include: ["board:<board_id>"]
@@ -594,6 +610,24 @@ derived:
       UNLESS a new triggering event (receipt, exception, commitment change)
       has occurred after the acknowledgment timestamp. Deterministic IDs
       ensure ack events survive inbox rebuilds.
+
+  agent_notification:
+    description: >
+      Derived per-target-agent wake notification state. Source wake intent is the
+      canonical agent_wakeup_requested event. Read and dismissed status are
+      derived from follow-up notification events and can be regenerated.
+    fields:
+      wakeup_id:        { type: string, required: true }
+      status:           { type: string, required: true, ref: enums.agent_notification_status }
+      target_handle:    { type: string, required: true }
+      target_actor_id:  { type: string, required: true }
+      thread_id:        { type: string, required: true }
+      thread_title:     { type: string, required: false }
+      trigger_event_id: { type: string, required: true }
+      trigger_text:     { type: string, required: false }
+      created_at:       { type: string, required: true }
+      read_at:          { type: string, required: false }
+      dismissed_at:     { type: string, required: false }
 
 # ---------------------------------------------------------------------------
 # Grounding rules

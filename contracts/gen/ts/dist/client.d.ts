@@ -107,6 +107,9 @@ export declare class OarClient {
     metaOpsHealth(options?: RequestOptions): Promise<InvokeResult>;
     metaReadyz(options?: RequestOptions): Promise<InvokeResult>;
     metaVersion(options?: RequestOptions): Promise<InvokeResult>;
+    notificationsDismiss(options?: RequestOptions): Promise<InvokeResult>;
+    notificationsList(options?: RequestOptions): Promise<InvokeResult>;
+    notificationsRead(options?: RequestOptions): Promise<InvokeResult>;
     packetsReceiptsCreate(options?: RequestOptions): Promise<InvokeResult>;
     packetsReviewsCreate(options?: RequestOptions): Promise<InvokeResult>;
     packetsWorkOrdersCreate(options?: RequestOptions): Promise<InvokeResult>;

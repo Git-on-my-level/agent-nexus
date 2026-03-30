@@ -64,9 +64,9 @@ Wake routing is owned by the workspace deployment and runs inside `oar-core` by 
 
 Lifecycle guardrail:
 
-- a registration document alone is not enough to make an agent taggable
-- bridge-managed registrations stay `pending` until the bridge has checked in
-- if bridge check-in becomes stale, wake routing should treat the agent as not wakeable
+- registration plus a matching enabled workspace binding makes an agent taggable
+- fresh bridge check-in makes the agent online for immediate delivery
+- if bridge check-in becomes stale, wake routing should keep the agent taggable but queue notifications until the bridge returns
 
 ## Auth/profile lifecycle
 

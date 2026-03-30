@@ -284,34 +284,8 @@ func (s *Service) routeMention(ctx context.Context, handle string, event map[str
 	if !registration.SupportsWorkspace(s.cfg.WorkspaceID) {
 		return false, s.emitException(ctx, threadID, eventID, handle, "agent_not_bound_to_workspace", fmt.Sprintf("Tagged agent @%s is not enabled for workspace %s", handle, s.cfg.WorkspaceID))
 	}
-	if registration.Status != "active" {
-		return false, s.emitException(ctx, threadID, eventID, handle, "agent_bridge_not_ready", fmt.Sprintf("Tagged agent @%s is registered but not wakeable until its bridge checks in", handle))
-	}
-	if strings.TrimSpace(registration.BridgeCheckinEventID) == "" {
-		return false, s.emitException(ctx, threadID, eventID, handle, "agent_bridge_not_checked_in", fmt.Sprintf("Tagged agent @%s has no bridge check-in event yet", handle))
-	}
-
-	checkin, err := s.loadBridgeCheckin(ctx, registration.BridgeCheckinEventID)
-	if err != nil {
-		return false, err
-	}
-	if checkin == nil {
-		return false, s.emitException(ctx, threadID, eventID, handle, "agent_bridge_not_checked_in", fmt.Sprintf("Tagged agent @%s has no valid bridge check-in event yet", handle))
-	}
-	if checkin.Handle != "" && checkin.Handle != handle {
-		return false, s.emitException(ctx, threadID, eventID, handle, "agent_bridge_handle_mismatch", fmt.Sprintf("Tagged agent @%s bridge check-in handle does not match registration", handle))
-	}
-	if strings.TrimSpace(registration.BridgeSigningPublicKeySPKIB64) == "" {
-		return false, s.emitException(ctx, threadID, eventID, handle, "agent_bridge_proof_missing", fmt.Sprintf("Tagged agent @%s registration is missing its bridge proof key", handle))
-	}
-	if !VerifyBridgeCheckinSignature(registration.BridgeSigningPublicKeySPKIB64, *checkin) {
-		return false, s.emitException(ctx, threadID, eventID, handle, "agent_bridge_proof_invalid", fmt.Sprintf("Tagged agent @%s has an invalid bridge readiness proof", handle))
-	}
-	if checkin.ActorID != registration.ActorID {
-		return false, s.emitException(ctx, threadID, eventID, handle, "agent_bridge_actor_mismatch", fmt.Sprintf("Tagged agent @%s bridge check-in actor does not match registration actor", handle))
-	}
-	if !checkin.ReadyForWorkspace(s.cfg.WorkspaceID, nowUTC()) {
-		return false, s.emitException(ctx, threadID, eventID, handle, "agent_bridge_checkin_stale", fmt.Sprintf("Tagged agent @%s has a stale bridge check-in and is not wakeable right now", handle))
+	if strings.EqualFold(strings.TrimSpace(registration.Status), "disabled") {
+		return false, s.emitException(ctx, threadID, eventID, handle, "agent_notifications_disabled", fmt.Sprintf("Tagged agent @%s is disabled for notifications", handle))
 	}
 
 	thread, err := s.deps.GetThread(ctx, threadID)
@@ -367,15 +341,17 @@ func (s *Service) routeMention(ctx context.Context, handle string, event map[str
 			fmt.Sprintf("artifact:%s", wakeupID),
 		},
 		"payload": map[string]any{
-			"wakeup_id":        wakeupID,
-			"wake_artifact_id": wakeupID,
-			"target_handle":    handle,
-			"target_actor_id":  registration.ActorID,
-			"workspace_id":     s.cfg.WorkspaceID,
-			"workspace_name":   s.cfg.WorkspaceName,
-			"thread_id":        threadID,
-			"trigger_event_id": eventID,
-			"session_key":      sessionKey,
+			"wakeup_id":          wakeupID,
+			"wake_artifact_id":   wakeupID,
+			"target_handle":      handle,
+			"target_actor_id":    registration.ActorID,
+			"workspace_id":       s.cfg.WorkspaceID,
+			"workspace_name":     s.cfg.WorkspaceName,
+			"thread_id":          threadID,
+			"trigger_event_id":   eventID,
+			"trigger_created_at": anyString(event["ts"]),
+			"trigger_text":       text,
+			"session_key":        sessionKey,
 		},
 		"provenance": map[string]any{
 			"sources": []string{fmt.Sprintf("actor_statement:%s", eventID)},
@@ -400,28 +376,6 @@ func (s *Service) loadRegistration(ctx context.Context, handle string) (*AgentRe
 		return nil, err
 	}
 	return &registration, nil
-}
-
-func (s *Service) loadBridgeCheckin(ctx context.Context, eventID string) (*AgentBridgeCheckin, error) {
-	event, err := s.deps.GetEvent(ctx, eventID)
-	if err != nil {
-		if errors.Is(err, primitives.ErrNotFound) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	if anyString(event["type"]) != BridgeCheckedInEvent {
-		return nil, nil
-	}
-	payload, ok := event["payload"].(map[string]any)
-	if !ok {
-		return nil, nil
-	}
-	checkin, err := decodeIntoMap[AgentBridgeCheckin](payload)
-	if err != nil {
-		return nil, err
-	}
-	return &checkin, nil
 }
 
 func (s *Service) emitException(ctx context.Context, threadID string, eventID string, handle string, code string, summary string) error {

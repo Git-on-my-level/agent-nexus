@@ -272,7 +272,8 @@ heartbeat payload includes:
 
 - tails `message_posted` from `oar-core`
 - resolves `@handle` mentions against registered agent principals
-- verifies bridge readiness from durable registration + bridge check-in state
+- verifies durable registration + workspace binding before creating wake intent
+- treats bridge check-in freshness as online/offline delivery state, not taggability
 - writes the wake artifact plus `agent_wakeup_requested`
 
 Per-agent bridges remain separate runtimes. They do not communicate with the

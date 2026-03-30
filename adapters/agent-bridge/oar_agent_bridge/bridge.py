@@ -28,6 +28,7 @@ from .util import compact_text, sign_bridge_checkin, utc_after_seconds_iso, utc_
 
 LOGGER = logging.getLogger(__name__)
 BRIDGE_RECONNECT_DELAY_SECONDS = 3
+NOTIFICATION_READ_RETRY_ATTEMPTS = 3
 
 
 class AgentBridge:
@@ -42,29 +43,21 @@ class AgentBridge:
         self.handle = config.agent.handle
 
     def run_forever(self) -> None:
-        handled = self.state.handled_wakeup_ids()
         self._start_checkin_loop()
         while True:
             try:
+                self._drain_notifications()
                 for stream_message in self.client.stream_events(types=[WAKE_REQUEST_EVENT], last_event_id=self.state.last_event_id):
                     event = self._decode_stream_event(stream_message)
                     if event is None:
                         continue
                     event_id = str(event.get("id", "")).strip()
                     payload = event.get("payload") or {}
-                    wakeup_id = str(payload.get("wakeup_id", "")).strip()
                     if not self._is_for_me(payload):
                         if event_id:
                             self.state.last_event_id = event_id
                         continue
-                    if wakeup_id and wakeup_id in handled:
-                        if event_id:
-                            self.state.last_event_id = event_id
-                        continue
-                    self._handle_wakeup(event)
-                    if wakeup_id:
-                        handled.add(wakeup_id)
-                        self.state.mark_wakeup_handled(wakeup_id)
+                    self._drain_notifications()
                     if event_id:
                         self.state.last_event_id = event_id
             except OARStreamDisconnected as exc:
@@ -140,14 +133,24 @@ class AgentBridge:
     def _is_for_me(self, payload: dict[str, Any]) -> bool:
         return str(payload.get("target_handle", "")).strip() == self.handle
 
-    def _handle_wakeup(self, event: dict[str, Any]) -> None:
-        payload = event.get("payload") or {}
-        wakeup_id = str(payload.get("wakeup_id", "")).strip()
-        target_actor_id = str(payload.get("target_actor_id", "")).strip()
-        thread_id = str(payload.get("thread_id", event.get("thread_id", ""))).strip()
+    def _drain_notifications(self) -> None:
+        notifications = self.client.list_agent_notifications(statuses=["unread", "read"], order="asc")
+        for notification in notifications:
+            self._handle_notification(notification)
+
+    def _handle_notification(self, notification: dict[str, Any]) -> None:
+        wakeup_id = str(notification.get("wakeup_id", "")).strip()
+        notification_status = str(notification.get("status", "")).strip().lower()
+        target_actor_id = str(notification.get("target_actor_id", "")).strip()
+        thread_id = str(notification.get("thread_id", "")).strip()
+        request_event_id = str(notification.get("request_event_id", "")).strip()
         if not wakeup_id or not thread_id:
-            raise RuntimeError(f"Malformed wake event: {event}")
-        claimed = self._claim_wakeup(wakeup_id, thread_id, target_actor_id, str(event.get("id", "")).strip())
+            raise RuntimeError(f"Malformed agent notification: {notification}")
+        if wakeup_id in self.state.handled_wakeup_ids():
+            if notification_status != "read":
+                self._mark_notification_read(wakeup_id)
+            return
+        claimed = self._claim_wakeup(wakeup_id, thread_id, target_actor_id, request_event_id)
         if not claimed:
             return
         packet_content = self.client.get_artifact_content(wakeup_id)
@@ -185,7 +188,7 @@ class AgentBridge:
                     "type": WAKE_FAILED_EVENT,
                     "thread_id": thread_id,
                     "summary": f"Wakeup {wakeup_id} failed for @{self.handle}",
-                    "refs": [f"thread:{thread_id}", f"event:{packet.trigger_event_id if 'packet' in locals() else str(payload.get('trigger_event_id', ''))}", f"artifact:{wakeup_id}"],
+                    "refs": [f"thread:{thread_id}", f"event:{packet.trigger_event_id if 'packet' in locals() else str(notification.get('trigger_event_id', ''))}", f"artifact:{wakeup_id}"],
                     "payload": {
                         "wakeup_id": wakeup_id,
                         "target_handle": self.handle,
@@ -196,6 +199,31 @@ class AgentBridge:
                 request_key=failure_request_key(wakeup_id, target_actor_id),
             )
             raise
+        self.state.mark_wakeup_handled(packet.wakeup_id)
+        self._mark_notification_read(packet.wakeup_id)
+
+    def _mark_notification_read(self, wakeup_id: str) -> None:
+        for attempt in range(1, NOTIFICATION_READ_RETRY_ATTEMPTS + 1):
+            try:
+                self.client.mark_agent_notification_read(wakeup_id)
+                return
+            except Exception as exc:
+                if attempt == NOTIFICATION_READ_RETRY_ATTEMPTS:
+                    LOGGER.error(
+                        "Wakeup %s completed but notification read acknowledgement failed after %d attempts: %s",
+                        wakeup_id,
+                        attempt,
+                        exc,
+                    )
+                    return
+                LOGGER.warning(
+                    "Failed marking notification %s read (attempt %d/%d): %s",
+                    wakeup_id,
+                    attempt,
+                    NOTIFICATION_READ_RETRY_ATTEMPTS,
+                    exc,
+                )
+                time.sleep(BRIDGE_RECONNECT_DELAY_SECONDS)
 
     def _claim_wakeup(self, wakeup_id: str, thread_id: str, target_actor_id: str, request_event_id: str) -> bool:
         try:

@@ -27,6 +27,15 @@ var bridgeSubcommandSpec = subcommandSpec{
 	examples: []string{"oar bridge install", "oar bridge import-auth --config ./agent.toml --from-profile agent-a", "oar bridge init-config --kind hermes --output ./agent.toml --workspace-id ws_main", "oar bridge workspace-id --handle hermes", "oar bridge start --config ./agent.toml", "oar bridge status --config ./agent.toml"},
 }
 
+var notificationsSubcommandSpec = subcommandSpec{
+	command:  "notifications",
+	valid:    []string{"list", "read", "dismiss"},
+	examples: []string{"oar notifications list --status unread", "oar notifications read --wakeup-id wake_123", "oar notifications dismiss --wakeup-id wake_123"},
+	aliases: map[string]string{
+		"ls": "list",
+	},
+}
+
 var authSubcommandSpec = subcommandSpec{
 	command: "auth",
 	valid:   []string{"register", "whoami", "list", "update-username", "rotate", "revoke", "token-status", "invites", "bootstrap", "principals", "audit"},

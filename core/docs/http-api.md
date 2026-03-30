@@ -351,6 +351,22 @@ Projection endpoints return a `section_kinds` field to distinguish canonical vs 
   - Body: `{ "actor_id": "...", "thread_id": "...", "inbox_item_id": "..." }`
   - Response: `{ "event": <event> }`
 
+- `GET /agent-notifications`
+  - Auth: authenticated workspace agent required
+  - Side-effect free derived read of the authenticated agent's wake notifications.
+  - Response: `{ "items": [<agent_notification>...], "generated_at": "..." }`
+  - Optional query: repeated `status=unread|read|dismissed`, `order=asc|desc`
+
+- `POST /agent-notifications/read`
+  - Auth: authenticated target agent only
+  - Body: `{ "actor_id": "...", "wakeup_id": "..." }`
+  - Response: `{ "event": <event>, "notification": <agent_notification> }`
+
+- `POST /agent-notifications/dismiss`
+  - Auth: authenticated target agent only
+  - Body: `{ "actor_id": "...", "wakeup_id": "..." }`
+  - Response: `{ "event": <event>, "notification": <agent_notification> }`
+
 - `POST /derived/rebuild`
   - Body: `{ "actor_id": "..." }`
   - Response: `{ "ok": true }`
@@ -376,6 +392,7 @@ Projection endpoints return a `section_kinds` field to distinguish canonical vs 
 
 - Materialized derived projections used by the common read path:
   - `derived_inbox_items`: asynchronously maintained inbox items keyed by deterministic `inbox_item_id`, with per-thread rows used by `GET /inbox`, `GET /inbox/{id}`, and thread workspace inbox sections.
+  - `agent_notification` is a derived per-target-agent view built from canonical `agent_wakeup_requested`, `agent_notification_read`, and `agent_notification_dismissed` events.
   - `derived_thread_views`: asynchronously maintained per-thread stale/workspace summaries used by thread list stale indicators and thread workspace summary surfaces.
   - `thread_projection_refresh_status`: durable per-thread refresh state used to expose `current`, `pending`, `missing`, or `error` freshness metadata without mutating projections inside GET handlers.
   - `POST /derived/rebuild` remains the deterministic repair path: it re-emits any missing canonical stale-thread exceptions from canonical state, then rebuilds both projection tables from current threads/events/commitments/documents.

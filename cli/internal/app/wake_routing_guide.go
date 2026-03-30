@@ -13,9 +13,9 @@ How it works
 - Wake routing is provided by a workspace-owned sidecar hosted inside <<tick>>oar-core<<tick>>, not by the per-agent CLI.
 - The durable registration document id is <<tick>>agentreg.<handle><<tick>>.
 - The bridge-owned readiness proof is the latest <<tick>>agent_bridge_checked_in<<tick>> event referenced by <<tick>>agentreg.<handle><<tick>>.
-- A tagged message only becomes durable wake work when the target agent is both registered and bridge-ready.
+- A tagged message becomes durable wake work when the target agent is registered for the workspace. Bridge readiness only changes whether delivery is immediate or queued.
 
-What counts as wakeable
+What counts as taggable
 
 - principal kind is <<tick>>agent<<tick>>
 - principal is not revoked
@@ -24,20 +24,23 @@ What counts as wakeable
 - registration document <<tick>>actor_id<<tick>> matches the principal actor
 - registration has an enabled binding for the current workspace
 - registration status is <<tick>>active<<tick>>
+
+What counts as online
+
+- the agent is already taggable
 - registration records a bridge check-in event id
 - that <<tick>>agent_bridge_checked_in<<tick>> event exists, matches the same actor, and has a fresh bridge check-in window
 
 Important lifecycle rule
 
-- An agent must not become taggable before the bridge is actually running and has checked in.
-- Bridge-managed registrations therefore start as <<tick>>pending<<tick>>.
-- The bridge flips them to active/fresh on check-in.
-- If the bridge stops checking in, the registration becomes stale and routing stops treating it as wakeable.
+- Bridge-managed registrations still start as <<tick>>pending<<tick>> until the bridge checks in and finalizes the live registration payload.
+- Once registration and workspace binding are valid, humans can tag the agent even if the bridge is offline.
+- If the bridge stops checking in, the agent becomes offline but remains taggable; pending notifications queue until the bridge returns.
 
 How humans discover it
 
-- In the web UI Access page, look for agent principals marked Wakeable and their <<tick>>@handle<<tick>>.
-- If Access shows pending or stale bridge state, do not expect tagging to work yet.
+- In the web UI Access page, look for registered agent principals and their <<tick>>@handle<<tick>>.
+- <<tick>>Online<<tick>> means immediate delivery is available now. <<tick>>Offline<<tick>> means tags still queue durable notifications for later delivery.
 
 How agents discover it
 
@@ -46,6 +49,8 @@ How agents discover it
 - Use <<tick>>oar help bridge<<tick>> to bootstrap the per-agent bridge runtime from the main CLI.
 - Use <<tick>>oar bridge workspace-id --handle <handle><<tick>> when an existing registration doc is the easiest source of truth for the durable workspace id.
 - Use <<tick>>oar bridge import-auth --config ./agent.toml --from-profile <agent><<tick>> when matching <<tick>>oar<<tick>> auth already exists.
+- Use <<tick>>oar notifications list --status unread<<tick>> to inspect queued notifications with the main CLI.
+- Use <<tick>>oar notifications dismiss --wakeup-id <wakeup-id><<tick>> to dismiss a notification so it no longer wakes the bridge.
 - Use <<tick>>oar auth whoami<<tick>> to confirm your current username and actor id.
 - Use <<tick>>oar docs get --document-id agentreg.<handle> --json<<tick>> to inspect a registration document directly.
 
@@ -77,13 +82,19 @@ Preferred path when you are using <<tick>>oar-agent-bridge<<tick>>
 
   oar bridge start --config ./agent.toml
 
-7. Verify the bridge has checked in before telling humans to use <<tick>>@handle<<tick>>:
+7. Verify the bridge has checked in before expecting immediate delivery:
 
   oar bridge status --config ./agent.toml
   oar bridge doctor --config ./agent.toml
   oar-agent-bridge registration status --config ./agent.toml
 
-8. If the bridge is wakeable but tagged delivery still does not work, ask the workspace operator to inspect the embedded wake-routing sidecar in <<tick>>oar-core<<tick>>.
+8. Pull or dismiss queued notifications directly when needed:
+
+  oar notifications list --status unread
+  oar-agent-bridge notifications list --config ./agent.toml --status unread
+  oar notifications dismiss --wakeup-id <wakeup-id>
+
+9. If the bridge is online but tagged delivery still does not work, ask the workspace operator to inspect the embedded wake-routing sidecar in <<tick>>oar-core<<tick>>.
 
 Generic OAR CLI lifecycle
 
@@ -182,10 +193,10 @@ Verification flow
   - principal actor id matches <<tick>>content.actor_id<<tick>>
   - <<tick>>workspace_bindings<<tick>> contains the current workspace id with <<tick>>enabled: true<<tick>>
   - <<tick>>status<<tick>> is <<tick>>active<<tick>>
-  - <<tick>>bridge_checkin_event_id<<tick>> is present on the registration
-  - <<tick>>oar events get --event-id <bridge-checkin-event-id> --json<<tick>> returns an <<tick>>agent_bridge_checked_in<<tick>> event
-  - that event actor id matches the principal actor
-  - that event <<tick>>expires_at<<tick>> is still in the future
+  - if you need online delivery right now, <<tick>>bridge_checkin_event_id<<tick>> is present on the registration
+  - if you need online delivery right now, <<tick>>oar events get --event-id <bridge-checkin-event-id> --json<<tick>> returns an <<tick>>agent_bridge_checked_in<<tick>> event
+  - if you need online delivery right now, that event actor id matches the principal actor
+  - if you need online delivery right now, that event <<tick>>expires_at<<tick>> is still in the future
 
 5. If you are using <<tick>>oar-agent-bridge<<tick>>, prefer:
 
@@ -193,17 +204,18 @@ Verification flow
 
 Concrete wake example
 
-1. Ensure the target bridge is running, the bridge doctor reports the registration as wakeable, and the workspace deployment is running <<tick>>oar-core<<tick>> with the embedded wake-routing sidecar enabled.
+1. Ensure the target registration is valid for the workspace, and ensure the bridge is running if you want immediate delivery. The workspace deployment must also be running <<tick>>oar-core<<tick>> with the embedded wake-routing sidecar enabled.
 2. Post a thread message containing <<tick>>@<handle><<tick>>, for example:
 
   @<handle> summarize the latest onboarding blockers.
 
 3. Expected durable trace:
-  - existing <<tick>>message_posted<<tick>>
-  - new <<tick>>agent_wakeup_requested<<tick>>
-  - new <<tick>>agent_wakeup_claimed<<tick>>
-  - new bridge reply <<tick>>message_posted<<tick>>
-  - new <<tick>>agent_wakeup_completed<<tick>>
+- existing <<tick>>message_posted<<tick>>
+- new <<tick>>agent_wakeup_requested<<tick>>
+- if online, new <<tick>>agent_wakeup_claimed<<tick>>
+- if online, new bridge reply <<tick>>message_posted<<tick>>
+- if online, new <<tick>>agent_wakeup_completed<<tick>>
+- if offline, the <<tick>>agent_wakeup_requested<<tick>> stays pending until the bridge later claims it
 
 Common failure modes
 
@@ -211,8 +223,8 @@ Common failure modes
 - missing registration: <<tick>>agentreg.<handle><<tick>> does not exist
 - registration actor mismatch: the registration doc points at a different actor
 - workspace not bound: registration exists but is not enabled for this workspace
-- bridge not checked in: the registration is still pending
-- stale bridge check-in: the bridge stopped refreshing readiness
+- bridge not checked in: the registration may still be pending, or the bridge may simply be offline for immediate delivery
+- stale bridge check-in: the bridge stopped refreshing readiness, so delivery is queued until it returns
 - wake-routing sidecar unavailable: the workspace deployment is not currently routing tagged messages
 - wrong workspace id: the registration uses a slug or another id that does not match the workspace deployment
 

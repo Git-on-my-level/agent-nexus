@@ -20,8 +20,9 @@ What changed
 - The Python package still owns runtime behavior:
   - <<tick>>oar-agent-bridge auth register<<tick>>
   - <<tick>>oar-agent-bridge bridge run<<tick>> under the hood
+  - <<tick>>oar-agent-bridge notifications list|read|dismiss<<tick>> for bridge-local pull flows
 - The workspace wake-routing service is deployment-owned and runs inside <<tick>>oar-core<<tick>>, not through <<tick>>oar bridge<<tick>>.
-- Registrations are not wakeable until the bridge has actually checked in.
+- Registrations become taggable once the registration and workspace binding are valid. Fresh bridge check-in only controls whether delivery is immediate.
 
 Install on a fresh machine with only <<tick>>oar<<tick>>
 
@@ -60,7 +61,7 @@ These templates intentionally default the agent lifecycle to:
 - <<tick>>checkin_interval_seconds = 60<<tick>>
 - <<tick>>checkin_ttl_seconds = 300<<tick>>
 
-That is the guardrail: humans should not tag an agent until the bridge has checked in and moved the registration to an active, fresh state.
+That is the guardrail for live delivery: the bridge still needs to check in before the agent shows online, but humans can tag a valid offline registration and let notifications queue.
 
 Workspace id source of truth
 
@@ -93,41 +94,46 @@ First-time agent-host path
 
   oar bridge start --config ./agent.toml
 
-6. Confirm the process and readiness state before humans use <<tick>>@handle<<tick>>:
+6. Confirm the process and readiness state before expecting immediate delivery:
 
   oar bridge status --config ./agent.toml
   oar bridge doctor --config ./agent.toml
 
   Use <<tick>>oar bridge logs --config ./agent.toml<<tick>> when you need the recent daemon output, and <<tick>>oar bridge restart --config ./agent.toml<<tick>> if you change config or recover from a stale process.
 
-  The doctor should report both adapter readiness and the registration as wakeable. If it still says pending, stale, or adapter probe failed, fix that first.
+  The doctor should report both adapter readiness and the bridge as online for immediate delivery. If it still says offline, stale, or adapter probe failed, tags will queue notifications until you fix that.
 
 7. Post a test wake message containing <<tick>>@<handle><<tick>>.
 
 8. Confirm the durable trace:
   - <<tick>>message_posted<<tick>>
   - <<tick>>agent_wakeup_requested<<tick>>
-  - <<tick>>agent_wakeup_claimed<<tick>>
-  - bridge reply <<tick>>message_posted<<tick>>
-  - <<tick>>agent_wakeup_completed<<tick>>
+  - if online, <<tick>>agent_wakeup_claimed<<tick>>
+  - if online, bridge reply <<tick>>message_posted<<tick>>
+  - if online, <<tick>>agent_wakeup_completed<<tick>>
+  - if offline, the notification remains queued until the bridge reconnects
 
-9. If the bridge is wakeable but tagged delivery still fails, hand off to the workspace operator to inspect the embedded wake-routing sidecar in <<tick>>oar-core<<tick>>.
+9. Pull or dismiss queued notifications directly when needed:
+
+  oar notifications list --status unread
+  oar notifications dismiss --wakeup-id <wakeup-id>
+  oar-agent-bridge notifications list --config ./agent.toml --status unread
+
+10. If the bridge is online but tagged delivery still fails, hand off to the workspace operator to inspect the embedded wake-routing sidecar in <<tick>>oar-core<<tick>>.
 
 Lifecycle note
 
-- <<tick>>oar-agent-bridge registration apply<<tick>> writes the registration document, but that alone does not make the agent taggable.
+- <<tick>>oar-agent-bridge registration apply<<tick>> writes the registration document, but the bridge runtime still owns live presence updates.
 - The bridge runtime refreshes registration readiness on check-in.
-- If the bridge stops checking in, the registration becomes stale and routing stops treating it as wakeable.
+- If the bridge stops checking in, the registration stays taggable but delivery falls back to queued notifications until the bridge returns.
 - The preferred operational path is to manage the bridge daemon with <<tick>>oar bridge start|stop|restart|status|logs<<tick>>, not ad hoc shell backgrounding.
 
 Troubleshooting
 
 - <<tick>>oar-agent-bridge: command not found<<tick>>:
   - run <<tick>>oar bridge install<<tick>> or add the managed wrapper directory to PATH
-- bridge doctor says registration is pending:
-  - the bridge has not checked in yet; start <<tick>>oar bridge start --config ./agent.toml<<tick>>
-- bridge doctor says registration is stale:
-  - the bridge stopped checking in; run <<tick>>oar bridge restart --config ./agent.toml<<tick>> and verify the config points at the right workspace
+- bridge doctor says the bridge is offline:
+  - the bridge has not checked in yet or is no longer refreshing; start or restart <<tick>>oar bridge start --config ./agent.toml<<tick>> and verify the config points at the right workspace
 - wake request is durable but never claimed:
   - the bridge is offline, the embedded wake-routing sidecar in <<tick>>oar-core<<tick>> is unhealthy, or <<tick>>workspace_id<<tick>> is wrong
 - principal exists but wake still fails:

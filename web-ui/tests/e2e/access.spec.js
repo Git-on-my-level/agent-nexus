@@ -240,12 +240,12 @@ test("does not repeat the username in principal rows", async ({ page }) => {
   await expect(
     page.getByText("agent via public_key", { exact: true }),
   ).toBeVisible();
-  const wakeableBadge = page.getByRole("button", { name: "Wakeable" });
-  await expect(wakeableBadge).toBeVisible();
-  await wakeableBadge.click();
+  const onlineBadge = page.getByRole("button", { name: "Online" });
+  await expect(onlineBadge).toBeVisible();
+  await onlineBadge.click();
   await expect(
     page.getByText(
-      "Wakeable for bound workspace local, but this page has no durable workspace ID to confirm the current workspace match.",
+      "Online for bound workspace local, but this page has no durable workspace ID to confirm the current workspace match.",
       { exact: true },
     ),
   ).toBeVisible();

@@ -1159,6 +1159,61 @@ var CommandRegistry = []CommandSpec{
 		},
 	},
 	{
+		CommandID: "notifications.dismiss",
+		CLIPath:   "notifications dismiss",
+		Group:     "notifications",
+		Method:    "POST",
+		Path:      "/agent-notifications/dismiss",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"events"},
+		Adjacent:  []string{"notifications.list", "notifications.read"},
+		Examples: []Example{
+			{
+				Title:   "Dismiss one notification",
+				Command: "oar notifications dismiss --wakeup-id wake_123 --json",
+			},
+		},
+	},
+	{
+		CommandID: "notifications.list",
+		CLIPath:   "notifications list",
+		Group:     "notifications",
+		Method:    "GET",
+		Path:      "/agent-notifications",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"events", "derived-views"},
+		Adjacent:  []string{"notifications.dismiss", "notifications.read"},
+		Examples: []Example{
+			{
+				Title:   "List unread notifications",
+				Command: "oar notifications list --status unread --json",
+			},
+			{
+				Title:   "List oldest unread first",
+				Command: "oar notifications list --status unread --order asc --json",
+			},
+		},
+	},
+	{
+		CommandID: "notifications.read",
+		CLIPath:   "notifications read",
+		Group:     "notifications",
+		Method:    "POST",
+		Path:      "/agent-notifications/read",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"events"},
+		Adjacent:  []string{"notifications.dismiss", "notifications.list"},
+		Examples: []Example{
+			{
+				Title:   "Mark one notification read",
+				Command: "oar notifications read --wakeup-id wake_123 --json",
+			},
+		},
+	},
+	{
 		CommandID: "packets.receipts.create",
 		CLIPath:   "packets receipts create",
 		Group:     "packets",
@@ -1734,6 +1789,18 @@ func (c *Client) MetaReadyz(ctx context.Context, opts RequestOptions) (*http.Res
 
 func (c *Client) MetaVersion(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "meta.version", nil, opts)
+}
+
+func (c *Client) NotificationsDismiss(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "notifications.dismiss", nil, opts)
+}
+
+func (c *Client) NotificationsList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "notifications.list", nil, opts)
+}
+
+func (c *Client) NotificationsRead(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "notifications.read", nil, opts)
 }
 
 func (c *Client) PacketsReceiptsCreate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
