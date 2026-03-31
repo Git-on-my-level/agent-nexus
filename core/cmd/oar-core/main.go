@@ -305,17 +305,6 @@ func main() {
 			ListMessagePostedAfter: func(ctx context.Context, cursor primitives.EventCursor, limit int) ([]map[string]any, error) {
 				return primitiveStore.ListEventsAfter(ctx, primitives.EventListFilter{Types: []string{router.MessagePostedEvent}}, cursor, limit)
 			},
-			GetRegistrationContent: func(ctx context.Context, documentID string) (map[string]any, error) {
-				_, revision, err := primitiveStore.GetDocument(ctx, documentID)
-				if err != nil {
-					return nil, err
-				}
-				content, ok := revision["content"].(map[string]any)
-				if !ok {
-					return nil, fmt.Errorf("document %s content is not structured", documentID)
-				}
-				return content, nil
-			},
 			GetEvent:  primitiveStore.GetEvent,
 			GetThread: primitiveStore.GetThread,
 			CreateArtifact: func(ctx context.Context, actorID string, artifact map[string]any, content any, contentType string) error {

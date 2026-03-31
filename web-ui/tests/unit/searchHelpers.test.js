@@ -71,6 +71,11 @@ describe("searchHelpers", () => {
     it("calls coreClient.listDocuments with query and limit", async () => {
       const mockDocs = [
         { id: "doc-1", title: "Test Document" },
+        {
+          id: "agentreg.hermes",
+          title: "Agent registration @hermes",
+          labels: ["agent-registration"],
+        },
         { id: "doc-2", title: "Another Document" },
       ];
       coreClient.listDocuments.mockResolvedValue({ documents: mockDocs });
@@ -81,7 +86,10 @@ describe("searchHelpers", () => {
         q: "test",
         limit: 15,
       });
-      expect(result).toEqual(mockDocs);
+      expect(result).toEqual([
+        { id: "doc-1", title: "Test Document" },
+        { id: "doc-2", title: "Another Document" },
+      ]);
     });
 
     it("uses default limit of 20 when not specified", async () => {

@@ -26,7 +26,9 @@ describe("wakeRegistrationMessage", () => {
     expect(message).toContain(
       "Use the bridge kind your agent runtime supports.",
     );
-    expect(message).toContain("This writes agentreg.m4-hermes");
+    expect(message).toContain(
+      "This updates @m4-hermes's wake registration on its principal",
+    );
   });
 
   it("falls back to placeholders when context is missing", () => {
@@ -35,6 +37,6 @@ describe("wakeRegistrationMessage", () => {
     expect(message).toContain("<OAR_WORKSPACE_URL>");
     expect(message).toContain("--workspace-id <workspace-id>");
     expect(message).toContain("--handle <handle>");
-    expect(message).toContain("agentreg.<handle>");
+    expect(message).toContain("@<handle>'s wake registration");
   });
 });

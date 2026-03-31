@@ -38,14 +38,15 @@ const (
 type Option func(*Store)
 
 type Agent struct {
-	AgentID       string  `json:"agent_id"`
-	Username      string  `json:"username"`
-	ActorID       string  `json:"actor_id"`
-	Revoked       bool    `json:"revoked"`
-	CreatedAt     string  `json:"created_at"`
-	UpdatedAt     string  `json:"updated_at"`
-	PrincipalKind *string `json:"principal_kind,omitempty"`
-	AuthMethod    *string `json:"auth_method,omitempty"`
+	AgentID       string             `json:"agent_id"`
+	Username      string             `json:"username"`
+	ActorID       string             `json:"actor_id"`
+	Revoked       bool               `json:"revoked"`
+	CreatedAt     string             `json:"created_at"`
+	UpdatedAt     string             `json:"updated_at"`
+	PrincipalKind *string            `json:"principal_kind,omitempty"`
+	AuthMethod    *string            `json:"auth_method,omitempty"`
+	Registration  *AgentRegistration `json:"registration,omitempty"`
 }
 
 type AgentKey struct {
@@ -615,14 +616,15 @@ func (s *Store) GetAgent(ctx context.Context, agentID string) (Agent, error) {
 		principalKindValue string
 		authMethodValue    string
 		revokedRaw         sql.NullString
+		metadataJSON       string
 	)
 	err := s.db.QueryRowContext(
 		ctx,
-		fmt.Sprintf(`SELECT id, username, actor_id, %s, %s, created_at, updated_at, revoked_at
+		fmt.Sprintf(`SELECT id, username, actor_id, %s, %s, created_at, updated_at, revoked_at, metadata_json
 		 FROM agents
 		 WHERE id = ?`, principalKindExpr("agents"), authMethodExpr("agents")),
 		agentID,
-	).Scan(&agent.AgentID, &agent.Username, &agent.ActorID, &principalKindValue, &authMethodValue, &agent.CreatedAt, &agent.UpdatedAt, &revokedRaw)
+	).Scan(&agent.AgentID, &agent.Username, &agent.ActorID, &principalKindValue, &authMethodValue, &agent.CreatedAt, &agent.UpdatedAt, &revokedRaw, &metadataJSON)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Agent{}, ErrAgentNotFound
@@ -633,6 +635,11 @@ func (s *Store) GetAgent(ctx context.Context, agentID string) (Agent, error) {
 	agent.Revoked = revokedRaw.Valid
 	agent.PrincipalKind = ptrString(strings.TrimSpace(principalKindValue))
 	agent.AuthMethod = ptrString(strings.TrimSpace(authMethodValue))
+	registration, err := registrationFromMetadataJSON(metadataJSON)
+	if err != nil {
+		return Agent{}, fmt.Errorf("query agent registration: %w", err)
+	}
+	agent.Registration = registration
 
 	return agent, nil
 }
@@ -771,6 +778,94 @@ func (s *Store) UpdateUsername(ctx context.Context, agentID string, username str
 		return Agent{}, fmt.Errorf("commit update username transaction: %w", err)
 	}
 
+	return s.GetAgent(ctx, agentID)
+}
+
+func (s *Store) UpdateRegistration(ctx context.Context, agentID string, registration AgentRegistration) (Agent, error) {
+	if s == nil || s.db == nil {
+		return Agent{}, fmt.Errorf("auth store database is not initialized")
+	}
+
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" {
+		return Agent{}, ErrAgentNotFound
+	}
+
+	nowText := time.Now().UTC().Format(time.RFC3339Nano)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Agent{}, fmt.Errorf("begin update registration transaction: %w", err)
+	}
+
+	var (
+		username     string
+		actorID      string
+		authMethod   string
+		metadataJSON string
+	)
+	if err := tx.QueryRowContext(
+		ctx,
+		fmt.Sprintf(`SELECT a.username, a.actor_id, %s, a.metadata_json FROM agents a WHERE a.id = ?`, authMethodExpr("a")),
+		agentID,
+	).Scan(&username, &actorID, &authMethod, &metadataJSON); err != nil {
+		_ = tx.Rollback()
+		if errors.Is(err, sql.ErrNoRows) {
+			return Agent{}, ErrAgentNotFound
+		}
+		return Agent{}, fmt.Errorf("query agent registration target: %w", err)
+	}
+	if strings.TrimSpace(authMethod) == AuthMethodControlPlane {
+		_ = tx.Rollback()
+		return Agent{}, fmt.Errorf("%w: control-plane-backed principals cannot modify workspace-local registration state", ErrInvalidRequest)
+	}
+
+	normalized := normalizeAgentRegistration(registration)
+	if normalized.Handle == "" {
+		normalized.Handle = strings.TrimSpace(username)
+	}
+	if normalized.Handle != strings.TrimSpace(username) {
+		_ = tx.Rollback()
+		return Agent{}, fmt.Errorf("%w: registration.handle must match the authenticated agent username", ErrInvalidRequest)
+	}
+	if normalized.ActorID == "" {
+		normalized.ActorID = strings.TrimSpace(actorID)
+	}
+	if normalized.ActorID != strings.TrimSpace(actorID) {
+		_ = tx.Rollback()
+		return Agent{}, fmt.Errorf("%w: registration.actor_id must match the authenticated agent actor_id", ErrInvalidRequest)
+	}
+	normalized.UpdatedAt = nowText
+
+	nextMetadataJSON, err := mergeRegistrationMetadataJSON(metadataJSON, normalized)
+	if err != nil {
+		_ = tx.Rollback()
+		return Agent{}, fmt.Errorf("merge registration metadata: %w", err)
+	}
+	result, err := tx.ExecContext(
+		ctx,
+		`UPDATE agents
+		 SET metadata_json = ?, updated_at = ?
+		 WHERE id = ?`,
+		nextMetadataJSON,
+		nowText,
+		agentID,
+	)
+	if err != nil {
+		_ = tx.Rollback()
+		return Agent{}, fmt.Errorf("update agent registration: %w", err)
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		_ = tx.Rollback()
+		return Agent{}, fmt.Errorf("read update registration rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		_ = tx.Rollback()
+		return Agent{}, ErrAgentNotFound
+	}
+	if err := tx.Commit(); err != nil {
+		return Agent{}, fmt.Errorf("commit update registration transaction: %w", err)
+	}
 	return s.GetAgent(ctx, agentID)
 }
 
@@ -1065,8 +1160,9 @@ func (s *Store) getPrincipalSummaryTx(ctx context.Context, tx *sql.Tx, agentID s
 
 func (s *Store) getPrincipalSummaryQueryRow(ctx context.Context, queryRow func(context.Context, string, ...any) *sql.Row, agentID string) (AuthPrincipalSummary, error) {
 	var (
-		item       AuthPrincipalSummary
-		revokedRaw sql.NullString
+		item         AuthPrincipalSummary
+		revokedRaw   sql.NullString
+		metadataJSON string
 	)
 	err := queryRow(
 		ctx,
@@ -1079,7 +1175,8 @@ func (s *Store) getPrincipalSummaryQueryRow(ctx context.Context, queryRow func(c
 			a.created_at,
 			%s,
 			a.updated_at,
-			a.revoked_at
+			a.revoked_at,
+			a.metadata_json
 		 FROM agents a
 		 WHERE a.id = ?`, principalKindExpr("a"), authMethodExpr("a"), principalLastSeenExpr("a")),
 		agentID,
@@ -1093,6 +1190,7 @@ func (s *Store) getPrincipalSummaryQueryRow(ctx context.Context, queryRow func(c
 		&item.LastSeenAt,
 		&item.UpdatedAt,
 		&revokedRaw,
+		&metadataJSON,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -1104,6 +1202,11 @@ func (s *Store) getPrincipalSummaryQueryRow(ctx context.Context, queryRow func(c
 	if revokedRaw.Valid {
 		item.RevokedAt = &revokedRaw.String
 	}
+	registration, err := registrationFromMetadataJSON(metadataJSON)
+	if err != nil {
+		return AuthPrincipalSummary{}, fmt.Errorf("query auth principal registration: %w", err)
+	}
+	item.Registration = registration
 	return item, nil
 }
 

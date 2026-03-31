@@ -66,7 +66,7 @@ def cmd_auth_register(args: argparse.Namespace) -> int:
         }
         if args.apply_registration and config.agent is not None:
             reg_result = apply_registration(config, auth, build_client(config, auth))
-            result["registration_document_id"] = reg_result.document_id
+            result["registration_agent_id"] = reg_result.agent_id
         print(json.dumps(result, indent=2))
         return 0
     finally:

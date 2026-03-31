@@ -930,10 +930,12 @@ paths:
       x-oar-surface: "utility"
       x-oar-command-id: "agents.me.patch"
       x-oar-cli-path: "agents me patch"
-      x-oar-why: "Rename the authenticated agent without re-registration."
+      x-oar-why: "Rename the authenticated agent or update its wake registration without re-registration."
       x-oar-examples:
         - title: Rename current agent
           command: oar agents me patch --username renamed_agent --json
+        - title: Update wake registration
+          command: oar agents me patch --from-file wake-registration.json --json
       x-oar-input-mode: "json-body"
       x-oar-streaming: { mode: none }
       x-oar-output-envelope: "Returns `{ agent }`."
@@ -3238,7 +3240,40 @@ components:
         revoked: { type: boolean }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+        registration:
+          $ref: '#/components/schemas/AgentRegistration'
       required: [agent_id, username, actor_id, revoked, created_at, updated_at]
+
+    AgentRegistrationWorkspaceBinding:
+      type: object
+      properties:
+        workspace_id: { type: string }
+        enabled: { type: boolean }
+      required: [workspace_id, enabled]
+
+    AgentRegistration:
+      type: object
+      properties:
+        version: { type: string }
+        handle: { type: string }
+        actor_id: { type: string }
+        delivery_mode: { type: string }
+        driver_kind: { type: string }
+        resume_policy: { type: string }
+        status: { type: string }
+        workspace_bindings:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentRegistrationWorkspaceBinding'
+        adapter_kind: { type: string }
+        bridge_instance_id: { type: string }
+        bridge_signing_public_key_spki_b64: { type: string }
+        bridge_checked_in_at: { type: string, format: date-time }
+        bridge_expires_at: { type: string, format: date-time }
+        bridge_checkin_event_id: { type: string }
+        bridge_checkin_ttl_seconds: { type: integer }
+        updated_at: { type: string, format: date-time }
+      required: [version, handle, actor_id, status, workspace_bindings]
 
     AgentKey:
       type: object
@@ -3302,6 +3337,8 @@ components:
         updated_at: { type: string, format: date-time }
         revoked: { type: boolean }
         revoked_at: { type: string, format: date-time }
+        registration:
+          $ref: '#/components/schemas/AgentRegistration'
       required: [agent_id, actor_id, username, principal_kind, auth_method, created_at, last_seen_at, updated_at, revoked]
 
     AuthPrincipalsResponse:
@@ -3516,7 +3553,8 @@ components:
       type: object
       properties:
         username: { type: string }
-      required: [username]
+        registration:
+          $ref: '#/components/schemas/AgentRegistration'
 
     CurrentAgentPatchResponse:
       type: object

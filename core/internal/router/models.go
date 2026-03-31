@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"strings"
 	"time"
+
+	"organization-autorunner-core/internal/auth"
 )
 
 const (
@@ -18,34 +20,8 @@ const (
 	MessagePostedEvent   = "message_posted"
 )
 
-type WorkspaceBinding struct {
-	WorkspaceID string `json:"workspace_id"`
-	Enabled     bool   `json:"enabled"`
-}
-
-type AgentRegistration struct {
-	Handle                        string             `json:"handle"`
-	ActorID                       string             `json:"actor_id"`
-	Status                        string             `json:"status"`
-	WorkspaceBindings             []WorkspaceBinding `json:"workspace_bindings"`
-	BridgeInstanceID              string             `json:"bridge_instance_id"`
-	BridgeSigningPublicKeySPKIB64 string             `json:"bridge_signing_public_key_spki_b64"`
-	BridgeCheckedInAt             string             `json:"bridge_checked_in_at"`
-	BridgeExpiresAt               string             `json:"bridge_expires_at"`
-	BridgeCheckinEventID          string             `json:"bridge_checkin_event_id"`
-}
-
-func (r AgentRegistration) SupportsWorkspace(workspaceID string) bool {
-	if strings.TrimSpace(workspaceID) == "" {
-		return false
-	}
-	for _, binding := range r.WorkspaceBindings {
-		if binding.Enabled && binding.WorkspaceID == workspaceID {
-			return true
-		}
-	}
-	return false
-}
+type WorkspaceBinding = auth.AgentRegistrationWorkspaceBinding
+type AgentRegistration = auth.AgentRegistration
 
 type AgentBridgeCheckin struct {
 	Handle            string `json:"handle"`
@@ -66,10 +42,6 @@ func (c AgentBridgeCheckin) ReadyForWorkspace(workspaceID string, now time.Time)
 		return false
 	}
 	return !expiresAt.Before(now.UTC())
-}
-
-func RegistrationDocumentID(handle string) string {
-	return "agentreg." + strings.TrimSpace(handle)
 }
 
 func WakeupRequestKey(workspaceID string, threadID string, messageEventID string, actorID string) string {

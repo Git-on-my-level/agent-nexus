@@ -10,7 +10,6 @@ from .models import (
     AgentBridgeCheckin,
     AgentRegistration,
     WorkspaceBinding,
-    registration_document_id,
 )
 from .oar_client import OARClient, OARClientError
 from .util import sha256_text, utc_after_seconds_iso, utc_now_iso, verify_bridge_checkin_signature
@@ -20,7 +19,7 @@ LOGGER = logging.getLogger(__name__)
 
 @dataclass(slots=True)
 class RegistrationApplyResult:
-    document_id: str
+    agent_id: str
     actor_id: str
     handle: str
     created_or_updated: str
@@ -33,7 +32,7 @@ class RegistrationApplyResult:
 
 @dataclass(slots=True)
 class RegistrationStatusResult:
-    document_id: str
+    agent_id: str
     handle: str
     actor_id: str
     registration_status: str
@@ -136,25 +135,13 @@ def apply_registration(
         bridge_checkin_event_id=bridge_checkin_event_id,
         bridge_checkin_ttl_seconds=config.agent.checkin_ttl_seconds,
     )
-    doc_id = registration_document_id(config.agent.handle)
-    payload = client.upsert_document(
-        doc_id,
-        document={
-            "document_id": doc_id,
-            "title": f"Agent registration @{config.agent.handle}",
-            "status": registration.status,
-            "labels": ["agent-registration", f"handle:{config.agent.handle}", f"actor:{state.actor_id}"],
-        },
-        content=registration.to_content(),
-        content_type="structured",
-        request_key=f"reg-{sha256_text(doc_id, state.actor_id, length=16)}",
-    )
-    LOGGER.info("Upserted registration document %s for @%s", doc_id, config.agent.handle)
+    payload = client.patch_current_agent(registration=registration.to_content())
+    LOGGER.info("Updated registration metadata for agent %s (@%s)", state.agent_id, config.agent.handle)
     return RegistrationApplyResult(
-        document_id=doc_id,
+        agent_id=state.agent_id,
         actor_id=state.actor_id,
         handle=config.agent.handle,
-        created_or_updated="upserted" if payload is not None else "unknown",
+        created_or_updated="updated" if payload is not None else "unknown",
         registration_status=registration.status,
         wakeable=registration.supports_workspace(config.oar.workspace_id) and registration.bridge_is_ready(),
         bridge_checkin_event_id=registration.bridge_checkin_event_id,
@@ -167,15 +154,13 @@ def registration_status(config: LoadedConfig, auth: AuthManager, client: OARClie
     if config.agent is None:
         raise ValueError("registration status requires an [agent] section in config")
     state = auth.require_state()
-    doc_id = registration_document_id(config.agent.handle)
     blockers: list[str] = []
-    try:
-        payload = client.get_document(doc_id)
-    except OARClientError as exc:
-        if exc.status_code != 404:
-            raise
+    payload = client.get_current_agent()
+    agent = payload.get("agent") if isinstance(payload, dict) else None
+    registration_payload = agent.get("registration") if isinstance(agent, dict) else None
+    if not isinstance(registration_payload, dict):
         return RegistrationStatusResult(
-            document_id=doc_id,
+            agent_id=state.agent_id,
             handle=config.agent.handle,
             actor_id=state.actor_id,
             registration_status="missing",
@@ -185,11 +170,9 @@ def registration_status(config: LoadedConfig, auth: AuthManager, client: OARClie
             bridge_checked_in_at="",
             bridge_expires_at="",
             wakeable=False,
-            blockers=[f"missing registration document {doc_id}"],
+            blockers=[f"missing registration for agent {state.agent_id}"],
         )
-    revision = payload.get("revision") or {}
-    content = revision.get("content") or {}
-    registration = AgentRegistration.from_content(content if isinstance(content, dict) else {})
+    registration = AgentRegistration.from_content(registration_payload)
     checkin_event_id = registration.bridge_checkin_event_id
     checkin: AgentBridgeCheckin | None = None
     if checkin_event_id:
@@ -241,7 +224,7 @@ def registration_status(config: LoadedConfig, auth: AuthManager, client: OARClie
     elif not checkin.is_ready_for_workspace(config.oar.workspace_id):
         blockers.append("bridge check-in is stale")
     return RegistrationStatusResult(
-        document_id=doc_id,
+        agent_id=state.agent_id,
         handle=config.agent.handle,
         actor_id=state.actor_id,
         registration_status=registration.status,

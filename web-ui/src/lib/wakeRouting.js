@@ -192,16 +192,19 @@ async function verifyBridgeProof(publicKeyB64, checkinContent) {
   }
 }
 
-export function registrationDocumentId(handle) {
-  const normalized = String(handle ?? "").trim();
-  return normalized ? `agentreg.${normalized}` : "";
-}
-
-export function bridgeCheckinEventId(registrationDoc) {
-  const content = documentContent(
+function principalRegistration(principal, registrationDoc = null) {
+  const registration = asObject(principal?.registration);
+  if (registration) {
+    return registration;
+  }
+  return documentContent(
     asObject(registrationLookup(registrationDoc))?.document,
   );
-  return String(content?.bridge_checkin_event_id ?? "").trim();
+}
+
+export function bridgeCheckinEventId(principal, registrationDoc = null) {
+  const registration = principalRegistration(principal, registrationDoc);
+  return String(registration?.bridge_checkin_event_id ?? "").trim();
 }
 
 export async function describeWakeRouting(
@@ -219,6 +222,7 @@ export async function describeWakeRouting(
   const actorId = String(principal?.actor_id ?? "").trim();
   const bindingTarget = String(workspaceId ?? "").trim();
   const lookup = registrationLookup(registrationDoc);
+  const content = principalRegistration(principal, registrationDoc);
 
   const base = {
     applicable: true,
@@ -266,30 +270,15 @@ export async function describeWakeRouting(
       ...base,
       state: "unregistered",
       badgeLabel: "Unregistered",
-      summary: `Missing registration document ${registrationDocumentId(handle)}.`,
+      summary: `Missing wake registration for @${handle}.`,
     };
   }
-
-  const documentMeta = asObject(asObject(lookup.document)?.document);
-  if (
-    String(documentMeta?.status ?? "").trim() === "tombstoned" ||
-    String(documentMeta?.tombstoned_at ?? "").trim() !== ""
-  ) {
-    return {
-      ...base,
-      state: "unregistered",
-      badgeLabel: "Unregistered",
-      summary: "Registration document is tombstoned.",
-    };
-  }
-
-  const content = documentContent(lookup.document);
   if (!content) {
     return {
       ...base,
       state: "unregistered",
       badgeLabel: "Unregistered",
-      summary: `Missing registration document ${registrationDocumentId(handle)}.`,
+      summary: `Missing wake registration for @${handle}.`,
     };
   }
 
@@ -300,7 +289,7 @@ export async function describeWakeRouting(
       state: "unknown",
       badgeLabel: "Unknown",
       badgeClass: "bg-slate-500/10 text-slate-300",
-      summary: `Registration doc handle does not match @${handle}.`,
+      summary: `Wake registration handle does not match @${handle}.`,
     };
   }
 

@@ -1,5 +1,3 @@
-import { registrationDocumentId } from "$lib/wakeRouting.js";
-
 export function buildWakeRegistrationMessage(baseUrl, workspaceId, handle) {
   const normalizedBaseUrl =
     String(baseUrl ?? "").trim() || "<OAR_WORKSPACE_URL>";
@@ -19,6 +17,6 @@ export function buildWakeRegistrationMessage(baseUrl, workspaceId, handle) {
     "",
     "Use the bridge kind your agent runtime supports.",
     "",
-    `This writes ${registrationDocumentId(normalizedHandle)} and starts bridge check-ins so @${normalizedHandle} can receive wakes immediately when online.`,
+    `This updates @${normalizedHandle}'s wake registration on its principal and starts bridge check-ins so it can receive wakes immediately when online.`,
   ].join("\n");
 }

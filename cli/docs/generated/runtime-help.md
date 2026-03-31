@@ -111,7 +111,7 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 - `bridge install` (local-helper): Install `oar-agent-bridge` into a dedicated Python 3.11+ virtualenv and expose a PATH wrapper.
 - `bridge import-auth` (local-helper): Copy an existing `oar` profile and key into bridge auth state for one bridge config.
 - `bridge init-config` (local-helper): Write a minimal agent bridge TOML config with the pending-until-check-in lifecycle baked in.
-- `bridge workspace-id` (local-helper): Discover durable workspace ids from an existing agent registration document.
+- `bridge workspace-id` (local-helper): Discover durable workspace ids from an existing agent wake registration.
 - `bridge doctor` (local-helper): Validate bridge install, config presence, and registration readiness without starting the daemon.
 - `bridge start` (local-helper): Start a managed bridge daemon for one config file.
 - `bridge stop` (local-helper): Stop a managed bridge daemon for one config file.
@@ -347,7 +347,7 @@ That is the guardrail for live delivery: the bridge still needs to check in befo
 Workspace id source of truth
 
 - `<workspace-id>` must be the durable workspace id for the deployment, not a slug and not a UI path segment.
-- If an `agentreg.<handle>` document already exists, use `oar bridge workspace-id --handle <handle>` to read its enabled workspace bindings first.
+- If the agent already has wake registration metadata, use `oar bridge workspace-id --handle <handle>` to read its enabled workspace bindings first.
 - If the workspace deployment already documents the configured `workspace_id`, copy that exact value.
 - If the deployment is driven by control-plane workspace records, copy the durable `workspace_id` from that workspace record, not the slug.
 - The bundled example value `ws_main` is only a sample.
@@ -404,7 +404,7 @@ First-time agent-host path
 
 Lifecycle note
 
-- `oar-agent-bridge registration apply` writes the registration document, but the bridge runtime still owns live presence updates.
+- `oar-agent-bridge registration apply` updates the agent principal registration, but the bridge runtime still owns live presence updates.
 - The bridge runtime refreshes registration readiness on check-in.
 - If the bridge stops checking in, the registration stays taggable but delivery falls back to queued notifications until the bridge returns.
 - The preferred operational path is to manage the bridge daemon with `oar bridge start|stop|restart|status|logs`, not ad hoc shell backgrounding.
@@ -418,7 +418,7 @@ Troubleshooting
 - wake request is durable but never claimed:
   - the bridge is offline, the embedded wake-routing sidecar in `oar-core` is unhealthy, or `workspace_id` is wrong
 - principal exists but wake still fails:
-  - inspect `agentreg.<handle>` for actor mismatch, disabled status, stale check-in, or missing workspace binding
+  - inspect the principal registration for actor mismatch, disabled status, stale check-in, or missing workspace binding
 
 Related docs
 
@@ -439,8 +439,8 @@ Use this when you want humans or agents to wake other agents from thread message
 How it works
 
 - Wake routing is provided by a workspace-owned sidecar hosted inside `oar-core`, not by the per-agent CLI.
-- The durable registration document id is `agentreg.<handle>`.
-- The bridge-owned readiness proof is the latest `agent_bridge_checked_in` event referenced by `agentreg.<handle>`.
+- The durable wake registration now lives on the agent principal metadata, not in `docs`.
+- The bridge-owned readiness proof is the latest `agent_bridge_checked_in` event referenced by that principal registration.
 - A tagged message becomes durable wake work when the target agent is registered for the workspace. Bridge readiness only changes whether delivery is immediate or queued.
 
 What counts as taggable
@@ -448,8 +448,8 @@ What counts as taggable
 - principal kind is `agent`
 - principal is not revoked
 - principal has a username/handle
-- registration document `agentreg.<handle>` exists
-- registration document `actor_id` matches the principal actor
+- principal has wake registration metadata
+- registration `actor_id` matches the principal actor
 - registration has an enabled binding for the current workspace
 - registration status is `active`
 
@@ -475,12 +475,12 @@ How agents discover it
 - Read this topic with `oar meta doc wake-routing`.
 - Read the preferred runtime path with `oar meta doc agent-bridge`.
 - Use `oar help bridge` to bootstrap the per-agent bridge runtime from the main CLI.
-- Use `oar bridge workspace-id --handle <handle>` when an existing registration doc is the easiest source of truth for the durable workspace id.
+- Use `oar bridge workspace-id --handle <handle>` when an existing registration is the easiest source of truth for the durable workspace id.
 - Use `oar bridge import-auth --config ./agent.toml --from-profile <agent>` when matching `oar` auth already exists.
 - Use `oar notifications list --status unread` to inspect queued notifications with the main CLI.
 - Use `oar notifications dismiss --wakeup-id <wakeup-id>` to dismiss a notification so it no longer wakes the bridge.
 - Use `oar auth whoami` to confirm your current username and actor id.
-- Use `oar docs get --document-id agentreg.<handle> --json` to inspect a registration document directly.
+- Use `oar auth principals list --json` to inspect principal registrations directly.
 
 Preferred path when you are using `oar-agent-bridge`
 
@@ -502,7 +502,7 @@ Preferred path when you are using `oar-agent-bridge`
 
   oar-agent-bridge auth register --config ./agent.toml --invite-token <token> --apply-registration
 
-  If auth already exists and you only need to rewrite the registration document:
+  If auth already exists and you only need to rewrite the principal registration:
 
   oar-agent-bridge registration apply --config <agent.toml>
 
@@ -526,7 +526,7 @@ Preferred path when you are using `oar-agent-bridge`
 
 Generic OAR CLI lifecycle
 
-If you are writing the document manually, only create the pending registration skeleton. Manual docs writes do not replace the live bridge-owned check-in event.
+If you are writing registration state manually, update the agent principal registration only. Manual principal updates do not replace the live bridge-owned check-in event.
 
 1. Confirm the identity you are registering:
 
@@ -536,7 +536,7 @@ If you are writing the document manually, only create the pending registration s
 
 2. Resolve the durable workspace id you want to enable:
 
-  - If an existing registration doc is available, start with `oar bridge workspace-id --handle <handle>` or `oar bridge workspace-id --document-id agentreg.<handle>`.
+  - If an existing registration is available, start with `oar bridge workspace-id --handle <handle>` or the legacy alias `oar bridge workspace-id --document-id agentreg.<handle>`.
   - If the workspace deployment already documents the configured `workspace_id`, copy that exact value.
   - If your deployment is driven by control-plane workspace records, copy the durable workspace id from that record, not the slug.
   - The bundled example value `ws_main` is only a sample.
@@ -545,18 +545,7 @@ If you are writing the document manually, only create the pending registration s
 3. Create a first-time registration payload such as `wake-registration.json`:
 
   {
-    "document": {
-      "document_id": "agentreg.<handle>",
-      "title": "Agent registration @<handle>",
-      "status": "pending",
-      "labels": [
-        "agent-registration",
-        "handle:<handle>",
-        "actor:<actor-id>"
-      ]
-    },
-    "content_type": "structured",
-    "content": {
+    "registration": {
       "version": "agent-registration/v1",
       "handle": "<handle>",
       "actor_id": "<actor-id>",
@@ -575,16 +564,16 @@ If you are writing the document manually, only create the pending registration s
     }
   }
 
-4. For first-time registration, create the document:
+4. For first-time registration, patch the current authenticated agent:
 
-  oar docs create --from-file wake-registration.json --json
+  curl -X PATCH "$OAR_BASE_URL/agents/me" \
+    -H "Authorization: Bearer <access-token>" \
+    -H "Content-Type: application/json" \
+    --data @wake-registration.json
 
-5. If `agentreg.<handle>` already exists, update it instead of retrying create:
+5. If auth already exists, prefer the supported bridge-managed path instead of hand-patching:
 
-  oar docs get --document-id agentreg.<handle> --json
-  oar docs update --document-id agentreg.<handle> --from-file wake-registration-update.json --json
-
-6. If `docs create` returns `conflict`, inspect the existing document and update it instead of retrying create blindly.
+  oar-agent-bridge registration apply --config ./agent.toml
 
 Registration schema notes
 
@@ -599,7 +588,7 @@ Registration schema notes
   - that event payload also includes `proof_signature_b64`, which must verify against the registration's public proof key
 - `updated_at` is advisory metadata. Set it to the current UTC time when creating or updating the registration, or let bridge-managed flows populate it.
 - Do not hand-edit `status = "active"` before the bridge has actually checked in.
-- Do not try to hand-author the bridge readiness proof. The supported path is to let the running bridge emit `agent_bridge_checked_in` and rewrite the registration.
+- Do not try to hand-author the bridge readiness proof. The supported path is to let the running bridge emit `agent_bridge_checked_in` and refresh the registration.
 
 Verification flow
 
@@ -611,9 +600,9 @@ Verification flow
 
   oar auth principals list --json
 
-3. Read the registration document:
+3. Read the principal registration:
 
-  oar docs get --document-id agentreg.<handle> --json
+  oar auth principals list --json
 
 4. Verify all of the following:
   - principal kind is `agent`
@@ -648,8 +637,8 @@ Concrete wake example
 Common failure modes
 
 - unknown handle: no matching agent principal username exists
-- missing registration: `agentreg.<handle>` does not exist
-- registration actor mismatch: the registration doc points at a different actor
+- missing registration: the agent principal does not have wake registration metadata
+- registration actor mismatch: the registration points at a different actor
 - workspace not bound: registration exists but is not enabled for this workspace
 - bridge not checked in: the registration may still be pending, or the bridge may simply be offline for immediate delivery
 - stale bridge check-in: the bridge stopped refreshing readiness, so delivery is queued until it returns
@@ -937,13 +926,13 @@ Subcommands
   bridge restart      Restart a managed bridge daemon for one config
   bridge status       Inspect managed process state for one config
   bridge logs         Read recent log lines for one config
-  bridge workspace-id Read workspace ids from an existing registration document
+  bridge workspace-id Read workspace ids from an existing wake registration
   bridge doctor       Validate install/config/readiness without starting daemons
 
 Recommended order
 
 1. `oar bridge install`
-2. `oar bridge workspace-id --handle <handle>` if a registration doc already exists and you need the real durable workspace id
+2. `oar bridge workspace-id --handle <handle>` if a registration already exists and you need the real durable workspace id
 3. `oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle>`
 4. `oar bridge import-auth --config ./agent.toml --from-profile <agent>` when matching `oar` auth already exists
 5. `oar-agent-bridge auth register ...` for the agent principal when auth does not already exist
@@ -3645,22 +3634,22 @@ Global flags:
 
 ## `bridge workspace-id`
 
-Discover durable workspace ids from an existing agent registration document.
+Discover durable workspace ids from an existing agent wake registration.
 
 ```text
 Local Help: bridge workspace-id
 
 - Kind: `local helper`
-- Summary: Discover durable workspace ids from an existing agent registration document.
-- Composition: Uses the active `oar` auth/profile to read `agentreg.<handle>` and extract enabled workspace bindings so bridge bootstrap can reuse the real durable workspace id instead of guessing.
-- JSON body: `document_id`, `handle`, `actor_id`, `registration_status`, `workspace_ids`, `workspace_bindings`
+- Summary: Discover durable workspace ids from an existing agent wake registration.
+- Composition: Uses the active `oar` auth/profile to read agent principal registration metadata and extract enabled workspace bindings so bridge bootstrap can reuse the real durable workspace id instead of guessing.
+- JSON body: `agent_id`, `handle`, `actor_id`, `registration_status`, `workspace_ids`, `workspace_bindings`
 - Examples:
   - `oar --agent agent-a bridge workspace-id --handle hermes`
   - `oar bridge workspace-id --document-id agentreg.hermes`
 
 Flags:
-  --handle <name>              Agent handle whose `agentreg.<handle>` document should be inspected.
-  --document-id <id>           Registration document id to inspect directly. Defaults to `agentreg.<handle>`.
+  --handle <name>              Agent handle whose wake registration should be inspected.
+  --document-id <id>           Legacy registration document alias. Accepts only `agentreg.<handle>`.
 
 
 Global flags:

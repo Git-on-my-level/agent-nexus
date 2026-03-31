@@ -112,6 +112,14 @@ class OARClient:
     def get_current_agent(self) -> dict[str, Any]:
         return self.raw_request("GET", "/agents/me")
 
+    def patch_current_agent(self, *, username: str | None = None, registration: dict[str, Any] | None = None) -> dict[str, Any]:
+        body: dict[str, Any] = {}
+        if username is not None:
+            body["username"] = username
+        if registration is not None:
+            body["registration"] = registration
+        return self.raw_request("PATCH", "/agents/me", json_body=body)
+
     def get_document(self, document_id: str) -> dict[str, Any]:
         return self.raw_request("GET", f"/docs/{document_id}")
 

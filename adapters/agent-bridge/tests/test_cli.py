@@ -79,7 +79,7 @@ def test_cmd_registration_status_serializes_slots_dataclass(monkeypatch, capsys)
         cli_module,
         "registration_status",
         lambda _config, _auth, _client: RegistrationStatusResult(
-            document_id="agentreg.hermes",
+            agent_id="agent-hermes",
             handle="hermes",
             actor_id="actor-1",
             registration_status="active",
@@ -98,7 +98,7 @@ def test_cmd_registration_status_serializes_slots_dataclass(monkeypatch, capsys)
     assert result == 0
     assert closed["value"] is True
     captured = capsys.readouterr()
-    assert '"document_id": "agentreg.hermes"' in captured.out
+    assert '"agent_id": "agent-hermes"' in captured.out
     assert '"wakeable": true' in captured.out
 
 

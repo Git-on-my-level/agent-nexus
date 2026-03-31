@@ -4,7 +4,6 @@ import { createSign, generateKeyPairSync } from "node:crypto";
 import {
   bridgeCheckinEventId,
   describeWakeRouting,
-  registrationDocumentId,
 } from "../../src/lib/wakeRouting.js";
 
 const bridgeProofKey = (() => {
@@ -58,21 +57,6 @@ function signCheckinPayload(content) {
     .toString("base64");
 }
 
-function registrationDoc(content) {
-  return {
-    state: "ok",
-    document: {
-      document: {
-        id: "agentreg.m4-hermes",
-        status: "active",
-      },
-      revision: {
-        content,
-      },
-    },
-  };
-}
-
 async function checkinEvent(content) {
   return {
     state: "ok",
@@ -100,15 +84,18 @@ describe("wakeRouting", () => {
   it("marks an agent online when the durable workspace id is bound", async () => {
     const { publicKeyB64 } = bridgeProofKey;
     const result = await describeWakeRouting(
-      principal,
-      registrationDoc({
-        handle: "m4-hermes",
-        actor_id: "actor-ops-ai",
-        status: "active",
-        bridge_signing_public_key_spki_b64: publicKeyB64,
-        bridge_checkin_event_id: "event-bridge-checkin-1",
-        workspace_bindings: [{ workspace_id: "ws-123", enabled: true }],
-      }),
+      {
+        ...principal,
+        registration: {
+          handle: "m4-hermes",
+          actor_id: "actor-ops-ai",
+          status: "active",
+          bridge_signing_public_key_spki_b64: publicKeyB64,
+          bridge_checkin_event_id: "event-bridge-checkin-1",
+          workspace_bindings: [{ workspace_id: "ws-123", enabled: true }],
+        },
+      },
+      null,
       "ws-123",
       await checkinEvent({
         handle: "m4-hermes",
@@ -120,15 +107,15 @@ describe("wakeRouting", () => {
       }),
     );
 
-    expect(registrationDocumentId("m4-hermes")).toBe("agentreg.m4-hermes");
     expect(
-      bridgeCheckinEventId(
-        registrationDoc({
+      bridgeCheckinEventId({
+        ...principal,
+        registration: {
           handle: "m4-hermes",
           actor_id: "actor-ops-ai",
           bridge_checkin_event_id: "event-bridge-checkin-1",
-        }),
-      ),
+        },
+      }),
     ).toBe("event-bridge-checkin-1");
     expect(result).toMatchObject({
       applicable: true,
@@ -151,7 +138,7 @@ describe("wakeRouting", () => {
       offline: false,
       state: "unregistered",
       badgeLabel: "Unregistered",
-      summary: "Missing registration document agentreg.m4-hermes.",
+      summary: "Missing wake registration for @m4-hermes.",
     });
 
     await expect(
@@ -169,15 +156,18 @@ describe("wakeRouting", () => {
     const { publicKeyB64 } = bridgeProofKey;
     await expect(
       describeWakeRouting(
-        principal,
-        registrationDoc({
-          handle: "m4-hermes",
-          actor_id: "actor-ops-ai",
-          status: "active",
-          bridge_signing_public_key_spki_b64: publicKeyB64,
-          bridge_checkin_event_id: "event-bridge-checkin-1",
-          workspace_bindings: [{ workspace_id: "ws-123", enabled: true }],
-        }),
+        {
+          ...principal,
+          registration: {
+            handle: "m4-hermes",
+            actor_id: "actor-ops-ai",
+            status: "active",
+            bridge_signing_public_key_spki_b64: publicKeyB64,
+            bridge_checkin_event_id: "event-bridge-checkin-1",
+            workspace_bindings: [{ workspace_id: "ws-123", enabled: true }],
+          },
+        },
+        null,
         "ws-123",
         { state: "error" },
       ),
@@ -195,15 +185,18 @@ describe("wakeRouting", () => {
   it("keeps healthy bridge registrations online when page workspace context is missing", async () => {
     const { publicKeyB64 } = bridgeProofKey;
     const result = await describeWakeRouting(
-      principal,
-      registrationDoc({
-        handle: "m4-hermes",
-        actor_id: "actor-ops-ai",
-        status: "active",
-        bridge_signing_public_key_spki_b64: publicKeyB64,
-        bridge_checkin_event_id: "event-bridge-checkin-1",
-        workspace_bindings: [{ workspace_id: "ws-123", enabled: true }],
-      }),
+      {
+        ...principal,
+        registration: {
+          handle: "m4-hermes",
+          actor_id: "actor-ops-ai",
+          status: "active",
+          bridge_signing_public_key_spki_b64: publicKeyB64,
+          bridge_checkin_event_id: "event-bridge-checkin-1",
+          workspace_bindings: [{ workspace_id: "ws-123", enabled: true }],
+        },
+      },
+      null,
       "",
       await checkinEvent({
         handle: "m4-hermes",
@@ -230,14 +223,17 @@ describe("wakeRouting", () => {
   it("keeps registered agents taggable but offline until the bridge checks in", async () => {
     const { publicKeyB64 } = bridgeProofKey;
     const result = await describeWakeRouting(
-      principal,
-      registrationDoc({
-        handle: "m4-hermes",
-        actor_id: "actor-ops-ai",
-        status: "pending",
-        bridge_signing_public_key_spki_b64: publicKeyB64,
-        workspace_bindings: [{ workspace_id: "ws-123", enabled: true }],
-      }),
+      {
+        ...principal,
+        registration: {
+          handle: "m4-hermes",
+          actor_id: "actor-ops-ai",
+          status: "pending",
+          bridge_signing_public_key_spki_b64: publicKeyB64,
+          workspace_bindings: [{ workspace_id: "ws-123", enabled: true }],
+        },
+      },
+      null,
       "ws-123",
       null,
     );
@@ -257,15 +253,18 @@ describe("wakeRouting", () => {
   it("treats stale bridge check-ins as offline", async () => {
     const { publicKeyB64 } = bridgeProofKey;
     const result = await describeWakeRouting(
-      principal,
-      registrationDoc({
-        handle: "m4-hermes",
-        actor_id: "actor-ops-ai",
-        status: "active",
-        bridge_signing_public_key_spki_b64: publicKeyB64,
-        bridge_checkin_event_id: "event-bridge-checkin-1",
-        workspace_bindings: [{ workspace_id: "ws-123", enabled: true }],
-      }),
+      {
+        ...principal,
+        registration: {
+          handle: "m4-hermes",
+          actor_id: "actor-ops-ai",
+          status: "active",
+          bridge_signing_public_key_spki_b64: publicKeyB64,
+          bridge_checkin_event_id: "event-bridge-checkin-1",
+          workspace_bindings: [{ workspace_id: "ws-123", enabled: true }],
+        },
+      },
+      null,
       "ws-123",
       await checkinEvent({
         handle: "m4-hermes",

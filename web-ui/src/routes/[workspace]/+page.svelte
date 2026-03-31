@@ -3,6 +3,7 @@
   import { onMount, onDestroy } from "svelte";
 
   import { coreClient } from "$lib/coreClient";
+  import { filterTopLevelDocuments } from "$lib/documentVisibility";
   import {
     buildInboxCategorySummary,
     buildThreadHealthSummary,
@@ -102,10 +103,14 @@
 
   function toSectionState(result, key, fallbackLabel) {
     if (result.status === "fulfilled") {
+      const items =
+        key === "documents"
+          ? filterTopLevelDocuments(result.value?.[key])
+          : (result.value?.[key] ?? []);
       return {
         status: "ready",
         error: "",
-        items: result.value?.[key] ?? [],
+        items,
       };
     }
 

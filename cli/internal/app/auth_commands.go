@@ -540,7 +540,7 @@ func authWakeRoutingHint(username string) string {
 		return "Wake registration help: oar help bridge; oar meta doc agent-bridge; oar meta doc wake-routing"
 	}
 	return fmt.Sprintf(
-		"Wake registration help: oar help bridge; oar meta doc agent-bridge; oar meta doc wake-routing (document id: agentreg.%s)",
+		"Wake registration help: oar help bridge; oar meta doc agent-bridge; oar meta doc wake-routing (principal: @%s)",
 		handle,
 	)
 }

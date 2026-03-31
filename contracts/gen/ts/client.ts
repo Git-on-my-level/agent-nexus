@@ -229,7 +229,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/agents/me",
     "operation_id": "patchCurrentAgent",
     "summary": "Update authenticated agent profile",
-    "why": "Rename the authenticated agent without re-registration.",
+    "why": "Rename the authenticated agent or update its wake registration without re-registration.",
     "input_mode": "json-body",
     "streaming": {
       "mode": "none"
@@ -253,10 +253,78 @@ export const commandRegistry: CommandSpec[] = [
       {
         "title": "Rename current agent",
         "command": "oar agents me patch --username renamed_agent --json"
+      },
+      {
+        "title": "Update wake registration",
+        "command": "oar agents me patch --from-file wake-registration.json --json"
       }
     ],
     "body_schema": {
-      "required": [
+      "optional": [
+        {
+          "name": "registration.actor_id",
+          "type": "string"
+        },
+        {
+          "name": "registration.adapter_kind",
+          "type": "string"
+        },
+        {
+          "name": "registration.bridge_checked_in_at",
+          "type": "datetime"
+        },
+        {
+          "name": "registration.bridge_checkin_event_id",
+          "type": "string"
+        },
+        {
+          "name": "registration.bridge_checkin_ttl_seconds",
+          "type": "integer"
+        },
+        {
+          "name": "registration.bridge_expires_at",
+          "type": "datetime"
+        },
+        {
+          "name": "registration.bridge_instance_id",
+          "type": "string"
+        },
+        {
+          "name": "registration.bridge_signing_public_key_spki_b64",
+          "type": "string"
+        },
+        {
+          "name": "registration.delivery_mode",
+          "type": "string"
+        },
+        {
+          "name": "registration.driver_kind",
+          "type": "string"
+        },
+        {
+          "name": "registration.handle",
+          "type": "string"
+        },
+        {
+          "name": "registration.resume_policy",
+          "type": "string"
+        },
+        {
+          "name": "registration.status",
+          "type": "string"
+        },
+        {
+          "name": "registration.updated_at",
+          "type": "datetime"
+        },
+        {
+          "name": "registration.version",
+          "type": "string"
+        },
+        {
+          "name": "registration.workspace_bindings",
+          "type": "list\u003cany\u003e"
+        },
         {
           "name": "username",
           "type": "string"

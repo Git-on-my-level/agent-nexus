@@ -38,16 +38,17 @@ type AuthAuditListFilter struct {
 }
 
 type AuthPrincipalSummary struct {
-	AgentID       string  `json:"agent_id"`
-	ActorID       string  `json:"actor_id"`
-	Username      string  `json:"username"`
-	PrincipalKind string  `json:"principal_kind"`
-	AuthMethod    string  `json:"auth_method"`
-	CreatedAt     string  `json:"created_at"`
-	LastSeenAt    string  `json:"last_seen_at"`
-	UpdatedAt     string  `json:"updated_at"`
-	Revoked       bool    `json:"revoked"`
-	RevokedAt     *string `json:"revoked_at,omitempty"`
+	AgentID       string             `json:"agent_id"`
+	ActorID       string             `json:"actor_id"`
+	Username      string             `json:"username"`
+	PrincipalKind string             `json:"principal_kind"`
+	AuthMethod    string             `json:"auth_method"`
+	CreatedAt     string             `json:"created_at"`
+	LastSeenAt    string             `json:"last_seen_at"`
+	UpdatedAt     string             `json:"updated_at"`
+	Revoked       bool               `json:"revoked"`
+	RevokedAt     *string            `json:"revoked_at,omitempty"`
+	Registration  *AgentRegistration `json:"registration,omitempty"`
 }
 
 type AuthAuditEvent struct {
@@ -92,7 +93,8 @@ func (s *Store) ListPrincipals(ctx context.Context, filter AuthPrincipalListFilt
 		a.created_at,
 		` + principalLastSeenExpr("a") + `,
 		a.updated_at,
-		a.revoked_at
+		a.revoked_at,
+		a.metadata_json
 	 FROM agents a
 	 ORDER BY a.created_at DESC, a.id DESC`
 	args := make([]any, 0, 2)
@@ -115,8 +117,9 @@ func (s *Store) ListPrincipals(ctx context.Context, filter AuthPrincipalListFilt
 	principals := make([]AuthPrincipalSummary, 0)
 	for rows.Next() {
 		var (
-			item       AuthPrincipalSummary
-			revokedRaw sql.NullString
+			item         AuthPrincipalSummary
+			revokedRaw   sql.NullString
+			metadataJSON string
 		)
 		if err := rows.Scan(
 			&item.AgentID,
@@ -128,6 +131,7 @@ func (s *Store) ListPrincipals(ctx context.Context, filter AuthPrincipalListFilt
 			&item.LastSeenAt,
 			&item.UpdatedAt,
 			&revokedRaw,
+			&metadataJSON,
 		); err != nil {
 			return nil, "", fmt.Errorf("scan auth principal row: %w", err)
 		}
@@ -135,6 +139,11 @@ func (s *Store) ListPrincipals(ctx context.Context, filter AuthPrincipalListFilt
 		if revokedRaw.Valid {
 			item.RevokedAt = &revokedRaw.String
 		}
+		registration, err := registrationFromMetadataJSON(metadataJSON)
+		if err != nil {
+			return nil, "", fmt.Errorf("decode auth principal registration: %w", err)
+		}
+		item.Registration = registration
 		principals = append(principals, item)
 	}
 	if err := rows.Err(); err != nil {

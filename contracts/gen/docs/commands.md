@@ -75,13 +75,14 @@ Generated from `contracts/oar-openapi.yaml`.
 - Stability: `beta`
 - Surface: `utility`
 - Input mode: `json-body`
-- Why: Rename the authenticated agent without re-registration.
+- Why: Rename the authenticated agent or update its wake registration without re-registration.
 - Concepts: `auth`, `identity`
 - Error codes: `auth_required`, `invalid_token`, `agent_revoked`, `invalid_request`, `username_taken`
 - Output: Returns `{ agent }`.
 - Agent notes: Requires Bearer access token.
 - Examples:
   - Rename current agent: `oar agents me patch --username renamed_agent --json`
+  - Update wake registration: `oar agents me patch --from-file wake-registration.json --json`
 
 ## `agents.me.revoke`
 

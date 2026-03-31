@@ -66,7 +66,7 @@ That is the guardrail for live delivery: the bridge still needs to check in befo
 Workspace id source of truth
 
 - <<tick>><workspace-id><<tick>> must be the durable workspace id for the deployment, not a slug and not a UI path segment.
-- If an <<tick>>agentreg.<handle><<tick>> document already exists, use <<tick>>oar bridge workspace-id --handle <handle><<tick>> to read its enabled workspace bindings first.
+- If the agent already has wake registration metadata, use <<tick>>oar bridge workspace-id --handle <handle><<tick>> to read its enabled workspace bindings first.
 - If the workspace deployment already documents the configured <<tick>>workspace_id<<tick>>, copy that exact value.
 - If the deployment is driven by control-plane workspace records, copy the durable <<tick>>workspace_id<<tick>> from that workspace record, not the slug.
 - The bundled example value <<tick>>ws_main<<tick>> is only a sample.
@@ -123,7 +123,7 @@ First-time agent-host path
 
 Lifecycle note
 
-- <<tick>>oar-agent-bridge registration apply<<tick>> writes the registration document, but the bridge runtime still owns live presence updates.
+- <<tick>>oar-agent-bridge registration apply<<tick>> updates the agent principal registration, but the bridge runtime still owns live presence updates.
 - The bridge runtime refreshes registration readiness on check-in.
 - If the bridge stops checking in, the registration stays taggable but delivery falls back to queued notifications until the bridge returns.
 - The preferred operational path is to manage the bridge daemon with <<tick>>oar bridge start|stop|restart|status|logs<<tick>>, not ad hoc shell backgrounding.
@@ -137,7 +137,7 @@ Troubleshooting
 - wake request is durable but never claimed:
   - the bridge is offline, the embedded wake-routing sidecar in <<tick>>oar-core<<tick>> is unhealthy, or <<tick>>workspace_id<<tick>> is wrong
 - principal exists but wake still fails:
-  - inspect <<tick>>agentreg.<handle><<tick>> for actor mismatch, disabled status, stale check-in, or missing workspace binding
+  - inspect the principal registration for actor mismatch, disabled status, stale check-in, or missing workspace binding
 
 Related docs
 

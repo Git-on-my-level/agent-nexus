@@ -154,6 +154,16 @@ test("thread detail separates messages from timeline and nests replies", async (
                   principal_kind: "agent",
                   auth_method: "public_key",
                   revoked: false,
+                  registration: {
+                    handle: "m4-hermes",
+                    actor_id: "actor-m4-hermes",
+                    status: "active",
+                    bridge_signing_public_key_spki_b64: publicKeyB64,
+                    bridge_checkin_event_id: "event-bridge-checkin-m4-hermes",
+                    workspace_bindings: [
+                      { workspace_id: "local", enabled: true },
+                    ],
+                  },
                 },
                 {
                   agent_id: "agent-clawd",
@@ -162,6 +172,16 @@ test("thread detail separates messages from timeline and nests replies", async (
                   principal_kind: "agent",
                   auth_method: "public_key",
                   revoked: false,
+                  registration: {
+                    handle: "clawd",
+                    actor_id: "actor-clawd",
+                    status: "active",
+                    bridge_signing_public_key_spki_b64: publicKeyB64,
+                    bridge_checkin_event_id: "event-bridge-checkin-clawd",
+                    workspace_bindings: [
+                      { workspace_id: "local", enabled: true },
+                    ],
+                  },
                 },
               ]
             : [
@@ -172,6 +192,14 @@ test("thread detail separates messages from timeline and nests replies", async (
                   principal_kind: "agent",
                   auth_method: "public_key",
                   revoked: false,
+                  registration: {
+                    handle: "jarvis",
+                    actor_id: "actor-jarvis",
+                    status: "pending",
+                    workspace_bindings: [
+                      { workspace_id: "local", enabled: true },
+                    ],
+                  },
                 },
               ],
         ...(cursor === "page-2" ? {} : { next_cursor: "page-2" }),
@@ -215,73 +243,6 @@ test("thread detail separates messages from timeline and nests replies", async (
           updated_at: "2026-03-04T00:00:00.000Z",
           updated_by: actorId,
           provenance: { sources: ["actor_statement:event-1001"] },
-        },
-      }),
-    });
-  });
-
-  await page.route("**/docs/agentreg.m4-hermes", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        document: {
-          id: "agentreg.m4-hermes",
-          status: "active",
-        },
-        revision: {
-          content: {
-            handle: "m4-hermes",
-            actor_id: "actor-m4-hermes",
-            status: "active",
-            bridge_signing_public_key_spki_b64: publicKeyB64,
-            bridge_checkin_event_id: "event-bridge-checkin-m4-hermes",
-            workspace_bindings: [{ workspace_id: "local", enabled: true }],
-          },
-        },
-      }),
-    });
-  });
-
-  await page.route("**/docs/agentreg.jarvis", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        document: {
-          id: "agentreg.jarvis",
-          status: "active",
-        },
-        revision: {
-          content: {
-            handle: "jarvis",
-            actor_id: "actor-jarvis",
-            status: "pending",
-            workspace_bindings: [{ workspace_id: "local", enabled: true }],
-          },
-        },
-      }),
-    });
-  });
-
-  await page.route("**/docs/agentreg.clawd", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        document: {
-          id: "agentreg.clawd",
-          status: "active",
-        },
-        revision: {
-          content: {
-            handle: "clawd",
-            actor_id: "actor-clawd",
-            status: "active",
-            bridge_signing_public_key_spki_b64: publicKeyB64,
-            bridge_checkin_event_id: "event-bridge-checkin-clawd",
-            workspace_bindings: [{ workspace_id: "local", enabled: true }],
-          },
         },
       }),
     });

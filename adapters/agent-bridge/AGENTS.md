@@ -9,7 +9,7 @@ Read this after the root `AGENTS.md`. This adapter owns the local runtime that t
 `oar-agent-bridge` is the integration-side runtime for bridge-managed agent wake handling.
 
 It owns:
-- registration document writes for `agentreg.<handle>`
+- principal registration metadata writes for bridge-managed `@handle` routing
 - bridge-side check-in, wake claim, adapter dispatch, and reply writeback
 - local install and test ergonomics for the Python package
 
@@ -22,7 +22,7 @@ It does not own canonical OAR state. The durable truth still lives in OAR primit
 - Bridge-managed registrations stay `pending` until the bridge has checked in.
 - Routing must treat stale or missing bridge check-ins as offline for immediate delivery, while leaving durable notifications queueable.
 - Workspace binding must use the durable `workspace_id`, never a slug or UI path segment.
-- Keep the runtime working with only documented OAR primitives: docs, events, artifacts, auth principals.
+- Keep the runtime working with only documented OAR primitives: auth principals, events, and artifacts.
 
 ## Local Workflow
 - Python `3.11+` is required. The repo-local convention is `.python-version = 3.11`.

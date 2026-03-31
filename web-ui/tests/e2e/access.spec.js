@@ -156,6 +156,18 @@ test("does not repeat the username in principal rows", async ({ page }) => {
             last_seen_at: "2026-03-20T11:15:00Z",
             updated_at: "2026-03-28T10:00:00Z",
             revoked: false,
+            registration: {
+              version: "agent-registration/v1",
+              handle: "m4-hermes",
+              actor_id: "actor-ops-ai",
+              status: "active",
+              bridge_signing_public_key_spki_b64: bridgeProofKey.publicKeyB64,
+              bridge_checkin_event_id: "event-bridge-checkin-hermes",
+              bridge_instance_id: "bridge-hermes-1",
+              bridge_checked_in_at: "2099-03-20T12:00:00Z",
+              bridge_expires_at: "2099-03-20T12:05:00Z",
+              workspace_bindings: [{ workspace_id: "local", enabled: true }],
+            },
           },
         ],
         active_human_principal_count: 0,
@@ -168,35 +180,6 @@ test("does not repeat the username in principal rows", async ({ page }) => {
       status: 200,
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ invites: [] }),
-    });
-  });
-
-  await page.route("**/docs/agentreg.m4-hermes", async (route) => {
-    const { publicKeyB64 } = bridgeProofKey;
-    await route.fulfill({
-      status: 200,
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        document: {
-          id: "agentreg.m4-hermes",
-          title: "Agent registration @m4-hermes",
-          status: "active",
-        },
-        revision: {
-          content: {
-            version: "agent-registration/v1",
-            handle: "m4-hermes",
-            actor_id: "actor-ops-ai",
-            status: "active",
-            bridge_signing_public_key_spki_b64: publicKeyB64,
-            bridge_checkin_event_id: "event-bridge-checkin-hermes",
-            bridge_instance_id: "bridge-hermes-1",
-            bridge_checked_in_at: "2099-03-20T12:00:00Z",
-            bridge_expires_at: "2099-03-20T12:05:00Z",
-            workspace_bindings: [{ workspace_id: "local", enabled: true }],
-          },
-        },
-      }),
     });
   });
 

@@ -36,7 +36,7 @@ class StubState:
 class StubClient:
     def __init__(self, events):
         self._events = list(events)
-        self.upserts = []
+        self.registration_updates = []
         self.created_events = []
         self.list_notification_calls = []
         self.notification_reads = []
@@ -47,9 +47,9 @@ class StubClient:
             yield event
         raise KeyboardInterrupt()
 
-    def upsert_document(self, document_id, **kwargs):
-        self.upserts.append((document_id, kwargs))
-        return {"document_id": document_id}
+    def patch_current_agent(self, **kwargs):
+        self.registration_updates.append(kwargs)
+        return {"agent": {"agent_id": "agent-hermes", "registration": kwargs.get("registration")}}
 
     def create_event(self, **kwargs):
         self.created_events.append(kwargs)
@@ -88,8 +88,8 @@ class StubClient:
             },
         }
 
-    def get_document(self, _document_id):
-        raise OARClientError(404, "not_found", "missing")
+    def get_current_agent(self):
+        return {"agent": {"agent_id": "agent-hermes"}}
 
 
 class StubAdapter:
@@ -102,6 +102,7 @@ class StubAdapter:
 
 class StubAuthState:
     username = "hermes"
+    agent_id = "agent-hermes"
     actor_id = "actor-hermes"
 
 
@@ -333,15 +334,14 @@ def test_bridge_checkin_upserts_active_registration():
 
     bridge._publish_checkin()
 
-    assert len(client.upserts) == 1
-    reg_payload = client.upserts[0][1]
-    assert reg_payload["document"]["status"] == "active"
-    assert reg_payload["content"]["status"] == "active"
-    assert reg_payload["content"]["bridge_instance_id"] == "bridge-test"
-    assert reg_payload["content"]["bridge_signing_public_key_spki_b64"] != ""
-    assert reg_payload["content"]["bridge_checked_in_at"] != ""
-    assert reg_payload["content"]["bridge_expires_at"] != ""
-    assert reg_payload["content"]["bridge_checkin_event_id"] == "event-1"
+    assert len(client.registration_updates) == 1
+    reg_payload = client.registration_updates[0]["registration"]
+    assert reg_payload["status"] == "active"
+    assert reg_payload["bridge_instance_id"] == "bridge-test"
+    assert reg_payload["bridge_signing_public_key_spki_b64"] != ""
+    assert reg_payload["bridge_checked_in_at"] != ""
+    assert reg_payload["bridge_expires_at"] != ""
+    assert reg_payload["bridge_checkin_event_id"] == "event-1"
     assert len(client.created_events) == 1
     checkin_event = client.created_events[0]["event"]
     checkin_payload = checkin_event["payload"]
@@ -365,5 +365,5 @@ def test_bridge_checkin_requires_adapter_doctor_to_pass():
     with pytest.raises(RuntimeError, match="adapter not ready"):
         bridge._publish_checkin()
 
-    assert client.upserts == []
+    assert client.registration_updates == []
     assert client.created_events == []

@@ -97,16 +97,16 @@ func init() {
 		},
 		localHelperTopic{
 			Path:        "bridge workspace-id",
-			Summary:     "Discover durable workspace ids from an existing agent registration document.",
-			JSONShape:   "`document_id`, `handle`, `actor_id`, `registration_status`, `workspace_ids`, `workspace_bindings`",
-			Composition: "Uses the active `oar` auth/profile to read `agentreg.<handle>` and extract enabled workspace bindings so bridge bootstrap can reuse the real durable workspace id instead of guessing.",
+			Summary:     "Discover durable workspace ids from an existing agent wake registration.",
+			JSONShape:   "`agent_id`, `handle`, `actor_id`, `registration_status`, `workspace_ids`, `workspace_bindings`",
+			Composition: "Uses the active `oar` auth/profile to read agent principal registration metadata and extract enabled workspace bindings so bridge bootstrap can reuse the real durable workspace id instead of guessing.",
 			Examples: []string{
 				"oar --agent agent-a bridge workspace-id --handle hermes",
 				"oar bridge workspace-id --document-id agentreg.hermes",
 			},
 			Flags: []localHelperFlag{
-				{Name: "--handle <name>", Description: "Agent handle whose `agentreg.<handle>` document should be inspected."},
-				{Name: "--document-id <id>", Description: "Registration document id to inspect directly. Defaults to `agentreg.<handle>`."},
+				{Name: "--handle <name>", Description: "Agent handle whose wake registration should be inspected."},
+				{Name: "--document-id <id>", Description: "Legacy registration document alias. Accepts only `agentreg.<handle>`."},
 			},
 		},
 		localHelperTopic{
@@ -195,13 +195,13 @@ Subcommands
   bridge restart      Restart a managed bridge daemon for one config
   bridge status       Inspect managed process state for one config
   bridge logs         Read recent log lines for one config
-  bridge workspace-id Read workspace ids from an existing registration document
+  bridge workspace-id Read workspace ids from an existing wake registration
   bridge doctor       Validate install/config/readiness without starting daemons
 
 Recommended order
 
 1. `+"`oar bridge install`"+`
-2. `+"`oar bridge workspace-id --handle <handle>`"+` if a registration doc already exists and you need the real durable workspace id
+2. `+"`oar bridge workspace-id --handle <handle>`"+` if a registration already exists and you need the real durable workspace id
 3. `+"`oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle>`"+`
 4. `+"`oar bridge import-auth --config ./agent.toml --from-profile <agent>`"+` when matching `+"`oar`"+` auth already exists
 5. `+"`oar-agent-bridge auth register ...`"+` for the agent principal when auth does not already exist
@@ -524,9 +524,9 @@ func (a *App) runBridgeInitConfig(args []string, cfg config.Resolved) (*commandR
 func (a *App) runBridgeWorkspaceID(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
 	fs := newSilentFlagSet("bridge workspace-id")
 	var handleFlag trackedString
-	var documentIDFlag trackedString
 	fs.Var(&handleFlag, "handle", "Agent handle whose registration should be inspected")
-	fs.Var(&documentIDFlag, "document-id", "Registration document id to inspect directly")
+	var documentIDFlag trackedString
+	fs.Var(&documentIDFlag, "document-id", "Legacy registration document id alias (`agentreg.<handle>`) to inspect")
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
@@ -541,26 +541,33 @@ func (a *App) runBridgeWorkspaceID(ctx context.Context, args []string, cfg confi
 		return nil, errnorm.Usage("invalid_request", "either --handle or --document-id is required")
 	case documentID != "" && handle != "":
 		return nil, errnorm.Usage("invalid_request", "--handle and --document-id cannot be combined")
-	case documentID == "":
-		documentID = "agentreg." + handle
+	case documentID != "":
+		if !strings.HasPrefix(documentID, "agentreg.") {
+			return nil, errnorm.Usage("invalid_request", "--document-id must use the legacy form `agentreg.<handle>`")
+		}
+		handle = strings.TrimSpace(strings.TrimPrefix(documentID, "agentreg."))
 	}
 
-	result, err := a.invokeTypedJSON(ctx, cfg, "docs get", "docs.get", map[string]string{"document_id": documentID}, nil, nil)
+	principal, err := a.lookupPrincipalByHandle(ctx, cfg, handle)
 	if err != nil {
 		return nil, err
 	}
-	data, _ := result.Data.(map[string]any)
-	body := extractNestedMap(data, "body")
-	document := extractNestedMap(body, "document")
-	revision := extractNestedMap(body, "revision")
-	content := extractNestedMap(revision, "content")
-
-	if handle == "" {
-		handle = strings.TrimPrefix(firstNonEmptyString(anyString(content["handle"]), anyString(document["id"])), "agentreg.")
+	if principal == nil {
+		return nil, errnorm.WithDetails(
+			errnorm.Local("bridge_workspace_id_missing", "no agent principal matched the requested handle"),
+			map[string]any{"handle": handle},
+		)
 	}
-	registrationStatus := firstNonEmptyString(anyString(content["status"]), anyString(document["status"]))
-	actorID := anyString(content["actor_id"])
-	workspaceBindingsRaw, _ := content["workspace_bindings"].([]any)
+	registration, _ := principal["registration"].(map[string]any)
+	if registration == nil {
+		return nil, errnorm.WithDetails(
+			errnorm.Local("bridge_workspace_id_missing", "principal does not contain wake registration metadata"),
+			map[string]any{"handle": handle, "agent_id": anyString(principal["agent_id"])},
+		)
+	}
+	registrationStatus := anyString(registration["status"])
+	actorID := anyString(principal["actor_id"])
+	workspaceBindingsRaw, _ := registration["workspace_bindings"].([]any)
 	workspaceBindings := make([]map[string]any, 0, len(workspaceBindingsRaw))
 	workspaceIDs := make([]string, 0, len(workspaceBindingsRaw))
 	seen := map[string]struct{}{}
@@ -589,9 +596,9 @@ func (a *App) runBridgeWorkspaceID(ctx context.Context, args []string, cfg confi
 	}
 	if len(workspaceIDs) == 0 {
 		return nil, errnorm.WithDetails(
-			errnorm.Local("bridge_workspace_id_missing", "registration document does not contain any enabled workspace bindings"),
+			errnorm.Local("bridge_workspace_id_missing", "registration does not contain any enabled workspace bindings"),
 			map[string]any{
-				"document_id":        documentID,
+				"agent_id":           anyString(principal["agent_id"]),
 				"handle":             handle,
 				"workspace_bindings": workspaceBindings,
 			},
@@ -600,7 +607,7 @@ func (a *App) runBridgeWorkspaceID(ctx context.Context, args []string, cfg confi
 
 	lines := []string{
 		"Bridge workspace id discovery",
-		"Document: " + documentID,
+		"Agent ID: " + anyString(principal["agent_id"]),
 	}
 	if handle != "" {
 		lines = append(lines, "Handle: "+handle)
@@ -621,7 +628,7 @@ func (a *App) runBridgeWorkspaceID(ctx context.Context, args []string, cfg confi
 	return &commandResult{
 		Text: strings.Join(lines, "\n"),
 		Data: map[string]any{
-			"document_id":         documentID,
+			"agent_id":            anyString(principal["agent_id"]),
 			"handle":              handle,
 			"actor_id":            actorID,
 			"registration_status": registrationStatus,
@@ -629,6 +636,42 @@ func (a *App) runBridgeWorkspaceID(ctx context.Context, args []string, cfg confi
 			"workspace_bindings":  workspaceBindings,
 		},
 	}, nil
+}
+
+func (a *App) lookupPrincipalByHandle(ctx context.Context, cfg config.Resolved, handle string) (map[string]any, error) {
+	cursor := ""
+	seenCursors := map[string]struct{}{}
+	for {
+		query := []queryParam{{name: "limit", values: []string{"200"}}}
+		if cursor != "" {
+			query = append(query, queryParam{name: "cursor", values: []string{cursor}})
+		}
+		result, err := a.invokeTypedJSON(ctx, cfg, "auth principals list", "auth.principals.list", nil, query, nil)
+		if err != nil {
+			return nil, err
+		}
+		data, _ := result.Data.(map[string]any)
+		body := extractNestedMap(data, "body")
+		principalsRaw, _ := body["principals"].([]any)
+		for _, item := range principalsRaw {
+			candidate, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			if strings.TrimSpace(anyString(candidate["username"])) == handle {
+				return candidate, nil
+			}
+		}
+		nextCursor := strings.TrimSpace(anyString(body["next_cursor"]))
+		if nextCursor == "" {
+			return nil, nil
+		}
+		if _, exists := seenCursors[nextCursor]; exists {
+			return nil, errnorm.Local("bridge_workspace_id_invalid_cursor", "auth principals list repeated a pagination cursor")
+		}
+		seenCursors[nextCursor] = struct{}{}
+		cursor = nextCursor
+	}
 }
 
 func (a *App) runBridgeDoctor(ctx context.Context, args []string) (*commandResult, error) {

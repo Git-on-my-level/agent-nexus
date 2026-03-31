@@ -168,13 +168,30 @@ func handlePatchCurrentAgent(w http.ResponseWriter, r *http.Request, opts handle
 	}
 
 	var req struct {
-		Username string `json:"username"`
+		Username     string                  `json:"username"`
+		Registration *auth.AgentRegistration `json:"registration"`
 	}
 	if !decodeJSONBody(w, r, &req) {
 		return
 	}
+	if strings.TrimSpace(req.Username) != "" && req.Registration != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "username and registration cannot be updated in the same request")
+		return
+	}
+	if strings.TrimSpace(req.Username) == "" && req.Registration == nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "username or registration is required")
+		return
+	}
 
-	agent, err := opts.authStore.UpdateUsername(r.Context(), principal.AgentID, req.Username)
+	var (
+		agent auth.Agent
+		err   error
+	)
+	if req.Registration != nil {
+		agent, err = opts.authStore.UpdateRegistration(r.Context(), principal.AgentID, *req.Registration)
+	} else {
+		agent, err = opts.authStore.UpdateUsername(r.Context(), principal.AgentID, req.Username)
+	}
 	if err != nil {
 		switch {
 		case errors.Is(err, auth.ErrInvalidRequest):

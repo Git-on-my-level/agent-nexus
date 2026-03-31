@@ -123,6 +123,10 @@ var CommandRegistry = []CommandSpec{
 				Title:   "Rename current agent",
 				Command: "oar agents me patch --username renamed_agent --json",
 			},
+			{
+				Title:   "Update wake registration",
+				Command: "oar agents me patch --from-file wake-registration.json --json",
+			},
 		},
 	},
 	{
