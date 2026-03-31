@@ -255,6 +255,31 @@ func (s *Service) loadPrincipals(ctx context.Context, force bool) error {
 	return nil
 }
 
+func (s *Service) refreshPrincipal(ctx context.Context, handle string) (auth.AuthPrincipalSummary, bool, error) {
+	if err := s.loadPrincipals(ctx, true); err != nil {
+		return auth.AuthPrincipalSummary{}, false, err
+	}
+	principal, ok := s.cache.byHandle[handle]
+	return principal, ok, nil
+}
+
+func routingRegistrationFailure(principal auth.AuthPrincipalSummary, workspaceID string) (*auth.AgentRegistration, string, string) {
+	registration := principal.Registration
+	if registration == nil {
+		return nil, "missing_agent_registration", fmt.Sprintf("Tagged agent @%s has no registration", principal.Username)
+	}
+	if strings.TrimSpace(registration.ActorID) != strings.TrimSpace(principal.ActorID) {
+		return nil, "registration_actor_mismatch", fmt.Sprintf("Tagged agent @%s registration actor does not match principal", principal.Username)
+	}
+	if !registration.SupportsWorkspace(workspaceID) {
+		return nil, "agent_not_bound_to_workspace", fmt.Sprintf("Tagged agent @%s is not enabled for workspace %s", principal.Username, workspaceID)
+	}
+	if strings.EqualFold(strings.TrimSpace(registration.Status), "disabled") {
+		return nil, "agent_notifications_disabled", fmt.Sprintf("Tagged agent @%s is disabled for notifications", principal.Username)
+	}
+	return registration, "", ""
+}
+
 func (s *Service) routeMention(ctx context.Context, handle string, event map[string]any, text string) (bool, error) {
 	threadID := anyString(event["thread_id"])
 	eventID := anyString(event["id"])
@@ -264,24 +289,33 @@ func (s *Service) routeMention(ctx context.Context, handle string, event map[str
 
 	principal, ok := s.cache.byHandle[handle]
 	if !ok {
-		return false, s.emitException(ctx, threadID, eventID, handle, "unknown_agent_handle", fmt.Sprintf("Unknown tagged agent @%s", handle))
+		refreshed, refreshedOK, err := s.refreshPrincipal(ctx, handle)
+		if err != nil {
+			return false, err
+		}
+		if !refreshedOK {
+			return false, s.emitException(ctx, threadID, eventID, handle, "unknown_agent_handle", fmt.Sprintf("Unknown tagged agent @%s", handle))
+		}
+		principal = refreshed
 	}
 
-	registration := principal.Registration
-	if registration == nil {
-		return false, s.emitException(ctx, threadID, eventID, handle, "missing_agent_registration", fmt.Sprintf("Tagged agent @%s has no registration", handle))
-	}
-	if strings.TrimSpace(registration.ActorID) != strings.TrimSpace(principal.ActorID) {
-		return false, s.emitException(ctx, threadID, eventID, handle, "registration_actor_mismatch", fmt.Sprintf("Tagged agent @%s registration actor does not match principal", handle))
+	registration, code, message := routingRegistrationFailure(principal, s.cfg.WorkspaceID)
+	if code != "" {
+		refreshed, refreshedOK, err := s.refreshPrincipal(ctx, handle)
+		if err != nil {
+			return false, err
+		}
+		if !refreshedOK {
+			return false, s.emitException(ctx, threadID, eventID, handle, "unknown_agent_handle", fmt.Sprintf("Unknown tagged agent @%s", handle))
+		}
+		principal = refreshed
+		registration, code, message = routingRegistrationFailure(principal, s.cfg.WorkspaceID)
+		if code != "" {
+			return false, s.emitException(ctx, threadID, eventID, handle, code, message)
+		}
 	}
 	if strings.TrimSpace(anyString(event["actor_id"])) == registration.ActorID {
 		return false, nil
-	}
-	if !registration.SupportsWorkspace(s.cfg.WorkspaceID) {
-		return false, s.emitException(ctx, threadID, eventID, handle, "agent_not_bound_to_workspace", fmt.Sprintf("Tagged agent @%s is not enabled for workspace %s", handle, s.cfg.WorkspaceID))
-	}
-	if strings.EqualFold(strings.TrimSpace(registration.Status), "disabled") {
-		return false, s.emitException(ctx, threadID, eventID, handle, "agent_notifications_disabled", fmt.Sprintf("Tagged agent @%s is disabled for notifications", handle))
 	}
 
 	thread, err := s.deps.GetThread(ctx, threadID)

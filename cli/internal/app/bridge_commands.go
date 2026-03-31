@@ -548,23 +548,9 @@ func (a *App) runBridgeWorkspaceID(ctx context.Context, args []string, cfg confi
 		handle = strings.TrimSpace(strings.TrimPrefix(documentID, "agentreg."))
 	}
 
-	result, err := a.invokeTypedJSON(ctx, cfg, "auth principals list", "auth.principals.list", map[string]string{"limit": "200"}, nil, nil)
+	principal, err := a.lookupPrincipalByHandle(ctx, cfg, handle)
 	if err != nil {
 		return nil, err
-	}
-	data, _ := result.Data.(map[string]any)
-	body := extractNestedMap(data, "body")
-	principalsRaw, _ := body["principals"].([]any)
-	var principal map[string]any
-	for _, item := range principalsRaw {
-		candidate, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		if strings.TrimSpace(anyString(candidate["username"])) == handle {
-			principal = candidate
-			break
-		}
 	}
 	if principal == nil {
 		return nil, errnorm.WithDetails(
@@ -650,6 +636,42 @@ func (a *App) runBridgeWorkspaceID(ctx context.Context, args []string, cfg confi
 			"workspace_bindings":  workspaceBindings,
 		},
 	}, nil
+}
+
+func (a *App) lookupPrincipalByHandle(ctx context.Context, cfg config.Resolved, handle string) (map[string]any, error) {
+	cursor := ""
+	seenCursors := map[string]struct{}{}
+	for {
+		query := []queryParam{{name: "limit", values: []string{"200"}}}
+		if cursor != "" {
+			query = append(query, queryParam{name: "cursor", values: []string{cursor}})
+		}
+		result, err := a.invokeTypedJSON(ctx, cfg, "auth principals list", "auth.principals.list", nil, query, nil)
+		if err != nil {
+			return nil, err
+		}
+		data, _ := result.Data.(map[string]any)
+		body := extractNestedMap(data, "body")
+		principalsRaw, _ := body["principals"].([]any)
+		for _, item := range principalsRaw {
+			candidate, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			if strings.TrimSpace(anyString(candidate["username"])) == handle {
+				return candidate, nil
+			}
+		}
+		nextCursor := strings.TrimSpace(anyString(body["next_cursor"]))
+		if nextCursor == "" {
+			return nil, nil
+		}
+		if _, exists := seenCursors[nextCursor]; exists {
+			return nil, errnorm.Local("bridge_workspace_id_invalid_cursor", "auth principals list repeated a pagination cursor")
+		}
+		seenCursors[nextCursor] = struct{}{}
+		cursor = nextCursor
+	}
 }
 
 func (a *App) runBridgeDoctor(ctx context.Context, args []string) (*commandResult, error) {
