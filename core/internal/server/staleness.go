@@ -107,6 +107,7 @@ func isMeaningfulThreadActivityEvent(event map[string]any) bool {
 		"document_created",
 		"document_updated",
 		"document_tombstoned",
+		"document_restored",
 		"commitment_created",
 		"commitment_status_changed":
 		return true

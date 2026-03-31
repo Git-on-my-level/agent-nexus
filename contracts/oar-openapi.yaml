@@ -1131,6 +1131,26 @@ paths:
         - in: query
           name: stale
           schema: { type: boolean }
+        - in: query
+          name: include_archived
+          schema: { type: boolean }
+          description: "Include archived threads in the list. Defaults to false."
+        - in: query
+          name: archived_only
+          schema: { type: boolean }
+          description: >
+            When true, return only archived threads (archived_at IS NOT NULL).
+            Mutually exclusive with include_archived; if both are set, archived_only wins.
+        - in: query
+          name: include_tombstoned
+          schema: { type: boolean }
+          description: "Include tombstoned threads in the list. Defaults to false."
+        - in: query
+          name: tombstoned_only
+          schema: { type: boolean }
+          description: >
+            When true, return only tombstoned threads (tombstoned_at IS NOT NULL).
+            Mutually exclusive with include_tombstoned; if both are set, tombstoned_only wins.
       responses:
         '200':
           description: Thread list
@@ -1323,6 +1343,224 @@ paths:
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /threads/{thread_id}/archive:
+    post:
+      operationId: archiveThread
+      summary: Archive a thread
+      tags: [threads]
+      x-oar-surface: "canonical"
+      x-oar-command-id: "threads.archive"
+      x-oar-cli-path: "threads archive"
+      x-oar-why: "Hide a thread from default list views while preserving it for search and direct access."
+      x-oar-examples:
+        - title: Archive thread
+          command: oar threads archive --thread-id thread_123 --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ thread }` with archive metadata set."
+      x-oar-error-codes: [invalid_json, invalid_request, not_found]
+      x-oar-concepts: [threads, lifecycle]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Idempotent; repeated archive calls on the same thread are safe. Returns 409 if thread is tombstoned."
+      parameters:
+        - $ref: '#/components/parameters/ThreadID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TombstoneRequest'
+      responses:
+        '200':
+          description: Thread archived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /threads/{thread_id}/unarchive:
+    post:
+      operationId: unarchiveThread
+      summary: Unarchive a thread
+      tags: [threads]
+      x-oar-surface: "canonical"
+      x-oar-command-id: "threads.unarchive"
+      x-oar-cli-path: "threads unarchive"
+      x-oar-why: "Return an archived thread to the default list views."
+      x-oar-examples:
+        - title: Unarchive thread
+          command: oar threads unarchive --thread-id thread_123 --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ thread }` with archive metadata cleared."
+      x-oar-error-codes: [invalid_json, invalid_request, not_found, not_archived]
+      x-oar-concepts: [threads, lifecycle]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Returns 409 if the thread is not currently archived."
+      parameters:
+        - $ref: '#/components/parameters/ThreadID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TombstoneRequest'
+      responses:
+        '200':
+          description: Thread unarchived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /threads/{thread_id}/tombstone:
+    post:
+      operationId: tombstoneThread
+      summary: Tombstone a thread (soft-delete)
+      tags: [threads]
+      x-oar-surface: "canonical"
+      x-oar-command-id: "threads.tombstone"
+      x-oar-cli-path: "threads tombstone"
+      x-oar-why: "Mark a thread as inactive while preserving provenance; tombstoned threads are excluded from list by default."
+      x-oar-examples:
+        - title: Tombstone thread
+          command: oar threads tombstone --thread-id thread_123 --reason "merged into parent" --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ thread }` with updated tombstone metadata."
+      x-oar-error-codes: [invalid_json, invalid_request, not_found]
+      x-oar-concepts: [threads, lifecycle]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Idempotent; repeated tombstone calls are safe."
+      parameters:
+        - $ref: '#/components/parameters/ThreadID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TombstoneRequest'
+      responses:
+        '200':
+          description: Thread tombstoned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /threads/{thread_id}/restore:
+    post:
+      operationId: restoreThread
+      summary: Restore a tombstoned thread
+      tags: [threads]
+      x-oar-surface: "canonical"
+      x-oar-command-id: "threads.restore"
+      x-oar-cli-path: "threads restore"
+      x-oar-why: "Reverse a tombstone on a thread, making it active and visible in default list queries again."
+      x-oar-examples:
+        - title: Restore thread
+          command: oar threads restore --thread-id thread_123 --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ thread }` with tombstone metadata cleared."
+      x-oar-error-codes: [invalid_json, invalid_request, not_found, not_tombstoned]
+      x-oar-concepts: [threads, lifecycle]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Returns 409 if the thread is not currently tombstoned."
+      parameters:
+        - $ref: '#/components/parameters/ThreadID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TombstoneRequest'
+      responses:
+        '200':
+          description: Thread restored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /threads/{thread_id}/purge:
+    post:
+      operationId: purgeThread
+      summary: Permanently delete a tombstoned thread (human-only)
+      tags: [threads]
+      x-oar-surface: "canonical"
+      x-oar-command-id: "threads.purge"
+      x-oar-cli-path: "threads purge"
+      x-oar-why: "Permanently remove a tombstoned thread and reclaim storage. Human-only to prevent accidental data loss by automated agents."
+      x-oar-examples:
+        - title: Purge thread
+          command: oar threads purge --thread-id thread_123 --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ purged: true, thread_id }` on success."
+      x-oar-error-codes: [invalid_json, not_found, not_tombstoned, human_only]
+      x-oar-concepts: [threads, lifecycle]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "403 if the caller is not a human principal. 409 if the thread is not tombstoned."
+      parameters:
+        - $ref: '#/components/parameters/ThreadID'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: Optional reason for permanent deletion
+                actor_id:
+                  type: string
+                  description: >
+                    Optional acting actor id. Ignored when the request is authenticated as a human principal.
+                    In local development only (`OAR_ALLOW_UNAUTHENTICATED_WRITES` + `OAR_ENABLE_DEV_ACTOR_MODE`),
+                    an unauthenticated purge may succeed when this matches a registered actor whose tags include `human`.
+      responses:
+        '200':
+          description: Thread permanently deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  purged:
+                    type: boolean
+                  thread_id:
+                    type: string
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
           $ref: '#/components/responses/ErrorResponse'
 
   /snapshots/{snapshot_id}:
@@ -1562,6 +1800,26 @@ paths:
           style: form
           explode: true
           description: "Return only boards owned by any of the given actor ids."
+        - in: query
+          name: include_archived
+          schema: { type: boolean }
+          description: "Include archived boards in the list. Defaults to false."
+        - in: query
+          name: archived_only
+          schema: { type: boolean }
+          description: >
+            When true, return only archived boards (archived_at IS NOT NULL).
+            Mutually exclusive with include_archived; if both are set, archived_only wins.
+        - in: query
+          name: include_tombstoned
+          schema: { type: boolean }
+          description: "Include tombstoned boards in the list. Defaults to false."
+        - in: query
+          name: tombstoned_only
+          schema: { type: boolean }
+          description: >
+            When true, return only tombstoned boards (tombstoned_at IS NOT NULL).
+            Mutually exclusive with include_tombstoned; if both are set, tombstoned_only wins.
       responses:
         '200':
           description: Board list
@@ -1908,6 +2166,224 @@ paths:
         '409':
           $ref: '#/components/responses/ErrorResponse'
 
+  /boards/{board_id}/archive:
+    post:
+      operationId: archiveBoard
+      summary: Archive a board
+      tags: [boards]
+      x-oar-surface: "canonical"
+      x-oar-command-id: "boards.archive"
+      x-oar-cli-path: "boards archive"
+      x-oar-why: "Hide a board from default list views while preserving it for search and direct access."
+      x-oar-examples:
+        - title: Archive board
+          command: oar boards archive --board-id board_product_launch --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ board }` with archive metadata set."
+      x-oar-error-codes: [invalid_json, invalid_request, not_found]
+      x-oar-concepts: [boards, lifecycle]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Idempotent; repeated archive calls on the same board are safe. Returns 409 if board is tombstoned."
+      parameters:
+        - $ref: '#/components/parameters/BoardID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TombstoneRequest'
+      responses:
+        '200':
+          description: Board archived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /boards/{board_id}/unarchive:
+    post:
+      operationId: unarchiveBoard
+      summary: Unarchive a board
+      tags: [boards]
+      x-oar-surface: "canonical"
+      x-oar-command-id: "boards.unarchive"
+      x-oar-cli-path: "boards unarchive"
+      x-oar-why: "Return an archived board to the default list views."
+      x-oar-examples:
+        - title: Unarchive board
+          command: oar boards unarchive --board-id board_product_launch --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ board }` with archive metadata cleared."
+      x-oar-error-codes: [invalid_json, invalid_request, not_found, not_archived]
+      x-oar-concepts: [boards, lifecycle]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Returns 409 if the board is not currently archived."
+      parameters:
+        - $ref: '#/components/parameters/BoardID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TombstoneRequest'
+      responses:
+        '200':
+          description: Board unarchived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /boards/{board_id}/tombstone:
+    post:
+      operationId: tombstoneBoard
+      summary: Tombstone a board (soft-delete)
+      tags: [boards]
+      x-oar-surface: "canonical"
+      x-oar-command-id: "boards.tombstone"
+      x-oar-cli-path: "boards tombstone"
+      x-oar-why: "Mark a board as inactive while preserving provenance; tombstoned boards are excluded from list by default."
+      x-oar-examples:
+        - title: Tombstone board
+          command: oar boards tombstone --board-id board_product_launch --reason "initiative closed" --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ board }` with updated tombstone metadata."
+      x-oar-error-codes: [invalid_json, invalid_request, not_found]
+      x-oar-concepts: [boards, lifecycle]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Idempotent; repeated tombstone calls are safe."
+      parameters:
+        - $ref: '#/components/parameters/BoardID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TombstoneRequest'
+      responses:
+        '200':
+          description: Board tombstoned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /boards/{board_id}/restore:
+    post:
+      operationId: restoreBoard
+      summary: Restore a tombstoned board
+      tags: [boards]
+      x-oar-surface: "canonical"
+      x-oar-command-id: "boards.restore"
+      x-oar-cli-path: "boards restore"
+      x-oar-why: "Reverse a tombstone on a board, making it active and visible in default list queries again."
+      x-oar-examples:
+        - title: Restore board
+          command: oar boards restore --board-id board_product_launch --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ board }` with tombstone metadata cleared."
+      x-oar-error-codes: [invalid_json, invalid_request, not_found, not_tombstoned]
+      x-oar-concepts: [boards, lifecycle]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Returns 409 if the board is not currently tombstoned."
+      parameters:
+        - $ref: '#/components/parameters/BoardID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TombstoneRequest'
+      responses:
+        '200':
+          description: Board restored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /boards/{board_id}/purge:
+    post:
+      operationId: purgeBoard
+      summary: Permanently delete a tombstoned board (human-only)
+      tags: [boards]
+      x-oar-surface: "canonical"
+      x-oar-command-id: "boards.purge"
+      x-oar-cli-path: "boards purge"
+      x-oar-why: "Permanently remove a tombstoned board and reclaim storage. Human-only to prevent accidental data loss by automated agents."
+      x-oar-examples:
+        - title: Purge board
+          command: oar boards purge --board-id board_product_launch --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ purged: true, board_id }` on success."
+      x-oar-error-codes: [invalid_json, not_found, not_tombstoned, human_only]
+      x-oar-concepts: [boards, lifecycle]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "403 if the caller is not a human principal. 409 if the board is not tombstoned."
+      parameters:
+        - $ref: '#/components/parameters/BoardID'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: Optional reason for permanent deletion
+                actor_id:
+                  type: string
+                  description: >
+                    Optional acting actor id. Ignored when the request is authenticated as a human principal.
+                    In local development only (`OAR_ALLOW_UNAUTHENTICATED_WRITES` + `OAR_ENABLE_DEV_ACTOR_MODE`),
+                    an unauthenticated purge may succeed when this matches a registered actor whose tags include `human`.
+      responses:
+        '200':
+          description: Board permanently deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  purged:
+                    type: boolean
+                  board_id:
+                    type: string
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
   /docs:
     get:
       operationId: listDocuments
@@ -1952,6 +2428,22 @@ paths:
           name: include_tombstoned
           schema: { type: boolean }
           description: "Include tombstoned documents in the list. Defaults to false."
+        - in: query
+          name: tombstoned_only
+          schema: { type: boolean }
+          description: >
+            When true, return only tombstoned documents (tombstoned_at IS NOT NULL).
+            Mutually exclusive with include_tombstoned; if both are set, tombstoned_only wins.
+        - in: query
+          name: include_archived
+          schema: { type: boolean }
+          description: "Include archived documents in the list. Defaults to false."
+        - in: query
+          name: archived_only
+          schema: { type: boolean }
+          description: >
+            When true, return only archived documents (archived_at IS NOT NULL).
+            Mutually exclusive with include_archived; if both are set, archived_only wins.
       responses:
         '200':
           description: Document list
@@ -2337,6 +2829,16 @@ paths:
           description: >
             When true, return only tombstoned artifacts (tombstoned_at IS NOT NULL).
             Mutually exclusive with include_tombstoned; if both are set, tombstoned_only wins.
+        - in: query
+          name: include_archived
+          schema: { type: boolean }
+          description: "Include archived artifacts in the list. Defaults to false."
+        - in: query
+          name: archived_only
+          schema: { type: boolean }
+          description: >
+            When true, return only archived artifacts (archived_at IS NOT NULL).
+            Mutually exclusive with include_archived; if both are set, archived_only wins.
       responses:
         '200':
           description: Artifact list
@@ -2551,6 +3053,88 @@ paths:
         '409':
           $ref: '#/components/responses/ErrorResponse'
 
+  /artifacts/{artifact_id}/archive:
+    post:
+      operationId: archiveArtifact
+      summary: Archive an artifact
+      tags: [artifacts]
+      x-oar-surface: "canonical"
+      x-oar-command-id: "artifacts.archive"
+      x-oar-cli-path: "artifacts archive"
+      x-oar-why: "Hide an artifact from default list views while preserving it for search and direct access."
+      x-oar-examples:
+        - title: Archive artifact
+          command: oar artifacts archive --artifact-id artifact_123 --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ artifact }` with archive metadata set."
+      x-oar-error-codes: [invalid_json, invalid_request, not_found]
+      x-oar-concepts: [artifacts, lifecycle]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Idempotent; repeated archive calls on the same artifact are safe. Returns 409 if artifact is tombstoned."
+      parameters:
+        - $ref: '#/components/parameters/ArtifactID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TombstoneRequest'
+      responses:
+        '200':
+          description: Artifact archived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /artifacts/{artifact_id}/unarchive:
+    post:
+      operationId: unarchiveArtifact
+      summary: Unarchive an artifact
+      tags: [artifacts]
+      x-oar-surface: "canonical"
+      x-oar-command-id: "artifacts.unarchive"
+      x-oar-cli-path: "artifacts unarchive"
+      x-oar-why: "Return an archived artifact to the default list views."
+      x-oar-examples:
+        - title: Unarchive artifact
+          command: oar artifacts unarchive --artifact-id artifact_123 --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ artifact }` with archive metadata cleared."
+      x-oar-error-codes: [invalid_json, invalid_request, not_found, not_archived]
+      x-oar-concepts: [artifacts, lifecycle]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Returns 409 if the artifact is not currently archived."
+      parameters:
+        - $ref: '#/components/parameters/ArtifactID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TombstoneRequest'
+      responses:
+        '200':
+          description: Artifact unarchived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
   /docs/{document_id}/tombstone:
     post:
       operationId: tombstoneDocument
@@ -2588,6 +3172,179 @@ paths:
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /docs/{document_id}/archive:
+    post:
+      operationId: archiveDocument
+      summary: Archive a document
+      tags: [docs]
+      x-oar-surface: "canonical"
+      x-oar-command-id: "docs.archive"
+      x-oar-cli-path: "docs archive"
+      x-oar-why: "Hide a document from default list views while preserving it for search and direct access."
+      x-oar-examples:
+        - title: Archive document
+          command: oar docs archive --document-id product-constitution --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ document, revision }` with archive metadata set."
+      x-oar-error-codes: [invalid_json, invalid_request, not_found]
+      x-oar-concepts: [docs, lifecycle]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Idempotent; repeated archive calls on the same document are safe. Returns 409 if document is tombstoned."
+      parameters:
+        - $ref: '#/components/parameters/DocumentID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TombstoneRequest'
+      responses:
+        '200':
+          description: Document archived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentWithRevisionResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /docs/{document_id}/unarchive:
+    post:
+      operationId: unarchiveDocument
+      summary: Unarchive a document
+      tags: [docs]
+      x-oar-surface: "canonical"
+      x-oar-command-id: "docs.unarchive"
+      x-oar-cli-path: "docs unarchive"
+      x-oar-why: "Return an archived document to the default list views."
+      x-oar-examples:
+        - title: Unarchive document
+          command: oar docs unarchive --document-id product-constitution --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ document, revision }` with archive metadata cleared."
+      x-oar-error-codes: [invalid_json, invalid_request, not_found, not_archived]
+      x-oar-concepts: [docs, lifecycle]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Returns 409 if the document is not currently archived."
+      parameters:
+        - $ref: '#/components/parameters/DocumentID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TombstoneRequest'
+      responses:
+        '200':
+          description: Document unarchived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentWithRevisionResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /docs/{document_id}/restore:
+    post:
+      operationId: restoreDocument
+      summary: Restore a tombstoned document
+      tags: [docs]
+      x-oar-surface: "canonical"
+      x-oar-command-id: "docs.restore"
+      x-oar-cli-path: "docs restore"
+      x-oar-why: "Reverse a tombstone on a document, making it active and visible in default list queries again."
+      x-oar-examples:
+        - title: Restore document
+          command: oar docs restore --document-id product-constitution --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ document, revision }` with tombstone metadata cleared."
+      x-oar-error-codes: [invalid_json, invalid_request, not_found, not_tombstoned]
+      x-oar-concepts: [docs, lifecycle]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Returns 409 if the document is not currently tombstoned."
+      parameters:
+        - $ref: '#/components/parameters/DocumentID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TombstoneRequest'
+      responses:
+        '200':
+          description: Document restored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentWithRevisionResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /docs/{document_id}/purge:
+    post:
+      operationId: purgeDocument
+      summary: Permanently delete a tombstoned document (human-only)
+      tags: [docs]
+      x-oar-surface: "canonical"
+      x-oar-command-id: "docs.purge"
+      x-oar-cli-path: "docs purge"
+      x-oar-why: "Permanently remove a tombstoned document and its revisions. Human-only."
+      x-oar-examples:
+        - title: Purge document
+          command: oar docs purge --document-id product-constitution --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ purged: true, document_id }` on success."
+      x-oar-error-codes: [not_found, not_tombstoned, human_only]
+      x-oar-concepts: [docs, lifecycle]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "403 if the caller is not a human principal. 409 if the document is not tombstoned."
+      parameters:
+        - $ref: '#/components/parameters/DocumentID'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: Optional reason for permanent deletion
+      responses:
+        '200':
+          description: Document permanently deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  purged:
+                    type: boolean
+                  document_id:
+                    type: string
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
           $ref: '#/components/responses/ErrorResponse'
 
   /work_orders:

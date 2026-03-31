@@ -466,6 +466,8 @@ func handleListArtifacts(w http.ResponseWriter, r *http.Request, opts handlerOpt
 
 	includeTombstoned := strings.TrimSpace(query.Get("include_tombstoned")) == "true"
 	tombstonedOnly := strings.TrimSpace(query.Get("tombstoned_only")) == "true"
+	includeArchived := strings.TrimSpace(query.Get("include_archived")) == "true"
+	archivedOnly := strings.TrimSpace(query.Get("archived_only")) == "true"
 
 	var limitPtr *int
 	if limitStr := strings.TrimSpace(query.Get("limit")); limitStr != "" {
@@ -483,6 +485,8 @@ func handleListArtifacts(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		CreatedAfter:      strings.TrimSpace(query.Get("created_after")),
 		IncludeTombstoned: includeTombstoned,
 		TombstonedOnly:    tombstonedOnly,
+		IncludeArchived:   includeArchived,
+		ArchivedOnly:      archivedOnly,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list artifacts")
@@ -583,6 +587,76 @@ func handleTombstoneArtifact(w http.ResponseWriter, r *http.Request, opts handle
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to tombstone artifact")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"artifact": artifact})
+}
+
+func handleArchiveArtifact(w http.ResponseWriter, r *http.Request, opts handlerOptions, artifactID string) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+
+	var req struct {
+		ActorID string `json:"actor_id"`
+	}
+	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+
+	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
+	if !ok {
+		return
+	}
+
+	artifact, err := opts.primitiveStore.ArchiveArtifact(r.Context(), actorID, artifactID)
+	if err != nil {
+		if errors.Is(err, primitives.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "artifact not found")
+			return
+		}
+		if errors.Is(err, primitives.ErrAlreadyTombstoned) {
+			writeError(w, http.StatusConflict, "already_tombstoned", "artifact is tombstoned")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to archive artifact")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"artifact": artifact})
+}
+
+func handleUnarchiveArtifact(w http.ResponseWriter, r *http.Request, opts handlerOptions, artifactID string) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+
+	var req struct {
+		ActorID string `json:"actor_id"`
+	}
+	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+
+	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
+	if !ok {
+		return
+	}
+
+	artifact, err := opts.primitiveStore.UnarchiveArtifact(r.Context(), actorID, artifactID)
+	if err != nil {
+		if errors.Is(err, primitives.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "artifact not found")
+			return
+		}
+		if errors.Is(err, primitives.ErrNotArchived) {
+			writeError(w, http.StatusConflict, "not_archived", "artifact is not archived")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to unarchive artifact")
 		return
 	}
 

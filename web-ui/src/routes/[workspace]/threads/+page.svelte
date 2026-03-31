@@ -47,6 +47,10 @@
   let creatingThread = $state(false);
   let createError = $state("");
   let filtersOpen = $state(false);
+  let showArchived = $state(false);
+  let archiveBusyId = $state("");
+  let trashConfirmId = $state("");
+  let trashBusyId = $state("");
   let workspaceSlug = $derived($page.params.workspace);
 
   let threadDraft = $state({
@@ -64,12 +68,13 @@
   }
 
   $effect(() => {
+    showArchived;
     const parsed = parseThreadListSearchParams($page.url.searchParams);
     filters = { ...defaultFilters, ...parsed };
     if ([...$page.url.searchParams.keys()].length > 0) {
       filtersOpen = true;
     }
-    loadThreadsFromState(parsed);
+    void loadThreadsFromState(parsed);
   });
 
   async function loadThreadsFromState(state) {
@@ -78,6 +83,9 @@
 
     try {
       const query = buildThreadFilterQueryParamsFromThreadListState(state);
+      if (showArchived) {
+        query.include_archived = "true";
+      }
       const response = await coreClient.listThreads(query);
       let list = response.threads ?? [];
       list = applyThreadListClientFilters(list, state);
@@ -266,11 +274,72 @@
     };
     return styles[status] ?? "text-gray-400";
   }
+
+  function isThreadArchived(thread) {
+    const at = thread?.archived_at;
+    return typeof at === "string" ? at.trim() !== "" : Boolean(at);
+  }
+
+  async function archiveThread(threadId) {
+    const id = String(threadId ?? "").trim();
+    if (!id || archiveBusyId) return;
+    archiveBusyId = id;
+    error = "";
+    try {
+      await coreClient.archiveThread(id, {});
+      await loadThreads();
+    } catch (e) {
+      error = `Archive failed: ${e instanceof Error ? e.message : String(e)}`;
+    } finally {
+      archiveBusyId = "";
+    }
+  }
+
+  async function unarchiveThread(threadId) {
+    const id = String(threadId ?? "").trim();
+    if (!id || archiveBusyId) return;
+    archiveBusyId = id;
+    error = "";
+    try {
+      await coreClient.unarchiveThread(id, {});
+      await loadThreads();
+    } catch (e) {
+      error = `Unarchive failed: ${e instanceof Error ? e.message : String(e)}`;
+    } finally {
+      archiveBusyId = "";
+    }
+  }
+
+  async function trashThread(threadId) {
+    const id = String(threadId ?? "").trim();
+    if (!id || trashBusyId) return;
+    trashBusyId = id;
+    error = "";
+    try {
+      await coreClient.tombstoneThread(id, {});
+      trashConfirmId = "";
+      await loadThreads();
+    } catch (e) {
+      error = `Trash failed: ${e instanceof Error ? e.message : String(e)}`;
+    } finally {
+      trashBusyId = "";
+    }
+  }
 </script>
 
 <div class="flex items-center justify-between mb-4">
   <h1 class="text-lg font-semibold text-[var(--ui-text)]">Threads</h1>
-  <div class="flex items-center gap-1.5">
+  <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-1.5">
+    <label
+      class="inline-flex cursor-pointer items-center gap-1.5 text-[12px] text-[var(--ui-text-muted)]"
+    >
+      <input
+        bind:checked={showArchived}
+        class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--ui-border)] bg-[var(--ui-bg)] text-[var(--ui-accent-strong)] focus:ring-2 focus:ring-[var(--ui-accent)] focus:ring-offset-0"
+        type="checkbox"
+      />
+      Show archived
+    </label>
     <span
       class="inline-flex items-center gap-1 rounded border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2 py-1 text-[11px] text-[var(--ui-text-muted)]"
     >
@@ -591,55 +660,144 @@
   >
     {#each threads as thread, i}
       {@const staleness = computeStaleness(thread)}
-      <a
-        class="flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--ui-border-subtle)] {i >
-        0
+      <div
+        class="flex items-stretch {i > 0
           ? 'border-t border-[var(--ui-border)]'
           : ''}"
-        href={workspaceHref(`/threads/${thread.id}`)}
       >
-        <span
-          class="flex h-2 w-2 shrink-0 rounded-full {priorityDot(
-            thread.priority,
-          )}"
-          title={getPriorityLabel(thread.priority)}
-        ></span>
-        <div class="min-w-0 flex-1">
-          <p class="truncate text-[13px] font-medium text-[var(--ui-text)]">
-            {thread.title}
-          </p>
-          <p class="truncate text-[12px] text-[var(--ui-text-muted)]">
-            {thread.current_summary}
-          </p>
-        </div>
-        <div class="flex shrink-0 items-center gap-1.5 text-[11px]">
-          <span class="font-medium capitalize {statusColor(thread.status)}"
-            >{thread.status}</span
-          >
-          <span class="hidden text-[var(--ui-text-muted)] sm:inline"
-            >{formatCadenceLabel(thread.cadence, {
-              includeExpression: false,
-            })}</span
-          >
-          {#if (thread.tags ?? []).length > 0}
-            <span
-              class="hidden rounded bg-[var(--ui-panel)] px-1.5 py-0.5 text-[var(--ui-text-muted)] sm:inline"
-              >{thread.tags[0]}{thread.tags.length > 1
-                ? ` +${thread.tags.length - 1}`
-                : ""}</span
+        <a
+          class="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--ui-border-subtle)]"
+          href={workspaceHref(`/threads/${thread.id}`)}
+        >
+          <span
+            class="flex h-2 w-2 shrink-0 rounded-full {priorityDot(
+              thread.priority,
+            )}"
+            title={getPriorityLabel(thread.priority)}
+          ></span>
+          <div class="min-w-0 flex-1">
+            <div class="flex flex-wrap items-center gap-2">
+              <p class="truncate text-[13px] font-medium text-[var(--ui-text)]">
+                {thread.title}
+              </p>
+              {#if isThreadArchived(thread)}
+                <span
+                  class="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-medium text-amber-400"
+                  >Archived</span
+                >
+              {/if}
+            </div>
+            <p class="truncate text-[12px] text-[var(--ui-text-muted)]">
+              {thread.current_summary}
+            </p>
+          </div>
+          <div class="flex shrink-0 items-center gap-1.5 text-[11px]">
+            <span class="font-medium capitalize {statusColor(thread.status)}"
+              >{thread.status}</span
             >
-          {/if}
-          {#if staleness.stale}
-            <span
-              class="rounded bg-red-500/10 px-1.5 py-0.5 font-medium text-red-400"
-              >Stale</span
+            <span class="hidden text-[var(--ui-text-muted)] sm:inline"
+              >{formatCadenceLabel(thread.cadence, {
+                includeExpression: false,
+              })}</span
             >
+            {#if (thread.tags ?? []).length > 0}
+              <span
+                class="hidden rounded bg-[var(--ui-panel)] px-1.5 py-0.5 text-[var(--ui-text-muted)] sm:inline"
+                >{thread.tags[0]}{thread.tags.length > 1
+                  ? ` +${thread.tags.length - 1}`
+                  : ""}</span
+              >
+            {/if}
+            {#if staleness.stale}
+              <span
+                class="rounded bg-red-500/10 px-1.5 py-0.5 font-medium text-red-400"
+                >Stale</span
+              >
+            {/if}
+            <span class="w-14 text-right text-[var(--ui-text-subtle)]"
+              >{formatTimestamp(thread.updated_at) || "—"}</span
+            >
+          </div>
+        </a>
+        <div
+          class="flex shrink-0 items-center gap-1 border-l border-[var(--ui-border)] px-2"
+        >
+          {#if trashConfirmId !== thread.id}
+            {#if isThreadArchived(thread)}
+              <button
+                class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2 py-1 text-[11px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={Boolean(archiveBusyId) || Boolean(trashBusyId)}
+                onclick={() => void unarchiveThread(thread.id)}
+                type="button"
+              >
+                Unarchive
+              </button>
+            {:else}
+              <button
+                class="cursor-pointer rounded-md p-1 text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border)] hover:text-[var(--ui-accent)] disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={Boolean(archiveBusyId) || Boolean(trashBusyId)}
+                onclick={() => void archiveThread(thread.id)}
+                title="Archive"
+                type="button"
+              >
+                <svg
+                  class="h-3.5 w-3.5"
+                  fill="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m8.25 3v6.75m0 0l-3-3m3 3l3-3M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"
+                  />
+                </svg>
+              </button>
+            {/if}
+            <button
+              class="cursor-pointer rounded-md p-1 text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border)] hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={Boolean(trashBusyId) || Boolean(archiveBusyId)}
+              onclick={() => {
+                trashConfirmId = thread.id;
+              }}
+              title="Move to trash"
+              type="button"
+            >
+              <svg
+                class="h-3.5 w-3.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
+                />
+              </svg>
+            </button>
+          {:else}
+            <div class="flex items-center gap-1">
+              <button
+                class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2 py-1 text-[11px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]"
+                onclick={() => {
+                  trashConfirmId = "";
+                }}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                class="cursor-pointer rounded-md bg-red-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={trashBusyId === thread.id}
+                onclick={() => void trashThread(thread.id)}
+                type="button"
+              >
+                Trash
+              </button>
+            </div>
           {/if}
-          <span class="w-14 text-right text-[var(--ui-text-subtle)]"
-            >{formatTimestamp(thread.updated_at) || "—"}</span
-          >
         </div>
-      </a>
+      </div>
     {/each}
   </div>
 {/if}

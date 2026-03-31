@@ -1,4 +1,5 @@
 <script>
+  import { goto } from "$app/navigation";
   import { page } from "$app/stores";
   import GuidedTypedRefsInput from "$lib/components/GuidedTypedRefsInput.svelte";
   import SearchableEntityPicker from "$lib/components/SearchableEntityPicker.svelte";
@@ -42,6 +43,8 @@
   let mutatingCardId = $state("");
   let backlogOpen = $state(false);
   let doneOpen = $state(false);
+  let boardTrashConfirm = $state(false);
+  let boardLifecycleBusy = $state(false);
 
   let boardTitle = $state("");
   let boardStatus = $state("active");
@@ -430,6 +433,58 @@
       void loadWorkspace();
     }
   });
+
+  $effect(() => {
+    boardId;
+    boardTrashConfirm = false;
+  });
+
+  async function handleArchiveBoard() {
+    if (!boardId || boardLifecycleBusy || workspace?.board?.tombstoned_at)
+      return;
+    boardLifecycleBusy = true;
+    try {
+      await coreClient.archiveBoard(boardId, {});
+      await loadWorkspace();
+    } finally {
+      boardLifecycleBusy = false;
+    }
+  }
+
+  async function handleUnarchiveBoard() {
+    if (!boardId || boardLifecycleBusy || workspace?.board?.tombstoned_at)
+      return;
+    boardLifecycleBusy = true;
+    try {
+      await coreClient.unarchiveBoard(boardId, {});
+      await loadWorkspace();
+    } finally {
+      boardLifecycleBusy = false;
+    }
+  }
+
+  async function handleTombstoneBoard() {
+    if (!boardId || boardLifecycleBusy) return;
+    boardLifecycleBusy = true;
+    try {
+      await coreClient.tombstoneBoard(boardId, {});
+      boardTrashConfirm = false;
+      await goto(workspacePath(workspaceSlug, "/boards"));
+    } finally {
+      boardLifecycleBusy = false;
+    }
+  }
+
+  async function handleRestoreBoard() {
+    if (!boardId || boardLifecycleBusy) return;
+    boardLifecycleBusy = true;
+    try {
+      await coreClient.restoreBoard(boardId, {});
+      await loadWorkspace();
+    } finally {
+      boardLifecycleBusy = false;
+    }
+  }
 </script>
 
 {#if loading}
@@ -473,6 +528,56 @@
   {@const backlogCards = cardsByColumn["backlog"] ?? []}
   {@const doneCards = cardsByColumn["done"] ?? []}
 
+  {#if board.tombstoned_at}
+    <div
+      class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[13px] text-red-400"
+    >
+      <div class="min-w-0 flex-1">
+        <div class="flex items-center gap-2 font-semibold">
+          <span>⚠</span>
+          <span>This board has been tombstoned</span>
+        </div>
+        {#if board.tombstone_reason}
+          <p class="mt-2">Reason: {board.tombstone_reason}</p>
+        {/if}
+        <p class="mt-1 text-[11px] text-red-400/80">
+          Tombstoned {#if board.tombstoned_by}by {actorName(
+              board.tombstoned_by,
+            )}{/if}
+          {#if board.tombstoned_at}
+            at {formatTimestamp(board.tombstoned_at)}
+          {/if}
+        </p>
+      </div>
+      <button
+        class="shrink-0 cursor-pointer rounded-md border border-red-500/40 bg-red-500/15 px-2 py-1 text-[12px] font-medium text-red-400 hover:bg-red-500/25 disabled:opacity-50"
+        disabled={boardLifecycleBusy}
+        onclick={handleRestoreBoard}
+        type="button"
+      >
+        {boardLifecycleBusy ? "…" : "Restore"}
+      </button>
+    </div>
+  {:else if board.archived_at}
+    <div
+      class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[13px] text-amber-400"
+    >
+      <p class="min-w-0 flex-1">
+        This board was archived on {formatTimestamp(board.archived_at) ||
+          "—"}{#if board.archived_by}
+          by {actorName(board.archived_by)}{/if}.
+      </p>
+      <button
+        class="shrink-0 cursor-pointer rounded-md border border-amber-500/40 bg-amber-500/15 px-2 py-1 text-[12px] font-medium text-amber-400 hover:bg-amber-500/25 disabled:opacity-50"
+        disabled={boardLifecycleBusy}
+        onclick={handleUnarchiveBoard}
+        type="button"
+      >
+        {boardLifecycleBusy ? "…" : "Unarchive"}
+      </button>
+    </div>
+  {/if}
+
   <div class="mb-3">
     <div class="flex items-center gap-2 text-[12px]">
       <a
@@ -511,22 +616,73 @@
         </span>
       </div>
 
-      <div class="flex shrink-0 gap-2">
-        <button
-          class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] hover:text-[var(--ui-text)]"
-          onclick={openBoardEditForm}
-          type="button"
-        >
-          {showBoardEditForm ? "Close" : "Edit"}
-        </button>
-        <button
-          class="rounded-md bg-indigo-600 px-2.5 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500"
-          onclick={openAddCardForm}
-          type="button"
-        >
-          {showAddCardForm ? "Close" : "Add card"}
-        </button>
-      </div>
+      {#if !board.tombstoned_at}
+        <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          {#if !board.archived_at}
+            <button
+              class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text)] transition-colors hover:bg-[var(--ui-border)] disabled:opacity-50"
+              disabled={boardLifecycleBusy}
+              onclick={handleArchiveBoard}
+              type="button"
+            >
+              Archive
+            </button>
+          {/if}
+          <button
+            class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] hover:text-[var(--ui-text)]"
+            onclick={openBoardEditForm}
+            type="button"
+          >
+            {showBoardEditForm ? "Close" : "Edit"}
+          </button>
+          <button
+            class="rounded-md bg-indigo-600 px-2.5 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500"
+            onclick={openAddCardForm}
+            type="button"
+          >
+            {showAddCardForm ? "Close" : "Add card"}
+          </button>
+          {#if boardTrashConfirm}
+            <button
+              class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] px-2 py-1 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)]"
+              onclick={() => (boardTrashConfirm = false)}
+              type="button"
+            >
+              Cancel
+            </button>
+            <button
+              class="cursor-pointer rounded-md border border-red-500/40 bg-red-500/15 px-2 py-1 text-[12px] font-medium text-red-400 transition-colors hover:bg-red-500/25 disabled:opacity-50"
+              disabled={boardLifecycleBusy}
+              onclick={handleTombstoneBoard}
+              type="button"
+            >
+              Confirm
+            </button>
+          {:else}
+            <button
+              aria-label="Move board to trash"
+              class="cursor-pointer rounded-md p-1.5 text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border)] hover:text-red-400 disabled:opacity-50"
+              disabled={boardLifecycleBusy}
+              onclick={() => (boardTrashConfirm = true)}
+              type="button"
+            >
+              <svg
+                class="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                />
+              </svg>
+            </button>
+          {/if}
+        </div>
+      {/if}
     </div>
 
     <!-- Single context line -->

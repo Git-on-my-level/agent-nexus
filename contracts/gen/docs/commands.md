@@ -4,7 +4,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.2.3`
-- Commands: `79`
+- Commands: `95`
 
 ## `actors.list`
 
@@ -98,6 +98,21 @@ Generated from `contracts/oar-openapi.yaml`.
 - Agent notes: Requires Bearer access token. `allow_human_lockout=true` is an explicit break-glass path that can leave the workspace without an active human principal; include a non-empty `human_lockout_reason`.
 - Examples:
   - Revoke self: `oar agents me revoke --json`
+
+## `artifacts.archive`
+
+- CLI path: `artifacts archive`
+- HTTP: `POST /artifacts/{artifact_id}/archive`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Hide an artifact from default list views while preserving it for search and direct access.
+- Concepts: `artifacts`, `lifecycle`
+- Error codes: `invalid_json`, `invalid_request`, `not_found`
+- Output: Returns `{ artifact }` with archive metadata set.
+- Agent notes: Idempotent; repeated archive calls on the same artifact are safe. Returns 409 if artifact is tombstoned.
+- Examples:
+  - Archive artifact: `oar artifacts archive --artifact-id artifact_123 --json`
 
 ## `artifacts.content.get`
 
@@ -203,6 +218,21 @@ Generated from `contracts/oar-openapi.yaml`.
 - Agent notes: Idempotent; repeated tombstone calls on the same artifact are safe.
 - Examples:
   - Tombstone artifact: `oar artifacts tombstone --artifact-id artifact_123 --reason "superseded by newer version" --json`
+
+## `artifacts.unarchive`
+
+- CLI path: `artifacts unarchive`
+- HTTP: `POST /artifacts/{artifact_id}/unarchive`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Return an archived artifact to the default list views.
+- Concepts: `artifacts`, `lifecycle`
+- Error codes: `invalid_json`, `invalid_request`, `not_found`, `not_archived`
+- Output: Returns `{ artifact }` with archive metadata cleared.
+- Agent notes: Returns 409 if the artifact is not currently archived.
+- Examples:
+  - Unarchive artifact: `oar artifacts unarchive --artifact-id artifact_123 --json`
 
 ## `auth.agents.register`
 
@@ -387,6 +417,21 @@ Generated from `contracts/oar-openapi.yaml`.
   - Refresh token grant: `oar auth token --grant-type refresh_token --refresh-token <token> --json`
   - Assertion grant: `oar auth token --grant-type assertion --agent-id <id> --key-id <id> --signed-at <rfc3339> --signature <base64> --json`
 
+## `boards.archive`
+
+- CLI path: `boards archive`
+- HTTP: `POST /boards/{board_id}/archive`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Hide a board from default list views while preserving it for search and direct access.
+- Concepts: `boards`, `lifecycle`
+- Error codes: `invalid_json`, `invalid_request`, `not_found`
+- Output: Returns `{ board }` with archive metadata set.
+- Agent notes: Idempotent; repeated archive calls on the same board are safe. Returns 409 if board is tombstoned.
+- Examples:
+  - Archive board: `oar boards archive --board-id board_product_launch --json`
+
 ## `boards.cards.add`
 
 - CLI path: `boards cards add`
@@ -510,6 +555,66 @@ Generated from `contracts/oar-openapi.yaml`.
   - Search boards by label: `oar boards list --q "launch" --json`
   - Paginated board list: `oar boards list --limit 30 --json`
 
+## `boards.purge`
+
+- CLI path: `boards purge`
+- HTTP: `POST /boards/{board_id}/purge`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Permanently remove a tombstoned board and reclaim storage. Human-only to prevent accidental data loss by automated agents.
+- Concepts: `boards`, `lifecycle`
+- Error codes: `invalid_json`, `not_found`, `not_tombstoned`, `human_only`
+- Output: Returns `{ purged: true, board_id }` on success.
+- Agent notes: 403 if the caller is not a human principal. 409 if the board is not tombstoned.
+- Examples:
+  - Purge board: `oar boards purge --board-id board_product_launch --json`
+
+## `boards.restore`
+
+- CLI path: `boards restore`
+- HTTP: `POST /boards/{board_id}/restore`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Reverse a tombstone on a board, making it active and visible in default list queries again.
+- Concepts: `boards`, `lifecycle`
+- Error codes: `invalid_json`, `invalid_request`, `not_found`, `not_tombstoned`
+- Output: Returns `{ board }` with tombstone metadata cleared.
+- Agent notes: Returns 409 if the board is not currently tombstoned.
+- Examples:
+  - Restore board: `oar boards restore --board-id board_product_launch --json`
+
+## `boards.tombstone`
+
+- CLI path: `boards tombstone`
+- HTTP: `POST /boards/{board_id}/tombstone`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Mark a board as inactive while preserving provenance; tombstoned boards are excluded from list by default.
+- Concepts: `boards`, `lifecycle`
+- Error codes: `invalid_json`, `invalid_request`, `not_found`
+- Output: Returns `{ board }` with updated tombstone metadata.
+- Agent notes: Idempotent; repeated tombstone calls are safe.
+- Examples:
+  - Tombstone board: `oar boards tombstone --board-id board_product_launch --reason "initiative closed" --json`
+
+## `boards.unarchive`
+
+- CLI path: `boards unarchive`
+- HTTP: `POST /boards/{board_id}/unarchive`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Return an archived board to the default list views.
+- Concepts: `boards`, `lifecycle`
+- Error codes: `invalid_json`, `invalid_request`, `not_found`, `not_archived`
+- Output: Returns `{ board }` with archive metadata cleared.
+- Agent notes: Returns 409 if the board is not currently archived.
+- Examples:
+  - Unarchive board: `oar boards unarchive --board-id board_product_launch --json`
+
 ## `boards.update`
 
 - CLI path: `boards update`
@@ -615,6 +720,21 @@ Generated from `contracts/oar-openapi.yaml`.
 - Examples:
   - Rebuild derived: `oar derived rebuild --actor-id system --json`
 
+## `docs.archive`
+
+- CLI path: `docs archive`
+- HTTP: `POST /docs/{document_id}/archive`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Hide a document from default list views while preserving it for search and direct access.
+- Concepts: `docs`, `lifecycle`
+- Error codes: `invalid_json`, `invalid_request`, `not_found`
+- Output: Returns `{ document, revision }` with archive metadata set.
+- Agent notes: Idempotent; repeated archive calls on the same document are safe. Returns 409 if document is tombstoned.
+- Examples:
+  - Archive document: `oar docs archive --document-id product-constitution --json`
+
 ## `docs.create`
 
 - CLI path: `docs create`
@@ -677,6 +797,36 @@ Generated from `contracts/oar-openapi.yaml`.
   - Search documents by title: `oar docs list --q "constitution" --json`
   - Paginated document list: `oar docs list --limit 50 --json`
 
+## `docs.purge`
+
+- CLI path: `docs purge`
+- HTTP: `POST /docs/{document_id}/purge`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Permanently remove a tombstoned document and its revisions. Human-only.
+- Concepts: `docs`, `lifecycle`
+- Error codes: `not_found`, `not_tombstoned`, `human_only`
+- Output: Returns `{ purged: true, document_id }` on success.
+- Agent notes: 403 if the caller is not a human principal. 409 if the document is not tombstoned.
+- Examples:
+  - Purge document: `oar docs purge --document-id product-constitution --json`
+
+## `docs.restore`
+
+- CLI path: `docs restore`
+- HTTP: `POST /docs/{document_id}/restore`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Reverse a tombstone on a document, making it active and visible in default list queries again.
+- Concepts: `docs`, `lifecycle`
+- Error codes: `invalid_json`, `invalid_request`, `not_found`, `not_tombstoned`
+- Output: Returns `{ document, revision }` with tombstone metadata cleared.
+- Agent notes: Returns 409 if the document is not currently tombstoned.
+- Examples:
+  - Restore document: `oar docs restore --document-id product-constitution --json`
+
 ## `docs.revision.get`
 
 - CLI path: `docs revision get`
@@ -706,6 +856,21 @@ Generated from `contracts/oar-openapi.yaml`.
 - Agent notes: Idempotent; repeated tombstone calls on the same document are safe.
 - Examples:
   - Tombstone document: `oar docs tombstone --document-id product-constitution --reason "replaced by v2" --json`
+
+## `docs.unarchive`
+
+- CLI path: `docs unarchive`
+- HTTP: `POST /docs/{document_id}/unarchive`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Return an archived document to the default list views.
+- Concepts: `docs`, `lifecycle`
+- Error codes: `invalid_json`, `invalid_request`, `not_found`, `not_archived`
+- Output: Returns `{ document, revision }` with archive metadata cleared.
+- Agent notes: Returns 409 if the document is not currently archived.
+- Examples:
+  - Unarchive document: `oar docs unarchive --document-id product-constitution --json`
 
 ## `docs.update`
 
@@ -1082,6 +1247,21 @@ Generated from `contracts/oar-openapi.yaml`.
 - Examples:
   - Get snapshot: `oar snapshots get --snapshot-id snapshot_123 --json`
 
+## `threads.archive`
+
+- CLI path: `threads archive`
+- HTTP: `POST /threads/{thread_id}/archive`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Hide a thread from default list views while preserving it for search and direct access.
+- Concepts: `threads`, `lifecycle`
+- Error codes: `invalid_json`, `invalid_request`, `not_found`
+- Output: Returns `{ thread }` with archive metadata set.
+- Agent notes: Idempotent; repeated archive calls on the same thread are safe. Returns 409 if thread is tombstoned.
+- Examples:
+  - Archive thread: `oar threads archive --thread-id thread_123 --json`
+
 ## `threads.context`
 
 - CLI path: `threads context`
@@ -1160,6 +1340,36 @@ Generated from `contracts/oar-openapi.yaml`.
 - Examples:
   - Patch thread: `oar threads patch --thread-id thread_123 --from-file patch.json --json`
 
+## `threads.purge`
+
+- CLI path: `threads purge`
+- HTTP: `POST /threads/{thread_id}/purge`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Permanently remove a tombstoned thread and reclaim storage. Human-only to prevent accidental data loss by automated agents.
+- Concepts: `threads`, `lifecycle`
+- Error codes: `invalid_json`, `not_found`, `not_tombstoned`, `human_only`
+- Output: Returns `{ purged: true, thread_id }` on success.
+- Agent notes: 403 if the caller is not a human principal. 409 if the thread is not tombstoned.
+- Examples:
+  - Purge thread: `oar threads purge --thread-id thread_123 --json`
+
+## `threads.restore`
+
+- CLI path: `threads restore`
+- HTTP: `POST /threads/{thread_id}/restore`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Reverse a tombstone on a thread, making it active and visible in default list queries again.
+- Concepts: `threads`, `lifecycle`
+- Error codes: `invalid_json`, `invalid_request`, `not_found`, `not_tombstoned`
+- Output: Returns `{ thread }` with tombstone metadata cleared.
+- Agent notes: Returns 409 if the thread is not currently tombstoned.
+- Examples:
+  - Restore thread: `oar threads restore --thread-id thread_123 --json`
+
 ## `threads.timeline`
 
 - CLI path: `threads timeline`
@@ -1174,6 +1384,36 @@ Generated from `contracts/oar-openapi.yaml`.
 - Agent notes: Events stay time ordered; missing refs are omitted from expansion maps.
 - Examples:
   - Timeline: `oar threads timeline --thread-id thread_123 --json`
+
+## `threads.tombstone`
+
+- CLI path: `threads tombstone`
+- HTTP: `POST /threads/{thread_id}/tombstone`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Mark a thread as inactive while preserving provenance; tombstoned threads are excluded from list by default.
+- Concepts: `threads`, `lifecycle`
+- Error codes: `invalid_json`, `invalid_request`, `not_found`
+- Output: Returns `{ thread }` with updated tombstone metadata.
+- Agent notes: Idempotent; repeated tombstone calls are safe.
+- Examples:
+  - Tombstone thread: `oar threads tombstone --thread-id thread_123 --reason "merged into parent" --json`
+
+## `threads.unarchive`
+
+- CLI path: `threads unarchive`
+- HTTP: `POST /threads/{thread_id}/unarchive`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Return an archived thread to the default list views.
+- Concepts: `threads`, `lifecycle`
+- Error codes: `invalid_json`, `invalid_request`, `not_found`, `not_archived`
+- Output: Returns `{ thread }` with archive metadata cleared.
+- Agent notes: Returns 409 if the thread is not currently archived.
+- Examples:
+  - Unarchive thread: `oar threads unarchive --thread-id thread_123 --json`
 
 ## `threads.workspace`
 

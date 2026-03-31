@@ -95,9 +95,25 @@ type PrimitiveStore interface {
 	ListRecentEventsByThread(ctx context.Context, threadID string, limit int) ([]map[string]any, error)
 	ListEvents(ctx context.Context, filter primitives.EventListFilter) ([]map[string]any, error)
 	TombstoneArtifact(ctx context.Context, actorID string, artifactID string, reason string) (map[string]any, error)
+	ArchiveArtifact(ctx context.Context, actorID string, artifactID string) (map[string]any, error)
+	UnarchiveArtifact(ctx context.Context, actorID string, artifactID string) (map[string]any, error)
 	RestoreArtifact(ctx context.Context, actorID string, artifactID string) (map[string]any, error)
 	PurgeTombstonedArtifact(ctx context.Context, artifactID string) error
 	TombstoneDocument(ctx context.Context, actorID string, documentID string, reason string) (map[string]any, map[string]any, error)
+	ArchiveDocument(ctx context.Context, actorID string, documentID string) (map[string]any, map[string]any, error)
+	UnarchiveDocument(ctx context.Context, actorID string, documentID string) (map[string]any, map[string]any, error)
+	RestoreDocument(ctx context.Context, actorID string, documentID string, reason string) (map[string]any, map[string]any, error)
+	PurgeDocument(ctx context.Context, documentID string) error
+	ArchiveThread(ctx context.Context, actorID string, threadID string) (map[string]any, error)
+	UnarchiveThread(ctx context.Context, actorID string, threadID string) (map[string]any, error)
+	TombstoneThread(ctx context.Context, actorID string, threadID string, reason string) (map[string]any, error)
+	RestoreThread(ctx context.Context, actorID string, threadID string) (map[string]any, error)
+	PurgeThread(ctx context.Context, threadID string) error
+	ArchiveBoard(ctx context.Context, actorID string, boardID string) (map[string]any, error)
+	UnarchiveBoard(ctx context.Context, actorID string, boardID string) (map[string]any, error)
+	TombstoneBoard(ctx context.Context, actorID string, boardID string, reason string) (map[string]any, error)
+	RestoreBoard(ctx context.Context, actorID string, boardID string) (map[string]any, error)
+	PurgeBoard(ctx context.Context, boardID string) error
 }
 
 type HandlerOption func(*handlerOptions)
@@ -871,6 +887,11 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
 			}
 			return routeAccessRequirement{}
+		case strings.HasSuffix(remainder, "/archive"), strings.HasSuffix(remainder, "/unarchive"), strings.HasSuffix(remainder, "/tombstone"), strings.HasSuffix(remainder, "/restore"), strings.HasSuffix(remainder, "/purge"):
+			if r.Method == http.MethodPost {
+				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+			}
+			return routeAccessRequirement{}
 		case strings.Contains(remainder, "/"):
 			return routeAccessRequirement{}
 		case r.Method == http.MethodGet || r.Method == http.MethodPatch:
@@ -930,6 +951,81 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				return
 			}
 			handleThreadWorkspace(w, r, opts, threadID)
+			return
+		}
+
+		if strings.HasSuffix(remainder, "/archive") {
+			if r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+				return
+			}
+			threadID := strings.TrimSuffix(remainder, "/archive")
+			threadID = strings.TrimSuffix(threadID, "/")
+			if threadID == "" || strings.Contains(threadID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			handleArchiveThread(w, r, opts, threadID)
+			return
+		}
+
+		if strings.HasSuffix(remainder, "/unarchive") {
+			if r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+				return
+			}
+			threadID := strings.TrimSuffix(remainder, "/unarchive")
+			threadID = strings.TrimSuffix(threadID, "/")
+			if threadID == "" || strings.Contains(threadID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			handleUnarchiveThread(w, r, opts, threadID)
+			return
+		}
+
+		if strings.HasSuffix(remainder, "/tombstone") {
+			if r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+				return
+			}
+			threadID := strings.TrimSuffix(remainder, "/tombstone")
+			threadID = strings.TrimSuffix(threadID, "/")
+			if threadID == "" || strings.Contains(threadID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			handleTombstoneThread(w, r, opts, threadID)
+			return
+		}
+
+		if strings.HasSuffix(remainder, "/restore") {
+			if r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+				return
+			}
+			threadID := strings.TrimSuffix(remainder, "/restore")
+			threadID = strings.TrimSuffix(threadID, "/")
+			if threadID == "" || strings.Contains(threadID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			handleRestoreThread(w, r, opts, threadID)
+			return
+		}
+
+		if strings.HasSuffix(remainder, "/purge") {
+			if r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+				return
+			}
+			threadID := strings.TrimSuffix(remainder, "/purge")
+			threadID = strings.TrimSuffix(threadID, "/")
+			if threadID == "" || strings.Contains(threadID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			handlePurgeThread(w, r, opts, threadID)
 			return
 		}
 
@@ -1004,6 +1100,26 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			return routeAccessRequirement{}
 		}
 		switch {
+		case strings.HasSuffix(remainder, "/purge"):
+			if r.Method == http.MethodPost {
+				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+			}
+			return routeAccessRequirement{}
+		case strings.HasSuffix(remainder, "/restore"):
+			if r.Method == http.MethodPost {
+				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+			}
+			return routeAccessRequirement{}
+		case strings.HasSuffix(remainder, "/archive"):
+			if r.Method == http.MethodPost {
+				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+			}
+			return routeAccessRequirement{}
+		case strings.HasSuffix(remainder, "/unarchive"):
+			if r.Method == http.MethodPost {
+				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+			}
+			return routeAccessRequirement{}
 		case strings.HasSuffix(remainder, "/tombstone"):
 			if r.Method == http.MethodPost {
 				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
@@ -1030,6 +1146,66 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		remainder := strings.TrimPrefix(r.URL.Path, "/docs/")
 		if remainder == "" {
 			writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+			return
+		}
+
+		if strings.HasSuffix(remainder, "/purge") {
+			if r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+				return
+			}
+			documentID := strings.TrimSuffix(remainder, "/purge")
+			documentID = strings.TrimSuffix(documentID, "/")
+			if documentID == "" || strings.Contains(documentID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			handlePurgeDocument(w, r, opts, documentID)
+			return
+		}
+
+		if strings.HasSuffix(remainder, "/restore") {
+			if r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+				return
+			}
+			documentID := strings.TrimSuffix(remainder, "/restore")
+			documentID = strings.TrimSuffix(documentID, "/")
+			if documentID == "" || strings.Contains(documentID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			handleRestoreDocument(w, r, opts, documentID)
+			return
+		}
+
+		if strings.HasSuffix(remainder, "/archive") {
+			if r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+				return
+			}
+			documentID := strings.TrimSuffix(remainder, "/archive")
+			documentID = strings.TrimSuffix(documentID, "/")
+			if documentID == "" || strings.Contains(documentID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			handleArchiveDocument(w, r, opts, documentID)
+			return
+		}
+
+		if strings.HasSuffix(remainder, "/unarchive") {
+			if r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+				return
+			}
+			documentID := strings.TrimSuffix(remainder, "/unarchive")
+			documentID = strings.TrimSuffix(documentID, "/")
+			if documentID == "" || strings.Contains(documentID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			handleUnarchiveDocument(w, r, opts, documentID)
 			return
 		}
 
@@ -1116,6 +1292,11 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
 			}
 			return routeAccessRequirement{}
+		case strings.HasSuffix(remainder, "/archive"), strings.HasSuffix(remainder, "/unarchive"), strings.HasSuffix(remainder, "/tombstone"), strings.HasSuffix(remainder, "/restore"), strings.HasSuffix(remainder, "/purge"):
+			if r.Method == http.MethodPost {
+				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+			}
+			return routeAccessRequirement{}
 		case strings.HasSuffix(remainder, "/cards"):
 			if r.Method == http.MethodGet || r.Method == http.MethodPost {
 				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
@@ -1162,6 +1343,81 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				return
 			}
 			handleGetBoardWorkspace(w, r, opts, boardID)
+			return
+		}
+
+		if strings.HasSuffix(remainder, "/archive") {
+			if r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+				return
+			}
+			boardID := strings.TrimSuffix(remainder, "/archive")
+			boardID = strings.TrimSuffix(boardID, "/")
+			if boardID == "" || strings.Contains(boardID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			handleArchiveBoard(w, r, opts, boardID)
+			return
+		}
+
+		if strings.HasSuffix(remainder, "/unarchive") {
+			if r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+				return
+			}
+			boardID := strings.TrimSuffix(remainder, "/unarchive")
+			boardID = strings.TrimSuffix(boardID, "/")
+			if boardID == "" || strings.Contains(boardID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			handleUnarchiveBoard(w, r, opts, boardID)
+			return
+		}
+
+		if strings.HasSuffix(remainder, "/tombstone") {
+			if r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+				return
+			}
+			boardID := strings.TrimSuffix(remainder, "/tombstone")
+			boardID = strings.TrimSuffix(boardID, "/")
+			if boardID == "" || strings.Contains(boardID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			handleTombstoneBoard(w, r, opts, boardID)
+			return
+		}
+
+		if strings.HasSuffix(remainder, "/restore") {
+			if r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+				return
+			}
+			boardID := strings.TrimSuffix(remainder, "/restore")
+			boardID = strings.TrimSuffix(boardID, "/")
+			if boardID == "" || strings.Contains(boardID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			handleRestoreBoard(w, r, opts, boardID)
+			return
+		}
+
+		if strings.HasSuffix(remainder, "/purge") {
+			if r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+				return
+			}
+			boardID := strings.TrimSuffix(remainder, "/purge")
+			boardID = strings.TrimSuffix(boardID, "/")
+			if boardID == "" || strings.Contains(boardID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			handlePurgeBoard(w, r, opts, boardID)
 			return
 		}
 
@@ -1323,6 +1579,16 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
 			}
 			return routeAccessRequirement{}
+		case strings.HasSuffix(remainder, "/archive"):
+			if r.Method == http.MethodPost {
+				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+			}
+			return routeAccessRequirement{}
+		case strings.HasSuffix(remainder, "/unarchive"):
+			if r.Method == http.MethodPost {
+				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+			}
+			return routeAccessRequirement{}
 		case strings.HasSuffix(remainder, "/content"):
 			if r.Method == http.MethodGet {
 				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
@@ -1384,6 +1650,36 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				return
 			}
 			handleTombstoneArtifact(w, r, opts, artifactID)
+			return
+		}
+
+		if strings.HasSuffix(remainder, "/archive") {
+			if r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+				return
+			}
+			artifactID := strings.TrimSuffix(remainder, "/archive")
+			artifactID = strings.TrimSuffix(artifactID, "/")
+			if artifactID == "" || strings.Contains(artifactID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			handleArchiveArtifact(w, r, opts, artifactID)
+			return
+		}
+
+		if strings.HasSuffix(remainder, "/unarchive") {
+			if r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+				return
+			}
+			artifactID := strings.TrimSuffix(remainder, "/unarchive")
+			artifactID = strings.TrimSuffix(artifactID, "/")
+			if artifactID == "" || strings.Contains(artifactID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			handleUnarchiveArtifact(w, r, opts, artifactID)
 			return
 		}
 

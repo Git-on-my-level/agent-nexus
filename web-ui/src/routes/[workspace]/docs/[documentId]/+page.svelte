@@ -44,6 +44,8 @@
   let saveError = $state("");
   let loadingSelectedRevisionKey = $state("");
   let metadataExpanded = $state(false);
+  let docTrashConfirm = $state(false);
+  let docLifecycleBusy = $state(false);
 
   let displayedContent = $derived(
     selectedRevision?.content ?? headRevision?.content ?? "",
@@ -100,6 +102,11 @@
   $effect(() => {
     const id = documentId;
     if (id && id !== loadedDocumentId) loadDocument(id);
+  });
+
+  $effect(() => {
+    documentId;
+    docTrashConfirm = false;
   });
 
   $effect(() => {
@@ -317,6 +324,51 @@
       saving = false;
     }
   }
+
+  async function handleArchiveDocument() {
+    if (!documentId || docLifecycleBusy || document?.tombstoned_at) return;
+    docLifecycleBusy = true;
+    try {
+      await coreClient.archiveDocument(documentId, {});
+      await loadDocument(documentId);
+    } finally {
+      docLifecycleBusy = false;
+    }
+  }
+
+  async function handleUnarchiveDocument() {
+    if (!documentId || docLifecycleBusy || document?.tombstoned_at) return;
+    docLifecycleBusy = true;
+    try {
+      await coreClient.unarchiveDocument(documentId, {});
+      await loadDocument(documentId);
+    } finally {
+      docLifecycleBusy = false;
+    }
+  }
+
+  async function handleTombstoneDocument() {
+    if (!documentId || docLifecycleBusy) return;
+    docLifecycleBusy = true;
+    try {
+      await coreClient.tombstoneDocument(documentId, {});
+      docTrashConfirm = false;
+      await goto(workspacePath(workspaceSlug, "/docs"));
+    } finally {
+      docLifecycleBusy = false;
+    }
+  }
+
+  async function handleRestoreDocument() {
+    if (!documentId || docLifecycleBusy) return;
+    docLifecycleBusy = true;
+    try {
+      await coreClient.restoreDocument(documentId, {});
+      await loadDocument(documentId);
+    } finally {
+      docLifecycleBusy = false;
+    }
+  }
 </script>
 
 <nav
@@ -360,26 +412,52 @@
   </div>
 {:else if document}
   {#if document.tombstoned_at}
-    <div class="mb-4 rounded-md border border-red-500/30 bg-red-500/10 p-4">
-      <div
-        class="flex items-center gap-2 text-[13px] font-semibold text-red-400"
-      >
-        <span>⚠</span>
-        <span>This document has been tombstoned</span>
-      </div>
-      {#if document.tombstone_reason}
-        <p class="mt-2 text-[13px] text-red-300">
-          Reason: {document.tombstone_reason}
-        </p>
-      {/if}
-      <p class="mt-1 text-[11px] text-[var(--ui-text-muted)]">
-        Tombstoned {#if document.tombstoned_by}by {actorName(
-            document.tombstoned_by,
-          )}{/if}
-        {#if document.tombstoned_at}
-          at {formatTimestamp(document.tombstoned_at)}
+    <div
+      class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[13px] text-red-400"
+    >
+      <div class="min-w-0 flex-1">
+        <div class="flex items-center gap-2 font-semibold">
+          <span>⚠</span>
+          <span>This document has been tombstoned</span>
+        </div>
+        {#if document.tombstone_reason}
+          <p class="mt-2">Reason: {document.tombstone_reason}</p>
         {/if}
+        <p class="mt-1 text-[11px] text-red-400/80">
+          Tombstoned {#if document.tombstoned_by}by {actorName(
+              document.tombstoned_by,
+            )}{/if}
+          {#if document.tombstoned_at}
+            at {formatTimestamp(document.tombstoned_at)}
+          {/if}
+        </p>
+      </div>
+      <button
+        class="shrink-0 cursor-pointer rounded-md border border-red-500/40 bg-red-500/15 px-2 py-1 text-[12px] font-medium text-red-400 hover:bg-red-500/25 disabled:opacity-50"
+        disabled={docLifecycleBusy}
+        onclick={handleRestoreDocument}
+        type="button"
+      >
+        {docLifecycleBusy ? "…" : "Restore"}
+      </button>
+    </div>
+  {:else if document.archived_at}
+    <div
+      class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[13px] text-amber-400"
+    >
+      <p class="min-w-0 flex-1">
+        This document was archived on {formatTimestamp(document.archived_at) ||
+          "—"}{#if document.archived_by}
+          by {actorName(document.archived_by)}{/if}.
       </p>
+      <button
+        class="shrink-0 cursor-pointer rounded-md border border-amber-500/40 bg-amber-500/15 px-2 py-1 text-[12px] font-medium text-amber-400 hover:bg-amber-500/25 disabled:opacity-50"
+        disabled={docLifecycleBusy}
+        onclick={handleUnarchiveDocument}
+        type="button"
+      >
+        {docLifecycleBusy ? "…" : "Unarchive"}
+      </button>
     </div>
   {/if}
 
@@ -435,11 +513,63 @@
             </p>
           {/if}
         </div>
-        <div class="flex shrink-0 items-center gap-1.5">
-          {#if !document.tombstoned_at && isTextEditable}
+        {#if !document.tombstoned_at}
+          <div class="flex shrink-0 items-center gap-1.5">
+            {#if isTextEditable}
+              <button
+                class="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-2.5 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500"
+                onclick={openEdit}
+                type="button"
+              >
+                <svg
+                  class="h-3.5 w-3.5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                  />
+                </svg>
+                New revision
+              </button>
+            {:else}
+              <span
+                class="inline-flex items-center gap-1 rounded-md border border-[var(--ui-border)] px-2.5 py-1.5 text-[12px] text-[var(--ui-text-subtle)]"
+                title="Content type '{headContentType}' can only be updated via the CLI or API"
+              >
+                <svg
+                  class="h-3.5 w-3.5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                {headContentType} — edit via CLI
+              </span>
+            {/if}
+            {#if !document.archived_at}
+              <button
+                class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text)] hover:bg-[var(--ui-border)] disabled:opacity-50"
+                disabled={docLifecycleBusy}
+                onclick={handleArchiveDocument}
+                type="button"
+              >
+                Archive
+              </button>
+            {/if}
             <button
-              class="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-2.5 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500"
-              onclick={openEdit}
+              class="cursor-pointer shrink-0 inline-flex items-center gap-1.5 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)]"
+              onclick={loadHistory}
               type="button"
             >
               <svg
@@ -452,53 +582,52 @@
                 <path
                   stroke-linecap="round"
                   stroke-linejoin="round"
-                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                 />
               </svg>
-              New revision
+              Revision history
             </button>
-          {:else if !document.tombstoned_at}
-            <span
-              class="inline-flex items-center gap-1 rounded-md border border-[var(--ui-border)] px-2.5 py-1.5 text-[12px] text-[var(--ui-text-subtle)]"
-              title="Content type '{headContentType}' can only be updated via the CLI or API"
-            >
-              <svg
-                class="h-3.5 w-3.5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                stroke-width="2"
+            {#if docTrashConfirm}
+              <button
+                class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] px-2 py-1 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border)]"
+                onclick={() => (docTrashConfirm = false)}
+                type="button"
               >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-              {headContentType} — edit via CLI
-            </span>
-          {/if}
-          <button
-            class="cursor-pointer shrink-0 inline-flex items-center gap-1.5 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)]"
-            onclick={loadHistory}
-            type="button"
-          >
-            <svg
-              class="h-3.5 w-3.5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-            Revision history
-          </button>
-        </div>
+                Cancel
+              </button>
+              <button
+                class="cursor-pointer rounded-md border border-red-500/40 bg-red-500/15 px-2 py-1 text-[12px] font-medium text-red-400 hover:bg-red-500/25 disabled:opacity-50"
+                disabled={docLifecycleBusy}
+                onclick={handleTombstoneDocument}
+                type="button"
+              >
+                Confirm
+              </button>
+            {:else}
+              <button
+                aria-label="Move document to trash"
+                class="cursor-pointer rounded-md p-1.5 text-[var(--ui-text-muted)] hover:bg-[var(--ui-border)] hover:text-red-400 disabled:opacity-50"
+                disabled={docLifecycleBusy}
+                onclick={() => (docTrashConfirm = true)}
+                type="button"
+              >
+                <svg
+                  class="h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                  />
+                </svg>
+              </button>
+            {/if}
+          </div>
+        {/if}
       </div>
 
       {#if editOpen}

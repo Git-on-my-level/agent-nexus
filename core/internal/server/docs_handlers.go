@@ -30,10 +30,16 @@ func handleListDocuments(w http.ResponseWriter, r *http.Request, opts handlerOpt
 	}
 
 	includeTombstoned := strings.TrimSpace(r.URL.Query().Get("include_tombstoned")) == "true"
+	tombstonedOnly := strings.TrimSpace(r.URL.Query().Get("tombstoned_only")) == "true"
+	includeArchived := strings.TrimSpace(r.URL.Query().Get("include_archived")) == "true"
+	archivedOnly := strings.TrimSpace(r.URL.Query().Get("archived_only")) == "true"
 	threadID := strings.TrimSpace(r.URL.Query().Get("thread_id"))
 	documents, nextCursor, err := opts.primitiveStore.ListDocuments(r.Context(), primitives.DocumentListFilter{
 		ThreadID:          threadID,
 		IncludeTombstoned: includeTombstoned,
+		TombstonedOnly:    tombstonedOnly,
+		IncludeArchived:   includeArchived,
+		ArchivedOnly:      archivedOnly,
 		Query:             strings.TrimSpace(r.URL.Query().Get("q")),
 		Limit:             limitFilter,
 		Cursor:            strings.TrimSpace(r.URL.Query().Get("cursor")),
@@ -445,6 +451,184 @@ func handleTombstoneDocument(w http.ResponseWriter, r *http.Request, opts handle
 		"document": document,
 		"revision": revision,
 	})
+}
+
+func handleArchiveDocument(w http.ResponseWriter, r *http.Request, opts handlerOptions, documentID string) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	if err := validateDocumentID(documentID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+
+	var req struct {
+		ActorID string `json:"actor_id"`
+	}
+	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+
+	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
+	if !ok {
+		return
+	}
+
+	document, revision, err := opts.primitiveStore.ArchiveDocument(r.Context(), actorID, documentID)
+	if err != nil {
+		if errors.Is(err, primitives.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "document not found")
+			return
+		}
+		if errors.Is(err, primitives.ErrAlreadyTombstoned) {
+			writeError(w, http.StatusConflict, "already_tombstoned", "document is tombstoned")
+			return
+		}
+		if errors.Is(err, primitives.ErrInvalidDocumentRequest) {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to archive document")
+		return
+	}
+	enqueueThreadProjectionsBestEffort(r.Context(), opts, []string{anyString(document["thread_id"])}, time.Now().UTC())
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"document": document,
+		"revision": revision,
+	})
+}
+
+func handleUnarchiveDocument(w http.ResponseWriter, r *http.Request, opts handlerOptions, documentID string) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	if err := validateDocumentID(documentID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+
+	var req struct {
+		ActorID string `json:"actor_id"`
+	}
+	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+
+	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
+	if !ok {
+		return
+	}
+
+	document, revision, err := opts.primitiveStore.UnarchiveDocument(r.Context(), actorID, documentID)
+	if err != nil {
+		if errors.Is(err, primitives.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "document not found")
+			return
+		}
+		if errors.Is(err, primitives.ErrNotArchived) {
+			writeError(w, http.StatusConflict, "not_archived", "document is not archived")
+			return
+		}
+		if errors.Is(err, primitives.ErrInvalidDocumentRequest) {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to unarchive document")
+		return
+	}
+	enqueueThreadProjectionsBestEffort(r.Context(), opts, []string{anyString(document["thread_id"])}, time.Now().UTC())
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"document": document,
+		"revision": revision,
+	})
+}
+
+func handleRestoreDocument(w http.ResponseWriter, r *http.Request, opts handlerOptions, documentID string) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	if err := validateDocumentID(documentID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+
+	var req struct {
+		ActorID string `json:"actor_id"`
+		Reason  string `json:"reason"`
+	}
+	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+
+	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
+	if !ok {
+		return
+	}
+
+	document, revision, err := opts.primitiveStore.RestoreDocument(r.Context(), actorID, documentID, req.Reason)
+	if err != nil {
+		if errors.Is(err, primitives.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "document not found")
+			return
+		}
+		if errors.Is(err, primitives.ErrNotTombstoned) {
+			writeError(w, http.StatusConflict, "not_tombstoned", "document is not currently tombstoned")
+			return
+		}
+		if errors.Is(err, primitives.ErrInvalidDocumentRequest) {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to restore document")
+		return
+	}
+	enqueueThreadProjectionsBestEffort(r.Context(), opts, []string{anyString(document["thread_id"])}, time.Now().UTC())
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"document": document,
+		"revision": revision,
+	})
+}
+
+func handlePurgeDocument(w http.ResponseWriter, r *http.Request, opts handlerOptions, documentID string) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	if err := validateDocumentID(documentID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+
+	principal, ok := requireAuthenticatedPrincipal(w, r, opts)
+	if !ok {
+		return
+	}
+	if !isHumanPrincipal(principal) {
+		writeError(w, http.StatusForbidden, "human_only", "only human principals may permanently delete documents")
+		return
+	}
+
+	err := opts.primitiveStore.PurgeDocument(r.Context(), documentID)
+	if err != nil {
+		if errors.Is(err, primitives.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "document not found")
+			return
+		}
+		if errors.Is(err, primitives.ErrNotTombstoned) {
+			writeError(w, http.StatusConflict, "not_tombstoned", "document is not currently tombstoned")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to purge document")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"purged": true, "document_id": documentID})
 }
 
 func optionalRefs(raw any) ([]string, error) {

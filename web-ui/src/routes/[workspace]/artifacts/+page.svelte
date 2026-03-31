@@ -31,6 +31,8 @@
   let error = $state("");
   let trashConfirmId = $state("");
   let trashBusyId = $state("");
+  let archiveBusyId = $state("");
+  let showArchived = $state(false);
   let filtersOpen = $state(false);
   let workspaceSlug = $derived($page.params.workspace);
   let actorName = $derived((id) =>
@@ -47,6 +49,7 @@
   }
 
   $effect(() => {
+    showArchived;
     const parsed = parseArtifactListSearchParams($page.url.searchParams);
     filters = { ...DEFAULT_ARTIFACT_LIST_FILTERS, ...parsed };
     dateInputs = {
@@ -61,9 +64,11 @@
     loading = true;
     error = "";
     try {
-      artifacts =
-        (await coreClient.listArtifacts(buildArtifactListQuery(state)))
-          .artifacts ?? [];
+      const query = { ...buildArtifactListQuery(state) };
+      if (showArchived) {
+        query.include_archived = "true";
+      }
+      artifacts = (await coreClient.listArtifacts(query)).artifacts ?? [];
     } catch (e) {
       error = `Failed to load artifacts: ${e instanceof Error ? e.message : String(e)}`;
       artifacts = [];
@@ -108,6 +113,43 @@
     return refs.slice(0, 3);
   }
 
+  function isArtifactArchived(artifact) {
+    const at = artifact?.archived_at;
+    return typeof at === "string" ? at.trim() !== "" : Boolean(at);
+  }
+
+  async function archiveArtifact(artifactId) {
+    const id = String(artifactId ?? "").trim();
+    if (!id || archiveBusyId) return;
+    archiveBusyId = id;
+    error = "";
+    try {
+      await coreClient.archiveArtifact(id, {});
+      const parsed = parseArtifactListSearchParams($page.url.searchParams);
+      await loadArtifactsFromState(parsed);
+    } catch (e) {
+      error = `Archive failed: ${e instanceof Error ? e.message : String(e)}`;
+    } finally {
+      archiveBusyId = "";
+    }
+  }
+
+  async function unarchiveArtifact(artifactId) {
+    const id = String(artifactId ?? "").trim();
+    if (!id || archiveBusyId) return;
+    archiveBusyId = id;
+    error = "";
+    try {
+      await coreClient.unarchiveArtifact(id, {});
+      const parsed = parseArtifactListSearchParams($page.url.searchParams);
+      await loadArtifactsFromState(parsed);
+    } catch (e) {
+      error = `Unarchive failed: ${e instanceof Error ? e.message : String(e)}`;
+    } finally {
+      archiveBusyId = "";
+    }
+  }
+
   async function trashArtifact(artifactId) {
     const id = String(artifactId ?? "").trim();
     if (!id || trashBusyId) return;
@@ -133,26 +175,38 @@
 
 <div class="flex items-center justify-between mb-4">
   <h1 class="text-lg font-semibold text-[var(--ui-text)]">Artifacts</h1>
-  <button
-    class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)]"
-    onclick={() => (filtersOpen = !filtersOpen)}
-    type="button"
-  >
-    <svg
-      class="h-3.5 w-3.5"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      stroke-width="2"
+  <div class="flex items-center gap-3">
+    <label
+      class="inline-flex cursor-pointer items-center gap-1.5 text-[12px] text-[var(--ui-text-muted)]"
     >
-      <path
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+      <input
+        bind:checked={showArchived}
+        class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--ui-border)] bg-[var(--ui-bg)] text-[var(--ui-accent-strong)] focus:ring-2 focus:ring-[var(--ui-accent)] focus:ring-offset-0"
+        type="checkbox"
       />
-    </svg>
-    Filter
-  </button>
+      Show archived
+    </label>
+    <button
+      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)]"
+      onclick={() => (filtersOpen = !filtersOpen)}
+      type="button"
+    >
+      <svg
+        class="h-3.5 w-3.5"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        stroke-width="2"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+        />
+      </svg>
+      Filter
+    </button>
+  </div>
 </div>
 
 {#if filtersOpen}
@@ -279,6 +333,12 @@
               >
                 {kindLabel(artifact.kind)}
               </span>
+              {#if isArtifactArchived(artifact)}
+                <span
+                  class="rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-medium text-amber-400"
+                  >Archived</span
+                >
+              {/if}
               <span class="text-[11px] text-[var(--ui-text-muted)]"
                 >{kindDescription(artifact.kind)}</span
               >
@@ -302,9 +362,44 @@
                 : "s"}
             </span>
             {#if trashConfirmId !== artifact.id}
+              {#if isArtifactArchived(artifact)}
+                <button
+                  class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2 py-1 text-[11px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={Boolean(archiveBusyId) || Boolean(trashBusyId)}
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    void unarchiveArtifact(artifact.id);
+                  }}
+                  type="button"
+                >
+                  Unarchive
+                </button>
+              {:else}
+                <button
+                  class="cursor-pointer rounded-md p-1 text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border)] hover:text-[var(--ui-accent)] disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={Boolean(archiveBusyId) || Boolean(trashBusyId)}
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    void archiveArtifact(artifact.id);
+                  }}
+                  title="Archive"
+                  type="button"
+                >
+                  <svg
+                    class="h-3.5 w-3.5"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m8.25 3v6.75m0 0l-3-3m3 3l3-3M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"
+                    />
+                  </svg>
+                </button>
+              {/if}
               <button
                 class="cursor-pointer rounded-md p-1 text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border)] hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={Boolean(trashBusyId)}
+                disabled={Boolean(trashBusyId) || Boolean(archiveBusyId)}
                 onclick={(e) => {
                   e.stopPropagation();
                   trashConfirmId = artifact.id;

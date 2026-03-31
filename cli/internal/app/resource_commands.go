@@ -368,6 +368,7 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 		var statusFlag, priorityFlag, staleFlag, queryFlag, cursorFlag trackedString
 		var limitFlag trackedInt
 		var tagsFlag, cadenceFlag trackedStrings
+		var includeArchived, archivedOnly, includeTombstoned, tombstonedOnly bool
 		fs.Var(&statusFlag, "status", "Filter by status")
 		fs.Var(&priorityFlag, "priority", "Filter by priority")
 		fs.Var(&staleFlag, "stale", "Filter by stale state (true/false)")
@@ -376,6 +377,10 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 		fs.Var(&cursorFlag, "cursor", "Pagination cursor from a previous list response")
 		fs.Var(&tagsFlag, "tag", "Filter by tag (repeatable)")
 		fs.Var(&cadenceFlag, "cadence", "Filter by cadence (repeatable)")
+		fs.BoolVar(&includeArchived, "include-archived", false, "Include archived threads")
+		fs.BoolVar(&archivedOnly, "archived-only", false, "Show only archived threads")
+		fs.BoolVar(&includeTombstoned, "include-tombstoned", false, "Include tombstoned threads")
+		fs.BoolVar(&tombstonedOnly, "tombstoned-only", false, "Show only tombstoned threads")
 		if err := fs.Parse(args[1:]); err != nil {
 			return nil, "threads list", errnorm.Usage("invalid_flags", err.Error())
 		}
@@ -396,6 +401,18 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 		addSingleQuery(&query, "cursor", cursorFlag.value)
 		addMultiQuery(&query, "tag", tagsFlag.values)
 		addMultiQuery(&query, "cadence", cadenceFlag.values)
+		if includeArchived {
+			query = append(query, queryParam{name: "include_archived", values: []string{"true"}})
+		}
+		if archivedOnly {
+			query = append(query, queryParam{name: "archived_only", values: []string{"true"}})
+		}
+		if includeTombstoned {
+			query = append(query, queryParam{name: "include_tombstoned", values: []string{"true"}})
+		}
+		if tombstonedOnly {
+			query = append(query, queryParam{name: "tombstoned_only", values: []string{"true"}})
+		}
 		result, err := a.invokeTypedJSON(ctx, cfg, "threads list", "threads.list", nil, query, nil)
 		return result, "threads list", err
 	case "get":
@@ -605,6 +622,235 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 	case "recommendations":
 		result, err := a.runThreadsRecommendationsCommand(ctx, args[1:], cfg)
 		return result, "threads recommendations", err
+	case "archive":
+		fs := newSilentFlagSet("threads archive")
+		var threadIDFlag trackedString
+		var actorIDFlag trackedString
+		var reasonFlag trackedString
+		fs.Var(&threadIDFlag, "thread-id", "Thread id to archive")
+		fs.Var(&actorIDFlag, "actor-id", "Actor id")
+		fs.Var(&reasonFlag, "reason", "Reason for archiving")
+		if err := fs.Parse(args[1:]); err != nil {
+			return nil, "threads archive", errnorm.Usage("invalid_flags", err.Error())
+		}
+		positionals := fs.Args()
+		id := strings.TrimSpace(threadIDFlag.value)
+		if id == "" && len(positionals) > 0 {
+			id = strings.TrimSpace(positionals[0])
+			positionals = positionals[1:]
+		}
+		if err := validateID(id, "thread id"); err != nil {
+			return nil, "threads archive", err
+		}
+		if len(positionals) > 0 {
+			return nil, "threads archive", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar threads archive`")
+		}
+		body := map[string]any{}
+		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
+		if err != nil {
+			return nil, "threads archive", err
+		}
+		if actorID != "" {
+			body["actor_id"] = actorID
+		} else if strings.TrimSpace(cfg.ActorID) != "" {
+			body["actor_id"] = strings.TrimSpace(cfg.ActorID)
+		}
+		if strings.TrimSpace(reasonFlag.value) != "" {
+			body["reason"] = strings.TrimSpace(reasonFlag.value)
+		}
+		result, callErr := a.invokeTypedJSONWithIDResolution(
+			ctx,
+			cfg,
+			"threads archive",
+			"threads.archive",
+			"thread_id",
+			id,
+			threadIDLookupSpec,
+			nil,
+			body,
+		)
+		return result, "threads archive", callErr
+	case "unarchive":
+		fs := newSilentFlagSet("threads unarchive")
+		var threadIDFlag trackedString
+		var actorIDFlag trackedString
+		var reasonFlag trackedString
+		fs.Var(&threadIDFlag, "thread-id", "Thread id to unarchive")
+		fs.Var(&actorIDFlag, "actor-id", "Actor id")
+		fs.Var(&reasonFlag, "reason", "Reason for unarchiving")
+		if err := fs.Parse(args[1:]); err != nil {
+			return nil, "threads unarchive", errnorm.Usage("invalid_flags", err.Error())
+		}
+		positionals := fs.Args()
+		id := strings.TrimSpace(threadIDFlag.value)
+		if id == "" && len(positionals) > 0 {
+			id = strings.TrimSpace(positionals[0])
+			positionals = positionals[1:]
+		}
+		if err := validateID(id, "thread id"); err != nil {
+			return nil, "threads unarchive", err
+		}
+		if len(positionals) > 0 {
+			return nil, "threads unarchive", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar threads unarchive`")
+		}
+		body := map[string]any{}
+		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
+		if err != nil {
+			return nil, "threads unarchive", err
+		}
+		if actorID != "" {
+			body["actor_id"] = actorID
+		} else if strings.TrimSpace(cfg.ActorID) != "" {
+			body["actor_id"] = strings.TrimSpace(cfg.ActorID)
+		}
+		if strings.TrimSpace(reasonFlag.value) != "" {
+			body["reason"] = strings.TrimSpace(reasonFlag.value)
+		}
+		result, callErr := a.invokeTypedJSONWithIDResolution(
+			ctx,
+			cfg,
+			"threads unarchive",
+			"threads.unarchive",
+			"thread_id",
+			id,
+			threadIDLookupSpec,
+			nil,
+			body,
+		)
+		return result, "threads unarchive", callErr
+	case "tombstone":
+		fs := newSilentFlagSet("threads tombstone")
+		var threadIDFlag trackedString
+		var actorIDFlag trackedString
+		var reasonFlag trackedString
+		fs.Var(&threadIDFlag, "thread-id", "Thread id to tombstone")
+		fs.Var(&actorIDFlag, "actor-id", "Actor id")
+		fs.Var(&reasonFlag, "reason", "Reason for tombstoning")
+		if err := fs.Parse(args[1:]); err != nil {
+			return nil, "threads tombstone", errnorm.Usage("invalid_flags", err.Error())
+		}
+		positionals := fs.Args()
+		id := strings.TrimSpace(threadIDFlag.value)
+		if id == "" && len(positionals) > 0 {
+			id = strings.TrimSpace(positionals[0])
+			positionals = positionals[1:]
+		}
+		if err := validateID(id, "thread id"); err != nil {
+			return nil, "threads tombstone", err
+		}
+		if len(positionals) > 0 {
+			return nil, "threads tombstone", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar threads tombstone`")
+		}
+		body := map[string]any{}
+		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
+		if err != nil {
+			return nil, "threads tombstone", err
+		}
+		if actorID != "" {
+			body["actor_id"] = actorID
+		} else if strings.TrimSpace(cfg.ActorID) != "" {
+			body["actor_id"] = strings.TrimSpace(cfg.ActorID)
+		}
+		if strings.TrimSpace(reasonFlag.value) != "" {
+			body["reason"] = strings.TrimSpace(reasonFlag.value)
+		}
+		result, callErr := a.invokeTypedJSONWithIDResolution(
+			ctx,
+			cfg,
+			"threads tombstone",
+			"threads.tombstone",
+			"thread_id",
+			id,
+			threadIDLookupSpec,
+			nil,
+			body,
+		)
+		return result, "threads tombstone", callErr
+	case "restore":
+		fs := newSilentFlagSet("threads restore")
+		var threadIDFlag trackedString
+		var actorIDFlag trackedString
+		var reasonFlag trackedString
+		fs.Var(&threadIDFlag, "thread-id", "Thread id to restore")
+		fs.Var(&actorIDFlag, "actor-id", "Actor id")
+		fs.Var(&reasonFlag, "reason", "Reason for restoring")
+		if err := fs.Parse(args[1:]); err != nil {
+			return nil, "threads restore", errnorm.Usage("invalid_flags", err.Error())
+		}
+		positionals := fs.Args()
+		id := strings.TrimSpace(threadIDFlag.value)
+		if id == "" && len(positionals) > 0 {
+			id = strings.TrimSpace(positionals[0])
+			positionals = positionals[1:]
+		}
+		if err := validateID(id, "thread id"); err != nil {
+			return nil, "threads restore", err
+		}
+		if len(positionals) > 0 {
+			return nil, "threads restore", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar threads restore`")
+		}
+		body := map[string]any{}
+		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
+		if err != nil {
+			return nil, "threads restore", err
+		}
+		if actorID != "" {
+			body["actor_id"] = actorID
+		} else if strings.TrimSpace(cfg.ActorID) != "" {
+			body["actor_id"] = strings.TrimSpace(cfg.ActorID)
+		}
+		if strings.TrimSpace(reasonFlag.value) != "" {
+			body["reason"] = strings.TrimSpace(reasonFlag.value)
+		}
+		result, callErr := a.invokeTypedJSONWithIDResolution(
+			ctx,
+			cfg,
+			"threads restore",
+			"threads.restore",
+			"thread_id",
+			id,
+			threadIDLookupSpec,
+			nil,
+			body,
+		)
+		return result, "threads restore", callErr
+	case "purge":
+		fs := newSilentFlagSet("threads purge")
+		var threadIDFlag trackedString
+		var reasonFlag trackedString
+		fs.Var(&threadIDFlag, "thread-id", "Thread id to purge")
+		fs.Var(&reasonFlag, "reason", "Reason for purging")
+		if err := fs.Parse(args[1:]); err != nil {
+			return nil, "threads purge", errnorm.Usage("invalid_flags", err.Error())
+		}
+		positionals := fs.Args()
+		id := strings.TrimSpace(threadIDFlag.value)
+		if id == "" && len(positionals) > 0 {
+			id = strings.TrimSpace(positionals[0])
+			positionals = positionals[1:]
+		}
+		if err := validateID(id, "thread id"); err != nil {
+			return nil, "threads purge", err
+		}
+		if len(positionals) > 0 {
+			return nil, "threads purge", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar threads purge`")
+		}
+		body := map[string]any{}
+		if strings.TrimSpace(reasonFlag.value) != "" {
+			body["reason"] = strings.TrimSpace(reasonFlag.value)
+		}
+		result, callErr := a.invokeTypedJSONWithIDResolution(
+			ctx,
+			cfg,
+			"threads purge",
+			"threads.purge",
+			"thread_id",
+			id,
+			threadIDLookupSpec,
+			nil,
+			body,
+		)
+		return result, "threads purge", callErr
 	default:
 		return nil, "threads", threadsSubcommandSpec.unknownError(args[0])
 	}
@@ -1282,12 +1528,16 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 		var kindFlag, threadIDFlag, beforeFlag, afterFlag trackedString
 		var includeTombstoned bool
 		var tombstonedOnly bool
+		var includeArchived bool
+		var archivedOnly bool
 		fs.Var(&kindFlag, "kind", "Filter by artifact kind")
 		fs.Var(&threadIDFlag, "thread-id", "Filter by thread id")
 		fs.Var(&beforeFlag, "created-before", "Filter by created_at upper bound")
 		fs.Var(&afterFlag, "created-after", "Filter by created_at lower bound")
 		fs.BoolVar(&includeTombstoned, "include-tombstoned", false, "Include tombstoned artifacts")
 		fs.BoolVar(&tombstonedOnly, "tombstoned-only", false, "Show only tombstoned artifacts")
+		fs.BoolVar(&includeArchived, "include-archived", false, "Include archived artifacts")
+		fs.BoolVar(&archivedOnly, "archived-only", false, "Show only archived artifacts")
 		if err := fs.Parse(args[1:]); err != nil {
 			return nil, "artifacts list", errnorm.Usage("invalid_flags", err.Error())
 		}
@@ -1314,6 +1564,12 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 		}
 		if tombstonedOnly {
 			query = append(query, queryParam{name: "tombstoned_only", values: []string{"true"}})
+		}
+		if includeArchived {
+			query = append(query, queryParam{name: "include_archived", values: []string{"true"}})
+		}
+		if archivedOnly {
+			query = append(query, queryParam{name: "archived_only", values: []string{"true"}})
 		}
 		result, err := a.invokeTypedJSON(ctx, cfg, "artifacts list", "artifacts.list", nil, query, nil)
 		return result, "artifacts list", err
@@ -1396,6 +1652,82 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "artifacts tombstone", "artifacts.tombstone", map[string]string{"artifact_id": id}, nil, body)
 		return result, "artifacts tombstone", callErr
+	case "archive":
+		fs := newSilentFlagSet("artifacts archive")
+		var artifactIDFlag trackedString
+		var actorIDFlag trackedString
+		var reasonFlag trackedString
+		fs.Var(&artifactIDFlag, "artifact-id", "Artifact id to archive")
+		fs.Var(&actorIDFlag, "actor-id", "Actor id")
+		fs.Var(&reasonFlag, "reason", "Reason for archiving")
+		if err := fs.Parse(args[1:]); err != nil {
+			return nil, "artifacts archive", errnorm.Usage("invalid_flags", err.Error())
+		}
+		positionals := fs.Args()
+		id := strings.TrimSpace(artifactIDFlag.value)
+		if id == "" && len(positionals) > 0 {
+			id = strings.TrimSpace(positionals[0])
+			positionals = positionals[1:]
+		}
+		if err := validateID(id, "artifact id"); err != nil {
+			return nil, "artifacts archive", err
+		}
+		if len(positionals) > 0 {
+			return nil, "artifacts archive", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar artifacts archive`")
+		}
+		body := map[string]any{}
+		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
+		if err != nil {
+			return nil, "artifacts archive", err
+		}
+		if actorID != "" {
+			body["actor_id"] = actorID
+		} else if strings.TrimSpace(cfg.ActorID) != "" {
+			body["actor_id"] = strings.TrimSpace(cfg.ActorID)
+		}
+		if strings.TrimSpace(reasonFlag.value) != "" {
+			body["reason"] = strings.TrimSpace(reasonFlag.value)
+		}
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "artifacts archive", "artifacts.archive", map[string]string{"artifact_id": id}, nil, body)
+		return result, "artifacts archive", callErr
+	case "unarchive":
+		fs := newSilentFlagSet("artifacts unarchive")
+		var artifactIDFlag trackedString
+		var actorIDFlag trackedString
+		var reasonFlag trackedString
+		fs.Var(&artifactIDFlag, "artifact-id", "Artifact id to unarchive")
+		fs.Var(&actorIDFlag, "actor-id", "Actor id")
+		fs.Var(&reasonFlag, "reason", "Reason for unarchiving")
+		if err := fs.Parse(args[1:]); err != nil {
+			return nil, "artifacts unarchive", errnorm.Usage("invalid_flags", err.Error())
+		}
+		positionals := fs.Args()
+		id := strings.TrimSpace(artifactIDFlag.value)
+		if id == "" && len(positionals) > 0 {
+			id = strings.TrimSpace(positionals[0])
+			positionals = positionals[1:]
+		}
+		if err := validateID(id, "artifact id"); err != nil {
+			return nil, "artifacts unarchive", err
+		}
+		if len(positionals) > 0 {
+			return nil, "artifacts unarchive", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar artifacts unarchive`")
+		}
+		body := map[string]any{}
+		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
+		if err != nil {
+			return nil, "artifacts unarchive", err
+		}
+		if actorID != "" {
+			body["actor_id"] = actorID
+		} else if strings.TrimSpace(cfg.ActorID) != "" {
+			body["actor_id"] = strings.TrimSpace(cfg.ActorID)
+		}
+		if strings.TrimSpace(reasonFlag.value) != "" {
+			body["reason"] = strings.TrimSpace(reasonFlag.value)
+		}
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "artifacts unarchive", "artifacts.unarchive", map[string]string{"artifact_id": id}, nil, body)
+		return result, "artifacts unarchive", callErr
 	case "restore":
 		fs := newSilentFlagSet("artifacts restore")
 		var artifactIDFlag trackedString
@@ -1477,12 +1809,17 @@ func (a *App) runBoardsCommand(ctx context.Context, args []string, cfg config.Re
 		var statusFlag, queryFlag, cursorFlag trackedString
 		var limitFlag trackedInt
 		var labelFlag, ownerFlag trackedStrings
+		var includeArchived, archivedOnly, includeTombstoned, tombstonedOnly bool
 		fs.Var(&statusFlag, "status", "Filter by board status")
 		fs.Var(&queryFlag, "q", "Search by board id or title")
 		fs.Var(&limitFlag, "limit", "Limit the number of returned boards")
 		fs.Var(&cursorFlag, "cursor", "Pagination cursor from a previous list response")
 		fs.Var(&labelFlag, "label", "Filter by label (repeatable)")
 		fs.Var(&ownerFlag, "owner", "Filter by owner actor id (repeatable)")
+		fs.BoolVar(&includeArchived, "include-archived", false, "Include archived boards")
+		fs.BoolVar(&archivedOnly, "archived-only", false, "Show only archived boards")
+		fs.BoolVar(&includeTombstoned, "include-tombstoned", false, "Include tombstoned boards")
+		fs.BoolVar(&tombstonedOnly, "tombstoned-only", false, "Show only tombstoned boards")
 		if err := fs.Parse(args[1:]); err != nil {
 			return nil, "boards list", errnorm.Usage("invalid_flags", err.Error())
 		}
@@ -1501,6 +1838,18 @@ func (a *App) runBoardsCommand(ctx context.Context, args []string, cfg config.Re
 		addSingleQuery(&query, "cursor", cursorFlag.value)
 		addMultiQuery(&query, "label", labelFlag.values)
 		addMultiQuery(&query, "owner", ownerFlag.values)
+		if includeArchived {
+			query = append(query, queryParam{name: "include_archived", values: []string{"true"}})
+		}
+		if archivedOnly {
+			query = append(query, queryParam{name: "archived_only", values: []string{"true"}})
+		}
+		if includeTombstoned {
+			query = append(query, queryParam{name: "include_tombstoned", values: []string{"true"}})
+		}
+		if tombstonedOnly {
+			query = append(query, queryParam{name: "tombstoned_only", values: []string{"true"}})
+		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "boards list", "boards.list", nil, query, nil)
 		return result, "boards list", callErr
 	case "create":
@@ -1561,6 +1910,235 @@ func (a *App) runBoardsCommand(ctx context.Context, args []string, cfg config.Re
 			nil,
 		)
 		return result, "boards workspace", callErr
+	case "archive":
+		fs := newSilentFlagSet("boards archive")
+		var boardIDFlag trackedString
+		var actorIDFlag trackedString
+		var reasonFlag trackedString
+		fs.Var(&boardIDFlag, "board-id", "Board id to archive")
+		fs.Var(&actorIDFlag, "actor-id", "Actor id")
+		fs.Var(&reasonFlag, "reason", "Reason for archiving")
+		if err := fs.Parse(args[1:]); err != nil {
+			return nil, "boards archive", errnorm.Usage("invalid_flags", err.Error())
+		}
+		positionals := fs.Args()
+		id := strings.TrimSpace(boardIDFlag.value)
+		if id == "" && len(positionals) > 0 {
+			id = strings.TrimSpace(positionals[0])
+			positionals = positionals[1:]
+		}
+		if err := validateID(id, "board id"); err != nil {
+			return nil, "boards archive", err
+		}
+		if len(positionals) > 0 {
+			return nil, "boards archive", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar boards archive`")
+		}
+		body := map[string]any{}
+		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
+		if err != nil {
+			return nil, "boards archive", err
+		}
+		if actorID != "" {
+			body["actor_id"] = actorID
+		} else if strings.TrimSpace(cfg.ActorID) != "" {
+			body["actor_id"] = strings.TrimSpace(cfg.ActorID)
+		}
+		if strings.TrimSpace(reasonFlag.value) != "" {
+			body["reason"] = strings.TrimSpace(reasonFlag.value)
+		}
+		result, callErr := a.invokeTypedJSONWithIDResolution(
+			ctx,
+			cfg,
+			"boards archive",
+			"boards.archive",
+			"board_id",
+			id,
+			boardIDLookupSpec,
+			nil,
+			body,
+		)
+		return result, "boards archive", callErr
+	case "unarchive":
+		fs := newSilentFlagSet("boards unarchive")
+		var boardIDFlag trackedString
+		var actorIDFlag trackedString
+		var reasonFlag trackedString
+		fs.Var(&boardIDFlag, "board-id", "Board id to unarchive")
+		fs.Var(&actorIDFlag, "actor-id", "Actor id")
+		fs.Var(&reasonFlag, "reason", "Reason for unarchiving")
+		if err := fs.Parse(args[1:]); err != nil {
+			return nil, "boards unarchive", errnorm.Usage("invalid_flags", err.Error())
+		}
+		positionals := fs.Args()
+		id := strings.TrimSpace(boardIDFlag.value)
+		if id == "" && len(positionals) > 0 {
+			id = strings.TrimSpace(positionals[0])
+			positionals = positionals[1:]
+		}
+		if err := validateID(id, "board id"); err != nil {
+			return nil, "boards unarchive", err
+		}
+		if len(positionals) > 0 {
+			return nil, "boards unarchive", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar boards unarchive`")
+		}
+		body := map[string]any{}
+		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
+		if err != nil {
+			return nil, "boards unarchive", err
+		}
+		if actorID != "" {
+			body["actor_id"] = actorID
+		} else if strings.TrimSpace(cfg.ActorID) != "" {
+			body["actor_id"] = strings.TrimSpace(cfg.ActorID)
+		}
+		if strings.TrimSpace(reasonFlag.value) != "" {
+			body["reason"] = strings.TrimSpace(reasonFlag.value)
+		}
+		result, callErr := a.invokeTypedJSONWithIDResolution(
+			ctx,
+			cfg,
+			"boards unarchive",
+			"boards.unarchive",
+			"board_id",
+			id,
+			boardIDLookupSpec,
+			nil,
+			body,
+		)
+		return result, "boards unarchive", callErr
+	case "tombstone":
+		fs := newSilentFlagSet("boards tombstone")
+		var boardIDFlag trackedString
+		var actorIDFlag trackedString
+		var reasonFlag trackedString
+		fs.Var(&boardIDFlag, "board-id", "Board id to tombstone")
+		fs.Var(&actorIDFlag, "actor-id", "Actor id")
+		fs.Var(&reasonFlag, "reason", "Reason for tombstoning")
+		if err := fs.Parse(args[1:]); err != nil {
+			return nil, "boards tombstone", errnorm.Usage("invalid_flags", err.Error())
+		}
+		positionals := fs.Args()
+		id := strings.TrimSpace(boardIDFlag.value)
+		if id == "" && len(positionals) > 0 {
+			id = strings.TrimSpace(positionals[0])
+			positionals = positionals[1:]
+		}
+		if err := validateID(id, "board id"); err != nil {
+			return nil, "boards tombstone", err
+		}
+		if len(positionals) > 0 {
+			return nil, "boards tombstone", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar boards tombstone`")
+		}
+		body := map[string]any{}
+		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
+		if err != nil {
+			return nil, "boards tombstone", err
+		}
+		if actorID != "" {
+			body["actor_id"] = actorID
+		} else if strings.TrimSpace(cfg.ActorID) != "" {
+			body["actor_id"] = strings.TrimSpace(cfg.ActorID)
+		}
+		if strings.TrimSpace(reasonFlag.value) != "" {
+			body["reason"] = strings.TrimSpace(reasonFlag.value)
+		}
+		result, callErr := a.invokeTypedJSONWithIDResolution(
+			ctx,
+			cfg,
+			"boards tombstone",
+			"boards.tombstone",
+			"board_id",
+			id,
+			boardIDLookupSpec,
+			nil,
+			body,
+		)
+		return result, "boards tombstone", callErr
+	case "restore":
+		fs := newSilentFlagSet("boards restore")
+		var boardIDFlag trackedString
+		var actorIDFlag trackedString
+		var reasonFlag trackedString
+		fs.Var(&boardIDFlag, "board-id", "Board id to restore")
+		fs.Var(&actorIDFlag, "actor-id", "Actor id")
+		fs.Var(&reasonFlag, "reason", "Reason for restoring")
+		if err := fs.Parse(args[1:]); err != nil {
+			return nil, "boards restore", errnorm.Usage("invalid_flags", err.Error())
+		}
+		positionals := fs.Args()
+		id := strings.TrimSpace(boardIDFlag.value)
+		if id == "" && len(positionals) > 0 {
+			id = strings.TrimSpace(positionals[0])
+			positionals = positionals[1:]
+		}
+		if err := validateID(id, "board id"); err != nil {
+			return nil, "boards restore", err
+		}
+		if len(positionals) > 0 {
+			return nil, "boards restore", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar boards restore`")
+		}
+		body := map[string]any{}
+		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
+		if err != nil {
+			return nil, "boards restore", err
+		}
+		if actorID != "" {
+			body["actor_id"] = actorID
+		} else if strings.TrimSpace(cfg.ActorID) != "" {
+			body["actor_id"] = strings.TrimSpace(cfg.ActorID)
+		}
+		if strings.TrimSpace(reasonFlag.value) != "" {
+			body["reason"] = strings.TrimSpace(reasonFlag.value)
+		}
+		result, callErr := a.invokeTypedJSONWithIDResolution(
+			ctx,
+			cfg,
+			"boards restore",
+			"boards.restore",
+			"board_id",
+			id,
+			boardIDLookupSpec,
+			nil,
+			body,
+		)
+		return result, "boards restore", callErr
+	case "purge":
+		fs := newSilentFlagSet("boards purge")
+		var boardIDFlag trackedString
+		var reasonFlag trackedString
+		fs.Var(&boardIDFlag, "board-id", "Board id to purge")
+		fs.Var(&reasonFlag, "reason", "Reason for purging")
+		if err := fs.Parse(args[1:]); err != nil {
+			return nil, "boards purge", errnorm.Usage("invalid_flags", err.Error())
+		}
+		positionals := fs.Args()
+		id := strings.TrimSpace(boardIDFlag.value)
+		if id == "" && len(positionals) > 0 {
+			id = strings.TrimSpace(positionals[0])
+			positionals = positionals[1:]
+		}
+		if err := validateID(id, "board id"); err != nil {
+			return nil, "boards purge", err
+		}
+		if len(positionals) > 0 {
+			return nil, "boards purge", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar boards purge`")
+		}
+		body := map[string]any{}
+		if strings.TrimSpace(reasonFlag.value) != "" {
+			body["reason"] = strings.TrimSpace(reasonFlag.value)
+		}
+		result, callErr := a.invokeTypedJSONWithIDResolution(
+			ctx,
+			cfg,
+			"boards purge",
+			"boards.purge",
+			"board_id",
+			id,
+			boardIDLookupSpec,
+			nil,
+			body,
+		)
+		return result, "boards purge", callErr
 	case "cards":
 		return a.runBoardCardsCommand(ctx, args[1:], cfg)
 	default:
@@ -1634,7 +2212,11 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 		fs := newSilentFlagSet("docs list")
 		var threadIDFlag, queryFlag, cursorFlag trackedString
 		var limitFlag trackedInt
-		includeTombstoned := fs.Bool("include-tombstoned", false, "Include tombstoned documents")
+		var includeTombstoned, tombstonedOnly, includeArchived, archivedOnly bool
+		fs.BoolVar(&includeTombstoned, "include-tombstoned", false, "Include tombstoned documents")
+		fs.BoolVar(&tombstonedOnly, "tombstoned-only", false, "Show only tombstoned documents")
+		fs.BoolVar(&includeArchived, "include-archived", false, "Include archived documents")
+		fs.BoolVar(&archivedOnly, "archived-only", false, "Show only archived documents")
 		fs.Var(&threadIDFlag, "thread-id", "Filter by thread id")
 		fs.Var(&queryFlag, "q", "Search by document id or title")
 		fs.Var(&limitFlag, "limit", "Limit the number of returned documents")
@@ -1665,8 +2247,17 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 			addSingleQuery(&query, "limit", strconv.Itoa(limitFlag.value))
 		}
 		addSingleQuery(&query, "cursor", cursorFlag.value)
-		if *includeTombstoned {
+		if includeTombstoned {
 			query = append(query, queryParam{name: "include_tombstoned", values: []string{"true"}})
+		}
+		if tombstonedOnly {
+			query = append(query, queryParam{name: "tombstoned_only", values: []string{"true"}})
+		}
+		if includeArchived {
+			query = append(query, queryParam{name: "include_archived", values: []string{"true"}})
+		}
+		if archivedOnly {
+			query = append(query, queryParam{name: "archived_only", values: []string{"true"}})
 		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "docs list", "docs.list", nil, query, nil)
 		return result, "docs list", callErr
@@ -1808,6 +2399,147 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "docs tombstone", "docs.tombstone", map[string]string{"document_id": id}, nil, body)
 		return result, "docs tombstone", callErr
+	case "archive":
+		fs := newSilentFlagSet("docs archive")
+		var documentIDFlag trackedString
+		var actorIDFlag trackedString
+		var reasonFlag trackedString
+		fs.Var(&documentIDFlag, "document-id", "Document id to archive")
+		fs.Var(&actorIDFlag, "actor-id", "Actor id")
+		fs.Var(&reasonFlag, "reason", "Reason for archiving")
+		if err := fs.Parse(args[1:]); err != nil {
+			return nil, "docs archive", errnorm.Usage("invalid_flags", err.Error())
+		}
+		positionals := fs.Args()
+		id := strings.TrimSpace(documentIDFlag.value)
+		if id == "" && len(positionals) > 0 {
+			id = strings.TrimSpace(positionals[0])
+			positionals = positionals[1:]
+		}
+		if err := validateID(id, "document id"); err != nil {
+			return nil, "docs archive", err
+		}
+		if len(positionals) > 0 {
+			return nil, "docs archive", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar docs archive`")
+		}
+		body := map[string]any{}
+		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
+		if err != nil {
+			return nil, "docs archive", err
+		}
+		if actorID != "" {
+			body["actor_id"] = actorID
+		} else if strings.TrimSpace(cfg.ActorID) != "" {
+			body["actor_id"] = strings.TrimSpace(cfg.ActorID)
+		}
+		if strings.TrimSpace(reasonFlag.value) != "" {
+			body["reason"] = strings.TrimSpace(reasonFlag.value)
+		}
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "docs archive", "docs.archive", map[string]string{"document_id": id}, nil, body)
+		return result, "docs archive", callErr
+	case "unarchive":
+		fs := newSilentFlagSet("docs unarchive")
+		var documentIDFlag trackedString
+		var actorIDFlag trackedString
+		var reasonFlag trackedString
+		fs.Var(&documentIDFlag, "document-id", "Document id to unarchive")
+		fs.Var(&actorIDFlag, "actor-id", "Actor id")
+		fs.Var(&reasonFlag, "reason", "Reason for unarchiving")
+		if err := fs.Parse(args[1:]); err != nil {
+			return nil, "docs unarchive", errnorm.Usage("invalid_flags", err.Error())
+		}
+		positionals := fs.Args()
+		id := strings.TrimSpace(documentIDFlag.value)
+		if id == "" && len(positionals) > 0 {
+			id = strings.TrimSpace(positionals[0])
+			positionals = positionals[1:]
+		}
+		if err := validateID(id, "document id"); err != nil {
+			return nil, "docs unarchive", err
+		}
+		if len(positionals) > 0 {
+			return nil, "docs unarchive", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar docs unarchive`")
+		}
+		body := map[string]any{}
+		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
+		if err != nil {
+			return nil, "docs unarchive", err
+		}
+		if actorID != "" {
+			body["actor_id"] = actorID
+		} else if strings.TrimSpace(cfg.ActorID) != "" {
+			body["actor_id"] = strings.TrimSpace(cfg.ActorID)
+		}
+		if strings.TrimSpace(reasonFlag.value) != "" {
+			body["reason"] = strings.TrimSpace(reasonFlag.value)
+		}
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "docs unarchive", "docs.unarchive", map[string]string{"document_id": id}, nil, body)
+		return result, "docs unarchive", callErr
+	case "restore":
+		fs := newSilentFlagSet("docs restore")
+		var documentIDFlag trackedString
+		var actorIDFlag trackedString
+		var reasonFlag trackedString
+		fs.Var(&documentIDFlag, "document-id", "Document id to restore")
+		fs.Var(&actorIDFlag, "actor-id", "Actor id")
+		fs.Var(&reasonFlag, "reason", "Reason for restoring")
+		if err := fs.Parse(args[1:]); err != nil {
+			return nil, "docs restore", errnorm.Usage("invalid_flags", err.Error())
+		}
+		positionals := fs.Args()
+		id := strings.TrimSpace(documentIDFlag.value)
+		if id == "" && len(positionals) > 0 {
+			id = strings.TrimSpace(positionals[0])
+			positionals = positionals[1:]
+		}
+		if err := validateID(id, "document id"); err != nil {
+			return nil, "docs restore", err
+		}
+		if len(positionals) > 0 {
+			return nil, "docs restore", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar docs restore`")
+		}
+		body := map[string]any{}
+		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
+		if err != nil {
+			return nil, "docs restore", err
+		}
+		if actorID != "" {
+			body["actor_id"] = actorID
+		} else if strings.TrimSpace(cfg.ActorID) != "" {
+			body["actor_id"] = strings.TrimSpace(cfg.ActorID)
+		}
+		if strings.TrimSpace(reasonFlag.value) != "" {
+			body["reason"] = strings.TrimSpace(reasonFlag.value)
+		}
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "docs restore", "docs.restore", map[string]string{"document_id": id}, nil, body)
+		return result, "docs restore", callErr
+	case "purge":
+		fs := newSilentFlagSet("docs purge")
+		var documentIDFlag trackedString
+		var reasonFlag trackedString
+		fs.Var(&documentIDFlag, "document-id", "Document id to purge")
+		fs.Var(&reasonFlag, "reason", "Reason for purging")
+		if err := fs.Parse(args[1:]); err != nil {
+			return nil, "docs purge", errnorm.Usage("invalid_flags", err.Error())
+		}
+		positionals := fs.Args()
+		id := strings.TrimSpace(documentIDFlag.value)
+		if id == "" && len(positionals) > 0 {
+			id = strings.TrimSpace(positionals[0])
+			positionals = positionals[1:]
+		}
+		if err := validateID(id, "document id"); err != nil {
+			return nil, "docs purge", err
+		}
+		if len(positionals) > 0 {
+			return nil, "docs purge", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar docs purge`")
+		}
+		body := map[string]any{}
+		if strings.TrimSpace(reasonFlag.value) != "" {
+			body["reason"] = strings.TrimSpace(reasonFlag.value)
+		}
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "docs purge", "docs.purge", map[string]string{"document_id": id}, nil, body)
+		return result, "docs purge", callErr
 	default:
 		return nil, "docs", docsSubcommandSpec.unknownError(args[0])
 	}

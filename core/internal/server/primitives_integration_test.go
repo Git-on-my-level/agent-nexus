@@ -1951,3 +1951,1431 @@ func TestDocumentTombstoneLifecycle(t *testing.T) {
 		t.Fatalf("expected repeated doc tombstone to preserve tombstone_reason, first=%v second=%v", tombstonePayload.Document["tombstone_reason"], repeatPayload.Document["tombstone_reason"])
 	}
 }
+
+func TestArtifactArchiveLifecycle(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	createResp := postJSONExpectStatus(t, h.baseURL+"/artifacts", `{
+		"actor_id":"actor-1",
+		"artifact":{"kind":"blob","refs":["thread:thread-1"],"summary":"archive lifecycle"},
+		"content":"body",
+		"content_type":"text"
+	}`, http.StatusCreated)
+	defer createResp.Body.Close()
+
+	var created map[string]map[string]any
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create artifact: %v", err)
+	}
+	artifactID := asString(created["artifact"]["id"])
+	if artifactID == "" {
+		t.Fatal("expected artifact id")
+	}
+
+	archiveResp := postJSONExpectStatus(t, h.baseURL+"/artifacts/"+artifactID+"/archive", `{"actor_id":"actor-1"}`, http.StatusOK)
+	defer archiveResp.Body.Close()
+	var archived map[string]map[string]any
+	if err := json.NewDecoder(archiveResp.Body).Decode(&archived); err != nil {
+		t.Fatalf("decode archive response: %v", err)
+	}
+	if archived["artifact"]["archived_at"] == nil {
+		t.Fatal("expected archived_at after archive")
+	}
+	firstArchivedAt := archived["artifact"]["archived_at"]
+
+	archiveAgain := postJSONExpectStatus(t, h.baseURL+"/artifacts/"+artifactID+"/archive", `{"actor_id":"actor-1"}`, http.StatusOK)
+	defer archiveAgain.Body.Close()
+	var archivedAgain map[string]map[string]any
+	if err := json.NewDecoder(archiveAgain.Body).Decode(&archivedAgain); err != nil {
+		t.Fatalf("decode idempotent archive: %v", err)
+	}
+	if archivedAgain["artifact"]["archived_at"] != firstArchivedAt {
+		t.Fatalf("idempotent archive should preserve archived_at: first=%v second=%v", firstArchivedAt, archivedAgain["artifact"]["archived_at"])
+	}
+
+	listDefault, err := http.Get(h.baseURL + "/artifacts")
+	if err != nil {
+		t.Fatalf("GET /artifacts: %v", err)
+	}
+	defer listDefault.Body.Close()
+	var defaultListed map[string][]map[string]any
+	if err := json.NewDecoder(listDefault.Body).Decode(&defaultListed); err != nil {
+		t.Fatalf("decode default list: %v", err)
+	}
+	for _, a := range defaultListed["artifacts"] {
+		if a["id"] == artifactID {
+			t.Fatal("archived artifact must not appear in default list")
+		}
+	}
+
+	withArchived, err := http.Get(h.baseURL + "/artifacts?include_archived=true")
+	if err != nil {
+		t.Fatalf("GET include_archived: %v", err)
+	}
+	defer withArchived.Body.Close()
+	var incListed map[string][]map[string]any
+	if err := json.NewDecoder(withArchived.Body).Decode(&incListed); err != nil {
+		t.Fatalf("decode include_archived list: %v", err)
+	}
+	found := false
+	for _, a := range incListed["artifacts"] {
+		if a["id"] == artifactID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected archived artifact with include_archived=true")
+	}
+
+	onlyArchived, err := http.Get(h.baseURL + "/artifacts?archived_only=true")
+	if err != nil {
+		t.Fatalf("GET archived_only: %v", err)
+	}
+	defer onlyArchived.Body.Close()
+	var onlyListed map[string][]map[string]any
+	if err := json.NewDecoder(onlyArchived.Body).Decode(&onlyListed); err != nil {
+		t.Fatalf("decode archived_only list: %v", err)
+	}
+	if len(onlyListed["artifacts"]) != 1 || onlyListed["artifacts"][0]["id"] != artifactID {
+		t.Fatalf("expected exactly archived artifact, got %#v", onlyListed["artifacts"])
+	}
+
+	unarchiveResp := postJSONExpectStatus(t, h.baseURL+"/artifacts/"+artifactID+"/unarchive", `{"actor_id":"actor-1"}`, http.StatusOK)
+	defer unarchiveResp.Body.Close()
+
+	reUnarchive, err := http.Post(h.baseURL+"/artifacts/"+artifactID+"/unarchive", "application/json", strings.NewReader(`{"actor_id":"actor-1"}`))
+	if err != nil {
+		t.Fatalf("POST second unarchive: %v", err)
+	}
+	defer reUnarchive.Body.Close()
+	if reUnarchive.StatusCode != http.StatusConflict {
+		b, _ := io.ReadAll(reUnarchive.Body)
+		t.Fatalf("expected 409 on second unarchive, got %d body=%s", reUnarchive.StatusCode, string(b))
+	}
+
+	listFinal, err := http.Get(h.baseURL + "/artifacts")
+	if err != nil {
+		t.Fatalf("GET /artifacts final: %v", err)
+	}
+	defer listFinal.Body.Close()
+	var finalListed map[string][]map[string]any
+	if err := json.NewDecoder(listFinal.Body).Decode(&finalListed); err != nil {
+		t.Fatalf("decode final list: %v", err)
+	}
+	found = false
+	for _, a := range finalListed["artifacts"] {
+		if a["id"] == artifactID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected artifact back in default list after unarchive")
+	}
+}
+
+func TestArtifactArchiveThenTrash(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	createResp := postJSONExpectStatus(t, h.baseURL+"/artifacts", `{
+		"actor_id":"actor-1",
+		"artifact":{"kind":"blob","refs":["thread:thread-1"],"summary":"archive then trash"},
+		"content":"x",
+		"content_type":"text"
+	}`, http.StatusCreated)
+	defer createResp.Body.Close()
+	var created map[string]map[string]any
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+	artifactID := asString(created["artifact"]["id"])
+	if artifactID == "" {
+		t.Fatal("expected artifact id")
+	}
+
+	postJSONExpectStatus(t, h.baseURL+"/artifacts/"+artifactID+"/archive", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
+
+	tombResp := postJSONExpectStatus(t, h.baseURL+"/artifacts/"+artifactID+"/tombstone", `{"actor_id":"actor-1","reason":"cleanup"}`, http.StatusOK)
+	defer tombResp.Body.Close()
+	var tomb map[string]map[string]any
+	if err := json.NewDecoder(tombResp.Body).Decode(&tomb); err != nil {
+		t.Fatalf("decode tombstone: %v", err)
+	}
+	if tomb["artifact"]["archived_at"] != nil {
+		t.Fatalf("expected archived_at cleared after tombstone, got %#v", tomb["artifact"]["archived_at"])
+	}
+	if tomb["artifact"]["tombstoned_at"] == nil {
+		t.Fatal("expected tombstoned_at set")
+	}
+
+	restoreResp := postJSONExpectStatus(t, h.baseURL+"/artifacts/"+artifactID+"/restore", `{"actor_id":"actor-1"}`, http.StatusOK)
+	defer restoreResp.Body.Close()
+	var restored map[string]map[string]any
+	if err := json.NewDecoder(restoreResp.Body).Decode(&restored); err != nil {
+		t.Fatalf("decode restore: %v", err)
+	}
+	if restored["artifact"]["archived_at"] != nil {
+		t.Fatalf("expected no archived_at after restore, got %#v", restored["artifact"]["archived_at"])
+	}
+	if restored["artifact"]["tombstoned_at"] != nil {
+		t.Fatalf("expected no tombstoned_at after restore, got %#v", restored["artifact"]["tombstoned_at"])
+	}
+}
+
+func TestArtifactCannotArchiveTrashed(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	createResp := postJSONExpectStatus(t, h.baseURL+"/artifacts", `{
+		"actor_id":"actor-1",
+		"artifact":{"kind":"blob","refs":["thread:thread-1"],"summary":"trashed"},
+		"content":"y",
+		"content_type":"text"
+	}`, http.StatusCreated)
+	defer createResp.Body.Close()
+	var created map[string]map[string]any
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+	artifactID := asString(created["artifact"]["id"])
+
+	postJSONExpectStatus(t, h.baseURL+"/artifacts/"+artifactID+"/tombstone", `{"actor_id":"actor-1","reason":"x"}`, http.StatusOK).Body.Close()
+
+	conflict := postJSONExpectStatus(t, h.baseURL+"/artifacts/"+artifactID+"/archive", `{"actor_id":"actor-1"}`, http.StatusConflict)
+	defer conflict.Body.Close()
+	assertErrorCode(t, conflict, "already_tombstoned")
+}
+
+func TestDocumentArchiveLifecycle(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	createResp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
+		"actor_id":"actor-1",
+		"document":{"title":"Archive doc"},
+		"content":"c",
+		"content_type":"text"
+	}`, http.StatusCreated)
+	defer createResp.Body.Close()
+	var created map[string]map[string]any
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create doc: %v", err)
+	}
+	docID := asString(created["document"]["id"])
+	if docID == "" {
+		t.Fatal("expected document id")
+	}
+
+	archiveResp := postJSONExpectStatus(t, h.baseURL+"/docs/"+docID+"/archive", `{"actor_id":"actor-1"}`, http.StatusOK)
+	defer archiveResp.Body.Close()
+	var archived struct {
+		Document map[string]any `json:"document"`
+	}
+	if err := json.NewDecoder(archiveResp.Body).Decode(&archived); err != nil {
+		t.Fatalf("decode archive doc: %v", err)
+	}
+	if archived.Document["archived_at"] == nil {
+		t.Fatal("expected archived_at on document")
+	}
+	firstAt := archived.Document["archived_at"]
+
+	postJSONExpectStatus(t, h.baseURL+"/docs/"+docID+"/archive", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
+
+	listDefault, err := http.Get(h.baseURL + "/docs")
+	if err != nil {
+		t.Fatalf("GET /docs: %v", err)
+	}
+	defer listDefault.Body.Close()
+	var defaultListed struct {
+		Documents []map[string]any `json:"documents"`
+	}
+	if err := json.NewDecoder(listDefault.Body).Decode(&defaultListed); err != nil {
+		t.Fatalf("decode default docs list: %v", err)
+	}
+	for _, d := range defaultListed.Documents {
+		if d["id"] == docID {
+			t.Fatal("archived document must not appear in default list")
+		}
+	}
+
+	withArchived, err := http.Get(h.baseURL + "/docs?include_archived=true")
+	if err != nil {
+		t.Fatalf("GET include_archived docs: %v", err)
+	}
+	defer withArchived.Body.Close()
+	var incListed struct {
+		Documents []map[string]any `json:"documents"`
+	}
+	if err := json.NewDecoder(withArchived.Body).Decode(&incListed); err != nil {
+		t.Fatalf("decode include_archived: %v", err)
+	}
+	found := false
+	for _, d := range incListed.Documents {
+		if d["id"] == docID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected doc in include_archived list")
+	}
+
+	onlyArchived, err := http.Get(h.baseURL + "/docs?archived_only=true")
+	if err != nil {
+		t.Fatalf("GET archived_only docs: %v", err)
+	}
+	defer onlyArchived.Body.Close()
+	var onlyListed struct {
+		Documents []map[string]any `json:"documents"`
+	}
+	if err := json.NewDecoder(onlyArchived.Body).Decode(&onlyListed); err != nil {
+		t.Fatalf("decode archived_only: %v", err)
+	}
+	if len(onlyListed.Documents) != 1 || onlyListed.Documents[0]["id"] != docID {
+		t.Fatalf("expected single archived doc, got %#v", onlyListed.Documents)
+	}
+	if onlyListed.Documents[0]["archived_at"] == nil {
+		t.Fatal("archived_only row should carry archived_at")
+	}
+	if onlyListed.Documents[0]["archived_at"] != firstAt {
+		t.Fatalf("archived_at should match archive response: list=%v archive=%v", onlyListed.Documents[0]["archived_at"], firstAt)
+	}
+
+	postJSONExpectStatus(t, h.baseURL+"/docs/"+docID+"/unarchive", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
+
+	reUnarchive, err := http.Post(h.baseURL+"/docs/"+docID+"/unarchive", "application/json", strings.NewReader(`{"actor_id":"actor-1"}`))
+	if err != nil {
+		t.Fatalf("second unarchive: %v", err)
+	}
+	defer reUnarchive.Body.Close()
+	if reUnarchive.StatusCode != http.StatusConflict {
+		b, _ := io.ReadAll(reUnarchive.Body)
+		t.Fatalf("expected 409 second unarchive, got %d body=%s", reUnarchive.StatusCode, string(b))
+	}
+
+	listFinal, err := http.Get(h.baseURL + "/docs")
+	if err != nil {
+		t.Fatalf("GET /docs final: %v", err)
+	}
+	defer listFinal.Body.Close()
+	var finalListed struct {
+		Documents []map[string]any `json:"documents"`
+	}
+	if err := json.NewDecoder(listFinal.Body).Decode(&finalListed); err != nil {
+		t.Fatalf("decode final list: %v", err)
+	}
+	found = false
+	for _, d := range finalListed.Documents {
+		if d["id"] == docID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected document back in default list")
+	}
+}
+
+func TestDocumentRestoreLifecycle(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	createResp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
+		"actor_id":"actor-1",
+		"document":{"title":"Restore doc"},
+		"content":"z",
+		"content_type":"text"
+	}`, http.StatusCreated)
+	defer createResp.Body.Close()
+	var created map[string]map[string]any
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+	docID := asString(created["document"]["id"])
+
+	postJSONExpectStatus(t, h.baseURL+"/docs/"+docID+"/tombstone", `{"actor_id":"actor-1","reason":"r"}`, http.StatusOK).Body.Close()
+
+	restoreResp := postJSONExpectStatus(t, h.baseURL+"/docs/"+docID+"/restore", `{"actor_id":"actor-1"}`, http.StatusOK)
+	defer restoreResp.Body.Close()
+	var restored struct {
+		Document map[string]any `json:"document"`
+	}
+	if err := json.NewDecoder(restoreResp.Body).Decode(&restored); err != nil {
+		t.Fatalf("decode restore: %v", err)
+	}
+	if restored.Document["tombstoned_at"] != nil {
+		t.Fatalf("expected tombstoned_at cleared, got %#v", restored.Document["tombstoned_at"])
+	}
+	if restored.Document["tombstoned_by"] != nil {
+		t.Fatalf("expected tombstoned_by cleared, got %#v", restored.Document["tombstoned_by"])
+	}
+	if restored.Document["tombstone_reason"] != nil {
+		t.Fatalf("expected tombstone_reason cleared, got %#v", restored.Document["tombstone_reason"])
+	}
+
+	reRestore, err := http.Post(h.baseURL+"/docs/"+docID+"/restore", "application/json", strings.NewReader(`{"actor_id":"actor-1"}`))
+	if err != nil {
+		t.Fatalf("second restore: %v", err)
+	}
+	defer reRestore.Body.Close()
+	if reRestore.StatusCode != http.StatusConflict {
+		b, _ := io.ReadAll(reRestore.Body)
+		t.Fatalf("expected 409 second restore, got %d body=%s", reRestore.StatusCode, string(b))
+	}
+	assertErrorCode(t, reRestore, "not_tombstoned")
+}
+
+func TestDocumentPurgeLifecycle(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServerWithHumanPrincipal(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	createResp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
+		"actor_id":"actor-1",
+		"document":{"title":"Purge doc"},
+		"content":"p",
+		"content_type":"text"
+	}`, http.StatusCreated)
+	defer createResp.Body.Close()
+	var created map[string]map[string]any
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+	docID := asString(created["document"]["id"])
+
+	postJSONExpectStatus(t, h.baseURL+"/docs/"+docID+"/tombstone", `{"actor_id":"actor-1","reason":"gone"}`, http.StatusOK).Body.Close()
+
+	purgeResp := postJSONExpectStatusBearer(t, h.baseURL+"/docs/"+docID+"/purge", `{}`, h.humanAccessToken, http.StatusOK)
+	defer purgeResp.Body.Close()
+	var purged map[string]any
+	if err := json.NewDecoder(purgeResp.Body).Decode(&purged); err != nil {
+		t.Fatalf("decode purge: %v", err)
+	}
+	if purged["purged"] != true || purged["document_id"] != docID {
+		t.Fatalf("unexpected purge payload: %#v", purged)
+	}
+
+	getResp, err := http.Get(h.baseURL + "/docs/" + docID)
+	if err != nil {
+		t.Fatalf("GET doc after purge: %v", err)
+	}
+	defer getResp.Body.Close()
+	if getResp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404 after purge, got %d", getResp.StatusCode)
+	}
+}
+
+func TestDocumentTombstonedOnlyFilter(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	createA := postJSONExpectStatus(t, h.baseURL+"/docs", `{
+		"actor_id":"actor-1",
+		"document":{"title":"Doc A"},
+		"content":"a",
+		"content_type":"text"
+	}`, http.StatusCreated)
+	defer createA.Body.Close()
+	var payloadA map[string]map[string]any
+	if err := json.NewDecoder(createA.Body).Decode(&payloadA); err != nil {
+		t.Fatalf("decode doc A: %v", err)
+	}
+	idA := asString(payloadA["document"]["id"])
+
+	createB := postJSONExpectStatus(t, h.baseURL+"/docs", `{
+		"actor_id":"actor-1",
+		"document":{"title":"Doc B"},
+		"content":"b",
+		"content_type":"text"
+	}`, http.StatusCreated)
+	defer createB.Body.Close()
+	var payloadB map[string]map[string]any
+	if err := json.NewDecoder(createB.Body).Decode(&payloadB); err != nil {
+		t.Fatalf("decode doc B: %v", err)
+	}
+	idB := asString(payloadB["document"]["id"])
+
+	postJSONExpectStatus(t, h.baseURL+"/docs/"+idA+"/tombstone", `{"actor_id":"actor-1","reason":"x"}`, http.StatusOK).Body.Close()
+
+	onlyResp, err := http.Get(h.baseURL + "/docs?tombstoned_only=true")
+	if err != nil {
+		t.Fatalf("GET tombstoned_only: %v", err)
+	}
+	defer onlyResp.Body.Close()
+	var only struct {
+		Documents []map[string]any `json:"documents"`
+	}
+	if err := json.NewDecoder(onlyResp.Body).Decode(&only); err != nil {
+		t.Fatalf("decode tombstoned_only: %v", err)
+	}
+	if len(only.Documents) != 1 || only.Documents[0]["id"] != idA {
+		t.Fatalf("expected one tombstoned doc %q, got %#v", idA, only.Documents)
+	}
+	for _, d := range only.Documents {
+		if d["id"] == idB {
+			t.Fatal("live doc must not appear in tombstoned_only list")
+		}
+	}
+}
+
+func TestThreadArchiveLifecycle(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	createResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
+		"actor_id":"actor-1",
+		"thread":{
+			"title":"Archive thread",
+			"type":"incident",
+			"status":"active",
+			"priority":"p2",
+			"tags":["archive-test"],
+			"cadence":"daily",
+			"next_check_in_at":"2026-03-05T00:00:00Z",
+			"current_summary":"s",
+			"next_actions":["a"],
+			"key_artifacts":[],
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated)
+	defer createResp.Body.Close()
+	var created struct {
+		Thread map[string]any `json:"thread"`
+	}
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create thread: %v", err)
+	}
+	threadID := asString(created.Thread["id"])
+	if threadID == "" {
+		t.Fatal("expected thread id")
+	}
+
+	archiveResp := postJSONExpectStatus(t, h.baseURL+"/threads/"+threadID+"/archive", `{"actor_id":"actor-1"}`, http.StatusOK)
+	defer archiveResp.Body.Close()
+	var archived struct {
+		Thread map[string]any `json:"thread"`
+	}
+	if err := json.NewDecoder(archiveResp.Body).Decode(&archived); err != nil {
+		t.Fatalf("decode archive thread: %v", err)
+	}
+	if archived.Thread["archived_at"] == nil {
+		t.Fatal("expected archived_at on thread")
+	}
+	firstAt := archived.Thread["archived_at"]
+
+	postJSONExpectStatus(t, h.baseURL+"/threads/"+threadID+"/archive", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
+
+	listDefault, err := http.Get(h.baseURL + "/threads")
+	if err != nil {
+		t.Fatalf("GET /threads: %v", err)
+	}
+	defer listDefault.Body.Close()
+	var defaultListed struct {
+		Threads []map[string]any `json:"threads"`
+	}
+	if err := json.NewDecoder(listDefault.Body).Decode(&defaultListed); err != nil {
+		t.Fatalf("decode threads list: %v", err)
+	}
+	for _, th := range defaultListed.Threads {
+		if th["id"] == threadID {
+			t.Fatal("archived thread must not appear in default list")
+		}
+	}
+
+	withArchived, err := http.Get(h.baseURL + "/threads?include_archived=true")
+	if err != nil {
+		t.Fatalf("GET include_archived threads: %v", err)
+	}
+	defer withArchived.Body.Close()
+	var incListed struct {
+		Threads []map[string]any `json:"threads"`
+	}
+	if err := json.NewDecoder(withArchived.Body).Decode(&incListed); err != nil {
+		t.Fatalf("decode include_archived threads: %v", err)
+	}
+	found := false
+	for _, th := range incListed.Threads {
+		if th["id"] == threadID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected thread in include_archived list")
+	}
+
+	onlyArchived, err := http.Get(h.baseURL + "/threads?archived_only=true")
+	if err != nil {
+		t.Fatalf("GET archived_only threads: %v", err)
+	}
+	defer onlyArchived.Body.Close()
+	var onlyListed struct {
+		Threads []map[string]any `json:"threads"`
+	}
+	if err := json.NewDecoder(onlyArchived.Body).Decode(&onlyListed); err != nil {
+		t.Fatalf("decode archived_only threads: %v", err)
+	}
+	if len(onlyListed.Threads) != 1 || onlyListed.Threads[0]["id"] != threadID {
+		t.Fatalf("expected single archived thread, got %#v", onlyListed.Threads)
+	}
+	if onlyListed.Threads[0]["archived_at"] == nil {
+		t.Fatal("archived_only thread should have archived_at")
+	}
+	if onlyListed.Threads[0]["archived_at"] != firstAt {
+		t.Fatalf("archived_at mismatch: list=%v archive=%v", onlyListed.Threads[0]["archived_at"], firstAt)
+	}
+
+	postJSONExpectStatus(t, h.baseURL+"/threads/"+threadID+"/unarchive", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
+
+	reUnarchive, err := http.Post(h.baseURL+"/threads/"+threadID+"/unarchive", "application/json", strings.NewReader(`{"actor_id":"actor-1"}`))
+	if err != nil {
+		t.Fatalf("second unarchive: %v", err)
+	}
+	defer reUnarchive.Body.Close()
+	if reUnarchive.StatusCode != http.StatusConflict {
+		b, _ := io.ReadAll(reUnarchive.Body)
+		t.Fatalf("expected 409 second unarchive, got %d body=%s", reUnarchive.StatusCode, string(b))
+	}
+
+	listFinal, err := http.Get(h.baseURL + "/threads")
+	if err != nil {
+		t.Fatalf("GET /threads final: %v", err)
+	}
+	defer listFinal.Body.Close()
+	var finalListed struct {
+		Threads []map[string]any `json:"threads"`
+	}
+	if err := json.NewDecoder(listFinal.Body).Decode(&finalListed); err != nil {
+		t.Fatalf("decode final threads: %v", err)
+	}
+	found = false
+	for _, th := range finalListed.Threads {
+		if th["id"] == threadID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected thread back in default list after unarchive")
+	}
+}
+
+func TestThreadTombstoneLifecycle(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	createResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
+		"actor_id":"actor-1",
+		"thread":{
+			"title":"Tomb thread",
+			"type":"incident",
+			"status":"active",
+			"priority":"p2",
+			"tags":["tomb"],
+			"cadence":"daily",
+			"next_check_in_at":"2026-03-05T00:00:00Z",
+			"current_summary":"s",
+			"next_actions":["a"],
+			"key_artifacts":[],
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated)
+	defer createResp.Body.Close()
+	var created struct {
+		Thread map[string]any `json:"thread"`
+	}
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create thread: %v", err)
+	}
+	threadID := asString(created.Thread["id"])
+
+	tomb1 := postJSONExpectStatus(t, h.baseURL+"/threads/"+threadID+"/tombstone", `{"actor_id":"actor-1","reason":"one"}`, http.StatusOK)
+	defer tomb1.Body.Close()
+	var firstTomb struct {
+		Thread map[string]any `json:"thread"`
+	}
+	if err := json.NewDecoder(tomb1.Body).Decode(&firstTomb); err != nil {
+		t.Fatalf("decode first tombstone: %v", err)
+	}
+	if firstTomb.Thread["tombstoned_at"] == nil {
+		t.Fatal("expected tombstoned_at")
+	}
+
+	tomb2 := postJSONExpectStatus(t, h.baseURL+"/threads/"+threadID+"/tombstone", `{"actor_id":"actor-1","reason":"two"}`, http.StatusOK)
+	defer tomb2.Body.Close()
+	var secondTomb struct {
+		Thread map[string]any `json:"thread"`
+	}
+	if err := json.NewDecoder(tomb2.Body).Decode(&secondTomb); err != nil {
+		t.Fatalf("decode second tombstone: %v", err)
+	}
+	if secondTomb.Thread["tombstoned_at"] != firstTomb.Thread["tombstoned_at"] {
+		t.Fatalf("idempotent tombstone should preserve tombstoned_at: %v vs %v", firstTomb.Thread["tombstoned_at"], secondTomb.Thread["tombstoned_at"])
+	}
+
+	listDefault, err := http.Get(h.baseURL + "/threads")
+	if err != nil {
+		t.Fatalf("GET /threads: %v", err)
+	}
+	defer listDefault.Body.Close()
+	var defaultListed struct {
+		Threads []map[string]any `json:"threads"`
+	}
+	if err := json.NewDecoder(listDefault.Body).Decode(&defaultListed); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	for _, th := range defaultListed.Threads {
+		if th["id"] == threadID {
+			t.Fatal("tombstoned thread must not appear in default list")
+		}
+	}
+
+	withTomb, err := http.Get(h.baseURL + "/threads?include_tombstoned=true")
+	if err != nil {
+		t.Fatalf("GET include_tombstoned: %v", err)
+	}
+	defer withTomb.Body.Close()
+	var incListed struct {
+		Threads []map[string]any `json:"threads"`
+	}
+	if err := json.NewDecoder(withTomb.Body).Decode(&incListed); err != nil {
+		t.Fatalf("decode include_tombstoned: %v", err)
+	}
+	found := false
+	for _, th := range incListed.Threads {
+		if th["id"] == threadID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected thread in include_tombstoned list")
+	}
+
+	onlyTomb, err := http.Get(h.baseURL + "/threads?tombstoned_only=true")
+	if err != nil {
+		t.Fatalf("GET tombstoned_only: %v", err)
+	}
+	defer onlyTomb.Body.Close()
+	var onlyListed struct {
+		Threads []map[string]any `json:"threads"`
+	}
+	if err := json.NewDecoder(onlyTomb.Body).Decode(&onlyListed); err != nil {
+		t.Fatalf("decode tombstoned_only: %v", err)
+	}
+	if len(onlyListed.Threads) != 1 || onlyListed.Threads[0]["id"] != threadID {
+		t.Fatalf("expected exactly one tombstoned thread, got %#v", onlyListed.Threads)
+	}
+}
+
+func TestThreadRestoreLifecycle(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	createResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
+		"actor_id":"actor-1",
+		"thread":{
+			"title":"Restore thread",
+			"type":"incident",
+			"status":"active",
+			"priority":"p2",
+			"tags":["restore"],
+			"cadence":"daily",
+			"next_check_in_at":"2026-03-05T00:00:00Z",
+			"current_summary":"s",
+			"next_actions":["a"],
+			"key_artifacts":[],
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated)
+	defer createResp.Body.Close()
+	var created struct {
+		Thread map[string]any `json:"thread"`
+	}
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+	threadID := asString(created.Thread["id"])
+
+	postJSONExpectStatus(t, h.baseURL+"/threads/"+threadID+"/tombstone", `{"actor_id":"actor-1","reason":"t"}`, http.StatusOK).Body.Close()
+
+	restoreResp := postJSONExpectStatus(t, h.baseURL+"/threads/"+threadID+"/restore", `{"actor_id":"actor-1"}`, http.StatusOK)
+	defer restoreResp.Body.Close()
+	var restored struct {
+		Thread map[string]any `json:"thread"`
+	}
+	if err := json.NewDecoder(restoreResp.Body).Decode(&restored); err != nil {
+		t.Fatalf("decode restore: %v", err)
+	}
+	if restored.Thread["tombstoned_at"] != nil {
+		t.Fatalf("expected tombstoned_at cleared, got %#v", restored.Thread["tombstoned_at"])
+	}
+
+	reRestore, err := http.Post(h.baseURL+"/threads/"+threadID+"/restore", "application/json", strings.NewReader(`{"actor_id":"actor-1"}`))
+	if err != nil {
+		t.Fatalf("second restore: %v", err)
+	}
+	defer reRestore.Body.Close()
+	if reRestore.StatusCode != http.StatusConflict {
+		b, _ := io.ReadAll(reRestore.Body)
+		t.Fatalf("expected 409 second restore, got %d body=%s", reRestore.StatusCode, string(b))
+	}
+	assertErrorCode(t, reRestore, "not_tombstoned")
+}
+
+func TestThreadArchiveThenTrash(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	createResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
+		"actor_id":"actor-1",
+		"thread":{
+			"title":"Archive trash thread",
+			"type":"incident",
+			"status":"active",
+			"priority":"p2",
+			"tags":["at"],
+			"cadence":"daily",
+			"next_check_in_at":"2026-03-05T00:00:00Z",
+			"current_summary":"s",
+			"next_actions":["a"],
+			"key_artifacts":[],
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated)
+	defer createResp.Body.Close()
+	var created struct {
+		Thread map[string]any `json:"thread"`
+	}
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+	threadID := asString(created.Thread["id"])
+
+	postJSONExpectStatus(t, h.baseURL+"/threads/"+threadID+"/archive", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
+
+	tombResp := postJSONExpectStatus(t, h.baseURL+"/threads/"+threadID+"/tombstone", `{"actor_id":"actor-1","reason":"cleanup"}`, http.StatusOK)
+	defer tombResp.Body.Close()
+	var tomb struct {
+		Thread map[string]any `json:"thread"`
+	}
+	if err := json.NewDecoder(tombResp.Body).Decode(&tomb); err != nil {
+		t.Fatalf("decode tombstone: %v", err)
+	}
+	if tomb.Thread["archived_at"] != nil {
+		t.Fatalf("expected archived_at cleared, got %#v", tomb.Thread["archived_at"])
+	}
+	if tomb.Thread["tombstoned_at"] == nil {
+		t.Fatal("expected tombstoned_at")
+	}
+
+	restoreResp := postJSONExpectStatus(t, h.baseURL+"/threads/"+threadID+"/restore", `{"actor_id":"actor-1"}`, http.StatusOK)
+	defer restoreResp.Body.Close()
+	var restored struct {
+		Thread map[string]any `json:"thread"`
+	}
+	if err := json.NewDecoder(restoreResp.Body).Decode(&restored); err != nil {
+		t.Fatalf("decode restore: %v", err)
+	}
+	if restored.Thread["archived_at"] != nil {
+		t.Fatalf("expected no archived_at after restore, got %#v", restored.Thread["archived_at"])
+	}
+	if restored.Thread["tombstoned_at"] != nil {
+		t.Fatalf("expected no tombstoned_at after restore, got %#v", restored.Thread["tombstoned_at"])
+	}
+}
+
+func TestBoardArchiveLifecycle(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+	threadID := createBoardThreadViaHTTP(t, h, "Board archive primary")
+
+	createBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
+		"actor_id":"actor-1",
+		"board":{"title":"Archive board test","primary_thread_id":"`+threadID+`"}
+	}`, http.StatusCreated)
+	defer createBoardResp.Body.Close()
+	var createPayload struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(createBoardResp.Body).Decode(&createPayload); err != nil {
+		t.Fatalf("decode create board: %v", err)
+	}
+	boardID := asString(createPayload.Board["id"])
+	if boardID == "" {
+		t.Fatal("expected board id")
+	}
+
+	archiveResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/archive", `{"actor_id":"actor-1"}`, http.StatusOK)
+	defer archiveResp.Body.Close()
+	var archived struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(archiveResp.Body).Decode(&archived); err != nil {
+		t.Fatalf("decode archive board: %v", err)
+	}
+	if archived.Board["archived_at"] == nil {
+		t.Fatal("expected archived_at on board")
+	}
+	firstAt := archived.Board["archived_at"]
+
+	postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/archive", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
+
+	listDefault, err := http.Get(h.baseURL + "/boards")
+	if err != nil {
+		t.Fatalf("GET /boards: %v", err)
+	}
+	defer listDefault.Body.Close()
+	var defaultListed struct {
+		Boards []struct {
+			Board map[string]any `json:"board"`
+		} `json:"boards"`
+	}
+	if err := json.NewDecoder(listDefault.Body).Decode(&defaultListed); err != nil {
+		t.Fatalf("decode boards list: %v", err)
+	}
+	for _, item := range defaultListed.Boards {
+		if asString(item.Board["id"]) == boardID {
+			t.Fatal("archived board must not appear in default list")
+		}
+	}
+
+	withArchived, err := http.Get(h.baseURL + "/boards?include_archived=true")
+	if err != nil {
+		t.Fatalf("GET include_archived boards: %v", err)
+	}
+	defer withArchived.Body.Close()
+	var incListed struct {
+		Boards []struct {
+			Board map[string]any `json:"board"`
+		} `json:"boards"`
+	}
+	if err := json.NewDecoder(withArchived.Body).Decode(&incListed); err != nil {
+		t.Fatalf("decode include_archived boards: %v", err)
+	}
+	found := false
+	for _, item := range incListed.Boards {
+		if asString(item.Board["id"]) == boardID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected board in include_archived list")
+	}
+
+	onlyArchived, err := http.Get(h.baseURL + "/boards?archived_only=true")
+	if err != nil {
+		t.Fatalf("GET archived_only boards: %v", err)
+	}
+	defer onlyArchived.Body.Close()
+	var onlyListed struct {
+		Boards []struct {
+			Board map[string]any `json:"board"`
+		} `json:"boards"`
+	}
+	if err := json.NewDecoder(onlyArchived.Body).Decode(&onlyListed); err != nil {
+		t.Fatalf("decode archived_only boards: %v", err)
+	}
+	if len(onlyListed.Boards) != 1 || asString(onlyListed.Boards[0].Board["id"]) != boardID {
+		t.Fatalf("expected single archived board, got %#v", onlyListed.Boards)
+	}
+	if onlyListed.Boards[0].Board["archived_at"] == nil {
+		t.Fatal("archived_only board should have archived_at")
+	}
+	if onlyListed.Boards[0].Board["archived_at"] != firstAt {
+		t.Fatalf("archived_at mismatch: list=%v archive=%v", onlyListed.Boards[0].Board["archived_at"], firstAt)
+	}
+
+	postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/unarchive", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
+
+	reUnarchive, err := http.Post(h.baseURL+"/boards/"+boardID+"/unarchive", "application/json", strings.NewReader(`{"actor_id":"actor-1"}`))
+	if err != nil {
+		t.Fatalf("second unarchive: %v", err)
+	}
+	defer reUnarchive.Body.Close()
+	if reUnarchive.StatusCode != http.StatusConflict {
+		b, _ := io.ReadAll(reUnarchive.Body)
+		t.Fatalf("expected 409 second unarchive, got %d body=%s", reUnarchive.StatusCode, string(b))
+	}
+
+	listFinal, err := http.Get(h.baseURL + "/boards")
+	if err != nil {
+		t.Fatalf("GET /boards final: %v", err)
+	}
+	defer listFinal.Body.Close()
+	var finalListed struct {
+		Boards []struct {
+			Board map[string]any `json:"board"`
+		} `json:"boards"`
+	}
+	if err := json.NewDecoder(listFinal.Body).Decode(&finalListed); err != nil {
+		t.Fatalf("decode final boards: %v", err)
+	}
+	found = false
+	for _, item := range finalListed.Boards {
+		if asString(item.Board["id"]) == boardID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected board back in default list after unarchive")
+	}
+}
+
+func TestBoardTombstoneLifecycle(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+	threadID := createBoardThreadViaHTTP(t, h, "Board tomb primary")
+
+	createBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
+		"actor_id":"actor-1",
+		"board":{"title":"Tomb board","primary_thread_id":"`+threadID+`"}
+	}`, http.StatusCreated)
+	defer createBoardResp.Body.Close()
+	var createPayload struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(createBoardResp.Body).Decode(&createPayload); err != nil {
+		t.Fatalf("decode create board: %v", err)
+	}
+	boardID := asString(createPayload.Board["id"])
+
+	postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/tombstone", `{"actor_id":"actor-1","reason":"done"}`, http.StatusOK).Body.Close()
+
+	listDefault, err := http.Get(h.baseURL + "/boards")
+	if err != nil {
+		t.Fatalf("GET /boards: %v", err)
+	}
+	defer listDefault.Body.Close()
+	var defaultListed struct {
+		Boards []struct {
+			Board map[string]any `json:"board"`
+		} `json:"boards"`
+	}
+	if err := json.NewDecoder(listDefault.Body).Decode(&defaultListed); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	for _, item := range defaultListed.Boards {
+		if asString(item.Board["id"]) == boardID {
+			t.Fatal("tombstoned board must not appear in default list")
+		}
+	}
+
+	onlyTomb, err := http.Get(h.baseURL + "/boards?tombstoned_only=true")
+	if err != nil {
+		t.Fatalf("GET tombstoned_only boards: %v", err)
+	}
+	defer onlyTomb.Body.Close()
+	var onlyListed struct {
+		Boards []struct {
+			Board map[string]any `json:"board"`
+		} `json:"boards"`
+	}
+	if err := json.NewDecoder(onlyTomb.Body).Decode(&onlyListed); err != nil {
+		t.Fatalf("decode tombstoned_only: %v", err)
+	}
+	if len(onlyListed.Boards) != 1 || asString(onlyListed.Boards[0].Board["id"]) != boardID {
+		t.Fatalf("expected one tombstoned board, got %#v", onlyListed.Boards)
+	}
+}
+
+func TestBoardRestoreLifecycle(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+	threadID := createBoardThreadViaHTTP(t, h, "Board restore primary")
+
+	createBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
+		"actor_id":"actor-1",
+		"board":{"title":"Restore board","primary_thread_id":"`+threadID+`"}
+	}`, http.StatusCreated)
+	defer createBoardResp.Body.Close()
+	var createPayload struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(createBoardResp.Body).Decode(&createPayload); err != nil {
+		t.Fatalf("decode create board: %v", err)
+	}
+	boardID := asString(createPayload.Board["id"])
+
+	postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/tombstone", `{"actor_id":"actor-1","reason":"x"}`, http.StatusOK).Body.Close()
+
+	restoreResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/restore", `{"actor_id":"actor-1"}`, http.StatusOK)
+	defer restoreResp.Body.Close()
+	var restored struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(restoreResp.Body).Decode(&restored); err != nil {
+		t.Fatalf("decode restore: %v", err)
+	}
+	if restored.Board["tombstoned_at"] != nil {
+		t.Fatalf("expected tombstoned_at cleared, got %#v", restored.Board["tombstoned_at"])
+	}
+
+	reRestore, err := http.Post(h.baseURL+"/boards/"+boardID+"/restore", "application/json", strings.NewReader(`{"actor_id":"actor-1"}`))
+	if err != nil {
+		t.Fatalf("second restore: %v", err)
+	}
+	defer reRestore.Body.Close()
+	if reRestore.StatusCode != http.StatusConflict {
+		b, _ := io.ReadAll(reRestore.Body)
+		t.Fatalf("expected 409 second restore, got %d body=%s", reRestore.StatusCode, string(b))
+	}
+	assertErrorCode(t, reRestore, "not_tombstoned")
+}
+
+func TestDocumentArchiveThenTrash(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	createResp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
+		"actor_id":"actor-1",
+		"document":{"title":"Archive then trash doc"},
+		"content":"c",
+		"content_type":"text"
+	}`, http.StatusCreated)
+	defer createResp.Body.Close()
+	var created map[string]map[string]any
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+	docID := asString(created["document"]["id"])
+	if docID == "" {
+		t.Fatal("expected document id")
+	}
+
+	archiveResp := postJSONExpectStatus(t, h.baseURL+"/docs/"+docID+"/archive", `{"actor_id":"actor-1"}`, http.StatusOK)
+	defer archiveResp.Body.Close()
+	var archived struct {
+		Document map[string]any `json:"document"`
+	}
+	if err := json.NewDecoder(archiveResp.Body).Decode(&archived); err != nil {
+		t.Fatalf("decode archive: %v", err)
+	}
+	if archived.Document["archived_at"] == nil {
+		t.Fatal("expected archived_at after archive")
+	}
+
+	tombResp := postJSONExpectStatus(t, h.baseURL+"/docs/"+docID+"/tombstone", `{"actor_id":"actor-1","reason":"cleanup"}`, http.StatusOK)
+	defer tombResp.Body.Close()
+	var tomb struct {
+		Document map[string]any `json:"document"`
+	}
+	if err := json.NewDecoder(tombResp.Body).Decode(&tomb); err != nil {
+		t.Fatalf("decode tombstone: %v", err)
+	}
+	if tomb.Document["archived_at"] != nil {
+		t.Fatalf("expected archived_at cleared after tombstone, got %#v", tomb.Document["archived_at"])
+	}
+	if tomb.Document["tombstoned_at"] == nil {
+		t.Fatal("expected tombstoned_at set")
+	}
+
+	restoreResp := postJSONExpectStatus(t, h.baseURL+"/docs/"+docID+"/restore", `{"actor_id":"actor-1"}`, http.StatusOK)
+	defer restoreResp.Body.Close()
+	var restored struct {
+		Document map[string]any `json:"document"`
+	}
+	if err := json.NewDecoder(restoreResp.Body).Decode(&restored); err != nil {
+		t.Fatalf("decode restore: %v", err)
+	}
+	if restored.Document["archived_at"] != nil {
+		t.Fatalf("expected no archived_at after restore, got %#v", restored.Document["archived_at"])
+	}
+	if restored.Document["tombstoned_at"] != nil {
+		t.Fatalf("expected no tombstoned_at after restore, got %#v", restored.Document["tombstoned_at"])
+	}
+}
+
+func TestDocumentCannotArchiveTrashed(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	createResp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
+		"actor_id":"actor-1",
+		"document":{"title":"Trashed doc"},
+		"content":"y",
+		"content_type":"text"
+	}`, http.StatusCreated)
+	defer createResp.Body.Close()
+	var created map[string]map[string]any
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+	docID := asString(created["document"]["id"])
+
+	postJSONExpectStatus(t, h.baseURL+"/docs/"+docID+"/tombstone", `{"actor_id":"actor-1","reason":"x"}`, http.StatusOK).Body.Close()
+
+	conflict := postJSONExpectStatus(t, h.baseURL+"/docs/"+docID+"/archive", `{"actor_id":"actor-1"}`, http.StatusConflict)
+	defer conflict.Body.Close()
+	assertErrorCode(t, conflict, "already_tombstoned")
+}
+
+func TestThreadCannotArchiveTrashed(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	createResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
+		"actor_id":"actor-1",
+		"thread":{
+			"title":"Cannot archive trashed",
+			"type":"incident",
+			"status":"active",
+			"priority":"p2",
+			"tags":["cat"],
+			"cadence":"daily",
+			"next_check_in_at":"2026-03-05T00:00:00Z",
+			"current_summary":"s",
+			"next_actions":["a"],
+			"key_artifacts":[],
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated)
+	defer createResp.Body.Close()
+	var created struct {
+		Thread map[string]any `json:"thread"`
+	}
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+	threadID := asString(created.Thread["id"])
+
+	postJSONExpectStatus(t, h.baseURL+"/threads/"+threadID+"/tombstone", `{"actor_id":"actor-1","reason":"x"}`, http.StatusOK).Body.Close()
+
+	conflict := postJSONExpectStatus(t, h.baseURL+"/threads/"+threadID+"/archive", `{"actor_id":"actor-1"}`, http.StatusConflict)
+	defer conflict.Body.Close()
+	assertErrorCode(t, conflict, "already_tombstoned")
+}
+
+func TestBoardArchiveThenTrash(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+	threadID := createBoardThreadViaHTTP(t, h, "Board archive then trash primary")
+
+	createBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
+		"actor_id":"actor-1",
+		"board":{"title":"Archive then trash board","primary_thread_id":"`+threadID+`"}
+	}`, http.StatusCreated)
+	defer createBoardResp.Body.Close()
+	var createPayload struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(createBoardResp.Body).Decode(&createPayload); err != nil {
+		t.Fatalf("decode create board: %v", err)
+	}
+	boardID := asString(createPayload.Board["id"])
+	if boardID == "" {
+		t.Fatal("expected board id")
+	}
+
+	archiveResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/archive", `{"actor_id":"actor-1"}`, http.StatusOK)
+	defer archiveResp.Body.Close()
+	var archived struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(archiveResp.Body).Decode(&archived); err != nil {
+		t.Fatalf("decode archive: %v", err)
+	}
+	if archived.Board["archived_at"] == nil {
+		t.Fatal("expected archived_at after archive")
+	}
+
+	tombResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/tombstone", `{"actor_id":"actor-1","reason":"cleanup"}`, http.StatusOK)
+	defer tombResp.Body.Close()
+	var tomb struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(tombResp.Body).Decode(&tomb); err != nil {
+		t.Fatalf("decode tombstone: %v", err)
+	}
+	if tomb.Board["archived_at"] != nil {
+		t.Fatalf("expected archived_at cleared after tombstone, got %#v", tomb.Board["archived_at"])
+	}
+	if tomb.Board["tombstoned_at"] == nil {
+		t.Fatal("expected tombstoned_at set")
+	}
+
+	restoreResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/restore", `{"actor_id":"actor-1"}`, http.StatusOK)
+	defer restoreResp.Body.Close()
+	var restored struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(restoreResp.Body).Decode(&restored); err != nil {
+		t.Fatalf("decode restore: %v", err)
+	}
+	if restored.Board["archived_at"] != nil {
+		t.Fatalf("expected no archived_at after restore, got %#v", restored.Board["archived_at"])
+	}
+	if restored.Board["tombstoned_at"] != nil {
+		t.Fatalf("expected no tombstoned_at after restore, got %#v", restored.Board["tombstoned_at"])
+	}
+}
+
+func TestBoardCannotArchiveTrashed(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+	threadID := createBoardThreadViaHTTP(t, h, "Board cannot archive trashed primary")
+
+	createBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
+		"actor_id":"actor-1",
+		"board":{"title":"Trashed board","primary_thread_id":"`+threadID+`"}
+	}`, http.StatusCreated)
+	defer createBoardResp.Body.Close()
+	var createPayload struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(createBoardResp.Body).Decode(&createPayload); err != nil {
+		t.Fatalf("decode create board: %v", err)
+	}
+	boardID := asString(createPayload.Board["id"])
+
+	postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/tombstone", `{"actor_id":"actor-1","reason":"x"}`, http.StatusOK).Body.Close()
+
+	conflict := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/archive", `{"actor_id":"actor-1"}`, http.StatusConflict)
+	defer conflict.Body.Close()
+	assertErrorCode(t, conflict, "already_tombstoned")
+}
+
+func TestThreadPurgeLifecycle(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServerWithHumanPrincipal(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	createResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
+		"actor_id":"actor-1",
+		"thread":{
+			"title":"Purge thread",
+			"type":"incident",
+			"status":"active",
+			"priority":"p2",
+			"tags":["purge"],
+			"cadence":"daily",
+			"next_check_in_at":"2026-03-05T00:00:00Z",
+			"current_summary":"s",
+			"next_actions":["a"],
+			"key_artifacts":[],
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated)
+	defer createResp.Body.Close()
+	var created struct {
+		Thread map[string]any `json:"thread"`
+	}
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+	threadID := asString(created.Thread["id"])
+
+	purgeEarly := postJSONExpectStatusBearer(t, h.baseURL+"/threads/"+threadID+"/purge", `{}`, h.humanAccessToken, http.StatusConflict)
+	defer purgeEarly.Body.Close()
+	assertErrorCode(t, purgeEarly, "not_tombstoned")
+
+	postJSONExpectStatus(t, h.baseURL+"/threads/"+threadID+"/tombstone", `{"actor_id":"actor-1","reason":"gone"}`, http.StatusOK).Body.Close()
+
+	purgeResp := postJSONExpectStatusBearer(t, h.baseURL+"/threads/"+threadID+"/purge", `{}`, h.humanAccessToken, http.StatusOK)
+	defer purgeResp.Body.Close()
+	var purged map[string]any
+	if err := json.NewDecoder(purgeResp.Body).Decode(&purged); err != nil {
+		t.Fatalf("decode purge: %v", err)
+	}
+	if purged["purged"] != true || purged["thread_id"] != threadID {
+		t.Fatalf("unexpected purge payload: %#v", purged)
+	}
+
+	getResp, err := http.Get(h.baseURL + "/threads/" + threadID)
+	if err != nil {
+		t.Fatalf("GET thread after purge: %v", err)
+	}
+	defer getResp.Body.Close()
+	if getResp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404 after purge, got %d", getResp.StatusCode)
+	}
+}
+
+func TestBoardPurgeLifecycle(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServerWithHumanPrincipal(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+	threadID := createBoardThreadViaHTTP(t, h, "Board purge primary")
+
+	createBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
+		"actor_id":"actor-1",
+		"board":{"title":"Purge board","primary_thread_id":"`+threadID+`"}
+	}`, http.StatusCreated)
+	defer createBoardResp.Body.Close()
+	var createPayload struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(createBoardResp.Body).Decode(&createPayload); err != nil {
+		t.Fatalf("decode create board: %v", err)
+	}
+	boardID := asString(createPayload.Board["id"])
+
+	purgeEarly := postJSONExpectStatusBearer(t, h.baseURL+"/boards/"+boardID+"/purge", `{}`, h.humanAccessToken, http.StatusConflict)
+	defer purgeEarly.Body.Close()
+	assertErrorCode(t, purgeEarly, "not_tombstoned")
+
+	postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/tombstone", `{"actor_id":"actor-1","reason":"gone"}`, http.StatusOK).Body.Close()
+
+	purgeResp := postJSONExpectStatusBearer(t, h.baseURL+"/boards/"+boardID+"/purge", `{}`, h.humanAccessToken, http.StatusOK)
+	defer purgeResp.Body.Close()
+	var purged map[string]any
+	if err := json.NewDecoder(purgeResp.Body).Decode(&purged); err != nil {
+		t.Fatalf("decode purge: %v", err)
+	}
+	if purged["purged"] != true || purged["board_id"] != boardID {
+		t.Fatalf("unexpected purge payload: %#v", purged)
+	}
+
+	getResp, err := http.Get(h.baseURL + "/boards/" + boardID)
+	if err != nil {
+		t.Fatalf("GET board after purge: %v", err)
+	}
+	defer getResp.Body.Close()
+	if getResp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404 after purge, got %d", getResp.StatusCode)
+	}
+}

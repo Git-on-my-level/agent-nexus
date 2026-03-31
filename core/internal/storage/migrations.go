@@ -524,6 +524,110 @@ var migrations = []migration{
 			);`,
 		},
 	},
+	{
+		Version:    22,
+		Statements: nil,
+		Apply:      applyV22ArchiveAndTombstoneColumnsMigration,
+	},
+}
+
+func applyV22ArchiveAndTombstoneColumnsMigration(ctx context.Context, tx *sql.Tx) error {
+	addCol := func(table, column, ddl string) error {
+		ok, err := tableExistsTx(ctx, tx, table)
+		if err != nil || !ok {
+			return err
+		}
+		exists, err := columnExistsTx(ctx, tx, table, column)
+		if err != nil {
+			return err
+		}
+		if exists {
+			return nil
+		}
+		if _, err := tx.ExecContext(ctx, ddl); err != nil {
+			return fmt.Errorf("migration 22 %s.%s: %w", table, column, err)
+		}
+		return nil
+	}
+	if err := addCol("artifacts", "archived_at", `ALTER TABLE artifacts ADD COLUMN archived_at TEXT`); err != nil {
+		return err
+	}
+	if err := addCol("artifacts", "archived_by", `ALTER TABLE artifacts ADD COLUMN archived_by TEXT`); err != nil {
+		return err
+	}
+	if ok, err := tableExistsTx(ctx, tx, "artifacts"); err != nil {
+		return err
+	} else if ok {
+		if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_artifacts_archived_at ON artifacts (archived_at)`); err != nil {
+			return fmt.Errorf("migration 22 artifacts archived index: %w", err)
+		}
+	}
+
+	if err := addCol("documents", "archived_at", `ALTER TABLE documents ADD COLUMN archived_at TEXT`); err != nil {
+		return err
+	}
+	if err := addCol("documents", "archived_by", `ALTER TABLE documents ADD COLUMN archived_by TEXT`); err != nil {
+		return err
+	}
+	if ok, err := tableExistsTx(ctx, tx, "documents"); err != nil {
+		return err
+	} else if ok {
+		if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_documents_archived_at ON documents (archived_at)`); err != nil {
+			return fmt.Errorf("migration 22 documents archived index: %w", err)
+		}
+	}
+
+	for _, col := range []struct {
+		name string
+		ddl  string
+	}{
+		{"archived_at", `ALTER TABLE snapshots ADD COLUMN archived_at TEXT`},
+		{"archived_by", `ALTER TABLE snapshots ADD COLUMN archived_by TEXT`},
+		{"tombstoned_at", `ALTER TABLE snapshots ADD COLUMN tombstoned_at TEXT`},
+		{"tombstoned_by", `ALTER TABLE snapshots ADD COLUMN tombstoned_by TEXT`},
+		{"tombstone_reason", `ALTER TABLE snapshots ADD COLUMN tombstone_reason TEXT`},
+	} {
+		if err := addCol("snapshots", col.name, col.ddl); err != nil {
+			return err
+		}
+	}
+	if ok, err := tableExistsTx(ctx, tx, "snapshots"); err != nil {
+		return err
+	} else if ok {
+		if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_snapshots_archived_at ON snapshots (archived_at)`); err != nil {
+			return fmt.Errorf("migration 22 snapshots archived index: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_snapshots_tombstoned_at ON snapshots (tombstoned_at)`); err != nil {
+			return fmt.Errorf("migration 22 snapshots tombstoned index: %w", err)
+		}
+	}
+
+	for _, col := range []struct {
+		name string
+		ddl  string
+	}{
+		{"archived_at", `ALTER TABLE boards ADD COLUMN archived_at TEXT`},
+		{"archived_by", `ALTER TABLE boards ADD COLUMN archived_by TEXT`},
+		{"tombstoned_at", `ALTER TABLE boards ADD COLUMN tombstoned_at TEXT`},
+		{"tombstoned_by", `ALTER TABLE boards ADD COLUMN tombstoned_by TEXT`},
+		{"tombstone_reason", `ALTER TABLE boards ADD COLUMN tombstone_reason TEXT`},
+	} {
+		if err := addCol("boards", col.name, col.ddl); err != nil {
+			return err
+		}
+	}
+	if ok, err := tableExistsTx(ctx, tx, "boards"); err != nil {
+		return err
+	} else if ok {
+		if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_boards_archived_at ON boards (archived_at)`); err != nil {
+			return fmt.Errorf("migration 22 boards archived index: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_boards_tombstoned_at ON boards (tombstoned_at)`); err != nil {
+			return fmt.Errorf("migration 22 boards tombstoned index: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func applyMigrations(ctx context.Context, db *sql.DB) error {

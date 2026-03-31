@@ -254,6 +254,10 @@ func TestWorkspaceMigrationBackfillsProjectionGenerationsConservatively(t *testi
 			version INTEGER PRIMARY KEY,
 			applied_at TEXT NOT NULL
 		);`,
+		`CREATE TABLE artifacts (id TEXT PRIMARY KEY);`,
+		`CREATE TABLE documents (id TEXT PRIMARY KEY);`,
+		`CREATE TABLE snapshots (id TEXT PRIMARY KEY);`,
+		`CREATE TABLE boards (id TEXT PRIMARY KEY);`,
 		`CREATE TABLE derived_thread_dirty_queue (
 			thread_id TEXT PRIMARY KEY,
 			dirty_at TEXT NOT NULL
@@ -485,6 +489,30 @@ func seedLegacyWorkspace(ctx context.Context, db *sql.DB, evidenceHash string, e
 			version INTEGER PRIMARY KEY,
 			applied_at TEXT NOT NULL
 		);`,
+		`CREATE TABLE snapshots (
+			id TEXT PRIMARY KEY,
+			kind TEXT NOT NULL,
+			thread_id TEXT,
+			updated_at TEXT NOT NULL,
+			updated_by TEXT NOT NULL,
+			body_json TEXT NOT NULL,
+			provenance_json TEXT NOT NULL DEFAULT '{}'
+		);`,
+		`CREATE TABLE boards (
+			id TEXT PRIMARY KEY,
+			title TEXT NOT NULL,
+			status TEXT NOT NULL,
+			labels_json TEXT NOT NULL DEFAULT '[]',
+			owners_json TEXT NOT NULL DEFAULT '[]',
+			primary_thread_id TEXT NOT NULL,
+			primary_document_id TEXT,
+			column_schema_json TEXT NOT NULL,
+			pinned_refs_json TEXT NOT NULL DEFAULT '[]',
+			created_at TEXT NOT NULL,
+			created_by TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			updated_by TEXT NOT NULL
+		);`,
 		`CREATE TABLE artifacts (
 			id TEXT PRIMARY KEY,
 			kind TEXT NOT NULL,
@@ -499,6 +527,21 @@ func seedLegacyWorkspace(ctx context.Context, db *sql.DB, evidenceHash string, e
 			tombstoned_at TEXT,
 			tombstoned_by TEXT,
 			tombstone_reason TEXT
+		);`,
+		`CREATE TABLE documents (
+			id TEXT PRIMARY KEY,
+			thread_id TEXT,
+			title TEXT,
+			slug TEXT,
+			status TEXT,
+			labels_json TEXT NOT NULL DEFAULT '[]',
+			supersedes_json TEXT NOT NULL DEFAULT '[]',
+			head_revision_id TEXT NOT NULL,
+			head_revision_number INTEGER NOT NULL,
+			created_at TEXT NOT NULL,
+			created_by TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			updated_by TEXT NOT NULL
 		);`,
 		`CREATE TABLE document_revisions (
 			revision_id TEXT PRIMARY KEY,
@@ -591,6 +634,26 @@ func seedLegacyWorkspace(ctx context.Context, db *sql.DB, evidenceHash string, e
 		documentPath,
 		`["thread:thread-legacy"]`,
 		string(documentMetadata),
+	); err != nil {
+		return err
+	}
+	if _, err := db.ExecContext(
+		ctx,
+		`INSERT INTO documents(
+			id, thread_id, title, slug, status, head_revision_id, head_revision_number,
+			created_at, created_by, updated_at, updated_by
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"legacy-doc",
+		"thread-legacy",
+		"Legacy document",
+		"legacy-doc",
+		"active",
+		"rev-legacy",
+		1,
+		"2026-03-04T11:00:00Z",
+		"actor-1",
+		"2026-03-04T11:00:00Z",
+		"actor-1",
 	); err != nil {
 		return err
 	}

@@ -1,4 +1,5 @@
 <script>
+  import { goto } from "$app/navigation";
   import { page } from "$app/stores";
 
   import GuidedTypedRefsInput from "$lib/components/GuidedTypedRefsInput.svelte";
@@ -46,10 +47,17 @@
   let threadTimeline = $state([]);
   let timelineLoading = $state(false);
   let timelineError = $state("");
+  let artifactTrashConfirm = $state(false);
+  let lifecycleBusy = $state(false);
 
   $effect(() => {
     const id = artifactId;
     if (id && id !== loadedArtifactId) loadArtifact(id);
+  });
+
+  $effect(() => {
+    artifactId;
+    artifactTrashConfirm = false;
   });
   let receiptPacket = $derived(
     artifact?.kind === "receipt" &&
@@ -341,6 +349,51 @@
 
     loading = false;
   }
+
+  async function handleArchiveArtifact() {
+    if (!artifact?.id || lifecycleBusy || artifact.tombstoned_at) return;
+    lifecycleBusy = true;
+    try {
+      await coreClient.archiveArtifact(artifact.id, {});
+      await loadArtifact(artifact.id);
+    } finally {
+      lifecycleBusy = false;
+    }
+  }
+
+  async function handleUnarchiveArtifact() {
+    if (!artifact?.id || lifecycleBusy || artifact.tombstoned_at) return;
+    lifecycleBusy = true;
+    try {
+      await coreClient.unarchiveArtifact(artifact.id, {});
+      await loadArtifact(artifact.id);
+    } finally {
+      lifecycleBusy = false;
+    }
+  }
+
+  async function handleTombstoneArtifact() {
+    if (!artifact?.id || lifecycleBusy) return;
+    lifecycleBusy = true;
+    try {
+      await coreClient.tombstoneArtifact(artifact.id, {});
+      artifactTrashConfirm = false;
+      await goto(workspaceHref("/artifacts"));
+    } finally {
+      lifecycleBusy = false;
+    }
+  }
+
+  async function handleRestoreArtifact() {
+    if (!artifact?.id || lifecycleBusy) return;
+    lifecycleBusy = true;
+    try {
+      await coreClient.restoreArtifact(artifact.id, {});
+      await loadArtifact(artifact.id);
+    } finally {
+      lifecycleBusy = false;
+    }
+  }
 </script>
 
 <nav
@@ -385,38 +438,119 @@
 {:else if artifact}
   {#if artifact?.tombstoned_at}
     <div
-      class="tombstone-banner mb-4 rounded-md border border-red-500/20 bg-red-500/10 p-4"
+      class="tombstone-banner mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[13px] text-red-400"
     >
-      <div
-        class="flex items-center gap-2 text-[13px] font-semibold text-red-400"
-      >
-        <span>⚠</span>
-        <span>This artifact has been tombstoned</span>
-      </div>
-      {#if artifact.tombstone_reason}
-        <p class="mt-2 text-[13px] text-red-400">
-          Reason: {artifact.tombstone_reason}
-        </p>
-      {/if}
-      <p class="mt-1 text-[11px] text-gray-500">
-        Tombstoned {#if artifact.tombstoned_by}by {actorName(
-            artifact.tombstoned_by,
-          )}{/if}
-        {#if artifact.tombstoned_at}
-          {formatTimestamp(artifact.tombstoned_at)}
+      <div class="min-w-0 flex-1">
+        <div class="flex items-center gap-2 font-semibold">
+          <span>⚠</span>
+          <span>This artifact has been tombstoned</span>
+        </div>
+        {#if artifact.tombstone_reason}
+          <p class="mt-2">Reason: {artifact.tombstone_reason}</p>
         {/if}
+        <p class="mt-1 text-[11px] text-red-400/80">
+          Tombstoned {#if artifact.tombstoned_by}by {actorName(
+              artifact.tombstoned_by,
+            )}{/if}
+          {#if artifact.tombstoned_at}
+            {formatTimestamp(artifact.tombstoned_at)}
+          {/if}
+        </p>
+      </div>
+      <button
+        class="shrink-0 cursor-pointer rounded-md border border-red-500/40 bg-red-500/15 px-2 py-1 text-[12px] font-medium text-red-400 hover:bg-red-500/25 disabled:opacity-50"
+        disabled={lifecycleBusy}
+        onclick={handleRestoreArtifact}
+        type="button"
+      >
+        {lifecycleBusy ? "…" : "Restore"}
+      </button>
+    </div>
+  {:else if artifact?.archived_at}
+    <div
+      class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[13px] text-amber-400"
+    >
+      <p class="min-w-0 flex-1">
+        This artifact was archived on {formatTimestamp(artifact.archived_at) ||
+          "—"}{#if artifact.archived_by}
+          by {actorName(artifact.archived_by)}{/if}.
       </p>
+      <button
+        class="shrink-0 cursor-pointer rounded-md border border-amber-500/40 bg-amber-500/15 px-2 py-1 text-[12px] font-medium text-amber-400 hover:bg-amber-500/25 disabled:opacity-50"
+        disabled={lifecycleBusy}
+        onclick={handleUnarchiveArtifact}
+        type="button"
+      >
+        {lifecycleBusy ? "…" : "Unarchive"}
+      </button>
     </div>
   {/if}
   <section
     class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-4"
   >
-    <h1 class="text-lg font-semibold text-[var(--ui-text)]">
-      {artifactHeaderTitle}
-    </h1>
-    <p class="mt-0.5 text-[13px] text-[var(--ui-text-muted)]">
-      {kindDescription(artifact.kind)}
-    </p>
+    <div class="flex items-start justify-between gap-3">
+      <div class="min-w-0 flex-1">
+        <h1 class="text-lg font-semibold text-[var(--ui-text)]">
+          {artifactHeaderTitle}
+        </h1>
+        <p class="mt-0.5 text-[13px] text-[var(--ui-text-muted)]">
+          {kindDescription(artifact.kind)}
+        </p>
+      </div>
+      {#if !artifact.tombstoned_at}
+        <div class="flex shrink-0 items-center gap-1.5">
+          {#if !artifact.archived_at}
+            <button
+              class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text)] hover:bg-[var(--ui-border)] disabled:opacity-50"
+              disabled={lifecycleBusy}
+              onclick={handleArchiveArtifact}
+              type="button"
+            >
+              Archive
+            </button>
+          {/if}
+          {#if artifactTrashConfirm}
+            <button
+              class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] px-2 py-1 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border)]"
+              onclick={() => (artifactTrashConfirm = false)}
+              type="button"
+            >
+              Cancel
+            </button>
+            <button
+              class="cursor-pointer rounded-md border border-red-500/40 bg-red-500/15 px-2 py-1 text-[12px] font-medium text-red-400 hover:bg-red-500/25 disabled:opacity-50"
+              disabled={lifecycleBusy}
+              onclick={handleTombstoneArtifact}
+              type="button"
+            >
+              Confirm
+            </button>
+          {:else}
+            <button
+              aria-label="Move artifact to trash"
+              class="cursor-pointer rounded-md p-1.5 text-[var(--ui-text-muted)] hover:bg-[var(--ui-border)] hover:text-red-400 disabled:opacity-50"
+              disabled={lifecycleBusy}
+              onclick={() => (artifactTrashConfirm = true)}
+              type="button"
+            >
+              <svg
+                class="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                />
+              </svg>
+            </button>
+          {/if}
+        </div>
+      {/if}
+    </div>
 
     <div class="mt-2 flex flex-wrap items-center gap-2 text-[12px]">
       <span class="rounded px-1.5 py-0.5 font-medium {kindColor(artifact.kind)}"

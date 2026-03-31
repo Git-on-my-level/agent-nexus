@@ -25,7 +25,9 @@ import (
 
 var ErrNotFound = errors.New("not found")
 var ErrConflict = errors.New("conflict")
-var ErrNotTombstoned = errors.New("artifact is not tombstoned")
+var ErrNotTombstoned = errors.New("entity is not tombstoned")
+var ErrNotArchived = errors.New("entity is not archived")
+var ErrAlreadyTombstoned = errors.New("entity is tombstoned")
 var ErrArtifactInUse = errors.New("artifact is referenced by document revisions")
 var ErrInvalidCommitmentTransition = errors.New("invalid commitment transition")
 var ErrInvalidArtifactID = errors.New("invalid artifact id")
@@ -43,27 +45,36 @@ type ArtifactListFilter struct {
 	CreatedAfter      string
 	IncludeTombstoned bool
 	TombstonedOnly    bool
+	IncludeArchived   bool
+	ArchivedOnly      bool
 }
 
 type DocumentListFilter struct {
 	ThreadID          string
 	IncludeTombstoned bool
+	TombstonedOnly    bool
+	IncludeArchived   bool
+	ArchivedOnly      bool
 	Query             string
 	Limit             *int
 	Cursor            string
 }
 
 type ThreadListFilter struct {
-	Status   string
-	Priority string
-	Tag      string
-	Tags     []string
-	Cadences []string
-	Stale    *bool
-	Now      time.Time
-	Query    string
-	Limit    *int
-	Cursor   string
+	Status            string
+	Priority          string
+	Tag               string
+	Tags              []string
+	Cadences          []string
+	Stale             *bool
+	Now               time.Time
+	Query             string
+	Limit             *int
+	Cursor            string
+	IncludeArchived   bool
+	ArchivedOnly      bool
+	IncludeTombstoned bool
+	TombstonedOnly    bool
 }
 
 type EventListFilter struct {
@@ -554,6 +565,9 @@ func (s *Store) TombstoneArtifact(ctx context.Context, actorID string, artifactI
 		return metadata, nil
 	}
 
+	delete(metadata, "archived_at")
+	delete(metadata, "archived_by")
+
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	metadata["tombstoned_at"] = now
 	metadata["tombstoned_by"] = actorID
@@ -567,11 +581,133 @@ func (s *Store) TombstoneArtifact(ctx context.Context, actorID string, artifactI
 	}
 
 	_, err = s.db.ExecContext(ctx,
-		`UPDATE artifacts SET tombstoned_at = ?, tombstoned_by = ?, tombstone_reason = ?, metadata_json = ? WHERE id = ?`,
+		`UPDATE artifacts SET tombstoned_at = ?, tombstoned_by = ?, tombstone_reason = ?, archived_at = NULL, archived_by = NULL, metadata_json = ? WHERE id = ?`,
 		now, actorID, strings.TrimSpace(reason), string(updatedMetadataJSON), artifactID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("tombstone artifact: %w", err)
+	}
+
+	return metadata, nil
+}
+
+func (s *Store) ArchiveArtifact(ctx context.Context, actorID, artifactID string) (map[string]any, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("primitives store database is not initialized")
+	}
+	actorID = strings.TrimSpace(actorID)
+	if actorID == "" {
+		return nil, fmt.Errorf("actor_id is required")
+	}
+	artifactID = strings.TrimSpace(artifactID)
+	if artifactID == "" {
+		return nil, fmt.Errorf("artifact_id is required")
+	}
+
+	var metadataJSON string
+	var tombstonedAt sql.NullString
+	var archivedAt sql.NullString
+	var archivedBy sql.NullString
+	err := s.db.QueryRowContext(
+		ctx,
+		`SELECT metadata_json, tombstoned_at, archived_at, archived_by FROM artifacts WHERE id = ?`,
+		artifactID,
+	).Scan(&metadataJSON, &tombstonedAt, &archivedAt, &archivedBy)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query artifact for archive: %w", err)
+	}
+
+	if tombstonedAt.Valid && strings.TrimSpace(tombstonedAt.String) != "" {
+		return nil, ErrAlreadyTombstoned
+	}
+
+	metadata, err := decodeArtifactMetadataJSON(metadataJSON)
+	if err != nil {
+		return nil, err
+	}
+
+	if archivedAt.Valid && strings.TrimSpace(archivedAt.String) != "" {
+		metadata["archived_at"] = archivedAt.String
+		if archivedBy.Valid && strings.TrimSpace(archivedBy.String) != "" {
+			metadata["archived_by"] = archivedBy.String
+		}
+		return metadata, nil
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	metadata["archived_at"] = now
+	metadata["archived_by"] = actorID
+
+	updatedMetadataJSON, err := json.Marshal(metadata)
+	if err != nil {
+		return nil, fmt.Errorf("encode archived artifact metadata: %w", err)
+	}
+
+	_, err = s.db.ExecContext(ctx,
+		`UPDATE artifacts SET archived_at = ?, archived_by = ?, metadata_json = ? WHERE id = ?`,
+		now, actorID, string(updatedMetadataJSON), artifactID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("archive artifact: %w", err)
+	}
+
+	return metadata, nil
+}
+
+func (s *Store) UnarchiveArtifact(ctx context.Context, actorID, artifactID string) (map[string]any, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("primitives store database is not initialized")
+	}
+	actorID = strings.TrimSpace(actorID)
+	if actorID == "" {
+		return nil, fmt.Errorf("actor_id is required")
+	}
+	artifactID = strings.TrimSpace(artifactID)
+	if artifactID == "" {
+		return nil, fmt.Errorf("artifact_id is required")
+	}
+
+	var metadataJSON string
+	var tombstonedDiscard sql.NullString
+	var archivedAt sql.NullString
+	var archivedByDiscard sql.NullString
+	err := s.db.QueryRowContext(
+		ctx,
+		`SELECT metadata_json, tombstoned_at, archived_at, archived_by FROM artifacts WHERE id = ?`,
+		artifactID,
+	).Scan(&metadataJSON, &tombstonedDiscard, &archivedAt, &archivedByDiscard)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query artifact for unarchive: %w", err)
+	}
+
+	if !archivedAt.Valid || strings.TrimSpace(archivedAt.String) == "" {
+		return nil, ErrNotArchived
+	}
+
+	metadata, err := decodeArtifactMetadataJSON(metadataJSON)
+	if err != nil {
+		return nil, err
+	}
+	delete(metadata, "archived_at")
+	delete(metadata, "archived_by")
+
+	updatedMetadataJSON, err := json.Marshal(metadata)
+	if err != nil {
+		return nil, fmt.Errorf("encode unarchived artifact metadata: %w", err)
+	}
+
+	_, err = s.db.ExecContext(ctx,
+		`UPDATE artifacts SET archived_at = NULL, archived_by = NULL, metadata_json = ? WHERE id = ?`,
+		string(updatedMetadataJSON), artifactID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("unarchive artifact: %w", err)
 	}
 
 	return metadata, nil
@@ -1096,6 +1232,208 @@ func (s *Store) ListThreads(ctx context.Context, filter ThreadListFilter) ([]map
 	}
 
 	return threads, nextCursor, nil
+}
+
+func (s *Store) ArchiveThread(ctx context.Context, actorID, threadID string) (map[string]any, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("primitives store database is not initialized")
+	}
+	actorID = strings.TrimSpace(actorID)
+	if actorID == "" {
+		return nil, fmt.Errorf("actor_id is required")
+	}
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		return nil, fmt.Errorf("thread_id is required")
+	}
+	row, err := s.getSnapshotRow(ctx, threadID)
+	if err != nil {
+		return nil, err
+	}
+	if row.Kind != "thread" {
+		return nil, ErrNotFound
+	}
+	if row.TombstonedAt.Valid && strings.TrimSpace(row.TombstonedAt.String) != "" {
+		return nil, ErrAlreadyTombstoned
+	}
+	if row.ArchivedAt.Valid && strings.TrimSpace(row.ArchivedAt.String) != "" {
+		return row.ToSnapshotMap()
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE snapshots SET archived_at = ?, archived_by = ? WHERE id = ?`,
+		now, actorID, threadID,
+	); err != nil {
+		return nil, fmt.Errorf("archive thread: %w", err)
+	}
+	row, err = s.getSnapshotRow(ctx, threadID)
+	if err != nil {
+		return nil, err
+	}
+	return row.ToSnapshotMap()
+}
+
+func (s *Store) UnarchiveThread(ctx context.Context, actorID, threadID string) (map[string]any, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("primitives store database is not initialized")
+	}
+	actorID = strings.TrimSpace(actorID)
+	if actorID == "" {
+		return nil, fmt.Errorf("actor_id is required")
+	}
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		return nil, fmt.Errorf("thread_id is required")
+	}
+	row, err := s.getSnapshotRow(ctx, threadID)
+	if err != nil {
+		return nil, err
+	}
+	if row.Kind != "thread" {
+		return nil, ErrNotFound
+	}
+	if !row.ArchivedAt.Valid || strings.TrimSpace(row.ArchivedAt.String) == "" {
+		return nil, ErrNotArchived
+	}
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE snapshots SET archived_at = NULL, archived_by = NULL WHERE id = ?`,
+		threadID,
+	); err != nil {
+		return nil, fmt.Errorf("unarchive thread: %w", err)
+	}
+	row, err = s.getSnapshotRow(ctx, threadID)
+	if err != nil {
+		return nil, err
+	}
+	return row.ToSnapshotMap()
+}
+
+func (s *Store) TombstoneThread(ctx context.Context, actorID, threadID, reason string) (map[string]any, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("primitives store database is not initialized")
+	}
+	actorID = strings.TrimSpace(actorID)
+	if actorID == "" {
+		return nil, fmt.Errorf("actor_id is required")
+	}
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		return nil, fmt.Errorf("thread_id is required")
+	}
+	row, err := s.getSnapshotRow(ctx, threadID)
+	if err != nil {
+		return nil, err
+	}
+	if row.Kind != "thread" {
+		return nil, ErrNotFound
+	}
+	if row.TombstonedAt.Valid && strings.TrimSpace(row.TombstonedAt.String) != "" {
+		return row.ToSnapshotMap()
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE snapshots SET tombstoned_at = ?, tombstoned_by = ?, tombstone_reason = ?, archived_at = NULL, archived_by = NULL WHERE id = ?`,
+		now, actorID, strings.TrimSpace(reason), threadID,
+	); err != nil {
+		return nil, fmt.Errorf("tombstone thread: %w", err)
+	}
+	row, err = s.getSnapshotRow(ctx, threadID)
+	if err != nil {
+		return nil, err
+	}
+	return row.ToSnapshotMap()
+}
+
+func (s *Store) RestoreThread(ctx context.Context, actorID, threadID string) (map[string]any, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("primitives store database is not initialized")
+	}
+	actorID = strings.TrimSpace(actorID)
+	if actorID == "" {
+		return nil, fmt.Errorf("actor_id is required")
+	}
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		return nil, fmt.Errorf("thread_id is required")
+	}
+	row, err := s.getSnapshotRow(ctx, threadID)
+	if err != nil {
+		return nil, err
+	}
+	if row.Kind != "thread" {
+		return nil, ErrNotFound
+	}
+	if !row.TombstonedAt.Valid || strings.TrimSpace(row.TombstonedAt.String) == "" {
+		return nil, ErrNotTombstoned
+	}
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE snapshots SET tombstoned_at = NULL, tombstoned_by = NULL, tombstone_reason = NULL WHERE id = ?`,
+		threadID,
+	); err != nil {
+		return nil, fmt.Errorf("restore thread: %w", err)
+	}
+	row, err = s.getSnapshotRow(ctx, threadID)
+	if err != nil {
+		return nil, err
+	}
+	return row.ToSnapshotMap()
+}
+
+func (s *Store) PurgeThread(ctx context.Context, threadID string) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("primitives store database is not initialized")
+	}
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		return fmt.Errorf("thread_id is required")
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin purge thread transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var foundID string
+	err = tx.QueryRowContext(ctx,
+		`SELECT id FROM snapshots WHERE id = ? AND kind = 'thread' AND tombstoned_at IS NOT NULL`,
+		threadID,
+	).Scan(&foundID)
+	if errors.Is(err, sql.ErrNoRows) {
+		var one int
+		err2 := tx.QueryRowContext(ctx, `SELECT 1 FROM snapshots WHERE id = ? AND kind = 'thread'`, threadID).Scan(&one)
+		if errors.Is(err2, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err2 != nil {
+			return fmt.Errorf("check thread existence: %w", err2)
+		}
+		return ErrNotTombstoned
+	}
+	if err != nil {
+		return fmt.Errorf("select tombstoned thread: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM derived_thread_views WHERE thread_id = ?`, threadID); err != nil {
+		return fmt.Errorf("delete derived_thread_views: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM derived_inbox_items WHERE thread_id = ?`, threadID); err != nil {
+		return fmt.Errorf("delete derived_inbox_items: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM derived_thread_dirty_queue WHERE thread_id = ?`, threadID); err != nil {
+		return fmt.Errorf("delete derived_thread_dirty_queue: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM snapshots WHERE id = ? AND kind = 'thread'`, threadID); err != nil {
+		return fmt.Errorf("delete thread snapshot: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM snapshots WHERE thread_id = ? AND kind = 'commitment'`, threadID); err != nil {
+		return fmt.Errorf("delete commitment snapshots: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit purge thread transaction: %w", err)
+	}
+	return nil
 }
 
 func (s *Store) ListEventsByThread(ctx context.Context, threadID string) ([]map[string]any, error) {
@@ -1978,13 +2316,18 @@ func (s *Store) recomputeThreadOpenCommitmentsTx(ctx context.Context, tx *sql.Tx
 }
 
 type snapshotRow struct {
-	ID             string
-	Kind           string
-	ThreadID       sql.NullString
-	UpdatedAt      string
-	UpdatedBy      string
-	BodyJSON       string
-	ProvenanceJSON string
+	ID              string
+	Kind            string
+	ThreadID        sql.NullString
+	UpdatedAt       string
+	UpdatedBy       string
+	BodyJSON        string
+	ProvenanceJSON  string
+	ArchivedAt      sql.NullString
+	ArchivedBy      sql.NullString
+	TombstonedAt    sql.NullString
+	TombstonedBy    sql.NullString
+	TombstoneReason sql.NullString
 }
 
 type snapshotFilterColumns struct {
@@ -2009,9 +2352,9 @@ func getSnapshotRowFromQueryRower(ctx context.Context, db queryRower, id string)
 	row := snapshotRow{}
 	err := db.QueryRowContext(
 		ctx,
-		`SELECT id, kind, thread_id, updated_at, updated_by, body_json, provenance_json FROM snapshots WHERE id = ?`,
+		`SELECT id, kind, thread_id, updated_at, updated_by, body_json, provenance_json, archived_at, archived_by, tombstoned_at, tombstoned_by, tombstone_reason FROM snapshots WHERE id = ?`,
 		id,
-	).Scan(&row.ID, &row.Kind, &row.ThreadID, &row.UpdatedAt, &row.UpdatedBy, &row.BodyJSON, &row.ProvenanceJSON)
+	).Scan(&row.ID, &row.Kind, &row.ThreadID, &row.UpdatedAt, &row.UpdatedBy, &row.BodyJSON, &row.ProvenanceJSON, &row.ArchivedAt, &row.ArchivedBy, &row.TombstonedAt, &row.TombstonedBy, &row.TombstoneReason)
 	if errors.Is(err, sql.ErrNoRows) {
 		return snapshotRow{}, ErrNotFound
 	}
@@ -2023,7 +2366,7 @@ func getSnapshotRowFromQueryRower(ctx context.Context, db queryRower, id string)
 
 func scanSnapshotRow(scanner interface{ Scan(dest ...any) error }) (snapshotRow, error) {
 	row := snapshotRow{}
-	if err := scanner.Scan(&row.ID, &row.Kind, &row.ThreadID, &row.UpdatedAt, &row.UpdatedBy, &row.BodyJSON, &row.ProvenanceJSON); err != nil {
+	if err := scanner.Scan(&row.ID, &row.Kind, &row.ThreadID, &row.UpdatedAt, &row.UpdatedBy, &row.BodyJSON, &row.ProvenanceJSON, &row.ArchivedAt, &row.ArchivedBy, &row.TombstonedAt, &row.TombstonedBy, &row.TombstoneReason); err != nil {
 		return snapshotRow{}, fmt.Errorf("scan snapshot row: %w", err)
 	}
 	return row, nil
@@ -2054,6 +2397,22 @@ func (r snapshotRow) ToSnapshotMap() (map[string]any, error) {
 		body["thread_id"] = r.ThreadID.String
 	}
 	body["provenance"] = provenance
+
+	if r.ArchivedAt.Valid && strings.TrimSpace(r.ArchivedAt.String) != "" {
+		body["archived_at"] = r.ArchivedAt.String
+	}
+	if r.ArchivedBy.Valid && strings.TrimSpace(r.ArchivedBy.String) != "" {
+		body["archived_by"] = r.ArchivedBy.String
+	}
+	if r.TombstonedAt.Valid && strings.TrimSpace(r.TombstonedAt.String) != "" {
+		body["tombstoned_at"] = r.TombstonedAt.String
+	}
+	if r.TombstonedBy.Valid && strings.TrimSpace(r.TombstonedBy.String) != "" {
+		body["tombstoned_by"] = r.TombstonedBy.String
+	}
+	if r.TombstoneReason.Valid && strings.TrimSpace(r.TombstoneReason.String) != "" {
+		body["tombstone_reason"] = r.TombstoneReason.String
+	}
 
 	return body, nil
 }
@@ -2230,10 +2589,20 @@ func buildThreadCadenceFilterClause(filters []string) (string, []any) {
 }
 
 func buildListThreadsQuery(filter ThreadListFilter) (string, []any) {
-	query := `SELECT snapshots.id, snapshots.kind, snapshots.thread_id, snapshots.updated_at, snapshots.updated_by, snapshots.body_json, snapshots.provenance_json
+	query := `SELECT snapshots.id, snapshots.kind, snapshots.thread_id, snapshots.updated_at, snapshots.updated_by, snapshots.body_json, snapshots.provenance_json, snapshots.archived_at, snapshots.archived_by, snapshots.tombstoned_at, snapshots.tombstoned_by, snapshots.tombstone_reason
 		 FROM snapshots
 		 WHERE snapshots.kind = 'thread'`
 	args := make([]any, 0, 9)
+	if filter.TombstonedOnly {
+		query += ` AND snapshots.tombstoned_at IS NOT NULL`
+	} else if !filter.IncludeTombstoned {
+		query += ` AND snapshots.tombstoned_at IS NULL`
+	}
+	if filter.ArchivedOnly {
+		query += ` AND snapshots.archived_at IS NOT NULL AND snapshots.tombstoned_at IS NULL`
+	} else if !filter.IncludeArchived {
+		query += ` AND snapshots.archived_at IS NULL`
+	}
 	if status := strings.TrimSpace(filter.Status); status != "" {
 		query += ` AND filter_status = ?`
 		args = append(args, status)
@@ -2280,7 +2649,7 @@ func buildListThreadsQuery(filter ThreadListFilter) (string, []any) {
 }
 
 func buildListCommitmentsQuery(filter CommitmentListFilter) (string, []any) {
-	query := `SELECT id, kind, thread_id, updated_at, updated_by, body_json, provenance_json
+	query := `SELECT id, kind, thread_id, updated_at, updated_by, body_json, provenance_json, archived_at, archived_by, tombstoned_at, tombstoned_by, tombstone_reason
 		 FROM snapshots
 		 WHERE kind = 'commitment'`
 	args := make([]any, 0, 6)
@@ -2324,6 +2693,13 @@ func buildListArtifactsQuery(filter ArtifactListFilter) (string, []any) {
 			primaryClauses = append(primaryClauses, "tombstoned_at IS NULL")
 			secondaryClauses = append(secondaryClauses, "tombstoned_at IS NULL")
 		}
+		if filter.ArchivedOnly {
+			primaryClauses = append(primaryClauses, "archived_at IS NOT NULL", "tombstoned_at IS NULL")
+			secondaryClauses = append(secondaryClauses, "archived_at IS NOT NULL", "tombstoned_at IS NULL")
+		} else if !filter.IncludeArchived {
+			primaryClauses = append(primaryClauses, "archived_at IS NULL")
+			secondaryClauses = append(secondaryClauses, "archived_at IS NULL")
+		}
 		if kind := strings.TrimSpace(filter.Kind); kind != "" {
 			primaryClauses = append(primaryClauses, "kind = ?")
 			secondaryClauses = append(secondaryClauses, "kind = ?")
@@ -2366,6 +2742,11 @@ func buildListArtifactsQuery(filter ArtifactListFilter) (string, []any) {
 		query += ` AND tombstoned_at IS NOT NULL`
 	} else if !filter.IncludeTombstoned {
 		query += ` AND tombstoned_at IS NULL`
+	}
+	if filter.ArchivedOnly {
+		query += ` AND archived_at IS NOT NULL AND tombstoned_at IS NULL`
+	} else if !filter.IncludeArchived {
+		query += ` AND archived_at IS NULL`
 	}
 	if kind := strings.TrimSpace(filter.Kind); kind != "" {
 		query += ` AND kind = ?`

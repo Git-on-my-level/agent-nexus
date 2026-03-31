@@ -393,6 +393,68 @@ export const commandRegistry: CommandSpec[] = [
     "ts_method": "agentsMeRevoke"
   },
   {
+    "command_id": "artifacts.archive",
+    "cli_path": "artifacts archive",
+    "group": "artifacts",
+    "method": "POST",
+    "path": "/artifacts/{artifact_id}/archive",
+    "operation_id": "archiveArtifact",
+    "summary": "Archive an artifact",
+    "why": "Hide an artifact from default list views while preserving it for search and direct access.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ artifact }` with archive metadata set.",
+    "error_codes": [
+      "invalid_json",
+      "invalid_request",
+      "not_found"
+    ],
+    "concepts": [
+      "artifacts",
+      "lifecycle"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Idempotent; repeated archive calls on the same artifact are safe. Returns 409 if artifact is tombstoned.",
+    "examples": [
+      {
+        "title": "Archive artifact",
+        "command": "oar artifacts archive --artifact-id artifact_123 --json"
+      }
+    ],
+    "body_schema": {
+      "required": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        }
+      ],
+      "optional": [
+        {
+          "name": "reason",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "artifact_id"
+    ],
+    "adjacent_commands": [
+      "artifacts.content.get",
+      "artifacts.create",
+      "artifacts.get",
+      "artifacts.list",
+      "artifacts.purge",
+      "artifacts.restore",
+      "artifacts.tombstone",
+      "artifacts.unarchive"
+    ],
+    "go_method": "ArtifactsArchive",
+    "ts_method": "artifactsArchive"
+  },
+  {
     "command_id": "artifacts.content.get",
     "cli_path": "artifacts content get",
     "group": "artifacts",
@@ -426,12 +488,14 @@ export const commandRegistry: CommandSpec[] = [
       "artifact_id"
     ],
     "adjacent_commands": [
+      "artifacts.archive",
       "artifacts.create",
       "artifacts.get",
       "artifacts.list",
       "artifacts.purge",
       "artifacts.restore",
-      "artifacts.tombstone"
+      "artifacts.tombstone",
+      "artifacts.unarchive"
     ],
     "go_method": "ArtifactsContentGet",
     "ts_method": "artifactsContentGet"
@@ -491,12 +555,14 @@ export const commandRegistry: CommandSpec[] = [
       ]
     },
     "adjacent_commands": [
+      "artifacts.archive",
       "artifacts.content.get",
       "artifacts.get",
       "artifacts.list",
       "artifacts.purge",
       "artifacts.restore",
-      "artifacts.tombstone"
+      "artifacts.tombstone",
+      "artifacts.unarchive"
     ],
     "go_method": "ArtifactsCreate",
     "ts_method": "artifactsCreate"
@@ -534,12 +600,14 @@ export const commandRegistry: CommandSpec[] = [
       "artifact_id"
     ],
     "adjacent_commands": [
+      "artifacts.archive",
       "artifacts.content.get",
       "artifacts.create",
       "artifacts.list",
       "artifacts.purge",
       "artifacts.restore",
-      "artifacts.tombstone"
+      "artifacts.tombstone",
+      "artifacts.unarchive"
     ],
     "go_method": "ArtifactsGet",
     "ts_method": "artifactsGet"
@@ -575,12 +643,14 @@ export const commandRegistry: CommandSpec[] = [
       }
     ],
     "adjacent_commands": [
+      "artifacts.archive",
       "artifacts.content.get",
       "artifacts.create",
       "artifacts.get",
       "artifacts.purge",
       "artifacts.restore",
-      "artifacts.tombstone"
+      "artifacts.tombstone",
+      "artifacts.unarchive"
     ],
     "go_method": "ArtifactsList",
     "ts_method": "artifactsList"
@@ -635,12 +705,14 @@ export const commandRegistry: CommandSpec[] = [
       "artifact_id"
     ],
     "adjacent_commands": [
+      "artifacts.archive",
       "artifacts.content.get",
       "artifacts.create",
       "artifacts.get",
       "artifacts.list",
       "artifacts.restore",
-      "artifacts.tombstone"
+      "artifacts.tombstone",
+      "artifacts.unarchive"
     ],
     "go_method": "ArtifactsPurge",
     "ts_method": "artifactsPurge"
@@ -696,12 +768,14 @@ export const commandRegistry: CommandSpec[] = [
       "artifact_id"
     ],
     "adjacent_commands": [
+      "artifacts.archive",
       "artifacts.content.get",
       "artifacts.create",
       "artifacts.get",
       "artifacts.list",
       "artifacts.purge",
-      "artifacts.tombstone"
+      "artifacts.tombstone",
+      "artifacts.unarchive"
     ],
     "go_method": "ArtifactsRestore",
     "ts_method": "artifactsRestore"
@@ -756,15 +830,80 @@ export const commandRegistry: CommandSpec[] = [
       "artifact_id"
     ],
     "adjacent_commands": [
+      "artifacts.archive",
       "artifacts.content.get",
       "artifacts.create",
       "artifacts.get",
       "artifacts.list",
       "artifacts.purge",
-      "artifacts.restore"
+      "artifacts.restore",
+      "artifacts.unarchive"
     ],
     "go_method": "ArtifactsTombstone",
     "ts_method": "artifactsTombstone"
+  },
+  {
+    "command_id": "artifacts.unarchive",
+    "cli_path": "artifacts unarchive",
+    "group": "artifacts",
+    "method": "POST",
+    "path": "/artifacts/{artifact_id}/unarchive",
+    "operation_id": "unarchiveArtifact",
+    "summary": "Unarchive an artifact",
+    "why": "Return an archived artifact to the default list views.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ artifact }` with archive metadata cleared.",
+    "error_codes": [
+      "invalid_json",
+      "invalid_request",
+      "not_found",
+      "not_archived"
+    ],
+    "concepts": [
+      "artifacts",
+      "lifecycle"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Returns 409 if the artifact is not currently archived.",
+    "examples": [
+      {
+        "title": "Unarchive artifact",
+        "command": "oar artifacts unarchive --artifact-id artifact_123 --json"
+      }
+    ],
+    "body_schema": {
+      "required": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        }
+      ],
+      "optional": [
+        {
+          "name": "reason",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "artifact_id"
+    ],
+    "adjacent_commands": [
+      "artifacts.archive",
+      "artifacts.content.get",
+      "artifacts.create",
+      "artifacts.get",
+      "artifacts.list",
+      "artifacts.purge",
+      "artifacts.restore",
+      "artifacts.tombstone"
+    ],
+    "go_method": "ArtifactsUnarchive",
+    "ts_method": "artifactsUnarchive"
   },
   {
     "command_id": "auth.agents.register",
@@ -1551,6 +1690,74 @@ export const commandRegistry: CommandSpec[] = [
     "ts_method": "authToken"
   },
   {
+    "command_id": "boards.archive",
+    "cli_path": "boards archive",
+    "group": "boards",
+    "method": "POST",
+    "path": "/boards/{board_id}/archive",
+    "operation_id": "archiveBoard",
+    "summary": "Archive a board",
+    "why": "Hide a board from default list views while preserving it for search and direct access.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ board }` with archive metadata set.",
+    "error_codes": [
+      "invalid_json",
+      "invalid_request",
+      "not_found"
+    ],
+    "concepts": [
+      "boards",
+      "lifecycle"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Idempotent; repeated archive calls on the same board are safe. Returns 409 if board is tombstoned.",
+    "examples": [
+      {
+        "title": "Archive board",
+        "command": "oar boards archive --board-id board_product_launch --json"
+      }
+    ],
+    "body_schema": {
+      "required": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        }
+      ],
+      "optional": [
+        {
+          "name": "reason",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "board_id"
+    ],
+    "adjacent_commands": [
+      "boards.cards.add",
+      "boards.cards.list",
+      "boards.cards.move",
+      "boards.cards.remove",
+      "boards.cards.update",
+      "boards.create",
+      "boards.get",
+      "boards.list",
+      "boards.purge",
+      "boards.restore",
+      "boards.tombstone",
+      "boards.unarchive",
+      "boards.update",
+      "boards.workspace"
+    ],
+    "go_method": "BoardsArchive",
+    "ts_method": "boardsArchive"
+  },
+  {
     "command_id": "boards.cards.add",
     "cli_path": "boards cards add",
     "group": "boards",
@@ -1636,6 +1843,7 @@ export const commandRegistry: CommandSpec[] = [
       "board_id"
     ],
     "adjacent_commands": [
+      "boards.archive",
       "boards.cards.list",
       "boards.cards.move",
       "boards.cards.remove",
@@ -1643,6 +1851,10 @@ export const commandRegistry: CommandSpec[] = [
       "boards.create",
       "boards.get",
       "boards.list",
+      "boards.purge",
+      "boards.restore",
+      "boards.tombstone",
+      "boards.unarchive",
       "boards.update",
       "boards.workspace"
     ],
@@ -1685,6 +1897,7 @@ export const commandRegistry: CommandSpec[] = [
       "board_id"
     ],
     "adjacent_commands": [
+      "boards.archive",
       "boards.cards.add",
       "boards.cards.move",
       "boards.cards.remove",
@@ -1692,6 +1905,10 @@ export const commandRegistry: CommandSpec[] = [
       "boards.create",
       "boards.get",
       "boards.list",
+      "boards.purge",
+      "boards.restore",
+      "boards.tombstone",
+      "boards.unarchive",
       "boards.update",
       "boards.workspace"
     ],
@@ -1773,6 +1990,7 @@ export const commandRegistry: CommandSpec[] = [
       "thread_id"
     ],
     "adjacent_commands": [
+      "boards.archive",
       "boards.cards.add",
       "boards.cards.list",
       "boards.cards.remove",
@@ -1780,6 +1998,10 @@ export const commandRegistry: CommandSpec[] = [
       "boards.create",
       "boards.get",
       "boards.list",
+      "boards.purge",
+      "boards.restore",
+      "boards.tombstone",
+      "boards.unarchive",
       "boards.update",
       "boards.workspace"
     ],
@@ -1840,6 +2062,7 @@ export const commandRegistry: CommandSpec[] = [
       "thread_id"
     ],
     "adjacent_commands": [
+      "boards.archive",
       "boards.cards.add",
       "boards.cards.list",
       "boards.cards.move",
@@ -1847,6 +2070,10 @@ export const commandRegistry: CommandSpec[] = [
       "boards.create",
       "boards.get",
       "boards.list",
+      "boards.purge",
+      "boards.restore",
+      "boards.tombstone",
+      "boards.unarchive",
       "boards.update",
       "boards.workspace"
     ],
@@ -1912,6 +2139,7 @@ export const commandRegistry: CommandSpec[] = [
       "thread_id"
     ],
     "adjacent_commands": [
+      "boards.archive",
       "boards.cards.add",
       "boards.cards.list",
       "boards.cards.move",
@@ -1919,6 +2147,10 @@ export const commandRegistry: CommandSpec[] = [
       "boards.create",
       "boards.get",
       "boards.list",
+      "boards.purge",
+      "boards.restore",
+      "boards.tombstone",
+      "boards.unarchive",
       "boards.update",
       "boards.workspace"
     ],
@@ -2015,6 +2247,7 @@ export const commandRegistry: CommandSpec[] = [
       ]
     },
     "adjacent_commands": [
+      "boards.archive",
       "boards.cards.add",
       "boards.cards.list",
       "boards.cards.move",
@@ -2022,6 +2255,10 @@ export const commandRegistry: CommandSpec[] = [
       "boards.cards.update",
       "boards.get",
       "boards.list",
+      "boards.purge",
+      "boards.restore",
+      "boards.tombstone",
+      "boards.unarchive",
       "boards.update",
       "boards.workspace"
     ],
@@ -2063,6 +2300,7 @@ export const commandRegistry: CommandSpec[] = [
       "board_id"
     ],
     "adjacent_commands": [
+      "boards.archive",
       "boards.cards.add",
       "boards.cards.list",
       "boards.cards.move",
@@ -2070,6 +2308,10 @@ export const commandRegistry: CommandSpec[] = [
       "boards.cards.update",
       "boards.create",
       "boards.list",
+      "boards.purge",
+      "boards.restore",
+      "boards.tombstone",
+      "boards.unarchive",
       "boards.update",
       "boards.workspace"
     ],
@@ -2120,6 +2362,7 @@ export const commandRegistry: CommandSpec[] = [
       }
     ],
     "adjacent_commands": [
+      "boards.archive",
       "boards.cards.add",
       "boards.cards.list",
       "boards.cards.move",
@@ -2127,11 +2370,288 @@ export const commandRegistry: CommandSpec[] = [
       "boards.cards.update",
       "boards.create",
       "boards.get",
+      "boards.purge",
+      "boards.restore",
+      "boards.tombstone",
+      "boards.unarchive",
       "boards.update",
       "boards.workspace"
     ],
     "go_method": "BoardsList",
     "ts_method": "boardsList"
+  },
+  {
+    "command_id": "boards.purge",
+    "cli_path": "boards purge",
+    "group": "boards",
+    "method": "POST",
+    "path": "/boards/{board_id}/purge",
+    "operation_id": "purgeBoard",
+    "summary": "Permanently delete a tombstoned board (human-only)",
+    "why": "Permanently remove a tombstoned board and reclaim storage. Human-only to prevent accidental data loss by automated agents.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ purged: true, board_id }` on success.",
+    "error_codes": [
+      "invalid_json",
+      "not_found",
+      "not_tombstoned",
+      "human_only"
+    ],
+    "concepts": [
+      "boards",
+      "lifecycle"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "403 if the caller is not a human principal. 409 if the board is not tombstoned.",
+    "examples": [
+      {
+        "title": "Purge board",
+        "command": "oar boards purge --board-id board_product_launch --json"
+      }
+    ],
+    "body_schema": {
+      "optional": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        },
+        {
+          "name": "reason",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "board_id"
+    ],
+    "adjacent_commands": [
+      "boards.archive",
+      "boards.cards.add",
+      "boards.cards.list",
+      "boards.cards.move",
+      "boards.cards.remove",
+      "boards.cards.update",
+      "boards.create",
+      "boards.get",
+      "boards.list",
+      "boards.restore",
+      "boards.tombstone",
+      "boards.unarchive",
+      "boards.update",
+      "boards.workspace"
+    ],
+    "go_method": "BoardsPurge",
+    "ts_method": "boardsPurge"
+  },
+  {
+    "command_id": "boards.restore",
+    "cli_path": "boards restore",
+    "group": "boards",
+    "method": "POST",
+    "path": "/boards/{board_id}/restore",
+    "operation_id": "restoreBoard",
+    "summary": "Restore a tombstoned board",
+    "why": "Reverse a tombstone on a board, making it active and visible in default list queries again.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ board }` with tombstone metadata cleared.",
+    "error_codes": [
+      "invalid_json",
+      "invalid_request",
+      "not_found",
+      "not_tombstoned"
+    ],
+    "concepts": [
+      "boards",
+      "lifecycle"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Returns 409 if the board is not currently tombstoned.",
+    "examples": [
+      {
+        "title": "Restore board",
+        "command": "oar boards restore --board-id board_product_launch --json"
+      }
+    ],
+    "body_schema": {
+      "required": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        }
+      ],
+      "optional": [
+        {
+          "name": "reason",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "board_id"
+    ],
+    "adjacent_commands": [
+      "boards.archive",
+      "boards.cards.add",
+      "boards.cards.list",
+      "boards.cards.move",
+      "boards.cards.remove",
+      "boards.cards.update",
+      "boards.create",
+      "boards.get",
+      "boards.list",
+      "boards.purge",
+      "boards.tombstone",
+      "boards.unarchive",
+      "boards.update",
+      "boards.workspace"
+    ],
+    "go_method": "BoardsRestore",
+    "ts_method": "boardsRestore"
+  },
+  {
+    "command_id": "boards.tombstone",
+    "cli_path": "boards tombstone",
+    "group": "boards",
+    "method": "POST",
+    "path": "/boards/{board_id}/tombstone",
+    "operation_id": "tombstoneBoard",
+    "summary": "Tombstone a board (soft-delete)",
+    "why": "Mark a board as inactive while preserving provenance; tombstoned boards are excluded from list by default.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ board }` with updated tombstone metadata.",
+    "error_codes": [
+      "invalid_json",
+      "invalid_request",
+      "not_found"
+    ],
+    "concepts": [
+      "boards",
+      "lifecycle"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Idempotent; repeated tombstone calls are safe.",
+    "examples": [
+      {
+        "title": "Tombstone board",
+        "command": "oar boards tombstone --board-id board_product_launch --reason \"initiative closed\" --json"
+      }
+    ],
+    "body_schema": {
+      "required": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        }
+      ],
+      "optional": [
+        {
+          "name": "reason",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "board_id"
+    ],
+    "adjacent_commands": [
+      "boards.archive",
+      "boards.cards.add",
+      "boards.cards.list",
+      "boards.cards.move",
+      "boards.cards.remove",
+      "boards.cards.update",
+      "boards.create",
+      "boards.get",
+      "boards.list",
+      "boards.purge",
+      "boards.restore",
+      "boards.unarchive",
+      "boards.update",
+      "boards.workspace"
+    ],
+    "go_method": "BoardsTombstone",
+    "ts_method": "boardsTombstone"
+  },
+  {
+    "command_id": "boards.unarchive",
+    "cli_path": "boards unarchive",
+    "group": "boards",
+    "method": "POST",
+    "path": "/boards/{board_id}/unarchive",
+    "operation_id": "unarchiveBoard",
+    "summary": "Unarchive a board",
+    "why": "Return an archived board to the default list views.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ board }` with archive metadata cleared.",
+    "error_codes": [
+      "invalid_json",
+      "invalid_request",
+      "not_found",
+      "not_archived"
+    ],
+    "concepts": [
+      "boards",
+      "lifecycle"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Returns 409 if the board is not currently archived.",
+    "examples": [
+      {
+        "title": "Unarchive board",
+        "command": "oar boards unarchive --board-id board_product_launch --json"
+      }
+    ],
+    "body_schema": {
+      "required": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        }
+      ],
+      "optional": [
+        {
+          "name": "reason",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "board_id"
+    ],
+    "adjacent_commands": [
+      "boards.archive",
+      "boards.cards.add",
+      "boards.cards.list",
+      "boards.cards.move",
+      "boards.cards.remove",
+      "boards.cards.update",
+      "boards.create",
+      "boards.get",
+      "boards.list",
+      "boards.purge",
+      "boards.restore",
+      "boards.tombstone",
+      "boards.update",
+      "boards.workspace"
+    ],
+    "go_method": "BoardsUnarchive",
+    "ts_method": "boardsUnarchive"
   },
   {
     "command_id": "boards.update",
@@ -2219,6 +2739,7 @@ export const commandRegistry: CommandSpec[] = [
       "board_id"
     ],
     "adjacent_commands": [
+      "boards.archive",
       "boards.cards.add",
       "boards.cards.list",
       "boards.cards.move",
@@ -2227,6 +2748,10 @@ export const commandRegistry: CommandSpec[] = [
       "boards.create",
       "boards.get",
       "boards.list",
+      "boards.purge",
+      "boards.restore",
+      "boards.tombstone",
+      "boards.unarchive",
       "boards.workspace"
     ],
     "go_method": "BoardsUpdate",
@@ -2271,6 +2796,7 @@ export const commandRegistry: CommandSpec[] = [
       "board_id"
     ],
     "adjacent_commands": [
+      "boards.archive",
       "boards.cards.add",
       "boards.cards.list",
       "boards.cards.move",
@@ -2279,6 +2805,10 @@ export const commandRegistry: CommandSpec[] = [
       "boards.create",
       "boards.get",
       "boards.list",
+      "boards.purge",
+      "boards.restore",
+      "boards.tombstone",
+      "boards.unarchive",
       "boards.update"
     ],
     "go_method": "BoardsWorkspace",
@@ -2612,6 +3142,70 @@ export const commandRegistry: CommandSpec[] = [
     "ts_method": "derivedRebuild"
   },
   {
+    "command_id": "docs.archive",
+    "cli_path": "docs archive",
+    "group": "docs",
+    "method": "POST",
+    "path": "/docs/{document_id}/archive",
+    "operation_id": "archiveDocument",
+    "summary": "Archive a document",
+    "why": "Hide a document from default list views while preserving it for search and direct access.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ document, revision }` with archive metadata set.",
+    "error_codes": [
+      "invalid_json",
+      "invalid_request",
+      "not_found"
+    ],
+    "concepts": [
+      "docs",
+      "lifecycle"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Idempotent; repeated archive calls on the same document are safe. Returns 409 if document is tombstoned.",
+    "examples": [
+      {
+        "title": "Archive document",
+        "command": "oar docs archive --document-id product-constitution --json"
+      }
+    ],
+    "body_schema": {
+      "required": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        }
+      ],
+      "optional": [
+        {
+          "name": "reason",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "document_id"
+    ],
+    "adjacent_commands": [
+      "docs.create",
+      "docs.get",
+      "docs.history",
+      "docs.list",
+      "docs.purge",
+      "docs.restore",
+      "docs.revision.get",
+      "docs.tombstone",
+      "docs.unarchive",
+      "docs.update"
+    ],
+    "go_method": "DocsArchive",
+    "ts_method": "docsArchive"
+  },
+  {
     "command_id": "docs.create",
     "cli_path": "docs create",
     "group": "docs",
@@ -2680,11 +3274,15 @@ export const commandRegistry: CommandSpec[] = [
       ]
     },
     "adjacent_commands": [
+      "docs.archive",
       "docs.get",
       "docs.history",
       "docs.list",
+      "docs.purge",
+      "docs.restore",
       "docs.revision.get",
       "docs.tombstone",
+      "docs.unarchive",
       "docs.update"
     ],
     "go_method": "DocsCreate",
@@ -2725,11 +3323,15 @@ export const commandRegistry: CommandSpec[] = [
       "document_id"
     ],
     "adjacent_commands": [
+      "docs.archive",
       "docs.create",
       "docs.history",
       "docs.list",
+      "docs.purge",
+      "docs.restore",
       "docs.revision.get",
       "docs.tombstone",
+      "docs.unarchive",
       "docs.update"
     ],
     "go_method": "DocsGet",
@@ -2771,11 +3373,15 @@ export const commandRegistry: CommandSpec[] = [
       "document_id"
     ],
     "adjacent_commands": [
+      "docs.archive",
       "docs.create",
       "docs.get",
       "docs.list",
+      "docs.purge",
+      "docs.restore",
       "docs.revision.get",
       "docs.tombstone",
+      "docs.unarchive",
       "docs.update"
     ],
     "go_method": "DocsHistory",
@@ -2820,15 +3426,142 @@ export const commandRegistry: CommandSpec[] = [
       }
     ],
     "adjacent_commands": [
+      "docs.archive",
       "docs.create",
       "docs.get",
       "docs.history",
+      "docs.purge",
+      "docs.restore",
       "docs.revision.get",
       "docs.tombstone",
+      "docs.unarchive",
       "docs.update"
     ],
     "go_method": "DocsList",
     "ts_method": "docsList"
+  },
+  {
+    "command_id": "docs.purge",
+    "cli_path": "docs purge",
+    "group": "docs",
+    "method": "POST",
+    "path": "/docs/{document_id}/purge",
+    "operation_id": "purgeDocument",
+    "summary": "Permanently delete a tombstoned document (human-only)",
+    "why": "Permanently remove a tombstoned document and its revisions. Human-only.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ purged: true, document_id }` on success.",
+    "error_codes": [
+      "not_found",
+      "not_tombstoned",
+      "human_only"
+    ],
+    "concepts": [
+      "docs",
+      "lifecycle"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "403 if the caller is not a human principal. 409 if the document is not tombstoned.",
+    "examples": [
+      {
+        "title": "Purge document",
+        "command": "oar docs purge --document-id product-constitution --json"
+      }
+    ],
+    "body_schema": {
+      "optional": [
+        {
+          "name": "reason",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "document_id"
+    ],
+    "adjacent_commands": [
+      "docs.archive",
+      "docs.create",
+      "docs.get",
+      "docs.history",
+      "docs.list",
+      "docs.restore",
+      "docs.revision.get",
+      "docs.tombstone",
+      "docs.unarchive",
+      "docs.update"
+    ],
+    "go_method": "DocsPurge",
+    "ts_method": "docsPurge"
+  },
+  {
+    "command_id": "docs.restore",
+    "cli_path": "docs restore",
+    "group": "docs",
+    "method": "POST",
+    "path": "/docs/{document_id}/restore",
+    "operation_id": "restoreDocument",
+    "summary": "Restore a tombstoned document",
+    "why": "Reverse a tombstone on a document, making it active and visible in default list queries again.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ document, revision }` with tombstone metadata cleared.",
+    "error_codes": [
+      "invalid_json",
+      "invalid_request",
+      "not_found",
+      "not_tombstoned"
+    ],
+    "concepts": [
+      "docs",
+      "lifecycle"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Returns 409 if the document is not currently tombstoned.",
+    "examples": [
+      {
+        "title": "Restore document",
+        "command": "oar docs restore --document-id product-constitution --json"
+      }
+    ],
+    "body_schema": {
+      "required": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        }
+      ],
+      "optional": [
+        {
+          "name": "reason",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "document_id"
+    ],
+    "adjacent_commands": [
+      "docs.archive",
+      "docs.create",
+      "docs.get",
+      "docs.history",
+      "docs.list",
+      "docs.purge",
+      "docs.revision.get",
+      "docs.tombstone",
+      "docs.unarchive",
+      "docs.update"
+    ],
+    "go_method": "DocsRestore",
+    "ts_method": "docsRestore"
   },
   {
     "command_id": "docs.revision.get",
@@ -2866,11 +3599,15 @@ export const commandRegistry: CommandSpec[] = [
       "revision_id"
     ],
     "adjacent_commands": [
+      "docs.archive",
       "docs.create",
       "docs.get",
       "docs.history",
       "docs.list",
+      "docs.purge",
+      "docs.restore",
       "docs.tombstone",
+      "docs.unarchive",
       "docs.update"
     ],
     "go_method": "DocsRevisionGet",
@@ -2926,15 +3663,84 @@ export const commandRegistry: CommandSpec[] = [
       "document_id"
     ],
     "adjacent_commands": [
+      "docs.archive",
       "docs.create",
       "docs.get",
       "docs.history",
       "docs.list",
+      "docs.purge",
+      "docs.restore",
       "docs.revision.get",
+      "docs.unarchive",
       "docs.update"
     ],
     "go_method": "DocsTombstone",
     "ts_method": "docsTombstone"
+  },
+  {
+    "command_id": "docs.unarchive",
+    "cli_path": "docs unarchive",
+    "group": "docs",
+    "method": "POST",
+    "path": "/docs/{document_id}/unarchive",
+    "operation_id": "unarchiveDocument",
+    "summary": "Unarchive a document",
+    "why": "Return an archived document to the default list views.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ document, revision }` with archive metadata cleared.",
+    "error_codes": [
+      "invalid_json",
+      "invalid_request",
+      "not_found",
+      "not_archived"
+    ],
+    "concepts": [
+      "docs",
+      "lifecycle"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Returns 409 if the document is not currently archived.",
+    "examples": [
+      {
+        "title": "Unarchive document",
+        "command": "oar docs unarchive --document-id product-constitution --json"
+      }
+    ],
+    "body_schema": {
+      "required": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        }
+      ],
+      "optional": [
+        {
+          "name": "reason",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "document_id"
+    ],
+    "adjacent_commands": [
+      "docs.archive",
+      "docs.create",
+      "docs.get",
+      "docs.history",
+      "docs.list",
+      "docs.purge",
+      "docs.restore",
+      "docs.revision.get",
+      "docs.tombstone",
+      "docs.update"
+    ],
+    "go_method": "DocsUnarchive",
+    "ts_method": "docsUnarchive"
   },
   {
     "command_id": "docs.update",
@@ -3010,12 +3816,16 @@ export const commandRegistry: CommandSpec[] = [
       "document_id"
     ],
     "adjacent_commands": [
+      "docs.archive",
       "docs.create",
       "docs.get",
       "docs.history",
       "docs.list",
+      "docs.purge",
+      "docs.restore",
       "docs.revision.get",
-      "docs.tombstone"
+      "docs.tombstone",
+      "docs.unarchive"
     ],
     "go_method": "DocsUpdate",
     "ts_method": "docsUpdate"
@@ -4296,6 +5106,71 @@ export const commandRegistry: CommandSpec[] = [
     "ts_method": "snapshotsGet"
   },
   {
+    "command_id": "threads.archive",
+    "cli_path": "threads archive",
+    "group": "threads",
+    "method": "POST",
+    "path": "/threads/{thread_id}/archive",
+    "operation_id": "archiveThread",
+    "summary": "Archive a thread",
+    "why": "Hide a thread from default list views while preserving it for search and direct access.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ thread }` with archive metadata set.",
+    "error_codes": [
+      "invalid_json",
+      "invalid_request",
+      "not_found"
+    ],
+    "concepts": [
+      "threads",
+      "lifecycle"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Idempotent; repeated archive calls on the same thread are safe. Returns 409 if thread is tombstoned.",
+    "examples": [
+      {
+        "title": "Archive thread",
+        "command": "oar threads archive --thread-id thread_123 --json"
+      }
+    ],
+    "body_schema": {
+      "required": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        }
+      ],
+      "optional": [
+        {
+          "name": "reason",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "thread_id"
+    ],
+    "adjacent_commands": [
+      "threads.context",
+      "threads.create",
+      "threads.get",
+      "threads.list",
+      "threads.patch",
+      "threads.purge",
+      "threads.restore",
+      "threads.timeline",
+      "threads.tombstone",
+      "threads.unarchive",
+      "threads.workspace"
+    ],
+    "go_method": "ThreadsArchive",
+    "ts_method": "threadsArchive"
+  },
+  {
     "command_id": "threads.context",
     "cli_path": "threads context",
     "group": "threads",
@@ -4337,11 +5212,16 @@ export const commandRegistry: CommandSpec[] = [
       "thread_id"
     ],
     "adjacent_commands": [
+      "threads.archive",
       "threads.create",
       "threads.get",
       "threads.list",
       "threads.patch",
+      "threads.purge",
+      "threads.restore",
       "threads.timeline",
+      "threads.tombstone",
+      "threads.unarchive",
       "threads.workspace"
     ],
     "go_method": "ThreadsContext",
@@ -4469,11 +5349,16 @@ export const commandRegistry: CommandSpec[] = [
       ]
     },
     "adjacent_commands": [
+      "threads.archive",
       "threads.context",
       "threads.get",
       "threads.list",
       "threads.patch",
+      "threads.purge",
+      "threads.restore",
       "threads.timeline",
+      "threads.tombstone",
+      "threads.unarchive",
       "threads.workspace"
     ],
     "go_method": "ThreadsCreate",
@@ -4512,11 +5397,16 @@ export const commandRegistry: CommandSpec[] = [
       "thread_id"
     ],
     "adjacent_commands": [
+      "threads.archive",
       "threads.context",
       "threads.create",
       "threads.list",
       "threads.patch",
+      "threads.purge",
+      "threads.restore",
       "threads.timeline",
+      "threads.tombstone",
+      "threads.unarchive",
       "threads.workspace"
     ],
     "go_method": "ThreadsGet",
@@ -4561,11 +5451,16 @@ export const commandRegistry: CommandSpec[] = [
       }
     ],
     "adjacent_commands": [
+      "threads.archive",
       "threads.context",
       "threads.create",
       "threads.get",
       "threads.patch",
+      "threads.purge",
+      "threads.restore",
       "threads.timeline",
+      "threads.tombstone",
+      "threads.unarchive",
       "threads.workspace"
     ],
     "go_method": "ThreadsList",
@@ -4695,15 +5590,150 @@ export const commandRegistry: CommandSpec[] = [
       "thread_id"
     ],
     "adjacent_commands": [
+      "threads.archive",
       "threads.context",
       "threads.create",
       "threads.get",
       "threads.list",
+      "threads.purge",
+      "threads.restore",
       "threads.timeline",
+      "threads.tombstone",
+      "threads.unarchive",
       "threads.workspace"
     ],
     "go_method": "ThreadsPatch",
     "ts_method": "threadsPatch"
+  },
+  {
+    "command_id": "threads.purge",
+    "cli_path": "threads purge",
+    "group": "threads",
+    "method": "POST",
+    "path": "/threads/{thread_id}/purge",
+    "operation_id": "purgeThread",
+    "summary": "Permanently delete a tombstoned thread (human-only)",
+    "why": "Permanently remove a tombstoned thread and reclaim storage. Human-only to prevent accidental data loss by automated agents.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ purged: true, thread_id }` on success.",
+    "error_codes": [
+      "invalid_json",
+      "not_found",
+      "not_tombstoned",
+      "human_only"
+    ],
+    "concepts": [
+      "threads",
+      "lifecycle"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "403 if the caller is not a human principal. 409 if the thread is not tombstoned.",
+    "examples": [
+      {
+        "title": "Purge thread",
+        "command": "oar threads purge --thread-id thread_123 --json"
+      }
+    ],
+    "body_schema": {
+      "optional": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        },
+        {
+          "name": "reason",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "thread_id"
+    ],
+    "adjacent_commands": [
+      "threads.archive",
+      "threads.context",
+      "threads.create",
+      "threads.get",
+      "threads.list",
+      "threads.patch",
+      "threads.restore",
+      "threads.timeline",
+      "threads.tombstone",
+      "threads.unarchive",
+      "threads.workspace"
+    ],
+    "go_method": "ThreadsPurge",
+    "ts_method": "threadsPurge"
+  },
+  {
+    "command_id": "threads.restore",
+    "cli_path": "threads restore",
+    "group": "threads",
+    "method": "POST",
+    "path": "/threads/{thread_id}/restore",
+    "operation_id": "restoreThread",
+    "summary": "Restore a tombstoned thread",
+    "why": "Reverse a tombstone on a thread, making it active and visible in default list queries again.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ thread }` with tombstone metadata cleared.",
+    "error_codes": [
+      "invalid_json",
+      "invalid_request",
+      "not_found",
+      "not_tombstoned"
+    ],
+    "concepts": [
+      "threads",
+      "lifecycle"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Returns 409 if the thread is not currently tombstoned.",
+    "examples": [
+      {
+        "title": "Restore thread",
+        "command": "oar threads restore --thread-id thread_123 --json"
+      }
+    ],
+    "body_schema": {
+      "required": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        }
+      ],
+      "optional": [
+        {
+          "name": "reason",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "thread_id"
+    ],
+    "adjacent_commands": [
+      "threads.archive",
+      "threads.context",
+      "threads.create",
+      "threads.get",
+      "threads.list",
+      "threads.patch",
+      "threads.purge",
+      "threads.timeline",
+      "threads.tombstone",
+      "threads.unarchive",
+      "threads.workspace"
+    ],
+    "go_method": "ThreadsRestore",
+    "ts_method": "threadsRestore"
   },
   {
     "command_id": "threads.timeline",
@@ -4740,15 +5770,151 @@ export const commandRegistry: CommandSpec[] = [
       "thread_id"
     ],
     "adjacent_commands": [
+      "threads.archive",
       "threads.context",
       "threads.create",
       "threads.get",
       "threads.list",
       "threads.patch",
+      "threads.purge",
+      "threads.restore",
+      "threads.tombstone",
+      "threads.unarchive",
       "threads.workspace"
     ],
     "go_method": "ThreadsTimeline",
     "ts_method": "threadsTimeline"
+  },
+  {
+    "command_id": "threads.tombstone",
+    "cli_path": "threads tombstone",
+    "group": "threads",
+    "method": "POST",
+    "path": "/threads/{thread_id}/tombstone",
+    "operation_id": "tombstoneThread",
+    "summary": "Tombstone a thread (soft-delete)",
+    "why": "Mark a thread as inactive while preserving provenance; tombstoned threads are excluded from list by default.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ thread }` with updated tombstone metadata.",
+    "error_codes": [
+      "invalid_json",
+      "invalid_request",
+      "not_found"
+    ],
+    "concepts": [
+      "threads",
+      "lifecycle"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Idempotent; repeated tombstone calls are safe.",
+    "examples": [
+      {
+        "title": "Tombstone thread",
+        "command": "oar threads tombstone --thread-id thread_123 --reason \"merged into parent\" --json"
+      }
+    ],
+    "body_schema": {
+      "required": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        }
+      ],
+      "optional": [
+        {
+          "name": "reason",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "thread_id"
+    ],
+    "adjacent_commands": [
+      "threads.archive",
+      "threads.context",
+      "threads.create",
+      "threads.get",
+      "threads.list",
+      "threads.patch",
+      "threads.purge",
+      "threads.restore",
+      "threads.timeline",
+      "threads.unarchive",
+      "threads.workspace"
+    ],
+    "go_method": "ThreadsTombstone",
+    "ts_method": "threadsTombstone"
+  },
+  {
+    "command_id": "threads.unarchive",
+    "cli_path": "threads unarchive",
+    "group": "threads",
+    "method": "POST",
+    "path": "/threads/{thread_id}/unarchive",
+    "operation_id": "unarchiveThread",
+    "summary": "Unarchive a thread",
+    "why": "Return an archived thread to the default list views.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ thread }` with archive metadata cleared.",
+    "error_codes": [
+      "invalid_json",
+      "invalid_request",
+      "not_found",
+      "not_archived"
+    ],
+    "concepts": [
+      "threads",
+      "lifecycle"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Returns 409 if the thread is not currently archived.",
+    "examples": [
+      {
+        "title": "Unarchive thread",
+        "command": "oar threads unarchive --thread-id thread_123 --json"
+      }
+    ],
+    "body_schema": {
+      "required": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        }
+      ],
+      "optional": [
+        {
+          "name": "reason",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "thread_id"
+    ],
+    "adjacent_commands": [
+      "threads.archive",
+      "threads.context",
+      "threads.create",
+      "threads.get",
+      "threads.list",
+      "threads.patch",
+      "threads.purge",
+      "threads.restore",
+      "threads.timeline",
+      "threads.tombstone",
+      "threads.workspace"
+    ],
+    "go_method": "ThreadsUnarchive",
+    "ts_method": "threadsUnarchive"
   },
   {
     "command_id": "threads.workspace",
@@ -4794,12 +5960,17 @@ export const commandRegistry: CommandSpec[] = [
       "thread_id"
     ],
     "adjacent_commands": [
+      "threads.archive",
       "threads.context",
       "threads.create",
       "threads.get",
       "threads.list",
       "threads.patch",
-      "threads.timeline"
+      "threads.purge",
+      "threads.restore",
+      "threads.timeline",
+      "threads.tombstone",
+      "threads.unarchive"
     ],
     "go_method": "ThreadsWorkspace",
     "ts_method": "threadsWorkspace"
@@ -4900,6 +6071,10 @@ export class OarClient {
     return this.invoke("agents.me.revoke", {}, options);
   }
 
+  artifactsArchive(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("artifacts.archive", pathParams, options);
+  }
+
   artifactsContentGet(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("artifacts.content.get", pathParams, options);
   }
@@ -4926,6 +6101,10 @@ export class OarClient {
 
   artifactsTombstone(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("artifacts.tombstone", pathParams, options);
+  }
+
+  artifactsUnarchive(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("artifacts.unarchive", pathParams, options);
   }
 
   authAgentsRegister(options: RequestOptions = {}): Promise<InvokeResult> {
@@ -4980,6 +6159,10 @@ export class OarClient {
     return this.invoke("auth.token", {}, options);
   }
 
+  boardsArchive(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("boards.archive", pathParams, options);
+  }
+
   boardsCardsAdd(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("boards.cards.add", pathParams, options);
   }
@@ -5012,6 +6195,22 @@ export class OarClient {
     return this.invoke("boards.list", {}, options);
   }
 
+  boardsPurge(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("boards.purge", pathParams, options);
+  }
+
+  boardsRestore(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("boards.restore", pathParams, options);
+  }
+
+  boardsTombstone(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("boards.tombstone", pathParams, options);
+  }
+
+  boardsUnarchive(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("boards.unarchive", pathParams, options);
+  }
+
   boardsUpdate(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("boards.update", pathParams, options);
   }
@@ -5040,6 +6239,10 @@ export class OarClient {
     return this.invoke("derived.rebuild", {}, options);
   }
 
+  docsArchive(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("docs.archive", pathParams, options);
+  }
+
   docsCreate(options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("docs.create", {}, options);
   }
@@ -5056,12 +6259,24 @@ export class OarClient {
     return this.invoke("docs.list", {}, options);
   }
 
+  docsPurge(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("docs.purge", pathParams, options);
+  }
+
+  docsRestore(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("docs.restore", pathParams, options);
+  }
+
   docsRevisionGet(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("docs.revision.get", pathParams, options);
   }
 
   docsTombstone(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("docs.tombstone", pathParams, options);
+  }
+
+  docsUnarchive(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("docs.unarchive", pathParams, options);
   }
 
   docsUpdate(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
@@ -5164,6 +6379,10 @@ export class OarClient {
     return this.invoke("snapshots.get", pathParams, options);
   }
 
+  threadsArchive(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("threads.archive", pathParams, options);
+  }
+
   threadsContext(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("threads.context", pathParams, options);
   }
@@ -5184,8 +6403,24 @@ export class OarClient {
     return this.invoke("threads.patch", pathParams, options);
   }
 
+  threadsPurge(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("threads.purge", pathParams, options);
+  }
+
+  threadsRestore(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("threads.restore", pathParams, options);
+  }
+
   threadsTimeline(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("threads.timeline", pathParams, options);
+  }
+
+  threadsTombstone(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("threads.tombstone", pathParams, options);
+  }
+
+  threadsUnarchive(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("threads.unarchive", pathParams, options);
   }
 
   threadsWorkspace(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {

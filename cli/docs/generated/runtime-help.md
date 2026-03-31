@@ -46,6 +46,11 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 - `threads patch` (command): Patch thread snapshot
 - `threads timeline` (command): Get thread timeline events and referenced entities
 - `threads context` (command): Get bundled thread context for agent callers
+- `threads archive` (command): Archive a thread
+- `threads unarchive` (command): Unarchive a thread
+- `threads tombstone` (command): Tombstone a thread (soft-delete)
+- `threads restore` (command): Restore a tombstoned thread
+- `threads purge` (command): Permanently delete a tombstoned thread (human-only)
 - `commitments list` (command): List commitments
 - `commitments get` (command): Get commitment by id
 - `commitments create` (command): Create commitment snapshot
@@ -54,6 +59,8 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 - `artifacts get` (command): Get artifact metadata by id
 - `artifacts create` (command): Create artifact
 - `artifacts content` (command): Get artifact raw content
+- `artifacts archive` (command): Archive an artifact
+- `artifacts unarchive` (command): Unarchive an artifact
 - `artifacts tombstone` (command): Tombstone an artifact (soft-delete)
 - `artifacts restore` (command): Restore a tombstoned artifact
 - `artifacts purge` (command): Permanently delete a tombstoned artifact (human-only)
@@ -61,6 +68,11 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 - `boards create` (command): Create board
 - `boards get` (command): Get board metadata
 - `boards update` (command): Update board metadata
+- `boards archive` (command): Archive a board
+- `boards unarchive` (command): Unarchive a board
+- `boards tombstone` (command): Tombstone a board (soft-delete)
+- `boards restore` (command): Restore a tombstoned board
+- `boards purge` (command): Permanently delete a tombstoned board (human-only)
 - `boards cards` (group): Nested generated help topic.
 - `boards cards add` (command): Add existing thread to board as a card
 - `boards cards update` (command): Update board card metadata
@@ -73,6 +85,10 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 - `docs history` (command): List ordered immutable revisions for a document
 - `docs revision` (group): Nested generated help topic.
 - `docs tombstone` (command): Tombstone a document (soft-delete)
+- `docs archive` (command): Archive a document
+- `docs unarchive` (command): Unarchive a document
+- `docs restore` (command): Restore a tombstoned document
+- `docs purge` (command): Permanently delete a tombstoned document (human-only)
 - `docs revision get` (command): Get one immutable document revision
 - `events get` (command): Get event by id
 - `events create` (command): Append event
@@ -1064,12 +1080,17 @@ Manage thread resources
 Generated Help: threads
 
 Commands:
+  threads archive          Archive a thread
   threads context          Get bundled thread context for agent callers
   threads create           Create thread snapshot
   threads get              Get thread snapshot by id
   threads list             List thread snapshots
   threads patch            Patch thread snapshot
+  threads purge            Permanently delete a tombstoned thread (human-only)
+  threads restore          Restore a tombstoned thread
   threads timeline         Get thread timeline events and referenced entities
+  threads tombstone        Tombstone a thread (soft-delete)
+  threads unarchive        Unarchive a thread
   threads workspace        Get thread workspace projection
 
 Canonical coordination read path:
@@ -1125,12 +1146,14 @@ Manage artifact resources and content
 Generated Help: artifacts
 
 Commands:
+  artifacts archive        Archive an artifact
   artifacts create         Create artifact
   artifacts get            Get artifact metadata by id
   artifacts list           List artifact metadata
   artifacts purge          Permanently delete a tombstoned artifact (human-only)
   artifacts restore        Restore a tombstoned artifact
   artifacts tombstone      Tombstone an artifact (soft-delete)
+  artifacts unarchive      Unarchive an artifact
 
 Local inspection helper:
   artifacts inspect        Fetch artifact metadata and content in one call.
@@ -1151,9 +1174,14 @@ Manage board resources and ordered cards
 Generated Help: boards
 
 Commands:
+  boards archive           Archive a board
   boards create            Create board
   boards get               Get board metadata
   boards list              List boards with derived summary data
+  boards purge             Permanently delete a tombstoned board (human-only)
+  boards restore           Restore a tombstoned board
+  boards tombstone         Tombstone a board (soft-delete)
+  boards unarchive         Unarchive a board
   boards update            Update board metadata
   boards workspace         Get board workspace projection
 
@@ -1173,11 +1201,15 @@ Manage long-lived docs and revisions
 Generated Help: docs
 
 Commands:
+  docs archive             Archive a document
   docs create              Create document with initial immutable revision
   docs get                 Get document and authoritative head revision
   docs history             List ordered immutable revisions for a document
   docs list                List documents and their current head metadata
+  docs purge               Permanently delete a tombstoned document (human-only)
+  docs restore             Restore a tombstoned document
   docs tombstone           Tombstone a document (soft-delete)
+  docs unarchive           Unarchive a document
   docs update              Create a new immutable revision for an existing document
 
 Local inspection helpers:
@@ -1569,7 +1601,7 @@ Generated Help: threads list
 - Error codes: `invalid_request`
 - Concepts: `threads`, `filtering`
 - Agent notes: Safe and idempotent. Optional pagination with `q` for search, `limit` for page size, and `cursor` for continuation.
-- Adjacent commands: `threads context`, `threads create`, `threads get`, `threads patch`, `threads timeline`, `threads workspace`
+- Adjacent commands: `threads archive`, `threads context`, `threads create`, `threads get`, `threads patch`, `threads purge`, `threads restore`, `threads timeline`, `threads tombstone`, `threads unarchive`, `threads workspace`
 - Examples:
   - List active p1 threads: `oar threads list --status active --priority p1 --json`
   - Search threads by title: `oar threads list --q "launch" --json`
@@ -1599,7 +1631,7 @@ Generated Help: threads get
 - Error codes: `not_found`
 - Concepts: `threads`
 - Agent notes: Safe and idempotent. Prefer `oar threads inspect` for operator coordination reads.
-- Adjacent commands: `threads context`, `threads create`, `threads list`, `threads patch`, `threads timeline`, `threads workspace`
+- Adjacent commands: `threads archive`, `threads context`, `threads create`, `threads list`, `threads patch`, `threads purge`, `threads restore`, `threads timeline`, `threads tombstone`, `threads unarchive`, `threads workspace`
 - Examples:
   - Read thread: `oar threads get --thread-id thread_123 --json`
 
@@ -1627,7 +1659,7 @@ Generated Help: threads create
 - Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`
 - Concepts: `threads`, `snapshots`
 - Agent notes: Replay-safe when `request_key` is reused with the same body; otherwise core issues a new canonical thread id.
-- Adjacent commands: `threads context`, `threads get`, `threads list`, `threads patch`, `threads timeline`, `threads workspace`
+- Adjacent commands: `threads archive`, `threads context`, `threads get`, `threads list`, `threads patch`, `threads purge`, `threads restore`, `threads timeline`, `threads tombstone`, `threads unarchive`, `threads workspace`
 - Examples:
   - Create thread: `oar threads create --from-file thread.json --json`
 
@@ -1659,7 +1691,7 @@ Generated Help: threads patch
 - Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`, `not_found`
 - Concepts: `threads`, `patch`
 - Agent notes: Use `if_updated_at` for optimistic concurrency.
-- Adjacent commands: `threads context`, `threads create`, `threads get`, `threads list`, `threads timeline`, `threads workspace`
+- Adjacent commands: `threads archive`, `threads context`, `threads create`, `threads get`, `threads list`, `threads purge`, `threads restore`, `threads timeline`, `threads tombstone`, `threads unarchive`, `threads workspace`
 - Examples:
   - Patch thread: `oar threads patch --thread-id thread_123 --from-file patch.json --json`
 
@@ -1691,7 +1723,7 @@ Generated Help: threads timeline
 - Error codes: `not_found`
 - Concepts: `threads`, `events`, `provenance`
 - Agent notes: Events stay time ordered; missing refs are omitted from expansion maps.
-- Adjacent commands: `threads context`, `threads create`, `threads get`, `threads list`, `threads patch`, `threads workspace`
+- Adjacent commands: `threads archive`, `threads context`, `threads create`, `threads get`, `threads list`, `threads patch`, `threads purge`, `threads restore`, `threads tombstone`, `threads unarchive`, `threads workspace`
 - Examples:
   - Timeline: `oar threads timeline --thread-id thread_123 --json`
 
@@ -1719,7 +1751,7 @@ Generated Help: threads context
 - Error codes: `invalid_request`, `not_found`
 - Concepts: `threads`, `events`, `artifacts`, `commitments`, `docs`
 - Agent notes: Derived thread context projection; do not build durable automation directly on projection payload shapes. Prefer canonical events and threads for durable substrate. Use include_artifact_content for prompt-ready previews; default mode keeps payloads lighter. Prefer `oar threads inspect` as the first single-thread coordination read.
-- Adjacent commands: `threads create`, `threads get`, `threads list`, `threads patch`, `threads timeline`, `threads workspace`
+- Adjacent commands: `threads archive`, `threads create`, `threads get`, `threads list`, `threads patch`, `threads purge`, `threads restore`, `threads timeline`, `threads tombstone`, `threads unarchive`, `threads workspace`
 - Examples:
   - Context with defaults: `oar threads context --thread-id thread_123 --json`
   - Context with artifact previews: `oar threads context --thread-id thread_123 --include-artifact-content --max-events 50 --json`
@@ -1728,6 +1760,161 @@ Generated Help: threads context
 Global flags:
   Global flags can appear before or after the command path.
   Examples: oar --json threads context ... ; oar threads context ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `threads archive`
+
+Archive a thread
+
+```text
+Generated Help: threads archive
+
+- Command ID: `threads.archive`
+- CLI path: `threads archive`
+- HTTP: `POST /threads/{thread_id}/archive`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Hide a thread from default list views while preserving it for search and direct access.
+- Output: Returns `{ thread }` with archive metadata set.
+- Error codes: `invalid_json`, `invalid_request`, `not_found`
+- Concepts: `threads`, `lifecycle`
+- Agent notes: Idempotent; repeated archive calls on the same thread are safe. Returns 409 if thread is tombstoned.
+- Adjacent commands: `threads context`, `threads create`, `threads get`, `threads list`, `threads patch`, `threads purge`, `threads restore`, `threads timeline`, `threads tombstone`, `threads unarchive`, `threads workspace`
+- Examples:
+  - Archive thread: `oar threads archive --thread-id thread_123 --json`
+
+Body schema:
+  Required: actor_id (string)
+  Optional: reason (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json threads archive ... ; oar threads archive ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `threads unarchive`
+
+Unarchive a thread
+
+```text
+Generated Help: threads unarchive
+
+- Command ID: `threads.unarchive`
+- CLI path: `threads unarchive`
+- HTTP: `POST /threads/{thread_id}/unarchive`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Return an archived thread to the default list views.
+- Output: Returns `{ thread }` with archive metadata cleared.
+- Error codes: `invalid_json`, `invalid_request`, `not_found`, `not_archived`
+- Concepts: `threads`, `lifecycle`
+- Agent notes: Returns 409 if the thread is not currently archived.
+- Adjacent commands: `threads archive`, `threads context`, `threads create`, `threads get`, `threads list`, `threads patch`, `threads purge`, `threads restore`, `threads timeline`, `threads tombstone`, `threads workspace`
+- Examples:
+  - Unarchive thread: `oar threads unarchive --thread-id thread_123 --json`
+
+Body schema:
+  Required: actor_id (string)
+  Optional: reason (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json threads unarchive ... ; oar threads unarchive ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `threads tombstone`
+
+Tombstone a thread (soft-delete)
+
+```text
+Generated Help: threads tombstone
+
+- Command ID: `threads.tombstone`
+- CLI path: `threads tombstone`
+- HTTP: `POST /threads/{thread_id}/tombstone`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Mark a thread as inactive while preserving provenance; tombstoned threads are excluded from list by default.
+- Output: Returns `{ thread }` with updated tombstone metadata.
+- Error codes: `invalid_json`, `invalid_request`, `not_found`
+- Concepts: `threads`, `lifecycle`
+- Agent notes: Idempotent; repeated tombstone calls are safe.
+- Adjacent commands: `threads archive`, `threads context`, `threads create`, `threads get`, `threads list`, `threads patch`, `threads purge`, `threads restore`, `threads timeline`, `threads unarchive`, `threads workspace`
+- Examples:
+  - Tombstone thread: `oar threads tombstone --thread-id thread_123 --reason "merged into parent" --json`
+
+Body schema:
+  Required: actor_id (string)
+  Optional: reason (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json threads tombstone ... ; oar threads tombstone ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `threads restore`
+
+Restore a tombstoned thread
+
+```text
+Generated Help: threads restore
+
+- Command ID: `threads.restore`
+- CLI path: `threads restore`
+- HTTP: `POST /threads/{thread_id}/restore`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Reverse a tombstone on a thread, making it active and visible in default list queries again.
+- Output: Returns `{ thread }` with tombstone metadata cleared.
+- Error codes: `invalid_json`, `invalid_request`, `not_found`, `not_tombstoned`
+- Concepts: `threads`, `lifecycle`
+- Agent notes: Returns 409 if the thread is not currently tombstoned.
+- Adjacent commands: `threads archive`, `threads context`, `threads create`, `threads get`, `threads list`, `threads patch`, `threads purge`, `threads timeline`, `threads tombstone`, `threads unarchive`, `threads workspace`
+- Examples:
+  - Restore thread: `oar threads restore --thread-id thread_123 --json`
+
+Body schema:
+  Required: actor_id (string)
+  Optional: reason (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json threads restore ... ; oar threads restore ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `threads purge`
+
+Permanently delete a tombstoned thread (human-only)
+
+```text
+Generated Help: threads purge
+
+- Command ID: `threads.purge`
+- CLI path: `threads purge`
+- HTTP: `POST /threads/{thread_id}/purge`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Permanently remove a tombstoned thread and reclaim storage. Human-only to prevent accidental data loss by automated agents.
+- Output: Returns `{ purged: true, thread_id }` on success.
+- Error codes: `invalid_json`, `not_found`, `not_tombstoned`, `human_only`
+- Concepts: `threads`, `lifecycle`
+- Agent notes: 403 if the caller is not a human principal. 409 if the thread is not tombstoned.
+- Adjacent commands: `threads archive`, `threads context`, `threads create`, `threads get`, `threads list`, `threads patch`, `threads restore`, `threads timeline`, `threads tombstone`, `threads unarchive`, `threads workspace`
+- Examples:
+  - Purge thread: `oar threads purge --thread-id thread_123 --json`
+
+Body schema:
+  Required: none
+  Optional: actor_id (string), reason (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json threads purge ... ; oar threads purge ... --json
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1868,7 +2055,7 @@ Generated Help: artifacts list
 - Error codes: `invalid_request`
 - Concepts: `artifacts`, `filtering`
 - Agent notes: Safe and idempotent.
-- Adjacent commands: `artifacts content get`, `artifacts create`, `artifacts get`, `artifacts purge`, `artifacts restore`, `artifacts tombstone`
+- Adjacent commands: `artifacts archive`, `artifacts content get`, `artifacts create`, `artifacts get`, `artifacts purge`, `artifacts restore`, `artifacts tombstone`, `artifacts unarchive`
 - Examples:
   - List work orders for a thread: `oar artifacts list --kind work_order --thread-id thread_123 --json`
 
@@ -1896,7 +2083,7 @@ Generated Help: artifacts get
 - Error codes: `not_found`
 - Concepts: `artifacts`
 - Agent notes: Safe and idempotent.
-- Adjacent commands: `artifacts content get`, `artifacts create`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts tombstone`
+- Adjacent commands: `artifacts archive`, `artifacts content get`, `artifacts create`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts tombstone`, `artifacts unarchive`
 - Examples:
   - Get artifact: `oar artifacts get --artifact-id artifact_123 --json`
 
@@ -1924,7 +2111,7 @@ Generated Help: artifacts create
 - Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`
 - Concepts: `artifacts`, `evidence`
 - Agent notes: Treat as non-idempotent unless caller controls artifact id collisions.
-- Adjacent commands: `artifacts content get`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts tombstone`
+- Adjacent commands: `artifacts archive`, `artifacts content get`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts tombstone`, `artifacts unarchive`
 - Examples:
   - Create structured artifact: `oar artifacts create --from-file artifact-create.json --json`
 
@@ -1955,7 +2142,7 @@ Generated Help: artifacts content
 - Error codes: `not_found`
 - Concepts: `artifacts`, `content`
 - Agent notes: Stream to file for large payloads.
-- Adjacent commands: `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts tombstone`
+- Adjacent commands: `artifacts archive`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts tombstone`, `artifacts unarchive`
 - Examples:
   - Download content: `oar artifacts content get --artifact-id artifact_123 > artifact.bin`
 
@@ -1963,6 +2150,68 @@ Generated Help: artifacts content
 Global flags:
   Global flags can appear before or after the command path.
   Examples: oar --json artifacts content ... ; oar artifacts content ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `artifacts archive`
+
+Archive an artifact
+
+```text
+Generated Help: artifacts archive
+
+- Command ID: `artifacts.archive`
+- CLI path: `artifacts archive`
+- HTTP: `POST /artifacts/{artifact_id}/archive`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Hide an artifact from default list views while preserving it for search and direct access.
+- Output: Returns `{ artifact }` with archive metadata set.
+- Error codes: `invalid_json`, `invalid_request`, `not_found`
+- Concepts: `artifacts`, `lifecycle`
+- Agent notes: Idempotent; repeated archive calls on the same artifact are safe. Returns 409 if artifact is tombstoned.
+- Adjacent commands: `artifacts content get`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts tombstone`, `artifacts unarchive`
+- Examples:
+  - Archive artifact: `oar artifacts archive --artifact-id artifact_123 --json`
+
+Body schema:
+  Required: actor_id (string)
+  Optional: reason (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json artifacts archive ... ; oar artifacts archive ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `artifacts unarchive`
+
+Unarchive an artifact
+
+```text
+Generated Help: artifacts unarchive
+
+- Command ID: `artifacts.unarchive`
+- CLI path: `artifacts unarchive`
+- HTTP: `POST /artifacts/{artifact_id}/unarchive`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Return an archived artifact to the default list views.
+- Output: Returns `{ artifact }` with archive metadata cleared.
+- Error codes: `invalid_json`, `invalid_request`, `not_found`, `not_archived`
+- Concepts: `artifacts`, `lifecycle`
+- Agent notes: Returns 409 if the artifact is not currently archived.
+- Adjacent commands: `artifacts archive`, `artifacts content get`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts tombstone`
+- Examples:
+  - Unarchive artifact: `oar artifacts unarchive --artifact-id artifact_123 --json`
+
+Body schema:
+  Required: actor_id (string)
+  Optional: reason (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json artifacts unarchive ... ; oar artifacts unarchive ... --json
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1983,7 +2232,7 @@ Generated Help: artifacts tombstone
 - Error codes: `invalid_json`, `invalid_request`, `not_found`
 - Concepts: `artifacts`, `lifecycle`
 - Agent notes: Idempotent; repeated tombstone calls on the same artifact are safe.
-- Adjacent commands: `artifacts content get`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`
+- Adjacent commands: `artifacts archive`, `artifacts content get`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts unarchive`
 - Examples:
   - Tombstone artifact: `oar artifacts tombstone --artifact-id artifact_123 --reason "superseded by newer version" --json`
 
@@ -2014,7 +2263,7 @@ Generated Help: artifacts restore
 - Error codes: `invalid_json`, `invalid_request`, `not_found`, `not_tombstoned`
 - Concepts: `artifacts`, `lifecycle`
 - Agent notes: Returns 409 if the artifact is not currently tombstoned.
-- Adjacent commands: `artifacts content get`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts tombstone`
+- Adjacent commands: `artifacts archive`, `artifacts content get`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts tombstone`, `artifacts unarchive`
 - Examples:
   - Restore artifact: `oar artifacts restore --artifact-id artifact_123 --json`
 
@@ -2045,13 +2294,13 @@ Generated Help: artifacts purge
 - Error codes: `invalid_json`, `not_found`, `not_tombstoned`, `artifact_in_use`, `human_only`
 - Concepts: `artifacts`, `lifecycle`
 - Agent notes: 403 if the caller is not a human principal. 409 if the artifact is not tombstoned or is still referenced by document revisions.
-- Adjacent commands: `artifacts content get`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts restore`, `artifacts tombstone`
+- Adjacent commands: `artifacts archive`, `artifacts content get`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts restore`, `artifacts tombstone`, `artifacts unarchive`
 - Examples:
   - Purge artifact: `oar artifacts purge --artifact-id artifact_123 --json`
 
 Body schema:
   Required: none
-  Optional: reason (string)
+  Optional: actor_id (string), reason (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2076,7 +2325,7 @@ Generated Help: boards list
 - Error codes: `invalid_request`
 - Concepts: `boards`, `planning`, `summaries`
 - Agent notes: Safe and idempotent. Use repeatable `label` and `owner` filters to narrow the list server-side. Optional pagination with `q` for search, `limit` for page size, and `cursor` for continuation.
-- Adjacent commands: `boards cards add`, `boards cards list`, `boards cards move`, `boards cards remove`, `boards cards update`, `boards create`, `boards get`, `boards update`, `boards workspace`
+- Adjacent commands: `boards archive`, `boards cards add`, `boards cards list`, `boards cards move`, `boards cards remove`, `boards cards update`, `boards create`, `boards get`, `boards purge`, `boards restore`, `boards tombstone`, `boards unarchive`, `boards update`, `boards workspace`
 - Examples:
   - List boards: `oar boards list --json`
   - List active boards for an owner: `oar boards list --status active --owner actor_ceo --json`
@@ -2107,7 +2356,7 @@ Generated Help: boards create
 - Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`
 - Concepts: `boards`, `planning`, `concurrency`
 - Agent notes: Replay-safe when `request_key` is reused with the same body. The primary thread is required and is never created as a card implicitly.
-- Adjacent commands: `boards cards add`, `boards cards list`, `boards cards move`, `boards cards remove`, `boards cards update`, `boards get`, `boards list`, `boards update`, `boards workspace`
+- Adjacent commands: `boards archive`, `boards cards add`, `boards cards list`, `boards cards move`, `boards cards remove`, `boards cards update`, `boards get`, `boards list`, `boards purge`, `boards restore`, `boards tombstone`, `boards unarchive`, `boards update`, `boards workspace`
 - Examples:
   - Create board: `oar boards create --from-file board-create.json --json`
 
@@ -2139,7 +2388,7 @@ Generated Help: boards get
 - Error codes: `invalid_request`, `not_found`
 - Concepts: `boards`, `planning`
 - Agent notes: Safe and idempotent.
-- Adjacent commands: `boards cards add`, `boards cards list`, `boards cards move`, `boards cards remove`, `boards cards update`, `boards create`, `boards list`, `boards update`, `boards workspace`
+- Adjacent commands: `boards archive`, `boards cards add`, `boards cards list`, `boards cards move`, `boards cards remove`, `boards cards update`, `boards create`, `boards list`, `boards purge`, `boards restore`, `boards tombstone`, `boards unarchive`, `boards update`, `boards workspace`
 - Examples:
   - Get board: `oar boards get --board-id board_product_launch --json`
 
@@ -2167,7 +2416,7 @@ Generated Help: boards update
 - Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`, `not_found`
 - Concepts: `boards`, `planning`, `concurrency`
 - Agent notes: Set `if_updated_at` from `boards.get` or `boards.workspace` to avoid lost updates.
-- Adjacent commands: `boards cards add`, `boards cards list`, `boards cards move`, `boards cards remove`, `boards cards update`, `boards create`, `boards get`, `boards list`, `boards workspace`
+- Adjacent commands: `boards archive`, `boards cards add`, `boards cards list`, `boards cards move`, `boards cards remove`, `boards cards update`, `boards create`, `boards get`, `boards list`, `boards purge`, `boards restore`, `boards tombstone`, `boards unarchive`, `boards workspace`
 - Examples:
   - Update board metadata: `oar boards update --board-id board_product_launch --from-file board-update.json --json`
 
@@ -2179,6 +2428,161 @@ Body schema:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: oar --json boards update ... ; oar boards update ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `boards archive`
+
+Archive a board
+
+```text
+Generated Help: boards archive
+
+- Command ID: `boards.archive`
+- CLI path: `boards archive`
+- HTTP: `POST /boards/{board_id}/archive`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Hide a board from default list views while preserving it for search and direct access.
+- Output: Returns `{ board }` with archive metadata set.
+- Error codes: `invalid_json`, `invalid_request`, `not_found`
+- Concepts: `boards`, `lifecycle`
+- Agent notes: Idempotent; repeated archive calls on the same board are safe. Returns 409 if board is tombstoned.
+- Adjacent commands: `boards cards add`, `boards cards list`, `boards cards move`, `boards cards remove`, `boards cards update`, `boards create`, `boards get`, `boards list`, `boards purge`, `boards restore`, `boards tombstone`, `boards unarchive`, `boards update`, `boards workspace`
+- Examples:
+  - Archive board: `oar boards archive --board-id board_product_launch --json`
+
+Body schema:
+  Required: actor_id (string)
+  Optional: reason (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json boards archive ... ; oar boards archive ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `boards unarchive`
+
+Unarchive a board
+
+```text
+Generated Help: boards unarchive
+
+- Command ID: `boards.unarchive`
+- CLI path: `boards unarchive`
+- HTTP: `POST /boards/{board_id}/unarchive`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Return an archived board to the default list views.
+- Output: Returns `{ board }` with archive metadata cleared.
+- Error codes: `invalid_json`, `invalid_request`, `not_found`, `not_archived`
+- Concepts: `boards`, `lifecycle`
+- Agent notes: Returns 409 if the board is not currently archived.
+- Adjacent commands: `boards archive`, `boards cards add`, `boards cards list`, `boards cards move`, `boards cards remove`, `boards cards update`, `boards create`, `boards get`, `boards list`, `boards purge`, `boards restore`, `boards tombstone`, `boards update`, `boards workspace`
+- Examples:
+  - Unarchive board: `oar boards unarchive --board-id board_product_launch --json`
+
+Body schema:
+  Required: actor_id (string)
+  Optional: reason (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json boards unarchive ... ; oar boards unarchive ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `boards tombstone`
+
+Tombstone a board (soft-delete)
+
+```text
+Generated Help: boards tombstone
+
+- Command ID: `boards.tombstone`
+- CLI path: `boards tombstone`
+- HTTP: `POST /boards/{board_id}/tombstone`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Mark a board as inactive while preserving provenance; tombstoned boards are excluded from list by default.
+- Output: Returns `{ board }` with updated tombstone metadata.
+- Error codes: `invalid_json`, `invalid_request`, `not_found`
+- Concepts: `boards`, `lifecycle`
+- Agent notes: Idempotent; repeated tombstone calls are safe.
+- Adjacent commands: `boards archive`, `boards cards add`, `boards cards list`, `boards cards move`, `boards cards remove`, `boards cards update`, `boards create`, `boards get`, `boards list`, `boards purge`, `boards restore`, `boards unarchive`, `boards update`, `boards workspace`
+- Examples:
+  - Tombstone board: `oar boards tombstone --board-id board_product_launch --reason "initiative closed" --json`
+
+Body schema:
+  Required: actor_id (string)
+  Optional: reason (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json boards tombstone ... ; oar boards tombstone ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `boards restore`
+
+Restore a tombstoned board
+
+```text
+Generated Help: boards restore
+
+- Command ID: `boards.restore`
+- CLI path: `boards restore`
+- HTTP: `POST /boards/{board_id}/restore`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Reverse a tombstone on a board, making it active and visible in default list queries again.
+- Output: Returns `{ board }` with tombstone metadata cleared.
+- Error codes: `invalid_json`, `invalid_request`, `not_found`, `not_tombstoned`
+- Concepts: `boards`, `lifecycle`
+- Agent notes: Returns 409 if the board is not currently tombstoned.
+- Adjacent commands: `boards archive`, `boards cards add`, `boards cards list`, `boards cards move`, `boards cards remove`, `boards cards update`, `boards create`, `boards get`, `boards list`, `boards purge`, `boards tombstone`, `boards unarchive`, `boards update`, `boards workspace`
+- Examples:
+  - Restore board: `oar boards restore --board-id board_product_launch --json`
+
+Body schema:
+  Required: actor_id (string)
+  Optional: reason (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json boards restore ... ; oar boards restore ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `boards purge`
+
+Permanently delete a tombstoned board (human-only)
+
+```text
+Generated Help: boards purge
+
+- Command ID: `boards.purge`
+- CLI path: `boards purge`
+- HTTP: `POST /boards/{board_id}/purge`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Permanently remove a tombstoned board and reclaim storage. Human-only to prevent accidental data loss by automated agents.
+- Output: Returns `{ purged: true, board_id }` on success.
+- Error codes: `invalid_json`, `not_found`, `not_tombstoned`, `human_only`
+- Concepts: `boards`, `lifecycle`
+- Agent notes: 403 if the caller is not a human principal. 409 if the board is not tombstoned.
+- Adjacent commands: `boards archive`, `boards cards add`, `boards cards list`, `boards cards move`, `boards cards remove`, `boards cards update`, `boards create`, `boards get`, `boards list`, `boards restore`, `boards tombstone`, `boards unarchive`, `boards update`, `boards workspace`
+- Examples:
+  - Purge board: `oar boards purge --board-id board_product_launch --json`
+
+Body schema:
+  Required: none
+  Optional: actor_id (string), reason (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json boards purge ... ; oar boards purge ... --json
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2221,7 +2625,7 @@ Generated Help: boards cards add
 - Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`, `not_found`
 - Concepts: `boards`, `planning`, `ordering`, `concurrency`
 - Agent notes: Replay-safe when `request_key` is reused with the same body. The board primary thread cannot be added as a card.
-- Adjacent commands: `boards cards list`, `boards cards move`, `boards cards remove`, `boards cards update`, `boards create`, `boards get`, `boards list`, `boards update`, `boards workspace`
+- Adjacent commands: `boards archive`, `boards cards list`, `boards cards move`, `boards cards remove`, `boards cards update`, `boards create`, `boards get`, `boards list`, `boards purge`, `boards restore`, `boards tombstone`, `boards unarchive`, `boards update`, `boards workspace`
 - Examples:
   - Add card to backlog: `oar boards cards add --board-id board_product_launch --from-file board-card-add.json --json`
 
@@ -2253,7 +2657,7 @@ Generated Help: boards cards update
 - Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`, `not_found`
 - Concepts: `boards`, `planning`, `docs`, `concurrency`
 - Agent notes: Set `if_board_updated_at` from the current board read before patching card metadata.
-- Adjacent commands: `boards cards add`, `boards cards list`, `boards cards move`, `boards cards remove`, `boards create`, `boards get`, `boards list`, `boards update`, `boards workspace`
+- Adjacent commands: `boards archive`, `boards cards add`, `boards cards list`, `boards cards move`, `boards cards remove`, `boards create`, `boards get`, `boards list`, `boards purge`, `boards restore`, `boards tombstone`, `boards unarchive`, `boards update`, `boards workspace`
 - Examples:
   - Update pinned document: `oar boards cards update --board-id board_product_launch --thread-id thread_123 --from-file board-card-update.json --json`
 
@@ -2284,7 +2688,7 @@ Generated Help: boards cards move
 - Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`, `not_found`
 - Concepts: `boards`, `planning`, `ordering`, `concurrency`
 - Agent notes: Provide at most one of `before_thread_id` or `after_thread_id`. If neither is set, the card moves to the end of the target column.
-- Adjacent commands: `boards cards add`, `boards cards list`, `boards cards remove`, `boards cards update`, `boards create`, `boards get`, `boards list`, `boards update`, `boards workspace`
+- Adjacent commands: `boards archive`, `boards cards add`, `boards cards list`, `boards cards remove`, `boards cards update`, `boards create`, `boards get`, `boards list`, `boards purge`, `boards restore`, `boards tombstone`, `boards unarchive`, `boards update`, `boards workspace`
 - Examples:
   - Move card into review: `oar boards cards move --board-id board_product_launch --thread-id thread_123 --from-file board-card-move.json --json`
 
@@ -2316,7 +2720,7 @@ Generated Help: boards cards remove
 - Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`, `not_found`
 - Concepts: `boards`, `planning`, `concurrency`
 - Agent notes: Removal deletes canonical membership. Cards are not archived separately in v1.
-- Adjacent commands: `boards cards add`, `boards cards list`, `boards cards move`, `boards cards update`, `boards create`, `boards get`, `boards list`, `boards update`, `boards workspace`
+- Adjacent commands: `boards archive`, `boards cards add`, `boards cards list`, `boards cards move`, `boards cards update`, `boards create`, `boards get`, `boards list`, `boards purge`, `boards restore`, `boards tombstone`, `boards unarchive`, `boards update`, `boards workspace`
 - Examples:
   - Remove board card: `oar boards cards remove --board-id board_product_launch --thread-id thread_123 --from-file board-card-remove.json --json`
 
@@ -2347,7 +2751,7 @@ Generated Help: docs list
 - Error codes: `invalid_request`
 - Concepts: `docs`, `revisions`
 - Agent notes: Safe and idempotent. Use `thread_id` to focus on one thread's docs and `include_tombstoned=true` when auditing superseded documents. Optional pagination with `q` for search, `limit` for page size, and `cursor` for continuation.
-- Adjacent commands: `docs create`, `docs get`, `docs history`, `docs revision get`, `docs tombstone`, `docs update`
+- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs history`, `docs purge`, `docs restore`, `docs revision get`, `docs tombstone`, `docs unarchive`, `docs update`
 - Examples:
   - List documents: `oar docs list --json`
   - Search documents by title: `oar docs list --q "constitution" --json`
@@ -2377,7 +2781,7 @@ Generated Help: docs create
 - Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`
 - Concepts: `docs`, `revisions`
 - Agent notes: Replay-safe when `request_key` is reused with the same body; core can issue the canonical document id when one is omitted.
-- Adjacent commands: `docs get`, `docs history`, `docs list`, `docs revision get`, `docs tombstone`, `docs update`
+- Adjacent commands: `docs archive`, `docs get`, `docs history`, `docs list`, `docs purge`, `docs restore`, `docs revision get`, `docs tombstone`, `docs unarchive`, `docs update`
 - Examples:
   - Create document: `oar docs create --from-file doc-create.json --json`
 
@@ -2409,7 +2813,7 @@ Generated Help: docs get
 - Error codes: `invalid_request`, `not_found`
 - Concepts: `docs`, `revisions`
 - Agent notes: Safe and idempotent.
-- Adjacent commands: `docs create`, `docs history`, `docs list`, `docs revision get`, `docs tombstone`, `docs update`
+- Adjacent commands: `docs archive`, `docs create`, `docs history`, `docs list`, `docs purge`, `docs restore`, `docs revision get`, `docs tombstone`, `docs unarchive`, `docs update`
 - Examples:
   - Get document head: `oar docs get --document-id product-constitution --json`
 
@@ -2437,7 +2841,7 @@ Generated Help: docs update
 - Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`, `not_found`
 - Concepts: `docs`, `revisions`, `concurrency`
 - Agent notes: Set `if_base_revision` from `docs.get` to prevent lost updates.
-- Adjacent commands: `docs create`, `docs get`, `docs history`, `docs list`, `docs revision get`, `docs tombstone`
+- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs history`, `docs list`, `docs purge`, `docs restore`, `docs revision get`, `docs tombstone`, `docs unarchive`
 - Examples:
   - Update document: `oar docs update --document-id product-constitution --from-file doc-update.json --json`
 
@@ -2469,7 +2873,7 @@ Generated Help: docs history
 - Error codes: `invalid_request`, `not_found`
 - Concepts: `docs`, `revisions`, `lineage`
 - Agent notes: Safe and idempotent.
-- Adjacent commands: `docs create`, `docs get`, `docs list`, `docs revision get`, `docs tombstone`, `docs update`
+- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs list`, `docs purge`, `docs restore`, `docs revision get`, `docs tombstone`, `docs unarchive`, `docs update`
 - Examples:
   - List document history: `oar docs history --document-id product-constitution --json`
 
@@ -2515,7 +2919,7 @@ Generated Help: docs tombstone
 - Error codes: `invalid_json`, `invalid_request`, `not_found`
 - Concepts: `docs`, `lifecycle`
 - Agent notes: Idempotent; repeated tombstone calls on the same document are safe.
-- Adjacent commands: `docs create`, `docs get`, `docs history`, `docs list`, `docs revision get`, `docs update`
+- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs history`, `docs list`, `docs purge`, `docs restore`, `docs revision get`, `docs unarchive`, `docs update`
 - Examples:
   - Tombstone document: `oar docs tombstone --document-id product-constitution --reason "replaced by v2" --json`
 
@@ -2526,6 +2930,130 @@ Body schema:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: oar --json docs tombstone ... ; oar docs tombstone ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `docs archive`
+
+Archive a document
+
+```text
+Generated Help: docs archive
+
+- Command ID: `docs.archive`
+- CLI path: `docs archive`
+- HTTP: `POST /docs/{document_id}/archive`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Hide a document from default list views while preserving it for search and direct access.
+- Output: Returns `{ document, revision }` with archive metadata set.
+- Error codes: `invalid_json`, `invalid_request`, `not_found`
+- Concepts: `docs`, `lifecycle`
+- Agent notes: Idempotent; repeated archive calls on the same document are safe. Returns 409 if document is tombstoned.
+- Adjacent commands: `docs create`, `docs get`, `docs history`, `docs list`, `docs purge`, `docs restore`, `docs revision get`, `docs tombstone`, `docs unarchive`, `docs update`
+- Examples:
+  - Archive document: `oar docs archive --document-id product-constitution --json`
+
+Body schema:
+  Required: actor_id (string)
+  Optional: reason (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json docs archive ... ; oar docs archive ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `docs unarchive`
+
+Unarchive a document
+
+```text
+Generated Help: docs unarchive
+
+- Command ID: `docs.unarchive`
+- CLI path: `docs unarchive`
+- HTTP: `POST /docs/{document_id}/unarchive`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Return an archived document to the default list views.
+- Output: Returns `{ document, revision }` with archive metadata cleared.
+- Error codes: `invalid_json`, `invalid_request`, `not_found`, `not_archived`
+- Concepts: `docs`, `lifecycle`
+- Agent notes: Returns 409 if the document is not currently archived.
+- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs history`, `docs list`, `docs purge`, `docs restore`, `docs revision get`, `docs tombstone`, `docs update`
+- Examples:
+  - Unarchive document: `oar docs unarchive --document-id product-constitution --json`
+
+Body schema:
+  Required: actor_id (string)
+  Optional: reason (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json docs unarchive ... ; oar docs unarchive ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `docs restore`
+
+Restore a tombstoned document
+
+```text
+Generated Help: docs restore
+
+- Command ID: `docs.restore`
+- CLI path: `docs restore`
+- HTTP: `POST /docs/{document_id}/restore`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Reverse a tombstone on a document, making it active and visible in default list queries again.
+- Output: Returns `{ document, revision }` with tombstone metadata cleared.
+- Error codes: `invalid_json`, `invalid_request`, `not_found`, `not_tombstoned`
+- Concepts: `docs`, `lifecycle`
+- Agent notes: Returns 409 if the document is not currently tombstoned.
+- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs history`, `docs list`, `docs purge`, `docs revision get`, `docs tombstone`, `docs unarchive`, `docs update`
+- Examples:
+  - Restore document: `oar docs restore --document-id product-constitution --json`
+
+Body schema:
+  Required: actor_id (string)
+  Optional: reason (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json docs restore ... ; oar docs restore ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `docs purge`
+
+Permanently delete a tombstoned document (human-only)
+
+```text
+Generated Help: docs purge
+
+- Command ID: `docs.purge`
+- CLI path: `docs purge`
+- HTTP: `POST /docs/{document_id}/purge`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Permanently remove a tombstoned document and its revisions. Human-only.
+- Output: Returns `{ purged: true, document_id }` on success.
+- Error codes: `not_found`, `not_tombstoned`, `human_only`
+- Concepts: `docs`, `lifecycle`
+- Agent notes: 403 if the caller is not a human principal. 409 if the document is not tombstoned.
+- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs history`, `docs list`, `docs restore`, `docs revision get`, `docs tombstone`, `docs unarchive`, `docs update`
+- Examples:
+  - Purge document: `oar docs purge --document-id product-constitution --json`
+
+Body schema:
+  Required: none
+  Optional: reason (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json docs purge ... ; oar docs purge ... --json
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2546,7 +3074,7 @@ Generated Help: docs revision get
 - Error codes: `invalid_request`, `not_found`
 - Concepts: `docs`, `revisions`
 - Agent notes: Safe and idempotent.
-- Adjacent commands: `docs create`, `docs get`, `docs history`, `docs list`, `docs tombstone`, `docs update`
+- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs history`, `docs list`, `docs purge`, `docs restore`, `docs tombstone`, `docs unarchive`, `docs update`
 - Examples:
   - Get revision: `oar docs revision get --document-id product-constitution --revision-id 019f... --json`
 

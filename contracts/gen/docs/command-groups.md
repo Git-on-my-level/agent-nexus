@@ -24,8 +24,9 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `artifacts`
 
-- Commands: `7`
+- Commands: `9`
 - Command IDs:
+  - `artifacts.archive` (`artifacts archive`)
   - `artifacts.content.get` (`artifacts content get`)
   - `artifacts.create` (`artifacts create`)
   - `artifacts.get` (`artifacts get`)
@@ -33,6 +34,7 @@ Generated from `contracts/oar-openapi.yaml`.
   - `artifacts.purge` (`artifacts purge`)
   - `artifacts.restore` (`artifacts restore`)
   - `artifacts.tombstone` (`artifacts tombstone`)
+  - `artifacts.unarchive` (`artifacts unarchive`)
 
 ## `auth`
 
@@ -54,8 +56,9 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `boards`
 
-- Commands: `10`
+- Commands: `15`
 - Command IDs:
+  - `boards.archive` (`boards archive`)
   - `boards.cards.add` (`boards cards add`)
   - `boards.cards.list` (`boards cards list`)
   - `boards.cards.move` (`boards cards move`)
@@ -64,6 +67,10 @@ Generated from `contracts/oar-openapi.yaml`.
   - `boards.create` (`boards create`)
   - `boards.get` (`boards get`)
   - `boards.list` (`boards list`)
+  - `boards.purge` (`boards purge`)
+  - `boards.restore` (`boards restore`)
+  - `boards.tombstone` (`boards tombstone`)
+  - `boards.unarchive` (`boards unarchive`)
   - `boards.update` (`boards update`)
   - `boards.workspace` (`boards workspace`)
 
@@ -84,14 +91,18 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `docs`
 
-- Commands: `7`
+- Commands: `11`
 - Command IDs:
+  - `docs.archive` (`docs archive`)
   - `docs.create` (`docs create`)
   - `docs.get` (`docs get`)
   - `docs.history` (`docs history`)
   - `docs.list` (`docs list`)
+  - `docs.purge` (`docs purge`)
+  - `docs.restore` (`docs restore`)
   - `docs.revision.get` (`docs revision get`)
   - `docs.tombstone` (`docs tombstone`)
+  - `docs.unarchive` (`docs unarchive`)
   - `docs.update` (`docs update`)
 
 ## `events`
@@ -150,13 +161,18 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `threads`
 
-- Commands: `7`
+- Commands: `12`
 - Command IDs:
+  - `threads.archive` (`threads archive`)
   - `threads.context` (`threads context`)
   - `threads.create` (`threads create`)
   - `threads.get` (`threads get`)
   - `threads.list` (`threads list`)
   - `threads.patch` (`threads patch`)
+  - `threads.purge` (`threads purge`)
+  - `threads.restore` (`threads restore`)
   - `threads.timeline` (`threads timeline`)
+  - `threads.tombstone` (`threads tombstone`)
+  - `threads.unarchive` (`threads unarchive`)
   - `threads.workspace` (`threads workspace`)
 

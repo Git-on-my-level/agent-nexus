@@ -529,6 +529,41 @@ export function createOarCoreClient(options = {}) {
       invokeJSON("threads.list", () =>
         generated.threadsList({ query: filters }),
       ),
+    archiveThread: (threadId, payload) =>
+      invokeJSON("threads.archive", () =>
+        generated.threadsArchive(
+          { thread_id: String(threadId) },
+          { body: withActorId(payload) },
+        ),
+      ),
+    unarchiveThread: (threadId, payload) =>
+      invokeJSON("threads.unarchive", () =>
+        generated.threadsUnarchive(
+          { thread_id: String(threadId) },
+          { body: withActorId(payload) },
+        ),
+      ),
+    tombstoneThread: (threadId, payload) =>
+      invokeJSON("threads.tombstone", () =>
+        generated.threadsTombstone(
+          { thread_id: String(threadId) },
+          { body: withActorId(payload) },
+        ),
+      ),
+    restoreThread: (threadId, payload) =>
+      invokeJSON("threads.restore", () =>
+        generated.threadsRestore(
+          { thread_id: String(threadId) },
+          { body: withActorId(payload) },
+        ),
+      ),
+    purgeThread: (threadId, payload) =>
+      invokeJSON("threads.purge", () =>
+        generated.threadsPurge(
+          { thread_id: String(threadId) },
+          { body: payload || {} },
+        ),
+      ),
     getThread: (threadId) =>
       invokeJSON("threads.get", () =>
         generated.threadsGet({ thread_id: String(threadId) }),
@@ -602,6 +637,20 @@ export function createOarCoreClient(options = {}) {
     getArtifact: (artifactId) =>
       invokeJSON("artifacts.get", () =>
         generated.artifactsGet({ artifact_id: String(artifactId) }),
+      ),
+    archiveArtifact: (artifactId, payload) =>
+      invokeJSON("artifacts.archive", () =>
+        generated.artifactsArchive(
+          { artifact_id: String(artifactId) },
+          { body: withActorId(payload) },
+        ),
+      ),
+    unarchiveArtifact: (artifactId, payload) =>
+      invokeJSON("artifacts.unarchive", () =>
+        generated.artifactsUnarchive(
+          { artifact_id: String(artifactId) },
+          { body: withActorId(payload) },
+        ),
       ),
     tombstoneArtifact: (artifactId, payload) =>
       invokeJSON("artifacts.tombstone", () =>
@@ -677,6 +726,34 @@ export function createOarCoreClient(options = {}) {
           { body: withActorId(payload) },
         ),
       ),
+    archiveDocument: (documentId, payload) =>
+      invokeJSON("docs.archive", () =>
+        generated.docsArchive(
+          { document_id: String(documentId) },
+          { body: withActorId(payload) },
+        ),
+      ),
+    unarchiveDocument: (documentId, payload) =>
+      invokeJSON("docs.unarchive", () =>
+        generated.docsUnarchive(
+          { document_id: String(documentId) },
+          { body: withActorId(payload) },
+        ),
+      ),
+    restoreDocument: (documentId, payload) =>
+      invokeJSON("docs.restore", () =>
+        generated.docsRestore(
+          { document_id: String(documentId) },
+          { body: withActorId(payload) },
+        ),
+      ),
+    purgeDocument: (documentId, payload) =>
+      invokeJSON("docs.purge", () =>
+        generated.docsPurge(
+          { document_id: String(documentId) },
+          { body: payload || {} },
+        ),
+      ),
 
     createEvent: (payload) =>
       invokeJSON("events.create", () =>
@@ -727,6 +804,41 @@ export function createOarCoreClient(options = {}) {
     getBoardWorkspace: (boardId) =>
       invokeJSON("boards.workspace", () =>
         generated.boardsWorkspace({ board_id: String(boardId) }),
+      ),
+    archiveBoard: (boardId, payload) =>
+      invokeJSON("boards.archive", () =>
+        generated.boardsArchive(
+          { board_id: String(boardId) },
+          { body: withActorId(payload) },
+        ),
+      ),
+    unarchiveBoard: (boardId, payload) =>
+      invokeJSON("boards.unarchive", () =>
+        generated.boardsUnarchive(
+          { board_id: String(boardId) },
+          { body: withActorId(payload) },
+        ),
+      ),
+    tombstoneBoard: (boardId, payload) =>
+      invokeJSON("boards.tombstone", () =>
+        generated.boardsTombstone(
+          { board_id: String(boardId) },
+          { body: withActorId(payload) },
+        ),
+      ),
+    restoreBoard: (boardId, payload) =>
+      invokeJSON("boards.restore", () =>
+        generated.boardsRestore(
+          { board_id: String(boardId) },
+          { body: withActorId(payload) },
+        ),
+      ),
+    purgeBoard: (boardId, payload) =>
+      invokeJSON("boards.purge", () =>
+        generated.boardsPurge(
+          { board_id: String(boardId) },
+          { body: payload || {} },
+        ),
       ),
 
     addBoardCard: (boardId, payload) =>

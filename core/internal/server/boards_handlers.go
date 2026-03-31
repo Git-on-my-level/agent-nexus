@@ -41,12 +41,16 @@ func handleListBoards(w http.ResponseWriter, r *http.Request, opts handlerOption
 	}
 
 	items, nextCursor, err := opts.primitiveStore.ListBoards(r.Context(), primitives.BoardListFilter{
-		Status: status,
-		Labels: normalizedQueryValues(query["label"]),
-		Owners: normalizedQueryValues(query["owner"]),
-		Query:  strings.TrimSpace(query.Get("q")),
-		Limit:  limitFilter,
-		Cursor: strings.TrimSpace(query.Get("cursor")),
+		Status:            status,
+		Labels:            normalizedQueryValues(query["label"]),
+		Owners:            normalizedQueryValues(query["owner"]),
+		Query:             strings.TrimSpace(query.Get("q")),
+		Limit:             limitFilter,
+		Cursor:            strings.TrimSpace(query.Get("cursor")),
+		IncludeArchived:   strings.TrimSpace(query.Get("include_archived")) == "true",
+		ArchivedOnly:      strings.TrimSpace(query.Get("archived_only")) == "true",
+		IncludeTombstoned: strings.TrimSpace(query.Get("include_tombstoned")) == "true",
+		TombstonedOnly:    strings.TrimSpace(query.Get("tombstoned_only")) == "true",
 	})
 	if err != nil {
 		if errors.Is(err, primitives.ErrInvalidCursor) {
@@ -254,6 +258,156 @@ func handleUpdateBoard(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	emitBoardLifecycleEventBestEffort(r.Context(), opts, actorID, buildBoardUpdatedEvent(currentBoard, updatedBoard, req.Patch))
 
 	writeJSON(w, http.StatusOK, map[string]any{"board": updatedBoard})
+}
+
+func writeBoardLifecycleStoreError(w http.ResponseWriter, err error) bool {
+	switch {
+	case errors.Is(err, primitives.ErrNotFound):
+		writeError(w, http.StatusNotFound, "not_found", "board not found")
+		return true
+	case errors.Is(err, primitives.ErrNotTombstoned):
+		writeError(w, http.StatusConflict, "not_tombstoned", "board is not currently tombstoned")
+		return true
+	case errors.Is(err, primitives.ErrNotArchived):
+		writeError(w, http.StatusConflict, "not_archived", "board is not archived")
+		return true
+	case errors.Is(err, primitives.ErrAlreadyTombstoned):
+		writeError(w, http.StatusConflict, "already_tombstoned", "board is tombstoned")
+		return true
+	case errors.Is(err, primitives.ErrInvalidBoardRequest):
+		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return true
+	default:
+		return false
+	}
+}
+
+func handleArchiveBoard(w http.ResponseWriter, r *http.Request, opts handlerOptions, boardID string) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	var req struct {
+		ActorID string `json:"actor_id"`
+	}
+	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
+	if !ok {
+		return
+	}
+	board, err := opts.primitiveStore.ArchiveBoard(r.Context(), actorID, boardID)
+	if err != nil {
+		if writeBoardLifecycleStoreError(w, err) {
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to archive board")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"board": board})
+}
+
+func handleUnarchiveBoard(w http.ResponseWriter, r *http.Request, opts handlerOptions, boardID string) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	var req struct {
+		ActorID string `json:"actor_id"`
+	}
+	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
+	if !ok {
+		return
+	}
+	board, err := opts.primitiveStore.UnarchiveBoard(r.Context(), actorID, boardID)
+	if err != nil {
+		if writeBoardLifecycleStoreError(w, err) {
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to unarchive board")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"board": board})
+}
+
+func handleTombstoneBoard(w http.ResponseWriter, r *http.Request, opts handlerOptions, boardID string) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	var req struct {
+		ActorID string `json:"actor_id"`
+		Reason  string `json:"reason"`
+	}
+	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
+	if !ok {
+		return
+	}
+	board, err := opts.primitiveStore.TombstoneBoard(r.Context(), actorID, boardID, req.Reason)
+	if err != nil {
+		if writeBoardLifecycleStoreError(w, err) {
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to tombstone board")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"board": board})
+}
+
+func handleRestoreBoard(w http.ResponseWriter, r *http.Request, opts handlerOptions, boardID string) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	var req struct {
+		ActorID string `json:"actor_id"`
+	}
+	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
+	if !ok {
+		return
+	}
+	board, err := opts.primitiveStore.RestoreBoard(r.Context(), actorID, boardID)
+	if err != nil {
+		if writeBoardLifecycleStoreError(w, err) {
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to restore board")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"board": board})
+}
+
+func handlePurgeBoard(w http.ResponseWriter, r *http.Request, opts handlerOptions, boardID string) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	principal, ok := requireAuthenticatedPrincipal(w, r, opts)
+	if !ok {
+		return
+	}
+	if !isHumanPrincipal(principal) {
+		writeError(w, http.StatusForbidden, "human_only", "only human principals may permanently delete boards")
+		return
+	}
+	if err := opts.primitiveStore.PurgeBoard(r.Context(), boardID); err != nil {
+		if writeBoardLifecycleStoreError(w, err) {
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to purge board")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"purged": true, "board_id": boardID})
 }
 
 func handleGetBoardWorkspace(w http.ResponseWriter, r *http.Request, opts handlerOptions, boardID string) {

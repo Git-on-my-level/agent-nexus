@@ -50,6 +50,7 @@ export declare class OarClient {
     agentsMeKeysRotate(options?: RequestOptions): Promise<InvokeResult>;
     agentsMePatch(options?: RequestOptions): Promise<InvokeResult>;
     agentsMeRevoke(options?: RequestOptions): Promise<InvokeResult>;
+    artifactsArchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     artifactsContentGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     artifactsCreate(options?: RequestOptions): Promise<InvokeResult>;
     artifactsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
@@ -57,6 +58,7 @@ export declare class OarClient {
     artifactsPurge(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     artifactsRestore(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     artifactsTombstone(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    artifactsUnarchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     authAgentsRegister(options?: RequestOptions): Promise<InvokeResult>;
     authAuditList(options?: RequestOptions): Promise<InvokeResult>;
     authBootstrapStatus(options?: RequestOptions): Promise<InvokeResult>;
@@ -70,6 +72,7 @@ export declare class OarClient {
     authPrincipalsList(options?: RequestOptions): Promise<InvokeResult>;
     authPrincipalsRevoke(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     authToken(options?: RequestOptions): Promise<InvokeResult>;
+    boardsArchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     boardsCardsAdd(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     boardsCardsList(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     boardsCardsMove(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
@@ -78,6 +81,10 @@ export declare class OarClient {
     boardsCreate(options?: RequestOptions): Promise<InvokeResult>;
     boardsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     boardsList(options?: RequestOptions): Promise<InvokeResult>;
+    boardsPurge(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    boardsRestore(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    boardsTombstone(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    boardsUnarchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     boardsUpdate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     boardsWorkspace(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     commitmentsCreate(options?: RequestOptions): Promise<InvokeResult>;
@@ -85,12 +92,16 @@ export declare class OarClient {
     commitmentsList(options?: RequestOptions): Promise<InvokeResult>;
     commitmentsPatch(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     derivedRebuild(options?: RequestOptions): Promise<InvokeResult>;
+    docsArchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsCreate(options?: RequestOptions): Promise<InvokeResult>;
     docsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsHistory(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsList(options?: RequestOptions): Promise<InvokeResult>;
+    docsPurge(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    docsRestore(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsRevisionGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsTombstone(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    docsUnarchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsUpdate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     eventsCreate(options?: RequestOptions): Promise<InvokeResult>;
     eventsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
@@ -116,11 +127,16 @@ export declare class OarClient {
     packetsReviewsCreate(options?: RequestOptions): Promise<InvokeResult>;
     packetsWorkOrdersCreate(options?: RequestOptions): Promise<InvokeResult>;
     snapshotsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    threadsArchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     threadsContext(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     threadsCreate(options?: RequestOptions): Promise<InvokeResult>;
     threadsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     threadsList(options?: RequestOptions): Promise<InvokeResult>;
     threadsPatch(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    threadsPurge(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    threadsRestore(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     threadsTimeline(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    threadsTombstone(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    threadsUnarchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     threadsWorkspace(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
 }

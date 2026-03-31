@@ -17,14 +17,18 @@ import (
 var ErrInvalidBoardRequest = errors.New("invalid board request")
 
 type BoardListFilter struct {
-	Status string
-	Label  string
-	Labels []string
-	Owner  string
-	Owners []string
-	Query  string
-	Limit  *int
-	Cursor string
+	Status            string
+	Label             string
+	Labels            []string
+	Owner             string
+	Owners            []string
+	Query             string
+	Limit             *int
+	Cursor            string
+	IncludeArchived   bool
+	ArchivedOnly      bool
+	IncludeTombstoned bool
+	TombstonedOnly    bool
 }
 
 type BoardListItem struct {
@@ -86,6 +90,11 @@ type boardRow struct {
 	CreatedBy        string
 	UpdatedAt        string
 	UpdatedBy        string
+	ArchivedAt       sql.NullString
+	ArchivedBy       sql.NullString
+	TombstonedAt     sql.NullString
+	TombstonedBy     sql.NullString
+	TombstoneReason  sql.NullString
 }
 
 type boardCardRow struct {
@@ -261,6 +270,183 @@ func (s *Store) GetBoard(ctx context.Context, boardID string) (map[string]any, e
 	return row.toMap()
 }
 
+func (s *Store) ArchiveBoard(ctx context.Context, actorID, boardID string) (map[string]any, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("primitives store database is not initialized")
+	}
+	if strings.TrimSpace(actorID) == "" {
+		return nil, invalidBoardRequest("actorID is required")
+	}
+	boardID = strings.TrimSpace(boardID)
+	if boardID == "" {
+		return nil, invalidBoardRequest("board_id is required")
+	}
+	row, err := s.getBoardRow(ctx, boardID)
+	if err != nil {
+		return nil, err
+	}
+	if row.TombstonedAt.Valid && strings.TrimSpace(row.TombstonedAt.String) != "" {
+		return nil, ErrAlreadyTombstoned
+	}
+	if row.ArchivedAt.Valid && strings.TrimSpace(row.ArchivedAt.String) != "" {
+		return row.toMap()
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE boards SET archived_at = ?, archived_by = ? WHERE id = ?`,
+		now, strings.TrimSpace(actorID), boardID,
+	); err != nil {
+		return nil, fmt.Errorf("archive board: %w", err)
+	}
+	row, err = s.getBoardRow(ctx, boardID)
+	if err != nil {
+		return nil, err
+	}
+	return row.toMap()
+}
+
+func (s *Store) UnarchiveBoard(ctx context.Context, actorID, boardID string) (map[string]any, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("primitives store database is not initialized")
+	}
+	if strings.TrimSpace(actorID) == "" {
+		return nil, invalidBoardRequest("actorID is required")
+	}
+	boardID = strings.TrimSpace(boardID)
+	if boardID == "" {
+		return nil, invalidBoardRequest("board_id is required")
+	}
+	row, err := s.getBoardRow(ctx, boardID)
+	if err != nil {
+		return nil, err
+	}
+	if !row.ArchivedAt.Valid || strings.TrimSpace(row.ArchivedAt.String) == "" {
+		return nil, ErrNotArchived
+	}
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE boards SET archived_at = NULL, archived_by = NULL WHERE id = ?`,
+		boardID,
+	); err != nil {
+		return nil, fmt.Errorf("unarchive board: %w", err)
+	}
+	row, err = s.getBoardRow(ctx, boardID)
+	if err != nil {
+		return nil, err
+	}
+	return row.toMap()
+}
+
+func (s *Store) TombstoneBoard(ctx context.Context, actorID, boardID, reason string) (map[string]any, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("primitives store database is not initialized")
+	}
+	if strings.TrimSpace(actorID) == "" {
+		return nil, invalidBoardRequest("actorID is required")
+	}
+	boardID = strings.TrimSpace(boardID)
+	if boardID == "" {
+		return nil, invalidBoardRequest("board_id is required")
+	}
+	row, err := s.getBoardRow(ctx, boardID)
+	if err != nil {
+		return nil, err
+	}
+	if row.TombstonedAt.Valid && strings.TrimSpace(row.TombstonedAt.String) != "" {
+		return row.toMap()
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE boards SET tombstoned_at = ?, tombstoned_by = ?, tombstone_reason = ?, archived_at = NULL, archived_by = NULL WHERE id = ?`,
+		now, strings.TrimSpace(actorID), strings.TrimSpace(reason), boardID,
+	); err != nil {
+		return nil, fmt.Errorf("tombstone board: %w", err)
+	}
+	row, err = s.getBoardRow(ctx, boardID)
+	if err != nil {
+		return nil, err
+	}
+	return row.toMap()
+}
+
+func (s *Store) RestoreBoard(ctx context.Context, actorID, boardID string) (map[string]any, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("primitives store database is not initialized")
+	}
+	if strings.TrimSpace(actorID) == "" {
+		return nil, invalidBoardRequest("actorID is required")
+	}
+	boardID = strings.TrimSpace(boardID)
+	if boardID == "" {
+		return nil, invalidBoardRequest("board_id is required")
+	}
+	row, err := s.getBoardRow(ctx, boardID)
+	if err != nil {
+		return nil, err
+	}
+	if !row.TombstonedAt.Valid || strings.TrimSpace(row.TombstonedAt.String) == "" {
+		return nil, ErrNotTombstoned
+	}
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE boards SET tombstoned_at = NULL, tombstoned_by = NULL, tombstone_reason = NULL WHERE id = ?`,
+		boardID,
+	); err != nil {
+		return nil, fmt.Errorf("restore board: %w", err)
+	}
+	row, err = s.getBoardRow(ctx, boardID)
+	if err != nil {
+		return nil, err
+	}
+	return row.toMap()
+}
+
+func (s *Store) PurgeBoard(ctx context.Context, boardID string) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("primitives store database is not initialized")
+	}
+	boardID = strings.TrimSpace(boardID)
+	if boardID == "" {
+		return invalidBoardRequest("board_id is required")
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin purge board transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var foundID string
+	err = tx.QueryRowContext(ctx,
+		`SELECT id FROM boards WHERE id = ? AND tombstoned_at IS NOT NULL`,
+		boardID,
+	).Scan(&foundID)
+	if errors.Is(err, sql.ErrNoRows) {
+		var one int
+		err2 := tx.QueryRowContext(ctx, `SELECT 1 FROM boards WHERE id = ?`, boardID).Scan(&one)
+		if errors.Is(err2, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err2 != nil {
+			return fmt.Errorf("check board existence: %w", err2)
+		}
+		return ErrNotTombstoned
+	}
+	if err != nil {
+		return fmt.Errorf("select tombstoned board: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM board_cards WHERE board_id = ?`, boardID); err != nil {
+		return fmt.Errorf("delete board cards: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM boards WHERE id = ?`, boardID); err != nil {
+		return fmt.Errorf("delete board: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit purge board transaction: %w", err)
+	}
+	return nil
+}
+
 func (s *Store) UpdateBoard(ctx context.Context, actorID, boardID string, patch map[string]any, ifUpdatedAt *string) (map[string]any, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("primitives store database is not initialized")
@@ -419,7 +605,7 @@ func (s *Store) UpdateBoard(ctx context.Context, actorID, boardID string, patch 
 		return nil, fmt.Errorf("commit board update transaction: %w", err)
 	}
 
-	return map[string]any{
+	out := map[string]any{
 		"id":                  boardID,
 		"title":               nextTitle,
 		"status":              nextStatus,
@@ -433,7 +619,9 @@ func (s *Store) UpdateBoard(ctx context.Context, actorID, boardID string, patch 
 		"created_by":          currentRow.CreatedBy,
 		"updated_at":          now,
 		"updated_by":          actorID,
-	}, nil
+	}
+	mergeBoardArchiveTombstoneFields(out, currentRow)
+	return out, nil
 }
 
 func (s *Store) ListBoards(ctx context.Context, filter BoardListFilter) ([]BoardListItem, string, error) {
@@ -971,10 +1159,20 @@ func (s *Store) computeBoardSummaries(ctx context.Context, boards []boardRow) (m
 }
 
 func buildListBoardsQuery(filter BoardListFilter) (string, []any) {
-	query := `SELECT id, title, status, labels_json, owners_json, primary_thread_id, primary_document_id, column_schema_json, pinned_refs_json, created_at, created_by, updated_at, updated_by
+	query := `SELECT id, title, status, labels_json, owners_json, primary_thread_id, primary_document_id, column_schema_json, pinned_refs_json, created_at, created_by, updated_at, updated_by, archived_at, archived_by, tombstoned_at, tombstoned_by, tombstone_reason
 		FROM boards
 		WHERE 1=1`
 	args := make([]any, 0, 8)
+	if filter.TombstonedOnly {
+		query += ` AND tombstoned_at IS NOT NULL`
+	} else if !filter.IncludeTombstoned {
+		query += ` AND tombstoned_at IS NULL`
+	}
+	if filter.ArchivedOnly {
+		query += ` AND archived_at IS NOT NULL AND tombstoned_at IS NULL`
+	} else if !filter.IncludeArchived {
+		query += ` AND archived_at IS NULL`
+	}
 	if status := strings.TrimSpace(filter.Status); status != "" {
 		query += ` AND status = ?`
 		args = append(args, status)
@@ -1375,7 +1573,7 @@ func loadBoardRow(ctx context.Context, rower queryRower, boardID string) (boardR
 	row := boardRow{}
 	err := rower.QueryRowContext(
 		ctx,
-		`SELECT id, title, status, labels_json, owners_json, primary_thread_id, primary_document_id, column_schema_json, pinned_refs_json, created_at, created_by, updated_at, updated_by
+		`SELECT id, title, status, labels_json, owners_json, primary_thread_id, primary_document_id, column_schema_json, pinned_refs_json, created_at, created_by, updated_at, updated_by, archived_at, archived_by, tombstoned_at, tombstoned_by, tombstone_reason
 		   FROM boards
 		  WHERE id = ?`,
 		strings.TrimSpace(boardID),
@@ -1393,6 +1591,11 @@ func loadBoardRow(ctx context.Context, rower queryRower, boardID string) (boardR
 		&row.CreatedBy,
 		&row.UpdatedAt,
 		&row.UpdatedBy,
+		&row.ArchivedAt,
+		&row.ArchivedBy,
+		&row.TombstonedAt,
+		&row.TombstonedBy,
+		&row.TombstoneReason,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return boardRow{}, ErrNotFound
@@ -1419,6 +1622,11 @@ func scanBoardRow(scanner interface{ Scan(dest ...any) error }) (boardRow, error
 		&row.CreatedBy,
 		&row.UpdatedAt,
 		&row.UpdatedBy,
+		&row.ArchivedAt,
+		&row.ArchivedBy,
+		&row.TombstonedAt,
+		&row.TombstonedBy,
+		&row.TombstoneReason,
 	); err != nil {
 		return boardRow{}, fmt.Errorf("scan board row: %w", err)
 	}
@@ -1472,12 +1680,33 @@ func scanBoardCardRow(scanner interface{ Scan(dest ...any) error }) (boardCardRo
 	return row, nil
 }
 
+func mergeBoardArchiveTombstoneFields(m map[string]any, r boardRow) {
+	if m == nil {
+		return
+	}
+	if r.ArchivedAt.Valid && strings.TrimSpace(r.ArchivedAt.String) != "" {
+		m["archived_at"] = r.ArchivedAt.String
+	}
+	if r.ArchivedBy.Valid && strings.TrimSpace(r.ArchivedBy.String) != "" {
+		m["archived_by"] = r.ArchivedBy.String
+	}
+	if r.TombstonedAt.Valid && strings.TrimSpace(r.TombstonedAt.String) != "" {
+		m["tombstoned_at"] = r.TombstonedAt.String
+	}
+	if r.TombstonedBy.Valid && strings.TrimSpace(r.TombstonedBy.String) != "" {
+		m["tombstoned_by"] = r.TombstonedBy.String
+	}
+	if r.TombstoneReason.Valid && strings.TrimSpace(r.TombstoneReason.String) != "" {
+		m["tombstone_reason"] = r.TombstoneReason.String
+	}
+}
+
 func (r boardRow) toMap() (map[string]any, error) {
 	columnSchema, err := decodeBoardColumnSchema(r.ColumnSchemaJSON)
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{
+	m := map[string]any{
 		"id":                  r.ID,
 		"title":               r.Title,
 		"status":              r.Status,
@@ -1491,7 +1720,9 @@ func (r boardRow) toMap() (map[string]any, error) {
 		"created_by":          r.CreatedBy,
 		"updated_at":          r.UpdatedAt,
 		"updated_by":          r.UpdatedBy,
-	}, nil
+	}
+	mergeBoardArchiveTombstoneFields(m, r)
+	return m, nil
 }
 
 func (r boardCardRow) toMap() map[string]any {

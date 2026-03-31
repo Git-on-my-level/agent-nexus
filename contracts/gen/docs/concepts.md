@@ -14,8 +14,9 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `artifacts`
 
-- Commands: `9`
+- Commands: `11`
 - Command IDs:
+  - `artifacts.archive`
   - `artifacts.content.get`
   - `artifacts.create`
   - `artifacts.get`
@@ -23,6 +24,7 @@ Generated from `contracts/oar-openapi.yaml`.
   - `artifacts.purge`
   - `artifacts.restore`
   - `artifacts.tombstone`
+  - `artifacts.unarchive`
   - `threads.context`
   - `threads.workspace`
 
@@ -56,8 +58,9 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `boards`
 
-- Commands: `11`
+- Commands: `16`
 - Command IDs:
+  - `boards.archive`
   - `boards.cards.add`
   - `boards.cards.list`
   - `boards.cards.move`
@@ -66,6 +69,10 @@ Generated from `contracts/oar-openapi.yaml`.
   - `boards.create`
   - `boards.get`
   - `boards.list`
+  - `boards.purge`
+  - `boards.restore`
+  - `boards.tombstone`
+  - `boards.unarchive`
   - `boards.update`
   - `boards.workspace`
   - `threads.workspace`
@@ -126,16 +133,20 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `docs`
 
-- Commands: `11`
+- Commands: `15`
 - Command IDs:
   - `boards.cards.update`
   - `boards.workspace`
+  - `docs.archive`
   - `docs.create`
   - `docs.get`
   - `docs.history`
   - `docs.list`
+  - `docs.purge`
+  - `docs.restore`
   - `docs.revision.get`
   - `docs.tombstone`
+  - `docs.unarchive`
   - `docs.update`
   - `threads.context`
   - `threads.workspace`
@@ -222,12 +233,28 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `lifecycle`
 
-- Commands: `4`
+- Commands: `20`
 - Command IDs:
+  - `artifacts.archive`
   - `artifacts.purge`
   - `artifacts.restore`
   - `artifacts.tombstone`
+  - `artifacts.unarchive`
+  - `boards.archive`
+  - `boards.purge`
+  - `boards.restore`
+  - `boards.tombstone`
+  - `boards.unarchive`
+  - `docs.archive`
+  - `docs.purge`
+  - `docs.restore`
   - `docs.tombstone`
+  - `docs.unarchive`
+  - `threads.archive`
+  - `threads.purge`
+  - `threads.restore`
+  - `threads.tombstone`
+  - `threads.unarchive`
 
 ## `lineage`
 
@@ -391,15 +418,20 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `threads`
 
-- Commands: `8`
+- Commands: `13`
 - Command IDs:
   - `boards.workspace`
+  - `threads.archive`
   - `threads.context`
   - `threads.create`
   - `threads.get`
   - `threads.list`
   - `threads.patch`
+  - `threads.purge`
+  - `threads.restore`
   - `threads.timeline`
+  - `threads.tombstone`
+  - `threads.unarchive`
   - `threads.workspace`
 
 ## `token-lifecycle`

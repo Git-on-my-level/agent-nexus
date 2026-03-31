@@ -56,7 +56,7 @@ func formatCommandSummary(commandID string, body any) string {
 		return formatInboxList(body)
 	case "docs.history":
 		return formatNamedList(body, "revisions", "Revisions", renderRevisionListItem)
-	case "threads.get", "threads.create", "threads.patch":
+	case "threads.get", "threads.create", "threads.patch", "threads.archive", "threads.unarchive", "threads.tombstone", "threads.restore":
 		return formatThreadRecord(extractNestedMap(body, "thread"))
 	case "threads.context":
 		return formatThreadContext(body)
@@ -70,9 +70,16 @@ func formatCommandSummary(commandID string, body any) string {
 		return formatThreadRecommendations(body)
 	case "threads.timeline":
 		return formatThreadTimeline(body)
+	case "threads.purge":
+		root := asMap(body)
+		id, _ := root["thread_id"].(string)
+		if id != "" {
+			return "Thread " + id + " permanently deleted"
+		}
+		return formatPrettyBody(body)
 	case "commitments.get", "commitments.create", "commitments.patch":
 		return formatCommitmentRecord(extractNestedMap(body, "commitment"))
-	case "artifacts.get", "artifacts.create", "artifacts.tombstone", "artifacts.restore":
+	case "artifacts.get", "artifacts.create", "artifacts.tombstone", "artifacts.restore", "artifacts.archive", "artifacts.unarchive":
 		return formatArtifactRecord(extractNestedMap(body, "artifact"))
 	case "artifacts.purge":
 		root := asMap(body)
@@ -85,12 +92,19 @@ func formatCommandSummary(commandID string, body any) string {
 		return formatArtifactInspect(body)
 	case "events.get", "events.create":
 		return formatEventRecord(extractNestedMap(body, "event"))
-	case "docs.get", "docs.create", "docs.update", "docs.tombstone":
+	case "docs.get", "docs.create", "docs.update", "docs.tombstone", "docs.archive", "docs.unarchive", "docs.restore":
 		return formatDocumentRecord(body)
 	case "threads.patch.propose", "commitments.patch.propose", "docs.update.propose":
 		return formatProposalPreview(body)
 	case "threads.patch.apply", "commitments.patch.apply", "docs.update.apply":
 		return formatProposalApply(body)
+	case "docs.purge":
+		root := asMap(body)
+		id, _ := root["document_id"].(string)
+		if id != "" {
+			return "Document " + id + " permanently deleted"
+		}
+		return formatPrettyBody(body)
 	case "docs.content":
 		return formatDocumentContentRecord(body)
 	case "docs.revision.get":
@@ -99,8 +113,15 @@ func formatCommandSummary(commandID string, body any) string {
 		return formatProvenanceWalkSummary(asMap(body))
 	case "boards.list":
 		return formatBoardsList(body)
-	case "boards.get", "boards.create", "boards.update":
+	case "boards.get", "boards.create", "boards.update", "boards.archive", "boards.unarchive", "boards.tombstone", "boards.restore":
 		return formatBoardRecord(extractNestedMap(body, "board"))
+	case "boards.purge":
+		root := asMap(body)
+		id, _ := root["board_id"].(string)
+		if id != "" {
+			return "Board " + id + " permanently deleted"
+		}
+		return formatPrettyBody(body)
 	case "boards.workspace":
 		return formatBoardWorkspace(body)
 	case "boards.cards.list":

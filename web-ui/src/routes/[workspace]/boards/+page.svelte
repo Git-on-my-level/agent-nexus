@@ -29,6 +29,10 @@
   let boards = $state([]);
   let loading = $state(false);
   let error = $state("");
+  let showArchived = $state(false);
+  let archiveBusyId = $state("");
+  let trashConfirmId = $state("");
+  let trashBusyId = $state("");
   let creating = $state(false);
   let createError = $state("");
   let showCreateForm = $state(false);
@@ -109,7 +113,9 @@
     loading = true;
     error = "";
     try {
-      const data = await coreClient.listBoards({});
+      const filters = {};
+      if (showArchived) filters.include_archived = "true";
+      const data = await coreClient.listBoards(filters);
       boards = data.boards ?? [];
     } catch (e) {
       error = `Failed to load boards: ${e instanceof Error ? e.message : String(e)}`;
@@ -168,13 +174,65 @@
   }
 
   $effect(() => {
+    showArchived;
     if (workspaceSlug) {
       void loadBoards();
     }
   });
+
+  function isBoardArchived(board) {
+    const at = board?.archived_at;
+    return typeof at === "string" ? at.trim() !== "" : Boolean(at);
+  }
+
+  async function archiveBoard(boardId) {
+    const id = String(boardId ?? "").trim();
+    if (!id || archiveBusyId) return;
+    archiveBusyId = id;
+    error = "";
+    try {
+      await coreClient.archiveBoard(id, {});
+      await loadBoards();
+    } catch (e) {
+      error = `Archive failed: ${e instanceof Error ? e.message : String(e)}`;
+    } finally {
+      archiveBusyId = "";
+    }
+  }
+
+  async function unarchiveBoard(boardId) {
+    const id = String(boardId ?? "").trim();
+    if (!id || archiveBusyId) return;
+    archiveBusyId = id;
+    error = "";
+    try {
+      await coreClient.unarchiveBoard(id, {});
+      await loadBoards();
+    } catch (e) {
+      error = `Unarchive failed: ${e instanceof Error ? e.message : String(e)}`;
+    } finally {
+      archiveBusyId = "";
+    }
+  }
+
+  async function trashBoard(boardId) {
+    const id = String(boardId ?? "").trim();
+    if (!id || trashBusyId) return;
+    trashBusyId = id;
+    error = "";
+    try {
+      await coreClient.tombstoneBoard(id, {});
+      trashConfirmId = "";
+      await loadBoards();
+    } catch (e) {
+      error = `Trash failed: ${e instanceof Error ? e.message : String(e)}`;
+    } finally {
+      trashBusyId = "";
+    }
+  }
 </script>
 
-<div class="mb-4 flex items-start justify-between gap-4">
+<div class="mb-4 flex flex-wrap items-start justify-between gap-4">
   <div>
     <h1 class="text-lg font-semibold text-[var(--ui-text)]">Boards</h1>
     <p class="mt-1 text-[12px] text-[var(--ui-text-muted)]">
@@ -183,16 +241,28 @@
     </p>
   </div>
 
-  <button
-    class="rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500"
-    onclick={() => {
-      createError = "";
-      showCreateForm = !showCreateForm;
-    }}
-    type="button"
-  >
-    {showCreateForm ? "Hide create form" : "Create board"}
-  </button>
+  <div class="flex flex-wrap items-center gap-3">
+    <label
+      class="inline-flex cursor-pointer items-center gap-1.5 text-[12px] text-[var(--ui-text-muted)]"
+    >
+      <input
+        bind:checked={showArchived}
+        class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--ui-border)] bg-[var(--ui-bg)] text-[var(--ui-accent-strong)] focus:ring-2 focus:ring-[var(--ui-accent)] focus:ring-offset-0"
+        type="checkbox"
+      />
+      Show archived
+    </label>
+    <button
+      class="rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-indigo-500"
+      onclick={() => {
+        createError = "";
+        showCreateForm = !showCreateForm;
+      }}
+      type="button"
+    >
+      {showCreateForm ? "Hide create form" : "Create board"}
+    </button>
+  </div>
 </div>
 
 {#if error}
@@ -369,120 +439,219 @@
       {@const counts = boardSummaryCounts(summary)}
       {@const projectionFreshness = item.projection_freshness ?? null}
       <div
-        class="block cursor-pointer px-4 py-3 transition-colors hover:bg-[var(--ui-border-subtle)] {i >
-        0
+        class="flex items-stretch {i > 0
           ? 'border-t border-[var(--ui-border)]'
           : ''}"
-        onclick={() => navigateToBoard(board.id)}
-        onkeydown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            navigateToBoard(board.id);
-          }
-        }}
-        role="button"
-        tabindex="0"
-        aria-label={board.title || board.id}
       >
-        <div class="flex items-start justify-between gap-3">
-          <div class="min-w-0 flex-1">
-            <div class="flex flex-wrap items-center gap-2">
-              {#if board.status}
-                <span
-                  class="inline-flex rounded px-1.5 py-0.5 text-[11px] font-semibold {statusColor(
-                    board.status,
-                  )}"
-                >
-                  {BOARD_STATUS_LABELS[board.status] ?? board.status}
-                </span>
-              {/if}
-              {#if projectionFreshness}
-                <span
-                  class="inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium {freshnessStatusTone(
-                    projectionFreshness.status,
-                  )}"
-                >
-                  {freshnessStatusLabel(projectionFreshness.status)}
-                </span>
-              {/if}
-              {#if summary?.has_primary_document}
-                <span
-                  class="rounded bg-indigo-500/10 px-1.5 py-0.5 text-[10px] text-indigo-300"
-                >
-                  Has doc
-                </span>
-              {/if}
-              {#each (board.labels ?? []).slice(0, 3) as label}
-                <span
-                  class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[10px] text-[var(--ui-text-muted)]"
-                >
-                  {label}
-                </span>
-              {/each}
-            </div>
-
-            <p
-              class="mt-1 truncate text-[13px] font-medium text-[var(--ui-text)]"
-            >
-              {board.title || board.id}
-            </p>
-
-            <div
-              class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[var(--ui-text-muted)]"
-            >
-              {#if board.owners?.length > 0}
-                <span>
-                  Owned by {board.owners
-                    .map((owner) => actorName(owner))
-                    .join(", ")}
-                </span>
-              {/if}
-              <span>
-                <span class="text-[var(--ui-text-subtle)]">Thread:</span>
-                <a
-                  class="text-indigo-300 transition-colors hover:text-indigo-200"
-                  href={workspaceHref(
-                    `/threads/${encodeURIComponent(board.primary_thread_id)}`,
-                  )}
-                >
-                  {board.primary_thread_id}
-                </a>
-              </span>
-              <span>
-                Visual scan updated {formatTimestamp(board.updated_at) || "—"}
-              </span>
-              {#if isFreshnessCurrent(projectionFreshness)}
-                <span>
-                  Latest derived activity {formatTimestamp(
-                    summary?.latest_activity_at,
-                  ) || "—"}
-                </span>
-              {:else if projectionFreshness}
-                <span>Derived scan details are still catching up</span>
-              {/if}
-            </div>
-
-            {#if isFreshnessCurrent(projectionFreshness)}
-              <div
-                class="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px]"
-              >
-                {#each CANONICAL_BOARD_COLUMNS as column, ci}
-                  {@const count = counts[column.key]}
+        <div
+          class="min-w-0 flex-1 cursor-pointer px-4 py-3 transition-colors hover:bg-[var(--ui-border-subtle)]"
+          onclick={() => navigateToBoard(board.id)}
+          onkeydown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              navigateToBoard(board.id);
+            }
+          }}
+          role="button"
+          tabindex="0"
+          aria-label={board.title || board.id}
+        >
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-center gap-2">
+                {#if board.status}
                   <span
-                    class={column.key === "blocked" && count > 0
-                      ? "text-amber-400"
-                      : "text-[var(--ui-text-subtle)]"}
+                    class="inline-flex rounded px-1.5 py-0.5 text-[11px] font-semibold {statusColor(
+                      board.status,
+                    )}"
                   >
-                    <span class="font-medium uppercase">{column.title}</span>
-                    {count}
+                    {BOARD_STATUS_LABELS[board.status] ?? board.status}
                   </span>
-                  {#if ci < CANONICAL_BOARD_COLUMNS.length - 1}
-                    <span class="text-[var(--ui-border)]">·</span>
-                  {/if}
+                {/if}
+                {#if isBoardArchived(board)}
+                  <span
+                    class="rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-medium text-amber-400"
+                    >Archived</span
+                  >
+                {/if}
+                {#if projectionFreshness}
+                  <span
+                    class="inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium {freshnessStatusTone(
+                      projectionFreshness.status,
+                    )}"
+                  >
+                    {freshnessStatusLabel(projectionFreshness.status)}
+                  </span>
+                {/if}
+                {#if summary?.has_primary_document}
+                  <span
+                    class="rounded bg-indigo-500/10 px-1.5 py-0.5 text-[10px] text-indigo-300"
+                  >
+                    Has doc
+                  </span>
+                {/if}
+                {#each (board.labels ?? []).slice(0, 3) as label}
+                  <span
+                    class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[10px] text-[var(--ui-text-muted)]"
+                  >
+                    {label}
+                  </span>
                 {/each}
               </div>
-            {/if}
+
+              <p
+                class="mt-1 truncate text-[13px] font-medium text-[var(--ui-text)]"
+              >
+                {board.title || board.id}
+              </p>
+
+              <div
+                class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[var(--ui-text-muted)]"
+              >
+                {#if board.owners?.length > 0}
+                  <span>
+                    Owned by {board.owners
+                      .map((owner) => actorName(owner))
+                      .join(", ")}
+                  </span>
+                {/if}
+                <span>
+                  <span class="text-[var(--ui-text-subtle)]">Thread:</span>
+                  <a
+                    class="text-indigo-300 transition-colors hover:text-indigo-200"
+                    href={workspaceHref(
+                      `/threads/${encodeURIComponent(board.primary_thread_id)}`,
+                    )}
+                    onclick={(event) => event.stopPropagation()}
+                  >
+                    {board.primary_thread_id}
+                  </a>
+                </span>
+                <span>
+                  Visual scan updated {formatTimestamp(board.updated_at) || "—"}
+                </span>
+                {#if isFreshnessCurrent(projectionFreshness)}
+                  <span>
+                    Latest derived activity {formatTimestamp(
+                      summary?.latest_activity_at,
+                    ) || "—"}
+                  </span>
+                {:else if projectionFreshness}
+                  <span>Derived scan details are still catching up</span>
+                {/if}
+              </div>
+
+              {#if isFreshnessCurrent(projectionFreshness)}
+                <div
+                  class="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px]"
+                >
+                  {#each CANONICAL_BOARD_COLUMNS as column, ci}
+                    {@const count = counts[column.key]}
+                    <span
+                      class={column.key === "blocked" && count > 0
+                        ? "text-amber-400"
+                        : "text-[var(--ui-text-subtle)]"}
+                    >
+                      <span class="font-medium uppercase">{column.title}</span>
+                      {count}
+                    </span>
+                    {#if ci < CANONICAL_BOARD_COLUMNS.length - 1}
+                      <span class="text-[var(--ui-border)]">·</span>
+                    {/if}
+                  {/each}
+                </div>
+              {/if}
+            </div>
           </div>
+        </div>
+        <div
+          class="flex shrink-0 items-center gap-1 border-l border-[var(--ui-border)] px-2"
+        >
+          {#if trashConfirmId !== board.id}
+            {#if isBoardArchived(board)}
+              <button
+                class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] px-2 py-1 text-[11px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={Boolean(archiveBusyId) || Boolean(trashBusyId)}
+                onclick={(event) => {
+                  event.stopPropagation();
+                  void unarchiveBoard(board.id);
+                }}
+                type="button"
+              >
+                Unarchive
+              </button>
+            {:else}
+              <button
+                class="cursor-pointer rounded-md p-1 text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border)] hover:text-[var(--ui-accent)] disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={Boolean(archiveBusyId) || Boolean(trashBusyId)}
+                onclick={(event) => {
+                  event.stopPropagation();
+                  void archiveBoard(board.id);
+                }}
+                title="Archive"
+                type="button"
+              >
+                <svg
+                  class="h-3.5 w-3.5"
+                  fill="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m8.25 3v6.75m0 0l-3-3m3 3l3-3M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"
+                  />
+                </svg>
+              </button>
+            {/if}
+            <button
+              class="cursor-pointer rounded-md p-1 text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border)] hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={Boolean(trashBusyId) || Boolean(archiveBusyId)}
+              onclick={(event) => {
+                event.stopPropagation();
+                trashConfirmId = board.id;
+              }}
+              title="Move to trash"
+              type="button"
+            >
+              <svg
+                class="h-3.5 w-3.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
+                />
+              </svg>
+            </button>
+          {:else}
+            <div class="flex items-center gap-1">
+              <button
+                class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] px-2 py-1 text-[11px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]"
+                onclick={(event) => {
+                  event.stopPropagation();
+                  trashConfirmId = "";
+                }}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                class="cursor-pointer rounded-md bg-red-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={trashBusyId === board.id}
+                onclick={(event) => {
+                  event.stopPropagation();
+                  void trashBoard(board.id);
+                }}
+                type="button"
+              >
+                Trash
+              </button>
+            </div>
+          {/if}
         </div>
       </div>
     {/each}

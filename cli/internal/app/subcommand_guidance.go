@@ -128,7 +128,7 @@ var provenanceSubcommandSpec = subcommandSpec{
 
 var threadsSubcommandSpec = subcommandSpec{
 	command:  "threads",
-	valid:    []string{"list", "get", "create", "patch", "propose-patch", "apply", "timeline", "context", "inspect", "workspace", "review", "recommendations"},
+	valid:    []string{"list", "get", "create", "patch", "propose-patch", "apply", "timeline", "context", "inspect", "workspace", "review", "recommendations", "archive", "unarchive", "tombstone", "restore", "purge"},
 	examples: []string{"oar threads list --status active", "oar threads review --thread-id <thread-id>", "oar threads workspace --status active --type initiative --full-id"},
 	aliases: map[string]string{
 		"ls":     "list",
@@ -149,7 +149,7 @@ var commitmentsSubcommandSpec = subcommandSpec{
 
 var artifactsSubcommandSpec = subcommandSpec{
 	command:  "artifacts",
-	valid:    []string{"list", "get", "create", "content", "inspect", "tombstone", "restore", "purge"},
+	valid:    []string{"list", "get", "create", "content", "inspect", "archive", "unarchive", "tombstone", "restore", "purge"},
 	examples: []string{"oar artifacts list --kind packet", "oar artifacts inspect --artifact-id <artifact-id>"},
 	aliases: map[string]string{
 		"ls":   "list",
@@ -159,7 +159,7 @@ var artifactsSubcommandSpec = subcommandSpec{
 
 var boardsSubcommandSpec = subcommandSpec{
 	command:  "boards",
-	valid:    []string{"list", "create", "get", "update", "workspace", "cards"},
+	valid:    []string{"list", "create", "get", "update", "workspace", "archive", "unarchive", "tombstone", "restore", "purge", "cards"},
 	examples: []string{"oar boards list --status active", "oar boards workspace --board-id <board-id>", "oar boards cards move --board-id <board-id> --thread-id <thread-id> --column review --if-board-updated-at <timestamp>"},
 	aliases: map[string]string{
 		"ls":   "list",
@@ -178,7 +178,7 @@ var boardsCardsSubcommandSpec = subcommandSpec{
 
 var docsSubcommandSpec = subcommandSpec{
 	command:  "docs",
-	valid:    []string{"list", "create", "get", "content", "update", "propose-update", "apply", "validate-update", "history", "revision", "tombstone"},
+	valid:    []string{"list", "create", "get", "content", "update", "propose-update", "apply", "validate-update", "history", "revision", "tombstone", "archive", "unarchive", "restore", "purge"},
 	examples: []string{"oar docs list --thread-id <thread-id>", "oar docs content --document-id <document-id>", "oar docs apply --proposal-id <proposal-id>"},
 	aliases: map[string]string{
 		"ls":   "list",
