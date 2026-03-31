@@ -13,6 +13,7 @@
     actorRegistry,
     principalRegistry,
   } from "$lib/actorSession";
+  import ConfirmModal from "$lib/components/ConfirmModal.svelte";
 
   const DOC_STATUS_LABELS = { draft: "Draft", active: "Active" };
 
@@ -21,7 +22,7 @@
   let error = $state("");
   let showArchived = $state(false);
   let archiveBusyId = $state("");
-  let trashConfirmId = $state("");
+  let confirmModal = $state({ open: false, action: "", entityId: "" });
   let trashBusyId = $state("");
   let workspaceSlug = $derived($page.params.workspace);
   let scopedThreadId = $derived(
@@ -238,13 +239,21 @@
     error = "";
     try {
       await coreClient.tombstoneDocument(id, {});
-      trashConfirmId = "";
+      confirmModal = { open: false, action: "", entityId: "" };
       await loadDocuments(scopedThreadId);
     } catch (e) {
       error = `Trash failed: ${e instanceof Error ? e.message : String(e)}`;
     } finally {
       trashBusyId = "";
     }
+  }
+
+  function handleConfirm() {
+    const id = confirmModal.entityId;
+    const action = confirmModal.action;
+    confirmModal = { open: false, action: "", entityId: "" };
+    if (action === "archive") void archiveDocument(id);
+    else if (action === "trash") void trashDocument(id);
   }
 </script>
 
@@ -543,80 +552,66 @@
       role="presentation"
       onclick={(e) => e.stopPropagation()}
     >
-      {#if trashConfirmId !== doc.id}
-        {#if isDocArchived(doc)}
-          <button
-            class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2 py-1 text-[11px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={Boolean(archiveBusyId) || Boolean(trashBusyId)}
-            onclick={() => void unarchiveDocument(doc.id)}
-            type="button"
-          >
-            Unarchive
-          </button>
-        {:else}
-          <button
-            class="cursor-pointer rounded-md p-1 text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border)] hover:text-[var(--ui-accent)] disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={Boolean(archiveBusyId) || Boolean(trashBusyId)}
-            onclick={() => void archiveDocument(doc.id)}
-            title="Archive"
-            type="button"
-          >
-            <svg
-              class="h-3.5 w-3.5"
-              fill="currentColor"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
-              <path
-                d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m8.25 3v6.75m0 0l-3-3m3 3l3-3M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"
-              />
-            </svg>
-          </button>
-        {/if}
+      {#if isDocArchived(doc)}
         <button
-          class="cursor-pointer rounded-md p-1 text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border)] hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={Boolean(trashBusyId) || Boolean(archiveBusyId)}
-          onclick={() => {
-            trashConfirmId = doc.id;
-          }}
-          title="Move to trash"
+          class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2 py-1 text-[11px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={Boolean(archiveBusyId) || Boolean(trashBusyId)}
+          onclick={() => void unarchiveDocument(doc.id)}
+          type="button"
+        >
+          Unarchive
+        </button>
+      {:else}
+        <button
+          class="cursor-pointer rounded-md p-1 text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border)] hover:text-[var(--ui-accent)] disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={Boolean(archiveBusyId) || Boolean(trashBusyId)}
+          onclick={() =>
+            (confirmModal = {
+              open: true,
+              action: "archive",
+              entityId: doc.id,
+            })}
+          title="Archive"
           type="button"
         >
           <svg
             class="h-3.5 w-3.5"
-            fill="none"
+            fill="currentColor"
             viewBox="0 0 24 24"
-            stroke="currentColor"
-            stroke-width="2"
+            aria-hidden="true"
           >
             <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
+              d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m8.25 3v6.75m0 0l-3-3m3 3l3-3M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"
             />
           </svg>
         </button>
-      {:else}
-        <div class="flex items-center gap-1">
-          <button
-            class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2 py-1 text-[11px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]"
-            onclick={() => {
-              trashConfirmId = "";
-            }}
-            type="button"
-          >
-            Cancel
-          </button>
-          <button
-            class="cursor-pointer rounded-md bg-red-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={trashBusyId === doc.id}
-            onclick={() => void trashDocument(doc.id)}
-            type="button"
-          >
-            Trash
-          </button>
-        </div>
       {/if}
+      <button
+        class="cursor-pointer rounded-md p-1 text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border)] hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-50"
+        disabled={Boolean(trashBusyId) || Boolean(archiveBusyId)}
+        onclick={() =>
+          (confirmModal = {
+            open: true,
+            action: "trash",
+            entityId: doc.id,
+          })}
+        title="Move to trash"
+        type="button"
+      >
+        <svg
+          class="h-3.5 w-3.5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
+          />
+        </svg>
+      </button>
     </div>
   </div>
 {/snippet}
@@ -679,3 +674,18 @@
     </div>
   {/if}
 {/if}
+
+<ConfirmModal
+  open={confirmModal.open}
+  title={confirmModal.action === "trash" ? "Move to trash" : "Archive document"}
+  message={confirmModal.action === "trash"
+    ? "This document will be tombstoned. You can restore it from trash later."
+    : "This document will be hidden from default views. You can unarchive it later."}
+  confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
+  variant={confirmModal.action === "trash" ? "danger" : "warning"}
+  busy={confirmModal.action === "trash"
+    ? Boolean(trashBusyId)
+    : Boolean(archiveBusyId)}
+  onconfirm={handleConfirm}
+  oncancel={() => (confirmModal = { open: false, action: "", entityId: "" })}
+/>

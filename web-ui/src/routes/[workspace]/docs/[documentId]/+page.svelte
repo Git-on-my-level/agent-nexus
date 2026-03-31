@@ -1,6 +1,7 @@
 <script>
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
+  import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import SearchableEntityPicker from "$lib/components/SearchableEntityPicker.svelte";
   import { coreClient } from "$lib/coreClient";
@@ -44,7 +45,7 @@
   let saveError = $state("");
   let loadingSelectedRevisionKey = $state("");
   let metadataExpanded = $state(false);
-  let docTrashConfirm = $state(false);
+  let confirmModal = $state({ open: false, action: "" });
   let docLifecycleBusy = $state(false);
 
   let displayedContent = $derived(
@@ -106,7 +107,7 @@
 
   $effect(() => {
     documentId;
-    docTrashConfirm = false;
+    confirmModal = { open: false, action: "" };
   });
 
   $effect(() => {
@@ -337,6 +338,7 @@
   }
 
   async function handleUnarchiveDocument() {
+    confirmModal = { open: false, action: "" };
     if (!documentId || docLifecycleBusy || document?.tombstoned_at) return;
     docLifecycleBusy = true;
     try {
@@ -347,12 +349,18 @@
     }
   }
 
+  function handleConfirm() {
+    const action = confirmModal.action;
+    confirmModal = { open: false, action: "" };
+    if (action === "archive") handleArchiveDocument();
+    else if (action === "trash") handleTombstoneDocument();
+  }
+
   async function handleTombstoneDocument() {
     if (!documentId || docLifecycleBusy) return;
     docLifecycleBusy = true;
     try {
       await coreClient.tombstoneDocument(documentId, {});
-      docTrashConfirm = false;
       await goto(workspacePath(workspaceSlug, "/docs"));
     } finally {
       docLifecycleBusy = false;
@@ -360,6 +368,7 @@
   }
 
   async function handleRestoreDocument() {
+    confirmModal = { open: false, action: "" };
     if (!documentId || docLifecycleBusy) return;
     docLifecycleBusy = true;
     try {
@@ -559,12 +568,23 @@
             {/if}
             {#if !document.archived_at}
               <button
-                class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text)] hover:bg-[var(--ui-border)] disabled:opacity-50"
+                aria-label="Archive"
+                class="cursor-pointer rounded-md p-1.5 text-[var(--ui-text-muted)] hover:bg-[var(--ui-border)] hover:text-[var(--ui-accent)] disabled:opacity-50"
                 disabled={docLifecycleBusy}
-                onclick={handleArchiveDocument}
+                onclick={() =>
+                  (confirmModal = { open: true, action: "archive" })}
                 type="button"
               >
-                Archive
+                <svg
+                  class="h-4 w-4"
+                  fill="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m8.25 3v6.75m0 0l-3-3m3 3l3-3M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"
+                  />
+                </svg>
               </button>
             {/if}
             <button
@@ -587,45 +607,27 @@
               </svg>
               Revision history
             </button>
-            {#if docTrashConfirm}
-              <button
-                class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] px-2 py-1 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border)]"
-                onclick={() => (docTrashConfirm = false)}
-                type="button"
+            <button
+              aria-label="Move document to trash"
+              class="cursor-pointer rounded-md p-1.5 text-[var(--ui-text-muted)] hover:bg-[var(--ui-border)] hover:text-red-400 disabled:opacity-50"
+              disabled={docLifecycleBusy}
+              onclick={() => (confirmModal = { open: true, action: "trash" })}
+              type="button"
+            >
+              <svg
+                class="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="2"
               >
-                Cancel
-              </button>
-              <button
-                class="cursor-pointer rounded-md border border-red-500/40 bg-red-500/15 px-2 py-1 text-[12px] font-medium text-red-400 hover:bg-red-500/25 disabled:opacity-50"
-                disabled={docLifecycleBusy}
-                onclick={handleTombstoneDocument}
-                type="button"
-              >
-                Confirm
-              </button>
-            {:else}
-              <button
-                aria-label="Move document to trash"
-                class="cursor-pointer rounded-md p-1.5 text-[var(--ui-text-muted)] hover:bg-[var(--ui-border)] hover:text-red-400 disabled:opacity-50"
-                disabled={docLifecycleBusy}
-                onclick={() => (docTrashConfirm = true)}
-                type="button"
-              >
-                <svg
-                  class="h-4 w-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  stroke-width="2"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                  />
-                </svg>
-              </button>
-            {/if}
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
+                />
+              </svg>
+            </button>
           </div>
         {/if}
       </div>
@@ -983,3 +985,16 @@
     Document not found.
   </div>
 {/if}
+
+<ConfirmModal
+  open={confirmModal.open}
+  title={confirmModal.action === "trash" ? "Move to trash" : "Archive document"}
+  message={confirmModal.action === "trash"
+    ? "This document will be tombstoned. You can restore it from trash later."
+    : "This document will be hidden from default views. You can unarchive it later."}
+  confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
+  variant={confirmModal.action === "trash" ? "danger" : "warning"}
+  busy={docLifecycleBusy}
+  onconfirm={handleConfirm}
+  oncancel={() => (confirmModal = { open: false, action: "" })}
+/>
