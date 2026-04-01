@@ -2746,6 +2746,156 @@ paths:
         '404':
           $ref: '#/components/responses/ErrorResponse'
 
+  /events/{event_id}/archive:
+    post:
+      operationId: archiveEvent
+      summary: Archive an event
+      tags: [events]
+      x-oar-surface: "canonical"
+      x-oar-command-id: "events.archive"
+      x-oar-cli-path: "events archive"
+      x-oar-why: "Hide an event from default timeline and message views while preserving it."
+      x-oar-examples:
+        - title: Archive event
+          command: oar events archive --event-id evt_123 --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ event }` with archive metadata set."
+      x-oar-error-codes: [invalid_json, invalid_request, not_found]
+      x-oar-concepts: [events, lifecycle]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Idempotent. For message_posted events, cascades to all reply descendants."
+      parameters:
+        - $ref: '#/components/parameters/EventID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TombstoneRequest'
+      responses:
+        '200':
+          description: Event archived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /events/{event_id}/unarchive:
+    post:
+      operationId: unarchiveEvent
+      summary: Unarchive an event
+      tags: [events]
+      x-oar-surface: "canonical"
+      x-oar-command-id: "events.unarchive"
+      x-oar-cli-path: "events unarchive"
+      x-oar-why: "Restore an archived event back to default timeline and message views."
+      x-oar-examples:
+        - title: Unarchive event
+          command: oar events unarchive --event-id evt_123 --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ event }` with archive metadata cleared."
+      x-oar-error-codes: [invalid_json, invalid_request, not_found]
+      x-oar-concepts: [events, lifecycle]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Idempotent. For message_posted events, cascades to all reply descendants."
+      parameters:
+        - $ref: '#/components/parameters/EventID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TombstoneRequest'
+      responses:
+        '200':
+          description: Event unarchived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /events/{event_id}/tombstone:
+    post:
+      operationId: tombstoneEvent
+      summary: Tombstone an event (soft-delete)
+      tags: [events]
+      x-oar-surface: "canonical"
+      x-oar-command-id: "events.tombstone"
+      x-oar-cli-path: "events tombstone"
+      x-oar-why: "Mark an event as deleted while preserving audit trail; tombstoned events are excluded from timeline and messages by default."
+      x-oar-examples:
+        - title: Tombstone event
+          command: oar events tombstone --event-id evt_123 --reason "spam" --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ event }` with tombstone metadata set."
+      x-oar-error-codes: [invalid_json, invalid_request, not_found]
+      x-oar-concepts: [events, lifecycle]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Idempotent. For message_posted events, cascades to all reply descendants."
+      parameters:
+        - $ref: '#/components/parameters/EventID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TombstoneRequest'
+      responses:
+        '200':
+          description: Event tombstoned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /events/{event_id}/restore:
+    post:
+      operationId: restoreEvent
+      summary: Restore a tombstoned event
+      tags: [events]
+      x-oar-surface: "canonical"
+      x-oar-command-id: "events.restore"
+      x-oar-cli-path: "events restore"
+      x-oar-why: "Undo a tombstone and return the event to active state."
+      x-oar-examples:
+        - title: Restore event
+          command: oar events restore --event-id evt_123 --json
+      x-oar-input-mode: "json-body"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ event }` with tombstone metadata cleared."
+      x-oar-error-codes: [invalid_json, invalid_request, not_found]
+      x-oar-concepts: [events, lifecycle]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "Idempotent. For message_posted events, cascades to all reply descendants."
+      parameters:
+        - $ref: '#/components/parameters/EventID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TombstoneRequest'
+      responses:
+        '200':
+          description: Event restored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
   /artifacts:
     post:
       operationId: createArtifact

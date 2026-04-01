@@ -153,11 +153,15 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `events`
 
-- Commands: `10`
+- Commands: `14`
 - Command IDs:
+  - `events.archive`
   - `events.create`
   - `events.get`
+  - `events.restore`
   - `events.stream`
+  - `events.tombstone`
+  - `events.unarchive`
   - `inbox.ack`
   - `notifications.dismiss`
   - `notifications.list`
@@ -233,7 +237,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `lifecycle`
 
-- Commands: `20`
+- Commands: `24`
 - Command IDs:
   - `artifacts.archive`
   - `artifacts.purge`
@@ -250,6 +254,10 @@ Generated from `contracts/oar-openapi.yaml`.
   - `docs.restore`
   - `docs.tombstone`
   - `docs.unarchive`
+  - `events.archive`
+  - `events.restore`
+  - `events.tombstone`
+  - `events.unarchive`
   - `threads.archive`
   - `threads.purge`
   - `threads.restore`

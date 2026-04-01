@@ -156,6 +156,144 @@ func handleGetEvent(w http.ResponseWriter, r *http.Request, opts handlerOptions,
 	writeJSON(w, http.StatusOK, map[string]any{"event": event})
 }
 
+func handleArchiveEvent(w http.ResponseWriter, r *http.Request, opts handlerOptions, eventID string) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+
+	var req struct {
+		ActorID string `json:"actor_id"`
+	}
+	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+
+	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
+	if !ok {
+		return
+	}
+
+	event, err := opts.primitiveStore.ArchiveEvent(r.Context(), actorID, eventID)
+	if err != nil {
+		if errors.Is(err, primitives.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "event not found")
+			return
+		}
+		if errors.Is(err, primitives.ErrAlreadyTombstoned) {
+			writeError(w, http.StatusConflict, "already_tombstoned", "event is tombstoned")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to archive event")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"event": event})
+}
+
+func handleUnarchiveEvent(w http.ResponseWriter, r *http.Request, opts handlerOptions, eventID string) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+
+	var req struct {
+		ActorID string `json:"actor_id"`
+	}
+	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+
+	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
+	if !ok {
+		return
+	}
+
+	event, err := opts.primitiveStore.UnarchiveEvent(r.Context(), actorID, eventID)
+	if err != nil {
+		if errors.Is(err, primitives.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "event not found")
+			return
+		}
+		if errors.Is(err, primitives.ErrNotArchived) {
+			writeError(w, http.StatusConflict, "not_archived", "event is not archived")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to unarchive event")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"event": event})
+}
+
+func handleTombstoneEvent(w http.ResponseWriter, r *http.Request, opts handlerOptions, eventID string) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+
+	var req struct {
+		ActorID string `json:"actor_id"`
+		Reason  string `json:"reason"`
+	}
+	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+
+	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
+	if !ok {
+		return
+	}
+
+	event, err := opts.primitiveStore.TombstoneEvent(r.Context(), actorID, eventID, req.Reason)
+	if err != nil {
+		if errors.Is(err, primitives.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "event not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to tombstone event")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"event": event})
+}
+
+func handleRestoreEvent(w http.ResponseWriter, r *http.Request, opts handlerOptions, eventID string) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+
+	var req struct {
+		ActorID string `json:"actor_id"`
+		Reason  string `json:"reason"`
+	}
+	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+
+	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
+	if !ok {
+		return
+	}
+
+	event, err := opts.primitiveStore.RestoreEvent(r.Context(), actorID, eventID)
+	if err != nil {
+		if errors.Is(err, primitives.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "event not found")
+			return
+		}
+		if errors.Is(err, primitives.ErrNotTombstoned) {
+			writeError(w, http.StatusConflict, "not_tombstoned", "event is not currently tombstoned")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to restore event")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"event": event})
+}
+
 func handleCreateArtifact(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")

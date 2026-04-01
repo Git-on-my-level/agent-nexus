@@ -40,6 +40,10 @@ type ActorRegistry interface {
 type PrimitiveStore interface {
 	AppendEvent(ctx context.Context, actorID string, event map[string]any) (map[string]any, error)
 	GetEvent(ctx context.Context, id string) (map[string]any, error)
+	ArchiveEvent(ctx context.Context, actorID, eventID string) (map[string]any, error)
+	UnarchiveEvent(ctx context.Context, actorID, eventID string) (map[string]any, error)
+	TombstoneEvent(ctx context.Context, actorID, eventID, reason string) (map[string]any, error)
+	RestoreEvent(ctx context.Context, actorID, eventID string) (map[string]any, error)
 	CreateArtifact(ctx context.Context, actorID string, artifact map[string]any, content any, contentType string) (map[string]any, error)
 	CreateArtifactAndEvent(ctx context.Context, actorID string, artifact map[string]any, content any, contentType string, event map[string]any) (map[string]any, map[string]any, error)
 	GetArtifact(ctx context.Context, id string) (map[string]any, error)
@@ -1527,24 +1531,65 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 	})
 
 	registerRoute("/events/", func(r *http.Request) routeAccessRequirement {
-		eventID := strings.TrimPrefix(r.URL.Path, "/events/")
-		if eventID == "" || strings.Contains(eventID, "/") || r.Method != http.MethodGet {
+		remainder := strings.TrimPrefix(r.URL.Path, "/events/")
+		if remainder == "" {
 			return routeAccessRequirement{}
 		}
-		return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
-	}, func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
-			return
+		switch {
+		case strings.HasSuffix(remainder, "/archive"), strings.HasSuffix(remainder, "/unarchive"),
+			strings.HasSuffix(remainder, "/tombstone"), strings.HasSuffix(remainder, "/restore"):
+			if r.Method == http.MethodPost {
+				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+			}
+			return routeAccessRequirement{}
+		default:
+			if !strings.Contains(remainder, "/") && r.Method == http.MethodGet {
+				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+			}
+			return routeAccessRequirement{}
 		}
-
-		eventID := strings.TrimPrefix(r.URL.Path, "/events/")
-		if eventID == "" || strings.Contains(eventID, "/") {
+	}, func(w http.ResponseWriter, r *http.Request) {
+		remainder := strings.TrimPrefix(r.URL.Path, "/events/")
+		if remainder == "" {
 			writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
 			return
 		}
 
-		handleGetEvent(w, r, opts, eventID)
+		for _, suffix := range []string{"/archive", "/unarchive", "/tombstone", "/restore"} {
+			if strings.HasSuffix(remainder, suffix) {
+				if r.Method != http.MethodPost {
+					writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+					return
+				}
+				eventID := strings.TrimSuffix(remainder, suffix)
+				eventID = strings.TrimSuffix(eventID, "/")
+				if eventID == "" || strings.Contains(eventID, "/") {
+					writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+					return
+				}
+				switch suffix {
+				case "/archive":
+					handleArchiveEvent(w, r, opts, eventID)
+				case "/unarchive":
+					handleUnarchiveEvent(w, r, opts, eventID)
+				case "/tombstone":
+					handleTombstoneEvent(w, r, opts, eventID)
+				case "/restore":
+					handleRestoreEvent(w, r, opts, eventID)
+				}
+				return
+			}
+		}
+
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+			return
+		}
+		if strings.Contains(remainder, "/") {
+			writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+			return
+		}
+		handleGetEvent(w, r, opts, remainder)
 	})
 
 	registerRoute("/artifacts", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodGet, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {

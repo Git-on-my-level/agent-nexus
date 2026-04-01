@@ -5039,6 +5039,37 @@ func TestDocsRevisionSubcommandRequiredGuidance(t *testing.T) {
 	}
 }
 
+func TestFilterEventsByLifecycleState(t *testing.T) {
+	t.Parallel()
+
+	active := map[string]any{"id": "evt_a", "type": "actor_statement"}
+	archived := map[string]any{"id": "evt_b", "archived_at": "2024-01-01T00:00:00Z"}
+	tomb := map[string]any{"id": "evt_c", "tombstoned_at": "2024-01-02T00:00:00Z"}
+	archivedAndTomb := map[string]any{"id": "evt_d", "archived_at": "2024-01-01T00:00:00Z", "tombstoned_at": "2024-01-02T00:00:00Z"}
+
+	events := []any{active, archived, tomb, archivedAndTomb}
+
+	def := filterEventsByLifecycleState(events, false, false, false, false)
+	if len(def) != 1 || anyString(asMap(def[0])["id"]) != "evt_a" {
+		t.Fatalf("default filter: want active only, got %#v", def)
+	}
+
+	incAll := filterEventsByLifecycleState(events, true, false, true, false)
+	if len(incAll) != 4 {
+		t.Fatalf("include both: want all four, got %d %#v", len(incAll), incAll)
+	}
+
+	tombOnly := filterEventsByLifecycleState(events, false, false, false, true)
+	if len(tombOnly) != 2 {
+		t.Fatalf("tombstoned-only: want 2, got %#v", tombOnly)
+	}
+
+	archOnly := filterEventsByLifecycleState(events, false, true, false, false)
+	if len(archOnly) != 1 || anyString(asMap(archOnly[0])["id"]) != "evt_b" {
+		t.Fatalf("archived-only: want evt_b, got %#v", archOnly)
+	}
+}
+
 func Example_oarThreadsList() {
 	fmt.Println("oar --json threads list --status active")
 	// Output: oar --json threads list --status active

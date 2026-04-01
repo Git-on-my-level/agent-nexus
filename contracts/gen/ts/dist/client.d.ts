@@ -103,9 +103,13 @@ export declare class OarClient {
     docsTombstone(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsUnarchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsUpdate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    eventsArchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     eventsCreate(options?: RequestOptions): Promise<InvokeResult>;
     eventsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    eventsRestore(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     eventsStream(options?: RequestOptions): Promise<InvokeResult>;
+    eventsTombstone(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    eventsUnarchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     inboxAck(options?: RequestOptions): Promise<InvokeResult>;
     inboxGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     inboxList(options?: RequestOptions): Promise<InvokeResult>;

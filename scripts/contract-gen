@@ -23,6 +23,11 @@ go run ./cmd/contract-gen \
 
 cd "$ROOT_DIR"
 
+# contract-gen writes client.ts only; web-ui imports dist/client.js. Keep dist in sync
+# so command_registry_digest matches core's contracts/gen/meta/commands.json.
+pnpm exec tsc -p contracts/gen/ts/tsconfig.json
+pnpm exec tsc -p contracts/gen/control/ts/tsconfig.json
+
 mkdir -p cli/internal/registry
 cp contracts/gen/meta/commands.json cli/internal/registry/commands.json
 cp contracts/gen/meta/concepts.json cli/internal/registry/concepts.json

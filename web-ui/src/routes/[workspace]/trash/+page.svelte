@@ -1,6 +1,7 @@
 <script>
   import { onMount } from "svelte";
 
+  import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import {
     authenticatedAgent,
     getAuthenticatedActorId,
@@ -31,7 +32,7 @@
   let error = $state("");
   let purgeConfirmId = $state("");
   let busyItemId = $state("");
-  let purgeAllConfirm = $state(false);
+  let purgeAllOpen = $state(false);
   let purgeAllBusy = $state(false);
 
   let tabs = $derived([
@@ -84,7 +85,7 @@
   function switchTab(tabId) {
     activeTab = tabId;
     purgeConfirmId = "";
-    purgeAllConfirm = false;
+    purgeAllOpen = false;
   }
 
   function docStatusColor(status) {
@@ -292,7 +293,7 @@
         failed++;
       }
     }
-    purgeAllConfirm = false;
+    purgeAllOpen = false;
     purgeAllBusy = false;
     if (failed > 0) {
       error = `Purge completed with ${failed} failure${failed > 1 ? "s" : ""}`;
@@ -322,53 +323,22 @@
     <p class="mt-0.5 text-[12px] text-[var(--ui-text-muted)]">
       Tombstoned items available for restore or permanent deletion. Restore
       returns them to their normal lists; purge permanently removes them (human
-      principals only).
+      principals only). Tombstoned events and messages are restored from within
+      their thread's timeline view.
     </p>
   </div>
   {#if isHumanPrincipal && !loading && activeItems.length > 0}
     <div class="shrink-0">
-      {#if !purgeAllConfirm}
-        <button
-          class="cursor-pointer rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-[12px] font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={Boolean(busyItemId) || purgeAllBusy}
-          onclick={() => {
-            purgeAllConfirm = true;
-          }}
-          type="button"
-        >
-          Purge all ({activeItems.length})
-        </button>
-      {:else}
-        <div
-          class="rounded-md border border-red-500/35 bg-red-500/5 p-2.5 text-[12px]"
-        >
-          <p class="font-medium text-red-300">
-            Permanently delete all {activeItems.length}
-            {entitySingular(activeTab)}{activeItems.length === 1 ? "" : "s"}?
-          </p>
-          <div class="mt-2 flex justify-end gap-1.5">
-            <button
-              class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]"
-              onclick={() => {
-                purgeAllConfirm = false;
-              }}
-              type="button"
-            >
-              Cancel
-            </button>
-            <button
-              class="cursor-pointer rounded-md bg-red-600 px-2.5 py-1.5 text-[12px] font-medium text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={purgeAllBusy}
-              onclick={() => {
-                void purgeAll();
-              }}
-              type="button"
-            >
-              {purgeAllBusy ? "Purging..." : "Confirm purge all"}
-            </button>
-          </div>
-        </div>
-      {/if}
+      <button
+        class="cursor-pointer rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-[12px] font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+        disabled={Boolean(busyItemId) || purgeAllBusy}
+        onclick={() => {
+          purgeAllOpen = true;
+        }}
+        type="button"
+      >
+        Purge all ({activeItems.length})
+      </button>
     </div>
   {/if}
 </div>
@@ -860,3 +830,19 @@
     {/each}
   </div>
 {/if}
+
+<ConfirmModal
+  open={purgeAllOpen}
+  title="Empty trash"
+  message="Permanently delete all {activeItems.length} {entitySingular(
+    activeTab,
+  )}{activeItems.length === 1 ? '' : 's'} in this tab. This cannot be undone."
+  confirmLabel="Purge all"
+  variant="danger"
+  busy={purgeAllBusy}
+  typedConfirmation="Empty trash"
+  onconfirm={() => void purgeAll()}
+  oncancel={() => {
+    purgeAllOpen = false;
+  }}
+/>

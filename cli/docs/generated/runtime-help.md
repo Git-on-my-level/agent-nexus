@@ -94,6 +94,10 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 - `events create` (command): Append event
 - `events stream` (command): Stream events via Server-Sent Events (SSE)
 - `events tail` (command): Stream events via Server-Sent Events (SSE)
+- `events archive` (command): Archive an event
+- `events unarchive` (command): Unarchive an event
+- `events tombstone` (command): Tombstone an event (soft-delete)
+- `events restore` (command): Restore a tombstoned event
 - `inbox list` (command): List derived inbox items
 - `inbox get` (command): Get derived inbox item detail
 - `inbox ack` (command): Acknowledge an inbox item
@@ -1237,9 +1241,13 @@ Manage events and event streams
 Generated Help: events
 
 Commands:
+  events archive           Archive an event
   events create            Append event
   events get               Get event by id
+  events restore           Restore a tombstoned event
   events stream            Stream events via Server-Sent Events (SSE)
+  events tombstone         Tombstone an event (soft-delete)
+  events unarchive         Unarchive an event
 
 Local inspection helpers:
   events list              List timeline events with thread/type/actor filters, id mode, and preview summaries.
@@ -1727,6 +1735,14 @@ Generated Help: threads timeline
 - Examples:
   - Timeline: `oar threads timeline --thread-id thread_123 --json`
 
+
+Local CLI flags:
+  --include-archived        Include archived events in the timeline.
+  --archived-only           Show only archived events.
+  --include-tombstoned      Include tombstoned events in the timeline.
+  --tombstoned-only         Show only tombstoned events.
+
+Note: by default, archived and tombstoned events are excluded from the timeline output.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3102,7 +3118,7 @@ Generated Help: events get
 - Error codes: `not_found`
 - Concepts: `events`
 - Agent notes: Safe and idempotent.
-- Adjacent commands: `events create`, `events stream`
+- Adjacent commands: `events archive`, `events create`, `events restore`, `events stream`, `events tombstone`, `events unarchive`
 - Examples:
   - Get event: `oar events get --event-id event_123 --json`
 
@@ -3130,7 +3146,7 @@ Generated Help: events create
 - Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`
 - Concepts: `events`, `append-only`
 - Agent notes: Replay-safe when `request_key` is reused with the same body.
-- Adjacent commands: `events get`, `events stream`
+- Adjacent commands: `events archive`, `events get`, `events restore`, `events stream`, `events tombstone`, `events unarchive`
 - Examples:
   - Append event: `oar events create --from-file event.json --json`
 
@@ -3188,7 +3204,7 @@ Generated Help: events stream
 - Error codes: `internal_error`, `cli_outdated`
 - Concepts: `events`, `streaming`
 - Agent notes: Supports `Last-Event-ID` header or `last_event_id` query for resumable reads.
-- Adjacent commands: `events create`, `events get`
+- Adjacent commands: `events archive`, `events create`, `events get`, `events restore`, `events tombstone`, `events unarchive`
 - Examples:
   - Stream all events: `oar events tail --json`
   - Resume by id: `oar events tail --last-event-id <event_id> --json`
@@ -3217,7 +3233,7 @@ Generated Help: events tail
 - Error codes: `internal_error`, `cli_outdated`
 - Concepts: `events`, `streaming`
 - Agent notes: Supports `Last-Event-ID` header or `last_event_id` query for resumable reads.
-- Adjacent commands: `events create`, `events get`
+- Adjacent commands: `events archive`, `events create`, `events get`, `events restore`, `events tombstone`, `events unarchive`
 - Examples:
   - Stream all events: `oar events tail --json`
   - Resume by id: `oar events tail --last-event-id <event_id> --json`
@@ -3226,6 +3242,130 @@ Generated Help: events tail
 Global flags:
   Global flags can appear before or after the command path.
   Examples: oar --json events tail ... ; oar events tail ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `events archive`
+
+Archive an event
+
+```text
+Generated Help: events archive
+
+- Command ID: `events.archive`
+- CLI path: `events archive`
+- HTTP: `POST /events/{event_id}/archive`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Hide an event from default timeline and message views while preserving it.
+- Output: Returns `{ event }` with archive metadata set.
+- Error codes: `invalid_json`, `invalid_request`, `not_found`
+- Concepts: `events`, `lifecycle`
+- Agent notes: Idempotent. For message_posted events, cascades to all reply descendants.
+- Adjacent commands: `events create`, `events get`, `events restore`, `events stream`, `events tombstone`, `events unarchive`
+- Examples:
+  - Archive event: `oar events archive --event-id evt_123 --json`
+
+Body schema:
+  Required: actor_id (string)
+  Optional: reason (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json events archive ... ; oar events archive ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `events unarchive`
+
+Unarchive an event
+
+```text
+Generated Help: events unarchive
+
+- Command ID: `events.unarchive`
+- CLI path: `events unarchive`
+- HTTP: `POST /events/{event_id}/unarchive`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Restore an archived event back to default timeline and message views.
+- Output: Returns `{ event }` with archive metadata cleared.
+- Error codes: `invalid_json`, `invalid_request`, `not_found`
+- Concepts: `events`, `lifecycle`
+- Agent notes: Idempotent. For message_posted events, cascades to all reply descendants.
+- Adjacent commands: `events archive`, `events create`, `events get`, `events restore`, `events stream`, `events tombstone`
+- Examples:
+  - Unarchive event: `oar events unarchive --event-id evt_123 --json`
+
+Body schema:
+  Required: actor_id (string)
+  Optional: reason (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json events unarchive ... ; oar events unarchive ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `events tombstone`
+
+Tombstone an event (soft-delete)
+
+```text
+Generated Help: events tombstone
+
+- Command ID: `events.tombstone`
+- CLI path: `events tombstone`
+- HTTP: `POST /events/{event_id}/tombstone`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Mark an event as deleted while preserving audit trail; tombstoned events are excluded from timeline and messages by default.
+- Output: Returns `{ event }` with tombstone metadata set.
+- Error codes: `invalid_json`, `invalid_request`, `not_found`
+- Concepts: `events`, `lifecycle`
+- Agent notes: Idempotent. For message_posted events, cascades to all reply descendants.
+- Adjacent commands: `events archive`, `events create`, `events get`, `events restore`, `events stream`, `events unarchive`
+- Examples:
+  - Tombstone event: `oar events tombstone --event-id evt_123 --reason "spam" --json`
+
+Body schema:
+  Required: actor_id (string)
+  Optional: reason (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json events tombstone ... ; oar events tombstone ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `events restore`
+
+Restore a tombstoned event
+
+```text
+Generated Help: events restore
+
+- Command ID: `events.restore`
+- CLI path: `events restore`
+- HTTP: `POST /events/{event_id}/restore`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Undo a tombstone and return the event to active state.
+- Output: Returns `{ event }` with tombstone metadata cleared.
+- Error codes: `invalid_json`, `invalid_request`, `not_found`
+- Concepts: `events`, `lifecycle`
+- Agent notes: Idempotent. For message_posted events, cascades to all reply descendants.
+- Adjacent commands: `events archive`, `events create`, `events get`, `events stream`, `events tombstone`, `events unarchive`
+- Examples:
+  - Restore event: `oar events restore --event-id evt_123 --json`
+
+Body schema:
+  Required: actor_id (string)
+  Optional: reason (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json events restore ... ; oar events restore ... --json
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3634,6 +3774,10 @@ Flags:
   --mine                       Resolve to the active profile actor_id.
   --max-events <n>             Keep the most recent matching events.
   --full-id                    Render full event ids in human output.
+  --include-archived           Include archived events in results.
+  --archived-only              Show only archived events.
+  --include-tombstoned         Include tombstoned events in results.
+  --tombstoned-only            Show only tombstoned events.
 
 
 Global flags:

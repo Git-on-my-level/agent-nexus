@@ -1088,6 +1088,24 @@ var CommandRegistry = []CommandSpec{
 		},
 	},
 	{
+		CommandID:  "events.archive",
+		CLIPath:    "events archive",
+		Group:      "events",
+		Method:     "POST",
+		Path:       "/events/{event_id}/archive",
+		PathParams: []string{"event_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"events", "lifecycle"},
+		Adjacent:   []string{"events.create", "events.get", "events.restore", "events.stream", "events.tombstone", "events.unarchive"},
+		Examples: []Example{
+			{
+				Title:   "Archive event",
+				Command: "oar events archive --event-id evt_123 --json",
+			},
+		},
+	},
+	{
 		CommandID: "events.create",
 		CLIPath:   "events create",
 		Group:     "events",
@@ -1096,7 +1114,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "stable",
 		Concepts:  []string{"events", "append-only"},
-		Adjacent:  []string{"events.get", "events.stream"},
+		Adjacent:  []string{"events.archive", "events.get", "events.restore", "events.stream", "events.tombstone", "events.unarchive"},
 		Examples: []Example{
 			{
 				Title:   "Append event",
@@ -1114,11 +1132,29 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "stable",
 		Concepts:   []string{"events"},
-		Adjacent:   []string{"events.create", "events.stream"},
+		Adjacent:   []string{"events.archive", "events.create", "events.restore", "events.stream", "events.tombstone", "events.unarchive"},
 		Examples: []Example{
 			{
 				Title:   "Get event",
 				Command: "oar events get --event-id event_123 --json",
+			},
+		},
+	},
+	{
+		CommandID:  "events.restore",
+		CLIPath:    "events restore",
+		Group:      "events",
+		Method:     "POST",
+		Path:       "/events/{event_id}/restore",
+		PathParams: []string{"event_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"events", "lifecycle"},
+		Adjacent:   []string{"events.archive", "events.create", "events.get", "events.stream", "events.tombstone", "events.unarchive"},
+		Examples: []Example{
+			{
+				Title:   "Restore event",
+				Command: "oar events restore --event-id evt_123 --json",
 			},
 		},
 	},
@@ -1131,7 +1167,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"events", "streaming"},
-		Adjacent:  []string{"events.create", "events.get"},
+		Adjacent:  []string{"events.archive", "events.create", "events.get", "events.restore", "events.tombstone", "events.unarchive"},
 		Examples: []Example{
 			{
 				Title:   "Stream all events",
@@ -1140,6 +1176,42 @@ var CommandRegistry = []CommandSpec{
 			{
 				Title:   "Resume by id",
 				Command: "oar events stream --last-event-id <event_id> --json",
+			},
+		},
+	},
+	{
+		CommandID:  "events.tombstone",
+		CLIPath:    "events tombstone",
+		Group:      "events",
+		Method:     "POST",
+		Path:       "/events/{event_id}/tombstone",
+		PathParams: []string{"event_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"events", "lifecycle"},
+		Adjacent:   []string{"events.archive", "events.create", "events.get", "events.restore", "events.stream", "events.unarchive"},
+		Examples: []Example{
+			{
+				Title:   "Tombstone event",
+				Command: "oar events tombstone --event-id evt_123 --reason \"spam\" --json",
+			},
+		},
+	},
+	{
+		CommandID:  "events.unarchive",
+		CLIPath:    "events unarchive",
+		Group:      "events",
+		Method:     "POST",
+		Path:       "/events/{event_id}/unarchive",
+		PathParams: []string{"event_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"events", "lifecycle"},
+		Adjacent:   []string{"events.archive", "events.create", "events.get", "events.restore", "events.stream", "events.tombstone"},
+		Examples: []Example{
+			{
+				Title:   "Unarchive event",
+				Command: "oar events unarchive --event-id evt_123 --json",
 			},
 		},
 	},
@@ -2103,6 +2175,10 @@ func (c *Client) DocsUpdate(ctx context.Context, pathParams map[string]string, o
 	return c.Invoke(ctx, "docs.update", pathParams, opts)
 }
 
+func (c *Client) EventsArchive(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "events.archive", pathParams, opts)
+}
+
 func (c *Client) EventsCreate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "events.create", nil, opts)
 }
@@ -2111,8 +2187,20 @@ func (c *Client) EventsGet(ctx context.Context, pathParams map[string]string, op
 	return c.Invoke(ctx, "events.get", pathParams, opts)
 }
 
+func (c *Client) EventsRestore(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "events.restore", pathParams, opts)
+}
+
 func (c *Client) EventsStream(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "events.stream", nil, opts)
+}
+
+func (c *Client) EventsTombstone(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "events.tombstone", pathParams, opts)
+}
+
+func (c *Client) EventsUnarchive(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "events.unarchive", pathParams, opts)
 }
 
 func (c *Client) InboxAck(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {

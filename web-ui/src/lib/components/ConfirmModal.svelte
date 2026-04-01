@@ -7,15 +7,29 @@
     cancelLabel = "Cancel",
     variant = "danger",
     busy = false,
+    typedConfirmation = "",
     onconfirm = () => {},
     oncancel = () => {},
   } = $props();
 
   let confirmBtnEl = $state(null);
+  let typedInputEl = $state(null);
+  let typedValue = $state("");
+
+  let needsTyped = $derived(typedConfirmation.length > 0);
+  let typedMatch = $derived(
+    needsTyped && typedValue.trim() === typedConfirmation,
+  );
+  let confirmDisabled = $derived(busy || (needsTyped && !typedMatch));
 
   $effect(() => {
     if (!open) return;
-    confirmBtnEl?.focus();
+    typedValue = "";
+    if (needsTyped) {
+      setTimeout(() => typedInputEl?.focus(), 0);
+    } else {
+      confirmBtnEl?.focus();
+    }
     function onKeydown(e) {
       if (e.key === "Escape" && !busy) {
         e.preventDefault();
@@ -30,6 +44,13 @@
   function handleBackdropClick(e) {
     if (e.target === e.currentTarget && !busy) {
       oncancel();
+    }
+  }
+
+  function handleTypedKeydown(e) {
+    if (e.key === "Enter" && typedMatch && !busy) {
+      e.preventDefault();
+      onconfirm();
     }
   }
 </script>
@@ -49,6 +70,22 @@
       {#if message}
         <p class="confirm-message">{message}</p>
       {/if}
+      {#if needsTyped}
+        <label class="confirm-typed">
+          <span class="confirm-typed-label">
+            Type <span class="confirm-typed-phrase">{typedConfirmation}</span> to
+            confirm
+          </span>
+          <input
+            bind:this={typedInputEl}
+            bind:value={typedValue}
+            class="confirm-typed-input"
+            autocomplete="off"
+            spellcheck="false"
+            onkeydown={handleTypedKeydown}
+          />
+        </label>
+      {/if}
       <div class="confirm-actions">
         <button
           class="confirm-btn confirm-btn--cancel"
@@ -63,7 +100,7 @@
             ? 'confirm-btn--danger'
             : 'confirm-btn--warning'}"
           bind:this={confirmBtnEl}
-          disabled={busy}
+          disabled={confirmDisabled}
           onclick={onconfirm}
           type="button"
         >
@@ -115,6 +152,40 @@
     font-size: 13px;
     color: var(--ui-text-muted);
     line-height: 1.5;
+  }
+
+  .confirm-typed {
+    display: block;
+    margin-top: 14px;
+  }
+
+  .confirm-typed-label {
+    display: block;
+    font-size: 12px;
+    color: var(--ui-text-muted);
+    margin-bottom: 6px;
+  }
+
+  .confirm-typed-phrase {
+    font-weight: 600;
+    color: var(--ui-text);
+  }
+
+  .confirm-typed-input {
+    width: 100%;
+    padding: 6px 10px;
+    font-size: 13px;
+    font-family: var(--ui-font-sans);
+    color: var(--ui-text);
+    background: var(--ui-bg);
+    border: 1px solid var(--ui-border);
+    border-radius: var(--ui-radius-md);
+    outline: none;
+    transition: border-color 80ms ease;
+  }
+
+  .confirm-typed-input:focus {
+    border-color: var(--ui-accent);
   }
 
   .confirm-actions {

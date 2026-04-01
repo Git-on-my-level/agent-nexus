@@ -195,7 +195,7 @@ var docsRevisionSubcommandSpec = subcommandSpec{
 
 var eventsSubcommandSpec = subcommandSpec{
 	command:  "events",
-	valid:    []string{"list", "get", "create", "validate", "stream", "tail", "explain"},
+	valid:    []string{"list", "get", "create", "validate", "stream", "tail", "explain", "archive", "unarchive", "tombstone", "restore"},
 	examples: []string{"oar events list --thread-id <thread-id> --type actor_statement --mine --full-id", "oar events tail --max-events 20"},
 	aliases: map[string]string{
 		"watch": "stream",

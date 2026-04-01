@@ -763,6 +763,34 @@ export function createOarCoreClient(options = {}) {
       invokeJSON("events.get", () =>
         generated.eventsGet({ event_id: String(eventId) }),
       ),
+    archiveEvent: (eventId, payload) =>
+      invokeJSON("events.archive", () =>
+        generated.eventsArchive(
+          { event_id: String(eventId) },
+          { body: withActorId(payload) },
+        ),
+      ),
+    unarchiveEvent: (eventId, payload) =>
+      invokeJSON("events.unarchive", () =>
+        generated.eventsUnarchive(
+          { event_id: String(eventId) },
+          { body: withActorId(payload) },
+        ),
+      ),
+    tombstoneEvent: (eventId, payload) =>
+      invokeJSON("events.tombstone", () =>
+        generated.eventsTombstone(
+          { event_id: String(eventId) },
+          { body: withActorId(payload) },
+        ),
+      ),
+    restoreEvent: (eventId, payload) =>
+      invokeJSON("events.restore", () =>
+        generated.eventsRestore(
+          { event_id: String(eventId) },
+          { body: withActorId(payload) },
+        ),
+      ),
 
     createWorkOrder: (payload) =>
       invokeJSON("packets.work-orders.create", () =>

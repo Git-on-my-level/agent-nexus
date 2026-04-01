@@ -90,7 +90,7 @@ func formatCommandSummary(commandID string, body any) string {
 		return formatPrettyBody(body)
 	case "artifacts.inspect":
 		return formatArtifactInspect(body)
-	case "events.get", "events.create":
+	case "events.get", "events.create", "events.archive", "events.unarchive", "events.tombstone", "events.restore":
 		return formatEventRecord(extractNestedMap(body, "event"))
 	case "docs.get", "docs.create", "docs.update", "docs.tombstone", "docs.archive", "docs.unarchive", "docs.restore":
 		return formatDocumentRecord(body)
@@ -394,6 +394,16 @@ func formatThreadRecord(thread map[string]any) string {
 	lines = appendStringList(lines, "next_actions", stringList(thread["next_actions"]))
 	lines = appendStringList(lines, "key_artifacts", stringList(thread["key_artifacts"]))
 	lines = appendStringList(lines, "open_commitments", stringList(thread["open_commitments"]))
+	if tombstonedAt := anyString(thread["tombstoned_at"]); tombstonedAt != "" {
+		lines = append(lines, "⚠ TOMBSTONED")
+		lines = appendScalar(lines, "tombstoned_at", thread, "tombstoned_at")
+		lines = appendScalar(lines, "tombstoned_by", thread, "tombstoned_by")
+		lines = appendScalar(lines, "tombstone_reason", thread, "tombstone_reason")
+	} else if archivedAt := anyString(thread["archived_at"]); archivedAt != "" {
+		lines = append(lines, "⚠ ARCHIVED")
+		lines = appendScalar(lines, "archived_at", thread, "archived_at")
+		lines = appendScalar(lines, "archived_by", thread, "archived_by")
+	}
 	return strings.Join(lines, "\n")
 }
 
@@ -433,6 +443,10 @@ func formatArtifactRecord(artifact map[string]any) string {
 		lines = appendScalar(lines, "tombstoned_at", artifact, "tombstoned_at")
 		lines = appendScalar(lines, "tombstoned_by", artifact, "tombstoned_by")
 		lines = appendScalar(lines, "tombstone_reason", artifact, "tombstone_reason")
+	} else if archivedAt := anyString(artifact["archived_at"]); archivedAt != "" {
+		lines = append(lines, "⚠ ARCHIVED")
+		lines = appendScalar(lines, "archived_at", artifact, "archived_at")
+		lines = appendScalar(lines, "archived_by", artifact, "archived_by")
 	}
 	return strings.Join(lines, "\n")
 }
@@ -451,6 +465,16 @@ func formatEventRecord(event map[string]any) string {
 	if payload := asMap(event["payload"]); len(payload) > 0 {
 		lines = append(lines, "payload:")
 		lines = append(lines, indentBlock(formatPrettyBody(payload))...)
+	}
+	if tombstonedAt := anyString(event["tombstoned_at"]); tombstonedAt != "" {
+		lines = append(lines, "⚠ TOMBSTONED")
+		lines = appendScalar(lines, "tombstoned_at", event, "tombstoned_at")
+		lines = appendScalar(lines, "tombstoned_by", event, "tombstoned_by")
+		lines = appendScalar(lines, "tombstone_reason", event, "tombstone_reason")
+	} else if archivedAt := anyString(event["archived_at"]); archivedAt != "" {
+		lines = append(lines, "⚠ ARCHIVED")
+		lines = appendScalar(lines, "archived_at", event, "archived_at")
+		lines = appendScalar(lines, "archived_by", event, "archived_by")
 	}
 	return strings.Join(lines, "\n")
 }
@@ -471,6 +495,10 @@ func formatDocumentRecord(body any) string {
 		lines = appendScalar(lines, "tombstoned_at", document, "tombstoned_at")
 		lines = appendScalar(lines, "tombstoned_by", document, "tombstoned_by")
 		lines = appendScalar(lines, "tombstone_reason", document, "tombstone_reason")
+	} else if archivedAt := anyString(document["archived_at"]); archivedAt != "" {
+		lines = append(lines, "⚠ ARCHIVED")
+		lines = appendScalar(lines, "archived_at", document, "archived_at")
+		lines = appendScalar(lines, "archived_by", document, "archived_by")
 	}
 	if content := firstNonEmpty(anyString(revision["content"]), anyString(root["content"]), anyString(root["body_text"])); content != "" {
 		lines = append(lines, "content:")
@@ -877,7 +905,13 @@ func displayIDWithMode(item map[string]any, fullID bool) string {
 
 func renderEventListItemWithMode(item map[string]any, fullID bool) string {
 	summary := firstNonEmpty(anyString(item["summary_preview"]), anyString(item["summary"]), anyString(item["created_at"]))
-	return compactSummary(displayEventID(item, fullID), anyString(item["type"]), summary)
+	prefix := ""
+	if anyString(item["tombstoned_at"]) != "" {
+		prefix = "[TOMBSTONED] "
+	} else if anyString(item["archived_at"]) != "" {
+		prefix = "[ARCHIVED] "
+	}
+	return compactSummary(displayEventID(item, fullID), prefix+anyString(item["type"]), summary)
 }
 
 func renderRecommendationEventItemWithMode(item map[string]any, fullID bool, fullSummary bool) string {
@@ -1117,6 +1151,16 @@ func formatBoardRecord(board map[string]any) string {
 	lines = appendStringList(lines, "owners", stringList(board["owners"]))
 	lines = appendScalar(lines, "updated_at", board, "updated_at")
 	lines = appendScalar(lines, "created_at", board, "created_at")
+	if tombstonedAt := anyString(board["tombstoned_at"]); tombstonedAt != "" {
+		lines = append(lines, "⚠ TOMBSTONED")
+		lines = appendScalar(lines, "tombstoned_at", board, "tombstoned_at")
+		lines = appendScalar(lines, "tombstoned_by", board, "tombstoned_by")
+		lines = appendScalar(lines, "tombstone_reason", board, "tombstone_reason")
+	} else if archivedAt := anyString(board["archived_at"]); archivedAt != "" {
+		lines = append(lines, "⚠ ARCHIVED")
+		lines = appendScalar(lines, "archived_at", board, "archived_at")
+		lines = appendScalar(lines, "archived_by", board, "archived_by")
+	}
 	return strings.Join(lines, "\n")
 }
 

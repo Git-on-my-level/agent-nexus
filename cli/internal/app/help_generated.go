@@ -64,6 +64,10 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--mine", Description: "Resolve to the active profile actor_id."},
 			{Name: "--max-events <n>", Description: "Keep the most recent matching events."},
 			{Name: "--full-id", Description: "Render full event ids in human output."},
+			{Name: "--include-archived", Description: "Include archived events in results."},
+			{Name: "--archived-only", Description: "Show only archived events."},
+			{Name: "--include-tombstoned", Description: "Include tombstoned events in results."},
+			{Name: "--tombstoned-only", Description: "Show only tombstoned events."},
 		},
 	},
 	{
@@ -753,6 +757,14 @@ Specialized raw-event type:
 Local CLI notes:
   - Common open ` + "`event.type`" + ` values include ` + "`actor_statement`" + `; the enum list above is illustrative, not exhaustive.
   - Use ` + "`--dry-run`" + ` with ` + "`--from-file`" + ` to validate and preview the request without sending the mutation.`)
+	case "threads.timeline":
+		return strings.TrimSpace(`Local CLI flags:
+  --include-archived        Include archived events in the timeline.
+  --archived-only           Show only archived events.
+  --include-tombstoned      Include tombstoned events in the timeline.
+  --tombstoned-only         Show only tombstoned events.
+
+Note: by default, archived and tombstoned events are excluded from the timeline output.`)
 	default:
 		return ""
 	}

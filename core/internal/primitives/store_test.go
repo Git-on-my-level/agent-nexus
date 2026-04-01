@@ -117,6 +117,134 @@ func TestListEventsAfterUsesChronologicalTimestampOrdering(t *testing.T) {
 	}
 }
 
+func TestArchiveEventCascadesMessageThreadReplies(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	store := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+
+	parent, err := store.AppendEvent(ctx, "actor-1", map[string]any{
+		"type":      "message_posted",
+		"thread_id": "thread-cascade",
+		"refs":      []any{"thread:thread-cascade"},
+		"payload":   map[string]any{"text": "root"},
+	})
+	if err != nil {
+		t.Fatalf("append parent: %v", err)
+	}
+	parentID, _ := parent["id"].(string)
+
+	child1, err := store.AppendEvent(ctx, "actor-1", map[string]any{
+		"type":      "message_posted",
+		"thread_id": "thread-cascade",
+		"refs":      []any{"thread:thread-cascade", "event:" + parentID},
+		"payload":   map[string]any{"text": "reply1"},
+	})
+	if err != nil {
+		t.Fatalf("append child1: %v", err)
+	}
+	child1ID, _ := child1["id"].(string)
+
+	_, err = store.AppendEvent(ctx, "actor-1", map[string]any{
+		"type":      "message_posted",
+		"thread_id": "thread-cascade",
+		"refs":      []any{"thread:thread-cascade", "event:" + child1ID},
+		"payload":   map[string]any{"text": "reply2"},
+	})
+	if err != nil {
+		t.Fatalf("append child2: %v", err)
+	}
+
+	if _, err := store.ArchiveEvent(ctx, "actor-2", parentID); err != nil {
+		t.Fatalf("archive root: %v", err)
+	}
+
+	byThread, err := store.ListEventsByThread(ctx, "thread-cascade")
+	if err != nil {
+		t.Fatalf("list events: %v", err)
+	}
+	for _, ev := range byThread {
+		if ev["type"] != "message_posted" {
+			continue
+		}
+		if ev["archived_at"] == nil || ev["archived_at"] == "" {
+			t.Fatalf("expected archived_at on %#v", ev["id"])
+		}
+		if ev["archived_by"] != "actor-2" {
+			t.Fatalf("expected archived_by actor-2 on %v, got %#v", ev["id"], ev["archived_by"])
+		}
+	}
+
+	if _, err := store.UnarchiveEvent(ctx, "actor-2", parentID); err != nil {
+		t.Fatalf("unarchive root: %v", err)
+	}
+	byThread, err = store.ListEventsByThread(ctx, "thread-cascade")
+	if err != nil {
+		t.Fatalf("list events after unarchive: %v", err)
+	}
+	for _, ev := range byThread {
+		if ev["type"] != "message_posted" {
+			continue
+		}
+		if _, ok := ev["archived_at"]; ok {
+			t.Fatalf("expected no archived_at on %#v", ev["id"])
+		}
+	}
+}
+
+func TestArchiveEventDoesNotCascadeNonMessagePosted(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	store := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+
+	parent, err := store.AppendEvent(ctx, "actor-1", map[string]any{
+		"type":      "note_added",
+		"thread_id": "thread-x",
+		"refs":      []any{"thread:thread-x"},
+		"payload":   map[string]any{"text": "n"},
+	})
+	if err != nil {
+		t.Fatalf("append: %v", err)
+	}
+	parentID, _ := parent["id"].(string)
+
+	child, err := store.AppendEvent(ctx, "actor-1", map[string]any{
+		"type":      "message_posted",
+		"thread_id": "thread-x",
+		"refs":      []any{"thread:thread-x", "event:" + parentID},
+		"payload":   map[string]any{"text": "m"},
+	})
+	if err != nil {
+		t.Fatalf("append child: %v", err)
+	}
+	childID, _ := child["id"].(string)
+
+	if _, err := store.ArchiveEvent(ctx, "actor-2", parentID); err != nil {
+		t.Fatalf("archive: %v", err)
+	}
+
+	other, err := store.GetEvent(ctx, childID)
+	if err != nil {
+		t.Fatalf("get child: %v", err)
+	}
+	if _, ok := other["archived_at"]; ok {
+		t.Fatal("non-message_posted archive should not cascade to descendants")
+	}
+}
+
 func TestCreateArtifactAcceptsSafeIDAndRejectsUnsafeIDs(t *testing.T) {
 	t.Parallel()
 

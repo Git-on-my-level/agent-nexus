@@ -4,7 +4,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.2.3`
-- Commands: `95`
+- Commands: `99`
 
 ## `actors.list`
 
@@ -887,6 +887,21 @@ Generated from `contracts/oar-openapi.yaml`.
 - Examples:
   - Update document: `oar docs update --document-id product-constitution --from-file doc-update.json --json`
 
+## `events.archive`
+
+- CLI path: `events archive`
+- HTTP: `POST /events/{event_id}/archive`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Hide an event from default timeline and message views while preserving it.
+- Concepts: `events`, `lifecycle`
+- Error codes: `invalid_json`, `invalid_request`, `not_found`
+- Output: Returns `{ event }` with archive metadata set.
+- Agent notes: Idempotent. For message_posted events, cascades to all reply descendants.
+- Examples:
+  - Archive event: `oar events archive --event-id evt_123 --json`
+
 ## `events.create`
 
 - CLI path: `events create`
@@ -917,6 +932,21 @@ Generated from `contracts/oar-openapi.yaml`.
 - Examples:
   - Get event: `oar events get --event-id event_123 --json`
 
+## `events.restore`
+
+- CLI path: `events restore`
+- HTTP: `POST /events/{event_id}/restore`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Undo a tombstone and return the event to active state.
+- Concepts: `events`, `lifecycle`
+- Error codes: `invalid_json`, `invalid_request`, `not_found`
+- Output: Returns `{ event }` with tombstone metadata cleared.
+- Agent notes: Idempotent. For message_posted events, cascades to all reply descendants.
+- Examples:
+  - Restore event: `oar events restore --event-id evt_123 --json`
+
 ## `events.stream`
 
 - CLI path: `events stream`
@@ -932,6 +962,36 @@ Generated from `contracts/oar-openapi.yaml`.
 - Examples:
   - Stream all events: `oar events stream --json`
   - Resume by id: `oar events stream --last-event-id <event_id> --json`
+
+## `events.tombstone`
+
+- CLI path: `events tombstone`
+- HTTP: `POST /events/{event_id}/tombstone`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Mark an event as deleted while preserving audit trail; tombstoned events are excluded from timeline and messages by default.
+- Concepts: `events`, `lifecycle`
+- Error codes: `invalid_json`, `invalid_request`, `not_found`
+- Output: Returns `{ event }` with tombstone metadata set.
+- Agent notes: Idempotent. For message_posted events, cascades to all reply descendants.
+- Examples:
+  - Tombstone event: `oar events tombstone --event-id evt_123 --reason "spam" --json`
+
+## `events.unarchive`
+
+- CLI path: `events unarchive`
+- HTTP: `POST /events/{event_id}/unarchive`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Restore an archived event back to default timeline and message views.
+- Concepts: `events`, `lifecycle`
+- Error codes: `invalid_json`, `invalid_request`, `not_found`
+- Output: Returns `{ event }` with archive metadata cleared.
+- Agent notes: Idempotent. For message_posted events, cascades to all reply descendants.
+- Examples:
+  - Unarchive event: `oar events unarchive --event-id evt_123 --json`
 
 ## `inbox.ack`
 

@@ -107,11 +107,15 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `events`
 
-- Commands: `3`
+- Commands: `7`
 - Command IDs:
+  - `events.archive` (`events archive`)
   - `events.create` (`events create`)
   - `events.get` (`events get`)
+  - `events.restore` (`events restore`)
   - `events.stream` (`events stream`)
+  - `events.tombstone` (`events tombstone`)
+  - `events.unarchive` (`events unarchive`)
 
 ## `inbox`
 

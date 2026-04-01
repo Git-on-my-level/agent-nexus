@@ -17,6 +17,7 @@
   import { listAllPrincipals } from "$lib/authPrincipals";
   import { coreClient } from "$lib/coreClient";
   import { enrichPrincipalsWithWakeRouting } from "$lib/principalWakeRouting.js";
+  import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import ThreadMessageItem from "$lib/components/thread-detail/ThreadMessageItem.svelte";
   import {
     flattenMessageThreadView,
@@ -40,10 +41,43 @@
   let actorName = $derived((id) =>
     lookupActorDisplayName(id, $actorRegistry, $principalRegistry),
   );
-  let messageThreads = $derived(toMessageThreadView(timeline, { threadId }));
+
+  let showArchived = $state(false);
+  let confirmModal = $state({ open: false, action: "", eventId: "" });
+  let lifecycleBusy = $state(false);
+  let lifecycleError = $state("");
+
+  let filteredTimeline = $derived(
+    (Array.isArray(timeline) ? timeline : []).filter((event) => {
+      if (event.tombstoned_at) return false;
+      if (!showArchived && event.archived_at) return false;
+      return true;
+    }),
+  );
+  let messageThreads = $derived(
+    toMessageThreadView(filteredTimeline, { threadId }),
+  );
   let allMessages = $derived(flattenMessageThreadView(messageThreads));
   let hasMessages = $derived(messageThreads.length > 0);
-  let showSyncStatus = $derived(timelineLoading && hasMessages);
+  let archivedMessageCount = $derived(
+    (Array.isArray(timeline) ? timeline : []).filter(
+      (e) =>
+        String(e?.type ?? "") === "message_posted" &&
+        e.archived_at &&
+        !e.tombstoned_at,
+    ).length,
+  );
+  let timelineHasAnyMessagePosted = $derived(
+    (Array.isArray(timeline) ? timeline : []).some(
+      (e) => String(e?.type ?? "") === "message_posted",
+    ),
+  );
+  let hasAnyNonTombstonedMessage = $derived(
+    (Array.isArray(timeline) ? timeline : []).some(
+      (e) => String(e?.type ?? "") === "message_posted" && !e.tombstoned_at,
+    ),
+  );
+  let showSyncStatus = $derived(timelineLoading && timelineHasAnyMessagePosted);
   let replyTargetMessage = $derived(
     replyToEventId
       ? (allMessages.find((message) => message.id === replyToEventId) ?? null)
@@ -202,6 +236,69 @@
 
   function clearReplyTarget() {
     replyToEventId = "";
+  }
+
+  async function refreshTimeline() {
+    await threadDetailStore.queueRefreshThreadDetail(threadId, {
+      timeline: true,
+    });
+  }
+
+  function openArchiveConfirm(eventId) {
+    confirmModal = { open: true, action: "archive", eventId };
+  }
+
+  function openTombstoneConfirm(eventId) {
+    confirmModal = { open: true, action: "trash", eventId };
+  }
+
+  function handleConfirm() {
+    const { action, eventId } = confirmModal;
+    confirmModal = { open: false, action: "", eventId: "" };
+    if (action === "archive") doArchive(eventId);
+    else if (action === "trash") doTombstone(eventId);
+  }
+
+  async function doArchive(eventId) {
+    if (!eventId || lifecycleBusy) return;
+    lifecycleBusy = true;
+    lifecycleError = "";
+    try {
+      await coreClient.archiveEvent(eventId, {});
+      await refreshTimeline();
+    } catch (e) {
+      lifecycleError = `Archive failed: ${e instanceof Error ? e.message : String(e)}`;
+    } finally {
+      lifecycleBusy = false;
+    }
+  }
+
+  async function doUnarchive(eventId) {
+    if (!eventId || lifecycleBusy) return;
+    lifecycleBusy = true;
+    lifecycleError = "";
+    try {
+      await coreClient.unarchiveEvent(eventId, {});
+      await refreshTimeline();
+    } catch (e) {
+      lifecycleError = `Unarchive failed: ${e instanceof Error ? e.message : String(e)}`;
+    } finally {
+      lifecycleBusy = false;
+    }
+  }
+
+  async function doTombstone(eventId) {
+    if (!eventId || lifecycleBusy) return;
+    lifecycleBusy = true;
+    lifecycleError = "";
+    try {
+      await coreClient.tombstoneEvent(eventId, {});
+      await refreshTimeline();
+    } catch (e) {
+      lifecycleError = `Trash failed: ${e instanceof Error ? e.message : String(e)}`;
+    } finally {
+      lifecycleBusy = false;
+    }
   }
 
   async function handlePostMessage() {
@@ -368,27 +465,50 @@
 </div>
 
 <div class="mt-4">
-  <div class="mb-3 flex items-center justify-between gap-3">
-    <h2
-      class="text-[12px] font-semibold uppercase tracking-wider text-[var(--ui-text-muted)]"
-    >
-      Messages
-    </h2>
+  <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+    <div class="flex flex-wrap items-center gap-3">
+      <h2
+        class="text-[12px] font-semibold uppercase tracking-wider text-[var(--ui-text-muted)]"
+      >
+        Messages
+      </h2>
+      {#if archivedMessageCount > 0}
+        <label
+          class="flex items-center gap-1.5 text-[11px] text-[var(--ui-text-muted)]"
+        >
+          <input
+            type="checkbox"
+            bind:checked={showArchived}
+            class="accent-[var(--ui-accent)]"
+          />
+          Show archived ({archivedMessageCount})
+        </label>
+      {/if}
+    </div>
     <div class="min-h-[1rem] text-right" aria-live="polite">
       {#if showSyncStatus}
         <p class="text-[11px] text-[var(--ui-text-muted)]">Syncing…</p>
       {/if}
     </div>
   </div>
-  {#if timelineError && !hasMessages}
+  {#if timelineError && !hasAnyNonTombstonedMessage}
     <p class="rounded bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
       {timelineError}
     </p>
-  {:else if timelineLoading && !hasMessages}
+  {:else if timelineLoading && !hasAnyNonTombstonedMessage}
     <p class="text-[13px] text-[var(--ui-text-muted)]">Loading messages...</p>
-  {:else if !hasMessages}
+  {:else if !hasAnyNonTombstonedMessage}
     <p class="text-[13px] text-[var(--ui-text-muted)]">No messages yet.</p>
+  {:else if !hasMessages}
+    <p class="text-[13px] text-[var(--ui-text-muted)]">
+      No messages in view. Turn on Show archived to see archived threads.
+    </p>
   {:else}
+    {#if lifecycleError}
+      <p class="mb-2 rounded bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
+        {lifecycleError}
+      </p>
+    {/if}
     {#if timelineError}
       <p class="mb-2 rounded bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
         {timelineError}
@@ -401,8 +521,27 @@
           {threadId}
           {actorName}
           onReply={setReplyTarget}
+          onArchive={openArchiveConfirm}
+          onTombstone={openTombstoneConfirm}
+          onUnarchive={doUnarchive}
+          {lifecycleBusy}
         />
       {/each}
     </div>
   {/if}
 </div>
+
+<ConfirmModal
+  open={confirmModal.open}
+  title={confirmModal.action === "trash"
+    ? "Move message to trash"
+    : "Archive message"}
+  message={confirmModal.action === "trash"
+    ? "This message and all its replies will be tombstoned. You can restore them from trash later."
+    : "This message and all its replies will be archived. Toggle 'Show archived' to see them again."}
+  confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
+  variant={confirmModal.action === "trash" ? "danger" : "warning"}
+  busy={lifecycleBusy}
+  onconfirm={handleConfirm}
+  oncancel={() => (confirmModal = { open: false, action: "", eventId: "" })}
+/>

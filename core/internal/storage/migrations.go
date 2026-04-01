@@ -529,6 +529,11 @@ var migrations = []migration{
 		Statements: nil,
 		Apply:      applyV22ArchiveAndTombstoneColumnsMigration,
 	},
+	{
+		Version:    23,
+		Statements: nil,
+		Apply:      applyV23EventArchiveAndTombstoneColumnsMigration,
+	},
 }
 
 func applyV22ArchiveAndTombstoneColumnsMigration(ctx context.Context, tx *sql.Tx) error {
@@ -627,6 +632,57 @@ func applyV22ArchiveAndTombstoneColumnsMigration(ctx context.Context, tx *sql.Tx
 		}
 	}
 
+	return nil
+}
+
+func applyV23EventArchiveAndTombstoneColumnsMigration(ctx context.Context, tx *sql.Tx) error {
+	addCol := func(table, column, ddl string) error {
+		ok, err := tableExistsTx(ctx, tx, table)
+		if err != nil || !ok {
+			return err
+		}
+		exists, err := columnExistsTx(ctx, tx, table, column)
+		if err != nil {
+			return err
+		}
+		if exists {
+			return nil
+		}
+		if _, err := tx.ExecContext(ctx, ddl); err != nil {
+			return fmt.Errorf("migration 23 %s.%s: %w", table, column, err)
+		}
+		return nil
+	}
+	for _, col := range []struct {
+		name string
+		ddl  string
+	}{
+		{"archived_at", `ALTER TABLE events ADD COLUMN archived_at TEXT`},
+		{"archived_by", `ALTER TABLE events ADD COLUMN archived_by TEXT`},
+		{"tombstoned_at", `ALTER TABLE events ADD COLUMN tombstoned_at TEXT`},
+		{"tombstoned_by", `ALTER TABLE events ADD COLUMN tombstoned_by TEXT`},
+		{"tombstone_reason", `ALTER TABLE events ADD COLUMN tombstone_reason TEXT`},
+	} {
+		if err := addCol("events", col.name, col.ddl); err != nil {
+			return err
+		}
+	}
+	if ok, err := tableExistsTx(ctx, tx, "events"); err != nil {
+		return err
+	} else if ok {
+		if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_events_archived_at ON events (archived_at)`); err != nil {
+			return fmt.Errorf("migration 23 events archived_at index: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_events_tombstoned_at ON events (tombstoned_at)`); err != nil {
+			return fmt.Errorf("migration 23 events tombstoned_at index: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_events_thread_archived ON events (thread_id, archived_at)`); err != nil {
+			return fmt.Errorf("migration 23 events thread_archived index: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_events_thread_tombstoned ON events (thread_id, tombstoned_at)`); err != nil {
+			return fmt.Errorf("migration 23 events thread_tombstoned index: %w", err)
+		}
+	}
 	return nil
 }
 

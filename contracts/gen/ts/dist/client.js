@@ -3786,6 +3786,66 @@ export const commandRegistry = [
         "ts_method": "docsUpdate"
     },
     {
+        "command_id": "events.archive",
+        "cli_path": "events archive",
+        "group": "events",
+        "method": "POST",
+        "path": "/events/{event_id}/archive",
+        "operation_id": "archiveEvent",
+        "summary": "Archive an event",
+        "why": "Hide an event from default timeline and message views while preserving it.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ event }` with archive metadata set.",
+        "error_codes": [
+            "invalid_json",
+            "invalid_request",
+            "not_found"
+        ],
+        "concepts": [
+            "events",
+            "lifecycle"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Idempotent. For message_posted events, cascades to all reply descendants.",
+        "examples": [
+            {
+                "title": "Archive event",
+                "command": "oar events archive --event-id evt_123 --json"
+            }
+        ],
+        "body_schema": {
+            "required": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                }
+            ],
+            "optional": [
+                {
+                    "name": "reason",
+                    "type": "string"
+                }
+            ]
+        },
+        "path_params": [
+            "event_id"
+        ],
+        "adjacent_commands": [
+            "events.create",
+            "events.get",
+            "events.restore",
+            "events.stream",
+            "events.tombstone",
+            "events.unarchive"
+        ],
+        "go_method": "EventsArchive",
+        "ts_method": "eventsArchive"
+    },
+    {
         "command_id": "events.create",
         "cli_path": "events create",
         "group": "events",
@@ -3894,8 +3954,12 @@ export const commandRegistry = [
             ]
         },
         "adjacent_commands": [
+            "events.archive",
             "events.get",
-            "events.stream"
+            "events.restore",
+            "events.stream",
+            "events.tombstone",
+            "events.unarchive"
         ],
         "go_method": "EventsCreate",
         "ts_method": "eventsCreate"
@@ -3933,11 +3997,75 @@ export const commandRegistry = [
             "event_id"
         ],
         "adjacent_commands": [
+            "events.archive",
             "events.create",
-            "events.stream"
+            "events.restore",
+            "events.stream",
+            "events.tombstone",
+            "events.unarchive"
         ],
         "go_method": "EventsGet",
         "ts_method": "eventsGet"
+    },
+    {
+        "command_id": "events.restore",
+        "cli_path": "events restore",
+        "group": "events",
+        "method": "POST",
+        "path": "/events/{event_id}/restore",
+        "operation_id": "restoreEvent",
+        "summary": "Restore a tombstoned event",
+        "why": "Undo a tombstone and return the event to active state.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ event }` with tombstone metadata cleared.",
+        "error_codes": [
+            "invalid_json",
+            "invalid_request",
+            "not_found"
+        ],
+        "concepts": [
+            "events",
+            "lifecycle"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Idempotent. For message_posted events, cascades to all reply descendants.",
+        "examples": [
+            {
+                "title": "Restore event",
+                "command": "oar events restore --event-id evt_123 --json"
+            }
+        ],
+        "body_schema": {
+            "required": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                }
+            ],
+            "optional": [
+                {
+                    "name": "reason",
+                    "type": "string"
+                }
+            ]
+        },
+        "path_params": [
+            "event_id"
+        ],
+        "adjacent_commands": [
+            "events.archive",
+            "events.create",
+            "events.get",
+            "events.stream",
+            "events.tombstone",
+            "events.unarchive"
+        ],
+        "go_method": "EventsRestore",
+        "ts_method": "eventsRestore"
     },
     {
         "command_id": "events.stream",
@@ -3977,11 +4105,135 @@ export const commandRegistry = [
             }
         ],
         "adjacent_commands": [
+            "events.archive",
             "events.create",
-            "events.get"
+            "events.get",
+            "events.restore",
+            "events.tombstone",
+            "events.unarchive"
         ],
         "go_method": "EventsStream",
         "ts_method": "eventsStream"
+    },
+    {
+        "command_id": "events.tombstone",
+        "cli_path": "events tombstone",
+        "group": "events",
+        "method": "POST",
+        "path": "/events/{event_id}/tombstone",
+        "operation_id": "tombstoneEvent",
+        "summary": "Tombstone an event (soft-delete)",
+        "why": "Mark an event as deleted while preserving audit trail; tombstoned events are excluded from timeline and messages by default.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ event }` with tombstone metadata set.",
+        "error_codes": [
+            "invalid_json",
+            "invalid_request",
+            "not_found"
+        ],
+        "concepts": [
+            "events",
+            "lifecycle"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Idempotent. For message_posted events, cascades to all reply descendants.",
+        "examples": [
+            {
+                "title": "Tombstone event",
+                "command": "oar events tombstone --event-id evt_123 --reason \"spam\" --json"
+            }
+        ],
+        "body_schema": {
+            "required": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                }
+            ],
+            "optional": [
+                {
+                    "name": "reason",
+                    "type": "string"
+                }
+            ]
+        },
+        "path_params": [
+            "event_id"
+        ],
+        "adjacent_commands": [
+            "events.archive",
+            "events.create",
+            "events.get",
+            "events.restore",
+            "events.stream",
+            "events.unarchive"
+        ],
+        "go_method": "EventsTombstone",
+        "ts_method": "eventsTombstone"
+    },
+    {
+        "command_id": "events.unarchive",
+        "cli_path": "events unarchive",
+        "group": "events",
+        "method": "POST",
+        "path": "/events/{event_id}/unarchive",
+        "operation_id": "unarchiveEvent",
+        "summary": "Unarchive an event",
+        "why": "Restore an archived event back to default timeline and message views.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ event }` with archive metadata cleared.",
+        "error_codes": [
+            "invalid_json",
+            "invalid_request",
+            "not_found"
+        ],
+        "concepts": [
+            "events",
+            "lifecycle"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Idempotent. For message_posted events, cascades to all reply descendants.",
+        "examples": [
+            {
+                "title": "Unarchive event",
+                "command": "oar events unarchive --event-id evt_123 --json"
+            }
+        ],
+        "body_schema": {
+            "required": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                }
+            ],
+            "optional": [
+                {
+                    "name": "reason",
+                    "type": "string"
+                }
+            ]
+        },
+        "path_params": [
+            "event_id"
+        ],
+        "adjacent_commands": [
+            "events.archive",
+            "events.create",
+            "events.get",
+            "events.restore",
+            "events.stream",
+            "events.tombstone"
+        ],
+        "go_method": "EventsUnarchive",
+        "ts_method": "eventsUnarchive"
     },
     {
         "command_id": "inbox.ack",
@@ -6170,14 +6422,26 @@ export class OarClient {
     docsUpdate(pathParams, options = {}) {
         return this.invoke("docs.update", pathParams, options);
     }
+    eventsArchive(pathParams, options = {}) {
+        return this.invoke("events.archive", pathParams, options);
+    }
     eventsCreate(options = {}) {
         return this.invoke("events.create", {}, options);
     }
     eventsGet(pathParams, options = {}) {
         return this.invoke("events.get", pathParams, options);
     }
+    eventsRestore(pathParams, options = {}) {
+        return this.invoke("events.restore", pathParams, options);
+    }
     eventsStream(options = {}) {
         return this.invoke("events.stream", {}, options);
+    }
+    eventsTombstone(pathParams, options = {}) {
+        return this.invoke("events.tombstone", pathParams, options);
+    }
+    eventsUnarchive(pathParams, options = {}) {
+        return this.invoke("events.unarchive", pathParams, options);
     }
     inboxAck(options = {}) {
         return this.invoke("inbox.ack", {}, options);

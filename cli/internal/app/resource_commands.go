@@ -449,9 +449,28 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 		result, callErr := a.runThreadsApplyCommand(ctx, args[1:], cfg)
 		return result, "threads apply", callErr
 	case "timeline":
-		id, err := parseIDArg(args[1:], "thread-id", "thread id")
-		if err != nil {
+		fs := newSilentFlagSet("threads timeline")
+		var threadIDFlag trackedString
+		var includeArchived, archivedOnly, includeTombstoned, tombstonedOnly bool
+		fs.Var(&threadIDFlag, "thread-id", "Thread id")
+		fs.BoolVar(&includeArchived, "include-archived", false, "Include archived events")
+		fs.BoolVar(&archivedOnly, "archived-only", false, "Show only archived events")
+		fs.BoolVar(&includeTombstoned, "include-tombstoned", false, "Include tombstoned events")
+		fs.BoolVar(&tombstonedOnly, "tombstoned-only", false, "Show only tombstoned events")
+		if err := fs.Parse(args[1:]); err != nil {
+			return nil, "threads timeline", errnorm.Usage("invalid_flags", err.Error())
+		}
+		positionals := fs.Args()
+		id := strings.TrimSpace(threadIDFlag.value)
+		if id == "" && len(positionals) > 0 {
+			id = strings.TrimSpace(positionals[0])
+			positionals = positionals[1:]
+		}
+		if err := validateID(id, "thread id"); err != nil {
 			return nil, "threads timeline", err
+		}
+		if len(positionals) > 0 {
+			return nil, "threads timeline", errnorm.Usage("invalid_args", "too many positional arguments")
 		}
 		result, callErr := a.invokeTypedJSONWithIDResolution(
 			ctx,
@@ -464,7 +483,25 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 			nil,
 			nil,
 		)
-		return result, "threads timeline", callErr
+		if callErr != nil {
+			return result, "threads timeline", callErr
+		}
+		data := asMap(result.Data)
+		body := asMap(data["body"])
+		events := asSlice(body["events"])
+		filtered := filterEventsByLifecycleState(events, includeArchived, archivedOnly, includeTombstoned, tombstonedOnly)
+		body["events"] = filtered
+		data["body"] = body
+		result.Data = data
+		result.Text = formatTypedCommandText(
+			"threads.timeline",
+			intValue(data["status_code"]),
+			headerValues(data["headers"]),
+			body,
+			cfg.Verbose,
+			cfg.Headers,
+		)
+		return result, "threads timeline", nil
 	case "context":
 		selection, err := parseThreadContextSelectionArgs(args[1:], "threads context")
 		if err != nil {
@@ -2594,6 +2631,158 @@ func (a *App) runEventsCommand(ctx context.Context, args []string, cfg config.Re
 	case "explain":
 		result, err := a.runEventsExplainCommand(args[1:])
 		return result, "events explain", err
+	case "archive":
+		fs := newSilentFlagSet("events archive")
+		var eventIDFlag trackedString
+		var actorIDFlag trackedString
+		var reasonFlag trackedString
+		fs.Var(&eventIDFlag, "event-id", "Event id to archive")
+		fs.Var(&actorIDFlag, "actor-id", "Actor id")
+		fs.Var(&reasonFlag, "reason", "Reason for archiving")
+		if err := fs.Parse(args[1:]); err != nil {
+			return nil, "events archive", errnorm.Usage("invalid_flags", err.Error())
+		}
+		positionals := fs.Args()
+		id := strings.TrimSpace(eventIDFlag.value)
+		if id == "" && len(positionals) > 0 {
+			id = strings.TrimSpace(positionals[0])
+			positionals = positionals[1:]
+		}
+		if err := validateID(id, "event id"); err != nil {
+			return nil, "events archive", err
+		}
+		if len(positionals) > 0 {
+			return nil, "events archive", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar events archive`")
+		}
+		body := map[string]any{}
+		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
+		if err != nil {
+			return nil, "events archive", err
+		}
+		if actorID != "" {
+			body["actor_id"] = actorID
+		} else if strings.TrimSpace(cfg.ActorID) != "" {
+			body["actor_id"] = strings.TrimSpace(cfg.ActorID)
+		}
+		if strings.TrimSpace(reasonFlag.value) != "" {
+			body["reason"] = strings.TrimSpace(reasonFlag.value)
+		}
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "events archive", "events.archive", map[string]string{"event_id": id}, nil, body)
+		return result, "events archive", callErr
+	case "unarchive":
+		fs := newSilentFlagSet("events unarchive")
+		var eventIDFlag trackedString
+		var actorIDFlag trackedString
+		var reasonFlag trackedString
+		fs.Var(&eventIDFlag, "event-id", "Event id to unarchive")
+		fs.Var(&actorIDFlag, "actor-id", "Actor id")
+		fs.Var(&reasonFlag, "reason", "Reason for unarchiving")
+		if err := fs.Parse(args[1:]); err != nil {
+			return nil, "events unarchive", errnorm.Usage("invalid_flags", err.Error())
+		}
+		positionals := fs.Args()
+		id := strings.TrimSpace(eventIDFlag.value)
+		if id == "" && len(positionals) > 0 {
+			id = strings.TrimSpace(positionals[0])
+			positionals = positionals[1:]
+		}
+		if err := validateID(id, "event id"); err != nil {
+			return nil, "events unarchive", err
+		}
+		if len(positionals) > 0 {
+			return nil, "events unarchive", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar events unarchive`")
+		}
+		body := map[string]any{}
+		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
+		if err != nil {
+			return nil, "events unarchive", err
+		}
+		if actorID != "" {
+			body["actor_id"] = actorID
+		} else if strings.TrimSpace(cfg.ActorID) != "" {
+			body["actor_id"] = strings.TrimSpace(cfg.ActorID)
+		}
+		if strings.TrimSpace(reasonFlag.value) != "" {
+			body["reason"] = strings.TrimSpace(reasonFlag.value)
+		}
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "events unarchive", "events.unarchive", map[string]string{"event_id": id}, nil, body)
+		return result, "events unarchive", callErr
+	case "tombstone":
+		fs := newSilentFlagSet("events tombstone")
+		var eventIDFlag trackedString
+		var actorIDFlag trackedString
+		var reasonFlag trackedString
+		fs.Var(&eventIDFlag, "event-id", "Event id to tombstone")
+		fs.Var(&actorIDFlag, "actor-id", "Actor id")
+		fs.Var(&reasonFlag, "reason", "Reason for tombstoning")
+		if err := fs.Parse(args[1:]); err != nil {
+			return nil, "events tombstone", errnorm.Usage("invalid_flags", err.Error())
+		}
+		positionals := fs.Args()
+		id := strings.TrimSpace(eventIDFlag.value)
+		if id == "" && len(positionals) > 0 {
+			id = strings.TrimSpace(positionals[0])
+			positionals = positionals[1:]
+		}
+		if err := validateID(id, "event id"); err != nil {
+			return nil, "events tombstone", err
+		}
+		if len(positionals) > 0 {
+			return nil, "events tombstone", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar events tombstone`")
+		}
+		body := map[string]any{}
+		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
+		if err != nil {
+			return nil, "events tombstone", err
+		}
+		if actorID != "" {
+			body["actor_id"] = actorID
+		} else if strings.TrimSpace(cfg.ActorID) != "" {
+			body["actor_id"] = strings.TrimSpace(cfg.ActorID)
+		}
+		if strings.TrimSpace(reasonFlag.value) != "" {
+			body["reason"] = strings.TrimSpace(reasonFlag.value)
+		}
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "events tombstone", "events.tombstone", map[string]string{"event_id": id}, nil, body)
+		return result, "events tombstone", callErr
+	case "restore":
+		fs := newSilentFlagSet("events restore")
+		var eventIDFlag trackedString
+		var actorIDFlag trackedString
+		var reasonFlag trackedString
+		fs.Var(&eventIDFlag, "event-id", "Event id to restore")
+		fs.Var(&actorIDFlag, "actor-id", "Actor id")
+		fs.Var(&reasonFlag, "reason", "Reason for restoring")
+		if err := fs.Parse(args[1:]); err != nil {
+			return nil, "events restore", errnorm.Usage("invalid_flags", err.Error())
+		}
+		positionals := fs.Args()
+		id := strings.TrimSpace(eventIDFlag.value)
+		if id == "" && len(positionals) > 0 {
+			id = strings.TrimSpace(positionals[0])
+			positionals = positionals[1:]
+		}
+		if err := validateID(id, "event id"); err != nil {
+			return nil, "events restore", err
+		}
+		if len(positionals) > 0 {
+			return nil, "events restore", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar events restore`")
+		}
+		body := map[string]any{}
+		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
+		if err != nil {
+			return nil, "events restore", err
+		}
+		if actorID != "" {
+			body["actor_id"] = actorID
+		} else if strings.TrimSpace(cfg.ActorID) != "" {
+			body["actor_id"] = strings.TrimSpace(cfg.ActorID)
+		}
+		if strings.TrimSpace(reasonFlag.value) != "" {
+			body["reason"] = strings.TrimSpace(reasonFlag.value)
+		}
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "events restore", "events.restore", map[string]string{"event_id": id}, nil, body)
+		return result, "events restore", callErr
 	default:
 		return nil, "events", eventsSubcommandSpec.unknownError(args[0])
 	}
@@ -2756,6 +2945,7 @@ func (a *App) runEventsListCommand(ctx context.Context, args []string, cfg confi
 	var mineFlag trackedBool
 	var fullIDFlag trackedBool
 	var typeFlags trackedStrings
+	var includeArchived, archivedOnly, includeTombstoned, tombstonedOnly bool
 	fs.Var(&threadIDFlags, "thread-id", "Thread id (repeatable)")
 	fs.Var(&typeFlags, "type", "Filter by event type (repeatable)")
 	fs.Var(&typesCSVFlag, "types", "Comma-separated event types")
@@ -2763,6 +2953,10 @@ func (a *App) runEventsListCommand(ctx context.Context, args []string, cfg confi
 	fs.Var(&mineFlag, "mine", "Filter to events authored by active profile actor_id")
 	fs.Var(&fullIDFlag, "full-id", "Render full IDs in human output")
 	fs.Var(&maxEventsFlag, "max-events", "Return at most N most-recent matching events (0 means unlimited)")
+	fs.BoolVar(&includeArchived, "include-archived", false, "Include archived events")
+	fs.BoolVar(&archivedOnly, "archived-only", false, "Show only archived events")
+	fs.BoolVar(&includeTombstoned, "include-tombstoned", false, "Include tombstoned events")
+	fs.BoolVar(&tombstonedOnly, "tombstoned-only", false, "Show only tombstoned events")
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
@@ -2835,6 +3029,7 @@ func (a *App) runEventsListCommand(ctx context.Context, args []string, cfg confi
 		allEvents = append(allEvents, threadEvents...)
 		filtered := filterEventsByType(threadEvents, typeFilters)
 		filtered = filterEventsByActorID(filtered, resolvedActorID)
+		filtered = filterEventsByLifecycleState(filtered, includeArchived, archivedOnly, includeTombstoned, tombstonedOnly)
 		matching = append(matching, filtered...)
 		mergeExpandedTimelineObjects(expandedSnapshots, asMap(body["snapshots"]))
 		mergeExpandedTimelineObjects(expandedArtifacts, asMap(body["artifacts"]))
@@ -2873,6 +3068,18 @@ func (a *App) runEventsListCommand(ctx context.Context, args []string, cfg confi
 	}
 	if maxEventsFlag.set {
 		listBody["max_events"] = maxEventsFlag.value
+	}
+	if includeArchived {
+		listBody["include_archived"] = true
+	}
+	if archivedOnly {
+		listBody["archived_only"] = true
+	}
+	if includeTombstoned {
+		listBody["include_tombstoned"] = true
+	}
+	if tombstonedOnly {
+		listBody["tombstoned_only"] = true
 	}
 
 	resultData := map[string]any{
@@ -4971,6 +5178,42 @@ func filterEventsByActorID(events []any, actorID string) []any {
 		filtered = append(filtered, event)
 	}
 	return filtered
+}
+
+func filterEventsByLifecycleState(events []any, includeArchived, archivedOnly, includeTombstoned, tombstonedOnly bool) []any {
+	if includeArchived && !archivedOnly && includeTombstoned && !tombstonedOnly {
+		return events
+	}
+	out := make([]any, 0, len(events))
+	for _, raw := range events {
+		event := asMap(raw)
+		if event == nil {
+			continue
+		}
+		isArchived := anyString(event["archived_at"]) != ""
+		isTombstoned := anyString(event["tombstoned_at"]) != ""
+
+		if tombstonedOnly {
+			if isTombstoned {
+				out = append(out, raw)
+			}
+			continue
+		}
+		if archivedOnly {
+			if isArchived && !isTombstoned {
+				out = append(out, raw)
+			}
+			continue
+		}
+		if isTombstoned && !includeTombstoned {
+			continue
+		}
+		if isArchived && !includeArchived {
+			continue
+		}
+		out = append(out, raw)
+	}
+	return out
 }
 
 func sortEventsByCreatedAt(events []any) {
