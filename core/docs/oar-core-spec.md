@@ -78,7 +78,7 @@ A durable record that something happened or that an actor claims something happe
 
 **Fields:** per `oar-schema.yaml` → `primitives.event`
 
-**v0 event types:** `message_posted`, `work_order_created`, `receipt_added`, `review_completed`, `decision_needed`, `decision_made`, `snapshot_updated`, `commitment_created`, `commitment_status_changed`, `exception_raised`, `inbox_item_acknowledged`
+**v0 event types:** `message_posted`, `work_order_created`, `receipt_added`, `review_completed`, `decision_needed`, `intervention_needed`, `decision_made`, `snapshot_updated`, `commitment_created`, `commitment_status_changed`, `exception_raised`, `inbox_item_acknowledged`
 
 ### 3.2 Snapshot (mutable current state)
 The current best-known state of a durable object (thread, commitment).

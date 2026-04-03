@@ -119,14 +119,22 @@ export function buildWorkOrderContextSuggestions({
       return;
     }
 
-    if (type === "decision_needed" || type === "decision_made") {
+    if (
+      type === "decision_needed" ||
+      type === "intervention_needed" ||
+      type === "decision_made"
+    ) {
       const eventRef = normalizeEventRef(event?.id);
       if (!eventRef) return;
       addSuggestion(suggestions, seenRefs, {
         ref: eventRef,
         kind: "event",
         source:
-          type === "decision_needed" ? "Pending decision" : "Recent decision",
+          type === "decision_needed"
+            ? "Pending decision"
+            : type === "intervention_needed"
+              ? "Pending intervention"
+              : "Recent decision",
         title: String(event?.summary ?? "").trim() || eventRef,
         detail: String(event?.ts ?? event?.created_at ?? "").trim(),
       });

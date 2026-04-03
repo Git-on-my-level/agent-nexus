@@ -155,6 +155,15 @@ func TestIsMeaningfulThreadActivityEvent(t *testing.T) {
 			want: true,
 		},
 		{
+			name: "intervention needed is meaningful activity",
+			event: map[string]any{
+				"type":      "intervention_needed",
+				"thread_id": "thread-1",
+				"ts":        "2026-03-04T12:00:00Z",
+			},
+			want: true,
+		},
+		{
 			name: "inbox ack is coordination noise",
 			event: map[string]any{
 				"type":      "inbox_item_acknowledged",

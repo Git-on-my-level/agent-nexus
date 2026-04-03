@@ -646,6 +646,9 @@ func TestGeneratedCommandHelpIncludesBodySchemaAndEnums(t *testing.T) {
 	if !strings.Contains(output, "- `decision_needed`") {
 		t.Fatalf("expected decision_needed listing output=%s", output)
 	}
+	if !strings.Contains(output, "- `intervention_needed`") {
+		t.Fatalf("expected intervention_needed listing output=%s", output)
+	}
 	if !strings.Contains(output, "`work_order_created`: prefer `oar work-orders create`") {
 		t.Fatalf("expected higher-level command hint output=%s", output)
 	}

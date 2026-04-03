@@ -46,7 +46,7 @@ enums:
 
   inbox_category:
     enum_policy: strict
-    values: [decision_needed, exception, commitment_risk]
+    values: [decision_needed, intervention_needed, exception, commitment_risk]
 
   agent_notification_status:
     enum_policy: strict
@@ -74,6 +74,7 @@ enums:
       - receipt_added
       - review_completed
       - decision_needed
+      - intervention_needed
       - decision_made
       - snapshot_updated
       - commitment_created
@@ -462,6 +463,10 @@ reference_conventions:
       thread_id: required
       refs_optional: ["artifact:<related_id>", "snapshot:<commitment_id>"]
 
+    intervention_needed:
+      thread_id: required
+      refs_optional: ["artifact:<related_id>", "snapshot:<commitment_id>"]
+
     decision_made:
       thread_id: required
       refs_optional: ["artifact:<decision_artifact_id>", "snapshot:<commitment_id>"]
@@ -604,6 +609,10 @@ derived:
       recommended_action: { type: string, required: true }
 
   inbox_derivation_rules:
+    semantics: >
+      `decision_needed` means a human must choose among multiple viable paths.
+      `intervention_needed` means the path is already clear, but an agent cannot
+      execute the next step and a human must act.
     acknowledgment: >
       When an inbox_item_acknowledged event exists referencing an inbox item
       (via inbox:<inbox_item_id>), that item is suppressed from the inbox

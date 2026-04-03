@@ -113,6 +113,7 @@ type eventTypeGuidance struct {
 var eventTypeGroupOrder = []string{
 	"Communication",
 	"Decisions",
+	"Interventions",
 	"State And Commitments",
 	"Exceptions",
 	"Packet Lifecycle",
@@ -122,6 +123,7 @@ var eventTypeGroupOrder = []string{
 var eventTypeGroupDescriptions = map[string]string{
 	"Communication":         "Direct communication or important non-structured information.",
 	"Decisions":             "Request or record decisions on the thread.",
+	"Interventions":         "Single clear path exists, but a human must act to complete it.",
 	"State And Commitments": "Track state changes and commitments.",
 	"Exceptions":            "Surface problems, risks, or escalations.",
 	"Packet Lifecycle":      "Packet lifecycle facts, usually emitted by higher-level commands.",
@@ -178,6 +180,15 @@ var knownEventTypeGuidance = []eventTypeGuidance{
 	{
 		Type:  "decision_needed",
 		Group: "Decisions",
+		Constraints: []string{
+			"thread_id is required.",
+			`event.refs may include "artifact:<related_id>" and "snapshot:<commitment_id>".`,
+		},
+	},
+	{
+		Type:    "intervention_needed",
+		Group:   "Interventions",
+		Summary: "Use when the next step is clear but a human must perform it.",
 		Constraints: []string{
 			"thread_id is required.",
 			`event.refs may include "artifact:<related_id>" and "snapshot:<commitment_id>".`,

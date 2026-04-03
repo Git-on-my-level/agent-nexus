@@ -3,7 +3,7 @@
   "contract_version": "0.2.3",
   "generated_by": "core/cmd/contract-gen",
   "event_type_open_enum": true,
-  "rule_count": 19,
+  "rule_count": 20,
   "rules": {
     "agent_notification_dismissed": {
       "thread_id": "required",
@@ -115,6 +115,9 @@
       "refs_must_include": [
         "inbox:\u003cinbox_item_id\u003e"
       ]
+    },
+    "intervention_needed": {
+      "thread_id": "required"
     },
     "message_posted": {
       "thread_id": "required"

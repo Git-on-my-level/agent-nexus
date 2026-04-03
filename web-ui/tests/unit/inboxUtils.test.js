@@ -27,6 +27,12 @@ describe("inbox grouping", () => {
           source_event_time: "2026-03-03T10:00:00.000Z",
         },
         {
+          id: "new-intervention",
+          category: "intervention_needed",
+          title: "Human needs to publish the approved post",
+          source_event_time: "2026-03-07T11:30:00.000Z",
+        },
+        {
           id: "old-decision",
           category: "decision_needed",
           source_event_time: "2026-03-03T10:00:00.000Z",
@@ -44,6 +50,7 @@ describe("inbox grouping", () => {
 
     expect(grouped.map((group) => group.category)).toEqual([
       "decision_needed",
+      "intervention_needed",
       "exception",
       "commitment_risk",
     ]);
@@ -53,9 +60,12 @@ describe("inbox grouping", () => {
       "new-decision",
     ]);
     expect(grouped[1].items.map((item) => item.id)).toEqual([
+      "new-intervention",
+    ]);
+    expect(grouped[2].items.map((item) => item.id)).toEqual([
       "fresh-exception",
     ]);
-    expect(grouped[2].items.map((item) => item.id)).toEqual(["old-risk"]);
+    expect(grouped[3].items.map((item) => item.id)).toEqual(["old-risk"]);
   });
 });
 

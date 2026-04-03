@@ -198,6 +198,77 @@ func TestInboxDerivationAndAcknowledgmentSuppression(t *testing.T) {
 	}
 }
 
+func TestInterventionNeededDerivesInboxItem(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	threadResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
+		"actor_id":"actor-1",
+		"thread":{
+			"title":"Intervention thread",
+			"type":"incident",
+			"status":"active",
+			"priority":"p1",
+			"tags":["ops"],
+			"cadence":"daily",
+			"next_check_in_at":"2026-03-05T00:00:00Z",
+			"current_summary":"summary",
+			"next_actions":["do x"],
+			"key_artifacts":[],
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated)
+	defer threadResp.Body.Close()
+
+	var createdThread struct {
+		Thread map[string]any `json:"thread"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&createdThread); err != nil {
+		t.Fatalf("decode thread response: %v", err)
+	}
+	threadID, _ := createdThread.Thread["id"].(string)
+	if threadID == "" {
+		t.Fatal("expected thread id")
+	}
+
+	eventResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
+		"actor_id":"actor-1",
+		"event":{
+			"type":"intervention_needed",
+			"thread_id":"`+threadID+`",
+			"refs":["thread:`+threadID+`"],
+			"summary":"Post the approved draft on LinkedIn",
+			"payload":{},
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated)
+	defer eventResp.Body.Close()
+
+	var createdEvent struct {
+		Event map[string]any `json:"event"`
+	}
+	if err := json.NewDecoder(eventResp.Body).Decode(&createdEvent); err != nil {
+		t.Fatalf("decode intervention event response: %v", err)
+	}
+	eventID, _ := createdEvent.Event["id"].(string)
+	if eventID == "" {
+		t.Fatal("expected intervention event id")
+	}
+
+	items := getInboxItems(t, h.baseURL)
+	item, ok := findInboxItem(items, func(item map[string]any) bool {
+		return asString(item["category"]) == "intervention_needed" && asString(item["source_event_id"]) == eventID
+	})
+	if !ok {
+		t.Fatalf("expected intervention_needed inbox item for source_event_id=%s, got %#v", eventID, items)
+	}
+	if got := asString(item["recommended_action"]); got != "take_action" {
+		t.Fatalf("expected recommended_action take_action, got %#v", item)
+	}
+}
+
 func TestDecisionNeedeSuppressedByDecisionMade(t *testing.T) {
 	t.Parallel()
 

@@ -133,7 +133,7 @@ func deriveThreadInboxItems(ctx context.Context, opts handlerOptions, threadID s
 	for _, event := range events {
 		eventType, _ := event["type"].(string)
 		switch eventType {
-		case "decision_needed", "exception_raised":
+		case "decision_needed", "intervention_needed", "exception_raised":
 			item, ok := deriveEventBackedInboxItem(event)
 			if !ok {
 				continue

@@ -738,6 +738,8 @@ func formatCommandSpecificHelpBlock(cmd registry.Command) string {
   Decisions: request or record decisions on the thread
   - ` + "`decision_needed`" + `
   - ` + "`decision_made`" + `
+  Interventions: single clear path exists, but a human must act to complete it
+  - ` + "`intervention_needed`" + `
   State and commitments: track state changes and commitments
   - ` + "`snapshot_updated`" + `
   - ` + "`commitment_created`" + `

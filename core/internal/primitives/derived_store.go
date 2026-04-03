@@ -583,10 +583,12 @@ func derivedInboxCategoryOrder(category string) int {
 	switch strings.TrimSpace(category) {
 	case "decision_needed":
 		return 0
-	case "exception":
+	case "intervention_needed":
 		return 1
-	case "commitment_risk":
+	case "exception":
 		return 2
+	case "commitment_risk":
+		return 3
 	default:
 		return 99
 	}

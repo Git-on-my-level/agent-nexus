@@ -1499,8 +1499,14 @@ func TestEventsExplainListMode(t *testing.T) {
 	if !strings.Contains(raw, "Communication: Direct communication or important non-structured information.") {
 		t.Fatalf("expected communication group in explain output, got %q", raw)
 	}
+	if !strings.Contains(raw, "Interventions: Single clear path exists, but a human must act to complete it.") {
+		t.Fatalf("expected interventions group in explain output, got %q", raw)
+	}
 	if !strings.Contains(raw, "- message_posted: Use for direct communication between entities on a thread.") {
 		t.Fatalf("expected message_posted communication guidance in explain output, got %q", raw)
+	}
+	if !strings.Contains(raw, "- intervention_needed: Use when the next step is clear but a human must perform it.") {
+		t.Fatalf("expected intervention_needed guidance in explain output, got %q", raw)
 	}
 	if !strings.Contains(raw, "- review_completed: prefer `oar reviews create`") {
 		t.Fatalf("expected preferred command guidance in explain output, got %q", raw)
@@ -1523,6 +1529,7 @@ func TestEventsExplainListModeJSON(t *testing.T) {
 	}
 
 	foundMessagePosted := false
+	foundInterventionNeeded := false
 	foundReviewCompleted := false
 	for _, item := range items {
 		entry, _ := item.(map[string]any)
@@ -1531,6 +1538,11 @@ func TestEventsExplainListModeJSON(t *testing.T) {
 			foundMessagePosted = true
 			if got := anyStringValue(entry["group"]); got != "Communication" {
 				t.Fatalf("expected message_posted group Communication, got %q entry=%#v", got, entry)
+			}
+		case "intervention_needed":
+			foundInterventionNeeded = true
+			if got := anyStringValue(entry["group"]); got != "Interventions" {
+				t.Fatalf("expected intervention_needed group Interventions, got %q entry=%#v", got, entry)
 			}
 		case "review_completed":
 			foundReviewCompleted = true
@@ -1541,6 +1553,9 @@ func TestEventsExplainListModeJSON(t *testing.T) {
 	}
 	if !foundMessagePosted {
 		t.Fatalf("expected message_posted in JSON output, payload=%#v", payload)
+	}
+	if !foundInterventionNeeded {
+		t.Fatalf("expected intervention_needed in JSON output, payload=%#v", payload)
 	}
 	if !foundReviewCompleted {
 		t.Fatalf("expected review_completed in JSON output, payload=%#v", payload)

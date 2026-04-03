@@ -113,7 +113,7 @@ A dedicated surface showing items that need human attention.
 
 **Display:**
 
-- Inbox items grouped by category: `decision_needed`, `exception`, `commitment_risk`.
+- Inbox items grouped by category: `decision_needed`, `intervention_needed`, `exception`, `commitment_risk`.
 - Within each category, sorted by time or due date (no ranking engine in v0).
 - Each item shows: title, category, recommended action, and a link to the relevant thread/commitment.
 - Inbox item IDs are deterministic (see schema) and stable across rebuilds.
