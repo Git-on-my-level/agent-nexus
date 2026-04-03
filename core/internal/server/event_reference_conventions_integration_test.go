@@ -19,7 +19,7 @@ func TestEventReferenceConventionsRejectMissingRequiredRefs(t *testing.T) {
 		"event":{
 			"type":"work_order_created",
 			"thread_id":"thread-1",
-			"refs":["thread:thread-1"],
+			"refs":[],
 			"summary":"work order created",
 			"payload":{},
 			"provenance":{"sources":["inferred"]}
@@ -43,15 +43,15 @@ func TestEventReferenceConventionsRejectMissingRequiredRefs(t *testing.T) {
 	commitmentStatusResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-1",
 		"event":{
-			"type":"commitment_status_changed",
+			"type":"decision_needed",
 			"thread_id":"thread-1",
-			"refs":["snapshot:commitment-1"],
+			"refs":[],
 			"summary":"status changed",
-			"payload":{"to_status":"done"},
+			"payload":{"decision":"approve"},
 			"provenance":{"sources":["inferred"]}
 		}
 	}`, http.StatusBadRequest)
-	assertEventErrorMessageContains(t, commitmentStatusResp, "payload.to_status=\"done\"")
+	assertEventErrorMessageContains(t, commitmentStatusResp, "event.refs must include")
 }
 
 func TestEventReferenceConventionsRejectMissingRequiredPayloadFields(t *testing.T) {

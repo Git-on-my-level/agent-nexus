@@ -794,26 +794,14 @@ func mapKeysSorted(values map[string]struct{}) []string {
 }
 
 func validateThreadCreate(contract *schema.Contract, thread map[string]any) error {
-	threadSchema, ok := contract.Snapshots["thread"]
-	if !ok {
-		return fmt.Errorf("thread schema is not loaded")
+	if thread == nil {
+		return fmt.Errorf("thread is required")
 	}
-
-	required := make([]string, 0)
-	for name, field := range threadSchema.Fields {
-		if field.Required && name != "open_commitments" {
-			required = append(required, name)
-		}
+	if _, exists := thread["provenance"]; !exists {
+		return fmt.Errorf("thread.provenance is required")
 	}
-	sort.Strings(required)
-	for _, name := range required {
-		value, exists := thread[name]
-		if !exists {
-			return fmt.Errorf("thread.%s is required", name)
-		}
-		if err := validateThreadField(contract, name, value, true); err != nil {
-			return err
-		}
+	if err := validateLegacyThreadCadence(thread); err != nil {
+		return err
 	}
 
 	for name, value := range thread {
@@ -826,10 +814,28 @@ func validateThreadCreate(contract *schema.Contract, thread map[string]any) erro
 }
 
 func validateThreadPatch(contract *schema.Contract, patch map[string]any) error {
+	if err := validateLegacyThreadCadence(patch); err != nil {
+		return err
+	}
 	for name, value := range patch {
 		if err := validateThreadField(contract, name, value, false); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func validateLegacyThreadCadence(body map[string]any) error {
+	raw, exists := body["cadence"]
+	if !exists {
+		return nil
+	}
+	cadence, ok := raw.(string)
+	if !ok {
+		return fmt.Errorf("thread.cadence must be a string")
+	}
+	if err := schedule.ValidateCadence(cadence); err != nil {
+		return fmt.Errorf("thread.cadence: %w", err)
 	}
 	return nil
 }

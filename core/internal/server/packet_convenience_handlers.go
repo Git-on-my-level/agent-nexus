@@ -129,6 +129,31 @@ func createPacketArtifactAndEvent(w http.ResponseWriter, r *http.Request, opts h
 	if firstNonEmptyString(req.Packet[idField]) == "" {
 		req.Packet[idField] = artifactID
 	}
+	if firstNonEmptyString(req.Packet["subject_ref"]) == "" {
+		if threadID := firstNonEmptyString(req.Packet["thread_id"]); threadID != "" {
+			req.Packet["subject_ref"] = "thread:" + threadID
+		} else if refs, err := extractStringSlice(req.Artifact["refs"]); err == nil {
+			if threadID := findFirstRefValueByPrefix(refs, "thread"); threadID != "" {
+				req.Packet["subject_ref"] = "thread:" + threadID
+			} else if topicID := findFirstRefValueByPrefix(refs, "topic"); topicID != "" {
+				req.Packet["subject_ref"] = "topic:" + topicID
+			}
+		}
+	}
+	if request.PacketKind == "receipt" || request.PacketKind == "review" {
+		if firstNonEmptyString(req.Packet["work_order_ref"]) == "" {
+			if workOrderID := firstNonEmptyString(req.Packet["work_order_id"]); workOrderID != "" {
+				req.Packet["work_order_ref"] = "artifact:" + workOrderID
+			}
+		}
+	}
+	if request.PacketKind == "review" {
+		if firstNonEmptyString(req.Packet["receipt_ref"]) == "" {
+			if receiptID := firstNonEmptyString(req.Packet["receipt_id"]); receiptID != "" {
+				req.Packet["receipt_ref"] = "artifact:" + receiptID
+			}
+		}
+	}
 	replayStatus, replayPayload, replayed, err := readIdempotencyReplay(r.Context(), opts.primitiveStore, scope, actorID, req.RequestKey, req)
 	if writeIdempotencyError(w, err) {
 		return

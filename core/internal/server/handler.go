@@ -91,6 +91,14 @@ type PrimitiveStore interface {
 	ListBoardCardHistory(ctx context.Context, cardID string) ([]map[string]any, error)
 	ListBoardMembershipsByThread(ctx context.Context, threadID string) ([]primitives.BoardMembership, error)
 	GetSnapshot(ctx context.Context, id string) (map[string]any, error)
+	ListTopics(ctx context.Context, filter primitives.TopicListFilter) ([]map[string]any, string, error)
+	CreateTopic(ctx context.Context, actorID string, topic map[string]any) (primitives.TopicPatchResult, error)
+	GetTopic(ctx context.Context, topicID string) (map[string]any, error)
+	PatchTopic(ctx context.Context, actorID string, topicID string, patch map[string]any, ifUpdatedAt *string) (primitives.TopicPatchResult, error)
+	ArchiveTopic(ctx context.Context, actorID string, topicID string) (map[string]any, error)
+	UnarchiveTopic(ctx context.Context, actorID string, topicID string) (map[string]any, error)
+	TombstoneTopic(ctx context.Context, actorID string, topicID string, reason string) (map[string]any, error)
+	RestoreTopic(ctx context.Context, actorID string, topicID string) (map[string]any, error)
 	CreateThread(ctx context.Context, actorID string, thread map[string]any) (primitives.PatchSnapshotResult, error)
 	GetThread(ctx context.Context, id string) (map[string]any, error)
 	PatchThread(ctx context.Context, actorID string, id string, patch map[string]any, ifUpdatedAt *string) (primitives.PatchSnapshotResult, error)
@@ -880,6 +888,152 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleRevokeCurrentAgent(w, r, opts)
 	})
 
+	registerRoute("/topics", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodGet, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			handleCreateTopic(w, r, opts)
+		case http.MethodGet:
+			handleListTopics(w, r, opts)
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST and GET are supported")
+		}
+	})
+
+	registerRoute("/topics/", func(r *http.Request) routeAccessRequirement {
+		remainder := strings.TrimPrefix(r.URL.Path, "/topics/")
+		if remainder == "" {
+			return routeAccessRequirement{}
+		}
+		switch {
+		case strings.HasSuffix(remainder, "/timeline"), strings.HasSuffix(remainder, "/workspace"):
+			if r.Method == http.MethodGet {
+				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+			}
+			return routeAccessRequirement{}
+		case strings.HasSuffix(remainder, "/archive"), strings.HasSuffix(remainder, "/unarchive"), strings.HasSuffix(remainder, "/tombstone"), strings.HasSuffix(remainder, "/restore"):
+			if r.Method == http.MethodPost {
+				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+			}
+			return routeAccessRequirement{}
+		case strings.Contains(remainder, "/"):
+			return routeAccessRequirement{}
+		case r.Method == http.MethodGet || r.Method == http.MethodPatch:
+			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+		default:
+			return routeAccessRequirement{}
+		}
+	}, func(w http.ResponseWriter, r *http.Request) {
+		remainder := strings.TrimPrefix(r.URL.Path, "/topics/")
+		if remainder == "" {
+			writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+			return
+		}
+
+		if strings.HasSuffix(remainder, "/timeline") {
+			if r.Method != http.MethodGet {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+				return
+			}
+			topicID := strings.TrimSuffix(remainder, "/timeline")
+			topicID = strings.TrimSuffix(topicID, "/")
+			if topicID == "" || strings.Contains(topicID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			handleGetTopicTimeline(w, r, opts, topicID)
+			return
+		}
+
+		if strings.HasSuffix(remainder, "/workspace") {
+			if r.Method != http.MethodGet {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+				return
+			}
+			topicID := strings.TrimSuffix(remainder, "/workspace")
+			topicID = strings.TrimSuffix(topicID, "/")
+			if topicID == "" || strings.Contains(topicID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			handleGetTopicWorkspace(w, r, opts, topicID)
+			return
+		}
+
+		if strings.HasSuffix(remainder, "/archive") {
+			if r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+				return
+			}
+			topicID := strings.TrimSuffix(remainder, "/archive")
+			topicID = strings.TrimSuffix(topicID, "/")
+			if topicID == "" || strings.Contains(topicID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			handleArchiveTopic(w, r, opts, topicID)
+			return
+		}
+
+		if strings.HasSuffix(remainder, "/unarchive") {
+			if r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+				return
+			}
+			topicID := strings.TrimSuffix(remainder, "/unarchive")
+			topicID = strings.TrimSuffix(topicID, "/")
+			if topicID == "" || strings.Contains(topicID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			handleUnarchiveTopic(w, r, opts, topicID)
+			return
+		}
+
+		if strings.HasSuffix(remainder, "/tombstone") {
+			if r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+				return
+			}
+			topicID := strings.TrimSuffix(remainder, "/tombstone")
+			topicID = strings.TrimSuffix(topicID, "/")
+			if topicID == "" || strings.Contains(topicID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			handleTombstoneTopic(w, r, opts, topicID)
+			return
+		}
+
+		if strings.HasSuffix(remainder, "/restore") {
+			if r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+				return
+			}
+			topicID := strings.TrimSuffix(remainder, "/restore")
+			topicID = strings.TrimSuffix(topicID, "/")
+			if topicID == "" || strings.Contains(topicID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			handleRestoreTopic(w, r, opts, topicID)
+			return
+		}
+
+		if strings.Contains(remainder, "/") {
+			writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+			return
+		}
+
+		switch r.Method {
+		case http.MethodGet:
+			handleGetTopic(w, r, opts, remainder)
+		case http.MethodPatch:
+			handlePatchTopic(w, r, opts, remainder)
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET and PATCH are supported")
+		}
+	})
+
 	registerRoute("/threads", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodGet, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodPost:
@@ -909,7 +1063,9 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			return routeAccessRequirement{}
 		case strings.Contains(remainder, "/"):
 			return routeAccessRequirement{}
-		case r.Method == http.MethodGet || r.Method == http.MethodPatch:
+		case r.Method == http.MethodGet:
+			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+		case r.Method == http.MethodPatch:
 			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
 		default:
 			return routeAccessRequirement{}
@@ -1145,6 +1301,11 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
 			}
 			return routeAccessRequirement{}
+		case strings.HasSuffix(remainder, "/revisions"):
+			if r.Method == http.MethodGet || r.Method == http.MethodPost {
+				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+			}
+			return routeAccessRequirement{}
 		case strings.Contains(remainder, "/revisions/"):
 			if r.Method == http.MethodGet {
 				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
@@ -1245,6 +1406,21 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				return
 			}
 			documentID := strings.TrimSuffix(remainder, "/history")
+			documentID = strings.TrimSuffix(documentID, "/")
+			if documentID == "" || strings.Contains(documentID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			handleListDocumentHistory(w, r, opts, documentID)
+			return
+		}
+
+		if strings.HasSuffix(remainder, "/revisions") {
+			if r.Method != http.MethodGet {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+				return
+			}
+			documentID := strings.TrimSuffix(remainder, "/revisions")
 			documentID = strings.TrimSuffix(documentID, "/")
 			if documentID == "" || strings.Contains(documentID, "/") {
 				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
@@ -1562,6 +1738,11 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
 			}
 			return routeAccessRequirement{}
+		case strings.HasSuffix(remainder, "/move"):
+			if r.Method == http.MethodPost {
+				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+			}
+			return routeAccessRequirement{}
 		case strings.Contains(remainder, "/"):
 			return routeAccessRequirement{}
 		case r.Method == http.MethodGet || r.Method == http.MethodPatch:
@@ -1587,6 +1768,14 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				return
 			}
 			handleArchiveBoardCard(w, r, opts, "", cardID)
+			return
+		}
+		if strings.HasSuffix(remainder, "/move") {
+			if r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+				return
+			}
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
 			return
 		}
 		if strings.Contains(remainder, "/") {
@@ -1850,6 +2039,30 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 	})
 
 	registerRoute("/reviews", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+			return
+		}
+		handleCreateReview(w, r, opts)
+	})
+
+	registerRoute("/packets/work-orders", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+			return
+		}
+		handleCreateWorkOrder(w, r, opts)
+	})
+
+	registerRoute("/packets/receipts", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+			return
+		}
+		handleCreateReceipt(w, r, opts)
+	})
+
+	registerRoute("/packets/reviews", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
 			return

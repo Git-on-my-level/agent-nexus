@@ -88,6 +88,7 @@ type contractFile struct {
 	Enums                map[string]rawEnum
 	RefFormat            rawRefFormat `yaml:"ref_format"`
 	Provenance           rawProvenance
+	Primitives           rawSnapshots `yaml:"primitives"`
 	Snapshots            rawSnapshots
 	Packets              rawPackets
 	ReferenceConventions rawReferenceConventions `yaml:"reference_conventions"`
@@ -260,8 +261,12 @@ func Load(path string) (*Contract, error) {
 		}
 	}
 
-	contract.Snapshots["thread"] = normalizeSnapshot("thread", file.Snapshots.Thread)
-	contract.Snapshots["commitment"] = normalizeSnapshot("commitment", file.Snapshots.Commitment)
+	snapshotSource := file.Primitives
+	if len(snapshotSource.Thread.Fields) == 0 && len(snapshotSource.Commitment.Fields) == 0 {
+		snapshotSource = file.Snapshots
+	}
+	contract.Snapshots["thread"] = normalizeSnapshot("thread", snapshotSource.Thread)
+	contract.Snapshots["commitment"] = normalizeSnapshot("commitment", snapshotSource.Commitment)
 
 	contract.Packets["work_order"] = normalizePacket("work_order", file.Packets.WorkOrder)
 	contract.Packets["receipt"] = normalizePacket("receipt", file.Packets.Receipt)

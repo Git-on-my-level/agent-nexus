@@ -96,6 +96,14 @@ func validatePacketField(contract *schema.Contract, fieldName string, value any,
 				return fmt.Errorf("packet.%s: %w", fieldName, err)
 			}
 		}
+	case "typed_ref":
+		text, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("packet.%s must be a string", fieldName)
+		}
+		if err := schema.ValidateTypedRefs(contract, []string{text}); err != nil {
+			return fmt.Errorf("packet.%s: %w", fieldName, err)
+		}
 	case "datetime":
 		text, ok := value.(string)
 		if !ok {
@@ -116,6 +124,9 @@ func validatePacketField(contract *schema.Contract, fieldName string, value any,
 		refs, err := extractStringSlice(value)
 		if err != nil {
 			return fmt.Errorf("packet.%s must be a list of strings", fieldName)
+		}
+		if fieldName == "outputs" && len(refs) == 0 {
+			return fmt.Errorf("packet.%s must include at least 1 item(s)", fieldName)
 		}
 		if spec.MinItems != nil && len(refs) < *spec.MinItems {
 			return fmt.Errorf("packet.%s must include at least %d item(s)", fieldName, *spec.MinItems)

@@ -77,6 +77,18 @@ type ThreadListFilter struct {
 	TombstonedOnly    bool
 }
 
+type TopicListFilter struct {
+	Type              string
+	Status            string
+	Query             string
+	Limit             *int
+	Cursor            string
+	IncludeArchived   bool
+	ArchivedOnly      bool
+	IncludeTombstoned bool
+	TombstonedOnly    bool
+}
+
 type EventListFilter struct {
 	Types []string
 }
