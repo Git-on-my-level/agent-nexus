@@ -16,6 +16,8 @@ import (
 
 var ErrInvalidBoardRequest = errors.New("invalid board request")
 
+const boardSummaryRiskHorizon = 7 * 24 * time.Hour
+
 type BoardListFilter struct {
 	Status            string
 	Label             string
@@ -1741,7 +1743,7 @@ func (s *Store) ListBoardMembershipsByThread(ctx context.Context, threadID strin
 
 	rows, err := s.db.QueryContext(
 		ctx,
-		`SELECT b.id, b.title, b.status, re.source_id, re.target_id, json_extract(re.metadata_json, '$.column_key'), c.title, c.status, c.parent_thread_id, c.pinned_document_id
+		`SELECT b.id, b.title, b.status, re.source_id, re.target_id, json_extract(re.metadata_json, '$.column_key'), c.title, c.status, c.parent_thread_id, c.pinned_document_id, c.due_at, c.updated_at
 		   FROM ref_edges re
 		   JOIN boards b ON b.id = re.source_id
 		   JOIN cards c ON c.id = re.target_id
@@ -1771,8 +1773,10 @@ func (s *Store) ListBoardMembershipsByThread(ctx context.Context, threadID strin
 			cardStatus       string
 			parentThreadID   sql.NullString
 			pinnedDocumentID sql.NullString
+			dueAt            sql.NullString
+			updatedAt        string
 		)
-		if err := rows.Scan(&boardID, &title, &status, &cardBoardID, &cardID, &columnKey, &cardTitle, &cardStatus, &parentThreadID, &pinnedDocumentID); err != nil {
+		if err := rows.Scan(&boardID, &title, &status, &cardBoardID, &cardID, &columnKey, &cardTitle, &cardStatus, &parentThreadID, &pinnedDocumentID, &dueAt, &updatedAt); err != nil {
 			return nil, fmt.Errorf("scan board membership: %w", err)
 		}
 		out = append(out, BoardMembership{
@@ -1790,6 +1794,8 @@ func (s *Store) ListBoardMembershipsByThread(ctx context.Context, threadID strin
 				"column_key":         nullableBoardString(columnKey.String),
 				"parent_thread":      nullableBoardString(parentThreadID.String),
 				"pinned_document_id": nullableBoardString(pinnedDocumentID.String),
+				"due_at":             nullableBoardString(dueAt.String),
+				"updated_at":         updatedAt,
 			},
 		})
 	}
@@ -1829,6 +1835,7 @@ func (s *Store) computeBoardSummaries(ctx context.Context, boards []boardRow) (m
 	if err != nil {
 		return nil, err
 	}
+	now := time.Now().UTC()
 
 	for _, board := range boards {
 		cards := cardsByBoard[board.ID]
@@ -1850,7 +1857,11 @@ func (s *Store) computeBoardSummaries(ctx context.Context, boards []boardRow) (m
 
 		unresolvedCardCount := 0
 		resolvedCardCount := 0
-		openCommitmentCount := 0
+		atRiskCardCount := 0
+		dueSoonCardCount := 0
+		overdueCardCount := 0
+		blockedCardCount := 0
+		staleCardCount := 0
 		documentCount := 0
 		latestActivityAt := board.UpdatedAt
 		for threadID := range threadSet {
@@ -1858,17 +1869,30 @@ func (s *Store) computeBoardSummaries(ctx context.Context, boards []boardRow) (m
 			if !ok {
 				continue
 			}
-			openCommitmentCount += projection.OpenCommitmentCount
 			documentCount += projection.DocumentCount
 			latestActivityAt = maxRFC3339Timestamp(latestActivityAt, projection.LastActivityAt)
 		}
 		for _, card := range cards {
-			switch strings.TrimSpace(card.Status) {
-			case "done", "cancelled":
-				resolvedCardCount++
-			default:
+			if boardCardRowCountsAsOpenWorkItem(card) {
 				unresolvedCardCount++
+				switch boardCardRowRiskState(card, now, boardSummaryRiskHorizon) {
+				case "overdue":
+					atRiskCardCount++
+					overdueCardCount++
+				case "due_soon":
+					atRiskCardCount++
+					dueSoonCardCount++
+				case "blocked":
+					atRiskCardCount++
+					blockedCardCount++
+				}
+				if projection, ok := projections[strings.TrimSpace(card.ParentThreadID.String)]; ok && projection.Stale {
+					staleCardCount++
+				}
+			} else {
+				resolvedCardCount++
 			}
+			latestActivityAt = maxRFC3339Timestamp(latestActivityAt, card.UpdatedAt)
 		}
 
 		summaries[board.ID] = map[string]any{
@@ -1876,7 +1900,11 @@ func (s *Store) computeBoardSummaries(ctx context.Context, boards []boardRow) (m
 			"cards_by_column":       cardsByColumn,
 			"unresolved_card_count": unresolvedCardCount,
 			"resolved_card_count":   resolvedCardCount,
-			"open_commitment_count": openCommitmentCount,
+			"at_risk_card_count":    atRiskCardCount,
+			"due_soon_card_count":   dueSoonCardCount,
+			"overdue_card_count":    overdueCardCount,
+			"blocked_card_count":    blockedCardCount,
+			"stale_card_count":      staleCardCount,
 			"document_count":        documentCount,
 			"latest_activity_at":    nullableBoardString(latestActivityAt),
 			"has_primary_document":  len(boardDocumentRefsFromRefs(decodeJSONListOrEmpty(board.RefsJSON))) > 0,
@@ -1884,6 +1912,48 @@ func (s *Store) computeBoardSummaries(ctx context.Context, boards []boardRow) (m
 	}
 
 	return summaries, nil
+}
+
+func boardCardRowCountsAsOpenWorkItem(card boardCardRow) bool {
+	switch strings.TrimSpace(card.Status) {
+	case "done", "cancelled":
+		return false
+	default:
+		return true
+	}
+}
+
+func boardCardRowRiskState(card boardCardRow, now time.Time, riskHorizon time.Duration) string {
+	if !boardCardRowCountsAsOpenWorkItem(card) {
+		return ""
+	}
+	if strings.TrimSpace(card.ColumnKey) == "blocked" {
+		if dueAt, ok := parseBoardCardRowDueAt(card); ok && !dueAt.After(now.Add(riskHorizon)) && dueAt.Before(now) {
+			return "overdue"
+		}
+		return "blocked"
+	}
+	dueAt, ok := parseBoardCardRowDueAt(card)
+	if !ok || dueAt.After(now.Add(riskHorizon)) {
+		return ""
+	}
+	if dueAt.Before(now) {
+		return "overdue"
+	}
+	return "due_soon"
+}
+
+func parseBoardCardRowDueAt(card boardCardRow) (time.Time, bool) {
+	if !card.DueAt.Valid || strings.TrimSpace(card.DueAt.String) == "" {
+		return time.Time{}, false
+	}
+	if parsed, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(card.DueAt.String)); err == nil {
+		return parsed, true
+	}
+	if parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(card.DueAt.String)); err == nil {
+		return parsed, true
+	}
+	return time.Time{}, false
 }
 
 func buildListBoardsQuery(filter BoardListFilter) (string, []any) {

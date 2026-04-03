@@ -1054,7 +1054,7 @@ func buildBoardWorkspacePayload(ctx context.Context, opts handlerOptions, boardI
 		return nil, err
 	}
 
-	boardSummary := buildBoardWorkspaceSummary(board, cards, states, documentsSection, commitmentsSection)
+	boardSummary := buildBoardWorkspaceSummary(board, cards, states, documentsSection, now)
 	freshness := aggregateThreadProjectionFreshness(states, threadIDs)
 	return map[string]any{
 		"board_id":                boardID,
@@ -1106,7 +1106,7 @@ func buildBoardWorkspaceCardsSection(ctx context.Context, opts handlerOptions, b
 			}
 		}
 
-		summary := boardCardDerivedSummary(threadID, states)
+		summary := boardCardDerivedSummary(card, threadID, states, time.Now().UTC())
 		freshness := boardCardDerivedFreshness(threadID, states)
 		items = append(items, map[string]any{
 			"board_ref":            "board:" + anyString(board["id"]),
@@ -1238,7 +1238,7 @@ func buildBoardWorkspaceInboxSection(ctx context.Context, opts handlerOptions, t
 	}, nil
 }
 
-func buildBoardWorkspaceSummary(board map[string]any, cards []map[string]any, states map[string]threadProjectionState, documentsSection, commitmentsSection map[string]any) map[string]any {
+func buildBoardWorkspaceSummary(board map[string]any, cards []map[string]any, states map[string]threadProjectionState, documentsSection map[string]any, now time.Time) map[string]any {
 	cardsByColumn := map[string]any{
 		"backlog":     0,
 		"ready":       0,
@@ -1274,18 +1274,56 @@ func buildBoardWorkspaceSummary(board map[string]any, cards []map[string]any, st
 		}
 	}
 
-	openCommitmentCount := workspaceIntValue(commitmentsSection["count"])
 	documentCount := workspaceIntValue(documentsSection["count"])
 	latestActivityAt := strings.TrimSpace(anyString(board["updated_at"]))
+	unresolvedCardCount := 0
+	resolvedCardCount := 0
+	atRiskCardCount := 0
+	dueSoonCardCount := 0
+	overdueCardCount := 0
+	blockedCardCount := 0
+	staleCardCount := 0
 	for threadID := range threadIDs {
 		projection := states[threadID].Projection
 		latestActivityAt = laterTimestamp(latestActivityAt, projection.LastActivityAt)
+	}
+	for _, card := range cards {
+		if !boardCardCountsAsOpenWorkItem(card) {
+			resolvedCardCount++
+		} else {
+			unresolvedCardCount++
+		}
+		riskState, _, _ := boardCardRiskState(card, now, defaultInboxRiskHorizon)
+		switch riskState {
+		case "overdue":
+			atRiskCardCount++
+			overdueCardCount++
+		case "due_soon":
+			atRiskCardCount++
+			dueSoonCardCount++
+		case "blocked":
+			atRiskCardCount++
+			blockedCardCount++
+		}
+		threadID := strings.TrimSpace(anyString(card["thread_id"]))
+		if state, ok := states[threadID]; ok && state.Projection.Stale && boardCardCountsAsOpenWorkItem(card) {
+			staleCardCount++
+		}
+		if updatedAt := strings.TrimSpace(anyString(card["updated_at"])); updatedAt != "" {
+			latestActivityAt = laterTimestamp(latestActivityAt, updatedAt)
+		}
 	}
 
 	return map[string]any{
 		"card_count":            len(cards),
 		"cards_by_column":       cardsByColumn,
-		"open_commitment_count": openCommitmentCount,
+		"unresolved_card_count": unresolvedCardCount,
+		"resolved_card_count":   resolvedCardCount,
+		"at_risk_card_count":    atRiskCardCount,
+		"due_soon_card_count":   dueSoonCardCount,
+		"overdue_card_count":    overdueCardCount,
+		"blocked_card_count":    blockedCardCount,
+		"stale_card_count":      staleCardCount,
 		"document_count":        documentCount,
 		"latest_activity_at":    nullableStringValue(latestActivityAt),
 		"has_primary_document":  len(boardDocumentRefs(board)) > 0,
@@ -1514,8 +1552,26 @@ func emitBoardLifecycleEventBestEffort(ctx context.Context, opts handlerOptions,
 	_ = emitBoardLifecycleEvent(ctx, opts, actorID, event)
 }
 
+func emitCardLifecycleEvent(ctx context.Context, opts handlerOptions, actorID string, event map[string]any) error {
+	if opts.primitiveStore == nil || event == nil {
+		return nil
+	}
+	stored, err := opts.primitiveStore.AppendEvent(ctx, actorID, event)
+	if err != nil {
+		return err
+	}
+	threadIDs := []string{anyString(stored["thread_id"])}
+	payload, _ := stored["payload"].(map[string]any)
+	threadIDs = append(threadIDs, anyString(payload["parent_thread"]))
+	enqueueThreadProjectionsBestEffort(ctx, opts, threadIDs, time.Now().UTC())
+	for _, threadID := range uniqueServerStrings(threadIDs) {
+		_ = refreshDerivedThreadProjection(ctx, opts, threadID, time.Now().UTC(), actorID)
+	}
+	return nil
+}
+
 func emitCardLifecycleEventBestEffort(ctx context.Context, opts handlerOptions, actorID string, event map[string]any) {
-	_ = emitBoardLifecycleEvent(ctx, opts, actorID, event)
+	_ = emitCardLifecycleEvent(ctx, opts, actorID, event)
 }
 
 func boardListItemsResponse(items []primitives.BoardListItem) []map[string]any {
@@ -1540,19 +1596,6 @@ func boardMembershipSectionResponse(items []primitives.BoardMembership) map[stri
 	return map[string]any{
 		"items": out,
 		"count": len(out),
-	}
-}
-
-func boardCardSummaryFromProjection(projection primitives.DerivedThreadProjection) map[string]any {
-	return map[string]any{
-		"open_commitment_count":  projection.OpenCommitmentCount,
-		"decision_request_count": projection.DecisionRequestCount,
-		"decision_count":         projection.DecisionCount,
-		"recommendation_count":   projection.RecommendationCount,
-		"document_count":         projection.DocumentCount,
-		"inbox_count":            projection.InboxCount,
-		"latest_activity_at":     nullableStringValue(projection.LastActivityAt),
-		"stale":                  projection.Stale,
 	}
 }
 
@@ -2166,12 +2209,27 @@ func containsTypedRefPrefix(refs []string, prefix string) bool {
 	return false
 }
 
-func boardCardDerivedSummary(threadID string, states map[string]threadProjectionState) any {
+func boardCardDerivedSummary(card map[string]any, threadID string, states map[string]threadProjectionState, now time.Time) any {
 	threadID = strings.TrimSpace(threadID)
 	if threadID == "" {
 		return nil
 	}
-	return boardCardSummaryFromProjection(states[threadID].Projection)
+	projection := states[threadID].Projection
+	riskState, dueAt, hasDueAt := boardCardRiskState(card, now, defaultInboxRiskHorizon)
+	summary := map[string]any{
+		"decision_request_count": projection.DecisionRequestCount,
+		"decision_count":         projection.DecisionCount,
+		"recommendation_count":   projection.RecommendationCount,
+		"document_count":         projection.DocumentCount,
+		"inbox_count":            projection.InboxCount,
+		"latest_activity_at":     nullableStringValue(projection.LastActivityAt),
+		"stale":                  projection.Stale,
+		"risk_state":             nullableStringValue(riskState),
+	}
+	if hasDueAt {
+		summary["due_at"] = dueAt.Format(time.RFC3339)
+	}
+	return summary
 }
 
 func boardCardDerivedFreshness(threadID string, states map[string]threadProjectionState) any {

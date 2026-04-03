@@ -74,18 +74,29 @@ func TestRefreshDerivedThreadProjectionBasicFlow(t *testing.T) {
 		}
 	}`, 201).Body.Close()
 
-	postJSONExpectStatus(t, h.baseURL+"/commitments", `{
+	boardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
 		"actor_id":"actor-1",
-		"commitment":{
-			"thread_id":"`+threadID+`",
-			"title":"Projection commitment",
-			"owner":"actor-1",
-			"due_at":"`+time.Now().UTC().Add(24*time.Hour).Format(time.RFC3339)+`",
-			"status":"open",
-			"definition_of_done":["done"],
-			"links":["url:https://example.com/task"],
-			"provenance":{"sources":["inferred"]}
+		"board":{
+			"title":"Projection board",
+			"primary_thread_id":"`+threadID+`"
 		}
+	}`, 201)
+	defer boardResp.Body.Close()
+	var createdBoard struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(boardResp.Body).Decode(&createdBoard); err != nil {
+		t.Fatalf("decode board response: %v", err)
+	}
+	boardID := anyString(createdBoard.Board["id"])
+	boardUpdatedAt := anyString(createdBoard.Board["updated_at"])
+	postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+boardUpdatedAt+`",
+		"thread_id":"`+threadID+`",
+		"title":"Projection work item",
+		"column_key":"ready",
+		"due_at":"`+time.Now().UTC().Add(24*time.Hour).Format(time.RFC3339)+`"
 	}`, 201).Body.Close()
 
 	postJSONExpectStatus(t, h.baseURL+"/docs", `{
@@ -98,11 +109,11 @@ func TestRefreshDerivedThreadProjectionBasicFlow(t *testing.T) {
 
 	items := getInboxItems(t, h.baseURL)
 	if len(items) != 2 {
-		t.Fatalf("expected decision + commitment inbox items, got %#v", items)
+		t.Fatalf("expected decision + work item inbox items, got %#v", items)
 	}
 
 	projection := mustLoadDerivedThreadProjection(t, h.workspace.DB(), threadID)
-	if projection.InboxCount != 2 || projection.DecisionRequestCount != 1 || projection.OpenCommitmentCount != 1 || projection.DocumentCount != 1 {
+	if projection.InboxCount != 2 || projection.DecisionRequestCount != 1 || workspaceIntValue(projection.Data["open_work_item_count"]) != 1 || projection.DocumentCount != 1 {
 		t.Fatalf("unexpected derived thread projection: %#v", projection)
 	}
 	if inboxRowCount := countDerivedInboxItemsForThread(t, h.workspace.DB(), threadID); inboxRowCount != 2 {

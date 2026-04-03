@@ -25,8 +25,12 @@ func emitStaleThreadExceptions(ctx context.Context, opts handlerOptions, now tim
 	if err != nil {
 		return nil, err
 	}
+	cards, err := opts.primitiveStore.ListCards(ctx)
+	if err != nil {
+		return nil, err
+	}
 
-	latestActivity := latestThreadActivityFromEvents(events)
+	latestActivity := mergeThreadActivity(latestThreadActivityFromEvents(events), latestThreadActivityFromCards(cards))
 	latestStaleException := latestStaleExceptionByThread(events)
 
 	actor := strings.TrimSpace(actorID)
@@ -90,6 +94,36 @@ func latestThreadActivityFromEvents(events []map[string]any) map[string]time.Tim
 	return out
 }
 
+func latestThreadActivityFromCards(cards []map[string]any) map[string]time.Time {
+	out := make(map[string]time.Time)
+	for _, card := range cards {
+		threadID := strings.TrimSpace(firstNonEmptyString(card["parent_thread"], card["thread_id"]))
+		if threadID == "" {
+			continue
+		}
+		updatedAt, ok := parseTimestamp(card["updated_at"])
+		if !ok {
+			continue
+		}
+		if current, exists := out[threadID]; !exists || updatedAt.After(current) {
+			out[threadID] = updatedAt
+		}
+	}
+	return out
+}
+
+func mergeThreadActivity(activitySets ...map[string]time.Time) map[string]time.Time {
+	out := map[string]time.Time{}
+	for _, activitySet := range activitySets {
+		for threadID, ts := range activitySet {
+			if current, exists := out[threadID]; !exists || ts.After(current) {
+				out[threadID] = ts
+			}
+		}
+	}
+	return out
+}
+
 func isMeaningfulThreadActivityEvent(event map[string]any) bool {
 	eventType, _ := event["type"].(string)
 	eventType = strings.TrimSpace(eventType)
@@ -102,6 +136,9 @@ func isMeaningfulThreadActivityEvent(event map[string]any) bool {
 		"decision_needed",
 		"intervention_needed",
 		"decision_made",
+		"card_created",
+		"card_updated",
+		"card_archived",
 		"work_order_created",
 		"receipt_added",
 		"review_completed",

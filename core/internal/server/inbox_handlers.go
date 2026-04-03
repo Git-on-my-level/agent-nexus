@@ -351,13 +351,13 @@ func deriveInboxItemsNoStaleEmission(ctx context.Context, opts handlerOptions, n
 		}
 	}
 
-	commitments, err := opts.primitiveStore.ListCommitments(ctx, primitives.CommitmentListFilter{})
+	cards, err := opts.primitiveStore.ListCards(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	for _, commitment := range commitments {
-		item, ok := deriveCommitmentRiskInboxItem(commitment, now, riskHorizon)
+	for _, card := range cards {
+		item, ok := deriveWorkItemRiskInboxItem(card, now, riskHorizon)
 		if !ok {
 			continue
 		}
@@ -486,62 +486,101 @@ func deriveEventBackedInboxItem(event map[string]any) (derivedInboxItem, bool) {
 	}, true
 }
 
-func deriveCommitmentRiskInboxItem(commitment map[string]any, now time.Time, riskHorizon time.Duration) (derivedInboxItem, bool) {
-	status, _ := commitment["status"].(string)
-	if status != "open" && status != "blocked" {
+func deriveWorkItemRiskInboxItem(card map[string]any, now time.Time, riskHorizon time.Duration) (derivedInboxItem, bool) {
+	threadID := strings.TrimSpace(firstNonEmptyString(card["parent_thread"], card["thread_id"]))
+	cardID := strings.TrimSpace(anyString(card["id"]))
+	if threadID == "" || cardID == "" {
 		return derivedInboxItem{}, false
 	}
 
-	dueAtText, _ := commitment["due_at"].(string)
-	dueAt, err := time.Parse(time.RFC3339, strings.TrimSpace(dueAtText))
-	if err != nil {
-		return derivedInboxItem{}, false
-	}
-	if dueAt.After(now.Add(riskHorizon)) {
+	if !boardCardCountsAsOpenWorkItem(card) {
 		return derivedInboxItem{}, false
 	}
 
-	threadID, _ := commitment["thread_id"].(string)
-	commitmentID, _ := commitment["id"].(string)
-	if strings.TrimSpace(threadID) == "" || strings.TrimSpace(commitmentID) == "" {
+	riskState, dueAt, hasDueAt := boardCardRiskState(card, now, riskHorizon)
+	if riskState == "" {
 		return derivedInboxItem{}, false
 	}
 
-	triggerAt, ok := parseTimestamp(commitment["updated_at"])
+	triggerAt, ok := parseTimestamp(card["updated_at"])
 	if !ok {
 		triggerAt = now
 	}
 
-	title, _ := commitment["title"].(string)
+	title, _ := card["title"].(string)
 	title = strings.TrimSpace(title)
 	if title == "" {
-		title = "Commitment risk"
+		title = "Work item risk"
 	}
 
-	recommendedAction := "follow_up_commitment"
-	if dueAt.Before(now) {
-		recommendedAction = "resolve_overdue_commitment"
+	recommendedAction := "follow_up_work_item"
+	switch riskState {
+	case "overdue":
+		recommendedAction = "resolve_overdue_work_item"
+	case "blocked":
+		recommendedAction = "unblock_work_item"
 	}
 
-	id := makeInboxItemID("commitment_risk", threadID, commitmentID, "")
+	id := makeInboxItemID("work_item_risk", threadID, cardID, "")
 	data := map[string]any{
 		"id":                 id,
-		"category":           "commitment_risk",
+		"category":           "work_item_risk",
 		"thread_id":          threadID,
-		"commitment_id":      commitmentID,
+		"card_id":            cardID,
+		"board_id":           nullableStringValue(anyString(card["board_id"])),
 		"title":              title,
+		"risk_state":         riskState,
 		"recommended_action": recommendedAction,
-		"due_at":             dueAt.Format(time.RFC3339),
+	}
+	if hasDueAt {
+		data["due_at"] = dueAt.Format(time.RFC3339)
 	}
 
 	return derivedInboxItem{
 		Data:      data,
-		Category:  "commitment_risk",
+		Category:  "work_item_risk",
 		ID:        id,
 		TriggerAt: triggerAt,
 		DueAt:     dueAt,
-		HasDueAt:  true,
+		HasDueAt:  hasDueAt,
 	}, true
+}
+
+func boardCardCountsAsOpenWorkItem(card map[string]any) bool {
+	switch strings.TrimSpace(anyString(card["status"])) {
+	case "done", "cancelled":
+		return false
+	default:
+		return true
+	}
+}
+
+func boardCardRiskState(card map[string]any, now time.Time, riskHorizon time.Duration) (string, time.Time, bool) {
+	if !boardCardCountsAsOpenWorkItem(card) {
+		return "", time.Time{}, false
+	}
+
+	if strings.TrimSpace(anyString(card["column_key"])) == "blocked" {
+		if dueAt, ok := parseOptionalRFC3339(anyString(card["due_at"])); ok && !dueAt.After(now.Add(riskHorizon)) {
+			if dueAt.Before(now) {
+				return "overdue", dueAt, true
+			}
+			return "blocked", dueAt, true
+		}
+		return "blocked", time.Time{}, false
+	}
+
+	dueAt, ok := parseOptionalRFC3339(anyString(card["due_at"]))
+	if !ok {
+		return "", time.Time{}, false
+	}
+	if dueAt.After(now.Add(riskHorizon)) {
+		return "", time.Time{}, true
+	}
+	if dueAt.Before(now) {
+		return "overdue", dueAt, true
+	}
+	return "due_soon", dueAt, true
 }
 
 func isSuppressedByAck(item derivedInboxItem, ackedAt map[string]time.Time) bool {
@@ -552,14 +591,14 @@ func isSuppressedByAck(item derivedInboxItem, ackedAt map[string]time.Time) bool
 	return !item.TriggerAt.After(acked)
 }
 
-func makeInboxItemID(category string, threadID string, commitmentID string, sourceEventID string) string {
-	if strings.TrimSpace(commitmentID) == "" {
-		commitmentID = "none"
+func makeInboxItemID(category string, threadID string, subjectID string, sourceEventID string) string {
+	if strings.TrimSpace(subjectID) == "" {
+		subjectID = "none"
 	}
 	if strings.TrimSpace(sourceEventID) == "" {
 		sourceEventID = "none"
 	}
-	return "inbox:" + category + ":" + threadID + ":" + commitmentID + ":" + sourceEventID
+	return "inbox:" + category + ":" + threadID + ":" + subjectID + ":" + sourceEventID
 }
 
 func parseTimestamp(raw any) (time.Time, bool) {
@@ -576,12 +615,28 @@ func parseTimestamp(raw any) (time.Time, bool) {
 	return time.Time{}, false
 }
 
+func parseOptionalRFC3339(raw string) (time.Time, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return time.Time{}, false
+	}
+	parsed, err := time.Parse(time.RFC3339, raw)
+	if err == nil {
+		return parsed, true
+	}
+	parsed, err = time.Parse(time.RFC3339Nano, raw)
+	if err == nil {
+		return parsed, true
+	}
+	return time.Time{}, false
+}
+
 func sortInboxItems(items []derivedInboxItem) {
 	categoryOrder := map[string]int{
 		"decision_needed":     0,
 		"intervention_needed": 1,
 		"exception":           2,
-		"commitment_risk":     3,
+		"work_item_risk":      3,
 	}
 
 	sort.Slice(items, func(i int, j int) bool {
@@ -600,7 +655,7 @@ func sortInboxItems(items []derivedInboxItem) {
 			return leftOrder < rightOrder
 		}
 
-		if left.Category == "commitment_risk" && right.Category == "commitment_risk" {
+		if left.Category == "work_item_risk" && right.Category == "work_item_risk" {
 			if left.HasDueAt && right.HasDueAt && !left.DueAt.Equal(right.DueAt) {
 				return left.DueAt.Before(right.DueAt)
 			}

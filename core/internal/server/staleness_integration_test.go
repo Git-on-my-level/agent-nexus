@@ -193,6 +193,79 @@ func TestStalenessClearsAfterActorStatementAndDocumentActivity(t *testing.T) {
 	}
 }
 
+func TestStalenessRebuildTreatsRecentCardActivityAsFresh(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	threadResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
+		"actor_id":"actor-1",
+		"thread":{
+			"title":"Card-backed stale thread",
+			"type":"incident",
+			"status":"active",
+			"priority":"p1",
+			"tags":["ops"],
+			"cadence":"daily",
+			"next_check_in_at":"2020-01-01T00:00:00Z",
+			"current_summary":"summary",
+			"next_actions":["do x"],
+			"key_artifacts":[],
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated)
+	defer threadResp.Body.Close()
+
+	var created struct {
+		Thread map[string]any `json:"thread"`
+	}
+	if err := json.NewDecoder(threadResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode thread response: %v", err)
+	}
+	threadID := asString(created.Thread["id"])
+	if threadID == "" {
+		t.Fatal("expected thread id")
+	}
+
+	createBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
+		"actor_id":"actor-1",
+		"board":{
+			"title":"Staleness board",
+			"primary_thread_id":"`+threadID+`"
+		}
+	}`, http.StatusCreated)
+	defer createBoardResp.Body.Close()
+	var createdBoard struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(createBoardResp.Body).Decode(&createdBoard); err != nil {
+		t.Fatalf("decode create board response: %v", err)
+	}
+	boardID := asString(createdBoard.Board["id"])
+	boardUpdatedAt := asString(createdBoard.Board["updated_at"])
+
+	postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+boardUpdatedAt+`",
+		"thread_id":"`+threadID+`",
+		"title":"Fresh board activity",
+		"column_key":"ready"
+	}`, http.StatusCreated).Body.Close()
+
+	postJSONExpectStatus(t, h.baseURL+"/derived/rebuild", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
+
+	if threadListedAsStale(t, h.baseURL, threadID) {
+		t.Fatalf("expected recent card activity to keep thread %s fresh", threadID)
+	}
+	items := getInboxItems(t, h.baseURL)
+	if _, ok := findInboxItem(items, func(item map[string]any) bool {
+		return asString(item["category"]) == "exception" && asString(item["thread_id"]) == threadID
+	}); ok {
+		t.Fatalf("expected no stale exception inbox item after recent card activity, got %#v", items)
+	}
+}
+
 func threadListedAsStale(t *testing.T, baseURL string, threadID string) bool {
 	t.Helper()
 

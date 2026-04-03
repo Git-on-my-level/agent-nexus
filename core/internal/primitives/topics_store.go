@@ -129,7 +129,6 @@ func (s *Store) ListTopics(ctx context.Context, filter TopicListFilter) ([]map[s
 			&row.Type,
 			&row.Status,
 			&row.Title,
-			&row.Summary,
 			&row.PrimaryThreadID,
 			&row.BodyJSON,
 			&row.ProvenanceJSON,
@@ -584,11 +583,11 @@ func (s *Store) getTopicRow(ctx context.Context, topicID string) (topicRow, erro
 	row := topicRow{}
 	err := s.db.QueryRowContext(
 		ctx,
-		`SELECT id, type, status, title, summary, primary_thread_id, body_json, provenance_json,
+		`SELECT id, type, status, title, primary_thread_id, body_json, provenance_json,
 			created_at, created_by, updated_at, updated_by, archived_at, archived_by, tombstoned_at, tombstoned_by, tombstone_reason
 		 FROM topics WHERE id = ?`,
 		topicID,
-	).Scan(&row.ID, &row.Type, &row.Status, &row.Title, &row.Summary, &row.PrimaryThreadID, &row.BodyJSON, &row.ProvenanceJSON,
+	).Scan(&row.ID, &row.Type, &row.Status, &row.Title, &row.PrimaryThreadID, &row.BodyJSON, &row.ProvenanceJSON,
 		&row.CreatedAt, &row.CreatedBy, &row.UpdatedAt, &row.UpdatedBy, &row.ArchivedAt, &row.ArchivedBy, &row.TombstonedAt, &row.TombstonedBy, &row.TombstoneReason)
 	if errors.Is(err, sql.ErrNoRows) {
 		return topicRow{}, ErrNotFound
@@ -827,7 +826,7 @@ func (s *Store) applyTopicLifecycleWithReason(ctx context.Context, actorID, topi
 }
 
 func buildListTopicsQuery(filter TopicListFilter) (string, []any) {
-	query := `SELECT id, type, status, title, summary, primary_thread_id, body_json, provenance_json, created_at, created_by, updated_at, updated_by, archived_at, archived_by, tombstoned_at, tombstoned_by, tombstone_reason
+	query := `SELECT id, type, status, title, primary_thread_id, body_json, provenance_json, created_at, created_by, updated_at, updated_by, archived_at, archived_by, tombstoned_at, tombstoned_by, tombstone_reason
 		FROM topics
 		WHERE 1=1`
 	args := make([]any, 0, 8)

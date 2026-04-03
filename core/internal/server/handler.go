@@ -92,6 +92,7 @@ type PrimitiveStore interface {
 	ArchiveBoardCard(ctx context.Context, actorID string, boardID string, identifier string, input primitives.RemoveBoardCardInput) (primitives.BoardCardMutationResult, error)
 	ListBoardCardHistory(ctx context.Context, cardID string) ([]map[string]any, error)
 	ListBoardMembershipsByThread(ctx context.Context, threadID string) ([]primitives.BoardMembership, error)
+	ListRefEdgesBySource(ctx context.Context, sourceType, sourceID string) ([]primitives.RefEdge, error)
 	GetSnapshot(ctx context.Context, id string) (map[string]any, error)
 	ListTopics(ctx context.Context, filter primitives.TopicListFilter) ([]map[string]any, string, error)
 	CreateTopic(ctx context.Context, actorID string, topic map[string]any) (primitives.TopicPatchResult, error)

@@ -53,6 +53,7 @@ func TestBoardStoreCreateUpdateAndListSummaries(t *testing.T) {
 	if _, err := store.AddBoardCard(ctx, "actor-2", boardID, primitives.AddBoardCardInput{
 		ThreadID:  cardThreadA,
 		ColumnKey: "backlog",
+		DueAt:     pointerString(time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339)),
 	}); err != nil {
 		t.Fatalf("add backlog card: %v", err)
 	}
@@ -92,8 +93,8 @@ func TestBoardStoreCreateUpdateAndListSummaries(t *testing.T) {
 	if cardsByColumn["backlog"] != 1 || cardsByColumn["ready"] != 1 || cardsByColumn["done"] != 0 {
 		t.Fatalf("unexpected cards by column: %#v", cardsByColumn)
 	}
-	if got := summary["open_commitment_count"]; got != 6 {
-		t.Fatalf("unexpected open commitment count: %#v", got)
+	if got := summary["at_risk_card_count"]; got != 1 {
+		t.Fatalf("unexpected at_risk_card_count: %#v", got)
 	}
 	if got := summary["document_count"]; got != 3 {
 		t.Fatalf("unexpected document count: %#v", got)
@@ -730,6 +731,10 @@ func boardCardThreadIDs(cards []map[string]any) []string {
 		out = append(out, threadID)
 	}
 	return out
+}
+
+func pointerString(value string) *string {
+	return &value
 }
 
 func sameStringSet(left, right []string) bool {

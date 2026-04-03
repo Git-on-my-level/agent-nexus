@@ -283,6 +283,31 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 		}
 	}`, http.StatusCreated).Body.Close()
 
+	createBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
+		"actor_id":"actor-1",
+		"board":{
+			"title":"Comprehensive inbox board",
+			"primary_thread_id":"`+threadID+`"
+		}
+	}`, http.StatusCreated)
+	defer createBoardResp.Body.Close()
+	var createdBoard struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(createBoardResp.Body).Decode(&createdBoard); err != nil {
+		t.Fatalf("decode board response: %v", err)
+	}
+	boardID := asString(createdBoard.Board["id"])
+	boardUpdatedAt := asString(createdBoard.Board["updated_at"])
+	postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+boardUpdatedAt+`",
+		"thread_id":"`+threadID+`",
+		"title":"Comprehensive work item",
+		"column_key":"ready",
+		"due_at":"`+time.Now().UTC().Add(24*time.Hour).Format(time.RFC3339)+`"
+	}`, http.StatusCreated).Body.Close()
+
 	postJSONExpectStatus(t, h.baseURL+"/derived/rebuild", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
 
 	inboxItems := getInboxItems(t, h.baseURL)
@@ -290,8 +315,8 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 	for _, item := range inboxItems {
 		categories[asString(item["category"])] = true
 	}
-	if !categories["commitment_risk"] || !categories["exception"] || !categories["decision_needed"] {
-		t.Fatalf("expected inbox categories commitment_risk/exception/decision_needed, got %#v", categories)
+	if !categories["work_item_risk"] || !categories["exception"] || !categories["decision_needed"] {
+		t.Fatalf("expected inbox categories work_item_risk/exception/decision_needed, got %#v", categories)
 	}
 
 	decisionItem, ok := findInboxItem(inboxItems, func(item map[string]any) bool {

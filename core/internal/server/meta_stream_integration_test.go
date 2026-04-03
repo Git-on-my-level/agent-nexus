@@ -405,21 +405,32 @@ func TestInboxStreamSuppressesDuplicateItems(t *testing.T) {
 		t.Fatal("expected created thread id")
 	}
 
-	dueSoon := time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339)
-	commitmentResp := postJSONExpectStatus(t, h.baseURL+"/commitments", `{
+	createBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
 		"actor_id":"actor-1",
-		"commitment":{
-			"thread_id":"`+threadID+`",
-			"title":"At risk commitment",
-			"owner":"actor-1",
-			"due_at":"`+dueSoon+`",
-			"status":"open",
-			"definition_of_done":["done"],
-			"links":["url:https://example.com/task"],
-			"provenance":{"sources":["inferred"]}
+		"board":{
+			"title":"Inbox stream board",
+			"primary_thread_id":"`+threadID+`"
 		}
 	}`, http.StatusCreated)
-	defer commitmentResp.Body.Close()
+	defer createBoardResp.Body.Close()
+	var boardPayload struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(createBoardResp.Body).Decode(&boardPayload); err != nil {
+		t.Fatalf("decode board response: %v", err)
+	}
+	boardID := asString(boardPayload.Board["id"])
+	boardUpdatedAt := asString(boardPayload.Board["updated_at"])
+
+	dueSoon := time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339)
+	postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+boardUpdatedAt+`",
+		"thread_id":"`+threadID+`",
+		"title":"At risk work item",
+		"column_key":"ready",
+		"due_at":"`+dueSoon+`"
+	}`, http.StatusCreated).Body.Close()
 
 	resp := openSSEStream(t, h.baseURL+"/inbox/stream", "")
 	reader, stop := startSSEReader(resp.Body)

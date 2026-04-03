@@ -21,9 +21,6 @@ func TestBoardsWorkspaceAndThreadWorkspaceMemberships(t *testing.T) {
 	primaryDocumentID := createBoardDocumentViaHTTP(t, h, primaryThreadID, "Primary board doc")
 	memberDocumentID := createBoardDocumentViaHTTP(t, h, memberThreadID, "Member board doc")
 
-	createBoardCommitmentViaHTTP(t, h, primaryThreadID, "Primary commitment")
-	createBoardCommitmentViaHTTP(t, h, memberThreadID, "Member commitment")
-
 	postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-1",
 		"event":{
@@ -66,7 +63,8 @@ func TestBoardsWorkspaceAndThreadWorkspaceMemberships(t *testing.T) {
 		"if_board_updated_at":"`+boardUpdatedAt+`",
 		"thread_id":"`+memberThreadID+`",
 		"column_key":"ready",
-		"pinned_document_id":"`+memberDocumentID+`"
+		"pinned_document_id":"`+memberDocumentID+`",
+		"due_at":"`+time.Now().UTC().Add(24*time.Hour).Format(time.RFC3339)+`"
 	}`, http.StatusCreated)
 	defer addCardResp.Body.Close()
 
@@ -106,8 +104,8 @@ func TestBoardsWorkspaceAndThreadWorkspaceMemberships(t *testing.T) {
 	if got := intFromAny(summary["card_count"]); got != 1 {
 		t.Fatalf("expected card_count=1, got %#v", summary["card_count"])
 	}
-	if got := intFromAny(summary["open_commitment_count"]); got != 1 {
-		t.Fatalf("expected open_commitment_count=1, got %#v", summary["open_commitment_count"])
+	if got := intFromAny(summary["at_risk_card_count"]); got != 1 {
+		t.Fatalf("expected at_risk_card_count=1, got %#v", summary["at_risk_card_count"])
 	}
 	if got := intFromAny(summary["document_count"]); got != 1 {
 		t.Fatalf("expected document_count=1, got %#v", summary["document_count"])
@@ -190,16 +188,16 @@ func TestBoardsWorkspaceAndThreadWorkspaceMemberships(t *testing.T) {
 	if asString(cardItem.Backing.PinnedDocument["id"]) != memberDocumentID {
 		t.Fatalf("expected pinned document %q, got %#v", memberDocumentID, cardItem.Backing.PinnedDocument)
 	}
-	if intFromAny(cardItem.Derived.Summary["open_commitment_count"]) != 0 || intFromAny(cardItem.Derived.Summary["document_count"]) != 0 || intFromAny(cardItem.Derived.Summary["inbox_count"]) != 0 {
+	if asString(cardItem.Derived.Summary["risk_state"]) != "due_soon" || intFromAny(cardItem.Derived.Summary["document_count"]) != 0 || intFromAny(cardItem.Derived.Summary["inbox_count"]) != 0 {
 		t.Fatalf("unexpected board card summary: %#v", cardItem.Derived.Summary)
 	}
 	if got := asString(cardItem.Derived.Freshness["status"]); got != "current" {
 		t.Fatalf("expected card freshness current, got %#v", cardItem.Derived.Freshness)
 	}
-	if workspacePayload.Documents.Count != 1 || workspacePayload.Commitments.Count != 1 || workspacePayload.Inbox.Count != 0 {
+	if workspacePayload.Documents.Count != 1 || workspacePayload.Commitments.Count != 0 || workspacePayload.Inbox.Count != 0 {
 		t.Fatalf("unexpected workspace aggregate sections: documents=%#v commitments=%#v inbox=%#v", workspacePayload.Documents, workspacePayload.Commitments, workspacePayload.Inbox)
 	}
-	if intFromAny(workspacePayload.BoardSummary["card_count"]) != 1 || intFromAny(workspacePayload.BoardSummary["open_commitment_count"]) != 1 || intFromAny(workspacePayload.BoardSummary["document_count"]) != 1 {
+	if intFromAny(workspacePayload.BoardSummary["card_count"]) != 1 || intFromAny(workspacePayload.BoardSummary["at_risk_card_count"]) != 1 || intFromAny(workspacePayload.BoardSummary["document_count"]) != 1 {
 		t.Fatalf("unexpected board summary: %#v", workspacePayload.BoardSummary)
 	}
 	if got := asString(workspacePayload.ProjectionFreshness["status"]); got != "current" {

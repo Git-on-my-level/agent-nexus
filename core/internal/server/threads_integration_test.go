@@ -823,6 +823,31 @@ func TestThreadTimelineIncludesReferencedObjectsAndOmitsMissingRefs(t *testing.T
 		t.Fatal("expected created commitment id")
 	}
 
+	createBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
+		"actor_id":"actor-1",
+		"board":{
+			"title":"Context workspace board",
+			"primary_thread_id":"`+threadID+`"
+		}
+	}`, http.StatusCreated)
+	defer createBoardResp.Body.Close()
+	var createdBoard struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(createBoardResp.Body).Decode(&createdBoard); err != nil {
+		t.Fatalf("decode create board response: %v", err)
+	}
+	boardID := asString(createdBoard.Board["id"])
+	boardUpdatedAt := asString(createdBoard.Board["updated_at"])
+	postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+boardUpdatedAt+`",
+		"thread_id":"`+threadID+`",
+		"title":"Context work item",
+		"column_key":"ready",
+		"due_at":"2026-03-08T00:00:00Z"
+	}`, http.StatusCreated).Body.Close()
+
 	const artifactID = "timeline-artifact-1"
 	createArtifactResp := postJSONExpectStatus(t, h.baseURL+"/artifacts", `{
 		"actor_id":"actor-1",
@@ -1417,6 +1442,8 @@ func TestThreadWorkspaceBundlesCanonicalAndDerivedSections(t *testing.T) {
 		}
 	}`, http.StatusCreated).Body.Close()
 
+	postJSONExpectStatus(t, h.baseURL+"/derived/rebuild", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
+
 	resp, err := http.Get(h.baseURL + "/threads/" + rootThreadID + "/workspace?include_artifact_content=true&include_related_event_content=true")
 	if err != nil {
 		t.Fatalf("GET /threads/{id}/workspace: %v", err)
@@ -1479,8 +1506,8 @@ func TestThreadWorkspaceBundlesCanonicalAndDerivedSections(t *testing.T) {
 	if len(payload.Collaboration.Recommendations) != 1 || len(payload.Collaboration.DecisionRequests) != 1 {
 		t.Fatalf("expected collaboration summary to include recommendation and decision request, got %#v", payload.Collaboration)
 	}
-	if payload.Inbox.Count != 2 || payload.PendingDecisions.Count != 1 {
-		t.Fatalf("expected inbox count=2 and pending decisions count=1, got inbox=%#v pending=%#v", payload.Inbox, payload.PendingDecisions)
+	if payload.Inbox.Count != 1 || payload.PendingDecisions.Count != 1 {
+		t.Fatalf("expected inbox count=1 and pending decisions count=1, got inbox=%#v pending=%#v", payload.Inbox, payload.PendingDecisions)
 	}
 	if payload.RelatedThreads.Count != 1 || payload.RelatedRecommendations.Count != 1 {
 		t.Fatalf("expected related thread review sections, got related_threads=%#v related_recommendations=%#v", payload.RelatedThreads, payload.RelatedRecommendations)

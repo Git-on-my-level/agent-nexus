@@ -440,13 +440,25 @@ func buildTopicResourceBundle(ctx context.Context, opts handlerOptions, topic ma
 		return topicResourceBundle{}, err
 	}
 
-	boardIDs := uniqueTopicIDs(topicRefIDs(topic, "board_refs", "board"))
+	refEdges, err := opts.primitiveStore.ListRefEdgesBySource(ctx, "topic", anyString(topic["id"]))
+	if err != nil {
+		return topicResourceBundle{}, err
+	}
+
+	boardIDs := collectTopicRefEdgeTargetIDs(refEdges, "board")
+	documentIDs := collectTopicRefEdgeTargetIDs(refEdges, "document")
+	threadIDs := append([]string{primaryThreadID}, collectTopicRefEdgeTargetIDs(refEdges, "thread")...)
+
 	boardMemberships, err := opts.primitiveStore.ListBoardMembershipsByThread(ctx, primaryThreadID)
 	if err != nil {
 		return topicResourceBundle{}, err
 	}
 	for _, membership := range boardMemberships {
 		boardIDs = append(boardIDs, anyString(membership.Board["id"]))
+		threadIDs = append(threadIDs, strings.TrimSpace(anyString(membership.Card["thread_id"])))
+		if pinnedDocumentID := strings.TrimSpace(anyString(membership.Card["pinned_document_id"])); pinnedDocumentID != "" {
+			documentIDs = append(documentIDs, pinnedDocumentID)
+		}
 	}
 	boardIDs = uniqueTopicIDs(boardIDs)
 
@@ -460,6 +472,7 @@ func buildTopicResourceBundle(ctx context.Context, opts handlerOptions, topic ma
 		board, err := opts.primitiveStore.GetBoard(ctx, boardID)
 		if err == nil {
 			boards = append(boards, board)
+			documentIDs = append(documentIDs, topicBoardDocumentIDs(board)...)
 		} else if !errors.Is(err, primitives.ErrNotFound) {
 			return topicResourceBundle{}, err
 		}
@@ -467,17 +480,25 @@ func buildTopicResourceBundle(ctx context.Context, opts handlerOptions, topic ma
 		cards, err := opts.primitiveStore.ListBoardCards(ctx, boardID)
 		if err == nil {
 			cardsByBoard[boardID] = append(cardsByBoard[boardID], cards)
+			for _, card := range cards {
+				threadIDs = append(threadIDs, strings.TrimSpace(anyString(card["thread_id"])))
+				if pinnedDocumentID := strings.TrimSpace(anyString(card["pinned_document_id"])); pinnedDocumentID != "" {
+					documentIDs = append(documentIDs, pinnedDocumentID)
+				}
+			}
 		} else if !errors.Is(err, primitives.ErrNotFound) {
 			return topicResourceBundle{}, err
 		}
 	}
 
-	directDocuments := uniqueTopicIDs(topicRefIDs(topic, "document_refs", "document"))
-	directDocuments = append(directDocuments, threadDocumentIDs(ctx, opts, primaryThreadID)...)
-	directDocuments = uniqueTopicIDs(directDocuments)
+	threadIDs = uniqueTopicIDs(threadIDs)
+	for _, threadID := range threadIDs {
+		documentIDs = append(documentIDs, threadDocumentIDs(ctx, opts, threadID)...)
+	}
+	documentIDs = uniqueTopicIDs(documentIDs)
 
-	documents := make([]map[string]any, 0, len(directDocuments))
-	for _, documentID := range directDocuments {
+	documents := make([]map[string]any, 0, len(documentIDs))
+	for _, documentID := range documentIDs {
 		documentID = strings.TrimSpace(documentID)
 		if documentID == "" {
 			continue
@@ -490,8 +511,6 @@ func buildTopicResourceBundle(ctx context.Context, opts handlerOptions, topic ma
 		}
 	}
 
-	threadIDs := []string{primaryThreadID}
-	threadIDs = append(threadIDs, topicRefIDs(topic, "related_refs", "thread")...)
 	for _, document := range documents {
 		if threadID := strings.TrimSpace(anyString(document["thread_id"])); threadID != "" {
 			threadIDs = append(threadIDs, threadID)
@@ -547,6 +566,33 @@ func buildTopicResourceBundle(ctx context.Context, opts handlerOptions, topic ma
 		ProjectionFreshness: cloneWorkspaceMap(projectionState.Freshness),
 		Inbox:               inbox,
 	}, nil
+}
+
+func collectTopicRefEdgeTargetIDs(edges []primitives.RefEdge, targetType string) []string {
+	out := make([]string, 0, len(edges))
+	for _, edge := range edges {
+		if strings.TrimSpace(edge.EdgeType) != "ref" || strings.TrimSpace(edge.TargetType) != strings.TrimSpace(targetType) {
+			continue
+		}
+		if targetID := strings.TrimSpace(edge.TargetID); targetID != "" {
+			out = append(out, targetID)
+		}
+	}
+	return uniqueTopicIDs(out)
+}
+
+func topicBoardDocumentIDs(board map[string]any) []string {
+	refs, err := extractStringSlice(board["document_refs"])
+	if err != nil {
+		return nil
+	}
+	out := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		if strings.HasPrefix(strings.TrimSpace(ref), "document:") {
+			out = append(out, strings.TrimSpace(strings.TrimPrefix(ref, "document:")))
+		}
+	}
+	return uniqueTopicIDs(out)
 }
 
 func writeTopicLifecycleStoreError(w http.ResponseWriter, err error) bool {

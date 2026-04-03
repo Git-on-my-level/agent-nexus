@@ -124,7 +124,7 @@ func TestInboxDerivationAndAcknowledgmentSuppression(t *testing.T) {
 		t.Fatalf("expected new decision item after retrigger, got %#v", itemsAfterNewDecision)
 	}
 
-	// Clear decision item so commitment-risk assertions are isolated.
+	// Clear decision item so work-item risk assertions are isolated.
 	secondDecisionItemID := asString(secondDecisionItem["id"])
 	postJSONExpectStatus(t, h.baseURL+"/inbox/ack", `{
 		"actor_id":"actor-1",
@@ -132,38 +132,55 @@ func TestInboxDerivationAndAcknowledgmentSuppression(t *testing.T) {
 		"inbox_item_id":"`+secondDecisionItemID+`"
 	}`, http.StatusCreated).Body.Close()
 
-	dueSoon := time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339)
-	commitmentResp := postJSONExpectStatus(t, h.baseURL+"/commitments", `{
+	createBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
 		"actor_id":"actor-1",
-		"commitment":{
-			"thread_id":"`+threadID+`",
-			"title":"At-risk commitment",
-			"owner":"actor-1",
-			"due_at":"`+dueSoon+`",
-			"status":"open",
-			"definition_of_done":["done"],
-			"links":["url:https://example.com/task"],
-			"provenance":{"sources":["inferred"]}
+		"board":{
+			"title":"Inbox board",
+			"primary_thread_id":"`+threadID+`"
 		}
 	}`, http.StatusCreated)
-	defer commitmentResp.Body.Close()
-	var createdCommitment struct {
-		Commitment map[string]any `json:"commitment"`
+	defer createBoardResp.Body.Close()
+	var createdBoard struct {
+		Board map[string]any `json:"board"`
 	}
-	if err := json.NewDecoder(commitmentResp.Body).Decode(&createdCommitment); err != nil {
-		t.Fatalf("decode commitment response: %v", err)
+	if err := json.NewDecoder(createBoardResp.Body).Decode(&createdBoard); err != nil {
+		t.Fatalf("decode board response: %v", err)
 	}
-	commitmentID := asString(createdCommitment.Commitment["id"])
-	if commitmentID == "" {
-		t.Fatal("expected commitment id")
+	boardID := asString(createdBoard.Board["id"])
+	boardUpdatedAt := asString(createdBoard.Board["updated_at"])
+	if boardID == "" || boardUpdatedAt == "" {
+		t.Fatalf("expected board id and updated_at, got %#v", createdBoard.Board)
+	}
+
+	dueSoon := time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339)
+	cardResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+boardUpdatedAt+`",
+		"thread_id":"`+threadID+`",
+		"title":"At-risk work item",
+		"column_key":"ready",
+		"due_at":"`+dueSoon+`"
+	}`, http.StatusCreated)
+	defer cardResp.Body.Close()
+	var createdCard struct {
+		Board map[string]any `json:"board"`
+		Card  map[string]any `json:"card"`
+	}
+	if err := json.NewDecoder(cardResp.Body).Decode(&createdCard); err != nil {
+		t.Fatalf("decode card response: %v", err)
+	}
+	cardID := asString(createdCard.Card["id"])
+	cardBoardUpdatedAt := asString(createdCard.Board["updated_at"])
+	if cardID == "" {
+		t.Fatal("expected card id")
 	}
 
 	itemsWithRisk := getInboxItems(t, h.baseURL)
 	riskItem, ok := findInboxItem(itemsWithRisk, func(item map[string]any) bool {
-		return asString(item["category"]) == "commitment_risk" && asString(item["commitment_id"]) == commitmentID
+		return asString(item["category"]) == "work_item_risk" && asString(item["card_id"]) == cardID
 	})
 	if !ok {
-		t.Fatalf("expected commitment_risk inbox item, got %#v", itemsWithRisk)
+		t.Fatalf("expected work_item_risk inbox item, got %#v", itemsWithRisk)
 	}
 	riskItemID := asString(riskItem["id"])
 
@@ -177,12 +194,13 @@ func TestInboxDerivationAndAcknowledgmentSuppression(t *testing.T) {
 	if _, exists := findInboxItem(itemsAfterRiskAck, func(item map[string]any) bool {
 		return asString(item["id"]) == riskItemID
 	}); exists {
-		t.Fatalf("expected acknowledged commitment_risk item to be suppressed, got %#v", itemsAfterRiskAck)
+		t.Fatalf("expected acknowledged work_item_risk item to be suppressed, got %#v", itemsAfterRiskAck)
 	}
 
-	patchResp := patchJSONExpectStatus(t, h.baseURL+"/commitments/"+commitmentID, `{
+	patchResp := patchJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards/"+threadID, `{
 		"actor_id":"actor-1",
-		"patch":{"status":"blocked"}
+		"if_board_updated_at":"`+cardBoardUpdatedAt+`",
+		"patch":{"title":"At-risk work item updated"}
 	}`, http.StatusOK)
 	patchResp.Body.Close()
 
@@ -191,9 +209,9 @@ func TestInboxDerivationAndAcknowledgmentSuppression(t *testing.T) {
 		return asString(item["id"]) == riskItemID
 	})
 	if !ok {
-		t.Fatalf("expected commitment_risk item to reappear after new trigger, got %#v", itemsAfterStatusChange)
+		t.Fatalf("expected work_item_risk item to reappear after new trigger, got %#v", itemsAfterStatusChange)
 	}
-	if asString(reappearedRisk["category"]) != "commitment_risk" {
+	if asString(reappearedRisk["category"]) != "work_item_risk" {
 		t.Fatalf("unexpected reappeared risk item: %#v", reappearedRisk)
 	}
 }
