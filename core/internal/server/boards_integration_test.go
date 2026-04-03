@@ -106,11 +106,11 @@ func TestBoardsWorkspaceAndThreadWorkspaceMemberships(t *testing.T) {
 	if got := intFromAny(summary["card_count"]); got != 1 {
 		t.Fatalf("expected card_count=1, got %#v", summary["card_count"])
 	}
-	if got := intFromAny(summary["open_commitment_count"]); got != 2 {
-		t.Fatalf("expected open_commitment_count=2, got %#v", summary["open_commitment_count"])
+	if got := intFromAny(summary["open_commitment_count"]); got != 1 {
+		t.Fatalf("expected open_commitment_count=1, got %#v", summary["open_commitment_count"])
 	}
-	if got := intFromAny(summary["document_count"]); got != 2 {
-		t.Fatalf("expected document_count=2, got %#v", summary["document_count"])
+	if got := intFromAny(summary["document_count"]); got != 1 {
+		t.Fatalf("expected document_count=1, got %#v", summary["document_count"])
 	}
 	if got := summary["has_primary_document"]; got != true {
 		t.Fatalf("expected has_primary_document=true, got %#v", got)
@@ -174,7 +174,7 @@ func TestBoardsWorkspaceAndThreadWorkspaceMemberships(t *testing.T) {
 	if workspacePayload.BoardID != boardID || asString(workspacePayload.Board["id"]) != boardID {
 		t.Fatalf("unexpected board workspace id payload: %#v", workspacePayload)
 	}
-	if asString(workspacePayload.PrimaryThread["id"]) != primaryThreadID {
+	if asString(workspacePayload.PrimaryThread["id"]) != boardID {
 		t.Fatalf("unexpected primary_thread payload: %#v", workspacePayload.PrimaryThread)
 	}
 	if asString(workspacePayload.PrimaryDocument["id"]) != primaryDocumentID {
@@ -381,7 +381,7 @@ func TestBoardLifecycleEventsAndConflictValidation(t *testing.T) {
 
 	invalidPrimaryCardResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
 		"actor_id":"actor-1",
-		"thread_id":"`+primaryThreadID+`"
+		"thread_id":"`+boardID+`"
 	}`, http.StatusBadRequest)
 	invalidPrimaryCardResp.Body.Close()
 
@@ -456,7 +456,7 @@ func TestBoardLifecycleEventsAndConflictValidation(t *testing.T) {
 		t.Fatalf("expected removed card thread_id %q, got %#v", memberThreadID, removeCardPayload.Card)
 	}
 
-	timelineResp, err := http.Get(h.baseURL + "/threads/" + primaryThreadID + "/timeline")
+	timelineResp, err := http.Get(h.baseURL + "/threads/" + boardID + "/timeline")
 	if err != nil {
 		t.Fatalf("GET /threads/{id}/timeline: %v", err)
 	}

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 
 const (
 	refEdgeTypeRef                  = "ref"
+	refEdgeTypeBoardCard            = "board_card"
 	refEdgeTypeBoardPrimaryThread   = "primary_thread"
 	refEdgeTypeBoardPrimaryDocument = "primary_document"
 	refEdgeTypeBoardPinnedRef       = "pinned_ref"
@@ -67,6 +69,27 @@ func typedRefEdgeTargets(edgeType string, refs []string) []refEdgeTarget {
 		})
 	}
 	return targets
+}
+
+func uniqueSortedStrings(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func appendRefEdgeTarget(targets []refEdgeTarget, edgeType, targetType, targetID string) []refEdgeTarget {

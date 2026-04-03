@@ -31,12 +31,11 @@ func TestBoardStoreCreateUpdateAndListSummaries(t *testing.T) {
 	primaryDocumentID := createBoardTestDocument(t, ctx, store, primaryThreadID, "Primary board doc")
 
 	board, err := store.CreateBoard(ctx, "actor-1", map[string]any{
-		"title":               "Operations Board",
-		"labels":              []string{"ops", "infra"},
-		"owners":              []string{"actor-1"},
-		"primary_thread_id":   primaryThreadID,
-		"primary_document_id": primaryDocumentID,
-		"pinned_refs":         []string{"thread:" + primaryThreadID},
+		"title":         "Operations Board",
+		"labels":        []string{"ops", "infra"},
+		"owners":        []string{"actor-1"},
+		"document_refs": []string{"document:" + primaryDocumentID},
+		"pinned_refs":   []string{"thread:" + primaryThreadID},
 	})
 	if err != nil {
 		t.Fatalf("create board: %v", err)
@@ -65,7 +64,8 @@ func TestBoardStoreCreateUpdateAndListSummaries(t *testing.T) {
 		t.Fatalf("add ready card: %v", err)
 	}
 
-	putBoardTestProjection(t, ctx, store, primaryThreadID, "2099-01-01T00:00:00Z", 2, 1)
+	boardThreadID := board["thread_id"].(string)
+	putBoardTestProjection(t, ctx, store, boardThreadID, "2099-01-01T00:00:00Z", 2, 1)
 	putBoardTestProjection(t, ctx, store, cardThreadA, "2099-01-02T00:00:00Z", 3, 2)
 	putBoardTestProjection(t, ctx, store, cardThreadB, "2099-01-03T00:00:00Z", 1, 0)
 
@@ -107,12 +107,11 @@ func TestBoardStoreCreateUpdateAndListSummaries(t *testing.T) {
 
 	initialUpdatedAt := listed[0].Board["updated_at"].(string)
 	updated, err := store.UpdateBoard(ctx, "actor-3", boardID, map[string]any{
-		"title":               "Operations Board Updated",
-		"status":              "paused",
-		"labels":              []string{"ops", "platform"},
-		"owners":              []string{"actor-3"},
-		"primary_document_id": nil,
-		"pinned_refs":         []string{"thread:" + cardThreadA},
+		"title":  "Operations Board Updated",
+		"status": "paused",
+		"labels": []string{"ops", "platform"},
+		"owners": []string{"actor-3"},
+		"refs":   []string{"thread:" + cardThreadA},
 	}, &initialUpdatedAt)
 	if err != nil {
 		t.Fatalf("update board: %v", err)
@@ -120,8 +119,8 @@ func TestBoardStoreCreateUpdateAndListSummaries(t *testing.T) {
 	if updated["title"] != "Operations Board Updated" || updated["status"] != "paused" {
 		t.Fatalf("unexpected updated board: %#v", updated)
 	}
-	if updated["primary_document_id"] != nil {
-		t.Fatalf("expected primary_document_id cleared, got %#v", updated["primary_document_id"])
+	if _, exists := updated["document_refs"]; exists {
+		t.Fatalf("expected document refs cleared, got %#v", updated["document_refs"])
 	}
 
 	loaded, err := store.GetBoard(ctx, boardID)
@@ -537,9 +536,9 @@ func TestBoardStoreMembershipValidationAndLookup(t *testing.T) {
 	}
 
 	if _, err := store.AddBoardCard(ctx, "actor-3", boardAID, primitives.AddBoardCardInput{
-		ThreadID: primaryThreadA,
+		ThreadID: boardA["thread_id"].(string),
 	}); !errors.Is(err, primitives.ErrInvalidBoardRequest) {
-		t.Fatalf("expected primary thread rejection, got %v", err)
+		t.Fatalf("expected board thread rejection, got %v", err)
 	}
 
 	memberships, err := store.ListBoardMembershipsByThread(ctx, memberThread)

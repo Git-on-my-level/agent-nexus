@@ -79,6 +79,7 @@ type PrimitiveStore interface {
 	ListBoards(ctx context.Context, filter primitives.BoardListFilter) ([]primitives.BoardListItem, string, error)
 	CreateBoard(ctx context.Context, actorID string, board map[string]any) (map[string]any, error)
 	GetBoard(ctx context.Context, boardID string) (map[string]any, error)
+	GetBoardSummary(ctx context.Context, boardID string) (map[string]any, error)
 	UpdateBoard(ctx context.Context, actorID string, boardID string, patch map[string]any, ifUpdatedAt *string) (map[string]any, error)
 	ListBoardCards(ctx context.Context, boardID string) ([]map[string]any, error)
 	GetBoardCard(ctx context.Context, boardID string, identifier string) (map[string]any, error)

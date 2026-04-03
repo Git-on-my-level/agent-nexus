@@ -109,16 +109,16 @@ func TestSharedResourceWritesIndexRefEdges(t *testing.T) {
 	revisionID := revision["revision_id"].(string)
 
 	board, err := store.CreateBoard(ctx, "actor-1", map[string]any{
-		"id":                  "board-edge-1",
-		"title":               "Edge board",
-		"primary_thread_id":   primaryThreadID,
-		"primary_document_id": documentID,
-		"pinned_refs":         []string{"customprefix:board-ref"},
+		"id":            "board-edge-1",
+		"title":         "Edge board",
+		"document_refs": []string{"document:" + documentID},
+		"pinned_refs":   []string{"customprefix:board-ref"},
 	})
 	if err != nil {
 		t.Fatalf("create board: %v", err)
 	}
 	boardID := board["id"].(string)
+	boardThreadID := board["thread_id"].(string)
 
 	cardResult, err := store.CreateBoardCard(ctx, "actor-2", boardID, AddBoardCardInput{
 		CardID:           "card-edge-1",
@@ -152,9 +152,12 @@ func TestSharedResourceWritesIndexRefEdges(t *testing.T) {
 		refEdgeTypeRef + "|thread|" + primaryThreadID,
 	})
 	assertRefEdges(t, workspace.DB(), "board", boardID, []string{
-		refEdgeTypeBoardPrimaryThread + "|thread|" + primaryThreadID,
-		refEdgeTypeBoardPrimaryDocument + "|document|" + documentID,
-		refEdgeTypeBoardPinnedRef + "|customprefix|board-ref",
+		refEdgeTypeBoardCard + "|card|" + cardID,
+		refEdgeTypeRef + "|customprefix|board-ref",
+		refEdgeTypeRef + "|document|" + documentID,
+	})
+	assertRefEdges(t, workspace.DB(), "thread", boardThreadID, []string{
+		refEdgeTypeRef + "|board|" + boardID,
 	})
 	assertRefEdges(t, workspace.DB(), "card", cardID, []string{
 		refEdgeTypeCardParentThread + "|thread|" + cardThreadID,

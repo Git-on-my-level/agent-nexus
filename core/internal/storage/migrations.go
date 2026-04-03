@@ -217,10 +217,9 @@ var migrations = []migration{
 				status TEXT NOT NULL,
 				labels_json TEXT NOT NULL DEFAULT '[]',
 				owners_json TEXT NOT NULL DEFAULT '[]',
-				primary_thread_id TEXT NOT NULL,
-				primary_document_id TEXT,
+				thread_id TEXT NOT NULL,
+				refs_json TEXT NOT NULL DEFAULT '[]',
 				column_schema_json TEXT NOT NULL,
-				pinned_refs_json TEXT NOT NULL DEFAULT '[]',
 				created_at TEXT NOT NULL,
 				created_by TEXT NOT NULL,
 				updated_at TEXT NOT NULL,
@@ -232,7 +231,7 @@ var migrations = []migration{
 				tombstone_reason TEXT
 			);`,
 			`CREATE INDEX IF NOT EXISTS idx_boards_status_updated_at ON boards (status, updated_at DESC, id);`,
-			`CREATE INDEX IF NOT EXISTS idx_boards_primary_thread_id ON boards (primary_thread_id);`,
+			`CREATE INDEX IF NOT EXISTS idx_boards_thread_id ON boards (thread_id);`,
 			`CREATE INDEX IF NOT EXISTS idx_boards_archived_at ON boards (archived_at);`,
 			`CREATE INDEX IF NOT EXISTS idx_boards_tombstoned_at ON boards (tombstoned_at);`,
 
