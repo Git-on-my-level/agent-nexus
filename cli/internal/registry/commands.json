@@ -2075,7 +2075,7 @@
       ],
       "stability": "beta",
       "surface": "canonical",
-      "agent_notes": "At most one of `before_card_id` and `after_card_id`; at most one of `before_thread_id` and `after_thread_id`; `before_card_id` and `before_thread_id` are mutually exclusive; `after_card_id` and `after_thread_id` are mutually exclusive; if no placement anchor is provided, the card moves to the end of the target column.",
+      "agent_notes": "Card-id and thread-id placement anchors cannot be combined. At most one of `before_card_id` and `after_card_id`; at most one of `before_thread_id` and `after_thread_id`; `before_card_id` and `before_thread_id` are mutually exclusive; `after_card_id` and `after_thread_id` are mutually exclusive; before-side and after-side anchors (across card and thread fields) are mutually exclusive. If no placement anchor is provided, the card moves to the end of the target column.",
       "examples": [
         {
           "title": "Move card into review",

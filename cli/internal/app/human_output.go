@@ -1382,10 +1382,10 @@ func formatBoardCardGetResult(body any) string {
 	return strings.Join(lines, "\n")
 }
 
-func formatBoardCardMutationResult(body any) string {
+func formatBoardCardBoardAndCardSummary(body any, headline string) string {
 	board := extractNestedMap(body, "board")
 	card := extractNestedMap(body, "card")
-	lines := []string{"Card updated:"}
+	lines := []string{headline}
 	if board != nil {
 		lines = appendScalar(lines, "board_updated_at", board, "updated_at")
 	}
@@ -1418,7 +1418,14 @@ func formatBoardCardMutationResult(body any) string {
 	return strings.Join(lines, "\n")
 }
 
+func formatBoardCardMutationResult(body any) string {
+	return formatBoardCardBoardAndCardSummary(body, "Card updated:")
+}
+
 func formatBoardCardRemoveResult(body any) string {
+	if extractNestedMap(body, "card") != nil {
+		return formatBoardCardBoardAndCardSummary(body, "Card removed:")
+	}
 	board := extractNestedMap(body, "board")
 	root := asMap(body)
 	removedThreadID := formatScalar(root["removed_thread_id"])

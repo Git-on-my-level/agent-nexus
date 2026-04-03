@@ -312,5 +312,54 @@ describe("mockCoreData parity behaviors", () => {
         version: 2,
       });
     });
+
+    it("updates board card via global card id with title and status patch", async () => {
+      const mod = await import("../../src/lib/mockCoreData.js");
+      const { board } = mod.createMockBoard({
+        actor_id: "actor-test",
+        board: {
+          id: "board-global-card-patch",
+          title: "Global patch board",
+          primary_thread_id: "thread-summer-menu",
+        },
+      });
+      const boardId = board.id;
+      let b = mod.getMockBoard(boardId);
+      const { card } = mod.createMockBoardCard(boardId, {
+        actor_id: "actor-test",
+        if_board_updated_at: b?.updated_at,
+        title: "Task A",
+        column_key: "backlog",
+      });
+      const globalId = card.id;
+      b = mod.getMockBoard(boardId);
+      mod.createMockDocument({
+        actor_id: "actor-test",
+        document: {
+          id: "doc-global-card-pin",
+          thread_id: "thread-summer-menu",
+          title: "Pin for global card",
+        },
+        content: "# Pin",
+        content_type: "text",
+      });
+      b = mod.getMockBoard(boardId);
+      const result = mod.updateMockBoardCardByGlobalCardId(globalId, {
+        actor_id: "actor-test",
+        if_board_updated_at: b?.updated_at,
+        patch: {
+          title: "Task A renamed",
+          status: "done",
+          pinned_document_id: "doc-global-card-pin",
+        },
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.card).toMatchObject({
+        title: "Task A renamed",
+        status: "done",
+        pinned_document_id: "doc-global-card-pin",
+        version: 2,
+      });
+    });
   });
 });

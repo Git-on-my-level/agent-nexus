@@ -503,7 +503,7 @@ Generated from `contracts/oar-openapi.yaml`.
 - Concepts: `boards`, `planning`, `ordering`, `concurrency`
 - Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`, `not_found`
 - Output: Returns `{ board, card }` after the move is applied.
-- Agent notes: At most one of `before_card_id` and `after_card_id`; at most one of `before_thread_id` and `after_thread_id`; `before_card_id` and `before_thread_id` are mutually exclusive; `after_card_id` and `after_thread_id` are mutually exclusive; if no placement anchor is provided, the card moves to the end of the target column.
+- Agent notes: Card-id and thread-id placement anchors cannot be combined. At most one of `before_card_id` and `after_card_id`; at most one of `before_thread_id` and `after_thread_id`; `before_card_id` and `before_thread_id` are mutually exclusive; `after_card_id` and `after_thread_id` are mutually exclusive; before-side and after-side anchors (across card and thread fields) are mutually exclusive. If no placement anchor is provided, the card moves to the end of the target column.
 - Examples:
   - Move card into review: `oar boards cards move --board-id board_product_launch --card-id card_123 --column review --json`
 

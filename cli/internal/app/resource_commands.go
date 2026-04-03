@@ -3677,10 +3677,6 @@ var (
 		requireColumn:         true,
 		allowBeforeAfter:      true,
 	}
-	parseBoardCardRemoveMutationOptions = boardCardMutationOptions{
-		requireIfBoardUpdated: true,
-		requireThreadTarget:   true,
-	}
 )
 
 func (a *App) parseBoardIDAndCardMutationBodyInput(ctx context.Context, args []string, cfg config.Resolved, commandName string, options boardCardMutationOptions) (string, any, error) {

@@ -443,6 +443,7 @@ func TestBoardLifecycleEventsAndConflictValidation(t *testing.T) {
 	defer removeCardResp.Body.Close()
 	var removeCardPayload struct {
 		Board           map[string]any `json:"board"`
+		Card            map[string]any `json:"card"`
 		RemovedThreadID string         `json:"removed_thread_id"`
 	}
 	if err := json.NewDecoder(removeCardResp.Body).Decode(&removeCardPayload); err != nil {
@@ -450,6 +451,9 @@ func TestBoardLifecycleEventsAndConflictValidation(t *testing.T) {
 	}
 	if removeCardPayload.RemovedThreadID != memberThreadID {
 		t.Fatalf("unexpected removed_thread_id: %#v", removeCardPayload)
+	}
+	if asString(removeCardPayload.Card["thread_id"]) != memberThreadID {
+		t.Fatalf("expected removed card thread_id %q, got %#v", memberThreadID, removeCardPayload.Card)
 	}
 
 	timelineResp, err := http.Get(h.baseURL + "/threads/" + primaryThreadID + "/timeline")
@@ -853,6 +857,116 @@ func TestBoardCardAddRequestKeyFallbackOnlyReplaysEquivalentState(t *testing.T) 
 	}`, http.StatusConflict)
 	defer staleEquivalentAddResp.Body.Close()
 	assertErrorCode(t, staleEquivalentAddResp, "conflict")
+}
+
+func TestBoardCardMoveRejectsInvalidPlacementAnchors(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	primaryThreadID := createBoardThreadViaHTTP(t, h, "Anchor primary thread")
+	threadA := createBoardThreadViaHTTP(t, h, "Anchor card thread A")
+	threadB := createBoardThreadViaHTTP(t, h, "Anchor card thread B")
+	primaryDocumentID := createBoardDocumentViaHTTP(t, h, primaryThreadID, "Anchor primary doc")
+
+	createBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
+		"actor_id":"actor-1",
+		"board":{
+			"title":"Anchor validation board",
+			"primary_thread_id":"`+primaryThreadID+`",
+			"primary_document_id":"`+primaryDocumentID+`"
+		}
+	}`, http.StatusCreated)
+	defer createBoardResp.Body.Close()
+	var createBoardPayload struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(createBoardResp.Body).Decode(&createBoardPayload); err != nil {
+		t.Fatalf("decode create board response: %v", err)
+	}
+	boardID := asString(createBoardPayload.Board["id"])
+	boardUpdatedAt := asString(createBoardPayload.Board["updated_at"])
+
+	addAResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+boardUpdatedAt+`",
+		"thread_id":"`+threadA+`",
+		"column_key":"backlog"
+	}`, http.StatusCreated)
+	defer addAResp.Body.Close()
+	var addAPayload struct {
+		Board map[string]any `json:"board"`
+		Card  map[string]any `json:"card"`
+	}
+	if err := json.NewDecoder(addAResp.Body).Decode(&addAPayload); err != nil {
+		t.Fatalf("decode add card A response: %v", err)
+	}
+	cardAID := asString(addAPayload.Card["id"])
+	afterAddA := asString(addAPayload.Board["updated_at"])
+
+	addBResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+afterAddA+`",
+		"thread_id":"`+threadB+`",
+		"column_key":"backlog"
+	}`, http.StatusCreated)
+	defer addBResp.Body.Close()
+	var addBPayload struct {
+		Board map[string]any `json:"board"`
+		Card  map[string]any `json:"card"`
+	}
+	if err := json.NewDecoder(addBResp.Body).Decode(&addBPayload); err != nil {
+		t.Fatalf("decode add card B response: %v", err)
+	}
+	cardBID := asString(addBPayload.Card["id"])
+	afterAddB := asString(addBPayload.Board["updated_at"])
+
+	moveBase := h.baseURL + "/boards/" + boardID + "/cards/" + threadA + "/move"
+	assertMoveInvalidRequest := func(t *testing.T, bodyJSON, wantMessage string) {
+		t.Helper()
+		resp := postJSONExpectStatus(t, moveBase, bodyJSON, http.StatusBadRequest)
+		defer resp.Body.Close()
+		var payload struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode error payload: %v", err)
+		}
+		if payload.Error.Code != "invalid_request" {
+			t.Fatalf("unexpected error code: got %q want invalid_request", payload.Error.Code)
+		}
+		if payload.Error.Message != wantMessage {
+			t.Fatalf("unexpected error message: got %q want %q", payload.Error.Message, wantMessage)
+		}
+	}
+
+	assertMoveInvalidRequest(t, `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+afterAddB+`",
+		"column_key":"ready",
+		"before_card_id":"`+cardBID+`",
+		"after_thread_id":"`+threadB+`"
+	}`, "card-id and thread-id placement anchors cannot be combined")
+
+	assertMoveInvalidRequest(t, `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+afterAddB+`",
+		"column_key":"ready",
+		"before_thread_id":"`+threadA+`",
+		"after_card_id":"`+cardBID+`"
+	}`, "card-id and thread-id placement anchors cannot be combined")
+
+	assertMoveInvalidRequest(t, `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+afterAddB+`",
+		"column_key":"ready",
+		"before_card_id":"`+cardBID+`",
+		"after_card_id":"`+cardAID+`"
+	}`, "before and after anchors are mutually exclusive")
 }
 
 func createBoardThreadViaHTTP(t *testing.T, h primitivesTestHarness, title string) string {

@@ -792,7 +792,7 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 	if err := validateBoardColumnKey(columnKey); err != nil {
 		return BoardCardMutationResult{}, invalidBoardRequestError(err)
 	}
-	if err := validateBoardPlacementAnchors(input.BeforeCardID, input.AfterCardID, input.BeforeThreadID, input.AfterThreadID); err != nil {
+	if err := ValidateBoardPlacementAnchors(input.BeforeCardID, input.AfterCardID, input.BeforeThreadID, input.AfterThreadID); err != nil {
 		return BoardCardMutationResult{}, invalidBoardRequestError(err)
 	}
 	if err := validateBoardCardStatus(input.Status, true); err != nil {
@@ -1180,7 +1180,7 @@ func (s *Store) MoveBoardCard(ctx context.Context, actorID, boardID, identifier 
 	if err := validateBoardColumnKey(columnKey); err != nil {
 		return BoardCardMutationResult{}, invalidBoardRequestError(err)
 	}
-	if err := validateBoardPlacementAnchors(input.BeforeCardID, input.AfterCardID, input.BeforeThreadID, input.AfterThreadID); err != nil {
+	if err := ValidateBoardPlacementAnchors(input.BeforeCardID, input.AfterCardID, input.BeforeThreadID, input.AfterThreadID); err != nil {
 		return BoardCardMutationResult{}, invalidBoardRequestError(err)
 	}
 
@@ -2521,7 +2521,8 @@ func inferLegacyBoardCardStatus(columnKey string) string {
 	return "todo"
 }
 
-func validateBoardPlacementAnchors(beforeCardID, afterCardID, beforeThreadID, afterThreadID string) error {
+// ValidateBoardPlacementAnchors enforces placement anchor rules shared by HTTP handlers and the store.
+func ValidateBoardPlacementAnchors(beforeCardID, afterCardID, beforeThreadID, afterThreadID string) error {
 	beforeCardID = strings.TrimSpace(beforeCardID)
 	afterCardID = strings.TrimSpace(afterCardID)
 	beforeThreadID = strings.TrimSpace(beforeThreadID)

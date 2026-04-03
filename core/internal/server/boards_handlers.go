@@ -850,7 +850,11 @@ func handleRemoveBoardCard(w http.ResponseWriter, r *http.Request, opts handlerO
 	emitBoardLifecycleEventBestEffort(r.Context(), opts, actorID, buildBoardCardArchivedEvent(result.Board, result.Card))
 	emitBoardLifecycleEventBestEffort(r.Context(), opts, actorID, buildLegacyBoardCardRemovedEvent(result.Board, result.Card))
 
-	writeJSON(w, http.StatusOK, map[string]any{"board": result.Board, "removed_thread_id": result.RemovedThreadID})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"board":             result.Board,
+		"card":              result.Card,
+		"removed_thread_id": result.RemovedThreadID,
+	})
 }
 
 func handleArchiveBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, boardID, identifier string) {
@@ -1577,14 +1581,8 @@ func validateBoardCardMoveRequest(columnKey, beforeCardID, afterCardID, beforeTh
 	if err := validateBoardPlacementRequest(columnKey, beforeThreadID, afterThreadID, nil); err != nil {
 		return err
 	}
-	if strings.TrimSpace(beforeCardID) != "" && strings.TrimSpace(afterCardID) != "" {
-		return errors.New("before_card_id and after_card_id are mutually exclusive")
-	}
-	if strings.TrimSpace(beforeCardID) != "" && strings.TrimSpace(beforeThreadID) != "" {
-		return errors.New("before_card_id and before_thread_id are mutually exclusive")
-	}
-	if strings.TrimSpace(afterCardID) != "" && strings.TrimSpace(afterThreadID) != "" {
-		return errors.New("after_card_id and after_thread_id are mutually exclusive")
+	if err := primitives.ValidateBoardPlacementAnchors(beforeCardID, afterCardID, beforeThreadID, afterThreadID); err != nil {
+		return err
 	}
 	return nil
 }
