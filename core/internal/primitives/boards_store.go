@@ -792,7 +792,7 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 	if err := validateBoardColumnKey(columnKey); err != nil {
 		return BoardCardMutationResult{}, invalidBoardRequestError(err)
 	}
-	if err := validateBoardPlacementAnchors(firstNonEmpty(input.BeforeCardID, input.BeforeThreadID), firstNonEmpty(input.AfterCardID, input.AfterThreadID)); err != nil {
+	if err := validateBoardPlacementAnchors(input.BeforeCardID, input.AfterCardID, input.BeforeThreadID, input.AfterThreadID); err != nil {
 		return BoardCardMutationResult{}, invalidBoardRequestError(err)
 	}
 	if err := validateBoardCardStatus(input.Status, true); err != nil {
@@ -1001,6 +1001,10 @@ func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifie
 		return BoardCardMutationResult{}, err
 	}
 	boardID = cardRow.BoardID
+	if err := ensureBoardCardMutable(cardRow); err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, err
+	}
 	boardRow, err := loadBoardRow(ctx, tx, boardID)
 	if err != nil {
 		_ = tx.Rollback()
@@ -1176,7 +1180,7 @@ func (s *Store) MoveBoardCard(ctx context.Context, actorID, boardID, identifier 
 	if err := validateBoardColumnKey(columnKey); err != nil {
 		return BoardCardMutationResult{}, invalidBoardRequestError(err)
 	}
-	if err := validateBoardPlacementAnchors(firstNonEmpty(input.BeforeCardID, input.BeforeThreadID), firstNonEmpty(input.AfterCardID, input.AfterThreadID)); err != nil {
+	if err := validateBoardPlacementAnchors(input.BeforeCardID, input.AfterCardID, input.BeforeThreadID, input.AfterThreadID); err != nil {
 		return BoardCardMutationResult{}, invalidBoardRequestError(err)
 	}
 
@@ -1201,6 +1205,10 @@ func (s *Store) MoveBoardCard(ctx context.Context, actorID, boardID, identifier 
 		cardRow, err = s.loadBoardCardByGlobalID(ctx, tx, identifier, true)
 	}
 	if err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, err
+	}
+	if err := ensureBoardCardMutable(cardRow); err != nil {
 		_ = tx.Rollback()
 		return BoardCardMutationResult{}, err
 	}
@@ -2513,11 +2521,34 @@ func inferLegacyBoardCardStatus(columnKey string) string {
 	return "todo"
 }
 
-func validateBoardPlacementAnchors(beforeID, afterID string) error {
-	beforeID = strings.TrimSpace(beforeID)
-	afterID = strings.TrimSpace(afterID)
-	if beforeID != "" && afterID != "" {
+func validateBoardPlacementAnchors(beforeCardID, afterCardID, beforeThreadID, afterThreadID string) error {
+	beforeCardID = strings.TrimSpace(beforeCardID)
+	afterCardID = strings.TrimSpace(afterCardID)
+	beforeThreadID = strings.TrimSpace(beforeThreadID)
+	afterThreadID = strings.TrimSpace(afterThreadID)
+
+	if beforeCardID != "" && beforeThreadID != "" {
+		return fmt.Errorf("before_card_id and before_thread_id are mutually exclusive")
+	}
+	if afterCardID != "" && afterThreadID != "" {
+		return fmt.Errorf("after_card_id and after_thread_id are mutually exclusive")
+	}
+
+	hasCardAnchor := beforeCardID != "" || afterCardID != ""
+	hasThreadAnchor := beforeThreadID != "" || afterThreadID != ""
+	if hasCardAnchor && hasThreadAnchor {
+		return fmt.Errorf("card-id and thread-id placement anchors cannot be combined")
+	}
+
+	if firstNonEmpty(beforeCardID, beforeThreadID) != "" && firstNonEmpty(afterCardID, afterThreadID) != "" {
 		return fmt.Errorf("before and after anchors are mutually exclusive")
+	}
+	return nil
+}
+
+func ensureBoardCardMutable(card boardCardRow) error {
+	if card.ArchivedAt.Valid && strings.TrimSpace(card.ArchivedAt.String) != "" {
+		return invalidBoardRequest("card is archived")
 	}
 	return nil
 }

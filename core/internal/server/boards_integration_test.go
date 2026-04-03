@@ -592,6 +592,22 @@ func TestArchiveBoardCardGlobalRoute(t *testing.T) {
 	if len(cardsPayload.Cards) != 0 {
 		t.Fatalf("expected archived card to be absent from active board cards, got %#v", cardsPayload.Cards)
 	}
+
+	patchArchivedResp := patchJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards/"+memberThreadID, `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+asString(archivePayload.Board["updated_at"])+`",
+		"patch":{"status":"done"}
+	}`, http.StatusBadRequest)
+	defer patchArchivedResp.Body.Close()
+	assertErrorCode(t, patchArchivedResp, "invalid_request")
+
+	moveArchivedResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards/"+memberThreadID+"/move", `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+asString(archivePayload.Board["updated_at"])+`",
+		"column_key":"done"
+	}`, http.StatusBadRequest)
+	defer moveArchivedResp.Body.Close()
+	assertErrorCode(t, moveArchivedResp, "invalid_request")
 }
 
 func TestBoardCardPatchAllowsContractValidNoOpShapes(t *testing.T) {

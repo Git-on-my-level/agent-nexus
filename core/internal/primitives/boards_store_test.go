@@ -362,6 +362,128 @@ func TestBoardStoreArchiveBoardCardByGlobalID(t *testing.T) {
 	}
 }
 
+func TestBoardStoreRejectsArchivedCardMutations(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	store := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+
+	primaryThreadID := createBoardTestThread(t, ctx, store, "Primary board thread")
+	cardThreadID := createBoardTestThread(t, ctx, store, "Card thread")
+
+	board, err := store.CreateBoard(ctx, "actor-1", map[string]any{
+		"title":             "Archived Mutation Board",
+		"primary_thread_id": primaryThreadID,
+	})
+	if err != nil {
+		t.Fatalf("create board: %v", err)
+	}
+	boardID := board["id"].(string)
+
+	added, err := store.AddBoardCard(ctx, "actor-2", boardID, primitives.AddBoardCardInput{
+		ThreadID:  cardThreadID,
+		ColumnKey: "ready",
+	})
+	if err != nil {
+		t.Fatalf("add board card: %v", err)
+	}
+	cardID := added.Card["id"].(string)
+	updatedAt := added.Board["updated_at"].(string)
+
+	sleepBoardTick()
+	archived, err := store.ArchiveBoardCard(ctx, "actor-3", "", cardID, primitives.RemoveBoardCardInput{
+		IfBoardUpdatedAt: &updatedAt,
+	})
+	if err != nil {
+		t.Fatalf("archive board card: %v", err)
+	}
+	archivedUpdatedAt := archived.Board["updated_at"].(string)
+	statusDone := "done"
+
+	if _, err := store.UpdateBoardCard(ctx, "actor-4", boardID, cardThreadID, primitives.UpdateBoardCardInput{
+		Status:           &statusDone,
+		IfBoardUpdatedAt: &archivedUpdatedAt,
+	}); !errors.Is(err, primitives.ErrInvalidBoardRequest) {
+		t.Fatalf("expected archived card update ErrInvalidBoardRequest, got %v", err)
+	}
+
+	if _, err := store.MoveBoardCard(ctx, "actor-4", boardID, cardThreadID, primitives.MoveBoardCardInput{
+		ColumnKey:        "done",
+		IfBoardUpdatedAt: &archivedUpdatedAt,
+	}); !errors.Is(err, primitives.ErrInvalidBoardRequest) {
+		t.Fatalf("expected archived card move ErrInvalidBoardRequest, got %v", err)
+	}
+}
+
+func TestBoardStoreRejectsMixedPlacementAnchorTypes(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	store := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+
+	primaryThreadID := createBoardTestThread(t, ctx, store, "Primary board thread")
+	cardThreadA := createBoardTestThread(t, ctx, store, "Card thread A")
+	cardThreadB := createBoardTestThread(t, ctx, store, "Card thread B")
+	cardThreadC := createBoardTestThread(t, ctx, store, "Card thread C")
+
+	board, err := store.CreateBoard(ctx, "actor-1", map[string]any{
+		"title":             "Anchor Board",
+		"primary_thread_id": primaryThreadID,
+	})
+	if err != nil {
+		t.Fatalf("create board: %v", err)
+	}
+	boardID := board["id"].(string)
+
+	addedA, err := store.AddBoardCard(ctx, "actor-2", boardID, primitives.AddBoardCardInput{
+		ThreadID:  cardThreadA,
+		ColumnKey: "backlog",
+	})
+	if err != nil {
+		t.Fatalf("add board card A: %v", err)
+	}
+	addedB, err := store.AddBoardCard(ctx, "actor-2", boardID, primitives.AddBoardCardInput{
+		ThreadID:  cardThreadB,
+		ColumnKey: "backlog",
+	})
+	if err != nil {
+		t.Fatalf("add board card B: %v", err)
+	}
+	updatedAt := addedB.Board["updated_at"].(string)
+
+	if _, err := store.CreateBoardCard(ctx, "actor-3", boardID, primitives.AddBoardCardInput{
+		Title:            "Card C",
+		ParentThreadID:   cardThreadC,
+		ColumnKey:        "backlog",
+		BeforeCardID:     addedA.Card["id"].(string),
+		AfterThreadID:    cardThreadB,
+		IfBoardUpdatedAt: &updatedAt,
+	}); !errors.Is(err, primitives.ErrInvalidBoardRequest) {
+		t.Fatalf("expected mixed-anchor create ErrInvalidBoardRequest, got %v", err)
+	}
+
+	if _, err := store.MoveBoardCard(ctx, "actor-3", boardID, cardThreadA, primitives.MoveBoardCardInput{
+		ColumnKey:        "backlog",
+		BeforeCardID:     addedB.Card["id"].(string),
+		AfterThreadID:    cardThreadB,
+		IfBoardUpdatedAt: &updatedAt,
+	}); !errors.Is(err, primitives.ErrInvalidBoardRequest) {
+		t.Fatalf("expected mixed-anchor move ErrInvalidBoardRequest, got %v", err)
+	}
+}
+
 func TestBoardStoreMembershipValidationAndLookup(t *testing.T) {
 	t.Parallel()
 
