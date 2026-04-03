@@ -69,7 +69,7 @@ func init() {
 			Path:        "bridge import-auth",
 			Summary:     "Copy an existing `oar` profile and key into bridge auth state for one bridge config.",
 			JSONShape:   "`config_path`, `auth_state_path`, `profile_path`, `profile_agent`, `username`, `actor_id`, `agent_id`, `key_id`",
-			Composition: "Pure local helper. Reads an existing `oar` profile plus Ed25519 key material, converts it into bridge auth state, and writes it to the bridge config's `[auth].state_path`.",
+			Composition: "Pure local helper. Reads an existing `oar` profile plus Ed25519 key material, converts it into bridge auth state, writes it to the bridge config's `[auth].state_path`, and syncs `[oar].base_url` when the config still has the default local value.",
 			Examples: []string{
 				"oar bridge import-auth --config ./agent.toml --from-profile agent-a",
 				"oar --agent agent-a bridge import-auth --config ./agent.toml",
@@ -85,7 +85,7 @@ func init() {
 			JSONShape:   "`kind`, `output`, `workspace_id`, `handle`, `content`",
 			Composition: "Pure local helper. Renders one minimal bridge config template with explicit workspace-id and readiness settings; optionally writes it to disk.",
 			Examples: []string{
-				"oar bridge init-config --kind hermes --output ./agent.toml --workspace-id ws_main --handle hermes",
+				"oar bridge init-config --kind hermes --output ./agent.toml --workspace-id ws_main --handle hermes --workspace-path /absolute/path/to/hermes/workspace",
 				"oar bridge init-config --kind zeroclaw --output ./zeroclaw.toml --workspace-id ws_main --handle zeroclaw",
 			},
 			Flags: []localHelperFlag{
@@ -93,6 +93,7 @@ func init() {
 				{Name: "--output <path>", Description: "Write the rendered TOML to a file. Omit to print it."},
 				{Name: "--workspace-id <id>", Description: "Durable OAR workspace id. Do not use a slug or UI path segment."},
 				{Name: "--handle <name>", Description: "Agent handle for bridge templates."},
+				{Name: "--workspace-path <path>", Description: "Hermes workspace path. Sets both `[adapter].cwd_default` and `[adapter.workspace_map]`."},
 			},
 		},
 		localHelperTopic{
@@ -202,8 +203,8 @@ Recommended order
 
 1. `+"`oar bridge install`"+`
 2. `+"`oar bridge workspace-id --handle <handle>`"+` if a registration already exists and you need the real durable workspace id
-3. `+"`oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle>`"+`
-4. `+"`oar bridge import-auth --config ./agent.toml --from-profile <agent>`"+` when matching `+"`oar`"+` auth already exists
+3. `+"`oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --workspace-path /absolute/path/to/hermes/workspace`"+`
+4. `+"`oar bridge import-auth --config ./agent.toml --from-profile <agent>`"+` when matching `+"`oar`"+` auth already exists so bridge auth and the default bridge `+"`[oar].base_url`"+` stay aligned
 5. `+"`oar-agent-bridge auth register ...`"+` for the agent principal when auth does not already exist
 6. `+"`oar bridge start --config ./agent.toml`"+`
 7. `+"`oar bridge status --config ./agent.toml`"+` and `+"`oar bridge doctor --config ./agent.toml`"+` before expecting immediate online delivery
@@ -310,7 +311,7 @@ func (a *App) runBridgeInstall(ctx context.Context, args []string) (*commandResu
 		"Python: " + pythonRuntime.Command + " (" + pythonRuntime.Version + ")",
 		"Installed ref: " + ref,
 		"Version: " + strings.TrimSpace(versionOut),
-		"Next step: oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle>",
+		"Next step: oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --workspace-path /absolute/path/to/hermes/workspace",
 		"Next step: oar bridge doctor --config ./agent.toml once the bridge has checked in",
 	}
 	if !bridgePathContains(a.Getenv, binDir) {
@@ -409,6 +410,24 @@ func (a *App) runBridgeImportAuth(args []string, cfg config.Resolved) (*commandR
 		return nil, err
 	}
 
+	profileBaseURL := strings.TrimSpace(prof.BaseURL)
+	var baseURLUpdated bool
+	var baseURLWarning string
+	if profileBaseURL != "" {
+		configBaseURL := strings.TrimSpace(configDetails.BaseURL)
+		if configBaseURL == "" || configBaseURL == "http://127.0.0.1:8000" {
+			if profileBaseURL != configBaseURL {
+				updated, err := bridgeUpdateConfigBaseURL(configDetails.ConfigPath, profileBaseURL)
+				if err != nil {
+					return nil, errnorm.Wrap(errnorm.KindLocal, "bridge_config_base_url_failed", "failed to update [oar].base_url in bridge config", err)
+				}
+				baseURLUpdated = updated
+			}
+		} else if profileBaseURL != configBaseURL {
+			baseURLWarning = fmt.Sprintf("WARNING: config [oar].base_url (%s) differs from imported profile base_url (%s); leaving config unchanged.", configBaseURL, profileBaseURL)
+		}
+	}
+
 	lines := []string{
 		"Bridge auth imported.",
 		"Config: " + configDetails.ConfigPath,
@@ -416,6 +435,12 @@ func (a *App) runBridgeImportAuth(args []string, cfg config.Resolved) (*commandR
 		"Source profile: " + profilePath,
 		"Username: " + username,
 		"Actor ID: " + strings.TrimSpace(prof.ActorID),
+	}
+	if baseURLUpdated {
+		lines = append(lines, "Base URL updated: "+profileBaseURL)
+	}
+	if baseURLWarning != "" {
+		lines = append(lines, baseURLWarning)
 	}
 	return &commandResult{
 		Text: strings.Join(lines, "\n"),
@@ -446,6 +471,7 @@ func (a *App) runBridgeInitConfig(args []string, cfg config.Resolved) (*commandR
 	var hermesCwdFlag trackedString
 	var zeroclawURLFlag trackedString
 	var zeroclawTokenFlag trackedString
+	var workspacePathFlag trackedString
 	fs.Var(&kindFlag, "kind", "Template kind: hermes or zeroclaw")
 	fs.Var(&outputFlag, "output", "Write the rendered TOML to a file")
 	fs.Var(&baseURLFlag, "base-url", "OAR base URL")
@@ -456,6 +482,7 @@ func (a *App) runBridgeInitConfig(args []string, cfg config.Resolved) (*commandR
 	fs.Var(&authStateFlag, "auth-state-path", "Auth state path")
 	fs.Var(&stateDirFlag, "state-dir", "Agent state dir")
 	fs.Var(&hermesCwdFlag, "adapter-cwd", "Default Hermes working directory")
+	fs.Var(&workspacePathFlag, "workspace-path", "Hermes workspace path (sets both cwd_default and workspace_map)")
 	fs.Var(&zeroclawURLFlag, "gateway-url", "ZeroClaw gateway base URL")
 	fs.Var(&zeroclawTokenFlag, "bearer-token", "ZeroClaw bearer token")
 	if err := fs.Parse(args); err != nil {
@@ -480,6 +507,13 @@ func (a *App) runBridgeInitConfig(args []string, cfg config.Resolved) (*commandR
 	if workspaceName == "" {
 		workspaceName = "Main"
 	}
+	hermesCWD := strings.TrimSpace(hermesCwdFlag.value)
+	workspacePath := strings.TrimSpace(workspacePathFlag.value)
+	if workspacePath != "" {
+		hermesCWD = workspacePath
+	}
+	hermesPlaceholderUsed := kind == "hermes" && hermesCWD == ""
+
 	rendered, handle, err := renderBridgeConfigTemplate(bridgeTemplateParams{
 		Kind:          kind,
 		BaseURL:       baseURL,
@@ -489,7 +523,7 @@ func (a *App) runBridgeInitConfig(args []string, cfg config.Resolved) (*commandR
 		Handle:        strings.TrimSpace(handleFlag.value),
 		AuthStatePath: strings.TrimSpace(authStateFlag.value),
 		StateDir:      strings.TrimSpace(stateDirFlag.value),
-		HermesCWD:     strings.TrimSpace(hermesCwdFlag.value),
+		HermesCWD:     hermesCWD,
 		ZeroClawURL:   strings.TrimSpace(zeroclawURLFlag.value),
 		ZeroClawToken: strings.TrimSpace(zeroclawTokenFlag.value),
 	})
@@ -502,21 +536,30 @@ func (a *App) runBridgeInitConfig(args []string, cfg config.Resolved) (*commandR
 		if err := bridgeWriteConfig(outputPath, rendered); err != nil {
 			return nil, err
 		}
-		text = strings.Join([]string{
+		textLines := []string{
 			"Bridge config written.",
 			"Kind: " + kind,
 			"Path: " + outputPath,
 			"Lifecycle: registrations stay pending until the bridge checks in.",
-		}, "\n")
+		}
+		if hermesPlaceholderUsed {
+			textLines = append(textLines,
+				"WARNING: hermes config was generated with placeholder workspace paths.",
+				"  Replace [adapter].cwd_default and [adapter.workspace_map] with actual paths,",
+				"  or re-run with --workspace-path <path> to prefill them.",
+			)
+		}
+		text = strings.Join(textLines, "\n")
 	}
 	return &commandResult{
 		Text: text,
 		Data: map[string]any{
-			"kind":         kind,
-			"output":       outputPath,
-			"workspace_id": workspaceID,
-			"handle":       handle,
-			"content":      rendered,
+			"kind":               kind,
+			"output":             outputPath,
+			"workspace_id":       workspaceID,
+			"handle":             handle,
+			"content":            rendered,
+			"hermes_placeholder": hermesPlaceholderUsed,
 		},
 	}, nil
 }
@@ -623,7 +666,7 @@ func (a *App) runBridgeWorkspaceID(ctx context.Context, args []string, cfg confi
 		lines = append(lines, "- "+workspaceID)
 	}
 	if handle != "" {
-		lines = append(lines, "Next step: oar bridge init-config --kind hermes --output ./agent.toml --workspace-id "+workspaceIDs[0]+" --handle "+handle)
+		lines = append(lines, "Next step: oar bridge init-config --kind hermes --output ./agent.toml --workspace-id "+workspaceIDs[0]+" --handle "+handle+" --workspace-path /absolute/path/to/hermes/workspace")
 	}
 	return &commandResult{
 		Text: strings.Join(lines, "\n"),
@@ -1078,6 +1121,7 @@ type bridgeConfigDetails struct {
 	ConfigPath    string
 	AuthStatePath string
 	AgentHandle   string
+	BaseURL       string
 }
 
 func loadBridgeConfigDetails(configPath string) (bridgeConfigDetails, error) {
@@ -1101,6 +1145,7 @@ func loadBridgeConfigDetails(configPath string) (bridgeConfigDetails, error) {
 		ConfigPath:    absPath,
 		AuthStatePath: authStatePath,
 		AgentHandle:   bridgeConfigStringValue(string(content), "agent", "handle"),
+		BaseURL:       bridgeConfigStringValue(string(content), "oar", "base_url"),
 	}, nil
 }
 
@@ -1187,4 +1232,59 @@ func writeBridgeJSONFile(path string, payload map[string]any) error {
 		return errnorm.Wrap(errnorm.KindLocal, "bridge_auth_write_failed", "failed to write bridge auth state", err)
 	}
 	return nil
+}
+
+func bridgeUpdateConfigBaseURL(configPath string, newBaseURL string) (bool, error) {
+	content, err := bridgeReadFile(configPath)
+	if err != nil {
+		return false, fmt.Errorf("read config for base_url update: %w", err)
+	}
+	updated, changed := bridgeReplaceConfigValue(string(content), "oar", "base_url", newBaseURL)
+	if !changed {
+		return false, nil
+	}
+	if err := bridgeWriteFile(configPath, []byte(updated), 0o600); err != nil {
+		return false, fmt.Errorf("write config with updated base_url: %w", err)
+	}
+	return true, nil
+}
+
+func bridgeReplaceConfigValue(content string, section string, key string, newValue string) (string, bool) {
+	var buf strings.Builder
+	currentSection := ""
+	sectionSeen := false
+	written := false
+	for _, line := range strings.Split(content, "\n") {
+		if matches := bridgeSectionHeaderPattern.FindStringSubmatch(line); len(matches) == 2 {
+			if currentSection == section && !written {
+				buf.WriteString(key + " = " + strconv.Quote(newValue) + "\n")
+				written = true
+			}
+			currentSection = matches[1]
+			if currentSection == section {
+				sectionSeen = true
+			}
+			buf.WriteString(line + "\n")
+			continue
+		}
+		if currentSection == section && !written {
+			name, _, ok := parseBridgeConfigAssignment(line)
+			if ok && name == key {
+				buf.WriteString(key + " = " + strconv.Quote(newValue) + "\n")
+				written = true
+				continue
+			}
+		}
+		buf.WriteString(line + "\n")
+	}
+	if !written {
+		if sectionSeen {
+			buf.WriteString(key + " = " + strconv.Quote(newValue) + "\n")
+		} else {
+			buf.WriteString("[" + section + "]\n")
+			buf.WriteString(key + " = " + strconv.Quote(newValue) + "\n")
+		}
+		written = true
+	}
+	return buf.String(), written
 }

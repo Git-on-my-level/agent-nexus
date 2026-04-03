@@ -52,7 +52,7 @@ Config generation
 
 Generate minimal configs from the CLI:
 
-  oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle>
+  oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --workspace-path /absolute/path/to/hermes/workspace
   oar bridge init-config --kind zeroclaw --output ./zeroclaw.toml --workspace-id <workspace-id> --handle <handle>
 
 These templates intentionally default the agent lifecycle to:
@@ -80,11 +80,15 @@ First-time agent-host path
 
 2. Render the agent config:
 
-  oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle>
+  oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --workspace-path /absolute/path/to/hermes/workspace
+
+  If you omit <<tick>>--workspace-path<<tick>>, the rendered Hermes config uses placeholder paths and must be edited before the bridge can run.
 
 3. If a matching <<tick>>oar<<tick>> profile already exists for the target principal, import it into the bridge config:
 
   oar bridge import-auth --config ./agent.toml --from-profile <agent>
+
+  This also syncs the default local <<tick>>[oar].base_url<<tick>> in the bridge config to the imported profile when they differ.
 
 4. Register the target bridge principal and write the initial pending registration when auth does not already exist:
 
