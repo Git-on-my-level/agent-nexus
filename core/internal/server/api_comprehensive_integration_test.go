@@ -160,7 +160,7 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 		"artifact":{"id":"`+workOrderID+`","refs":["thread:`+threadID+`"],"summary":"work order"},
 		"packet":{
 			"work_order_id":"`+workOrderID+`",
-			"thread_id":"`+threadID+`",
+			"subject_ref":"thread:`+threadID+`",
 			"objective":"fix",
 			"constraints":["none"],
 			"context_refs":["url:https://example.com/context"],
@@ -183,7 +183,7 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 		"packet":{
 			"receipt_id":"receipt-invalid",
 			"work_order_id":"`+workOrderID+`",
-			"thread_id":"`+threadID+`",
+			"subject_ref":"thread:`+threadID+`",
 			"outputs":[],
 			"verification_evidence":["url:https://example.com/evidence"],
 			"changes_summary":"summary",
@@ -198,7 +198,7 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 		"packet":{
 			"receipt_id":"`+receiptID+`",
 			"work_order_id":"`+workOrderID+`",
-			"thread_id":"`+threadID+`",
+			"subject_ref":"thread:`+threadID+`",
 			"outputs":["artifact:output-1"],
 			"verification_evidence":["url:https://example.com/evidence"],
 			"changes_summary":"summary",
@@ -213,6 +213,7 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 		"artifact":{"id":"`+reviewID+`","refs":["thread:`+threadID+`","artifact:`+receiptID+`","artifact:`+workOrderID+`"],"summary":"review"},
 		"packet":{
 			"review_id":"`+reviewID+`",
+			"subject_ref":"thread:`+threadID+`",
 			"work_order_id":"`+workOrderID+`",
 			"receipt_id":"`+receiptID+`",
 			"outcome":"accept",
@@ -363,7 +364,7 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 		"artifact":{"id":"wo-mismatch-a","refs":["thread:`+threadID+`"]},
 		"packet":{
 			"work_order_id":"wo-mismatch-b",
-			"thread_id":"`+threadID+`",
+			"subject_ref":"thread:`+threadID+`",
 			"objective":"x",
 			"constraints":["none"],
 			"context_refs":["url:https://example.com/context"],

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"organization-autorunner-core/internal/primitives"
+	"organization-autorunner-core/internal/schema"
 )
 
 func handleCreateWorkOrder(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
@@ -16,10 +18,10 @@ func handleCreateWorkOrder(w http.ResponseWriter, r *http.Request, opts handlerO
 		PacketKind: "work_order",
 		EventType:  "work_order_created",
 		Summary:    "work order created",
-		EventRefs: func(artifactID string, threadID string, packet map[string]any) []string {
+		EventRefs: func(artifactID string, threadID string, subjectRef string, packet map[string]any) []string {
 			return []string{
 				"artifact:" + artifactID,
-				"thread:" + threadID,
+				subjectRef,
 			}
 		},
 	})
@@ -30,12 +32,11 @@ func handleCreateReceipt(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		PacketKind: "receipt",
 		EventType:  "receipt_added",
 		Summary:    "receipt added",
-		EventRefs: func(artifactID string, threadID string, packet map[string]any) []string {
-			workOrderID, _ := packet["work_order_id"].(string)
+		EventRefs: func(artifactID string, threadID string, subjectRef string, packet map[string]any) []string {
 			return []string{
 				"artifact:" + artifactID,
-				"artifact:" + strings.TrimSpace(workOrderID),
-				"thread:" + threadID,
+				packetArtifactLinkRef(packet, "work_order_ref", "work_order_id"),
+				subjectRef,
 			}
 		},
 	})
@@ -46,14 +47,12 @@ func handleCreateReview(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		PacketKind: "review",
 		EventType:  "review_completed",
 		Summary:    "review completed",
-		EventRefs: func(artifactID string, threadID string, packet map[string]any) []string {
-			workOrderID, _ := packet["work_order_id"].(string)
-			receiptID, _ := packet["receipt_id"].(string)
+		EventRefs: func(artifactID string, threadID string, subjectRef string, packet map[string]any) []string {
 			return []string{
 				"artifact:" + artifactID,
-				"artifact:" + strings.TrimSpace(receiptID),
-				"artifact:" + strings.TrimSpace(workOrderID),
-				"thread:" + threadID,
+				packetArtifactLinkRef(packet, "receipt_ref", "receipt_id"),
+				packetArtifactLinkRef(packet, "work_order_ref", "work_order_id"),
+				subjectRef,
 			}
 		},
 	})
@@ -63,7 +62,7 @@ type packetCreateRequest struct {
 	PacketKind string
 	EventType  string
 	Summary    string
-	EventRefs  func(artifactID string, threadID string, packet map[string]any) []string
+	EventRefs  func(artifactID string, threadID string, subjectRef string, packet map[string]any) []string
 }
 
 func createPacketArtifactAndEvent(w http.ResponseWriter, r *http.Request, opts handlerOptions, request packetCreateRequest) {
@@ -129,17 +128,6 @@ func createPacketArtifactAndEvent(w http.ResponseWriter, r *http.Request, opts h
 	if firstNonEmptyString(req.Packet[idField]) == "" {
 		req.Packet[idField] = artifactID
 	}
-	if firstNonEmptyString(req.Packet["subject_ref"]) == "" {
-		if threadID := firstNonEmptyString(req.Packet["thread_id"]); threadID != "" {
-			req.Packet["subject_ref"] = "thread:" + threadID
-		} else if refs, err := extractStringSlice(req.Artifact["refs"]); err == nil {
-			if threadID := findFirstRefValueByPrefix(refs, "thread"); threadID != "" {
-				req.Packet["subject_ref"] = "thread:" + threadID
-			} else if topicID := findFirstRefValueByPrefix(refs, "topic"); topicID != "" {
-				req.Packet["subject_ref"] = "topic:" + topicID
-			}
-		}
-	}
 	if request.PacketKind == "receipt" || request.PacketKind == "review" {
 		if firstNonEmptyString(req.Packet["work_order_ref"]) == "" {
 			if workOrderID := firstNonEmptyString(req.Packet["work_order_id"]); workOrderID != "" {
@@ -154,6 +142,22 @@ func createPacketArtifactAndEvent(w http.ResponseWriter, r *http.Request, opts h
 			}
 		}
 	}
+	artifactRefs, err := extractStringSlice(req.Artifact["refs"])
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "artifact.refs must be a list of strings")
+		return
+	}
+	artifactRefs = append(artifactRefs, "artifact:"+artifactID)
+	if subjectRef := firstNonEmptyString(req.Packet["subject_ref"]); subjectRef != "" {
+		artifactRefs = append(artifactRefs, subjectRef)
+	}
+	if workOrderRef := packetArtifactLinkRef(req.Packet, "work_order_ref", "work_order_id"); workOrderRef != "" {
+		artifactRefs = append(artifactRefs, workOrderRef)
+	}
+	if receiptRef := packetArtifactLinkRef(req.Packet, "receipt_ref", "receipt_id"); receiptRef != "" {
+		artifactRefs = append(artifactRefs, receiptRef)
+	}
+	req.Artifact["refs"] = uniqueStringRefs(artifactRefs)
 	replayStatus, replayPayload, replayed, err := readIdempotencyReplay(r.Context(), opts.primitiveStore, scope, actorID, req.RequestKey, req)
 	if writeIdempotencyError(w, err) {
 		return
@@ -167,21 +171,39 @@ func createPacketArtifactAndEvent(w http.ResponseWriter, r *http.Request, opts h
 		return
 	}
 
-	threadID, err := validatePacketArtifactAndContent(opts.contract, request.PacketKind, req.Artifact, req.Packet)
+	subjectRef, err := validatePacketArtifactAndContent(opts.contract, request.PacketKind, req.Artifact, req.Packet)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
+	threadID, err := resolveSubjectRefThreadID(r.Context(), opts, subjectRef)
+	if err != nil {
+		if errors.Is(err, primitives.ErrNotFound) {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to resolve packet subject")
+		return
+	}
 
-	eventRefs := request.EventRefs(artifactID, threadID, req.Packet)
+	eventRefs := request.EventRefs(artifactID, threadID, subjectRef, req.Packet)
 	eventRefs = uniqueStringRefs(eventRefs)
 
+	eventPayload := map[string]any{
+		"subject_ref": subjectRef,
+	}
+	if workOrderRef := packetArtifactLinkRef(req.Packet, "work_order_ref", "work_order_id"); workOrderRef != "" {
+		eventPayload["work_order_ref"] = workOrderRef
+	}
+	if receiptRef := packetArtifactLinkRef(req.Packet, "receipt_ref", "receipt_id"); receiptRef != "" {
+		eventPayload["receipt_ref"] = receiptRef
+	}
 	event := map[string]any{
 		"type":       request.EventType,
 		"thread_id":  threadID,
 		"refs":       eventRefs,
 		"summary":    request.Summary,
-		"payload":    map[string]any{},
+		"payload":    eventPayload,
 		"provenance": actorStatementProvenance(),
 	}
 	if strings.TrimSpace(req.RequestKey) != "" {
@@ -238,6 +260,84 @@ func createPacketArtifactAndEvent(w http.ResponseWriter, r *http.Request, opts h
 		return
 	}
 	writeJSON(w, status, payload)
+}
+
+func resolveSubjectRefThreadID(ctx context.Context, opts handlerOptions, subjectRef string) (string, error) {
+	subjectRef = strings.TrimSpace(subjectRef)
+	prefix, value, err := schema.SplitTypedRef(subjectRef)
+	if err != nil {
+		return "", err
+	}
+
+	switch prefix {
+	case "thread":
+		thread, err := opts.primitiveStore.GetThread(ctx, value)
+		if err != nil {
+			if errors.Is(err, primitives.ErrNotFound) {
+				return "", invalidPacketSubjectRef(subjectRef)
+			}
+			return "", err
+		}
+		return strings.TrimSpace(anyString(thread["id"])), nil
+	case "document":
+		document, _, err := opts.primitiveStore.GetDocument(ctx, value)
+		if err != nil {
+			if errors.Is(err, primitives.ErrNotFound) {
+				return "", invalidPacketSubjectRef(subjectRef)
+			}
+			return "", err
+		}
+		threadID := strings.TrimSpace(anyString(document["thread_id"]))
+		if threadID == "" {
+			return "", invalidPacketSubjectRef(subjectRef)
+		}
+		return threadID, nil
+	case "topic":
+		topic, err := opts.primitiveStore.GetTopic(ctx, value)
+		if err != nil {
+			if errors.Is(err, primitives.ErrNotFound) {
+				return "", invalidPacketSubjectRef(subjectRef)
+			}
+			return "", err
+		}
+		threadID := strings.TrimSpace(anyString(topic["primary_thread_id"]))
+		if threadID == "" {
+			return "", invalidPacketSubjectRef(subjectRef)
+		}
+		return threadID, nil
+	case "board":
+		board, err := opts.primitiveStore.GetBoard(ctx, value)
+		if err != nil {
+			if errors.Is(err, primitives.ErrNotFound) {
+				return "", invalidPacketSubjectRef(subjectRef)
+			}
+			return "", err
+		}
+		threadID := strings.TrimSpace(anyString(board["primary_thread_id"]))
+		if threadID == "" {
+			return "", invalidPacketSubjectRef(subjectRef)
+		}
+		return threadID, nil
+	case "card":
+		card, err := opts.primitiveStore.GetBoardCard(ctx, "", value)
+		if err != nil {
+			if errors.Is(err, primitives.ErrNotFound) {
+				return "", invalidPacketSubjectRef(subjectRef)
+			}
+			return "", err
+		}
+		threadID := strings.TrimSpace(anyString(card["thread_id"]))
+		if threadID == "" {
+			return "", invalidPacketSubjectRef(subjectRef)
+		}
+		return threadID, nil
+	default:
+		return "", invalidPacketSubjectRef(subjectRef)
+	}
+}
+
+func invalidPacketSubjectRef(subjectRef string) error {
+	return errors.New("packet.subject_ref does not resolve to a backing thread: " + strings.TrimSpace(subjectRef))
 }
 
 func uniqueStringRefs(values []string) []string {

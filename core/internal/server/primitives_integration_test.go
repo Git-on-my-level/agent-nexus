@@ -351,6 +351,10 @@ func TestDocumentsLifecycleRoundTrip(t *testing.T) {
 	if created["document"]["id"] != "doc-1" {
 		t.Fatalf("unexpected document id: %#v", created["document"]["id"])
 	}
+	documentThreadID, _ := created["document"]["thread_id"].(string)
+	if documentThreadID == "" {
+		t.Fatalf("expected document backing thread id, got %#v", created["document"])
+	}
 	headRevisionID, _ := created["revision"]["revision_id"].(string)
 	if headRevisionID == "" {
 		t.Fatal("expected created revision id")
@@ -442,9 +446,9 @@ func TestDocumentsLifecycleRoundTrip(t *testing.T) {
 		t.Fatalf("expected no documents for unrelated thread filter, got %#v", unrelatedThreadDocs.Documents)
 	}
 
-	threadDocsResp, err := http.Get(h.baseURL + "/docs?thread_id=thread-docs")
+	threadDocsResp, err := http.Get(h.baseURL + "/docs?thread_id=" + documentThreadID)
 	if err != nil {
-		t.Fatalf("GET /docs?thread_id=thread-docs: %v", err)
+		t.Fatalf("GET /docs?thread_id=<backing>: %v", err)
 	}
 	defer threadDocsResp.Body.Close()
 	if threadDocsResp.StatusCode != http.StatusOK {
@@ -459,8 +463,8 @@ func TestDocumentsLifecycleRoundTrip(t *testing.T) {
 	if len(threadDocs.Documents) != 1 {
 		t.Fatalf("expected one thread-filtered document, got %#v", threadDocs.Documents)
 	}
-	if got := threadDocs.Documents[0]["thread_id"]; got != "thread-docs" {
-		t.Fatalf("expected thread-filtered document thread_id=thread-docs, got %#v", got)
+	if got := threadDocs.Documents[0]["thread_id"]; got != documentThreadID {
+		t.Fatalf("expected thread-filtered document thread_id=%s, got %#v", documentThreadID, got)
 	}
 
 	updateResp := requestJSONExpectStatus(t, http.MethodPatch, h.baseURL+"/docs/doc-1", `{

@@ -412,6 +412,9 @@ func (s *Store) CreateArtifactAndEvent(ctx context.Context, actorID string, arti
 	metadata["content_type"] = contentType
 	metadata["content_hash"] = contentHash
 	artifactThreadID := firstThreadRefValue(artifactRefs)
+	if artifactThreadID == "" {
+		artifactThreadID = strings.TrimSpace(anyStringValue(event["thread_id"]))
+	}
 
 	stagedContent, err := s.blob.Write(ctx, contentHash, encodedContent)
 	if err != nil {

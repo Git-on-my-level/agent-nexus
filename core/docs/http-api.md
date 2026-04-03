@@ -263,7 +263,11 @@ Projection endpoints return a `section_kinds` field to distinguish canonical vs 
 - `POST /docs`
   - Body: `{ "actor_id": "...", "request_key"?: "...", "document": { id?, thread_id?, title?, slug?, status?, labels?, supersedes? }, "refs"?: ["typed:ref"...], "content": <string|object|base64>, "content_type": "text|structured|binary" }`
   - Response: `{ "document": <document>, "revision": <document_revision_with_content> }`
-  - Side effect: appends `document_created` to `events` with thread/document/revision/artifact refs when the document is thread-linked.
+  - Notes:
+    - Every document has a backing `thread_id`. If the caller omits `document.thread_id`, core creates one and returns it on the stored document.
+    - Core sets the backing thread `subject_ref` to `document:<document_id>`.
+    - Non-lineage links belong in `refs`; revision lineage remains explicit via `prev_revision_id`.
+  - Side effect: appends `document_created` to `events` on the document backing thread with thread/document/revision/artifact refs.
 
 - `GET /docs`
   - Query (optional): `thread_id=<thread_id>`, `include_tombstoned=true|false`, `q`, `limit`, `cursor`
@@ -278,7 +282,7 @@ Projection endpoints return a `section_kinds` field to distinguish canonical vs 
 - `PATCH /docs/{document_id}`
   - Body: `{ "actor_id": "...", "document"?: { title?, thread_id?, slug?, status?, labels?, supersedes? }, "if_base_revision": "<revision_id>", "refs"?: ["typed:ref"...], "content": <string|object|base64>, "content_type": "text|structured|binary" }`
   - Response: `{ "document": <document>, "revision": <document_revision_with_content> }`
-  - Side effect: appends `document_updated` to `events` with thread/document/revision/artifact refs when the document is thread-linked.
+  - Side effect: appends `document_updated` to `events` on the current backing thread with thread/document/revision/artifact refs.
 
 - `GET /docs/{document_id}/history`
   - Response: `{ "document_id": "<document_id>", "revisions": [<document_revision>...] }`
@@ -289,7 +293,7 @@ Projection endpoints return a `section_kinds` field to distinguish canonical vs 
 - `POST /docs/{document_id}/tombstone`
   - Body: `{ "actor_id": "...", "reason": "..." }`
   - Response: `{ "document": <document>, "revision": <document_revision_with_content> }`
-  - Side effect: appends `document_tombstoned` to `events` with thread/document/current-revision/artifact refs when the document is thread-linked.
+  - Side effect: appends `document_tombstoned` to `events` on the current backing thread with thread/document/current-revision/artifact refs.
 
 ### Events
 
@@ -311,17 +315,26 @@ Projection endpoints return a `section_kinds` field to distinguish canonical vs 
 ### Packet convenience endpoints
 
 - `POST /work_orders`
-  - Body: `{ "actor_id": "...", "request_key"?: "...", "artifact": <artifact_metadata>, "packet": <work_order_packet> }`
+  - Body: `{ "actor_id": "...", "request_key"?: "...", "artifact": <artifact_metadata>, "packet": { "work_order_id"?, "subject_ref": "typed:ref", ... } }`
   - `artifact.id` and `packet.work_order_id` MAY be omitted together; core issues the canonical artifact id and returns it in both artifact metadata and packet content.
+  - `packet.subject_ref` is required. Legacy `packet.thread_id` payloads are rejected.
+  - Core resolves `packet.subject_ref` to the correct backing thread internally before emitting `work_order_created`.
+  - Core normalizes packet artifact refs to include the packet artifact self-ref plus `packet.subject_ref`.
   - Response: `{ "artifact": <artifact_metadata>, "event": <event> }`
 
 - `POST /receipts`
-  - Body: `{ "actor_id": "...", "request_key"?: "...", "artifact": <artifact_metadata>, "packet": <receipt_packet> }`
+  - Body: `{ "actor_id": "...", "request_key"?: "...", "artifact": <artifact_metadata>, "packet": { "receipt_id"?, "subject_ref": "typed:ref", "work_order_ref"?, "work_order_id"?, ... } }`
   - `artifact.id` and `packet.receipt_id` MAY be omitted together; core issues the canonical artifact id and returns it in both artifact metadata and packet content.
+  - `packet.subject_ref` is required. Legacy `packet.thread_id` payloads are rejected.
+  - Core resolves `packet.subject_ref` to the correct backing thread internally before emitting `receipt_added`.
+  - Core normalizes packet artifact refs to include the packet artifact self-ref, `packet.subject_ref`, and the linked work-order artifact ref.
   - Response: `{ "artifact": <artifact_metadata>, "event": <event> }`
 
 - `POST /reviews`
-  - Body: `{ "actor_id": "...", "request_key"?: "...", "artifact": <artifact_metadata>, "packet": <review_packet> }`
+  - Body: `{ "actor_id": "...", "request_key"?: "...", "artifact": <artifact_metadata>, "packet": { "review_id"?, "subject_ref": "typed:ref", "work_order_ref"?, "work_order_id"?, "receipt_ref"?, "receipt_id"?, ... } }`
+  - `packet.subject_ref` is required. Legacy `packet.thread_id` payloads are rejected.
+  - Core resolves `packet.subject_ref` to the correct backing thread internally before emitting `review_completed`.
+  - Core normalizes packet artifact refs to include the packet artifact self-ref, `packet.subject_ref`, and the linked receipt/work-order artifact refs.
   - Response: `{ "artifact": <artifact_metadata>, "event": <event> }`
 
 - Atomicity guarantee:

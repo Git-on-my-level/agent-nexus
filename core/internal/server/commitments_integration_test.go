@@ -105,7 +105,7 @@ func TestCommitmentsCreateAndRestrictedTransitions(t *testing.T) {
 		},
 		"packet":{
 			"work_order_id":"`+workOrderID+`",
-			"thread_id":"`+threadID+`",
+			"subject_ref":"thread:`+threadID+`",
 			"objective":"fix issue",
 			"constraints":["none"],
 			"context_refs":["url:https://example.com/context"],
@@ -126,7 +126,7 @@ func TestCommitmentsCreateAndRestrictedTransitions(t *testing.T) {
 		"packet":{
 			"receipt_id":"`+receiptID+`",
 			"work_order_id":"`+workOrderID+`",
-			"thread_id":"`+threadID+`",
+			"subject_ref":"thread:`+threadID+`",
 			"outputs":["artifact:deliverable-1"],
 			"verification_evidence":["url:https://example.com/evidence"],
 			"changes_summary":"summary",

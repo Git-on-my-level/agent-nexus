@@ -36,6 +36,9 @@ func validatePacketArtifactAndContent(contract *schema.Contract, kind string, ar
 			return "", err
 		}
 	}
+	if legacyThreadID := strings.TrimSpace(anyString(packet["thread_id"])); legacyThreadID != "" {
+		return "", fmt.Errorf("packet.thread_id is not supported; use packet.subject_ref")
+	}
 
 	idField, ok := packetIDFieldName(kind)
 	if !ok {
@@ -68,16 +71,12 @@ func validatePacketArtifactAndContent(contract *schema.Contract, kind string, ar
 		return "", err
 	}
 
-	threadID, _ := packet["thread_id"].(string)
-	threadID = strings.TrimSpace(threadID)
-	if threadID == "" {
-		threadID = findFirstRefValueByPrefix(refs, "thread")
+	subjectRef, _ := packet["subject_ref"].(string)
+	subjectRef = strings.TrimSpace(subjectRef)
+	if subjectRef == "" {
+		return "", fmt.Errorf("packet.subject_ref is required")
 	}
-	if threadID == "" {
-		return "", fmt.Errorf("artifact.refs must include thread:<thread_id>")
-	}
-
-	return threadID, nil
+	return subjectRef, nil
 }
 
 func validatePacketField(contract *schema.Contract, fieldName string, value any, spec schema.FieldSpec) error {
@@ -147,45 +146,70 @@ func validatePacketField(contract *schema.Contract, fieldName string, value any,
 
 func validateRequiredArtifactRefs(contract *schema.Contract, kind string, refs []string, packet map[string]any) error {
 	requiredTemplates := contract.ArtifactRefRules[kind]
+	subjectRef := strings.TrimSpace(anyString(packet["subject_ref"]))
+	if subjectRef == "" {
+		return fmt.Errorf("packet.subject_ref is required")
+	}
+
 	for _, template := range requiredTemplates {
-		if template == "thread:<thread_id>" {
-			threadID, _ := packet["thread_id"].(string)
-			threadID = strings.TrimSpace(threadID)
-			if threadID == "" {
-				if findFirstRefValueByPrefix(refs, "thread") == "" {
-					return fmt.Errorf("artifact.refs must include thread:<thread_id>")
-				}
-				continue
-			}
-			expected := "thread:" + threadID
-			if !containsStringRef(refs, expected) {
-				return fmt.Errorf("artifact.refs must include %q", expected)
+		if strings.Contains(template, "<topic_id> OR card:<card_id> OR board:<board_id>") {
+			if !containsStringRef(refs, subjectRef) {
+				return fmt.Errorf("artifact.refs must include %q", subjectRef)
 			}
 			continue
 		}
 
 		if strings.Contains(template, "<work_order_artifact_id>") {
-			workOrderID, _ := packet["work_order_id"].(string)
-			workOrderID = strings.TrimSpace(workOrderID)
-			expected := "artifact:" + workOrderID
-			if workOrderID == "" || !containsStringRef(refs, expected) {
-				return fmt.Errorf("artifact.refs must include %q", expected)
+			workOrderRef := packetArtifactLinkRef(packet, "work_order_ref", "work_order_id")
+			if workOrderRef == "" || !containsStringRef(refs, workOrderRef) {
+				return fmt.Errorf("artifact.refs must include %q", workOrderRef)
 			}
 			continue
 		}
 
 		if strings.Contains(template, "<receipt_artifact_id>") {
-			receiptID, _ := packet["receipt_id"].(string)
-			receiptID = strings.TrimSpace(receiptID)
-			expected := "artifact:" + receiptID
-			if receiptID == "" || !containsStringRef(refs, expected) {
+			receiptRef := packetArtifactLinkRef(packet, "receipt_ref", "receipt_id")
+			if receiptRef == "" || !containsStringRef(refs, receiptRef) {
+				return fmt.Errorf("artifact.refs must include %q", receiptRef)
+			}
+			continue
+		}
+
+		if strings.Contains(template, "<artifact_id>") {
+			artifactID, _ := packet[packetIDField(template, kind)].(string)
+			artifactID = strings.TrimSpace(artifactID)
+			expected := "artifact:" + artifactID
+			if artifactID == "" || !containsStringRef(refs, expected) {
 				return fmt.Errorf("artifact.refs must include %q", expected)
 			}
 			continue
 		}
 	}
 
+	if !containsStringRef(refs, subjectRef) {
+		return fmt.Errorf("artifact.refs must include %q", subjectRef)
+	}
+
 	return nil
+}
+
+func packetArtifactLinkRef(packet map[string]any, refField, idField string) string {
+	if ref := strings.TrimSpace(anyString(packet[refField])); ref != "" {
+		return ref
+	}
+	if id := strings.TrimSpace(anyString(packet[idField])); id != "" {
+		return "artifact:" + id
+	}
+	return ""
+}
+
+func packetIDField(template, kind string) string {
+	if strings.Contains(template, "<artifact_id>") {
+		if idField, ok := packetIDFieldName(kind); ok {
+			return idField
+		}
+	}
+	return ""
 }
 
 func containsStringRef(refs []string, expected string) bool {

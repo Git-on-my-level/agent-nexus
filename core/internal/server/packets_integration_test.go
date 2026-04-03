@@ -14,33 +14,38 @@ func TestPacketConvenienceEndpointsAndTimeline(t *testing.T) {
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
-	threadResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
+	documentResp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
 		"actor_id":"actor-1",
-		"thread":{
-			"title":"Packet flow thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p1",
-			"tags":["ops"],
-			"cadence":"daily",
-			"next_check_in_at":"2026-03-05T00:00:00Z",
-			"current_summary":"summary",
-			"next_actions":["do x"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
+		"document":{"id":"packet-doc-1","title":"Packet flow document","status":"active"},
+		"content":"packet flow body",
+		"content_type":"text"
 	}`, http.StatusCreated)
-	defer threadResp.Body.Close()
+	defer documentResp.Body.Close()
 
-	var createdThread struct {
+	var createdDocument struct {
+		Document map[string]any `json:"document"`
+	}
+	if err := json.NewDecoder(documentResp.Body).Decode(&createdDocument); err != nil {
+		t.Fatalf("decode create document response: %v", err)
+	}
+	documentID, _ := createdDocument.Document["id"].(string)
+	documentThreadID, _ := createdDocument.Document["thread_id"].(string)
+	if documentID == "" || documentThreadID == "" {
+		t.Fatalf("expected document id and backing thread id, got %#v", createdDocument.Document)
+	}
+	threadResp, err := http.Get(h.baseURL + "/threads/" + documentThreadID)
+	if err != nil {
+		t.Fatalf("GET /threads/{document_thread_id}: %v", err)
+	}
+	defer threadResp.Body.Close()
+	var documentThread struct {
 		Thread map[string]any `json:"thread"`
 	}
-	if err := json.NewDecoder(threadResp.Body).Decode(&createdThread); err != nil {
-		t.Fatalf("decode create thread response: %v", err)
+	if err := json.NewDecoder(threadResp.Body).Decode(&documentThread); err != nil {
+		t.Fatalf("decode document backing thread response: %v", err)
 	}
-	threadID, _ := createdThread.Thread["id"].(string)
-	if threadID == "" {
-		t.Fatal("expected created thread id")
+	if asString(documentThread.Thread["subject_ref"]) != "document:"+documentID {
+		t.Fatalf("expected document backing thread subject_ref=document:%s, got %#v", documentID, documentThread.Thread["subject_ref"])
 	}
 
 	workOrderID := "work-order-1"
@@ -48,12 +53,12 @@ func TestPacketConvenienceEndpointsAndTimeline(t *testing.T) {
 		"actor_id":"actor-1",
 		"artifact":{
 			"id":"`+workOrderID+`",
-			"refs":["thread:`+threadID+`"],
+			"refs":["document:`+documentID+`"],
 			"summary":"work order artifact"
 		},
 		"packet":{
 			"work_order_id":"`+workOrderID+`",
-			"thread_id":"`+threadID+`",
+			"subject_ref":"document:`+documentID+`",
 			"objective":"Investigate and fix",
 			"constraints":["no downtime"],
 			"context_refs":["url:https://example.com/context"],
@@ -73,6 +78,7 @@ func TestPacketConvenienceEndpointsAndTimeline(t *testing.T) {
 	if workOrderPayload.Artifact["kind"] != "work_order" {
 		t.Fatalf("unexpected work order kind: %#v", workOrderPayload.Artifact["kind"])
 	}
+	assertRefsContain(t, workOrderPayload.Artifact["refs"], "artifact:"+workOrderID, "document:"+documentID)
 	if workOrderPayload.Event["type"] != "work_order_created" {
 		t.Fatalf("unexpected work order event type: %#v", workOrderPayload.Event["type"])
 	}
@@ -92,13 +98,13 @@ func TestPacketConvenienceEndpointsAndTimeline(t *testing.T) {
 		"actor_id":"actor-1",
 		"artifact":{
 			"id":"`+receiptID+`",
-			"refs":["thread:`+threadID+`","artifact:`+workOrderID+`"],
+			"refs":["document:`+documentID+`","artifact:`+workOrderID+`"],
 			"summary":"receipt artifact"
 		},
 		"packet":{
 			"receipt_id":"`+receiptID+`",
 			"work_order_id":"`+workOrderID+`",
-			"thread_id":"`+threadID+`",
+			"subject_ref":"document:`+documentID+`",
 			"outputs":[],
 			"verification_evidence":["url:https://example.com/evidence"],
 			"changes_summary":"changed things",
@@ -111,13 +117,13 @@ func TestPacketConvenienceEndpointsAndTimeline(t *testing.T) {
 		"actor_id":"actor-1",
 		"artifact":{
 			"id":"`+receiptID+`",
-			"refs":["thread:`+threadID+`","artifact:`+workOrderID+`"],
+			"refs":["document:`+documentID+`","artifact:`+workOrderID+`"],
 			"summary":"receipt artifact"
 		},
 		"packet":{
 			"receipt_id":"`+receiptID+`",
 			"work_order_id":"`+workOrderID+`",
-			"thread_id":"`+threadID+`",
+			"subject_ref":"document:`+documentID+`",
 			"outputs":["artifact:output-1"],
 			"verification_evidence":["url:https://example.com/evidence"],
 			"changes_summary":"changed things",
@@ -125,17 +131,26 @@ func TestPacketConvenienceEndpointsAndTimeline(t *testing.T) {
 		}
 	}`, http.StatusCreated)
 	defer receiptSuccessResp.Body.Close()
+	var receiptPayload struct {
+		Artifact map[string]any `json:"artifact"`
+		Event    map[string]any `json:"event"`
+	}
+	if err := json.NewDecoder(receiptSuccessResp.Body).Decode(&receiptPayload); err != nil {
+		t.Fatalf("decode receipt response: %v", err)
+	}
+	assertRefsContain(t, receiptPayload.Artifact["refs"], "artifact:"+receiptID, "artifact:"+workOrderID, "document:"+documentID)
 
 	reviewID := "review-1"
 	reviewResp := postJSONExpectStatus(t, h.baseURL+"/reviews", `{
 		"actor_id":"actor-1",
 		"artifact":{
 			"id":"`+reviewID+`",
-			"refs":["thread:`+threadID+`","artifact:`+receiptID+`","artifact:`+workOrderID+`"],
+			"refs":["document:`+documentID+`","artifact:`+receiptID+`","artifact:`+workOrderID+`"],
 			"summary":"review artifact"
 		},
 		"packet":{
 			"review_id":"`+reviewID+`",
+			"subject_ref":"document:`+documentID+`",
 			"work_order_id":"`+workOrderID+`",
 			"receipt_id":"`+receiptID+`",
 			"outcome":"accept",
@@ -144,6 +159,14 @@ func TestPacketConvenienceEndpointsAndTimeline(t *testing.T) {
 		}
 	}`, http.StatusCreated)
 	defer reviewResp.Body.Close()
+	var reviewPayload struct {
+		Artifact map[string]any `json:"artifact"`
+		Event    map[string]any `json:"event"`
+	}
+	if err := json.NewDecoder(reviewResp.Body).Decode(&reviewPayload); err != nil {
+		t.Fatalf("decode review response: %v", err)
+	}
+	assertRefsContain(t, reviewPayload.Artifact["refs"], "artifact:"+reviewID, "artifact:"+receiptID, "artifact:"+workOrderID, "document:"+documentID)
 
 	if resp, err := http.Get(h.baseURL + "/artifacts/" + reviewID); err != nil {
 		t.Fatalf("GET /artifacts/{review_id}: %v", err)
@@ -154,7 +177,7 @@ func TestPacketConvenienceEndpointsAndTimeline(t *testing.T) {
 		}
 	}
 
-	timelineResp, err := http.Get(h.baseURL + "/threads/" + threadID + "/timeline")
+	timelineResp, err := http.Get(h.baseURL + "/threads/" + documentThreadID + "/timeline")
 	if err != nil {
 		t.Fatalf("GET /threads/{id}/timeline: %v", err)
 	}
@@ -174,7 +197,7 @@ func TestPacketConvenienceEndpointsAndTimeline(t *testing.T) {
 	if workOrderEvent == nil {
 		t.Fatal("expected work_order_created event in timeline")
 	}
-	assertRefsContain(t, workOrderEvent["refs"], "artifact:"+workOrderID, "thread:"+threadID)
+	assertRefsContain(t, workOrderEvent["refs"], "artifact:"+workOrderID, "document:"+documentID)
 	assertActorStatementProvenance(t, workOrderEvent)
 
 	receiptEvent := findEventByType(timeline.Events, "receipt_added")
@@ -231,7 +254,7 @@ func TestPacketValidationErrors(t *testing.T) {
 		"artifact":{"id":"wo-missing","refs":["thread:`+threadID+`"]},
 		"packet":{
 			"work_order_id":"wo-missing",
-			"thread_id":"`+threadID+`",
+			"subject_ref":"thread:`+threadID+`",
 			"constraints":["none"],
 			"context_refs":["url:https://example.com/context"],
 			"acceptance_criteria":["done"],
@@ -245,7 +268,7 @@ func TestPacketValidationErrors(t *testing.T) {
 		"artifact":{"id":"wo-bad-ref","refs":["thread:`+threadID+`"]},
 		"packet":{
 			"work_order_id":"wo-bad-ref",
-			"thread_id":"`+threadID+`",
+			"subject_ref":"thread:`+threadID+`",
 			"objective":"obj",
 			"constraints":["none"],
 			"context_refs":["invalidref"],
@@ -260,7 +283,7 @@ func TestPacketValidationErrors(t *testing.T) {
 		"artifact":{"id":"wo-one","refs":["thread:`+threadID+`"]},
 		"packet":{
 			"work_order_id":"wo-two",
-			"thread_id":"`+threadID+`",
+			"subject_ref":"thread:`+threadID+`",
 			"objective":"obj",
 			"constraints":["none"],
 			"context_refs":["url:https://example.com/context"],
@@ -314,7 +337,7 @@ func TestPacketCreateRequestKeyReplaysSingleWrite(t *testing.T) {
 			"summary":"work order artifact"
 		},
 		"packet":{
-			"thread_id":"` + threadID + `",
+			"subject_ref":"thread:` + threadID + `",
 			"objective":"Investigate and fix",
 			"constraints":["no downtime"],
 			"context_refs":["url:https://example.com/context"],
@@ -362,7 +385,7 @@ func TestPacketCreateRequestKeyReplaysSingleWrite(t *testing.T) {
 		},
 		"packet":{
 			"work_order_id":"` + workOrderID + `",
-			"thread_id":"` + threadID + `",
+			"subject_ref":"thread:` + threadID + `",
 			"outputs":["artifact:output-1"],
 			"verification_evidence":["url:https://example.com/evidence"],
 			"changes_summary":"changed things",
@@ -498,7 +521,7 @@ func TestPacketConvenienceEndpointsRejectUnsafeArtifactIDs(t *testing.T) {
 		"artifact":{"id":"../../wo-bad","refs":["thread:`+threadID+`"]},
 		"packet":{
 			"work_order_id":"../../wo-bad",
-			"thread_id":"`+threadID+`",
+			"subject_ref":"thread:`+threadID+`",
 			"objective":"obj",
 			"constraints":["none"],
 			"context_refs":["url:https://example.com/context"],
@@ -514,7 +537,7 @@ func TestPacketConvenienceEndpointsRejectUnsafeArtifactIDs(t *testing.T) {
 		"artifact":{"id":"`+workOrderID+`","refs":["thread:`+threadID+`"]},
 		"packet":{
 			"work_order_id":"`+workOrderID+`",
-			"thread_id":"`+threadID+`",
+			"subject_ref":"thread:`+threadID+`",
 			"objective":"obj",
 			"constraints":["none"],
 			"context_refs":["url:https://example.com/context"],
@@ -529,7 +552,7 @@ func TestPacketConvenienceEndpointsRejectUnsafeArtifactIDs(t *testing.T) {
 		"packet":{
 			"receipt_id":"..",
 			"work_order_id":"`+workOrderID+`",
-			"thread_id":"`+threadID+`",
+			"subject_ref":"thread:`+threadID+`",
 			"outputs":["artifact:output-1"],
 			"verification_evidence":["url:https://example.com/evidence"],
 			"changes_summary":"summary",
@@ -545,7 +568,7 @@ func TestPacketConvenienceEndpointsRejectUnsafeArtifactIDs(t *testing.T) {
 		"packet":{
 			"receipt_id":"`+receiptID+`",
 			"work_order_id":"`+workOrderID+`",
-			"thread_id":"`+threadID+`",
+			"subject_ref":"thread:`+threadID+`",
 			"outputs":["artifact:output-1"],
 			"verification_evidence":["url:https://example.com/evidence"],
 			"changes_summary":"summary",
@@ -558,6 +581,7 @@ func TestPacketConvenienceEndpointsRejectUnsafeArtifactIDs(t *testing.T) {
 		"artifact":{"id":"/tmp/review-bad","refs":["thread:`+threadID+`","artifact:`+receiptID+`","artifact:`+workOrderID+`"]},
 		"packet":{
 			"review_id":"/tmp/review-bad",
+			"subject_ref":"thread:`+threadID+`",
 			"work_order_id":"`+workOrderID+`",
 			"receipt_id":"`+receiptID+`",
 			"outcome":"accept",
