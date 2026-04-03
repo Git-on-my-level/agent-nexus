@@ -48,7 +48,7 @@ func TestInboxDerivationAndAcknowledgmentSuppression(t *testing.T) {
 		"event":{
 			"type":"decision_needed",
 			"thread_id":"`+threadID+`",
-			"refs":["thread:`+threadID+`"],
+			"refs":["topic:`+threadID+`"],
 			"summary":"Need a decision",
 			"payload":{},
 			"provenance":{"sources":["inferred"]}
@@ -101,7 +101,7 @@ func TestInboxDerivationAndAcknowledgmentSuppression(t *testing.T) {
 		"event":{
 			"type":"decision_needed",
 			"thread_id":"`+threadID+`",
-			"refs":["thread:`+threadID+`"],
+			"refs":["topic:`+threadID+`"],
 			"summary":"Need another decision",
 			"payload":{},
 			"provenance":{"sources":["inferred"]}
@@ -256,7 +256,7 @@ func TestInterventionNeededDerivesInboxItem(t *testing.T) {
 		"event":{
 			"type":"intervention_needed",
 			"thread_id":"`+threadID+`",
-			"refs":["thread:`+threadID+`"],
+			"refs":["topic:`+threadID+`"],
 			"summary":"Post the approved draft on LinkedIn",
 			"payload":{},
 			"provenance":{"sources":["inferred"]}
@@ -327,7 +327,7 @@ func TestDecisionNeedeSuppressedByDecisionMade(t *testing.T) {
 		"event":{
 			"type":"decision_needed",
 			"thread_id":"`+threadID+`",
-			"refs":["thread:`+threadID+`"],
+			"refs":["topic:`+threadID+`"],
 			"summary":"Approve customer refunds",
 			"payload":{},
 			"provenance":{"sources":["inferred"]}
@@ -353,7 +353,7 @@ func TestDecisionNeedeSuppressedByDecisionMade(t *testing.T) {
 		"event":{
 			"type":"decision_made",
 			"thread_id":"`+threadID+`",
-			"refs":["thread:`+threadID+`","inbox:`+inboxItemID+`"],
+			"refs":["topic:`+threadID+`","inbox:`+inboxItemID+`"],
 			"summary":"Approved emergency refunds",
 			"payload":{"notes":""},
 			"provenance":{"sources":["actor_statement:ui"]}
@@ -374,7 +374,7 @@ func TestDecisionNeedeSuppressedByDecisionMade(t *testing.T) {
 		"event":{
 			"type":"decision_needed",
 			"thread_id":"`+threadID+`",
-			"refs":["thread:`+threadID+`"],
+			"refs":["topic:`+threadID+`"],
 			"summary":"Another decision needed",
 			"payload":{},
 			"provenance":{"sources":["inferred"]}
@@ -430,7 +430,7 @@ func TestGetInboxItemDetailByID(t *testing.T) {
 		"event":{
 			"type":"decision_needed",
 			"thread_id":"`+threadID+`",
-			"refs":["thread:`+threadID+`"],
+			"refs":["topic:`+threadID+`"],
 			"summary":"Need a decision",
 			"payload":{},
 			"provenance":{"sources":["inferred"]}

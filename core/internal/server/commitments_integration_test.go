@@ -100,7 +100,7 @@ func TestCommitmentsCreateAndRestrictedTransitions(t *testing.T) {
 		"actor_id":"actor-1",
 		"artifact":{
 			"id":"`+workOrderID+`",
-			"refs":["thread:`+threadID+`"],
+			"refs":["topic:`+threadID+`"],
 			"summary":"work order"
 		},
 		"packet":{
@@ -221,7 +221,7 @@ func TestCommitmentsCreateAndRestrictedTransitions(t *testing.T) {
 		"event":{
 			"type":"decision_made",
 			"thread_id":"`+threadID+`",
-			"refs":["thread:`+threadID+`"],
+			"refs":["topic:`+threadID+`"],
 			"summary":"decision",
 			"payload":{"outcome":"cancel"},
 			"provenance":{"sources":["inferred"]}
@@ -557,10 +557,7 @@ func TestPatchCommitmentIfUpdatedAtOptimisticLocking(t *testing.T) {
 		t.Fatalf("commitment conflict patch emitted event: before=%d after=%d", len(timelineBefore.Events), len(timelineAfter.Events))
 	}
 
-	getResp, err := http.Get(h.baseURL + "/commitments/" + commitmentID)
-	if err != nil {
-		t.Fatalf("GET commitment after conflict: %v", err)
-	}
+	getResp := requestJSONExpectStatus(t, http.MethodGet, h.baseURL+"/commitments/"+commitmentID, "", http.StatusOK)
 	defer getResp.Body.Close()
 	if getResp.StatusCode != http.StatusOK {
 		t.Fatalf("unexpected get commitment status after conflict: %d", getResp.StatusCode)

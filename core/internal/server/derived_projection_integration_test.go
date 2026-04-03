@@ -67,7 +67,7 @@ func TestRefreshDerivedThreadProjectionBasicFlow(t *testing.T) {
 		"event":{
 			"type":"decision_needed",
 			"thread_id":"`+threadID+`",
-			"refs":["thread:`+threadID+`"],
+			"refs":["topic:`+threadID+`"],
 			"summary":"Need a decision",
 			"payload":{},
 			"provenance":{"sources":["inferred"]}

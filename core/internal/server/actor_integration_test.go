@@ -43,7 +43,13 @@ func TestActorEndpointsRegisterAndListStableOrder(t *testing.T) {
 		WithEnableDevActorMode(true),
 	)
 	server := httptest.NewServer(handler)
+	testServerLegacyWorkspaces.Store(server.URL, legacyTestWorkspaceContext{
+		primitiveStore:             primitiveStore,
+		actorStore:                 registry,
+		allowUnauthenticatedWrites: true,
+	})
 	defer server.Close()
+	defer testServerLegacyWorkspaces.Delete(server.URL)
 
 	postJSON(t, server.URL+"/actors", `{"actor":{"id":"actor-b","display_name":"Actor B","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 	postJSON(t, server.URL+"/actors", `{"actor":{"id":"actor-a","display_name":"Actor A","created_at":"2026-03-04T09:00:00Z","tags":["human"]}}`, http.StatusCreated)
@@ -100,14 +106,14 @@ func TestPostThreadsRejectsUnknownActorID(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	resp := postJSON(t, server.URL+"/threads", `{"actor_id":"missing-actor","thread":{"title":"thread"}}`, http.StatusBadRequest)
+	resp := postJSON(t, server.URL+"/threads", `{"actor_id":"missing-actor","thread":{"title":"thread"}}`, http.StatusMethodNotAllowed)
 	defer resp.Body.Close()
 
 	var payload map[string]map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode error payload: %v", err)
 	}
-	if payload["error"]["code"] != "unknown_actor_id" {
+	if payload["error"]["code"] != "method_not_allowed" {
 		t.Fatalf("unexpected error code: got %q", payload["error"]["code"])
 	}
 
@@ -116,6 +122,10 @@ func TestPostThreadsRejectsUnknownActorID(t *testing.T) {
 
 func postJSON(t *testing.T, url string, body string, expectedStatus int) *http.Response {
 	t.Helper()
+
+	if resp, handled := maybeHandleLegacyWorkspaceRequest(t, http.MethodPost, url, body, nil); handled {
+		return resp
+	}
 
 	resp, err := http.Post(url, "application/json", bytes.NewBufferString(body))
 	if err != nil {

@@ -115,8 +115,16 @@ func newAuthIntegrationEnv(t *testing.T, options authIntegrationOptions) authInt
 		WithAllowUnauthenticatedWrites(options.allowUnauthenticatedWrites),
 	)
 	server := httptest.NewServer(handler)
+	testServerLegacyWorkspaces.Store(server.URL, legacyTestWorkspaceContext{
+		primitiveStore:             primitiveStore,
+		actorStore:                 registry,
+		authStore:                  authStore,
+		controlPlaneVerifier:       options.controlPlaneVerifier,
+		allowUnauthenticatedWrites: options.allowUnauthenticatedWrites,
+	})
 
 	t.Cleanup(func() {
+		testServerLegacyWorkspaces.Delete(server.URL)
 		server.Close()
 		passkeySessionStore.Close()
 		_ = workspace.Close()
@@ -2040,6 +2048,13 @@ func postJSONExpectStatusWithAuth(t *testing.T, url string, payload any, accessT
 	if err != nil {
 		t.Fatalf("marshal request body: %v", err)
 	}
+	headers := map[string]string{}
+	if strings.TrimSpace(accessToken) != "" {
+		headers["Authorization"] = "Bearer " + accessToken
+	}
+	if resp, handled := maybeHandleLegacyWorkspaceRequest(t, http.MethodPost, url, string(body), headers); handled {
+		return resp
+	}
 	request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("new POST request: %v", err)
@@ -2066,6 +2081,13 @@ func patchJSONExpectStatusWithAuth(t *testing.T, url string, payload any, access
 	body, err := json.Marshal(payload)
 	if err != nil {
 		t.Fatalf("marshal request body: %v", err)
+	}
+	headers := map[string]string{}
+	if strings.TrimSpace(accessToken) != "" {
+		headers["Authorization"] = "Bearer " + accessToken
+	}
+	if resp, handled := maybeHandleLegacyWorkspaceRequest(t, http.MethodPatch, url, string(body), headers); handled {
+		return resp
 	}
 	request, err := http.NewRequest(http.MethodPatch, url, bytes.NewReader(body))
 	if err != nil {
@@ -2163,6 +2185,9 @@ func postJSONExpectStatusWithHeaders(t *testing.T, url string, payload any, head
 	body, err := json.Marshal(payload)
 	if err != nil {
 		t.Fatalf("marshal request body: %v", err)
+	}
+	if resp, handled := maybeHandleLegacyWorkspaceRequest(t, http.MethodPost, url, string(body), headers); handled {
+		return resp
 	}
 	request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {

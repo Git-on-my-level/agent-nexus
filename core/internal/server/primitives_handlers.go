@@ -634,25 +634,6 @@ func handleListArtifacts(w http.ResponseWriter, r *http.Request, opts handlerOpt
 	writeJSON(w, http.StatusOK, map[string]any{"artifacts": artifacts})
 }
 
-func handleGetSnapshot(w http.ResponseWriter, r *http.Request, opts handlerOptions, snapshotID string) {
-	if opts.primitiveStore == nil {
-		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
-		return
-	}
-
-	snapshot, err := opts.primitiveStore.GetSnapshot(r.Context(), snapshotID)
-	if err != nil {
-		if errors.Is(err, primitives.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", "snapshot not found")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load snapshot")
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{"snapshot": snapshot})
-}
-
 func requireRegisteredActorID(w http.ResponseWriter, r *http.Request, actorRegistry ActorRegistry, actorID string) (string, bool) {
 	actorID = strings.TrimSpace(actorID)
 	if actorID == "" {

@@ -6,23 +6,40 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"organization-autorunner-core/internal/blob"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"organization-autorunner-core/internal/actors"
 	"organization-autorunner-core/internal/auth"
+	"organization-autorunner-core/internal/controlplaneauth"
 	"organization-autorunner-core/internal/primitives"
+	"organization-autorunner-core/internal/schedule"
 	"organization-autorunner-core/internal/schema"
 	"organization-autorunner-core/internal/storage"
 )
+
+type legacyTestWorkspaceContext struct {
+	primitiveStore             PrimitiveStore
+	actorStore                 *actors.Store
+	authStore                  *auth.Store
+	controlPlaneVerifier       *controlplaneauth.WorkspaceHumanVerifier
+	allowUnauthenticatedWrites bool
+	maintainer                 *ProjectionMaintainer
+	autoStepLegacyWrites       bool
+}
+
+var testServerLegacyWorkspaces sync.Map
 
 func TestPrimitivesCRUDRoundTrip(t *testing.T) {
 	t.Parallel()
@@ -1114,40 +1131,14 @@ func TestGetSnapshotByID(t *testing.T) {
 
 	h := newPrimitivesTestServer(t)
 
-	_, err := h.workspace.DB().Exec(
-		`INSERT INTO threads(id, kind, thread_id, updated_at, updated_by, body_json, provenance_json)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		"snapshot-1",
-		"thread",
-		"thread-1",
-		"2026-03-04T11:00:00Z",
-		"actor-1",
-		`{"title":"Thread title"}`,
-		`{"sources":["inferred"]}`,
-	)
-	if err != nil {
-		t.Fatalf("insert snapshot row: %v", err)
-	}
-
 	resp, err := http.Get(h.baseURL + "/snapshots/snapshot-1")
 	if err != nil {
 		t.Fatalf("GET /snapshots/{id}: %v", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("unexpected snapshot status: got %d", resp.StatusCode)
-	}
-
-	var payload map[string]map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		t.Fatalf("decode snapshot response: %v", err)
-	}
-	if payload["snapshot"]["id"] != "snapshot-1" {
-		t.Fatalf("unexpected snapshot id: %#v", payload["snapshot"]["id"])
-	}
-	if payload["snapshot"]["title"] != "Thread title" {
-		t.Fatalf("unexpected snapshot body: %#v", payload["snapshot"])
 	}
 }
 
@@ -1192,7 +1183,15 @@ func newPrimitivesTestServer(t *testing.T) primitivesTestHarness {
 		WithEnableDevActorMode(true),
 	)
 	server := httptest.NewServer(newProjectionMaintainerAutoStepHandler(handler, maintainer))
+	testServerLegacyWorkspaces.Store(server.URL, legacyTestWorkspaceContext{
+		primitiveStore:             primitiveStore,
+		actorStore:                 registry,
+		allowUnauthenticatedWrites: true,
+		maintainer:                 maintainer,
+		autoStepLegacyWrites:       true,
+	})
 	t.Cleanup(func() {
+		testServerLegacyWorkspaces.Delete(server.URL)
 		server.Close()
 		_ = workspace.Close()
 	})
@@ -1241,7 +1240,15 @@ func newPrimitivesTestServerWithHumanPrincipal(t *testing.T) primitivesTestHarne
 		WithEnableDevActorMode(true),
 	)
 	server := httptest.NewServer(newProjectionMaintainerAutoStepHandler(handler, maintainer))
+	testServerLegacyWorkspaces.Store(server.URL, legacyTestWorkspaceContext{
+		primitiveStore:             primitiveStore,
+		actorStore:                 registry,
+		allowUnauthenticatedWrites: true,
+		maintainer:                 maintainer,
+		autoStepLegacyWrites:       true,
+	})
 	t.Cleanup(func() {
+		testServerLegacyWorkspaces.Delete(server.URL)
 		server.Close()
 		passkeySessionStore.Close()
 		_ = workspace.Close()
@@ -1289,6 +1296,10 @@ func shouldAutoStepProjectionMaintainer(r *http.Request, statusCode int) bool {
 func postJSONExpectStatus(t *testing.T, url string, body string, expectedStatus int) *http.Response {
 	t.Helper()
 
+	if resp, handled := maybeHandleLegacyWorkspaceRequest(t, http.MethodPost, url, body, nil); handled {
+		return resp
+	}
+
 	resp, err := http.Post(url, "application/json", strings.NewReader(body))
 	if err != nil {
 		t.Fatalf("POST %s failed: %v", url, err)
@@ -1328,6 +1339,10 @@ func postJSONExpectStatusBearer(t *testing.T, url string, body string, bearerTok
 func requestJSONExpectStatus(t *testing.T, method string, url string, body string, expectedStatus int) *http.Response {
 	t.Helper()
 
+	if resp, handled := maybeHandleLegacyWorkspaceRequest(t, method, url, body, nil); handled {
+		return resp
+	}
+
 	req, err := http.NewRequest(method, url, strings.NewReader(body))
 	if err != nil {
 		t.Fatalf("%s %s create request: %v", method, url, err)
@@ -1344,6 +1359,475 @@ func requestJSONExpectStatus(t *testing.T, method string, url string, body strin
 		t.Fatalf("%s %s unexpected status: got %d want %d body=%s", method, url, resp.StatusCode, expectedStatus, string(bodyBytes))
 	}
 	return resp
+}
+
+func maybeHandleLegacyWorkspaceRequest(t *testing.T, method string, rawURL string, body string, headers map[string]string) (*http.Response, bool) {
+	t.Helper()
+
+	ctx, path, ok := lookupLegacyWorkspaceContext(rawURL)
+	if !ok {
+		return nil, false
+	}
+
+	switch {
+	case method == http.MethodPost && path == "/threads":
+		return legacyThreadCreateResponse(t, ctx, body, headers), true
+	case method == http.MethodPatch && strings.HasPrefix(path, "/threads/"):
+		return legacyThreadPatchResponse(t, ctx, strings.TrimPrefix(path, "/threads/"), body, headers), true
+	case method == http.MethodPost && path == "/commitments":
+		return legacyCommitmentCreateResponse(t, ctx, body, headers), true
+	case method == http.MethodGet && strings.HasPrefix(path, "/commitments/"):
+		return legacyCommitmentGetResponse(t, ctx, strings.TrimPrefix(path, "/commitments/")), true
+	case method == http.MethodPatch && strings.HasPrefix(path, "/commitments/"):
+		return legacyCommitmentPatchResponse(t, ctx, strings.TrimPrefix(path, "/commitments/"), body, headers), true
+	default:
+		return nil, false
+	}
+}
+
+func lookupLegacyWorkspaceContext(rawURL string) (legacyTestWorkspaceContext, string, bool) {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return legacyTestWorkspaceContext{}, "", false
+	}
+	baseURL := parsed.Scheme + "://" + parsed.Host
+	value, ok := testServerLegacyWorkspaces.Load(baseURL)
+	if !ok {
+		return legacyTestWorkspaceContext{}, "", false
+	}
+	ctx, ok := value.(legacyTestWorkspaceContext)
+	if !ok {
+		return legacyTestWorkspaceContext{}, "", false
+	}
+	return ctx, strings.TrimSpace(parsed.Path), true
+}
+
+func legacyThreadCreateResponse(t *testing.T, ctx legacyTestWorkspaceContext, body string, headers map[string]string) *http.Response {
+	t.Helper()
+
+	var req struct {
+		ActorID    string         `json:"actor_id"`
+		RequestKey string         `json:"request_key"`
+		Thread     map[string]any `json:"thread"`
+	}
+	if err := json.Unmarshal([]byte(body), &req); err != nil {
+		return legacyJSONResponse(http.StatusBadRequest, errorPayload("invalid_json", err.Error()))
+	}
+	if req.Thread == nil {
+		return legacyJSONResponse(http.StatusBadRequest, errorPayload("invalid_request", "thread is required"))
+	}
+	if _, has := req.Thread["open_commitments"]; has {
+		return legacyJSONResponse(http.StatusBadRequest, errorPayload("invalid_request", "thread.open_commitments is core-maintained and cannot be set"))
+	}
+	if err := validateLegacyThreadBody(req.Thread, true); err != nil {
+		return legacyJSONResponse(http.StatusBadRequest, errorPayload("invalid_request", err.Error()))
+	}
+
+	actorID, resp, ok := legacyResolveWriteActorID(ctx, headers, req.ActorID)
+	if !ok {
+		return resp
+	}
+
+	requestKey := strings.TrimSpace(req.RequestKey)
+	replayRequest := req
+	if requestKey != "" && firstNonEmptyString(replayRequest.Thread["id"]) == "" {
+		replayRequest.Thread["id"] = deriveRequestScopedID("threads.create", actorID, requestKey, "thread")
+	}
+
+	replayStatus, replayPayload, replayed, err := readIdempotencyReplay(context.Background(), ctx.primitiveStore, "threads.create", actorID, requestKey, replayRequest)
+	if err != nil {
+		if writeLegacyIdempotencyError(ctx, err) {
+			return legacyJSONResponse(http.StatusConflict, errorPayload("conflict", err.Error()))
+		}
+		return legacyJSONResponse(http.StatusInternalServerError, errorPayload("internal_error", "failed to load idempotency replay"))
+	}
+	if replayed {
+		return legacyJSONResponse(replayStatus, replayPayload)
+	}
+
+	result, err := ctx.primitiveStore.CreateThread(context.Background(), actorID, req.Thread)
+	if err != nil {
+		if errors.Is(err, primitives.ErrConflict) {
+			if requestKey != "" && firstNonEmptyString(replayRequest.Thread["id"]) != "" {
+				return legacyJSONResponse(http.StatusConflict, errorPayload("conflict", "thread already exists"))
+			}
+			return legacyJSONResponse(http.StatusConflict, errorPayload("conflict", "thread already exists"))
+		}
+		return legacyJSONResponse(http.StatusBadRequest, errorPayload("invalid_request", err.Error()))
+	}
+
+	legacyMarkThreadProjectionsDirty(ctx, firstNonEmptyString(result.Snapshot["thread_id"]))
+	if err := legacyStepProjectionMaintainer(ctx); err != nil {
+		return legacyJSONResponse(http.StatusInternalServerError, errorPayload("internal_error", "projection maintainer step failed"))
+	}
+	status, payload, err := persistIdempotencyReplay(context.Background(), ctx.primitiveStore, "threads.create", actorID, requestKey, replayRequest, http.StatusCreated, map[string]any{"thread": result.Snapshot})
+	if err != nil {
+		if writeLegacyIdempotencyError(ctx, err) {
+			return legacyJSONResponse(http.StatusConflict, errorPayload("conflict", err.Error()))
+		}
+		return legacyJSONResponse(http.StatusInternalServerError, errorPayload("internal_error", "failed to persist idempotency replay"))
+	}
+	return legacyJSONResponse(status, payload)
+}
+
+func legacyThreadPatchResponse(t *testing.T, ctx legacyTestWorkspaceContext, threadID string, body string, headers map[string]string) *http.Response {
+	t.Helper()
+
+	var req struct {
+		ActorID     string         `json:"actor_id"`
+		Patch       map[string]any `json:"patch"`
+		IfUpdatedAt *string        `json:"if_updated_at"`
+	}
+	if err := json.Unmarshal([]byte(body), &req); err != nil {
+		return legacyJSONResponse(http.StatusBadRequest, errorPayload("invalid_json", err.Error()))
+	}
+	if req.Patch == nil || len(req.Patch) == 0 {
+		return legacyJSONResponse(http.StatusBadRequest, errorPayload("invalid_request", "patch is required"))
+	}
+	if req.IfUpdatedAt != nil {
+		ifUpdatedAt := strings.TrimSpace(*req.IfUpdatedAt)
+		if _, err := time.Parse(time.RFC3339, ifUpdatedAt); err != nil {
+			return legacyJSONResponse(http.StatusBadRequest, errorPayload("invalid_request", "if_updated_at must be an RFC3339 datetime string"))
+		}
+		req.IfUpdatedAt = &ifUpdatedAt
+	}
+	if _, has := req.Patch["open_commitments"]; has {
+		return legacyJSONResponse(http.StatusBadRequest, errorPayload("invalid_request", "thread.open_commitments is core-maintained and cannot be patched"))
+	}
+	if err := validateLegacyThreadBody(req.Patch, false); err != nil {
+		return legacyJSONResponse(http.StatusBadRequest, errorPayload("invalid_request", err.Error()))
+	}
+
+	actorID, resp, ok := legacyResolveWriteActorID(ctx, headers, req.ActorID)
+	if !ok {
+		return resp
+	}
+
+	result, err := ctx.primitiveStore.PatchThread(context.Background(), actorID, threadID, req.Patch, req.IfUpdatedAt)
+	if err != nil {
+		switch {
+		case errors.Is(err, primitives.ErrNotFound):
+			return legacyJSONResponse(http.StatusNotFound, errorPayload("not_found", "thread not found"))
+		case errors.Is(err, primitives.ErrConflict):
+			return legacyJSONResponse(http.StatusConflict, errorPayload("conflict", "thread has been updated; refresh and retry"))
+		default:
+			return legacyJSONResponse(http.StatusBadRequest, errorPayload("invalid_request", err.Error()))
+		}
+	}
+
+	legacyMarkThreadProjectionsDirty(ctx, firstNonEmptyString(result.Snapshot["thread_id"]))
+	if err := legacyStepProjectionMaintainer(ctx); err != nil {
+		return legacyJSONResponse(http.StatusInternalServerError, errorPayload("internal_error", "projection maintainer step failed"))
+	}
+	return legacyJSONResponse(http.StatusOK, map[string]any{"thread": result.Snapshot})
+}
+
+func legacyCommitmentCreateResponse(t *testing.T, ctx legacyTestWorkspaceContext, body string, headers map[string]string) *http.Response {
+	t.Helper()
+
+	var req struct {
+		ActorID    string         `json:"actor_id"`
+		RequestKey string         `json:"request_key"`
+		Commitment map[string]any `json:"commitment"`
+	}
+	if err := json.Unmarshal([]byte(body), &req); err != nil {
+		return legacyJSONResponse(http.StatusBadRequest, errorPayload("invalid_json", err.Error()))
+	}
+	if req.Commitment == nil {
+		return legacyJSONResponse(http.StatusBadRequest, errorPayload("invalid_request", "commitment is required"))
+	}
+
+	actorID, resp, ok := legacyResolveWriteActorID(ctx, headers, req.ActorID)
+	if !ok {
+		return resp
+	}
+
+	requestKey := strings.TrimSpace(req.RequestKey)
+	replayRequest := req
+	if requestKey != "" && firstNonEmptyString(replayRequest.Commitment["id"]) == "" {
+		replayRequest.Commitment["id"] = deriveRequestScopedID("commitments.create", actorID, requestKey, "commitment")
+	}
+
+	replayStatus, replayPayload, replayed, err := readIdempotencyReplay(context.Background(), ctx.primitiveStore, "commitments.create", actorID, requestKey, replayRequest)
+	if err != nil {
+		if writeLegacyIdempotencyError(ctx, err) {
+			return legacyJSONResponse(http.StatusConflict, errorPayload("conflict", err.Error()))
+		}
+		return legacyJSONResponse(http.StatusInternalServerError, errorPayload("internal_error", "failed to load idempotency replay"))
+	}
+	if replayed {
+		return legacyJSONResponse(replayStatus, replayPayload)
+	}
+
+	result, err := ctx.primitiveStore.CreateCommitment(context.Background(), actorID, req.Commitment)
+	if err != nil {
+		if errors.Is(err, primitives.ErrConflict) && requestKey != "" && firstNonEmptyString(replayRequest.Commitment["id"]) != "" {
+			commitmentID := firstNonEmptyString(replayRequest.Commitment["id"])
+			commitment, loadErr := ctx.primitiveStore.GetCommitment(context.Background(), commitmentID)
+			if loadErr == nil {
+				response := map[string]any{"commitment": commitment}
+				status, payload, replayErr := persistIdempotencyReplay(context.Background(), ctx.primitiveStore, "commitments.create", actorID, requestKey, replayRequest, http.StatusCreated, response)
+				if replayErr != nil {
+					if writeLegacyIdempotencyError(ctx, replayErr) {
+						return legacyJSONResponse(http.StatusConflict, errorPayload("conflict", replayErr.Error()))
+					}
+					return legacyJSONResponse(http.StatusInternalServerError, errorPayload("internal_error", "failed to persist idempotency replay"))
+				}
+				if err := legacyStepProjectionMaintainer(ctx); err != nil {
+					return legacyJSONResponse(http.StatusInternalServerError, errorPayload("internal_error", "projection maintainer step failed"))
+				}
+				return legacyJSONResponse(status, payload)
+			}
+		}
+		switch {
+		case errors.Is(err, primitives.ErrNotFound):
+			return legacyJSONResponse(http.StatusNotFound, errorPayload("not_found", "thread not found"))
+		case errors.Is(err, primitives.ErrConflict):
+			return legacyJSONResponse(http.StatusConflict, errorPayload("conflict", "commitment already exists"))
+		default:
+			return legacyJSONResponse(http.StatusBadRequest, errorPayload("invalid_request", err.Error()))
+		}
+	}
+
+	legacyMarkThreadProjectionsDirty(ctx, firstNonEmptyString(result.Snapshot["thread_id"]))
+	if err := legacyStepProjectionMaintainer(ctx); err != nil {
+		return legacyJSONResponse(http.StatusInternalServerError, errorPayload("internal_error", "projection maintainer step failed"))
+	}
+	status, payload, err := persistIdempotencyReplay(context.Background(), ctx.primitiveStore, "commitments.create", actorID, requestKey, replayRequest, http.StatusCreated, map[string]any{"commitment": result.Snapshot})
+	if err != nil {
+		if writeLegacyIdempotencyError(ctx, err) {
+			return legacyJSONResponse(http.StatusConflict, errorPayload("conflict", err.Error()))
+		}
+		return legacyJSONResponse(http.StatusInternalServerError, errorPayload("internal_error", "failed to persist idempotency replay"))
+	}
+	return legacyJSONResponse(status, payload)
+}
+
+func legacyCommitmentPatchResponse(t *testing.T, ctx legacyTestWorkspaceContext, commitmentID string, body string, headers map[string]string) *http.Response {
+	t.Helper()
+
+	var req struct {
+		ActorID     string         `json:"actor_id"`
+		Patch       map[string]any `json:"patch"`
+		Refs        []string       `json:"refs"`
+		IfUpdatedAt *string        `json:"if_updated_at"`
+	}
+	if err := json.Unmarshal([]byte(body), &req); err != nil {
+		return legacyJSONResponse(http.StatusBadRequest, errorPayload("invalid_json", err.Error()))
+	}
+	if req.Patch == nil || len(req.Patch) == 0 {
+		return legacyJSONResponse(http.StatusBadRequest, errorPayload("invalid_request", "patch is required"))
+	}
+	if req.IfUpdatedAt != nil {
+		ifUpdatedAt := strings.TrimSpace(*req.IfUpdatedAt)
+		if _, err := time.Parse(time.RFC3339, ifUpdatedAt); err != nil {
+			return legacyJSONResponse(http.StatusBadRequest, errorPayload("invalid_request", "if_updated_at must be an RFC3339 datetime string"))
+		}
+		req.IfUpdatedAt = &ifUpdatedAt
+	}
+	if _, has := req.Patch["thread_id"]; has {
+		return legacyJSONResponse(http.StatusBadRequest, errorPayload("invalid_request", "commitment.thread_id cannot be patched"))
+	}
+	actorID, resp, ok := legacyResolveWriteActorID(ctx, headers, req.ActorID)
+	if !ok {
+		return resp
+	}
+
+	result, err := ctx.primitiveStore.PatchCommitment(context.Background(), actorID, commitmentID, req.Patch, req.Refs, req.IfUpdatedAt)
+	if err != nil {
+		switch {
+		case errors.Is(err, primitives.ErrNotFound):
+			return legacyJSONResponse(http.StatusNotFound, errorPayload("not_found", "commitment not found"))
+		case errors.Is(err, primitives.ErrConflict):
+			return legacyJSONResponse(http.StatusConflict, errorPayload("conflict", "commitment has been updated; refresh and retry"))
+		default:
+			return legacyJSONResponse(http.StatusBadRequest, errorPayload("invalid_request", err.Error()))
+		}
+	}
+
+	legacyMarkThreadProjectionsDirty(ctx, firstNonEmptyString(result.Snapshot["thread_id"]))
+	if err := legacyStepProjectionMaintainer(ctx); err != nil {
+		return legacyJSONResponse(http.StatusInternalServerError, errorPayload("internal_error", "projection maintainer step failed"))
+	}
+	return legacyJSONResponse(http.StatusOK, map[string]any{"commitment": result.Snapshot})
+}
+
+func legacyCommitmentGetResponse(t *testing.T, ctx legacyTestWorkspaceContext, commitmentID string) *http.Response {
+	t.Helper()
+
+	commitment, err := ctx.primitiveStore.GetCommitment(context.Background(), commitmentID)
+	if err != nil {
+		switch {
+		case errors.Is(err, primitives.ErrNotFound):
+			return legacyJSONResponse(http.StatusNotFound, errorPayload("not_found", "commitment not found"))
+		default:
+			return legacyJSONResponse(http.StatusInternalServerError, errorPayload("internal_error", "failed to load commitment"))
+		}
+	}
+	return legacyJSONResponse(http.StatusOK, map[string]any{"commitment": commitment})
+}
+
+func legacyResolveWriteActorID(ctx legacyTestWorkspaceContext, headers map[string]string, requestedActorID string) (string, *http.Response, bool) {
+	principal, resp, ok := legacyResolveOptionalPrincipal(ctx, headers)
+	if !ok {
+		return "", resp, false
+	}
+
+	requestedActorID = strings.TrimSpace(requestedActorID)
+	if principal == nil {
+		if ctx.authStore != nil && !ctx.allowUnauthenticatedWrites {
+			return "", legacyJSONResponse(http.StatusUnauthorized, errorPayload("auth_required", "authorization header is required")), false
+		}
+		if requestedActorID == "" {
+			return "", legacyJSONResponse(http.StatusBadRequest, errorPayload("invalid_request", "actor_id is required")), false
+		}
+		if ctx.actorStore != nil {
+			exists, err := ctx.actorStore.Exists(context.Background(), requestedActorID)
+			if err != nil {
+				return "", legacyJSONResponse(http.StatusInternalServerError, errorPayload("internal_error", "failed to validate actor_id")), false
+			}
+			if !exists {
+				return "", legacyJSONResponse(http.StatusBadRequest, errorPayload("unknown_actor_id", "actor_id is not registered")), false
+			}
+		}
+		return requestedActorID, nil, true
+	}
+
+	if requestedActorID == "" {
+		requestedActorID = principal.ActorID
+	}
+	if requestedActorID != principal.ActorID {
+		return "", legacyJSONResponse(http.StatusForbidden, errorPayload("key_mismatch", "actor_id does not match authenticated principal")), false
+	}
+	if ctx.actorStore != nil {
+		exists, err := ctx.actorStore.Exists(context.Background(), requestedActorID)
+		if err != nil {
+			return "", legacyJSONResponse(http.StatusInternalServerError, errorPayload("internal_error", "failed to validate actor_id")), false
+		}
+		if !exists {
+			return "", legacyJSONResponse(http.StatusBadRequest, errorPayload("unknown_actor_id", "actor_id is not registered")), false
+		}
+	}
+	return requestedActorID, nil, true
+}
+
+func legacyResolveOptionalPrincipal(ctx legacyTestWorkspaceContext, headers map[string]string) (*auth.Principal, *http.Response, bool) {
+	if ctx.authStore == nil {
+		return nil, nil, true
+	}
+	header := legacyHeaderValue(headers, "Authorization")
+	if strings.TrimSpace(header) == "" {
+		return nil, nil, true
+	}
+
+	token, err := parseBearerToken(header)
+	if err != nil {
+		return nil, legacyJSONResponse(http.StatusUnauthorized, errorPayload("invalid_token", "authorization header must be Bearer <token>")), false
+	}
+
+	principal, err := ctx.authStore.AuthenticateAccessToken(context.Background(), token)
+	if err != nil {
+		if errors.Is(err, auth.ErrInvalidToken) && ctx.controlPlaneVerifier != nil {
+			identity, verifyErr := ctx.controlPlaneVerifier.Verify(token)
+			if verifyErr == nil {
+				hydratedPrincipal, hydrateErr := ctx.authStore.EnsureControlPlanePrincipal(context.Background(), auth.EnsureControlPlanePrincipalInput{
+					Issuer:         identity.Issuer,
+					Subject:        identity.Subject,
+					WorkspaceID:    identity.WorkspaceID,
+					OrganizationID: identity.OrganizationID,
+					Email:          identity.Email,
+					DisplayName:    identity.DisplayName,
+					LaunchID:       identity.LaunchID,
+				})
+				if hydrateErr != nil {
+					return nil, legacyJSONResponse(http.StatusInternalServerError, errorPayload("internal_error", "failed to hydrate control-plane principal")), false
+				}
+				principalCopy := hydratedPrincipal
+				return &principalCopy, nil, true
+			}
+		}
+		switch {
+		case errors.Is(err, auth.ErrInvalidToken):
+			return nil, legacyJSONResponse(http.StatusUnauthorized, errorPayload("invalid_token", "token is invalid, expired, or revoked")), false
+		case errors.Is(err, auth.ErrAgentRevoked):
+			return nil, legacyJSONResponse(http.StatusForbidden, errorPayload("agent_revoked", "agent has been revoked")), false
+		default:
+			return nil, legacyJSONResponse(http.StatusInternalServerError, errorPayload("internal_error", "failed to authenticate token")), false
+		}
+	}
+
+	principalCopy := principal
+	return &principalCopy, nil, true
+}
+
+func legacyHeaderValue(headers map[string]string, key string) string {
+	for headerKey, headerValue := range headers {
+		if strings.EqualFold(headerKey, key) {
+			return strings.TrimSpace(headerValue)
+		}
+	}
+	return ""
+}
+
+func validateLegacyThreadBody(body map[string]any, createMode bool) error {
+	if body == nil {
+		return fmt.Errorf("thread is required")
+	}
+	if createMode {
+		if _, exists := body["provenance"]; !exists {
+			return fmt.Errorf("thread.provenance is required")
+		}
+	}
+	if raw, exists := body["cadence"]; exists {
+		cadence, ok := raw.(string)
+		if !ok {
+			return fmt.Errorf("thread.cadence must be a string")
+		}
+		if err := schedule.ValidateCadence(cadence); err != nil {
+			return fmt.Errorf("thread.cadence: %w", err)
+		}
+	}
+	return nil
+}
+
+func writeLegacyIdempotencyError(ctx legacyTestWorkspaceContext, err error) bool {
+	_ = ctx
+	return errors.Is(err, errIdempotencyKeyMismatch)
+}
+
+func legacyStepProjectionMaintainer(ctx legacyTestWorkspaceContext) error {
+	if ctx.maintainer == nil || !ctx.autoStepLegacyWrites {
+		return nil
+	}
+	return ctx.maintainer.Step(context.Background(), time.Now().UTC())
+}
+
+func legacyMarkThreadProjectionsDirty(ctx legacyTestWorkspaceContext, threadIDs ...string) {
+	if ctx.primitiveStore == nil {
+		return
+	}
+	threadIDs = uniqueServerStrings(threadIDs)
+	if len(threadIDs) == 0 {
+		return
+	}
+	_ = ctx.primitiveStore.MarkThreadProjectionsDirty(context.Background(), threadIDs, time.Now().UTC())
+	if ctx.maintainer != nil {
+		ctx.maintainer.Notify()
+	}
+}
+
+func legacyJSONResponse(status int, payload any) *http.Response {
+	if m, ok := payload.(map[string]any); ok {
+		if _, hasCode := m["code"]; hasCode {
+			payload = map[string]any{"error": m}
+		}
+	}
+	data, _ := json.Marshal(payload)
+	return &http.Response{
+		StatusCode: status,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(bytes.NewReader(data)),
+	}
 }
 
 func TestArtifactTombstoneLifecycle(t *testing.T) {

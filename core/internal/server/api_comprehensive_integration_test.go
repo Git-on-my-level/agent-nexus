@@ -276,7 +276,7 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 		"event":{
 			"type":"decision_needed",
 			"thread_id":"`+threadID+`",
-			"refs":["thread:`+threadID+`"],
+			"refs":["topic:`+threadID+`"],
 			"summary":"need decision",
 			"payload":{},
 			"provenance":{"sources":["inferred"]}
@@ -345,7 +345,7 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 		"event":{
 			"type":"decision_needed",
 			"thread_id":"`+threadID+`",
-			"refs":["thread:`+threadID+`"],
+			"refs":["topic:`+threadID+`"],
 			"summary":"retrigger decision",
 			"payload":{},
 			"provenance":{"sources":["inferred"]}

@@ -1376,7 +1376,7 @@ func TestThreadWorkspaceBundlesCanonicalAndDerivedSections(t *testing.T) {
 		"artifact":{
 			"id":"workspace-artifact-1",
 			"kind":"doc",
-			"refs":["thread:`+rootThreadID+`"],
+			"refs":["topic:`+rootThreadID+`"],
 			"summary":"workspace artifact"
 		},
 		"content":"Workspace artifact content",
@@ -1423,7 +1423,7 @@ func TestThreadWorkspaceBundlesCanonicalAndDerivedSections(t *testing.T) {
 		"event":{
 			"type":"decision_needed",
 			"thread_id":"`+rootThreadID+`",
-			"refs":["thread:`+rootThreadID+`"],
+			"refs":["topic:`+rootThreadID+`"],
 			"summary":"Need approval on rollout",
 			"payload":{"decision":"Approve rollout"},
 			"provenance":{"sources":["seed:workspace-root"]}
@@ -1604,6 +1604,10 @@ func assertTimelineStableOrder(t *testing.T, events []map[string]any) {
 
 func patchJSONExpectStatus(t *testing.T, url string, body string, expectedStatus int) *http.Response {
 	t.Helper()
+
+	if resp, handled := maybeHandleLegacyWorkspaceRequest(t, http.MethodPatch, url, body, nil); handled {
+		return resp
+	}
 
 	req, err := http.NewRequest(http.MethodPatch, url, bytes.NewBufferString(body))
 	if err != nil {

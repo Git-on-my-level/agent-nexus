@@ -72,7 +72,7 @@ func TestStalenessRebuildEmitsSingleStaleExceptionAndInboxException(t *testing.T
 		"event":{
 			"type":"decision_made",
 			"thread_id":"`+threadID+`",
-			"refs":["thread:`+threadID+`"],
+			"refs":["topic:`+threadID+`"],
 			"summary":"decision made",
 			"payload":{"outcome":"resolved"},
 			"provenance":{"sources":["inferred"]}
@@ -132,7 +132,7 @@ func TestStalenessClearsAfterActorStatementAndDocumentActivity(t *testing.T) {
 		"event":{
 			"type":"actor_statement",
 			"thread_id":"`+threadID+`",
-			"refs":["thread:`+threadID+`"],
+			"refs":["topic:`+threadID+`"],
 			"summary":"shared an update",
 			"payload":{"statement":"progress update"},
 			"provenance":{"sources":["inferred"]}
@@ -154,7 +154,7 @@ func TestStalenessClearsAfterActorStatementAndDocumentActivity(t *testing.T) {
 	docCreateResp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
 		"actor_id":"actor-1",
 		"document":{"id":"stale-doc-1","thread_id":"`+threadID+`","title":"Runbook","status":"active","labels":["ops"]},
-		"refs":["thread:`+threadID+`"],
+		"refs":["topic:`+threadID+`"],
 		"content":"initial text",
 		"content_type":"text"
 	}`, http.StatusCreated)
@@ -177,7 +177,7 @@ func TestStalenessClearsAfterActorStatementAndDocumentActivity(t *testing.T) {
 		"actor_id":"actor-1",
 		"if_base_revision":"`+baseRevisionID+`",
 		"document":{"title":"Runbook updated"},
-		"refs":["thread:`+threadID+`"],
+		"refs":["topic:`+threadID+`"],
 		"content":"updated text",
 		"content_type":"text"
 	}`, http.StatusOK).Body.Close()

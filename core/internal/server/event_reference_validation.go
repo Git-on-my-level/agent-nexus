@@ -73,9 +73,6 @@ func validateRequiredRefPatterns(eventType string, refs []string, patterns []str
 		if actualByPrefix[prefix] >= requiredCount {
 			continue
 		}
-		if prefix == "topic" && allowsLegacyThreadRefFallback(eventType) && actualByPrefix["thread"] >= requiredCount {
-			continue
-		}
 		if requiredCount == 1 {
 			return fmt.Errorf("event.refs must include a %q typed ref for event.type=%q", prefix+":<id>", eventType)
 		}
@@ -195,13 +192,4 @@ func normalizeRequiredPayloadKey(raw string) string {
 		return key
 	}
 	return strings.TrimSpace(key[:idx])
-}
-
-func allowsLegacyThreadRefFallback(eventType string) bool {
-	switch strings.TrimSpace(eventType) {
-	case "decision_needed", "intervention_needed", "decision_made":
-		return true
-	default:
-		return false
-	}
 }

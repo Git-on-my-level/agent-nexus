@@ -56,7 +56,14 @@ func newManualProjectionTestServer(t *testing.T) manualProjectionHarness {
 		WithEnableDevActorMode(true),
 	)
 	server := httptest.NewServer(handler)
+	testServerLegacyWorkspaces.Store(server.URL, legacyTestWorkspaceContext{
+		primitiveStore:             primitiveStore,
+		actorStore:                 registry,
+		allowUnauthenticatedWrites: true,
+		maintainer:                 maintainer,
+	})
 	t.Cleanup(func() {
+		testServerLegacyWorkspaces.Delete(server.URL)
 		server.Close()
 		_ = workspace.Close()
 	})
@@ -80,7 +87,7 @@ func TestThreadWorkspaceReadDoesNotMutateDerivedState(t *testing.T) {
 		"event":{
 			"type":"decision_needed",
 			"thread_id":"`+threadID+`",
-			"refs":["thread:`+threadID+`"],
+			"refs":["topic:`+threadID+`"],
 			"summary":"Need a decision",
 			"payload":{},
 			"provenance":{"sources":["inferred"]}
@@ -189,7 +196,7 @@ func TestProjectionMaintainerStepClearsPendingStatus(t *testing.T) {
 		"event":{
 			"type":"decision_needed",
 			"thread_id":"`+threadID+`",
-			"refs":["thread:`+threadID+`"],
+			"refs":["topic:`+threadID+`"],
 			"summary":"Need a decision",
 			"payload":{},
 			"provenance":{"sources":["inferred"]}
@@ -240,7 +247,7 @@ func TestDisabledWorkerLeavesProjectionPendingButReadable(t *testing.T) {
 		"event":{
 			"type":"decision_needed",
 			"thread_id":"`+threadID+`",
-			"refs":["thread:`+threadID+`"],
+			"refs":["topic:`+threadID+`"],
 			"summary":"Need a decision",
 			"payload":{},
 			"provenance":{"sources":["inferred"]}

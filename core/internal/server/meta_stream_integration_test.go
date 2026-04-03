@@ -479,12 +479,14 @@ func newMetaStreamTestServer(t *testing.T, configure func(*httptest.Server), opt
 		_ = workspace.Close()
 		t.Fatalf("ensure system actor: %v", err)
 	}
+	authStore := auth.NewStore(workspace.DB())
+	primitiveStore := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
 
 	baseOptions := []HandlerOption{
 		WithHealthCheck(workspace.Ping),
 		WithActorRegistry(registry),
-		WithAuthStore(auth.NewStore(workspace.DB())),
-		WithPrimitiveStore(primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)),
+		WithAuthStore(authStore),
+		WithPrimitiveStore(primitiveStore),
 		WithSchemaContract(contract),
 		WithAllowUnauthenticatedWrites(true),
 		WithEnableDevActorMode(true),
@@ -496,7 +498,14 @@ func newMetaStreamTestServer(t *testing.T, configure func(*httptest.Server), opt
 		configure(server)
 	}
 	server.Start()
+	testServerLegacyWorkspaces.Store(server.URL, legacyTestWorkspaceContext{
+		primitiveStore:             primitiveStore,
+		actorStore:                 registry,
+		authStore:                  authStore,
+		allowUnauthenticatedWrites: true,
+	})
 	t.Cleanup(func() {
+		testServerLegacyWorkspaces.Delete(server.URL)
 		server.Close()
 		_ = workspace.Close()
 	})
@@ -512,7 +521,7 @@ func appendEventForTest(t *testing.T, baseURL string, actorID string, threadID s
 		"event":{
 			"type":"my_custom_event",
 			"thread_id":"%s",
-			"refs":["thread:%s"],
+			"refs":["topic:%s"],
 			"summary":%q,
 			"payload":{},
 			"provenance":{"sources":["inferred"]}

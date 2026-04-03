@@ -66,7 +66,14 @@ func newProjectionMaintenanceTestServerWithMode(t *testing.T, mode string) proje
 		WithProjectionMaintainer(maintainer),
 	)
 	server := httptest.NewServer(handler)
+	testServerLegacyWorkspaces.Store(server.URL, legacyTestWorkspaceContext{
+		primitiveStore:             primitiveStore,
+		actorStore:                 registry,
+		allowUnauthenticatedWrites: true,
+		maintainer:                 maintainer,
+	})
 	t.Cleanup(func() {
+		testServerLegacyWorkspaces.Delete(server.URL)
 		server.Close()
 		_ = workspace.Close()
 	})
@@ -220,7 +227,7 @@ func TestProjectionMaintainerSuppressesStaleInboxAfterNewActivity(t *testing.T) 
 		"event":{
 			"type":"actor_statement",
 			"thread_id":"`+threadID+`",
-			"refs":["thread:`+threadID+`"],
+			"refs":["topic:`+threadID+`"],
 			"summary":"progress update",
 			"payload":{"statement":"on it"},
 			"provenance":{"sources":["inferred"]}
@@ -477,7 +484,14 @@ func TestProjectionMaintainerKeepsProjectionPendingForConcurrentWrites(t *testin
 		WithProjectionMaintainer(maintainer),
 	)
 	server := httptest.NewServer(handler)
+	testServerLegacyWorkspaces.Store(server.URL, legacyTestWorkspaceContext{
+		primitiveStore:             store,
+		actorStore:                 registry,
+		allowUnauthenticatedWrites: true,
+		maintainer:                 maintainer,
+	})
 	t.Cleanup(func() {
+		testServerLegacyWorkspaces.Delete(server.URL)
 		server.Close()
 		_ = workspace.Close()
 	})
@@ -521,7 +535,7 @@ func TestProjectionMaintainerKeepsProjectionPendingForConcurrentWrites(t *testin
 		"event":{
 			"type":"decision_needed",
 			"thread_id":"`+threadID+`",
-			"refs":["thread:`+threadID+`"],
+			"refs":["topic:`+threadID+`"],
 			"summary":"Need a first decision",
 			"payload":{},
 			"provenance":{"sources":["inferred"]}
@@ -552,7 +566,7 @@ func TestProjectionMaintainerKeepsProjectionPendingForConcurrentWrites(t *testin
 		"event":{
 			"type":"decision_needed",
 			"thread_id":"`+threadID+`",
-			"refs":["thread:`+threadID+`"],
+			"refs":["topic:`+threadID+`"],
 			"summary":"Need a second decision",
 			"payload":{},
 			"provenance":{"sources":["inferred"]}
@@ -659,7 +673,14 @@ func TestProjectionMaintainerNotifyWakesRunLoopPromptly(t *testing.T) {
 		WithProjectionMaintainer(maintainer),
 	)
 	server := httptest.NewServer(handler)
+	testServerLegacyWorkspaces.Store(server.URL, legacyTestWorkspaceContext{
+		primitiveStore:             store,
+		actorStore:                 registry,
+		allowUnauthenticatedWrites: true,
+		maintainer:                 maintainer,
+	})
 	t.Cleanup(func() {
+		testServerLegacyWorkspaces.Delete(server.URL)
 		server.Close()
 		_ = workspace.Close()
 	})
@@ -766,7 +787,14 @@ func TestOpsHealthEndpointReportsProjectionMaintenanceErrors(t *testing.T) {
 		WithProjectionMaintainer(maintainer),
 	)
 	server := httptest.NewServer(handler)
+	testServerLegacyWorkspaces.Store(server.URL, legacyTestWorkspaceContext{
+		primitiveStore:             primitiveStore,
+		actorStore:                 registry,
+		allowUnauthenticatedWrites: true,
+		maintainer:                 maintainer,
+	})
 	t.Cleanup(func() {
+		testServerLegacyWorkspaces.Delete(server.URL)
 		server.Close()
 		_ = workspace.Close()
 	})
@@ -842,7 +870,14 @@ func TestOpsHealthEndpointKeepsDiagnosticsWhenReadinessFails(t *testing.T) {
 		WithProjectionMaintainer(maintainer),
 	)
 	server := httptest.NewServer(handler)
+	testServerLegacyWorkspaces.Store(server.URL, legacyTestWorkspaceContext{
+		primitiveStore:             primitiveStore,
+		actorStore:                 registry,
+		allowUnauthenticatedWrites: true,
+		maintainer:                 maintainer,
+	})
 	t.Cleanup(func() {
+		testServerLegacyWorkspaces.Delete(server.URL)
 		server.Close()
 		_ = workspace.Close()
 	})

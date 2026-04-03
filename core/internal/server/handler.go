@@ -1037,14 +1037,12 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 	})
 
-	registerRoute("/threads", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodGet, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/threads", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
-		case http.MethodPost:
-			handleCreateThread(w, r, opts)
 		case http.MethodGet:
 			handleListThreads(w, r, opts)
 		default:
-			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST and GET are supported")
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
 		}
 	})
 
@@ -1067,8 +1065,6 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		case strings.Contains(remainder, "/"):
 			return routeAccessRequirement{}
 		case r.Method == http.MethodGet:
-			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
-		case r.Method == http.MethodPatch:
 			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
 		default:
 			return routeAccessRequirement{}
@@ -1208,53 +1204,11 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			return
 		}
 
-		switch r.Method {
-		case http.MethodGet:
-			handleGetThread(w, r, opts, remainder)
-		case http.MethodPatch:
-			handlePatchThread(w, r, opts, remainder)
-		default:
-			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET and PATCH are supported")
-		}
-	})
-
-	registerRoute("/commitments", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodGet, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodPost:
-			handleCreateCommitment(w, r, opts)
-		case http.MethodGet:
-			handleListCommitments(w, r, opts)
-		default:
-			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST and GET are supported")
-		}
-	})
-
-	registerRoute("/commitments/", func(r *http.Request) routeAccessRequirement {
-		commitmentID := strings.TrimPrefix(r.URL.Path, "/commitments/")
-		if commitmentID == "" || strings.Contains(commitmentID, "/") {
-			return routeAccessRequirement{}
-		}
-		switch r.Method {
-		case http.MethodGet, http.MethodPatch:
-			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
-		default:
-			return routeAccessRequirement{}
-		}
-	}, func(w http.ResponseWriter, r *http.Request) {
-		commitmentID := strings.TrimPrefix(r.URL.Path, "/commitments/")
-		if commitmentID == "" || strings.Contains(commitmentID, "/") {
-			writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
 			return
 		}
-
-		switch r.Method {
-		case http.MethodGet:
-			handleGetCommitment(w, r, opts, commitmentID)
-		case http.MethodPatch:
-			handlePatchCommitment(w, r, opts, commitmentID)
-		default:
-			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET and PATCH are supported")
-		}
+		handleGetThread(w, r, opts, remainder)
 	})
 
 	registerRoute("/docs", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodGet, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
@@ -2160,27 +2114,6 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			return
 		}
 		handleRebuildDerived(w, r, opts)
-	})
-
-	registerRoute("/snapshots/", func(r *http.Request) routeAccessRequirement {
-		snapshotID := strings.TrimPrefix(r.URL.Path, "/snapshots/")
-		if snapshotID == "" || strings.Contains(snapshotID, "/") || r.Method != http.MethodGet {
-			return routeAccessRequirement{}
-		}
-		return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
-	}, func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
-			return
-		}
-
-		snapshotID := strings.TrimPrefix(r.URL.Path, "/snapshots/")
-		if snapshotID == "" || strings.Contains(snapshotID, "/") {
-			writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
-			return
-		}
-
-		handleGetSnapshot(w, r, opts, snapshotID)
 	})
 
 	registerRoute("/", exactRouteAccess(routeAccessAlwaysPublic), func(w http.ResponseWriter, _ *http.Request) {
