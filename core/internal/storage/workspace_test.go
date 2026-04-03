@@ -457,6 +457,182 @@ func TestWorkspaceInitializationRepairsAppliedProjectionGenerationMigration(t *t
 	assertColumnAbsent(t, workspace.DB(), "thread_projection_refresh_status", "in_progress")
 }
 
+func TestWorkspaceInitializationRepairsAppliedArchiveAndTombstoneMigrations(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	workspaceRoot := t.TempDir()
+	layout := storage.NewLayout(workspaceRoot)
+	if err := os.MkdirAll(layout.RootDir, 0o755); err != nil {
+		t.Fatalf("create workspace root: %v", err)
+	}
+
+	legacyDB, err := sql.Open("sqlite", "file:"+layout.DatabasePath)
+	if err != nil {
+		t.Fatalf("open legacy sqlite database: %v", err)
+	}
+
+	statements := []string{
+		`CREATE TABLE schema_migrations (
+			version INTEGER PRIMARY KEY,
+			applied_at TEXT NOT NULL
+		);`,
+		`CREATE TABLE artifacts (
+			id TEXT PRIMARY KEY,
+			kind TEXT NOT NULL,
+			thread_id TEXT,
+			created_at TEXT NOT NULL,
+			created_by TEXT NOT NULL,
+			content_type TEXT NOT NULL,
+			content_hash TEXT NOT NULL,
+			refs_json TEXT NOT NULL DEFAULT '[]',
+			metadata_json TEXT NOT NULL DEFAULT '{}',
+			tombstoned_at TEXT,
+			tombstoned_by TEXT,
+			tombstone_reason TEXT
+		);`,
+		`CREATE TABLE documents (
+			id TEXT PRIMARY KEY,
+			thread_id TEXT,
+			title TEXT,
+			slug TEXT,
+			status TEXT,
+			labels_json TEXT NOT NULL DEFAULT '[]',
+			supersedes_json TEXT NOT NULL DEFAULT '[]',
+			head_revision_id TEXT NOT NULL,
+			head_revision_number INTEGER NOT NULL,
+			created_at TEXT NOT NULL,
+			created_by TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			updated_by TEXT NOT NULL,
+			tombstoned_at TEXT,
+			tombstoned_by TEXT,
+			tombstone_reason TEXT
+		);`,
+		`CREATE TABLE document_revisions (
+			revision_id TEXT PRIMARY KEY,
+			document_id TEXT NOT NULL,
+			revision_number INTEGER NOT NULL,
+			prev_revision_id TEXT,
+			artifact_id TEXT NOT NULL,
+			thread_id TEXT,
+			refs_json TEXT NOT NULL DEFAULT '[]',
+			revision_hash TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			created_by TEXT NOT NULL
+		);`,
+		`CREATE TABLE snapshots (
+			id TEXT PRIMARY KEY,
+			kind TEXT NOT NULL,
+			thread_id TEXT,
+			updated_at TEXT NOT NULL,
+			updated_by TEXT NOT NULL,
+			body_json TEXT NOT NULL,
+			provenance_json TEXT NOT NULL DEFAULT '{}'
+		);`,
+		`CREATE TABLE boards (
+			id TEXT PRIMARY KEY,
+			title TEXT NOT NULL,
+			status TEXT NOT NULL,
+			labels_json TEXT NOT NULL DEFAULT '[]',
+			owners_json TEXT NOT NULL DEFAULT '[]',
+			primary_thread_id TEXT NOT NULL,
+			primary_document_id TEXT,
+			column_schema_json TEXT NOT NULL,
+			pinned_refs_json TEXT NOT NULL DEFAULT '[]',
+			created_at TEXT NOT NULL,
+			created_by TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			updated_by TEXT NOT NULL
+		);`,
+		`CREATE TABLE events (
+			id TEXT PRIMARY KEY,
+			type TEXT NOT NULL,
+			ts TEXT NOT NULL,
+			actor_id TEXT NOT NULL,
+			thread_id TEXT,
+			refs_json TEXT NOT NULL DEFAULT '[]',
+			payload_json TEXT NOT NULL DEFAULT '{}',
+			body_json TEXT NOT NULL DEFAULT '{}',
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);`,
+		`CREATE TABLE derived_thread_dirty_queue (
+			thread_id TEXT PRIMARY KEY,
+			dirty_at TEXT NOT NULL
+		);`,
+		`CREATE TABLE derived_thread_views (
+			thread_id TEXT PRIMARY KEY
+		);`,
+		`CREATE TABLE thread_projection_refresh_status (
+			thread_id TEXT PRIMARY KEY,
+			desired_generation INTEGER NOT NULL DEFAULT 0,
+			materialized_generation INTEGER NOT NULL DEFAULT 0,
+			in_progress_generation INTEGER,
+			queued_at TEXT,
+			started_at TEXT,
+			completed_at TEXT,
+			last_error_at TEXT,
+			last_error TEXT,
+			updated_at TEXT NOT NULL
+		);`,
+	}
+	for _, statement := range statements {
+		if _, err := legacyDB.ExecContext(ctx, statement); err != nil {
+			t.Fatalf("seed legacy schema: %v", err)
+		}
+	}
+	for version := 1; version <= 23; version++ {
+		if _, err := legacyDB.ExecContext(ctx, `INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)`, version, "2026-03-30T00:00:00Z"); err != nil {
+			t.Fatalf("seed schema_migrations: %v", err)
+		}
+	}
+	if err := legacyDB.Close(); err != nil {
+		t.Fatalf("close legacy sqlite database: %v", err)
+	}
+
+	workspace, err := storage.InitializeWorkspace(ctx, workspaceRoot)
+	if err != nil {
+		t.Fatalf("initialize repaired workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	assertColumnPresent(t, workspace.DB(), "artifacts", "archived_at")
+	assertColumnPresent(t, workspace.DB(), "artifacts", "archived_by")
+	assertColumnPresent(t, workspace.DB(), "documents", "archived_at")
+	assertColumnPresent(t, workspace.DB(), "documents", "archived_by")
+	assertColumnPresent(t, workspace.DB(), "snapshots", "archived_at")
+	assertColumnPresent(t, workspace.DB(), "snapshots", "archived_by")
+	assertColumnPresent(t, workspace.DB(), "snapshots", "tombstoned_at")
+	assertColumnPresent(t, workspace.DB(), "snapshots", "tombstoned_by")
+	assertColumnPresent(t, workspace.DB(), "snapshots", "tombstone_reason")
+	assertColumnPresent(t, workspace.DB(), "boards", "archived_at")
+	assertColumnPresent(t, workspace.DB(), "boards", "archived_by")
+	assertColumnPresent(t, workspace.DB(), "boards", "tombstoned_at")
+	assertColumnPresent(t, workspace.DB(), "boards", "tombstoned_by")
+	assertColumnPresent(t, workspace.DB(), "boards", "tombstone_reason")
+	assertColumnPresent(t, workspace.DB(), "events", "archived_at")
+	assertColumnPresent(t, workspace.DB(), "events", "archived_by")
+	assertColumnPresent(t, workspace.DB(), "events", "tombstoned_at")
+	assertColumnPresent(t, workspace.DB(), "events", "tombstoned_by")
+	assertColumnPresent(t, workspace.DB(), "events", "tombstone_reason")
+
+	store := primitives.NewStore(
+		workspace.DB(),
+		blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir),
+		workspace.Layout().ArtifactContentDir,
+	)
+
+	if _, err := store.ListEvents(ctx, primitives.EventListFilter{}); err != nil {
+		t.Fatalf("list events after archive/tombstone repair: %v", err)
+	}
+	if _, _, err := store.ListDocuments(ctx, primitives.DocumentListFilter{}); err != nil {
+		t.Fatalf("list documents after archive/tombstone repair: %v", err)
+	}
+	if _, _, err := store.ListThreads(ctx, primitives.ThreadListFilter{}); err != nil {
+		t.Fatalf("list threads after archive/tombstone repair: %v", err)
+	}
+}
+
 func TestProjectionQueueStatsAndListingRecoverStrandedGenerationRows(t *testing.T) {
 	t.Parallel()
 
