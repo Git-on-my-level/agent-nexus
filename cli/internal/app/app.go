@@ -72,7 +72,7 @@ func (a *App) Run(args []string) int {
 	if len(remaining) > 1 {
 		subPeek = remaining[1]
 	}
-	configLenient := cmdPeek == "version" || cmdPeek == "help" || cmdPeek == "--help" || cmdPeek == "-h" || cmdPeek == "meta" || cmdPeek == "update" || cmdPeek == "bridge" ||
+	configLenient := cmdPeek == "version" || cmdPeek == "help" || cmdPeek == "--help" || cmdPeek == "-h" || cmdPeek == "meta" || cmdPeek == "update" || cmdPeek == "bridge" || cmdPeek == "concepts" || cmdPeek == "primitives" ||
 		(cmdPeek == "import" && isConfigLenientImportCommand(remaining[1:])) ||
 		(cmdPeek == "auth" && (subPeek == "list" || subPeek == "ls" || subPeek == "profiles" || subPeek == "default"))
 

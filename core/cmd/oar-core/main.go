@@ -395,6 +395,7 @@ func main() {
 		server.WithHumanAuthMode(humanAuthMode),
 		server.WithControlPlaneHumanVerifier(controlPlaneVerifier),
 		server.WithWorkspaceServiceIdentity(serviceIdentity),
+		server.WithWorkspaceID(workspaceID),
 		server.WithEnableDevActorMode(enableDevActorMode),
 		server.WithAllowUnauthenticatedWrites(allowUnauthenticatedWrites),
 		server.WithAllowLoopbackVerificationReads(allowLoopbackVerifyReads),

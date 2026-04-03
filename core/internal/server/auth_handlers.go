@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"organization-autorunner-core/internal/auth"
 	"organization-autorunner-core/internal/controlplaneauth"
@@ -281,7 +282,7 @@ func handleRevokeCurrentAgent(w http.ResponseWriter, r *http.Request, opts handl
 		return
 	}
 
-	writeRevokePrincipalResponse(w, result)
+	writeRevokePrincipalResponse(w, result, opts.workspaceID)
 }
 
 func handleRevokePrincipal(w http.ResponseWriter, r *http.Request, opts handlerOptions, agentID string) {
@@ -317,7 +318,7 @@ func handleRevokePrincipal(w http.ResponseWriter, r *http.Request, opts handlerO
 		return
 	}
 
-	writeRevokePrincipalResponse(w, result)
+	writeRevokePrincipalResponse(w, result, opts.workspaceID)
 }
 
 func decodeRevokePrincipalRequest(w http.ResponseWriter, r *http.Request) (struct {
@@ -337,10 +338,11 @@ func decodeRevokePrincipalRequest(w http.ResponseWriter, r *http.Request) (struc
 	return req, true
 }
 
-func writeRevokePrincipalResponse(w http.ResponseWriter, result auth.RevokeAgentResult) {
+func writeRevokePrincipalResponse(w http.ResponseWriter, result auth.RevokeAgentResult, workspaceID string) {
+	principal := enrichAuthPrincipalSummary(result.Principal, workspaceID, time.Now().UTC())
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":         true,
-		"principal":  result.Principal,
+		"principal":  principal,
 		"revocation": result.Revocation,
 	})
 }

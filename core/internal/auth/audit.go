@@ -49,6 +49,7 @@ type AuthPrincipalSummary struct {
 	Revoked       bool               `json:"revoked"`
 	RevokedAt     *string            `json:"revoked_at,omitempty"`
 	Registration  *AgentRegistration `json:"registration,omitempty"`
+	WakeRouting   *WakeRoutingStatus `json:"wake_routing,omitempty"`
 }
 
 type AuthAuditEvent struct {

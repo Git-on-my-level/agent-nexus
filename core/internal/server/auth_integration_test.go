@@ -42,6 +42,7 @@ type authIntegrationOptions struct {
 	humanAuthMode              string
 	controlPlaneVerifier       *controlplaneauth.WorkspaceHumanVerifier
 	workspaceServiceIdentity   *controlplaneauth.WorkspaceServiceIdentity
+	workspaceID                string
 }
 
 type authIntegrationEnv struct {
@@ -93,6 +94,10 @@ func newAuthIntegrationEnv(t *testing.T, options authIntegrationOptions) authInt
 	}
 
 	primitiveStore := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+	workspaceID := strings.TrimSpace(options.workspaceID)
+	if workspaceID == "" {
+		workspaceID = "ws_main"
+	}
 	handler := NewHandler(
 		"0.2.2",
 		WithActorRegistry(registry),
@@ -105,6 +110,7 @@ func newAuthIntegrationEnv(t *testing.T, options authIntegrationOptions) authInt
 		WithHumanAuthMode(options.humanAuthMode),
 		WithControlPlaneHumanVerifier(options.controlPlaneVerifier),
 		WithWorkspaceServiceIdentity(options.workspaceServiceIdentity),
+		WithWorkspaceID(workspaceID),
 		WithEnableDevActorMode(options.enableDevActorMode),
 		WithAllowUnauthenticatedWrites(options.allowUnauthenticatedWrites),
 	)
@@ -367,6 +373,69 @@ func TestAgentAuthLifecycleAndActorCompatibility(t *testing.T) {
 	revokedMeResp := getJSONExpectStatusWithAuth(t, serverURL+"/agents/me", newAssertionPayload.Tokens.AccessToken, http.StatusForbidden)
 	defer revokedMeResp.Body.Close()
 	assertErrorCode(t, revokedMeResp, "agent_revoked")
+}
+
+func TestListAuthPrincipalsIncludesDerivedWakeRouting(t *testing.T) {
+	t.Parallel()
+
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{
+		bootstrapToken: testBootstrapToken,
+		workspaceID:    "ws_local",
+	})
+	serverURL := env.server.URL
+
+	publicKey, _ := generateKeyPair(t)
+	registerResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/agents/register", map[string]any{
+		"username":        "m4-hermes",
+		"public_key":      publicKey,
+		"bootstrap_token": testBootstrapToken,
+	}, "", http.StatusCreated)
+	defer registerResp.Body.Close()
+
+	var registerPayload struct {
+		Agent struct {
+			AgentID string `json:"agent_id"`
+			ActorID string `json:"actor_id"`
+		} `json:"agent"`
+		Tokens struct {
+			AccessToken string `json:"access_token"`
+		} `json:"tokens"`
+	}
+	if err := json.NewDecoder(registerResp.Body).Decode(&registerPayload); err != nil {
+		t.Fatalf("decode register response: %v", err)
+	}
+
+	if _, err := env.authStore.UpdateRegistration(context.Background(), registerPayload.Agent.AgentID, auth.AgentRegistration{
+		Handle:            "m4-hermes",
+		ActorID:           registerPayload.Agent.ActorID,
+		Status:            "active",
+		BridgeInstanceID:  "bridge-hermes-1",
+		BridgeCheckedInAt: "2099-03-20T12:00:00Z",
+		BridgeExpiresAt:   "2099-03-20T12:05:00Z",
+		WorkspaceBindings: []auth.AgentRegistrationWorkspaceBinding{
+			{WorkspaceID: "ws_local", Enabled: true},
+		},
+	}); err != nil {
+		t.Fatalf("update registration: %v", err)
+	}
+
+	page := listAuthPrincipalsPage(t, serverURL, registerPayload.Tokens.AccessToken, 50, "")
+	if len(page.Principals) != 1 {
+		t.Fatalf("expected one principal, got %#v", page.Principals)
+	}
+	wakeRouting, ok := page.Principals[0]["wake_routing"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected wake_routing object, got %#v", page.Principals[0])
+	}
+	if got := asString(wakeRouting["state"]); got != "online" {
+		t.Fatalf("expected online wake routing state, got %#v", wakeRouting)
+	}
+	if got := asString(wakeRouting["summary"]); got != "Online as @m4-hermes." {
+		t.Fatalf("unexpected wake routing summary: %#v", wakeRouting)
+	}
+	if online, _ := wakeRouting["online"].(bool); !online {
+		t.Fatalf("expected online=true, got %#v", wakeRouting)
+	}
 }
 
 func TestControlPlaneHumanWorkspaceTokenAcceptedAndShadowPrincipalStable(t *testing.T) {

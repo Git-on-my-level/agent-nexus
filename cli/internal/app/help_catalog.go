@@ -35,6 +35,7 @@ var (
 
 var runtimeHelpManualDocTopics = []runtimeHelpDocTopic{
 	{Path: "onboarding", Kind: "manual", Summary: "Offline quick-start mental model and first command flow."},
+	{Path: "concepts", Kind: "manual", Summary: "Quick guide to the core OAR primitives and when to use each."},
 	{Path: "agent-guide", Kind: "manual", Summary: "Prescriptive agent guide for choosing OAR primitives, operating safely, and automating the CLI well."},
 	{Path: "agent-bridge", Kind: "manual", Summary: "Install, configure, and operate the preferred `oar-agent-bridge` wake-routing runtime on a fresh machine."},
 	{Path: "wake-routing", Kind: "manual", Summary: "How `@handle` wake routing works, including self-registration, verification, and troubleshooting."},

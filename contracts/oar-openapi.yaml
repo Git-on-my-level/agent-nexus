@@ -4328,6 +4328,19 @@ components:
         updated_at: { type: string, format: date-time }
       required: [version, handle, actor_id, status, workspace_bindings]
 
+    WakeRoutingStatus:
+      type: object
+      properties:
+        applicable: { type: boolean }
+        handle: { type: string }
+        taggable: { type: boolean }
+        online: { type: boolean }
+        state:
+          type: string
+          enum: [unknown, revoked, unregistered, disabled, offline, online]
+        summary: { type: string }
+      required: [applicable, handle, taggable, online, state, summary]
+
     AgentKey:
       type: object
       properties:
@@ -4392,6 +4405,8 @@ components:
         revoked_at: { type: string, format: date-time }
         registration:
           $ref: '#/components/schemas/AgentRegistration'
+        wake_routing:
+          $ref: '#/components/schemas/WakeRoutingStatus'
       required: [agent_id, actor_id, username, principal_kind, auth_method, created_at, last_seen_at, updated_at, revoked]
 
     AuthPrincipalsResponse:

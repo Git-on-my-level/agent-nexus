@@ -64,11 +64,15 @@ Preferred path when you are using <<tick>>oar-agent-bridge<<tick>>
 
 3. Generate the agent config:
 
-  oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle>
+  oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --workspace-path /absolute/path/to/hermes/workspace
+
+  If you omit <<tick>>--workspace-path<<tick>>, the generated Hermes config keeps placeholder paths and must be edited before the bridge can start.
 
 4. If matching <<tick>>oar<<tick>> auth already exists, import it into the bridge config:
 
   oar bridge import-auth --config ./agent.toml --from-profile <agent>
+
+  This also syncs the default local <<tick>>[oar].base_url<<tick>> in the bridge config to the imported profile when they differ.
 
 5. Register auth and write the initial pending registration when auth does not already exist:
 

@@ -233,6 +233,53 @@ func TestRunGeneratedHelpTopicSupportsCompatibilityAliasPath(t *testing.T) {
 	}
 }
 
+func TestMetaCommandShowsRequiredInputsAndConcurrencyGuidance(t *testing.T) {
+	t.Parallel()
+
+	output := runHelpCommand(t, "meta", "command", "boards.cards.archive")
+	if !strings.Contains(output, "Inputs:") {
+		t.Fatalf("expected input block output=%s", output)
+	}
+	if !strings.Contains(output, "- path `card_id`") {
+		t.Fatalf("expected required path param output=%s", output)
+	}
+	if !strings.Contains(output, "body `if_board_updated_at` (datetime)") {
+		t.Fatalf("expected concurrency body field output=%s", output)
+	}
+	if !strings.Contains(output, "oar boards get --board-id <board-id>") || !strings.Contains(output, "oar boards workspace --board-id <board-id>") {
+		t.Fatalf("expected concurrency token sourcing guidance output=%s", output)
+	}
+}
+
+func TestInboxListHelpMentionsViewingAsAndCategories(t *testing.T) {
+	t.Parallel()
+
+	output := runHelpCommand(t, "help", "inbox", "list")
+	if !strings.Contains(output, "viewing_as") {
+		t.Fatalf("expected viewing_as scoping guidance output=%s", output)
+	}
+	if !strings.Contains(output, "`decision_needed`") || !strings.Contains(output, "`commitment_risk`") {
+		t.Fatalf("expected inbox category reference output=%s", output)
+	}
+}
+
+func TestConceptsCommandAndHelpTopic(t *testing.T) {
+	t.Parallel()
+
+	commandOutput := runHelpCommand(t, "concepts")
+	if !strings.Contains(commandOutput, "OAR concepts guide") {
+		t.Fatalf("expected concepts guide heading output=%s", commandOutput)
+	}
+	if !strings.Contains(commandOutput, "threads") || !strings.Contains(commandOutput, "docs") || !strings.Contains(commandOutput, "boards") {
+		t.Fatalf("expected core primitives in concepts guide output=%s", commandOutput)
+	}
+
+	helpOutput := runHelpCommand(t, "help", "concepts")
+	if !strings.Contains(helpOutput, "OAR concepts guide") {
+		t.Fatalf("expected help concepts to reuse concepts guide output=%s", helpOutput)
+	}
+}
+
 func TestRunEventsHelpMentionsLocalExplainAcrossEntryPoints(t *testing.T) {
 	t.Parallel()
 
@@ -628,10 +675,10 @@ func TestGeneratedCommandHelpIncludesBodySchemaAndEnums(t *testing.T) {
 		t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
 	output := stdout.String()
-	if !strings.Contains(output, "Body schema:") {
-		t.Fatalf("expected body schema block output=%s", output)
+	if !strings.Contains(output, "Inputs:") {
+		t.Fatalf("expected input block output=%s", output)
 	}
-	if !strings.Contains(output, "event.type (string)") {
+	if !strings.Contains(output, "body `event.type` (string)") {
 		t.Fatalf("expected event.type body field output=%s", output)
 	}
 	if !strings.Contains(output, "work_order_claimed") {

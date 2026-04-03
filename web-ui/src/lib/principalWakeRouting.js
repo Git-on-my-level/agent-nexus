@@ -1,62 +1,61 @@
-import { bridgeCheckinEventId, describeWakeRouting } from "$lib/wakeRouting";
+function badgeForWakeRoutingState(state) {
+  switch (String(state ?? "").trim()) {
+    case "online":
+      return {
+        badgeLabel: "Online",
+        badgeClass: "bg-emerald-500/10 text-emerald-400",
+      };
+    case "revoked":
+      return {
+        badgeLabel: "Revoked",
+        badgeClass: "bg-red-500/10 text-red-400",
+      };
+    case "disabled":
+      return {
+        badgeLabel: "Disabled",
+        badgeClass: "bg-amber-500/10 text-amber-400",
+      };
+    case "unregistered":
+      return {
+        badgeLabel: "Unregistered",
+        badgeClass: "bg-amber-500/10 text-amber-400",
+      };
+    case "unknown":
+      return {
+        badgeLabel: "Unknown",
+        badgeClass: "bg-slate-500/10 text-slate-300",
+      };
+    default:
+      return {
+        badgeLabel: "Offline",
+        badgeClass: "bg-amber-500/10 text-amber-400",
+      };
+  }
+}
 
-/**
- * @param {object[]} principalList
- * @param {{ workspaceBindingTarget?: string, client: { getEvent: Function } }} options
- */
-export async function enrichPrincipalsWithWakeRouting(
-  principalList,
-  { workspaceBindingTarget = "", client },
-) {
-  const activeAgentPrincipals = [
-    ...new Set(
-      (principalList ?? [])
-        .filter(
-          (principal) =>
-            principal?.principal_kind === "agent" &&
-            !principal?.revoked &&
-            String(principal?.username ?? "").trim() !== "" &&
-            principal?.registration,
-        )
-        .map((principal) => String(principal.username).trim()),
-    ),
-  ];
+function normalizeWakeRouting(value, principal) {
+  const wakeRouting = value && typeof value === "object" ? value : null;
+  const applicable =
+    wakeRouting?.applicable ?? principal?.principal_kind === "agent";
+  const state = String(wakeRouting?.state ?? "unknown").trim() || "unknown";
+  const summary =
+    String(wakeRouting?.summary ?? "").trim() ||
+    "Wake routing status is unavailable right now.";
+  return {
+    applicable,
+    handle: String(wakeRouting?.handle ?? principal?.username ?? "").trim(),
+    taggable: Boolean(wakeRouting?.taggable),
+    online: Boolean(wakeRouting?.online),
+    offline: state === "offline",
+    state,
+    ...badgeForWakeRoutingState(state),
+    summary,
+  };
+}
 
-  const bridgeCheckins = new Map();
-
-  await Promise.all(
-    activeAgentPrincipals.map(async (handle) => {
-      const principal = (principalList ?? []).find(
-        (item) => String(item?.username ?? "").trim() === handle,
-      );
-      const checkinEventId = bridgeCheckinEventId(principal);
-      if (!checkinEventId) {
-        bridgeCheckins.set(handle, { state: "missing" });
-        return;
-      }
-      try {
-        bridgeCheckins.set(handle, {
-          state: "ok",
-          document: await client.getEvent(checkinEventId),
-        });
-      } catch (error) {
-        bridgeCheckins.set(
-          handle,
-          error?.status === 404 ? { state: "missing" } : { state: "error" },
-        );
-      }
-    }),
-  );
-
-  return Promise.all(
-    (principalList ?? []).map(async (principal) => ({
-      ...principal,
-      wakeRouting: await describeWakeRouting(
-        principal,
-        null,
-        workspaceBindingTarget,
-        bridgeCheckins.get(String(principal?.username ?? "").trim()) ?? null,
-      ),
-    })),
-  );
+export async function enrichPrincipalsWithWakeRouting(principalList) {
+  return (principalList ?? []).map((principal) => ({
+    ...principal,
+    wakeRouting: normalizeWakeRouting(principal?.wake_routing, principal),
+  }));
 }

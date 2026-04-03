@@ -361,6 +361,7 @@ Core Commands:
   version       Print CLI/runtime version details
   doctor        Validate local and network preconditions
   update        Replace the installed CLI binary with the recommended or requested release
+  concepts      Explain the core OAR primitives and when to use them
   bridge        Install, manage, and inspect the Python wake-routing bridge runtime
   auth          Manage agent registration, profile auth, and token lifecycle
   import        Bootstrap a precision-first workspace import and run local import helpers
@@ -385,6 +386,7 @@ Core Commands:
 	b.WriteString(strings.TrimSpace(`
 
 Onboarding:
+  `+"`oar concepts`"+` for a quick primitive-selection guide.
   `+"`oar help onboarding`"+` for the offline quick-start topic.
   `+"`oar meta doc agent-guide`"+` for the prescriptive bundled agent guide.
   `+"`oar meta skill cursor --write-dir ~/.cursor/skills/oar-cli-onboard`"+` to export a Cursor skill file.
@@ -417,6 +419,9 @@ func helpTopicText(topic string) (string, bool) {
 	}
 	if topic == "onboarding" {
 		return onboardingHelpText(), true
+	}
+	if topic == "concepts" || topic == "primitives" || topic == "primitives guide" {
+		return conceptsGuideText() + "\n", true
 	}
 	if topic == "update" {
 		return updateUsageText() + "\n", true
@@ -678,7 +683,7 @@ func formatGeneratedCommandHelp(topic string, cmd registry.Command) string {
 			b.WriteString(fmt.Sprintf("  - %s: `%s`\n", title, runtimeCommandFromRegistryCommand(example.Command)))
 		}
 	}
-	if schemaBlock := formatBodySchemaBlock(cmd.BodySchema); strings.TrimSpace(schemaBlock) != "" {
+	if schemaBlock := formatInputSchemaBlock(cmd); strings.TrimSpace(schemaBlock) != "" {
 		b.WriteString("\n")
 		b.WriteString(schemaBlock)
 	}
@@ -702,71 +707,76 @@ func formatGlobalFlagUsage(topic string) string {
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>`, path, path))
 }
 
-func formatBodySchemaBlock(schema *registry.BodySchema) string {
-	if schema == nil {
-		return ""
-	}
-	required := formatBodyFieldList(schema.Required)
-	optional := formatBodyFieldList(schema.Optional)
-	if required == "" && optional == "" {
+func formatInputSchemaBlock(cmd registry.Command) string {
+	schema := cmd.BodySchema
+	hasRequiredPath := len(cmd.PathParams) > 0
+	hasBodyFields := schema != nil && (len(schema.Required) > 0 || len(schema.Optional) > 0)
+	if !hasRequiredPath && !hasBodyFields {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString("Body schema:\n")
-	if required == "" {
-		b.WriteString("  Required: none\n")
-	} else {
-		b.WriteString("  Required: " + required + "\n")
+	b.WriteString("Inputs:\n")
+	if hasRequiredPath || (schema != nil && len(schema.Required) > 0) {
+		b.WriteString("  Required:\n")
+		for _, field := range cmd.PathParams {
+			b.WriteString("  - path `")
+			b.WriteString(strings.TrimSpace(field))
+			b.WriteString("`")
+			if note := fieldHelpText(strings.TrimSpace(cmd.CommandID), strings.TrimSpace(field)); note != "" {
+				b.WriteString(": ")
+				b.WriteString(note)
+			}
+			b.WriteString("\n")
+		}
+		if schema != nil {
+			for _, field := range schema.Required {
+				b.WriteString("  - ")
+				b.WriteString(formatBodyFieldLine(strings.TrimSpace(cmd.CommandID), "body", field))
+				b.WriteString("\n")
+			}
+		}
 	}
-	if optional == "" {
-		b.WriteString("  Optional: none\n")
-	} else {
-		b.WriteString("  Optional: " + optional + "\n")
+	if schema != nil && len(schema.Optional) > 0 {
+		b.WriteString("  Optional:\n")
+		for _, field := range schema.Optional {
+			b.WriteString("  - ")
+			b.WriteString(formatBodyFieldLine(strings.TrimSpace(cmd.CommandID), "body", field))
+			b.WriteString("\n")
+		}
 	}
-	if enumLine := formatEnumFieldList(schema.Required, schema.Optional); enumLine != "" {
-		b.WriteString("  Enum values: " + enumLine + "\n")
+	if schema != nil {
+		if enumLine := formatEnumFieldList(schema.Required, schema.Optional); enumLine != "" {
+			b.WriteString("  Enum values: " + enumLine + "\n")
+		}
 	}
 	return strings.TrimSpace(b.String())
 }
 
-func formatCommandSpecificHelpBlock(cmd registry.Command) string {
-	switch strings.TrimSpace(cmd.CommandID) {
-	case "events.create":
-		return strings.TrimSpace(`Common authoring types:
-  Communication: direct communication or important non-structured information
-  - ` + "`message_posted`" + `
-  Decisions: request or record decisions on the thread
-  - ` + "`decision_needed`" + `
-  - ` + "`decision_made`" + `
-  Interventions: single clear path exists, but a human must act to complete it
-  - ` + "`intervention_needed`" + `
-  State and commitments: track state changes and commitments
-  - ` + "`snapshot_updated`" + `
-  - ` + "`commitment_created`" + `
-  - ` + "`commitment_status_changed`" + `
-  Exceptions: surface problems, risks, or escalations
-  - ` + "`exception_raised`" + `
+func formatBodyFieldLine(commandID string, location string, field registry.BodyField) string {
+	name := strings.TrimSpace(field.Name)
+	fieldType := strings.TrimSpace(field.Type)
+	if fieldType == "" {
+		fieldType = "any"
+	}
+	line := fmt.Sprintf("%s `%s` (%s)", strings.TrimSpace(location), name, fieldType)
+	if note := fieldHelpText(commandID, name); note != "" {
+		line += ": " + note
+	}
+	return line
+}
 
-Usually emitted by higher-level commands:
-  - ` + "`work_order_created`" + `: prefer ` + "`oar work-orders create`" + `
-  - ` + "`receipt_added`" + `: prefer ` + "`oar receipts create`" + `
-  - ` + "`review_completed`" + `: prefer ` + "`oar reviews create`" + `
-  - ` + "`inbox_item_acknowledged`" + `: prefer ` + "`oar inbox ack`" + `
-
-Specialized raw-event type:
-  - ` + "`work_order_claimed`" + `: claim marker for work-order flows
-
-Local CLI notes:
-  - Common open ` + "`event.type`" + ` values include ` + "`actor_statement`" + `; the enum list above is illustrative, not exhaustive.
-  - Use ` + "`--dry-run`" + ` with ` + "`--from-file`" + ` to validate and preview the request without sending the mutation.`)
-	case "threads.timeline":
-		return strings.TrimSpace(`Local CLI flags:
-  --include-archived        Include archived events in the timeline.
-  --archived-only           Show only archived events.
-  --include-tombstoned      Include tombstoned events in the timeline.
-  --tombstoned-only         Show only tombstoned events.
-
-Note: by default, archived and tombstoned events are excluded from the timeline output.`)
+func fieldHelpText(commandID string, name string) string {
+	commandID = strings.TrimSpace(commandID)
+	name = strings.TrimSpace(name)
+	switch {
+	case name == "if_board_updated_at":
+		return "Optimistic concurrency token. Copy `board.updated_at` from `oar boards get --board-id <board-id>`, `oar boards workspace --board-id <board-id>`, or the latest board mutation response."
+	case name == "if_base_revision":
+		return "Optimistic concurrency token. Copy the current head revision id from `oar docs get --document-id <document-id>` before updating."
+	case strings.HasPrefix(name, "if_"):
+		return "Optimistic concurrency token. Read the latest value from the corresponding read command before mutating."
+	case commandID == "inbox.get" && name == "inbox_item_id":
+		return "Canonical inbox id, alias, or unique prefix from `oar inbox list`."
 	default:
 		return ""
 	}
@@ -821,6 +831,60 @@ func formatEnumFieldList(required []registry.BodyField, optional []registry.Body
 	}
 	sort.Strings(parts)
 	return strings.Join(parts, "; ")
+}
+
+func formatCommandSpecificHelpBlock(cmd registry.Command) string {
+	switch strings.TrimSpace(cmd.CommandID) {
+	case "events.create":
+		return strings.TrimSpace(`Common authoring types:
+  Communication: direct communication or important non-structured information
+  - ` + "`message_posted`" + `
+  Decisions: request or record decisions on the thread
+  - ` + "`decision_needed`" + `
+  - ` + "`decision_made`" + `
+  Interventions: single clear path exists, but a human must act to complete it
+  - ` + "`intervention_needed`" + `
+  State and commitments: track state changes and commitments
+  - ` + "`snapshot_updated`" + `
+  - ` + "`commitment_created`" + `
+  - ` + "`commitment_status_changed`" + `
+  Exceptions: surface problems, risks, or escalations
+  - ` + "`exception_raised`" + `
+
+Usually emitted by higher-level commands:
+  - ` + "`work_order_created`" + `: prefer ` + "`oar work-orders create`" + `
+  - ` + "`receipt_added`" + `: prefer ` + "`oar receipts create`" + `
+  - ` + "`review_completed`" + `: prefer ` + "`oar reviews create`" + `
+  - ` + "`inbox_item_acknowledged`" + `: prefer ` + "`oar inbox ack`" + `
+
+Specialized raw-event type:
+  - ` + "`work_order_claimed`" + `: claim marker for work-order flows
+
+Local CLI notes:
+  - Common open ` + "`event.type`" + ` values include ` + "`actor_statement`" + `; the enum list above is illustrative, not exhaustive.
+  - Use ` + "`--dry-run`" + ` with ` + "`--from-file`" + ` to validate and preview the request without sending the mutation.`)
+	case "threads.timeline":
+		return strings.TrimSpace(`Local CLI flags:
+  --include-archived        Include archived events in the timeline.
+  --archived-only           Show only archived events.
+  --include-tombstoned      Include tombstoned events in the timeline.
+  --tombstoned-only         Show only tombstoned events in the timeline.
+
+Note: by default, archived and tombstoned events are excluded from the timeline output.`)
+	case "inbox.list":
+		return strings.TrimSpace(`View scoping:
+  - ` + "`inbox list`" + ` is read from the active CLI identity's perspective.
+  - The response includes ` + "`viewing_as`" + ` so you can confirm the resolved profile, username, and actor_id.
+  - Switch perspective with ` + "`--agent <profile>`" + ` or ` + "`OAR_AGENT`" + ` before reading or acting.
+
+Inbox categories:
+  - ` + "`decision_needed`" + `: A human must choose among multiple viable paths.
+  - ` + "`intervention_needed`" + `: The next step is clear, but a human must act because the agent cannot execute it.
+  - ` + "`exception`" + `: Investigate an exception, risk, or broken expectation on the thread.
+  - ` + "`commitment_risk`" + `: A commitment is at risk or overdue and needs follow-up.`)
+	default:
+		return ""
+	}
 }
 
 func commandByCLIPath(commands []registry.Command, path string) (registry.Command, bool) {

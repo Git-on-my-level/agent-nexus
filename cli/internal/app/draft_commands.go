@@ -1286,7 +1286,7 @@ Examples:
 	if path := strings.TrimSpace(runtimePathFromRegistryPath(cmd.CLIPath)); path != "" {
 		b.WriteString(" (`" + path + "`)")
 	}
-	if schemaBlock := formatBodySchemaBlock(cmd.BodySchema); strings.TrimSpace(schemaBlock) != "" {
+	if schemaBlock := formatInputSchemaBlock(cmd); strings.TrimSpace(schemaBlock) != "" {
 		b.WriteString("\n\n")
 		b.WriteString(schemaBlock)
 	}

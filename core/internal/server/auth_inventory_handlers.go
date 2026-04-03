@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"organization-autorunner-core/internal/auth"
 )
@@ -13,6 +14,12 @@ const (
 	defaultAuthListLimit = 50
 	maxAuthListLimit     = 200
 )
+
+func enrichAuthPrincipalSummary(item auth.AuthPrincipalSummary, workspaceID string, now time.Time) auth.AuthPrincipalSummary {
+	wakeRouting := auth.DescribeWakeRouting(item, workspaceID, now)
+	item.WakeRouting = &wakeRouting
+	return item
+}
 
 func handleListAuthPrincipals(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 	if _, ok := requireAuthenticatedPrincipal(w, r, opts); !ok {
@@ -35,6 +42,10 @@ func handleListAuthPrincipals(w http.ResponseWriter, r *http.Request, opts handl
 		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list auth principals")
 		return
+	}
+	now := time.Now().UTC()
+	for index := range principals {
+		principals[index] = enrichAuthPrincipalSummary(principals[index], opts.workspaceID, now)
 	}
 
 	activeHumanCount, err := opts.authStore.CountActiveHumanPrincipals(r.Context())

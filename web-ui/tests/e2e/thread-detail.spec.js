@@ -1,62 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { createSign, generateKeyPairSync } from "node:crypto";
-
-const bridgeProofKey = (() => {
-  const { publicKey, privateKey } = generateKeyPairSync("ec", {
-    namedCurve: "prime256v1",
-    publicKeyEncoding: { format: "der", type: "spki" },
-    privateKeyEncoding: { format: "der", type: "pkcs8" },
-  });
-  return {
-    privateKey,
-    publicKeyB64: Buffer.from(publicKey).toString("base64"),
-  };
-})();
-
-function stableJsonValue(value) {
-  if (Array.isArray(value)) {
-    return value.map((item) => stableJsonValue(item));
-  }
-  if (value && typeof value === "object") {
-    return Object.keys(value)
-      .sort()
-      .reduce((normalized, key) => {
-        normalized[key] = stableJsonValue(value[key]);
-        return normalized;
-      }, {});
-  }
-  return value;
-}
-
-function signCheckinPayload(content) {
-  const signer = createSign("sha256");
-  signer.update(
-    Buffer.from(
-      JSON.stringify(
-        stableJsonValue({
-          v: "agent-bridge-checkin-proof/v1",
-          handle: String(content.handle ?? "").trim(),
-          actor_id: String(content.actor_id ?? "").trim(),
-          workspace_id: String(content.workspace_id ?? "").trim(),
-          bridge_instance_id: String(content.bridge_instance_id ?? "").trim(),
-          checked_in_at: String(content.checked_in_at ?? "").trim(),
-          expires_at: String(content.expires_at ?? "").trim(),
-        }),
-      ),
-      "utf8",
-    ),
-  );
-  signer.end();
-  return signer
-    .sign({ key: bridgeProofKey.privateKey, format: "der", type: "pkcs8" })
-    .toString("base64");
-}
 
 test("thread detail separates messages from timeline and nests replies", async ({
   page,
 }) => {
   const actorId = "actor-thread-detail-e2e";
-  const { publicKeyB64 } = bridgeProofKey;
   let postedEvents = 0;
   let streamLastEventId = "";
   let timelineRequests = 0;
@@ -158,11 +105,17 @@ test("thread detail separates messages from timeline and nests replies", async (
                     handle: "m4-hermes",
                     actor_id: "actor-m4-hermes",
                     status: "active",
-                    bridge_signing_public_key_spki_b64: publicKeyB64,
-                    bridge_checkin_event_id: "event-bridge-checkin-m4-hermes",
                     workspace_bindings: [
                       { workspace_id: "local", enabled: true },
                     ],
+                  },
+                  wake_routing: {
+                    applicable: true,
+                    handle: "m4-hermes",
+                    taggable: true,
+                    online: true,
+                    state: "online",
+                    summary: "Online as @m4-hermes.",
                   },
                 },
                 {
@@ -176,11 +129,18 @@ test("thread detail separates messages from timeline and nests replies", async (
                     handle: "clawd",
                     actor_id: "actor-clawd",
                     status: "active",
-                    bridge_signing_public_key_spki_b64: publicKeyB64,
-                    bridge_checkin_event_id: "event-bridge-checkin-clawd",
                     workspace_bindings: [
                       { workspace_id: "local", enabled: true },
                     ],
+                  },
+                  wake_routing: {
+                    applicable: true,
+                    handle: "clawd",
+                    taggable: true,
+                    online: false,
+                    state: "offline",
+                    summary:
+                      "Offline. The agent is registered for this workspace, but its last bridge heartbeat is stale.",
                   },
                 },
               ]
@@ -199,6 +159,15 @@ test("thread detail separates messages from timeline and nests replies", async (
                     workspace_bindings: [
                       { workspace_id: "local", enabled: true },
                     ],
+                  },
+                  wake_routing: {
+                    applicable: true,
+                    handle: "jarvis",
+                    taggable: true,
+                    online: false,
+                    state: "offline",
+                    summary:
+                      "Offline. The agent is registered for this workspace, but no fresh bridge heartbeat is available.",
                   },
                 },
               ],
@@ -243,59 +212,6 @@ test("thread detail separates messages from timeline and nests replies", async (
           updated_at: "2026-03-04T00:00:00.000Z",
           updated_by: actorId,
           provenance: { sources: ["actor_statement:event-1001"] },
-        },
-      }),
-    });
-  });
-
-  await page.route(
-    "**/events/event-bridge-checkin-m4-hermes",
-    async (route) => {
-      const payload = {
-        handle: "m4-hermes",
-        actor_id: "actor-m4-hermes",
-        workspace_id: "local",
-        bridge_instance_id: "bridge-hermes-1",
-        checked_in_at: "2099-03-20T12:00:00Z",
-        expires_at: "2099-03-20T12:05:00Z",
-      };
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          event: {
-            id: "event-bridge-checkin-m4-hermes",
-            type: "agent_bridge_checked_in",
-            payload: {
-              ...payload,
-              proof_signature_b64: await signCheckinPayload(payload),
-            },
-          },
-        }),
-      });
-    },
-  );
-
-  await page.route("**/events/event-bridge-checkin-clawd", async (route) => {
-    const payload = {
-      handle: "clawd",
-      actor_id: "actor-clawd",
-      workspace_id: "local",
-      bridge_instance_id: "bridge-clawd-1",
-      checked_in_at: "2026-03-20T12:00:00Z",
-      expires_at: "2026-03-20T12:05:00Z",
-    };
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        event: {
-          id: "event-bridge-checkin-clawd",
-          type: "agent_bridge_checked_in",
-          payload: {
-            ...payload,
-            proof_signature_b64: await signCheckinPayload(payload),
-          },
         },
       }),
     });

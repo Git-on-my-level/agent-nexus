@@ -1,56 +1,4 @@
 import { expect, test } from "@playwright/test";
-import { createSign, generateKeyPairSync } from "node:crypto";
-
-const bridgeProofKey = (() => {
-  const { publicKey, privateKey } = generateKeyPairSync("ec", {
-    namedCurve: "prime256v1",
-    publicKeyEncoding: { format: "der", type: "spki" },
-    privateKeyEncoding: { format: "der", type: "pkcs8" },
-  });
-  return {
-    privateKey,
-    publicKeyB64: Buffer.from(publicKey).toString("base64"),
-  };
-})();
-
-function stableJsonValue(value) {
-  if (Array.isArray(value)) {
-    return value.map((item) => stableJsonValue(item));
-  }
-  if (value && typeof value === "object") {
-    return Object.keys(value)
-      .sort()
-      .reduce((normalized, key) => {
-        normalized[key] = stableJsonValue(value[key]);
-        return normalized;
-      }, {});
-  }
-  return value;
-}
-
-function signCheckinPayload(content) {
-  const signer = createSign("sha256");
-  signer.update(
-    Buffer.from(
-      JSON.stringify(
-        stableJsonValue({
-          v: "agent-bridge-checkin-proof/v1",
-          handle: String(content.handle ?? "").trim(),
-          actor_id: String(content.actor_id ?? "").trim(),
-          workspace_id: String(content.workspace_id ?? "").trim(),
-          bridge_instance_id: String(content.bridge_instance_id ?? "").trim(),
-          checked_in_at: String(content.checked_in_at ?? "").trim(),
-          expires_at: String(content.expires_at ?? "").trim(),
-        }),
-      ),
-      "utf8",
-    ),
-  );
-  signer.end();
-  return signer
-    .sign({ key: bridgeProofKey.privateKey, format: "der", type: "pkcs8" })
-    .toString("base64");
-}
 
 test("renders the access page without auth seeding", async ({ page }) => {
   await page.goto("/local/access");
@@ -161,12 +109,18 @@ test("does not repeat the username in principal rows", async ({ page }) => {
               handle: "m4-hermes",
               actor_id: "actor-ops-ai",
               status: "active",
-              bridge_signing_public_key_spki_b64: bridgeProofKey.publicKeyB64,
-              bridge_checkin_event_id: "event-bridge-checkin-hermes",
               bridge_instance_id: "bridge-hermes-1",
               bridge_checked_in_at: "2099-03-20T12:00:00Z",
               bridge_expires_at: "2099-03-20T12:05:00Z",
               workspace_bindings: [{ workspace_id: "local", enabled: true }],
+            },
+            wake_routing: {
+              applicable: true,
+              handle: "m4-hermes",
+              taggable: true,
+              online: true,
+              state: "online",
+              summary: "Online as @m4-hermes.",
             },
           },
         ],
@@ -180,32 +134,6 @@ test("does not repeat the username in principal rows", async ({ page }) => {
       status: 200,
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ invites: [] }),
-    });
-  });
-
-  await page.route("**/events/event-bridge-checkin-hermes", async (route) => {
-    const payload = {
-      version: "agent-bridge-checkin/v1",
-      handle: "m4-hermes",
-      actor_id: "actor-ops-ai",
-      workspace_id: "local",
-      bridge_instance_id: "bridge-hermes-1",
-      checked_in_at: "2099-03-20T12:00:00Z",
-      expires_at: "2099-03-20T12:05:00Z",
-    };
-    await route.fulfill({
-      status: 200,
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        event: {
-          id: "event-bridge-checkin-hermes",
-          type: "agent_bridge_checked_in",
-          payload: {
-            ...payload,
-            proof_signature_b64: await signCheckinPayload(payload),
-          },
-        },
-      }),
     });
   });
 
@@ -227,10 +155,7 @@ test("does not repeat the username in principal rows", async ({ page }) => {
   await expect(onlineBadge).toBeVisible();
   await onlineBadge.click();
   await expect(
-    page.getByText(
-      "Online for bound workspace local, but this page has no durable workspace ID to confirm the current workspace match.",
-      { exact: true },
-    ),
+    page.getByText("Online as @m4-hermes.", { exact: true }),
   ).toBeVisible();
   await expect(
     page.getByText("m4-hermes • agent via public_key", { exact: true }),

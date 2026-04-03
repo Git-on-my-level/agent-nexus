@@ -233,6 +233,9 @@ func formatEventsList(body any) string {
 func formatInboxList(body any) string {
 	root := asMap(body)
 	lines := make([]string, 0, 16)
+	if viewingAs := strings.TrimSpace(formatViewingAsSummary(root["viewing_as"])); viewingAs != "" {
+		lines = append(lines, "viewing_as: "+viewingAs)
+	}
 	if threadID := strings.TrimSpace(anyString(root["thread_id"])); threadID != "" {
 		lines = append(lines, "Thread "+threadID)
 	}
@@ -243,6 +246,12 @@ func formatInboxList(body any) string {
 	lines = appendScalar(lines, "total_items", root, "total_items")
 	lines = appendScalar(lines, "returned_items", root, "returned_items")
 	lines = appendStringList(lines, "types", stringList(root["types"]))
+	if root["category_reference"] != nil {
+		lines = append(lines, "category_reference:")
+		for _, entry := range inboxCategoryReference {
+			lines = append(lines, "- "+entry.Name+": "+entry.Description)
+		}
+	}
 	lines = appendInboxListSection(lines, "items", asSlice(root["items"]), asBool(root["full_id"]))
 	return strings.Join(lines, "\n")
 }
