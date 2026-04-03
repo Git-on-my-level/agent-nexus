@@ -752,7 +752,7 @@ func TestPatchSnapshotPreservesUnknownFieldsAndEmitsChangedFields(t *testing.T) 
 
 	_, err = workspace.DB().ExecContext(
 		context.Background(),
-		`INSERT INTO snapshots(id, kind, thread_id, updated_at, updated_by, body_json, provenance_json)
+		`INSERT INTO threads(id, kind, thread_id, updated_at, updated_by, body_json, provenance_json)
 		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		"snapshot-1",
 		"thread",
@@ -873,7 +873,7 @@ func TestPatchSnapshotOptimisticLockingIfUpdatedAt(t *testing.T) {
 	const initialUpdatedAt = "2026-03-04T00:00:00Z"
 	_, err = workspace.DB().ExecContext(
 		context.Background(),
-		`INSERT INTO snapshots(id, kind, thread_id, updated_at, updated_by, body_json, provenance_json)
+		`INSERT INTO threads(id, kind, thread_id, updated_at, updated_by, body_json, provenance_json)
 		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		"snapshot-lock-1",
 		"thread",
@@ -987,10 +987,10 @@ func TestCreateThreadStoresProvenanceOnlyInProvenanceJSON(t *testing.T) {
 	var provenanceJSON string
 	if err := workspace.DB().QueryRowContext(
 		context.Background(),
-		`SELECT body_json, provenance_json FROM snapshots WHERE id = ?`,
+		`SELECT body_json, provenance_json FROM threads WHERE id = ?`,
 		threadID,
 	).Scan(&bodyJSON, &provenanceJSON); err != nil {
-		t.Fatalf("query stored thread snapshot row: %v", err)
+		t.Fatalf("query stored thread row: %v", err)
 	}
 
 	body := map[string]any{}
@@ -1066,7 +1066,7 @@ func TestPatchThreadProvenanceRoundTripAndPreserveWhenOmitted(t *testing.T) {
 	var provenanceJSON string
 	if err := workspace.DB().QueryRowContext(
 		context.Background(),
-		`SELECT body_json, provenance_json FROM snapshots WHERE id = ?`,
+		`SELECT body_json, provenance_json FROM threads WHERE id = ?`,
 		threadID,
 	).Scan(&bodyJSON, &provenanceJSON); err != nil {
 		t.Fatalf("query snapshot after provenance patch: %v", err)

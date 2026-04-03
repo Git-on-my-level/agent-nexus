@@ -74,7 +74,7 @@ func TestWorkspaceListQueriesUseIndexedPlans(t *testing.T) {
 
 	threadQuery, threadArgs := buildListThreadsQuery(ThreadListFilter{Status: "active"})
 	threadPlan := explainQueryPlan(t, workspace.DB(), threadQuery, threadArgs...)
-	assertPlanUsesIndex(t, "threads", threadPlan, "idx_snapshots_kind_status_updated_at")
+	assertPlanUsesIndex(t, "threads", threadPlan, "idx_threads_status_updated_at")
 
 	commitmentQuery, commitmentArgs := buildListCommitmentsQuery(CommitmentListFilter{
 		ThreadID:  threadID,
@@ -83,7 +83,7 @@ func TestWorkspaceListQueriesUseIndexedPlans(t *testing.T) {
 		DueBefore: "2026-03-31T00:00:00Z",
 	})
 	commitmentPlan := explainQueryPlan(t, workspace.DB(), commitmentQuery, commitmentArgs...)
-	assertPlanUsesIndex(t, "commitments", commitmentPlan, "idx_snapshots_commitments_thread_status_due_updated_at")
+	assertPlanUsesIndex(t, "commitments", commitmentPlan, "idx_commitments_thread_status_due_updated_at")
 
 	artifactQuery, artifactArgs := buildListArtifactsQuery(ArtifactListFilter{
 		ThreadID: threadID,

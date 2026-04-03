@@ -111,7 +111,7 @@ func TestPostThreadsRejectsUnknownActorID(t *testing.T) {
 		t.Fatalf("unexpected error code: got %q", payload["error"]["code"])
 	}
 
-	assertTableCount(t, workspace.DB(), "snapshots", 0)
+	assertTableCount(t, workspace.DB(), "threads", 0)
 }
 
 func postJSON(t *testing.T, url string, body string, expectedStatus int) *http.Response {

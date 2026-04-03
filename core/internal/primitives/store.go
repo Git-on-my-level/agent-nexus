@@ -1529,7 +1529,15 @@ func (s *Store) GetSnapshot(ctx context.Context, id string) (map[string]any, err
 		return nil, fmt.Errorf("primitives store database is not initialized")
 	}
 
-	row, err := s.getSnapshotRow(ctx, id)
+	row, err := s.getSnapshotRow(ctx, id, "threads")
+	if err == nil {
+		return row.ToSnapshotMap()
+	}
+	if !errors.Is(err, ErrNotFound) {
+		return nil, err
+	}
+
+	row, err = s.getSnapshotRow(ctx, id, "commitments")
 	if err != nil {
 		return nil, err
 	}
@@ -1556,7 +1564,7 @@ func (s *Store) PatchSnapshot(ctx context.Context, actorID string, id string, pa
 	)
 	err := s.db.QueryRowContext(
 		ctx,
-		`SELECT id, kind, thread_id, provenance_json, body_json FROM snapshots WHERE id = ?`,
+		`SELECT id, kind, thread_id, provenance_json, body_json FROM threads WHERE id = ?`,
 		id,
 	).Scan(&snapshotID, &snapshotKind, &threadID, &provenanceJSON, &bodyJSON)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -1627,7 +1635,7 @@ func (s *Store) PatchSnapshot(ctx context.Context, actorID string, id string, pa
 	if ifUpdatedAt != nil {
 		updateResult, err = tx.ExecContext(
 			ctx,
-			`UPDATE snapshots
+			`UPDATE threads
 			 SET body_json = ?, provenance_json = ?, updated_at = ?, updated_by = ?,
 			     filter_status = ?, filter_priority = ?, filter_owner = ?, filter_due_at = ?,
 			     filter_cadence = ?, filter_cadence_preset = ?, filter_tags_json = ?
@@ -1649,7 +1657,7 @@ func (s *Store) PatchSnapshot(ctx context.Context, actorID string, id string, pa
 	} else {
 		updateResult, err = tx.ExecContext(
 			ctx,
-			`UPDATE snapshots
+			`UPDATE threads
 			 SET body_json = ?, provenance_json = ?, updated_at = ?, updated_by = ?,
 			     filter_status = ?, filter_priority = ?, filter_owner = ?, filter_due_at = ?,
 			     filter_cadence = ?, filter_cadence_preset = ?, filter_tags_json = ?
@@ -1774,7 +1782,7 @@ func (s *Store) CreateThread(ctx context.Context, actorID string, thread map[str
 
 	_, err = tx.ExecContext(
 		ctx,
-		`INSERT INTO snapshots(id, kind, thread_id, updated_at, updated_by, body_json, provenance_json, filter_status, filter_priority, filter_owner, filter_due_at, filter_cadence, filter_cadence_preset, filter_tags_json)
+		`INSERT INTO threads(id, kind, thread_id, updated_at, updated_by, body_json, provenance_json, filter_status, filter_priority, filter_owner, filter_due_at, filter_cadence, filter_cadence_preset, filter_tags_json)
 		 VALUES (?, 'thread', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		threadID,
 		threadID,
@@ -1842,7 +1850,7 @@ func (s *Store) CreateThread(ctx context.Context, actorID string, thread map[str
 }
 
 func (s *Store) GetThread(ctx context.Context, id string) (map[string]any, error) {
-	row, err := s.getSnapshotRow(ctx, id)
+	row, err := s.getSnapshotRow(ctx, id, "threads")
 	if err != nil {
 		return nil, err
 	}
@@ -1853,7 +1861,7 @@ func (s *Store) GetThread(ctx context.Context, id string) (map[string]any, error
 }
 
 func (s *Store) PatchThread(ctx context.Context, actorID string, id string, patch map[string]any, ifUpdatedAt *string) (PatchSnapshotResult, error) {
-	row, err := s.getSnapshotRow(ctx, id)
+	row, err := s.getSnapshotRow(ctx, id, "threads")
 	if err != nil {
 		return PatchSnapshotResult{}, err
 	}
@@ -1922,7 +1930,7 @@ func (s *Store) ArchiveThread(ctx context.Context, actorID, threadID string) (ma
 	if threadID == "" {
 		return nil, fmt.Errorf("thread_id is required")
 	}
-	row, err := s.getSnapshotRow(ctx, threadID)
+	row, err := s.getSnapshotRow(ctx, threadID, "threads")
 	if err != nil {
 		return nil, err
 	}
@@ -1937,12 +1945,12 @@ func (s *Store) ArchiveThread(ctx context.Context, actorID, threadID string) (ma
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if _, err := s.db.ExecContext(ctx,
-		`UPDATE snapshots SET archived_at = ?, archived_by = ? WHERE id = ?`,
+		`UPDATE threads SET archived_at = ?, archived_by = ? WHERE id = ?`,
 		now, actorID, threadID,
 	); err != nil {
 		return nil, fmt.Errorf("archive thread: %w", err)
 	}
-	row, err = s.getSnapshotRow(ctx, threadID)
+	row, err = s.getSnapshotRow(ctx, threadID, "threads")
 	if err != nil {
 		return nil, err
 	}
@@ -1961,7 +1969,7 @@ func (s *Store) UnarchiveThread(ctx context.Context, actorID, threadID string) (
 	if threadID == "" {
 		return nil, fmt.Errorf("thread_id is required")
 	}
-	row, err := s.getSnapshotRow(ctx, threadID)
+	row, err := s.getSnapshotRow(ctx, threadID, "threads")
 	if err != nil {
 		return nil, err
 	}
@@ -1972,12 +1980,12 @@ func (s *Store) UnarchiveThread(ctx context.Context, actorID, threadID string) (
 		return nil, ErrNotArchived
 	}
 	if _, err := s.db.ExecContext(ctx,
-		`UPDATE snapshots SET archived_at = NULL, archived_by = NULL WHERE id = ?`,
+		`UPDATE threads SET archived_at = NULL, archived_by = NULL WHERE id = ?`,
 		threadID,
 	); err != nil {
 		return nil, fmt.Errorf("unarchive thread: %w", err)
 	}
-	row, err = s.getSnapshotRow(ctx, threadID)
+	row, err = s.getSnapshotRow(ctx, threadID, "threads")
 	if err != nil {
 		return nil, err
 	}
@@ -1996,7 +2004,7 @@ func (s *Store) TombstoneThread(ctx context.Context, actorID, threadID, reason s
 	if threadID == "" {
 		return nil, fmt.Errorf("thread_id is required")
 	}
-	row, err := s.getSnapshotRow(ctx, threadID)
+	row, err := s.getSnapshotRow(ctx, threadID, "threads")
 	if err != nil {
 		return nil, err
 	}
@@ -2008,12 +2016,12 @@ func (s *Store) TombstoneThread(ctx context.Context, actorID, threadID, reason s
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if _, err := s.db.ExecContext(ctx,
-		`UPDATE snapshots SET tombstoned_at = ?, tombstoned_by = ?, tombstone_reason = ?, archived_at = NULL, archived_by = NULL WHERE id = ?`,
+		`UPDATE threads SET tombstoned_at = ?, tombstoned_by = ?, tombstone_reason = ?, archived_at = NULL, archived_by = NULL WHERE id = ?`,
 		now, actorID, strings.TrimSpace(reason), threadID,
 	); err != nil {
 		return nil, fmt.Errorf("tombstone thread: %w", err)
 	}
-	row, err = s.getSnapshotRow(ctx, threadID)
+	row, err = s.getSnapshotRow(ctx, threadID, "threads")
 	if err != nil {
 		return nil, err
 	}
@@ -2032,7 +2040,7 @@ func (s *Store) RestoreThread(ctx context.Context, actorID, threadID string) (ma
 	if threadID == "" {
 		return nil, fmt.Errorf("thread_id is required")
 	}
-	row, err := s.getSnapshotRow(ctx, threadID)
+	row, err := s.getSnapshotRow(ctx, threadID, "threads")
 	if err != nil {
 		return nil, err
 	}
@@ -2043,12 +2051,12 @@ func (s *Store) RestoreThread(ctx context.Context, actorID, threadID string) (ma
 		return nil, ErrNotTombstoned
 	}
 	if _, err := s.db.ExecContext(ctx,
-		`UPDATE snapshots SET tombstoned_at = NULL, tombstoned_by = NULL, tombstone_reason = NULL WHERE id = ?`,
+		`UPDATE threads SET tombstoned_at = NULL, tombstoned_by = NULL, tombstone_reason = NULL WHERE id = ?`,
 		threadID,
 	); err != nil {
 		return nil, fmt.Errorf("restore thread: %w", err)
 	}
-	row, err = s.getSnapshotRow(ctx, threadID)
+	row, err = s.getSnapshotRow(ctx, threadID, "threads")
 	if err != nil {
 		return nil, err
 	}
@@ -2072,12 +2080,12 @@ func (s *Store) PurgeThread(ctx context.Context, threadID string) error {
 
 	var foundID string
 	err = tx.QueryRowContext(ctx,
-		`SELECT id FROM snapshots WHERE id = ? AND kind = 'thread' AND tombstoned_at IS NOT NULL`,
+		`SELECT id FROM threads WHERE id = ? AND tombstoned_at IS NOT NULL`,
 		threadID,
 	).Scan(&foundID)
 	if errors.Is(err, sql.ErrNoRows) {
 		var one int
-		err2 := tx.QueryRowContext(ctx, `SELECT 1 FROM snapshots WHERE id = ? AND kind = 'thread'`, threadID).Scan(&one)
+		err2 := tx.QueryRowContext(ctx, `SELECT 1 FROM threads WHERE id = ?`, threadID).Scan(&one)
 		if errors.Is(err2, sql.ErrNoRows) {
 			return ErrNotFound
 		}
@@ -2099,11 +2107,11 @@ func (s *Store) PurgeThread(ctx context.Context, threadID string) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM derived_thread_dirty_queue WHERE thread_id = ?`, threadID); err != nil {
 		return fmt.Errorf("delete derived_thread_dirty_queue: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM snapshots WHERE id = ? AND kind = 'thread'`, threadID); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM threads WHERE id = ?`, threadID); err != nil {
 		return fmt.Errorf("delete thread snapshot: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM snapshots WHERE thread_id = ? AND kind = 'commitment'`, threadID); err != nil {
-		return fmt.Errorf("delete commitment snapshots: %w", err)
+	if _, err := tx.ExecContext(ctx, `DELETE FROM commitments WHERE thread_id = ?`, threadID); err != nil {
+		return fmt.Errorf("delete commitments: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -2568,7 +2576,7 @@ func (s *Store) CreateCommitment(ctx context.Context, actorID string, commitment
 		return PatchSnapshotResult{}, fmt.Errorf("commitment.thread_id is required")
 	}
 
-	threadRow, err := s.getSnapshotRow(ctx, threadID)
+	threadRow, err := s.getSnapshotRow(ctx, threadID, "threads")
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return PatchSnapshotResult{}, ErrNotFound
@@ -2610,7 +2618,7 @@ func (s *Store) CreateCommitment(ctx context.Context, actorID string, commitment
 
 	_, err = tx.ExecContext(
 		ctx,
-		`INSERT INTO snapshots(id, kind, thread_id, updated_at, updated_by, body_json, provenance_json, filter_status, filter_priority, filter_owner, filter_due_at, filter_cadence, filter_cadence_preset, filter_tags_json)
+		`INSERT INTO commitments(id, kind, thread_id, updated_at, updated_by, body_json, provenance_json, filter_status, filter_priority, filter_owner, filter_due_at, filter_cadence, filter_cadence_preset, filter_tags_json)
 		 VALUES (?, 'commitment', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		commitmentID,
 		threadID,
@@ -2678,7 +2686,7 @@ func (s *Store) CreateCommitment(ctx context.Context, actorID string, commitment
 }
 
 func (s *Store) GetCommitment(ctx context.Context, id string) (map[string]any, error) {
-	row, err := s.getSnapshotRow(ctx, id)
+	row, err := s.getSnapshotRow(ctx, id, "commitments")
 	if err != nil {
 		return nil, err
 	}
@@ -2699,7 +2707,7 @@ func (s *Store) PatchCommitment(ctx context.Context, actorID string, id string, 
 		return PatchSnapshotResult{}, fmt.Errorf("commitment patch is required")
 	}
 
-	row, err := s.getSnapshotRow(ctx, id)
+	row, err := s.getSnapshotRow(ctx, id, "commitments")
 	if err != nil {
 		return PatchSnapshotResult{}, err
 	}
@@ -2788,7 +2796,7 @@ func (s *Store) PatchCommitment(ctx context.Context, actorID string, id string, 
 	if ifUpdatedAt != nil {
 		updateResult, err = tx.ExecContext(
 			ctx,
-			`UPDATE snapshots
+			`UPDATE commitments
 			 SET body_json = ?, provenance_json = ?, updated_at = ?, updated_by = ?,
 			     filter_status = ?, filter_owner = ?, filter_due_at = ?
 			 WHERE id = ? AND updated_at = ?`,
@@ -2805,7 +2813,7 @@ func (s *Store) PatchCommitment(ctx context.Context, actorID string, id string, 
 	} else {
 		updateResult, err = tx.ExecContext(
 			ctx,
-			`UPDATE snapshots
+			`UPDATE commitments
 			 SET body_json = ?, provenance_json = ?, updated_at = ?, updated_by = ?,
 			     filter_status = ?, filter_owner = ?, filter_due_at = ?
 			 WHERE id = ?`,
@@ -2943,7 +2951,7 @@ func (s *Store) recomputeThreadOpenCommitments(ctx context.Context, actorID stri
 }
 
 func (s *Store) recomputeThreadOpenCommitmentsTx(ctx context.Context, tx *sql.Tx, actorID string, threadID string) error {
-	threadRow, err := getSnapshotRowFromQueryRower(ctx, tx, threadID)
+	threadRow, err := getSnapshotRowFromQueryRower(ctx, tx, threadID, "threads")
 	if err != nil {
 		return err
 	}
@@ -2968,8 +2976,8 @@ func (s *Store) recomputeThreadOpenCommitmentsTx(ctx context.Context, tx *sql.Tx
 	rows, err := tx.QueryContext(
 		ctx,
 		`SELECT id, body_json
-		 FROM snapshots
-		 WHERE kind = 'commitment' AND thread_id = ?
+		 FROM commitments
+		 WHERE thread_id = ?
 		 ORDER BY updated_at ASC, id ASC`,
 		threadID,
 	)
@@ -3016,7 +3024,7 @@ func (s *Store) recomputeThreadOpenCommitmentsTx(ctx context.Context, tx *sql.Tx
 
 	_, err = tx.ExecContext(
 		ctx,
-		`UPDATE snapshots SET body_json = ? WHERE id = ? AND kind = 'thread'`,
+		`UPDATE threads SET body_json = ? WHERE id = ?`,
 		string(bodyJSON),
 		threadID,
 	)
@@ -3052,19 +3060,19 @@ type snapshotFilterColumns struct {
 	TagsJSON      string
 }
 
-func (s *Store) getSnapshotRow(ctx context.Context, id string) (snapshotRow, error) {
+func (s *Store) getSnapshotRow(ctx context.Context, id string, tableName string) (snapshotRow, error) {
 	if s == nil || s.db == nil {
 		return snapshotRow{}, fmt.Errorf("primitives store database is not initialized")
 	}
 
-	return getSnapshotRowFromQueryRower(ctx, s.db, id)
+	return getSnapshotRowFromQueryRower(ctx, s.db, id, tableName)
 }
 
-func getSnapshotRowFromQueryRower(ctx context.Context, db queryRower, id string) (snapshotRow, error) {
+func getSnapshotRowFromQueryRower(ctx context.Context, db queryRower, id string, tableName string) (snapshotRow, error) {
 	row := snapshotRow{}
 	err := db.QueryRowContext(
 		ctx,
-		`SELECT id, kind, thread_id, updated_at, updated_by, body_json, provenance_json, archived_at, archived_by, tombstoned_at, tombstoned_by, tombstone_reason FROM snapshots WHERE id = ?`,
+		fmt.Sprintf(`SELECT id, kind, thread_id, updated_at, updated_by, body_json, provenance_json, archived_at, archived_by, tombstoned_at, tombstoned_by, tombstone_reason FROM %s WHERE id = ?`, tableName),
 		id,
 	).Scan(&row.ID, &row.Kind, &row.ThreadID, &row.UpdatedAt, &row.UpdatedBy, &row.BodyJSON, &row.ProvenanceJSON, &row.ArchivedAt, &row.ArchivedBy, &row.TombstonedAt, &row.TombstonedBy, &row.TombstoneReason)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -3301,26 +3309,41 @@ func buildThreadCadenceFilterClause(filters []string) (string, []any) {
 }
 
 func buildListThreadsQuery(filter ThreadListFilter) (string, []any) {
-	query := `SELECT snapshots.id, snapshots.kind, snapshots.thread_id, snapshots.updated_at, snapshots.updated_by, snapshots.body_json, snapshots.provenance_json, snapshots.archived_at, snapshots.archived_by, snapshots.tombstoned_at, snapshots.tombstoned_by, snapshots.tombstone_reason
-		 FROM snapshots
-		 WHERE snapshots.kind = 'thread'`
+	query := `SELECT threads.id, threads.kind, threads.thread_id, threads.updated_at, threads.updated_by, threads.body_json, threads.provenance_json, threads.archived_at, threads.archived_by, threads.tombstoned_at, threads.tombstoned_by, threads.tombstone_reason
+		 FROM threads`
 	args := make([]any, 0, 9)
 	if filter.TombstonedOnly {
-		query += ` AND snapshots.tombstoned_at IS NOT NULL`
+		query += ` WHERE threads.tombstoned_at IS NOT NULL`
 	} else if !filter.IncludeTombstoned {
-		query += ` AND snapshots.tombstoned_at IS NULL`
+		query += ` WHERE threads.tombstoned_at IS NULL`
 	}
 	if filter.ArchivedOnly {
-		query += ` AND snapshots.archived_at IS NOT NULL AND snapshots.tombstoned_at IS NULL`
+		if strings.Contains(query, "WHERE") {
+			query += ` AND threads.archived_at IS NOT NULL AND threads.tombstoned_at IS NULL`
+		} else {
+			query += ` WHERE threads.archived_at IS NOT NULL AND threads.tombstoned_at IS NULL`
+		}
 	} else if !filter.IncludeArchived {
-		query += ` AND snapshots.archived_at IS NULL`
+		if strings.Contains(query, "WHERE") {
+			query += ` AND threads.archived_at IS NULL`
+		} else {
+			query += ` WHERE threads.archived_at IS NULL`
+		}
 	}
 	if status := strings.TrimSpace(filter.Status); status != "" {
-		query += ` AND filter_status = ?`
+		if strings.Contains(query, "WHERE") {
+			query += ` AND filter_status = ?`
+		} else {
+			query += ` WHERE filter_status = ?`
+		}
 		args = append(args, status)
 	}
 	if priority := strings.TrimSpace(filter.Priority); priority != "" {
-		query += ` AND filter_priority = ?`
+		if strings.Contains(query, "WHERE") {
+			query += ` AND filter_priority = ?`
+		} else {
+			query += ` WHERE filter_priority = ?`
+		}
 		args = append(args, priority)
 	}
 	for _, tag := range combineThreadTagFilters(filter) {
@@ -3333,20 +3356,20 @@ func buildListThreadsQuery(filter ThreadListFilter) (string, []any) {
 	}
 	if q := strings.TrimSpace(filter.Query); q != "" {
 		searchPattern := "%" + strings.ToLower(q) + "%"
-		query += ` AND (LOWER(id) LIKE ? OR LOWER(json_extract(body_json, '$.title')) LIKE ?)`
+		query += ` AND (LOWER(threads.id) LIKE ? OR LOWER(json_extract(body_json, '$.title')) LIKE ?)`
 		args = append(args, searchPattern, searchPattern)
 	}
 	if filter.Stale != nil {
 		query = strings.Replace(
 			query,
-			"FROM snapshots",
-			"FROM snapshots LEFT JOIN derived_thread_views ON derived_thread_views.thread_id = snapshots.id",
+			"FROM threads",
+			"FROM threads LEFT JOIN derived_thread_views ON derived_thread_views.thread_id = threads.id",
 			1,
 		)
 		query += ` AND COALESCE(derived_thread_views.stale, 0) = ?`
 		args = append(args, boolToInt(*filter.Stale))
 	}
-	query += ` ORDER BY snapshots.updated_at DESC, snapshots.id ASC`
+	query += ` ORDER BY threads.updated_at DESC, threads.id ASC`
 	if filter.Limit != nil && *filter.Limit > 0 {
 		query += ` LIMIT ?`
 		args = append(args, *filter.Limit+1)
@@ -3362,27 +3385,49 @@ func buildListThreadsQuery(filter ThreadListFilter) (string, []any) {
 
 func buildListCommitmentsQuery(filter CommitmentListFilter) (string, []any) {
 	query := `SELECT id, kind, thread_id, updated_at, updated_by, body_json, provenance_json, archived_at, archived_by, tombstoned_at, tombstoned_by, tombstone_reason
-		 FROM snapshots
-		 WHERE kind = 'commitment'`
+		 FROM commitments`
 	args := make([]any, 0, 6)
+	hasWhere := false
+
 	if threadID := strings.TrimSpace(filter.ThreadID); threadID != "" {
-		query += ` AND thread_id = ?`
+		query += ` WHERE thread_id = ?`
+		hasWhere = true
 		args = append(args, threadID)
 	}
 	if owner := strings.TrimSpace(filter.Owner); owner != "" {
-		query += ` AND filter_owner = ?`
+		if hasWhere {
+			query += ` AND filter_owner = ?`
+		} else {
+			query += ` WHERE filter_owner = ?`
+			hasWhere = true
+		}
 		args = append(args, owner)
 	}
 	if status := strings.TrimSpace(filter.Status); status != "" {
-		query += ` AND filter_status = ?`
+		if hasWhere {
+			query += ` AND filter_status = ?`
+		} else {
+			query += ` WHERE filter_status = ?`
+			hasWhere = true
+		}
 		args = append(args, status)
 	}
 	if dueAfter := strings.TrimSpace(filter.DueAfter); dueAfter != "" {
-		query += ` AND filter_due_at >= ?`
+		if hasWhere {
+			query += ` AND filter_due_at >= ?`
+		} else {
+			query += ` WHERE filter_due_at >= ?`
+			hasWhere = true
+		}
 		args = append(args, dueAfter)
 	}
 	if dueBefore := strings.TrimSpace(filter.DueBefore); dueBefore != "" {
-		query += ` AND filter_due_at <= ?`
+		if hasWhere {
+			query += ` AND filter_due_at <= ?`
+		} else {
+			query += ` WHERE filter_due_at <= ?`
+			hasWhere = true
+		}
 		args = append(args, dueBefore)
 	}
 	query += ` ORDER BY updated_at DESC, id ASC`

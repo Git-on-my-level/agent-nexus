@@ -1111,7 +1111,7 @@ func TestGetSnapshotByID(t *testing.T) {
 	h := newPrimitivesTestServer(t)
 
 	_, err := h.workspace.DB().Exec(
-		`INSERT INTO snapshots(id, kind, thread_id, updated_at, updated_by, body_json, provenance_json)
+		`INSERT INTO threads(id, kind, thread_id, updated_at, updated_by, body_json, provenance_json)
 		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		"snapshot-1",
 		"thread",

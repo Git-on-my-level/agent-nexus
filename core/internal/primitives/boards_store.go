@@ -1912,7 +1912,7 @@ func touchBoardRow(ctx context.Context, tx *sql.Tx, board boardRow, actorID stri
 }
 
 func ensureThreadExists(ctx context.Context, rower queryRower, threadID string) error {
-	snapshot, err := getSnapshotRowFromQueryRower(ctx, rower, strings.TrimSpace(threadID))
+	snapshot, err := getSnapshotRowFromQueryRower(ctx, rower, strings.TrimSpace(threadID), "threads")
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return ErrNotFound
@@ -2144,7 +2144,7 @@ func resolveBoardPlacementAnchors(ctx context.Context, rower queryRower, boardID
 }
 
 func loadThreadTitleForBoardCard(ctx context.Context, rower queryRower, threadID string) (string, error) {
-	snapshot, err := getSnapshotRowFromQueryRower(ctx, rower, strings.TrimSpace(threadID))
+	snapshot, err := getSnapshotRowFromQueryRower(ctx, rower, strings.TrimSpace(threadID), "threads")
 	if err != nil {
 		return "", err
 	}
