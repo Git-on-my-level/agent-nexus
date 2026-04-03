@@ -36,6 +36,38 @@ function parseTimestamp(value) {
   return Number.isNaN(parsed) ? null : parsed;
 }
 
+function registrationHeartbeat(registration) {
+  return {
+    bridgeInstanceId: String(registration?.bridge_instance_id ?? "").trim(),
+    checkedInAt: parseTimestamp(registration?.bridge_checked_in_at),
+    expiresAt: parseTimestamp(registration?.bridge_expires_at),
+  };
+}
+
+function hasFreshRegistrationHeartbeat(registration) {
+  const heartbeat = registrationHeartbeat(registration);
+  return Boolean(
+    heartbeat.bridgeInstanceId &&
+    heartbeat.checkedInAt &&
+    heartbeat.expiresAt &&
+    heartbeat.expiresAt >= Date.now(),
+  );
+}
+
+function onlineWakeRouting(handle, summary) {
+  return {
+    applicable: true,
+    handle,
+    taggable: true,
+    online: true,
+    offline: false,
+    state: "online",
+    badgeLabel: "Online",
+    badgeClass: "bg-emerald-500/10 text-emerald-400",
+    summary,
+  };
+}
+
 function stableJsonValue(value) {
   if (Array.isArray(value)) {
     return value.map((item) => stableJsonValue(item));
@@ -358,6 +390,7 @@ export async function describeWakeRouting(
     taggable: true,
     offline: true,
   };
+  const freshRegistrationHeartbeat = hasFreshRegistrationHeartbeat(content);
 
   const bridgeProofKey = String(
     content.bridge_signing_public_key_spki_b64 ?? "",
@@ -372,6 +405,9 @@ export async function describeWakeRouting(
 
   const checkinEventId = String(content.bridge_checkin_event_id ?? "").trim();
   if (!checkinEventId) {
+    if (freshRegistrationHeartbeat) {
+      return onlineWakeRouting(handle, `Online as @${handle}.`);
+    }
     return {
       ...offline,
       summary:
@@ -390,6 +426,9 @@ export async function describeWakeRouting(
     };
   }
   if (checkinLookup.state === "missing") {
+    if (freshRegistrationHeartbeat) {
+      return onlineWakeRouting(handle, `Online as @${handle}.`);
+    }
     return {
       ...offline,
       summary: `Offline. Missing bridge check-in event ${checkinEventId}.`,
@@ -492,28 +531,11 @@ export async function describeWakeRouting(
   }
 
   if (!bindingTarget) {
-    return {
-      applicable: true,
+    return onlineWakeRouting(
       handle,
-      taggable: true,
-      online: true,
-      offline: false,
-      state: "online",
-      badgeLabel: "Online",
-      badgeClass: "bg-emerald-500/10 text-emerald-400",
-      summary: `Online for bound workspace ${checkinWorkspaceId}, but this page has no durable workspace ID to confirm the current workspace match.`,
-    };
+      `Online for bound workspace ${checkinWorkspaceId}, but this page has no durable workspace ID to confirm the current workspace match.`,
+    );
   }
 
-  return {
-    applicable: true,
-    handle,
-    taggable: true,
-    online: true,
-    offline: false,
-    state: "online",
-    badgeLabel: "Online",
-    badgeClass: "bg-emerald-500/10 text-emerald-400",
-    summary: `Online as @${handle}.`,
-  };
+  return onlineWakeRouting(handle, `Online as @${handle}.`);
 }

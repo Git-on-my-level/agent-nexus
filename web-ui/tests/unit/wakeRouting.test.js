@@ -220,6 +220,38 @@ describe("wakeRouting", () => {
     });
   });
 
+  it("treats a fresh principal registration heartbeat as online when no check-in event id is present", async () => {
+    const { publicKeyB64 } = bridgeProofKey;
+    const result = await describeWakeRouting(
+      {
+        ...principal,
+        registration: {
+          handle: "m4-hermes",
+          actor_id: "actor-ops-ai",
+          status: "active",
+          bridge_signing_public_key_spki_b64: publicKeyB64,
+          bridge_instance_id: "bridge-hermes-1",
+          bridge_checked_in_at: "2099-03-01T10:00:00Z",
+          bridge_expires_at: "2099-03-01T10:05:00Z",
+          workspace_bindings: [{ workspace_id: "ws-123", enabled: true }],
+        },
+      },
+      null,
+      "ws-123",
+      null,
+    );
+
+    expect(result).toMatchObject({
+      applicable: true,
+      taggable: true,
+      online: true,
+      offline: false,
+      state: "online",
+      badgeLabel: "Online",
+      summary: "Online as @m4-hermes.",
+    });
+  });
+
   it("keeps registered agents taggable but offline until the bridge checks in", async () => {
     const { publicKeyB64 } = bridgeProofKey;
     const result = await describeWakeRouting(
@@ -247,6 +279,39 @@ describe("wakeRouting", () => {
       badgeLabel: "Offline",
       summary:
         "Offline. The agent is registered for this workspace, but no fresh bridge check-in is available yet.",
+    });
+  });
+
+  it("keeps agents online when the check-in event lookup is missing but the principal heartbeat is still fresh", async () => {
+    const { publicKeyB64 } = bridgeProofKey;
+    const result = await describeWakeRouting(
+      {
+        ...principal,
+        registration: {
+          handle: "m4-hermes",
+          actor_id: "actor-ops-ai",
+          status: "active",
+          bridge_signing_public_key_spki_b64: publicKeyB64,
+          bridge_checkin_event_id: "event-bridge-checkin-1",
+          bridge_instance_id: "bridge-hermes-1",
+          bridge_checked_in_at: "2099-03-01T10:00:00Z",
+          bridge_expires_at: "2099-03-01T10:05:00Z",
+          workspace_bindings: [{ workspace_id: "ws-123", enabled: true }],
+        },
+      },
+      null,
+      "ws-123",
+      { state: "missing" },
+    );
+
+    expect(result).toMatchObject({
+      applicable: true,
+      taggable: true,
+      online: true,
+      offline: false,
+      state: "online",
+      badgeLabel: "Online",
+      summary: "Online as @m4-hermes.",
     });
   });
 
