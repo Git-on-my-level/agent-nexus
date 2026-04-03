@@ -338,8 +338,8 @@ func TestDraftCreateHelpWithCommandShowsTargetSchema(t *testing.T) {
 	if !strings.Contains(output, "Target command: events.create") {
 		t.Fatalf("expected target command help output=%s", output)
 	}
-	if !strings.Contains(output, "Body schema:") {
-		t.Fatalf("expected body schema in draft create help output=%s", output)
+	if !strings.Contains(output, "Inputs:") {
+		t.Fatalf("expected input block in draft create help output=%s", output)
 	}
 	if !strings.Contains(output, "work_order_claimed") {
 		t.Fatalf("expected enum values in draft create help output=%s", output)

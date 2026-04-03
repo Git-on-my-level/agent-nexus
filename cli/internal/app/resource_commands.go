@@ -3267,17 +3267,13 @@ func (a *App) runInboxList(ctx context.Context, args []string, cfg config.Resolv
 	if err != nil {
 		return nil, err
 	}
-	if len(threadIDs) == 0 && len(typeFilters) == 0 && !(fullIDFlag.set && fullIDFlag.value) {
-		return result, nil
-	}
-
 	data := asMap(result.Data)
 	body := asMap(data["body"])
 	if body == nil {
 		return result, nil
 	}
-
 	filteredBody := cloneMap(body)
+	enrichInboxListBody(filteredBody, cfg)
 	filteredItems := filteredInboxItems(asSlice(body["items"]), threadIDs, typeFilters)
 	filteredBody["items"] = filteredItems
 	filteredBody["returned_items"] = len(filteredItems)
@@ -3305,6 +3301,44 @@ func (a *App) runInboxList(ctx context.Context, args []string, cfg config.Resolv
 		cfg.Headers,
 	)
 	return result, nil
+}
+
+func enrichInboxListBody(body map[string]any, cfg config.Resolved) bool {
+	if body == nil {
+		return false
+	}
+	changed := false
+	viewing := viewingAsData(cfg)
+	if len(viewing) > 0 {
+		body["viewing_as"] = viewing
+		changed = true
+	}
+	body["category_reference"] = inboxCategoryReferenceMap()
+	items := asSlice(body["items"])
+	for _, raw := range items {
+		item := asMap(raw)
+		if item == nil {
+			continue
+		}
+		category := firstNonEmpty(
+			strings.TrimSpace(anyString(item["category"])),
+			strings.TrimSpace(anyString(item["type"])),
+			strings.TrimSpace(anyString(item["kind"])),
+		)
+		if category == "" {
+			continue
+		}
+		description := inboxCategoryDescription(category)
+		if description == "" {
+			continue
+		}
+		if strings.TrimSpace(anyString(item["category_description"])) == description {
+			continue
+		}
+		item["category_description"] = description
+		changed = true
+	}
+	return changed
 }
 
 func (a *App) runInboxGet(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {

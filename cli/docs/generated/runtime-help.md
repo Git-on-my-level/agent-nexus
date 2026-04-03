@@ -5,6 +5,7 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 ## Topics
 
 - `onboarding` (manual): Offline quick-start mental model and first command flow.
+- `concepts` (manual): Quick guide to the core OAR primitives and when to use each.
 - `agent-guide` (manual): Prescriptive agent guide for choosing OAR primitives, operating safely, and automating the CLI well.
 - `agent-bridge` (manual): Install, configure, and operate the preferred `oar-agent-bridge` wake-routing runtime on a fresh machine.
 - `wake-routing` (manual): How `@handle` wake routing works, including self-registration, verification, and troubleshooting.
@@ -175,6 +176,68 @@ Next step
 
   oar meta doc agent-guide
   oar meta doc wake-routing
+```
+
+## `concepts`
+
+Quick guide to the core OAR primitives and when to use each.
+
+```text
+OAR concepts guide
+
+Use this command when you need to decide which primitive fits the task before you start issuing writes.
+
+Selection rules:
+- Use events for immutable facts.
+- Use threads for durable work state and coordination.
+- Use docs for narrative knowledge that should be revised over time.
+- Use boards for cross-object workflow views, not source-of-truth content.
+- Use inbox for current attention signals from the active CLI identity's perspective.
+- Use draft when you want a local review checkpoint before a write.
+
+threads
+- Use when: You need a durable work object with ownership, status, cadence, summary, and follow-up over time.
+- Not for: Append-only facts or long-form narrative documents.
+- Examples: initiatives, incidents, cases, deliverables
+- Read next: oar threads list ; oar threads get ; oar threads review
+
+events
+- Use when: You need immutable facts, observations, decisions, or updates in an auditable sequence.
+- Not for: Replacing the current durable state of a work object.
+- Examples: decision_needed, decision_made, message_posted, exception_raised
+- Read next: oar events list ; oar events explain ; oar threads timeline
+
+docs
+- Use when: You need long-lived narrative knowledge that should be revised, read, and referenced as a document.
+- Not for: Ephemeral chat-like updates or board membership.
+- Examples: plans, notes, decision records, runbooks
+- Read next: oar docs list ; oar docs get ; oar docs content
+
+boards
+- Use when: You need a coordination view across multiple work items with explicit workflow columns and ordering.
+- Not for: Being the source of truth for the work itself.
+- Examples: triage board, release board, initiative tracking board
+- Read next: oar boards list ; oar boards workspace ; oar boards cards list
+
+inbox
+- Use when: You need the derived queue of what currently needs attention from the active actor's perspective.
+- Not for: Durable automation contracts or historical truth.
+- Examples: pending decisions, exceptions, commitment risk
+- Read next: oar inbox list ; oar inbox get ; oar inbox ack
+
+draft
+- Use when: You want to stage a mutation locally, inspect it, then apply it explicitly.
+- Not for: Read paths or append-only event authoring.
+- Examples: reviewable thread patches, reviewable doc updates
+- Read next: oar draft create ; oar draft list ; oar draft commit
+
+Inbox categories:
+- `decision_needed`: A human must choose among multiple viable paths.
+- `intervention_needed`: The next step is clear, but a human must act because the agent cannot execute it.
+- `exception`: Investigate an exception, risk, or broken expectation on the thread.
+- `commitment_risk`: A commitment is at risk or overdue and needs follow-up.
+
+For the fuller operating model, read `oar meta doc agent-guide`.
 ```
 
 ## `agent-guide`
@@ -1435,9 +1498,9 @@ Generated Help: actors register
 - Examples:
   - Register actor: `oar actors register --id bot-1 --display-name "Bot 1" --created-at 2026-03-04T10:00:00Z --json`
 
-Body schema:
-  Required: actor (object)
-  Optional: none
+Inputs:
+  Required:
+  - body `actor` (object)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1467,9 +1530,13 @@ Generated Help: auth register
   - Bootstrap first agent: `oar auth register --username agent.one --bootstrap-token <token> --json`
   - Register invited agent: `oar auth register --username agent.two --invite-token <token> --json`
 
-Body schema:
-  Required: public_key (string), username (string)
-  Optional: bootstrap_token (string), invite_token (string)
+Inputs:
+  Required:
+  - body `public_key` (string)
+  - body `username` (string)
+  Optional:
+  - body `bootstrap_token` (string)
+  - body `invite_token` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1526,9 +1593,11 @@ Generated Help: auth invites create
 - Examples:
   - Create agent invite: `oar auth invites create --kind agent --json`
 
-Body schema:
-  Required: kind (string)
-  Optional: expires_at (datetime)
+Inputs:
+  Required:
+  - body `kind` (string)
+  Optional:
+  - body `expires_at` (datetime)
   Enum values: kind: agent, any, human
 
 Global flags:
@@ -1558,6 +1627,9 @@ Generated Help: auth invites revoke
 - Examples:
   - Revoke invite: `oar auth invites revoke --invite-id invite_123 --json`
 
+Inputs:
+  Required:
+  - path `invite_id`
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1643,6 +1715,9 @@ Generated Help: threads get
 - Examples:
   - Read thread: `oar threads get --thread-id thread_123 --json`
 
+Inputs:
+  Required:
+  - path `thread_id`
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1671,9 +1746,24 @@ Generated Help: threads create
 - Examples:
   - Create thread: `oar threads create --from-file thread.json --json`
 
-Body schema:
-  Required: thread.cadence (string), thread.current_summary (string), thread.key_artifacts (list<typed_ref>), thread.next_actions (list<string>), thread.priority (string), thread.provenance.sources (list<string>), thread.status (string), thread.tags (list<string>), thread.title (string), thread.type (string)
-  Optional: actor_id (string), request_key (string), thread.next_check_in_at (datetime), thread.provenance.by_field (map<string, list<string>>), thread.provenance.notes (string)
+Inputs:
+  Required:
+  - body `thread.cadence` (string)
+  - body `thread.current_summary` (string)
+  - body `thread.key_artifacts` (list<typed_ref>)
+  - body `thread.next_actions` (list<string>)
+  - body `thread.priority` (string)
+  - body `thread.provenance.sources` (list<string>)
+  - body `thread.status` (string)
+  - body `thread.tags` (list<string>)
+  - body `thread.title` (string)
+  - body `thread.type` (string)
+  Optional:
+  - body `actor_id` (string)
+  - body `request_key` (string)
+  - body `thread.next_check_in_at` (datetime)
+  - body `thread.provenance.by_field` (map<string, list<string>>)
+  - body `thread.provenance.notes` (string)
   Enum values: thread.priority (strict): p0, p1, p2, p3; thread.status (strict): active, closed, paused; thread.type (strict): case, incident, initiative, other, process, relationship
 
 Global flags:
@@ -1703,9 +1793,25 @@ Generated Help: threads patch
 - Examples:
   - Patch thread: `oar threads patch --thread-id thread_123 --from-file patch.json --json`
 
-Body schema:
-  Required: none
-  Optional: actor_id (string), if_updated_at (datetime), patch.cadence (string), patch.current_summary (string), patch.key_artifacts (list<typed_ref>), patch.next_actions (list<string>), patch.next_check_in_at (datetime), patch.priority (string), patch.provenance.by_field (map<string, list<string>>), patch.provenance.notes (string), patch.provenance.sources (list<string>), patch.status (string), patch.tags (list<string>), patch.title (string), patch.type (string)
+Inputs:
+  Required:
+  - path `thread_id`
+  Optional:
+  - body `actor_id` (string)
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
+  - body `patch.cadence` (string)
+  - body `patch.current_summary` (string)
+  - body `patch.key_artifacts` (list<typed_ref>)
+  - body `patch.next_actions` (list<string>)
+  - body `patch.next_check_in_at` (datetime)
+  - body `patch.priority` (string)
+  - body `patch.provenance.by_field` (map<string, list<string>>)
+  - body `patch.provenance.notes` (string)
+  - body `patch.provenance.sources` (list<string>)
+  - body `patch.status` (string)
+  - body `patch.tags` (list<string>)
+  - body `patch.title` (string)
+  - body `patch.type` (string)
   Enum values: patch.priority (strict): p0, p1, p2, p3; patch.status (strict): active, closed, paused; patch.type (strict): case, incident, initiative, other, process, relationship
 
 Global flags:
@@ -1735,12 +1841,15 @@ Generated Help: threads timeline
 - Examples:
   - Timeline: `oar threads timeline --thread-id thread_123 --json`
 
+Inputs:
+  Required:
+  - path `thread_id`
 
 Local CLI flags:
   --include-archived        Include archived events in the timeline.
   --archived-only           Show only archived events.
   --include-tombstoned      Include tombstoned events in the timeline.
-  --tombstoned-only         Show only tombstoned events.
+  --tombstoned-only         Show only tombstoned events in the timeline.
 
 Note: by default, archived and tombstoned events are excluded from the timeline output.
 
@@ -1772,6 +1881,9 @@ Generated Help: threads context
   - Context with defaults: `oar threads context --thread-id thread_123 --json`
   - Context with artifact previews: `oar threads context --thread-id thread_123 --include-artifact-content --max-events 50 --json`
 
+Inputs:
+  Required:
+  - path `thread_id`
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1800,9 +1912,12 @@ Generated Help: threads archive
 - Examples:
   - Archive thread: `oar threads archive --thread-id thread_123 --json`
 
-Body schema:
-  Required: actor_id (string)
-  Optional: reason (string)
+Inputs:
+  Required:
+  - path `thread_id`
+  - body `actor_id` (string)
+  Optional:
+  - body `reason` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1831,9 +1946,12 @@ Generated Help: threads unarchive
 - Examples:
   - Unarchive thread: `oar threads unarchive --thread-id thread_123 --json`
 
-Body schema:
-  Required: actor_id (string)
-  Optional: reason (string)
+Inputs:
+  Required:
+  - path `thread_id`
+  - body `actor_id` (string)
+  Optional:
+  - body `reason` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1862,9 +1980,12 @@ Generated Help: threads tombstone
 - Examples:
   - Tombstone thread: `oar threads tombstone --thread-id thread_123 --reason "merged into parent" --json`
 
-Body schema:
-  Required: actor_id (string)
-  Optional: reason (string)
+Inputs:
+  Required:
+  - path `thread_id`
+  - body `actor_id` (string)
+  Optional:
+  - body `reason` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1893,9 +2014,12 @@ Generated Help: threads restore
 - Examples:
   - Restore thread: `oar threads restore --thread-id thread_123 --json`
 
-Body schema:
-  Required: actor_id (string)
-  Optional: reason (string)
+Inputs:
+  Required:
+  - path `thread_id`
+  - body `actor_id` (string)
+  Optional:
+  - body `reason` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1924,9 +2048,12 @@ Generated Help: threads purge
 - Examples:
   - Purge thread: `oar threads purge --thread-id thread_123 --json`
 
-Body schema:
-  Required: none
-  Optional: actor_id (string), reason (string)
+Inputs:
+  Required:
+  - path `thread_id`
+  Optional:
+  - body `actor_id` (string)
+  - body `reason` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1983,6 +2110,9 @@ Generated Help: commitments get
 - Examples:
   - Get commitment: `oar commitments get --commitment-id commitment_123 --json`
 
+Inputs:
+  Required:
+  - path `commitment_id`
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2011,9 +2141,21 @@ Generated Help: commitments create
 - Examples:
   - Create commitment: `oar commitments create --from-file commitment.json --json`
 
-Body schema:
-  Required: commitment.definition_of_done (list<string>), commitment.due_at (datetime), commitment.links (list<typed_ref>), commitment.owner (string), commitment.provenance.sources (list<string>), commitment.status (string), commitment.thread_id (string), commitment.title (string)
-  Optional: actor_id (string), commitment.provenance.by_field (map<string, list<string>>), commitment.provenance.notes (string), request_key (string)
+Inputs:
+  Required:
+  - body `commitment.definition_of_done` (list<string>)
+  - body `commitment.due_at` (datetime)
+  - body `commitment.links` (list<typed_ref>)
+  - body `commitment.owner` (string)
+  - body `commitment.provenance.sources` (list<string>)
+  - body `commitment.status` (string)
+  - body `commitment.thread_id` (string)
+  - body `commitment.title` (string)
+  Optional:
+  - body `actor_id` (string)
+  - body `commitment.provenance.by_field` (map<string, list<string>>)
+  - body `commitment.provenance.notes` (string)
+  - body `request_key` (string)
   Enum values: commitment.status (strict): blocked, canceled, done, open
 
 Global flags:
@@ -2043,9 +2185,22 @@ Generated Help: commitments patch
 - Examples:
   - Mark commitment done: `oar commitments patch --commitment-id commitment_123 --from-file commitment-patch.json --json`
 
-Body schema:
-  Required: none
-  Optional: actor_id (string), if_updated_at (datetime), patch.definition_of_done (list<string>), patch.due_at (datetime), patch.links (list<typed_ref>), patch.owner (string), patch.provenance.by_field (map<string, list<string>>), patch.provenance.notes (string), patch.provenance.sources (list<string>), patch.status (string), patch.title (string), refs (list<string>)
+Inputs:
+  Required:
+  - path `commitment_id`
+  Optional:
+  - body `actor_id` (string)
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
+  - body `patch.definition_of_done` (list<string>)
+  - body `patch.due_at` (datetime)
+  - body `patch.links` (list<typed_ref>)
+  - body `patch.owner` (string)
+  - body `patch.provenance.by_field` (map<string, list<string>>)
+  - body `patch.provenance.notes` (string)
+  - body `patch.provenance.sources` (list<string>)
+  - body `patch.status` (string)
+  - body `patch.title` (string)
+  - body `refs` (list<string>)
   Enum values: patch.status (strict): blocked, canceled, done, open
 
 Global flags:
@@ -2103,6 +2258,9 @@ Generated Help: artifacts get
 - Examples:
   - Get artifact: `oar artifacts get --artifact-id artifact_123 --json`
 
+Inputs:
+  Required:
+  - path `artifact_id`
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2131,9 +2289,13 @@ Generated Help: artifacts create
 - Examples:
   - Create structured artifact: `oar artifacts create --from-file artifact-create.json --json`
 
-Body schema:
-  Required: artifact (object), content (object|string), content_type (string)
-  Optional: actor_id (string)
+Inputs:
+  Required:
+  - body `artifact` (object)
+  - body `content` (object|string)
+  - body `content_type` (string)
+  Optional:
+  - body `actor_id` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2162,6 +2324,9 @@ Generated Help: artifacts content
 - Examples:
   - Download content: `oar artifacts content get --artifact-id artifact_123 > artifact.bin`
 
+Inputs:
+  Required:
+  - path `artifact_id`
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2190,9 +2355,12 @@ Generated Help: artifacts archive
 - Examples:
   - Archive artifact: `oar artifacts archive --artifact-id artifact_123 --json`
 
-Body schema:
-  Required: actor_id (string)
-  Optional: reason (string)
+Inputs:
+  Required:
+  - path `artifact_id`
+  - body `actor_id` (string)
+  Optional:
+  - body `reason` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2221,9 +2389,12 @@ Generated Help: artifacts unarchive
 - Examples:
   - Unarchive artifact: `oar artifacts unarchive --artifact-id artifact_123 --json`
 
-Body schema:
-  Required: actor_id (string)
-  Optional: reason (string)
+Inputs:
+  Required:
+  - path `artifact_id`
+  - body `actor_id` (string)
+  Optional:
+  - body `reason` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2252,9 +2423,12 @@ Generated Help: artifacts tombstone
 - Examples:
   - Tombstone artifact: `oar artifacts tombstone --artifact-id artifact_123 --reason "superseded by newer version" --json`
 
-Body schema:
-  Required: actor_id (string)
-  Optional: reason (string)
+Inputs:
+  Required:
+  - path `artifact_id`
+  - body `actor_id` (string)
+  Optional:
+  - body `reason` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2283,9 +2457,12 @@ Generated Help: artifacts restore
 - Examples:
   - Restore artifact: `oar artifacts restore --artifact-id artifact_123 --json`
 
-Body schema:
-  Required: actor_id (string)
-  Optional: reason (string)
+Inputs:
+  Required:
+  - path `artifact_id`
+  - body `actor_id` (string)
+  Optional:
+  - body `reason` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2314,9 +2491,12 @@ Generated Help: artifacts purge
 - Examples:
   - Purge artifact: `oar artifacts purge --artifact-id artifact_123 --json`
 
-Body schema:
-  Required: none
-  Optional: actor_id (string), reason (string)
+Inputs:
+  Required:
+  - path `artifact_id`
+  Optional:
+  - body `actor_id` (string)
+  - body `reason` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2376,9 +2556,20 @@ Generated Help: boards create
 - Examples:
   - Create board: `oar boards create --from-file board-create.json --json`
 
-Body schema:
-  Required: board.primary_thread_id (string), board.title (string)
-  Optional: actor_id (string), board.column_schema (list<any>), board.id (string), board.labels (list<string>), board.owners (list<string>), board.pinned_refs (list<string>), board.primary_document_id (string), board.status (string), request_key (string)
+Inputs:
+  Required:
+  - body `board.primary_thread_id` (string)
+  - body `board.title` (string)
+  Optional:
+  - body `actor_id` (string)
+  - body `board.column_schema` (list<any>)
+  - body `board.id` (string)
+  - body `board.labels` (list<string>)
+  - body `board.owners` (list<string>)
+  - body `board.pinned_refs` (list<string>)
+  - body `board.primary_document_id` (string)
+  - body `board.status` (string)
+  - body `request_key` (string)
   Enum values: board.status: active, closed, paused
 
 Global flags:
@@ -2408,6 +2599,9 @@ Generated Help: boards get
 - Examples:
   - Get board: `oar boards get --board-id board_product_launch --json`
 
+Inputs:
+  Required:
+  - path `board_id`
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2436,9 +2630,19 @@ Generated Help: boards update
 - Examples:
   - Update board metadata: `oar boards update --board-id board_product_launch --from-file board-update.json --json`
 
-Body schema:
-  Required: if_updated_at (datetime)
-  Optional: actor_id (string), patch.column_schema (list<any>), patch.labels (list<string>), patch.owners (list<string>), patch.pinned_refs (list<string>), patch.primary_document_id (any|string), patch.status (string), patch.title (string)
+Inputs:
+  Required:
+  - path `board_id`
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
+  Optional:
+  - body `actor_id` (string)
+  - body `patch.column_schema` (list<any>)
+  - body `patch.labels` (list<string>)
+  - body `patch.owners` (list<string>)
+  - body `patch.pinned_refs` (list<string>)
+  - body `patch.primary_document_id` (any|string)
+  - body `patch.status` (string)
+  - body `patch.title` (string)
   Enum values: patch.status: active, closed, paused
 
 Global flags:
@@ -2468,9 +2672,12 @@ Generated Help: boards archive
 - Examples:
   - Archive board: `oar boards archive --board-id board_product_launch --json`
 
-Body schema:
-  Required: actor_id (string)
-  Optional: reason (string)
+Inputs:
+  Required:
+  - path `board_id`
+  - body `actor_id` (string)
+  Optional:
+  - body `reason` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2499,9 +2706,12 @@ Generated Help: boards unarchive
 - Examples:
   - Unarchive board: `oar boards unarchive --board-id board_product_launch --json`
 
-Body schema:
-  Required: actor_id (string)
-  Optional: reason (string)
+Inputs:
+  Required:
+  - path `board_id`
+  - body `actor_id` (string)
+  Optional:
+  - body `reason` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2530,9 +2740,12 @@ Generated Help: boards tombstone
 - Examples:
   - Tombstone board: `oar boards tombstone --board-id board_product_launch --reason "initiative closed" --json`
 
-Body schema:
-  Required: actor_id (string)
-  Optional: reason (string)
+Inputs:
+  Required:
+  - path `board_id`
+  - body `actor_id` (string)
+  Optional:
+  - body `reason` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2561,9 +2774,12 @@ Generated Help: boards restore
 - Examples:
   - Restore board: `oar boards restore --board-id board_product_launch --json`
 
-Body schema:
-  Required: actor_id (string)
-  Optional: reason (string)
+Inputs:
+  Required:
+  - path `board_id`
+  - body `actor_id` (string)
+  Optional:
+  - body `reason` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2592,9 +2808,12 @@ Generated Help: boards purge
 - Examples:
   - Purge board: `oar boards purge --board-id board_product_launch --json`
 
-Body schema:
-  Required: none
-  Optional: actor_id (string), reason (string)
+Inputs:
+  Required:
+  - path `board_id`
+  Optional:
+  - body `actor_id` (string)
+  - body `reason` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2645,9 +2864,18 @@ Generated Help: boards cards add
 - Examples:
   - Add card to backlog: `oar boards cards add --board-id board_product_launch --from-file board-card-add.json --json`
 
-Body schema:
-  Required: thread_id (string)
-  Optional: actor_id (string), after_thread_id (string), before_thread_id (string), column_key (string), if_board_updated_at (datetime), pinned_document_id (string), request_key (string)
+Inputs:
+  Required:
+  - path `board_id`
+  - body `thread_id` (string)
+  Optional:
+  - body `actor_id` (string)
+  - body `after_thread_id` (string)
+  - body `before_thread_id` (string)
+  - body `column_key` (string)
+  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `oar boards get --board-id <board-id>`, `oar boards workspace --board-id <board-id>`, or the latest board mutation response.
+  - body `pinned_document_id` (string)
+  - body `request_key` (string)
   Enum values: column_key: backlog, blocked, done, in_progress, ready, review
 
 Global flags:
@@ -2677,9 +2905,14 @@ Generated Help: boards cards update
 - Examples:
   - Update pinned document: `oar boards cards update --board-id board_product_launch --thread-id thread_123 --from-file board-card-update.json --json`
 
-Body schema:
-  Required: if_board_updated_at (datetime)
-  Optional: actor_id (string), patch.pinned_document_id (any|string)
+Inputs:
+  Required:
+  - path `board_id`
+  - path `thread_id`
+  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `oar boards get --board-id <board-id>`, `oar boards workspace --board-id <board-id>`, or the latest board mutation response.
+  Optional:
+  - body `actor_id` (string)
+  - body `patch.pinned_document_id` (any|string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2708,9 +2941,16 @@ Generated Help: boards cards move
 - Examples:
   - Move card into review: `oar boards cards move --board-id board_product_launch --thread-id thread_123 --from-file board-card-move.json --json`
 
-Body schema:
-  Required: column_key (string), if_board_updated_at (datetime)
-  Optional: actor_id (string), after_thread_id (string), before_thread_id (string)
+Inputs:
+  Required:
+  - path `board_id`
+  - path `thread_id`
+  - body `column_key` (string)
+  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `oar boards get --board-id <board-id>`, `oar boards workspace --board-id <board-id>`, or the latest board mutation response.
+  Optional:
+  - body `actor_id` (string)
+  - body `after_thread_id` (string)
+  - body `before_thread_id` (string)
   Enum values: column_key: backlog, blocked, done, in_progress, ready, review
 
 Global flags:
@@ -2740,9 +2980,13 @@ Generated Help: boards cards remove
 - Examples:
   - Remove board card: `oar boards cards remove --board-id board_product_launch --thread-id thread_123 --from-file board-card-remove.json --json`
 
-Body schema:
-  Required: if_board_updated_at (datetime)
-  Optional: actor_id (string)
+Inputs:
+  Required:
+  - path `board_id`
+  - path `thread_id`
+  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `oar boards get --board-id <board-id>`, `oar boards workspace --board-id <board-id>`, or the latest board mutation response.
+  Optional:
+  - body `actor_id` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2801,9 +3045,15 @@ Generated Help: docs create
 - Examples:
   - Create document: `oar docs create --from-file doc-create.json --json`
 
-Body schema:
-  Required: content (object|string), content_type (string), document (object)
-  Optional: actor_id (string), refs (list<string>), request_key (string)
+Inputs:
+  Required:
+  - body `content` (object|string)
+  - body `content_type` (string)
+  - body `document` (object)
+  Optional:
+  - body `actor_id` (string)
+  - body `refs` (list<string>)
+  - body `request_key` (string)
   Enum values: content_type: binary, structured, text
 
 Global flags:
@@ -2833,6 +3083,9 @@ Generated Help: docs get
 - Examples:
   - Get document head: `oar docs get --document-id product-constitution --json`
 
+Inputs:
+  Required:
+  - path `document_id`
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2861,9 +3114,16 @@ Generated Help: docs update
 - Examples:
   - Update document: `oar docs update --document-id product-constitution --from-file doc-update.json --json`
 
-Body schema:
-  Required: content (object|string), content_type (string), if_base_revision (string)
-  Optional: actor_id (string), document (object), refs (list<string>)
+Inputs:
+  Required:
+  - path `document_id`
+  - body `content` (object|string)
+  - body `content_type` (string)
+  - body `if_base_revision` (string): Optimistic concurrency token. Copy the current head revision id from `oar docs get --document-id <document-id>` before updating.
+  Optional:
+  - body `actor_id` (string)
+  - body `document` (object)
+  - body `refs` (list<string>)
   Enum values: content_type: binary, structured, text
 
 Global flags:
@@ -2893,6 +3153,9 @@ Generated Help: docs history
 - Examples:
   - List document history: `oar docs history --document-id product-constitution --json`
 
+Inputs:
+  Required:
+  - path `document_id`
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2939,9 +3202,12 @@ Generated Help: docs tombstone
 - Examples:
   - Tombstone document: `oar docs tombstone --document-id product-constitution --reason "replaced by v2" --json`
 
-Body schema:
-  Required: actor_id (string)
-  Optional: reason (string)
+Inputs:
+  Required:
+  - path `document_id`
+  - body `actor_id` (string)
+  Optional:
+  - body `reason` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2970,9 +3236,12 @@ Generated Help: docs archive
 - Examples:
   - Archive document: `oar docs archive --document-id product-constitution --json`
 
-Body schema:
-  Required: actor_id (string)
-  Optional: reason (string)
+Inputs:
+  Required:
+  - path `document_id`
+  - body `actor_id` (string)
+  Optional:
+  - body `reason` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3001,9 +3270,12 @@ Generated Help: docs unarchive
 - Examples:
   - Unarchive document: `oar docs unarchive --document-id product-constitution --json`
 
-Body schema:
-  Required: actor_id (string)
-  Optional: reason (string)
+Inputs:
+  Required:
+  - path `document_id`
+  - body `actor_id` (string)
+  Optional:
+  - body `reason` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3032,9 +3304,12 @@ Generated Help: docs restore
 - Examples:
   - Restore document: `oar docs restore --document-id product-constitution --json`
 
-Body schema:
-  Required: actor_id (string)
-  Optional: reason (string)
+Inputs:
+  Required:
+  - path `document_id`
+  - body `actor_id` (string)
+  Optional:
+  - body `reason` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3063,9 +3338,11 @@ Generated Help: docs purge
 - Examples:
   - Purge document: `oar docs purge --document-id product-constitution --json`
 
-Body schema:
-  Required: none
-  Optional: reason (string)
+Inputs:
+  Required:
+  - path `document_id`
+  Optional:
+  - body `reason` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3094,6 +3371,10 @@ Generated Help: docs revision get
 - Examples:
   - Get revision: `oar docs revision get --document-id product-constitution --revision-id 019f... --json`
 
+Inputs:
+  Required:
+  - path `document_id`
+  - path `revision_id`
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3122,6 +3403,9 @@ Generated Help: events get
 - Examples:
   - Get event: `oar events get --event-id event_123 --json`
 
+Inputs:
+  Required:
+  - path `event_id`
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3150,9 +3434,20 @@ Generated Help: events create
 - Examples:
   - Append event: `oar events create --from-file event.json --json`
 
-Body schema:
-  Required: event.provenance.sources (list<string>), event.refs (list<typed_ref>), event.summary (string), event.type (string)
-  Optional: actor_id (string), event.actor_id (string), event.payload (object), event.provenance.by_field (map<string, list<string>>), event.provenance.notes (string), event.thread_id (string), request_key (string)
+Inputs:
+  Required:
+  - body `event.provenance.sources` (list<string>)
+  - body `event.refs` (list<typed_ref>)
+  - body `event.summary` (string)
+  - body `event.type` (string)
+  Optional:
+  - body `actor_id` (string)
+  - body `event.actor_id` (string)
+  - body `event.payload` (object)
+  - body `event.provenance.by_field` (map<string, list<string>>)
+  - body `event.provenance.notes` (string)
+  - body `event.thread_id` (string)
+  - body `request_key` (string)
   Enum values: event.type (open): agent_notification_dismissed, agent_notification_read, board_card_added, board_card_moved, board_card_removed, board_card_updated, board_created, board_updated, commitment_created, commitment_status_changed, decision_made, decision_needed, document_created, document_tombstoned, document_updated, exception_raised, inbox_item_acknowledged, intervention_needed, message_posted, receipt_added, review_completed, snapshot_updated, work_order_claimed, work_order_created
 
 Common authoring types:
@@ -3268,9 +3563,12 @@ Generated Help: events archive
 - Examples:
   - Archive event: `oar events archive --event-id evt_123 --json`
 
-Body schema:
-  Required: actor_id (string)
-  Optional: reason (string)
+Inputs:
+  Required:
+  - path `event_id`
+  - body `actor_id` (string)
+  Optional:
+  - body `reason` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3299,9 +3597,12 @@ Generated Help: events unarchive
 - Examples:
   - Unarchive event: `oar events unarchive --event-id evt_123 --json`
 
-Body schema:
-  Required: actor_id (string)
-  Optional: reason (string)
+Inputs:
+  Required:
+  - path `event_id`
+  - body `actor_id` (string)
+  Optional:
+  - body `reason` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3330,9 +3631,12 @@ Generated Help: events tombstone
 - Examples:
   - Tombstone event: `oar events tombstone --event-id evt_123 --reason "spam" --json`
 
-Body schema:
-  Required: actor_id (string)
-  Optional: reason (string)
+Inputs:
+  Required:
+  - path `event_id`
+  - body `actor_id` (string)
+  Optional:
+  - body `reason` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3361,9 +3665,12 @@ Generated Help: events restore
 - Examples:
   - Restore event: `oar events restore --event-id evt_123 --json`
 
-Body schema:
-  Required: actor_id (string)
-  Optional: reason (string)
+Inputs:
+  Required:
+  - path `event_id`
+  - body `actor_id` (string)
+  Optional:
+  - body `reason` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3391,6 +3698,17 @@ Generated Help: inbox list
 - Examples:
   - List inbox: `oar inbox list --json`
 
+
+View scoping:
+  - `inbox list` is read from the active CLI identity's perspective.
+  - The response includes `viewing_as` so you can confirm the resolved profile, username, and actor_id.
+  - Switch perspective with `--agent <profile>` or `OAR_AGENT` before reading or acting.
+
+Inbox categories:
+  - `decision_needed`: A human must choose among multiple viable paths.
+  - `intervention_needed`: The next step is clear, but a human must act because the agent cannot execute it.
+  - `exception`: Investigate an exception, risk, or broken expectation on the thread.
+  - `commitment_risk`: A commitment is at risk or overdue and needs follow-up.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3420,6 +3738,9 @@ Generated Help: inbox get
   - Get inbox item by canonical id: `oar inbox get --id inbox:decision_needed:thread_123:none:event_123 --json`
   - Get inbox item by alias: `oar inbox get --id ibx_abcd1234ef56 --json`
 
+Inputs:
+  Required:
+  - path `inbox_item_id`: Canonical inbox id, alias, or unique prefix from `oar inbox list`.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3449,9 +3770,12 @@ Generated Help: inbox ack
   - Ack inbox item: `oar inbox ack --thread-id thread_123 --inbox-item-id inbox:item-1 --json`
   - Ack inbox item by id: `oar inbox ack inbox:decision_needed:thread_123:none:event_1 --json`
 
-Body schema:
-  Required: inbox_item_id (string), thread_id (string)
-  Optional: actor_id (string)
+Inputs:
+  Required:
+  - body `inbox_item_id` (string)
+  - body `thread_id` (string)
+  Optional:
+  - body `actor_id` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3537,9 +3861,9 @@ Generated Help: derived rebuild
 - Examples:
   - Rebuild derived: `oar derived rebuild --actor-id system --json`
 
-Body schema:
-  Required: none
-  Optional: actor_id (string)
+Inputs:
+  Optional:
+  - body `actor_id` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3596,6 +3920,9 @@ Generated Help: meta command
 - Examples:
   - Read command metadata: `oar meta command --command-id threads.list --json`
 
+Inputs:
+  Required:
+  - path `command_id`
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3652,6 +3979,9 @@ Generated Help: meta concept
 - Examples:
   - Read one concept: `oar meta concept --concept-name compatibility --json`
 
+Inputs:
+  Required:
+  - path `concept_name`
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3680,9 +4010,19 @@ Generated Help: work-orders create
 - Examples:
   - Create work order: `oar work-orders create --from-file work-order.json --json`
 
-Body schema:
-  Required: artifact (object), packet.acceptance_criteria (list<string>), packet.constraints (list<string>), packet.context_refs (list<typed_ref>), packet.definition_of_done (list<string>), packet.objective (string), packet.thread_id (string), packet.work_order_id (string)
-  Optional: actor_id (string), request_key (string)
+Inputs:
+  Required:
+  - body `artifact` (object)
+  - body `packet.acceptance_criteria` (list<string>)
+  - body `packet.constraints` (list<string>)
+  - body `packet.context_refs` (list<typed_ref>)
+  - body `packet.definition_of_done` (list<string>)
+  - body `packet.objective` (string)
+  - body `packet.thread_id` (string)
+  - body `packet.work_order_id` (string)
+  Optional:
+  - body `actor_id` (string)
+  - body `request_key` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3711,9 +4051,19 @@ Generated Help: receipts create
 - Examples:
   - Create receipt: `oar receipts create --from-file receipt.json --json`
 
-Body schema:
-  Required: artifact (object), packet.changes_summary (string), packet.known_gaps (list<string>), packet.outputs (list<typed_ref>), packet.receipt_id (string), packet.thread_id (string), packet.verification_evidence (list<typed_ref>), packet.work_order_id (string)
-  Optional: actor_id (string), request_key (string)
+Inputs:
+  Required:
+  - body `artifact` (object)
+  - body `packet.changes_summary` (string)
+  - body `packet.known_gaps` (list<string>)
+  - body `packet.outputs` (list<typed_ref>)
+  - body `packet.receipt_id` (string)
+  - body `packet.thread_id` (string)
+  - body `packet.verification_evidence` (list<typed_ref>)
+  - body `packet.work_order_id` (string)
+  Optional:
+  - body `actor_id` (string)
+  - body `request_key` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3742,9 +4092,18 @@ Generated Help: reviews create
 - Examples:
   - Create review: `oar reviews create --from-file review.json --json`
 
-Body schema:
-  Required: artifact (object), packet.evidence_refs (list<typed_ref>), packet.notes (string), packet.outcome (string), packet.receipt_id (string), packet.review_id (string), packet.work_order_id (string)
-  Optional: actor_id (string), request_key (string)
+Inputs:
+  Required:
+  - body `artifact` (object)
+  - body `packet.evidence_refs` (list<typed_ref>)
+  - body `packet.notes` (string)
+  - body `packet.outcome` (string)
+  - body `packet.receipt_id` (string)
+  - body `packet.review_id` (string)
+  - body `packet.work_order_id` (string)
+  Optional:
+  - body `actor_id` (string)
+  - body `request_key` (string)
   Enum values: packet.outcome (strict): accept, escalate, revise
 
 Global flags:

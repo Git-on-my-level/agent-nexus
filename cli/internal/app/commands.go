@@ -67,6 +67,26 @@ func (a *App) runCommand(ctx context.Context, args []string, cfg config.Resolved
 	case "provenance":
 		result, name, err := a.runProvenanceCommand(ctx, args[1:], cfg)
 		return name, result, err
+	case "concepts":
+		if len(args) > 1 {
+			return "concepts", nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar concepts`")
+		}
+		text := conceptsGuideText()
+		return "concepts", &commandResult{Text: text, Data: conceptsGuideData()}, nil
+	case "primitives":
+		if len(args) == 1 || isHelpToken(args[1]) {
+			text := conceptsGuideText()
+			return "primitives guide", &commandResult{Text: text, Data: conceptsGuideData()}, nil
+		}
+		if len(args) == 2 && strings.TrimSpace(args[1]) == "guide" {
+			text := conceptsGuideText()
+			return "primitives guide", &commandResult{Text: text, Data: conceptsGuideData()}, nil
+		}
+		topic := strings.TrimSpace(args[0])
+		if len(args) > 1 {
+			topic = strings.TrimSpace(args[0] + " " + args[1])
+		}
+		return "primitives", nil, errnorm.Usage("unknown_command", fmt.Sprintf("unknown command %q", topic))
 	case "actors", "threads", "commitments", "artifacts", "boards", "docs", "events", "inbox", "work-orders", "receipts", "reviews", "derived":
 		result, name, err := a.runTypedResource(ctx, args[0], args[1:], cfg)
 		return name, result, err
