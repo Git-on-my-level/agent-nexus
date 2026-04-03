@@ -1006,6 +1006,10 @@ func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifie
 		_ = tx.Rollback()
 		return BoardCardMutationResult{}, err
 	}
+	if err := ensureBoardUpdatedAtMatches(boardRow, input.IfBoardUpdatedAt); err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, err
+	}
 
 	nextTitle := cardRow.Title
 	if input.Title != nil {
@@ -1190,7 +1194,12 @@ func (s *Store) MoveBoardCard(ctx context.Context, actorID, boardID, identifier 
 		_ = tx.Rollback()
 		return BoardCardMutationResult{}, err
 	}
-	cardRow, err := s.loadBoardCardByIdentifier(ctx, tx, boardID, identifier, true)
+	var cardRow boardCardRow
+	if strings.TrimSpace(boardID) != "" {
+		cardRow, err = s.loadBoardCardByIdentifier(ctx, tx, boardID, identifier, true)
+	} else {
+		cardRow, err = s.loadBoardCardByGlobalID(ctx, tx, identifier, true)
+	}
 	if err != nil {
 		_ = tx.Rollback()
 		return BoardCardMutationResult{}, err
@@ -1280,7 +1289,12 @@ func (s *Store) ArchiveBoardCard(ctx context.Context, actorID, boardID, identifi
 		return BoardCardMutationResult{}, fmt.Errorf("begin board card archive transaction: %w", err)
 	}
 
-	cardRow, err := s.loadBoardCardByIdentifier(ctx, tx, boardID, identifier, true)
+	var cardRow boardCardRow
+	if strings.TrimSpace(boardID) != "" {
+		cardRow, err = s.loadBoardCardByIdentifier(ctx, tx, boardID, identifier, true)
+	} else {
+		cardRow, err = s.loadBoardCardByGlobalID(ctx, tx, identifier, true)
+	}
 	if err != nil {
 		_ = tx.Rollback()
 		return BoardCardMutationResult{}, err

@@ -657,15 +657,19 @@ func handleUpdateBoardCard(w http.ResponseWriter, r *http.Request, opts handlerO
 		writeError(w, http.StatusBadRequest, "invalid_request", "patch is required")
 		return
 	}
-	if req.IfBoardUpdatedAt != nil {
-		if _, ok := normalizeRequiredTimestamp(w, req.IfBoardUpdatedAt, "if_board_updated_at"); !ok {
-			return
-		}
+	if req.IfBoardUpdatedAt == nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "if_board_updated_at is required")
+		return
+	}
+	ifBoardUpdatedAt, ok := normalizeRequiredTimestamp(w, req.IfBoardUpdatedAt, "if_board_updated_at")
+	if !ok {
+		return
 	}
 	patchInput, changedFields, ok := parseBoardCardPatchInput(w, req.Patch)
 	if !ok {
 		return
 	}
+	patchInput.IfBoardUpdatedAt = &ifBoardUpdatedAt
 
 	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
 	if !ok {
