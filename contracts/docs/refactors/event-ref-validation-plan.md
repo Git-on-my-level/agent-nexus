@@ -16,7 +16,7 @@ Goal: one canonical rule source in contract data, consumed consistently by core,
 |---|---|---|
 | `contracts/oar-schema.yaml` | Declares `reference_conventions.event_refs` and open `event_type` enum policy. | Canonical source exists, but part of conditional logic is prose (`refs_conditional`) not machine-structured. |
 | `core/internal/schema/schema.go` | `rawEventRefConventions` is a hardcoded struct with one field per event type; `Load()` manually copies each known event key into `contract.EventRefRules`. | Every new event rule requires code edits in core schema loader, creating avoidable key drift. |
-| `core/internal/server/event_reference_validation.go` | Applies shared required checks, but has hardcoded conditional branch for `commitment_status_changed` statuses (`done`, `canceled`). | Conditional rules are duplicated in code instead of being data-driven. |
+| `core/internal/server/event_reference_validation.go` | Applies shared required checks, but still carries hardcoded conditional branches for status-transition events (`done`, `canceled`). | Conditional rules are duplicated in code instead of being data-driven. |
 | `web-ui/src/lib/commitmentUtils.js` | `validateCommitmentStatusTransition(...)` hardcodes the same `done/canceled` reference constraints and user-facing messages. | UI can drift from core when conditional rule semantics change. |
 | `web-ui/src/routes/events/+server.js` (mock mode) | Hand-checks only one rule (`decision_made` requires `thread_id`). | Mock event validation only partially mirrors core conventions. |
 | `cli/internal/app/resource_commands.go` | No local event-reference rule map; `events create` forwards payloads to core. | No duplication today, but no shared rule consumption either; adding CLI-side hints/validation later risks ad hoc maps unless a shared source is added now. |
@@ -38,7 +38,7 @@ Planned schema shape addition (illustrative):
   - `any_ref_prefixes` and/or `all_ref_prefixes`,
   - optional `error_code` for stable cross-surface messaging keys.
 
-This removes hardcoded `commitment_status_changed` conditions from core/web-ui code.
+This removes hardcoded status-transition conditions from core/web-ui code.
 
 ### 2) Generate normalized event-ref metadata from schema
 
@@ -58,7 +58,7 @@ with normalized, machine-oriented data:
 
 - Core:
   - Stop hand-wiring event rule keys in `schema.Load()` by switching to map-based decoding for `event_refs`.
-  - Update event validator to evaluate conditionals from rule data (remove hardcoded `commitment_status_changed` branch).
+  - Update event validator to evaluate conditionals from rule data (remove hardcoded status-transition branch).
 - CLI:
   - Add a lightweight preflight validator for `events create` that consumes generated rules via `cli/internal/registry` embedded JSON.
   - Keep core as authority; CLI preflight is best-effort and preserves open-enum pass-through.
