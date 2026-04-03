@@ -4,7 +4,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.2.3`
-- Concepts: `46`
+- Concepts: `47`
 
 ## `append-only`
 
@@ -58,13 +58,14 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `boards`
 
-- Commands: `16`
+- Commands: `17`
 - Command IDs:
   - `boards.archive`
-  - `boards.cards.add`
+  - `boards.cards.archive`
+  - `boards.cards.create`
+  - `boards.cards.get`
   - `boards.cards.list`
   - `boards.cards.move`
-  - `boards.cards.remove`
   - `boards.cards.update`
   - `boards.create`
   - `boards.get`
@@ -107,9 +108,9 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - Commands: `7`
 - Command IDs:
-  - `boards.cards.add`
+  - `boards.cards.archive`
+  - `boards.cards.create`
   - `boards.cards.move`
-  - `boards.cards.remove`
   - `boards.cards.update`
   - `boards.create`
   - `boards.update`
@@ -133,9 +134,8 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `docs`
 
-- Commands: `15`
+- Commands: `14`
 - Command IDs:
-  - `boards.cards.update`
   - `boards.workspace`
   - `docs.archive`
   - `docs.create`
@@ -198,6 +198,14 @@ Generated from `contracts/oar-openapi.yaml`.
   - `meta.livez`
   - `meta.ops.health`
   - `meta.readyz`
+
+## `history`
+
+- Commands: `3`
+- Command IDs:
+  - `boards.cards.archive`
+  - `boards.cards.get`
+  - `boards.cards.update`
 
 ## `identity`
 
@@ -311,7 +319,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - Commands: `3`
 - Command IDs:
-  - `boards.cards.add`
+  - `boards.cards.create`
   - `boards.cards.list`
   - `boards.cards.move`
 
@@ -341,12 +349,13 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `planning`
 
-- Commands: `10`
+- Commands: `11`
 - Command IDs:
-  - `boards.cards.add`
+  - `boards.cards.archive`
+  - `boards.cards.create`
+  - `boards.cards.get`
   - `boards.cards.list`
   - `boards.cards.move`
-  - `boards.cards.remove`
   - `boards.cards.update`
   - `boards.create`
   - `boards.get`

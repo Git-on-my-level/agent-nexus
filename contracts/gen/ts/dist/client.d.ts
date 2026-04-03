@@ -73,10 +73,11 @@ export declare class OarClient {
     authPrincipalsRevoke(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     authToken(options?: RequestOptions): Promise<InvokeResult>;
     boardsArchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
-    boardsCardsAdd(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    boardsCardsArchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    boardsCardsCreate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    boardsCardsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     boardsCardsList(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     boardsCardsMove(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
-    boardsCardsRemove(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     boardsCardsUpdate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     boardsCreate(options?: RequestOptions): Promise<InvokeResult>;
     boardsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;

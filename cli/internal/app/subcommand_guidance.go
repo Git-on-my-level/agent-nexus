@@ -160,7 +160,7 @@ var artifactsSubcommandSpec = subcommandSpec{
 var boardsSubcommandSpec = subcommandSpec{
 	command:  "boards",
 	valid:    []string{"list", "create", "get", "update", "workspace", "archive", "unarchive", "tombstone", "restore", "purge", "cards"},
-	examples: []string{"oar boards list --status active", "oar boards workspace --board-id <board-id>", "oar boards cards move --board-id <board-id> --thread-id <thread-id> --column review --if-board-updated-at <timestamp>"},
+	examples: []string{"oar boards list --status active", "oar boards workspace --board-id <board-id>", "oar boards cards create --board-id <board-id> --title \"Buy groceries\" --column backlog"},
 	aliases: map[string]string{
 		"ls":   "list",
 		"show": "get",
@@ -169,10 +169,13 @@ var boardsSubcommandSpec = subcommandSpec{
 
 var boardsCardsSubcommandSpec = subcommandSpec{
 	command:  "boards cards",
-	valid:    []string{"list", "add", "update", "move", "remove"},
-	examples: []string{"oar boards cards list --board-id <board-id>", "oar boards cards add --board-id <board-id> --thread-id <thread-id>", "oar boards cards move --board-id <board-id> --thread-id <thread-id> --column review --if-board-updated-at <timestamp>"},
+	valid:    []string{"list", "create", "get", "update", "move", "archive"},
+	examples: []string{"oar boards cards list --board-id <board-id>", "oar boards cards create --board-id <board-id> --title \"Buy groceries\" --column backlog", "oar boards cards update --card-id <card-id> --status done"},
 	aliases: map[string]string{
-		"ls": "list",
+		"ls":     "list",
+		"add":    "create",
+		"remove": "archive",
+		"show":   "get",
 	},
 }
 

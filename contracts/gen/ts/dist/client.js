@@ -1694,10 +1694,11 @@ export const commandRegistry = [
             "board_id"
         ],
         "adjacent_commands": [
-            "boards.cards.add",
+            "boards.cards.archive",
+            "boards.cards.create",
+            "boards.cards.get",
             "boards.cards.list",
             "boards.cards.move",
-            "boards.cards.remove",
             "boards.cards.update",
             "boards.create",
             "boards.get",
@@ -1713,19 +1714,90 @@ export const commandRegistry = [
         "ts_method": "boardsArchive"
     },
     {
-        "command_id": "boards.cards.add",
-        "cli_path": "boards cards add",
+        "command_id": "boards.cards.archive",
+        "cli_path": "boards cards archive",
         "group": "boards",
         "method": "POST",
-        "path": "/boards/{board_id}/cards",
-        "operation_id": "addBoardCard",
-        "summary": "Add existing thread to board as a card",
-        "why": "Create explicit board membership for an existing thread with canonical column placement and server-owned rank.",
+        "path": "/cards/{card_id}/archive",
+        "operation_id": "archiveBoardCard",
+        "summary": "Archive a board card artifact",
+        "why": "Archive a board card artifact while preserving its version history and board provenance.",
         "input_mode": "json-body",
         "streaming": {
             "mode": "none"
         },
-        "output_envelope": "Returns `{ board, card }` after membership creation and board concurrency-token advancement.",
+        "output_envelope": "Returns `{ board, card }` after the card is archived.",
+        "error_codes": [
+            "invalid_json",
+            "invalid_request",
+            "unknown_actor_id",
+            "conflict",
+            "not_found"
+        ],
+        "concepts": [
+            "boards",
+            "planning",
+            "history",
+            "concurrency"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Archive is the v2 replacement for legacy remove semantics. Historical thread-backed cards remain resolvable through old events.",
+        "examples": [
+            {
+                "title": "Archive card",
+                "command": "oar boards cards archive --card-id card_123 --json"
+            }
+        ],
+        "body_schema": {
+            "optional": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                },
+                {
+                    "name": "if_board_updated_at",
+                    "type": "datetime"
+                }
+            ]
+        },
+        "path_params": [
+            "card_id"
+        ],
+        "adjacent_commands": [
+            "boards.archive",
+            "boards.cards.create",
+            "boards.cards.get",
+            "boards.cards.list",
+            "boards.cards.move",
+            "boards.cards.update",
+            "boards.create",
+            "boards.get",
+            "boards.list",
+            "boards.purge",
+            "boards.restore",
+            "boards.tombstone",
+            "boards.unarchive",
+            "boards.update",
+            "boards.workspace"
+        ],
+        "go_method": "BoardsCardsArchive",
+        "ts_method": "boardsCardsArchive"
+    },
+    {
+        "command_id": "boards.cards.create",
+        "cli_path": "boards cards create",
+        "group": "boards",
+        "method": "POST",
+        "path": "/boards/{board_id}/cards",
+        "operation_id": "createBoardCard",
+        "summary": "Create a versioned board card artifact",
+        "why": "Create a first-class board card artifact, optionally linked to a parent thread, with canonical placement and server-owned rank.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ board, card }` after card creation and board concurrency-token advancement.",
         "error_codes": [
             "invalid_json",
             "invalid_request",
@@ -1741,23 +1813,21 @@ export const commandRegistry = [
         ],
         "stability": "beta",
         "surface": "canonical",
-        "agent_notes": "Replay-safe when `request_key` is reused with the same body. The board primary thread cannot be added as a card.",
+        "agent_notes": "Replay-safe when `request_key` is reused with the same body. Cards may be standalone tasks or wrap an existing thread via `parent_thread`.",
         "examples": [
             {
-                "title": "Add card to backlog",
-                "command": "oar boards cards add --board-id board_product_launch --from-file board-card-add.json --json"
+                "title": "Create standalone board card",
+                "command": "oar boards cards create --board-id board_product_launch --title \"Buy groceries\" --column backlog --json"
             }
         ],
         "body_schema": {
-            "required": [
-                {
-                    "name": "thread_id",
-                    "type": "string"
-                }
-            ],
             "optional": [
                 {
                     "name": "actor_id",
+                    "type": "string"
+                },
+                {
+                    "name": "after_card_id",
                     "type": "string"
                 },
                 {
@@ -1765,7 +1835,23 @@ export const commandRegistry = [
                     "type": "string"
                 },
                 {
+                    "name": "assignee",
+                    "type": "any|string"
+                },
+                {
+                    "name": "before_card_id",
+                    "type": "string"
+                },
+                {
                     "name": "before_thread_id",
+                    "type": "string"
+                },
+                {
+                    "name": "body",
+                    "type": "string"
+                },
+                {
+                    "name": "card_id",
                     "type": "string"
                 },
                 {
@@ -1785,11 +1871,37 @@ export const commandRegistry = [
                     "type": "datetime"
                 },
                 {
+                    "name": "parent_thread",
+                    "type": "any|string"
+                },
+                {
                     "name": "pinned_document_id",
-                    "type": "string"
+                    "type": "any|string"
+                },
+                {
+                    "name": "priority",
+                    "type": "any|string"
                 },
                 {
                     "name": "request_key",
+                    "type": "string"
+                },
+                {
+                    "name": "status",
+                    "type": "string",
+                    "enum_values": [
+                        "cancelled",
+                        "done",
+                        "in_progress",
+                        "todo"
+                    ]
+                },
+                {
+                    "name": "thread_id",
+                    "type": "string"
+                },
+                {
+                    "name": "title",
                     "type": "string"
                 }
             ]
@@ -1799,9 +1911,10 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "boards.archive",
+            "boards.cards.archive",
+            "boards.cards.get",
             "boards.cards.list",
             "boards.cards.move",
-            "boards.cards.remove",
             "boards.cards.update",
             "boards.create",
             "boards.get",
@@ -1813,8 +1926,64 @@ export const commandRegistry = [
             "boards.update",
             "boards.workspace"
         ],
-        "go_method": "BoardsCardsAdd",
-        "ts_method": "boardsCardsAdd"
+        "go_method": "BoardsCardsCreate",
+        "ts_method": "boardsCardsCreate"
+    },
+    {
+        "command_id": "boards.cards.get",
+        "cli_path": "boards cards get",
+        "group": "boards",
+        "method": "GET",
+        "path": "/boards/{board_id}/cards/{id}",
+        "operation_id": "getBoardCard",
+        "summary": "Get board card by board-scoped identifier",
+        "why": "Read the current board card artifact plus version history.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ card }` with embedded version history.",
+        "error_codes": [
+            "invalid_request",
+            "not_found"
+        ],
+        "concepts": [
+            "boards",
+            "planning",
+            "history"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "The identifier accepts `card_id` and legacy thread-backed cards can still be resolved through their parent thread id.",
+        "examples": [
+            {
+                "title": "Get board card",
+                "command": "oar boards cards get --board-id board_product_launch --card-id card_123 --json"
+            }
+        ],
+        "path_params": [
+            "board_id",
+            "id"
+        ],
+        "adjacent_commands": [
+            "boards.archive",
+            "boards.cards.archive",
+            "boards.cards.create",
+            "boards.cards.list",
+            "boards.cards.move",
+            "boards.cards.update",
+            "boards.create",
+            "boards.get",
+            "boards.list",
+            "boards.purge",
+            "boards.restore",
+            "boards.tombstone",
+            "boards.unarchive",
+            "boards.update",
+            "boards.workspace"
+        ],
+        "go_method": "BoardsCardsGet",
+        "ts_method": "boardsCardsGet"
     },
     {
         "command_id": "boards.cards.list",
@@ -1853,9 +2022,10 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "boards.archive",
-            "boards.cards.add",
+            "boards.cards.archive",
+            "boards.cards.create",
+            "boards.cards.get",
             "boards.cards.move",
-            "boards.cards.remove",
             "boards.cards.update",
             "boards.create",
             "boards.get",
@@ -1875,7 +2045,7 @@ export const commandRegistry = [
         "cli_path": "boards cards move",
         "group": "boards",
         "method": "POST",
-        "path": "/boards/{board_id}/cards/{thread_id}/move",
+        "path": "/boards/{board_id}/cards/{id}/move",
         "operation_id": "moveBoardCard",
         "summary": "Move board card across columns or ranks",
         "why": "Request relative placement for a card while keeping rank tokens opaque and server-owned.",
@@ -1903,7 +2073,7 @@ export const commandRegistry = [
         "examples": [
             {
                 "title": "Move card into review",
-                "command": "oar boards cards move --board-id board_product_launch --thread-id thread_123 --from-file board-card-move.json --json"
+                "command": "oar boards cards move --board-id board_product_launch --card-id card_123 --column review --json"
             }
         ],
         "body_schema": {
@@ -1931,7 +2101,15 @@ export const commandRegistry = [
                     "type": "string"
                 },
                 {
+                    "name": "after_card_id",
+                    "type": "string"
+                },
+                {
                     "name": "after_thread_id",
+                    "type": "string"
+                },
+                {
+                    "name": "before_card_id",
                     "type": "string"
                 },
                 {
@@ -1942,13 +2120,14 @@ export const commandRegistry = [
         },
         "path_params": [
             "board_id",
-            "thread_id"
+            "id"
         ],
         "adjacent_commands": [
             "boards.archive",
-            "boards.cards.add",
+            "boards.cards.archive",
+            "boards.cards.create",
+            "boards.cards.get",
             "boards.cards.list",
-            "boards.cards.remove",
             "boards.cards.update",
             "boards.create",
             "boards.get",
@@ -1964,91 +2143,19 @@ export const commandRegistry = [
         "ts_method": "boardsCardsMove"
     },
     {
-        "command_id": "boards.cards.remove",
-        "cli_path": "boards cards remove",
-        "group": "boards",
-        "method": "POST",
-        "path": "/boards/{board_id}/cards/{thread_id}/remove",
-        "operation_id": "removeBoardCard",
-        "summary": "Remove board card membership",
-        "why": "Delete canonical board membership for a card without introducing a separate archived-card lifecycle in v1.",
-        "input_mode": "json-body",
-        "streaming": {
-            "mode": "none"
-        },
-        "output_envelope": "Returns `{ board, removed_thread_id }` after membership removal and board concurrency-token advancement.",
-        "error_codes": [
-            "invalid_json",
-            "invalid_request",
-            "unknown_actor_id",
-            "conflict",
-            "not_found"
-        ],
-        "concepts": [
-            "boards",
-            "planning",
-            "concurrency"
-        ],
-        "stability": "beta",
-        "surface": "canonical",
-        "agent_notes": "Removal deletes canonical membership. Cards are not archived separately in v1.",
-        "examples": [
-            {
-                "title": "Remove board card",
-                "command": "oar boards cards remove --board-id board_product_launch --thread-id thread_123 --from-file board-card-remove.json --json"
-            }
-        ],
-        "body_schema": {
-            "required": [
-                {
-                    "name": "if_board_updated_at",
-                    "type": "datetime"
-                }
-            ],
-            "optional": [
-                {
-                    "name": "actor_id",
-                    "type": "string"
-                }
-            ]
-        },
-        "path_params": [
-            "board_id",
-            "thread_id"
-        ],
-        "adjacent_commands": [
-            "boards.archive",
-            "boards.cards.add",
-            "boards.cards.list",
-            "boards.cards.move",
-            "boards.cards.update",
-            "boards.create",
-            "boards.get",
-            "boards.list",
-            "boards.purge",
-            "boards.restore",
-            "boards.tombstone",
-            "boards.unarchive",
-            "boards.update",
-            "boards.workspace"
-        ],
-        "go_method": "BoardsCardsRemove",
-        "ts_method": "boardsCardsRemove"
-    },
-    {
         "command_id": "boards.cards.update",
         "cli_path": "boards cards update",
         "group": "boards",
         "method": "PATCH",
-        "path": "/boards/{board_id}/cards/{thread_id}",
+        "path": "/cards/{card_id}",
         "operation_id": "updateBoardCard",
-        "summary": "Update board card metadata",
-        "why": "Patch mutable board-card metadata, which in v1 is limited to the pinned document convenience link.",
+        "summary": "Update a versioned board card artifact",
+        "why": "Patch mutable board-card fields and record a new card version automatically.",
         "input_mode": "json-body",
         "streaming": {
             "mode": "none"
         },
-        "output_envelope": "Returns `{ board, card }` after metadata update and board concurrency-token advancement.",
+        "output_envelope": "Returns `{ board, card }` after the card update and version increment are persisted.",
         "error_codes": [
             "invalid_json",
             "invalid_request",
@@ -2059,7 +2166,7 @@ export const commandRegistry = [
         "concepts": [
             "boards",
             "planning",
-            "docs",
+            "history",
             "concurrency"
         ],
         "stability": "beta",
@@ -2067,8 +2174,8 @@ export const commandRegistry = [
         "agent_notes": "Set `if_board_updated_at` from the current board read before patching card metadata.",
         "examples": [
             {
-                "title": "Update pinned document",
-                "command": "oar boards cards update --board-id board_product_launch --thread-id thread_123 --from-file board-card-update.json --json"
+                "title": "Mark card done",
+                "command": "oar boards cards update --card-id card_123 --status done --if-board-updated-at 2026-03-08T00:00:00Z --json"
             }
         ],
         "body_schema": {
@@ -2084,21 +2191,55 @@ export const commandRegistry = [
                     "type": "string"
                 },
                 {
+                    "name": "patch.assignee",
+                    "type": "any|string"
+                },
+                {
+                    "name": "patch.body",
+                    "type": "string"
+                },
+                {
+                    "name": "patch.parent_thread",
+                    "type": "any|string"
+                },
+                {
                     "name": "patch.pinned_document_id",
                     "type": "any|string"
+                },
+                {
+                    "name": "patch.priority",
+                    "type": "any|string"
+                },
+                {
+                    "name": "patch.status",
+                    "type": "string",
+                    "enum_values": [
+                        "cancelled",
+                        "done",
+                        "in_progress",
+                        "todo"
+                    ]
+                },
+                {
+                    "name": "patch.thread_id",
+                    "type": "any|string"
+                },
+                {
+                    "name": "patch.title",
+                    "type": "string"
                 }
             ]
         },
         "path_params": [
-            "board_id",
-            "thread_id"
+            "card_id"
         ],
         "adjacent_commands": [
             "boards.archive",
-            "boards.cards.add",
+            "boards.cards.archive",
+            "boards.cards.create",
+            "boards.cards.get",
             "boards.cards.list",
             "boards.cards.move",
-            "boards.cards.remove",
             "boards.create",
             "boards.get",
             "boards.list",
@@ -2203,10 +2344,11 @@ export const commandRegistry = [
         },
         "adjacent_commands": [
             "boards.archive",
-            "boards.cards.add",
+            "boards.cards.archive",
+            "boards.cards.create",
+            "boards.cards.get",
             "boards.cards.list",
             "boards.cards.move",
-            "boards.cards.remove",
             "boards.cards.update",
             "boards.get",
             "boards.list",
@@ -2256,10 +2398,11 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "boards.archive",
-            "boards.cards.add",
+            "boards.cards.archive",
+            "boards.cards.create",
+            "boards.cards.get",
             "boards.cards.list",
             "boards.cards.move",
-            "boards.cards.remove",
             "boards.cards.update",
             "boards.create",
             "boards.list",
@@ -2318,10 +2461,11 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "boards.archive",
-            "boards.cards.add",
+            "boards.cards.archive",
+            "boards.cards.create",
+            "boards.cards.get",
             "boards.cards.list",
             "boards.cards.move",
-            "boards.cards.remove",
             "boards.cards.update",
             "boards.create",
             "boards.get",
@@ -2385,10 +2529,11 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "boards.archive",
-            "boards.cards.add",
+            "boards.cards.archive",
+            "boards.cards.create",
+            "boards.cards.get",
             "boards.cards.list",
             "boards.cards.move",
-            "boards.cards.remove",
             "boards.cards.update",
             "boards.create",
             "boards.get",
@@ -2454,10 +2599,11 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "boards.archive",
-            "boards.cards.add",
+            "boards.cards.archive",
+            "boards.cards.create",
+            "boards.cards.get",
             "boards.cards.list",
             "boards.cards.move",
-            "boards.cards.remove",
             "boards.cards.update",
             "boards.create",
             "boards.get",
@@ -2522,10 +2668,11 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "boards.archive",
-            "boards.cards.add",
+            "boards.cards.archive",
+            "boards.cards.create",
+            "boards.cards.get",
             "boards.cards.list",
             "boards.cards.move",
-            "boards.cards.remove",
             "boards.cards.update",
             "boards.create",
             "boards.get",
@@ -2591,10 +2738,11 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "boards.archive",
-            "boards.cards.add",
+            "boards.cards.archive",
+            "boards.cards.create",
+            "boards.cards.get",
             "boards.cards.list",
             "boards.cards.move",
-            "boards.cards.remove",
             "boards.cards.update",
             "boards.create",
             "boards.get",
@@ -2695,10 +2843,11 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "boards.archive",
-            "boards.cards.add",
+            "boards.cards.archive",
+            "boards.cards.create",
+            "boards.cards.get",
             "boards.cards.list",
             "boards.cards.move",
-            "boards.cards.remove",
             "boards.cards.update",
             "boards.create",
             "boards.get",
@@ -2752,10 +2901,11 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "boards.archive",
-            "boards.cards.add",
+            "boards.cards.archive",
+            "boards.cards.create",
+            "boards.cards.get",
             "boards.cards.list",
             "boards.cards.move",
-            "boards.cards.remove",
             "boards.cards.update",
             "boards.create",
             "boards.get",
@@ -6333,17 +6483,20 @@ export class OarClient {
     boardsArchive(pathParams, options = {}) {
         return this.invoke("boards.archive", pathParams, options);
     }
-    boardsCardsAdd(pathParams, options = {}) {
-        return this.invoke("boards.cards.add", pathParams, options);
+    boardsCardsArchive(pathParams, options = {}) {
+        return this.invoke("boards.cards.archive", pathParams, options);
+    }
+    boardsCardsCreate(pathParams, options = {}) {
+        return this.invoke("boards.cards.create", pathParams, options);
+    }
+    boardsCardsGet(pathParams, options = {}) {
+        return this.invoke("boards.cards.get", pathParams, options);
     }
     boardsCardsList(pathParams, options = {}) {
         return this.invoke("boards.cards.list", pathParams, options);
     }
     boardsCardsMove(pathParams, options = {}) {
         return this.invoke("boards.cards.move", pathParams, options);
-    }
-    boardsCardsRemove(pathParams, options = {}) {
-        return this.invoke("boards.cards.remove", pathParams, options);
     }
     boardsCardsUpdate(pathParams, options = {}) {
         return this.invoke("boards.cards.update", pathParams, options);

@@ -379,7 +379,7 @@ printf '{"artifact":{"id":"%s","refs":["thread:%s","artifact:%s"],"summary":"Smo
 printf '{"artifact":{"id":"%s","refs":["thread:%s","artifact:%s","artifact:%s"],"summary":"Smoke review"},"packet":{"review_id":"%s","work_order_id":"%s","receipt_id":"%s","outcome":"accept","notes":"accepted","evidence_refs":["artifact:%s"]}}\n' "$REVIEW_ID" "$THREAD_ID" "$WORK_ORDER_ID" "$RECEIPT_ID" "$REVIEW_ID" "$WORK_ORDER_ID" "$RECEIPT_ID" "$RECEIPT_ID" \
   | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" reviews create >"$TMP_DIR/review-create.json"
 
-# Board smoke: create a board, add/reorder/move/remove cards, and verify the
+# Board smoke: create a board, add/reorder/move/archive cards, and verify the
 # canonical workspace through both core and the UI proxy.
 printf '{"thread":{"title":"Smoke board card A","type":"process","status":"active","priority":"p2","tags":["smoke","board"],"cadence":"weekly","current_summary":"board card A","next_actions":["verify board ordering"],"key_artifacts":[],"provenance":{"sources":["actor_statement:smoke"]}}}\n' \
   | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" threads create >"$TMP_DIR/board-thread-a-create.json"
@@ -442,12 +442,30 @@ fi
 run_cli_json "$TMP_DIR/board-get.json" boards get --board-id "$BOARD_ID"
 
 run_cli_json "$TMP_DIR/board-card-a-add.json" boards cards add --board-id "$BOARD_ID" --thread-id "$BOARD_THREAD_A_ID" --column backlog --pinned-document-id "$CARD_DOC_ID"
+BOARD_CARD_A_ID="$(json_get "$TMP_DIR/board-card-a-add.json" 'data.card.id' || true)"
+if [[ -z "$BOARD_CARD_A_ID" ]]; then
+  BOARD_CARD_A_ID="$(json_get "$TMP_DIR/board-card-a-add.json" 'data.body.card.id' || true)"
+fi
+if [[ -z "$BOARD_CARD_A_ID" ]]; then
+  echo "failed to parse board card A id" >&2
+  cat "$TMP_DIR/board-card-a-add.json" >&2 || true
+  exit 1
+fi
 BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-card-a-add.json" 'data.board.updated_at' || true)"
 if [[ -z "$BOARD_UPDATED_AT" ]]; then
   BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-card-a-add.json" 'data.body.board.updated_at' || true)"
 fi
 
 run_cli_json "$TMP_DIR/board-card-b-add.json" boards cards add --board-id "$BOARD_ID" --thread-id "$BOARD_THREAD_B_ID" --column backlog --after "$BOARD_THREAD_A_ID"
+BOARD_CARD_B_ID="$(json_get "$TMP_DIR/board-card-b-add.json" 'data.card.id' || true)"
+if [[ -z "$BOARD_CARD_B_ID" ]]; then
+  BOARD_CARD_B_ID="$(json_get "$TMP_DIR/board-card-b-add.json" 'data.body.card.id' || true)"
+fi
+if [[ -z "$BOARD_CARD_B_ID" ]]; then
+  echo "failed to parse board card B id" >&2
+  cat "$TMP_DIR/board-card-b-add.json" >&2 || true
+  exit 1
+fi
 BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-card-b-add.json" 'data.board.updated_at' || true)"
 if [[ -z "$BOARD_UPDATED_AT" ]]; then
   BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-card-b-add.json" 'data.body.board.updated_at' || true)"
@@ -459,22 +477,23 @@ if [[ -z "$BOARD_UPDATED_AT" ]]; then
   BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-card-b-reorder.json" 'data.body.board.updated_at' || true)"
 fi
 
-run_cli_json "$TMP_DIR/board-card-a-update.json" boards cards update --board-id "$BOARD_ID" --thread-id "$BOARD_THREAD_A_ID" --if-board-updated-at "$BOARD_UPDATED_AT" --pinned-document-id "$PRIMARY_DOC_ID"
+run_cli_json "$TMP_DIR/board-card-a-update.json" boards cards update --card-id "$BOARD_CARD_A_ID" --if-board-updated-at "$BOARD_UPDATED_AT" --pinned-document-id "$PRIMARY_DOC_ID"
 BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-card-a-update.json" 'data.board.updated_at' || true)"
 if [[ -z "$BOARD_UPDATED_AT" ]]; then
   BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-card-a-update.json" 'data.body.board.updated_at' || true)"
 fi
 
-run_cli_json "$TMP_DIR/board-card-b-move.json" boards cards move --board-id "$BOARD_ID" --thread-id "$BOARD_THREAD_B_ID" --column review --if-board-updated-at "$BOARD_UPDATED_AT"
+run_cli_json "$TMP_DIR/board-card-b-move.json" boards cards move --board-id "$BOARD_ID" --card-id "$BOARD_CARD_B_ID" --column review --if-board-updated-at "$BOARD_UPDATED_AT"
 BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-card-b-move.json" 'data.board.updated_at' || true)"
 if [[ -z "$BOARD_UPDATED_AT" ]]; then
   BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-card-b-move.json" 'data.body.board.updated_at' || true)"
 fi
 
-run_cli_json "$TMP_DIR/board-card-a-remove.json" boards cards remove --board-id "$BOARD_ID" --thread-id "$BOARD_THREAD_A_ID" --if-board-updated-at "$BOARD_UPDATED_AT"
-BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-card-a-remove.json" 'data.board.updated_at' || true)"
+run_cli_json "$TMP_DIR/board-card-a-archive.json" boards cards archive --card-id "$BOARD_CARD_A_ID" --if-board-updated-at "$BOARD_UPDATED_AT"
+assert_contains "$TMP_DIR/board-card-a-archive.json" "\"archived_at\""
+BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-card-a-archive.json" 'data.board.updated_at' || true)"
 if [[ -z "$BOARD_UPDATED_AT" ]]; then
-  BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-card-a-remove.json" 'data.body.board.updated_at' || true)"
+  BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-card-a-archive.json" 'data.body.board.updated_at' || true)"
 fi
 
 run_cli_json "$TMP_DIR/board-workspace.json" boards workspace --board-id "$BOARD_ID"

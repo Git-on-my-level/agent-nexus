@@ -56,13 +56,14 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `boards`
 
-- Commands: `15`
+- Commands: `16`
 - Command IDs:
   - `boards.archive` (`boards archive`)
-  - `boards.cards.add` (`boards cards add`)
+  - `boards.cards.archive` (`boards cards archive`)
+  - `boards.cards.create` (`boards cards create`)
+  - `boards.cards.get` (`boards cards get`)
   - `boards.cards.list` (`boards cards list`)
   - `boards.cards.move` (`boards cards move`)
-  - `boards.cards.remove` (`boards cards remove`)
   - `boards.cards.update` (`boards cards update`)
   - `boards.create` (`boards create`)
   - `boards.get` (`boards get`)

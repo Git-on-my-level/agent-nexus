@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/google/uuid"
+
 	"organization-autorunner-core/internal/authaudit"
 )
 
@@ -533,6 +535,11 @@ var migrations = []migration{
 		Version:    23,
 		Statements: nil,
 		Apply:      applyV23EventArchiveAndTombstoneColumnsMigration,
+	},
+	{
+		Version:    24,
+		Statements: nil,
+		Apply:      applyV24BoardCardArtifactsMigration,
 	},
 }
 
@@ -1182,4 +1189,185 @@ func scrubLegacyArtifactMetadataJSON(metadataJSON string) (string, bool, error) 
 		return "", false, err
 	}
 	return string(encoded), true, nil
+}
+
+func applyV24BoardCardArtifactsMigration(ctx context.Context, tx *sql.Tx) error {
+	boardCardsExists, err := tableExistsTx(ctx, tx, "board_cards")
+	if err != nil {
+		return err
+	}
+	if !boardCardsExists {
+		return nil
+	}
+
+	if _, err := tx.ExecContext(ctx, `ALTER TABLE board_cards RENAME TO board_cards_legacy`); err != nil {
+		return fmt.Errorf("migration 24 rename board_cards: %w", err)
+	}
+
+	for _, stmt := range []string{
+		`CREATE TABLE IF NOT EXISTS cards (
+			id TEXT PRIMARY KEY,
+			title TEXT NOT NULL,
+			body_markdown TEXT NOT NULL DEFAULT '',
+			version INTEGER NOT NULL DEFAULT 1,
+			parent_thread_id TEXT,
+			pinned_document_id TEXT,
+			assignee TEXT,
+			priority TEXT,
+			status TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			created_by TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			updated_by TEXT NOT NULL,
+			provenance_json TEXT NOT NULL DEFAULT '{}',
+			archived_at TEXT,
+			archived_by TEXT
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_cards_parent_thread_id ON cards (parent_thread_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_cards_archived_at ON cards (archived_at);`,
+		`CREATE TABLE IF NOT EXISTS card_versions (
+			card_id TEXT NOT NULL,
+			version INTEGER NOT NULL,
+			title TEXT NOT NULL,
+			body_markdown TEXT NOT NULL DEFAULT '',
+			parent_thread_id TEXT,
+			pinned_document_id TEXT,
+			assignee TEXT,
+			priority TEXT,
+			status TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			created_by TEXT NOT NULL,
+			provenance_json TEXT NOT NULL DEFAULT '{}',
+			PRIMARY KEY (card_id, version),
+			FOREIGN KEY(card_id) REFERENCES cards(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_card_versions_card_id_version ON card_versions (card_id, version);`,
+		`CREATE TABLE IF NOT EXISTS board_cards (
+			board_id TEXT NOT NULL,
+			card_id TEXT NOT NULL,
+			column_key TEXT NOT NULL,
+			rank TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			created_by TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			updated_by TEXT NOT NULL,
+			PRIMARY KEY (board_id, card_id),
+			FOREIGN KEY(board_id) REFERENCES boards(id) ON DELETE CASCADE,
+			FOREIGN KEY(card_id) REFERENCES cards(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_board_cards_board_column_rank ON board_cards (board_id, column_key, rank, card_id);`,
+	} {
+		if _, err := tx.ExecContext(ctx, stmt); err != nil {
+			return fmt.Errorf("migration 24 apply statement: %w", err)
+		}
+	}
+
+	rows, err := tx.QueryContext(
+		ctx,
+		`SELECT board_id, thread_id, column_key, rank, pinned_document_id, created_at, created_by, updated_at, updated_by
+		   FROM board_cards_legacy
+		  ORDER BY board_id ASC, created_at ASC, thread_id ASC`,
+	)
+	if err != nil {
+		return fmt.Errorf("migration 24 query legacy board cards: %w", err)
+	}
+	defer rows.Close()
+
+	provenanceJSON := `{"sources":["migrated:board_card_legacy"]}`
+	for rows.Next() {
+		var (
+			boardID          string
+			threadID         string
+			columnKey        string
+			rank             string
+			pinnedDocumentID sql.NullString
+			createdAt        string
+			createdBy        string
+			updatedAt        string
+			updatedBy        string
+		)
+		if err := rows.Scan(&boardID, &threadID, &columnKey, &rank, &pinnedDocumentID, &createdAt, &createdBy, &updatedAt, &updatedBy); err != nil {
+			return fmt.Errorf("migration 24 scan legacy board card: %w", err)
+		}
+
+		cardID := uuid.NewString()
+		title := threadID
+		if err := tx.QueryRowContext(
+			ctx,
+			`SELECT COALESCE(NULLIF(json_extract(body_json, '$.title'), ''), ?)
+			   FROM snapshots
+			  WHERE id = ? AND kind = 'thread'`,
+			threadID,
+			threadID,
+		).Scan(&title); err != nil && err != sql.ErrNoRows {
+			return fmt.Errorf("migration 24 load legacy thread title: %w", err)
+		}
+
+		status := "todo"
+		if columnKey == "done" {
+			status = "done"
+		}
+
+		if _, err := tx.ExecContext(
+			ctx,
+			`INSERT INTO cards(
+				id, title, body_markdown, version, parent_thread_id, pinned_document_id, assignee, priority, status,
+				created_at, created_by, updated_at, updated_by, provenance_json
+			) VALUES (?, ?, '', 1, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?)`,
+			cardID,
+			title,
+			threadID,
+			nullStringValue(pinnedDocumentID),
+			status,
+			createdAt,
+			createdBy,
+			updatedAt,
+			updatedBy,
+			provenanceJSON,
+		); err != nil {
+			return fmt.Errorf("migration 24 insert card: %w", err)
+		}
+
+		if _, err := tx.ExecContext(
+			ctx,
+			`INSERT INTO card_versions(
+				card_id, version, title, body_markdown, parent_thread_id, pinned_document_id, assignee, priority, status,
+				created_at, created_by, provenance_json
+			) VALUES (?, 1, ?, '', ?, ?, NULL, NULL, ?, ?, ?, ?)`,
+			cardID,
+			title,
+			threadID,
+			nullStringValue(pinnedDocumentID),
+			status,
+			createdAt,
+			createdBy,
+			provenanceJSON,
+		); err != nil {
+			return fmt.Errorf("migration 24 insert card version: %w", err)
+		}
+
+		if _, err := tx.ExecContext(
+			ctx,
+			`INSERT INTO board_cards(board_id, card_id, column_key, rank, created_at, created_by, updated_at, updated_by)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			boardID,
+			cardID,
+			columnKey,
+			rank,
+			createdAt,
+			createdBy,
+			updatedAt,
+			updatedBy,
+		); err != nil {
+			return fmt.Errorf("migration 24 insert board card membership: %w", err)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("migration 24 iterate legacy board cards: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `DROP TABLE board_cards_legacy`); err != nil {
+		return fmt.Errorf("migration 24 drop legacy board cards: %w", err)
+	}
+	return nil
 }

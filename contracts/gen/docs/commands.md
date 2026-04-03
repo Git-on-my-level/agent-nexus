@@ -4,7 +4,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.2.3`
-- Commands: `99`
+- Commands: `100`
 
 ## `actors.list`
 
@@ -432,20 +432,50 @@ Generated from `contracts/oar-openapi.yaml`.
 - Examples:
   - Archive board: `oar boards archive --board-id board_product_launch --json`
 
-## `boards.cards.add`
+## `boards.cards.archive`
 
-- CLI path: `boards cards add`
+- CLI path: `boards cards archive`
+- HTTP: `POST /cards/{card_id}/archive`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Archive a board card artifact while preserving its version history and board provenance.
+- Concepts: `boards`, `planning`, `history`, `concurrency`
+- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`, `not_found`
+- Output: Returns `{ board, card }` after the card is archived.
+- Agent notes: Archive is the v2 replacement for legacy remove semantics. Historical thread-backed cards remain resolvable through old events.
+- Examples:
+  - Archive card: `oar boards cards archive --card-id card_123 --json`
+
+## `boards.cards.create`
+
+- CLI path: `boards cards create`
 - HTTP: `POST /boards/{board_id}/cards`
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `json-body`
-- Why: Create explicit board membership for an existing thread with canonical column placement and server-owned rank.
+- Why: Create a first-class board card artifact, optionally linked to a parent thread, with canonical placement and server-owned rank.
 - Concepts: `boards`, `planning`, `ordering`, `concurrency`
 - Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`, `not_found`
-- Output: Returns `{ board, card }` after membership creation and board concurrency-token advancement.
-- Agent notes: Replay-safe when `request_key` is reused with the same body. The board primary thread cannot be added as a card.
+- Output: Returns `{ board, card }` after card creation and board concurrency-token advancement.
+- Agent notes: Replay-safe when `request_key` is reused with the same body. Cards may be standalone tasks or wrap an existing thread via `parent_thread`.
 - Examples:
-  - Add card to backlog: `oar boards cards add --board-id board_product_launch --from-file board-card-add.json --json`
+  - Create standalone board card: `oar boards cards create --board-id board_product_launch --title "Buy groceries" --column backlog --json`
+
+## `boards.cards.get`
+
+- CLI path: `boards cards get`
+- HTTP: `GET /boards/{board_id}/cards/{id}`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Read the current board card artifact plus version history.
+- Concepts: `boards`, `planning`, `history`
+- Error codes: `invalid_request`, `not_found`
+- Output: Returns `{ card }` with embedded version history.
+- Agent notes: The identifier accepts `card_id` and legacy thread-backed cards can still be resolved through their parent thread id.
+- Examples:
+  - Get board card: `oar boards cards get --board-id board_product_launch --card-id card_123 --json`
 
 ## `boards.cards.list`
 
@@ -465,7 +495,7 @@ Generated from `contracts/oar-openapi.yaml`.
 ## `boards.cards.move`
 
 - CLI path: `boards cards move`
-- HTTP: `POST /boards/{board_id}/cards/{thread_id}/move`
+- HTTP: `POST /boards/{board_id}/cards/{id}/move`
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `json-body`
@@ -475,37 +505,22 @@ Generated from `contracts/oar-openapi.yaml`.
 - Output: Returns `{ board, card }` after the move is applied.
 - Agent notes: Provide at most one of `before_thread_id` or `after_thread_id`. If neither is set, the card moves to the end of the target column.
 - Examples:
-  - Move card into review: `oar boards cards move --board-id board_product_launch --thread-id thread_123 --from-file board-card-move.json --json`
-
-## `boards.cards.remove`
-
-- CLI path: `boards cards remove`
-- HTTP: `POST /boards/{board_id}/cards/{thread_id}/remove`
-- Stability: `beta`
-- Surface: `canonical`
-- Input mode: `json-body`
-- Why: Delete canonical board membership for a card without introducing a separate archived-card lifecycle in v1.
-- Concepts: `boards`, `planning`, `concurrency`
-- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`, `not_found`
-- Output: Returns `{ board, removed_thread_id }` after membership removal and board concurrency-token advancement.
-- Agent notes: Removal deletes canonical membership. Cards are not archived separately in v1.
-- Examples:
-  - Remove board card: `oar boards cards remove --board-id board_product_launch --thread-id thread_123 --from-file board-card-remove.json --json`
+  - Move card into review: `oar boards cards move --board-id board_product_launch --card-id card_123 --column review --json`
 
 ## `boards.cards.update`
 
 - CLI path: `boards cards update`
-- HTTP: `PATCH /boards/{board_id}/cards/{thread_id}`
+- HTTP: `PATCH /cards/{card_id}`
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `json-body`
-- Why: Patch mutable board-card metadata, which in v1 is limited to the pinned document convenience link.
-- Concepts: `boards`, `planning`, `docs`, `concurrency`
+- Why: Patch mutable board-card fields and record a new card version automatically.
+- Concepts: `boards`, `planning`, `history`, `concurrency`
 - Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`, `not_found`
-- Output: Returns `{ board, card }` after metadata update and board concurrency-token advancement.
+- Output: Returns `{ board, card }` after the card update and version increment are persisted.
 - Agent notes: Set `if_board_updated_at` from the current board read before patching card metadata.
 - Examples:
-  - Update pinned document: `oar boards cards update --board-id board_product_launch --thread-id thread_123 --from-file board-card-update.json --json`
+  - Mark card done: `oar boards cards update --card-id card_123 --status done --if-board-updated-at 2026-03-08T00:00:00Z --json`
 
 ## `boards.create`
 

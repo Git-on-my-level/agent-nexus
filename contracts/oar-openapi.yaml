@@ -2001,23 +2001,23 @@ paths:
         '404':
           $ref: '#/components/responses/ErrorResponse'
     post:
-      operationId: addBoardCard
-      summary: Add existing thread to board as a card
+      operationId: createBoardCard
+      summary: Create a versioned board card artifact
       tags: [boards]
       x-oar-surface: "canonical"
-      x-oar-command-id: "boards.cards.add"
-      x-oar-cli-path: "boards cards add"
-      x-oar-why: "Create explicit board membership for an existing thread with canonical column placement and server-owned rank."
+      x-oar-command-id: "boards.cards.create"
+      x-oar-cli-path: "boards cards create"
+      x-oar-why: "Create a first-class board card artifact, optionally linked to a parent thread, with canonical placement and server-owned rank."
       x-oar-examples:
-        - title: Add card to backlog
-          command: oar boards cards add --board-id board_product_launch --from-file board-card-add.json --json
+        - title: Create standalone board card
+          command: oar boards cards create --board-id board_product_launch --title "Buy groceries" --column backlog --json
       x-oar-input-mode: "json-body"
       x-oar-streaming: { mode: none }
-      x-oar-output-envelope: "Returns `{ board, card }` after membership creation and board concurrency-token advancement."
+      x-oar-output-envelope: "Returns `{ board, card }` after card creation and board concurrency-token advancement."
       x-oar-error-codes: [invalid_json, invalid_request, unknown_actor_id, conflict, not_found]
       x-oar-concepts: [boards, planning, ordering, concurrency]
       x-oar-stability: "beta"
-      x-oar-agent-notes: "Replay-safe when `request_key` is reused with the same body. The board primary thread cannot be added as a card."
+      x-oar-agent-notes: "Replay-safe when `request_key` is reused with the same body. Cards may be standalone tasks or wrap an existing thread via `parent_thread`."
       parameters:
         - $ref: '#/components/parameters/BoardID'
       requestBody:
@@ -2025,10 +2025,10 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AddBoardCardRequest'
+              $ref: '#/components/schemas/CreateBoardCardRequest'
       responses:
         '201':
-          description: Board card added
+          description: Board card created
           content:
             application/json:
               schema:
@@ -2040,28 +2040,64 @@ paths:
         '409':
           $ref: '#/components/responses/ErrorResponse'
 
-  /boards/{board_id}/cards/{thread_id}:
+  /boards/{board_id}/cards/{id}:
+    get:
+      operationId: getBoardCard
+      summary: Get board card by board-scoped identifier
+      tags: [boards]
+      x-oar-surface: "canonical"
+      x-oar-command-id: "boards.cards.get"
+      x-oar-cli-path: "boards cards get"
+      x-oar-why: "Read the current board card artifact plus version history."
+      x-oar-examples:
+        - title: Get board card
+          command: oar boards cards get --board-id board_product_launch --card-id card_123 --json
+      x-oar-input-mode: "none"
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ card }` with embedded version history."
+      x-oar-error-codes: [invalid_request, not_found]
+      x-oar-concepts: [boards, planning, history]
+      x-oar-stability: "beta"
+      x-oar-agent-notes: "The identifier accepts `card_id` and legacy thread-backed cards can still be resolved through their parent thread id."
+      parameters:
+        - $ref: '#/components/parameters/BoardID'
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Board card detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetBoardCardResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /cards/{card_id}:
     patch:
       operationId: updateBoardCard
-      summary: Update board card metadata
+      summary: Update a versioned board card artifact
       tags: [boards]
       x-oar-surface: "canonical"
       x-oar-command-id: "boards.cards.update"
       x-oar-cli-path: "boards cards update"
-      x-oar-why: "Patch mutable board-card metadata, which in v1 is limited to the pinned document convenience link."
+      x-oar-why: "Patch mutable board-card fields and record a new card version automatically."
       x-oar-examples:
-        - title: Update pinned document
-          command: oar boards cards update --board-id board_product_launch --thread-id thread_123 --from-file board-card-update.json --json
+        - title: Mark card done
+          command: oar boards cards update --card-id card_123 --status done --if-board-updated-at 2026-03-08T00:00:00Z --json
       x-oar-input-mode: "json-body"
       x-oar-streaming: { mode: none }
-      x-oar-output-envelope: "Returns `{ board, card }` after metadata update and board concurrency-token advancement."
+      x-oar-output-envelope: "Returns `{ board, card }` after the card update and version increment are persisted."
       x-oar-error-codes: [invalid_json, invalid_request, unknown_actor_id, conflict, not_found]
-      x-oar-concepts: [boards, planning, docs, concurrency]
+      x-oar-concepts: [boards, planning, history, concurrency]
       x-oar-stability: "beta"
       x-oar-agent-notes: "Set `if_board_updated_at` from the current board read before patching card metadata."
       parameters:
-        - $ref: '#/components/parameters/BoardID'
-        - $ref: '#/components/parameters/ThreadID'
+        - $ref: '#/components/parameters/CardID'
       requestBody:
         required: true
         content:
@@ -2082,7 +2118,7 @@ paths:
         '409':
           $ref: '#/components/responses/ErrorResponse'
 
-  /boards/{board_id}/cards/{thread_id}/move:
+  /boards/{board_id}/cards/{id}/move:
     post:
       operationId: moveBoardCard
       summary: Move board card across columns or ranks
@@ -2093,7 +2129,7 @@ paths:
       x-oar-why: "Request relative placement for a card while keeping rank tokens opaque and server-owned."
       x-oar-examples:
         - title: Move card into review
-          command: oar boards cards move --board-id board_product_launch --thread-id thread_123 --from-file board-card-move.json --json
+          command: oar boards cards move --board-id board_product_launch --card-id card_123 --column review --json
       x-oar-input-mode: "json-body"
       x-oar-streaming: { mode: none }
       x-oar-output-envelope: "Returns `{ board, card }` after the move is applied."
@@ -2103,7 +2139,10 @@ paths:
       x-oar-agent-notes: "Provide at most one of `before_thread_id` or `after_thread_id`. If neither is set, the card moves to the end of the target column."
       parameters:
         - $ref: '#/components/parameters/BoardID'
-        - $ref: '#/components/parameters/ThreadID'
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -2124,41 +2163,40 @@ paths:
         '409':
           $ref: '#/components/responses/ErrorResponse'
 
-  /boards/{board_id}/cards/{thread_id}/remove:
+  /cards/{card_id}/archive:
     post:
-      operationId: removeBoardCard
-      summary: Remove board card membership
+      operationId: archiveBoardCard
+      summary: Archive a board card artifact
       tags: [boards]
       x-oar-surface: "canonical"
-      x-oar-command-id: "boards.cards.remove"
-      x-oar-cli-path: "boards cards remove"
-      x-oar-why: "Delete canonical board membership for a card without introducing a separate archived-card lifecycle in v1."
+      x-oar-command-id: "boards.cards.archive"
+      x-oar-cli-path: "boards cards archive"
+      x-oar-why: "Archive a board card artifact while preserving its version history and board provenance."
       x-oar-examples:
-        - title: Remove board card
-          command: oar boards cards remove --board-id board_product_launch --thread-id thread_123 --from-file board-card-remove.json --json
+        - title: Archive card
+          command: oar boards cards archive --card-id card_123 --json
       x-oar-input-mode: "json-body"
       x-oar-streaming: { mode: none }
-      x-oar-output-envelope: "Returns `{ board, removed_thread_id }` after membership removal and board concurrency-token advancement."
+      x-oar-output-envelope: "Returns `{ board, card }` after the card is archived."
       x-oar-error-codes: [invalid_json, invalid_request, unknown_actor_id, conflict, not_found]
-      x-oar-concepts: [boards, planning, concurrency]
+      x-oar-concepts: [boards, planning, history, concurrency]
       x-oar-stability: "beta"
-      x-oar-agent-notes: "Removal deletes canonical membership. Cards are not archived separately in v1."
+      x-oar-agent-notes: "Archive is the v2 replacement for legacy remove semantics. Historical thread-backed cards remain resolvable through old events."
       parameters:
-        - $ref: '#/components/parameters/BoardID'
-        - $ref: '#/components/parameters/ThreadID'
+        - $ref: '#/components/parameters/CardID'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RemoveBoardCardRequest'
+              $ref: '#/components/schemas/ArchiveBoardCardRequest'
       responses:
         '200':
-          description: Board card removed
+          description: Board card archived
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/BoardCardRemovedResponse'
+                $ref: '#/components/schemas/BoardCardResponse'
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '404':
@@ -3952,6 +3990,11 @@ components:
       name: board_id
       required: true
       schema: { type: string }
+    CardID:
+      in: path
+      name: card_id
+      required: true
+      schema: { type: string }
     SnapshotID:
       in: path
       name: snapshot_id
@@ -4785,19 +4828,82 @@ components:
         [id, title, status, labels, owners, primary_thread_id, primary_document_id, column_schema,
          pinned_refs, created_at, created_by, updated_at, updated_by]
 
-    BoardCard:
+    BoardCardHistoryEntry:
       type: object
-      description: Canonical explicit board membership for one thread within a board.
       properties:
-        board_id: { type: string }
-        thread_id: { type: string }
-        column_key:
-          $ref: '#/components/schemas/BoardColumnKey'
-        rank: { type: string }
+        id: { type: string }
+        version: { type: integer }
+        title: { type: string }
+        body: { type: string }
+        parent_thread:
+          oneOf:
+            - type: string
+            - type: 'null'
+        thread_id:
+          oneOf:
+            - type: string
+            - type: 'null'
         pinned_document_id:
           oneOf:
             - type: string
             - type: 'null'
+        assignee:
+          oneOf:
+            - type: string
+            - type: 'null'
+        priority:
+          oneOf:
+            - type: string
+            - type: 'null'
+        status:
+          type: string
+          enum: [todo, in_progress, done, cancelled]
+        created_at:
+          type: string
+          format: date-time
+        created_by: { type: string }
+        provenance:
+          type: object
+          additionalProperties: true
+      required:
+        [id, version, title, body, parent_thread, thread_id, pinned_document_id, assignee,
+         priority, status, created_at, created_by, provenance]
+
+    BoardCard:
+      type: object
+      description: Canonical versioned board card artifact plus its board placement.
+      properties:
+        id: { type: string }
+        board_id: { type: string }
+        column_key:
+          $ref: '#/components/schemas/BoardColumnKey'
+        rank: { type: string }
+        title: { type: string }
+        body: { type: string }
+        version: { type: integer }
+        parent_thread:
+          oneOf:
+            - type: string
+            - type: 'null'
+        thread_id:
+          oneOf:
+            - type: string
+            - type: 'null'
+        pinned_document_id:
+          oneOf:
+            - type: string
+            - type: 'null'
+        assignee:
+          oneOf:
+            - type: string
+            - type: 'null'
+        priority:
+          oneOf:
+            - type: string
+            - type: 'null'
+        status:
+          type: string
+          enum: [todo, in_progress, done, cancelled]
         created_at:
           type: string
           format: date-time
@@ -4806,9 +4912,26 @@ components:
           type: string
           format: date-time
         updated_by: { type: string }
+        archived_at:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+        archived_by:
+          oneOf:
+            - type: string
+            - type: 'null'
+        provenance:
+          type: object
+          additionalProperties: true
+        history:
+          type: array
+          items:
+            $ref: '#/components/schemas/BoardCardHistoryEntry'
       required:
-        [board_id, thread_id, column_key, rank, pinned_document_id, created_at, created_by,
-         updated_at, updated_by]
+        [id, board_id, column_key, rank, title, body, version, parent_thread, thread_id,
+         pinned_document_id, assignee, priority, status, created_at, created_by, updated_at,
+         updated_by, provenance]
 
     BoardCardsByColumn:
       type: object
@@ -4931,6 +5054,7 @@ components:
       type: object
       properties:
         board_id: { type: string }
+        id: { type: string }
         thread_id: { type: string }
         column_key:
           $ref: '#/components/schemas/BoardColumnKey'
@@ -4938,7 +5062,7 @@ components:
           oneOf:
             - type: string
             - type: 'null'
-      required: [board_id, thread_id, column_key, pinned_document_id]
+      required: [board_id, id, thread_id, column_key, pinned_document_id]
 
     ThreadBoardMembership:
       type: object
@@ -4963,9 +5087,14 @@ components:
     BoardWorkspaceCardBacking:
       type: object
       properties:
-        thread_ref: { type: string }
+        thread_ref:
+          oneOf:
+            - type: string
+            - type: 'null'
         thread:
-          $ref: '#/components/schemas/Thread'
+          oneOf:
+            - $ref: '#/components/schemas/Thread'
+            - type: 'null'
         pinned_document_ref:
           oneOf:
             - type: string
@@ -4980,9 +5109,13 @@ components:
       type: object
       properties:
         summary:
-          $ref: '#/components/schemas/BoardCardSummary'
+          oneOf:
+            - $ref: '#/components/schemas/BoardCardSummary'
+            - type: 'null'
         freshness:
-          $ref: '#/components/schemas/ProjectionFreshnessThread'
+          oneOf:
+            - $ref: '#/components/schemas/ProjectionFreshnessThread'
+            - type: 'null'
       required: [summary, freshness]
 
     BoardWorkspaceCard:
@@ -5281,7 +5414,7 @@ components:
             $ref: '#/components/schemas/BoardCard'
       required: [board_id, cards]
 
-    AddBoardCardRequest:
+    CreateBoardCardRequest:
       type: object
       properties:
         actor_id: { type: string }
@@ -5289,13 +5422,35 @@ components:
         if_board_updated_at:
           type: string
           format: date-time
+        card_id: { type: string }
+        title: { type: string }
+        body: { type: string }
+        parent_thread:
+          oneOf:
+            - type: string
+            - type: 'null'
         thread_id: { type: string }
         column_key:
           $ref: '#/components/schemas/BoardColumnKey'
+        before_card_id: { type: string }
+        after_card_id: { type: string }
         before_thread_id: { type: string }
         after_thread_id: { type: string }
-        pinned_document_id: { type: string }
-      required: [thread_id]
+        assignee:
+          oneOf:
+            - type: string
+            - type: 'null'
+        priority:
+          oneOf:
+            - type: string
+            - type: 'null'
+        status:
+          type: string
+          enum: [todo, in_progress, done, cancelled]
+        pinned_document_id:
+          oneOf:
+            - type: string
+            - type: 'null'
 
     UpdateBoardCardRequest:
       type: object
@@ -5307,6 +5462,27 @@ components:
         patch:
           type: object
           properties:
+            title: { type: string }
+            body: { type: string }
+            parent_thread:
+              oneOf:
+                - type: string
+                - type: 'null'
+            thread_id:
+              oneOf:
+                - type: string
+                - type: 'null'
+            assignee:
+              oneOf:
+                - type: string
+                - type: 'null'
+            priority:
+              oneOf:
+                - type: string
+                - type: 'null'
+            status:
+              type: string
+              enum: [todo, in_progress, done, cancelled]
             pinned_document_id:
               oneOf:
                 - type: string
@@ -5322,18 +5498,19 @@ components:
           format: date-time
         column_key:
           $ref: '#/components/schemas/BoardColumnKey'
+        before_card_id: { type: string }
+        after_card_id: { type: string }
         before_thread_id: { type: string }
         after_thread_id: { type: string }
       required: [if_board_updated_at, column_key]
 
-    RemoveBoardCardRequest:
+    ArchiveBoardCardRequest:
       type: object
       properties:
         actor_id: { type: string }
         if_board_updated_at:
           type: string
           format: date-time
-      required: [if_board_updated_at]
 
     BoardCardResponse:
       type: object
@@ -5344,13 +5521,12 @@ components:
           $ref: '#/components/schemas/BoardCard'
       required: [board, card]
 
-    BoardCardRemovedResponse:
+    GetBoardCardResponse:
       type: object
       properties:
-        board:
-          $ref: '#/components/schemas/Board'
-        removed_thread_id: { type: string }
-      required: [board, removed_thread_id]
+        card:
+          $ref: '#/components/schemas/BoardCard'
+      required: [card]
 
     BoardWorkspaceResponse:
       type: object
