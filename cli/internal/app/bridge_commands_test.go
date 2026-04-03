@@ -395,3 +395,213 @@ func TestLoadBridgeConfigDetailsExpandsAuthStatePath(t *testing.T) {
 		t.Fatalf("unexpected auth state path: got %q want %q", details.AuthStatePath, want)
 	}
 }
+
+func TestRenderBridgeHermesTemplateWorkspacePathPrefillsCWD(t *testing.T) {
+	rendered, _, err := renderBridgeConfigTemplate(bridgeTemplateParams{
+		Kind:          "hermes",
+		BaseURL:       "https://oar.example",
+		WorkspaceID:   "ws_main",
+		WorkspaceName: "Main",
+		Handle:        "hermes",
+		HermesCWD:     "/home/user/hermes-workspace",
+	})
+	if err != nil {
+		t.Fatalf("renderBridgeConfigTemplate: %v", err)
+	}
+	if !strings.Contains(rendered, `cwd_default = "/home/user/hermes-workspace"`) {
+		t.Fatalf("expected workspace path in cwd_default, output=%s", rendered)
+	}
+	if !strings.Contains(rendered, `"/home/user/hermes-workspace"`) {
+		t.Fatalf("expected workspace path in workspace_map, output=%s", rendered)
+	}
+}
+
+func TestRenderBridgeHermesTemplateUsesPlaceholderWhenNoWorkspacePath(t *testing.T) {
+	rendered, _, err := renderBridgeConfigTemplate(bridgeTemplateParams{
+		Kind:          "hermes",
+		BaseURL:       "https://oar.example",
+		WorkspaceID:   "ws_main",
+		WorkspaceName: "Main",
+		Handle:        "hermes",
+	})
+	if err != nil {
+		t.Fatalf("renderBridgeConfigTemplate: %v", err)
+	}
+	if !strings.Contains(rendered, "/absolute/path/to/your/hermes/workspace") {
+		t.Fatalf("expected placeholder path when no workspace-path provided, output=%s", rendered)
+	}
+}
+
+func TestBridgeInitConfigWorkspacePathFlagOverridesAdapterCWD(t *testing.T) {
+	dir := t.TempDir()
+	outputPath := filepath.Join(dir, "agent.toml")
+	app := New()
+	result, err := app.runBridgeInitConfig([]string{
+		"--kind", "hermes",
+		"--output", outputPath,
+		"--workspace-id", "ws_main",
+		"--handle", "hermes",
+		"--workspace-path", "/custom/workspace",
+	}, config.Resolved{})
+	if err != nil {
+		t.Fatalf("runBridgeInitConfig: %v", err)
+	}
+	if strings.Contains(result.Text, "WARNING") {
+		t.Fatalf("expected no warning when workspace-path is provided, output=%s", result.Text)
+	}
+	content, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("read output config: %v", err)
+	}
+	if !strings.Contains(string(content), `cwd_default = "/custom/workspace"`) {
+		t.Fatalf("expected workspace-path to be used in cwd_default, content=%s", content)
+	}
+}
+
+func TestBridgeInitConfigHermesEmitsPlaceholderWarning(t *testing.T) {
+	dir := t.TempDir()
+	outputPath := filepath.Join(dir, "agent.toml")
+	app := New()
+	result, err := app.runBridgeInitConfig([]string{
+		"--kind", "hermes",
+		"--output", outputPath,
+		"--workspace-id", "ws_main",
+		"--handle", "hermes",
+	}, config.Resolved{})
+	if err != nil {
+		t.Fatalf("runBridgeInitConfig: %v", err)
+	}
+	if !strings.Contains(result.Text, "WARNING") {
+		t.Fatalf("expected placeholder warning when hermes kind without workspace-path, output=%s", result.Text)
+	}
+	if !strings.Contains(result.Text, "placeholder workspace paths") {
+		t.Fatalf("expected specific warning text, output=%s", result.Text)
+	}
+}
+
+func TestBridgeImportAuthUpdatesBaseURLFromProfile(t *testing.T) {
+	home := t.TempDir()
+	configDir := t.TempDir()
+	configPath := filepath.Join(configDir, "agent.toml")
+	if err := os.WriteFile(configPath, []byte("[oar]\nbase_url = \"http://127.0.0.1:8000\"\nworkspace_id = \"ws_main\"\nworkspace_name = \"Main\"\n\n[auth]\nstate_path = \".state/bridge-auth.json\"\n\n[agent]\nhandle = \"hermes\"\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	keyPath := filepath.Join(home, ".config", "oar", "keys", "agent-a.ed25519")
+	if err := profile.SavePrivateKey(keyPath, privateKey); err != nil {
+		t.Fatalf("save private key: %v", err)
+	}
+	profilePath := filepath.Join(home, ".config", "oar", "profiles", "agent-a.json")
+	if err := profile.Save(profilePath, profile.Profile{
+		Agent:                "agent-a",
+		BaseURL:              "http://127.0.0.1:8002",
+		Username:             "hermes",
+		AgentID:              "agent_123",
+		ActorID:              "actor_123",
+		KeyID:                "key_123",
+		PrivateKeyPath:       keyPath,
+		AccessToken:          "access-token",
+		RefreshToken:         "refresh-token",
+		TokenType:            "Bearer",
+		AccessTokenExpiresAt: "2099-01-01T00:00:00Z",
+	}); err != nil {
+		t.Fatalf("save profile: %v", err)
+	}
+
+	app := New()
+	app.UserHomeDir = func() (string, error) { return home, nil }
+	result, err := app.runBridgeImportAuth([]string{"--config", configPath, "--from-profile", "agent-a"}, config.Resolved{Agent: "agent-a", ProfilePath: profilePath})
+	if err != nil {
+		t.Fatalf("runBridgeImportAuth: %v", err)
+	}
+	if !strings.Contains(result.Text, "Base URL updated: http://127.0.0.1:8002") {
+		t.Fatalf("expected base URL update message, output=%s", result.Text)
+	}
+
+	updated, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read updated config: %v", err)
+	}
+	if !strings.Contains(string(updated), `base_url = "http://127.0.0.1:8002"`) {
+		t.Fatalf("expected updated base_url in config, content=%s", updated)
+	}
+}
+
+func TestBridgeImportAuthDoesNotOverrideExplicitBaseURL(t *testing.T) {
+	home := t.TempDir()
+	configDir := t.TempDir()
+	configPath := filepath.Join(configDir, "agent.toml")
+	if err := os.WriteFile(configPath, []byte("[oar]\nbase_url = \"http://192.168.1.100:8000\"\nworkspace_id = \"ws_main\"\nworkspace_name = \"Main\"\n\n[auth]\nstate_path = \".state/bridge-auth.json\"\n\n[agent]\nhandle = \"hermes\"\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	keyPath := filepath.Join(home, ".config", "oar", "keys", "agent-b.ed25519")
+	if err := profile.SavePrivateKey(keyPath, privateKey); err != nil {
+		t.Fatalf("save private key: %v", err)
+	}
+	profilePath := filepath.Join(home, ".config", "oar", "profiles", "agent-b.json")
+	if err := profile.Save(profilePath, profile.Profile{
+		Agent:                "agent-b",
+		BaseURL:              "http://127.0.0.1:8002",
+		Username:             "hermes",
+		AgentID:              "agent_456",
+		ActorID:              "actor_456",
+		KeyID:                "key_456",
+		PrivateKeyPath:       keyPath,
+		AccessToken:          "access-token",
+		RefreshToken:         "refresh-token",
+		TokenType:            "Bearer",
+		AccessTokenExpiresAt: "2099-01-01T00:00:00Z",
+	}); err != nil {
+		t.Fatalf("save profile: %v", err)
+	}
+
+	app := New()
+	app.UserHomeDir = func() (string, error) { return home, nil }
+	result, err := app.runBridgeImportAuth([]string{"--config", configPath, "--from-profile", "agent-b"}, config.Resolved{Agent: "agent-b", ProfilePath: profilePath})
+	if err != nil {
+		t.Fatalf("runBridgeImportAuth: %v", err)
+	}
+	if strings.Contains(result.Text, "Base URL updated") {
+		t.Fatalf("expected no base URL update when config already has explicit base_url, output=%s", result.Text)
+	}
+	if !strings.Contains(result.Text, "WARNING: config [oar].base_url") {
+		t.Fatalf("expected mismatch warning when config base_url differs from profile, output=%s", result.Text)
+	}
+
+	updated, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read updated config: %v", err)
+	}
+	if !strings.Contains(string(updated), `base_url = "http://192.168.1.100:8000"`) {
+		t.Fatalf("expected original base_url preserved in config, content=%s", updated)
+	}
+}
+
+func TestBridgeReplaceConfigValue(t *testing.T) {
+	input := `[oar]
+base_url = "http://127.0.0.1:8000"
+workspace_id = "ws_main"
+
+[adapter]
+cwd_default = "/path"
+`
+	result := bridgeReplaceConfigValue(input, "oar", "base_url", "http://127.0.0.1:8002")
+	if !strings.Contains(result, `base_url = "http://127.0.0.1:8002"`) {
+		t.Fatalf("expected updated base_url, got=%s", result)
+	}
+	if !strings.Contains(result, `workspace_id = "ws_main"`) {
+		t.Fatalf("expected other fields preserved, got=%s", result)
+	}
+	if !strings.Contains(result, `cwd_default = "/path"`) {
+		t.Fatalf("expected adapter section preserved, got=%s", result)
+	}
+}

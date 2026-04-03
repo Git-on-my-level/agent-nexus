@@ -234,9 +234,11 @@ oar-agent-bridge --version
 
 ```bash
 oar bridge workspace-id --handle <handle>
-oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle>
+oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --workspace-path /absolute/path/to/hermes/workspace
 oar bridge import-auth --config ./agent.toml --from-profile <agent>
 ```
+
+If you omit `--workspace-path`, the Hermes template is written with placeholder paths and the CLI prints a warning so you can patch `[adapter].cwd_default` and `[adapter.workspace_map]` before starting the bridge. When `import-auth` reads a profile with a different OAR host, it also updates the default local `[oar].base_url` in the config so the two steps compose.
 
 4. Register the agent and write its initial pending wake registration in one step:
 

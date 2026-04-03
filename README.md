@@ -111,7 +111,7 @@ If this agent or machine also needs the per-agent wake bridge runtime, bootstrap
 # requires Python 3.11+ and git on PATH
 oar bridge install
 oar bridge workspace-id --handle <handle>
-oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle>
+oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --workspace-path /absolute/path/to/hermes/workspace
 oar bridge import-auth --config ./agent.toml --from-profile <agent>
 oar bridge start --config ./agent.toml
 oar bridge status --config ./agent.toml
@@ -120,6 +120,8 @@ oar bridge logs --config ./agent.toml
 oar bridge restart --config ./agent.toml
 oar bridge stop --config ./agent.toml
 ```
+
+For Hermes templates, omit `--workspace-path` only if you intend to hand-edit the generated placeholder paths. `oar bridge import-auth` also rewrites the default local `base_url` in that config when the imported profile points at a different OAR deployment.
 
 See `runbooks/release.md` for version-pinning and custom install directory options.
 

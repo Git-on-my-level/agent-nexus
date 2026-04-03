@@ -355,7 +355,7 @@ Config generation
 
 Generate minimal configs from the CLI:
 
-  oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle>
+  oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --workspace-path /absolute/path/to/hermes/workspace
   oar bridge init-config --kind zeroclaw --output ./zeroclaw.toml --workspace-id <workspace-id> --handle <handle>
 
 These templates intentionally default the agent lifecycle to:
@@ -383,11 +383,15 @@ First-time agent-host path
 
 2. Render the agent config:
 
-  oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle>
+  oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --workspace-path /absolute/path/to/hermes/workspace
+
+  If you omit `--workspace-path`, the rendered Hermes config uses placeholder paths and must be edited before the bridge can run.
 
 3. If a matching `oar` profile already exists for the target principal, import it into the bridge config:
 
   oar bridge import-auth --config ./agent.toml --from-profile <agent>
+
+  This also syncs the default local `[oar].base_url` in the bridge config to the imported profile when they differ.
 
 4. Register the target bridge principal and write the initial pending registration when auth does not already exist:
 
@@ -514,11 +518,15 @@ Preferred path when you are using `oar-agent-bridge`
 
 3. Generate the agent config:
 
-  oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle>
+  oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --workspace-path /absolute/path/to/hermes/workspace
+
+  If you omit `--workspace-path`, the generated Hermes config keeps placeholder paths and must be edited before the bridge can start.
 
 4. If matching `oar` auth already exists, import it into the bridge config:
 
   oar bridge import-auth --config ./agent.toml --from-profile <agent>
+
+  This also syncs the default local `[oar].base_url` in the bridge config to the imported profile when they differ.
 
 5. Register auth and write the initial pending registration when auth does not already exist:
 
@@ -955,8 +963,8 @@ Recommended order
 
 1. `oar bridge install`
 2. `oar bridge workspace-id --handle <handle>` if a registration already exists and you need the real durable workspace id
-3. `oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle>`
-4. `oar bridge import-auth --config ./agent.toml --from-profile <agent>` when matching `oar` auth already exists
+3. `oar bridge init-config --kind hermes --output ./agent.toml --workspace-id <workspace-id> --handle <handle> --workspace-path /absolute/path/to/hermes/workspace`
+4. `oar bridge import-auth --config ./agent.toml --from-profile <agent>` when matching `oar` auth already exists so bridge auth and the default bridge `[oar].base_url` stay aligned
 5. `oar-agent-bridge auth register ...` for the agent principal when auth does not already exist
 6. `oar bridge start --config ./agent.toml`
 7. `oar bridge status --config ./agent.toml` and `oar bridge doctor --config ./agent.toml` before expecting immediate online delivery
@@ -4327,7 +4335,7 @@ Local Help: bridge import-auth
 
 - Kind: `local helper`
 - Summary: Copy an existing `oar` profile and key into bridge auth state for one bridge config.
-- Composition: Pure local helper. Reads an existing `oar` profile plus Ed25519 key material, converts it into bridge auth state, and writes it to the bridge config's `[auth].state_path`.
+- Composition: Pure local helper. Reads an existing `oar` profile plus Ed25519 key material, converts it into bridge auth state, writes it to the bridge config's `[auth].state_path`, and syncs `[oar].base_url` when the config still has the default local value.
 - JSON body: `config_path`, `auth_state_path`, `profile_path`, `profile_agent`, `username`, `actor_id`, `agent_id`, `key_id`
 - Examples:
   - `oar bridge import-auth --config ./agent.toml --from-profile agent-a`
@@ -4356,7 +4364,7 @@ Local Help: bridge init-config
 - Composition: Pure local helper. Renders one minimal bridge config template with explicit workspace-id and readiness settings; optionally writes it to disk.
 - JSON body: `kind`, `output`, `workspace_id`, `handle`, `content`
 - Examples:
-  - `oar bridge init-config --kind hermes --output ./agent.toml --workspace-id ws_main --handle hermes`
+  - `oar bridge init-config --kind hermes --output ./agent.toml --workspace-id ws_main --handle hermes --workspace-path /absolute/path/to/hermes/workspace`
   - `oar bridge init-config --kind zeroclaw --output ./zeroclaw.toml --workspace-id ws_main --handle zeroclaw`
 
 Flags:
@@ -4364,6 +4372,7 @@ Flags:
   --output <path>              Write the rendered TOML to a file. Omit to print it.
   --workspace-id <id>          Durable OAR workspace id. Do not use a slug or UI path segment.
   --handle <name>              Agent handle for bridge templates.
+  --workspace-path <path>      Hermes workspace path. Sets both `[adapter].cwd_default` and `[adapter.workspace_map]`.
 
 
 Global flags:
