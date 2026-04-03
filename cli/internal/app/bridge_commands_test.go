@@ -531,6 +531,61 @@ func TestBridgeImportAuthUpdatesBaseURLFromProfile(t *testing.T) {
 	}
 }
 
+func TestBridgeImportAuthInsertsMissingBaseURLFromProfile(t *testing.T) {
+	home := t.TempDir()
+	configDir := t.TempDir()
+	configPath := filepath.Join(configDir, "agent.toml")
+	if err := os.WriteFile(configPath, []byte("[oar]\nworkspace_id = \"ws_main\"\nworkspace_name = \"Main\"\n\n[auth]\nstate_path = \".state/bridge-auth.json\"\n\n[agent]\nhandle = \"hermes\"\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	keyPath := filepath.Join(home, ".config", "oar", "keys", "agent-missing-base-url.ed25519")
+	if err := profile.SavePrivateKey(keyPath, privateKey); err != nil {
+		t.Fatalf("save private key: %v", err)
+	}
+	profilePath := filepath.Join(home, ".config", "oar", "profiles", "agent-missing-base-url.json")
+	if err := profile.Save(profilePath, profile.Profile{
+		Agent:                "agent-missing-base-url",
+		BaseURL:              "http://127.0.0.1:8002",
+		Username:             "hermes",
+		AgentID:              "agent_789",
+		ActorID:              "actor_789",
+		KeyID:                "key_789",
+		PrivateKeyPath:       keyPath,
+		AccessToken:          "access-token",
+		RefreshToken:         "refresh-token",
+		TokenType:            "Bearer",
+		AccessTokenExpiresAt: "2099-01-01T00:00:00Z",
+	}); err != nil {
+		t.Fatalf("save profile: %v", err)
+	}
+
+	app := New()
+	app.UserHomeDir = func() (string, error) { return home, nil }
+	result, err := app.runBridgeImportAuth([]string{"--config", configPath, "--from-profile", "agent-missing-base-url"}, config.Resolved{Agent: "agent-missing-base-url", ProfilePath: profilePath})
+	if err != nil {
+		t.Fatalf("runBridgeImportAuth: %v", err)
+	}
+	if !strings.Contains(result.Text, "Base URL updated: http://127.0.0.1:8002") {
+		t.Fatalf("expected base URL insert message, output=%s", result.Text)
+	}
+
+	updated, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read updated config: %v", err)
+	}
+	content := string(updated)
+	if !strings.Contains(content, "[oar]\nworkspace_id = \"ws_main\"\nworkspace_name = \"Main\"") ||
+		!strings.Contains(content, "\nbase_url = \"http://127.0.0.1:8002\"\n[auth]") &&
+			!strings.Contains(content, "\n\nbase_url = \"http://127.0.0.1:8002\"\n[auth]") {
+		t.Fatalf("expected inserted base_url in oar section, content=%s", content)
+	}
+}
+
 func TestBridgeImportAuthDoesNotOverrideExplicitBaseURL(t *testing.T) {
 	home := t.TempDir()
 	configDir := t.TempDir()
@@ -594,7 +649,10 @@ workspace_id = "ws_main"
 [adapter]
 cwd_default = "/path"
 `
-	result := bridgeReplaceConfigValue(input, "oar", "base_url", "http://127.0.0.1:8002")
+	result, changed := bridgeReplaceConfigValue(input, "oar", "base_url", "http://127.0.0.1:8002")
+	if !changed {
+		t.Fatal("expected replacement to report a change")
+	}
 	if !strings.Contains(result, `base_url = "http://127.0.0.1:8002"`) {
 		t.Fatalf("expected updated base_url, got=%s", result)
 	}
@@ -603,5 +661,24 @@ cwd_default = "/path"
 	}
 	if !strings.Contains(result, `cwd_default = "/path"`) {
 		t.Fatalf("expected adapter section preserved, got=%s", result)
+	}
+}
+
+func TestBridgeReplaceConfigValueInsertsMissingKeyInSection(t *testing.T) {
+	input := `[oar]
+workspace_id = "ws_main"
+workspace_name = "Main"
+
+[adapter]
+cwd_default = "/path"
+`
+	result, changed := bridgeReplaceConfigValue(input, "oar", "base_url", "http://127.0.0.1:8002")
+	if !changed {
+		t.Fatal("expected insert to report a change")
+	}
+	if !strings.Contains(result, "[oar]\nworkspace_id = \"ws_main\"\nworkspace_name = \"Main\"") ||
+		!strings.Contains(result, "\nbase_url = \"http://127.0.0.1:8002\"\n[adapter]") &&
+			!strings.Contains(result, "\n\nbase_url = \"http://127.0.0.1:8002\"\n[adapter]") {
+		t.Fatalf("expected missing key inserted before next section, got=%s", result)
 	}
 }

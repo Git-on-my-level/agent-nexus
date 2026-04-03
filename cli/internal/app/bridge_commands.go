@@ -417,10 +417,11 @@ func (a *App) runBridgeImportAuth(args []string, cfg config.Resolved) (*commandR
 		configBaseURL := strings.TrimSpace(configDetails.BaseURL)
 		if configBaseURL == "" || configBaseURL == "http://127.0.0.1:8000" {
 			if profileBaseURL != configBaseURL {
-				if err := bridgeUpdateConfigBaseURL(configDetails.ConfigPath, profileBaseURL); err != nil {
+				updated, err := bridgeUpdateConfigBaseURL(configDetails.ConfigPath, profileBaseURL)
+				if err != nil {
 					return nil, errnorm.Wrap(errnorm.KindLocal, "bridge_config_base_url_failed", "failed to update [oar].base_url in bridge config", err)
 				}
-				baseURLUpdated = true
+				baseURLUpdated = updated
 			}
 		} else if profileBaseURL != configBaseURL {
 			baseURLWarning = fmt.Sprintf("WARNING: config [oar].base_url (%s) differs from imported profile base_url (%s); leaving config unchanged.", configBaseURL, profileBaseURL)
@@ -1233,25 +1234,38 @@ func writeBridgeJSONFile(path string, payload map[string]any) error {
 	return nil
 }
 
-func bridgeUpdateConfigBaseURL(configPath string, newBaseURL string) error {
+func bridgeUpdateConfigBaseURL(configPath string, newBaseURL string) (bool, error) {
 	content, err := bridgeReadFile(configPath)
 	if err != nil {
-		return fmt.Errorf("read config for base_url update: %w", err)
+		return false, fmt.Errorf("read config for base_url update: %w", err)
 	}
-	updated := bridgeReplaceConfigValue(string(content), "oar", "base_url", newBaseURL)
+	updated, changed := bridgeReplaceConfigValue(string(content), "oar", "base_url", newBaseURL)
+	if !changed {
+		return false, nil
+	}
 	if err := bridgeWriteFile(configPath, []byte(updated), 0o600); err != nil {
-		return fmt.Errorf("write config with updated base_url: %w", err)
+		return false, fmt.Errorf("write config with updated base_url: %w", err)
 	}
-	return nil
+	return true, nil
 }
 
-func bridgeReplaceConfigValue(content string, section string, key string, newValue string) string {
+func bridgeReplaceConfigValue(content string, section string, key string, newValue string) (string, bool) {
 	var buf strings.Builder
 	currentSection := ""
+	sectionSeen := false
 	written := false
 	for _, line := range strings.Split(content, "\n") {
 		if matches := bridgeSectionHeaderPattern.FindStringSubmatch(line); len(matches) == 2 {
+			if currentSection == section && !written {
+				buf.WriteString(key + " = " + strconv.Quote(newValue) + "\n")
+				written = true
+			}
 			currentSection = matches[1]
+			if currentSection == section {
+				sectionSeen = true
+			}
+			buf.WriteString(line + "\n")
+			continue
 		}
 		if currentSection == section && !written {
 			name, _, ok := parseBridgeConfigAssignment(line)
@@ -1263,5 +1277,14 @@ func bridgeReplaceConfigValue(content string, section string, key string, newVal
 		}
 		buf.WriteString(line + "\n")
 	}
-	return buf.String()
+	if !written {
+		if sectionSeen {
+			buf.WriteString(key + " = " + strconv.Quote(newValue) + "\n")
+		} else {
+			buf.WriteString("[" + section + "]\n")
+			buf.WriteString(key + " = " + strconv.Quote(newValue) + "\n")
+		}
+		written = true
+	}
+	return buf.String(), written
 }
