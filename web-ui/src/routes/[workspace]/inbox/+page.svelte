@@ -359,6 +359,7 @@
 
   function categoryBadgeClass(category) {
     if (category === "decision_needed") return "text-indigo-400";
+    if (category === "intervention_needed") return "text-cyan-400";
     if (category === "exception") return "text-red-400";
     if (category === "commitment_risk") return "text-amber-400";
     return "text-[var(--ui-text-muted)]";

@@ -2,18 +2,21 @@ import { parseTimestampMs } from "./dateUtils.js";
 
 export const INBOX_CATEGORY_ORDER = [
   "decision_needed",
+  "intervention_needed",
   "exception",
   "commitment_risk",
 ];
 
 export const INBOX_CATEGORY_LABELS = {
   decision_needed: "Needs Decision",
+  intervention_needed: "Needs Intervention",
   exception: "Exception",
   commitment_risk: "At Risk",
 };
 
 export const INBOX_CATEGORY_DESCRIPTIONS = {
   decision_needed: "Decision event pending",
+  intervention_needed: "Human action required",
   exception: "Error or anomaly flagged",
   commitment_risk: "Commitment deadline approaching",
 };
@@ -33,6 +36,7 @@ export const INBOX_URGENCY_LABELS = {
 const INBOX_CATEGORY_URGENCY_BASE = {
   exception: 90,
   decision_needed: 76,
+  intervention_needed: 74,
   commitment_risk: 62,
 };
 

@@ -3153,7 +3153,7 @@ Generated Help: events create
 Body schema:
   Required: event.provenance.sources (list<string>), event.refs (list<typed_ref>), event.summary (string), event.type (string)
   Optional: actor_id (string), event.actor_id (string), event.payload (object), event.provenance.by_field (map<string, list<string>>), event.provenance.notes (string), event.thread_id (string), request_key (string)
-  Enum values: event.type (open): agent_notification_dismissed, agent_notification_read, board_card_added, board_card_moved, board_card_removed, board_card_updated, board_created, board_updated, commitment_created, commitment_status_changed, decision_made, decision_needed, document_created, document_tombstoned, document_updated, exception_raised, inbox_item_acknowledged, message_posted, receipt_added, review_completed, snapshot_updated, work_order_claimed, work_order_created
+  Enum values: event.type (open): agent_notification_dismissed, agent_notification_read, board_card_added, board_card_moved, board_card_removed, board_card_updated, board_created, board_updated, commitment_created, commitment_status_changed, decision_made, decision_needed, document_created, document_tombstoned, document_updated, exception_raised, inbox_item_acknowledged, intervention_needed, message_posted, receipt_added, review_completed, snapshot_updated, work_order_claimed, work_order_created
 
 Common authoring types:
   Communication: direct communication or important non-structured information
@@ -3161,6 +3161,8 @@ Common authoring types:
   Decisions: request or record decisions on the thread
   - `decision_needed`
   - `decision_made`
+  Interventions: single clear path exists, but a human must act to complete it
+  - `intervention_needed`
   State and commitments: track state changes and commitments
   - `snapshot_updated`
   - `commitment_created`

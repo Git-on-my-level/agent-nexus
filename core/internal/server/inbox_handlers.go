@@ -316,7 +316,7 @@ func resolveInboxRiskHorizon(w http.ResponseWriter, r *http.Request, opts handle
 
 func deriveInboxItemsNoStaleEmission(ctx context.Context, opts handlerOptions, now time.Time, riskHorizon time.Duration) ([]derivedInboxItem, error) {
 	events, err := opts.primitiveStore.ListEvents(ctx, primitives.EventListFilter{
-		Types: []string{"decision_needed", "exception_raised", "inbox_item_acknowledged", "receipt_added", "decision_made"},
+		Types: []string{"decision_needed", "intervention_needed", "exception_raised", "inbox_item_acknowledged", "receipt_added", "decision_made"},
 	})
 	if err != nil {
 		return nil, err
@@ -330,7 +330,7 @@ func deriveInboxItemsNoStaleEmission(ctx context.Context, opts handlerOptions, n
 	for _, event := range events {
 		eventType, _ := event["type"].(string)
 		switch eventType {
-		case "decision_needed", "exception_raised":
+		case "decision_needed", "intervention_needed", "exception_raised":
 			item, ok := deriveEventBackedInboxItem(event)
 			if !ok {
 				continue
@@ -450,6 +450,10 @@ func deriveEventBackedInboxItem(event map[string]any) (derivedInboxItem, bool) {
 		category = "decision_needed"
 		recommendedAction = "make_decision"
 		titleFallback = "Decision needed"
+	case "intervention_needed":
+		category = "intervention_needed"
+		recommendedAction = "take_action"
+		titleFallback = "Intervention needed"
 	case "exception_raised":
 		category = "exception"
 		recommendedAction = "investigate_exception"
@@ -574,9 +578,10 @@ func parseTimestamp(raw any) (time.Time, bool) {
 
 func sortInboxItems(items []derivedInboxItem) {
 	categoryOrder := map[string]int{
-		"decision_needed": 0,
-		"exception":       1,
-		"commitment_risk": 2,
+		"decision_needed":     0,
+		"intervention_needed": 1,
+		"exception":           2,
+		"commitment_risk":     3,
 	}
 
 	sort.Slice(items, func(i int, j int) bool {

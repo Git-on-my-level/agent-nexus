@@ -100,6 +100,7 @@ func isMeaningfulThreadActivityEvent(event map[string]any) bool {
 	switch eventType {
 	case "actor_statement",
 		"decision_needed",
+		"intervention_needed",
 		"decision_made",
 		"work_order_created",
 		"receipt_added",

@@ -19,6 +19,11 @@ describe("dashboard summaries", () => {
 
     expect(summary).toEqual([
       { category: "decision_needed", label: "Needs Decision", count: 2 },
+      {
+        category: "intervention_needed",
+        label: "Needs Intervention",
+        count: 0,
+      },
       { category: "exception", label: "Exception", count: 1 },
       { category: "commitment_risk", label: "At Risk", count: 0 },
       { category: "unknown", label: "unknown", count: 1 },
