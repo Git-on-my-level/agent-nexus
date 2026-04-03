@@ -115,6 +115,7 @@ type preparedEvent struct {
 	Type        string
 	ThreadID    string
 	RefsJSON    string
+	RefTargets  []refEdgeTarget
 	PayloadJSON string
 	BodyJSON    string
 }
@@ -149,27 +150,7 @@ func (s *Store) AppendEvent(ctx context.Context, actorID string, event map[strin
 }
 
 func overlayEventLifecycleFromSQLColumns(body map[string]any, archivedAt, archivedBy, tombstonedAt, tombstonedBy, tombstoneReason sql.NullString) {
-	delete(body, "archived_at")
-	delete(body, "archived_by")
-	delete(body, "tombstoned_at")
-	delete(body, "tombstoned_by")
-	delete(body, "tombstone_reason")
-	if tombstonedAt.Valid && strings.TrimSpace(tombstonedAt.String) != "" {
-		body["tombstoned_at"] = tombstonedAt.String
-		if tombstonedBy.Valid && strings.TrimSpace(tombstonedBy.String) != "" {
-			body["tombstoned_by"] = tombstonedBy.String
-		}
-		if tombstoneReason.Valid && strings.TrimSpace(tombstoneReason.String) != "" {
-			body["tombstone_reason"] = tombstoneReason.String
-		}
-		return
-	}
-	if archivedAt.Valid && strings.TrimSpace(archivedAt.String) != "" {
-		body["archived_at"] = archivedAt.String
-		if archivedBy.Valid && strings.TrimSpace(archivedBy.String) != "" {
-			body["archived_by"] = archivedBy.String
-		}
-	}
+	lifecycleFieldsFromSQLColumns(archivedAt, archivedBy, tombstonedAt, tombstonedBy, tombstoneReason).apply(body)
 }
 
 func decodeEventBodyFromRow(
@@ -346,6 +327,10 @@ func (s *Store) CreateArtifact(ctx context.Context, actorID string, artifact map
 		}
 		return nil, fmt.Errorf("insert artifact: %w", err)
 	}
+	if err := replaceRefEdges(ctx, tx, "artifact", artifactID, typedRefEdgeTargets(refEdgeTypeRef, refs)); err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
 
 	if err := s.applyBlobLedgerWritePlanTx(ctx, tx, blobPlan); err != nil {
 		_ = tx.Rollback()
@@ -460,6 +445,10 @@ func (s *Store) CreateArtifactAndEvent(ctx context.Context, actorID string, arti
 			return nil, nil, ErrConflict
 		}
 		return nil, nil, fmt.Errorf("insert artifact: %w", err)
+	}
+	if err := replaceRefEdges(ctx, tx, "artifact", artifactID, typedRefEdgeTargets(refEdgeTypeRef, artifactRefs)); err != nil {
+		_ = tx.Rollback()
+		return nil, nil, err
 	}
 
 	if err := insertPreparedEvent(ctx, tx, preparedEvent); err != nil {
@@ -601,25 +590,12 @@ func (s *Store) TombstoneArtifact(ctx context.Context, actorID string, artifactI
 		return nil, err
 	}
 	if tombstonedAt.Valid && strings.TrimSpace(tombstonedAt.String) != "" {
-		metadata["tombstoned_at"] = tombstonedAt.String
-		if tombstonedBy.Valid && strings.TrimSpace(tombstonedBy.String) != "" {
-			metadata["tombstoned_by"] = tombstonedBy.String
-		}
-		if tombstoneReason.Valid && strings.TrimSpace(tombstoneReason.String) != "" {
-			metadata["tombstone_reason"] = tombstoneReason.String
-		}
+		lifecycleFieldsFromSQLColumns(sql.NullString{}, sql.NullString{}, tombstonedAt, tombstonedBy, tombstoneReason).apply(metadata)
 		return metadata, nil
 	}
 
-	delete(metadata, "archived_at")
-	delete(metadata, "archived_by")
-
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	metadata["tombstoned_at"] = now
-	metadata["tombstoned_by"] = actorID
-	if strings.TrimSpace(reason) != "" {
-		metadata["tombstone_reason"] = reason
-	}
+	applyTombstonedLifecycle(metadata, now, actorID, reason)
 
 	updatedMetadataJSON, err := json.Marshal(metadata)
 	if err != nil {
@@ -676,16 +652,12 @@ func (s *Store) ArchiveArtifact(ctx context.Context, actorID, artifactID string)
 	}
 
 	if archivedAt.Valid && strings.TrimSpace(archivedAt.String) != "" {
-		metadata["archived_at"] = archivedAt.String
-		if archivedBy.Valid && strings.TrimSpace(archivedBy.String) != "" {
-			metadata["archived_by"] = archivedBy.String
-		}
+		lifecycleFieldsFromSQLColumns(archivedAt, archivedBy, sql.NullString{}, sql.NullString{}, sql.NullString{}).apply(metadata)
 		return metadata, nil
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	metadata["archived_at"] = now
-	metadata["archived_by"] = actorID
+	applyArchivedLifecycle(metadata, now, actorID)
 
 	updatedMetadataJSON, err := json.Marshal(metadata)
 	if err != nil {
@@ -740,8 +712,7 @@ func (s *Store) UnarchiveArtifact(ctx context.Context, actorID, artifactID strin
 	if err != nil {
 		return nil, err
 	}
-	delete(metadata, "archived_at")
-	delete(metadata, "archived_by")
+	clearArchivedLifecycle(metadata)
 
 	updatedMetadataJSON, err := json.Marshal(metadata)
 	if err != nil {
@@ -798,9 +769,7 @@ func (s *Store) RestoreArtifact(ctx context.Context, actorID, artifactID string)
 	if err != nil {
 		return nil, err
 	}
-	delete(metadata, "tombstoned_at")
-	delete(metadata, "tombstoned_by")
-	delete(metadata, "tombstone_reason")
+	clearTombstonedLifecycle(metadata, "", "")
 
 	updatedMetadataJSON, err := json.Marshal(metadata)
 	if err != nil {
@@ -836,10 +805,17 @@ func (s *Store) collectMessageDescendantIDs(ctx context.Context, threadID, paren
 		current := queue[0]
 		queue = queue[1:]
 
-		refPattern := fmt.Sprintf(`"event:%s"`, current)
 		rows, err := s.db.QueryContext(ctx,
-			`SELECT id FROM events WHERE thread_id = ? AND type = 'message_posted' AND refs_json LIKE ?`,
-			threadID, "%"+refPattern+"%",
+			`SELECT events.id
+			 FROM ref_edges
+			 JOIN events ON events.id = ref_edges.source_id
+			 WHERE ref_edges.source_type = 'event'
+			   AND ref_edges.target_type = 'event'
+			   AND ref_edges.target_id = ?
+			   AND ref_edges.edge_type = ?
+			   AND events.thread_id = ?
+			   AND events.type = 'message_posted'`,
+			current, refEdgeTypeRef, threadID,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("query message descendants: %w", err)
@@ -910,8 +886,7 @@ func (s *Store) archiveEventCascadeChild(ctx context.Context, actorID, childID s
 	overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, tombstonedAt, tombstonedBy, tombstoneReason)
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	body["archived_at"] = now
-	body["archived_by"] = actorID
+	applyArchivedLifecycle(body, now, actorID)
 	updatedBodyJSON, err := json.Marshal(body)
 	if err != nil {
 		return fmt.Errorf("encode cascade archived event body: %w", err)
@@ -965,8 +940,7 @@ func (s *Store) unarchiveEventCascadeChild(ctx context.Context, childID string) 
 		return err
 	}
 	overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, tombstonedAt, tombstonedBy, tombstoneReason)
-	delete(body, "archived_at")
-	delete(body, "archived_by")
+	clearArchivedLifecycle(body)
 
 	updatedBodyJSON, err := json.Marshal(body)
 	if err != nil {
@@ -1022,15 +996,8 @@ func (s *Store) tombstoneEventCascadeChild(ctx context.Context, actorID, childID
 	}
 	overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, tombstonedAt, tombstonedBy, tombstoneReason)
 
-	delete(body, "archived_at")
-	delete(body, "archived_by")
-
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	body["tombstoned_at"] = now
-	body["tombstoned_by"] = actorID
-	if strings.TrimSpace(reason) != "" {
-		body["tombstone_reason"] = strings.TrimSpace(reason)
-	}
+	applyTombstonedLifecycle(body, now, actorID, strings.TrimSpace(reason))
 
 	updatedBodyJSON, err := json.Marshal(body)
 	if err != nil {
@@ -1085,9 +1052,7 @@ func (s *Store) restoreEventCascadeChild(ctx context.Context, childID string) er
 		return err
 	}
 	overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, tombstonedAt, tombstonedBy, tombstoneReason)
-	delete(body, "tombstoned_at")
-	delete(body, "tombstoned_by")
-	delete(body, "tombstone_reason")
+	clearTombstonedLifecycle(body, archivedAt.String, archivedBy.String)
 
 	updatedBodyJSON, err := json.Marshal(body)
 	if err != nil {
@@ -1589,7 +1554,7 @@ func (s *Store) PatchSnapshot(ctx context.Context, actorID string, id string, pa
 	}
 
 	bodyPatch := cloneMap(patch)
-	nextProvenance := cloneMap(currentProvenance)
+	nextProvenance := cloneProvenance(currentProvenance)
 	provenanceChanged := false
 	if rawProvenance, hasProvenance := bodyPatch["provenance"]; hasProvenance {
 		provenancePatch, ok := rawProvenance.(map[string]any)
@@ -1620,9 +1585,9 @@ func (s *Store) PatchSnapshot(ctx context.Context, actorID string, id string, pa
 	if err != nil {
 		return PatchSnapshotResult{}, fmt.Errorf("encode patched snapshot body: %w", err)
 	}
-	updatedProvenanceJSON, err := json.Marshal(nextProvenance)
+	_, updatedProvenanceJSON, err := marshalProvenance(nextProvenance, "encode patched snapshot")
 	if err != nil {
-		return PatchSnapshotResult{}, fmt.Errorf("encode patched snapshot provenance: %w", err)
+		return PatchSnapshotResult{}, err
 	}
 	filterColumns := snapshotFilterColumnsForKind(snapshotKind, current)
 
@@ -1631,65 +1596,34 @@ func (s *Store) PatchSnapshot(ctx context.Context, actorID string, id string, pa
 		return PatchSnapshotResult{}, fmt.Errorf("begin snapshot patch transaction: %w", err)
 	}
 
-	var updateResult sql.Result
-	if ifUpdatedAt != nil {
-		updateResult, err = tx.ExecContext(
-			ctx,
-			`UPDATE threads
-			 SET body_json = ?, provenance_json = ?, updated_at = ?, updated_by = ?,
-			     filter_status = ?, filter_priority = ?, filter_owner = ?, filter_due_at = ?,
-			     filter_cadence = ?, filter_cadence_preset = ?, filter_tags_json = ?
-			 WHERE id = ? AND updated_at = ?`,
-			string(updatedBodyJSON),
-			string(updatedProvenanceJSON),
-			updatedAt,
-			actorID,
-			nullableString(filterColumns.Status),
-			nullableString(filterColumns.Priority),
-			nullableString(filterColumns.Owner),
-			nullableString(filterColumns.DueAt),
-			nullableString(filterColumns.Cadence),
-			nullableString(filterColumns.CadencePreset),
-			filterColumns.TagsJSON,
-			snapshotID,
-			*ifUpdatedAt,
-		)
-	} else {
-		updateResult, err = tx.ExecContext(
-			ctx,
-			`UPDATE threads
-			 SET body_json = ?, provenance_json = ?, updated_at = ?, updated_by = ?,
-			     filter_status = ?, filter_priority = ?, filter_owner = ?, filter_due_at = ?,
-			     filter_cadence = ?, filter_cadence_preset = ?, filter_tags_json = ?
-			 WHERE id = ?`,
-			string(updatedBodyJSON),
-			string(updatedProvenanceJSON),
-			updatedAt,
-			actorID,
-			nullableString(filterColumns.Status),
-			nullableString(filterColumns.Priority),
-			nullableString(filterColumns.Owner),
-			nullableString(filterColumns.DueAt),
-			nullableString(filterColumns.Cadence),
-			nullableString(filterColumns.CadencePreset),
-			filterColumns.TagsJSON,
-			snapshotID,
-		)
+	updateQuery := `UPDATE threads
+		 SET body_json = ?, provenance_json = ?, updated_at = ?, updated_by = ?,
+		     filter_status = ?, filter_priority = ?, filter_owner = ?, filter_due_at = ?,
+		     filter_cadence = ?, filter_cadence_preset = ?, filter_tags_json = ?
+		 WHERE id = ?`
+	updateArgs := []any{
+		string(updatedBodyJSON),
+		updatedProvenanceJSON,
+		updatedAt,
+		actorID,
+		nullableString(filterColumns.Status),
+		nullableString(filterColumns.Priority),
+		nullableString(filterColumns.Owner),
+		nullableString(filterColumns.DueAt),
+		nullableString(filterColumns.Cadence),
+		nullableString(filterColumns.CadencePreset),
+		filterColumns.TagsJSON,
+		snapshotID,
 	}
+	updateQuery, updateArgs = appendIfUpdatedAtClause(updateQuery, updateArgs, ifUpdatedAt)
+	updateResult, err := tx.ExecContext(ctx, updateQuery, updateArgs...)
 	if err != nil {
 		_ = tx.Rollback()
 		return PatchSnapshotResult{}, fmt.Errorf("update snapshot: %w", err)
 	}
-	if ifUpdatedAt != nil {
-		rowsAffected, err := updateResult.RowsAffected()
-		if err != nil {
-			_ = tx.Rollback()
-			return PatchSnapshotResult{}, fmt.Errorf("read patch snapshot rows affected: %w", err)
-		}
-		if rowsAffected == 0 {
-			_ = tx.Rollback()
-			return PatchSnapshotResult{}, ErrConflict
-		}
+	if err := requireIfUpdatedAtRowsAffected(updateResult, ifUpdatedAt, "patch snapshot"); err != nil {
+		_ = tx.Rollback()
+		return PatchSnapshotResult{}, err
 	}
 
 	eventPayload := map[string]any{
@@ -1765,13 +1699,9 @@ func (s *Store) CreateThread(ctx context.Context, actorID string, thread map[str
 		return PatchSnapshotResult{}, fmt.Errorf("marshal thread snapshot body: %w", err)
 	}
 
-	provenance := map[string]any{}
-	if rawProvenance, ok := thread["provenance"].(map[string]any); ok {
-		provenance = rawProvenance
-	}
-	provenanceJSON, err := json.Marshal(provenance)
+	provenance, provenanceJSON, err := marshalProvenance(thread["provenance"], "marshal thread")
 	if err != nil {
-		return PatchSnapshotResult{}, fmt.Errorf("marshal thread provenance: %w", err)
+		return PatchSnapshotResult{}, err
 	}
 	filterColumns := snapshotFilterColumnsForKind("thread", body)
 
@@ -1789,7 +1719,7 @@ func (s *Store) CreateThread(ctx context.Context, actorID string, thread map[str
 		updatedAt,
 		actorID,
 		string(bodyJSON),
-		string(provenanceJSON),
+		provenanceJSON,
 		nullableString(filterColumns.Status),
 		nullableString(filterColumns.Priority),
 		nil,
@@ -2346,6 +2276,7 @@ func prepareEventForInsert(actorID string, event map[string]any) (preparedEvent,
 		Type:        typeValue,
 		ThreadID:    threadID,
 		RefsJSON:    string(refsJSON),
+		RefTargets:  typedRefEdgeTargets(refEdgeTypeRef, refs),
 		PayloadJSON: string(payloadJSON),
 		BodyJSON:    string(bodyJSON),
 	}, nil
@@ -2369,6 +2300,9 @@ func insertPreparedEvent(ctx context.Context, exec eventExec, prepared preparedE
 			return ErrConflict
 		}
 		return fmt.Errorf("insert event: %w", err)
+	}
+	if err := replaceRefEdges(ctx, exec, "event", anyStringValue(prepared.Body["id"]), prepared.RefTargets); err != nil {
+		return err
 	}
 
 	return nil
@@ -2601,13 +2535,9 @@ func (s *Store) CreateCommitment(ctx context.Context, actorID string, commitment
 		return PatchSnapshotResult{}, fmt.Errorf("marshal commitment snapshot body: %w", err)
 	}
 
-	provenance := map[string]any{}
-	if rawProvenance, ok := commitment["provenance"].(map[string]any); ok {
-		provenance = rawProvenance
-	}
-	provenanceJSON, err := json.Marshal(provenance)
+	provenance, provenanceJSON, err := marshalProvenance(commitment["provenance"], "marshal commitment")
 	if err != nil {
-		return PatchSnapshotResult{}, fmt.Errorf("marshal commitment provenance: %w", err)
+		return PatchSnapshotResult{}, err
 	}
 	filterColumns := snapshotFilterColumnsForKind("commitment", body)
 
@@ -2625,7 +2555,7 @@ func (s *Store) CreateCommitment(ctx context.Context, actorID string, commitment
 		updatedAt,
 		actorID,
 		string(bodyJSON),
-		string(provenanceJSON),
+		provenanceJSON,
 		nullableString(filterColumns.Status),
 		nil,
 		nullableString(filterColumns.Owner),
@@ -2760,20 +2690,10 @@ func (s *Store) PatchCommitment(ctx context.Context, actorID string, id string, 
 		}
 	}
 
-	provenance := map[string]any{}
-	if rawProvenance, ok := currentSnapshot["provenance"].(map[string]any); ok {
-		provenance = cloneMap(rawProvenance)
-	}
+	provenance := cloneProvenance(currentSnapshot["provenance"])
 	if statusChanged {
 		labels := statusEvidenceLabels(newStatus, refs)
-		if len(labels) > 0 {
-			byField := map[string]any{}
-			if rawByField, ok := provenance["by_field"].(map[string]any); ok {
-				byField = cloneMap(rawByField)
-			}
-			byField["status"] = labels
-			provenance["by_field"] = byField
-		}
+		provenance = setProvenanceFieldLabels(provenance, "status", labels)
 	}
 
 	updatedAt := time.Now().UTC().Format(time.RFC3339Nano)
@@ -2781,9 +2701,9 @@ func (s *Store) PatchCommitment(ctx context.Context, actorID string, id string, 
 	if err != nil {
 		return PatchSnapshotResult{}, fmt.Errorf("encode patched commitment body: %w", err)
 	}
-	provenanceJSON, err := json.Marshal(provenance)
+	_, provenanceJSON, err := marshalProvenance(provenance, "encode patched commitment")
 	if err != nil {
-		return PatchSnapshotResult{}, fmt.Errorf("encode patched commitment provenance: %w", err)
+		return PatchSnapshotResult{}, err
 	}
 	filterColumns := snapshotFilterColumnsForKind("commitment", currentBody)
 
@@ -2792,55 +2712,29 @@ func (s *Store) PatchCommitment(ctx context.Context, actorID string, id string, 
 		return PatchSnapshotResult{}, fmt.Errorf("begin commitment patch transaction: %w", err)
 	}
 
-	var updateResult sql.Result
-	if ifUpdatedAt != nil {
-		updateResult, err = tx.ExecContext(
-			ctx,
-			`UPDATE commitments
-			 SET body_json = ?, provenance_json = ?, updated_at = ?, updated_by = ?,
-			     filter_status = ?, filter_owner = ?, filter_due_at = ?
-			 WHERE id = ? AND updated_at = ?`,
-			string(bodyJSON),
-			string(provenanceJSON),
-			updatedAt,
-			actorID,
-			nullableString(filterColumns.Status),
-			nullableString(filterColumns.Owner),
-			nullableString(filterColumns.DueAt),
-			id,
-			*ifUpdatedAt,
-		)
-	} else {
-		updateResult, err = tx.ExecContext(
-			ctx,
-			`UPDATE commitments
-			 SET body_json = ?, provenance_json = ?, updated_at = ?, updated_by = ?,
-			     filter_status = ?, filter_owner = ?, filter_due_at = ?
-			 WHERE id = ?`,
-			string(bodyJSON),
-			string(provenanceJSON),
-			updatedAt,
-			actorID,
-			nullableString(filterColumns.Status),
-			nullableString(filterColumns.Owner),
-			nullableString(filterColumns.DueAt),
-			id,
-		)
+	updateQuery := `UPDATE commitments
+		 SET body_json = ?, provenance_json = ?, updated_at = ?, updated_by = ?,
+		     filter_status = ?, filter_owner = ?, filter_due_at = ?
+		 WHERE id = ?`
+	updateArgs := []any{
+		string(bodyJSON),
+		provenanceJSON,
+		updatedAt,
+		actorID,
+		nullableString(filterColumns.Status),
+		nullableString(filterColumns.Owner),
+		nullableString(filterColumns.DueAt),
+		id,
 	}
+	updateQuery, updateArgs = appendIfUpdatedAtClause(updateQuery, updateArgs, ifUpdatedAt)
+	updateResult, err := tx.ExecContext(ctx, updateQuery, updateArgs...)
 	if err != nil {
 		_ = tx.Rollback()
 		return PatchSnapshotResult{}, fmt.Errorf("update commitment snapshot: %w", err)
 	}
-	if ifUpdatedAt != nil {
-		rowsAffected, err := updateResult.RowsAffected()
-		if err != nil {
-			_ = tx.Rollback()
-			return PatchSnapshotResult{}, fmt.Errorf("read patch commitment rows affected: %w", err)
-		}
-		if rowsAffected == 0 {
-			_ = tx.Rollback()
-			return PatchSnapshotResult{}, ErrConflict
-		}
+	if err := requireIfUpdatedAtRowsAffected(updateResult, ifUpdatedAt, "patch commitment"); err != nil {
+		_ = tx.Rollback()
+		return PatchSnapshotResult{}, err
 	}
 
 	eventType := "snapshot_updated"
@@ -3440,51 +3334,60 @@ func buildListArtifactsQuery(filter ArtifactListFilter) (string, []any) {
 
 	if threadID := strings.TrimSpace(filter.ThreadID); threadID != "" {
 		primaryClauses := []string{"thread_id = ?"}
-		secondaryClauses := []string{"COALESCE(thread_id, '') <> ?", "EXISTS (SELECT 1 FROM json_each(refs_json) WHERE value = ?)"}
+		secondaryClauses := []string{
+			"COALESCE(artifacts.thread_id, '') <> ?",
+			"ref_edges.source_type = ?",
+			"ref_edges.target_type = ?",
+			"ref_edges.target_id = ?",
+			"ref_edges.edge_type = ?",
+		}
 		primaryArgs := []any{threadID}
-		secondaryArgs := []any{threadID, "thread:" + threadID}
+		secondaryArgs := []any{threadID, "artifact", "thread", threadID, refEdgeTypeRef}
 		if filter.TombstonedOnly {
 			primaryClauses = append(primaryClauses, "tombstoned_at IS NOT NULL")
-			secondaryClauses = append(secondaryClauses, "tombstoned_at IS NOT NULL")
+			secondaryClauses = append(secondaryClauses, "artifacts.tombstoned_at IS NOT NULL")
 		} else if !filter.IncludeTombstoned {
 			primaryClauses = append(primaryClauses, "tombstoned_at IS NULL")
-			secondaryClauses = append(secondaryClauses, "tombstoned_at IS NULL")
+			secondaryClauses = append(secondaryClauses, "artifacts.tombstoned_at IS NULL")
 		}
 		if filter.ArchivedOnly {
 			primaryClauses = append(primaryClauses, "archived_at IS NOT NULL", "tombstoned_at IS NULL")
-			secondaryClauses = append(secondaryClauses, "archived_at IS NOT NULL", "tombstoned_at IS NULL")
+			secondaryClauses = append(secondaryClauses, "artifacts.archived_at IS NOT NULL", "artifacts.tombstoned_at IS NULL")
 		} else if !filter.IncludeArchived {
 			primaryClauses = append(primaryClauses, "archived_at IS NULL")
-			secondaryClauses = append(secondaryClauses, "archived_at IS NULL")
+			secondaryClauses = append(secondaryClauses, "artifacts.archived_at IS NULL")
 		}
 		if kind := strings.TrimSpace(filter.Kind); kind != "" {
 			primaryClauses = append(primaryClauses, "kind = ?")
-			secondaryClauses = append(secondaryClauses, "kind = ?")
+			secondaryClauses = append(secondaryClauses, "artifacts.kind = ?")
 			primaryArgs = append(primaryArgs, kind)
 			secondaryArgs = append(secondaryArgs, kind)
 		}
 		if createdAfter := strings.TrimSpace(filter.CreatedAfter); createdAfter != "" {
 			primaryClauses = append(primaryClauses, "created_at >= ?")
-			secondaryClauses = append(secondaryClauses, "created_at >= ?")
+			secondaryClauses = append(secondaryClauses, "artifacts.created_at >= ?")
 			primaryArgs = append(primaryArgs, createdAfter)
 			secondaryArgs = append(secondaryArgs, createdAfter)
 		}
 		if createdBefore := strings.TrimSpace(filter.CreatedBefore); createdBefore != "" {
 			primaryClauses = append(primaryClauses, "created_at <= ?")
-			secondaryClauses = append(secondaryClauses, "created_at <= ?")
+			secondaryClauses = append(secondaryClauses, "artifacts.created_at <= ?")
 			primaryArgs = append(primaryArgs, createdBefore)
 			secondaryArgs = append(secondaryArgs, createdBefore)
 		}
 		if q != "" {
 			searchClause := "(id LIKE ? OR kind LIKE ? OR COALESCE(json_extract(metadata_json, '$.summary'), '') LIKE ?)"
 			primaryClauses = append(primaryClauses, searchClause)
-			secondaryClauses = append(secondaryClauses, searchClause)
+			secondaryClauses = append(secondaryClauses, "(artifacts.id LIKE ? OR artifacts.kind LIKE ? OR COALESCE(json_extract(artifacts.metadata_json, '$.summary'), '') LIKE ?)")
 			primaryArgs = append(primaryArgs, qPattern, qPattern, qPattern)
 			secondaryArgs = append(secondaryArgs, qPattern, qPattern, qPattern)
 		}
 		innerQuery := `SELECT metadata_json, created_at, id FROM artifacts WHERE ` + strings.Join(primaryClauses, " AND ") + `
 			UNION ALL
-			SELECT metadata_json, created_at, id FROM artifacts WHERE ` + strings.Join(secondaryClauses, " AND ")
+			SELECT artifacts.metadata_json, artifacts.created_at, artifacts.id
+			  FROM ref_edges
+			  JOIN artifacts ON artifacts.id = ref_edges.source_id
+			 WHERE ` + strings.Join(secondaryClauses, " AND ")
 		query := `SELECT metadata_json FROM (` + innerQuery + `) ORDER BY created_at ASC, id ASC`
 		if filter.Limit != nil && *filter.Limit > 0 {
 			query += fmt.Sprintf(` LIMIT %d`, *filter.Limit)

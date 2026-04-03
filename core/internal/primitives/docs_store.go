@@ -305,6 +305,10 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		}
 		return nil, nil, fmt.Errorf("insert document artifact: %w", err)
 	}
+	if err := replaceRefEdges(ctx, tx, "artifact", artifactID, typedRefEdgeTargets(refEdgeTypeRef, revisionRefs)); err != nil {
+		_ = tx.Rollback()
+		return nil, nil, err
+	}
 
 	if _, err := tx.ExecContext(
 		ctx,
@@ -333,6 +337,11 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		}
 		return nil, nil, fmt.Errorf("insert document: %w", err)
 	}
+	documentTargets := appendRefEdgeTarget(nil, refEdgeTypeDocumentThread, "thread", threadID)
+	if err := replaceRefEdges(ctx, tx, "document", documentID, documentTargets); err != nil {
+		_ = tx.Rollback()
+		return nil, nil, err
+	}
 
 	if _, err := tx.ExecContext(
 		ctx,
@@ -354,6 +363,10 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 			return nil, nil, ErrConflict
 		}
 		return nil, nil, fmt.Errorf("insert document revision: %w", err)
+	}
+	if err := replaceRefEdges(ctx, tx, "document_revision", revisionID, typedRefEdgeTargets(refEdgeTypeRef, revisionRefs)); err != nil {
+		_ = tx.Rollback()
+		return nil, nil, err
 	}
 
 	lifecycleEvent, err := prepareEventForInsert(actorID, buildDocumentLifecycleEvent(
@@ -621,6 +634,10 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		}
 		return nil, nil, fmt.Errorf("insert document artifact: %w", err)
 	}
+	if err := replaceRefEdges(ctx, tx, "artifact", artifactID, typedRefEdgeTargets(refEdgeTypeRef, revisionRefs)); err != nil {
+		_ = tx.Rollback()
+		return nil, nil, err
+	}
 
 	if _, err := tx.ExecContext(
 		ctx,
@@ -643,6 +660,10 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 			return nil, nil, ErrConflict
 		}
 		return nil, nil, fmt.Errorf("insert document revision: %w", err)
+	}
+	if err := replaceRefEdges(ctx, tx, "document_revision", revisionID, typedRefEdgeTargets(refEdgeTypeRef, revisionRefs)); err != nil {
+		_ = tx.Rollback()
+		return nil, nil, err
 	}
 
 	lifecycleEvent, err := prepareEventForInsert(actorID, buildDocumentLifecycleEvent(
@@ -705,6 +726,11 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 	if affected == 0 {
 		_ = tx.Rollback()
 		return nil, nil, ErrConflict
+	}
+	documentTargets := appendRefEdgeTarget(nil, refEdgeTypeDocumentThread, "thread", nextThreadID)
+	if err := replaceRefEdges(ctx, tx, "document", documentID, documentTargets); err != nil {
+		_ = tx.Rollback()
+		return nil, nil, err
 	}
 
 	if err := s.applyBlobLedgerWritePlanTx(ctx, tx, blobPlan); err != nil {

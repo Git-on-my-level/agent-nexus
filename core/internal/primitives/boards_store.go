@@ -268,6 +268,13 @@ func (s *Store) CreateBoard(ctx context.Context, actorID string, board map[strin
 		}
 		return nil, fmt.Errorf("insert board: %w", err)
 	}
+	boardTargets := appendRefEdgeTarget(nil, refEdgeTypeBoardPrimaryThread, "thread", primaryThreadID)
+	boardTargets = appendRefEdgeTarget(boardTargets, refEdgeTypeBoardPrimaryDocument, "document", primaryDocumentID)
+	boardTargets = append(boardTargets, typedRefEdgeTargets(refEdgeTypeBoardPinnedRef, pinnedRefs)...)
+	if err := replaceRefEdges(ctx, tx, "board", boardID, boardTargets); err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
 
 	if err := tx.Commit(); err != nil {
 		_ = tx.Rollback()
@@ -607,26 +614,24 @@ func (s *Store) UpdateBoard(ctx context.Context, actorID, boardID string, patch 
 		actorID,
 		boardID,
 	}
-	if ifUpdatedAt != nil {
-		query += ` AND updated_at = ?`
-		args = append(args, strings.TrimSpace(*ifUpdatedAt))
-	}
+	query, args = appendIfUpdatedAtClause(query, args, ifUpdatedAt)
 
 	result, err := tx.ExecContext(ctx, query, args...)
 	if err != nil {
 		_ = tx.Rollback()
 		return nil, fmt.Errorf("update board: %w", err)
 	}
-	if ifUpdatedAt != nil {
-		rowsAffected, rowsErr := result.RowsAffected()
-		if rowsErr != nil {
-			_ = tx.Rollback()
-			return nil, fmt.Errorf("read board update result: %w", rowsErr)
-		}
-		if rowsAffected == 0 {
-			_ = tx.Rollback()
-			return nil, ErrConflict
-		}
+	if err := requireIfUpdatedAtRowsAffected(result, ifUpdatedAt, "board update"); err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+
+	boardTargets := appendRefEdgeTarget(nil, refEdgeTypeBoardPrimaryThread, "thread", currentRow.PrimaryThreadID)
+	boardTargets = appendRefEdgeTarget(boardTargets, refEdgeTypeBoardPrimaryDocument, "document", derefBoardString(nextPrimaryDocumentID))
+	boardTargets = append(boardTargets, typedRefEdgeTargets(refEdgeTypeBoardPinnedRef, nextPinnedRefs)...)
+	if err := replaceRefEdges(ctx, tx, "board", boardID, boardTargets); err != nil {
+		_ = tx.Rollback()
+		return nil, err
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -864,7 +869,7 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	provenanceJSON := `{"sources":["inferred"]}`
+	provenanceJSON := inferredProvenanceJSON()
 
 	if _, err := tx.ExecContext(
 		ctx,
@@ -936,6 +941,12 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 			return BoardCardMutationResult{}, ErrConflict
 		}
 		return BoardCardMutationResult{}, fmt.Errorf("insert board card membership: %w", err)
+	}
+	cardTargets := appendRefEdgeTarget(nil, refEdgeTypeCardParentThread, "thread", parentThreadID)
+	cardTargets = appendRefEdgeTarget(cardTargets, refEdgeTypeCardPinnedDocument, "document", derefBoardString(pinnedDocumentID))
+	if err := replaceRefEdges(ctx, tx, "card", cardID, cardTargets); err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, err
 	}
 
 	boardRow, err = touchBoardRow(ctx, tx, boardRow, actorID)
@@ -1137,6 +1148,12 @@ func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifie
 	); err != nil {
 		_ = tx.Rollback()
 		return BoardCardMutationResult{}, fmt.Errorf("update board card: %w", err)
+	}
+	cardTargets := appendRefEdgeTarget(nil, refEdgeTypeCardParentThread, "thread", nextParentThread)
+	cardTargets = appendRefEdgeTarget(cardTargets, refEdgeTypeCardPinnedDocument, "document", nextPinnedDocumentID)
+	if err := replaceRefEdges(ctx, tx, "card", cardRow.CardID, cardTargets); err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, err
 	}
 
 	boardRow, err = touchBoardRow(ctx, tx, boardRow, actorID)
@@ -1886,13 +1903,7 @@ func validateBoardAnchors(ctx context.Context, tx *sql.Tx, boardID, targetColumn
 }
 
 func ensureBoardUpdatedAtMatches(board boardRow, ifUpdatedAt *string) error {
-	if ifUpdatedAt == nil {
-		return nil
-	}
-	if strings.TrimSpace(*ifUpdatedAt) != board.UpdatedAt {
-		return ErrConflict
-	}
-	return nil
+	return ensureUpdatedAtMatches(board.UpdatedAt, ifUpdatedAt)
 }
 
 func touchBoardRow(ctx context.Context, tx *sql.Tx, board boardRow, actorID string) (boardRow, error) {
