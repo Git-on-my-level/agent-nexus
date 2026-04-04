@@ -149,3 +149,50 @@ export function freshnessStatusTone(status) {
 export function isFreshnessCurrent(freshness) {
   return String(freshness?.status ?? "").trim() === "current";
 }
+
+export function cardStatusTagColor(status) {
+  switch (
+    String(status ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/[\s-]+/g, "_")
+  ) {
+    case "todo":
+      return "text-blue-400 bg-blue-500/10";
+    case "in_progress":
+      return "text-amber-300 bg-amber-500/10";
+    case "blocked":
+      return "text-red-400 bg-red-500/10";
+    case "review":
+      return "text-purple-400 bg-purple-500/10";
+    case "done":
+      return "text-emerald-400 bg-emerald-500/10";
+    case "canceled":
+    case "cancelled":
+      return "text-gray-500 bg-gray-500/10";
+    case "paused":
+      return "text-amber-400 bg-amber-400/10";
+    default:
+      return "text-[var(--ui-text-muted)] bg-[var(--ui-border)]";
+  }
+}
+
+export function cardPriorityTagColor(priority) {
+  switch (
+    String(priority ?? "")
+      .trim()
+      .toLowerCase()
+  ) {
+    case "critical":
+    case "urgent":
+      return "text-red-400 bg-red-500/10";
+    case "high":
+      return "text-orange-400 bg-orange-500/10";
+    case "medium":
+      return "text-amber-300 bg-amber-500/10";
+    case "low":
+      return "text-blue-400 bg-blue-500/10";
+    default:
+      return "text-[var(--ui-text-muted)] bg-[var(--ui-border)]";
+  }
+}

@@ -57,6 +57,8 @@ export declare class OarClient {
     cardsList(options?: RequestOptions): Promise<InvokeResult>;
     cardsMove(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     cardsPatch(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    cardsPurge(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    cardsRestore(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsCreate(options?: RequestOptions): Promise<InvokeResult>;
     docsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsList(options?: RequestOptions): Promise<InvokeResult>;

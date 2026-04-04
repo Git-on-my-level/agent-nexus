@@ -4,7 +4,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.3.0`
-- Commands: `39`
+- Commands: `41`
 
 ## `artifacts.get`
 
@@ -161,6 +161,30 @@ Generated from `contracts/oar-openapi.yaml`.
 - Concepts: `cards`, `write`, `concurrency`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ card }`.
+
+## `cards.purge`
+
+- CLI path: `cards purge`
+- HTTP: `POST /cards/{card_id}/purge`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Permanently delete an archived card (human-gated; requires archived_at).
+- Concepts: `cards`, `write`
+- Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
+- Output: Returns `{ purged, card_id }`.
+
+## `cards.restore`
+
+- CLI path: `cards restore`
+- HTTP: `POST /cards/{card_id}/restore`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Clear archived_at on a soft-deleted card so it reappears on boards.
+- Concepts: `cards`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Output: Returns `{ board, card }`.
 
 ## `docs.create`
 

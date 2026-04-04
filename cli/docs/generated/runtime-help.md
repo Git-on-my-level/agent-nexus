@@ -1634,7 +1634,7 @@ Generated Help: cards list
 - Output: Returns `{ cards }`.
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `cards`
-- Adjacent commands: `cards get`, `cards move`, `cards patch`
+- Adjacent commands: `cards get`, `cards move`, `cards patch`, `cards purge`, `cards restore`
 
 
 Global flags:
@@ -1659,7 +1659,7 @@ Generated Help: cards get
 - Output: Returns `{ card }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `cards`
-- Adjacent commands: `cards list`, `cards move`, `cards patch`
+- Adjacent commands: `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`
 
 Inputs:
   Required:
@@ -1687,7 +1687,7 @@ Generated Help: cards patch
 - Output: Returns `{ card }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `cards`, `write`, `concurrency`
-- Adjacent commands: `cards get`, `cards list`, `cards move`
+- Adjacent commands: `cards get`, `cards list`, `cards move`, `cards purge`, `cards restore`
 
 Inputs:
   Required:
@@ -1732,7 +1732,7 @@ Generated Help: cards move
 - Output: Returns `{ card }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `cards`, `boards`, `write`
-- Adjacent commands: `cards get`, `cards list`, `cards patch`
+- Adjacent commands: `cards get`, `cards list`, `cards patch`, `cards purge`, `cards restore`
 
 Inputs:
   Required:
@@ -1744,7 +1744,7 @@ Inputs:
   - body `move.if_board_updated_at` (datetime)
   - body `move.resolution` (string)
   - body `move.resolution_refs` (list<any>)
-  Enum values: move.column_key: backlog, blocked, done, in_progress, ready, review; move.resolution: canceled, done
+  Enum values: move.column_key: backlog, blocked, done, in_progress, ready, review; move.resolution: canceled, completed
 
 Global flags:
   Global flags can appear before or after the command path.

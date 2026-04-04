@@ -397,7 +397,7 @@
       String(nextPayload.column_key ?? "").trim() === "done" &&
       !nextPayload.resolution
     ) {
-      nextPayload.resolution = "done";
+      nextPayload.resolution = "completed";
       const refs = String(manageResolutionRefs ?? "")
         .split(/\r?\n|,/)
         .map((item) => item.trim())

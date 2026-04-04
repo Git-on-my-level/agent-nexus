@@ -829,6 +829,21 @@ paths:
       x-oar-error-codes: [auth_required, invalid_token]
       x-oar-concepts: [cards]
       x-oar-stability: beta
+      parameters:
+        - name: archived_only
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: When true, return only archived (soft-deleted) cards.
+        - name: tombstoned_only
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: Trash-list alias for archived_only (cards are archived, not tombstoned).
       responses:
         '200':
           description: Card list
@@ -938,6 +953,84 @@ paths:
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /cards/{card_id}/restore:
+    post:
+      operationId: restoreArchivedCard
+      summary: Restore archived card
+      tags: [cards]
+      x-oar-surface: canonical
+      x-oar-command-id: cards.restore
+      x-oar-cli-path: cards restore
+      x-oar-why: Clear archived_at on a soft-deleted card so it reappears on boards.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ board, card }`."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-oar-concepts: [cards, write]
+      x-oar-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/CardID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RestoreArchivedCardRequest'
+      responses:
+        '200':
+          description: Card restored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardCardMutationResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /cards/{card_id}/purge:
+    post:
+      operationId: purgeArchivedCard
+      summary: Purge archived card
+      tags: [cards]
+      x-oar-surface: canonical
+      x-oar-command-id: cards.purge
+      x-oar-cli-path: cards purge
+      x-oar-why: Permanently delete an archived card (human-gated; requires archived_at).
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ purged, card_id }`."
+      x-oar-error-codes: [auth_required, human_only, invalid_token, not_found, conflict]
+      x-oar-concepts: [cards, write]
+      x-oar-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/CardID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurgeCardRequest'
+      responses:
+        '200':
+          description: Card purged
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurgeCardResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
           $ref: '#/components/responses/ErrorResponse'
         '404':
           $ref: '#/components/responses/ErrorResponse'
@@ -2112,6 +2205,33 @@ components:
           type: array
           items: { $ref: '#/components/schemas/Card' }
       required: [cards]
+
+    BoardCardMutationResponse:
+      type: object
+      properties:
+        board: { $ref: '#/components/schemas/Board' }
+        card: { $ref: '#/components/schemas/Card' }
+      required: [board, card]
+
+    RestoreArchivedCardRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+        if_board_updated_at:
+          type: string
+          format: date-time
+
+    PurgeCardRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+
+    PurgeCardResponse:
+      type: object
+      properties:
+        purged: { type: boolean }
+        card_id: { type: string }
+      required: [purged, card_id]
 
     PacketPayload:
       oneOf:

@@ -696,21 +696,29 @@ export function createOarCoreClient(options = {}) {
       }),
 
     createCommitment: (payload) =>
-      invokeJSON("commitments.create", () =>
-        generated.commitmentsCreate({ body: withActorId(payload) }),
-      ),
+      invokeDirectJSON("/commitments", {
+        method: "POST",
+        body: JSON.stringify(withActorId(payload)),
+        headers: {
+          "content-type": "application/json",
+        },
+      }),
     listCommitments: (filters) =>
       invokeDirectJSON("/commitments", { query: filters }),
     getCommitment: (commitmentId) =>
-      invokeJSON("commitments.get", () =>
-        generated.commitmentsGet({ commitment_id: String(commitmentId) }),
+      invokeDirectJSON(
+        `/commitments/${encodeURIComponent(String(commitmentId))}`,
       ),
     updateCommitment: (commitmentId, payload) =>
-      invokeJSON("commitments.patch", () =>
-        generated.commitmentsPatch(
-          { commitment_id: String(commitmentId) },
-          { body: withActorId(payload) },
-        ),
+      invokeDirectJSON(
+        `/commitments/${encodeURIComponent(String(commitmentId))}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify(withActorId(payload)),
+          headers: {
+            "content-type": "application/json",
+          },
+        },
       ),
 
     createArtifact: (payload) =>

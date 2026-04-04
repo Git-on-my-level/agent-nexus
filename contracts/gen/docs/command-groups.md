@@ -27,12 +27,14 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `cards`
 
-- Commands: `4`
+- Commands: `6`
 - Command IDs:
   - `cards.get` (`cards get`)
   - `cards.list` (`cards list`)
   - `cards.move` (`cards move`)
   - `cards.patch` (`cards patch`)
+  - `cards.purge` (`cards purge`)
+  - `cards.restore` (`cards restore`)
 
 ## `docs`
 

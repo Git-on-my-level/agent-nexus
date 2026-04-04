@@ -28,7 +28,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `cards`
 
-- Commands: `7`
+- Commands: `9`
 - Command IDs:
   - `boards.cards.create`
   - `boards.cards.get`
@@ -37,6 +37,8 @@ Generated from `contracts/oar-openapi.yaml`.
   - `cards.list`
   - `cards.move`
   - `cards.patch`
+  - `cards.purge`
+  - `cards.restore`
 
 ## `compatibility`
 
@@ -158,13 +160,15 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `write`
 
-- Commands: `11`
+- Commands: `13`
 - Command IDs:
   - `boards.cards.create`
   - `boards.create`
   - `boards.patch`
   - `cards.move`
   - `cards.patch`
+  - `cards.purge`
+  - `cards.restore`
   - `docs.create`
   - `docs.revisions.create`
   - `events.create`

@@ -25,7 +25,7 @@ func emitStaleThreadExceptions(ctx context.Context, opts handlerOptions, now tim
 	if err != nil {
 		return nil, err
 	}
-	cards, err := opts.primitiveStore.ListCards(ctx)
+	cards, err := opts.primitiveStore.ListCards(ctx, primitives.CardListFilter{})
 	if err != nil {
 		return nil, err
 	}

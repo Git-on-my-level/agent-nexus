@@ -147,7 +147,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"cards"},
-		Adjacent:   []string{"cards.list", "cards.move", "cards.patch"},
+		Adjacent:   []string{"cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore"},
 	},
 	{
 		CommandID: "cards.list",
@@ -158,7 +158,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"cards"},
-		Adjacent:  []string{"cards.get", "cards.move", "cards.patch"},
+		Adjacent:  []string{"cards.get", "cards.move", "cards.patch", "cards.purge", "cards.restore"},
 	},
 	{
 		CommandID:  "cards.move",
@@ -170,7 +170,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "boards", "write"},
-		Adjacent:   []string{"cards.get", "cards.list", "cards.patch"},
+		Adjacent:   []string{"cards.get", "cards.list", "cards.patch", "cards.purge", "cards.restore"},
 	},
 	{
 		CommandID:  "cards.patch",
@@ -182,7 +182,31 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "write", "concurrency"},
-		Adjacent:   []string{"cards.get", "cards.list", "cards.move"},
+		Adjacent:   []string{"cards.get", "cards.list", "cards.move", "cards.purge", "cards.restore"},
+	},
+	{
+		CommandID:  "cards.purge",
+		CLIPath:    "cards purge",
+		Group:      "cards",
+		Method:     "POST",
+		Path:       "/cards/{card_id}/purge",
+		PathParams: []string{"card_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"cards", "write"},
+		Adjacent:   []string{"cards.get", "cards.list", "cards.move", "cards.patch", "cards.restore"},
+	},
+	{
+		CommandID:  "cards.restore",
+		CLIPath:    "cards restore",
+		Group:      "cards",
+		Method:     "POST",
+		Path:       "/cards/{card_id}/restore",
+		PathParams: []string{"card_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"cards", "write"},
+		Adjacent:   []string{"cards.get", "cards.list", "cards.move", "cards.patch", "cards.purge"},
 	},
 	{
 		CommandID: "docs.create",
@@ -650,6 +674,14 @@ func (c *Client) CardsMove(ctx context.Context, pathParams map[string]string, op
 
 func (c *Client) CardsPatch(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "cards.patch", pathParams, opts)
+}
+
+func (c *Client) CardsPurge(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "cards.purge", pathParams, opts)
+}
+
+func (c *Client) CardsRestore(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "cards.restore", pathParams, opts)
 }
 
 func (c *Client) DocsCreate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {

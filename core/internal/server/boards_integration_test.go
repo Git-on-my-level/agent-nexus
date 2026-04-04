@@ -609,6 +609,181 @@ func TestArchiveBoardCardGlobalRoute(t *testing.T) {
 	assertErrorCode(t, moveArchivedResp, "invalid_request")
 }
 
+func TestCardGlobalTrashListRestoreAndPurge(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-human-dev","display_name":"Human Dev","created_at":"2026-03-04T10:00:05Z","tags":["human"]}}`, http.StatusCreated).Body.Close()
+
+	primaryThreadID := createBoardThreadViaHTTP(t, h, "Trash primary thread")
+	memberThreadID := createBoardThreadViaHTTP(t, h, "Trash member thread")
+
+	createBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
+		"actor_id":"actor-1",
+		"board":{
+			"title":"Trash Board",
+			"primary_thread_id":"`+primaryThreadID+`"
+		}
+	}`, http.StatusCreated)
+	defer createBoardResp.Body.Close()
+
+	var createBoardPayload struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(createBoardResp.Body).Decode(&createBoardPayload); err != nil {
+		t.Fatalf("decode create board response: %v", err)
+	}
+	boardID := asString(createBoardPayload.Board["id"])
+	boardUpdatedAt := asString(createBoardPayload.Board["updated_at"])
+
+	addCardResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+boardUpdatedAt+`",
+		"thread_id":"`+memberThreadID+`",
+		"column_key":"review"
+	}`, http.StatusCreated)
+	defer addCardResp.Body.Close()
+
+	var addCardPayload struct {
+		Board map[string]any `json:"board"`
+		Card  map[string]any `json:"card"`
+	}
+	if err := json.NewDecoder(addCardResp.Body).Decode(&addCardPayload); err != nil {
+		t.Fatalf("decode add card response: %v", err)
+	}
+	cardID := asString(addCardPayload.Card["id"])
+	if cardID == "" {
+		t.Fatalf("expected card id in add response: %#v", addCardPayload.Card)
+	}
+	afterAdd := asString(addCardPayload.Board["updated_at"])
+
+	archiveResp := postJSONExpectStatus(t, h.baseURL+"/cards/"+cardID+"/archive", `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+afterAdd+`"
+	}`, http.StatusOK)
+	defer archiveResp.Body.Close()
+
+	var archivePayload struct {
+		Board map[string]any `json:"board"`
+		Card  map[string]any `json:"card"`
+	}
+	if err := json.NewDecoder(archiveResp.Body).Decode(&archivePayload); err != nil {
+		t.Fatalf("decode archive response: %v", err)
+	}
+
+	listActiveResp, err := http.Get(h.baseURL + "/cards")
+	if err != nil {
+		t.Fatalf("GET /cards: %v", err)
+	}
+	defer listActiveResp.Body.Close()
+	if listActiveResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected GET /cards status: %d", listActiveResp.StatusCode)
+	}
+	var listActivePayload struct {
+		Cards []map[string]any `json:"cards"`
+	}
+	if err := json.NewDecoder(listActiveResp.Body).Decode(&listActivePayload); err != nil {
+		t.Fatalf("decode GET /cards: %v", err)
+	}
+	for _, c := range listActivePayload.Cards {
+		if asString(c["id"]) == cardID {
+			t.Fatalf("expected archived card absent from default GET /cards, got %#v", c)
+		}
+	}
+
+	archivedOnlyResp, err := http.Get(h.baseURL + "/cards?tombstoned_only=true")
+	if err != nil {
+		t.Fatalf("GET /cards?tombstoned_only=true: %v", err)
+	}
+	defer archivedOnlyResp.Body.Close()
+	if archivedOnlyResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected archived-only list status: %d", archivedOnlyResp.StatusCode)
+	}
+	var archivedPayload struct {
+		Cards []map[string]any `json:"cards"`
+	}
+	if err := json.NewDecoder(archivedOnlyResp.Body).Decode(&archivedPayload); err != nil {
+		t.Fatalf("decode archived-only cards: %v", err)
+	}
+	foundArchived := false
+	for _, c := range archivedPayload.Cards {
+		if asString(c["id"]) == cardID {
+			foundArchived = true
+			break
+		}
+	}
+	if !foundArchived {
+		t.Fatalf("expected archived card in tombstoned_only list, got %#v", archivedPayload.Cards)
+	}
+
+	restoreResp := postJSONExpectStatus(t, h.baseURL+"/cards/"+cardID+"/restore", `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+asString(archivePayload.Board["updated_at"])+`"
+	}`, http.StatusOK)
+	defer restoreResp.Body.Close()
+	var restoredPayload struct {
+		Board map[string]any `json:"board"`
+		Card  map[string]any `json:"card"`
+	}
+	if err := json.NewDecoder(restoreResp.Body).Decode(&restoredPayload); err != nil {
+		t.Fatalf("decode restore card: %v", err)
+	}
+	if asString(restoredPayload.Card["archived_at"]) != "" {
+		t.Fatalf("expected cleared archived_at after restore, got %#v", restoredPayload.Card["archived_at"])
+	}
+
+	listActiveAfterRestoreResp, err := http.Get(h.baseURL + "/cards")
+	if err != nil {
+		t.Fatalf("GET /cards after restore: %v", err)
+	}
+	defer listActiveAfterRestoreResp.Body.Close()
+	if listActiveAfterRestoreResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected GET /cards after restore status: %d", listActiveAfterRestoreResp.StatusCode)
+	}
+	var listActiveAfterRestore struct {
+		Cards []map[string]any `json:"cards"`
+	}
+	if err := json.NewDecoder(listActiveAfterRestoreResp.Body).Decode(&listActiveAfterRestore); err != nil {
+		t.Fatalf("decode GET /cards after restore: %v", err)
+	}
+	foundActive := false
+	for _, c := range listActiveAfterRestore.Cards {
+		if asString(c["id"]) == cardID {
+			foundActive = true
+			break
+		}
+	}
+	if !foundActive {
+		t.Fatalf("expected restored card in GET /cards, got %#v", listActiveAfterRestore.Cards)
+	}
+
+	reArchiveResp := postJSONExpectStatus(t, h.baseURL+"/cards/"+cardID+"/archive", `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+asString(restoredPayload.Board["updated_at"])+`"
+	}`, http.StatusOK)
+	defer reArchiveResp.Body.Close()
+
+	purgeResp := postJSONExpectStatus(t, h.baseURL+"/cards/"+cardID+"/purge", `{"actor_id":"actor-human-dev"}`, http.StatusOK)
+	defer purgeResp.Body.Close()
+	var purgeBody map[string]any
+	if err := json.NewDecoder(purgeResp.Body).Decode(&purgeBody); err != nil {
+		t.Fatalf("decode purge card: %v", err)
+	}
+	if purgeBody["purged"] != true {
+		t.Fatalf("expected purged, got %#v", purgeBody)
+	}
+
+	getPurgedResp, err := http.Get(h.baseURL + "/cards/" + cardID)
+	if err != nil {
+		t.Fatalf("GET /cards/{id} after purge: %v", err)
+	}
+	defer getPurgedResp.Body.Close()
+	if getPurgedResp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404 after purge, got %d", getPurgedResp.StatusCode)
+	}
+}
+
 func TestBoardCardPatchAllowsContractValidNoOpShapes(t *testing.T) {
 	t.Parallel()
 

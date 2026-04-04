@@ -351,7 +351,7 @@ func deriveInboxItemsNoStaleEmission(ctx context.Context, opts handlerOptions, n
 		}
 	}
 
-	cards, err := opts.primitiveStore.ListCards(ctx)
+	cards, err := opts.primitiveStore.ListCards(ctx, primitives.CardListFilter{})
 	if err != nil {
 		return nil, err
 	}

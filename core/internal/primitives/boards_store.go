@@ -33,6 +33,12 @@ type BoardListFilter struct {
 	TombstonedOnly    bool
 }
 
+// CardListFilter scopes global card listing (GET /cards).
+type CardListFilter struct {
+	// ArchivedOnly returns cards with archived_at set (soft-deleted / trash lane).
+	ArchivedOnly bool
+}
+
 type BoardListItem struct {
 	Board   map[string]any
 	Summary map[string]any
@@ -774,9 +780,13 @@ func (s *Store) ListBoardCards(ctx context.Context, boardID string) ([]map[strin
 	return out, nil
 }
 
-func (s *Store) ListCards(ctx context.Context) ([]map[string]any, error) {
+func (s *Store) ListCards(ctx context.Context, filter CardListFilter) ([]map[string]any, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("primitives store database is not initialized")
+	}
+	archivedClause := `archived_at IS NULL`
+	if filter.ArchivedOnly {
+		archivedClause = `archived_at IS NOT NULL`
 	}
 	rows, err := s.db.QueryContext(
 		ctx,
@@ -784,7 +794,7 @@ func (s *Store) ListCards(ctx context.Context) ([]map[string]any, error) {
 		        definition_of_done_json, pinned_document_id, assignee, priority, status, resolution, resolution_refs_json, refs_json,
 		        created_at, created_by, updated_at, updated_by, provenance_json, archived_at, archived_by
 		   FROM cards
-		  WHERE archived_at IS NULL
+		  WHERE `+archivedClause+`
 		  ORDER BY board_id ASC, `+boardColumnOrderSQL("column_key")+`, rank ASC, id ASC`,
 	)
 	if err != nil {
@@ -1698,6 +1708,150 @@ func (s *Store) ArchiveBoardCard(ctx context.Context, actorID, boardID, identifi
 		return BoardCardMutationResult{}, err
 	}
 	return BoardCardMutationResult{Board: boardMap, Card: cardMap}, nil
+}
+
+func (s *Store) RestoreArchivedBoardCard(ctx context.Context, actorID, boardID, identifier string, input RemoveBoardCardInput) (BoardCardMutationResult, error) {
+	if s == nil || s.db == nil {
+		return BoardCardMutationResult{}, fmt.Errorf("primitives store database is not initialized")
+	}
+	if strings.TrimSpace(actorID) == "" {
+		return BoardCardMutationResult{}, invalidBoardRequest("actorID is required")
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return BoardCardMutationResult{}, fmt.Errorf("begin board card restore transaction: %w", err)
+	}
+
+	var cardRow boardCardRow
+	if strings.TrimSpace(boardID) != "" {
+		cardRow, err = s.loadBoardCardByIdentifier(ctx, tx, boardID, identifier, true)
+	} else {
+		cardRow, err = s.loadBoardCardByGlobalID(ctx, tx, identifier, true)
+	}
+	if err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, err
+	}
+	boardID = cardRow.BoardID
+	boardRow, err := loadBoardRow(ctx, tx, boardID)
+	if err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, err
+	}
+	if err := ensureBoardUpdatedAtMatches(boardRow, input.IfBoardUpdatedAt); err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, err
+	}
+	if !cardRow.ArchivedAt.Valid || strings.TrimSpace(cardRow.ArchivedAt.String) == "" {
+		boardMap, mapErr := boardRow.toMap()
+		if mapErr != nil {
+			_ = tx.Rollback()
+			return BoardCardMutationResult{}, mapErr
+		}
+		cardMap, mapErr := cardRow.toMap()
+		if mapErr != nil {
+			_ = tx.Rollback()
+			return BoardCardMutationResult{}, mapErr
+		}
+		_ = tx.Rollback()
+		return BoardCardMutationResult{Board: boardMap, Card: cardMap}, nil
+	}
+
+	if _, err := tx.ExecContext(ctx, `UPDATE cards SET archived_at = NULL, archived_by = NULL WHERE id = ?`, cardRow.CardID); err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, fmt.Errorf("restore board card: %w", err)
+	}
+	cardRow.ArchivedAt = sql.NullString{}
+	cardRow.ArchivedBy = sql.NullString{}
+
+	boardRow, err = touchBoardRow(ctx, tx, boardRow, actorID)
+	if err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, fmt.Errorf("commit board card restore transaction: %w", err)
+	}
+
+	boardMap, err := boardRow.toMap()
+	if err != nil {
+		return BoardCardMutationResult{}, err
+	}
+	cardRow, err = s.loadBoardCardByIdentifier(ctx, s.db, boardID, cardRow.CardID, false)
+	if err != nil {
+		return BoardCardMutationResult{}, err
+	}
+	cardMap, err := cardRow.toMap()
+	if err != nil {
+		return BoardCardMutationResult{}, err
+	}
+	return BoardCardMutationResult{Board: boardMap, Card: cardMap}, nil
+}
+
+// PurgeArchivedBoardCard permanently removes a card that was soft-deleted (archived).
+func (s *Store) PurgeArchivedBoardCard(ctx context.Context, boardID, identifier string) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("primitives store database is not initialized")
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin purge card transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var cardRow boardCardRow
+	if strings.TrimSpace(boardID) != "" {
+		cardRow, err = s.loadBoardCardByIdentifier(ctx, tx, boardID, identifier, true)
+	} else {
+		cardRow, err = s.loadBoardCardByGlobalID(ctx, tx, identifier, true)
+	}
+	if err != nil {
+		return err
+	}
+	if !cardRow.ArchivedAt.Valid || strings.TrimSpace(cardRow.ArchivedAt.String) == "" {
+		return ErrNotArchived
+	}
+	cardID := strings.TrimSpace(cardRow.CardID)
+
+	boardRow, err := loadBoardRow(ctx, tx, cardRow.BoardID)
+	if err != nil {
+		return err
+	}
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM ref_edges WHERE source_type = ? AND source_id = ?`, "card", cardID); err != nil {
+		return fmt.Errorf("delete card source ref edges: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM ref_edges WHERE target_type = ? AND target_id = ?`, "card", cardID); err != nil {
+		return fmt.Errorf("delete card target ref edges: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM board_cards WHERE card_id = ?`, cardID); err != nil {
+		return fmt.Errorf("delete board_cards row: %w", err)
+	}
+	res, err := tx.ExecContext(ctx, `DELETE FROM cards WHERE id = ? AND archived_at IS NOT NULL`, cardID)
+	if err != nil {
+		return fmt.Errorf("delete card: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected card purge: %w", err)
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+
+	boardRow, err = touchBoardRow(ctx, tx, boardRow, "oar-core")
+	if err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit purge card transaction: %w", err)
+	}
+	return nil
 }
 
 func (s *Store) ListBoardCardHistory(ctx context.Context, cardID string) ([]map[string]any, error) {

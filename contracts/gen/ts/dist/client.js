@@ -563,7 +563,9 @@ export const commandRegistry = [
         "adjacent_commands": [
             "cards.list",
             "cards.move",
-            "cards.patch"
+            "cards.patch",
+            "cards.purge",
+            "cards.restore"
         ],
         "go_method": "CardsGet",
         "ts_method": "cardsGet"
@@ -594,7 +596,9 @@ export const commandRegistry = [
         "adjacent_commands": [
             "cards.get",
             "cards.move",
-            "cards.patch"
+            "cards.patch",
+            "cards.purge",
+            "cards.restore"
         ],
         "go_method": "CardsList",
         "ts_method": "cardsList"
@@ -660,7 +664,7 @@ export const commandRegistry = [
                     "type": "string",
                     "enum_values": [
                         "canceled",
-                        "done"
+                        "completed"
                     ]
                 },
                 {
@@ -675,7 +679,9 @@ export const commandRegistry = [
         "adjacent_commands": [
             "cards.get",
             "cards.list",
-            "cards.patch"
+            "cards.patch",
+            "cards.purge",
+            "cards.restore"
         ],
         "go_method": "CardsMove",
         "ts_method": "cardsMove"
@@ -798,10 +804,112 @@ export const commandRegistry = [
         "adjacent_commands": [
             "cards.get",
             "cards.list",
-            "cards.move"
+            "cards.move",
+            "cards.purge",
+            "cards.restore"
         ],
         "go_method": "CardsPatch",
         "ts_method": "cardsPatch"
+    },
+    {
+        "command_id": "cards.purge",
+        "cli_path": "cards purge",
+        "group": "cards",
+        "method": "POST",
+        "path": "/cards/{card_id}/purge",
+        "operation_id": "purgeArchivedCard",
+        "summary": "Purge archived card",
+        "why": "Permanently delete an archived card (human-gated; requires archived_at).",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ purged, card_id }`.",
+        "error_codes": [
+            "auth_required",
+            "human_only",
+            "invalid_token",
+            "not_found",
+            "conflict"
+        ],
+        "concepts": [
+            "cards",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "body_schema": {
+            "optional": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                }
+            ]
+        },
+        "path_params": [
+            "card_id"
+        ],
+        "adjacent_commands": [
+            "cards.get",
+            "cards.list",
+            "cards.move",
+            "cards.patch",
+            "cards.restore"
+        ],
+        "go_method": "CardsPurge",
+        "ts_method": "cardsPurge"
+    },
+    {
+        "command_id": "cards.restore",
+        "cli_path": "cards restore",
+        "group": "cards",
+        "method": "POST",
+        "path": "/cards/{card_id}/restore",
+        "operation_id": "restoreArchivedCard",
+        "summary": "Restore archived card",
+        "why": "Clear archived_at on a soft-deleted card so it reappears on boards.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ board, card }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "not_found",
+            "conflict"
+        ],
+        "concepts": [
+            "cards",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "body_schema": {
+            "optional": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                },
+                {
+                    "name": "if_board_updated_at",
+                    "type": "datetime"
+                }
+            ]
+        },
+        "path_params": [
+            "card_id"
+        ],
+        "adjacent_commands": [
+            "cards.get",
+            "cards.list",
+            "cards.move",
+            "cards.patch",
+            "cards.purge"
+        ],
+        "go_method": "CardsRestore",
+        "ts_method": "cardsRestore"
     },
     {
         "command_id": "docs.create",
@@ -2190,6 +2298,12 @@ export class OarClient {
     }
     cardsPatch(pathParams, options = {}) {
         return this.invoke("cards.patch", pathParams, options);
+    }
+    cardsPurge(pathParams, options = {}) {
+        return this.invoke("cards.purge", pathParams, options);
+    }
+    cardsRestore(pathParams, options = {}) {
+        return this.invoke("cards.restore", pathParams, options);
     }
     docsCreate(options = {}) {
         return this.invoke("docs.create", {}, options);
