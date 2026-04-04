@@ -3366,6 +3366,116 @@ function sortBoardCardsForBoard(cards) {
   });
 }
 
+function normalizeCardRef(prefix, value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  if (raw.includes(":")) return raw;
+  return `${prefix}:${raw}`;
+}
+
+function normalizeCardRefList(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const seen = new Set();
+  const refs = [];
+
+  for (const item of value) {
+    const normalized = String(item ?? "").trim();
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    refs.push(normalized);
+  }
+
+  return refs;
+}
+
+function normalizeMockBoardCard(card) {
+  if (!card) return null;
+
+  const rawThreadRef = String(card.thread_ref ?? "").trim();
+  const parsedThreadRef = splitTypedRef(rawThreadRef);
+  const threadId = String(
+    card.thread_id ??
+      card.parent_thread ??
+      (parsedThreadRef.prefix === "thread" ? parsedThreadRef.id : ""),
+  ).trim();
+  const thread = threadId ? getMockThread(threadId) : null;
+  const documentId = String(card.document_ref ?? card.pinned_document_id ?? "")
+    .replace(/^document:/, "")
+    .trim();
+  const cardId =
+    String(card.id ?? "").trim() ||
+    (threadId ? threadId : `card-${String(card.board_id ?? "board").trim()}`);
+  const resolution = String(card.resolution ?? "").trim();
+  const dueAt = String(card.due_at ?? "").trim();
+  const definitionOfDone = Array.isArray(card.definition_of_done)
+    ? [...card.definition_of_done]
+    : [];
+  const relatedRefs = normalizeCardRefList(card.related_refs);
+  const resolutionRefs = normalizeCardRefList(card.resolution_refs);
+  const assigneeRefs = Array.isArray(card.assignee_refs)
+    ? [...card.assignee_refs]
+    : Array.isArray(card.assignee)
+      ? [...card.assignee]
+      : card.assignee
+        ? [String(card.assignee).trim()]
+        : [];
+
+  const threadRef = normalizeCardRef("thread", threadId);
+  const rawTopicRef = String(card.topic_ref ?? "").trim();
+  const topicRef = rawTopicRef
+    ? rawTopicRef.includes(":")
+      ? rawTopicRef
+      : normalizeCardRef("topic", rawTopicRef)
+    : String(thread?.topic_ref ?? "").trim() || "";
+  const rawDocumentRef = String(card.document_ref ?? "").trim();
+  const documentRef = rawDocumentRef
+    ? rawDocumentRef.includes(":")
+      ? rawDocumentRef
+      : normalizeCardRef("document", rawDocumentRef)
+    : normalizeCardRef("document", documentId);
+  const boardRef = normalizeCardRef("board", card.board_id);
+  const summary =
+    String(card.summary ?? "").trim() ||
+    String(card.body ?? "").trim() ||
+    String(thread?.current_summary ?? "").trim() ||
+    String(thread?.title ?? "").trim() ||
+    String(card.title ?? "").trim();
+
+  return {
+    ...card,
+    id: cardId,
+    board_ref: boardRef,
+    topic_ref: topicRef || null,
+    thread_ref: threadRef || null,
+    document_ref: documentRef || null,
+    title: String(card.title ?? "").trim() || summary,
+    summary,
+    due_at: dueAt || null,
+    definition_of_done: definitionOfDone,
+    assignee_refs: assigneeRefs,
+    risk: String(card.risk ?? "").trim() || "medium",
+    resolution:
+      resolution ||
+      (String(card.status ?? "").trim() === "done"
+        ? "completed"
+        : String(card.status ?? "").trim() === "cancelled"
+          ? "canceled"
+          : String(card.column_key ?? "").trim() === "done"
+            ? "completed"
+            : "unresolved"),
+    resolution_refs: resolutionRefs,
+    related_refs:
+      relatedRefs.length > 0
+        ? relatedRefs
+        : [threadRef, topicRef || null, documentRef || null].filter(Boolean),
+  };
+}
+
 function getBoardColumnCards(boardId) {
   const columns = canonicalColumnSchema.reduce((acc, column) => {
     acc[column.key] = [];
@@ -3393,9 +3503,16 @@ function renormalizeColumnCards(cards) {
 function mockCardMatchesAnchor(card, anchor) {
   const a = String(anchor ?? "").trim();
   if (!a) return false;
-  const id = String(card?.id ?? "").trim();
-  const tid = String(card?.thread_id ?? "").trim();
-  return id === a || tid === a;
+  const { prefix, id: anchorId } = splitTypedRef(a);
+  const cardId = String(card?.id ?? "").trim();
+  const tid = String(card?.thread_id ?? card?.parent_thread ?? "").trim();
+  if (prefix === "card") {
+    return cardId === anchorId || tid === anchorId;
+  }
+  if (prefix === "thread" || prefix === "topic") {
+    return tid === anchorId;
+  }
+  return cardId === a || tid === a;
 }
 
 function mockBoardCardStableKey(card) {
@@ -3415,19 +3532,28 @@ function newStandaloneMockCardId(explicitId) {
 }
 
 function resolveInsertIndex(cards, payload = {}) {
-  const { before_card_id, after_card_id, before_thread_id, after_thread_id } =
-    payload;
+  const {
+    before_card_ref,
+    after_card_ref,
+    before_card_id,
+    after_card_id,
+    before_thread_id,
+    after_thread_id,
+  } = payload;
 
-  if (before_card_id) {
+  const beforeAnchor = before_card_ref ?? before_card_id;
+  const afterAnchor = after_card_ref ?? after_card_id;
+
+  if (beforeAnchor) {
     const beforeIndex = cards.findIndex((card) =>
-      mockCardMatchesAnchor(card, before_card_id),
+      mockCardMatchesAnchor(card, beforeAnchor),
     );
     if (beforeIndex >= 0) return beforeIndex;
   }
 
-  if (after_card_id) {
+  if (afterAnchor) {
     const afterIndex = cards.findIndex((card) =>
-      mockCardMatchesAnchor(card, after_card_id),
+      mockCardMatchesAnchor(card, afterAnchor),
     );
     if (afterIndex >= 0) return afterIndex + 1;
   }
@@ -3457,8 +3583,10 @@ function buildBoardSummary(board) {
   }, {});
 
   let latestActivityAt = board.updated_at ?? null;
-  let openCommitmentCount = 0;
+  let unresolvedCardCount = 0;
+  let resolvedCardCount = 0;
   let documentCount = 0;
+  let openCommitmentCount = 0;
   const threadIds = collectMockBoardWorkspaceThreadIds(
     board.id,
     board.primary_thread_id,
@@ -3466,6 +3594,12 @@ function buildBoardSummary(board) {
 
   for (const card of cards) {
     cardsByColumn[card.column_key] = (cardsByColumn[card.column_key] ?? 0) + 1;
+    const normalized = normalizeMockBoardCard(card);
+    if (String(normalized?.resolution ?? "").trim() === "unresolved") {
+      unresolvedCardCount += 1;
+    } else {
+      resolvedCardCount += 1;
+    }
   }
 
   for (const threadId of threadIds) {
@@ -3489,6 +3623,8 @@ function buildBoardSummary(board) {
     card_count: cards.length,
     cards_by_column: cardsByColumn,
     open_commitment_count: openCommitmentCount,
+    unresolved_card_count: unresolvedCardCount,
+    resolved_card_count: resolvedCardCount,
     document_count: documentCount,
     latest_activity_at: latestActivityAt,
     has_primary_document: Boolean(board.primary_document_id),
@@ -3496,41 +3632,78 @@ function buildBoardSummary(board) {
 }
 
 function buildBoardWorkspaceCard(card) {
-  const threadId = String(card.thread_id ?? card.parent_thread ?? "").trim();
+  const normalizedCard = normalizeMockBoardCard(card);
+  const threadId = String(
+    normalizedCard.thread_id ?? normalizedCard.parent_thread ?? "",
+  ).trim();
   const thread = threadId ? getMockThread(threadId) : null;
 
-  const pinnedDocument = card.pinned_document_id
-    ? (getMockDocument(card.pinned_document_id)?.document ?? null)
+  const documentId = String(
+    normalizedCard.document_ref ?? normalizedCard.pinned_document_id ?? "",
+  )
+    .replace(/^document:/, "")
+    .trim();
+  const pinnedDocument = documentId
+    ? (getMockDocument(documentId)?.document ?? null)
     : null;
+  const relatedTopicCount = new Set(
+    normalizeCardRefList(normalizedCard.related_refs)
+      .map((ref) => splitTypedRef(ref))
+      .filter((ref) => ["topic", "thread", "card"].includes(ref.prefix))
+      .map((ref) => `${ref.prefix}:${ref.id}`),
+  ).size;
+  const documentCount = new Set(
+    [
+      normalizedCard.document_ref,
+      ...normalizeCardRefList(normalizedCard.related_refs).filter(
+        (ref) => splitTypedRef(ref).prefix === "document",
+      ),
+    ].filter(Boolean),
+  ).size;
 
   if (!thread) {
     return {
-      membership: { ...card },
+      membership: { ...normalizedCard },
       backing: {
         thread_ref: threadId ? `thread:${threadId}` : null,
         thread: null,
-        pinned_document_ref: card.pinned_document_id
-          ? `document:${card.pinned_document_id}`
-          : null,
+        pinned_document_ref: documentId ? `document:${documentId}` : null,
         pinned_document: pinnedDocument ? { ...pinnedDocument } : null,
       },
       derived: {
-        summary: null,
-        freshness: null,
+        summary: {
+          related_topic_count: relatedTopicCount,
+          document_count: documentCount,
+          inbox_count: 0,
+          latest_activity_at: normalizedCard.updated_at ?? null,
+          stale: false,
+        },
+        freshness: {
+          thread_id: null,
+          status: "current",
+          generated_at: normalizedCard.updated_at ?? null,
+          queued_at: null,
+          started_at: null,
+          completed_at: normalizedCard.updated_at ?? null,
+          last_error_at: null,
+          last_error: null,
+          materialized: true,
+          refresh_in_flight: false,
+        },
       },
     };
   }
 
   const documents = listMockDocuments({ thread_id: threadId });
   const recentEvents = listMockTimelineEvents(threadId);
-  const openCommitments = listMockCommitments({
-    thread_id: threadId,
-    status: "open",
-  });
   const keyArtifacts = normalizeRefList(thread.key_artifacts).map((ref) => ({
     ref,
     artifact: null,
   }));
+  const openCommitments = listMockCommitments({
+    thread_id: threadId,
+    status: "open",
+  });
   const collaboration = buildMockWorkspaceCollaboration(
     recentEvents,
     keyArtifacts,
@@ -3539,15 +3712,12 @@ function buildBoardWorkspaceCard(card) {
   const inboxCount = listMockInboxItems().filter(
     (item) => String(item.thread_id ?? "") === String(threadId),
   ).length;
-
   return {
-    membership: { ...card },
+    membership: { ...normalizedCard },
     backing: {
       thread_ref: `thread:${threadId}`,
       thread: { ...thread },
-      pinned_document_ref: card.pinned_document_id
-        ? `document:${card.pinned_document_id}`
-        : null,
+      pinned_document_ref: documentId ? `document:${documentId}` : null,
       pinned_document: pinnedDocument ? { ...pinnedDocument } : null,
     },
     derived: {
@@ -3556,18 +3726,20 @@ function buildBoardWorkspaceCard(card) {
         decision_request_count: collaboration.decision_request_count,
         decision_count: collaboration.decision_count,
         recommendation_count: collaboration.recommendation_count,
-        document_count: documents.length,
+        related_topic_count: relatedTopicCount || (thread ? 1 : 0),
+        document_count: documentCount || documents.length,
         inbox_count: inboxCount,
-        latest_activity_at: thread.updated_at ?? card.updated_at ?? null,
+        latest_activity_at:
+          normalizedCard.updated_at ?? thread.updated_at ?? null,
         stale: ["stale", "very-stale"].includes(String(thread.staleness ?? "")),
       },
       freshness: {
         thread_id: threadId,
         status: "current",
-        generated_at: thread.updated_at ?? card.updated_at ?? null,
+        generated_at: normalizedCard.updated_at ?? thread.updated_at ?? null,
         queued_at: null,
         started_at: null,
-        completed_at: thread.updated_at ?? card.updated_at ?? null,
+        completed_at: normalizedCard.updated_at ?? thread.updated_at ?? null,
         last_error_at: null,
         last_error: null,
         materialized: true,
@@ -3598,7 +3770,7 @@ function touchBoard(board, actorId) {
 }
 
 function cloneBoardCard(card) {
-  return card ? { ...card } : null;
+  return card ? normalizeMockBoardCard(card) : null;
 }
 
 export function listMockBoards(filters = {}) {
@@ -3791,8 +3963,12 @@ export function createMockBoardCard(boardId, payload) {
     return boardConflict;
   }
 
+  const rawThreadRef = String(payload.thread_ref ?? "").trim();
+  const parsedThreadRef = splitTypedRef(rawThreadRef);
   const threadId = String(
-    payload.thread_id ?? payload.parent_thread ?? "",
+    payload.thread_id ??
+      payload.parent_thread ??
+      (parsedThreadRef.prefix === "thread" ? parsedThreadRef.id : ""),
   ).trim();
   const title = String(payload.title ?? "").trim();
 
@@ -3865,17 +4041,37 @@ export function createMockBoardCard(boardId, payload) {
     };
   }
 
-  const newCard = {
+  const newCard = normalizeMockBoardCard({
     id: cardId,
     board_id: boardId,
     thread_id: threadId || null,
     parent_thread: threadId || null,
+    topic_ref: payload.topic_ref ?? null,
+    thread_ref: payload.thread_ref ?? null,
+    document_ref: payload.document_ref ?? null,
     title: threadId ? title || (getMockThread(threadId)?.title ?? "") : title,
+    summary:
+      String(payload.summary ?? "").trim() || String(payload.body ?? "").trim(),
+    due_at: payload.due_at ?? null,
+    definition_of_done: Array.isArray(payload.definition_of_done)
+      ? payload.definition_of_done
+      : [],
     body: String(payload.body ?? "").trim() || "",
     column_key: columnKey,
     rank: "0000",
     pinned_document_id: pinnedDocumentId || null,
     version: 1,
+    assignee_refs: Array.isArray(payload.assignee_refs)
+      ? payload.assignee_refs
+      : [],
+    risk: String(payload.risk ?? "").trim() || "medium",
+    resolution: String(payload.resolution ?? "").trim() || "unresolved",
+    resolution_refs: Array.isArray(payload.resolution_refs)
+      ? payload.resolution_refs
+      : [],
+    related_refs: Array.isArray(payload.related_refs)
+      ? payload.related_refs
+      : [],
     assignee: payload.assignee ?? null,
     priority: payload.priority ?? null,
     status: payload.status ?? "todo",
@@ -3883,7 +4079,7 @@ export function createMockBoardCard(boardId, payload) {
     created_by: payload.actor_id || "unknown",
     updated_at: nowIso,
     updated_by: payload.actor_id || "unknown",
-  };
+  });
 
   targetColumn.splice(resolveInsertIndex(targetColumn, payload), 0, newCard);
   renormalizeColumnCards(targetColumn);
@@ -4022,6 +4218,36 @@ export function updateMockBoardCard(boardId, cardId, payload) {
     }
   }
 
+  if (Object.prototype.hasOwnProperty.call(patch, "summary")) {
+    const value = String(patch.summary ?? "").trim();
+    if (card.summary !== value) {
+      card.summary = value;
+      mutated = true;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, "due_at")) {
+    const value = String(patch.due_at ?? "").trim();
+    const next = value || null;
+    if (card.due_at !== next) {
+      card.due_at = next;
+      mutated = true;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, "definition_of_done")) {
+    const next = Array.isArray(patch.definition_of_done)
+      ? [...patch.definition_of_done]
+      : [];
+    const current = Array.isArray(card.definition_of_done)
+      ? card.definition_of_done
+      : [];
+    if (JSON.stringify(current) !== JSON.stringify(next)) {
+      card.definition_of_done = next;
+      mutated = true;
+    }
+  }
+
   if (Object.prototype.hasOwnProperty.call(patch, "assignee")) {
     const value = patch.assignee == null ? "" : String(patch.assignee).trim();
     const next = value || null;
@@ -4036,6 +4262,24 @@ export function updateMockBoardCard(boardId, cardId, payload) {
     const next = value || null;
     if (card.priority !== next) {
       card.priority = next;
+      mutated = true;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, "assignee_refs")) {
+    const next = normalizeCardRefList(patch.assignee_refs);
+    const current = normalizeCardRefList(card.assignee_refs);
+    if (JSON.stringify(current) !== JSON.stringify(next)) {
+      card.assignee_refs = next;
+      mutated = true;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, "risk")) {
+    const value = String(patch.risk ?? "").trim();
+    const next = value || "medium";
+    if (card.risk !== next) {
+      card.risk = next;
       mutated = true;
     }
   }
@@ -4066,6 +4310,81 @@ export function updateMockBoardCard(boardId, cardId, payload) {
     const next = value || null;
     if (card.pinned_document_id !== next) {
       card.pinned_document_id = next;
+      card.document_ref = next ? `document:${next}` : null;
+      mutated = true;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, "document_ref")) {
+    const value = String(patch.document_ref ?? "").trim();
+    const normalized = value ? value.replace(/^document:/, "") : "";
+    if (normalized && !getMockDocument(normalized)) {
+      return {
+        error: "not_found",
+        message: `Document not found: ${normalized}`,
+      };
+    }
+    const next = normalized || null;
+    const nextRef = next ? `document:${next}` : null;
+    if (card.pinned_document_id !== next || card.document_ref !== nextRef) {
+      card.pinned_document_id = next;
+      card.document_ref = nextRef;
+      mutated = true;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, "topic_ref")) {
+    const value = String(patch.topic_ref ?? "").trim();
+    const next = value || null;
+    if (card.topic_ref !== next) {
+      card.topic_ref = next;
+      mutated = true;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, "thread_ref")) {
+    const value = String(patch.thread_ref ?? "").trim();
+    const next = value || null;
+    const threadAnchor = splitTypedRef(next);
+    if (next && threadAnchor.prefix === "thread") {
+      card.thread_id = threadAnchor.id;
+      card.parent_thread = threadAnchor.id;
+    } else if (next && !threadAnchor.prefix) {
+      card.thread_id = next;
+      card.parent_thread = next;
+    } else if (!next) {
+      card.thread_id = null;
+      card.parent_thread = null;
+    }
+    if (card.thread_ref !== next) {
+      card.thread_ref = next;
+      mutated = true;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, "resolution")) {
+    const value = String(patch.resolution ?? "").trim();
+    const next = value || "unresolved";
+    if (card.resolution !== next) {
+      card.resolution = next;
+      mutated = true;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, "resolution_refs")) {
+    const next = normalizeCardRefList(patch.resolution_refs);
+    const current = normalizeCardRefList(card.resolution_refs);
+    if (JSON.stringify(current) !== JSON.stringify(next)) {
+      card.resolution_refs = next;
+      mutated = true;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, "related_refs")) {
+    const next = normalizeCardRefList(patch.related_refs);
+    const current = normalizeCardRefList(card.related_refs);
+    if (JSON.stringify(current) !== JSON.stringify(next)) {
+      card.related_refs = next;
       mutated = true;
     }
   }
@@ -4138,6 +4457,21 @@ export function moveMockBoardCard(boardId, cardId, payload) {
   card.column_key = columnKey;
   const insertIndex = resolveInsertIndex(targetColumn, payload);
   targetColumn.splice(insertIndex, 0, card);
+
+  if (Object.prototype.hasOwnProperty.call(payload, "resolution")) {
+    const moveResolution = String(payload.resolution ?? "").trim();
+    if (moveResolution === "done") {
+      card.resolution = "completed";
+    } else if (moveResolution === "canceled") {
+      card.resolution = "canceled";
+    }
+  } else if (columnKey === "done" && card.resolution === "unresolved") {
+    card.resolution = "completed";
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "resolution_refs")) {
+    card.resolution_refs = normalizeCardRefList(payload.resolution_refs);
+  }
 
   renormalizeColumnCards(sourceColumn);
   if (targetColumn !== sourceColumn) {

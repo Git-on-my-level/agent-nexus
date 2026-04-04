@@ -5,6 +5,7 @@
   let {
     refValue = "",
     threadId = "",
+    boardId = "",
     snapshotIsThread = false,
     humanize = false,
     showRaw = false,
@@ -14,6 +15,7 @@
   let resolved = $derived(
     resolveRefLink(refValue, {
       threadId,
+      boardId,
       snapshotIsThread,
       humanize,
       labelHints,

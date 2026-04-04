@@ -6,6 +6,7 @@
   let {
     value = $bindable(""),
     suggestions = [],
+    boardId = "",
     addInputLabel = "Add typed ref",
     addInputPlaceholder = "artifact:artifact-123",
     addButtonLabel = "Add ref",
@@ -67,6 +68,7 @@
     refs.map((refValue) =>
       resolveRefLink(refValue, {
         workspaceSlug: $page.params.workspace,
+        boardId,
       }),
     ),
   );

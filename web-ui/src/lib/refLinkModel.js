@@ -85,7 +85,13 @@ const LINK_RESOLVERS = {
     buildInternalHref(workspaceSlug, `/topics/${asPathSegment(value)}`),
   topic: ({ workspaceSlug, value }) =>
     buildInternalHref(workspaceSlug, `/topics/${asPathSegment(value)}`),
-  card: () => "",
+  card: ({ workspaceSlug, boardId, value }) =>
+    boardId
+      ? buildInternalHref(
+          workspaceSlug,
+          `/boards/${asPathSegment(boardId)}#card-${asPathSegment(value)}`,
+        )
+      : "",
   snapshot: ({ workspaceSlug, snapshotIsThread, value }) =>
     snapshotIsThread
       ? buildInternalHref(workspaceSlug, `/topics/${asPathSegment(value)}`)
@@ -127,6 +133,7 @@ export function resolveRefLink(refValue, options = {}) {
   const prefix = parsed.prefix;
   const value = parsed.value;
   const workspaceSlug = options.workspaceSlug;
+  const boardId = options.boardId;
   const threadId = options.threadId;
   const snapshotIsThread = Boolean(options.snapshotIsThread);
 
@@ -149,6 +156,7 @@ export function resolveRefLink(refValue, options = {}) {
     return createResolvedLink(raw, prefix, value, labels, {
       href: linkResolver({ workspaceSlug, snapshotIsThread, threadId, value }),
       isExternal: prefix === "url",
+      boardId,
     });
   }
 
