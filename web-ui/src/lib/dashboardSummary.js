@@ -1,5 +1,9 @@
 import { parseTimestampMs } from "./dateUtils.js";
-import { INBOX_CATEGORY_ORDER, getInboxCategoryLabel } from "./inboxUtils";
+import {
+  INBOX_CATEGORY_ORDER,
+  getInboxCategoryLabel,
+  normalizeInboxCategory,
+} from "./inboxUtils";
 import { computeStaleness } from "./threadFilters";
 
 function compareByTimestampDesc(leftValue, rightValue) {
@@ -23,7 +27,7 @@ export function buildInboxCategorySummary(items = []) {
   const counts = new Map();
 
   for (const item of items) {
-    const category = String(item?.category ?? "unknown");
+    const category = normalizeInboxCategory(item?.category ?? "unknown");
     counts.set(category, (counts.get(category) ?? 0) + 1);
   }
 
@@ -186,7 +190,7 @@ export function inboxSummarySentence(categorySummary) {
   );
   const decisions = decisionEntry ? decisionEntry.count : 0;
 
-  const itemWord = total === 1 ? "item needs" : "items need";
+  const itemWord = total === 1 ? "work item needs" : "work items need";
   const base = `${total} ${itemWord} your attention`;
 
   if (decisions > 0) {

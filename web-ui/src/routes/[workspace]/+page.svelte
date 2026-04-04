@@ -12,7 +12,13 @@
     threadHealthSentence,
   } from "$lib/dashboardSummary";
   import { formatTimestamp } from "$lib/formatDate";
-  import { getInboxCategoryLabel, sortInboxItems } from "$lib/inboxUtils";
+  import {
+    getInboxCategoryLabel,
+    getInboxSubjectLabel,
+    getInboxSubjectRef,
+    splitTypedRef,
+    sortInboxItems,
+  } from "$lib/inboxUtils";
   import { workspacePath } from "$lib/workspacePaths";
   import { getPriorityLabel } from "$lib/threadFilters";
   import { BOARD_STATUS_LABELS } from "$lib/boardUtils";
@@ -127,8 +133,26 @@
   }
 
   function inboxItemTarget(item) {
-    if (item?.thread_id) {
-      return workspacePath(workspaceSlug, `/topics/${item.thread_id}`);
+    const subjectRef = getInboxSubjectRef(item);
+    const { prefix, id } = splitTypedRef(subjectRef);
+
+    if (prefix === "topic" || prefix === "thread") {
+      return workspacePath(workspaceSlug, `/topics/${id}`);
+    }
+    if (prefix === "board") {
+      return workspacePath(workspaceSlug, `/boards/${id}`);
+    }
+    if (prefix === "document") {
+      return workspacePath(workspaceSlug, `/docs/${id}`);
+    }
+    if (prefix === "card") {
+      const boardRef = (item?.related_refs ?? []).find(
+        (ref) => splitTypedRef(ref).prefix === "board",
+      );
+      const { id: boardId } = splitTypedRef(boardRef);
+      return boardId
+        ? workspacePath(workspaceSlug, `/boards/${boardId}`)
+        : workspacePath(workspaceSlug, "/inbox");
     }
     return workspacePath(workspaceSlug, "/inbox");
   }
@@ -288,6 +312,11 @@
                 <p class="text-[11px] text-[var(--ui-text-muted)]">
                   {getInboxCategoryLabel(item.category)}
                 </p>
+                {#if getInboxSubjectLabel(item)}
+                  <p class="text-[11px] text-[var(--ui-text-subtle)]">
+                    {getInboxSubjectLabel(item)}
+                  </p>
+                {/if}
               </div>
             </a>
           {/each}

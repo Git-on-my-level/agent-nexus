@@ -4,25 +4,31 @@ export const INBOX_CATEGORY_ORDER = [
   "decision_needed",
   "intervention_needed",
   "exception",
-  "commitment_risk",
+  "risk_review",
+  "stale_topic",
+  "document_attention",
 ];
 
 export const INBOX_CATEGORY_LABELS = {
   decision_needed: "Needs Decision",
   intervention_needed: "Needs Intervention",
   exception: "Exception",
-  commitment_risk: "At Risk",
+  risk_review: "Risk Review",
+  stale_topic: "Stale Topic",
+  document_attention: "Document Attention",
 };
 
 export const INBOX_CATEGORY_DESCRIPTIONS = {
   decision_needed: "Decision event pending",
   intervention_needed: "Human action required",
   exception: "Error or anomaly flagged",
-  commitment_risk: "Commitment deadline approaching",
+  risk_review: "Work item risk needs review",
+  stale_topic: "Topic appears stale",
+  document_attention: "Document needs attention",
 };
 
 export function getInboxCategoryLabel(category) {
-  return INBOX_CATEGORY_LABELS[category] ?? category;
+  return INBOX_CATEGORY_LABELS[normalizeInboxCategory(category)] ?? category;
 }
 
 export const INBOX_URGENCY_LEVELS = ["immediate", "high", "normal"];
@@ -37,8 +43,91 @@ const INBOX_CATEGORY_URGENCY_BASE = {
   exception: 90,
   decision_needed: 76,
   intervention_needed: 74,
-  commitment_risk: 62,
+  risk_review: 66,
+  stale_topic: 70,
+  document_attention: 58,
 };
+
+const INBOX_CATEGORY_ALIASES = {
+  commitment_risk: "risk_review",
+};
+
+const INBOX_SUBJECT_LABELS = {
+  topic: "Topic",
+  card: "Card",
+  board: "Board",
+  document: "Document",
+  thread: "Topic",
+};
+
+export function normalizeInboxCategory(category) {
+  const normalized = String(category ?? "").trim();
+  return INBOX_CATEGORY_ALIASES[normalized] ?? normalized;
+}
+
+export function splitTypedRef(refValue) {
+  const raw = String(refValue ?? "").trim();
+  const separatorIndex = raw.indexOf(":");
+  if (separatorIndex <= 0 || separatorIndex >= raw.length - 1) {
+    return { prefix: "", id: "" };
+  }
+  return {
+    prefix: raw.slice(0, separatorIndex).trim(),
+    id: raw.slice(separatorIndex + 1).trim(),
+  };
+}
+
+export function normalizeTypedRef(refValue) {
+  const { prefix, id } = splitTypedRef(refValue);
+  if (!prefix || !id) {
+    return "";
+  }
+  return `${prefix}:${id}`;
+}
+
+export function getInboxSubjectRef(item) {
+  const explicit = normalizeTypedRef(item?.subject_ref);
+  if (explicit) return explicit;
+
+  const threadId = String(item?.thread_id ?? "").trim();
+  if (threadId) return `topic:${threadId}`;
+
+  const topicId = String(item?.topic_id ?? "").trim();
+  if (topicId) return `topic:${topicId}`;
+
+  const boardId = String(item?.board_id ?? "").trim();
+  if (boardId) return `board:${boardId}`;
+
+  const documentId = String(item?.document_id ?? "").trim();
+  if (documentId) return `document:${documentId}`;
+
+  const cardId = String(
+    item?.card_id ?? item?.commitment_id ?? item?.work_item_id ?? "",
+  ).trim();
+  if (cardId) return `card:${cardId}`;
+
+  return "";
+}
+
+export function getInboxSubjectKind(item) {
+  return splitTypedRef(getInboxSubjectRef(item)).prefix;
+}
+
+export function getInboxSubjectId(item) {
+  return splitTypedRef(getInboxSubjectRef(item)).id;
+}
+
+export function getInboxSubjectLabel(item) {
+  const subjectRef = getInboxSubjectRef(item);
+  if (!subjectRef) {
+    return "";
+  }
+
+  const { prefix, id } = splitTypedRef(subjectRef);
+  const label = INBOX_SUBJECT_LABELS[prefix] ?? prefix;
+  const title = String(item?.subject_title ?? item?.subject_name ?? "").trim();
+  return title ? `${label}: ${title}` : `${label}: ${id}`;
+}
 
 export function getInboxUrgencyLabel(level) {
   const normalizedLevel = String(level ?? "").trim();
@@ -100,7 +189,7 @@ export function deriveInboxUrgency(item, options = {}) {
   const ageHours = hasSourceEventTime
     ? Math.max(0, (nowTs - sourceEventTs) / (60 * 60 * 1000))
     : Number.NaN;
-  const category = String(item?.category ?? "unknown");
+  const category = normalizeInboxCategory(item?.category ?? "unknown");
 
   let score = INBOX_CATEGORY_URGENCY_BASE[category] ?? 54;
 
@@ -131,8 +220,14 @@ export function deriveInboxUrgency(item, options = {}) {
 
 export function enrichInboxItem(item, options = {}) {
   const urgency = deriveInboxUrgency(item, options);
+  const subjectRef = getInboxSubjectRef(item);
+  const subject = splitTypedRef(subjectRef);
   return {
     ...item,
+    category: normalizeInboxCategory(item?.category ?? "unknown"),
+    subject_ref: subjectRef || item?.subject_ref || "",
+    subject_kind: subject.prefix,
+    subject_id: subject.id,
     urgency_level: urgency.level,
     urgency_label: urgency.label,
     urgency_score: urgency.score,
@@ -204,7 +299,7 @@ export function groupInboxItems(items = [], options = {}) {
   INBOX_CATEGORY_ORDER.forEach((category) => grouped.set(category, []));
 
   for (const item of items) {
-    const category = String(item?.category ?? "unknown");
+    const category = normalizeInboxCategory(item?.category ?? "unknown");
 
     if (!grouped.has(category)) {
       grouped.set(category, []);
@@ -235,7 +330,7 @@ export function summarizeInboxByCategory(items = []) {
     counts[category] = 0;
   }
   for (const item of items) {
-    const category = String(item?.category ?? "unknown");
+    const category = normalizeInboxCategory(item?.category ?? "unknown");
     counts[category] = (counts[category] ?? 0) + 1;
   }
   return counts;

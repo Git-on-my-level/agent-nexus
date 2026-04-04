@@ -273,6 +273,79 @@ describe("mockCoreData parity behaviors", () => {
       expect(after[0].rank).toBe("0001");
     });
 
+    it("archives cards without exposing them in active board views", async () => {
+      const mod = await import("../../src/lib/mockCoreData.js");
+      const { board } = mod.createMockBoard({
+        actor_id: "actor-test",
+        board: {
+          id: "board-card-archive-test",
+          title: "Archive test",
+          primary_thread_id: "thread-summer-menu",
+        },
+      });
+      const boardId = board.id;
+      let currentBoard = mod.getMockBoard(boardId);
+      const { card } = mod.createMockBoardCard(boardId, {
+        actor_id: "actor-test",
+        if_board_updated_at: currentBoard?.updated_at,
+        title: "Archive me",
+        column_key: "ready",
+      });
+
+      const archiveResult = mod.archiveMockBoardCardByCardId(card.id, {
+        actor_id: "actor-test",
+      });
+      expect(archiveResult.card.archived_at).toBeTruthy();
+      expect(archiveResult.card.archived_by).toBe("actor-test");
+      expect(mod.listMockBoardCards(boardId)).toHaveLength(0);
+      expect(mod.getMockBoard(boardId)).toMatchObject({
+        id: boardId,
+      });
+      expect(mod.getMockBoardWorkspace(boardId)?.cards?.count).toBe(0);
+      expect(mod.getMockCard(card.id)).toMatchObject({
+        id: card.id,
+        archived_at: archiveResult.card.archived_at,
+      });
+    });
+
+    it("restores and purges archived cards through lifecycle helpers", async () => {
+      const mod = await import("../../src/lib/mockCoreData.js");
+      const { board } = mod.createMockBoard({
+        actor_id: "actor-test",
+        board: {
+          id: "board-card-restore-test",
+          title: "Restore test",
+          primary_thread_id: "thread-summer-menu",
+        },
+      });
+      const boardId = board.id;
+      let currentBoard = mod.getMockBoard(boardId);
+      const { card } = mod.createMockBoardCard(boardId, {
+        actor_id: "actor-test",
+        if_board_updated_at: currentBoard?.updated_at,
+        title: "Restore me",
+        column_key: "backlog",
+      });
+
+      mod.archiveMockBoardCardByCardId(card.id, {
+        actor_id: "actor-test",
+      });
+      expect(mod.listMockBoardCards(boardId)).toHaveLength(0);
+
+      const restoreResult = mod.restoreMockBoardCardByCardId(card.id, {
+        actor_id: "actor-test",
+      });
+      expect(restoreResult.card.archived_at).toBeNull();
+      expect(mod.listMockBoardCards(boardId)).toHaveLength(1);
+
+      const purgeResult = mod.purgeMockBoardCardByCardId(card.id, {
+        actor_id: "actor-test",
+      });
+      expect(purgeResult.card.id).toBe(card.id);
+      expect(mod.getMockCard(card.id)).toBeNull();
+      expect(mod.listMockBoardCards(boardId)).toHaveLength(0);
+    });
+
     it("applies board card patch fields in mock like core", async () => {
       const mod = await import("../../src/lib/mockCoreData.js");
       const { board } = mod.createMockBoard({

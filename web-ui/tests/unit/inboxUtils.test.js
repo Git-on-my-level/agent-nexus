@@ -52,7 +52,9 @@ describe("inbox grouping", () => {
       "decision_needed",
       "intervention_needed",
       "exception",
-      "commitment_risk",
+      "risk_review",
+      "stale_topic",
+      "document_attention",
     ]);
 
     expect(grouped[0].items.map((item) => item.id)).toEqual([
@@ -66,6 +68,8 @@ describe("inbox grouping", () => {
       "fresh-exception",
     ]);
     expect(grouped[3].items.map((item) => item.id)).toEqual(["old-risk"]);
+    expect(grouped[4].items).toEqual([]);
+    expect(grouped[5].items).toEqual([]);
   });
 });
 
@@ -88,7 +92,7 @@ describe("inbox urgency derivation", () => {
     );
     const normal = deriveInboxUrgency(
       {
-        category: "commitment_risk",
+        category: "risk_review",
         source_event_time: "2026-03-07T11:30:00.000Z",
       },
       { now },
@@ -128,7 +132,7 @@ describe("inbox urgency derivation", () => {
       },
       {
         id: "3",
-        category: "commitment_risk",
+        category: "risk_review",
       },
     ];
 

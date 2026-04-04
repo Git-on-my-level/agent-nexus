@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
 
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
+  import RefLink from "$lib/components/RefLink.svelte";
   import {
     authenticatedAgent,
     getAuthenticatedActorId,
@@ -26,6 +27,7 @@
   let documents = $state([]);
   let threads = $state([]);
   let boards = $state([]);
+  let cards = $state([]);
 
   let activeTab = $state("artifacts");
   let loading = $state(true);
@@ -40,6 +42,7 @@
     { id: "documents", label: "Documents", count: documents.length },
     { id: "threads", label: "Topics", count: threads.length },
     { id: "boards", label: "Boards", count: boards.length },
+    { id: "cards", label: "Cards", count: cards.length },
   ]);
 
   let activeItems = $derived.by(() => {
@@ -52,6 +55,8 @@
         return threads;
       case "boards":
         return boards;
+      case "cards":
+        return cards;
       default:
         return [];
     }
@@ -97,8 +102,12 @@
   function threadStatusColor(status) {
     const styles = {
       active: "text-emerald-400",
+      blocked: "text-amber-400",
+      resolved: "text-sky-400",
+      archived: "text-gray-400",
       paused: "text-amber-400",
       closed: "text-gray-400",
+      proposed: "text-[var(--ui-text-muted)]",
     };
     return styles[status] ?? "text-gray-400";
   }
@@ -107,23 +116,36 @@
     loading = true;
     error = "";
     try {
-      const [artifactResult, docResult, threadResult, boardResult] =
+      const [artifactResult, docResult, topicResult, boardResult, cardResult] =
         await Promise.all([
           coreClient.listArtifacts({ tombstoned_only: "true" }),
           coreClient.listDocuments({ tombstoned_only: "true" }),
-          coreClient.listThreads({ tombstoned_only: "true" }),
+          coreClient.listTopics({}),
           coreClient.listBoards({ tombstoned_only: "true" }),
+          coreClient.listCards({}),
         ]);
       artifacts = artifactResult.artifacts ?? [];
       documents = docResult.documents ?? [];
-      threads = threadResult.threads ?? [];
+      threads = (topicResult.topics ?? []).filter(
+        (topic) =>
+          Boolean(topic?.archived_at) ||
+          Boolean(topic?.tombstoned_at) ||
+          String(topic?.status ?? "").trim() === "archived",
+      );
       boards = (boardResult.boards ?? []).map((item) => item.board);
+      cards = (cardResult.cards ?? []).filter(
+        (card) =>
+          Boolean(card?.archived_at) ||
+          Boolean(card?.tombstoned_at) ||
+          String(card?.status ?? "").trim() === "archived",
+      );
     } catch (e) {
       error = `Failed to load trash: ${e instanceof Error ? e.message : String(e)}`;
       artifacts = [];
       documents = [];
       threads = [];
       boards = [];
+      cards = [];
     } finally {
       loading = false;
     }
@@ -137,6 +159,10 @@
     const summary = String(artifact?.summary ?? "").trim();
     if (summary) return summary;
     return `${kindLabel(artifact?.kind)} artifact`;
+  }
+
+  function topicSummary(topic) {
+    return String(topic?.summary ?? topic?.current_summary ?? "").trim();
   }
 
   function tombstoneReason(entity) {
@@ -178,6 +204,9 @@
         case "boards":
           await coreClient.restoreBoard(id, {});
           break;
+        case "cards":
+          await coreClient.restoreCard(id, {});
+          break;
         default:
           return;
       }
@@ -213,6 +242,9 @@
         case "boards":
           await coreClient.purgeBoard(id, body);
           break;
+        case "cards":
+          await coreClient.purgeCard(id, body);
+          break;
         default:
           return;
       }
@@ -236,9 +268,11 @@
       case "documents":
         return "document";
       case "threads":
-        return "thread";
+        return "topic";
       case "boards":
         return "board";
+      case "cards":
+        return "card";
       default:
         return "item";
     }
@@ -251,9 +285,11 @@
       case "documents":
         return "No tombstoned documents in this category";
       case "threads":
-        return "No tombstoned threads in this category";
+        return "No tombstoned topics in this category";
       case "boards":
         return "No tombstoned boards in this category";
+      case "cards":
+        return "No archived cards in this category";
       default:
         return "No tombstoned items in this category";
     }
@@ -286,6 +322,9 @@
           case "boards":
             await coreClient.purgeBoard(id, body);
             break;
+          case "cards":
+            await coreClient.purgeCard(id, body);
+            break;
           default:
             break;
         }
@@ -308,9 +347,11 @@
       case "documents":
         return "Permanently delete this document? This cannot be undone.";
       case "threads":
-        return "Permanently delete this thread? This cannot be undone.";
+        return "Permanently delete this topic? This cannot be undone.";
       case "boards":
         return "Permanently delete this board? This cannot be undone.";
+      case "cards":
+        return "Permanently delete this card? This cannot be undone.";
       default:
         return "Permanently delete this item? This cannot be undone.";
     }
@@ -327,7 +368,7 @@
       their thread's timeline view.
     </p>
   </div>
-  {#if isHumanPrincipal && !loading && activeItems.length > 0}
+  {#if isHumanPrincipal && !loading && activeItems.length > 0 && (activeTab !== "cards" || $devActorMode)}
     <div class="shrink-0">
       <button
         class="cursor-pointer rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-[12px] font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
@@ -644,6 +685,11 @@
                 >
               {/if}
             </div>
+            {#if topicSummary(thread)}
+              <p class="mt-1 text-[12px] text-[var(--ui-text-muted)]">
+                {topicSummary(thread)}
+              </p>
+            {/if}
             <div
               class="mt-2 grid gap-x-4 gap-y-1 text-[11px] text-[var(--ui-text-muted)] sm:grid-cols-2 xl:grid-cols-3"
             >
@@ -825,6 +871,163 @@
               </div>
             {/if}
           </div>
+        </div>
+      </div>
+    {/each}
+  </div>
+{/if}
+
+{#if !loading && activeTab === "cards" && cards.length > 0}
+  <div
+    class="space-y-px rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] overflow-hidden"
+  >
+    {#each cards as card, i}
+      <div
+        class="px-4 py-3 {i > 0 ? 'border-t border-[var(--ui-border)]' : ''}"
+      >
+        <div
+          class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between"
+        >
+          <div class="min-w-0 flex-1">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="text-[13px] font-medium text-[var(--ui-text)]">
+                {String(card?.title ?? "").trim() || card.id}
+              </span>
+              {#if card.risk}
+                <span
+                  class="rounded bg-[var(--ui-panel)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--ui-text-muted)]"
+                  >{String(card.risk).trim()}</span
+                >
+              {/if}
+              {#if card.resolution}
+                <span
+                  class="rounded bg-[var(--ui-panel)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--ui-text-muted)]"
+                  >{String(card.resolution).trim()}</span
+                >
+              {/if}
+            </div>
+            {#if card.summary}
+              <p class="mt-1 text-[12px] text-[var(--ui-text-muted)]">
+                {card.summary}
+              </p>
+            {/if}
+            <div
+              class="mt-2 grid gap-x-4 gap-y-1 text-[11px] text-[var(--ui-text-muted)] sm:grid-cols-2 xl:grid-cols-3"
+            >
+              <div>
+                <span class="text-[var(--ui-text-subtle)]">Created</span>
+                {formatTimestamp(card.created_at) || "—"}
+                <span class="text-[var(--ui-text-subtle)]"> · </span>
+                {actorName(card.created_by)}
+              </div>
+              <div>
+                <span class="text-[var(--ui-text-subtle)]">Archived</span>
+                {formatTimestamp(card.archived_at) || "—"}
+                <span class="text-[var(--ui-text-subtle)]"> · </span>
+                {actorName(card.archived_by)}
+              </div>
+              <div class="sm:col-span-2 xl:col-span-1">
+                <span class="text-[var(--ui-text-subtle)]">Tombstoned</span>
+                {formatTimestamp(card.tombstoned_at) || "—"}
+                <span class="text-[var(--ui-text-subtle)]"> · </span>
+                {actorName(card.tombstoned_by)}
+              </div>
+              <div class="sm:col-span-2 xl:col-span-1">
+                <span class="text-[var(--ui-text-subtle)]">Reason</span>
+                {tombstoneReason(card)}
+              </div>
+            </div>
+            <div class="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+              {#if card.board_ref}
+                <span
+                  class="rounded bg-[var(--ui-panel)] px-1.5 py-0.5 font-medium text-[var(--ui-text-muted)]"
+                >
+                  Board: {card.board_ref}
+                </span>
+              {/if}
+              {#if card.topic_ref}
+                <span
+                  class="rounded bg-[var(--ui-panel)] px-1.5 py-0.5 font-medium text-[var(--ui-text-muted)]"
+                >
+                  Topic: {card.topic_ref}
+                </span>
+              {/if}
+              {#if card.document_ref}
+                <span
+                  class="rounded bg-[var(--ui-panel)] px-1.5 py-0.5 font-medium text-[var(--ui-text-muted)]"
+                >
+                  Doc: {card.document_ref}
+                </span>
+              {/if}
+              {#if Array.isArray(card.related_refs)}
+                {#each card.related_refs as refValue}
+                  <RefLink
+                    {refValue}
+                    threadId={card.thread_id ?? card.parent_thread}
+                  />
+                {/each}
+              {/if}
+            </div>
+          </div>
+          {#if $devActorMode}
+            <div
+              class="flex shrink-0 flex-col items-stretch gap-2 lg:items-end"
+            >
+              <div class="flex flex-wrap justify-end gap-1.5">
+                <button
+                  class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text)] transition-colors hover:bg-[var(--ui-border)] disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={busyItemId === itemBusyKey("cards", card.id)}
+                  onclick={() => restoreEntity("cards", card.id)}
+                  type="button"
+                >
+                  Restore
+                </button>
+                {#if isHumanPrincipal}
+                  {#if purgeConfirmId !== itemBusyKey("cards", card.id)}
+                    <button
+                      class="cursor-pointer rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-[12px] font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={Boolean(busyItemId)}
+                      onclick={() => {
+                        purgeConfirmId = itemBusyKey("cards", card.id);
+                      }}
+                      type="button"
+                    >
+                      Purge
+                    </button>
+                  {/if}
+                {/if}
+              </div>
+
+              {#if isHumanPrincipal && purgeConfirmId === itemBusyKey("cards", card.id)}
+                <div
+                  class="rounded-md border border-red-500/35 bg-red-500/5 p-2.5 text-[12px]"
+                  role="region"
+                  aria-label="Confirm purge"
+                >
+                  <p class="font-medium text-red-300">
+                    {purgeConfirmLabel("cards")}
+                  </p>
+                  <div class="mt-2 flex flex-wrap justify-end gap-1.5">
+                    <button
+                      class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]"
+                      onclick={cancelPurge}
+                      type="button"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      class="cursor-pointer rounded-md bg-red-600 px-2.5 py-1.5 text-[12px] font-medium text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={busyItemId === itemBusyKey("cards", card.id)}
+                      onclick={() => confirmPurgeEntity("cards", card.id)}
+                      type="button"
+                    >
+                      Confirm purge
+                    </button>
+                  </div>
+                </div>
+              {/if}
+            </div>
+          {/if}
         </div>
       </div>
     {/each}

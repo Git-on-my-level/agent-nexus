@@ -1841,8 +1841,84 @@ export function createMockEvent(event) {
   return event;
 }
 
+function splitLegacyTypedRef(refValue) {
+  const raw = String(refValue ?? "").trim();
+  const separatorIndex = raw.indexOf(":");
+  if (separatorIndex <= 0 || separatorIndex >= raw.length - 1) {
+    return { prefix: "", id: "" };
+  }
+  return {
+    prefix: raw.slice(0, separatorIndex).trim(),
+    id: raw.slice(separatorIndex + 1).trim(),
+  };
+}
+
+function normalizeMockInboxCategory(category) {
+  const normalized = String(category ?? "").trim();
+  if (normalized === "commitment_risk") {
+    return "risk_review";
+  }
+  return normalized;
+}
+
+function deriveMockInboxSubjectRef(item) {
+  const explicit = String(item?.subject_ref ?? "").trim();
+  if (explicit) {
+    return explicit;
+  }
+
+  const topicId = String(item?.topic_id ?? item?.thread_id ?? "").trim();
+  if (topicId) {
+    return `topic:${topicId}`;
+  }
+
+  const boardId = String(item?.board_id ?? "").trim();
+  if (boardId) {
+    return `board:${boardId}`;
+  }
+
+  const documentId = String(item?.document_id ?? "").trim();
+  if (documentId) {
+    return `document:${documentId}`;
+  }
+
+  const cardId = String(
+    item?.card_id ?? item?.commitment_id ?? item?.work_item_id ?? "",
+  ).trim();
+  if (cardId) {
+    return `card:${cardId}`;
+  }
+
+  return "";
+}
+
+function normalizeMockInboxItem(item) {
+  const subjectRef = deriveMockInboxSubjectRef(item);
+  const relatedRefs = Array.isArray(item?.related_refs)
+    ? item.related_refs
+    : Array.isArray(item?.refs)
+      ? item.refs
+      : [];
+
+  return {
+    ...item,
+    category: normalizeMockInboxCategory(item?.category),
+    subject_ref: subjectRef,
+    related_refs:
+      relatedRefs.length > 0
+        ? relatedRefs
+        : item?.thread_id
+          ? [`topic:${item.thread_id}`]
+          : [],
+    subject_kind: splitLegacyTypedRef(subjectRef).prefix,
+    subject_id: splitLegacyTypedRef(subjectRef).id,
+  };
+}
+
 export function listMockInboxItems() {
-  return inboxItems.filter((item) => !item.acknowledged_at);
+  return inboxItems
+    .filter((item) => !item.acknowledged_at)
+    .map((item) => normalizeMockInboxItem(item));
 }
 
 export function ackMockInboxItem({ thread_id, inbox_item_id }) {
@@ -2086,6 +2162,45 @@ export function getMockThread(threadId) {
   return threads.find((thread) => thread.id === threadId) ?? null;
 }
 
+export function listMockTopics(filters = {}) {
+  return listMockThreads(filters).map((thread) => ({
+    id: thread.id,
+    type: thread.type ?? "other",
+    status:
+      thread.status === "closed"
+        ? "archived"
+        : thread.status === "paused"
+          ? "blocked"
+          : "active",
+    title: thread.title,
+    summary: thread.current_summary ?? "",
+    owner_refs: thread.created_by ? [`actor:${thread.created_by}`] : [],
+    primary_thread_ref: `thread:${thread.id}`,
+    document_refs: listMockDocuments({ thread_id: thread.id }).map(
+      (doc) => `document:${doc.id}`,
+    ),
+    board_refs: boards
+      .filter((board) => board.primary_thread_id === thread.id)
+      .map((board) => `board:${board.id}`),
+    related_refs: [
+      ...new Set([
+        ...(thread.key_artifacts ?? []).map((ref) => String(ref).trim()),
+        ...(thread.open_commitments ?? []).map((id) => `card:${id}`),
+        `thread:${thread.id}`,
+      ]),
+    ].filter(Boolean),
+    created_at: thread.created_at,
+    created_by: thread.created_by,
+    updated_at: thread.updated_at,
+    updated_by: thread.updated_by,
+    provenance: thread.provenance,
+  }));
+}
+
+export function getMockTopic(topicId) {
+  return listMockTopics().find((topic) => topic.id === topicId) ?? null;
+}
+
 function artifactContentPreview(content) {
   const text = String(content ?? "").trim();
   if (!text) {
@@ -2160,7 +2275,7 @@ export function getMockThreadWorkspace(
     .filter(
       (c) =>
         String(c.thread_id ?? c.parent_thread ?? "").trim() ===
-        String(threadId).trim(),
+          String(threadId).trim() && isVisibleBoardCard(c),
     )
     .map((card) => {
       const board = boards.find((b) => b.id === card.board_id);
@@ -2188,7 +2303,9 @@ export function getMockThreadWorkspace(
       id: b.id,
       title: b.title,
       status: b.status,
-      card_count: boardCards.filter((c) => c.board_id === b.id).length,
+      card_count: boardCards.filter(
+        (c) => c.board_id === b.id && isVisibleBoardCard(c),
+      ).length,
       updated_at: b.updated_at,
     }));
 
@@ -3393,6 +3510,44 @@ function normalizeCardRefList(value) {
   return refs;
 }
 
+function isArchivedBoardCard(card) {
+  return (
+    Boolean(card?.archived_at) ||
+    String(card?.status ?? "").trim() === "archived"
+  );
+}
+
+function isTombstonedBoardCard(card) {
+  return Boolean(card?.tombstoned_at);
+}
+
+function isVisibleBoardCard(card) {
+  return !isArchivedBoardCard(card) && !isTombstonedBoardCard(card);
+}
+
+function clearBoardCardLifecycle(card) {
+  card.archived_at = null;
+  card.archived_by = null;
+  card.tombstoned_at = null;
+  card.tombstoned_by = null;
+  card.tombstone_reason = null;
+}
+
+function archiveBoardCard(card, actorId, reason = "") {
+  const nowIso = new Date().toISOString();
+  card.archived_at = nowIso;
+  card.archived_by = actorId || card.archived_by || "unknown";
+  card.tombstoned_at = null;
+  card.tombstoned_by = null;
+  card.tombstone_reason = reason || null;
+  card.version = (Number(card.version) || 0) + 1;
+  card.updated_at = nowIso;
+  if (actorId) {
+    card.updated_by = actorId;
+  }
+  return nowIso;
+}
+
 function normalizeMockBoardCard(card) {
   if (!card) return null;
 
@@ -3453,6 +3608,11 @@ function normalizeMockBoardCard(card) {
     topic_ref: topicRef || null,
     thread_ref: threadRef || null,
     document_ref: documentRef || null,
+    archived_at: card.archived_at ?? null,
+    archived_by: card.archived_by ?? null,
+    tombstoned_at: card.tombstoned_at ?? null,
+    tombstoned_by: card.tombstoned_by ?? null,
+    tombstone_reason: card.tombstone_reason ?? null,
     title: String(card.title ?? "").trim() || summary,
     summary,
     due_at: dueAt || null,
@@ -3483,7 +3643,10 @@ function getBoardColumnCards(boardId) {
   }, {});
 
   for (const card of sortBoardCardsForBoard(
-    boardCards.filter((candidate) => candidate.board_id === boardId),
+    boardCards.filter(
+      (candidate) =>
+        candidate.board_id === boardId && isVisibleBoardCard(candidate),
+    ),
   )) {
     if (!columns[card.column_key]) {
       columns[card.column_key] = [];
@@ -3576,7 +3739,9 @@ function resolveInsertIndex(cards, payload = {}) {
 }
 
 function buildBoardSummary(board) {
-  const cards = boardCards.filter((card) => card.board_id === board.id);
+  const cards = boardCards.filter(
+    (card) => card.board_id === board.id && isVisibleBoardCard(card),
+  );
   const cardsByColumn = canonicalColumnSchema.reduce((counts, column) => {
     counts[column.key] = 0;
     return counts;
@@ -3604,6 +3769,9 @@ function buildBoardSummary(board) {
 
   for (const threadId of threadIds) {
     const thread = getMockThread(threadId);
+    openCommitmentCount += Array.isArray(thread?.open_commitments)
+      ? thread.open_commitments.length
+      : 0;
     if (thread?.updated_at) {
       if (
         !latestActivityAt ||
@@ -3612,20 +3780,39 @@ function buildBoardSummary(board) {
         latestActivityAt = thread.updated_at;
       }
     }
-
-    openCommitmentCount += Array.isArray(thread?.open_commitments)
-      ? thread.open_commitments.length
-      : 0;
     documentCount += listMockDocuments({ thread_id: threadId }).length;
   }
+
+  const inboxCount = listMockInboxItems().filter((item) => {
+    const subjectRef = String(item?.subject_ref ?? "").trim();
+    if (!subjectRef) {
+      return false;
+    }
+    const { prefix, id } = splitLegacyTypedRef(subjectRef);
+    if (prefix === "topic" || prefix === "thread") {
+      return threadIds.includes(id);
+    }
+    if (prefix === "board") {
+      return id === board.id;
+    }
+    return false;
+  }).length;
+
+  const relatedTopicCount = threadIds.length;
+  const stale = threadIds.some((threadId) =>
+    isThreadStale(getMockThread(threadId)),
+  );
 
   return {
     card_count: cards.length,
     cards_by_column: cardsByColumn,
+    related_topic_count: relatedTopicCount,
     open_commitment_count: openCommitmentCount,
     unresolved_card_count: unresolvedCardCount,
     resolved_card_count: resolvedCardCount,
     document_count: documentCount,
+    inbox_count: inboxCount,
+    stale,
     latest_activity_at: latestActivityAt,
     has_primary_document: Boolean(board.primary_document_id),
   };
@@ -3673,6 +3860,7 @@ function buildBoardWorkspaceCard(card) {
       derived: {
         summary: {
           related_topic_count: relatedTopicCount,
+          open_commitment_count: 0,
           document_count: documentCount,
           inbox_count: 0,
           latest_activity_at: normalizedCard.updated_at ?? null,
@@ -3722,11 +3910,11 @@ function buildBoardWorkspaceCard(card) {
     },
     derived: {
       summary: {
-        open_commitment_count: collaboration.open_commitment_count,
         decision_request_count: collaboration.decision_request_count,
         decision_count: collaboration.decision_count,
         recommendation_count: collaboration.recommendation_count,
         related_topic_count: relatedTopicCount || (thread ? 1 : 0),
+        open_commitment_count: openCommitments.length,
         document_count: documentCount || documents.length,
         inbox_count: inboxCount,
         latest_activity_at:
@@ -3819,7 +4007,7 @@ function collectMockBoardWorkspaceThreadIds(boardId, primaryThreadId) {
 
   pushThreadId(primaryThreadId);
   for (const card of boardCards) {
-    if (card.board_id === boardId) {
+    if (card.board_id === boardId && isVisibleBoardCard(card)) {
       pushThreadId(card.thread_id);
       pushThreadId(card.parent_thread);
     }
@@ -3945,8 +4133,57 @@ export function getMockBoardWorkspace(boardId) {
 
 export function listMockBoardCards(boardId) {
   return sortBoardCardsForBoard(
-    boardCards.filter((card) => card.board_id === boardId),
+    boardCards.filter(
+      (card) => card.board_id === boardId && isVisibleBoardCard(card),
+    ),
   ).map((card) => cloneBoardCard(card));
+}
+
+export function listMockCards(filters = {}) {
+  const boardFilter = String(filters.board_id ?? "").trim();
+  const topicFilter = String(
+    filters.topic_id ?? filters.thread_id ?? "",
+  ).trim();
+  const archivedOnly =
+    filters.archived_only === true || String(filters.archived_only) === "true";
+  const tombstonedOnly =
+    filters.tombstoned_only === true ||
+    String(filters.tombstoned_only) === "true";
+
+  return boardCards
+    .filter((card) => {
+      if (boardFilter && String(card.board_id ?? "") !== boardFilter) {
+        return false;
+      }
+      if (
+        topicFilter &&
+        String(card.thread_id ?? card.parent_thread ?? "") !== topicFilter
+      ) {
+        return false;
+      }
+      if (archivedOnly && !card.archived_at) {
+        return false;
+      }
+      if (tombstonedOnly && !card.tombstoned_at) {
+        return false;
+      }
+      return true;
+    })
+    .map((card) => normalizeMockBoardCard(card));
+}
+
+export function getMockCard(cardId) {
+  return (
+    listMockCards().find((card) => {
+      const stableId = String(card?.id ?? "").trim();
+      if (stableId === String(cardId ?? "").trim()) {
+        return true;
+      }
+      return (
+        String(card?.thread_id ?? "").trim() === String(cardId ?? "").trim()
+      );
+    }) ?? null
+  );
 }
 
 export function createMockBoardCard(boardId, payload) {
@@ -4010,6 +4247,7 @@ export function createMockBoardCard(boardId, payload) {
       boardCards.some(
         (card) =>
           card.board_id === boardId &&
+          isVisibleBoardCard(card) &&
           String(card.thread_id ?? "").trim() === threadId,
       )
     ) {
@@ -4031,7 +4269,10 @@ export function createMockBoardCard(boardId, payload) {
   if (
     String(payload.card_id ?? "").trim() &&
     boardCards.some(
-      (c) => c.board_id === boardId && mockCardMatchesAnchor(c, cardId),
+      (c) =>
+        c.board_id === boardId &&
+        isVisibleBoardCard(c) &&
+        mockCardMatchesAnchor(c, cardId),
     )
   ) {
     return {
@@ -4079,6 +4320,11 @@ export function createMockBoardCard(boardId, payload) {
     created_by: payload.actor_id || "unknown",
     updated_at: nowIso,
     updated_by: payload.actor_id || "unknown",
+    archived_at: null,
+    archived_by: null,
+    tombstoned_at: null,
+    tombstoned_by: null,
+    tombstone_reason: null,
   });
 
   targetColumn.splice(resolveInsertIndex(targetColumn, payload), 0, newCard);
@@ -4180,6 +4426,7 @@ export function updateMockBoardCard(boardId, cardId, payload) {
           (c) =>
             c.board_id === boardId &&
             c !== card &&
+            isVisibleBoardCard(c) &&
             String(c.thread_id ?? "").trim() === nextParent,
         );
         if (duplicate) {
@@ -4518,12 +4765,18 @@ export function removeMockBoardCard(boardId, cardId, payload = {}) {
     };
   }
 
-  const removedCard = boardCards.splice(cardIndex, 1)[0];
-  const colKey = removedCard.column_key;
+  const removedCard = boardCards[cardIndex];
+  archiveBoardCard(
+    removedCard,
+    payload.actor_id,
+    String(payload.reason ?? "").trim(),
+  );
   const remainingInColumn = sortBoardCardsForBoard(
     boardCards.filter(
       (candidate) =>
-        candidate.board_id === boardId && candidate.column_key === colKey,
+        candidate.board_id === boardId &&
+        candidate.column_key === removedCard.column_key &&
+        isVisibleBoardCard(candidate),
     ),
   );
   renormalizeColumnCards(remainingInColumn);
@@ -4549,6 +4802,82 @@ export function archiveMockBoardCardByCardId(cardId, payload = {}) {
   }
   const cardRow = boardCards[cardIndex];
   return removeMockBoardCard(cardRow.board_id, cardId, payload);
+}
+
+export function restoreMockBoardCardByCardId(cardId, payload = {}) {
+  const card = boardCards.find((candidate) =>
+    mockCardMatchesAnchor(candidate, cardId),
+  );
+  if (!card) {
+    return {
+      error: "not_found",
+      message: `Card not found: ${cardId}`,
+    };
+  }
+
+  const board = boards.find((candidate) => candidate.id === card.board_id);
+  if (!board) {
+    return {
+      error: "not_found",
+      message: `Board not found: ${card.board_id}`,
+    };
+  }
+
+  clearBoardCardLifecycle(card);
+  const activeCardsInColumn = sortBoardCardsForBoard(
+    boardCards.filter(
+      (candidate) =>
+        candidate.board_id === board.id &&
+        candidate.column_key === card.column_key &&
+        isVisibleBoardCard(candidate),
+    ),
+  );
+  renormalizeColumnCards(activeCardsInColumn);
+  card.version = (Number(card.version) || 0) + 1;
+  card.updated_at = new Date().toISOString();
+  if (payload.actor_id) {
+    card.updated_by = payload.actor_id;
+  }
+  touchBoard(board, payload.actor_id);
+
+  return {
+    board: cloneBoard(board),
+    card: cloneBoardCard(card),
+  };
+}
+
+export function purgeMockBoardCardByCardId(cardId, payload = {}) {
+  const cardIndex = boardCards.findIndex((candidate) =>
+    mockCardMatchesAnchor(candidate, cardId),
+  );
+  if (cardIndex === -1) {
+    return {
+      error: "not_found",
+      message: `Card not found: ${cardId}`,
+    };
+  }
+
+  const removedCard = boardCards.splice(cardIndex, 1)[0];
+  const board = boards.find(
+    (candidate) => candidate.id === removedCard.board_id,
+  );
+  if (board) {
+    const remainingInColumn = sortBoardCardsForBoard(
+      boardCards.filter(
+        (candidate) =>
+          candidate.board_id === board.id &&
+          candidate.column_key === removedCard.column_key &&
+          isVisibleBoardCard(candidate),
+      ),
+    );
+    renormalizeColumnCards(remainingInColumn);
+    touchBoard(board, payload.actor_id);
+  }
+
+  return {
+    board: board ? cloneBoard(board) : null,
+    card: cloneBoardCard(removedCard),
+  };
 }
 
 export function createMockBoard(payload) {

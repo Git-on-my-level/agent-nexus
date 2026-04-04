@@ -3,15 +3,10 @@
   import { page } from "$app/stores";
   import { onMount } from "svelte";
 
-  import {
-    actorRegistry,
-    lookupActorDisplayName,
-    principalRegistry,
-  } from "$lib/actorSession";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
   import { coreClient } from "$lib/coreClient";
-  import { formatAbsoluteDateTime, formatTimestamp } from "$lib/formatDate";
+  import { formatAbsoluteDateTime } from "$lib/formatDate";
   import { workspacePath } from "$lib/workspacePaths";
   import {
     INBOX_CATEGORY_ORDER,
@@ -22,6 +17,11 @@
     enrichInboxItem,
     getInboxCategoryLabel,
     getInboxUrgencyLabel,
+    getInboxSubjectId,
+    getInboxSubjectKind,
+    getInboxSubjectLabel,
+    getInboxSubjectRef,
+    splitTypedRef,
     groupInboxItems,
     summarizeInboxUrgency,
   } from "$lib/inboxUtils";
@@ -39,13 +39,10 @@
   let categoryFilter = $state("all");
   let filtersOpen = $state(false);
   let workspaceSlug = $derived($page.params.workspace);
-  let actorName = $derived((id) =>
-    lookupActorDisplayName(id, $actorRegistry, $principalRegistry),
-  );
 
-  let threadContextCache = $state({});
-  let threadContextLoading = $state({});
-  let threadContextErrors = $state({});
+  let subjectContextCache = $state({});
+  let subjectContextLoading = $state({});
+  let subjectContextErrors = $state({});
 
   let totalItems = $derived(items.length);
   let enrichedItems = $derived(items.map((item) => enrichInboxItem(item)));
@@ -90,6 +87,49 @@
 
   function workspaceHref(pathname = "/") {
     return workspacePath(workspaceSlug, pathname);
+  }
+
+  function relatedBoardHref(item) {
+    const boardRef = (item?.related_refs ?? []).find(
+      (ref) => splitTypedRef(ref).prefix === "board",
+    );
+    const { id } = splitTypedRef(boardRef);
+    return id ? workspaceHref(`/boards/${id}`) : "";
+  }
+
+  function inboxItemHref(item) {
+    const subjectRef = getInboxSubjectRef(item);
+    const { prefix, id } = splitTypedRef(subjectRef);
+
+    if (prefix === "topic" || prefix === "thread") {
+      return workspaceHref(`/topics/${id}`);
+    }
+    if (prefix === "board") {
+      return workspaceHref(`/boards/${id}`);
+    }
+    if (prefix === "document") {
+      return workspaceHref(`/docs/${id}`);
+    }
+    if (prefix === "card") {
+      return relatedBoardHref(item) || workspaceHref("/inbox");
+    }
+
+    return workspaceHref("/inbox");
+  }
+
+  function inboxActionThreadId(item) {
+    const explicitThreadId = String(item?.thread_id ?? "").trim();
+    if (explicitThreadId) {
+      return explicitThreadId;
+    }
+
+    const subjectRef = getInboxSubjectRef(item);
+    const { prefix, id } = splitTypedRef(subjectRef);
+    if (prefix === "topic" || prefix === "thread") {
+      return id;
+    }
+
+    return "";
   }
 
   $effect(() => {
@@ -187,33 +227,70 @@
       },
     };
 
-    if (open && item.thread_id) {
-      loadThreadContext(item.thread_id);
+    if (open) {
+      loadSubjectContext(item);
     }
   }
 
-  async function loadThreadContext(threadId) {
-    if (!threadId || threadContextCache[threadId]) return;
-    threadContextLoading = { ...threadContextLoading, [threadId]: true };
+  async function loadSubjectContext(item) {
+    const subjectRef = getInboxSubjectRef(item);
+    const { prefix, id } = splitTypedRef(subjectRef);
+    const cacheKey = subjectRef || String(item?.id ?? "");
+
+    if (!cacheKey || subjectContextCache[cacheKey]) return;
+
+    subjectContextLoading = { ...subjectContextLoading, [cacheKey]: true };
     try {
-      const [threadResponse, commitmentsResponse] = await Promise.all([
-        coreClient.getThread(threadId),
-        coreClient.listCommitments({ thread_id: threadId, status: "active" }),
-      ]);
-      threadContextCache = {
-        ...threadContextCache,
-        [threadId]: {
-          thread: threadResponse.thread,
-          commitments: commitmentsResponse.commitments ?? [],
+      let subject = null;
+      let related = {};
+
+      if (prefix === "topic" || prefix === "thread") {
+        const response = await coreClient.getTopic(id);
+        subject = response.topic ?? response.thread ?? null;
+      } else if (prefix === "board") {
+        const response = await coreClient.getBoard(id);
+        subject = response.board ?? null;
+        related = {
+          summary: response.summary ?? null,
+        };
+      } else if (prefix === "card") {
+        const response = await coreClient.getCard(id);
+        subject = response.card ?? response.membership ?? null;
+        if (subject?.board_ref) {
+          const boardId = String(subject.board_ref ?? "").replace(
+            /^board:/,
+            "",
+          );
+          if (boardId) {
+            try {
+              const boardResponse = await coreClient.getBoard(boardId);
+              related.board = boardResponse.board ?? null;
+              related.board_summary = boardResponse.summary ?? null;
+            } catch {
+              related.board = null;
+            }
+          }
+        }
+      } else if (prefix === "document") {
+        const response = await coreClient.getDocument(id);
+        subject = response.document ?? null;
+      }
+
+      subjectContextCache = {
+        ...subjectContextCache,
+        [cacheKey]: {
+          subject,
+          related,
+          subject_ref: subjectRef,
         },
       };
     } catch (e) {
-      threadContextErrors = {
-        ...threadContextErrors,
-        [threadId]: e.message || String(e),
+      subjectContextErrors = {
+        ...subjectContextErrors,
+        [cacheKey]: e.message || String(e),
       };
     } finally {
-      threadContextLoading = { ...threadContextLoading, [threadId]: false };
+      subjectContextLoading = { ...subjectContextLoading, [cacheKey]: false };
     }
   }
 
@@ -250,10 +327,12 @@
 
       ackInFlightById = { ...ackInFlightById, [item.id]: true };
       try {
-        await coreClient.ackInboxItem({
-          thread_id: item.thread_id,
-          inbox_item_id: item.id,
-        });
+        const ackPayload = { inbox_item_id: item.id };
+        const actionThreadId = inboxActionThreadId(item);
+        if (actionThreadId) {
+          ackPayload.thread_id = actionThreadId;
+        }
+        await coreClient.ackInboxItem(ackPayload);
       } catch (ackError) {
         const reason =
           ackError instanceof Error ? ackError.message : String(ackError);
@@ -284,7 +363,9 @@
     error = "";
     setDecisionFormError(item.id, "");
 
-    if (!item.thread_id) {
+    const actionThreadId = inboxActionThreadId(item);
+
+    if (!actionThreadId) {
       error = "Cannot record decision: no linked thread.";
       return;
     }
@@ -304,7 +385,7 @@
       const response = await coreClient.createEvent({
         event: {
           type: "decision_made",
-          thread_id: item.thread_id,
+          thread_id: actionThreadId,
           refs,
           summary: draft.summary.trim(),
           payload: {
@@ -360,8 +441,9 @@
   function categoryBadgeClass(category) {
     if (category === "decision_needed") return "text-indigo-400";
     if (category === "intervention_needed") return "text-cyan-400";
-    if (category === "exception") return "text-red-400";
-    if (category === "commitment_risk") return "text-amber-400";
+    if (category === "risk_review") return "text-amber-400";
+    if (category === "stale_topic") return "text-orange-400";
+    if (category === "document_attention") return "text-sky-400";
     return "text-[var(--ui-text-muted)]";
   }
 </script>
@@ -645,11 +727,21 @@
                 {/if}
               </div>
 
-              <h3
-                class="mt-1.5 text-[13px] font-semibold text-[var(--ui-text)] leading-snug"
-              >
-                {item.title}
-              </h3>
+              <div class="mt-1.5 flex flex-wrap items-start gap-2">
+                <h3
+                  class="text-[13px] font-semibold text-[var(--ui-text)] leading-snug"
+                >
+                  {item.title}
+                </h3>
+                {#if getInboxSubjectLabel(item)}
+                  <a
+                    class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] hover:text-[var(--ui-text)]"
+                    href={inboxItemHref(item)}
+                  >
+                    {getInboxSubjectLabel(item)}
+                  </a>
+                {/if}
+              </div>
 
               {#if item.recommended_action}
                 <div class="mt-2 rounded bg-[var(--ui-bg-soft)] px-3 py-2">
@@ -666,33 +758,20 @@
               {/if}
 
               <div class="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
-                {#if item.thread_id}
-                  <a
-                    class="inline-flex items-center gap-1 font-medium text-[var(--ui-text-muted)] hover:text-[var(--ui-text)] transition-colors"
-                    href={workspaceHref(`/topics/${item.thread_id}`)}
+                {#if getInboxSubjectRef(item)}
+                  <span
+                    class="inline-flex items-center gap-1 rounded bg-[var(--ui-panel)] px-1.5 py-0.5 font-medium text-[var(--ui-text-muted)]"
                   >
-                    <span class="text-[var(--ui-text-subtle)]">Topic:</span>
-                    {item.thread_id}
-                  </a>
-                {/if}
-                {#if item.commitment_id}
-                  <a
-                    class="inline-flex items-center gap-1 font-medium text-[var(--ui-text-muted)] hover:text-[var(--ui-text)] transition-colors"
-                    href={item.thread_id
-                      ? workspaceHref(
-                          `/topics/${item.thread_id}#commitment-card-${item.commitment_id}`,
-                        )
-                      : workspaceHref(
-                          `/topics#commitment-card-${item.commitment_id}`,
-                        )}
-                  >
-                    <span class="text-[var(--ui-text-subtle)]">Commitment:</span
-                    >
-                    {item.commitment_id}
-                  </a>
+                    <span class="text-[var(--ui-text-subtle)]">
+                      {getInboxSubjectKind(item)
+                        ? `${getInboxSubjectKind(item)}:`
+                        : "Subject:"}
+                    </span>
+                    <span>{getInboxSubjectId(item)}</span>
+                  </span>
                 {/if}
                 {#each item.refs ?? [] as refValue}
-                  <RefLink {refValue} threadId={item.thread_id} />
+                  <RefLink {refValue} threadId={inboxActionThreadId(item)} />
                 {/each}
               </div>
 
@@ -740,9 +819,7 @@
                     Decision recorded &mdash;
                     <a
                       class="font-medium underline hover:text-emerald-300"
-                      href={workspaceHref(
-                        `/topics/${item.thread_id}#event-${postedDecisionByInboxItem[item.id].id}`,
-                      )}
+                      href={`${inboxItemHref(item)}#event-${postedDecisionByInboxItem[item.id].id}`}
                     >
                       view in timeline
                     </a>
@@ -755,11 +832,12 @@
                   class="mt-3 grid grid-cols-1 md:grid-cols-[3fr_2fr] gap-3"
                   data-testid={`decision-panel-${item.id}`}
                 >
-                  {#if item.thread_id}
+                  {#if getInboxSubjectRef(item)}
+                    {@const subjectRef = getInboxSubjectRef(item)}
                     <div
                       class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] p-3 min-w-0"
                     >
-                      {#if threadContextLoading[item.thread_id]}
+                      {#if subjectContextLoading[subjectRef]}
                         <div
                           class="flex items-center gap-2 text-[12px] text-[var(--ui-text-muted)] py-4 justify-center"
                         >
@@ -782,97 +860,105 @@
                               d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                             ></path>
                           </svg>
-                          Loading thread context…
+                          Loading subject context…
                         </div>
-                      {:else if threadContextErrors[item.thread_id]}
+                      {:else if subjectContextErrors[subjectRef]}
                         <div class="text-[12px] text-red-400 py-2">
-                          Failed to load thread: {threadContextErrors[
-                            item.thread_id
+                          Failed to load subject: {subjectContextErrors[
+                            subjectRef
                           ]}
                         </div>
-                      {:else if threadContextCache[item.thread_id]}
-                        {@const ctx = threadContextCache[item.thread_id]}
-                        {@const thread = ctx.thread}
-                        {@const commitments = ctx.commitments}
+                      {:else if subjectContextCache[subjectRef]}
+                        {@const ctx = subjectContextCache[subjectRef]}
+                        {@const subject = ctx.subject}
+                        {@const related = ctx.related}
                         <div class="flex items-center gap-2 mb-2">
                           <h4
                             class="text-[13px] font-semibold text-[var(--ui-text)] truncate min-w-0"
                           >
-                            {thread.title ?? thread.id}
+                            {subject?.title ??
+                              subject?.summary ??
+                              subject?.id ??
+                              getInboxSubjectLabel(item)}
                           </h4>
                           <span
-                            class="shrink-0 rounded-md border border-[var(--ui-border)] px-1.5 py-0.5 text-[11px] font-medium capitalize {thread.status ===
+                            class="shrink-0 rounded-md border border-[var(--ui-border)] px-1.5 py-0.5 text-[11px] font-medium capitalize {subject?.status ===
                             'active'
                               ? 'text-emerald-400'
-                              : thread.status === 'paused'
+                              : subject?.status === 'blocked'
                                 ? 'text-amber-400'
-                                : 'text-[var(--ui-text-muted)]'}"
+                                : subject?.status === 'archived'
+                                  ? 'text-[var(--ui-text-muted)]'
+                                  : 'text-[var(--ui-text-muted)]'}"
                           >
-                            {thread.status ?? "unknown"}
+                            {subject?.status ?? "unknown"}
                           </span>
-                          {#if thread.priority}
+                          {#if subject?.type}
                             <span
                               class="shrink-0 text-[11px] font-medium text-[var(--ui-text-muted)] uppercase"
-                              >{thread.priority}</span
+                              >{subject.type}</span
                             >
                           {/if}
                         </div>
 
-                        {#if thread.current_summary}
+                        {#if subject?.summary}
                           <div
                             class="mb-2 text-[12px] text-[var(--ui-text)] leading-relaxed"
                           >
                             <MarkdownRenderer
-                              source={thread.current_summary}
+                              source={subject.summary}
                               class="text-[12px]"
                             />
                           </div>
                         {/if}
 
-                        {#if commitments.length > 0}
+                        <div class="flex flex-wrap gap-1.5">
+                          {#if subject?.board_ref}
+                            <span
+                              class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] text-[var(--ui-text-muted)]"
+                            >
+                              Board: {subject.board_ref}
+                            </span>
+                          {/if}
+                          {#if subject?.topic_ref}
+                            <span
+                              class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] text-[var(--ui-text-muted)]"
+                            >
+                              Topic: {subject.topic_ref}
+                            </span>
+                          {/if}
+                          {#if subject?.document_ref}
+                            <span
+                              class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] text-[var(--ui-text-muted)]"
+                            >
+                              Doc: {subject.document_ref}
+                            </span>
+                          {/if}
+                          {#if related?.board_summary}
+                            <span
+                              class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] text-[var(--ui-text-muted)]"
+                            >
+                              {related.board_summary.card_count ?? 0} cards
+                            </span>
+                          {/if}
+                        </div>
+
+                        {#if Array.isArray(subject?.related_refs) && subject.related_refs.length > 0}
                           <div
                             class="border-t border-[var(--ui-border)] pt-2 mt-2"
                           >
                             <p
                               class="text-[11px] font-medium text-[var(--ui-text-muted)] uppercase tracking-wide mb-1.5"
                             >
-                              Active commitments
+                              Related refs
                             </p>
                             <div class="space-y-1.5">
-                              {#each commitments as commitment}
-                                <div
-                                  class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[12px]"
-                                >
-                                  <div class="flex items-center gap-2">
-                                    <span
-                                      class="font-medium text-[var(--ui-text)] truncate min-w-0"
-                                      >{commitment.description ??
-                                        commitment.id}</span
-                                    >
-                                    <span
-                                      class="shrink-0 rounded px-1 py-0.5 text-[10px] font-medium capitalize border border-[var(--ui-border)] text-[var(--ui-text-muted)]"
-                                      >{commitment.status ?? "open"}</span
-                                    >
-                                  </div>
-                                  <div
-                                    class="flex items-center gap-3 mt-0.5 text-[11px] text-[var(--ui-text-muted)]"
-                                  >
-                                    {#if commitment.owner}
-                                      <span
-                                        >Owner: {actorName(
-                                          commitment.owner,
-                                        )}</span
-                                      >
-                                    {/if}
-                                    {#if commitment.due_by}
-                                      <span
-                                        >Due: {formatTimestamp(
-                                          commitment.due_by,
-                                        )}</span
-                                      >
-                                    {/if}
-                                  </div>
-                                </div>
+                              {#each subject.related_refs as refValue}
+                                <RefLink
+                                  {refValue}
+                                  threadId={subject?.thread_id ??
+                                    inboxActionThreadId(item)}
+                                />
                               {/each}
                             </div>
                           </div>
@@ -883,9 +969,9 @@
                         >
                           <a
                             class="inline-flex items-center gap-1 text-[12px] font-medium text-[var(--ui-accent)] hover:text-[var(--ui-accent-strong)] transition-colors"
-                            href={workspaceHref("/topics/" + item.thread_id)}
+                            href={inboxItemHref(item)}
                           >
-                            View full topic &rarr;
+                            View subject &rarr;
                           </a>
                         </div>
                       {/if}
@@ -893,7 +979,9 @@
                   {/if}
 
                   <form
-                    class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-3 {item.thread_id
+                    class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-3 {inboxActionThreadId(
+                      item,
+                    )
                       ? ''
                       : 'md:col-span-2'}"
                     data-testid={`decision-form-${item.id}`}

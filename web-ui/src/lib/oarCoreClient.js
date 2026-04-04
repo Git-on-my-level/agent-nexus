@@ -438,6 +438,33 @@ export function createOarCoreClient(options = {}) {
     return response;
   }
 
+  async function invokeMockJSON(path, payload = {}, { method = "POST" } = {}) {
+    if (resolvedBaseUrl) {
+      throw new Error(
+        `Mock-only card lifecycle route ${method} ${path} is unavailable when OAR_CORE_BASE_URL is set.`,
+      );
+    }
+
+    const response = await fetchFn(path, {
+      method,
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(withActorId(payload)),
+    });
+
+    if (!response.ok) {
+      throw buildRawRequestError(await parseRawErrorResponse(response), {
+        target,
+        method,
+        path,
+      });
+    }
+
+    return parseJsonBody(await response.text(), `${method} ${path}`);
+  }
+
   function requireActorId() {
     const actorId =
       typeof actorIdProvider === "function" ? actorIdProvider() : undefined;
@@ -604,6 +631,34 @@ export function createOarCoreClient(options = {}) {
     getSnapshot: (snapshotId) =>
       invokeJSON("snapshots.get", () =>
         generated.snapshotsGet({ snapshot_id: String(snapshotId) }),
+      ),
+
+    listTopics: (filters) =>
+      invokeJSON("topics.list", () => generated.topicsList({ query: filters })),
+    getTopic: (topicId) =>
+      invokeJSON("topics.get", () =>
+        generated.topicsGet({ topic_id: String(topicId) }),
+      ),
+    listCards: (filters) =>
+      invokeJSON("cards.list", () => generated.cardsList({ query: filters })),
+    getCard: (cardId) =>
+      invokeJSON("cards.get", () =>
+        generated.cardsGet({ card_id: String(cardId) }),
+      ),
+    archiveCard: (cardId, payload) =>
+      invokeMockJSON(
+        `/cards/${encodeURIComponent(String(cardId))}/archive`,
+        payload,
+      ),
+    restoreCard: (cardId, payload) =>
+      invokeMockJSON(
+        `/cards/${encodeURIComponent(String(cardId))}/restore`,
+        payload,
+      ),
+    purgeCard: (cardId, payload) =>
+      invokeMockJSON(
+        `/cards/${encodeURIComponent(String(cardId))}/purge`,
+        payload,
       ),
 
     createCommitment: (payload) =>

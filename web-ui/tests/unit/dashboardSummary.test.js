@@ -25,7 +25,13 @@ describe("dashboard summaries", () => {
         count: 0,
       },
       { category: "exception", label: "Exception", count: 1 },
-      { category: "commitment_risk", label: "At Risk", count: 0 },
+      { category: "risk_review", label: "Risk Review", count: 0 },
+      { category: "stale_topic", label: "Stale Topic", count: 0 },
+      {
+        category: "document_attention",
+        label: "Document Attention",
+        count: 0,
+      },
       { category: "unknown", label: "unknown", count: 1 },
     ]);
   });
