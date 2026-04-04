@@ -22,8 +22,17 @@ def test_roundtrip_packet_content():
         trigger_event_url="http://localhost:8080/events/event_1",
         cli_thread_inspect="oar threads inspect --thread-id thread_1 --json",
         cli_thread_workspace="oar threads workspace --thread-id thread_1 --json",
+        subject_ref="topic:topic_1",
+        resolved_subject={
+            "ref": "topic:topic_1",
+            "kind": "topic",
+            "title": "Example topic",
+            "thread_id": "thread_1",
+        },
     )
     restored = WakePacket.from_content(packet.to_content())
     assert restored.handle == packet.handle
     assert restored.trigger_text == packet.trigger_text
     assert restored.session_key == packet.session_key
+    assert restored.subject_ref == packet.subject_ref
+    assert restored.resolved_subject == packet.resolved_subject

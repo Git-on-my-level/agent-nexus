@@ -69,6 +69,13 @@ class StubClient:
             "target": {"handle": "hermes", "actor_id": "actor-hermes"},
             "workspace": {"id": "ws_main", "name": "Main"},
             "thread": {"id": "thread-1", "title": "Thread"},
+            "subject_ref": "topic:topic-1",
+            "resolved_subject": {
+                "ref": "topic:topic-1",
+                "kind": "topic",
+                "title": "Topic",
+                "thread_id": "thread-1",
+            },
             "trigger": {
                 "message_event_id": "evt-trigger",
                 "created_at": "2026-03-29T00:00:00Z",
@@ -93,10 +100,25 @@ class StubClient:
 
 
 class StubAdapter:
+    def __init__(self):
+        self.dispatch_calls = []
+        self.last_packet = None
+        self.last_prompt_text = ""
+
     def doctor(self):
         return {"adapter_kind": "stub"}
 
     def dispatch(self, packet, _prompt_text, _session_key, existing_native_session_id=None):
+        self.dispatch_calls.append(
+            {
+                "packet": packet,
+                "prompt_text": _prompt_text,
+                "session_key": _session_key,
+                "existing_native_session_id": existing_native_session_id,
+            }
+        )
+        self.last_packet = packet
+        self.last_prompt_text = _prompt_text
         return SimpleNamespace(response_text="done", native_session_id=existing_native_session_id or "native-1")
 
 
@@ -233,6 +255,31 @@ def test_handle_notification_marks_read_after_dispatch():
 
     assert client.notification_reads == ["wake-1"]
     assert "wake-1" in state.handled_wakeup_ids()
+    assert bridge.adapter.last_prompt_text.startswith("You were tagged in an OAR topic or card.")
+    assert '"subject_ref": "topic:topic-1"' in bridge.adapter.last_prompt_text
+    assert '"resolved_subject"' in bridge.adapter.last_prompt_text
+    assert [entry["event"]["type"] for entry in client.created_events] == [
+        "agent_wakeup_claimed",
+        "message_posted",
+        "agent_wakeup_completed",
+    ]
+    assert client.created_events[0]["event"]["refs"] == [
+        "thread:thread-1",
+        "event:evt-request",
+        "artifact:wake-1",
+    ]
+    assert client.created_events[1]["event"]["refs"] == [
+        "thread:thread-1",
+        "topic:topic-1",
+        "event:evt-trigger",
+        "artifact:wake-1",
+    ]
+    assert client.created_events[2]["event"]["refs"] == [
+        "thread:thread-1",
+        "topic:topic-1",
+        "event:evt-trigger",
+        "artifact:wake-1",
+    ]
 
 
 def test_handle_notification_leaves_notification_unread_when_completion_fails():

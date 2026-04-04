@@ -189,10 +189,29 @@ class WakePacket:
     trigger_event_url: str
     cli_thread_inspect: str
     cli_thread_workspace: str
+    subject_ref: str = ""
+    resolved_subject: dict[str, Any] = field(default_factory=dict)
     version: str = WAKE_PACKET_VERSION
 
+    def subject_context_refs(self) -> list[str]:
+        refs = [f"thread:{self.thread_id}"] if self.thread_id else []
+        subject_ref = self.effective_subject_ref()
+        if subject_ref and subject_ref not in refs:
+            refs.append(subject_ref)
+        return refs
+
+    def effective_subject_ref(self) -> str:
+        subject_ref = self.subject_ref.strip()
+        if subject_ref:
+            return subject_ref
+        for key in ("ref", "subject_ref"):
+            resolved_ref = str(self.resolved_subject.get(key, "")).strip()
+            if resolved_ref:
+                return resolved_ref
+        return f"thread:{self.thread_id}" if self.thread_id else ""
+
     def to_content(self) -> dict[str, Any]:
-        return {
+        content = {
             "version": self.version,
             "wakeup_id": self.wakeup_id,
             "target": {
@@ -228,12 +247,17 @@ class WakePacket:
                     "trigger_event": self.trigger_event_url,
                 },
             },
-            "reply_refs": [
-                f"thread:{self.thread_id}",
-                f"event:{self.trigger_event_id}",
-                f"artifact:{self.wakeup_id}",
-            ],
         }
+        if self.subject_ref.strip():
+            content["subject_ref"] = self.subject_ref.strip()
+        if self.resolved_subject:
+            content["resolved_subject"] = dict(self.resolved_subject)
+        content["reply_refs"] = [
+            *self.subject_context_refs(),
+            f"event:{self.trigger_event_id}",
+            f"artifact:{self.wakeup_id}",
+        ]
+        return content
 
     @classmethod
     def from_content(cls, content: dict[str, Any]) -> "WakePacket":
@@ -249,6 +273,23 @@ class WakePacket:
         thread_url = str(api.get("thread", ""))
         if "/threads/" in thread_url:
             base_url = thread_url.split("/threads/", 1)[0]
+        resolved_subject: dict[str, Any] = {}
+        for candidate in (content.get("resolved_subject"), content.get("subject")):
+            if isinstance(candidate, dict):
+                resolved_subject = dict(candidate)
+                break
+        subject_ref = str(content.get("subject_ref", "")).strip()
+        if not subject_ref:
+            for candidate in (resolved_subject, content.get("subject") if isinstance(content.get("subject"), dict) else {}):
+                if not isinstance(candidate, dict):
+                    continue
+                for key in ("ref", "subject_ref"):
+                    resolved_ref = str(candidate.get(key, "")).strip()
+                    if resolved_ref:
+                        subject_ref = resolved_ref
+                        break
+                if subject_ref:
+                    break
         return cls(
             wakeup_id=str(content.get("wakeup_id", "")).strip(),
             handle=str(target.get("handle", "")).strip(),
@@ -269,8 +310,11 @@ class WakePacket:
             trigger_event_url=str(api.get("trigger_event", "")).strip(),
             cli_thread_inspect=str(cli[1] if len(cli) > 1 else "").strip(),
             cli_thread_workspace=str(cli[0] if len(cli) > 0 else "").strip(),
+            subject_ref=subject_ref,
+            resolved_subject=resolved_subject,
             version=str(content.get("version", WAKE_PACKET_VERSION)).strip() or WAKE_PACKET_VERSION,
         )
+
 
 def wakeup_request_key(workspace_id: str, thread_id: str, message_event_id: str, actor_id: str) -> str:
     return f"wake-req-{sha256_text(workspace_id, thread_id, message_event_id, actor_id, length=24)}"
