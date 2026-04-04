@@ -517,9 +517,6 @@ func extractProvenanceRefs(resourceType string, payload map[string]any, includeE
 				}
 			}
 		}
-		if ptr := strings.TrimSpace(anyString(payload["primary_thread_ref"])); ptr != "" {
-			appendRef(ptr, "primary_thread_ref")
-		}
 		if tid := strings.TrimSpace(anyString(payload["thread_id"])); tid != "" {
 			appendRef("thread:"+tid, "topic.thread_id")
 		}

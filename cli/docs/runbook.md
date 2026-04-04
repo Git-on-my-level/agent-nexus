@@ -149,6 +149,8 @@ oar --agent agent-a events stream --follow
 oar --agent agent-a events list --thread-id thread_123 --thread-id thread_456 --type actor_statement --mine --full-id --max-events 20
 oar --json --agent agent-a provenance walk --from event:event_123 --depth 2
 oar --agent agent-a topics get --topic-id topic_123
+oar --agent agent-a topics workspace --topic-id topic_123 --full-id
+# Backing-thread reads (tooling/diagnostics; prefer topics workspace for operator triage)
 oar --agent agent-a threads inspect --thread-id thread_123 --max-events 50 --full-id
 oar --agent agent-a threads context --status active --tag pilot-rescue --type initiative --full-id
 oar --agent agent-a threads recommendations --thread-id thread_123 --full-id --full-summary
@@ -201,7 +203,7 @@ Generated board help lands in:
 
 Machine-facing notes for the targeted automation commands:
 
-- `events list`, `events get`, `events stream`, `inbox stream`, `threads inspect`, `threads context`, and `threads recommendations` include a stable `command_id` alongside `command`.
+- `events list`, `events get`, `events stream`, `inbox stream`, `topics workspace`, `threads inspect`, `threads context`, and `threads recommendations` include a stable `command_id` alongside `command`.
 - `events tail` and `inbox tail` resolve to canonical machine command identity (`events stream` / `inbox stream`) in JSON success/error envelopes.
 - Stream frames expose a normalized payload contract:
   - `id`, `type`

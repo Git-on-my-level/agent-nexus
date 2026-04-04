@@ -20,33 +20,18 @@ func TestRefreshDerivedTopicProjectionBasicFlow(t *testing.T) {
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, 201)
 
-	createResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
-		"actor_id":"actor-1",
-		"thread":{
-			"title":"Projection thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p1",
-			"tags":["ops"],
-			"cadence":"reactive",
-			"current_summary":"summary",
-			"next_actions":["do x"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, 201)
-	defer createResp.Body.Close()
-
-	var created struct {
-		Thread map[string]any `json:"thread"`
-	}
-	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
-		t.Fatalf("decode thread response: %v", err)
-	}
-	threadID := anyString(created.Thread["id"])
-	if threadID == "" {
-		t.Fatal("expected thread id")
-	}
+	threadID := integrationSeedThread(t, h, "actor-1", map[string]any{
+		"title":           "Projection thread",
+		"type":            "incident",
+		"status":          "active",
+		"priority":        "p1",
+		"tags":            []any{"ops"},
+		"cadence":         "reactive",
+		"current_summary": "summary",
+		"next_actions":    []any{"do x"},
+		"key_artifacts":   []any{},
+		"provenance":      map[string]any{"sources": []any{"inferred"}},
+	})
 
 	contract, err := schema.Load(filepath.Join("..", "..", "..", "contracts", "oar-schema.yaml"))
 	if err != nil {
@@ -128,34 +113,19 @@ func TestEnsureDerivedTopicProjectionRefreshesExpiredTimeSensitiveState(t *testi
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, 201)
 
 	baseNow := time.Now().UTC()
-	createResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
-		"actor_id":"actor-1",
-		"thread":{
-			"title":"Expiring projection thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p1",
-			"tags":["ops"],
-			"cadence":"daily",
-			"next_check_in_at":"`+baseNow.Add(30*time.Second).Format(time.RFC3339)+`",
-			"current_summary":"summary",
-			"next_actions":["check"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, 201)
-	defer createResp.Body.Close()
-
-	var created struct {
-		Thread map[string]any `json:"thread"`
-	}
-	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
-		t.Fatalf("decode thread response: %v", err)
-	}
-	threadID := anyString(created.Thread["id"])
-	if threadID == "" {
-		t.Fatal("expected thread id")
-	}
+	threadID := integrationSeedThread(t, h, "actor-1", map[string]any{
+		"title":            "Expiring projection thread",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p1",
+		"tags":             []any{"ops"},
+		"cadence":          "daily",
+		"next_check_in_at": baseNow.Add(30 * time.Second).Format(time.RFC3339),
+		"current_summary":  "summary",
+		"next_actions":     []any{"check"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
 
 	contract, err := schema.Load(filepath.Join("..", "..", "..", "contracts", "oar-schema.yaml"))
 	if err != nil {
@@ -202,34 +172,18 @@ func TestDocumentThreadRetargetRefreshesBothDerivedProjections(t *testing.T) {
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, 201)
 
 	createThread := func(title string) string {
-		resp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
-			"actor_id":"actor-1",
-			"thread":{
-				"title":"`+title+`",
-				"type":"incident",
-				"status":"active",
-				"priority":"p1",
-				"tags":["ops"],
-				"cadence":"reactive",
-				"current_summary":"summary",
-				"next_actions":["check"],
-				"key_artifacts":[],
-				"provenance":{"sources":["inferred"]}
-			}
-		}`, 201)
-		defer resp.Body.Close()
-
-		var payload struct {
-			Thread map[string]any `json:"thread"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-			t.Fatalf("decode thread response: %v", err)
-		}
-		threadID := anyString(payload.Thread["id"])
-		if threadID == "" {
-			t.Fatal("expected thread id")
-		}
-		return threadID
+		return integrationSeedThread(t, h, "actor-1", map[string]any{
+			"title":           title,
+			"type":            "incident",
+			"status":          "active",
+			"priority":        "p1",
+			"tags":            []any{"ops"},
+			"cadence":         "reactive",
+			"current_summary": "summary",
+			"next_actions":    []any{"check"},
+			"key_artifacts":   []any{},
+			"provenance":      map[string]any{"sources": []any{"inferred"}},
+		})
 	}
 
 	fromThreadID := createThread("Projection source")

@@ -665,7 +665,7 @@ func validateTopicFields(topic map[string]any, createMode bool, path string, out
 				continue
 			}
 			validateTypedRefs(values, full, out)
-		case "primary_thread_ref":
+		case "thread_id":
 			if raw == nil {
 				continue
 			}

@@ -1,7 +1,7 @@
 <script>
-  import ThreadDetailPage from "../../threads/[threadId]/+page.svelte";
+  import WorkspaceTopicThreadDetailPage from "$lib/pages/WorkspaceTopicThreadDetailPage.svelte";
 
   let { data } = $props();
 </script>
 
-<ThreadDetailPage {data} />
+<WorkspaceTopicThreadDetailPage {data} />

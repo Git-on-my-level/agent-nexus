@@ -1171,7 +1171,7 @@ func TestCardMoveResolutionTransitionsAndEvents(t *testing.T) {
 		"actor_id":"actor-1",
 		"if_board_updated_at":"`+asString(addPayload.Board["updated_at"])+`",
 		"column_key":"done",
-		"resolution":"completed",
+		"resolution":"done",
 		"resolution_refs":["event:card-completion-1"]
 	}`, http.StatusOK)
 	defer doneMoveResp.Body.Close()
@@ -1185,8 +1185,8 @@ func TestCardMoveResolutionTransitionsAndEvents(t *testing.T) {
 	if asString(doneMovePayload.Card["column_key"]) != "done" {
 		t.Fatalf("expected card to move into done, got %#v", doneMovePayload.Card["column_key"])
 	}
-	if asString(doneMovePayload.Card["resolution"]) != "completed" {
-		t.Fatalf("expected card resolution completed, got %#v", doneMovePayload.Card["resolution"])
+	if asString(doneMovePayload.Card["resolution"]) != "done" {
+		t.Fatalf("expected card resolution done, got %#v", doneMovePayload.Card["resolution"])
 	}
 	if !containsAny(doneMovePayload.Card["resolution_refs"].([]any), "event:card-completion-1") {
 		t.Fatalf("expected terminal evidence ref on moved card, got %#v", doneMovePayload.Card["resolution_refs"])
@@ -1294,36 +1294,19 @@ func TestCardMoveResolutionTransitionsAndEvents(t *testing.T) {
 
 func createBoardThreadViaHTTP(t *testing.T, h primitivesTestHarness, title string) string {
 	t.Helper()
-
-	resp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
-		"actor_id":"actor-1",
-		"thread":{
-			"title":"`+title+`",
-			"type":"initiative",
-			"status":"active",
-			"priority":"p1",
-			"tags":["boards"],
-			"cadence":"daily",
-			"next_check_in_at":"2099-03-05T00:00:00Z",
-			"current_summary":"summary",
-			"next_actions":["review"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated)
-	defer resp.Body.Close()
-
-	var payload struct {
-		Thread map[string]any `json:"thread"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		t.Fatalf("decode create thread response: %v", err)
-	}
-	threadID := asString(payload.Thread["id"])
-	if threadID == "" {
-		t.Fatalf("expected thread id for %q", title)
-	}
-	return threadID
+	return integrationSeedThread(t, h, "actor-1", map[string]any{
+		"title":            title,
+		"type":             "initiative",
+		"status":           "active",
+		"priority":         "p1",
+		"tags":             []any{"boards"},
+		"cadence":          "daily",
+		"next_check_in_at": "2099-03-05T00:00:00Z",
+		"current_summary":  "summary",
+		"next_actions":     []any{"review"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
 }
 
 func createBoardDocumentViaHTTP(t *testing.T, h primitivesTestHarness, threadID, title string) string {

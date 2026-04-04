@@ -1666,16 +1666,18 @@ components:
         id: { type: string }
         type:
           type: string
-          enum: [initiative, objective, decision, incident, risk, request, note, other]
+          enum: [case, process, relationship, initiative, objective, decision, incident, risk, request, note, other]
         status:
           type: string
-          enum: [proposed, active, blocked, resolved, archived]
+          enum: [proposed, active, paused, blocked, resolved, closed, archived]
         title: { type: string }
         summary: { type: string }
+        thread_id:
+          type: string
+          description: Backing thread id for topic timeline and events.
         owner_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
-        primary_thread_ref: { $ref: '#/components/schemas/TypedRef' }
         document_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
@@ -1731,11 +1733,13 @@ components:
       properties:
         id: { type: string }
         title: { type: string }
+        thread_id:
+          type: string
+          description: Backing thread id for board timeline and events.
         status:
           type: string
-          enum: [active, paused, archived]
+          enum: [active, paused, closed]
         primary_topic_ref: { $ref: '#/components/schemas/TypedRef' }
-        primary_thread_ref: { $ref: '#/components/schemas/TypedRef' }
         document_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
@@ -1759,7 +1763,10 @@ components:
         id: { type: string }
         board_ref: { $ref: '#/components/schemas/TypedRef' }
         topic_ref: { $ref: '#/components/schemas/TypedRef' }
-        thread_ref: { $ref: '#/components/schemas/TypedRef' }
+        thread_id:
+          type: string
+          nullable: true
+          description: Backing thread id when the card is thread-scoped.
         document_ref: { $ref: '#/components/schemas/TypedRef' }
         title: { type: string }
         summary: { type: string }
@@ -1775,7 +1782,9 @@ components:
           enum: [low, medium, high, critical]
         resolution:
           type: string
-          enum: [unresolved, completed, canceled, superseded]
+          nullable: true
+          enum: [done, canceled]
+          description: Null while the card is active; terminal `done` or `canceled` when resolved.
         resolution_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
@@ -1788,7 +1797,7 @@ components:
         updated_by: { type: string }
         provenance: { $ref: '#/components/schemas/Provenance' }
       required:
-        [id, board_ref, title, summary, column_key, rank, assignee_refs, risk, resolution, resolution_refs,
+        [id, board_ref, title, summary, column_key, rank, assignee_refs, risk, resolution_refs,
          related_refs, created_at, created_by, updated_at, updated_by, provenance]
 
     BoardSummary:
@@ -1866,7 +1875,9 @@ components:
         owner_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
-        primary_thread_ref: { $ref: '#/components/schemas/TypedRef' }
+        thread_id:
+          type: string
+          description: Optional backing thread id; server assigns when omitted on create.
         document_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
@@ -1893,7 +1904,9 @@ components:
         owner_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
-        primary_thread_ref: { $ref: '#/components/schemas/TypedRef' }
+        thread_id:
+          type: string
+          description: Backing thread id; immutable once set.
         document_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
@@ -1935,9 +1948,11 @@ components:
         title: { type: string }
         status:
           type: string
-          enum: [active, paused, archived]
+          enum: [active, paused, closed]
         primary_topic_ref: { $ref: '#/components/schemas/TypedRef' }
-        primary_thread_ref: { $ref: '#/components/schemas/TypedRef' }
+        thread_id:
+          type: string
+          description: Backing thread id; defaults to board id when omitted.
         document_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
@@ -1953,9 +1968,8 @@ components:
         title: { type: string }
         status:
           type: string
-          enum: [active, paused, archived]
+          enum: [active, paused, closed]
         primary_topic_ref: { $ref: '#/components/schemas/TypedRef' }
-        primary_thread_ref: { $ref: '#/components/schemas/TypedRef' }
         document_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
@@ -1969,7 +1983,9 @@ components:
       properties:
         id: { type: string }
         topic_ref: { $ref: '#/components/schemas/TypedRef' }
-        thread_ref: { $ref: '#/components/schemas/TypedRef' }
+        thread_id:
+          type: string
+          description: Backing thread id when the card is thread-scoped.
         document_ref: { $ref: '#/components/schemas/TypedRef' }
         title: { type: string }
         summary: { type: string }
@@ -1984,7 +2000,8 @@ components:
           enum: [low, medium, high, critical]
         resolution:
           type: string
-          enum: [unresolved, completed, canceled, superseded]
+          nullable: true
+          enum: [done, canceled]
         resolution_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
@@ -1993,13 +2010,15 @@ components:
           items: { $ref: '#/components/schemas/TypedRef' }
         provenance: { $ref: '#/components/schemas/Provenance' }
       required:
-        [title, summary, column_key, assignee_refs, risk, resolution, resolution_refs, related_refs, provenance]
+        [title, summary, column_key, assignee_refs, risk, resolution_refs, related_refs, provenance]
 
     CardPatchInput:
       type: object
       properties:
         topic_ref: { $ref: '#/components/schemas/TypedRef' }
-        thread_ref: { $ref: '#/components/schemas/TypedRef' }
+        thread_id:
+          type: string
+          description: Backing thread id when the card is thread-scoped.
         document_ref: { $ref: '#/components/schemas/TypedRef' }
         title: { type: string }
         summary: { type: string }
@@ -2014,7 +2033,8 @@ components:
           enum: [low, medium, high, critical]
         resolution:
           type: string
-          enum: [unresolved, completed, canceled, superseded]
+          nullable: true
+          enum: [done, canceled]
         resolution_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
@@ -2033,7 +2053,7 @@ components:
         after_card_ref: { $ref: '#/components/schemas/TypedRef' }
         resolution:
           type: string
-          enum: [completed, canceled]
+          enum: [done, canceled]
         resolution_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }

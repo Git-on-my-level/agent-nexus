@@ -328,12 +328,6 @@ func resolveSubjectRefThreadID(ctx context.Context, opts handlerOptions, subject
 		}
 		threadID := strings.TrimSpace(anyString(card["thread_id"]))
 		if threadID == "" {
-			threadID = strings.TrimSpace(anyString(card["thread_ref"]))
-			if strings.HasPrefix(threadID, "thread:") {
-				threadID = strings.TrimSpace(strings.TrimPrefix(threadID, "thread:"))
-			}
-		}
-		if threadID == "" {
 			return "", invalidPacketSubjectRef(subjectRef)
 		}
 		return threadID, nil

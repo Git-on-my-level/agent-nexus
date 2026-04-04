@@ -3,7 +3,6 @@ package server
 import (
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strconv"
 	"testing"
@@ -204,12 +203,6 @@ func TestActorListInvalidLimit(t *testing.T) {
 	}
 }
 
-const threadTemplate = `{"actor_id":"actor-1","thread":{"id":"%s","title":"%s","type":"incident","status":"active","priority":"p1","tags":[],"cadence":"daily","next_check_in_at":"2020-01-01T00:00:00Z","current_summary":"Summary","next_actions":[],"key_artifacts":[],"provenance":{"sources":[]}}}`
-
-func createThreadJSON(id, title string) string {
-	return fmt.Sprintf(threadTemplate, id, title)
-}
-
 func TestThreadListPaginationLimitParameter(t *testing.T) {
 	t.Parallel()
 
@@ -217,7 +210,7 @@ func TestThreadListPaginationLimitParameter(t *testing.T) {
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
 	for i := 0; i < 5; i++ {
-		postJSONExpectStatus(t, h.baseURL+"/threads", createThreadJSON("thread-"+string(rune('a'+i)), "Thread "+string(rune('A'+i))), http.StatusCreated)
+		integrationSeedThread(t, h, "actor-1", paginationTestThread("thread-"+string(rune('a'+i)), "Thread "+string(rune('A'+i))))
 	}
 
 	resp, err := http.Get(h.baseURL + "/threads?limit=3")
@@ -253,10 +246,10 @@ func TestThreadListPaginationWithStaleFilter(t *testing.T) {
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
 	for i := 0; i < 3; i++ {
-		postJSONExpectStatus(t, h.baseURL+"/threads", createThreadJSON("thread-"+string(rune('a'+i)), "Thread "+string(rune('A'+i))), http.StatusCreated)
+		integrationSeedThread(t, h, "actor-1", paginationTestThread("thread-"+string(rune('a'+i)), "Thread "+string(rune('A'+i))))
 	}
 
-	patchJSONExpectStatus(t, h.baseURL+"/threads/thread-a", `{"actor_id":"actor-1","patch":{"title":"Thread A refreshed"}}`, http.StatusOK).Body.Close()
+	integrationPatchThread(t, h, "actor-1", "thread-a", map[string]any{"title": "Thread A refreshed"}, nil)
 	postJSONExpectStatus(t, h.baseURL+"/derived/rebuild", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
 
 	var staleIDs []string
@@ -319,8 +312,8 @@ func TestThreadListSearchQuery(t *testing.T) {
 
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
-	postJSONExpectStatus(t, h.baseURL+"/threads", createThreadJSON("search-thread", "Search Test Thread"), http.StatusCreated)
-	postJSONExpectStatus(t, h.baseURL+"/threads", createThreadJSON("other-thread", "Other Thread"), http.StatusCreated)
+	integrationSeedThread(t, h, "actor-1", paginationTestThread("search-thread", "Search Test Thread"))
+	integrationSeedThread(t, h, "actor-1", paginationTestThread("other-thread", "Other Thread"))
 
 	resp, err := http.Get(h.baseURL + "/threads?q=search")
 	if err != nil {
@@ -348,7 +341,7 @@ func TestDocumentListPaginationLimitParameter(t *testing.T) {
 
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
-	postJSONExpectStatus(t, h.baseURL+"/threads", createThreadJSON("thread-1", "Thread"), http.StatusCreated)
+	integrationSeedThread(t, h, "actor-1", paginationTestThread("thread-1", "Thread"))
 
 	for i := 0; i < 5; i++ {
 		postJSONExpectStatus(t, h.baseURL+"/docs", `{"actor_id":"actor-1","document":{"document_id":"doc-`+string(rune('a'+i))+`","title":"Doc `+string(rune('A'+i))+`"},"content":"content","content_type":"text"}`, http.StatusCreated)
@@ -385,7 +378,7 @@ func TestDocumentListSearchQuery(t *testing.T) {
 
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
-	postJSONExpectStatus(t, h.baseURL+"/threads", createThreadJSON("thread-1", "Thread"), http.StatusCreated)
+	integrationSeedThread(t, h, "actor-1", paginationTestThread("thread-1", "Thread"))
 	postJSONExpectStatus(t, h.baseURL+"/docs", `{"actor_id":"actor-1","document":{"document_id":"search-doc","title":"Search Test Doc"},"content":"content","content_type":"text"}`, http.StatusCreated)
 	postJSONExpectStatus(t, h.baseURL+"/docs", `{"actor_id":"actor-1","document":{"document_id":"other-doc","title":"Other Doc"},"content":"content","content_type":"text"}`, http.StatusCreated)
 
@@ -415,7 +408,7 @@ func TestBoardListPaginationLimitParameter(t *testing.T) {
 
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
-	postJSONExpectStatus(t, h.baseURL+"/threads", createThreadJSON("thread-1", "Thread"), http.StatusCreated)
+	integrationSeedThread(t, h, "actor-1", paginationTestThread("thread-1", "Thread"))
 
 	for i := 0; i < 5; i++ {
 		postJSONExpectStatus(t, h.baseURL+"/boards", `{"actor_id":"actor-1","board":{"id":"board-`+string(rune('a'+i))+`","title":"Board `+string(rune('A'+i))+`","refs":["thread:thread-1"]}}`, http.StatusCreated)
@@ -452,7 +445,7 @@ func TestBoardListSearchQuery(t *testing.T) {
 
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
-	postJSONExpectStatus(t, h.baseURL+"/threads", createThreadJSON("thread-1", "Thread"), http.StatusCreated)
+	integrationSeedThread(t, h, "actor-1", paginationTestThread("thread-1", "Thread"))
 	postJSONExpectStatus(t, h.baseURL+"/boards", `{"actor_id":"actor-1","board":{"id":"search-board","title":"Search Test Board","refs":["thread:thread-1"]}}`, http.StatusCreated)
 	postJSONExpectStatus(t, h.baseURL+"/boards", `{"actor_id":"actor-1","board":{"id":"other-board","title":"Other Board","refs":["thread:thread-1"]}}`, http.StatusCreated)
 
@@ -518,7 +511,7 @@ func TestThreadListPaginationCursorStability(t *testing.T) {
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
 	for i := 0; i < 5; i++ {
-		postJSONExpectStatus(t, h.baseURL+"/threads", createThreadJSON("thread-"+string(rune('a'+i)), "Thread "+string(rune('A'+i))), http.StatusCreated)
+		integrationSeedThread(t, h, "actor-1", paginationTestThread("thread-"+string(rune('a'+i)), "Thread "+string(rune('A'+i))))
 	}
 
 	var allThreads []map[string]any
@@ -574,7 +567,7 @@ func TestThreadListInvalidLimit(t *testing.T) {
 
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
-	postJSONExpectStatus(t, h.baseURL+"/threads", createThreadJSON("thread-1", "Thread"), http.StatusCreated)
+	integrationSeedThread(t, h, "actor-1", paginationTestThread("thread-1", "Thread"))
 
 	testCases := []struct {
 		limit   string
@@ -615,7 +608,7 @@ func TestDocumentListPaginationCursorStability(t *testing.T) {
 
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
-	postJSONExpectStatus(t, h.baseURL+"/threads", createThreadJSON("thread-1", "Thread"), http.StatusCreated)
+	integrationSeedThread(t, h, "actor-1", paginationTestThread("thread-1", "Thread"))
 
 	for i := 0; i < 5; i++ {
 		postJSONExpectStatus(t, h.baseURL+"/docs", `{"actor_id":"actor-1","document":{"document_id":"doc-`+string(rune('a'+i))+`","title":"Doc `+string(rune('A'+i))+`"},"content":"content","content_type":"text"}`, http.StatusCreated)
@@ -674,7 +667,7 @@ func TestDocumentListInvalidLimit(t *testing.T) {
 
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
-	postJSONExpectStatus(t, h.baseURL+"/threads", createThreadJSON("thread-1", "Thread"), http.StatusCreated)
+	integrationSeedThread(t, h, "actor-1", paginationTestThread("thread-1", "Thread"))
 	postJSONExpectStatus(t, h.baseURL+"/docs", `{"actor_id":"actor-1","document":{"document_id":"doc-1","title":"Doc"},"content":"content","content_type":"text"}`, http.StatusCreated)
 
 	testCases := []struct {
@@ -716,7 +709,7 @@ func TestBoardListPaginationCursorStability(t *testing.T) {
 
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
-	postJSONExpectStatus(t, h.baseURL+"/threads", createThreadJSON("thread-1", "Thread"), http.StatusCreated)
+	integrationSeedThread(t, h, "actor-1", paginationTestThread("thread-1", "Thread"))
 
 	for i := 0; i < 5; i++ {
 		postJSONExpectStatus(t, h.baseURL+"/boards", `{"actor_id":"actor-1","board":{"id":"board-`+string(rune('a'+i))+`","title":"Board `+string(rune('A'+i))+`","refs":["thread:thread-1"]}}`, http.StatusCreated)
@@ -779,7 +772,7 @@ func TestBoardListInvalidLimit(t *testing.T) {
 
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
-	postJSONExpectStatus(t, h.baseURL+"/threads", createThreadJSON("thread-1", "Thread"), http.StatusCreated)
+	integrationSeedThread(t, h, "actor-1", paginationTestThread("thread-1", "Thread"))
 	postJSONExpectStatus(t, h.baseURL+"/boards", `{"actor_id":"actor-1","board":{"id":"board-1","title":"Board","refs":["thread:thread-1"]}}`, http.StatusCreated)
 
 	testCases := []struct {
@@ -821,7 +814,7 @@ func TestPaginationInvalidCursor(t *testing.T) {
 
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
-	postJSONExpectStatus(t, h.baseURL+"/threads", createThreadJSON("thread-1", "Thread One"), http.StatusCreated)
+	integrationSeedThread(t, h, "actor-1", paginationTestThread("thread-1", "Thread One"))
 	postJSONExpectStatus(t, h.baseURL+"/docs", `{"actor_id":"actor-1","document":{"document_id":"doc-1","title":"Doc"},"content":"content","content_type":"text"}`, http.StatusCreated)
 	postJSONExpectStatus(t, h.baseURL+"/boards", `{"actor_id":"actor-1","board":{"id":"board-1","title":"Board","refs":["thread:thread-1"]}}`, http.StatusCreated)
 

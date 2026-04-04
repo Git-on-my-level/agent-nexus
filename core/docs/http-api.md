@@ -233,7 +233,7 @@ Projection endpoints return a `section_kinds` field to distinguish canonical vs 
 
 ### Threads (read-only inspection)
 
-Backing threads hold append-only timelines and anchor many packet subjects. They are **not** the primary operator noun; topics and cards are. The contract exposes read-only thread routes for diagnostics, CLI inspection, and compatibility reads.
+Backing threads hold append-only timelines and anchor many packet subjects. They are **not** the primary operator noun; topics and cards are. The contract exposes read-only thread routes for diagnostics and tooling inspection.
 
 - `GET /threads`
   - Query (optional): `status`, `priority`, `tag`, `cadence`, `stale` (boolean)
@@ -443,4 +443,4 @@ Backing threads hold append-only timelines and anchor many packet subjects. They
 - Meaningful topic activity for stale-topic clearing:
   - The current activity set is explicit: `actor_statement`, `topic_created`, `topic_updated`, `topic_status_changed`, `card_created`, `card_updated`, `card_moved`, `card_resolved`, `decision_needed`, `intervention_needed`, `decision_made`, `work_order_created`, `receipt_added`, `review_completed`, `document_created`, `document_revised`, `document_tombstoned`, `board_created`, `board_updated`, plus any non-create topic/card edits that materially change user-authored state.
   - Coordination noise does not count as activity: inbox acknowledgments, exception notifications, topic-creation bookkeeping, and derived board/card membership maintenance.
-  - `topic.primary_thread_ref` and board/card linkage remain present on reads for compatibility, but keeping those backing links synchronized no longer emits a user-visible timeline event or bumps the topic’s visible update clock.
+- Topic, board, and card backing-thread linkage is exposed through `thread_id` on the canonical resource shape; keeping those backing links synchronized no longer emits a user-visible timeline event or bumps the topic’s visible update clock.

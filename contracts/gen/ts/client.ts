@@ -218,16 +218,6 @@ export const commandRegistry: CommandSpec[] = [
           "type": "list\u003cany\u003e"
         },
         {
-          "name": "card.resolution",
-          "type": "string",
-          "enum_values": [
-            "canceled",
-            "completed",
-            "superseded",
-            "unresolved"
-          ]
-        },
-        {
           "name": "card.resolution_refs",
           "type": "list\u003cany\u003e"
         },
@@ -268,7 +258,15 @@ export const commandRegistry: CommandSpec[] = [
           "type": "string"
         },
         {
-          "name": "card.thread_ref",
+          "name": "card.resolution",
+          "type": "string",
+          "enum_values": [
+            "canceled",
+            "done"
+          ]
+        },
+        {
+          "name": "card.thread_id",
           "type": "string"
         },
         {
@@ -421,7 +419,7 @@ export const commandRegistry: CommandSpec[] = [
           "type": "string",
           "enum_values": [
             "active",
-            "archived",
+            "closed",
             "paused"
           ]
         },
@@ -432,10 +430,6 @@ export const commandRegistry: CommandSpec[] = [
       ],
       "optional": [
         {
-          "name": "board.primary_thread_ref",
-          "type": "string"
-        },
-        {
           "name": "board.primary_topic_ref",
           "type": "string"
         },
@@ -445,6 +439,10 @@ export const commandRegistry: CommandSpec[] = [
         },
         {
           "name": "board.provenance.notes",
+          "type": "string"
+        },
+        {
+          "name": "board.thread_id",
           "type": "string"
         }
       ]
@@ -578,10 +576,6 @@ export const commandRegistry: CommandSpec[] = [
           "type": "list\u003cany\u003e"
         },
         {
-          "name": "patch.primary_thread_ref",
-          "type": "string"
-        },
-        {
           "name": "patch.primary_topic_ref",
           "type": "string"
         },
@@ -602,7 +596,7 @@ export const commandRegistry: CommandSpec[] = [
           "type": "string",
           "enum_values": [
             "active",
-            "archived",
+            "closed",
             "paused"
           ]
         },
@@ -853,7 +847,7 @@ export const commandRegistry: CommandSpec[] = [
           "type": "string",
           "enum_values": [
             "canceled",
-            "completed"
+            "done"
           ]
         },
         {
@@ -951,9 +945,7 @@ export const commandRegistry: CommandSpec[] = [
           "type": "string",
           "enum_values": [
             "canceled",
-            "completed",
-            "superseded",
-            "unresolved"
+            "done"
           ]
         },
         {
@@ -975,7 +967,7 @@ export const commandRegistry: CommandSpec[] = [
           "type": "string"
         },
         {
-          "name": "patch.thread_ref",
+          "name": "patch.thread_id",
           "type": "string"
         },
         {
@@ -1452,6 +1444,8 @@ export const commandRegistry: CommandSpec[] = [
           "enum_values": [
             "agent_notification_dismissed",
             "agent_notification_read",
+            "board_card_added",
+            "board_card_moved",
             "board_created",
             "board_updated",
             "card_created",
@@ -1462,6 +1456,7 @@ export const commandRegistry: CommandSpec[] = [
             "decision_needed",
             "document_created",
             "document_revised",
+            "document_revision_created",
             "document_tombstoned",
             "exception_raised",
             "inbox_item_acknowledged",
@@ -1469,8 +1464,11 @@ export const commandRegistry: CommandSpec[] = [
             "message_posted",
             "receipt_added",
             "review_completed",
+            "topic_archived",
             "topic_created",
+            "topic_restored",
             "topic_status_changed",
+            "topic_tombstoned",
             "topic_updated",
             "work_order_created"
           ],
@@ -2167,15 +2165,15 @@ export const commandRegistry: CommandSpec[] = [
       ],
       "optional": [
         {
-          "name": "topic.primary_thread_ref",
-          "type": "string"
-        },
-        {
           "name": "topic.provenance.by_field",
           "type": "object"
         },
         {
           "name": "topic.provenance.notes",
+          "type": "string"
+        },
+        {
+          "name": "topic.thread_id",
           "type": "string"
         }
       ]
@@ -2307,10 +2305,6 @@ export const commandRegistry: CommandSpec[] = [
           "type": "list\u003cany\u003e"
         },
         {
-          "name": "patch.primary_thread_ref",
-          "type": "string"
-        },
-        {
           "name": "patch.provenance.by_field",
           "type": "object"
         },
@@ -2339,6 +2333,10 @@ export const commandRegistry: CommandSpec[] = [
         },
         {
           "name": "patch.summary",
+          "type": "string"
+        },
+        {
+          "name": "patch.thread_id",
           "type": "string"
         },
         {

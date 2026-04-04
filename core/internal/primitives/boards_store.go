@@ -1228,9 +1228,9 @@ func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifie
 	if input.PinnedDocumentID != nil {
 		nextPinnedDocumentID = strings.TrimSpace(*input.PinnedDocumentID)
 	}
-	nextResolution := strings.TrimSpace(cardRow.Resolution.String)
+	nextResolution := normalizeIncomingCardResolution(strings.TrimSpace(cardRow.Resolution.String))
 	if input.Resolution != nil {
-		nextResolution = strings.TrimSpace(*input.Resolution)
+		nextResolution = normalizeIncomingCardResolution(strings.TrimSpace(*input.Resolution))
 	}
 	if err := validateCardResolution(nextResolution, true); err != nil {
 		_ = tx.Rollback()
@@ -3322,7 +3322,6 @@ func (r boardCardRow) toMap() (map[string]any, error) {
 		"board_id":           r.BoardID,
 		"board_ref":          "board:" + strings.TrimSpace(r.BoardID),
 		"thread_id":          nullableBoardString(threadID),
-		"thread_ref":         boardTypedRefOrNil("thread", threadID),
 		"column_key":         r.ColumnKey,
 		"rank":               r.Rank,
 		"title":              r.Title,
@@ -3338,7 +3337,7 @@ func (r boardCardRow) toMap() (map[string]any, error) {
 		"due_at":             nullableBoardString(r.DueAt.String),
 		"definition_of_done": definitionOfDone,
 		"status":             r.Status,
-		"resolution":         nullableBoardString(r.Resolution.String),
+		"resolution":         canonicalizeCardResolutionForAPI(r.Resolution.String),
 		"resolution_refs":    resolutionRefs,
 		"refs":               refs,
 		"created_at":         r.CreatedAt,
@@ -3379,7 +3378,7 @@ func (r boardCardVersionRow) toMap() map[string]any {
 		"column_key":         r.ColumnKey,
 		"rank":               r.Rank,
 		"status":             r.Status,
-		"resolution":         nullableBoardString(r.Resolution.String),
+		"resolution":         canonicalizeCardResolutionForAPI(r.Resolution.String),
 		"resolution_refs":    decodeJSONListOrEmpty(r.ResolutionRefsJSON),
 		"refs":               decodeJSONListOrEmpty(r.RefsJSON),
 		"created_at":         r.CreatedAt,
@@ -3574,22 +3573,47 @@ func normalizeBoardCardStatus(raw string) string {
 	return status
 }
 
+func canonicalizeCardResolutionForAPI(raw string) any {
+	s := normalizeIncomingCardResolution(raw)
+	if s == "" {
+		return nil
+	}
+	switch s {
+	case "done", "canceled":
+		return s
+	default:
+		return nil
+	}
+}
+
+func normalizeIncomingCardResolution(raw string) string {
+	s := strings.TrimSpace(raw)
+	switch s {
+	case "completed", "superseded":
+		return "done"
+	case "unresolved":
+		return ""
+	default:
+		return s
+	}
+}
+
 func validateCardResolution(raw string, allowEmpty bool) error {
-	value := strings.TrimSpace(raw)
+	value := normalizeIncomingCardResolution(raw)
 	if value == "" && allowEmpty {
 		return nil
 	}
 	switch value {
-	case "unresolved", "completed", "canceled", "superseded":
+	case "done", "canceled":
 		return nil
 	default:
-		return fmt.Errorf("card.resolution must be one of: unresolved, completed, canceled, superseded")
+		return fmt.Errorf("card.resolution must be null, done, or canceled")
 	}
 }
 
 func resolveBoardCardMoveResolution(cardRow boardCardRow, columnKey string, input MoveBoardCardInput) (string, string, bool, error) {
 	columnKey = strings.TrimSpace(columnKey)
-	currentResolution := strings.TrimSpace(cardRow.Resolution.String)
+	currentResolution := normalizeIncomingCardResolution(strings.TrimSpace(cardRow.Resolution.String))
 	if input.Resolution == nil {
 		if columnKey != "done" {
 			if currentResolution != "" {
@@ -3606,7 +3630,7 @@ func resolveBoardCardMoveResolution(cardRow boardCardRow, columnKey string, inpu
 		return "", "", false, invalidBoardRequest("resolution is required when column_key is done")
 	}
 
-	nextResolution := strings.TrimSpace(*input.Resolution)
+	nextResolution := normalizeIncomingCardResolution(strings.TrimSpace(*input.Resolution))
 	if err := validateCardResolution(nextResolution, false); err != nil {
 		return "", "", false, invalidBoardRequestError(err)
 	}
@@ -3627,9 +3651,9 @@ func resolveBoardCardMoveResolution(cardRow boardCardRow, columnKey string, inpu
 		}
 	}
 	switch nextResolution {
-	case "completed":
+	case "done":
 		if !containsTypedRefPrefix(resolutionRefs, "artifact") && !containsTypedRefPrefix(resolutionRefs, "event") {
-			return "", "", false, invalidBoardRequest("resolution_refs must include at least one artifact: or event: ref for resolution completed")
+			return "", "", false, invalidBoardRequest("resolution_refs must include at least one artifact: or event: ref for resolution done")
 		}
 	case "canceled":
 		if !containsTypedRefPrefix(resolutionRefs, "event") {
@@ -3645,11 +3669,11 @@ func resolveBoardCardMoveResolution(cardRow boardCardRow, columnKey string, inpu
 
 func normalizeCardResolution(raw *string, status string) string {
 	if raw != nil {
-		return strings.TrimSpace(*raw)
+		return normalizeIncomingCardResolution(strings.TrimSpace(*raw))
 	}
 	switch strings.TrimSpace(status) {
 	case "done":
-		return "completed"
+		return "done"
 	case "cancelled":
 		return "canceled"
 	default:
@@ -3660,7 +3684,7 @@ func normalizeCardResolution(raw *string, status string) string {
 func resolutionFromStatus(status string) string {
 	switch strings.TrimSpace(status) {
 	case "done":
-		return "completed"
+		return "done"
 	case "cancelled":
 		return "canceled"
 	default:

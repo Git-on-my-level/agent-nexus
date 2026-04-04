@@ -293,13 +293,13 @@
     return typeof at === "string" ? at.trim() !== "" : Boolean(at);
   }
 
-  async function archiveThread(threadId) {
-    const id = String(threadId ?? "").trim();
+  async function archiveTopicRow(topicId) {
+    const id = String(topicId ?? "").trim();
     if (!id || archiveBusyId) return;
     archiveBusyId = id;
     error = "";
     try {
-      await coreClient.archiveThread(id, {});
+      await coreClient.archiveTopic(id, {});
       await loadThreads();
     } catch (e) {
       error = `Archive failed: ${e instanceof Error ? e.message : String(e)}`;
@@ -308,13 +308,13 @@
     }
   }
 
-  async function unarchiveThread(threadId) {
-    const id = String(threadId ?? "").trim();
+  async function unarchiveTopicRow(topicId) {
+    const id = String(topicId ?? "").trim();
     if (!id || archiveBusyId) return;
     archiveBusyId = id;
     error = "";
     try {
-      await coreClient.unarchiveThread(id, {});
+      await coreClient.unarchiveTopic(id, {});
       await loadThreads();
     } catch (e) {
       error = `Unarchive failed: ${e instanceof Error ? e.message : String(e)}`;
@@ -323,13 +323,13 @@
     }
   }
 
-  async function trashThread(threadId) {
-    const id = String(threadId ?? "").trim();
+  async function trashTopicRow(topicId) {
+    const id = String(topicId ?? "").trim();
     if (!id || trashBusyId) return;
     trashBusyId = id;
     error = "";
     try {
-      await coreClient.tombstoneThread(id, {});
+      await coreClient.tombstoneTopic(id, {});
       confirmModal = { open: false, action: "", entityId: "" };
       await loadThreads();
     } catch (e) {
@@ -343,8 +343,8 @@
     const id = confirmModal.entityId;
     const action = confirmModal.action;
     confirmModal = { open: false, action: "", entityId: "" };
-    if (action === "archive") void archiveThread(id);
-    else if (action === "trash") void trashThread(id);
+    if (action === "archive") void archiveTopicRow(id);
+    else if (action === "trash") void trashTopicRow(id);
   }
 </script>
 
@@ -747,7 +747,7 @@
             <button
               class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2 py-1 text-[11px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] disabled:cursor-not-allowed disabled:opacity-50"
               disabled={Boolean(archiveBusyId) || Boolean(trashBusyId)}
-              onclick={() => void unarchiveThread(thread.id)}
+              onclick={() => void unarchiveTopicRow(thread.id)}
               type="button"
             >
               Unarchive

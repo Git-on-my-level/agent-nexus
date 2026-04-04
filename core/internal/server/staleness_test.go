@@ -183,16 +183,6 @@ func TestIsMeaningfulThreadActivityEvent(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "derived open cards update is coordination noise",
-			event: map[string]any{
-				"type":      "snapshot_updated",
-				"thread_id": "thread-1",
-				"ts":        "2026-03-04T12:00:00Z",
-				"payload":   map[string]any{"changed_fields": []string{"open_cards"}},
-			},
-			want: false,
-		},
-		{
 			name: "thread_updated open_cards only is coordination noise",
 			event: map[string]any{
 				"type":      "thread_updated",
@@ -214,13 +204,12 @@ func TestIsMeaningfulThreadActivityEvent(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "legacy thread snapshot created is not follow up activity",
+			name: "legacy snapshot events are ignored",
 			event: map[string]any{
 				"type":      "snapshot_updated",
 				"thread_id": "thread-1",
 				"ts":        "2026-03-04T12:00:00Z",
-				"summary":   "thread snapshot created",
-				"payload":   map[string]any{"changed_fields": []string{"title", "status"}},
+				"summary":   "legacy snapshot event",
 			},
 			want: false,
 		},

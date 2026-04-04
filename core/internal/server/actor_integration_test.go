@@ -43,13 +43,7 @@ func TestActorEndpointsRegisterAndListStableOrder(t *testing.T) {
 		WithEnableDevActorMode(true),
 	)
 	server := httptest.NewServer(handler)
-	testServerLegacyWorkspaces.Store(server.URL, legacyTestWorkspaceContext{
-		primitiveStore:             primitiveStore,
-		actorStore:                 registry,
-		allowUnauthenticatedWrites: true,
-	})
 	defer server.Close()
-	defer testServerLegacyWorkspaces.Delete(server.URL)
 
 	postJSON(t, server.URL+"/actors", `{"actor":{"id":"actor-b","display_name":"Actor B","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 	postJSON(t, server.URL+"/actors", `{"actor":{"id":"actor-a","display_name":"Actor A","created_at":"2026-03-04T09:00:00Z","tags":["human"]}}`, http.StatusCreated)
@@ -122,10 +116,6 @@ func TestPostThreadsRejectsUnknownActorID(t *testing.T) {
 
 func postJSON(t *testing.T, url string, body string, expectedStatus int) *http.Response {
 	t.Helper()
-
-	if resp, handled := maybeHandleLegacyWorkspaceRequest(t, http.MethodPost, url, body, nil); handled {
-		return resp
-	}
 
 	resp, err := http.Post(url, "application/json", bytes.NewBufferString(body))
 	if err != nil {

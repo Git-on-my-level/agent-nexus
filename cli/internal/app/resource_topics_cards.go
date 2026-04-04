@@ -147,7 +147,7 @@ func (a *App) normalizeTopicMutationBody(ctx context.Context, cfg config.Resolve
 	case "topics.create":
 		topic := nestedMutationMap(body, "topic")
 		if err := a.normalizeMutationFields(ctx, cfg, topic, []mutationFieldSpec{
-			{key: "primary_thread_ref", kind: mutationFieldTypedRef},
+			{key: "thread_id", kind: mutationFieldThreadID},
 			{key: "owner_refs", kind: mutationFieldTypedRefList},
 			{key: "document_refs", kind: mutationFieldTypedRefList},
 			{key: "board_refs", kind: mutationFieldTypedRefList},
@@ -159,7 +159,7 @@ func (a *App) normalizeTopicMutationBody(ctx context.Context, cfg config.Resolve
 	case "topics.patch":
 		patch := nestedMutationMap(body, "patch")
 		if err := a.normalizeMutationFields(ctx, cfg, patch, []mutationFieldSpec{
-			{key: "primary_thread_ref", kind: mutationFieldTypedRef},
+			{key: "thread_id", kind: mutationFieldThreadID},
 			{key: "owner_refs", kind: mutationFieldTypedRefList},
 			{key: "document_refs", kind: mutationFieldTypedRefList},
 			{key: "board_refs", kind: mutationFieldTypedRefList},
@@ -185,7 +185,7 @@ func (a *App) normalizeCardMutationBody(ctx context.Context, cfg config.Resolved
 			{key: "related_refs", kind: mutationFieldTypedRefList},
 			{key: "resolution_refs", kind: mutationFieldTypedRefList},
 			{key: "topic_ref", kind: mutationFieldTypedRef},
-			{key: "thread_ref", kind: mutationFieldTypedRef},
+			{key: "thread_id", kind: mutationFieldThreadID},
 			{key: "document_ref", kind: mutationFieldTypedRef},
 		})
 	case "cards.move":

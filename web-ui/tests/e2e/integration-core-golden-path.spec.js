@@ -67,9 +67,7 @@ function hasTimelineEventForArtifact(events, type, artifactId) {
 }
 
 function primaryThreadIdFromTopic(topic) {
-  const ref = String(topic?.primary_thread_ref ?? "").trim();
-  const match = /^thread:(.+)$/.exec(ref);
-  return match ? match[1].trim() : "";
+  return String(topic?.thread_id ?? "").trim();
 }
 
 async function openThreadDetailFromNav(page, threadTitle) {

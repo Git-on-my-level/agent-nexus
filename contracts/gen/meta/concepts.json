@@ -204,16 +204,6 @@
                 "type": "list\u003cany\u003e"
               },
               {
-                "name": "card.resolution",
-                "type": "string",
-                "enum_values": [
-                  "canceled",
-                  "completed",
-                  "superseded",
-                  "unresolved"
-                ]
-              },
-              {
                 "name": "card.resolution_refs",
                 "type": "list\u003cany\u003e"
               },
@@ -254,7 +244,15 @@
                 "type": "string"
               },
               {
-                "name": "card.thread_ref",
+                "name": "card.resolution",
+                "type": "string",
+                "enum_values": [
+                  "canceled",
+                  "done"
+                ]
+              },
+              {
+                "name": "card.thread_id",
                 "type": "string"
               },
               {
@@ -407,7 +405,7 @@
                 "type": "string",
                 "enum_values": [
                   "active",
-                  "archived",
+                  "closed",
                   "paused"
                 ]
               },
@@ -418,10 +416,6 @@
             ],
             "optional": [
               {
-                "name": "board.primary_thread_ref",
-                "type": "string"
-              },
-              {
                 "name": "board.primary_topic_ref",
                 "type": "string"
               },
@@ -431,6 +425,10 @@
               },
               {
                 "name": "board.provenance.notes",
+                "type": "string"
+              },
+              {
+                "name": "board.thread_id",
                 "type": "string"
               }
             ]
@@ -564,10 +562,6 @@
                 "type": "list\u003cany\u003e"
               },
               {
-                "name": "patch.primary_thread_ref",
-                "type": "string"
-              },
-              {
                 "name": "patch.primary_topic_ref",
                 "type": "string"
               },
@@ -588,7 +582,7 @@
                 "type": "string",
                 "enum_values": [
                   "active",
-                  "archived",
+                  "closed",
                   "paused"
                 ]
               },
@@ -714,7 +708,7 @@
                 "type": "string",
                 "enum_values": [
                   "canceled",
-                  "completed"
+                  "done"
                 ]
               },
               {
@@ -810,16 +804,6 @@
                 "type": "list\u003cany\u003e"
               },
               {
-                "name": "card.resolution",
-                "type": "string",
-                "enum_values": [
-                  "canceled",
-                  "completed",
-                  "superseded",
-                  "unresolved"
-                ]
-              },
-              {
                 "name": "card.resolution_refs",
                 "type": "list\u003cany\u003e"
               },
@@ -860,7 +844,15 @@
                 "type": "string"
               },
               {
-                "name": "card.thread_ref",
+                "name": "card.resolution",
+                "type": "string",
+                "enum_values": [
+                  "canceled",
+                  "done"
+                ]
+              },
+              {
+                "name": "card.thread_id",
                 "type": "string"
               },
               {
@@ -1155,7 +1147,7 @@
                 "type": "string",
                 "enum_values": [
                   "canceled",
-                  "completed"
+                  "done"
                 ]
               },
               {
@@ -1253,9 +1245,7 @@
                 "type": "string",
                 "enum_values": [
                   "canceled",
-                  "completed",
-                  "superseded",
-                  "unresolved"
+                  "done"
                 ]
               },
               {
@@ -1277,7 +1267,7 @@
                 "type": "string"
               },
               {
-                "name": "patch.thread_ref",
+                "name": "patch.thread_id",
                 "type": "string"
               },
               {
@@ -1495,10 +1485,6 @@
                 "type": "list\u003cany\u003e"
               },
               {
-                "name": "patch.primary_thread_ref",
-                "type": "string"
-              },
-              {
                 "name": "patch.primary_topic_ref",
                 "type": "string"
               },
@@ -1519,7 +1505,7 @@
                 "type": "string",
                 "enum_values": [
                   "active",
-                  "archived",
+                  "closed",
                   "paused"
                 ]
               },
@@ -1619,9 +1605,7 @@
                 "type": "string",
                 "enum_values": [
                   "canceled",
-                  "completed",
-                  "superseded",
-                  "unresolved"
+                  "done"
                 ]
               },
               {
@@ -1643,7 +1627,7 @@
                 "type": "string"
               },
               {
-                "name": "patch.thread_ref",
+                "name": "patch.thread_id",
                 "type": "string"
               },
               {
@@ -1717,10 +1701,6 @@
                 "type": "list\u003cany\u003e"
               },
               {
-                "name": "patch.primary_thread_ref",
-                "type": "string"
-              },
-              {
                 "name": "patch.provenance.by_field",
                 "type": "object"
               },
@@ -1749,6 +1729,10 @@
               },
               {
                 "name": "patch.summary",
+                "type": "string"
+              },
+              {
+                "name": "patch.thread_id",
                 "type": "string"
               },
               {
@@ -2156,6 +2140,8 @@
                 "enum_values": [
                   "agent_notification_dismissed",
                   "agent_notification_read",
+                  "board_card_added",
+                  "board_card_moved",
                   "board_created",
                   "board_updated",
                   "card_created",
@@ -2166,6 +2152,7 @@
                   "decision_needed",
                   "document_created",
                   "document_revised",
+                  "document_revision_created",
                   "document_tombstoned",
                   "exception_raised",
                   "inbox_item_acknowledged",
@@ -2173,8 +2160,11 @@
                   "message_posted",
                   "receipt_added",
                   "review_completed",
+                  "topic_archived",
                   "topic_created",
+                  "topic_restored",
                   "topic_status_changed",
+                  "topic_tombstoned",
                   "topic_updated",
                   "work_order_created"
                 ],
@@ -3522,15 +3512,15 @@
             ],
             "optional": [
               {
-                "name": "topic.primary_thread_ref",
-                "type": "string"
-              },
-              {
                 "name": "topic.provenance.by_field",
                 "type": "object"
               },
               {
                 "name": "topic.provenance.notes",
+                "type": "string"
+              },
+              {
+                "name": "topic.thread_id",
                 "type": "string"
               }
             ]
@@ -3662,10 +3652,6 @@
                 "type": "list\u003cany\u003e"
               },
               {
-                "name": "patch.primary_thread_ref",
-                "type": "string"
-              },
-              {
                 "name": "patch.provenance.by_field",
                 "type": "object"
               },
@@ -3694,6 +3680,10 @@
               },
               {
                 "name": "patch.summary",
+                "type": "string"
+              },
+              {
+                "name": "patch.thread_id",
                 "type": "string"
               },
               {
@@ -4064,16 +4054,6 @@
                 "type": "list\u003cany\u003e"
               },
               {
-                "name": "card.resolution",
-                "type": "string",
-                "enum_values": [
-                  "canceled",
-                  "completed",
-                  "superseded",
-                  "unresolved"
-                ]
-              },
-              {
                 "name": "card.resolution_refs",
                 "type": "list\u003cany\u003e"
               },
@@ -4114,7 +4094,15 @@
                 "type": "string"
               },
               {
-                "name": "card.thread_ref",
+                "name": "card.resolution",
+                "type": "string",
+                "enum_values": [
+                  "canceled",
+                  "done"
+                ]
+              },
+              {
+                "name": "card.thread_id",
                 "type": "string"
               },
               {
@@ -4186,7 +4174,7 @@
                 "type": "string",
                 "enum_values": [
                   "active",
-                  "archived",
+                  "closed",
                   "paused"
                 ]
               },
@@ -4197,10 +4185,6 @@
             ],
             "optional": [
               {
-                "name": "board.primary_thread_ref",
-                "type": "string"
-              },
-              {
                 "name": "board.primary_topic_ref",
                 "type": "string"
               },
@@ -4210,6 +4194,10 @@
               },
               {
                 "name": "board.provenance.notes",
+                "type": "string"
+              },
+              {
+                "name": "board.thread_id",
                 "type": "string"
               }
             ]
@@ -4269,10 +4257,6 @@
                 "type": "list\u003cany\u003e"
               },
               {
-                "name": "patch.primary_thread_ref",
-                "type": "string"
-              },
-              {
                 "name": "patch.primary_topic_ref",
                 "type": "string"
               },
@@ -4293,7 +4277,7 @@
                 "type": "string",
                 "enum_values": [
                   "active",
-                  "archived",
+                  "closed",
                   "paused"
                 ]
               },
@@ -4432,7 +4416,7 @@
                 "type": "string",
                 "enum_values": [
                   "canceled",
-                  "completed"
+                  "done"
                 ]
               },
               {
@@ -4530,9 +4514,7 @@
                 "type": "string",
                 "enum_values": [
                   "canceled",
-                  "completed",
-                  "superseded",
-                  "unresolved"
+                  "done"
                 ]
               },
               {
@@ -4554,7 +4536,7 @@
                 "type": "string"
               },
               {
-                "name": "patch.thread_ref",
+                "name": "patch.thread_id",
                 "type": "string"
               },
               {
@@ -4884,6 +4866,8 @@
                 "enum_values": [
                   "agent_notification_dismissed",
                   "agent_notification_read",
+                  "board_card_added",
+                  "board_card_moved",
                   "board_created",
                   "board_updated",
                   "card_created",
@@ -4894,6 +4878,7 @@
                   "decision_needed",
                   "document_created",
                   "document_revised",
+                  "document_revision_created",
                   "document_tombstoned",
                   "exception_raised",
                   "inbox_item_acknowledged",
@@ -4901,8 +4886,11 @@
                   "message_posted",
                   "receipt_added",
                   "review_completed",
+                  "topic_archived",
                   "topic_created",
+                  "topic_restored",
                   "topic_status_changed",
+                  "topic_tombstoned",
                   "topic_updated",
                   "work_order_created"
                 ],
@@ -5079,15 +5067,15 @@
             ],
             "optional": [
               {
-                "name": "topic.primary_thread_ref",
-                "type": "string"
-              },
-              {
                 "name": "topic.provenance.by_field",
                 "type": "object"
               },
               {
                 "name": "topic.provenance.notes",
+                "type": "string"
+              },
+              {
+                "name": "topic.thread_id",
                 "type": "string"
               }
             ]
@@ -5149,10 +5137,6 @@
                 "type": "list\u003cany\u003e"
               },
               {
-                "name": "patch.primary_thread_ref",
-                "type": "string"
-              },
-              {
                 "name": "patch.provenance.by_field",
                 "type": "object"
               },
@@ -5181,6 +5165,10 @@
               },
               {
                 "name": "patch.summary",
+                "type": "string"
+              },
+              {
+                "name": "patch.thread_id",
                 "type": "string"
               },
               {

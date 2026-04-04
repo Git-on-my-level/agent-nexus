@@ -65,7 +65,7 @@
   let addCardColumnKey = $state("backlog");
   let addCardDocumentId = $state("");
   let addCardRisk = $state("medium");
-  let addCardResolution = $state("unresolved");
+  let addCardResolution = $state("");
   let addCardResolutionRefs = $state("");
   let addCardRelatedRefs = $state("");
   let addCardAssignees = $state([]);
@@ -78,7 +78,7 @@
   let manageThreadId = $state("");
   let manageDocumentId = $state("");
   let manageRisk = $state("medium");
-  let manageResolution = $state("unresolved");
+  let manageResolution = $state("");
   let manageResolutionRefs = $state("");
   let manageRelatedRefs = $state("");
   let manageAssignees = $state([]);
@@ -94,10 +94,10 @@
     (workspace?.inbox?.items ?? []).map((item) => enrichInboxItem(item)),
   );
   let resolvedCards = $derived(
-    (workspace?.cards?.items ?? []).filter(
-      (card) =>
-        String(card?.membership?.resolution ?? "").trim() !== "unresolved",
-    ),
+    (workspace?.cards?.items ?? []).filter((card) => {
+      const r = String(card?.membership?.resolution ?? "").trim();
+      return r === "done" || r === "canceled";
+    }),
   );
   let actorOptions = $derived(
     $actorRegistry.map((actor) => ({
@@ -154,6 +154,14 @@
     boardPinnedRefs = joinDelimitedValues(board?.pinned_refs ?? []);
   }
 
+  function normalizeResolutionForEdit(raw) {
+    const r = String(raw ?? "").trim();
+    if (!r || r === "unresolved") return "";
+    if (r === "completed") return "done";
+    if (r === "cancelled") return "canceled";
+    return r;
+  }
+
   function syncCardDrafts(cardItem) {
     const card = cardItem?.membership ?? {};
     manageTitle = card.title ?? "";
@@ -165,7 +173,7 @@
       .replace(/^document:/, "")
       .trim();
     manageRisk = card.risk ?? "medium";
-    manageResolution = card.resolution ?? "unresolved";
+    manageResolution = normalizeResolutionForEdit(card.resolution);
     manageResolutionRefs = joinDelimitedValues(card.resolution_refs ?? []);
     manageRelatedRefs = joinDelimitedValues(card.related_refs ?? []);
     manageAssignees = [...(card.assignee_refs ?? [])];
@@ -176,22 +184,26 @@
 
   function cardResolutionLabel(resolution) {
     switch (String(resolution ?? "").trim()) {
+      case "done":
       case "completed":
-        return "Completed";
+        return "Done";
       case "canceled":
+      case "cancelled":
         return "Canceled";
       case "superseded":
         return "Superseded";
       default:
-        return "Unresolved";
+        return "Open";
     }
   }
 
   function cardResolutionTone(resolution) {
     switch (String(resolution ?? "").trim()) {
+      case "done":
       case "completed":
         return "text-emerald-300 bg-emerald-500/10";
       case "canceled":
+      case "cancelled":
         return "text-slate-300 bg-slate-500/10";
       case "superseded":
         return "text-amber-300 bg-amber-500/10";
@@ -214,7 +226,7 @@
     addCardColumnKey = "backlog";
     addCardDocumentId = "";
     addCardRisk = "medium";
-    addCardResolution = "unresolved";
+    addCardResolution = "";
     addCardResolutionRefs = "";
     addCardRelatedRefs = "";
     addCardAssignees = [];
@@ -346,8 +358,8 @@
 
     const title = addCardTitle.trim();
     const summary = addCardSummary.trim();
-    const threadRef = addCardThreadId.trim();
-    if (!title && !threadRef) {
+    const threadId = addCardThreadId.trim();
+    if (!title && !threadId) {
       mutationError = "Enter a card title or pick a backing thread.";
       return;
     }
@@ -359,14 +371,14 @@
           if_board_updated_at: workspace.board.updated_at,
           title,
           summary: summary || title,
-          thread_ref: threadRef ? `thread:${threadRef}` : null,
+          thread_id: threadId || null,
           column_key: addCardColumnKey,
           document_ref: addCardDocumentId.trim()
             ? `document:${addCardDocumentId.trim()}`
             : null,
           assignee_refs: [...addCardAssignees],
           risk: addCardRisk,
-          resolution: addCardResolution,
+          resolution: addCardResolution.trim() || null,
           resolution_refs: String(addCardResolutionRefs ?? "")
             .split(/\r?\n|,/)
             .map((item) => item.trim())
@@ -400,7 +412,7 @@
       String(nextPayload.column_key ?? "").trim() === "done" &&
       !nextPayload.resolution
     ) {
-      nextPayload.resolution = "completed";
+      nextPayload.resolution = "done";
       const refs = String(manageResolutionRefs ?? "")
         .split(/\r?\n|,/)
         .map((item) => item.trim())
@@ -452,15 +464,13 @@
           patch: {
             title: manageTitle.trim(),
             summary: manageSummary.trim() || manageTitle.trim(),
-            thread_ref: manageThreadId.trim()
-              ? `thread:${manageThreadId.trim()}`
-              : null,
+            thread_id: manageThreadId.trim() || null,
             document_ref: manageDocumentId.trim()
               ? `document:${manageDocumentId.trim()}`
               : null,
             assignee_refs: [...manageAssignees],
             risk: manageRisk,
-            resolution: manageResolution,
+            resolution: manageResolution.trim() || null,
             resolution_refs: String(manageResolutionRefs ?? "")
               .split(/\r?\n|,/)
               .map((item) => item.trim())
@@ -517,8 +527,9 @@
   /** Visual status for the card row: thread staleness when linked, else artifact status. */
   function boardCardRowStatus(membership, thread) {
     const resolution = String(membership?.resolution ?? "").trim();
-    if (resolution === "completed") return "done";
-    if (resolution === "canceled") return "canceled";
+    if (resolution === "done" || resolution === "completed") return "done";
+    if (resolution === "canceled" || resolution === "cancelled")
+      return "canceled";
     if (resolution === "superseded") return "paused";
     if (thread) return getThreadStatus(thread);
     const s = String(membership?.status ?? "").trim();
@@ -1120,10 +1131,9 @@
               bind:value={addCardResolution}
               class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-1.5 text-[13px] text-[var(--ui-text)]"
             >
-              <option value="unresolved">Unresolved</option>
-              <option value="completed">Completed</option>
+              <option value="">Open</option>
+              <option value="done">Done</option>
               <option value="canceled">Canceled</option>
-              <option value="superseded">Superseded</option>
             </select>
           </label>
 
@@ -1221,7 +1231,8 @@
     {@const cardResolution = String(membership?.resolution ?? "").trim()}
     {@const cardSummary = String(membership?.summary ?? "").trim()}
     {@const cardDueAt = String(membership?.due_at ?? "").trim()}
-    {@const threadRef = String(membership?.thread_ref ?? "").trim()}
+    {@const threadLinkRef =
+      linkedThreadId.trim() !== "" ? `thread:${linkedThreadId}` : ""}
     {@const topicRef = String(membership?.topic_ref ?? "").trim()}
     {@const documentRef = String(membership?.document_ref ?? "").trim()}
     {@const assigneeRefs = Array.isArray(membership?.assignee_refs)
@@ -1357,9 +1368,9 @@
         <div
           class="mt-1.5 flex flex-wrap gap-1 pl-4 text-[11px] text-[var(--ui-text-muted)]"
         >
-          {#if threadRef}
+          {#if threadLinkRef}
             <RefLink
-              refValue={threadRef}
+              refValue={threadLinkRef}
               threadId={linkedThreadId}
               {boardId}
               showRaw
@@ -1478,10 +1489,9 @@
                 bind:value={manageResolution}
                 class="mt-0.5 w-full rounded border border-[var(--ui-border)] bg-[var(--ui-panel)] px-2 py-1 text-[12px] text-[var(--ui-text)]"
               >
-                <option value="unresolved">Unresolved</option>
-                <option value="completed">Completed</option>
+                <option value="">Open</option>
+                <option value="done">Done</option>
                 <option value="canceled">Canceled</option>
-                <option value="superseded">Superseded</option>
               </select>
             </label>
 

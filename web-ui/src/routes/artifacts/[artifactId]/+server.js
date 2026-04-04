@@ -1,6 +1,6 @@
 import { json } from "@sveltejs/kit";
 
-import { getMockArtifact } from "$lib/mockCoreData";
+import { artifactForApiResponse, getMockArtifact } from "$lib/mockCoreData";
 import { assertMockModeEnabled } from "$lib/server/mockGuard";
 
 export function GET({ params, url }) {
@@ -14,5 +14,5 @@ export function GET({ params, url }) {
     return json({ error: "Artifact not found." }, { status: 404 });
   }
 
-  return json({ artifact });
+  return json({ artifact: artifactForApiResponse(artifact) });
 }

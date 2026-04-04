@@ -204,10 +204,14 @@ test("create receipt then submit review and see review_completed in timeline", a
     });
   });
 
-  await page.route(/\/receipts$/, async (route) => {
+  await page.route(/\/(receipts|packets\/receipts)$/, async (route) => {
     const payload = JSON.parse(route.request().postData() ?? "{}");
     const receiptId =
       payload.artifact?.id ?? payload.packet?.receipt_id ?? createdReceiptId;
+    const subjectRef = String(payload.packet?.subject_ref ?? "");
+    const backingThreadId = subjectRef.includes(":")
+      ? subjectRef.split(":").slice(1).join(":").trim()
+      : "";
 
     createdReceiptPacket = {
       ...payload.packet,
@@ -216,7 +220,7 @@ test("create receipt then submit review and see review_completed in timeline", a
     createdReceiptArtifact = {
       id: receiptId,
       kind: "receipt",
-      thread_id: payload.packet.thread_id,
+      thread_id: backingThreadId,
       refs: payload.artifact.refs,
       summary: payload.artifact.summary,
       provenance: { sources: ["actor_statement:ui"] },
@@ -227,10 +231,11 @@ test("create receipt then submit review and see review_completed in timeline", a
       ts: "2026-03-04T06:00:00.000Z",
       type: "receipt_added",
       actor_id: payload.actor_id,
-      thread_id: payload.packet.thread_id,
+      thread_id: backingThreadId,
       refs: [
         `artifact:${receiptId}`,
         `artifact:${payload.packet.work_order_id}`,
+        subjectRef,
       ],
       summary: `Receipt added: ${payload.artifact.summary}`,
       payload: {
@@ -250,19 +255,24 @@ test("create receipt then submit review and see review_completed in timeline", a
     });
   });
 
-  await page.route(/\/reviews$/, async (route) => {
+  await page.route(/\/(reviews|packets\/reviews)$/, async (route) => {
     reviewPayload = JSON.parse(route.request().postData() ?? "{}");
     const reviewId = reviewPayload.packet.review_id;
+    const subjectRef = String(reviewPayload.packet?.subject_ref ?? "");
+    const backingThreadId = subjectRef.includes(":")
+      ? subjectRef.split(":").slice(1).join(":").trim()
+      : String(reviewPayload.artifact?.thread_id ?? "");
     const createdEvent = {
       id: "event-review-1",
       ts: "2026-03-04T06:10:00.000Z",
       type: "review_completed",
       actor_id: reviewPayload.actor_id,
-      thread_id: reviewPayload.artifact.thread_id,
+      thread_id: backingThreadId,
       refs: [
         `artifact:${reviewId}`,
         `artifact:${reviewPayload.packet.receipt_id}`,
         `artifact:${reviewPayload.packet.work_order_id}`,
+        subjectRef,
       ],
       summary: `Review completed (${reviewPayload.packet.outcome})`,
       payload: {
@@ -279,7 +289,7 @@ test("create receipt then submit review and see review_completed in timeline", a
         artifact: {
           id: reviewId,
           kind: "review",
-          thread_id: reviewPayload.artifact.thread_id,
+          thread_id: backingThreadId,
           refs: reviewPayload.artifact.refs,
           summary: reviewPayload.artifact.summary,
         },
@@ -322,7 +332,10 @@ test("create receipt then submit review and see review_completed in timeline", a
 
   await expect.poll(() => reviewPayload !== null).toBe(true);
   expect(reviewPayload.packet).toMatchObject({
+    subject_ref: "thread:thread-onboarding",
+    receipt_ref: `artifact:${createdReceiptArtifact.id}`,
     receipt_id: createdReceiptArtifact.id,
+    work_order_ref: `artifact:${workOrderId}`,
     work_order_id: workOrderId,
     outcome: "revise",
     notes: "Needs additional hardening.",

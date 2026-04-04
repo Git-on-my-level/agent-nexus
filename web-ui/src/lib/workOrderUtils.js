@@ -5,15 +5,25 @@ import {
   validateTypedRefs,
 } from "./typedRefs.js";
 
-export function ensureThreadRef(refs = [], threadId) {
+/** Ensures the packet anchor typed ref appears first in context_refs (subject-first). */
+export function ensureSubjectAnchorRef(refs = [], subjectRef) {
   const normalized = refs.map((item) => String(item).trim()).filter(Boolean);
-  const threadRef = `thread:${threadId}`;
-
-  if (!normalized.includes(threadRef)) {
-    normalized.unshift(threadRef);
+  const anchor = String(subjectRef ?? "").trim();
+  if (!anchor) {
+    return normalized;
   }
 
-  return normalized;
+  const without = normalized.filter((r) => r !== anchor);
+  return [anchor, ...without];
+}
+
+/** @deprecated Prefer `ensureSubjectAnchorRef` with a `topic:` / `thread:` typed ref. */
+export function ensureThreadRef(refs = [], threadId) {
+  const tid = String(threadId ?? "").trim();
+  if (!tid) {
+    return refs.map((item) => String(item).trim()).filter(Boolean);
+  }
+  return ensureSubjectAnchorRef(refs, `thread:${tid}`);
 }
 
 function dedupePreserveOrder(items = []) {
@@ -160,7 +170,7 @@ export function buildWorkOrderContextSuggestions({
     addSuggestion(suggestions, seenRefs, {
       ref,
       kind: "document",
-      source: "Thread document",
+      source: "Linked document",
       title: String(document?.title ?? "").trim() || ref,
       detail: detailParts.join(" • "),
     });
@@ -170,12 +180,12 @@ export function buildWorkOrderContextSuggestions({
 }
 
 export function mergeContextRefsInput(rawInput, refsToAdd = [], options = {}) {
-  const threadId = String(options.threadId ?? "").trim();
+  const subjectRef = String(options.subjectRef ?? "").trim();
   const currentRefs = parseListInput(rawInput);
   const merged = dedupePreserveOrder([...currentRefs, ...refsToAdd]);
 
   return serializeListInput(
-    threadId ? ensureThreadRef(merged, threadId) : merged,
+    subjectRef ? ensureSubjectAnchorRef(merged, subjectRef) : merged,
   );
 }
 
@@ -184,7 +194,7 @@ export function removeContextRefsFromInput(
   refsToRemove = [],
   options = {},
 ) {
-  const threadId = String(options.threadId ?? "").trim();
+  const subjectRef = String(options.subjectRef ?? "").trim();
   const removeSet = new Set(
     refsToRemove.map((item) => String(item ?? "").trim()).filter(Boolean),
   );
@@ -193,13 +203,13 @@ export function removeContextRefsFromInput(
   );
 
   return serializeListInput(
-    threadId ? ensureThreadRef(remaining, threadId) : remaining,
+    subjectRef ? ensureSubjectAnchorRef(remaining, subjectRef) : remaining,
   );
 }
 
 export function applyWorkOrderContextPrefill({
   currentInput = "",
-  threadId = "",
+  subjectRef = "",
   prefillRefs = [],
   prefillKey = "",
   appliedPrefillKey = "",
@@ -215,13 +225,13 @@ export function applyWorkOrderContextPrefill({
 
   return {
     applied: true,
-    nextInput: mergeContextRefsInput(currentInput, prefillRefs, { threadId }),
+    nextInput: mergeContextRefsInput(currentInput, prefillRefs, { subjectRef }),
     nextAppliedPrefillKey: normalizedPrefillKey,
   };
 }
 
 export function validateWorkOrderDraft(draft, options = {}) {
-  const threadId = String(options.threadId ?? "").trim();
+  const subjectRef = String(options.subjectRef ?? "").trim();
   const errors = [];
   const fieldErrors = {};
 
@@ -233,15 +243,15 @@ export function validateWorkOrderDraft(draft, options = {}) {
 
   const objective = String(draft?.objective ?? "").trim();
   const constraints = parseListInput(draft?.constraintsInput);
-  const contextRefs = ensureThreadRef(
+  const contextRefs = ensureSubjectAnchorRef(
     parseListInput(draft?.contextRefsInput),
-    threadId,
+    subjectRef,
   );
   const acceptanceCriteria = parseListInput(draft?.acceptanceCriteriaInput);
   const definitionOfDone = parseListInput(draft?.definitionOfDoneInput);
 
-  if (!threadId) {
-    addError("thread_id", "thread_id is required.");
+  if (!subjectRef) {
+    addError("subject_ref", "subject_ref is required.");
   }
 
   if (!objective) {
@@ -279,7 +289,7 @@ export function validateWorkOrderDraft(draft, options = {}) {
     errors,
     fieldErrors,
     normalized: {
-      thread_id: threadId,
+      subject_ref: subjectRef,
       objective,
       constraints,
       context_refs: contextRefs,

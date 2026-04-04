@@ -8,7 +8,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"organization-autorunner-core/internal/primitives"
@@ -21,10 +20,8 @@ const (
 	threadContextContentPreviewChars = 500
 )
 
-// Thread lifecycle POST routes (archive, unarchive, tombstone, restore, purge) remain on the public
-// HTTP API because the operator UI calls them directly for standalone thread list/detail and trash
-// flows. Topic/board/card/document lifecycle may also update backing threads internally via the store
-// without using these routes.
+// Backing threads are read-only on the public HTTP API (list, get, timeline, context, workspace).
+// Archive, tombstone, restore, and purge use topic/board/card/document lifecycle routes instead.
 
 func handleGetThread(w http.ResponseWriter, r *http.Request, opts handlerOptions, threadID string) {
 	if opts.primitiveStore == nil {
@@ -128,162 +125,6 @@ func handleListThreads(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		response["next_cursor"] = nextCursor
 	}
 	writeJSON(w, http.StatusOK, response)
-}
-
-func writeThreadLifecycleStoreError(w http.ResponseWriter, err error) bool {
-	switch {
-	case errors.Is(err, primitives.ErrNotFound):
-		writeError(w, http.StatusNotFound, "not_found", "thread not found")
-		return true
-	case errors.Is(err, primitives.ErrNotTombstoned):
-		writeError(w, http.StatusConflict, "not_tombstoned", "thread is not currently tombstoned")
-		return true
-	case errors.Is(err, primitives.ErrNotArchived):
-		writeError(w, http.StatusConflict, "not_archived", "thread is not archived")
-		return true
-	case errors.Is(err, primitives.ErrAlreadyTombstoned):
-		writeError(w, http.StatusConflict, "already_tombstoned", "thread is tombstoned")
-		return true
-	default:
-		msg := err.Error()
-		if strings.Contains(msg, "actor_id is required") || strings.Contains(msg, "thread_id is required") {
-			writeError(w, http.StatusBadRequest, "invalid_request", msg)
-			return true
-		}
-		return false
-	}
-}
-
-func handleArchiveThread(w http.ResponseWriter, r *http.Request, opts handlerOptions, threadID string) {
-	if opts.primitiveStore == nil {
-		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
-		return
-	}
-	var req struct {
-		ActorID string `json:"actor_id"`
-	}
-	if !decodeJSONBody(w, r, &req) {
-		return
-	}
-	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
-	if !ok {
-		return
-	}
-	thread, err := opts.primitiveStore.ArchiveThread(r.Context(), actorID, threadID)
-	if err != nil {
-		if writeThreadLifecycleStoreError(w, err) {
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to archive thread")
-		return
-	}
-	enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{threadID}, time.Now().UTC())
-	writeJSON(w, http.StatusOK, map[string]any{"thread": thread})
-}
-
-func handleUnarchiveThread(w http.ResponseWriter, r *http.Request, opts handlerOptions, threadID string) {
-	if opts.primitiveStore == nil {
-		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
-		return
-	}
-	var req struct {
-		ActorID string `json:"actor_id"`
-	}
-	if !decodeJSONBody(w, r, &req) {
-		return
-	}
-	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
-	if !ok {
-		return
-	}
-	thread, err := opts.primitiveStore.UnarchiveThread(r.Context(), actorID, threadID)
-	if err != nil {
-		if writeThreadLifecycleStoreError(w, err) {
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to unarchive thread")
-		return
-	}
-	enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{threadID}, time.Now().UTC())
-	writeJSON(w, http.StatusOK, map[string]any{"thread": thread})
-}
-
-func handleTombstoneThread(w http.ResponseWriter, r *http.Request, opts handlerOptions, threadID string) {
-	if opts.primitiveStore == nil {
-		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
-		return
-	}
-	var req struct {
-		ActorID string `json:"actor_id"`
-		Reason  string `json:"reason"`
-	}
-	if !decodeJSONBody(w, r, &req) {
-		return
-	}
-	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
-	if !ok {
-		return
-	}
-	thread, err := opts.primitiveStore.TombstoneThread(r.Context(), actorID, threadID, req.Reason)
-	if err != nil {
-		if writeThreadLifecycleStoreError(w, err) {
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to tombstone thread")
-		return
-	}
-	enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{threadID}, time.Now().UTC())
-	writeJSON(w, http.StatusOK, map[string]any{"thread": thread})
-}
-
-func handleRestoreThread(w http.ResponseWriter, r *http.Request, opts handlerOptions, threadID string) {
-	if opts.primitiveStore == nil {
-		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
-		return
-	}
-	var req struct {
-		ActorID string `json:"actor_id"`
-	}
-	if !decodeJSONBody(w, r, &req) {
-		return
-	}
-	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
-	if !ok {
-		return
-	}
-	thread, err := opts.primitiveStore.RestoreThread(r.Context(), actorID, threadID)
-	if err != nil {
-		if writeThreadLifecycleStoreError(w, err) {
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to restore thread")
-		return
-	}
-	enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{threadID}, time.Now().UTC())
-	writeJSON(w, http.StatusOK, map[string]any{"thread": thread})
-}
-
-func handlePurgeThread(w http.ResponseWriter, r *http.Request, opts handlerOptions, threadID string) {
-	if opts.primitiveStore == nil {
-		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
-		return
-	}
-	principal, ok := requireAuthenticatedPrincipal(w, r, opts)
-	if !ok {
-		return
-	}
-	if !isHumanPrincipal(principal) {
-		writeError(w, http.StatusForbidden, "human_only", "only human principals may permanently delete threads")
-		return
-	}
-	if err := opts.primitiveStore.PurgeThread(r.Context(), threadID); err != nil {
-		if writeThreadLifecycleStoreError(w, err) {
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to purge thread")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"purged": true, "thread_id": threadID})
 }
 
 func normalizedQueryValues(raw []string) []string {

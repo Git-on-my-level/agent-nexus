@@ -114,7 +114,7 @@ The unit of ongoing context — a project, incident, relationship, process, or i
 
 **Fields:** per `oar-schema.yaml` → `resources.topic`
 
-Topics MAY point at a backing thread through `primary_thread_ref`, but the topic is the canonical subject record.
+Topics MAY point at a backing thread through `thread_id`, but the topic is the canonical subject record.
 
 ### 4.2 Card
 A first-class board work item anchored to a board and optionally linked to a topic, backing thread, or document lineage.
@@ -122,7 +122,7 @@ A first-class board work item anchored to a board and optionally linked to a top
 **Fields:** per `oar-schema.yaml` → `resources.card`
 
 **Restricted transitions:**
-- `resolution → completed` requires a typed reference to a receipt artifact (`artifact:<id>`) or a decision event (`event:<id>`).
+- `resolution → done` requires a typed reference to a receipt artifact (`artifact:<id>`) or a decision event (`event:<id>`).
 - `resolution → canceled` requires a typed reference to a decision event (`event:<id>`).
 - oar-core MUST reject these transitions if the required reference is missing.
 
@@ -279,7 +279,7 @@ The `inferred` label indicates the system generated or updated a value without d
 
 ### 8.2 Restricted updates
 The following MUST NOT be updated without a typed reference to a receipt artifact or decision event:
-- `card.resolution → completed` (requires `artifact:<receipt_id>` OR `event:<decision_event_id>`)
+- `card.resolution → done` (requires `artifact:<receipt_id>` OR `event:<decision_event_id>`)
 - `card.resolution → canceled` (requires `event:<decision_event_id>`)
 - Any "metric improved" claim
 - Any "shipped/sent/deployed" assertion
@@ -331,7 +331,7 @@ Key rules:
 - Each event type has required and optional refs (see schema for full list).
 - All packet artifacts MUST include `subject_ref` plus the required packet-kind refs in `artifact.refs`; the subject can be a topic, thread, card, board, or document as allowed by the packet schema and core resolver.
 - `topic_updated`, `topic_status_changed`, `card_updated`, `card_moved`, and `card_resolved` events SHOULD include `changed_fields` or equivalent change details in their payload when applicable.
-- `card.resolution -> completed` MUST include either `artifact:<receipt_id>` or `event:<decision_event_id>` in refs (matching the restricted transition rule).
+- `card.resolution -> done` MUST include either `artifact:<receipt_id>` or `event:<decision_event_id>` in refs (matching the restricted transition rule).
 
 oar-core SHOULD validate required refs on event creation and reject events missing them.
 

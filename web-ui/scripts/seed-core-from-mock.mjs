@@ -26,6 +26,20 @@ if (!coreBaseUrl) {
 const seed = getMockSeedData();
 const defaultActorId = seed.actors[0]?.id ?? "actor-ops-ai";
 
+function normalizeSeedCardResolution(raw) {
+  const s = String(raw ?? "").trim();
+  if (!s || s === "unresolved" || s === "superseded") {
+    return "";
+  }
+  if (s === "completed") {
+    return "done";
+  }
+  if (s === "done" || s === "canceled") {
+    return s;
+  }
+  return "";
+}
+
 const threadIdMap = new Map();
 const topicIdMap = new Map();
 const documentIdMap = new Map();
@@ -472,7 +486,7 @@ async function seedBoards() {
         ...(threadId
           ? {
               topic_ref: `topic:${threadId}`,
-              thread_ref: `thread:${threadId}`,
+              thread_id: threadId,
             }
           : {}),
         ...(pinnedDocumentId ? { pinned_document_id: pinnedDocumentId } : {}),
@@ -483,8 +497,10 @@ async function seedBoards() {
           ? { summary: String(sourceCard.summary).trim() }
           : {}),
         ...(sourceCard.risk ? { risk: String(sourceCard.risk) } : {}),
-        ...(sourceCard.resolution
-          ? { resolution: String(sourceCard.resolution) }
+        ...(normalizeSeedCardResolution(sourceCard.resolution)
+          ? {
+              resolution: normalizeSeedCardResolution(sourceCard.resolution),
+            }
           : {}),
         ...(Array.isArray(sourceCard.related_refs) &&
         sourceCard.related_refs.length > 0

@@ -17,31 +17,19 @@ func TestNotificationsListReadAndDismissAreTargetScoped(t *testing.T) {
 	targetInviteToken := createNotificationTestInvite(t, env.server.URL, sender.AccessToken)
 	target := registerNotificationTestAgentWithInvite(t, env.server.URL, "target.agent", targetInviteToken)
 
-	threadResp := postJSONExpectStatusWithAuth(t, env.server.URL+"/threads", map[string]any{
-		"thread": map[string]any{
-			"title":           "Notification thread",
-			"type":            "incident",
-			"status":          "active",
-			"priority":        "p2",
-			"tags":            []string{"notifications"},
-			"cadence":         "daily",
-			"current_summary": "summary",
-			"next_actions":    []string{"check"},
-			"key_artifacts":   []string{},
-			"provenance":      map[string]any{"sources": []string{"inferred"}},
-		},
-	}, sender.AccessToken, http.StatusCreated)
-	var threadPayload struct {
-		Thread map[string]any `json:"thread"`
-	}
-	if err := json.NewDecoder(threadResp.Body).Decode(&threadPayload); err != nil {
-		t.Fatalf("decode thread response: %v", err)
-	}
-	threadResp.Body.Close()
-	threadID := asString(threadPayload.Thread["id"])
-	if threadID == "" {
-		t.Fatal("expected thread id")
-	}
+	threadID := integrationSeedThreadWithStore(t, env.primitiveStore, nil, sender.ActorID, map[string]any{
+		"title":            "Notification thread",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p2",
+		"tags":             []any{"notifications"},
+		"cadence":          "daily",
+		"next_check_in_at": "2026-03-06T00:00:00Z",
+		"current_summary":  "summary",
+		"next_actions":     []any{"check"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
 
 	sourceResp := postJSONExpectStatusWithAuth(t, env.server.URL+"/events", map[string]any{
 		"event": map[string]any{

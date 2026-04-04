@@ -69,12 +69,11 @@ func (r topicRow) toMap() (map[string]any, error) {
 	if _, has := body["summary"]; !has {
 		body["summary"] = r.Summary.String
 	}
-	coerceLegacyTopicThreadKeys(body)
+	coerceLegacyTopicPersistedBody(body)
 	if r.ThreadID.Valid && strings.TrimSpace(r.ThreadID.String) != "" {
-		tid := strings.TrimSpace(r.ThreadID.String)
-		body["thread_id"] = tid
-		body["thread_ref"] = "thread:" + tid
+		body["thread_id"] = strings.TrimSpace(r.ThreadID.String)
 	}
+	delete(body, "thread_ref")
 	for _, field := range []string{"owner_refs", "document_refs", "board_refs", "related_refs"} {
 		if _, has := body[field]; !has {
 			body[field] = []string{}
@@ -191,7 +190,10 @@ func (s *Store) CreateTopic(ctx context.Context, actorID string, topic map[strin
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
-	primaryThreadID := uuid.NewString()
+	primaryThreadID := strings.TrimSpace(anyStringValue(normalized["thread_id"]))
+	if primaryThreadID == "" {
+		primaryThreadID = uuid.NewString()
+	}
 
 	topicBody := cloneMap(normalized)
 	delete(topicBody, "id")
@@ -199,11 +201,11 @@ func (s *Store) CreateTopic(ctx context.Context, actorID string, topic map[strin
 	delete(topicBody, "created_by")
 	delete(topicBody, "updated_at")
 	delete(topicBody, "updated_by")
-	topicBody["thread_ref"] = "thread:" + primaryThreadID
+	delete(topicBody, "thread_id")
 
 	threadBody := buildTopicBackingThreadBody(topicID, normalized, primaryThreadID, actorID, now)
 
-	topicBodyJSON, err := json.Marshal(topicBody)
+	topicBodyJSON, err := json.Marshal(stripTopicBodyJSONFields(topicBody))
 	if err != nil {
 		return TopicPatchResult{}, fmt.Errorf("marshal topic body: %w", err)
 	}
@@ -292,7 +294,7 @@ func (s *Store) CreateTopic(ctx context.Context, actorID string, topic map[strin
 	}
 
 	changedFields := sortedKeys(topicBody)
-	changedFields = append(changedFields, "thread_ref")
+	changedFields = append(changedFields, "thread_id")
 	changedFields = append(changedFields, "provenance")
 	sort.Strings(changedFields)
 
@@ -387,12 +389,12 @@ func (s *Store) PatchTopic(ctx context.Context, actorID string, topicID string, 
 		provenanceChanged = !reflectDeepEqual(currentProvenance, nextProvenance)
 	}
 
-	if rawThreadRef, exists := bodyPatch["thread_ref"]; exists {
-		if strings.TrimSpace(anyStringValue(rawThreadRef)) == "" {
+	if rawThreadID, exists := bodyPatch["thread_id"]; exists {
+		if strings.TrimSpace(anyStringValue(rawThreadID)) == "" {
 			return TopicPatchResult{}, ErrInvalidTopicRequest
 		}
-		currentThreadRef := strings.TrimSpace(anyStringValue(current["thread_ref"]))
-		if currentThreadRef != "" && currentThreadRef != strings.TrimSpace(anyStringValue(rawThreadRef)) {
+		currentThreadID := strings.TrimSpace(anyStringValue(current["thread_id"]))
+		if currentThreadID != "" && currentThreadID != strings.TrimSpace(anyStringValue(rawThreadID)) {
 			return TopicPatchResult{}, ErrInvalidTopicRequest
 		}
 	}
@@ -419,27 +421,15 @@ func (s *Store) PatchTopic(ctx context.Context, actorID string, topicID string, 
 	nextTopicStatus := strings.TrimSpace(anyStringValue(nextBody["status"]))
 	nextTitle := strings.TrimSpace(anyStringValue(nextBody["title"]))
 	nextSummary := strings.TrimSpace(anyStringValue(nextBody["summary"]))
-	nextThreadRef := strings.TrimSpace(anyStringValue(nextBody["thread_ref"]))
-	nextBackingThreadID := strings.TrimSpace(strings.TrimPrefix(nextThreadRef, "thread:"))
-	if nextBackingThreadID == "" {
-		nextBackingThreadID = strings.TrimSpace(anyStringValue(nextBody["thread_id"]))
-	}
+	nextBackingThreadID := strings.TrimSpace(anyStringValue(nextBody["thread_id"]))
 
 	nextTopicBody := cloneMap(nextBody)
 	nextTopicBody["provenance"] = nextProvenance
-	if nextThreadRef == "" && nextBackingThreadID == "" {
-		nextBackingThreadID = row.ThreadID.String
-		nextThreadRef = "thread:" + row.ThreadID.String
-		nextTopicBody["thread_ref"] = nextThreadRef
-		nextTopicBody["thread_id"] = nextBackingThreadID
-	} else if nextThreadRef == "" && nextBackingThreadID != "" {
-		nextThreadRef = "thread:" + nextBackingThreadID
-		nextTopicBody["thread_ref"] = nextThreadRef
-		nextTopicBody["thread_id"] = nextBackingThreadID
-	} else if nextBackingThreadID == "" {
-		nextBackingThreadID = strings.TrimPrefix(nextThreadRef, "thread:")
-		nextTopicBody["thread_id"] = nextBackingThreadID
+	if nextBackingThreadID == "" {
+		nextBackingThreadID = strings.TrimSpace(row.ThreadID.String)
 	}
+	nextTopicBody["thread_id"] = nextBackingThreadID
+	delete(nextTopicBody, "thread_ref")
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	nextThreadBody := buildTopicBackingThreadBody(topicID, nextTopicBody, nextBackingThreadID, actorID, now)
@@ -447,7 +437,7 @@ func (s *Store) PatchTopic(ctx context.Context, actorID string, topicID string, 
 	topicTargets := combineTopicRefTargets(nextTopicBody, nextBackingThreadID)
 	threadTargets := typedRefEdgeTargets(refEdgeTypeRef, []string{"topic:" + topicID})
 
-	topicBodyJSON, err := json.Marshal(stripTopicWriteOnlyFields(nextTopicBody))
+	topicBodyJSON, err := json.Marshal(stripTopicBodyJSONFields(stripTopicWriteOnlyFields(nextTopicBody)))
 	if err != nil {
 		return TopicPatchResult{}, fmt.Errorf("marshal patched topic body: %w", err)
 	}
@@ -557,7 +547,7 @@ func (s *Store) PatchTopic(ctx context.Context, actorID string, topicID string, 
 	nextBody["title"] = nextTitle
 	nextBody["summary"] = nextSummary
 	nextBody["thread_id"] = nextBackingThreadID
-	nextBody["thread_ref"] = "thread:" + nextBackingThreadID
+	delete(nextBody, "thread_ref")
 	nextBody["created_at"] = row.CreatedAt
 	nextBody["created_by"] = row.CreatedBy
 	nextBody["updated_at"] = now
@@ -691,8 +681,12 @@ func (s *Store) applyTopicLifecycleWithReason(ctx context.Context, actorID, topi
 	case "unarchive", "restore":
 		updatedTopic["status"] = "active"
 	}
+	if action == "tombstone" {
+		delete(updatedTopic, "archived_at")
+		delete(updatedTopic, "archived_by")
+	}
 
-	topicBodyJSON, err := json.Marshal(stripTopicWriteOnlyFields(updatedTopic))
+	topicBodyJSON, err := json.Marshal(stripTopicBodyJSONFields(stripTopicWriteOnlyFields(updatedTopic)))
 	if err != nil {
 		return nil, fmt.Errorf("marshal topic lifecycle body: %w", err)
 	}
@@ -824,6 +818,8 @@ func (s *Store) applyTopicLifecycleWithReason(ctx context.Context, actorID, topi
 		delete(updatedTopic, "archived_by")
 	}
 	if action == "tombstone" {
+		delete(updatedTopic, "archived_at")
+		delete(updatedTopic, "archived_by")
 		updatedTopic["tombstoned_at"] = now
 		updatedTopic["tombstoned_by"] = actorID
 		if strings.TrimSpace(reason) != "" {
@@ -834,6 +830,8 @@ func (s *Store) applyTopicLifecycleWithReason(ctx context.Context, actorID, topi
 		delete(updatedTopic, "tombstoned_at")
 		delete(updatedTopic, "tombstoned_by")
 		delete(updatedTopic, "tombstone_reason")
+		delete(updatedTopic, "archived_at")
+		delete(updatedTopic, "archived_by")
 	}
 
 	return updatedTopic, nil
@@ -881,37 +879,64 @@ func buildListTopicsQuery(filter TopicListFilter) (string, []any) {
 	return query, args
 }
 
-func coerceLegacyTopicThreadKeys(out map[string]any) {
+// coerceLegacyTopicPersistedBody upgrades historical topic JSON bodies to thread_id and drops legacy keys.
+func coerceLegacyTopicPersistedBody(out map[string]any) {
 	legacyRef := "primary" + "_thread_ref"
 	legacyID := "primary" + "_thread_id"
 	if v, ok := out[legacyRef]; ok && v != nil {
-		if _, has := out["thread_ref"]; !has {
-			out["thread_ref"] = v
+		refStr := strings.TrimSpace(anyStringValue(v))
+		if refStr != "" {
+			if prefix, id, okRef := splitTypedRef(refStr); okRef && prefix == "thread" && strings.TrimSpace(id) != "" {
+				if _, has := out["thread_id"]; !has || strings.TrimSpace(anyStringValue(out["thread_id"])) == "" {
+					out["thread_id"] = strings.TrimSpace(id)
+				}
+			}
 		}
 		delete(out, legacyRef)
 	}
 	if v, ok := out[legacyID]; ok && v != nil {
-		if _, has := out["thread_id"]; !has {
-			out["thread_id"] = v
+		id := strings.TrimSpace(anyStringValue(v))
+		if id != "" {
+			if _, has := out["thread_id"]; !has || strings.TrimSpace(anyStringValue(out["thread_id"])) == "" {
+				out["thread_id"] = id
+			}
 		}
 		delete(out, legacyID)
 	}
+	if raw, exists := out["thread_ref"]; exists && raw != nil {
+		refStr := strings.TrimSpace(anyStringValue(raw))
+		if refStr != "" {
+			if prefix, id, okRef := splitTypedRef(refStr); okRef && prefix == "thread" && strings.TrimSpace(id) != "" {
+				if _, has := out["thread_id"]; !has || strings.TrimSpace(anyStringValue(out["thread_id"])) == "" {
+					out["thread_id"] = strings.TrimSpace(id)
+				}
+			}
+		}
+		delete(out, "thread_ref")
+	}
+}
+
+func stripTopicBodyJSONFields(body map[string]any) map[string]any {
+	out := cloneMap(body)
+	delete(out, "thread_ref")
+	delete(out, "thread_id")
+	return out
 }
 
 func normalizeTopicInput(topic map[string]any, createMode bool) (map[string]any, error) {
 	out := cloneMap(topic)
-	coerceLegacyTopicThreadKeys(out)
+	if _, ok := out["thread_ref"]; ok {
+		return nil, ErrInvalidTopicRequest
+	}
+	if _, ok := out["primary_thread_ref"]; ok {
+		return nil, ErrInvalidTopicRequest
+	}
 
 	if raw, exists := out["thread_id"]; exists && raw != nil {
 		id := strings.TrimSpace(anyStringValue(raw))
-		if id != "" {
-			wantRef := "thread:" + id
-			if existing, ok := out["thread_ref"].(string); ok && strings.TrimSpace(existing) != "" && strings.TrimSpace(existing) != wantRef {
-				return nil, ErrInvalidTopicRequest
-			}
-			out["thread_ref"] = wantRef
+		if id != "" && strings.Contains(id, "/") {
+			return nil, ErrInvalidTopicRequest
 		}
-		delete(out, "thread_id")
 	}
 
 	if id, exists := out["id"]; exists {
@@ -950,20 +975,6 @@ func normalizeTopicInput(topic map[string]any, createMode bool) (map[string]any,
 		} else if createMode {
 			out[field] = []string{}
 		}
-	}
-
-	if raw, exists := out["thread_ref"]; exists && raw != nil {
-		ref, ok := raw.(string)
-		if !ok || strings.TrimSpace(ref) == "" {
-			return nil, ErrInvalidTopicRequest
-		}
-		prefix, _, ok := splitTypedRef(ref)
-		if !ok || prefix != "thread" {
-			return nil, ErrInvalidTopicRequest
-		}
-		out["thread_ref"] = strings.TrimSpace(ref)
-	} else if createMode {
-		out["thread_ref"] = ""
 	}
 
 	if raw, exists := out["provenance"]; exists && raw != nil {
@@ -1049,7 +1060,7 @@ func extractTopicRefs(raw any) ([]string, error) {
 
 func isTopicType(value string) bool {
 	switch strings.TrimSpace(value) {
-	case "initiative", "objective", "decision", "incident", "risk", "request", "note", "other":
+	case "case", "process", "relationship", "initiative", "objective", "decision", "incident", "risk", "request", "note", "other":
 		return true
 	default:
 		return false
@@ -1058,7 +1069,7 @@ func isTopicType(value string) bool {
 
 func isTopicStatus(value string) bool {
 	switch strings.TrimSpace(value) {
-	case "proposed", "active", "blocked", "resolved", "archived":
+	case "proposed", "active", "paused", "blocked", "resolved", "closed", "archived":
 		return true
 	default:
 		return false

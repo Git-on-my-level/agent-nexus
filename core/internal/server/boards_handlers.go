@@ -126,13 +126,6 @@ func handleCreateBoard(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		boardInput[key] = value
 	}
 	mergeBoardHTTPConvenienceFields(boardInput)
-	threadRefs := boardThreadRefs(boardInput)
-	if len(threadRefs) > 0 {
-		refs := boardRefs(boardInput)
-		refs = append(refs, threadRefs...)
-		boardInput["refs"] = uniqueSortedStrings(refs)
-	}
-	delete(boardInput, "thread_id")
 
 	board, err := opts.primitiveStore.CreateBoard(r.Context(), actorID, boardInput)
 	if err != nil {
@@ -820,6 +813,12 @@ func handleMoveCardMutation(w http.ResponseWriter, r *http.Request, opts handler
 	}
 	if req.Resolution != nil {
 		normalizedResolution := strings.TrimSpace(*req.Resolution)
+		if normalizedResolution == "completed" || normalizedResolution == "superseded" {
+			normalizedResolution = "done"
+		}
+		if normalizedResolution == "unresolved" {
+			normalizedResolution = ""
+		}
 		if err := validateCardResolution(normalizedResolution, false); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 			return
@@ -1146,7 +1145,7 @@ func buildBoardWorkspaceCardsSection(ctx context.Context, opts handlerOptions, b
 			"projection_freshness": freshness,
 			"membership":           card,
 			"backing": map[string]any{
-				"thread_ref":          nullableTypedRef("thread", threadID),
+				"thread_id":           nullableStringValue(threadID),
 				"thread":              thread,
 				"pinned_document_ref": nullableTypedRef("document", anyString(card["pinned_document_id"])),
 				"pinned_document":     pinnedDocument,
@@ -1608,14 +1607,9 @@ func mergeBoardHTTPConvenienceFields(board map[string]any) {
 	if board == nil {
 		return
 	}
-	legacyThreadField := "primary" + "_thread_id"
 	legacyDocumentField := "primary" + "_document_id"
 	refs := boardRefs(board)
 	changed := false
-	if tid := strings.TrimSpace(anyString(board[legacyThreadField])); tid != "" {
-		refs = append(refs, "thread:"+tid)
-		changed = true
-	}
 	if did := strings.TrimSpace(anyString(board[legacyDocumentField])); did != "" {
 		refs = append(refs, "document:"+did)
 		changed = true
@@ -1623,7 +1617,6 @@ func mergeBoardHTTPConvenienceFields(board map[string]any) {
 	if changed {
 		board["refs"] = uniqueSortedStrings(refs)
 	}
-	delete(board, legacyThreadField)
 	delete(board, legacyDocumentField)
 }
 
@@ -1872,6 +1865,12 @@ func parseBoardCardPatchInput(w http.ResponseWriter, patch map[string]any) (prim
 			appendChanged(field)
 		case "resolution":
 			value := strings.TrimSpace(anyString(raw))
+			if value == "completed" || value == "superseded" {
+				value = "done"
+			}
+			if value == "unresolved" {
+				value = ""
+			}
 			if value != "" {
 				if err := validateCardResolution(value, false); err != nil {
 					writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
@@ -1930,33 +1929,42 @@ func validateBoardCardMoveRequest(columnKey, beforeCardID, afterCardID, beforeTh
 
 func validateCardResolution(resolution string, allowEmpty bool) error {
 	value := strings.TrimSpace(resolution)
+	if value == "completed" || value == "superseded" {
+		value = "done"
+	}
+	if value == "unresolved" {
+		value = ""
+	}
 	if value == "" && allowEmpty {
 		return nil
 	}
 	switch value {
-	case "completed", "canceled":
+	case "done", "canceled":
 		return nil
 	default:
-		return errors.New("resolution must be one of: completed, canceled")
+		return errors.New("resolution must be one of: done, canceled")
 	}
 }
 
 func validateMoveCardResolutionRefs(resolution string, resolutionRefs []string) error {
 	resolution = strings.TrimSpace(resolution)
+	if resolution == "completed" || resolution == "superseded" {
+		resolution = "done"
+	}
 	if len(resolutionRefs) == 0 {
 		return errors.New("resolution_refs are required when resolution is set")
 	}
 	switch resolution {
-	case "completed":
+	case "done":
 		if !containsTypedRefPrefix(resolutionRefs, "artifact") && !containsTypedRefPrefix(resolutionRefs, "event") {
-			return errors.New("resolution_refs must include at least one artifact: or event: ref for resolution completed")
+			return errors.New("resolution_refs must include at least one artifact: or event: ref for resolution done")
 		}
 	case "canceled":
 		if !containsTypedRefPrefix(resolutionRefs, "event") {
 			return errors.New("resolution_refs must include at least one event: ref for resolution canceled")
 		}
 	default:
-		return errors.New("resolution must be one of: completed, canceled")
+		return errors.New("resolution must be one of: done, canceled")
 	}
 	return nil
 }

@@ -72,19 +72,11 @@ func newPrimitivesTestServerWithStore(t *testing.T, workspace *storage.Workspace
 		WithEnableDevActorMode(true),
 	)
 	server := httptest.NewServer(newProjectionMaintainerAutoStepHandler(handler, maintainer))
-	testServerLegacyWorkspaces.Store(server.URL, legacyTestWorkspaceContext{
-		primitiveStore:             primitiveStore,
-		actorStore:                 registry,
-		allowUnauthenticatedWrites: true,
-		maintainer:                 maintainer,
-		autoStepLegacyWrites:       true,
-	})
 	t.Cleanup(func() {
-		testServerLegacyWorkspaces.Delete(server.URL)
 		server.Close()
 	})
 
-	return primitivesTestHarness{workspace: workspace, baseURL: server.URL, maintainer: maintainer}
+	return primitivesTestHarness{workspace: workspace, baseURL: server.URL, maintainer: maintainer, primitiveStore: primitiveStore}
 }
 
 func TestBoardCreateSucceedsWhenLifecycleEventAppendFails(t *testing.T) {

@@ -257,7 +257,7 @@ describe("threadDetailStore", () => {
     coreClientMocks.getTopicWorkspace.mockResolvedValueOnce({
       topic: {
         id: topicId,
-        primary_thread_ref: `thread:${threadRow.id}`,
+        thread_id: threadRow.id,
         title: "Topic title",
         summary: "S",
         type: "other",

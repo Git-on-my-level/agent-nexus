@@ -109,7 +109,7 @@ export function threadWorkspaceToTopicWorkspace(ws, topicIdOverride) {
         title: thread.title,
         summary: String(thread.current_summary ?? ""),
         owner_refs: Array.isArray(thread.owner_refs) ? thread.owner_refs : [],
-        primary_thread_ref: threadId ? `thread:${threadId}` : "",
+        thread_id: threadId || null,
         document_refs: Array.isArray(thread.document_refs)
           ? thread.document_refs
           : [],

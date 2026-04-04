@@ -102,7 +102,7 @@ test("trash page restores archived topics, boards, cards, documents, and artifac
       board_id: "board-trash-1",
       board_ref: "board:board-trash-1",
       topic_ref: "topic:topic-trash-1",
-      thread_ref: "thread:topic-trash-1",
+      thread_id: "topic-trash-1",
       document_ref: "document:doc-trash-1",
       title: "Archived card",
       summary: "Archived card summary",
@@ -110,7 +110,7 @@ test("trash page restores archived topics, boards, cards, documents, and artifac
       rank: "0001",
       assignee_refs: [],
       risk: "medium",
-      resolution: "completed",
+      resolution: "done",
       resolution_refs: ["artifact:artifact-trash-1"],
       related_refs: ["topic:topic-trash-1"],
       created_at: "2026-03-01T08:00:00.000Z",
@@ -253,14 +253,14 @@ test("trash page restores archived topics, boards, cards, documents, and artifac
     });
   });
 
-  await page.route(/\/threads\/[^/?]+\/restore$/, async (route) => {
+  await page.route(/\/topics\/[^/?]+\/restore$/, async (route) => {
     const topicId = route.request().url().split("/").at(-2) ?? "";
     const restored = restoreById(topics, topicId, { status: "active" });
     await route.fulfill({
       status: restored ? 200 : 404,
       contentType: "application/json",
       body: JSON.stringify(
-        restored ? { thread: restored } : { error: "not found" },
+        restored ? { topic: restored } : { error: "not found" },
       ),
     });
   });
@@ -351,21 +351,6 @@ test("trash page restores archived topics, boards, cards, documents, and artifac
     });
   });
 
-  await page.route(/\/threads\/[^/?]+\/purge$/, async (route) => {
-    const topicId = route.request().url().split("/").at(-2) ?? "";
-    const idx = topics.findIndex((t) => String(t.id) === topicId);
-    if (idx >= 0) {
-      topics.splice(idx, 1);
-    }
-    await route.fulfill({
-      status: idx >= 0 ? 200 : 404,
-      contentType: "application/json",
-      body: JSON.stringify(
-        idx >= 0 ? { thread_id: topicId } : { error: "not found" },
-      ),
-    });
-  });
-
   await page.route(/\/boards\/[^/?]+\/purge$/, async (route) => {
     const boardId = route.request().url().split("/").at(-2) ?? "";
     const idx = boards.findIndex((b) => String(b?.board?.id ?? "") === boardId);
@@ -448,7 +433,7 @@ test("trash page purges a card after confirmation (human principal)", async ({
       board_id: "board-purge-e2e",
       board_ref: "board:board-purge-e2e",
       topic_ref: "topic:t-purge",
-      thread_ref: "thread:t-purge",
+      thread_id: "t-purge",
       document_ref: null,
       title: "Card pending purge",
       summary: "",
@@ -456,7 +441,7 @@ test("trash page purges a card after confirmation (human principal)", async ({
       rank: "a",
       assignee_refs: [],
       risk: "medium",
-      resolution: "completed",
+      resolution: "done",
       resolution_refs: [],
       related_refs: [],
       created_at: "2026-03-01T08:00:00.000Z",

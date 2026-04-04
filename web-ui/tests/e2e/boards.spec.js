@@ -138,7 +138,7 @@ function buildWorkspace(
       items: sortedCards.map((card) => ({
         membership: card,
         backing: {
-          thread_ref: `thread:${card.thread_id}`,
+          thread_id: card.thread_id,
           thread: threads.find((thread) => thread.id === card.thread_id),
           pinned_document_ref: card.pinned_document_id
             ? `document:${card.pinned_document_id}`
@@ -444,9 +444,10 @@ test("board UI supports create/edit and card mutation flows", async ({
     const payload = JSON.parse(route.request().postData() ?? "{}");
     addCardPayloads.push(payload);
     const now = nextTimestamp();
-    const threadId = String(payload.thread_ref ?? payload.thread_id ?? "")
+    const fromTypedRef = String(payload.thread_ref ?? "")
       .replace(/^thread:/, "")
       .trim();
+    const threadId = String(payload.thread_id ?? fromTypedRef ?? "").trim();
     const targetColumnCards = cards.filter(
       (card) => card.column_key === payload.column_key,
     );
@@ -510,7 +511,7 @@ test("board UI supports create/edit and card mutation flows", async ({
       movingCard.column_key = payload.column_key;
       if (payload.column_key === "done") {
         movingCard.resolution =
-          payload.resolution === "canceled" ? "canceled" : "completed";
+          payload.resolution === "canceled" ? "canceled" : "done";
         movingCard.resolution_refs = Array.isArray(payload.resolution_refs)
           ? payload.resolution_refs
           : [];
@@ -737,12 +738,12 @@ test("board UI supports create/edit and card mutation flows", async ({
       if_board_updated_at: "2026-03-05T01:00:00.000Z",
       title: "",
       summary: "",
-      thread_ref: "thread:thread-execution",
+      thread_id: "thread-execution",
       column_key: "ready",
       document_ref: "document:doc-playbook",
       assignee_refs: [],
       risk: "medium",
-      resolution: "unresolved",
+      resolution: null,
       resolution_refs: [],
       related_refs: [],
       due_at: null,
@@ -753,12 +754,12 @@ test("board UI supports create/edit and card mutation flows", async ({
       if_board_updated_at: "2026-03-05T02:00:00.000Z",
       title: "",
       summary: "",
-      thread_ref: "thread:thread-review",
+      thread_id: "thread-review",
       column_key: "ready",
       document_ref: null,
       assignee_refs: [],
       risk: "medium",
-      resolution: "unresolved",
+      resolution: null,
       resolution_refs: [],
       related_refs: [],
       due_at: null,
@@ -781,7 +782,7 @@ test("board UI supports create/edit and card mutation flows", async ({
         actor_id: actorId,
         if_board_updated_at: "2026-03-05T04:00:00.000Z",
         column_key: "done",
-        resolution: "completed",
+        resolution: "done",
       },
     },
   ]);
@@ -792,11 +793,11 @@ test("board UI supports create/edit and card mutation flows", async ({
       patch: {
         title: "",
         summary: "",
-        thread_ref: "thread:thread-execution",
+        thread_id: "thread-execution",
         document_ref: "document:doc-playbook",
         assignee_refs: [],
         risk: "medium",
-        resolution: "unresolved",
+        resolution: null,
         resolution_refs: [],
         related_refs: [],
         due_at: null,

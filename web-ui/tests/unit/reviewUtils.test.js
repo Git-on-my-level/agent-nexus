@@ -36,7 +36,7 @@ describe("review typed-ref validation", () => {
 
 describe("review draft/payload builder", () => {
   const baseOptions = {
-    threadId: "thread-1",
+    subjectRef: "topic:thread-1",
     receiptId: "artifact-receipt-1",
     workOrderId: "artifact-work-order-1",
     reviewId: "artifact-review-1",
@@ -56,14 +56,15 @@ describe("review draft/payload builder", () => {
     expect(result.errors).toEqual([]);
     expect(result.packet).toEqual({
       review_id: "artifact-review-1",
-      work_order_id: "artifact-work-order-1",
-      receipt_id: "artifact-receipt-1",
+      subject_ref: "topic:thread-1",
+      work_order_ref: "artifact:artifact-work-order-1",
+      receipt_ref: "artifact:artifact-receipt-1",
       outcome: "accept",
       notes: "Looks good.",
       evidence_refs: [],
     });
     expect(result.artifact.refs).toEqual([
-      "thread:thread-1",
+      "topic:thread-1",
       "artifact:artifact-receipt-1",
       "artifact:artifact-work-order-1",
     ]);
@@ -77,7 +78,7 @@ describe("review draft/payload builder", () => {
         evidenceRefsInput: "bad-ref",
       },
       {
-        threadId: "",
+        subjectRef: "",
         receiptId: "",
         workOrderId: "",
         reviewId: "",
@@ -86,7 +87,7 @@ describe("review draft/payload builder", () => {
 
     expect(result.valid).toBe(false);
     expect(result.errors).toEqual([
-      "thread_id is required.",
+      "subject_ref is required.",
       "receipt_id is required.",
       "work_order_id is required.",
       "review_id is required.",

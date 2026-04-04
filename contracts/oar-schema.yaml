@@ -10,11 +10,11 @@ version: "0.3.0"
 enums:
   topic_type:
     enum_policy: strict
-    values: [initiative, objective, decision, incident, risk, request, note, other]
+    values: [case, process, relationship, initiative, objective, decision, incident, risk, request, note, other]
 
   topic_status:
     enum_policy: strict
-    values: [proposed, active, blocked, resolved, archived]
+    values: [proposed, active, paused, blocked, resolved, closed, archived]
 
   thread_status:
     enum_policy: strict
@@ -30,7 +30,10 @@ enums:
 
   card_resolution:
     enum_policy: strict
-    values: [unresolved, completed, canceled, superseded]
+    description: >
+      Terminal resolution for a card. Null/absent while the card is active; only
+      `done` or `canceled` when resolved.
+    values: [done, canceled]
 
   review_outcome:
     enum_policy: strict
@@ -38,7 +41,7 @@ enums:
 
   inbox_category:
     enum_policy: strict
-    values: [decision_needed, intervention_needed, risk_review, stale_topic, document_attention]
+    values: [decision_needed, intervention_needed, risk_review, stale_topic, work_item_risk, document_attention]
 
   agent_notification_status:
     enum_policy: strict
@@ -46,7 +49,7 @@ enums:
 
   board_status:
     enum_policy: strict
-    values: [active, paused, archived]
+    values: [active, paused, closed]
 
   board_column_key:
     enum_policy: strict
@@ -60,6 +63,9 @@ enums:
       - topic_created
       - topic_updated
       - topic_status_changed
+      - topic_archived
+      - topic_restored
+      - topic_tombstoned
       - message_posted
       - work_order_created
       - receipt_added
@@ -69,9 +75,12 @@ enums:
       - decision_made
       - document_created
       - document_revised
+      - document_revision_created
       - document_tombstoned
       - board_created
       - board_updated
+      - board_card_added
+      - board_card_moved
       - card_created
       - card_updated
       - card_moved
@@ -219,7 +228,7 @@ resources:
       title: { type: string, required: true }
       summary: { type: string, required: true }
       owner_refs: { type: "list<typed_ref>", required: true }
-      primary_thread_ref: { type: typed_ref, required: false }
+      thread_id: { type: string, required: false, description: "Backing thread id for topic timeline and events." }
       document_refs: { type: "list<typed_ref>", required: true }
       board_refs: { type: "list<typed_ref>", required: true }
       related_refs: { type: "list<typed_ref>", required: true }
@@ -266,7 +275,7 @@ resources:
       title: { type: string, required: true }
       status: { type: string, required: true, ref: enums.board_status }
       primary_topic_ref: { type: typed_ref, required: false }
-      primary_thread_ref: { type: typed_ref, required: false }
+      thread_id: { type: string, required: false, description: "Backing thread id for board timeline and events." }
       document_refs: { type: "list<typed_ref>", required: true }
       card_refs: { type: "list<typed_ref>", required: true }
       pinned_refs: { type: "list<typed_ref>", required: true }
@@ -284,7 +293,7 @@ resources:
       id: { type: string, required: true }
       board_ref: { type: typed_ref, required: true }
       topic_ref: { type: typed_ref, required: false }
-      thread_ref: { type: typed_ref, required: false }
+      thread_id: { type: string, required: false, description: "Backing thread id when the card is thread-scoped." }
       document_ref: { type: typed_ref, required: false }
       title: { type: string, required: true }
       summary: { type: string, required: true }
@@ -292,7 +301,7 @@ resources:
       rank: { type: string, required: true }
       assignee_refs: { type: "list<typed_ref>", required: true }
       risk: { type: string, required: true, ref: enums.work_item_risk }
-      resolution: { type: string, required: true, ref: enums.card_resolution }
+      resolution: { type: string, required: false, ref: enums.card_resolution, description: "Null while active; `done` or `canceled` when terminal." }
       resolution_refs: { type: "list<typed_ref>", required: true }
       related_refs: { type: "list<typed_ref>", required: true }
       created_at: { type: datetime, required: true }
@@ -495,7 +504,7 @@ grounding_rules:
   restricted_fields:
     description: Evidence-backed mutations require explicit provenance and refs.
     fields:
-      - "card.resolution -> completed"
+      - "card.resolution -> done"
       - "card.resolution -> canceled"
       - "topic.status -> resolved"
       - "any shipped/sent/deployed assertion"

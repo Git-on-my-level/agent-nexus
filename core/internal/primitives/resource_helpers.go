@@ -15,7 +15,6 @@ import (
 const (
 	refEdgeTypeRef                  = "ref"
 	refEdgeTypeBoardCard            = "board_card"
-	refEdgeTypeBoardPrimaryThread   = "primary_thread"
 	refEdgeTypeBoardPrimaryDocument = "primary_document"
 	refEdgeTypeBoardPinnedRef       = "pinned_ref"
 	refEdgeTypeCardParentThread     = "parent_thread"

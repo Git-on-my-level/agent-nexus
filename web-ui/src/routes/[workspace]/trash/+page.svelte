@@ -199,7 +199,7 @@
           await coreClient.restoreDocument(id, {});
           break;
         case "threads":
-          await coreClient.restoreThread(id, {});
+          await coreClient.restoreTopic(id, {});
           break;
         case "boards":
           await coreClient.restoreBoard(id, {});
@@ -235,9 +235,6 @@
           break;
         case "documents":
           await coreClient.purgeDocument(id, body);
-          break;
-        case "threads":
-          await coreClient.purgeThread(id, body);
           break;
         case "boards":
           await coreClient.purgeBoard(id, body);
@@ -316,9 +313,6 @@
           case "documents":
             await coreClient.purgeDocument(id, body);
             break;
-          case "threads":
-            await coreClient.purgeThread(id, body);
-            break;
           case "boards":
             await coreClient.purgeBoard(id, body);
             break;
@@ -363,12 +357,13 @@
     <h1 class="text-lg font-semibold text-[var(--ui-text)]">Trash</h1>
     <p class="mt-0.5 text-[12px] text-[var(--ui-text-muted)]">
       Tombstoned items available for restore or permanent deletion. Restore
-      returns them to their normal lists; purge permanently removes them (human
-      principals only). Tombstoned events and messages are restored from within
-      their thread's timeline view.
+      returns them to their normal lists; purge permanently removes supported
+      resource types (human principals only). Topics can be restored but not
+      purged from this surface yet. Tombstoned events and messages are restored
+      from within their timeline view.
     </p>
   </div>
-  {#if isHumanPrincipal && !loading && activeItems.length > 0 && (activeTab !== "cards" || $devActorMode)}
+  {#if isHumanPrincipal && !loading && activeItems.length > 0 && activeTab !== "threads" && (activeTab !== "cards" || $devActorMode)}
     <div class="shrink-0">
       <button
         class="cursor-pointer rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-[12px] font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
@@ -723,49 +718,7 @@
               >
                 Restore
               </button>
-              {#if isHumanPrincipal}
-                {#if purgeConfirmId !== itemBusyKey("threads", thread.id)}
-                  <button
-                    class="cursor-pointer rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-[12px] font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
-                    disabled={Boolean(busyItemId)}
-                    onclick={() => {
-                      purgeConfirmId = itemBusyKey("threads", thread.id);
-                    }}
-                    type="button"
-                  >
-                    Purge
-                  </button>
-                {/if}
-              {/if}
             </div>
-            {#if isHumanPrincipal && purgeConfirmId === itemBusyKey("threads", thread.id)}
-              <div
-                class="rounded-md border border-red-500/35 bg-red-500/5 p-2.5 text-[12px]"
-                role="region"
-                aria-label="Confirm purge"
-              >
-                <p class="font-medium text-red-300">
-                  {purgeConfirmLabel("threads")}
-                </p>
-                <div class="mt-2 flex flex-wrap justify-end gap-1.5">
-                  <button
-                    class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]"
-                    onclick={cancelPurge}
-                    type="button"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    class="cursor-pointer rounded-md bg-red-600 px-2.5 py-1.5 text-[12px] font-medium text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
-                    disabled={busyItemId === itemBusyKey("threads", thread.id)}
-                    onclick={() => confirmPurgeEntity("threads", thread.id)}
-                    type="button"
-                  >
-                    Confirm purge
-                  </button>
-                </div>
-              </div>
-            {/if}
           </div>
         </div>
       </div>

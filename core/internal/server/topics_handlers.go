@@ -688,18 +688,6 @@ func validateTopicWriteInput(contract *schema.Contract, topic map[string]any, cr
 		}
 	}
 
-	if raw, exists := topic["thread_ref"]; exists && raw != nil {
-		ref, ok := raw.(string)
-		if !ok || strings.TrimSpace(ref) == "" {
-			return fmt.Errorf("topic.thread_ref must be a typed ref string")
-		}
-		if err := schema.ValidateTypedRef(contract, strings.TrimSpace(ref)); err != nil {
-			return fmt.Errorf("topic.thread_ref: %w", err)
-		}
-		if !strings.HasPrefix(strings.TrimSpace(ref), "thread:") {
-			return fmt.Errorf("topic.thread_ref must use the thread: prefix")
-		}
-	}
 	if raw, exists := topic["thread_id"]; exists && raw != nil {
 		tid := strings.TrimSpace(anyString(raw))
 		if tid == "" {

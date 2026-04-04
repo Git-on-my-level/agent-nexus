@@ -56,20 +56,13 @@ func newManualProjectionTestServer(t *testing.T) manualProjectionHarness {
 		WithEnableDevActorMode(true),
 	)
 	server := httptest.NewServer(handler)
-	testServerLegacyWorkspaces.Store(server.URL, legacyTestWorkspaceContext{
-		primitiveStore:             primitiveStore,
-		actorStore:                 registry,
-		allowUnauthenticatedWrites: true,
-		maintainer:                 maintainer,
-	})
 	t.Cleanup(func() {
-		testServerLegacyWorkspaces.Delete(server.URL)
 		server.Close()
 		_ = workspace.Close()
 	})
 
 	return manualProjectionHarness{
-		primitivesTestHarness: primitivesTestHarness{workspace: workspace, baseURL: server.URL, maintainer: maintainer},
+		primitivesTestHarness: primitivesTestHarness{workspace: workspace, baseURL: server.URL, maintainer: maintainer, primitiveStore: primitiveStore},
 		store:                 primitiveStore,
 		maintainer:            maintainer,
 	}
@@ -140,34 +133,19 @@ func TestInboxReadDoesNotEmitStaleThreadExceptions(t *testing.T) {
 	h := newManualProjectionTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
 
-	resp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
-		"actor_id":"actor-1",
-		"thread":{
-			"title":"Pending stale thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p1",
-			"tags":["ops"],
-			"cadence":"daily",
-			"next_check_in_at":"2020-01-01T00:00:00Z",
-			"current_summary":"summary",
-			"next_actions":["check"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated)
-	defer resp.Body.Close()
-
-	var created struct {
-		Thread map[string]any `json:"thread"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
-		t.Fatalf("decode thread response: %v", err)
-	}
-	threadID := asString(created.Thread["id"])
-	if threadID == "" {
-		t.Fatal("expected thread id")
-	}
+	threadID := integrationSeedThread(t, h.primitivesTestHarness, "actor-1", map[string]any{
+		"title":            "Pending stale thread",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p1",
+		"tags":             []any{"ops"},
+		"cadence":          "daily",
+		"next_check_in_at": "2020-01-01T00:00:00Z",
+		"current_summary":  "summary",
+		"next_actions":     []any{"check"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
 
 	before := countStaleThreadExceptions(t, h.baseURL, threadID)
 	inboxResp, err := http.Get(h.baseURL + "/inbox")

@@ -145,7 +145,7 @@ MAIN_TOPIC_RESP="$(post_json "/topics" "$(cat <<JSON
 }
 JSON
 )")"
-MAIN_TOPIC_THREAD_ID="$(extract_first_field "$MAIN_TOPIC_RESP" "primary_thread_ref" | sed 's/^thread://')"
+MAIN_TOPIC_THREAD_ID="$(extract_first_field "$MAIN_TOPIC_RESP" "thread_id")"
 
 CARD_A_TOPIC_RESP="$(post_json "/topics" "$(cat <<JSON
 {
@@ -165,7 +165,7 @@ CARD_A_TOPIC_RESP="$(post_json "/topics" "$(cat <<JSON
 }
 JSON
 )")"
-CARD_A_THREAD_ID="$(extract_first_field "$CARD_A_TOPIC_RESP" "primary_thread_ref" | sed 's/^thread://')"
+CARD_A_THREAD_ID="$(extract_first_field "$CARD_A_TOPIC_RESP" "thread_id")"
 
 CARD_B_TOPIC_RESP="$(post_json "/topics" "$(cat <<JSON
 {
@@ -185,7 +185,7 @@ CARD_B_TOPIC_RESP="$(post_json "/topics" "$(cat <<JSON
 }
 JSON
 )")"
-CARD_B_THREAD_ID="$(extract_first_field "$CARD_B_TOPIC_RESP" "primary_thread_ref" | sed 's/^thread://')"
+CARD_B_THREAD_ID="$(extract_first_field "$CARD_B_TOPIC_RESP" "thread_id")"
 
 if [[ -z "$MAIN_TOPIC_THREAD_ID" || -z "$CARD_A_THREAD_ID" || -z "$CARD_B_THREAD_ID" ]]; then
   echo "failed to extract backing thread ids from topic creation responses" >&2
@@ -239,7 +239,7 @@ BOARD_RESP="$(post_json "/boards" "$(cat <<JSON
     "labels": ["smoke", "board"],
     "owners": ["${ACTOR_ID}"],
     "primary_topic_ref": "topic:${MAIN_TOPIC_ID}",
-    "primary_thread_ref": "thread:${MAIN_TOPIC_THREAD_ID}",
+    "thread_id": "${BOARD_ID}",
     "document_refs": ["document:${PRIMARY_DOC_ID}"],
     "card_refs": [],
     "pinned_refs": ["document:${PRIMARY_DOC_ID}"],

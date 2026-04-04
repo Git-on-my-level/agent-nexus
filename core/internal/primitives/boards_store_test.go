@@ -342,7 +342,7 @@ func TestBoardStoreMoveCardResolutionTransitions(t *testing.T) {
 
 	_, err = store.MoveBoardCard(ctx, "actor-3", boardID, cardThreadA, primitives.MoveBoardCardInput{
 		ColumnKey:        "done",
-		Resolution:       stringPtr("completed"),
+		Resolution:       stringPtr("done"),
 		IfBoardUpdatedAt: &firstMoveBoardUpdatedAt,
 	})
 	if !errors.Is(err, primitives.ErrInvalidBoardRequest) {
@@ -352,14 +352,15 @@ func TestBoardStoreMoveCardResolutionTransitions(t *testing.T) {
 	evidenceRefs := []string{"event:card-completion-1"}
 	movedDone, err := store.MoveBoardCard(ctx, "actor-3", boardID, cardThreadA, primitives.MoveBoardCardInput{
 		ColumnKey:        "done",
-		Resolution:       stringPtr("completed"),
+		Resolution:       stringPtr("done"),
 		ResolutionRefs:   &evidenceRefs,
 		IfBoardUpdatedAt: &firstMoveBoardUpdatedAt,
 	})
 	if err != nil {
 		t.Fatalf("move done card with evidence: %v", err)
 	}
-	if movedDone.Card["column_key"] != "done" || movedDone.Card["resolution"] != "completed" {
+	res, _ := movedDone.Card["resolution"].(string)
+	if movedDone.Card["column_key"] != "done" || res != "done" {
 		t.Fatalf("unexpected terminal move result: %#v", movedDone.Card)
 	}
 	if got := movedDone.Card["resolution_refs"]; !reflect.DeepEqual(got, []any{"event:card-completion-1"}) && !reflect.DeepEqual(got, []string{"event:card-completion-1"}) {

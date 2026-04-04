@@ -204,12 +204,16 @@ test("receipt form validates typed refs and creates receipt that appears in time
     });
   });
 
-  await page.route(/\/receipts$/, async (route) => {
+  await page.route(/\/(receipts|packets\/receipts)$/, async (route) => {
     postedPayload = JSON.parse(route.request().postData() ?? "{}");
     const receiptId =
       postedPayload.artifact?.id ??
       postedPayload.packet?.receipt_id ??
       createdReceiptId;
+    const subjectRef = String(postedPayload.packet?.subject_ref ?? "");
+    const backingThreadId = subjectRef.includes(":")
+      ? subjectRef.split(":").slice(1).join(":").trim()
+      : "";
 
     createdReceiptPacket = {
       ...postedPayload.packet,
@@ -218,7 +222,7 @@ test("receipt form validates typed refs and creates receipt that appears in time
     createdReceiptArtifact = {
       id: receiptId,
       kind: "receipt",
-      thread_id: postedPayload.packet.thread_id,
+      thread_id: backingThreadId,
       refs: postedPayload.artifact.refs,
       summary: postedPayload.artifact.summary,
       provenance: { sources: ["actor_statement:ui"] },
@@ -229,10 +233,11 @@ test("receipt form validates typed refs and creates receipt that appears in time
       ts: "2026-03-04T06:00:00.000Z",
       type: "receipt_added",
       actor_id: postedPayload.actor_id,
-      thread_id: postedPayload.packet.thread_id,
+      thread_id: backingThreadId,
       refs: [
         `artifact:${receiptId}`,
         `artifact:${postedPayload.packet.work_order_id}`,
+        subjectRef,
       ],
       summary: `Receipt added: ${postedPayload.artifact.summary}`,
       payload: {
@@ -282,7 +287,8 @@ test("receipt form validates typed refs and creates receipt that appears in time
   expect(postedPayload.artifact.id).toBeUndefined();
   expect(postedPayload.packet).not.toHaveProperty("receipt_id");
   expect(postedPayload.packet).toMatchObject({
-    thread_id: "thread-onboarding",
+    subject_ref: "thread:thread-onboarding",
+    work_order_ref: `artifact:${workOrderId}`,
     work_order_id: workOrderId,
     outputs: ["artifact:artifact-output-1"],
     verification_evidence: ["artifact:artifact-evidence-1"],

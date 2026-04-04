@@ -1,6 +1,6 @@
 import { json } from "@sveltejs/kit";
 
-import { listMockArtifacts } from "$lib/mockCoreData";
+import { artifactForApiResponse, listMockArtifacts } from "$lib/mockCoreData";
 import { assertMockModeEnabled } from "$lib/server/mockGuard";
 
 export function GET({ url }) {
@@ -20,6 +20,6 @@ export function GET({ url }) {
   };
 
   return json({
-    artifacts: listMockArtifacts(filters),
+    artifacts: listMockArtifacts(filters).map(artifactForApiResponse),
   });
 }

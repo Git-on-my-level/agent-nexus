@@ -1713,21 +1713,26 @@ function cardRiskFromThreadPriority(priority) {
 
 function cardResolutionFromRow(card) {
   const explicit = String(card?.resolution ?? "").trim();
-  if (
-    ["unresolved", "completed", "canceled", "superseded"].includes(explicit)
-  ) {
+  if (explicit === "done" || explicit === "canceled") {
     return explicit;
+  }
+  if (explicit === "completed") {
+    return "done";
+  }
+  if (explicit === "unresolved" || explicit === "superseded" || !explicit) {
+    // Open card — canonical contract uses null
+    return null;
   }
 
   const status = String(card?.status ?? "").trim();
   if (status === "done") {
-    return "completed";
+    return "done";
   }
   if (status === "cancelled" || status === "archived") {
     return "canceled";
   }
 
-  return "unresolved";
+  return null;
 }
 
 function buildCanonicalTopicSeed(thread) {
@@ -1757,7 +1762,6 @@ function buildCanonicalTopicSeed(thread) {
     board_refs: boardRefs,
     document_refs: documentRefs,
     related_refs: [...new Set(relatedRefs)],
-    primary_thread_ref: threadId ? `thread:${threadId}` : null,
     created_at: thread?.created_at ?? null,
     created_by: thread?.created_by ?? thread?.updated_by ?? "unknown",
     updated_at: thread?.updated_at ?? thread?.created_at ?? null,
@@ -1773,7 +1777,7 @@ function buildCanonicalCardSeed(card) {
     ? threads.find((entry) => entry.id === threadId)
     : null;
   const topicRef = threadId ? `topic:${threadId}` : null;
-  const threadRef = threadId ? `thread:${threadId}` : null;
+  const threadTypedRef = threadId ? `thread:${threadId}` : null;
   const boardRef = boardId ? `board:${boardId}` : null;
   const documentId = String(card?.pinned_document_id ?? "").trim();
   const documentRef = documentId ? `document:${documentId}` : null;
@@ -1791,7 +1795,6 @@ function buildCanonicalCardSeed(card) {
     parent_thread: threadId || null,
     board_ref: boardRef,
     topic_ref: topicRef,
-    thread_ref: threadRef,
     document_ref: documentRef,
     title:
       String(card?.title ?? thread?.title ?? summary ?? "").trim() || summary,
@@ -1809,7 +1812,7 @@ function buildCanonicalCardSeed(card) {
     related_refs: [
       boardRef,
       topicRef,
-      threadRef,
+      threadTypedRef,
       documentRef,
       ...(Array.isArray(card?.related_refs) ? card.related_refs : []),
     ].filter(Boolean),
@@ -2209,7 +2212,7 @@ export function listMockTopics(filters = {}) {
     title: thread.title,
     summary: thread.current_summary ?? "",
     owner_refs: thread.created_by ? [`actor:${thread.created_by}`] : [],
-    primary_thread_ref: `thread:${thread.id}`,
+    thread_id: thread.id,
     document_refs: listMockDocuments({ thread_id: thread.id }).map(
       (doc) => `document:${doc.id}`,
     ),
@@ -2256,9 +2259,11 @@ function listMockOpenCardsForThread(threadId) {
       return refs.some((ref) => threadRefs.has(ref));
     })
     .map((card) => normalizeMockBoardCard(card))
-    .filter(
-      (row) => row && String(row.resolution ?? "").trim() === "unresolved",
-    );
+    .filter((row) => {
+      if (!row) return false;
+      const r = String(row.resolution ?? "").trim();
+      return !r || r === "unresolved";
+    });
 }
 
 function artifactContentPreview(content) {
@@ -2473,6 +2478,38 @@ export function updateMockThread({
   return { thread: next };
 }
 
+function resolveMockSubjectBackingThreadId(subjectRef, explicitThreadId = "") {
+  const direct = String(explicitThreadId ?? "").trim();
+  if (direct) {
+    return direct;
+  }
+
+  const normalizedRef = String(subjectRef ?? "").trim();
+  if (!normalizedRef) {
+    return "";
+  }
+  if (normalizedRef.startsWith("thread:")) {
+    return normalizedRef.slice("thread:".length).trim();
+  }
+  if (normalizedRef.startsWith("topic:")) {
+    const topicId = normalizedRef.slice("topic:".length).trim();
+    return String(getMockTopic(topicId)?.thread_id ?? "").trim() || topicId;
+  }
+  if (normalizedRef.startsWith("document:")) {
+    const documentId = normalizedRef.slice("document:".length).trim();
+    return String(getMockDocument(documentId)?.thread_id ?? "").trim();
+  }
+  if (normalizedRef.startsWith("board:")) {
+    const boardId = normalizedRef.slice("board:".length).trim();
+    return String(getMockBoard(boardId)?.thread_id ?? "").trim();
+  }
+  if (normalizedRef.startsWith("card:")) {
+    const cardId = normalizedRef.slice("card:".length).trim();
+    return String(getMockCard(cardId)?.thread_id ?? "").trim();
+  }
+  return "";
+}
+
 export function createMockWorkOrder({ actor_id, artifact = {}, packet = {} }) {
   const requestKey = String(arguments[0]?.request_key ?? "").trim();
   const issuedArtifactId =
@@ -2486,7 +2523,8 @@ export function createMockWorkOrder({ actor_id, artifact = {}, packet = {} }) {
       : "";
   const artifactId = String(artifact.id ?? issuedArtifactId).trim();
   const packetId = String(packet.work_order_id ?? artifactId).trim();
-  const threadId = String(packet.thread_id ?? artifact.thread_id ?? "").trim();
+  const subjectRef = String(packet.subject_ref ?? "").trim();
+  const threadId = String(artifact.thread_id ?? "").trim();
 
   if (!artifactId) {
     return { error: "validation", message: "artifact.id is required." };
@@ -2506,8 +2544,19 @@ export function createMockWorkOrder({ actor_id, artifact = {}, packet = {} }) {
     };
   }
 
-  if (!threadId) {
-    return { error: "validation", message: "packet.thread_id is required." };
+  if (!subjectRef) {
+    return { error: "validation", message: "packet.subject_ref is required." };
+  }
+
+  const backingThreadId = resolveMockSubjectBackingThreadId(
+    subjectRef,
+    threadId,
+  );
+  if (!backingThreadId) {
+    return {
+      error: "validation",
+      message: "artifact.thread_id or a topic-scoped subject_ref is required.",
+    };
   }
 
   if (!packet.objective) {
@@ -2557,19 +2606,18 @@ export function createMockWorkOrder({ actor_id, artifact = {}, packet = {} }) {
     };
   }
 
-  const threadRef = `thread:${threadId}`;
   const artifactRefs = normalizeRefList(artifact.refs);
-  if (!artifactRefs.includes(threadRef)) {
+  if (!artifactRefs.includes(subjectRef)) {
     return {
       error: "validation",
-      message: "artifact.refs must include thread:<thread_id>.",
+      message: "artifact.refs must include packet.subject_ref.",
     };
   }
 
   const createdArtifact = {
     id: artifactId,
     kind: "work_order",
-    thread_id: threadId,
+    thread_id: backingThreadId,
     summary: String(artifact.summary ?? packet.objective).trim(),
     refs: artifactRefs,
     created_at: new Date().toISOString(),
@@ -2579,7 +2627,7 @@ export function createMockWorkOrder({ actor_id, artifact = {}, packet = {} }) {
     },
     packet: {
       work_order_id: packetId,
-      thread_id: threadId,
+      subject_ref: subjectRef,
       objective: String(packet.objective).trim(),
       constraints,
       context_refs: contextRefs,
@@ -2595,8 +2643,8 @@ export function createMockWorkOrder({ actor_id, artifact = {}, packet = {} }) {
     ts: new Date().toISOString(),
     type: "work_order_created",
     actor_id,
-    thread_id: threadId,
-    refs: [`artifact:${artifactId}`, threadRef],
+    thread_id: backingThreadId,
+    refs: [`artifact:${artifactId}`, subjectRef],
     summary: `Work order created: ${createdArtifact.summary}`,
     payload: {
       artifact_id: artifactId,
@@ -2664,6 +2712,54 @@ export function listMockArtifacts(filters = {}) {
   });
 }
 
+function mockTopicSubjectRefFromThreadId(threadId) {
+  const tid = String(threadId ?? "").trim();
+  return tid ? `topic:${tid}` : "";
+}
+
+export function normalizePacketShapeForClient(packet, kind, threadId) {
+  if (!packet || typeof packet !== "object") return packet;
+  const p = { ...packet };
+  const inferredSubject =
+    String(p.subject_ref ?? "").trim() ||
+    mockTopicSubjectRefFromThreadId(threadId);
+  if (inferredSubject) {
+    p.subject_ref = inferredSubject;
+  }
+  delete p.thread_id;
+  const k = String(kind ?? "");
+  if (k === "receipt") {
+    const woid = String(p.work_order_id ?? "").trim();
+    if (woid && !String(p.work_order_ref ?? "").trim()) {
+      p.work_order_ref = `artifact:${woid}`;
+    }
+  }
+  if (k === "review") {
+    const woid = String(p.work_order_id ?? "").trim();
+    const rid = String(p.receipt_id ?? "").trim();
+    if (woid && !String(p.work_order_ref ?? "").trim()) {
+      p.work_order_ref = `artifact:${woid}`;
+    }
+    if (rid && !String(p.receipt_ref ?? "").trim()) {
+      p.receipt_ref = `artifact:${rid}`;
+    }
+  }
+  return p;
+}
+
+export function artifactForApiResponse(artifact) {
+  if (!artifact) return null;
+  const base = { ...artifact };
+  const k = String(base.kind ?? "");
+  if (
+    base.packet &&
+    (k === "work_order" || k === "receipt" || k === "review")
+  ) {
+    base.packet = normalizePacketShapeForClient(base.packet, k, base.thread_id);
+  }
+  return base;
+}
+
 export function getMockArtifact(artifactId) {
   return artifacts.find((artifact) => artifact.id === artifactId) ?? null;
 }
@@ -2687,7 +2783,11 @@ export function getMockArtifactContent(artifactId) {
   if (artifact.packet) {
     return {
       contentType: "application/json",
-      content: artifact.packet,
+      content: normalizePacketShapeForClient(
+        artifact.packet,
+        artifact.kind,
+        artifact.thread_id,
+      ),
     };
   }
 
@@ -2926,8 +3026,16 @@ export function createMockReceipt({ actor_id, artifact = {}, packet = {} }) {
       : "";
   const artifactId = String(artifact.id ?? issuedArtifactId).trim();
   const packetId = String(packet.receipt_id ?? artifactId).trim();
-  const threadId = String(packet.thread_id ?? artifact.thread_id ?? "").trim();
-  const workOrderId = String(packet.work_order_id ?? "").trim();
+  const subjectRef = String(packet.subject_ref ?? "").trim();
+  const workOrderRef =
+    String(packet.work_order_ref ?? "").trim() ||
+    (String(packet.work_order_id ?? "").trim()
+      ? `artifact:${String(packet.work_order_id).trim()}`
+      : "");
+  const workOrderId = workOrderRef.startsWith("artifact:")
+    ? workOrderRef.slice("artifact:".length).trim()
+    : String(packet.work_order_id ?? "").trim();
+  const threadId = String(artifact.thread_id ?? "").trim();
 
   if (!artifactId) {
     return { error: "validation", message: "artifact.id is required." };
@@ -2944,14 +3052,25 @@ export function createMockReceipt({ actor_id, artifact = {}, packet = {} }) {
     };
   }
 
-  if (!threadId) {
-    return { error: "validation", message: "packet.thread_id is required." };
+  if (!subjectRef) {
+    return { error: "validation", message: "packet.subject_ref is required." };
   }
 
-  if (!workOrderId) {
+  if (!workOrderRef || !workOrderId) {
     return {
       error: "validation",
-      message: "packet.work_order_id is required.",
+      message: "packet.work_order_ref (or work_order_id) is required.",
+    };
+  }
+
+  const backingThreadId = resolveMockSubjectBackingThreadId(
+    subjectRef,
+    threadId,
+  );
+  if (!backingThreadId) {
+    return {
+      error: "validation",
+      message: "artifact.thread_id or a topic-scoped subject_ref is required.",
     };
   }
 
@@ -2994,25 +3113,23 @@ export function createMockReceipt({ actor_id, artifact = {}, packet = {} }) {
     };
   }
 
-  const threadRef = `thread:${threadId}`;
-  const workOrderRef = `artifact:${workOrderId}`;
   const artifactRefs = normalizeRefList(artifact.refs);
 
   if (
-    !artifactRefs.includes(threadRef) ||
+    !artifactRefs.includes(subjectRef) ||
     !artifactRefs.includes(workOrderRef)
   ) {
     return {
       error: "validation",
       message:
-        "artifact.refs must include thread:<thread_id> and artifact:<work_order_id>.",
+        "artifact.refs must include packet.subject_ref and work_order_ref.",
     };
   }
 
   const createdArtifact = {
     id: artifactId,
     kind: "receipt",
-    thread_id: threadId,
+    thread_id: backingThreadId,
     summary: String(artifact.summary ?? `Receipt for ${workOrderId}`).trim(),
     refs: artifactRefs,
     created_at: new Date().toISOString(),
@@ -3022,8 +3139,9 @@ export function createMockReceipt({ actor_id, artifact = {}, packet = {} }) {
     },
     packet: {
       receipt_id: packetId,
+      subject_ref: subjectRef,
+      work_order_ref: workOrderRef,
       work_order_id: workOrderId,
-      thread_id: threadId,
       outputs,
       verification_evidence: verificationEvidence,
       changes_summary: changesSummary,
@@ -3038,8 +3156,8 @@ export function createMockReceipt({ actor_id, artifact = {}, packet = {} }) {
     ts: new Date().toISOString(),
     type: "receipt_added",
     actor_id,
-    thread_id: threadId,
-    refs: [`artifact:${artifactId}`, `artifact:${workOrderId}`, threadRef],
+    thread_id: backingThreadId,
+    refs: [`artifact:${artifactId}`, workOrderRef, subjectRef],
     summary: `Receipt added: ${createdArtifact.summary}`,
     payload: {
       artifact_id: artifactId,
@@ -3058,8 +3176,23 @@ export function createMockReceipt({ actor_id, artifact = {}, packet = {} }) {
 export function createMockReview({ actor_id, artifact = {}, packet = {} }) {
   const artifactId = String(artifact.id ?? "").trim();
   const packetId = String(packet.review_id ?? "").trim();
-  const receiptId = String(packet.receipt_id ?? "").trim();
-  const workOrderId = String(packet.work_order_id ?? "").trim();
+  const receiptRef =
+    String(packet.receipt_ref ?? "").trim() ||
+    (String(packet.receipt_id ?? "").trim()
+      ? `artifact:${String(packet.receipt_id).trim()}`
+      : "");
+  const workOrderRef =
+    String(packet.work_order_ref ?? "").trim() ||
+    (String(packet.work_order_id ?? "").trim()
+      ? `artifact:${String(packet.work_order_id).trim()}`
+      : "");
+  const receiptId = receiptRef.startsWith("artifact:")
+    ? receiptRef.slice("artifact:".length).trim()
+    : String(packet.receipt_id ?? "").trim();
+  const workOrderId = workOrderRef.startsWith("artifact:")
+    ? workOrderRef.slice("artifact:".length).trim()
+    : String(packet.work_order_id ?? "").trim();
+  const subjectRef = String(packet.subject_ref ?? "").trim();
   const threadId = String(artifact.thread_id ?? "").trim();
 
   if (!artifactId) {
@@ -3077,18 +3210,29 @@ export function createMockReview({ actor_id, artifact = {}, packet = {} }) {
     };
   }
 
-  if (!threadId) {
-    return { error: "validation", message: "artifact.thread_id is required." };
+  if (!subjectRef) {
+    return { error: "validation", message: "packet.subject_ref is required." };
   }
 
-  if (!receiptId) {
-    return { error: "validation", message: "packet.receipt_id is required." };
-  }
-
-  if (!workOrderId) {
+  const backingThreadId = resolveMockSubjectBackingThreadId(
+    subjectRef,
+    threadId,
+  );
+  if (!backingThreadId) {
     return {
       error: "validation",
-      message: "packet.work_order_id is required.",
+      message: "artifact.thread_id or a topic-scoped subject_ref is required.",
+    };
+  }
+
+  if (!receiptId || !receiptRef) {
+    return { error: "validation", message: "packet.receipt_ref is required." };
+  }
+
+  if (!workOrderId || !workOrderRef) {
+    return {
+      error: "validation",
+      message: "packet.work_order_ref is required.",
     };
   }
 
@@ -3114,27 +3258,24 @@ export function createMockReview({ actor_id, artifact = {}, packet = {} }) {
     };
   }
 
-  const threadRef = `thread:${threadId}`;
-  const receiptRef = `artifact:${receiptId}`;
-  const workOrderRef = `artifact:${workOrderId}`;
   const artifactRefs = normalizeRefList(artifact.refs);
 
   if (
-    !artifactRefs.includes(threadRef) ||
+    !artifactRefs.includes(subjectRef) ||
     !artifactRefs.includes(receiptRef) ||
     !artifactRefs.includes(workOrderRef)
   ) {
     return {
       error: "validation",
       message:
-        "artifact.refs must include thread:<thread_id>, artifact:<receipt_id>, and artifact:<work_order_id>.",
+        "artifact.refs must include subject_ref, receipt_ref, and work_order_ref.",
     };
   }
 
   const createdArtifact = {
     id: artifactId,
     kind: "review",
-    thread_id: threadId,
+    thread_id: backingThreadId,
     summary: String(
       artifact.summary ?? `Review (${outcome}) for ${receiptId}`,
     ).trim(),
@@ -3146,6 +3287,9 @@ export function createMockReview({ actor_id, artifact = {}, packet = {} }) {
     },
     packet: {
       review_id: packetId,
+      subject_ref: subjectRef,
+      work_order_ref: workOrderRef,
+      receipt_ref: receiptRef,
       work_order_id: workOrderId,
       receipt_id: receiptId,
       outcome,
@@ -3161,13 +3305,8 @@ export function createMockReview({ actor_id, artifact = {}, packet = {} }) {
     ts: new Date().toISOString(),
     type: "review_completed",
     actor_id,
-    thread_id: threadId,
-    refs: [
-      `artifact:${artifactId}`,
-      `artifact:${receiptId}`,
-      `artifact:${workOrderId}`,
-      threadRef,
-    ],
+    thread_id: backingThreadId,
+    refs: [`artifact:${artifactId}`, receiptRef, workOrderRef, subjectRef],
     summary: `Review completed (${outcome})`,
     payload: {
       artifact_id: artifactId,
@@ -3543,7 +3682,6 @@ function normalizeMockBoardCard(card) {
         ? [String(card.assignee).trim()]
         : [];
 
-  const threadRef = normalizeCardRef("thread", threadId);
   const rawTopicRef = String(card.topic_ref ?? "").trim();
   const topicRef = rawTopicRef
     ? rawTopicRef.includes(":")
@@ -3564,12 +3702,32 @@ function normalizeMockBoardCard(card) {
     String(thread?.title ?? "").trim() ||
     String(card.title ?? "").trim();
 
-  return {
+  const threadRefForRelated = normalizeCardRef("thread", threadId);
+  let nextResolution = null;
+  if (resolution === "completed" || resolution === "done") {
+    nextResolution = "done";
+  } else if (resolution === "canceled" || resolution === "cancelled") {
+    nextResolution = "canceled";
+  } else if (
+    !resolution ||
+    resolution === "unresolved" ||
+    resolution === "superseded"
+  ) {
+    const st = String(card.status ?? "").trim();
+    if (st === "done") {
+      nextResolution = "done";
+    } else if (st === "cancelled" || st === "archived") {
+      nextResolution = "canceled";
+    } else if (String(card.column_key ?? "").trim() === "done") {
+      nextResolution = "done";
+    }
+  }
+
+  const normalized = {
     ...card,
     id: cardId,
     board_ref: boardRef,
     topic_ref: topicRef || null,
-    thread_ref: threadRef || null,
     document_ref: documentRef || null,
     archived_at: card.archived_at ?? null,
     archived_by: card.archived_by ?? null,
@@ -3582,21 +3740,17 @@ function normalizeMockBoardCard(card) {
     definition_of_done: definitionOfDone,
     assignee_refs: assigneeRefs,
     risk: String(card.risk ?? "").trim() || "medium",
-    resolution:
-      resolution ||
-      (String(card.status ?? "").trim() === "done"
-        ? "completed"
-        : String(card.status ?? "").trim() === "cancelled"
-          ? "canceled"
-          : String(card.column_key ?? "").trim() === "done"
-            ? "completed"
-            : "unresolved"),
+    resolution: nextResolution,
     resolution_refs: resolutionRefs,
     related_refs:
       relatedRefs.length > 0
         ? relatedRefs
-        : [threadRef, topicRef || null, documentRef || null].filter(Boolean),
+        : [threadRefForRelated, topicRef || null, documentRef || null].filter(
+            Boolean,
+          ),
   };
+  delete normalized.thread_ref;
+  return normalized;
 }
 
 function getBoardColumnCards(boardId) {
@@ -3723,7 +3877,8 @@ function buildBoardSummary(board) {
   for (const card of cards) {
     cardsByColumn[card.column_key] = (cardsByColumn[card.column_key] ?? 0) + 1;
     const normalized = normalizeMockBoardCard(card);
-    if (String(normalized?.resolution ?? "").trim() === "unresolved") {
+    const res = String(normalized?.resolution ?? "").trim();
+    if (!res || res === "unresolved") {
       unresolvedCardCount += 1;
     } else {
       resolvedCardCount += 1;
@@ -3817,7 +3972,7 @@ function buildBoardWorkspaceCard(card) {
     return {
       membership: { ...normalizedCard },
       backing: {
-        thread_ref: threadId ? `thread:${threadId}` : null,
+        thread_id: threadId || null,
         thread: null,
         pinned_document_ref: documentId ? `document:${documentId}` : null,
         pinned_document: pinnedDocument ? { ...pinnedDocument } : null,
@@ -3865,7 +4020,7 @@ function buildBoardWorkspaceCard(card) {
   return {
     membership: { ...normalizedCard },
     backing: {
-      thread_ref: `thread:${threadId}`,
+      thread_id: threadId,
       thread: { ...thread },
       pinned_document_ref: documentId ? `document:${documentId}` : null,
       pinned_document: pinnedDocument ? { ...pinnedDocument } : null,
@@ -4223,7 +4378,6 @@ export function createMockBoardCard(boardId, payload) {
     thread_id: threadId || null,
     parent_thread: threadId || null,
     topic_ref: payload.topic_ref ?? null,
-    thread_ref: payload.thread_ref ?? null,
     document_ref: payload.document_ref ?? null,
     title: threadId ? title || (getMockThread(threadId)?.title ?? "") : title,
     summary:
@@ -4241,7 +4395,13 @@ export function createMockBoardCard(boardId, payload) {
       ? payload.assignee_refs
       : [],
     risk: String(payload.risk ?? "").trim() || "medium",
-    resolution: String(payload.resolution ?? "").trim() || "unresolved",
+    resolution: (() => {
+      const r = String(payload.resolution ?? "").trim();
+      if (!r) return null;
+      if (r === "completed") return "done";
+      if (r === "done" || r === "canceled") return r;
+      return null;
+    })(),
     resolution_refs: Array.isArray(payload.resolution_refs)
       ? payload.resolution_refs
       : [],
@@ -4524,29 +4684,54 @@ export function updateMockBoardCard(boardId, cardId, payload) {
     }
   }
 
-  if (Object.prototype.hasOwnProperty.call(patch, "thread_ref")) {
-    const value = String(patch.thread_ref ?? "").trim();
-    const next = value || null;
-    const threadAnchor = splitTypedRef(next);
-    if (next && threadAnchor.prefix === "thread") {
-      card.thread_id = threadAnchor.id;
-      card.parent_thread = threadAnchor.id;
-    } else if (next && !threadAnchor.prefix) {
-      card.thread_id = next;
-      card.parent_thread = next;
-    } else if (!next) {
+  function applyThreadAnchorFromPatch(raw) {
+    if (raw === null || raw === undefined || raw === "") {
       card.thread_id = null;
       card.parent_thread = null;
+      return true;
     }
-    if (card.thread_ref !== next) {
-      card.thread_ref = next;
+    const value = String(raw ?? "").trim();
+    const typed = splitTypedRef(value);
+    if (value && typed.prefix === "thread") {
+      card.thread_id = typed.id;
+      card.parent_thread = typed.id;
+      return true;
+    }
+    if (value && !typed.prefix) {
+      card.thread_id = value;
+      card.parent_thread = value;
+      return true;
+    }
+    if (!value) {
+      card.thread_id = null;
+      card.parent_thread = null;
+      return true;
+    }
+    return false;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, "thread_id")) {
+    if (applyThreadAnchorFromPatch(patch.thread_id)) {
       mutated = true;
     }
+    delete card.thread_ref;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, "thread_ref")) {
+    if (applyThreadAnchorFromPatch(patch.thread_ref)) {
+      mutated = true;
+    }
+    delete card.thread_ref;
   }
 
   if (Object.prototype.hasOwnProperty.call(patch, "resolution")) {
-    const value = String(patch.resolution ?? "").trim();
-    const next = value || "unresolved";
+    const raw = patch.resolution;
+    let next = null;
+    if (raw !== null && raw !== undefined && String(raw).trim() !== "") {
+      const value = String(raw).trim();
+      if (value === "completed") next = "done";
+      else if (value === "done" || value === "canceled") next = value;
+    }
     if (card.resolution !== next) {
       card.resolution = next;
       mutated = true;
@@ -4642,13 +4827,18 @@ export function moveMockBoardCard(boardId, cardId, payload) {
 
   if (Object.prototype.hasOwnProperty.call(payload, "resolution")) {
     const moveResolution = String(payload.resolution ?? "").trim();
-    if (moveResolution === "completed") {
-      card.resolution = "completed";
+    if (moveResolution === "completed" || moveResolution === "done") {
+      card.resolution = "done";
     } else if (moveResolution === "canceled") {
       card.resolution = "canceled";
     }
-  } else if (columnKey === "done" && card.resolution === "unresolved") {
-    card.resolution = "completed";
+  } else if (
+    columnKey === "done" &&
+    (!card.resolution ||
+      card.resolution === "unresolved" ||
+      String(card.resolution).trim() === "")
+  ) {
+    card.resolution = "done";
   }
 
   if (Object.prototype.hasOwnProperty.call(payload, "resolution_refs")) {

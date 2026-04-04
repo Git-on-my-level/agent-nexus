@@ -248,8 +248,17 @@
     reviseFollowupLink = "";
     submittingReview = true;
     const reviewId = generateReviewId();
+    const subjectRef =
+      String(receiptPacket?.subject_ref ?? "").trim() ||
+      (() => {
+        const first = (artifact.refs ?? []).find((r) =>
+          /^(topic|thread):/.test(String(r)),
+        );
+        return first ? String(first).trim() : "";
+      })() ||
+      (artifact.thread_id ? `thread:${artifact.thread_id}` : "");
     const payload = buildReviewPayload(reviewDraft, {
-      threadId: artifact.thread_id,
+      subjectRef,
       receiptId: artifact.id,
       workOrderId: receiptPacket.work_order_id,
       reviewId,
@@ -741,10 +750,11 @@
             /></span
           >
           <span class="flex items-center gap-1"
-            >Topic: <RefLink
+            >Subject: <RefLink
               humanize
               labelHints={artifactRefHints}
-              refValue={`thread:${receiptPacket.thread_id}`}
+              refValue={String(receiptPacket.subject_ref ?? "").trim() ||
+                `thread:${receiptPacket.thread_id ?? ""}`}
               showRaw
             /></span
           >

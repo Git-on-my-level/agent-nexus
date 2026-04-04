@@ -41,11 +41,7 @@ func TestTopicWorkspaceResolvesBoardsCardsAndDocsViaRefEdges(t *testing.T) {
 		t.Fatalf("decode create topic response: %v", err)
 	}
 	topicID := asString(createdTopic.Topic["id"])
-	primaryThreadRef := asString(createdTopic.Topic["thread_ref"])
-	primaryThreadID := asStringFromTypedRef(primaryThreadRef)
-	if primaryThreadID == "" {
-		primaryThreadID = asString(createdTopic.Topic["thread_id"])
-	}
+	primaryThreadID := asString(createdTopic.Topic["thread_id"])
 	if topicID == "" || primaryThreadID == "" {
 		t.Fatalf("expected topic id and primary thread, got %#v", createdTopic.Topic)
 	}

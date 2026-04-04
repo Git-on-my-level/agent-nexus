@@ -23,15 +23,15 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 - `auth` (group): Register, inspect, and manage auth state
 - `topics` (group): Manage durable work subjects
 - `cards` (group): Manage board-scoped cards
-- `threads` (group): Inspect thread resources and coordination views
+- `threads` (group): Read-only backing-thread inspection (tooling and diagnostics)
 - `artifacts` (group): Manage artifact resources and content
 - `boards` (group): Manage board resources and ordered cards
 - `docs` (group): Manage long-lived docs and revisions
 - `events` (group): Manage events and event streams
 - `inbox` (group): List/get/ack/stream inbox items
-- `work-orders` (group): Create work-order packets
-- `receipts` (group): Create receipt packets
-- `reviews` (group): Create review packets
+- `work-orders` (group): Create work-order packets (packet.subject_ref required)
+- `receipts` (group): Create receipt packets (subject_ref + work_order_ref)
+- `reviews` (group): Create review packets (subject_ref + receipt_ref + work_order_ref)
 - `derived` (group): Run derived-view maintenance actions
 - `meta` (group): Inspect generated command/concept metadata
 - `threads list` (command): List backing threads
@@ -1140,7 +1140,7 @@ Tip: `oar help <command path>` for full command-level generated details.
 
 ## `threads`
 
-Inspect thread resources and coordination views
+Read-only backing-thread inspection (tooling and diagnostics)
 
 ```text
 Generated Help: threads
@@ -1286,7 +1286,7 @@ Tip: `oar help <command path>` for full command-level generated details.
 
 ## `work-orders`
 
-Create work-order packets
+Create work-order packets (packet.subject_ref required)
 
 ```text
 Generated Help: work-orders
@@ -1304,7 +1304,7 @@ Tip: `oar help <command path>` for full command-level generated details.
 
 ## `receipts`
 
-Create receipt packets
+Create receipt packets (subject_ref + work_order_ref)
 
 ```text
 Generated Help: receipts
@@ -1322,7 +1322,7 @@ Tip: `oar help <command path>` for full command-level generated details.
 
 ## `reviews`
 
-Create review packets
+Create review packets (subject_ref + receipt_ref + work_order_ref)
 
 ```text
 Generated Help: reviews
@@ -1549,9 +1549,9 @@ Inputs:
   - body `topic.title` (string)
   - body `topic.type` (string)
   Optional:
-  - body `topic.primary_thread_ref` (string)
   - body `topic.provenance.by_field` (object)
   - body `topic.provenance.notes` (string)
+  - body `topic.thread_id` (string)
   Enum values: topic.status: active, archived, blocked, proposed, resolved; topic.type: decision, incident, initiative, note, objective, other, request, risk
 
 Global flags:
@@ -1586,13 +1586,13 @@ Inputs:
   - body `patch.board_refs` (list<any>)
   - body `patch.document_refs` (list<any>)
   - body `patch.owner_refs` (list<any>)
-  - body `patch.primary_thread_ref` (string)
   - body `patch.provenance.by_field` (object)
   - body `patch.provenance.notes` (string)
   - body `patch.provenance.sources` (list<string>)
   - body `patch.related_refs` (list<any>)
   - body `patch.status` (string)
   - body `patch.summary` (string)
+  - body `patch.thread_id` (string)
   - body `patch.title` (string)
   - body `patch.type` (string)
   Enum values: patch.status: active, archived, blocked, proposed, resolved; patch.type: decision, incident, initiative, note, objective, other, request, risk
@@ -1746,10 +1746,10 @@ Inputs:
   - body `patch.resolution_refs` (list<any>)
   - body `patch.risk` (string)
   - body `patch.summary` (string)
-  - body `patch.thread_ref` (string)
+  - body `patch.thread_id` (string)
   - body `patch.title` (string)
   - body `patch.topic_ref` (string)
-  Enum values: patch.column_key: backlog, blocked, done, in_progress, ready, review; patch.resolution: canceled, completed, superseded, unresolved; patch.risk: critical, high, low, medium
+  Enum values: patch.column_key: backlog, blocked, done, in_progress, ready, review; patch.resolution: canceled, done; patch.risk: critical, high, low, medium
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1785,7 +1785,7 @@ Inputs:
   - body `move.if_board_updated_at` (datetime)
   - body `move.resolution` (string)
   - body `move.resolution_refs` (list<any>)
-  Enum values: move.column_key: backlog, blocked, done, in_progress, ready, review; move.resolution: canceled, completed
+  Enum values: move.column_key: backlog, blocked, done, in_progress, ready, review; move.resolution: canceled, done
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2021,11 +2021,11 @@ Inputs:
   - body `board.status` (string)
   - body `board.title` (string)
   Optional:
-  - body `board.primary_thread_ref` (string)
   - body `board.primary_topic_ref` (string)
   - body `board.provenance.by_field` (object)
   - body `board.provenance.notes` (string)
-  Enum values: board.status: active, archived, paused
+  - body `board.thread_id` (string)
+  Enum values: board.status: active, closed, paused
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2106,7 +2106,6 @@ Inputs:
   - body `card.column_key` (string)
   - body `card.provenance.sources` (list<string>)
   - body `card.related_refs` (list<any>)
-  - body `card.resolution` (string)
   - body `card.resolution_refs` (list<any>)
   - body `card.risk` (string)
   - body `card.summary` (string)
@@ -2116,10 +2115,11 @@ Inputs:
   - body `card.id` (string)
   - body `card.provenance.by_field` (object)
   - body `card.provenance.notes` (string)
-  - body `card.thread_ref` (string)
+  - body `card.resolution` (string)
+  - body `card.thread_id` (string)
   - body `card.topic_ref` (string)
   - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `oar boards get --board-id <board-id>`, `oar boards workspace --board-id <board-id>`, or the latest board mutation response.
-  Enum values: card.column_key: backlog, blocked, done, in_progress, ready, review; card.resolution: canceled, completed, superseded, unresolved; card.risk: critical, high, low, medium
+  Enum values: card.column_key: backlog, blocked, done, in_progress, ready, review; card.resolution: canceled, done; card.risk: critical, high, low, medium
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2275,7 +2275,7 @@ Inputs:
   - body `event.provenance.by_field` (object)
   - body `event.provenance.notes` (string)
   - body `event.thread_ref` (string)
-  Enum values: event.type (open): agent_notification_dismissed, agent_notification_read, board_created, board_updated, card_created, card_moved, card_resolved, card_updated, decision_made, decision_needed, document_created, document_revised, document_tombstoned, exception_raised, inbox_item_acknowledged, intervention_needed, message_posted, receipt_added, review_completed, topic_created, topic_status_changed, topic_updated, work_order_created
+  Enum values: event.type (open): agent_notification_dismissed, agent_notification_read, board_card_added, board_card_moved, board_created, board_updated, card_created, card_moved, card_resolved, card_updated, decision_made, decision_needed, document_created, document_revised, document_revision_created, document_tombstoned, exception_raised, inbox_item_acknowledged, intervention_needed, message_posted, receipt_added, review_completed, topic_archived, topic_created, topic_restored, topic_status_changed, topic_tombstoned, topic_updated, work_order_created
 
 Common authoring types:
   Communication: direct communication or important non-structured information

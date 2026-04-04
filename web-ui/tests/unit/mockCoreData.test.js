@@ -19,7 +19,6 @@ describe("mockCoreData parity behaviors", () => {
         thread_id: "thread-lemon-shortage",
         type: "incident",
         status: "active",
-        primary_thread_ref: "thread:thread-lemon-shortage",
       });
       expect(seed.boards[0]).toMatchObject({
         id: "board-product-launch",
@@ -29,9 +28,9 @@ describe("mockCoreData parity behaviors", () => {
         board_id: "board-product-launch",
         thread_id: "thread-summer-menu",
         topic_ref: "topic:thread-summer-menu",
-        thread_ref: "thread:thread-summer-menu",
-        resolution: "unresolved",
+        resolution: null,
       });
+      expect(seed.cards[0].thread_ref).toBeUndefined();
       expect(
         seed.packets.every((packet) => packet?.artifact && packet?.packet),
       ).toBe(true);

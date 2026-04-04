@@ -6,40 +6,23 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"organization-autorunner-core/internal/blob"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"organization-autorunner-core/internal/actors"
 	"organization-autorunner-core/internal/auth"
-	"organization-autorunner-core/internal/controlplaneauth"
 	"organization-autorunner-core/internal/primitives"
-	"organization-autorunner-core/internal/schedule"
 	"organization-autorunner-core/internal/schema"
 	"organization-autorunner-core/internal/storage"
 )
-
-type legacyTestWorkspaceContext struct {
-	primitiveStore             PrimitiveStore
-	actorStore                 *actors.Store
-	authStore                  *auth.Store
-	controlPlaneVerifier       *controlplaneauth.WorkspaceHumanVerifier
-	allowUnauthenticatedWrites bool
-	maintainer                 *ProjectionMaintainer
-	autoStepLegacyWrites       bool
-}
-
-var testServerLegacyWorkspaces sync.Map
 
 func TestPrimitivesCRUDRoundTrip(t *testing.T) {
 	t.Parallel()
@@ -434,23 +417,20 @@ func TestDocumentsLifecycleRoundTrip(t *testing.T) {
 
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
-	postJSONExpectStatus(t, h.baseURL+"/threads", `{
-		"actor_id":"actor-1",
-		"thread":{
-			"id":"thread-1",
-			"title":"Replay event thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p2",
-			"tags":["events"],
-			"cadence":"daily",
-			"next_check_in_at":"2026-03-05T00:00:00Z",
-			"current_summary":"summary",
-			"next_actions":["review"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated).Body.Close()
+	integrationSeedThread(t, h, "actor-1", map[string]any{
+		"id":               "thread-1",
+		"title":            "Replay event thread",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p2",
+		"tags":             []any{"events"},
+		"cadence":          "daily",
+		"next_check_in_at": "2026-03-05T00:00:00Z",
+		"current_summary":  "summary",
+		"next_actions":     []any{"review"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
 
 	createResp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
 		"actor_id":"actor-1",
@@ -743,23 +723,20 @@ func TestDocumentCreateRequestKeyReplaysSingleWrite(t *testing.T) {
 
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
-	postJSONExpectStatus(t, h.baseURL+"/threads", `{
-		"actor_id":"actor-1",
-		"thread":{
-			"id":"thread-docs",
-			"title":"Replay docs thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p2",
-			"tags":["docs"],
-			"cadence":"daily",
-			"next_check_in_at":"2026-03-05T00:00:00Z",
-			"current_summary":"summary",
-			"next_actions":["review"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated).Body.Close()
+	integrationSeedThread(t, h, "actor-1", map[string]any{
+		"id":               "thread-docs",
+		"title":            "Replay docs thread",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p2",
+		"tags":             []any{"docs"},
+		"cadence":          "daily",
+		"next_check_in_at": "2026-03-05T00:00:00Z",
+		"current_summary":  "summary",
+		"next_actions":     []any{"review"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
 
 	body := `{
 		"actor_id":"actor-1",
@@ -1298,27 +1275,12 @@ func TestCreateArtifactRejectsUnsafeArtifactIDs(t *testing.T) {
 	assertErrorMessageContains(t, respWithAbsolute, "artifact.id")
 }
 
-func TestGetSnapshotByID(t *testing.T) {
-	t.Parallel()
-
-	h := newPrimitivesTestServer(t)
-
-	resp, err := http.Get(h.baseURL + "/snapshots/snapshot-1")
-	if err != nil {
-		t.Fatalf("GET /snapshots/{id}: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("unexpected snapshot status: got %d", resp.StatusCode)
-	}
-}
-
 type primitivesTestHarness struct {
 	workspace        *storage.Workspace
 	baseURL          string
 	maintainer       *ProjectionMaintainer
 	humanAccessToken string
+	primitiveStore   PrimitiveStore
 }
 
 func newPrimitivesTestServer(t *testing.T) primitivesTestHarness {
@@ -1355,20 +1317,12 @@ func newPrimitivesTestServer(t *testing.T) primitivesTestHarness {
 		WithEnableDevActorMode(true),
 	)
 	server := httptest.NewServer(newProjectionMaintainerAutoStepHandler(handler, maintainer))
-	testServerLegacyWorkspaces.Store(server.URL, legacyTestWorkspaceContext{
-		primitiveStore:             primitiveStore,
-		actorStore:                 registry,
-		allowUnauthenticatedWrites: true,
-		maintainer:                 maintainer,
-		autoStepLegacyWrites:       true,
-	})
 	t.Cleanup(func() {
-		testServerLegacyWorkspaces.Delete(server.URL)
 		server.Close()
 		_ = workspace.Close()
 	})
 
-	return primitivesTestHarness{workspace: workspace, baseURL: server.URL, maintainer: maintainer, humanAccessToken: ""}
+	return primitivesTestHarness{workspace: workspace, baseURL: server.URL, maintainer: maintainer, humanAccessToken: "", primitiveStore: primitiveStore}
 }
 
 func newPrimitivesTestServerWithHumanPrincipal(t *testing.T) primitivesTestHarness {
@@ -1412,15 +1366,7 @@ func newPrimitivesTestServerWithHumanPrincipal(t *testing.T) primitivesTestHarne
 		WithEnableDevActorMode(true),
 	)
 	server := httptest.NewServer(newProjectionMaintainerAutoStepHandler(handler, maintainer))
-	testServerLegacyWorkspaces.Store(server.URL, legacyTestWorkspaceContext{
-		primitiveStore:             primitiveStore,
-		actorStore:                 registry,
-		allowUnauthenticatedWrites: true,
-		maintainer:                 maintainer,
-		autoStepLegacyWrites:       true,
-	})
 	t.Cleanup(func() {
-		testServerLegacyWorkspaces.Delete(server.URL)
 		server.Close()
 		passkeySessionStore.Close()
 		_ = workspace.Close()
@@ -1431,6 +1377,7 @@ func newPrimitivesTestServerWithHumanPrincipal(t *testing.T) primitivesTestHarne
 		baseURL:          server.URL,
 		maintainer:       maintainer,
 		humanAccessToken: humanToken,
+		primitiveStore:   primitiveStore,
 	}
 }
 
@@ -1467,10 +1414,6 @@ func shouldAutoStepProjectionMaintainer(r *http.Request, statusCode int) bool {
 
 func postJSONExpectStatus(t *testing.T, url string, body string, expectedStatus int) *http.Response {
 	t.Helper()
-
-	if resp, handled := maybeHandleLegacyWorkspaceRequest(t, http.MethodPost, url, body, nil); handled {
-		return resp
-	}
 
 	resp, err := http.Post(url, "application/json", strings.NewReader(body))
 	if err != nil {
@@ -1511,10 +1454,6 @@ func postJSONExpectStatusBearer(t *testing.T, url string, body string, bearerTok
 func requestJSONExpectStatus(t *testing.T, method string, url string, body string, expectedStatus int) *http.Response {
 	t.Helper()
 
-	if resp, handled := maybeHandleLegacyWorkspaceRequest(t, method, url, body, nil); handled {
-		return resp
-	}
-
 	req, err := http.NewRequest(method, url, strings.NewReader(body))
 	if err != nil {
 		t.Fatalf("%s %s create request: %v", method, url, err)
@@ -1531,324 +1470,6 @@ func requestJSONExpectStatus(t *testing.T, method string, url string, body strin
 		t.Fatalf("%s %s unexpected status: got %d want %d body=%s", method, url, resp.StatusCode, expectedStatus, string(bodyBytes))
 	}
 	return resp
-}
-
-func maybeHandleLegacyWorkspaceRequest(t *testing.T, method string, rawURL string, body string, headers map[string]string) (*http.Response, bool) {
-	t.Helper()
-
-	ctx, path, ok := lookupLegacyWorkspaceContext(rawURL)
-	if !ok {
-		return nil, false
-	}
-
-	switch {
-	case method == http.MethodPost && path == "/threads":
-		return legacyThreadCreateResponse(t, ctx, body, headers), true
-	case method == http.MethodPatch && strings.HasPrefix(path, "/threads/"):
-		return legacyThreadPatchResponse(t, ctx, strings.TrimPrefix(path, "/threads/"), body, headers), true
-	default:
-		return nil, false
-	}
-}
-
-func lookupLegacyWorkspaceContext(rawURL string) (legacyTestWorkspaceContext, string, bool) {
-	parsed, err := url.Parse(rawURL)
-	if err != nil {
-		return legacyTestWorkspaceContext{}, "", false
-	}
-	baseURL := parsed.Scheme + "://" + parsed.Host
-	value, ok := testServerLegacyWorkspaces.Load(baseURL)
-	if !ok {
-		return legacyTestWorkspaceContext{}, "", false
-	}
-	ctx, ok := value.(legacyTestWorkspaceContext)
-	if !ok {
-		return legacyTestWorkspaceContext{}, "", false
-	}
-	return ctx, strings.TrimSpace(parsed.Path), true
-}
-
-func legacyThreadCreateResponse(t *testing.T, ctx legacyTestWorkspaceContext, body string, headers map[string]string) *http.Response {
-	t.Helper()
-
-	var req struct {
-		ActorID    string         `json:"actor_id"`
-		RequestKey string         `json:"request_key"`
-		Thread     map[string]any `json:"thread"`
-	}
-	if err := json.Unmarshal([]byte(body), &req); err != nil {
-		return legacyJSONResponse(http.StatusBadRequest, errorPayload("invalid_json", err.Error()))
-	}
-	if req.Thread == nil {
-		return legacyJSONResponse(http.StatusBadRequest, errorPayload("invalid_request", "thread is required"))
-	}
-	if _, has := req.Thread["open_cards"]; has {
-		return legacyJSONResponse(http.StatusBadRequest, errorPayload("invalid_request", "thread.open_cards is core-maintained and cannot be set"))
-	}
-	if err := validateLegacyThreadBody(req.Thread, true); err != nil {
-		return legacyJSONResponse(http.StatusBadRequest, errorPayload("invalid_request", err.Error()))
-	}
-
-	actorID, resp, ok := legacyResolveWriteActorID(ctx, headers, req.ActorID)
-	if !ok {
-		return resp
-	}
-
-	requestKey := strings.TrimSpace(req.RequestKey)
-	replayRequest := req
-	if requestKey != "" && firstNonEmptyString(replayRequest.Thread["id"]) == "" {
-		replayRequest.Thread["id"] = deriveRequestScopedID("threads.create", actorID, requestKey, "thread")
-	}
-
-	replayStatus, replayPayload, replayed, err := readIdempotencyReplay(context.Background(), ctx.primitiveStore, "threads.create", actorID, requestKey, replayRequest)
-	if err != nil {
-		if writeLegacyIdempotencyError(ctx, err) {
-			return legacyJSONResponse(http.StatusConflict, errorPayload("conflict", err.Error()))
-		}
-		return legacyJSONResponse(http.StatusInternalServerError, errorPayload("internal_error", "failed to load idempotency replay"))
-	}
-	if replayed {
-		return legacyJSONResponse(replayStatus, replayPayload)
-	}
-
-	result, err := ctx.primitiveStore.CreateThread(context.Background(), actorID, req.Thread)
-	if err != nil {
-		if errors.Is(err, primitives.ErrConflict) {
-			if requestKey != "" && firstNonEmptyString(replayRequest.Thread["id"]) != "" {
-				return legacyJSONResponse(http.StatusConflict, errorPayload("conflict", "thread already exists"))
-			}
-			return legacyJSONResponse(http.StatusConflict, errorPayload("conflict", "thread already exists"))
-		}
-		return legacyJSONResponse(http.StatusBadRequest, errorPayload("invalid_request", err.Error()))
-	}
-
-	legacyMarkTopicProjectionsDirty(ctx, firstNonEmptyString(result.Thread["thread_id"]))
-	if err := legacyStepProjectionMaintainer(ctx); err != nil {
-		return legacyJSONResponse(http.StatusInternalServerError, errorPayload("internal_error", "projection maintainer step failed"))
-	}
-	status, payload, err := persistIdempotencyReplay(context.Background(), ctx.primitiveStore, "threads.create", actorID, requestKey, replayRequest, http.StatusCreated, map[string]any{"thread": result.Thread})
-	if err != nil {
-		if writeLegacyIdempotencyError(ctx, err) {
-			return legacyJSONResponse(http.StatusConflict, errorPayload("conflict", err.Error()))
-		}
-		return legacyJSONResponse(http.StatusInternalServerError, errorPayload("internal_error", "failed to persist idempotency replay"))
-	}
-	return legacyJSONResponse(status, payload)
-}
-
-func legacyThreadPatchResponse(t *testing.T, ctx legacyTestWorkspaceContext, threadID string, body string, headers map[string]string) *http.Response {
-	t.Helper()
-
-	var req struct {
-		ActorID     string         `json:"actor_id"`
-		Patch       map[string]any `json:"patch"`
-		IfUpdatedAt *string        `json:"if_updated_at"`
-	}
-	if err := json.Unmarshal([]byte(body), &req); err != nil {
-		return legacyJSONResponse(http.StatusBadRequest, errorPayload("invalid_json", err.Error()))
-	}
-	if req.Patch == nil || len(req.Patch) == 0 {
-		return legacyJSONResponse(http.StatusBadRequest, errorPayload("invalid_request", "patch is required"))
-	}
-	if req.IfUpdatedAt != nil {
-		ifUpdatedAt := strings.TrimSpace(*req.IfUpdatedAt)
-		if _, err := time.Parse(time.RFC3339, ifUpdatedAt); err != nil {
-			return legacyJSONResponse(http.StatusBadRequest, errorPayload("invalid_request", "if_updated_at must be an RFC3339 datetime string"))
-		}
-		req.IfUpdatedAt = &ifUpdatedAt
-	}
-	if _, has := req.Patch["open_cards"]; has {
-		return legacyJSONResponse(http.StatusBadRequest, errorPayload("invalid_request", "thread.open_cards is core-maintained and cannot be patched"))
-	}
-	if err := validateLegacyThreadBody(req.Patch, false); err != nil {
-		return legacyJSONResponse(http.StatusBadRequest, errorPayload("invalid_request", err.Error()))
-	}
-
-	actorID, resp, ok := legacyResolveWriteActorID(ctx, headers, req.ActorID)
-	if !ok {
-		return resp
-	}
-
-	result, err := ctx.primitiveStore.PatchThread(context.Background(), actorID, threadID, req.Patch, req.IfUpdatedAt)
-	if err != nil {
-		switch {
-		case errors.Is(err, primitives.ErrNotFound):
-			return legacyJSONResponse(http.StatusNotFound, errorPayload("not_found", "thread not found"))
-		case errors.Is(err, primitives.ErrConflict):
-			return legacyJSONResponse(http.StatusConflict, errorPayload("conflict", "thread has been updated; refresh and retry"))
-		default:
-			return legacyJSONResponse(http.StatusBadRequest, errorPayload("invalid_request", err.Error()))
-		}
-	}
-
-	legacyMarkTopicProjectionsDirty(ctx, firstNonEmptyString(result.Thread["thread_id"]))
-	if err := legacyStepProjectionMaintainer(ctx); err != nil {
-		return legacyJSONResponse(http.StatusInternalServerError, errorPayload("internal_error", "projection maintainer step failed"))
-	}
-	return legacyJSONResponse(http.StatusOK, map[string]any{"thread": result.Thread})
-}
-
-func legacyResolveWriteActorID(ctx legacyTestWorkspaceContext, headers map[string]string, requestedActorID string) (string, *http.Response, bool) {
-	principal, resp, ok := legacyResolveOptionalPrincipal(ctx, headers)
-	if !ok {
-		return "", resp, false
-	}
-
-	requestedActorID = strings.TrimSpace(requestedActorID)
-	if principal == nil {
-		if ctx.authStore != nil && !ctx.allowUnauthenticatedWrites {
-			return "", legacyJSONResponse(http.StatusUnauthorized, errorPayload("auth_required", "authorization header is required")), false
-		}
-		if requestedActorID == "" {
-			return "", legacyJSONResponse(http.StatusBadRequest, errorPayload("invalid_request", "actor_id is required")), false
-		}
-		if ctx.actorStore != nil {
-			exists, err := ctx.actorStore.Exists(context.Background(), requestedActorID)
-			if err != nil {
-				return "", legacyJSONResponse(http.StatusInternalServerError, errorPayload("internal_error", "failed to validate actor_id")), false
-			}
-			if !exists {
-				return "", legacyJSONResponse(http.StatusBadRequest, errorPayload("unknown_actor_id", "actor_id is not registered")), false
-			}
-		}
-		return requestedActorID, nil, true
-	}
-
-	if requestedActorID == "" {
-		requestedActorID = principal.ActorID
-	}
-	if requestedActorID != principal.ActorID {
-		return "", legacyJSONResponse(http.StatusForbidden, errorPayload("key_mismatch", "actor_id does not match authenticated principal")), false
-	}
-	if ctx.actorStore != nil {
-		exists, err := ctx.actorStore.Exists(context.Background(), requestedActorID)
-		if err != nil {
-			return "", legacyJSONResponse(http.StatusInternalServerError, errorPayload("internal_error", "failed to validate actor_id")), false
-		}
-		if !exists {
-			return "", legacyJSONResponse(http.StatusBadRequest, errorPayload("unknown_actor_id", "actor_id is not registered")), false
-		}
-	}
-	return requestedActorID, nil, true
-}
-
-func legacyResolveOptionalPrincipal(ctx legacyTestWorkspaceContext, headers map[string]string) (*auth.Principal, *http.Response, bool) {
-	if ctx.authStore == nil {
-		return nil, nil, true
-	}
-	header := legacyHeaderValue(headers, "Authorization")
-	if strings.TrimSpace(header) == "" {
-		return nil, nil, true
-	}
-
-	token, err := parseBearerToken(header)
-	if err != nil {
-		return nil, legacyJSONResponse(http.StatusUnauthorized, errorPayload("invalid_token", "authorization header must be Bearer <token>")), false
-	}
-
-	principal, err := ctx.authStore.AuthenticateAccessToken(context.Background(), token)
-	if err != nil {
-		if errors.Is(err, auth.ErrInvalidToken) && ctx.controlPlaneVerifier != nil {
-			identity, verifyErr := ctx.controlPlaneVerifier.Verify(token)
-			if verifyErr == nil {
-				hydratedPrincipal, hydrateErr := ctx.authStore.EnsureControlPlanePrincipal(context.Background(), auth.EnsureControlPlanePrincipalInput{
-					Issuer:         identity.Issuer,
-					Subject:        identity.Subject,
-					WorkspaceID:    identity.WorkspaceID,
-					OrganizationID: identity.OrganizationID,
-					Email:          identity.Email,
-					DisplayName:    identity.DisplayName,
-					LaunchID:       identity.LaunchID,
-				})
-				if hydrateErr != nil {
-					return nil, legacyJSONResponse(http.StatusInternalServerError, errorPayload("internal_error", "failed to hydrate control-plane principal")), false
-				}
-				principalCopy := hydratedPrincipal
-				return &principalCopy, nil, true
-			}
-		}
-		switch {
-		case errors.Is(err, auth.ErrInvalidToken):
-			return nil, legacyJSONResponse(http.StatusUnauthorized, errorPayload("invalid_token", "token is invalid, expired, or revoked")), false
-		case errors.Is(err, auth.ErrAgentRevoked):
-			return nil, legacyJSONResponse(http.StatusForbidden, errorPayload("agent_revoked", "agent has been revoked")), false
-		default:
-			return nil, legacyJSONResponse(http.StatusInternalServerError, errorPayload("internal_error", "failed to authenticate token")), false
-		}
-	}
-
-	principalCopy := principal
-	return &principalCopy, nil, true
-}
-
-func legacyHeaderValue(headers map[string]string, key string) string {
-	for headerKey, headerValue := range headers {
-		if strings.EqualFold(headerKey, key) {
-			return strings.TrimSpace(headerValue)
-		}
-	}
-	return ""
-}
-
-func validateLegacyThreadBody(body map[string]any, createMode bool) error {
-	if body == nil {
-		return fmt.Errorf("thread is required")
-	}
-	if createMode {
-		if _, exists := body["provenance"]; !exists {
-			return fmt.Errorf("thread.provenance is required")
-		}
-	}
-	if raw, exists := body["cadence"]; exists {
-		cadence, ok := raw.(string)
-		if !ok {
-			return fmt.Errorf("thread.cadence must be a string")
-		}
-		if err := schedule.ValidateCadence(cadence); err != nil {
-			return fmt.Errorf("thread.cadence: %w", err)
-		}
-	}
-	return nil
-}
-
-func writeLegacyIdempotencyError(ctx legacyTestWorkspaceContext, err error) bool {
-	_ = ctx
-	return errors.Is(err, errIdempotencyKeyMismatch)
-}
-
-func legacyStepProjectionMaintainer(ctx legacyTestWorkspaceContext) error {
-	if ctx.maintainer == nil || !ctx.autoStepLegacyWrites {
-		return nil
-	}
-	return ctx.maintainer.Step(context.Background(), time.Now().UTC())
-}
-
-func legacyMarkTopicProjectionsDirty(ctx legacyTestWorkspaceContext, threadIDs ...string) {
-	if ctx.primitiveStore == nil {
-		return
-	}
-	threadIDs = uniqueServerStrings(threadIDs)
-	if len(threadIDs) == 0 {
-		return
-	}
-	_ = ctx.primitiveStore.MarkTopicProjectionsDirty(context.Background(), threadIDs, time.Now().UTC())
-	if ctx.maintainer != nil {
-		ctx.maintainer.Notify()
-	}
-}
-
-func legacyJSONResponse(status int, payload any) *http.Response {
-	if m, ok := payload.(map[string]any); ok {
-		if _, hasCode := m["code"]; hasCode {
-			payload = map[string]any{"error": m}
-		}
-	}
-	data, _ := json.Marshal(payload)
-	return &http.Response{
-		StatusCode: status,
-		Header:     http.Header{"Content-Type": []string{"application/json"}},
-		Body:       io.NopCloser(bytes.NewReader(data)),
-	}
 }
 
 func TestArtifactTombstoneLifecycle(t *testing.T) {
@@ -2943,118 +2564,116 @@ func TestDocumentTombstonedOnlyFilter(t *testing.T) {
 	}
 }
 
-func TestThreadArchiveLifecycle(t *testing.T) {
+func TestTopicArchiveLifecycle(t *testing.T) {
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
-	createResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
+	createResp := postJSONExpectStatus(t, h.baseURL+"/topics", `{
 		"actor_id":"actor-1",
-		"thread":{
-			"title":"Archive thread",
+		"topic":{
 			"type":"incident",
 			"status":"active",
-			"priority":"p2",
-			"tags":["archive-test"],
-			"cadence":"daily",
-			"next_check_in_at":"2026-03-05T00:00:00Z",
-			"current_summary":"s",
-			"next_actions":["a"],
-			"key_artifacts":[],
+			"title":"Archive topic",
+			"summary":"s",
+			"owner_refs":[],
+			"document_refs":[],
+			"board_refs":[],
+			"related_refs":[],
 			"provenance":{"sources":["inferred"]}
 		}
 	}`, http.StatusCreated)
 	defer createResp.Body.Close()
 	var created struct {
-		Thread map[string]any `json:"thread"`
+		Topic map[string]any `json:"topic"`
 	}
 	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
-		t.Fatalf("decode create thread: %v", err)
+		t.Fatalf("decode create topic: %v", err)
 	}
-	threadID := asString(created.Thread["id"])
-	if threadID == "" {
-		t.Fatal("expected thread id")
+	topicID := asString(created.Topic["id"])
+	if topicID == "" {
+		t.Fatal("expected topic id")
 	}
 
-	archiveResp := postJSONExpectStatus(t, h.baseURL+"/threads/"+threadID+"/archive", `{"actor_id":"actor-1"}`, http.StatusOK)
+	archiveResp := postJSONExpectStatus(t, h.baseURL+"/topics/"+topicID+"/archive", `{"actor_id":"actor-1"}`, http.StatusOK)
 	defer archiveResp.Body.Close()
 	var archived struct {
-		Thread map[string]any `json:"thread"`
+		Topic map[string]any `json:"topic"`
 	}
 	if err := json.NewDecoder(archiveResp.Body).Decode(&archived); err != nil {
-		t.Fatalf("decode archive thread: %v", err)
+		t.Fatalf("decode archive topic: %v", err)
 	}
-	if archived.Thread["archived_at"] == nil {
-		t.Fatal("expected archived_at on thread")
+	if archived.Topic["archived_at"] == nil {
+		t.Fatal("expected archived_at on topic")
 	}
-	firstAt := archived.Thread["archived_at"]
+	firstAt := archived.Topic["archived_at"]
 
-	postJSONExpectStatus(t, h.baseURL+"/threads/"+threadID+"/archive", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
+	postJSONExpectStatus(t, h.baseURL+"/topics/"+topicID+"/archive", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
 
-	listDefault, err := http.Get(h.baseURL + "/threads")
+	listDefault, err := http.Get(h.baseURL + "/topics")
 	if err != nil {
-		t.Fatalf("GET /threads: %v", err)
+		t.Fatalf("GET /topics: %v", err)
 	}
 	defer listDefault.Body.Close()
 	var defaultListed struct {
-		Threads []map[string]any `json:"threads"`
+		Topics []map[string]any `json:"topics"`
 	}
 	if err := json.NewDecoder(listDefault.Body).Decode(&defaultListed); err != nil {
-		t.Fatalf("decode threads list: %v", err)
+		t.Fatalf("decode topics list: %v", err)
 	}
-	for _, th := range defaultListed.Threads {
-		if th["id"] == threadID {
-			t.Fatal("archived thread must not appear in default list")
+	for _, tp := range defaultListed.Topics {
+		if tp["id"] == topicID {
+			t.Fatal("archived topic must not appear in default list")
 		}
 	}
 
-	withArchived, err := http.Get(h.baseURL + "/threads?include_archived=true")
+	withArchived, err := http.Get(h.baseURL + "/topics?include_archived=true")
 	if err != nil {
-		t.Fatalf("GET include_archived threads: %v", err)
+		t.Fatalf("GET include_archived topics: %v", err)
 	}
 	defer withArchived.Body.Close()
 	var incListed struct {
-		Threads []map[string]any `json:"threads"`
+		Topics []map[string]any `json:"topics"`
 	}
 	if err := json.NewDecoder(withArchived.Body).Decode(&incListed); err != nil {
-		t.Fatalf("decode include_archived threads: %v", err)
+		t.Fatalf("decode include_archived topics: %v", err)
 	}
 	found := false
-	for _, th := range incListed.Threads {
-		if th["id"] == threadID {
+	for _, tp := range incListed.Topics {
+		if tp["id"] == topicID {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Fatal("expected thread in include_archived list")
+		t.Fatal("expected topic in include_archived list")
 	}
 
-	onlyArchived, err := http.Get(h.baseURL + "/threads?archived_only=true")
+	onlyArchived, err := http.Get(h.baseURL + "/topics?archived_only=true")
 	if err != nil {
-		t.Fatalf("GET archived_only threads: %v", err)
+		t.Fatalf("GET archived_only topics: %v", err)
 	}
 	defer onlyArchived.Body.Close()
 	var onlyListed struct {
-		Threads []map[string]any `json:"threads"`
+		Topics []map[string]any `json:"topics"`
 	}
 	if err := json.NewDecoder(onlyArchived.Body).Decode(&onlyListed); err != nil {
-		t.Fatalf("decode archived_only threads: %v", err)
+		t.Fatalf("decode archived_only topics: %v", err)
 	}
-	if len(onlyListed.Threads) != 1 || onlyListed.Threads[0]["id"] != threadID {
-		t.Fatalf("expected single archived thread, got %#v", onlyListed.Threads)
+	if len(onlyListed.Topics) != 1 || onlyListed.Topics[0]["id"] != topicID {
+		t.Fatalf("expected single archived topic, got %#v", onlyListed.Topics)
 	}
-	if onlyListed.Threads[0]["archived_at"] == nil {
-		t.Fatal("archived_only thread should have archived_at")
+	if onlyListed.Topics[0]["archived_at"] == nil {
+		t.Fatal("archived_only topic should have archived_at")
 	}
-	if onlyListed.Threads[0]["archived_at"] != firstAt {
-		t.Fatalf("archived_at mismatch: list=%v archive=%v", onlyListed.Threads[0]["archived_at"], firstAt)
+	if onlyListed.Topics[0]["archived_at"] != firstAt {
+		t.Fatalf("archived_at mismatch: list=%v archive=%v", onlyListed.Topics[0]["archived_at"], firstAt)
 	}
 
-	postJSONExpectStatus(t, h.baseURL+"/threads/"+threadID+"/unarchive", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
+	postJSONExpectStatus(t, h.baseURL+"/topics/"+topicID+"/unarchive", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
 
-	reUnarchive, err := http.Post(h.baseURL+"/threads/"+threadID+"/unarchive", "application/json", strings.NewReader(`{"actor_id":"actor-1"}`))
+	reUnarchive, err := http.Post(h.baseURL+"/topics/"+topicID+"/unarchive", "application/json", strings.NewReader(`{"actor_id":"actor-1"}`))
 	if err != nil {
 		t.Fatalf("second unarchive: %v", err)
 	}
@@ -3064,185 +2683,169 @@ func TestThreadArchiveLifecycle(t *testing.T) {
 		t.Fatalf("expected 409 second unarchive, got %d body=%s", reUnarchive.StatusCode, string(b))
 	}
 
-	listFinal, err := http.Get(h.baseURL + "/threads")
+	listFinal, err := http.Get(h.baseURL + "/topics")
 	if err != nil {
-		t.Fatalf("GET /threads final: %v", err)
+		t.Fatalf("GET /topics final: %v", err)
 	}
 	defer listFinal.Body.Close()
 	var finalListed struct {
-		Threads []map[string]any `json:"threads"`
+		Topics []map[string]any `json:"topics"`
 	}
 	if err := json.NewDecoder(listFinal.Body).Decode(&finalListed); err != nil {
-		t.Fatalf("decode final threads: %v", err)
+		t.Fatalf("decode final topics: %v", err)
 	}
 	found = false
-	for _, th := range finalListed.Threads {
-		if th["id"] == threadID {
+	for _, tp := range finalListed.Topics {
+		if tp["id"] == topicID {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Fatal("expected thread back in default list after unarchive")
+		t.Fatal("expected topic back in default list after unarchive")
 	}
 }
 
-func TestThreadTombstoneLifecycle(t *testing.T) {
+func TestTopicTombstoneLifecycle(t *testing.T) {
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
-	createResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
+	createResp := postJSONExpectStatus(t, h.baseURL+"/topics", `{
 		"actor_id":"actor-1",
-		"thread":{
-			"title":"Tomb thread",
+		"topic":{
 			"type":"incident",
 			"status":"active",
-			"priority":"p2",
-			"tags":["tomb"],
-			"cadence":"daily",
-			"next_check_in_at":"2026-03-05T00:00:00Z",
-			"current_summary":"s",
-			"next_actions":["a"],
-			"key_artifacts":[],
+			"title":"Tomb topic",
+			"summary":"s",
+			"owner_refs":[],
+			"document_refs":[],
+			"board_refs":[],
+			"related_refs":[],
 			"provenance":{"sources":["inferred"]}
 		}
 	}`, http.StatusCreated)
 	defer createResp.Body.Close()
 	var created struct {
-		Thread map[string]any `json:"thread"`
+		Topic map[string]any `json:"topic"`
 	}
 	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
-		t.Fatalf("decode create thread: %v", err)
+		t.Fatalf("decode create topic: %v", err)
 	}
-	threadID := asString(created.Thread["id"])
+	topicID := asString(created.Topic["id"])
 
-	tomb1 := postJSONExpectStatus(t, h.baseURL+"/threads/"+threadID+"/tombstone", `{"actor_id":"actor-1","reason":"one"}`, http.StatusOK)
+	tomb1 := postJSONExpectStatus(t, h.baseURL+"/topics/"+topicID+"/tombstone", `{"actor_id":"actor-1","reason":"one"}`, http.StatusOK)
 	defer tomb1.Body.Close()
 	var firstTomb struct {
-		Thread map[string]any `json:"thread"`
+		Topic map[string]any `json:"topic"`
 	}
 	if err := json.NewDecoder(tomb1.Body).Decode(&firstTomb); err != nil {
 		t.Fatalf("decode first tombstone: %v", err)
 	}
-	if firstTomb.Thread["tombstoned_at"] == nil {
+	if firstTomb.Topic["tombstoned_at"] == nil {
 		t.Fatal("expected tombstoned_at")
 	}
 
-	tomb2 := postJSONExpectStatus(t, h.baseURL+"/threads/"+threadID+"/tombstone", `{"actor_id":"actor-1","reason":"two"}`, http.StatusOK)
-	defer tomb2.Body.Close()
-	var secondTomb struct {
-		Thread map[string]any `json:"thread"`
-	}
-	if err := json.NewDecoder(tomb2.Body).Decode(&secondTomb); err != nil {
-		t.Fatalf("decode second tombstone: %v", err)
-	}
-	if secondTomb.Thread["tombstoned_at"] != firstTomb.Thread["tombstoned_at"] {
-		t.Fatalf("idempotent tombstone should preserve tombstoned_at: %v vs %v", firstTomb.Thread["tombstoned_at"], secondTomb.Thread["tombstoned_at"])
-	}
-
-	listDefault, err := http.Get(h.baseURL + "/threads")
+	listDefault, err := http.Get(h.baseURL + "/topics")
 	if err != nil {
-		t.Fatalf("GET /threads: %v", err)
+		t.Fatalf("GET /topics: %v", err)
 	}
 	defer listDefault.Body.Close()
 	var defaultListed struct {
-		Threads []map[string]any `json:"threads"`
+		Topics []map[string]any `json:"topics"`
 	}
 	if err := json.NewDecoder(listDefault.Body).Decode(&defaultListed); err != nil {
 		t.Fatalf("decode list: %v", err)
 	}
-	for _, th := range defaultListed.Threads {
-		if th["id"] == threadID {
-			t.Fatal("tombstoned thread must not appear in default list")
+	for _, tp := range defaultListed.Topics {
+		if tp["id"] == topicID {
+			t.Fatal("tombstoned topic must not appear in default list")
 		}
 	}
 
-	withTomb, err := http.Get(h.baseURL + "/threads?include_tombstoned=true")
+	withTomb, err := http.Get(h.baseURL + "/topics?include_tombstoned=true")
 	if err != nil {
 		t.Fatalf("GET include_tombstoned: %v", err)
 	}
 	defer withTomb.Body.Close()
 	var incListed struct {
-		Threads []map[string]any `json:"threads"`
+		Topics []map[string]any `json:"topics"`
 	}
 	if err := json.NewDecoder(withTomb.Body).Decode(&incListed); err != nil {
 		t.Fatalf("decode include_tombstoned: %v", err)
 	}
 	found := false
-	for _, th := range incListed.Threads {
-		if th["id"] == threadID {
+	for _, tp := range incListed.Topics {
+		if tp["id"] == topicID {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Fatal("expected thread in include_tombstoned list")
+		t.Fatal("expected topic in include_tombstoned list")
 	}
 
-	onlyTomb, err := http.Get(h.baseURL + "/threads?tombstoned_only=true")
+	onlyTomb, err := http.Get(h.baseURL + "/topics?tombstoned_only=true")
 	if err != nil {
 		t.Fatalf("GET tombstoned_only: %v", err)
 	}
 	defer onlyTomb.Body.Close()
 	var onlyListed struct {
-		Threads []map[string]any `json:"threads"`
+		Topics []map[string]any `json:"topics"`
 	}
 	if err := json.NewDecoder(onlyTomb.Body).Decode(&onlyListed); err != nil {
 		t.Fatalf("decode tombstoned_only: %v", err)
 	}
-	if len(onlyListed.Threads) != 1 || onlyListed.Threads[0]["id"] != threadID {
-		t.Fatalf("expected exactly one tombstoned thread, got %#v", onlyListed.Threads)
+	if len(onlyListed.Topics) != 1 || onlyListed.Topics[0]["id"] != topicID {
+		t.Fatalf("expected exactly one tombstoned topic, got %#v", onlyListed.Topics)
 	}
 }
 
-func TestThreadRestoreLifecycle(t *testing.T) {
+func TestTopicRestoreLifecycle(t *testing.T) {
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
-	createResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
+	createResp := postJSONExpectStatus(t, h.baseURL+"/topics", `{
 		"actor_id":"actor-1",
-		"thread":{
-			"title":"Restore thread",
+		"topic":{
 			"type":"incident",
 			"status":"active",
-			"priority":"p2",
-			"tags":["restore"],
-			"cadence":"daily",
-			"next_check_in_at":"2026-03-05T00:00:00Z",
-			"current_summary":"s",
-			"next_actions":["a"],
-			"key_artifacts":[],
+			"title":"Restore topic",
+			"summary":"s",
+			"owner_refs":[],
+			"document_refs":[],
+			"board_refs":[],
+			"related_refs":[],
 			"provenance":{"sources":["inferred"]}
 		}
 	}`, http.StatusCreated)
 	defer createResp.Body.Close()
 	var created struct {
-		Thread map[string]any `json:"thread"`
+		Topic map[string]any `json:"topic"`
 	}
 	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
 		t.Fatalf("decode create: %v", err)
 	}
-	threadID := asString(created.Thread["id"])
+	topicID := asString(created.Topic["id"])
 
-	postJSONExpectStatus(t, h.baseURL+"/threads/"+threadID+"/tombstone", `{"actor_id":"actor-1","reason":"t"}`, http.StatusOK).Body.Close()
+	postJSONExpectStatus(t, h.baseURL+"/topics/"+topicID+"/tombstone", `{"actor_id":"actor-1","reason":"t"}`, http.StatusOK).Body.Close()
 
-	restoreResp := postJSONExpectStatus(t, h.baseURL+"/threads/"+threadID+"/restore", `{"actor_id":"actor-1"}`, http.StatusOK)
+	restoreResp := postJSONExpectStatus(t, h.baseURL+"/topics/"+topicID+"/restore", `{"actor_id":"actor-1"}`, http.StatusOK)
 	defer restoreResp.Body.Close()
 	var restored struct {
-		Thread map[string]any `json:"thread"`
+		Topic map[string]any `json:"topic"`
 	}
 	if err := json.NewDecoder(restoreResp.Body).Decode(&restored); err != nil {
 		t.Fatalf("decode restore: %v", err)
 	}
-	if restored.Thread["tombstoned_at"] != nil {
-		t.Fatalf("expected tombstoned_at cleared, got %#v", restored.Thread["tombstoned_at"])
+	if restored.Topic["tombstoned_at"] != nil {
+		t.Fatalf("expected tombstoned_at cleared, got %#v", restored.Topic["tombstoned_at"])
 	}
 
-	reRestore, err := http.Post(h.baseURL+"/threads/"+threadID+"/restore", "application/json", strings.NewReader(`{"actor_id":"actor-1"}`))
+	reRestore, err := http.Post(h.baseURL+"/topics/"+topicID+"/restore", "application/json", strings.NewReader(`{"actor_id":"actor-1"}`))
 	if err != nil {
 		t.Fatalf("second restore: %v", err)
 	}
@@ -3254,67 +2857,65 @@ func TestThreadRestoreLifecycle(t *testing.T) {
 	assertErrorCode(t, reRestore, "not_tombstoned")
 }
 
-func TestThreadArchiveThenTrash(t *testing.T) {
+func TestTopicArchiveThenTrash(t *testing.T) {
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
-	createResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
+	createResp := postJSONExpectStatus(t, h.baseURL+"/topics", `{
 		"actor_id":"actor-1",
-		"thread":{
-			"title":"Archive trash thread",
+		"topic":{
 			"type":"incident",
 			"status":"active",
-			"priority":"p2",
-			"tags":["at"],
-			"cadence":"daily",
-			"next_check_in_at":"2026-03-05T00:00:00Z",
-			"current_summary":"s",
-			"next_actions":["a"],
-			"key_artifacts":[],
+			"title":"Archive trash topic",
+			"summary":"s",
+			"owner_refs":[],
+			"document_refs":[],
+			"board_refs":[],
+			"related_refs":[],
 			"provenance":{"sources":["inferred"]}
 		}
 	}`, http.StatusCreated)
 	defer createResp.Body.Close()
 	var created struct {
-		Thread map[string]any `json:"thread"`
+		Topic map[string]any `json:"topic"`
 	}
 	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
 		t.Fatalf("decode create: %v", err)
 	}
-	threadID := asString(created.Thread["id"])
+	topicID := asString(created.Topic["id"])
 
-	postJSONExpectStatus(t, h.baseURL+"/threads/"+threadID+"/archive", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
+	postJSONExpectStatus(t, h.baseURL+"/topics/"+topicID+"/archive", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
 
-	tombResp := postJSONExpectStatus(t, h.baseURL+"/threads/"+threadID+"/tombstone", `{"actor_id":"actor-1","reason":"cleanup"}`, http.StatusOK)
+	tombResp := postJSONExpectStatus(t, h.baseURL+"/topics/"+topicID+"/tombstone", `{"actor_id":"actor-1","reason":"cleanup"}`, http.StatusOK)
 	defer tombResp.Body.Close()
 	var tomb struct {
-		Thread map[string]any `json:"thread"`
+		Topic map[string]any `json:"topic"`
 	}
 	if err := json.NewDecoder(tombResp.Body).Decode(&tomb); err != nil {
 		t.Fatalf("decode tombstone: %v", err)
 	}
-	if tomb.Thread["archived_at"] != nil {
-		t.Fatalf("expected archived_at cleared, got %#v", tomb.Thread["archived_at"])
+	if tomb.Topic["archived_at"] != nil {
+		t.Fatalf("expected archived_at cleared, got %#v", tomb.Topic["archived_at"])
 	}
-	if tomb.Thread["tombstoned_at"] == nil {
+	if tomb.Topic["tombstoned_at"] == nil {
 		t.Fatal("expected tombstoned_at")
 	}
 
-	restoreResp := postJSONExpectStatus(t, h.baseURL+"/threads/"+threadID+"/restore", `{"actor_id":"actor-1"}`, http.StatusOK)
+	restoreResp := postJSONExpectStatus(t, h.baseURL+"/topics/"+topicID+"/restore", `{"actor_id":"actor-1"}`, http.StatusOK)
 	defer restoreResp.Body.Close()
 	var restored struct {
-		Thread map[string]any `json:"thread"`
+		Topic map[string]any `json:"topic"`
 	}
 	if err := json.NewDecoder(restoreResp.Body).Decode(&restored); err != nil {
 		t.Fatalf("decode restore: %v", err)
 	}
-	if restored.Thread["archived_at"] != nil {
-		t.Fatalf("expected no archived_at after restore, got %#v", restored.Thread["archived_at"])
+	if restored.Topic["archived_at"] != nil {
+		t.Fatalf("expected no archived_at after restore, got %#v", restored.Topic["archived_at"])
 	}
-	if restored.Thread["tombstoned_at"] != nil {
-		t.Fatalf("expected no tombstoned_at after restore, got %#v", restored.Thread["tombstoned_at"])
+	if restored.Topic["tombstoned_at"] != nil {
+		t.Fatalf("expected no tombstoned_at after restore, got %#v", restored.Topic["tombstoned_at"])
 	}
 }
 
@@ -3655,40 +3256,38 @@ func TestDocumentCannotArchiveTrashed(t *testing.T) {
 	assertErrorCode(t, conflict, "already_tombstoned")
 }
 
-func TestThreadCannotArchiveTrashed(t *testing.T) {
+func TestTopicCannotArchiveTrashed(t *testing.T) {
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
-	createResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
+	createResp := postJSONExpectStatus(t, h.baseURL+"/topics", `{
 		"actor_id":"actor-1",
-		"thread":{
-			"title":"Cannot archive trashed",
+		"topic":{
 			"type":"incident",
 			"status":"active",
-			"priority":"p2",
-			"tags":["cat"],
-			"cadence":"daily",
-			"next_check_in_at":"2026-03-05T00:00:00Z",
-			"current_summary":"s",
-			"next_actions":["a"],
-			"key_artifacts":[],
+			"title":"Cannot archive trashed",
+			"summary":"s",
+			"owner_refs":[],
+			"document_refs":[],
+			"board_refs":[],
+			"related_refs":[],
 			"provenance":{"sources":["inferred"]}
 		}
 	}`, http.StatusCreated)
 	defer createResp.Body.Close()
 	var created struct {
-		Thread map[string]any `json:"thread"`
+		Topic map[string]any `json:"topic"`
 	}
 	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
 		t.Fatalf("decode create: %v", err)
 	}
-	threadID := asString(created.Thread["id"])
+	topicID := asString(created.Topic["id"])
 
-	postJSONExpectStatus(t, h.baseURL+"/threads/"+threadID+"/tombstone", `{"actor_id":"actor-1","reason":"x"}`, http.StatusOK).Body.Close()
+	postJSONExpectStatus(t, h.baseURL+"/topics/"+topicID+"/tombstone", `{"actor_id":"actor-1","reason":"x"}`, http.StatusOK).Body.Close()
 
-	conflict := postJSONExpectStatus(t, h.baseURL+"/threads/"+threadID+"/archive", `{"actor_id":"actor-1"}`, http.StatusConflict)
+	conflict := postJSONExpectStatus(t, h.baseURL+"/topics/"+topicID+"/archive", `{"actor_id":"actor-1"}`, http.StatusConflict)
 	defer conflict.Body.Close()
 	assertErrorCode(t, conflict, "already_tombstoned")
 }
@@ -3786,61 +3385,29 @@ func TestBoardCannotArchiveTrashed(t *testing.T) {
 	assertErrorCode(t, conflict, "already_tombstoned")
 }
 
-func TestThreadPurgeLifecycle(t *testing.T) {
+func TestThreadPurgeRemovedFromPublicAPI(t *testing.T) {
 	t.Parallel()
 
 	h := newPrimitivesTestServerWithHumanPrincipal(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
-	createResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
-		"actor_id":"actor-1",
-		"thread":{
-			"title":"Purge thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p2",
-			"tags":["purge"],
-			"cadence":"daily",
-			"next_check_in_at":"2026-03-05T00:00:00Z",
-			"current_summary":"s",
-			"next_actions":["a"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated)
-	defer createResp.Body.Close()
-	var created struct {
-		Thread map[string]any `json:"thread"`
-	}
-	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
-		t.Fatalf("decode create: %v", err)
-	}
-	threadID := asString(created.Thread["id"])
+	threadID := integrationSeedThread(t, h, "actor-1", map[string]any{
+		"title":            "No purge route",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p2",
+		"tags":             []any{"purge"},
+		"cadence":          "daily",
+		"next_check_in_at": "2026-03-05T00:00:00Z",
+		"current_summary":  "s",
+		"next_actions":     []any{"a"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
 
-	purgeEarly := postJSONExpectStatusBearer(t, h.baseURL+"/threads/"+threadID+"/purge", `{}`, h.humanAccessToken, http.StatusConflict)
-	defer purgeEarly.Body.Close()
-	assertErrorCode(t, purgeEarly, "not_tombstoned")
-
-	postJSONExpectStatus(t, h.baseURL+"/threads/"+threadID+"/tombstone", `{"actor_id":"actor-1","reason":"gone"}`, http.StatusOK).Body.Close()
-
-	purgeResp := postJSONExpectStatusBearer(t, h.baseURL+"/threads/"+threadID+"/purge", `{}`, h.humanAccessToken, http.StatusOK)
+	purgeResp := postJSONExpectStatusBearer(t, h.baseURL+"/threads/"+threadID+"/purge", `{}`, h.humanAccessToken, http.StatusNotFound)
 	defer purgeResp.Body.Close()
-	var purged map[string]any
-	if err := json.NewDecoder(purgeResp.Body).Decode(&purged); err != nil {
-		t.Fatalf("decode purge: %v", err)
-	}
-	if purged["purged"] != true || purged["thread_id"] != threadID {
-		t.Fatalf("unexpected purge payload: %#v", purged)
-	}
-
-	getResp, err := http.Get(h.baseURL + "/threads/" + threadID)
-	if err != nil {
-		t.Fatalf("GET thread after purge: %v", err)
-	}
-	defer getResp.Body.Close()
-	if getResp.StatusCode != http.StatusNotFound {
-		t.Fatalf("expected 404 after purge, got %d", getResp.StatusCode)
-	}
+	assertErrorCode(t, purgeResp, "not_found")
 }
 
 func TestBoardPurgeLifecycle(t *testing.T) {

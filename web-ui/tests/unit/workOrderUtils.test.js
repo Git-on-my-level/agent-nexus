@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyWorkOrderContextPrefill,
   buildWorkOrderContextSuggestions,
-  ensureThreadRef,
+  ensureSubjectAnchorRef,
   mergeContextRefsInput,
   removeContextRefsFromInput,
   validateWorkOrderDraft,
@@ -20,14 +20,17 @@ describe("work order list helpers", () => {
     expect(serializeListInput(["one", "two"])).toBe("one\ntwo");
   });
 
-  it("ensures thread ref is present", () => {
-    expect(ensureThreadRef(["artifact:a"], "thread-1")).toEqual([
-      "thread:thread-1",
+  it("ensures subject anchor ref is present first", () => {
+    expect(ensureSubjectAnchorRef(["artifact:a"], "topic:thread-1")).toEqual([
+      "topic:thread-1",
       "artifact:a",
     ]);
     expect(
-      ensureThreadRef(["thread:thread-1", "artifact:a"], "thread-1"),
-    ).toEqual(["thread:thread-1", "artifact:a"]);
+      ensureSubjectAnchorRef(
+        ["topic:thread-1", "artifact:a"],
+        "topic:thread-1",
+      ),
+    ).toEqual(["topic:thread-1", "artifact:a"]);
   });
 });
 
@@ -61,16 +64,16 @@ describe("work order draft validation", () => {
         acceptanceCriteriaInput: "All tests pass",
         definitionOfDoneInput: "Merged to main",
       },
-      { threadId: "thread-1" },
+      { subjectRef: "topic:thread-1" },
     );
 
     expect(result.valid).toBe(true);
     expect(result.errors).toEqual([]);
     expect(result.normalized).toMatchObject({
-      thread_id: "thread-1",
+      subject_ref: "topic:thread-1",
       objective: "Ship onboarding fix",
       constraints: ["No downtime"],
-      context_refs: ["thread:thread-1", "artifact:artifact-1"],
+      context_refs: ["topic:thread-1", "artifact:artifact-1"],
       acceptance_criteria: ["All tests pass"],
       definition_of_done: ["Merged to main"],
     });
@@ -85,7 +88,7 @@ describe("work order draft validation", () => {
         acceptanceCriteriaInput: "",
         definitionOfDoneInput: "",
       },
-      { threadId: "thread-1" },
+      { subjectRef: "topic:thread-1" },
     );
 
     expect(result.valid).toBe(false);
@@ -157,7 +160,7 @@ describe("work order context suggestions", () => {
       }),
       expect.objectContaining({
         ref: "document:doc-1",
-        source: "Thread document",
+        source: "Linked document",
         detail: "active • v2 • text",
       }),
     ]);
@@ -165,32 +168,32 @@ describe("work order context suggestions", () => {
 });
 
 describe("context ref input merging", () => {
-  it("dedupes merged refs and keeps the thread ref first", () => {
+  it("dedupes merged refs and keeps the subject ref first", () => {
     expect(
       mergeContextRefsInput(
-        "thread:thread-1\nartifact:artifact-1",
+        "topic:thread-1\nartifact:artifact-1",
         ["artifact:artifact-1", "document:doc-1", "url:https://example.com"],
-        { threadId: "thread-1" },
+        { subjectRef: "topic:thread-1" },
       ),
     ).toBe(
-      "thread:thread-1\nartifact:artifact-1\ndocument:doc-1\nurl:https://example.com",
+      "topic:thread-1\nartifact:artifact-1\ndocument:doc-1\nurl:https://example.com",
     );
   });
 
   it("removes only selected suggestion refs and preserves manual entries", () => {
     expect(
       removeContextRefsFromInput(
-        "thread:thread-1\nartifact:artifact-1\nurl:https://example.com\ndocument:doc-1",
+        "topic:thread-1\nartifact:artifact-1\nurl:https://example.com\ndocument:doc-1",
         ["artifact:artifact-1", "document:doc-1"],
-        { threadId: "thread-1" },
+        { subjectRef: "topic:thread-1" },
       ),
-    ).toBe("thread:thread-1\nurl:https://example.com");
+    ).toBe("topic:thread-1\nurl:https://example.com");
   });
 
   it("applies prefill once and does not reapply after manual edits", () => {
     const first = applyWorkOrderContextPrefill({
-      currentInput: "thread:thread-1",
-      threadId: "thread-1",
+      currentInput: "topic:thread-1",
+      subjectRef: "topic:thread-1",
       prefillRefs: ["artifact:artifact-1", "artifact:artifact-1"],
       prefillKey: "thread-1|artifact:artifact-1",
       appliedPrefillKey: "",
@@ -198,13 +201,13 @@ describe("context ref input merging", () => {
 
     expect(first).toEqual({
       applied: true,
-      nextInput: "thread:thread-1\nartifact:artifact-1",
+      nextInput: "topic:thread-1\nartifact:artifact-1",
       nextAppliedPrefillKey: "thread-1|artifact:artifact-1",
     });
 
     const second = applyWorkOrderContextPrefill({
-      currentInput: "thread:thread-1",
-      threadId: "thread-1",
+      currentInput: "topic:thread-1",
+      subjectRef: "topic:thread-1",
       prefillRefs: ["artifact:artifact-1"],
       prefillKey: "thread-1|artifact:artifact-1",
       appliedPrefillKey: first.nextAppliedPrefillKey,
@@ -212,7 +215,7 @@ describe("context ref input merging", () => {
 
     expect(second).toEqual({
       applied: false,
-      nextInput: "thread:thread-1",
+      nextInput: "topic:thread-1",
       nextAppliedPrefillKey: "thread-1|artifact:artifact-1",
     });
   });

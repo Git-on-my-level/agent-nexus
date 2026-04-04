@@ -40,14 +40,15 @@ describe("receipt draft validation", () => {
         changesSummary: "Implemented the requested flow.",
         knownGapsInput: "Need one more integration test",
       },
-      { threadId: "thread-1" },
+      { subjectRef: "topic:thread-1" },
     );
 
     expect(result.valid).toBe(true);
     expect(result.errors).toEqual([]);
     expect(result.normalized).toMatchObject({
-      thread_id: "thread-1",
+      subject_ref: "topic:thread-1",
       work_order_id: "artifact-work-order-1",
+      work_order_ref: "artifact:artifact-work-order-1",
       outputs: ["artifact:artifact-output-1"],
       verification_evidence: ["artifact:artifact-test-log"],
       changes_summary: "Implemented the requested flow.",
@@ -64,7 +65,7 @@ describe("receipt draft validation", () => {
         changesSummary: "",
         knownGapsInput: "",
       },
-      { threadId: "thread-1" },
+      { subjectRef: "topic:thread-1" },
     );
 
     expect(result.valid).toBe(false);
@@ -86,7 +87,7 @@ describe("receipt draft validation", () => {
         knownGapsInput: "Need one more integration test",
       },
       {
-        threadId: "thread-1",
+        subjectRef: "topic:thread-1",
         receiptId: "artifact-receipt-1",
       },
     );
@@ -94,8 +95,8 @@ describe("receipt draft validation", () => {
     expect(result.valid).toBe(true);
     expect(result.packet).toEqual({
       receipt_id: "artifact-receipt-1",
-      thread_id: "thread-1",
-      work_order_id: "artifact-work-order-1",
+      subject_ref: "topic:thread-1",
+      work_order_ref: "artifact:artifact-work-order-1",
       outputs: ["artifact:artifact-output-1"],
       verification_evidence: ["artifact:artifact-test-log"],
       changes_summary: "Implemented the requested flow.",
@@ -104,9 +105,8 @@ describe("receipt draft validation", () => {
     expect(result.artifact).toEqual({
       id: "artifact-receipt-1",
       kind: "receipt",
-      thread_id: "thread-1",
       summary: "Receipt for artifact-work-order-1",
-      refs: ["thread:thread-1", "artifact:artifact-work-order-1"],
+      refs: ["topic:thread-1", "artifact:artifact-work-order-1"],
     });
   });
 
@@ -118,7 +118,7 @@ describe("receipt draft validation", () => {
         verificationEvidenceInput: "",
         changesSummary: "",
       },
-      { threadId: "thread-1" },
+      { subjectRef: "topic:thread-1" },
     );
 
     expect(result.valid).toBe(false);

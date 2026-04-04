@@ -269,17 +269,16 @@ async function parseRawErrorResponse(response) {
   };
 }
 
-/** 0.3.x packets require `subject_ref`; legacy UI still sends `thread_id` on the packet. */
-function normalizePacketThreadIdToSubjectRef(packet) {
+function normalizePacketForCreate(packet) {
   if (!packet || typeof packet !== "object") {
     return packet;
   }
   const next = { ...packet };
-  const threadId = String(next.thread_id ?? "").trim();
-  delete next.thread_id;
-  if (threadId && !String(next.subject_ref ?? "").trim()) {
-    next.subject_ref = `thread:${threadId}`;
+  const legacyThreadId = String(next.thread_id ?? "").trim();
+  if (!String(next.subject_ref ?? "").trim() && legacyThreadId) {
+    next.subject_ref = `thread:${legacyThreadId}`;
   }
+  delete next.thread_id;
   return next;
 }
 
@@ -555,73 +554,14 @@ export function createOarCoreClient(options = {}) {
     listAuthAudit: (filters) =>
       invokeDirectJSON("/auth/audit", { query: filters }),
 
-    createThread: (payload) =>
-      invokeDirectJSON("/threads", {
-        method: "POST",
-        body: JSON.stringify(withActorId(payload)),
-        headers: { "content-type": "application/json" },
-      }),
     listThreads: (filters) =>
       invokeJSON("threads.list", () =>
         generated.threadsList({ query: filters }),
-      ),
-    archiveThread: (threadId, payload) =>
-      invokeDirectJSON(
-        `/threads/${encodeURIComponent(String(threadId))}/archive`,
-        {
-          method: "POST",
-          body: JSON.stringify(withActorId(payload)),
-          headers: { "content-type": "application/json" },
-        },
-      ),
-    unarchiveThread: (threadId, payload) =>
-      invokeDirectJSON(
-        `/threads/${encodeURIComponent(String(threadId))}/unarchive`,
-        {
-          method: "POST",
-          body: JSON.stringify(withActorId(payload)),
-          headers: { "content-type": "application/json" },
-        },
-      ),
-    tombstoneThread: (threadId, payload) =>
-      invokeDirectJSON(
-        `/threads/${encodeURIComponent(String(threadId))}/tombstone`,
-        {
-          method: "POST",
-          body: JSON.stringify(withActorId(payload)),
-          headers: { "content-type": "application/json" },
-        },
-      ),
-    restoreThread: (threadId, payload) =>
-      invokeDirectJSON(
-        `/threads/${encodeURIComponent(String(threadId))}/restore`,
-        {
-          method: "POST",
-          body: JSON.stringify(withActorId(payload)),
-          headers: {
-            "content-type": "application/json",
-          },
-        },
-      ),
-    purgeThread: (threadId, payload) =>
-      invokeDirectJSON(
-        `/threads/${encodeURIComponent(String(threadId))}/purge`,
-        {
-          method: "POST",
-          body: JSON.stringify(payload || {}),
-          headers: { "content-type": "application/json" },
-        },
       ),
     getThread: (threadId) =>
       invokeJSON("threads.inspect", () =>
         generated.threadsInspect({ thread_id: String(threadId) }),
       ),
-    updateThread: (threadId, payload) =>
-      invokeDirectJSON(`/threads/${encodeURIComponent(String(threadId))}`, {
-        method: "PATCH",
-        body: JSON.stringify(withActorId(payload)),
-        headers: { "content-type": "application/json" },
-      }),
     getThreadWorkspace: (threadId, filters) =>
       invokeJSON("threads.workspace", () =>
         generated.threadsWorkspace(
@@ -677,6 +617,42 @@ export function createOarCoreClient(options = {}) {
           { topic_id: String(topicId) },
           { body: withActorId(payload) },
         ),
+      ),
+    archiveTopic: (topicId, payload) =>
+      invokeDirectJSON(
+        `/topics/${encodeURIComponent(String(topicId))}/archive`,
+        {
+          method: "POST",
+          body: JSON.stringify(withActorId(payload ?? {})),
+          headers: { "content-type": "application/json" },
+        },
+      ),
+    unarchiveTopic: (topicId, payload) =>
+      invokeDirectJSON(
+        `/topics/${encodeURIComponent(String(topicId))}/unarchive`,
+        {
+          method: "POST",
+          body: JSON.stringify(withActorId(payload ?? {})),
+          headers: { "content-type": "application/json" },
+        },
+      ),
+    tombstoneTopic: (topicId, payload) =>
+      invokeDirectJSON(
+        `/topics/${encodeURIComponent(String(topicId))}/tombstone`,
+        {
+          method: "POST",
+          body: JSON.stringify(withActorId(payload ?? {})),
+          headers: { "content-type": "application/json" },
+        },
+      ),
+    restoreTopic: (topicId, payload) =>
+      invokeDirectJSON(
+        `/topics/${encodeURIComponent(String(topicId))}/restore`,
+        {
+          method: "POST",
+          body: JSON.stringify(withActorId(payload ?? {})),
+          headers: { "content-type": "application/json" },
+        },
       ),
     listCards: (filters) =>
       invokeJSON("cards.list", () => generated.cardsList({ query: filters })),
@@ -907,7 +883,7 @@ export function createOarCoreClient(options = {}) {
     createWorkOrder: (payload) => {
       const body = withActorId({ ...payload });
       if (body.packet) {
-        body.packet = normalizePacketThreadIdToSubjectRef(body.packet);
+        body.packet = normalizePacketForCreate(body.packet);
       }
       return invokeJSON("packets.work-orders.create", () =>
         generated.packetsWorkOrdersCreate({ body }),
@@ -916,7 +892,7 @@ export function createOarCoreClient(options = {}) {
     createReceipt: (payload) => {
       const body = withActorId({ ...payload });
       if (body.packet) {
-        body.packet = normalizePacketThreadIdToSubjectRef(body.packet);
+        body.packet = normalizePacketForCreate(body.packet);
       }
       return invokeJSON("packets.receipts.create", () =>
         generated.packetsReceiptsCreate({ body }),
@@ -925,7 +901,7 @@ export function createOarCoreClient(options = {}) {
     createReview: (payload) => {
       const body = withActorId({ ...payload });
       if (body.packet) {
-        body.packet = normalizePacketThreadIdToSubjectRef(body.packet);
+        body.packet = normalizePacketForCreate(body.packet);
       }
       return invokeJSON("packets.reviews.create", () =>
         generated.packetsReviewsCreate({ body }),

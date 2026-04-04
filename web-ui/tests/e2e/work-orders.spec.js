@@ -115,8 +115,12 @@ test("work order composer validates typed refs and sends correct POST payload", 
     });
   });
 
-  await page.route(/\/work_orders$/, async (route) => {
+  await page.route(/\/(work_orders|packets\/work-orders)$/, async (route) => {
     postedPayload = JSON.parse(route.request().postData() ?? "{}");
+    const subjectRef = String(postedPayload.packet?.subject_ref ?? "");
+    const backingThreadId = subjectRef.includes(":")
+      ? subjectRef.split(":").slice(1).join(":").trim()
+      : "";
     const artifactId =
       postedPayload.artifact?.id ??
       postedPayload.packet?.work_order_id ??
@@ -126,11 +130,8 @@ test("work order composer validates typed refs and sends correct POST payload", 
       ts: "2026-03-04T05:00:00.000Z",
       type: "work_order_created",
       actor_id: postedPayload.actor_id,
-      thread_id: postedPayload.packet.thread_id,
-      refs: [
-        `artifact:${artifactId}`,
-        `thread:${postedPayload.packet.thread_id}`,
-      ],
+      thread_id: backingThreadId,
+      refs: [`artifact:${artifactId}`, subjectRef],
       summary: `Work order created: ${postedPayload.packet.objective}`,
       payload: { artifact_id: artifactId },
       provenance: { sources: ["actor_statement:ui"] },
@@ -144,7 +145,7 @@ test("work order composer validates typed refs and sends correct POST payload", 
         artifact: {
           id: artifactId,
           kind: "work_order",
-          thread_id: postedPayload.packet.thread_id,
+          thread_id: backingThreadId,
           refs: postedPayload.artifact.refs,
           summary: postedPayload.packet.objective,
         },
@@ -189,12 +190,11 @@ test("work order composer validates typed refs and sends correct POST payload", 
 
   expect(postedPayload.actor_id).toBe(actorId);
   expect(postedPayload.artifact.kind).toBe("work_order");
-  expect(postedPayload.artifact.thread_id).toBe("thread-onboarding");
   expect(postedPayload.artifact.refs).toEqual(["thread:thread-onboarding"]);
   expect(postedPayload.artifact.id).toBeUndefined();
   expect(postedPayload.packet).not.toHaveProperty("work_order_id");
   expect(postedPayload.packet).toMatchObject({
-    thread_id: "thread-onboarding",
+    subject_ref: "thread:thread-onboarding",
     objective: "Ship onboarding update",
     constraints: ["No downtime", "No schema drift"],
     context_refs: [

@@ -1054,11 +1054,6 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
 			}
 			return routeAccessRequirement{}
-		case strings.HasSuffix(remainder, "/archive"), strings.HasSuffix(remainder, "/unarchive"), strings.HasSuffix(remainder, "/tombstone"), strings.HasSuffix(remainder, "/restore"), strings.HasSuffix(remainder, "/purge"):
-			if r.Method == http.MethodPost {
-				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
-			}
-			return routeAccessRequirement{}
 		case strings.Contains(remainder, "/"):
 			return routeAccessRequirement{}
 		case r.Method == http.MethodGet:
@@ -1118,81 +1113,6 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				return
 			}
 			handleThreadWorkspace(w, r, opts, threadID)
-			return
-		}
-
-		if strings.HasSuffix(remainder, "/archive") {
-			if r.Method != http.MethodPost {
-				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
-				return
-			}
-			threadID := strings.TrimSuffix(remainder, "/archive")
-			threadID = strings.TrimSuffix(threadID, "/")
-			if threadID == "" || strings.Contains(threadID, "/") {
-				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
-				return
-			}
-			handleArchiveThread(w, r, opts, threadID)
-			return
-		}
-
-		if strings.HasSuffix(remainder, "/unarchive") {
-			if r.Method != http.MethodPost {
-				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
-				return
-			}
-			threadID := strings.TrimSuffix(remainder, "/unarchive")
-			threadID = strings.TrimSuffix(threadID, "/")
-			if threadID == "" || strings.Contains(threadID, "/") {
-				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
-				return
-			}
-			handleUnarchiveThread(w, r, opts, threadID)
-			return
-		}
-
-		if strings.HasSuffix(remainder, "/tombstone") {
-			if r.Method != http.MethodPost {
-				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
-				return
-			}
-			threadID := strings.TrimSuffix(remainder, "/tombstone")
-			threadID = strings.TrimSuffix(threadID, "/")
-			if threadID == "" || strings.Contains(threadID, "/") {
-				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
-				return
-			}
-			handleTombstoneThread(w, r, opts, threadID)
-			return
-		}
-
-		if strings.HasSuffix(remainder, "/restore") {
-			if r.Method != http.MethodPost {
-				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
-				return
-			}
-			threadID := strings.TrimSuffix(remainder, "/restore")
-			threadID = strings.TrimSuffix(threadID, "/")
-			if threadID == "" || strings.Contains(threadID, "/") {
-				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
-				return
-			}
-			handleRestoreThread(w, r, opts, threadID)
-			return
-		}
-
-		if strings.HasSuffix(remainder, "/purge") {
-			if r.Method != http.MethodPost {
-				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
-				return
-			}
-			threadID := strings.TrimSuffix(remainder, "/purge")
-			threadID = strings.TrimSuffix(threadID, "/")
-			if threadID == "" || strings.Contains(threadID, "/") {
-				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
-				return
-			}
-			handlePurgeThread(w, r, opts, threadID)
 			return
 		}
 

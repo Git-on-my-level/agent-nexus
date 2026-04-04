@@ -3,7 +3,7 @@ import { parseListInput, validateTypedRefs } from "./typedRefs.js";
 const ALLOWED_REVIEW_OUTCOMES = new Set(["accept", "revise", "escalate"]);
 
 export function validateReviewDraft(draft, options = {}) {
-  const threadId = String(options.threadId ?? "").trim();
+  const subjectRef = String(options.subjectRef ?? "").trim();
   const receiptId = String(options.receiptId ?? "").trim();
   const workOrderId = String(options.workOrderId ?? "").trim();
   const reviewId = String(options.reviewId ?? "").trim();
@@ -21,8 +21,8 @@ export function validateReviewDraft(draft, options = {}) {
   const notes = String(draft?.notes ?? "").trim();
   const evidenceRefs = parseListInput(draft?.evidenceRefsInput);
 
-  if (!threadId) {
-    addError("thread_id", "thread_id is required.");
+  if (!subjectRef) {
+    addError("subject_ref", "subject_ref is required.");
   }
 
   if (!receiptId) {
@@ -53,6 +53,9 @@ export function validateReviewDraft(draft, options = {}) {
     );
   }
 
+  const workOrderRef = workOrderId ? `artifact:${workOrderId}` : "";
+  const receiptRef = receiptId ? `artifact:${receiptId}` : "";
+
   return {
     valid: errors.length === 0,
     errors,
@@ -61,7 +64,9 @@ export function validateReviewDraft(draft, options = {}) {
       review_id: reviewId,
       receipt_id: receiptId,
       work_order_id: workOrderId,
-      thread_id: threadId,
+      work_order_ref: workOrderRef,
+      receipt_ref: receiptRef,
+      subject_ref: subjectRef,
       outcome,
       notes,
       evidence_refs: evidenceRefs,
@@ -81,8 +86,9 @@ export function buildReviewPayload(draft, options = {}) {
 
   const packet = {
     review_id: validation.normalized.review_id,
-    work_order_id: validation.normalized.work_order_id,
-    receipt_id: validation.normalized.receipt_id,
+    subject_ref: validation.normalized.subject_ref,
+    work_order_ref: validation.normalized.work_order_ref,
+    receipt_ref: validation.normalized.receipt_ref,
     outcome: validation.normalized.outcome,
     notes: validation.normalized.notes,
     evidence_refs: validation.normalized.evidence_refs,
@@ -97,12 +103,11 @@ export function buildReviewPayload(draft, options = {}) {
     artifact: {
       id: validation.normalized.review_id,
       kind: "review",
-      thread_id: validation.normalized.thread_id,
       summary: `Review (${validation.normalized.outcome}) for ${validation.normalized.receipt_id}`,
       refs: [
-        `thread:${validation.normalized.thread_id}`,
-        `artifact:${validation.normalized.receipt_id}`,
-        `artifact:${validation.normalized.work_order_id}`,
+        validation.normalized.subject_ref,
+        validation.normalized.receipt_ref,
+        validation.normalized.work_order_ref,
       ],
     },
   };

@@ -261,7 +261,7 @@ describe("oarCoreClient error messaging", () => {
     ]);
   });
 
-  it("maps packet.thread_id to subject_ref for work-order creates", async () => {
+  it("forwards work-order create bodies without client-side packet mutation", async () => {
     const seenBodies = [];
     const client = createOarCoreClient({
       baseUrl: "http://core.test",
@@ -286,10 +286,10 @@ describe("oarCoreClient error messaging", () => {
       request_key: "rk-1",
       artifact: { kind: "work_order" },
       packet: {
-        thread_id: "thr-9",
+        subject_ref: "topic:thr-9",
         objective: "do it",
         constraints: ["c"],
-        context_refs: ["thread:thr-9"],
+        context_refs: ["topic:thr-9"],
         acceptance_criteria: ["a"],
         definition_of_done: ["d"],
       },
@@ -297,8 +297,7 @@ describe("oarCoreClient error messaging", () => {
 
     expect(seenBodies.length).toBe(1);
     const body = JSON.parse(seenBodies[0]);
-    expect(body.packet.thread_id).toBeUndefined();
-    expect(body.packet.subject_ref).toBe("thread:thr-9");
+    expect(body.packet.subject_ref).toBe("topic:thr-9");
   });
 
   it("posts inbox acknowledgements to the contract acknowledge path", async () => {

@@ -11,7 +11,7 @@ function parseTypedRefId(ref, prefix) {
 
 function primaryThreadFromTopicWorkspace(workspace) {
   const topic = workspace?.topic;
-  const primaryId = parseTypedRefId(topic?.primary_thread_ref, "thread");
+  const primaryId = String(topic?.thread_id ?? "").trim();
   const threads = Array.isArray(workspace?.threads) ? workspace.threads : [];
   if (primaryId) {
     const found = threads.find((t) => String(t?.id) === primaryId);
@@ -47,11 +47,7 @@ function deriveBoardPanelsFromTopicWorkspace(workspace, topicId) {
   const boardMemberships = [];
   for (const card of cards) {
     const cid = String(card?.thread_id ?? "").trim();
-    const refThread = parseTypedRefId(card?.thread_ref, "thread");
-    const threadMatch =
-      (primaryThreadId && cid === primaryThreadId) ||
-      (primaryThreadId && refThread === primaryThreadId);
-    if (!threadMatch) continue;
+    if (!primaryThreadId || cid !== primaryThreadId) continue;
     const boardId =
       String(card?.board_id ?? "").trim() ||
       parseTypedRefId(card?.board_ref, "board");

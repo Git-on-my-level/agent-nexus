@@ -12,7 +12,12 @@
   import { parseListInput } from "$lib/typedRefs.js";
   import { validateReceiptDraft } from "$lib/receiptUtils";
 
-  let { threadId, onWorkOrderSubmit, onReceiptSubmit } = $props();
+  let {
+    threadId,
+    subjectRef = "",
+    onWorkOrderSubmit,
+    onReceiptSubmit,
+  } = $props();
 
   let workOrders = $derived($threadDetailStore.workOrders);
   let workOrdersLoading = $derived($threadDetailStore.workOrdersLoading);
@@ -81,10 +86,11 @@
   }
 
   function blankWorkOrderDraft() {
+    const anchor = String(subjectRef ?? "").trim();
     return {
       objective: "",
       constraintsInput: "",
-      contextRefsInput: `thread:${threadId}`,
+      contextRefsInput: anchor,
       acceptanceCriteriaInput: "",
       definitionOfDoneInput: "",
       requestKey: createRequestKey("work-order"),
@@ -115,7 +121,7 @@
 
     const prefill = applyWorkOrderContextPrefill({
       currentInput: workOrderDraft.contextRefsInput,
-      threadId,
+      subjectRef,
       prefillRefs: workOrderPrefillRefs,
       prefillKey: workOrderPrefillKey,
       appliedPrefillKey: workOrderAppliedPrefillKey,
@@ -148,10 +154,10 @@
     if (!workOrderDraft) return;
     const nextInput = selectedContextRefs.has(ref)
       ? removeContextRefsFromInput(workOrderDraft.contextRefsInput, [ref], {
-          threadId,
+          subjectRef,
         })
       : mergeContextRefsInput(workOrderDraft.contextRefsInput, [ref], {
-          threadId,
+          subjectRef,
         });
     updateWorkOrderContextRefs(nextInput);
   }
@@ -162,7 +168,7 @@
       mergeContextRefsInput(
         workOrderDraft.contextRefsInput,
         workOrderContextSuggestions.map((suggestion) => suggestion.ref),
-        { threadId },
+        { subjectRef },
       ),
     );
   }
@@ -173,7 +179,7 @@
       removeContextRefsFromInput(
         workOrderDraft.contextRefsInput,
         workOrderContextSuggestions.map((suggestion) => suggestion.ref),
-        { threadId },
+        { subjectRef },
       ),
     );
   }
@@ -189,7 +195,7 @@
     creatingWorkOrder = true;
     workOrderErrors = [];
     workOrderNotice = "";
-    const v = validateWorkOrderDraft(workOrderDraft, { threadId });
+    const v = validateWorkOrderDraft(workOrderDraft, { subjectRef });
     if (!v.valid) {
       workOrderErrors = v.errors;
       creatingWorkOrder = false;
@@ -200,12 +206,11 @@
         threadId,
         {
           kind: "work_order",
-          thread_id: threadId,
           summary: v.normalized.objective,
-          refs: [`thread:${threadId}`],
+          refs: [v.normalized.subject_ref],
         },
         {
-          thread_id: threadId,
+          subject_ref: v.normalized.subject_ref,
           ...v.normalized,
         },
         workOrderDraft.requestKey,
@@ -234,7 +239,7 @@
     creatingReceipt = true;
     receiptErrors = [];
     receiptNotice = "";
-    const v = validateReceiptDraft(receiptDraft, { threadId });
+    const v = validateReceiptDraft(receiptDraft, { subjectRef });
     if (!v.valid) {
       receiptErrors = v.errors;
       creatingReceipt = false;
@@ -245,16 +250,16 @@
         threadId,
         {
           kind: "receipt",
-          thread_id: threadId,
           summary: v.normalized.changes_summary.slice(0, 120),
           refs: [
-            `thread:${threadId}`,
+            v.normalized.subject_ref,
             `artifact:${v.normalized.work_order_id}`,
           ],
         },
         {
+          subject_ref: v.normalized.subject_ref,
+          work_order_ref: `artifact:${v.normalized.work_order_id}`,
           work_order_id: v.normalized.work_order_id,
-          thread_id: threadId,
           ...v.normalized,
         },
         receiptDraft.requestKey,

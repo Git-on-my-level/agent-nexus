@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 from oar_agent_bridge.bridge import AgentBridge
 from oar_agent_bridge.config import AdapterConfig, AgentConfig, LoadedConfig, OARConfig
+from oar_agent_bridge.models import WakePacket
 from oar_agent_bridge.oar_client import OARClientError, OARStreamDisconnected
 from oar_agent_bridge.util import generate_bridge_proof_keypair
 
@@ -191,7 +192,8 @@ def test_claim_wakeup_returns_false_on_conflict():
 
     bridge.client.create_event = raise_conflict
 
-    assert bridge._claim_wakeup("wake-1", "thread-1", "actor-1", "event-1") is False
+    packet = WakePacket.from_content(bridge.client.get_artifact_content("wake-1"))
+    assert bridge._claim_wakeup(packet, "actor-1", "event-1") is False
 
 
 def test_bridge_logs_transport_disconnect_without_traceback(monkeypatch, caplog):
@@ -265,6 +267,7 @@ def test_handle_notification_marks_read_after_dispatch():
     ]
     assert client.created_events[0]["event"]["refs"] == [
         "thread:thread-1",
+        "topic:topic-1",
         "event:evt-request",
         "artifact:wake-1",
     ]

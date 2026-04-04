@@ -66,14 +66,7 @@ func newProjectionMaintenanceTestServerWithMode(t *testing.T, mode string) proje
 		WithProjectionMaintainer(maintainer),
 	)
 	server := httptest.NewServer(handler)
-	testServerLegacyWorkspaces.Store(server.URL, legacyTestWorkspaceContext{
-		primitiveStore:             primitiveStore,
-		actorStore:                 registry,
-		allowUnauthenticatedWrites: true,
-		maintainer:                 maintainer,
-	})
 	t.Cleanup(func() {
-		testServerLegacyWorkspaces.Delete(server.URL)
 		server.Close()
 		_ = workspace.Close()
 	})
@@ -129,34 +122,19 @@ func TestProjectionMaintainerEmitsStaleExceptionsAndRefreshesInbox(t *testing.T)
 	h := newProjectionMaintenanceTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
 
-	createResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
-		"actor_id":"actor-1",
-		"thread":{
-			"title":"Worker stale thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p1",
-			"tags":["ops"],
-			"cadence":"daily",
-			"next_check_in_at":"2020-01-01T00:00:00Z",
-			"current_summary":"summary",
-			"next_actions":["follow up"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated)
-	defer createResp.Body.Close()
-
-	var created struct {
-		Thread map[string]any `json:"thread"`
-	}
-	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
-		t.Fatalf("decode thread response: %v", err)
-	}
-	threadID := asString(created.Thread["id"])
-	if threadID == "" {
-		t.Fatal("expected thread id")
-	}
+	threadID := integrationSeedThreadWithStore(t, h.store, nil, "actor-1", map[string]any{
+		"title":            "Worker stale thread",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p1",
+		"tags":             []any{"ops"},
+		"cadence":          "daily",
+		"next_check_in_at": "2020-01-01T00:00:00Z",
+		"current_summary":  "summary",
+		"next_actions":     []any{"follow up"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
 
 	if count := countStaleThreadExceptions(t, h.baseURL, threadID); count != 0 {
 		t.Fatalf("expected no stale exceptions before maintainer step, got %d", count)
@@ -190,34 +168,19 @@ func TestProjectionMaintainerSuppressesStaleInboxAfterNewActivity(t *testing.T) 
 	h := newProjectionMaintenanceTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
 
-	createResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
-		"actor_id":"actor-1",
-		"thread":{
-			"title":"Worker stale suppression thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p1",
-			"tags":["ops"],
-			"cadence":"daily",
-			"next_check_in_at":"2020-01-01T00:00:00Z",
-			"current_summary":"summary",
-			"next_actions":["follow up"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated)
-	defer createResp.Body.Close()
-
-	var created struct {
-		Thread map[string]any `json:"thread"`
-	}
-	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
-		t.Fatalf("decode thread response: %v", err)
-	}
-	threadID := asString(created.Thread["id"])
-	if threadID == "" {
-		t.Fatal("expected thread id")
-	}
+	threadID := integrationSeedThreadWithStore(t, h.store, nil, "actor-1", map[string]any{
+		"title":            "Worker stale suppression thread",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p1",
+		"tags":             []any{"ops"},
+		"cadence":          "daily",
+		"next_check_in_at": "2020-01-01T00:00:00Z",
+		"current_summary":  "summary",
+		"next_actions":     []any{"follow up"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
 
 	staleNow := time.Date(2026, 3, 18, 10, 0, 0, 0, time.UTC)
 	h.step(t, staleNow)
@@ -284,22 +247,19 @@ func TestOpsHealthEndpointReportsProjectionMaintenanceLag(t *testing.T) {
 	h := newProjectionMaintenanceTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
 
-	postJSONExpectStatus(t, h.baseURL+"/threads", `{
-		"actor_id":"actor-1",
-		"thread":{
-			"id":"health-thread",
-			"title":"Health projection thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p1",
-			"tags":["ops"],
-			"cadence":"reactive",
-			"current_summary":"summary",
-			"next_actions":["follow up"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated).Body.Close()
+	integrationSeedThreadWithStore(t, h.store, nil, "actor-1", map[string]any{
+		"id":              "health-thread",
+		"title":           "Health projection thread",
+		"type":            "incident",
+		"status":          "active",
+		"priority":        "p1",
+		"tags":            []any{"ops"},
+		"cadence":         "reactive",
+		"current_summary": "summary",
+		"next_actions":    []any{"follow up"},
+		"key_artifacts":   []any{},
+		"provenance":      map[string]any{"sources": []any{"inferred"}},
+	})
 
 	before := getProjectionMaintenanceHealth(t, h.baseURL, "/ops/health")
 	if before.Mode != ProjectionModeBackground {
@@ -335,22 +295,19 @@ func TestProjectionMaintainerManualModeRunExitsWithoutProcessingQueue(t *testing
 	h := newProjectionMaintenanceTestServerWithMode(t, ProjectionModeManual)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
 
-	postJSONExpectStatus(t, h.baseURL+"/threads", `{
-		"actor_id":"actor-1",
-		"thread":{
-			"id":"manual-mode-thread",
-			"title":"Manual mode projection thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p1",
-			"tags":["ops"],
-			"cadence":"reactive",
-			"current_summary":"summary",
-			"next_actions":["follow up"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated).Body.Close()
+	integrationSeedThreadWithStore(t, h.store, nil, "actor-1", map[string]any{
+		"id":              "manual-mode-thread",
+		"title":           "Manual mode projection thread",
+		"type":            "incident",
+		"status":          "active",
+		"priority":        "p1",
+		"tags":            []any{"ops"},
+		"cadence":         "reactive",
+		"current_summary": "summary",
+		"next_actions":    []any{"follow up"},
+		"key_artifacts":   []any{},
+		"provenance":      map[string]any{"sources": []any{"inferred"}},
+	})
 
 	before, err := h.store.GetDerivedTopicProjectionQueueStats(context.Background())
 	if err != nil {
@@ -390,34 +347,19 @@ func TestManualModeDerivedRebuildClearsPendingProjectionWork(t *testing.T) {
 	h := newProjectionMaintenanceTestServerWithMode(t, ProjectionModeManual)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
 
-	createResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
-		"actor_id":"actor-1",
-		"thread":{
-			"title":"Manual rebuild thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p1",
-			"tags":["ops"],
-			"cadence":"daily",
-			"next_check_in_at":"2020-01-01T00:00:00Z",
-			"current_summary":"summary",
-			"next_actions":["follow up"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated)
-	defer createResp.Body.Close()
-
-	var created struct {
-		Thread map[string]any `json:"thread"`
-	}
-	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
-		t.Fatalf("decode thread response: %v", err)
-	}
-	threadID := asString(created.Thread["id"])
-	if threadID == "" {
-		t.Fatal("expected thread id")
-	}
+	threadID := integrationSeedThreadWithStore(t, h.store, nil, "actor-1", map[string]any{
+		"title":            "Manual rebuild thread",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p1",
+		"tags":             []any{"ops"},
+		"cadence":          "daily",
+		"next_check_in_at": "2020-01-01T00:00:00Z",
+		"current_summary":  "summary",
+		"next_actions":     []any{"follow up"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
 
 	before := getProjectionMaintenanceHealth(t, h.baseURL, "/ops/health")
 	if before.Mode != ProjectionModeManual {
@@ -484,46 +426,24 @@ func TestProjectionMaintainerKeepsProjectionPendingForConcurrentWrites(t *testin
 		WithProjectionMaintainer(maintainer),
 	)
 	server := httptest.NewServer(handler)
-	testServerLegacyWorkspaces.Store(server.URL, legacyTestWorkspaceContext{
-		primitiveStore:             store,
-		actorStore:                 registry,
-		allowUnauthenticatedWrites: true,
-		maintainer:                 maintainer,
-	})
 	t.Cleanup(func() {
-		testServerLegacyWorkspaces.Delete(server.URL)
 		server.Close()
 		_ = workspace.Close()
 	})
 
 	postJSONExpectStatus(t, server.URL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
-	createResp := postJSONExpectStatus(t, server.URL+"/threads", `{
-		"actor_id":"actor-1",
-		"thread":{
-			"title":"Concurrent projection thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p1",
-			"tags":["ops"],
-			"cadence":"reactive",
-			"current_summary":"summary",
-			"next_actions":["follow up"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated)
-	defer createResp.Body.Close()
-
-	var created struct {
-		Thread map[string]any `json:"thread"`
-	}
-	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
-		t.Fatalf("decode thread response: %v", err)
-	}
-	threadID := asString(created.Thread["id"])
-	if threadID == "" {
-		t.Fatal("expected thread id")
-	}
+	threadID := integrationSeedThreadWithStore(t, store, nil, "actor-1", map[string]any{
+		"title":           "Concurrent projection thread",
+		"type":            "incident",
+		"status":          "active",
+		"priority":        "p1",
+		"tags":            []any{"ops"},
+		"cadence":         "reactive",
+		"current_summary": "summary",
+		"next_actions":    []any{"follow up"},
+		"key_artifacts":   []any{},
+		"provenance":      map[string]any{"sources": []any{"inferred"}},
+	})
 
 	if err := maintainer.Step(context.Background(), time.Now().UTC()); err != nil {
 		t.Fatalf("initial step: %v", err)
@@ -673,14 +593,7 @@ func TestProjectionMaintainerNotifyWakesRunLoopPromptly(t *testing.T) {
 		WithProjectionMaintainer(maintainer),
 	)
 	server := httptest.NewServer(handler)
-	testServerLegacyWorkspaces.Store(server.URL, legacyTestWorkspaceContext{
-		primitiveStore:             store,
-		actorStore:                 registry,
-		allowUnauthenticatedWrites: true,
-		maintainer:                 maintainer,
-	})
 	t.Cleanup(func() {
-		testServerLegacyWorkspaces.Delete(server.URL)
 		server.Close()
 		_ = workspace.Close()
 	})
@@ -691,33 +604,18 @@ func TestProjectionMaintainerNotifyWakesRunLoopPromptly(t *testing.T) {
 	defer cancel()
 	go maintainer.Run(ctx)
 
-	createResp := postJSONExpectStatus(t, server.URL+"/threads", `{
-		"actor_id":"actor-1",
-		"thread":{
-			"title":"Wakeup projection thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p1",
-			"tags":["ops"],
-			"cadence":"reactive",
-			"current_summary":"summary",
-			"next_actions":["follow up"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated)
-	defer createResp.Body.Close()
-
-	var created struct {
-		Thread map[string]any `json:"thread"`
-	}
-	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
-		t.Fatalf("decode thread response: %v", err)
-	}
-	threadID := asString(created.Thread["id"])
-	if threadID == "" {
-		t.Fatal("expected thread id")
-	}
+	threadID := integrationSeedThreadWithStore(t, store, nil, "actor-1", map[string]any{
+		"title":           "Wakeup projection thread",
+		"type":            "incident",
+		"status":          "active",
+		"priority":        "p1",
+		"tags":            []any{"ops"},
+		"cadence":         "reactive",
+		"current_summary": "summary",
+		"next_actions":    []any{"follow up"},
+		"key_artifacts":   []any{},
+		"provenance":      map[string]any{"sources": []any{"inferred"}},
+	})
 
 	deadline := time.Now().Add(2 * time.Second)
 	for {
@@ -787,35 +685,25 @@ func TestOpsHealthEndpointReportsProjectionMaintenanceErrors(t *testing.T) {
 		WithProjectionMaintainer(maintainer),
 	)
 	server := httptest.NewServer(handler)
-	testServerLegacyWorkspaces.Store(server.URL, legacyTestWorkspaceContext{
-		primitiveStore:             primitiveStore,
-		actorStore:                 registry,
-		allowUnauthenticatedWrites: true,
-		maintainer:                 maintainer,
-	})
 	t.Cleanup(func() {
-		testServerLegacyWorkspaces.Delete(server.URL)
 		server.Close()
 		_ = workspace.Close()
 	})
 
 	postJSONExpectStatus(t, server.URL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
-	postJSONExpectStatus(t, server.URL+"/threads", `{
-		"actor_id":"actor-1",
-		"thread":{
-			"id":"failing-thread",
-			"title":"Failing projection thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p1",
-			"tags":["ops"],
-			"cadence":"reactive",
-			"current_summary":"summary",
-			"next_actions":["follow up"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated).Body.Close()
+	integrationSeedThreadWithStore(t, primitiveStore, nil, "actor-1", map[string]any{
+		"id":              "failing-thread",
+		"title":           "Failing projection thread",
+		"type":            "incident",
+		"status":          "active",
+		"priority":        "p1",
+		"tags":            []any{"ops"},
+		"cadence":         "reactive",
+		"current_summary": "summary",
+		"next_actions":    []any{"follow up"},
+		"key_artifacts":   []any{},
+		"provenance":      map[string]any{"sources": []any{"inferred"}},
+	})
 
 	if err := maintainer.Step(context.Background(), time.Date(2026, 3, 18, 10, 0, 0, 0, time.UTC)); err == nil {
 		t.Fatal("expected projection maintainer step to fail")
@@ -870,14 +758,7 @@ func TestOpsHealthEndpointKeepsDiagnosticsWhenReadinessFails(t *testing.T) {
 		WithProjectionMaintainer(maintainer),
 	)
 	server := httptest.NewServer(handler)
-	testServerLegacyWorkspaces.Store(server.URL, legacyTestWorkspaceContext{
-		primitiveStore:             primitiveStore,
-		actorStore:                 registry,
-		allowUnauthenticatedWrites: true,
-		maintainer:                 maintainer,
-	})
 	t.Cleanup(func() {
-		testServerLegacyWorkspaces.Delete(server.URL)
 		server.Close()
 		_ = workspace.Close()
 	})

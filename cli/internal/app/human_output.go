@@ -357,8 +357,8 @@ func renderCardListItem(item map[string]any) string {
 	if ref := strings.TrimSpace(anyString(item["topic_ref"])); ref != "" {
 		refs = append(refs, "topic="+ref)
 	}
-	if ref := strings.TrimSpace(anyString(item["thread_ref"])); ref != "" {
-		refs = append(refs, "thread="+ref)
+	if threadID := strings.TrimSpace(anyString(item["thread_id"])); threadID != "" {
+		refs = append(refs, "thread=thread:"+threadID)
 	}
 	if ref := strings.TrimSpace(anyString(item["column_key"])); ref != "" {
 		refs = append(refs, "column="+ref)
@@ -379,7 +379,7 @@ func formatTopicRecord(topic map[string]any) string {
 	lines = appendScalar(lines, "type", topic, "type")
 	lines = appendScalar(lines, "summary", topic, "summary")
 	lines = appendStringList(lines, "owner_refs", stringList(topic["owner_refs"]))
-	lines = appendScalar(lines, "primary_thread_ref", topic, "primary_thread_ref")
+	lines = appendScalar(lines, "thread_id", topic, "thread_id")
 	lines = appendStringList(lines, "document_refs", stringList(topic["document_refs"]))
 	lines = appendStringList(lines, "board_refs", stringList(topic["board_refs"]))
 	lines = appendStringList(lines, "related_refs", stringList(topic["related_refs"]))
@@ -396,7 +396,7 @@ func formatCardRecord(card map[string]any) string {
 	lines = appendScalar(lines, "summary", card, "summary")
 	lines = appendScalar(lines, "board_ref", card, "board_ref")
 	lines = appendScalar(lines, "topic_ref", card, "topic_ref")
-	lines = appendScalar(lines, "thread_ref", card, "thread_ref")
+	lines = appendScalar(lines, "thread_id", card, "thread_id")
 	lines = appendScalar(lines, "document_ref", card, "document_ref")
 	lines = appendScalar(lines, "column_key", card, "column_key")
 	lines = appendScalar(lines, "rank", card, "rank")
