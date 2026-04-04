@@ -289,7 +289,7 @@
     New Work Order
   </h2>
   <p class="mt-0.5 text-[12px] text-[var(--ui-text-muted)]">
-    Create a new work order for this thread.
+    Create a new work order for this topic.
   </p>
   {#if workOrderPrefillNotice}<p
       class="mt-2 rounded bg-indigo-500/10 px-3 py-1.5 text-[12px] text-indigo-400"
@@ -337,7 +337,7 @@
             </p>
             <p class="mt-0.5 text-[11px] text-[var(--ui-text-subtle)]">
               Pull from key artifacts, recent receipts and reviews, decisions,
-              and thread-linked docs. You can still edit the raw typed refs
+              and topic-linked docs. You can still edit the raw typed refs
               below.
             </p>
           </div>
@@ -359,7 +359,7 @@
 
         {#if workOrderContextSuggestions.length === 0}
           <p class="mt-2 text-[12px] text-[var(--ui-text-muted)]">
-            No suggested refs yet for this thread.
+            No suggested refs yet for this topic.
           </p>
         {:else}
           <div class="mt-2 flex flex-wrap gap-2">

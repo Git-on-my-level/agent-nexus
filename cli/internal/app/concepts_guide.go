@@ -22,10 +22,24 @@ type namedDescription struct {
 var conceptsGuidePrimitives = []conceptsPrimitive{
 	{
 		Name:        "threads",
-		UseWhen:     "You need a durable work object with ownership, status, cadence, summary, and follow-up over time.",
-		NotFor:      "Append-only facts or long-form narrative documents.",
+		UseWhen:     "You need read-only coordination data, provenance, and timeline inspection for an existing work subject.",
+		NotFor:      "Creating the work subject itself or storing long-lived planning state.",
+		Examples:    []string{"timeline inspection", "workspace inspection", "coordination view"},
+		RelatedRead: []string{"oar threads list", "oar threads inspect", "oar threads workspace"},
+	},
+	{
+		Name:        "topics",
+		UseWhen:     "You need the durable work subject itself with ownership, summary, related refs, and provenance.",
+		NotFor:      "Board-scoped task placement or low-level event history.",
 		Examples:    []string{"initiatives", "incidents", "cases", "deliverables"},
-		RelatedRead: []string{"oar threads list", "oar threads get", "oar threads review"},
+		RelatedRead: []string{"oar topics list", "oar topics get", "oar topics workspace"},
+	},
+	{
+		Name:        "cards",
+		UseWhen:     "You need board-scoped planning items with column, rank, assignee, and move/update operations.",
+		NotFor:      "The durable subject record or append-only event history.",
+		Examples:    []string{"board cards", "task cards", "workflow cards"},
+		RelatedRead: []string{"oar cards list", "oar cards get", "oar cards move"},
 	},
 	{
 		Name:        "events",
@@ -113,7 +127,9 @@ func conceptsGuideData() map[string]any {
 func conceptsSelectionRules() []string {
 	return []string{
 		"Use events for immutable facts.",
-		"Use threads for durable work state and coordination.",
+		"Use topics for durable work subjects.",
+		"Use cards for board-scoped planning and movement.",
+		"Use threads for read-only coordination and timeline inspection.",
 		"Use docs for narrative knowledge that should be revised over time.",
 		"Use boards for cross-object workflow views, not source-of-truth content.",
 		"Use inbox for current attention signals from the active CLI identity's perspective.",

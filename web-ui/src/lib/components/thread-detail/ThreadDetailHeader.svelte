@@ -70,7 +70,7 @@
     lifecycleBusy = true;
     try {
       await coreClient.tombstoneThread(threadId, {});
-      await goto(workspacePath(workspaceSlug, "/threads"));
+      await goto(workspacePath(workspaceSlug, "/topics"));
     } finally {
       lifecycleBusy = false;
     }
@@ -100,7 +100,7 @@
 >
   <a
     class="hover:text-[var(--ui-text)]"
-    href={workspacePath(workspaceSlug, "/threads")}>Threads</a
+    href={workspacePath(workspaceSlug, "/topics")}>Topics</a
   >
   <span class="text-[var(--ui-text-subtle)]">/</span>
   <span class="truncate text-[var(--ui-text)]" aria-current="page"
@@ -115,7 +115,7 @@
     <div class="min-w-0 flex-1">
       <div class="flex items-center gap-2 font-semibold">
         <span>⚠</span>
-        <span>This thread has been tombstoned</span>
+        <span>This topic has been tombstoned</span>
       </div>
       {#if snapshot.tombstone_reason}
         <p class="mt-2">Reason: {snapshot.tombstone_reason}</p>
@@ -143,7 +143,7 @@
     class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[13px] text-amber-400"
   >
     <p class="min-w-0 flex-1">
-      This thread was archived on {formatTimestamp(snapshot.archived_at) ||
+      This topic was archived on {formatTimestamp(snapshot.archived_at) ||
         "—"}{#if snapshot.archived_by}
         by {actorName(snapshot.archived_by)}{/if}.
     </p>
@@ -205,7 +205,7 @@
           </button>
         {/if}
         <button
-          aria-label="Move thread to trash"
+          aria-label="Move topic to trash"
           class="cursor-pointer rounded-md p-1.5 text-[var(--ui-text-muted)] hover:bg-[var(--ui-border)] hover:text-red-400 disabled:opacity-50"
           disabled={lifecycleBusy}
           onclick={() => (confirmModal = { open: true, action: "trash" })}
@@ -232,10 +232,10 @@
 
 <ConfirmModal
   open={confirmModal.open}
-  title={confirmModal.action === "trash" ? "Move to trash" : "Archive thread"}
+  title={confirmModal.action === "trash" ? "Move to trash" : "Archive topic"}
   message={confirmModal.action === "trash"
-    ? "This thread will be tombstoned. You can restore it from trash later."
-    : "This thread will be hidden from default views. You can unarchive it later."}
+    ? "This topic will be tombstoned. You can restore it from trash later."
+    : "This topic will be hidden from default views. You can unarchive it later."}
   confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
   variant={confirmModal.action === "trash" ? "danger" : "warning"}
   busy={lifecycleBusy}

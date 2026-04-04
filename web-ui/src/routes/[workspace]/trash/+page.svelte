@@ -38,7 +38,7 @@
   let tabs = $derived([
     { id: "artifacts", label: "Artifacts", count: artifacts.length },
     { id: "documents", label: "Documents", count: documents.length },
-    { id: "threads", label: "Threads", count: threads.length },
+    { id: "threads", label: "Topics", count: threads.length },
     { id: "boards", label: "Boards", count: boards.length },
   ]);
 

@@ -266,10 +266,10 @@
     </p>
     {#if scopedThreadId}
       <p class="mt-1 text-[12px] text-[var(--ui-text-muted)]">
-        Scoped to thread
+        Scoped to topic
         <a
           class="text-indigo-300 transition-colors hover:text-indigo-200"
-          href={workspaceHref(`/threads/${encodeURIComponent(scopedThreadId)}`)}
+          href={workspaceHref(`/topics/${encodeURIComponent(scopedThreadId)}`)}
         >
           {scopedThreadId}
         </a>
@@ -339,7 +339,7 @@
     class="mb-4 flex items-center justify-between rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2"
   >
     <p class="text-[12px] text-[var(--ui-text-muted)]">
-      Showing only documents linked to this thread.
+      Showing only documents linked to this topic.
     </p>
     <a
       class="text-[12px] font-medium text-indigo-300 transition-colors hover:text-indigo-200"
@@ -408,12 +408,12 @@
       </label>
       <SearchableEntityPicker
         bind:value={draft.thread_id}
-        advancedLabel="Use a manual thread ID"
-        helperText="Optional: link the doc lineage to its primary thread."
-        label="Thread linkage"
-        manualLabel="Thread ID"
+        advancedLabel="Use a manual topic ID"
+        helperText="Optional: link the doc lineage to its primary topic."
+        label="Topic linkage"
+        manualLabel="Topic ID"
         manualPlaceholder="thread-..."
-        placeholder="Search threads by title, ID, or tags"
+        placeholder="Search topics by title, ID, or tags"
         searchFn={searchThreadOptions}
       />
       <label class="sm:col-span-2">

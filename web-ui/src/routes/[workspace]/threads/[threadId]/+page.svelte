@@ -20,7 +20,7 @@
   const THREAD_DETAIL_TABS = ["overview", "work", "messages", "timeline"];
 
   let { data } = $props();
-  let threadId = $derived($page.params.threadId);
+  let threadId = $derived($page.params.topicId || $page.params.threadId);
 
   let snapshot = $derived($threadDetailStore.snapshot);
   let snapshotLoading = $derived($threadDetailStore.snapshotLoading);
@@ -114,7 +114,7 @@
     } catch (error) {
       if (error?.status === 409) {
         conflictWarning =
-          "Thread was updated elsewhere. Reloaded — reapply your changes.";
+          "Topic was updated elsewhere. Reloaded — reapply your changes.";
         await threadDetailStore.queueRefreshThreadDetail(threadId, {
           workspace: true,
           timeline: true,
@@ -250,11 +250,11 @@
     {snapshotError}
   </p>
 {:else if !snapshot}
-  <p class="text-[13px] text-[var(--ui-text-muted)]">Thread not found.</p>
+  <p class="text-[13px] text-[var(--ui-text-muted)]">Topic not found.</p>
 {:else}
   <div
     class="mt-3 flex gap-0 border-b border-[var(--ui-border)]"
-    aria-label="Thread sections"
+    aria-label="Topic sections"
     role="tablist"
   >
     {#each [["overview", "Overview"], ["work", "Work"], ["messages", "Messages"], ["timeline", "Timeline"]] as [tabId, tabLabel]}

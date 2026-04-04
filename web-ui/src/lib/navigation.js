@@ -12,8 +12,8 @@ export const navigationItems = [
     hint: "Needs attention",
   },
   {
-    label: "Threads",
-    href: "/threads",
+    label: "Topics",
+    href: "/topics",
     icon: "threads",
     hint: "Ongoing work",
   },
@@ -65,6 +65,11 @@ const SHELL_CONTENT_RULES = [
     maxWidth: "84rem",
   },
   {
+    match: /^\/topics\/[^/]+/,
+    mode: "fluid",
+    maxWidth: "112rem",
+  },
+  {
     match: /^\/threads\/[^/]+/,
     mode: "fluid",
     maxWidth: "112rem",
@@ -85,7 +90,7 @@ const SHELL_CONTENT_RULES = [
     maxWidth: "88rem",
   },
   {
-    match: /^\/(threads|artifacts|docs|boards)$/,
+    match: /^\/(threads|topics|artifacts|docs|boards)$/,
     mode: "wide",
     maxWidth: "88rem",
   },

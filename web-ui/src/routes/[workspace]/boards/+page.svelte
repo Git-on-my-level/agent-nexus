@@ -82,7 +82,7 @@
       title: document.title || document.id,
       subtitle: [
         document.status,
-        document.thread_id && `Thread ${document.thread_id}`,
+        document.thread_id && `Topic ${document.thread_id}`,
       ]
         .filter(Boolean)
         .join(" · "),
@@ -329,7 +329,7 @@
           label="Primary thread"
           manualLabel="Primary thread ID"
           manualPlaceholder="thread-q2-initiative"
-          placeholder="Search threads by title, ID, or tags"
+          placeholder="Search topics by title, ID, or tags"
           searchFn={searchThreadOptions}
         />
 
@@ -525,11 +525,11 @@
                   </span>
                 {/if}
                 <span>
-                  <span class="text-[var(--ui-text-subtle)]">Thread:</span>
+                  <span class="text-[var(--ui-text-subtle)]">Topic:</span>
                   <a
                     class="text-indigo-300 transition-colors hover:text-indigo-200"
                     href={workspaceHref(
-                      `/threads/${encodeURIComponent(board.primary_thread_id)}`,
+                      `/topics/${encodeURIComponent(board.primary_thread_id)}`,
                     )}
                     onclick={(event) => event.stopPropagation()}
                   >

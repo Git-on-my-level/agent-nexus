@@ -39,9 +39,9 @@ func TestApplyCommandShapeCompatibilityAliasExactMatches(t *testing.T) {
 			want: []string{"artifacts", "content", "--artifact-id", "artifact_123"},
 		},
 		{
-			name: "threads update",
-			args: []string{"threads", "update", "--thread-id", "thread_123"},
-			want: []string{"threads", "patch", "--thread-id", "thread_123"},
+			name: "topics update",
+			args: []string{"topics", "update", "--topic-id", "topic_123"},
+			want: []string{"topics", "patch", "--topic-id", "topic_123"},
 		},
 	}
 
@@ -110,12 +110,12 @@ func TestCommandShapeCompatibilityAliasesResolveToCanonicalHandlers(t *testing.T
 			wantCommand: "artifacts content",
 		},
 		{
-			name:        "threads update",
-			args:        []string{"threads", "update", "--thread-id", "thread_1"},
+			name:        "topics update",
+			args:        []string{"topics", "update", "--topic-id", "topic_1"},
 			stdin:       `{"patch":{"status":"resolved"}}`,
 			wantMethod:  http.MethodPatch,
-			wantPath:    "/threads/thread_1",
-			wantCommand: "threads patch",
+			wantPath:    "/topics/topic_1",
+			wantCommand: "topics patch",
 		},
 	}
 

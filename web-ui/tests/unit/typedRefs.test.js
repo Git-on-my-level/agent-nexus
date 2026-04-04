@@ -24,6 +24,14 @@ describe("typed refs", () => {
       prefix: "thread",
       value: "thread-9",
     });
+    expect(parseRef("topic:topic-9")).toEqual({
+      prefix: "topic",
+      value: "topic-9",
+    });
+    expect(parseRef("card:card-9")).toEqual({
+      prefix: "card",
+      value: "card-9",
+    });
     expect(parseRef("url:https://example.com/path?a=b")).toEqual({
       prefix: "url",
       value: "https://example.com/path?a=b",
@@ -52,5 +60,7 @@ describe("typed refs", () => {
   it("treats document prefixes as known refs", () => {
     expect(isKnownRefPrefix("document")).toBe(true);
     expect(isKnownRefPrefix("document_revision")).toBe(true);
+    expect(isKnownRefPrefix("topic")).toBe(true);
+    expect(isKnownRefPrefix("card")).toBe(true);
   });
 });

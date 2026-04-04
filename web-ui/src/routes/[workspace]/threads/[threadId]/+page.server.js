@@ -1,13 +1,13 @@
-import { resolveWorkspaceBySlug } from "$lib/server/workspaceResolver";
+import { redirect } from "@sveltejs/kit";
+
+import { workspacePath } from "$lib/workspacePaths";
 
 export async function load(event) {
-  const resolved = await resolveWorkspaceBySlug({
-    event,
-    workspaceSlug: event.params.workspace,
-  });
-
-  return {
-    workspaceId:
-      resolved.workspace?.workspaceId ?? resolved.workspace?.id ?? "",
-  };
+  throw redirect(
+    307,
+    workspacePath(
+      event.params.workspace,
+      `/topics/${encodeURIComponent(event.params.threadId)}`,
+    ),
+  );
 }

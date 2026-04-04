@@ -24,7 +24,7 @@
   function buildFlatResults(r) {
     const flat = [];
     if (r.threads.length) {
-      flat.push({ type: "header", label: "Threads" });
+      flat.push({ type: "header", label: "Topics" });
       for (const t of r.threads) flat.push({ type: "thread", item: t });
     }
     if (r.docs.length) {
@@ -113,7 +113,7 @@
   function navigate(entry) {
     if (!workspaceSlug || entry.type === "header") return;
     const paths = {
-      thread: `/threads/${entry.item.id}`,
+      thread: `/topics/${entry.item.id}`,
       doc: `/docs/${entry.item.id}`,
       board: `/boards/${entry.item.id}`,
       artifact: `/artifacts/${entry.item.id}`,
@@ -203,7 +203,7 @@
   };
 
   const typeLabels = {
-    thread: "Thread",
+    thread: "Topic",
     doc: "Doc",
     board: "Board",
     artifact: "Artifact",
@@ -238,7 +238,7 @@
           bind:this={inputEl}
           class="cmd-input"
           type="text"
-          placeholder="Search threads, docs, boards, artifacts..."
+          placeholder="Search topics, docs, boards, artifacts..."
           value={query}
           oninput={handleInput}
           spellcheck="false"

@@ -12,7 +12,7 @@ describe("navigation model", () => {
     expect(navigationItems.map((item) => item.label)).toEqual([
       "Home",
       "Inbox",
-      "Threads",
+      "Topics",
       "Boards",
       "Docs",
     ]);
@@ -28,7 +28,7 @@ describe("navigation model", () => {
 
   it("detects known routes", () => {
     expect(isKnownSection("/")).toBe(true);
-    expect(isKnownSection("/threads")).toBe(true);
+    expect(isKnownSection("/topics")).toBe(true);
     expect(isKnownSection("/boards")).toBe(true);
     expect(isKnownSection("/docs")).toBe(true);
     expect(isKnownSection("/artifacts")).toBe(true);

@@ -28,10 +28,10 @@ type localHelperTopic struct {
 }
 
 var runtimeGeneratedTopics = []runtimeHelpTopic{
-	{Path: "actors", Description: "List and register actor identities"},
 	{Path: "auth", Description: "Register, inspect, and manage auth state"},
-	{Path: "threads", Description: "Manage thread resources"},
-	{Path: "commitments", Description: "Manage commitment resources"},
+	{Path: "threads", Description: "Inspect thread resources and coordination views"},
+	{Path: "topics", Description: "Manage durable work subjects"},
+	{Path: "cards", Description: "Manage board-scoped cards"},
 	{Path: "artifacts", Description: "Manage artifact resources and content"},
 	{Path: "boards", Description: "Manage board resources and ordered cards"},
 	{Path: "docs", Description: "Manage long-lived docs and revisions"},
@@ -112,9 +112,9 @@ var localHelperTopics = []localHelperTopic{
 	},
 	{
 		Path:        "threads inspect",
-		Summary:     "Canonical thread coordination read path: compose one view from `threads context` and related `inbox list` items.",
+		Summary:     "Canonical thread coordination read path: compose one view from read-only thread data and related `inbox list` items.",
 		JSONShape:   "`thread`, `context`, `collaboration`, `inbox`",
-		Composition: "Resolves one thread by id or discovery filters, loads `threads context`, then filters inbox items client-side by `thread_id` for one operator-focused coordination view.",
+		Composition: "Resolves one thread by id or discovery filters, loads the thread's read-only coordination views, then filters inbox items client-side by `thread_id` for one operator-focused coordination view.",
 		Examples: []string{
 			"oar threads inspect --thread-id <thread-id>",
 			"oar threads inspect --status active --type initiative --full-id",
@@ -128,7 +128,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--cadence <cadence>", Description: "Repeatable discovery cadence filter."},
 			{Name: "--type <thread-type>", Description: "Local discovery filter after `threads list`."},
 			{Name: "--max-events <n>", Description: "Maximum recent context events to include."},
-			{Name: "--include-artifact-content", Description: "Include artifact content previews from `threads context`."},
+			{Name: "--include-artifact-content", Description: "Include artifact content previews from the underlying read-only thread views."},
 			{Name: "--full-id", Description: "Render full event and inbox ids in human output."},
 		},
 	},
@@ -136,10 +136,9 @@ var localHelperTopics = []localHelperTopic{
 		Path:        "threads workspace",
 		Summary:     "Single holistic thread coordination read: combine context, inbox, recommendation review, and related-thread signals in one command.",
 		JSONShape:   "`thread`, `context`, `collaboration`, `inbox`, `pending_decisions`, `related_threads`, `related_recommendations`, `related_decisions`, `follow_up`",
-		Composition: "Resolves one thread by id or discovery filters, loads `threads context`, adds thread-scoped inbox items from `inbox list`, and follows related thread refs for additional review context.",
+		Composition: "Resolves one thread by id or discovery filters, loads the thread's read-only coordination views, adds thread-scoped inbox items, and follows related thread refs for additional review context.",
 		Examples: []string{
 			"oar threads workspace --thread-id <thread-id> --full-id",
-			"oar threads workspace --thread-id <thread-id> --include-related-event-content --verbose",
 			"oar threads workspace --status active --type initiative --full-summary",
 		},
 		Flags: []localHelperFlag{
@@ -151,47 +150,22 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--cadence <cadence>", Description: "Repeatable discovery cadence filter."},
 			{Name: "--type <thread-type>", Description: "Local discovery filter after `threads list`."},
 			{Name: "--max-events <n>", Description: "Maximum recent context events to include."},
-			{Name: "--include-artifact-content", Description: "Include artifact content previews from `threads context`."},
-			{Name: "--include-related-event-content", Description: "Hydrate related review items with full `events get` content in one command."},
+			{Name: "--include-artifact-content", Description: "Include artifact content previews from the underlying read-only thread views."},
 			{Name: "--full-summary", Description: "Show full recommendation/decision summaries in human output."},
-			{Name: "--full-id", Description: "Render full event and inbox ids in human output."},
-		},
-	},
-	{
-		Path:        "threads review",
-		Summary:     "Opinionated deep-read helper: run the holistic workspace view with related-event hydration and full summaries enabled by default.",
-		JSONShape:   "`thread`, `context`, `collaboration`, `inbox`, `pending_decisions`, `related_threads`, `related_recommendations`, `related_decisions`, `follow_up`",
-		Composition: "Uses the same aggregate view as `threads workspace`, but defaults to a review-oriented read by hydrating related review items with `events get` content and expanding recommendation summaries in one command.",
-		Examples: []string{
-			"oar threads review --thread-id <thread-id>",
-			"oar threads review --thread-id <thread-id> --full-id",
-			"oar threads review --status active --type initiative",
-		},
-		Flags: []localHelperFlag{
-			{Name: "--thread-id <thread-id>", Description: "Thread id to review."},
-			{Name: "--status <status>", Description: "Discover one thread by status."},
-			{Name: "--priority <priority>", Description: "Discover one thread by priority."},
-			{Name: "--stale <bool>", Description: "Discover one thread by stale state."},
-			{Name: "--tag <tag>", Description: "Repeatable discovery tag filter."},
-			{Name: "--cadence <cadence>", Description: "Repeatable discovery cadence filter."},
-			{Name: "--type <thread-type>", Description: "Local discovery filter after `threads list`."},
-			{Name: "--max-events <n>", Description: "Maximum recent context events to include."},
-			{Name: "--include-artifact-content", Description: "Include artifact content previews from `threads context`."},
 			{Name: "--full-id", Description: "Render full event and inbox ids in human output."},
 		},
 	},
 	{
 		Path:        "threads recommendations",
-		Summary:     "Review one thread's recommendation/decision inputs plus related-thread signals with provenance and follow-up hints.",
-		JSONShape:   "`thread`, `recommendations`, `decision_requests`, `decisions`, `pending_decisions`, `related_threads`, `related_recommendations`, `follow_up`",
-		Composition: "Resolves one thread by id or discovery filters, loads `threads context`, adds thread-scoped pending decision inbox items from `inbox list`, and follows related thread refs for additional review context.",
+		Summary:     "Compose a recommendation-oriented review of one thread with related follow-up context.",
+		JSONShape:   "`thread`, `recommendations`, `decision_requests`, `decisions`, `pending_decisions`, `related_threads`, `related_recommendations`, `related_decision_requests`, `related_decisions`, `warnings`, `follow_up`",
+		Composition: "Loads the read-only thread context, inbox, and related-thread review context to highlight recommendation signals and follow-up hints without changing state.",
 		Examples: []string{
-			"oar threads recommendations --thread-id <thread-id> --full-id",
-			"oar threads recommendations --thread-id <thread-id> --include-related-event-content --verbose",
+			"oar threads recommendations --thread-id <thread-id>",
 			"oar threads recommendations --status active --type initiative --full-summary",
 		},
 		Flags: []localHelperFlag{
-			{Name: "--thread-id <thread-id>", Description: "Thread id to review."},
+			{Name: "--thread-id <thread-id>", Description: "Thread id to inspect."},
 			{Name: "--status <status>", Description: "Discover one thread by status."},
 			{Name: "--priority <priority>", Description: "Discover one thread by priority."},
 			{Name: "--stale <bool>", Description: "Discover one thread by stale state."},
@@ -199,62 +173,10 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--cadence <cadence>", Description: "Repeatable discovery cadence filter."},
 			{Name: "--type <thread-type>", Description: "Local discovery filter after `threads list`."},
 			{Name: "--max-events <n>", Description: "Maximum recent context events to include."},
-			{Name: "--include-artifact-content", Description: "Include artifact content previews from `threads context`."},
-			{Name: "--include-related-event-content", Description: "Hydrate related review items with full `events get` content in one command."},
+			{Name: "--include-artifact-content", Description: "Include artifact content previews from the underlying read-only thread views."},
+			{Name: "--include-related-event-content", Description: "Hydrate related review items with full `events.get` payloads."},
 			{Name: "--full-summary", Description: "Show full recommendation/decision summaries in human output."},
 			{Name: "--full-id", Description: "Render full event and inbox ids in human output."},
-		},
-	},
-	{
-		Path:        "threads propose-patch",
-		Summary:     "Stage a thread patch proposal locally and show the diff before applying it.",
-		JSONShape:   "`proposal_id`, `target_command_id`, `path`, `body`, `diff`, `apply_command`",
-		Composition: "Resolves the thread id, fetches current state with `threads get`, computes a local diff, and persists a proposal file instead of sending the patch immediately.",
-		Examples: []string{
-			"oar threads propose-patch --thread-id <thread-id> --from-file patch.json",
-			"cat patch.json | oar threads propose-patch --thread-id <thread-id>",
-		},
-		Flags: []localHelperFlag{
-			{Name: "--thread-id <thread-id>", Description: "Thread id to patch."},
-			{Name: "--from-file <path>", Description: "Load the patch body from a JSON file."},
-		},
-	},
-	{
-		Path:        "threads apply",
-		Summary:     "Apply a previously staged thread patch proposal.",
-		JSONShape:   "`proposal_id`, `target_command_id`, `applied`, `kept`, `result`",
-		Composition: "Loads the local proposal by exact id or unique prefix, validates it again, then sends the underlying `threads.patch` request.",
-		Examples: []string{
-			"oar threads apply --proposal-id <proposal-id>",
-			"oar threads apply <proposal-id-prefix>",
-		},
-		Flags: []localHelperFlag{
-			{Name: "--proposal-id <proposal-id>", Description: "Proposal id or unique prefix to apply."},
-		},
-	},
-	{
-		Path:        "commitments propose-patch",
-		Summary:     "Stage a commitment patch proposal locally and show the diff before applying it.",
-		JSONShape:   "`proposal_id`, `target_command_id`, `path`, `body`, `diff`, `apply_command`",
-		Composition: "Resolves the commitment id, fetches current state with `commitments get`, computes a local diff, and persists a proposal file instead of sending the patch immediately.",
-		Examples: []string{
-			"oar commitments propose-patch --commitment-id <commitment-id> --from-file patch.json",
-		},
-		Flags: []localHelperFlag{
-			{Name: "--commitment-id <commitment-id>", Description: "Commitment id to patch."},
-			{Name: "--from-file <path>", Description: "Load the patch body from a JSON file."},
-		},
-	},
-	{
-		Path:        "commitments apply",
-		Summary:     "Apply a previously staged commitment update proposal.",
-		JSONShape:   "`proposal_id`, `target_command_id`, `applied`, `kept`, `result`",
-		Composition: "Loads the local proposal by exact id or unique prefix, validates it again, then sends the underlying `commitments.patch` request.",
-		Examples: []string{
-			"oar commitments apply --proposal-id <proposal-id>",
-		},
-		Flags: []localHelperFlag{
-			{Name: "--proposal-id <proposal-id>", Description: "Proposal id or unique prefix to apply."},
 		},
 	},
 	{
@@ -312,9 +234,9 @@ var localHelperTopics = []localHelperTopic{
 	},
 	{
 		Path:        "docs validate-update",
-		Summary:     "Validate a `docs update` payload locally from stdin or file without sending the mutation.",
+		Summary:     "Validate a `docs.revisions.create` payload locally from stdin or file without sending the mutation.",
 		JSONShape:   "`command`, `command_id`, `path_params`, `query`, `body`, `valid`",
-		Composition: "Parses the same body accepted by `docs update`, expands `--content-file` when present, and returns a validation preview envelope without contacting core.",
+		Composition: "Parses the same body accepted by `docs.revisions.create`, expands `--content-file` when present, and returns a validation preview envelope without contacting core.",
 		Examples: []string{
 			`cat update.json | oar docs validate-update --document-id <document-id>`,
 			`oar docs validate-update --document-id <document-id> --content-file body.md`,
@@ -329,7 +251,7 @@ var localHelperTopics = []localHelperTopic{
 		Path:        "docs apply",
 		Summary:     "Apply a previously staged document update proposal.",
 		JSONShape:   "`proposal_id`, `target_command_id`, `applied`, `kept`, `result`",
-		Composition: "Loads the local proposal by exact id or unique prefix, validates it again, then sends the underlying `docs.update` request.",
+		Composition: "Loads the local proposal by exact id or unique prefix, validates it again, then sends the underlying `docs.revisions.create` request.",
 		Examples: []string{
 			"oar docs apply --proposal-id <proposal-id>",
 			"oar docs apply <proposal-id-prefix>",
@@ -422,6 +344,55 @@ func helpTopicText(topic string) (string, bool) {
 	}
 	if topic == "concepts" || topic == "primitives" || topic == "primitives guide" {
 		return conceptsGuideText() + "\n", true
+	}
+	if topic == "auth" {
+		return strings.TrimSpace(`Auth lifecycle and registration surface
+
+Use this group to register a profile, inspect the active identity, and manage local auth state.
+
+Core commands:
+  auth register       Create or register a profile.
+  auth whoami         Inspect the active profile.
+  auth list           List local profiles.
+  auth default        Select the default profile.
+  auth update-username  Rename the current principal locally.
+  auth rotate         Rotate the active agent key.
+  auth revoke         Revoke the current profile.
+  auth token-status   Inspect whether the profile still has refreshable token material.
+
+	Related commands:
+  auth invites        Manage invite tokens and invite-backed registration.
+  auth bootstrap      Inspect bootstrap status before first registration.
+  auth principals     Inspect or revoke principals.
+  auth audit          Inspect audit records for auth activity.`) + "\n", true
+	}
+	if topic == "derived" {
+		return strings.TrimSpace(`Derived maintenance surface
+
+Use this group to refresh or inspect derived views that are computed from canonical state.
+
+Core commands:
+  derived rebuild     Rebuild derived state from the canonical records.
+  derived status      Inspect the current derived maintenance state.
+
+Tip: derived commands are operational helpers, not the source of truth.`) + "\n", true
+	}
+	if topic == "meta" {
+		return strings.TrimSpace(`Metadata and shipped reference surface
+
+Use this group to inspect CLI/runtime metadata and to print the bundled runtime reference docs.
+
+Core commands:
+  meta health     Inspect overall CLI/runtime health.
+  meta readyz     Check readiness.
+  meta version    Print version information.
+
+Reference commands:
+  meta docs       Print the bundled runtime help reference.
+  meta doc        Print one bundled runtime help topic.
+  meta skill      Export a bundled editor skill file.
+  meta commands   Inspect generated command metadata.
+  meta concepts   Inspect generated concepts metadata.`) + "\n", true
 	}
 	if topic == "update" {
 		return updateUsageText() + "\n", true
@@ -546,20 +517,11 @@ func localGroupHelpSupplement(topic string) string {
 	switch strings.TrimSpace(topic) {
 	case "threads":
 		return strings.TrimSpace(`Canonical coordination read path:
-  threads review              Deep-read one thread workspace with review hydration enabled by default.
+  threads recommendations   Compose a recommendation-focused review of a thread.
   threads workspace           Compose one holistic thread workspace from context + inbox + related-thread review.
   threads inspect             Compose one thread coordination view from context + inbox in one command.
-  threads recommendations     Focus recommendation/decision review with actor+timestamp provenance.
-  Mutation flow:
-  threads patch               Send the thread patch to core immediately.
-  threads propose-patch       Stage a thread patch proposal and inspect the diff before applying.
-  threads apply               Apply a staged thread patch proposal.
-  Tip: start with ` + "`oar threads review`" + ` when you want one deep review read, use ` + "`oar threads workspace`" + ` for the canonical coordination view, use ` + "`--status/--tag/--type initiative`" + ` to discover one thread, use ` + "`oar threads context`" + ` for cross-thread aggregates, and ` + "`oar threads get`" + ` for raw snapshot-only reads. Add ` + "`--full-id`" + ` for copy/paste ids.`)
-	case "commitments":
-		return strings.TrimSpace(`Mutation flow:
-  commitments patch          Send the commitment patch to core immediately.
-  commitments propose-patch  Stage a commitment patch proposal and inspect the diff before applying.
-  commitments apply          Apply a staged commitment update proposal.`)
+  threads timeline           Inspect the backing thread timeline.
+  Tip: start with ` + "`oar threads workspace`" + ` for the canonical coordination view, use ` + "`--status/--tag/--type initiative`" + ` to discover one thread, and use ` + "`oar threads get`" + ` for raw snapshot-only reads. Add ` + "`--full-id`" + ` for copy/paste ids.`)
 	case "events":
 		return strings.TrimSpace(`Local inspection helpers:
   events list              List timeline events with thread/type/actor filters, id mode, and preview summaries.
@@ -574,11 +536,10 @@ func localGroupHelpSupplement(topic string) string {
 		return strings.TrimSpace(`Local inspection helpers:
   docs content             Show current document content with revision metadata.
   Mutation flow:
-  docs update              Send the document update to core immediately.
   docs propose-update      Stage an update proposal and inspect its diff before applying it.
   docs apply               Apply a staged document update proposal.
-  docs validate-update     Validate a docs.update payload from stdin/--from-file.
-  Tip: add ` + "`--content-file <path>`" + ` to avoid hand-escaping multiline content.`)
+  docs validate-update     Validate a docs.revisions.create payload from stdin/--from-file.
+  Tip: add ` + "`--content-file <path>`" + ` to avoid hand-escaping multiline content. The proposal flow stages ` + "`docs.revisions.create`" + `.`)
 	case "meta":
 		return strings.TrimSpace(`Shipped reference docs:
   meta docs               Print the bundled Markdown runtime reference.
@@ -844,7 +805,7 @@ func formatCommandSpecificHelpBlock(cmd registry.Command) string {
   - ` + "`decision_made`" + `
   Interventions: single clear path exists, but a human must act to complete it
   - ` + "`intervention_needed`" + `
-  State and commitments: track state changes and commitments
+  State changes: track state changes and status transitions
   - ` + "`snapshot_updated`" + `
   - ` + "`commitment_created`" + `
   - ` + "`commitment_status_changed`" + `
@@ -921,7 +882,6 @@ func runtimeSupportedCommandIDs() map[string]struct{} {
 
 func runtimeGeneratedHelpSpecs() []subcommandSpec {
 	return []subcommandSpec{
-		actorsSubcommandSpec,
 		{
 			command:  "auth",
 			valid:    []string{"register"},
@@ -931,7 +891,8 @@ func runtimeGeneratedHelpSpecs() []subcommandSpec {
 		authInvitesSubcommandSpec,
 		authBootstrapSubcommandSpec,
 		threadsSubcommandSpec,
-		commitmentsSubcommandSpec,
+		topicsSubcommandSpec,
+		cardsSubcommandSpec,
 		artifactsSubcommandSpec,
 		boardsSubcommandSpec,
 		boardsCardsSubcommandSpec,
@@ -1017,7 +978,7 @@ func mapRuntimePathToRegistryPath(path string) string {
 	}
 	path = strings.Join(parts, " ")
 	rewrites := map[string]string{
-		"threads update":    "threads patch",
+		"topics update":     "topics patch",
 		"events tail":       "events stream",
 		"inbox tail":        "inbox stream",
 		"artifacts content": "artifacts content get",
@@ -1110,6 +1071,16 @@ func authLocalHelpText(topic string) (string, bool) {
 			summary:  "Persist the default profile used when no explicit agent is selected.",
 			usage:    "oar auth default <profile>",
 			examples: []string{"oar auth default agent-a", "oar --json auth default agent-a"},
+		},
+		"auth invites": {
+			summary:  "Manage invite tokens and invite-backed registration for later principals.",
+			usage:    "oar auth invites",
+			examples: []string{"oar auth invites create --kind human", "oar auth invites revoke --token <invite-token>"},
+		},
+		"auth bootstrap": {
+			summary:  "Inspect whether bootstrap registration is still available for the first principal.",
+			usage:    "oar auth bootstrap status",
+			examples: []string{"oar auth bootstrap status", "oar --json auth bootstrap status"},
 		},
 		"auth update-username": {
 			summary:  "Update the authenticated agent username and sync the local profile copy.",

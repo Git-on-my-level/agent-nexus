@@ -9,6 +9,8 @@ import (
 
 var typedRefLookupByPrefix = map[string]resourceIDLookupSpec{
 	"thread":     threadIDLookupSpec,
+	"topic":      topicIDLookupSpec,
+	"card":       cardIDLookupSpec,
 	"artifact":   artifactIDLookupSpec,
 	"board":      boardIDLookupSpec,
 	"commitment": commitmentIDLookupSpec,
@@ -18,6 +20,7 @@ type mutationFieldKind int
 
 const (
 	mutationFieldThreadID mutationFieldKind = iota + 1
+	mutationFieldTypedRef
 	mutationFieldTypedRefList
 )
 
@@ -61,13 +64,18 @@ func commandSupportsMutationIDResolution(commandID string) bool {
 	switch strings.TrimSpace(commandID) {
 	case "commitments.create",
 		"commitments.patch",
+		"topics.create",
+		"topics.patch",
 		"boards.create",
 		"boards.update",
 		"boards.cards.add",
 		"boards.cards.create",
 		"boards.cards.move",
+		"cards.patch",
+		"cards.move",
 		"docs.create",
 		"docs.update",
+		"docs.revisions.create",
 		"events.create",
 		"inbox.ack",
 		"packets.receipts.create",
@@ -78,116 +86,6 @@ func commandSupportsMutationIDResolution(commandID string) bool {
 		return true
 	default:
 		return false
-	}
-}
-
-func (a *App) normalizeMutationCommandBody(ctx context.Context, cfg config.Resolved, commandID string, pathParams map[string]string, body map[string]any) error {
-	switch commandID {
-	case "threads.create":
-		return a.normalizeMutationFields(ctx, cfg, nestedMutationMap(body, "thread"), []mutationFieldSpec{
-			{key: "key_artifacts", kind: mutationFieldTypedRefList},
-		})
-	case "threads.patch":
-		return a.normalizeMutationFields(ctx, cfg, nestedMutationMap(body, "patch"), []mutationFieldSpec{
-			{key: "key_artifacts", kind: mutationFieldTypedRefList},
-		})
-	case "commitments.create":
-		return a.normalizeMutationFields(ctx, cfg, nestedMutationMap(body, "commitment"), []mutationFieldSpec{
-			{key: "thread_id", kind: mutationFieldThreadID},
-			{key: "links", kind: mutationFieldTypedRefList},
-		})
-	case "commitments.patch":
-		if err := a.normalizeMutationFields(ctx, cfg, nestedMutationMap(body, "patch"), []mutationFieldSpec{
-			{key: "links", kind: mutationFieldTypedRefList},
-		}); err != nil {
-			return err
-		}
-		return a.normalizeMutationFields(ctx, cfg, body, []mutationFieldSpec{
-			{key: "refs", kind: mutationFieldTypedRefList},
-		})
-	case "boards.create":
-		return a.normalizeMutationFields(ctx, cfg, nestedMutationMap(body, "board"), []mutationFieldSpec{
-			{key: "primary_thread_id", kind: mutationFieldThreadID},
-			{key: "pinned_refs", kind: mutationFieldTypedRefList},
-		})
-	case "boards.update":
-		return a.normalizeMutationFields(ctx, cfg, nestedMutationMap(body, "patch"), []mutationFieldSpec{
-			{key: "pinned_refs", kind: mutationFieldTypedRefList},
-		})
-	case "boards.cards.add", "boards.cards.create":
-		return a.normalizeMutationFields(ctx, cfg, body, []mutationFieldSpec{
-			{key: "thread_id", kind: mutationFieldThreadID},
-			{key: "parent_thread", kind: mutationFieldThreadID},
-			{key: "before_thread_id", kind: mutationFieldThreadID},
-			{key: "after_thread_id", kind: mutationFieldThreadID},
-		})
-	case "boards.cards.move":
-		if err := a.normalizeMutationFields(ctx, cfg, body, []mutationFieldSpec{
-			{key: "before_thread_id", kind: mutationFieldThreadID},
-			{key: "after_thread_id", kind: mutationFieldThreadID},
-		}); err != nil {
-			return err
-		}
-		if pathParams == nil {
-			return nil
-		}
-		rawBoardID := strings.TrimSpace(pathParams["board_id"])
-		if rawBoardID == "" {
-			return nil
-		}
-		resolvedBoard, err := a.resolveMaybeBoardID(ctx, cfg, rawBoardID)
-		if err != nil {
-			return err
-		}
-		if err := a.normalizeBoardMutationCardAnchorField(ctx, cfg, resolvedBoard, body, "before_card_id"); err != nil {
-			return err
-		}
-		return a.normalizeBoardMutationCardAnchorField(ctx, cfg, resolvedBoard, body, "after_card_id")
-	case "docs.create", "docs.update":
-		return a.normalizeMutationFields(ctx, cfg, body, []mutationFieldSpec{
-			{key: "refs", kind: mutationFieldTypedRefList},
-		})
-	case "events.create":
-		return a.normalizeMutationFields(ctx, cfg, nestedMutationMap(body, "event"), []mutationFieldSpec{
-			{key: "thread_id", kind: mutationFieldThreadID},
-			{key: "refs", kind: mutationFieldTypedRefList},
-		})
-	case "inbox.ack":
-		return a.normalizeMutationFields(ctx, cfg, body, []mutationFieldSpec{
-			{key: "thread_id", kind: mutationFieldThreadID},
-		})
-	case "packets.work-orders.create":
-		if err := a.normalizeMutationFields(ctx, cfg, nestedMutationMap(body, "artifact"), []mutationFieldSpec{
-			{key: "refs", kind: mutationFieldTypedRefList},
-		}); err != nil {
-			return err
-		}
-		return a.normalizeMutationFields(ctx, cfg, nestedMutationMap(body, "packet"), []mutationFieldSpec{
-			{key: "thread_id", kind: mutationFieldThreadID},
-			{key: "context_refs", kind: mutationFieldTypedRefList},
-		})
-	case "packets.receipts.create":
-		if err := a.normalizeMutationFields(ctx, cfg, nestedMutationMap(body, "artifact"), []mutationFieldSpec{
-			{key: "refs", kind: mutationFieldTypedRefList},
-		}); err != nil {
-			return err
-		}
-		return a.normalizeMutationFields(ctx, cfg, nestedMutationMap(body, "packet"), []mutationFieldSpec{
-			{key: "thread_id", kind: mutationFieldThreadID},
-			{key: "outputs", kind: mutationFieldTypedRefList},
-			{key: "verification_evidence", kind: mutationFieldTypedRefList},
-		})
-	case "packets.reviews.create":
-		if err := a.normalizeMutationFields(ctx, cfg, nestedMutationMap(body, "artifact"), []mutationFieldSpec{
-			{key: "refs", kind: mutationFieldTypedRefList},
-		}); err != nil {
-			return err
-		}
-		return a.normalizeMutationFields(ctx, cfg, nestedMutationMap(body, "packet"), []mutationFieldSpec{
-			{key: "evidence_refs", kind: mutationFieldTypedRefList},
-		})
-	default:
-		return nil
 	}
 }
 
@@ -208,6 +106,12 @@ func (a *App) normalizeMutationFields(ctx context.Context, cfg config.Resolved, 
 		switch spec.kind {
 		case mutationFieldThreadID:
 			normalized, err := a.normalizeThreadIDValue(ctx, cfg, rawValue)
+			if err != nil {
+				return err
+			}
+			target[spec.key] = normalized
+		case mutationFieldTypedRef:
+			normalized, err := a.normalizeTypedRefValue(ctx, cfg, rawValue)
 			if err != nil {
 				return err
 			}
@@ -261,6 +165,18 @@ func (a *App) normalizeTypedRef(ctx context.Context, cfg config.Resolved, raw st
 		return "", err
 	}
 	return kind + ":" + resolvedID, nil
+}
+
+func (a *App) normalizeTypedRefValue(ctx context.Context, cfg config.Resolved, value any) (any, error) {
+	raw := strings.TrimSpace(anyString(value))
+	if raw == "" {
+		return value, nil
+	}
+	normalized, err := a.normalizeTypedRef(ctx, cfg, raw)
+	if err != nil {
+		return nil, err
+	}
+	return normalized, nil
 }
 
 func shouldResolveDisplayedShortID(raw string) bool {

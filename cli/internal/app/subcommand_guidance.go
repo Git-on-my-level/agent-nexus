@@ -128,11 +128,10 @@ var provenanceSubcommandSpec = subcommandSpec{
 
 var threadsSubcommandSpec = subcommandSpec{
 	command:  "threads",
-	valid:    []string{"list", "get", "create", "patch", "propose-patch", "apply", "timeline", "context", "inspect", "workspace", "review", "recommendations", "archive", "unarchive", "tombstone", "restore", "purge"},
-	examples: []string{"oar threads list --status active", "oar threads review --thread-id <thread-id>", "oar threads workspace --status active --type initiative --full-id"},
+	valid:    []string{"list", "get", "timeline", "inspect", "workspace"},
+	examples: []string{"oar threads list --status active", "oar threads inspect --thread-id <thread-id>", "oar threads workspace --status active --type initiative --full-id"},
 	aliases: map[string]string{
-		"ls":     "list",
-		"update": "patch",
+		"ls": "list",
 	},
 }
 
@@ -181,7 +180,7 @@ var boardsCardsSubcommandSpec = subcommandSpec{
 
 var docsSubcommandSpec = subcommandSpec{
 	command:  "docs",
-	valid:    []string{"list", "create", "get", "content", "update", "propose-update", "apply", "validate-update", "history", "revision", "tombstone", "archive", "unarchive", "restore", "purge"},
+	valid:    []string{"list", "create", "get", "content", "history", "revision", "tombstone", "archive", "unarchive", "restore", "purge"},
 	examples: []string{"oar docs list --thread-id <thread-id>", "oar docs content --document-id <document-id>", "oar docs apply --proposal-id <proposal-id>"},
 	aliases: map[string]string{
 		"ls":   "list",

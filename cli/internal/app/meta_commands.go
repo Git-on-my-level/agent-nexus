@@ -161,8 +161,8 @@ func (a *App) runMetaCommand(args []string) (*commandResult, error) {
 	if !ok {
 		return nil, errnorm.Local("not_found", "command metadata not found")
 	}
-	if strings.TrimSpace(cmd.Why) == "" || len(cmd.Examples) == 0 {
-		return nil, errnorm.Internal("registry_invalid", "generated command metadata is missing required why/examples fields")
+	if strings.TrimSpace(cmd.Why) == "" {
+		return nil, errnorm.Internal("registry_invalid", "generated command metadata is missing required why field")
 	}
 
 	text := formatGeneratedCommandHelp(runtimePathFromRegistryPath(cmd.CLIPath), cmd)

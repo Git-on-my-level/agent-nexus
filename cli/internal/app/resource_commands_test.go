@@ -942,13 +942,13 @@ func TestDocsCommands(t *testing.T) {
 			_, _ = w.Write([]byte(`{"document":{"id":"doc_1","head_revision_id":"rev_1"},"revision":{"revision_id":"rev_1","revision_number":1}}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/docs/doc_1":
 			_, _ = w.Write([]byte(`{"document":{"id":"doc_1","head_revision_id":"rev_1"},"revision":{"revision_id":"rev_1","revision_number":1,"content":"initial","content_type":"text"}}`))
-		case r.Method == http.MethodPatch && r.URL.Path == "/docs/doc_1":
+		case r.Method == http.MethodPost && r.URL.Path == "/docs/doc_1/revisions":
 			body, _ := io.ReadAll(r.Body)
 			if !bytes.Contains(body, []byte(`"if_base_revision":"rev_1"`)) {
 				t.Fatalf("unexpected docs update body: %s", string(body))
 			}
 			_, _ = w.Write([]byte(`{"document":{"id":"doc_1","head_revision_id":"rev_2"},"revision":{"revision_id":"rev_2","revision_number":2}}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/docs/doc_1/history":
+		case r.Method == http.MethodGet && r.URL.Path == "/docs/doc_1/revisions":
 			_, _ = w.Write([]byte(`{"document_id":"doc_1","revisions":[{"revision_id":"rev_1"},{"revision_id":"rev_2"}]}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/docs/doc_1/revisions/rev_1":
 			_, _ = w.Write([]byte(`{"revision":{"revision_id":"rev_1","content":"initial"}}`))
@@ -980,7 +980,7 @@ func TestDocsUpdateInjectsActorIDFromProfile(t *testing.T) {
 			_, _ = w.Write([]byte(`{"document":{"id":"doc_1","head_revision_id":"rev_1"},"revision":{"revision_id":"rev_1","revision_number":1,"content":"initial","content_type":"text"}}`))
 			return
 		}
-		if r.Method != http.MethodPatch || r.URL.Path != "/docs/doc_1" {
+		if r.Method != http.MethodPost || r.URL.Path != "/docs/doc_1/revisions" {
 			http.NotFound(w, r)
 			return
 		}
@@ -1084,7 +1084,7 @@ func TestProductManagerFlowRegisterThenDocsUpdate(t *testing.T) {
 		case r.Method == http.MethodGet && r.URL.Path == "/docs/northwave-pilot-rescue-brief":
 			_, _ = w.Write([]byte(`{"document":{"id":"northwave-pilot-rescue-brief","head_revision_id":"rev_1"},"revision":{"revision_id":"rev_1","revision_number":1,"content":"initial brief","content_type":"text"}}`))
 			return
-		case r.Method == http.MethodPatch && r.URL.Path == "/docs/northwave-pilot-rescue-brief":
+		case r.Method == http.MethodPost && r.URL.Path == "/docs/northwave-pilot-rescue-brief/revisions":
 			if gotAuth := strings.TrimSpace(r.Header.Get("Authorization")); gotAuth != "Bearer token-product-manager" {
 				t.Fatalf("expected auth bearer token, got %q", gotAuth)
 			}
@@ -1326,7 +1326,7 @@ func TestDocsProposeUpdateWithContentFileUsesFetchedDocumentState(t *testing.T) 
 			getCount++
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"document":{"id":"doc_1","head_revision_id":"rev_1"},"revision":{"revision_id":"rev_1","revision_number":1,"content":"old content","content_type":"text"}}`))
-		case r.Method == http.MethodPatch && r.URL.Path == "/docs/doc_1":
+		case r.Method == http.MethodPost && r.URL.Path == "/docs/doc_1/revisions":
 			patchCount++
 			http.NotFound(w, r)
 		default:
@@ -1358,8 +1358,8 @@ func TestDocsProposeUpdateWithContentFileUsesFetchedDocumentState(t *testing.T) 
 	})
 	payload := assertEnvelopeOK(t, raw)
 	data, _ := payload["data"].(map[string]any)
-	if got := anyStringValue(data["path"]); got != "/docs/doc_1" {
-		t.Fatalf("expected path /docs/doc_1, got %q payload=%#v", got, payload)
+	if got := anyStringValue(data["path"]); got != "/docs/doc_1/revisions" {
+		t.Fatalf("expected path /docs/doc_1/revisions, got %q payload=%#v", got, payload)
 	}
 	body, _ := data["body"].(map[string]any)
 	if got := anyStringValue(body["content"]); got != strings.TrimSpace(content) {
@@ -1484,87 +1484,41 @@ func TestDocsProposeUpdateTextDiffFallsBackWhenRevisionContentEmpty(t *testing.T
 	}
 }
 
-func TestCommitmentsPatchWritesImmediatelyAndProposePatchStages(t *testing.T) {
+func TestCommitmentsCommandsAreRemoved(t *testing.T) {
 	t.Parallel()
 
-	var mu sync.Mutex
-	getCalls := 0
-	patchCalls := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/commitments/commitment_1":
-			mu.Lock()
-			getCalls++
-			mu.Unlock()
-			_, _ = w.Write([]byte(`{"commitment":{"id":"commitment_1","thread_id":"thread_1","title":"Publish note","status":"open"}}`))
-		case r.Method == http.MethodPatch && r.URL.Path == "/commitments/commitment_1":
-			mu.Lock()
-			patchCalls++
-			mu.Unlock()
-			body, _ := io.ReadAll(r.Body)
-			if !bytes.Contains(body, []byte(`"patch":{"status":"done"}`)) {
-				t.Fatalf("unexpected commitments patch body: %s", string(body))
-			}
-			_, _ = w.Write([]byte(`{"commitment":{"id":"commitment_1","thread_id":"thread_1","title":"Publish note","status":"done"}}`))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-
 	home := t.TempDir()
-	assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{"patch":{"status":"done"}}`), []string{
+	raw := runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{"patch":{"status":"done"}}`), []string{
 		"--json",
-		"--base-url", server.URL,
 		"commitments", "patch",
 		"--commitment-id", "commitment_1",
-	}))
-
-	mu.Lock()
-	gotGetsAfterPatch := getCalls
-	gotPatchesAfterPatch := patchCalls
-	mu.Unlock()
-	if gotGetsAfterPatch != 0 {
-		t.Fatalf("expected no commitments get during direct patch, got %d", gotGetsAfterPatch)
-	}
-	if gotPatchesAfterPatch != 1 {
-		t.Fatalf("expected one commitments patch during direct patch, got %d", gotPatchesAfterPatch)
+	})
+	payload := assertEnvelopeError(t, raw)
+	errObj, _ := payload["error"].(map[string]any)
+	if errObj == nil || anyStringValue(errObj["code"]) != "unknown_command" {
+		t.Fatalf("expected removed commitments patch command to fail, payload=%#v", payload)
 	}
 
-	updatePayload := assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{"patch":{"status":"done"}}`), []string{
+	raw = runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
-		"--base-url", server.URL,
 		"commitments", "propose-patch",
 		"--commitment-id", "commitment_1",
-	}))
-
-	mu.Lock()
-	gotGetsAfterStage := getCalls
-	gotPatchesAfterStage := patchCalls
-	mu.Unlock()
-	if gotGetsAfterStage != 1 {
-		t.Fatalf("expected one commitments get during proposal staging, got %d", gotGetsAfterStage)
-	}
-	if gotPatchesAfterStage != 1 {
-		t.Fatalf("expected direct patch count to remain unchanged during proposal staging, got %d", gotPatchesAfterStage)
+	})
+	payload = assertEnvelopeError(t, raw)
+	errObj, _ = payload["error"].(map[string]any)
+	if errObj == nil || anyStringValue(errObj["code"]) != "unknown_command" {
+		t.Fatalf("expected removed commitments propose-patch command to fail, payload=%#v", payload)
 	}
 
-	applyPayload := assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
+	raw = runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
-		"--base-url", server.URL,
 		"commitments", "apply",
-		proposalIDFromEnvelope(t, updatePayload),
-	}))
-	if got := anyStringValue(applyPayload["command_id"]); got != "commitments.patch.apply" {
-		t.Fatalf("expected commitments.patch.apply command_id, got %#v", applyPayload)
-	}
-
-	mu.Lock()
-	gotPatches := patchCalls
-	mu.Unlock()
-	if gotPatches != 2 {
-		t.Fatalf("expected two commitments patches after direct patch plus apply, got %d", gotPatches)
+		"proposal_1",
+	})
+	payload = assertEnvelopeError(t, raw)
+	errObj, _ = payload["error"].(map[string]any)
+	if errObj == nil || anyStringValue(errObj["code"]) != "unknown_command" {
+		t.Fatalf("expected removed commitments apply command to fail, payload=%#v", payload)
 	}
 }
 
@@ -1934,8 +1888,8 @@ func TestNormalizeMutationBodyIDsSkipsNestedStructuredDocContent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/artifacts":
-			_, _ = w.Write([]byte(`{"artifacts":[{"id":"artifact_1234567890"}]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/threads":
+			_, _ = w.Write([]byte(`{"threads":[{"id":"thread_1234567890"}]}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -1945,26 +1899,26 @@ func TestNormalizeMutationBodyIDsSkipsNestedStructuredDocContent(t *testing.T) {
 	body := map[string]any{
 		"document":     map[string]any{"id": "doc_1"},
 		"content_type": "structured",
-		"refs":         []any{"artifact:artifact_123"},
+		"refs":         []any{"thread:thread_12345"},
 		"content": map[string]any{
-			"thread_id": "9a61af8e-d2c",
+			"thread_id": "thread_12345",
 			"nested": map[string]any{
 				"refs": []any{"thread:9a61af8e-d2c"},
 			},
 		},
 	}
 
-	normalizedAny, err := app.normalizeMutationBodyIDs(context.Background(), config.Resolved{BaseURL: server.URL}, "docs.update", nil, body)
+	normalizedAny, err := app.normalizeMutationBodyIDs(context.Background(), config.Resolved{BaseURL: server.URL}, "docs.revisions.create", nil, body)
 	if err != nil {
-		t.Fatalf("normalize docs.update body: %v", err)
+		t.Fatalf("normalize docs.revisions.create body: %v", err)
 	}
 	normalized, _ := normalizedAny.(map[string]any)
 	refs := asSlice(normalized["refs"])
-	if len(refs) != 1 || anyStringValue(refs[0]) != "artifact:artifact_1234567890" {
+	if len(refs) != 1 || anyStringValue(refs[0]) != "thread:thread_1234567890" {
 		t.Fatalf("expected top-level docs refs to be normalized, got %#v", normalized)
 	}
 	content := asMap(normalized["content"])
-	if got := anyStringValue(content["thread_id"]); got != "9a61af8e-d2c" {
+	if got := anyStringValue(content["thread_id"]); got != "thread_12345" {
 		t.Fatalf("expected structured content.thread_id to remain untouched, got %#v", normalized)
 	}
 	nested := asMap(content["nested"])
@@ -2036,39 +1990,25 @@ func TestEventsCreateMissingThreadIDFailsLocally(t *testing.T) {
 	}
 }
 
-func TestCommitmentsGetHumanOutputPrefersLinks(t *testing.T) {
+func TestCommitmentsGetHumanOutputIsRemoved(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || r.URL.Path != "/commitments/commitment_1" {
-			http.NotFound(w, r)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"commitment":{
-			"id":"commitment_1",
-			"title":"Publish launch brief",
-			"status":"open",
-			"thread_id":"thread_1",
-			"owner":"actor_1",
-			"due_at":"2026-03-07T12:00:00Z",
-			"links":["artifact:artifact_launch_brief","url:https://example.com/launch"],
-			"refs":["artifact:legacy_ref_should_not_render"]
-		}}`))
-	}))
-	defer server.Close()
-
 	home := t.TempDir()
-	out := runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--base-url", server.URL,
-		"commitments", "get",
-		"--commitment-id", "commitment_1",
-	})
-	if !strings.Contains(out, "links:") || !strings.Contains(out, "artifact:artifact_launch_brief") {
-		t.Fatalf("expected human output to render commitment links, got:\n%s", out)
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	cli := New()
+	cli.Stdout = stdout
+	cli.Stderr = stderr
+	cli.Stdin = strings.NewReader("")
+	cli.StdinIsTTY = func() bool { return true }
+	cli.UserHomeDir = func() (string, error) { return home, nil }
+	cli.ReadFile = os.ReadFile
+	exitCode := cli.Run([]string{"commitments", "get", "--commitment-id", "commitment_1"})
+	if exitCode == 0 {
+		t.Fatalf("expected removed commitments get command to fail, stdout=%s stderr=%s", stdout.String(), stderr.String())
 	}
-	if strings.Contains(out, "\nrefs:") {
-		t.Fatalf("expected human output to avoid non-canonical refs label, got:\n%s", out)
+	if !strings.Contains(stderr.String(), "unknown command \"commitments\"") {
+		t.Fatalf("expected unknown command error, stdout=%s stderr=%s", stdout.String(), stderr.String())
 	}
 }
 
@@ -2173,37 +2113,15 @@ func TestThreadsContextIncludesCollaborationSummarySections(t *testing.T) {
 	}
 }
 
-func TestCommitmentsListResolvesShortThreadIDFilter(t *testing.T) {
+func TestCommitmentsListIsRemoved(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/threads":
-			_, _ = w.Write([]byte(`{"threads":[{"id":"thread_canonical_123"}]}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/commitments":
-			if got := r.URL.Query().Get("thread_id"); got != "thread_canonical_123" {
-				t.Fatalf("expected canonical thread_id query, got %q", got)
-			}
-			_, _ = w.Write([]byte(`{"commitments":[{"id":"commitment_1","thread_id":"thread_canonical_123","title":"Do work"}]}`))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-
 	home := t.TempDir()
-	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"commitments", "list",
-		"--thread-id", "thread_canon",
-	})
-	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
-	items := asSlice(data["commitments"])
-	if len(items) != 1 {
-		t.Fatalf("expected one commitment after short thread id resolution, got %#v", data)
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "commitments", "list", "--thread-id", "thread_canon"})
+	payload := assertEnvelopeError(t, raw)
+	errObj, _ := payload["error"].(map[string]any)
+	if errObj == nil || anyStringValue(errObj["code"]) != "unknown_command" {
+		t.Fatalf("expected removed commitments list command to fail, payload=%#v", payload)
 	}
 }
 
@@ -2867,7 +2785,7 @@ func TestThreadsContextRejectsMixedSelectionModesWithActionableGuidance(t *testi
 		t.Fatalf("unexpected error payload: %#v", payload)
 	}
 	message := anyStringValue(errObj["message"])
-	if !strings.Contains(message, "--thread-id cannot be combined with discovery filters") || !strings.Contains(message, "oar threads workspace --thread-id <thread-id>") || !strings.Contains(message, "oar threads context --thread-id <thread-id>") || !strings.Contains(message, "oar threads context --status active") {
+	if !strings.Contains(message, "--thread-id cannot be combined with discovery filters") || !strings.Contains(message, "oar threads workspace --thread-id <thread-id>") || !strings.Contains(message, "oar threads inspect --thread-id <thread-id>") || !strings.Contains(message, "oar threads inspect --status active") {
 		t.Fatalf("expected actionable threads context guidance, got %#v", payload)
 	}
 }
@@ -3202,7 +3120,7 @@ func TestThreadsInspectRejectsMixedSelectionModes(t *testing.T) {
 		t.Fatalf("unexpected error payload: %#v", payload)
 	}
 	message := anyStringValue(errObj["message"])
-	if !strings.Contains(message, "--thread-id cannot be combined with discovery filters") || !strings.Contains(message, "oar threads inspect --thread-id <thread-id>") || !strings.Contains(message, "oar threads context --status active") {
+	if !strings.Contains(message, "--thread-id cannot be combined with discovery filters") || !strings.Contains(message, "oar threads inspect --thread-id <thread-id>") || !strings.Contains(message, "oar threads inspect --status active") {
 		t.Fatalf("expected shared-selection validation message, got %#v", payload)
 	}
 }
@@ -3907,7 +3825,7 @@ func TestThreadsRecommendationsSelectionValidation(t *testing.T) {
 		t.Fatalf("expected invalid_request for mixed selection, got %#v", mixedSelection)
 	}
 	message := anyStringValue(mixedErr["message"])
-	if !strings.Contains(message, "--thread-id cannot be combined with discovery filters") || !strings.Contains(message, "oar threads recommendations --thread-id <thread-id>") || !strings.Contains(message, "oar threads context --status active") {
+	if !strings.Contains(message, "--thread-id cannot be combined with discovery filters") || !strings.Contains(message, "oar threads recommendations --thread-id <thread-id>") || !strings.Contains(message, "oar threads inspect --status active") {
 		t.Fatalf("expected mixed selection guidance, got %#v", mixedSelection)
 	}
 
@@ -4585,29 +4503,15 @@ func TestArtifactsInspectCommand(t *testing.T) {
 	}
 }
 
-func TestCommitmentsInspectAliasMapsToGet(t *testing.T) {
+func TestCommitmentsInspectAliasIsRemoved(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || r.URL.Path != "/commitments/commitment_1" {
-			http.NotFound(w, r)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"commitment":{"id":"commitment_1","status":"open","title":"Publish"}}`))
-	}))
-	defer server.Close()
-
 	home := t.TempDir()
-	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"commitments", "inspect",
-		"--commitment-id", "commitment_1",
-	})
-	payload := assertEnvelopeOK(t, raw)
-	if got := anyStringValue(payload["command"]); got != "commitments get" {
-		t.Fatalf("expected commitments inspect alias to run get, payload=%#v", payload)
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "commitments", "inspect", "--commitment-id", "commitment_1"})
+	payload := assertEnvelopeError(t, raw)
+	errObj, _ := payload["error"].(map[string]any)
+	if errObj == nil || anyStringValue(errObj["code"]) != "unknown_command" {
+		t.Fatalf("expected removed commitments inspect alias to fail, payload=%#v", payload)
 	}
 }
 

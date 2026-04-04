@@ -275,7 +275,7 @@
         params.append("context_ref", `artifact:${artifact.id}`);
         params.append("context_ref", `artifact:${receiptPacket.work_order_id}`);
         reviseFollowupLink = workspaceHref(
-          `/threads/${encodeURIComponent(artifact.thread_id)}?${params.toString()}#work-order-composer`,
+          `/topics/${encodeURIComponent(artifact.thread_id)}?${params.toString()}#work-order-composer`,
         );
       }
       await loadThreadTimeline(artifact.thread_id);
@@ -566,11 +566,11 @@
     </div>
     {#if artifact.thread_id}
       <div class="mt-1.5 text-[12px] text-[var(--ui-text-muted)]">
-        <span class="text-[var(--ui-text-subtle)]">Thread</span>
+        <span class="text-[var(--ui-text-subtle)]">Topic</span>
         <a
           class="ml-1 text-indigo-400 transition-colors hover:text-indigo-300"
           href={workspaceHref(
-            `/threads/${encodeURIComponent(artifact.thread_id)}`,
+            `/topics/${encodeURIComponent(artifact.thread_id)}`,
           )}
         >
           {artifact.thread_id}
@@ -741,7 +741,7 @@
             /></span
           >
           <span class="flex items-center gap-1"
-            >Thread: <RefLink
+            >Topic: <RefLink
               humanize
               labelHints={artifactRefHints}
               refValue={`thread:${receiptPacket.thread_id}`}
@@ -922,7 +922,7 @@
       {#if threadTimeline.length > 0 || timelineLoading}
         <div class="border-t border-[var(--ui-border)] px-4 py-3">
           <h3 class="text-[13px] font-medium text-[var(--ui-text)]">
-            Thread Timeline
+            Topic Timeline
           </h3>
           {#if timelineLoading}
             <div class="mt-2 text-[12px] text-[var(--ui-text-muted)]">

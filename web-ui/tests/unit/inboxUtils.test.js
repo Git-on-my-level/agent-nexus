@@ -154,14 +154,14 @@ describe("inbox urgency derivation", () => {
 describe("inbox typed-ref rendering targets", () => {
   it("resolves thread/event/url refs used by inbox cards", () => {
     expect(resolveRefLink("thread:thread-onboarding")).toMatchObject({
-      href: "/threads/thread-onboarding",
+      href: "/topics/thread-onboarding",
       isLink: true,
     });
 
     expect(
       resolveRefLink("event:evt-1001", { threadId: "thread-onboarding" }),
     ).toMatchObject({
-      href: "/threads/thread-onboarding#event-evt-1001",
+      href: "/topics/thread-onboarding#event-evt-1001",
       isLink: true,
     });
 

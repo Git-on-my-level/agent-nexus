@@ -128,7 +128,7 @@
 
   function inboxItemTarget(item) {
     if (item?.thread_id) {
-      return workspacePath(workspaceSlug, `/threads/${item.thread_id}`);
+      return workspacePath(workspaceSlug, `/topics/${item.thread_id}`);
     }
     return workspacePath(workspaceSlug, "/inbox");
   }
@@ -150,7 +150,7 @@
   function threadsQueryHref(queryPairs) {
     const params = new URLSearchParams(queryPairs);
     const qs = params.toString();
-    const base = workspaceHref("/threads");
+    const base = workspaceHref("/topics");
     return qs ? `${base}?${qs}` : base;
   }
 
@@ -298,11 +298,11 @@
     <section>
       <div class="flex items-center justify-between gap-2 mb-2">
         <h2 class="text-[13px] font-semibold text-[var(--ui-text)]">
-          Thread health
+          Topic health
         </h2>
         <a
           class="text-[12px] font-medium text-[var(--ui-text-muted)] hover:text-[var(--ui-text)] transition-colors"
-          href={workspaceHref("/threads")}>View all</a
+          href={workspaceHref("/topics")}>View all</a
         >
       </div>
       {#if threadsState.status === "ready"}
@@ -338,7 +338,7 @@
         </p>
       {:else if threadsState.items.length === 0}
         <p class="text-[13px] text-[var(--ui-text-muted)] py-3">
-          No threads yet. They'll appear here as work begins.
+          No topics yet. They'll appear here as work begins.
         </p>
       {:else}
         <div class="flex gap-2 mb-3">
@@ -393,7 +393,7 @@
           </a>
           <a
             class="flex-1 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-center transition-colors hover:bg-[var(--ui-border-subtle)]"
-            href={workspaceHref("/threads")}
+            href={workspaceHref("/topics")}
           >
             <p class="text-[11px] font-medium text-[var(--ui-text-muted)]">
               Total
@@ -413,7 +413,7 @@
               0
                 ? 'border-t border-[var(--ui-border)]'
                 : ''}"
-              href={workspaceHref(`/threads/${thread.id}`)}
+              href={workspaceHref(`/topics/${thread.id}`)}
             >
               <div class="min-w-0 flex-1">
                 <p

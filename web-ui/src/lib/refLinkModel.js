@@ -32,7 +32,9 @@ function shouldHumanizeByDefault(prefix) {
 
 function humanizedLabelForPrefix(prefix, value) {
   if (prefix === "artifact") return "Artifact";
-  if (prefix === "thread") return "Thread";
+  if (prefix === "card") return "Card";
+  if (prefix === "thread") return "Topic";
+  if (prefix === "topic") return "Topic";
   if (prefix === "snapshot") return "Snapshot";
   if (prefix === "event") return "Event";
   if (prefix === "document") return `Document ${value}`.trim();
@@ -80,16 +82,19 @@ const LINK_RESOLVERS = {
   artifact: ({ workspaceSlug, value }) =>
     buildInternalHref(workspaceSlug, `/artifacts/${asPathSegment(value)}`),
   thread: ({ workspaceSlug, value }) =>
-    buildInternalHref(workspaceSlug, `/threads/${asPathSegment(value)}`),
+    buildInternalHref(workspaceSlug, `/topics/${asPathSegment(value)}`),
+  topic: ({ workspaceSlug, value }) =>
+    buildInternalHref(workspaceSlug, `/topics/${asPathSegment(value)}`),
+  card: () => "",
   snapshot: ({ workspaceSlug, snapshotIsThread, value }) =>
     snapshotIsThread
-      ? buildInternalHref(workspaceSlug, `/threads/${asPathSegment(value)}`)
+      ? buildInternalHref(workspaceSlug, `/topics/${asPathSegment(value)}`)
       : buildInternalHref(workspaceSlug, `/snapshots/${asPathSegment(value)}`),
   event: ({ workspaceSlug, threadId, value }) =>
     threadId
       ? buildInternalHref(
           workspaceSlug,
-          `/threads/${asPathSegment(threadId)}#event-${asPathSegment(value)}`,
+          `/topics/${asPathSegment(threadId)}#event-${asPathSegment(value)}`,
         )
       : "",
   url: ({ value }) => value,

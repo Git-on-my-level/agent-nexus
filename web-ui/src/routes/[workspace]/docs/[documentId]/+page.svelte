@@ -516,7 +516,7 @@
               <a
                 class="text-indigo-400 transition-colors hover:text-indigo-300"
                 href={workspaceHref(
-                  `/threads/${encodeURIComponent(document.thread_id)}`,
+                  `/topics/${encodeURIComponent(document.thread_id)}`,
                 )}>{document.thread_id}</a
               >
             </p>
@@ -709,12 +709,12 @@
                 </label>
                 <SearchableEntityPicker
                   bind:value={editDraft.thread_id}
-                  advancedLabel="Use a manual thread ID"
-                  helperText="Update the canonical thread linkage for this doc lineage."
-                  label="Thread linkage"
-                  manualLabel="Thread ID"
+                  advancedLabel="Use a manual topic ID"
+                  helperText="Update the canonical topic linkage for this doc lineage."
+                  label="Topic linkage"
+                  manualLabel="Topic ID"
                   manualPlaceholder="thread-..."
-                  placeholder="Search threads by title, ID, or tags"
+                  placeholder="Search topics by title, ID, or tags"
                   searchFn={searchThreadOptions}
                 />
               </div>

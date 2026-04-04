@@ -50,7 +50,7 @@
         Boards
       </h2>
       <p class="mt-0.5 text-[12px] text-[var(--ui-text-subtle)]">
-        Boards owned by or tracking this thread.
+        Boards owned by or tracking this topic.
       </p>
     </div>
     <a
@@ -63,7 +63,7 @@
 
   {#if !hasAny}
     <p class="px-4 py-3 text-[13px] text-[var(--ui-text-muted)]">
-      This thread isn't tracked on any boards yet.
+      This topic isn't tracked on any boards yet.
     </p>
   {:else}
     <div class="divide-y divide-[var(--ui-border-subtle)]">
@@ -72,7 +72,7 @@
           <div
             class="text-[10px] font-semibold uppercase tracking-wide text-[var(--ui-text-subtle)] px-4 pt-2.5 pb-1"
           >
-            Owned by this thread
+            Owned by this topic
           </div>
           {#each ownedBoards as board}
             <a

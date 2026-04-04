@@ -64,7 +64,7 @@
         Documents
       </h2>
       <p class="mt-0.5 text-[12px] text-[var(--ui-text-subtle)]">
-        Thread-linked docs and current head revisions.
+        Topic-linked docs and current head revisions.
       </p>
     </div>
     <a
@@ -83,7 +83,7 @@
     <p class="px-4 py-3 text-[13px] text-red-400">{documentsError}</p>
   {:else if documents.length === 0}
     <p class="px-4 py-3 text-[13px] text-[var(--ui-text-muted)]">
-      No documents linked to this thread.
+      No documents linked to this topic.
     </p>
   {:else}
     <div class="divide-y divide-[var(--ui-border-subtle)]">

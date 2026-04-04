@@ -669,9 +669,9 @@
                 {#if item.thread_id}
                   <a
                     class="inline-flex items-center gap-1 font-medium text-[var(--ui-text-muted)] hover:text-[var(--ui-text)] transition-colors"
-                    href={workspaceHref(`/threads/${item.thread_id}`)}
+                    href={workspaceHref(`/topics/${item.thread_id}`)}
                   >
-                    <span class="text-[var(--ui-text-subtle)]">Thread:</span>
+                    <span class="text-[var(--ui-text-subtle)]">Topic:</span>
                     {item.thread_id}
                   </a>
                 {/if}
@@ -680,10 +680,10 @@
                     class="inline-flex items-center gap-1 font-medium text-[var(--ui-text-muted)] hover:text-[var(--ui-text)] transition-colors"
                     href={item.thread_id
                       ? workspaceHref(
-                          `/threads/${item.thread_id}#commitment-card-${item.commitment_id}`,
+                          `/topics/${item.thread_id}#commitment-card-${item.commitment_id}`,
                         )
                       : workspaceHref(
-                          `/threads#commitment-card-${item.commitment_id}`,
+                          `/topics#commitment-card-${item.commitment_id}`,
                         )}
                   >
                     <span class="text-[var(--ui-text-subtle)]">Commitment:</span
@@ -741,7 +741,7 @@
                     <a
                       class="font-medium underline hover:text-emerald-300"
                       href={workspaceHref(
-                        `/threads/${item.thread_id}#event-${postedDecisionByInboxItem[item.id].id}`,
+                        `/topics/${item.thread_id}#event-${postedDecisionByInboxItem[item.id].id}`,
                       )}
                     >
                       view in timeline
@@ -883,9 +883,9 @@
                         >
                           <a
                             class="inline-flex items-center gap-1 text-[12px] font-medium text-[var(--ui-accent)] hover:text-[var(--ui-accent-strong)] transition-colors"
-                            href={workspaceHref("/threads/" + item.thread_id)}
+                            href={workspaceHref("/topics/" + item.thread_id)}
                           >
-                            View full thread &rarr;
+                            View full topic &rarr;
                           </a>
                         </div>
                       {/if}

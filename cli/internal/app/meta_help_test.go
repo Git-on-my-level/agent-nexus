@@ -81,8 +81,13 @@ func TestRunMetaCommandIncludesWhyAndExample(t *testing.T) {
 		t.Fatalf("expected non-empty why payload=%#v", payload)
 	}
 	examples, _ := commandObj["examples"].([]any)
-	if len(examples) == 0 {
-		t.Fatalf("expected at least one example payload=%#v", payload)
+	if len(examples) > 0 {
+		for _, raw := range examples {
+			example, _ := raw.(map[string]any)
+			if example == nil || strings.TrimSpace(anyString(example["command"])) == "" {
+				t.Fatalf("expected example command fields when examples are present payload=%#v", payload)
+			}
+		}
 	}
 }
 
@@ -109,14 +114,8 @@ func TestRunGeneratedHelpTopic(t *testing.T) {
 	if !strings.Contains(output, "Generated Help: threads") {
 		t.Fatalf("expected generated help header output=%s", output)
 	}
-	if !strings.Contains(output, "threads create") {
+	if !strings.Contains(output, "threads list") {
 		t.Fatalf("expected generated command listing output=%s", output)
-	}
-	if !strings.Contains(output, "threads patch") {
-		t.Fatalf("expected patch subcommand in generated help output=%s", output)
-	}
-	if !strings.Contains(output, "threads propose-patch") {
-		t.Fatalf("expected explicit proposal subcommand in generated help output=%s", output)
 	}
 	if !strings.Contains(output, "threads timeline") {
 		t.Fatalf("expected timeline subcommand in generated help output=%s", output)
@@ -136,11 +135,11 @@ func TestRunGeneratedHelpTopic(t *testing.T) {
 	if !strings.Contains(output, "threads workspace") {
 		t.Fatalf("expected local threads workspace helper in generated help output=%s", output)
 	}
-	if !strings.Contains(output, "threads apply") {
-		t.Fatalf("expected threads apply workflow guidance in generated help output=%s", output)
+	if !strings.Contains(output, "threads recommendations") {
+		t.Fatalf("expected local threads recommendations helper in generated help output=%s", output)
 	}
-	if strings.Contains(output, "threads update") {
-		t.Fatalf("unexpected legacy update subcommand in generated help output=%s", output)
+	if strings.Contains(output, "threads create") || strings.Contains(output, "threads patch") || strings.Contains(output, "threads propose-patch") || strings.Contains(output, "threads apply") {
+		t.Fatalf("unexpected legacy thread write guidance in generated help output=%s", output)
 	}
 	if !strings.Contains(output, "Global flags can appear before or after the command path.") {
 		t.Fatalf("expected global flag placement guidance output=%s", output)
@@ -175,8 +174,8 @@ func TestRunGeneratedAuthHelpTopics(t *testing.T) {
 	}
 
 	authOutput := run([]string{"help", "auth"})
-	if !strings.Contains(authOutput, "Generated Help: auth") {
-		t.Fatalf("expected generated auth help header output=%s", authOutput)
+	if !strings.Contains(authOutput, "Auth lifecycle and registration surface") {
+		t.Fatalf("expected local auth help header output=%s", authOutput)
 	}
 	if !strings.Contains(authOutput, "auth register") || !strings.Contains(authOutput, "auth invites") || !strings.Contains(authOutput, "auth bootstrap") {
 		t.Fatalf("expected auth subcommand discoverability output=%s", authOutput)
@@ -186,8 +185,8 @@ func TestRunGeneratedAuthHelpTopics(t *testing.T) {
 	}
 
 	invitesOutput := run([]string{"help", "auth", "invites"})
-	if !strings.Contains(invitesOutput, "Generated Help: auth invites") {
-		t.Fatalf("expected generated auth invites help header output=%s", invitesOutput)
+	if !strings.Contains(invitesOutput, "Local Help: auth invites") {
+		t.Fatalf("expected local auth invites help header output=%s", invitesOutput)
 	}
 	if !strings.Contains(invitesOutput, "auth invites create") || !strings.Contains(invitesOutput, "auth invites revoke") {
 		t.Fatalf("expected auth invites subcommand discoverability output=%s", invitesOutput)
@@ -375,7 +374,7 @@ func TestRunLocalHelperHelpTopicsResolveAcrossEntryPoints(t *testing.T) {
 		if !strings.Contains(output, "Local Help: threads inspect") {
 			t.Fatalf("expected local threads inspect help header output=%s", output)
 		}
-		if !strings.Contains(output, "threads context") || !strings.Contains(output, "inbox list") {
+		if !strings.Contains(output, "read-only thread data") || !strings.Contains(output, "inbox list") {
 			t.Fatalf("expected composed-helper details output=%s", output)
 		}
 	}
@@ -383,7 +382,7 @@ func TestRunLocalHelperHelpTopicsResolveAcrossEntryPoints(t *testing.T) {
 		if !strings.Contains(output, "Local Help: threads workspace") {
 			t.Fatalf("expected local threads workspace help header output=%s", output)
 		}
-		if !strings.Contains(output, "related-thread") || !strings.Contains(output, "inbox list") || !strings.Contains(output, "--include-related-event-content") {
+		if !strings.Contains(output, "related thread refs") || !strings.Contains(output, "thread-scoped inbox items") || !strings.Contains(output, "--full-summary") {
 			t.Fatalf("expected workspace helper details output=%s", output)
 		}
 	}
@@ -391,7 +390,7 @@ func TestRunLocalHelperHelpTopicsResolveAcrossEntryPoints(t *testing.T) {
 		if !strings.Contains(output, "Local Help: threads recommendations") {
 			t.Fatalf("expected local threads recommendations help header output=%s", output)
 		}
-		if !strings.Contains(output, "--full-summary") || !strings.Contains(output, "inbox list") || !strings.Contains(output, "--include-related-event-content") {
+		if !strings.Contains(output, "Compose a recommendation-oriented review of one thread with related follow-up context.") || !strings.Contains(output, "Loads the read-only thread context, inbox, and related-thread review context") || !strings.Contains(output, "--include-related-event-content") {
 			t.Fatalf("expected recommendations helper details output=%s", output)
 		}
 	}
@@ -435,15 +434,18 @@ func TestRunDocsHelpMentionsLocalValidateUpdate(t *testing.T) {
 	if !strings.Contains(output, "docs content") {
 		t.Fatalf("expected docs content helper output=%s", output)
 	}
-	if !strings.Contains(output, "docs update") || !strings.Contains(output, "docs propose-update") || !strings.Contains(output, "docs apply") {
-		t.Fatalf("expected docs direct/proposal/apply helpers output=%s", output)
+	if !strings.Contains(output, "docs propose-update") || !strings.Contains(output, "docs apply") {
+		t.Fatalf("expected docs proposal/apply helpers output=%s", output)
+	}
+	if strings.Contains(output, "docs update") {
+		t.Fatalf("unexpected legacy docs update guidance output=%s", output)
 	}
 	if !strings.Contains(output, "--content-file <path>") {
 		t.Fatalf("expected content-file hint output=%s", output)
 	}
 }
 
-func TestRunCommitmentsHelpMentionsApplyWorkflow(t *testing.T) {
+func TestRunCommitmentsHelpIsRemoved(t *testing.T) {
 	t.Parallel()
 
 	stdout := &bytes.Buffer{}
@@ -459,12 +461,11 @@ func TestRunCommitmentsHelpMentionsApplyWorkflow(t *testing.T) {
 	}
 
 	exitCode := cli.Run([]string{"help", "commitments"})
-	if exitCode != 0 {
-		t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
+	if exitCode == 0 {
+		t.Fatalf("expected removed commitments help topic to fail, stdout=%s stderr=%s", stdout.String(), stderr.String())
 	}
-	output := stdout.String()
-	if !strings.Contains(output, "commitments patch") || !strings.Contains(output, "commitments propose-patch") || !strings.Contains(output, "commitments apply") {
-		t.Fatalf("expected commitments direct/proposal/apply workflow output=%s", output)
+	if !strings.Contains(stderr.String(), "unknown help topic \"commitments\"") {
+		t.Fatalf("expected unknown help topic error, stdout=%s stderr=%s", stdout.String(), stderr.String())
 	}
 }
 
@@ -506,8 +507,11 @@ func TestRunDraftHelpTopic(t *testing.T) {
 	if !strings.Contains(output, "Draft staging") {
 		t.Fatalf("expected draft header output=%s", output)
 	}
-	if !strings.Contains(output, "threads propose-patch") || !strings.Contains(output, "docs propose-update") {
+	if !strings.Contains(output, "docs propose-update") {
 		t.Fatalf("expected proposal-flow guidance output=%s", output)
+	}
+	if strings.Contains(output, "threads propose-patch") {
+		t.Fatalf("unexpected legacy thread proposal guidance output=%s", output)
 	}
 	if !strings.Contains(output, "oar draft list") || !strings.Contains(output, "oar draft commit") {
 		t.Fatalf("expected draft workflow guidance output=%s", output)
@@ -772,8 +776,11 @@ func TestRunGeneratedHelpResolvesDerivedDocsAndArtifactCommands(t *testing.T) {
 	if !strings.Contains(docsGroup, "docs list") {
 		t.Fatalf("expected docs list in docs group help output=%s", docsGroup)
 	}
-	if !strings.Contains(docsGroup, "docs tombstone") {
-		t.Fatalf("expected docs tombstone in docs group help output=%s", docsGroup)
+	if !strings.Contains(docsGroup, "docs apply") {
+		t.Fatalf("expected docs apply in docs group help output=%s", docsGroup)
+	}
+	if strings.Contains(docsGroup, "docs update") {
+		t.Fatalf("unexpected legacy docs update in docs group help output=%s", docsGroup)
 	}
 
 	docsList := runHelpCommand(t, "help", "docs", "list")
@@ -784,20 +791,20 @@ func TestRunGeneratedHelpResolvesDerivedDocsAndArtifactCommands(t *testing.T) {
 		t.Fatalf("expected docs.list command metadata output=%s", docsList)
 	}
 
-	docsTombstone := runHelpCommand(t, "help", "docs", "tombstone")
-	if !strings.Contains(docsTombstone, "Generated Help: docs tombstone") {
-		t.Fatalf("expected docs tombstone exact generated help output=%s", docsTombstone)
+	docsApply := runHelpCommand(t, "help", "docs", "apply")
+	if !strings.Contains(docsApply, "Local Help: docs apply") {
+		t.Fatalf("expected docs apply exact generated help output=%s", docsApply)
 	}
-	if !strings.Contains(docsTombstone, "- Command ID: `docs.tombstone`") {
-		t.Fatalf("expected docs.tombstone command metadata output=%s", docsTombstone)
+	if !strings.Contains(docsApply, "Apply a previously staged document update proposal.") {
+		t.Fatalf("expected docs apply command metadata output=%s", docsApply)
 	}
 
-	artifactTombstone := runHelpCommand(t, "help", "artifacts", "tombstone")
-	if !strings.Contains(artifactTombstone, "Generated Help: artifacts tombstone") {
-		t.Fatalf("expected artifacts tombstone exact generated help output=%s", artifactTombstone)
+	artifactInspect := runHelpCommand(t, "help", "artifacts", "inspect")
+	if !strings.Contains(artifactInspect, "Local Help: artifacts inspect") {
+		t.Fatalf("expected artifacts inspect exact generated help output=%s", artifactInspect)
 	}
-	if !strings.Contains(artifactTombstone, "- Command ID: `artifacts.tombstone`") {
-		t.Fatalf("expected artifacts.tombstone command metadata output=%s", artifactTombstone)
+	if !strings.Contains(artifactInspect, "Fetch artifact metadata and resolved content in one command") {
+		t.Fatalf("expected artifacts.inspect command metadata output=%s", artifactInspect)
 	}
 }
 

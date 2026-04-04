@@ -501,7 +501,7 @@
     <p class="text-[13px] text-[var(--ui-text-muted)]">No messages yet.</p>
   {:else if !hasMessages}
     <p class="text-[13px] text-[var(--ui-text-muted)]">
-      No messages in view. Turn on Show archived to see archived threads.
+      No messages in view. Turn on Show archived to see archived topics.
     </p>
   {:else}
     {#if lifecycleError}

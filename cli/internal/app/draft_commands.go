@@ -457,7 +457,11 @@ func validateDraftBody(commandID string, body map[string]any) []string {
 		"threads.patch":              validateDraftThreadPatch,
 		"commitments.create":         validateDraftCommitmentCreate,
 		"commitments.patch":          validateDraftCommitmentPatch,
-		"docs.update":                validateDraftDocsUpdate,
+		"topics.create":              validateDraftTopicCreate,
+		"topics.patch":               validateDraftTopicPatch,
+		"cards.patch":                validateDraftCardPatch,
+		"cards.move":                 validateDraftCardMove,
+		"docs.revisions.create":      validateDraftDocsUpdate,
 		"events.create":              validateDraftEventCreate,
 		"artifacts.create":           validateDraftArtifactCreate,
 		"inbox.ack":                  validateDraftInboxAck,
@@ -493,7 +497,7 @@ func validateDraftCreateCommand(commandID string) error {
 
 func validateDraftDocsUpdate(body map[string]any) []string {
 	out := make([]string, 0)
-	if err := validateDocsUpdateBody(body, "docs update"); err != nil {
+	if err := validateDocsUpdateBody(body, "docs revisions create"); err != nil {
 		out = append(out, err.Error())
 	}
 	return out
@@ -667,6 +671,182 @@ func validateDraftCommitmentPatch(body map[string]any) []string {
 		}
 	}
 	return out
+}
+
+func validateDraftTopicCreate(body map[string]any) []string {
+	out := make([]string, 0)
+	validateOptionalNonEmptyString(body, "actor_id", "actor_id", &out)
+	topic, ok := requiredObjectField(body, "topic", "topic", &out)
+	if !ok {
+		return out
+	}
+	requiredFields := []string{
+		"type",
+		"status",
+		"title",
+		"summary",
+		"owner_refs",
+		"document_refs",
+		"board_refs",
+		"related_refs",
+		"provenance",
+	}
+	for _, field := range requiredFields {
+		if _, exists := topic[field]; !exists {
+			out = append(out, fmt.Sprintf("topic.%s is required", field))
+		}
+	}
+	validateTopicFields(topic, true, "topic", &out)
+	return out
+}
+
+func validateDraftTopicPatch(body map[string]any) []string {
+	out := make([]string, 0)
+	validateOptionalNonEmptyString(body, "actor_id", "actor_id", &out)
+	validateOptionalRFC3339(body, "if_updated_at", "if_updated_at", &out)
+	patch, ok := requiredObjectField(body, "patch", "patch", &out)
+	if !ok {
+		return out
+	}
+	if len(patch) == 0 {
+		out = append(out, "patch is required")
+		return out
+	}
+	validateTopicFields(patch, false, "patch", &out)
+	return out
+}
+
+func validateTopicFields(topic map[string]any, createMode bool, path string, out *[]string) {
+	stringFields := map[string]bool{
+		"type":    true,
+		"status":  true,
+		"title":   true,
+		"summary": true,
+	}
+	for field, raw := range topic {
+		full := path + "." + field
+		switch field {
+		case "type", "status", "title", "summary":
+			text, ok := raw.(string)
+			if !ok {
+				*out = append(*out, full+" must be a string")
+				continue
+			}
+			if createMode && strings.TrimSpace(text) == "" {
+				*out = append(*out, full+" must be non-empty")
+			}
+		case "owner_refs", "document_refs", "board_refs", "related_refs":
+			values, ok := asStringList(raw)
+			if !ok {
+				*out = append(*out, full+" must be a list of strings")
+				continue
+			}
+			validateTypedRefs(values, full, out)
+		case "primary_thread_ref":
+			if raw == nil {
+				continue
+			}
+			text, ok := raw.(string)
+			if !ok {
+				*out = append(*out, full+" must be a string")
+				continue
+			}
+			if strings.TrimSpace(text) == "" {
+				*out = append(*out, full+" must be non-empty")
+			}
+		case "provenance":
+			provenance, ok := raw.(map[string]any)
+			if !ok {
+				*out = append(*out, full+" must be an object")
+				continue
+			}
+			validateProvenance(provenance, full, out)
+		default:
+			if !stringFields[field] {
+				continue
+			}
+		}
+	}
+}
+
+func validateDraftCardPatch(body map[string]any) []string {
+	out := make([]string, 0)
+	validateOptionalNonEmptyString(body, "actor_id", "actor_id", &out)
+	validateOptionalRFC3339(body, "if_updated_at", "if_updated_at", &out)
+	patch, ok := requiredObjectField(body, "patch", "patch", &out)
+	if !ok {
+		return out
+	}
+	if len(patch) == 0 {
+		out = append(out, "patch is required")
+		return out
+	}
+	validateCardFields(patch, false, "patch", &out)
+	return out
+}
+
+func validateDraftCardMove(body map[string]any) []string {
+	out := make([]string, 0)
+	validateOptionalNonEmptyString(body, "actor_id", "actor_id", &out)
+	move, ok := requiredObjectField(body, "move", "move", &out)
+	if !ok {
+		return out
+	}
+	requiredStringField(move, "column_key", "move.column_key", true, &out)
+	validateCardFields(move, false, "move", &out)
+	return out
+}
+
+func validateCardFields(card map[string]any, createMode bool, path string, out *[]string) {
+	for field, raw := range card {
+		full := path + "." + field
+		switch field {
+		case "title", "summary", "risk", "resolution":
+			text, ok := raw.(string)
+			if !ok {
+				*out = append(*out, full+" must be a string")
+				continue
+			}
+			if createMode && strings.TrimSpace(text) == "" {
+				*out = append(*out, full+" must be non-empty")
+			}
+		case "assignee_refs", "resolution_refs", "related_refs":
+			values, ok := asStringList(raw)
+			if !ok {
+				*out = append(*out, full+" must be a list of strings")
+				continue
+			}
+			validateTypedRefs(values, full, out)
+		case "topic_ref", "thread_ref", "document_ref", "before_card_ref", "after_card_ref":
+			if raw == nil {
+				continue
+			}
+			text, ok := raw.(string)
+			if !ok {
+				*out = append(*out, full+" must be a string")
+				continue
+			}
+			if strings.TrimSpace(text) == "" {
+				*out = append(*out, full+" must be non-empty")
+			}
+		case "provenance":
+			provenance, ok := raw.(map[string]any)
+			if !ok {
+				*out = append(*out, full+" must be an object")
+				continue
+			}
+			validateProvenance(provenance, full, out)
+		case "column_key":
+			text, ok := raw.(string)
+			if !ok {
+				*out = append(*out, full+" must be a string")
+				continue
+			}
+			if createMode && strings.TrimSpace(text) == "" {
+				*out = append(*out, full+" must be non-empty")
+			}
+		}
+	}
 }
 
 func validateCommitmentFields(commitment map[string]any, createMode bool, path string, out *[]string) {
@@ -854,7 +1034,7 @@ func validatePacketForKind(kind string, artifact map[string]any, packet map[stri
 	rules := map[string]map[string]string{
 		"work_order": {
 			"work_order_id":       "string",
-			"thread_id":           "string",
+			"subject_ref":         "string",
 			"objective":           "string",
 			"constraints":         "list<string>",
 			"context_refs":        "list<typed_ref>",
@@ -863,20 +1043,21 @@ func validatePacketForKind(kind string, artifact map[string]any, packet map[stri
 		},
 		"receipt": {
 			"receipt_id":            "string",
-			"work_order_id":         "string",
-			"thread_id":             "string",
+			"subject_ref":           "string",
+			"work_order_ref":        "string",
 			"outputs":               "list<typed_ref+>",
 			"verification_evidence": "list<typed_ref+>",
 			"changes_summary":       "string",
 			"known_gaps":            "list<string>",
 		},
 		"review": {
-			"review_id":     "string",
-			"work_order_id": "string",
-			"receipt_id":    "string",
-			"outcome":       "string",
-			"notes":         "string",
-			"evidence_refs": "list<typed_ref>",
+			"review_id":      "string",
+			"subject_ref":    "string",
+			"work_order_ref": "string",
+			"receipt_ref":    "string",
+			"outcome":        "string",
+			"notes":          "string",
+			"evidence_refs":  "list<typed_ref>",
 		},
 	}
 	fields, ok := rules[kind]
@@ -955,28 +1136,28 @@ func validatePacketForKind(kind string, artifact map[string]any, packet map[stri
 	if !refsOK {
 		return
 	}
-	threadID, _ := packet["thread_id"].(string)
-	threadID = strings.TrimSpace(threadID)
-	if threadID != "" && !containsRef(artifactRefs, "thread:"+threadID) {
-		*out = append(*out, fmt.Sprintf("artifact.refs must include %q", "thread:"+threadID))
+	subjectRef, _ := packet["subject_ref"].(string)
+	subjectRef = strings.TrimSpace(subjectRef)
+	if subjectRef != "" && !containsRef(artifactRefs, subjectRef) {
+		*out = append(*out, fmt.Sprintf("artifact.refs must include %q", subjectRef))
 	}
 	switch kind {
 	case "receipt":
-		workOrderID, _ := packet["work_order_id"].(string)
-		workOrderID = strings.TrimSpace(workOrderID)
-		if workOrderID != "" && !containsRef(artifactRefs, "artifact:"+workOrderID) {
-			*out = append(*out, fmt.Sprintf("artifact.refs must include %q", "artifact:"+workOrderID))
+		workOrderRef, _ := packet["work_order_ref"].(string)
+		workOrderRef = strings.TrimSpace(workOrderRef)
+		if workOrderRef != "" && !containsRef(artifactRefs, workOrderRef) {
+			*out = append(*out, fmt.Sprintf("artifact.refs must include %q", workOrderRef))
 		}
 	case "review":
-		workOrderID, _ := packet["work_order_id"].(string)
-		workOrderID = strings.TrimSpace(workOrderID)
-		if workOrderID != "" && !containsRef(artifactRefs, "artifact:"+workOrderID) {
-			*out = append(*out, fmt.Sprintf("artifact.refs must include %q", "artifact:"+workOrderID))
+		workOrderRef, _ := packet["work_order_ref"].(string)
+		workOrderRef = strings.TrimSpace(workOrderRef)
+		if workOrderRef != "" && !containsRef(artifactRefs, workOrderRef) {
+			*out = append(*out, fmt.Sprintf("artifact.refs must include %q", workOrderRef))
 		}
-		receiptID, _ := packet["receipt_id"].(string)
-		receiptID = strings.TrimSpace(receiptID)
-		if receiptID != "" && !containsRef(artifactRefs, "artifact:"+receiptID) {
-			*out = append(*out, fmt.Sprintf("artifact.refs must include %q", "artifact:"+receiptID))
+		receiptRef, _ := packet["receipt_ref"].(string)
+		receiptRef = strings.TrimSpace(receiptRef)
+		if receiptRef != "" && !containsRef(artifactRefs, receiptRef) {
+			*out = append(*out, fmt.Sprintf("artifact.refs must include %q", receiptRef))
 		}
 	}
 }
@@ -1220,7 +1401,7 @@ Use `+"`oar draft`"+` when you want a local checkpoint before sending a write to
 Choose the right path:
 
 - Use direct commands when the mutation is small and you are ready to apply it now.
-- Prefer command-specific proposal flows when they exist, such as `+"`threads propose-patch`"+` or `+"`docs propose-update`"+`, because they add domain-aware diff/review helpers.
+- Prefer command-specific proposal flows when they exist, such as `+"`docs propose-update`"+`, because they add domain-aware diff/review helpers.
 - Use `+"`draft`"+` for lower-level commands, generic JSON bodies, or cases where you want to stage the exact request before commit.
 
 Standard workflow
@@ -1244,7 +1425,7 @@ Heuristics
 - Re-read current state before committing older drafts if the target may have changed.
 
 Examples:
-  cat payload.json | oar draft create --command threads.create
+  cat payload.json | oar draft create --command topics.create
   oar draft list
   oar draft commit draft-20260305T103000-a1b2c3d4e5f6
 `) + "\n"
@@ -1265,7 +1446,7 @@ Flags:
 
 Examples:
   cat payload.json | oar draft create --command events.create
-  oar draft create --command threads.create --from-file thread.json
+  oar draft create --command topics.create --from-file topic.json
 `))
 
 	commandValue := draftCreateHelpCommandValue(args)

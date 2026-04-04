@@ -27,8 +27,8 @@ var commandShapeCompatibilityAliases = []commandShapeCompatibilityAlias{
 		requireTrailingArgs: true,
 	},
 	{
-		from: []string{"threads", "update"},
-		to:   []string{"threads", "patch"},
+		from: []string{"topics", "update"},
+		to:   []string{"topics", "patch"},
 	},
 }
 

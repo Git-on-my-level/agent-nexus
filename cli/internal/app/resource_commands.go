@@ -51,6 +51,24 @@ var (
 		listField:      "threads",
 		notFoundHints:  []string{"thread not found"},
 	}
+	topicIDLookupSpec = resourceIDLookupSpec{
+		idLabel:        "topic id",
+		resource:       "topic",
+		resourcePlural: "topics",
+		listCommand:    "topics list",
+		listCommandID:  "topics.list",
+		listField:      "topics",
+		notFoundHints:  []string{"topic not found"},
+	}
+	cardIDLookupSpec = resourceIDLookupSpec{
+		idLabel:        "card id",
+		resource:       "card",
+		resourcePlural: "cards",
+		listCommand:    "cards list",
+		listCommandID:  "cards.list",
+		listField:      "cards",
+		notFoundHints:  []string{"card not found"},
+	}
 	commitmentIDLookupSpec = resourceIDLookupSpec{
 		idLabel:        "commitment id",
 		resource:       "commitment",
@@ -273,8 +291,10 @@ func (a *App) runTypedResource(ctx context.Context, resource string, args []stri
 		return a.runActorsCommand(ctx, args, cfg)
 	case "threads":
 		return a.runThreadsCommand(ctx, args, cfg)
-	case "commitments":
-		return a.runCommitmentsCommand(ctx, args, cfg)
+	case "topics":
+		return a.runTopicsCommand(ctx, args, cfg)
+	case "cards":
+		return a.runCardsCommand(ctx, args, cfg)
 	case "artifacts":
 		return a.runArtifactsCommand(ctx, args, cfg)
 	case "boards":
@@ -518,150 +538,8 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 		)
 		return result, "threads timeline", nil
 	case "context":
-		selection, err := parseThreadContextSelectionArgs(args[1:], "threads context")
-		if err != nil {
-			return nil, "threads context", err
-		}
-		threadIDs, err := a.resolveThreadContextSelection(ctx, cfg, "threads context", selection, true)
-		if err != nil {
-			return nil, "threads context", err
-		}
-		query := threadContextQuery(selection)
-		if len(threadIDs) == 1 {
-			result, callErr := a.invokeTypedJSONWithIDResolution(
-				ctx,
-				cfg,
-				"threads context",
-				"threads.context",
-				"thread_id",
-				threadIDs[0],
-				threadIDLookupSpec,
-				query,
-				nil,
-			)
-			if callErr != nil {
-				return result, "threads context", callErr
-			}
-			data := asMap(result.Data)
-			body := asMap(data["body"])
-			if body != nil {
-				addThreadContextCollaborationSummary(body)
-				body["full_id"] = selection.fullID
-				data["body"] = body
-				result.Data = data
-				result.Text = formatTypedCommandText(
-					"threads.context",
-					intValue(data["status_code"]),
-					headerValues(data["headers"]),
-					body,
-					cfg.Verbose,
-					cfg.Headers,
-				)
-			}
-			return result, "threads context", nil
-		}
-
-		resolvedThreadIDs := make([]string, 0, len(threadIDs))
-		threadRecords := make([]any, 0, len(threadIDs))
-		contexts := make([]any, 0, len(threadIDs))
-		recentEvents := make([]any, 0, len(threadIDs)*4)
-		keyArtifacts := make([]any, 0, len(threadIDs)*2)
-		openCommitments := make([]any, 0, len(threadIDs)*2)
-		seenContextThreadIDs := make(map[string]struct{}, len(threadIDs))
-		statusCode := http.StatusOK
-		headers := map[string][]string{"Content-Type": {"application/json"}}
-		capturedTransport := false
-
-		for _, threadID := range threadIDs {
-			contextResult, contextErr := a.invokeTypedJSONWithIDResolution(
-				ctx,
-				cfg,
-				"threads context",
-				"threads.context",
-				"thread_id",
-				threadID,
-				threadIDLookupSpec,
-				query,
-				nil,
-			)
-			if contextErr != nil {
-				return contextResult, "threads context", contextErr
-			}
-			data := asMap(contextResult.Data)
-			if !capturedTransport {
-				if code := intValue(data["status_code"]); code > 0 {
-					statusCode = code
-				}
-				if responseHeaders := headerValues(data["headers"]); len(responseHeaders) > 0 {
-					headers = responseHeaders
-				}
-				capturedTransport = true
-			}
-			body := asMap(data["body"])
-			if body == nil {
-				continue
-			}
-			addThreadContextCollaborationSummary(body)
-			body["full_id"] = selection.fullID
-
-			thread := asMap(body["thread"])
-			resolvedContextThreadID := strings.TrimSpace(anyString(body["thread_id"]))
-			if thread != nil {
-				resolvedContextThreadID = firstNonEmpty(strings.TrimSpace(anyString(thread["id"])), resolvedContextThreadID)
-			}
-			if resolvedContextThreadID == "" {
-				resolvedContextThreadID = strings.TrimSpace(threadID)
-			}
-			if resolvedContextThreadID != "" {
-				if _, exists := seenContextThreadIDs[resolvedContextThreadID]; exists {
-					continue
-				}
-				seenContextThreadIDs[resolvedContextThreadID] = struct{}{}
-				resolvedThreadIDs = append(resolvedThreadIDs, resolvedContextThreadID)
-			}
-
-			if thread != nil {
-				threadRecords = append(threadRecords, thread)
-			}
-			contexts = append(contexts, body)
-			recentEvents = append(recentEvents, asSlice(body["recent_events"])...)
-			keyArtifacts = append(keyArtifacts, asSlice(body["key_artifacts"])...)
-			openCommitments = append(openCommitments, asSlice(body["open_commitments"])...)
-		}
-		resolvedThreadIDs = normalizeIDFilters(resolvedThreadIDs)
-		if len(resolvedThreadIDs) == 0 {
-			resolvedThreadIDs = threadIDs
-		}
-
-		aggregateBody := map[string]any{
-			"thread_ids":         resolvedThreadIDs,
-			"thread_count":       len(resolvedThreadIDs),
-			"threads":            uniqueMapsByID(threadRecords),
-			"contexts":           contexts,
-			"recent_events":      uniqueMapsByID(recentEvents),
-			"key_artifacts":      uniqueContextArtifactItems(keyArtifacts),
-			"open_commitments":   uniqueMapsByID(openCommitments),
-			"contexts_generated": true,
-			"full_id":            selection.fullID,
-		}
-		sortEventsByCreatedAt(asSlice(aggregateBody["recent_events"]))
-		addThreadContextCollaborationSummary(aggregateBody)
-
-		data := map[string]any{
-			"status_code": statusCode,
-			"headers":     headers,
-			"body":        aggregateBody,
-		}
-		result := &commandResult{Data: data}
-		result.Text = formatTypedCommandText(
-			"threads.context",
-			statusCode,
-			headers,
-			aggregateBody,
-			cfg.Verbose,
-			cfg.Headers,
-		)
-		return result, "threads context", nil
+		result, err := a.runThreadsContextCommand(ctx, args[1:], cfg)
+		return result, "threads context", err
 	case "inspect":
 		result, err := a.runThreadsInspectCommand(ctx, args[1:], cfg)
 		return result, "threads inspect", err
@@ -1130,7 +1008,7 @@ func (a *App) resolveThreadContextSelection(ctx context.Context, cfg config.Reso
 	if len(threadIDs) != 1 {
 		return nil, errnorm.Usage(
 			"invalid_request",
-			fmt.Sprintf("%s requires exactly one thread; refine filters or pass one --thread-id. For multi-thread views, use `oar threads context`.", commandName),
+			fmt.Sprintf("%s requires exactly one thread; refine filters or pass one --thread-id. For multi-thread views, use `oar threads workspace`.", commandName),
 		)
 	}
 	return threadIDs, nil
@@ -1138,10 +1016,10 @@ func (a *App) resolveThreadContextSelection(ctx context.Context, cfg config.Reso
 
 func mixedThreadSelectionMessage(commandName string) string {
 	base := "--thread-id cannot be combined with discovery filters (--status/--priority/--stale/--tag/--cadence/--type). Choose one mode."
-	discoveryExample := "oar threads context --status active"
+	discoveryExample := "oar threads inspect --status active"
 	switch strings.TrimSpace(commandName) {
 	case "threads context":
-		return base + " For one thread, use `oar threads workspace --thread-id <thread-id>` for the canonical coordination view or `oar threads context --thread-id <thread-id>` for raw context. For discovery, remove `--thread-id` and use `" + discoveryExample + "`."
+		return base + " For one thread, use `oar threads inspect --thread-id <thread-id>` for raw inspection or `oar threads workspace --thread-id <thread-id>` for the canonical coordination view. For discovery, remove `--thread-id` and use `" + discoveryExample + "`."
 	case "threads recommendations":
 		return base + " For one thread, use `oar threads recommendations --thread-id <thread-id>`. For discovery, remove `--thread-id` and use `" + discoveryExample + "`."
 	case "threads workspace":
@@ -1174,30 +1052,24 @@ func (a *App) runThreadsInspectCommand(ctx context.Context, args []string, cfg c
 		return nil, err
 	}
 
-	contextResult, callErr := a.invokeTypedJSONWithIDResolution(
-		ctx,
-		cfg,
-		"threads context",
-		"threads.context",
-		"thread_id",
-		threadIDs[0],
-		threadIDLookupSpec,
-		threadContextQuery(selection),
-		nil,
-	)
+	statusCode, headers, body, callErr := a.loadThreadContextEnvelope(ctx, cfg, threadIDs[0], selection)
 	if callErr != nil {
 		return nil, callErr
 	}
 
-	data := asMap(contextResult.Data)
-	body := asMap(data["body"])
-	if body == nil {
-		return contextResult, nil
-	}
-	addThreadContextCollaborationSummary(body)
-
 	thread := extractNestedMap(body, "thread")
+	if thread == nil {
+		thread = map[string]any{}
+	}
 	resolvedThreadID := firstNonEmpty(strings.TrimSpace(anyString(body["thread_id"])), strings.TrimSpace(anyString(thread["id"])), strings.TrimSpace(threadIDs[0]))
+	contextSection := cloneMap(body)
+	if contextSection == nil {
+		contextSection = map[string]any{}
+	}
+	contextSection["thread_id"] = resolvedThreadID
+	contextSection["thread"] = thread
+	contextSection["full_id"] = selection.fullID
+	addThreadContextCollaborationSummary(contextSection)
 
 	inboxResult, err := a.invokeTypedJSON(ctx, cfg, "inbox list", "inbox.list", nil, nil, nil)
 	if err != nil {
@@ -1207,33 +1079,32 @@ func (a *App) runThreadsInspectCommand(ctx context.Context, args []string, cfg c
 	inboxBody := extractNestedMap(inboxData, "body")
 	inboxItems := filteredInboxItems(asSlice(inboxBody["items"]), []string{resolvedThreadID}, nil)
 
-	contextSection := cloneMap(body)
-	delete(contextSection, "thread")
-	delete(contextSection, "collaboration_summary")
-	delete(contextSection, "full_id")
-
 	inspectBody := map[string]any{
 		"thread_id":      resolvedThreadID,
 		"full_id":        selection.fullID,
 		"thread":         thread,
 		"context":        contextSection,
-		"collaboration":  asMap(body["collaboration_summary"]),
+		"collaboration":  asMap(contextSection["collaboration_summary"]),
 		"inbox":          map[string]any{"thread_id": resolvedThreadID, "items": inboxItems, "count": len(inboxItems), "full_id": selection.fullID},
 		"context_source": "threads.context",
 		"inbox_source":   "inbox.list",
 	}
 
-	data["body"] = inspectBody
-	contextResult.Data = data
-	contextResult.Text = formatTypedCommandText(
+	data := map[string]any{
+		"status_code": statusCode,
+		"headers":     headers,
+		"body":        inspectBody,
+	}
+	result := &commandResult{Data: data}
+	result.Text = formatTypedCommandText(
 		"threads.inspect",
-		intValue(data["status_code"]),
-		headerValues(data["headers"]),
+		statusCode,
+		headers,
 		inspectBody,
 		cfg.Verbose,
 		cfg.Headers,
 	)
-	return contextResult, nil
+	return result, nil
 }
 
 func (a *App) runThreadsRecommendationsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
@@ -1246,27 +1117,10 @@ func (a *App) runThreadsRecommendationsCommand(ctx context.Context, args []strin
 		return nil, err
 	}
 
-	contextResult, callErr := a.invokeTypedJSONWithIDResolution(
-		ctx,
-		cfg,
-		"threads context",
-		"threads.context",
-		"thread_id",
-		threadIDs[0],
-		threadIDLookupSpec,
-		threadContextQuery(selection.threadContextSelection),
-		nil,
-	)
+	statusCode, headers, body, callErr := a.loadThreadContextEnvelope(ctx, cfg, threadIDs[0], selection.threadContextSelection)
 	if callErr != nil {
 		return nil, callErr
 	}
-
-	data := asMap(contextResult.Data)
-	body := asMap(data["body"])
-	if body == nil {
-		return contextResult, nil
-	}
-	addThreadContextCollaborationSummary(body)
 
 	thread := extractNestedMap(body, "thread")
 	resolvedThreadID := firstNonEmpty(strings.TrimSpace(anyString(body["thread_id"])), strings.TrimSpace(anyString(thread["id"])), strings.TrimSpace(threadIDs[0]))
@@ -1328,12 +1182,16 @@ func (a *App) runThreadsRecommendationsCommand(ctx context.Context, args []strin
 		}
 	}
 
-	data["body"] = recommendationBody
-	contextResult.Data = data
+	data := map[string]any{
+		"status_code": statusCode,
+		"headers":     headers,
+		"body":        recommendationBody,
+	}
+	contextResult := &commandResult{Data: data}
 	contextResult.Text = formatTypedCommandText(
 		"threads.recommendations",
-		intValue(data["status_code"]),
-		headerValues(data["headers"]),
+		statusCode,
+		headers,
 		recommendationBody,
 		cfg.Verbose,
 		cfg.Headers,
@@ -1352,17 +1210,7 @@ func (a *App) collectRelatedThreadRecommendationReview(ctx context.Context, cfg 
 	relatedEventContentCount := 0
 
 	for _, relatedThreadID := range relatedThreadIDs {
-		contextResult, err := a.invokeTypedJSONWithIDResolution(
-			ctx,
-			cfg,
-			"threads context",
-			"threads.context",
-			"thread_id",
-			relatedThreadID,
-			threadIDLookupSpec,
-			threadContextQuery(selection),
-			nil,
-		)
+		_, _, body, err := a.loadThreadContextEnvelope(ctx, cfg, relatedThreadID, selection)
 		if err != nil {
 			warnings = append(warnings, map[string]any{
 				"thread_id": relatedThreadID,
@@ -1370,12 +1218,6 @@ func (a *App) collectRelatedThreadRecommendationReview(ctx context.Context, cfg 
 			})
 			continue
 		}
-		data := asMap(contextResult.Data)
-		body := extractNestedMap(data, "body")
-		if body == nil {
-			continue
-		}
-		addThreadContextCollaborationSummary(body)
 		thread := extractNestedMap(body, "thread")
 		collaboration := asMap(body["collaboration_summary"])
 		recommendations := annotateRecommendationReviewEvents(normalizeRecommendationReviewEvents(asSlice(collaboration["recommendations"])), thread)
@@ -2365,13 +2207,13 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 		if err := validateDocsUpdateBody(body, "docs validate-update"); err != nil {
 			return nil, "docs validate-update", err
 		}
-		return validationResult("docs validate-update", "docs.update", map[string]string{"document_id": id}, nil, body), "docs validate-update", nil
+		return validationResult("docs validate-update", "docs.revisions.create", map[string]string{"document_id": id}, nil, body), "docs validate-update", nil
 	case "history":
 		id, err := parseIDArg(args[1:], "document-id", "document id")
 		if err != nil {
 			return nil, "docs history", err
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "docs history", "docs.history", map[string]string{"document_id": id}, nil, nil)
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "docs history", "docs.revisions.list", map[string]string{"document_id": id}, nil, nil)
 		return result, "docs history", callErr
 	case "revision":
 		if len(args) < 2 {
@@ -2414,7 +2256,7 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 			ctx,
 			cfg,
 			"docs revision get",
-			"docs.revision.get",
+			"docs.revisions.get",
 			map[string]string{"document_id": documentID, "revision_id": revisionID},
 			nil,
 			nil,
@@ -2955,7 +2797,7 @@ func (a *App) runDocsUpdateCommand(ctx context.Context, args []string, cfg confi
 	if err != nil {
 		return nil, err
 	}
-	return a.invokeTypedJSON(ctx, cfg, "docs update", "docs.update", map[string]string{"document_id": id}, nil, body)
+	return a.invokeTypedJSON(ctx, cfg, "docs update", "docs.revisions.create", map[string]string{"document_id": id}, nil, body)
 }
 
 func (a *App) runEventsListCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
@@ -5984,7 +5826,7 @@ func validateDocsUpdateBody(body any, commandName string) error {
 
 	appendDocsCommonValidationIssues(payload, &issues)
 	if len(issues) > 0 {
-		return errnorm.Usage("invalid_request", fmt.Sprintf("docs update payload failed local validation: %s", strings.Join(issues, "; ")))
+		return errnorm.Usage("invalid_request", fmt.Sprintf("docs.revisions.create payload failed local validation: %s", strings.Join(issues, "; ")))
 	}
 	return nil
 }
@@ -6019,7 +5861,7 @@ func appendDocsCommonValidationIssues(payload map[string]any, issues *[]string) 
 func ensureDocsUpdateActorIdentity(body any, cfg config.Resolved) (any, error) {
 	payload, ok := body.(map[string]any)
 	if !ok {
-		return nil, errnorm.Usage("invalid_request", "JSON body for `oar docs update` must be an object")
+		return nil, errnorm.Usage("invalid_request", "JSON body for `oar docs revisions create` must be an object")
 	}
 
 	if actorID := strings.TrimSpace(anyString(payload["actor_id"])); actorID != "" {

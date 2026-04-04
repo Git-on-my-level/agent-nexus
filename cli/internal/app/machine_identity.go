@@ -36,21 +36,21 @@ var machineCommandIdentityByPath = map[string]machineCommandIdentity{
 		Command:   "threads recommendations",
 		CommandID: "threads.recommendations",
 	},
-	"commitments propose-patch": {
-		Command:   "commitments propose-patch",
-		CommandID: "commitments.patch.propose",
-	},
-	"commitments apply": {
-		Command:   "commitments apply",
-		CommandID: "commitments.patch.apply",
-	},
 	"docs propose-update": {
 		Command:   "docs propose-update",
-		CommandID: "docs.update.propose",
+		CommandID: "docs.revisions.create.propose",
 	},
 	"docs apply": {
 		Command:   "docs apply",
-		CommandID: "docs.update.apply",
+		CommandID: "docs.revisions.create.apply",
+	},
+	"docs history": {
+		Command:   "docs history",
+		CommandID: "docs.revisions.list",
+	},
+	"docs revision get": {
+		Command:   "docs revision get",
+		CommandID: "docs.revisions.get",
 	},
 }
 

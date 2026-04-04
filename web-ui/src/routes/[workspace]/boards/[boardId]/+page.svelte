@@ -99,7 +99,7 @@
       title: document.title || document.id,
       subtitle: [
         document.status,
-        document.thread_id && `Thread ${document.thread_id}`,
+        document.thread_id && `Topic ${document.thread_id}`,
       ]
         .filter(Boolean)
         .join(" · "),
@@ -711,11 +711,11 @@
       class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[var(--ui-text-muted)]"
     >
       {#if primaryThread}
-        <span class="text-[var(--ui-text-subtle)]">Thread</span>
+        <span class="text-[var(--ui-text-subtle)]">Topic</span>
         <a
           class="text-indigo-400 transition-colors hover:text-indigo-300"
           href={workspaceHref(
-            `/threads/${encodeURIComponent(primaryThread.id)}`,
+            `/topics/${encodeURIComponent(primaryThread.id)}`,
           )}
         >
           {primaryThread.title || primaryThread.id}
@@ -906,7 +906,7 @@
             label="Card thread"
             manualLabel="Card thread ID"
             manualPlaceholder="thread-onboarding"
-            placeholder="Search threads by title, ID, or tags"
+            placeholder="Search topics by title, ID, or tags"
             searchFn={searchThreadOptions}
           />
 
@@ -997,7 +997,7 @@
                 rowStatus,
               )}"
               href={workspaceHref(
-                `/threads/${encodeURIComponent(linkedThreadId)}`,
+                `/topics/${encodeURIComponent(linkedThreadId)}`,
               )}
             >
               {headerTitle}
@@ -1095,7 +1095,7 @@
                   Boolean(summary?.stale),
                 )}"
               >
-                {summary?.stale ? "Thread stale" : "Fresh check-in"}
+                {summary?.stale ? "Topic stale" : "Fresh check-in"}
               </span>
             {:else}
               <span
@@ -1108,13 +1108,13 @@
             <span
               class="rounded bg-[var(--ui-border)] px-1 py-0.5 text-[11px] text-[var(--ui-text-subtle)]"
             >
-              Thread linked — snapshot not loaded for this workspace
+              Topic linked — snapshot not loaded for this workspace
             </span>
           {:else}
             <span
               class="rounded bg-[var(--ui-border)] px-1 py-0.5 text-[11px] text-[var(--ui-text-subtle)]"
             >
-              Standalone card — thread-linked scan not shown
+              Standalone card — topic-linked scan not shown
             </span>
           {/if}
         </div>
@@ -1548,7 +1548,7 @@
                   {item.title || item.summary || item.id}
                 </div>
                 <div class="mt-1 text-[11px] text-[var(--ui-text-subtle)]">
-                  {item.urgency_label} · Thread {item.thread_id}
+                  {item.urgency_label} · Topic {item.thread_id}
                 </div>
               </div>
             {/each}
@@ -1571,7 +1571,7 @@
               <a
                 class="ml-1 font-medium text-amber-200 underline transition-colors hover:text-amber-100"
                 href={workspaceHref(
-                  `/threads/${encodeURIComponent(warning.thread_id)}`,
+                  `/topics/${encodeURIComponent(warning.thread_id)}`,
                 )}
               >
                 {warning.thread_id}

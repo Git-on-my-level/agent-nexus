@@ -94,7 +94,7 @@
     } catch (loadError) {
       const reason =
         loadError instanceof Error ? loadError.message : String(loadError);
-      error = `Failed to load threads: ${reason}`;
+      error = `Failed to load topics: ${reason}`;
       threads = [];
     } finally {
       loading = false;
@@ -107,7 +107,7 @@
 
   async function applyFilters() {
     const qs = buildThreadListSearchString(filters);
-    const path = workspaceHref("/threads");
+    const path = workspaceHref("/topics");
     await goto(`${path}${qs ? `?${qs}` : ""}`, {
       replaceState: true,
       noScroll: true,
@@ -116,7 +116,7 @@
   }
 
   async function resetFilters() {
-    await goto(workspaceHref("/threads"), {
+    await goto(workspaceHref("/topics"), {
       replaceState: true,
       noScroll: true,
       keepFocus: true,
@@ -137,7 +137,7 @@
 
   async function createThread() {
     if (!threadDraft.title.trim()) {
-      createError = "Thread title is required.";
+      createError = "Topic title is required.";
       return;
     }
     const cadenceError = validateCadenceSelection({
@@ -184,7 +184,7 @@
         submitError instanceof Error
           ? submitError.message
           : String(submitError);
-      createError = `Failed to create thread: ${reason}`;
+      createError = `Failed to create topic: ${reason}`;
     } finally {
       creatingThread = false;
     }
@@ -337,7 +337,7 @@
 </script>
 
 <div class="flex items-center justify-between mb-4">
-  <h1 class="text-lg font-semibold text-[var(--ui-text)]">Threads</h1>
+  <h1 class="text-lg font-semibold text-[var(--ui-text)]">Topics</h1>
   <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-1.5">
     <label
       class="inline-flex cursor-pointer items-center gap-1.5 text-[12px] text-[var(--ui-text-muted)]"
@@ -407,7 +407,7 @@
           />
         </svg>
       {/if}
-      {createOpen ? "Cancel" : "New thread"}
+      {createOpen ? "Cancel" : "New topic"}
     </button>
   </div>
 </div>
@@ -540,7 +540,7 @@
         <input
           bind:value={threadDraft.title}
           class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
-          placeholder="Thread title..."
+          placeholder="Topic title..."
           required
           type="text"
         />
@@ -621,7 +621,7 @@
         disabled={creatingThread}
         type="submit"
       >
-        {creatingThread ? "Creating..." : "Create thread"}
+        {creatingThread ? "Creating..." : "Create topic"}
       </button>
     </div>
   </form>
@@ -646,12 +646,12 @@
         d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
       ></path>
     </svg>
-    Loading threads...
+    Loading topics...
   </div>
 {:else if threads.length === 0}
   <div class="mt-8 text-center">
     <p class="text-[13px] text-[var(--ui-text-muted)]">
-      No threads match the current filters.
+      No topics match the current filters.
     </p>
     {#if hasActiveFilters}
       <button
@@ -676,7 +676,7 @@
       >
         <a
           class="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--ui-border-subtle)]"
-          href={workspaceHref(`/threads/${thread.id}`)}
+          href={workspaceHref(`/topics/${thread.id}`)}
         >
           <span
             class="flex h-2 w-2 shrink-0 rounded-full {priorityDot(
@@ -799,10 +799,10 @@
 
 <ConfirmModal
   open={confirmModal.open}
-  title={confirmModal.action === "trash" ? "Move to trash" : "Archive thread"}
+  title={confirmModal.action === "trash" ? "Move to trash" : "Archive topic"}
   message={confirmModal.action === "trash"
-    ? "This thread will be tombstoned. You can restore it from trash later."
-    : "This thread will be hidden from default views. You can unarchive it later."}
+    ? "This topic will be tombstoned. You can restore it from trash later."
+    : "This topic will be hidden from default views. You can unarchive it later."}
   confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
   variant={confirmModal.action === "trash" ? "danger" : "warning"}
   busy={confirmModal.action === "trash"

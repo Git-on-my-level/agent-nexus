@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"organization-autorunner-cli/internal/registry"
 )
 
 func TestRunMetaDocsPrintsBundledRuntimeReference(t *testing.T) {
@@ -27,8 +29,8 @@ func TestRunMetaDocsPrintsBundledRuntimeReference(t *testing.T) {
 	if !strings.Contains(output, "## `wake-routing`") {
 		t.Fatalf("expected wake-routing topic in runtime docs output=%s", output)
 	}
-	if !strings.Contains(output, "## `docs tombstone`") {
-		t.Fatalf("expected docs tombstone topic in runtime docs output=%s", output)
+	if !strings.Contains(output, "## `docs apply`") {
+		t.Fatalf("expected docs apply topic in runtime docs output=%s", output)
 	}
 	if !strings.Contains(output, "## `threads workspace`") {
 		t.Fatalf("expected local helper topic in runtime docs output=%s", output)
@@ -154,9 +156,17 @@ func TestRuntimeHelpDocMarkdownCoversCatalogTopics(t *testing.T) {
 func TestRuntimeHelpCatalogCoversGeneratedRuntimePaths(t *testing.T) {
 	t.Parallel()
 
+	meta, err := registry.LoadEmbedded()
+	if err != nil {
+		t.Fatalf("load embedded registry: %v", err)
+	}
 	for _, path := range runtimeGeneratedRegistryPaths() {
 		runtimePath := strings.Join(strings.Fields(strings.TrimSpace(path)), " ")
 		if runtimePath == "" {
+			continue
+		}
+		mapped := mapRuntimePathToRegistryPath(runtimePath)
+		if _, ok := commandByCLIPath(meta.Commands, mapped); !ok {
 			continue
 		}
 		markdown, err := RuntimeHelpDocMarkdown(runtimePath)

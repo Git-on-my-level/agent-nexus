@@ -258,12 +258,12 @@ func (a *App) runDocsProposeUpdateCommand(ctx context.Context, args []string, cf
 	resolvedID := strings.TrimSpace(firstNonEmpty(anyString(document["id"]), id))
 	diffText := docsProposalDiffText(currentBody, body)
 
-	draft, draftPath, err := a.stageProposal("docs.update", map[string]string{"document_id": resolvedID}, body, cfg, map[string]any{"resource": "document"})
+	draft, draftPath, err := a.stageProposal("docs.revisions.create", map[string]string{"document_id": resolvedID}, body, cfg, map[string]any{"resource": "document"})
 	if err != nil {
 		return nil, err
 	}
 	applyCommand := "oar docs apply --proposal-id " + draft.DraftID
-	return proposalPreviewResult("docs.update", "PATCH", resolveCommandPath("docs.update", map[string]string{"document_id": resolvedID}, nil), map[string]string{"document_id": resolvedID}, body, draft.DraftID, draftPath, diffText, applyCommand), nil
+	return proposalPreviewResult("docs.revisions.create", "POST", resolveCommandPath("docs.revisions.create", map[string]string{"document_id": resolvedID}, nil), map[string]string{"document_id": resolvedID}, body, draft.DraftID, draftPath, diffText, applyCommand), nil
 }
 
 func (a *App) runDocsApplyCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
@@ -271,6 +271,6 @@ func (a *App) runDocsApplyCommand(ctx context.Context, args []string, cfg config
 	if err != nil {
 		return nil, err
 	}
-	_, result, err := a.commitProposal(ctx, proposalID, cfg, "docs.update")
+	_, result, err := a.commitProposal(ctx, proposalID, cfg, "docs.revisions.create")
 	return result, err
 }

@@ -240,7 +240,7 @@
         </select>
       </label>
       <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
-        Thread ID
+        Topic ID
         <input
           bind:value={filters.thread_id}
           class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"

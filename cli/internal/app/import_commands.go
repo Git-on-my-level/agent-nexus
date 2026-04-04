@@ -74,9 +74,9 @@ func init() {
 		},
 		localHelperTopic{
 			Path:        "import apply",
-			Summary:     "Write payload previews for a plan and optionally execute thread/artifact/doc creates in dependency order.",
+			Summary:     "Write payload previews for a plan and optionally execute topic/artifact/doc creates in dependency order.",
 			JSONShape:   "`plan`, `execute`, `results`, `refs`",
-			Composition: "Local helper with optional network writes. Always writes payload previews first; when `--execute` is set it creates threads, then artifacts, then docs, substituting `$REF:<key>` placeholders after upstream IDs are known.",
+			Composition: "Local helper with optional network writes. Always writes payload previews first; when `--execute` is set it creates topics, then artifacts, then docs, substituting `$REF:<key>` placeholders after upstream IDs are known.",
 			Examples: []string{
 				"oar import apply --plan ./.oar-import/workspace/plan.json",
 				"oar import apply --plan ./.oar-import/workspace/plan.json --execute --agent importer",
@@ -84,7 +84,7 @@ func init() {
 			Flags: []localHelperFlag{
 				{Name: "--plan <path>", Description: "Plan produced by `oar import plan`. Positional form also supported."},
 				{Name: "--out <dir>", Description: "Output directory for payload previews and apply results. Defaults to `<plan-dir>/apply`."},
-				{Name: "--execute", Description: "Actually call `threads create`, `artifacts create`, and `docs create`. Default is preview-only."},
+				{Name: "--execute", Description: "Actually call `topics create`, `artifacts create`, and `docs create`. Default is preview-only."},
 			},
 		},
 	)
@@ -117,11 +117,11 @@ func (a *App) runImportCommand(ctx context.Context, args []string, cfg config.Re
 func importUsageText() string {
 	return strings.TrimSpace(`Import guide
 
-Use `+"`oar import`"+` to turn external material into a clean OAR graph. The goal is not to dump files into the system. The goal is to create discoverable threads, docs, and artifacts with low duplication, low orphan rates, and clear provenance.
+Use `+"`oar import`"+` to turn external material into a clean OAR graph. The goal is not to dump files into the system. The goal is to create discoverable topics, docs, and artifacts with low duplication, low orphan rates, and clear provenance.
 
 Object model
 
-- `+"`threads`"+` hold ongoing work, collector structures, and discoverable entry points.
+- `+"`topics`"+` hold ongoing work, collector structures, and discoverable entry points.
 - `+"`docs`"+` hold narrative knowledge, summaries, and hub content.
 - `+"`artifacts`"+` hold raw or attached evidence.
 - Import should create a graph that people and agents can navigate, not just a pile of uploaded files.
@@ -131,7 +131,7 @@ Read in this order
 1. `+"`oar help import`"+` — doctrine, quality bars, and the recommended loop.
 2. `+"`oar help import scan`"+` — inventory and text-cache generation.
 3. `+"`oar help import plan`"+` — classification, collector threads, hub docs, and review bundles.
-4. If you will execute writes: `+"`oar help threads create`"+`, `+"`oar help artifacts create`"+`, and `+"`oar help docs create`"+`.
+4. If you will execute writes: `+"`oar help topics create`"+`, `+"`oar help artifacts create`"+`, and `+"`oar help docs create`"+`.
 5. Optional graph/provenance reference: `+"`oar help provenance`"+`.
 
 Operating stance
@@ -177,7 +177,7 @@ func importBootstrapData() map[string]any {
 			{"command": "oar help import", "why": "Read doctrine, quality bars, and the recommended loop."},
 			{"command": "oar help import scan", "why": "Understand inventory, cluster hints, and text-cache generation."},
 			{"command": "oar help import plan", "why": "Understand conservative classification, collector threads, hub docs, and review bundles."},
-			{"command": "oar help threads create", "why": "Confirm thread payload shape before executing writes."},
+			{"command": "oar help topics create", "why": "Confirm topic payload shape before executing writes."},
 			{"command": "oar help artifacts create", "why": "Confirm artifact payload shape before executing writes."},
 			{"command": "oar help docs create", "why": "Confirm document payload shape before executing writes."},
 		},
@@ -401,7 +401,7 @@ func (a *App) runImportApply(ctx context.Context, args []string, cfg config.Reso
 			var err error
 			switch kind {
 			case "thread":
-				result, err = a.invokeTypedJSON(ctx, cfg, "threads create", "threads.create", nil, nil, payload)
+				result, err = a.invokeTypedJSON(ctx, cfg, "topics create", "topics.create", nil, nil, payload)
 			case "artifact":
 				result, err = a.invokeTypedJSON(ctx, cfg, "artifacts create", "artifacts.create", nil, nil, payload)
 			case "doc":

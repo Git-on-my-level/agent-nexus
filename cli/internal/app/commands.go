@@ -87,7 +87,7 @@ func (a *App) runCommand(ctx context.Context, args []string, cfg config.Resolved
 			topic = strings.TrimSpace(args[0] + " " + args[1])
 		}
 		return "primitives", nil, errnorm.Usage("unknown_command", fmt.Sprintf("unknown command %q", topic))
-	case "actors", "threads", "commitments", "artifacts", "boards", "docs", "events", "inbox", "work-orders", "receipts", "reviews", "derived":
+	case "actors", "threads", "topics", "cards", "artifacts", "boards", "docs", "events", "inbox", "work-orders", "receipts", "reviews", "derived":
 		result, name, err := a.runTypedResource(ctx, args[0], args[1:], cfg)
 		return name, result, err
 	case "api":
