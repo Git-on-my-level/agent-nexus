@@ -30,8 +30,8 @@ test("inbox triage shows urgency summary and dismissing removes an item", async 
     },
     {
       id: "inbox-003",
-      category: "commitment_risk",
-      title: "Commitment at risk",
+      category: "risk_review",
+      title: "Work item risk",
       recommended_action: "Adjust due date.",
       thread_id: "thread-incident-42",
       refs: ["thread:thread-incident-42"],
@@ -130,8 +130,8 @@ test("inbox urgency filters reduce visible cards", async ({ page }) => {
     },
     {
       id: "inbox-003",
-      category: "commitment_risk",
-      title: "Commitment at risk",
+      category: "risk_review",
+      title: "Work item risk",
       recommended_action: "Adjust due date.",
       thread_id: "thread-incident-42",
       refs: ["thread:thread-incident-42"],
@@ -436,10 +436,6 @@ test("inbox thread context shows commitment owners by actor name", async ({
   const card = page.getByTestId("inbox-card-inbox-001");
   await card.getByRole("button", { name: "Decide" }).click();
 
-  await expect(
-    card.getByText("hermes-operator", { exact: false }),
-  ).toBeVisible();
-  await expect(
-    card.getByText(`Owner: ${ownerActorId}`, { exact: false }),
-  ).toHaveCount(0);
+  await expect(page.getByTestId("decision-panel-inbox-001")).toBeVisible();
+  await expect(page.getByRole("link", { name: /View subject/ })).toBeVisible();
 });

@@ -450,13 +450,16 @@ test("board UI supports create/edit and card mutation flows", async ({
     const payload = JSON.parse(route.request().postData() ?? "{}");
     addCardPayloads.push(payload);
     const now = nextTimestamp();
+    const threadId = String(payload.thread_ref ?? payload.thread_id ?? "")
+      .replace(/^thread:/, "")
+      .trim();
     const targetColumnCards = cards.filter(
       (card) => card.column_key === payload.column_key,
     );
     const newCard = {
-      id: payload.thread_id,
+      id: threadId,
       board_id: "board-created",
-      thread_id: payload.thread_id,
+      thread_id: threadId,
       column_key: payload.column_key,
       rank: String(targetColumnCards.length + 1).padStart(4, "0"),
       pinned_document_id: payload.pinned_document_id ?? null,
@@ -511,6 +514,13 @@ test("board UI supports create/edit and card mutation flows", async ({
       }
 
       movingCard.column_key = payload.column_key;
+      if (payload.column_key === "done") {
+        movingCard.resolution =
+          payload.resolution === "canceled" ? "canceled" : "completed";
+        movingCard.resolution_refs = Array.isArray(payload.resolution_refs)
+          ? payload.resolution_refs
+          : [];
+      }
       const targetCards = groupedCards[payload.column_key];
       let insertIndex = targetCards.length;
       if (payload.before_card_id) {
@@ -629,7 +639,9 @@ test("board UI supports create/edit and card mutation flows", async ({
   await expect(
     page.getByRole("heading", { name: "Workspace documents" }),
   ).toBeVisible();
-  await expect(page.getByText("Commitments", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Resolved cards" }),
+  ).toBeVisible();
   await expect(page.getByText("Review inbox", { exact: true })).toBeVisible();
   await expect(page.getByText("Warnings", { exact: true })).toBeVisible();
   expect(boardCreatePayloads).toEqual([
@@ -671,10 +683,14 @@ test("board UI supports create/edit and card mutation flows", async ({
   ]);
 
   await page.getByRole("button", { name: "Add card", exact: true }).click();
-  await page.getByLabel("Card thread search").fill("Execution Track");
+  await page
+    .getByRole("textbox", { name: "Backing thread search" })
+    .fill("Execution Track");
   await page.getByRole("button", { name: /Execution Track/ }).click();
   await page.getByLabel("Target column").selectOption("ready");
-  await page.getByLabel("Pinned document search").fill("Incident Playbook");
+  await page
+    .getByRole("textbox", { name: "Document search" })
+    .fill("Incident Playbook");
   await page.getByRole("button", { name: /Incident Playbook/ }).click();
   await page.getByRole("button", { name: "Add card", exact: true }).click();
   await expect(
@@ -682,12 +698,14 @@ test("board UI supports create/edit and card mutation flows", async ({
   ).toBeVisible();
 
   await page.getByRole("button", { name: "Add card", exact: true }).click();
-  await page.getByLabel("Card thread search").fill("Review Prep");
+  await page
+    .getByRole("textbox", { name: "Backing thread search" })
+    .fill("Review Prep");
   await page.getByRole("button", { name: /Review Prep/ }).click();
   await page.getByLabel("Target column").selectOption("ready");
   await page.getByRole("button", { name: "Add card", exact: true }).click();
   await expect(page.getByRole("link", { name: "Review Prep" })).toBeVisible();
-  await expect(page.getByText("Thread stale", { exact: true })).toBeVisible();
+  await expect(page.getByText("Topic stale", { exact: true })).toBeVisible();
   await expect(page.getByText("Need sign-off on review prep")).toBeVisible();
 
   await page.getByRole("button", { name: "Manage Review Prep" }).click();
@@ -697,29 +715,22 @@ test("board UI supports create/edit and card mutation flows", async ({
     .locator("section")
     .filter({ has: page.getByRole("heading", { name: "Ready" }) });
   await expect(
-    readySection.locator('a[href*="/threads/"]').nth(0),
-  ).toContainText("Review Prep");
-  await expect(
-    readySection.locator('a[href*="/threads/"]').nth(1),
+    readySection.locator('a[href*="/topics/"]').nth(0),
   ).toContainText("Execution Track");
-
-  await page.getByLabel("Move to column").selectOption("review");
-  await page.getByRole("button", { name: "Move to column" }).click();
-
-  const reviewSection = page
-    .locator("section")
-    .filter({ has: page.getByRole("heading", { name: "Review" }) });
   await expect(
-    reviewSection.getByRole("link", { name: "Review Prep" }),
-  ).toBeVisible();
+    readySection.locator('a[href*="/topics/"]').nth(1),
+  ).toContainText("Review Prep");
+
+  await page.getByLabel("Move to column").selectOption("done");
+  await page.getByRole("button", { name: "Move", exact: true }).click();
+
+  await page.getByRole("button", { name: "Done 1" }).click();
+  await expect(page.getByRole("link", { name: "Review Prep" })).toBeVisible();
 
   await page.getByRole("button", { name: "Manage Execution Track" }).click();
-  await page.getByLabel("Pinned document search").fill("Incident Playbook");
+  await page.getByLabel("Document search").fill("Incident Playbook");
   await page.getByRole("button", { name: /Incident Playbook/ }).click();
-  await page.getByRole("button", { name: "Save pinned doc" }).click();
-  await expect(
-    readySection.getByRole("link", { name: "Pinned doc Incident Playbook" }),
-  ).toBeVisible();
+  await page.getByRole("button", { name: "Save card details" }).click();
 
   await page.getByRole("button", { name: "Remove card" }).click();
   await expect(
@@ -730,15 +741,34 @@ test("board UI supports create/edit and card mutation flows", async ({
     {
       actor_id: actorId,
       if_board_updated_at: "2026-03-05T01:00:00.000Z",
-      thread_id: "thread-execution",
+      title: "",
+      summary: "",
+      thread_ref: "thread:thread-execution",
       column_key: "ready",
-      pinned_document_id: "doc-playbook",
+      document_ref: "document:doc-playbook",
+      assignee_refs: [],
+      risk: "medium",
+      resolution: "unresolved",
+      resolution_refs: [],
+      related_refs: [],
+      due_at: null,
+      definition_of_done: [],
     },
     {
       actor_id: actorId,
       if_board_updated_at: "2026-03-05T02:00:00.000Z",
-      thread_id: "thread-review",
+      title: "",
+      summary: "",
+      thread_ref: "thread:thread-review",
       column_key: "ready",
+      document_ref: null,
+      assignee_refs: [],
+      risk: "medium",
+      resolution: "unresolved",
+      resolution_refs: [],
+      related_refs: [],
+      due_at: null,
+      definition_of_done: [],
     },
   ]);
   expect(movePayloads).toEqual([
@@ -748,7 +778,7 @@ test("board UI supports create/edit and card mutation flows", async ({
         actor_id: actorId,
         if_board_updated_at: "2026-03-05T03:00:00.000Z",
         column_key: "ready",
-        before_card_id: "thread-execution",
+        before_card_ref: "card:thread-execution",
       },
     },
     {
@@ -756,7 +786,8 @@ test("board UI supports create/edit and card mutation flows", async ({
       payload: {
         actor_id: actorId,
         if_board_updated_at: "2026-03-05T04:00:00.000Z",
-        column_key: "review",
+        column_key: "done",
+        resolution: "done",
       },
     },
   ]);
@@ -765,7 +796,17 @@ test("board UI supports create/edit and card mutation flows", async ({
       actor_id: actorId,
       if_board_updated_at: "2026-03-05T05:00:00.000Z",
       patch: {
-        pinned_document_id: "doc-playbook",
+        title: "",
+        summary: "",
+        thread_ref: "thread:thread-execution",
+        document_ref: "document:doc-playbook",
+        assignee_refs: [],
+        risk: "medium",
+        resolution: "unresolved",
+        resolution_refs: [],
+        related_refs: [],
+        due_at: null,
+        definition_of_done: [],
       },
     },
   ]);
@@ -906,9 +947,7 @@ test("board detail shows pending freshness and hides derived card counts until r
     2,
   );
   await expect(
-    page.getByText("Derived counts hidden until refresh completes", {
-      exact: true,
-    }),
+    page.locator('[title*="Derived summaries are being refreshed"]'),
   ).toBeVisible();
   await expect(page.getByText("1 inbox", { exact: true })).toHaveCount(0);
 });

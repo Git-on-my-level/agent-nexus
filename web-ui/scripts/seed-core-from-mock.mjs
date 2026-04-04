@@ -50,7 +50,7 @@ async function main() {
   }
 
   await seedActors();
-  await seedThreads();
+  await seedTopics();
   await seedCommitments();
   await seedDocuments();
   await seedArtifacts();
@@ -64,15 +64,17 @@ async function main() {
 }
 
 async function detectSeededState() {
-  const [actorsBody, threadsBody, boardsBody] = await Promise.all([
+  const [actorsBody, topicsBody, boardsBody] = await Promise.all([
     request("GET", "/actors"),
-    request("GET", "/threads"),
+    request("GET", "/topics"),
     request("GET", "/boards"),
   ]);
 
-  const actorIds = new Set((actorsBody?.actors ?? []).map((actor) => actor?.id));
+  const actorIds = new Set(
+    (actorsBody?.actors ?? []).map((actor) => actor?.id),
+  );
   const threadTitles = new Set(
-    (threadsBody?.threads ?? []).map((thread) => String(thread?.title ?? "")),
+    (topicsBody?.topics ?? []).map((topic) => String(topic?.title ?? "")),
   );
   const boardCount = (boardsBody?.boards ?? []).length;
 
@@ -90,36 +92,50 @@ async function seedActors() {
   }
 }
 
-async function seedThreads() {
-  for (const sourceThread of seed.threads) {
-    const actorId = pickActorId(sourceThread.updated_by);
-    const threadPayload = {
-      type: sourceThread.type,
-      title: sourceThread.title,
-      status: sourceThread.status,
-      priority: sourceThread.priority,
-      tags: sourceThread.tags,
-      key_artifacts: normalizeArtifactRefs(sourceThread.key_artifacts),
-      cadence: sourceThread.cadence,
-      current_summary: sourceThread.current_summary,
-      next_actions: sourceThread.next_actions,
-      next_check_in_at: sourceThread.next_check_in_at,
-      provenance: sourceThread.provenance,
+async function seedTopics() {
+  const sourceTopics =
+    Array.isArray(seed.topics) && seed.topics.length > 0
+      ? seed.topics
+      : Array.isArray(seed.threads)
+        ? seed.threads
+        : [];
+
+  for (const sourceTopic of sourceTopics) {
+    const actorId = pickActorId(
+      sourceTopic.updated_by ?? sourceTopic.created_by,
+    );
+    const topicPayload = {
+      type: sourceTopic.type,
+      title: sourceTopic.title,
+      status: sourceTopic.status,
+      summary:
+        sourceTopic.summary ?? sourceTopic.current_summary ?? sourceTopic.title,
+      owner_refs: mapRefs(
+        sourceTopic.owner_refs ??
+          (sourceTopic.created_by ? [`actor:${sourceTopic.created_by}`] : []),
+      ),
+      board_refs: mapRefs(sourceTopic.board_refs),
+      document_refs: mapRefs(sourceTopic.document_refs),
+      related_refs: mapRefs(sourceTopic.related_refs),
+      provenance: sourceTopic.provenance,
+      ...(sourceTopic.primary_thread_ref
+        ? { primary_thread_ref: String(sourceTopic.primary_thread_ref) }
+        : {}),
     };
 
-    const response = await request("POST", "/threads", {
+    const response = await request("POST", "/topics", {
       actor_id: actorId,
-      thread: threadPayload,
+      topic: topicPayload,
     });
 
-    const created = response?.thread;
+    const created = response?.topic;
     const newId = String(created?.id ?? "").trim();
     if (!newId) {
-      throw new Error(`Thread create returned no id for ${sourceThread.title}`);
+      throw new Error(`Topic create returned no id for ${sourceTopic.title}`);
     }
 
-    threadIdMap.set(sourceThread.id, newId);
-    snapshotIdMap.set(sourceThread.id, newId);
+    threadIdMap.set(String(sourceTopic.id ?? "").trim(), newId);
+    snapshotIdMap.set(String(sourceTopic.id ?? "").trim(), newId);
   }
 }
 
@@ -147,7 +163,9 @@ async function seedCommitments() {
     const created = response?.commitment;
     const newId = String(created?.id ?? "").trim();
     if (!newId) {
-      throw new Error(`Commitment create returned no id for ${sourceCommitment.title}`);
+      throw new Error(
+        `Commitment create returned no id for ${sourceCommitment.title}`,
+      );
     }
 
     snapshotIdMap.set(sourceCommitment.id, newId);
@@ -235,7 +253,9 @@ async function seedDocuments() {
         "PATCH",
         `/docs/${encodeURIComponent(newDocumentId)}`,
         {
-          actor_id: pickActorId(revision.created_by ?? sourceDocument.updated_by),
+          actor_id: pickActorId(
+            revision.created_by ?? sourceDocument.updated_by,
+          ),
           if_base_revision: baseRevisionId,
           refs,
           content: revision.content,
@@ -243,7 +263,9 @@ async function seedDocuments() {
         },
       );
 
-      baseRevisionId = String(updateResponse?.revision?.revision_id ?? "").trim();
+      baseRevisionId = String(
+        updateResponse?.revision?.revision_id ?? "",
+      ).trim();
       if (!baseRevisionId) {
         throw new Error(
           `Document update returned no revision id for ${documentId}`,
@@ -252,14 +274,18 @@ async function seedDocuments() {
     }
 
     if (sourceDocument.tombstoned_at) {
-      await request("POST", `/docs/${encodeURIComponent(newDocumentId)}/tombstone`, {
-        actor_id: pickActorId(
-          sourceDocument.tombstoned_by ?? sourceDocument.updated_by,
-        ),
-        reason:
-          sourceDocument.tombstone_reason ??
-          "Tombstoned while seeding mock data.",
-      });
+      await request(
+        "POST",
+        `/docs/${encodeURIComponent(newDocumentId)}/tombstone`,
+        {
+          actor_id: pickActorId(
+            sourceDocument.tombstoned_by ?? sourceDocument.updated_by,
+          ),
+          reason:
+            sourceDocument.tombstone_reason ??
+            "Tombstoned while seeding mock data.",
+        },
+      );
     }
   }
 }
@@ -277,8 +303,7 @@ async function tombstoneSeedArtifactIfNeeded(sourceArtifact) {
       sourceArtifact.tombstoned_by ?? sourceArtifact.created_by,
     ),
     reason:
-      sourceArtifact.tombstone_reason ??
-      "Tombstoned while seeding mock data.",
+      sourceArtifact.tombstone_reason ?? "Tombstoned while seeding mock data.",
   });
 }
 
@@ -289,15 +314,30 @@ async function seedArtifacts() {
     review: 3,
   };
 
-  const sortedArtifacts = [...seed.artifacts].sort((a, b) => {
+  const sourcePackets =
+    Array.isArray(seed.packets) && seed.packets.length > 0
+      ? seed.packets
+      : Array.isArray(seed.artifacts)
+        ? seed.artifacts
+            .filter((artifact) => Boolean(artifact?.packet))
+            .map((artifact) => ({
+              id: artifact.id,
+              kind: artifact.kind,
+              artifact,
+              packet: artifact.packet,
+            }))
+        : [];
+
+  const sortedArtifacts = [...sourcePackets].sort((a, b) => {
     const aOrder = packetOrder[String(a?.kind ?? "")] ?? 0;
     const bOrder = packetOrder[String(b?.kind ?? "")] ?? 0;
     return aOrder - bOrder;
   });
 
-  for (const sourceArtifact of sortedArtifacts) {
+  for (const sourcePacket of sortedArtifacts) {
+    const sourceArtifact = sourcePacket.artifact ?? sourcePacket;
     const actorId = pickActorId(sourceArtifact.created_by);
-    const kind = String(sourceArtifact.kind ?? "").trim();
+    const kind = String(sourceArtifact.kind ?? sourcePacket.kind ?? "").trim();
 
     if (kind === "work_order") {
       try {
@@ -397,9 +437,9 @@ async function seedArtifacts() {
       summary: sourceArtifact.summary ?? "",
     };
 
-    if (sourceArtifact.packet && typeof sourceArtifact.packet === "object") {
+    if (sourcePacket.packet && typeof sourcePacket.packet === "object") {
       contentType = "structured";
-      content = sourceArtifact.packet;
+      content = sourcePacket.packet;
     } else if (typeof sourceArtifact.content_text === "string") {
       contentType = "text";
       content = sourceArtifact.content_text;
@@ -433,11 +473,19 @@ async function seedArtifacts() {
 
 async function seedBoards() {
   const sourceBoards = Array.isArray(seed.boards) ? seed.boards : [];
-  const sourceCards = Array.isArray(seed.boardCards) ? seed.boardCards : [];
+  const sourceCards =
+    Array.isArray(seed.cards) && seed.cards.length > 0
+      ? seed.cards
+      : Array.isArray(seed.boardCards)
+        ? seed.boardCards
+        : [];
 
   for (const sourceBoard of sourceBoards) {
+    const primaryThreadRef = String(
+      sourceBoard.primary_topic_ref ?? sourceBoard.primary_thread_ref ?? "",
+    ).trim();
     const primaryThreadId = normalizeMappedOptionalThreadId(
-      sourceBoard.primary_thread_id,
+      sourceBoard.primary_thread_id ?? primaryThreadRef,
     );
     if (!primaryThreadId) {
       console.warn(
@@ -446,10 +494,21 @@ async function seedBoards() {
       continue;
     }
 
-    const actorId = pickActorId(sourceBoard.created_by ?? sourceBoard.updated_by);
+    const actorId = pickActorId(
+      sourceBoard.created_by ?? sourceBoard.updated_by,
+    );
     const primaryDocumentId = mapOptionalDocumentId(
       sourceBoard.primary_document_id,
     );
+    const primaryTopicRef = String(
+      sourceBoard.primary_topic_ref ?? sourceBoard.primary_thread_ref ?? "",
+    ).trim();
+    const documentRefs = mapRefs(
+      sourceBoard.document_refs ??
+        (primaryDocumentId ? [`document:${primaryDocumentId}`] : []),
+    );
+    const cardRefs = mapRefs(sourceBoard.card_refs);
+    const pinnedRefs = mapRefs(sourceBoard.pinned_refs);
     const createResponse = await requestRetryOnServerError("POST", "/boards", {
       actor_id: actorId,
       board: {
@@ -458,12 +517,15 @@ async function seedBoards() {
         status: sourceBoard.status,
         labels: sourceBoard.labels,
         owners: sourceBoard.owners,
+        ...(primaryTopicRef ? { primary_topic_ref: primaryTopicRef } : {}),
         primary_thread_id: primaryThreadId,
         ...(primaryDocumentId
           ? { primary_document_id: primaryDocumentId }
           : {}),
+        ...(documentRefs.length > 0 ? { document_refs: documentRefs } : {}),
+        ...(cardRefs.length > 0 ? { card_refs: cardRefs } : {}),
         column_schema: sourceBoard.column_schema,
-        pinned_refs: mapRefs(sourceBoard.pinned_refs),
+        ...(pinnedRefs.length > 0 ? { pinned_refs: pinnedRefs } : {}),
       },
     });
 
@@ -476,7 +538,9 @@ async function seedBoards() {
 
     let currentBoard = createdBoard;
     const orderedCards = sourceCards
-      .filter((card) => String(card.board_id ?? "") === String(sourceBoard.id ?? ""))
+      .filter(
+        (card) => String(card.board_id ?? "") === String(sourceBoard.id ?? ""),
+      )
       .sort(compareBoardCardsForSeed);
 
     const lastAnchorByColumn = new Map();
@@ -505,7 +569,8 @@ async function seedBoards() {
       const pinnedDocumentId = mapOptionalDocumentId(
         sourceCard.pinned_document_id,
       );
-      const columnKey = String(sourceCard.column_key ?? "backlog").trim() || "backlog";
+      const columnKey =
+        String(sourceCard.column_key ?? "backlog").trim() || "backlog";
       const afterAnchor = lastAnchorByColumn.get(columnKey);
       const boardUpdatedAt = String(currentBoard?.updated_at ?? "").trim();
 
@@ -513,7 +578,35 @@ async function seedBoards() {
         actor_id: pickActorId(sourceCard.created_by ?? sourceCard.updated_by),
         ...(boardUpdatedAt ? { if_board_updated_at: boardUpdatedAt } : {}),
         column_key: columnKey,
+        ...(threadId
+          ? {
+              topic_ref: `topic:${threadId}`,
+              thread_ref: `thread:${threadId}`,
+            }
+          : {}),
         ...(pinnedDocumentId ? { pinned_document_id: pinnedDocumentId } : {}),
+        ...(String(sourceCard.title ?? "").trim()
+          ? { title: String(sourceCard.title).trim() }
+          : {}),
+        ...(String(sourceCard.summary ?? "").trim()
+          ? { summary: String(sourceCard.summary).trim() }
+          : {}),
+        ...(sourceCard.risk ? { risk: String(sourceCard.risk) } : {}),
+        ...(sourceCard.resolution
+          ? { resolution: String(sourceCard.resolution) }
+          : {}),
+        ...(Array.isArray(sourceCard.related_refs) &&
+        sourceCard.related_refs.length > 0
+          ? { related_refs: mapRefs(sourceCard.related_refs) }
+          : {}),
+        ...(Array.isArray(sourceCard.resolution_refs) &&
+        sourceCard.resolution_refs.length > 0
+          ? { resolution_refs: mapRefs(sourceCard.resolution_refs) }
+          : {}),
+        ...(Array.isArray(sourceCard.assignee_refs) &&
+        sourceCard.assignee_refs.length > 0
+          ? { assignee_refs: mapRefs(sourceCard.assignee_refs) }
+          : {}),
       };
 
       const placementAfter = (anchor) => {
@@ -583,7 +676,10 @@ async function seedEvents() {
   for (const sourceEvent of sortedEvents) {
     const actorId = pickActorId(sourceEvent.actor_id);
     const mappedThreadId = mapThreadId(sourceEvent.thread_id);
-    const payload = normalizeEventPayload(sourceEvent.type, sourceEvent.payload);
+    const payload = normalizeEventPayload(
+      sourceEvent.type,
+      sourceEvent.payload,
+    );
     const refs = normalizeEventRefs(
       sourceEvent.type,
       mapRefs(sourceEvent.refs),
@@ -708,17 +804,6 @@ function mapRefs(values) {
   return values.map((entry) => mapRef(entry)).filter(Boolean);
 }
 
-function normalizeArtifactRefs(values) {
-  if (!Array.isArray(values)) {
-    return [];
-  }
-
-  return values
-    .map((entry) => String(entry ?? "").trim())
-    .filter(Boolean)
-    .map((entry) => (entry.includes(":") ? mapRef(entry) : `artifact:${entry}`));
-}
-
 function pickActorId(candidate) {
   const id = String(candidate ?? "").trim();
   return id || defaultActorId;
@@ -756,8 +841,10 @@ function compareBoardCardsForSeed(left, right) {
     return rankDelta;
   }
 
-  return String(left?.thread_id ?? left?.id ?? "").localeCompare(
-    String(right?.thread_id ?? right?.id ?? ""),
+  return String(
+    left?.thread_id ?? left?.topic_ref ?? left?.id ?? "",
+  ).localeCompare(
+    String(right?.thread_id ?? right?.topic_ref ?? right?.id ?? ""),
   );
 }
 
@@ -790,7 +877,9 @@ function normalizeEventPayload(type, payload) {
     type === "exception_raised" &&
     !String(next["subtype (e.g. stale_thread)"] ?? "").trim()
   ) {
-    next["subtype (e.g. stale_thread)"] = String(next.subtype ?? "stale_thread");
+    next["subtype (e.g. stale_thread)"] = String(
+      next.subtype ?? "stale_thread",
+    );
   }
 
   return next;

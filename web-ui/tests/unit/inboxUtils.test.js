@@ -22,7 +22,7 @@ describe("inbox grouping", () => {
         },
         {
           id: "old-risk",
-          category: "commitment_risk",
+          category: "risk_review",
           title: "Aging risk",
           source_event_time: "2026-03-03T10:00:00.000Z",
         },

@@ -269,7 +269,7 @@ const inboxItems = [
   },
   {
     id: "inbox-003",
-    category: "commitment_risk",
+    category: "risk_review",
     title: "Summer launch at risk — lemon shortage blocks pilot batch",
     recommended_action:
       "Update summer menu thread with expected unblock date once lemon restock is confirmed.",
@@ -1817,15 +1817,227 @@ function deepClone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function topicStatusFromThreadStatus(status) {
+  switch (String(status ?? "").trim()) {
+    case "active":
+      return "active";
+    case "paused":
+      return "blocked";
+    case "closed":
+      return "archived";
+    default:
+      return "proposed";
+  }
+}
+
+function topicTypeFromThreadType(type) {
+  switch (String(type ?? "").trim()) {
+    case "incident":
+      return "incident";
+    case "initiative":
+      return "initiative";
+    case "case":
+      return "decision";
+    case "process":
+      return "objective";
+    case "note":
+      return "note";
+    case "request":
+      return "request";
+    case "risk":
+      return "risk";
+    default:
+      return "other";
+  }
+}
+
+function cardRiskFromThreadPriority(priority) {
+  switch (String(priority ?? "").trim()) {
+    case "p0":
+      return "critical";
+    case "p1":
+      return "high";
+    case "p2":
+      return "medium";
+    case "p3":
+      return "low";
+    default:
+      return "medium";
+  }
+}
+
+function cardResolutionFromRow(card) {
+  const explicit = String(card?.resolution ?? "").trim();
+  if (
+    ["unresolved", "completed", "canceled", "superseded"].includes(explicit)
+  ) {
+    return explicit;
+  }
+
+  const status = String(card?.status ?? "").trim();
+  if (status === "done") {
+    return "completed";
+  }
+  if (status === "cancelled" || status === "archived") {
+    return "canceled";
+  }
+
+  return "unresolved";
+}
+
+function buildCanonicalTopicSeed(thread) {
+  const threadId = String(thread?.id ?? "").trim();
+  const boardRefs = boards
+    .filter((board) => String(board.primary_thread_id ?? "") === threadId)
+    .map((board) => `board:${board.id}`);
+  const documentRefs = listMockDocuments({ thread_id: threadId }).map(
+    (document) => `document:${document.id}`,
+  );
+  const relatedRefs = [
+    `thread:${threadId}`,
+    ...(Array.isArray(thread?.key_artifacts) ? thread.key_artifacts : []),
+    ...(Array.isArray(thread?.open_commitments)
+      ? thread.open_commitments.map((id) => `card:${id}`)
+      : []),
+  ].filter(Boolean);
+
+  return {
+    id: threadId,
+    thread_id: threadId,
+    type: topicTypeFromThreadType(thread?.type),
+    status: topicStatusFromThreadStatus(thread?.status),
+    title: String(thread?.title ?? "").trim(),
+    summary: String(thread?.current_summary ?? "").trim(),
+    owner_refs: thread?.created_by ? [`actor:${thread.created_by}`] : [],
+    board_refs: boardRefs,
+    document_refs: documentRefs,
+    related_refs: [...new Set(relatedRefs)],
+    primary_thread_ref: threadId ? `thread:${threadId}` : null,
+    created_at: thread?.created_at ?? null,
+    created_by: thread?.created_by ?? thread?.updated_by ?? "unknown",
+    updated_at: thread?.updated_at ?? thread?.created_at ?? null,
+    updated_by: thread?.updated_by ?? thread?.created_by ?? "unknown",
+    provenance: deepClone(thread?.provenance ?? { sources: [] }),
+  };
+}
+
+function buildCanonicalCardSeed(card) {
+  const threadId = String(card?.thread_id ?? card?.parent_thread ?? "").trim();
+  const boardId = String(card?.board_id ?? "").trim();
+  const thread = threadId
+    ? threads.find((entry) => entry.id === threadId)
+    : null;
+  const topicRef = threadId ? `topic:${threadId}` : null;
+  const threadRef = threadId ? `thread:${threadId}` : null;
+  const boardRef = boardId ? `board:${boardId}` : null;
+  const documentId = String(card?.pinned_document_id ?? "").trim();
+  const documentRef = documentId ? `document:${documentId}` : null;
+  const summary =
+    String(card?.summary ?? "").trim() ||
+    String(card?.body ?? "").trim() ||
+    String(thread?.current_summary ?? "").trim() ||
+    String(thread?.title ?? "").trim() ||
+    String(card?.title ?? "").trim();
+
+  return {
+    id: String(card?.id ?? threadId ?? boardId ?? "").trim() || null,
+    board_id: boardId || null,
+    thread_id: threadId || null,
+    parent_thread: threadId || null,
+    board_ref: boardRef,
+    topic_ref: topicRef,
+    thread_ref: threadRef,
+    document_ref: documentRef,
+    title:
+      String(card?.title ?? thread?.title ?? summary ?? "").trim() || summary,
+    summary,
+    column_key: String(card?.column_key ?? "backlog").trim() || "backlog",
+    rank: String(card?.rank ?? "0000").trim() || "0000",
+    assignee_refs: Array.isArray(card?.assignee_refs)
+      ? deepClone(card.assignee_refs)
+      : [],
+    risk: cardRiskFromThreadPriority(thread?.priority),
+    resolution: cardResolutionFromRow(card),
+    resolution_refs: Array.isArray(card?.resolution_refs)
+      ? deepClone(card.resolution_refs)
+      : [],
+    related_refs: [
+      boardRef,
+      topicRef,
+      threadRef,
+      documentRef,
+      ...(Array.isArray(card?.related_refs) ? card.related_refs : []),
+    ].filter(Boolean),
+    created_at: card?.created_at ?? null,
+    created_by: card?.created_by ?? thread?.created_by ?? "unknown",
+    updated_at: card?.updated_at ?? card?.created_at ?? null,
+    updated_by: card?.updated_by ?? card?.created_by ?? "unknown",
+    provenance: deepClone(card?.provenance ?? { sources: [] }),
+  };
+}
+
+function buildCanonicalBoardSeed(board) {
+  const boardId = String(board?.id ?? "").trim();
+  const primaryThreadId = String(board?.primary_thread_id ?? "").trim();
+  const cardRefs = boardCards
+    .filter((card) => String(card?.board_id ?? "") === boardId)
+    .map((card) => `card:${String(card?.id ?? card?.thread_id ?? "").trim()}`)
+    .filter(Boolean);
+  const documentRefs = [
+    board?.primary_document_id
+      ? `document:${String(board.primary_document_id).trim()}`
+      : null,
+    ...listMockDocuments({ thread_id: primaryThreadId }).map(
+      (document) => `document:${document.id}`,
+    ),
+  ].filter(Boolean);
+
+  return {
+    ...deepClone(board),
+    primary_topic_ref: primaryThreadId ? `topic:${primaryThreadId}` : null,
+    primary_thread_ref: primaryThreadId ? `thread:${primaryThreadId}` : null,
+    document_refs: [...new Set(documentRefs)],
+    card_refs: [...new Set(cardRefs)],
+  };
+}
+
+function buildCanonicalPacketSeed(artifact) {
+  const packet = artifact?.packet;
+  if (!packet || typeof packet !== "object") {
+    return null;
+  }
+
+  const topicId = String(artifact?.thread_id ?? "").trim();
+  const subjectRef = topicId ? `topic:${topicId}` : null;
+  const packetId = String(
+    packet.work_order_id ??
+      packet.receipt_id ??
+      packet.review_id ??
+      artifact?.id ??
+      "",
+  ).trim();
+
+  return {
+    id: packetId || String(artifact?.id ?? "").trim() || null,
+    kind: String(artifact?.kind ?? "").trim(),
+    subject_ref: subjectRef,
+    artifact: deepClone(artifact),
+    packet: deepClone(packet),
+  };
+}
+
 export function getMockSeedData() {
   return {
     actors: deepClone(actors),
+    topics: deepClone(threads.map(buildCanonicalTopicSeed)),
+    boards: deepClone(boards.map(buildCanonicalBoardSeed)),
+    cards: deepClone(boardCards.map(buildCanonicalCardSeed)),
+    packets: deepClone(artifacts.map(buildCanonicalPacketSeed).filter(Boolean)),
     threads: deepClone(threads),
     commitments: deepClone(commitments),
     documents: deepClone(MOCK_DOCUMENTS),
     documentRevisions: deepClone(MOCK_DOCUMENT_REVISIONS),
     artifacts: deepClone(artifacts),
-    boards: deepClone(boards),
     boardCards: deepClone(boardCards),
     events: deepClone(events),
   };

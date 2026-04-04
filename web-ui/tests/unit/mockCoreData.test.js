@@ -9,6 +9,46 @@ describe("mockCoreData parity behaviors", () => {
     });
   });
 
+  describe("canonical seed data", () => {
+    it("exposes topic, board, card, and packet seed views", async () => {
+      const mod = await import("../../src/lib/mockCoreData.js");
+      const seed = mod.getMockSeedData();
+
+      expect(seed.topics[0]).toMatchObject({
+        id: "thread-lemon-shortage",
+        thread_id: "thread-lemon-shortage",
+        type: "incident",
+        status: "active",
+        primary_thread_ref: "thread:thread-lemon-shortage",
+      });
+      expect(seed.boards[0]).toMatchObject({
+        id: "board-product-launch",
+        primary_topic_ref: "topic:thread-q2-initiative",
+        primary_thread_ref: "thread:thread-q2-initiative",
+      });
+      expect(seed.cards[0]).toMatchObject({
+        board_id: "board-product-launch",
+        thread_id: "thread-summer-menu",
+        topic_ref: "topic:thread-summer-menu",
+        thread_ref: "thread:thread-summer-menu",
+        resolution: "unresolved",
+      });
+      expect(
+        seed.packets.every((packet) => packet?.artifact && packet?.packet),
+      ).toBe(true);
+      expect(seed.packets.map((packet) => packet.kind)).toEqual([
+        "work_order",
+        "receipt",
+        "review",
+        "work_order",
+        "receipt",
+        "review",
+        "receipt",
+        "review",
+      ]);
+    });
+  });
+
   describe("documents list matches contract behavior", () => {
     it("filters tombstoned docs by default and sorts by updated_at desc", async () => {
       const mod = await import("../../src/lib/mockCoreData.js");

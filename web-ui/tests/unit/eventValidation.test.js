@@ -6,10 +6,9 @@ function validBaseEvent(overrides = {}) {
   return {
     actor_id: "actor-1",
     event: {
-      type: "message_posted",
+      type: "topic_created",
       summary: "hello",
-      thread_id: "thread-1",
-      refs: ["thread:thread-1"],
+      refs: ["topic:topic-1"],
       provenance: { sources: ["actor_statement:event-1"] },
       ...overrides,
     },
@@ -21,14 +20,28 @@ describe("event validation", () => {
     expect(validateEventCreatePayload(validBaseEvent())).toBe("");
   });
 
-  it("rejects thread-scoped events without thread_id", () => {
+  it("allows message_posted without a thread_id requirement", () => {
     const error = validateEventCreatePayload(
-      validBaseEvent({ thread_id: undefined }),
+      validBaseEvent({
+        type: "message_posted",
+        refs: ["thread:thread-1"],
+        thread_id: undefined,
+      }),
     );
 
-    expect(error).toContain(
-      'event.thread_id is required for event.type="message_posted"',
+    expect(error).toBe("");
+  });
+
+  it("rejects card_moved payloads that miss required board refs", () => {
+    const error = validateEventCreatePayload(
+      validBaseEvent({
+        type: "card_moved",
+        refs: ["card:card_1"],
+        payload: { column_key: "done" },
+      }),
     );
+
+    expect(error).toContain('event.refs must include a "board:<id>"');
   });
 
   it("rejects review_completed payloads that miss required artifact refs", () => {
@@ -36,23 +49,23 @@ describe("event validation", () => {
       validBaseEvent({
         type: "review_completed",
         refs: ["artifact:work_order_1", "artifact:receipt_1"],
+        payload: { subject_ref: "card:card_1" },
       }),
     );
 
     expect(error).toContain('at least 3 refs with prefix "artifact"');
   });
 
-  it("enforces commitment status transition evidence refs", () => {
+  it("enforces topic status transition payload refs", () => {
     const error = validateEventCreatePayload(
       validBaseEvent({
-        type: "commitment_status_changed",
-        refs: ["snapshot:commitment_1"],
-        payload: { to_status: "done" },
+        type: "topic_status_changed",
+        refs: ["topic:topic_1"],
+        payload: { from_status: "active" },
       }),
     );
 
-    expect(error).toContain("artifact prefix or event prefix");
-    expect(error).toContain('payload.to_status="done"');
+    expect(error).toContain("event.payload.to_status is required");
   });
 
   it("keeps unknown event types open", () => {

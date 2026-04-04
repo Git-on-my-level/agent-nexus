@@ -10,10 +10,9 @@ import {
 describe("eventRefRules", () => {
   describe("getEventRefRule", () => {
     it("returns rule for known event type", () => {
-      const rule = getEventRefRule("commitment_status_changed");
+      const rule = getEventRefRule("topic_created");
       expect(rule).toBeTruthy();
-      expect(rule.thread_id).toBe("required");
-      expect(rule.conditional_refs).toHaveLength(2);
+      expect(rule.refs_must_include).toEqual(["topic:<topic_id>"]);
     });
 
     it("returns null for unknown event type", () => {
@@ -24,7 +23,7 @@ describe("eventRefRules", () => {
 
   describe("hasEventRefRule", () => {
     it("returns true for known event type", () => {
-      expect(hasEventRefRule("commitment_status_changed")).toBe(true);
+      expect(hasEventRefRule("card_moved")).toBe(true);
     });
 
     it("returns false for unknown event type", () => {
@@ -38,21 +37,19 @@ describe("eventRefRules", () => {
       expect(result.valid).toBe(true);
     });
 
-    it("rejects missing thread_id when required", () => {
-      const result = validateEventRefRule(
-        "commitment_status_changed",
-        ["snapshot:commitment-1"],
-        { to_status: "done" },
-      );
+    it("rejects missing topic refs when required", () => {
+      const result = validateEventRefRule("topic_created", [], {});
       expect(result.valid).toBe(false);
-      expect(result.error).toContain("thread_id is required");
+      expect(result.error).toContain("topic:<id>");
     });
 
-    it("does not treat generated conditional thread_id requirements as unconditional", () => {
+    it("accepts message_posted without an explicit thread_id requirement", () => {
       const result = validateEventRefRule(
-        "snapshot_updated",
-        ["snapshot:snapshot-1"],
-        {},
+        "message_posted",
+        ["thread:thread-1"],
+        {
+          summary: "hello",
+        },
       );
       expect(result.valid).toBe(true);
       expect(result.error).toBe("");
@@ -76,104 +73,48 @@ describe("eventRefRules", () => {
       expect(result.error).toContain("valid typed refs");
     });
 
-    it("enforces payload_must_include contract fields", () => {
-      const missingSubtype = validateEventRefRule(
-        "exception_raised",
-        ["thread:thread-1"],
-        { thread_id: "thread-1" },
-      );
-      expect(missingSubtype.valid).toBe(false);
-      expect(missingSubtype.error).toContain(
-        "event.payload.subtype is required",
-      );
-
-      const withSubtype = validateEventRefRule(
-        "exception_raised",
-        ["thread:thread-1"],
-        { thread_id: "thread-1", subtype: "stale_thread" },
-      );
-      expect(withSubtype.valid).toBe(true);
-    });
-
-    it("rejects missing conditional refs for done status", () => {
+    it("rejects missing topic_status_changed payload fields", () => {
       const result = validateEventRefRule(
-        "commitment_status_changed",
-        ["snapshot:commitment-1"],
-        { thread_id: "thread-1", to_status: "done" },
+        "topic_status_changed",
+        ["topic:topic-1"],
+        { from_status: "active" },
       );
       expect(result.valid).toBe(false);
-      expect(result.error).toContain('payload.to_status="done"');
+      expect(result.error).toContain("event.payload.to_status");
     });
 
-    it("matches conditional when payload equals case-insensitively (core / CLI parity)", () => {
-      const bad = validateEventRefRule(
-        "commitment_status_changed",
-        ["snapshot:commitment-1"],
-        { thread_id: "thread-1", to_status: "Done" },
-      );
+    it("requires board refs for card_moved", () => {
+      const bad = validateEventRefRule("card_moved", ["card:card-1"], {
+        column_key: "done",
+      });
       expect(bad.valid).toBe(false);
-      expect(bad.error).toContain("artifact prefix or event prefix");
-
-      const good = validateEventRefRule(
-        "commitment_status_changed",
-        ["snapshot:commitment-1", "artifact:r1"],
-        { thread_id: "thread-1", to_status: "DONE" },
-      );
-      expect(good.valid).toBe(true);
+      expect(bad.error).toContain("board:<id>");
     });
 
-    it("allows artifact ref for done status", () => {
+    it("accepts card_resolved with required refs and payload", () => {
       const result = validateEventRefRule(
-        "commitment_status_changed",
-        ["snapshot:commitment-1", "artifact:receipt-1"],
-        { thread_id: "thread-1", to_status: "done" },
+        "card_resolved",
+        ["card:card-1", "board:board-1"],
+        { resolution: "completed" },
       );
       expect(result.valid).toBe(true);
     });
 
-    it("allows event ref for done status", () => {
-      const result = validateEventRefRule(
-        "commitment_status_changed",
-        ["snapshot:commitment-1", "event:decision-1"],
-        { thread_id: "thread-1", to_status: "done" },
-      );
-      expect(result.valid).toBe(true);
-    });
-
-    it("requires event ref for canceled status", () => {
-      const result = validateEventRefRule(
-        "commitment_status_changed",
-        ["snapshot:commitment-1", "artifact:receipt-1"],
-        { thread_id: "thread-1", to_status: "canceled" },
-      );
-      expect(result.valid).toBe(false);
-      expect(result.error).toContain('payload.to_status="canceled"');
-    });
-
-    it("allows event ref for canceled status", () => {
-      const result = validateEventRefRule(
-        "commitment_status_changed",
-        ["snapshot:commitment-1", "event:decision-1"],
-        { thread_id: "thread-1", to_status: "canceled" },
-      );
-      expect(result.valid).toBe(true);
-    });
-
-    it("requires repeated prefixes to satisfy all required refs", () => {
+    it("requires repeated artifact refs for review_completed", () => {
       const result = validateEventRefRule(
         "review_completed",
         ["artifact:review-1", "artifact:receipt-1"],
-        { thread_id: "thread-1" },
+        { subject_ref: "card:card-1" },
       );
       expect(result.valid).toBe(false);
       expect(result.error).toContain("at least 3 refs with prefix");
     });
 
-    it("allows required repeated prefixes when count is met", () => {
+    it("accepts review_completed with all required refs", () => {
       const result = validateEventRefRule(
         "review_completed",
         ["artifact:review-1", "artifact:receipt-1", "artifact:work-order-1"],
-        { thread_id: "thread-1" },
+        { subject_ref: "card:card-1" },
       );
       expect(result.valid).toBe(true);
     });

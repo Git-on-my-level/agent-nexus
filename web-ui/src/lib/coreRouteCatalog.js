@@ -93,21 +93,7 @@ export function getCatalogEntries() {
   return getCatalogByPath();
 }
 
-export const proxyOnlyCommands = [
-  "agents.me.get",
-  "agents.me.keys.rotate",
-  "agents.me.patch",
-  "agents.me.revoke",
-  "auth.agents.register",
-  "auth.token",
-  "events.stream",
-  "inbox.stream",
-  "meta.commands.get",
-  "meta.commands.list",
-  "meta.concepts.get",
-  "meta.concepts.list",
-  "derived.rebuild",
-];
+export const proxyOnlyCommands = [];
 
 export const mockSupportedCommands = commandRegistry
   .map((c) => c.command_id)
