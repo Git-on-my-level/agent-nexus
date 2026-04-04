@@ -357,6 +357,50 @@ paths:
         '404':
           $ref: '#/components/responses/ErrorResponse'
 
+  /threads/{thread_id}/context:
+    get:
+      operationId: getThreadContext
+      summary: Get backing thread coordination context
+      tags: [threads]
+      x-oar-surface: projection
+      x-oar-command-id: threads.context
+      x-oar-cli-path: threads context
+      x-oar-why: Load a compact coordination bundle (thread, recent events, key artifacts, commitments, documents) for inspection and triage.
+      x-oar-input-mode: none
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ thread, recent_events, key_artifacts, open_commitments, documents }` plus forward-compatible fields."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token, not_found]
+      x-oar-concepts: [threads, inspection]
+      x-oar-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/ThreadID'
+        - name: max_events
+          in: query
+          required: false
+          description: Cap on recent timeline events included (non-negative integer).
+          schema:
+            type: integer
+            minimum: 0
+        - name: include_artifact_content
+          in: query
+          required: false
+          description: When true, include short text previews for key artifacts where content is available.
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Thread context bundle
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadContextResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
   /threads/{thread_id}/workspace:
     get:
       operationId: getThreadWorkspace
@@ -920,6 +964,45 @@ paths:
         '409':
           $ref: '#/components/responses/ErrorResponse'
 
+  /cards/{card_id}/archive:
+    post:
+      operationId: archiveCard
+      summary: Archive card
+      tags: [cards]
+      x-oar-surface: canonical
+      x-oar-command-id: cards.archive
+      x-oar-cli-path: cards archive
+      x-oar-why: Soft-delete a first-class card by setting archived_at (board concurrency via if_board_updated_at).
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ board, card }`."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-oar-concepts: [cards, write]
+      x-oar-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/CardID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArchiveCardRequest'
+      responses:
+        '200':
+          description: Card archived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardCardMutationResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
   /cards/{card_id}/move:
     post:
       operationId: moveCard
@@ -1192,6 +1275,110 @@ paths:
         '401':
           $ref: '#/components/responses/ErrorResponse'
 
+  /artifacts:
+    get:
+      operationId: listArtifacts
+      summary: List artifacts
+      tags: [artifacts]
+      x-oar-surface: canonical
+      x-oar-command-id: artifacts.list
+      x-oar-cli-path: artifacts list
+      x-oar-why: Search and filter immutable artifacts across the workspace.
+      x-oar-input-mode: none
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ artifacts }`."
+      x-oar-error-codes: [auth_required, invalid_token]
+      x-oar-concepts: [artifacts]
+      x-oar-stability: beta
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema: { type: string }
+        - name: kind
+          in: query
+          required: false
+          schema: { type: string }
+        - name: thread_id
+          in: query
+          required: false
+          schema: { type: string }
+        - name: thread
+          in: query
+          required: false
+          description: Alias for thread_id (core accepts either).
+          schema: { type: string }
+        - name: created_before
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+        - name: created_after
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1 }
+        - name: include_tombstoned
+          in: query
+          required: false
+          schema: { type: boolean }
+        - name: tombstoned_only
+          in: query
+          required: false
+          schema: { type: boolean }
+        - name: include_archived
+          in: query
+          required: false
+          schema: { type: boolean }
+        - name: archived_only
+          in: query
+          required: false
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: Artifact list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactsListResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+    post:
+      operationId: createArtifact
+      summary: Create artifact
+      tags: [artifacts]
+      x-oar-surface: canonical
+      x-oar-command-id: artifacts.create
+      x-oar-cli-path: artifacts create
+      x-oar-why: Store content-addressed artifact metadata and payload (bytes, text, or structured packet JSON).
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ artifact }`."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token, conflict]
+      x-oar-concepts: [artifacts, write]
+      x-oar-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateArtifactRequest'
+      responses:
+        '201':
+          description: Artifact created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
   /artifacts/{artifact_id}:
     get:
       operationId: getArtifact
@@ -1257,7 +1444,7 @@ paths:
       x-oar-why: Suppress or clear a derived inbox item via a durable acknowledgment event.
       x-oar-input-mode: json-body
       x-oar-streaming: { mode: none }
-      x-oar-output-envelope: "Returns `{ item, event }`."
+      x-oar-output-envelope: "Returns `{ event }`."
       x-oar-error-codes: [auth_required, invalid_request, invalid_token, not_found]
       x-oar-concepts: [inbox, write]
       x-oar-stability: beta
@@ -1270,8 +1457,8 @@ paths:
             schema:
               $ref: '#/components/schemas/AcknowledgeInboxItemRequest'
       responses:
-        '200':
-          description: Inbox item acknowledged
+        '201':
+          description: Acknowledgment event appended
           content:
             application/json:
               schema:
@@ -1989,10 +2176,16 @@ components:
     AcknowledgeInboxItemRequest:
       type: object
       properties:
+        actor_id: { type: string }
+        thread_id: { type: string }
+        inbox_item_id:
+          type: string
+          description: Required when using legacy POST /inbox/ack; must match path inbox_id when using POST /inbox/{inbox_id}/acknowledge.
         note: { type: string }
         refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
+      required: [thread_id]
 
     TopicResponse:
       type: object
@@ -2278,6 +2471,57 @@ components:
     AcknowledgeInboxItemResponse:
       type: object
       properties:
-        item: { $ref: '#/components/schemas/InboxItem' }
         event: { $ref: '#/components/schemas/Event' }
-      required: [item, event]
+      required: [event]
+
+    ArtifactsListResponse:
+      type: object
+      properties:
+        artifacts:
+          type: array
+          items: { $ref: '#/components/schemas/Artifact' }
+      required: [artifacts]
+
+    CreateArtifactRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+        artifact:
+          type: object
+          additionalProperties: true
+          description: Artifact fields before persistence (e.g. kind, refs, summary).
+        content: {}
+        content_type: { type: string }
+      required: [artifact, content_type]
+
+    ThreadContextArtifactEntry:
+      type: object
+      description: Key artifact row; may include ref, artifact, and optional content_preview.
+      additionalProperties: true
+
+    ThreadContextResponse:
+      type: object
+      properties:
+        thread: { $ref: '#/components/schemas/Thread' }
+        recent_events:
+          type: array
+          items: { $ref: '#/components/schemas/Event' }
+        key_artifacts:
+          type: array
+          items: { $ref: '#/components/schemas/ThreadContextArtifactEntry' }
+        open_commitments:
+          type: array
+          items: { type: object, additionalProperties: true }
+        documents:
+          type: array
+          items: { type: object, additionalProperties: true }
+      additionalProperties: true
+      required: [thread, recent_events, key_artifacts, open_commitments, documents]
+
+    ArchiveCardRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+        if_board_updated_at:
+          type: string
+          format: date-time

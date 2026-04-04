@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -382,14 +383,14 @@ func TestInboxAckAliasResolvesCanonicalAndThreadFromInboxList(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"items":[{"id":"` + inboxID + `","thread_id":"thread_42"}]}`))
 			return
-		case r.Method == http.MethodPost && r.URL.Path == "/inbox/ack":
+		case r.Method == http.MethodPost && r.URL.Path == "/inbox/"+url.PathEscape(inboxID)+"/acknowledge":
 			body, _ := io.ReadAll(r.Body)
 			var payload map[string]any
 			if err := json.Unmarshal(body, &payload); err != nil {
 				t.Fatalf("decode inbox ack body: %v body=%s", err, string(body))
 			}
-			if got := strings.TrimSpace(anyStringValue(payload["inbox_item_id"])); got != inboxID {
-				t.Fatalf("expected canonical inbox_item_id %q, got %q body=%s", inboxID, got, string(body))
+			if _, exists := payload["inbox_item_id"]; exists {
+				t.Fatalf("expected inbox_item_id in path only, got body=%s", string(body))
 			}
 			if got := strings.TrimSpace(anyStringValue(payload["thread_id"])); got != "thread_42" {
 				t.Fatalf("expected resolved thread_id thread_42, got %q body=%s", got, string(body))
@@ -3709,7 +3710,7 @@ func TestInboxAckActorIDMeAliasFromProfile(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/inbox/ack" {
+		if r.Method != http.MethodPost || r.URL.Path != "/inbox/"+url.PathEscape("inbox:1")+"/acknowledge" {
 			http.NotFound(w, r)
 			return
 		}
@@ -3717,6 +3718,9 @@ func TestInboxAckActorIDMeAliasFromProfile(t *testing.T) {
 		var payload map[string]any
 		if err := json.Unmarshal(body, &payload); err != nil {
 			t.Fatalf("decode inbox ack body: %v body=%s", err, string(body))
+		}
+		if _, exists := payload["inbox_item_id"]; exists {
+			t.Fatalf("expected inbox_item_id in path only, got body=%s", string(body))
 		}
 		if got := strings.TrimSpace(anyStringValue(payload["actor_id"])); got != "actor-profile-1" {
 			t.Fatalf("expected actor_id from profile, got %q body=%s", got, string(body))
@@ -3751,7 +3755,7 @@ func TestInboxAckPositionalInboxItemIDResolvesThreadFromInboxList(t *testing.T) 
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"items":[{"id":"inbox:decision_needed:thread_42:none:event_1","thread_id":"thread_42"}],"generated_at":"2026-03-05T00:00:00Z"}`))
 			return
-		case r.Method == http.MethodPost && r.URL.Path == "/inbox/ack":
+		case r.Method == http.MethodPost && r.URL.Path == "/inbox/"+url.PathEscape("inbox:decision_needed:thread_42:none:event_1")+"/acknowledge":
 			body, _ := io.ReadAll(r.Body)
 			var payload map[string]any
 			if err := json.Unmarshal(body, &payload); err != nil {
@@ -3760,8 +3764,8 @@ func TestInboxAckPositionalInboxItemIDResolvesThreadFromInboxList(t *testing.T) 
 			if got := strings.TrimSpace(anyStringValue(payload["thread_id"])); got != "thread_42" {
 				t.Fatalf("expected resolved thread_id thread_42, got %q body=%s", got, string(body))
 			}
-			if got := strings.TrimSpace(anyStringValue(payload["inbox_item_id"])); got != "inbox:decision_needed:thread_42:none:event_1" {
-				t.Fatalf("unexpected inbox_item_id %q body=%s", got, string(body))
+			if _, exists := payload["inbox_item_id"]; exists {
+				t.Fatalf("expected inbox_item_id in path only, got body=%s", string(body))
 			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)

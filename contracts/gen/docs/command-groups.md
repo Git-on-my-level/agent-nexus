@@ -8,9 +8,11 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `artifacts`
 
-- Commands: `1`
+- Commands: `3`
 - Command IDs:
+  - `artifacts.create` (`artifacts create`)
   - `artifacts.get` (`artifacts get`)
+  - `artifacts.list` (`artifacts list`)
 
 ## `boards`
 
@@ -27,8 +29,9 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `cards`
 
-- Commands: `6`
+- Commands: `7`
 - Command IDs:
+  - `cards.archive` (`cards archive`)
   - `cards.get` (`cards get`)
   - `cards.list` (`cards list`)
   - `cards.move` (`cards move`)
@@ -79,8 +82,9 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `threads`
 
-- Commands: `4`
+- Commands: `5`
 - Command IDs:
+  - `threads.context` (`threads context`)
   - `threads.inspect` (`threads inspect`)
   - `threads.list` (`threads list`)
   - `threads.timeline` (`threads timeline`)

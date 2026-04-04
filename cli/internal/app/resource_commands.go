@@ -2906,8 +2906,31 @@ func (a *App) runInboxCommand(ctx context.Context, args []string, cfg config.Res
 		if err != nil {
 			return nil, "inbox ack", err
 		}
-		result, callErr := a.invokeRawJSON(ctx, cfg, "inbox ack", http.MethodPost, "/inbox/ack", body)
-		return result, "inbox ack", callErr
+		bodyMap, ok := body.(map[string]any)
+		if !ok {
+			return nil, "inbox ack", errnorm.Usage("invalid_request", "inbox ack body must be a JSON object")
+		}
+		inboxItemID := strings.TrimSpace(anyString(bodyMap["inbox_item_id"]))
+		if inboxItemID == "" {
+			return nil, "inbox ack", errnorm.Usage("invalid_request", "inbox_item_id is required")
+		}
+		apiBody := make(map[string]any, len(bodyMap))
+		for k, v := range bodyMap {
+			if k == "inbox_item_id" {
+				continue
+			}
+			apiBody[k] = v
+		}
+		result, callErr := a.invokeTypedJSON(
+			ctx,
+			cfg,
+			"inbox acknowledge",
+			"inbox.acknowledge",
+			map[string]string{"inbox_id": inboxItemID},
+			nil,
+			apiBody,
+		)
+		return result, "inbox acknowledge", callErr
 	case "stream":
 		result, err := a.runInboxStream(ctx, args[1:], cfg, "inbox stream", false)
 		return result, "inbox stream", err

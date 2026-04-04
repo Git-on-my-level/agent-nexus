@@ -36,6 +36,7 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 - `meta` (group): Inspect generated command/concept metadata
 - `threads list` (command): List backing threads
 - `threads timeline` (command): Get backing thread timeline
+- `threads context` (command): Get backing thread coordination context
 - `topics list` (command): List topics
 - `topics get` (command): Get topic
 - `topics create` (command): Create topic
@@ -46,7 +47,9 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 - `cards get` (command): Get card
 - `cards patch` (command): Patch card
 - `cards move` (command): Move card
+- `artifacts list` (command): List artifacts
 - `artifacts get` (command): Get artifact metadata
+- `artifacts create` (command): Create artifact
 - `boards list` (command): List boards
 - `boards create` (command): Create board
 - `boards get` (command): Get board
@@ -1093,6 +1096,7 @@ Inspect thread resources and coordination views
 Generated Help: threads
 
 Commands:
+  threads context          Get backing thread coordination context
   threads inspect          Inspect backing thread
   threads list             List backing threads
   threads timeline         Get backing thread timeline
@@ -1165,7 +1169,9 @@ Manage artifact resources and content
 Generated Help: artifacts
 
 Commands:
+  artifacts create         Create artifact
   artifacts get            Get artifact metadata
+  artifacts list           List artifacts
 
 Local inspection helper:
   artifacts inspect        Fetch artifact metadata and content in one call.
@@ -1380,7 +1386,7 @@ Generated Help: threads list
 - Output: Returns `{ threads }`.
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `threads`, `inspection`
-- Adjacent commands: `threads inspect`, `threads timeline`, `threads workspace`
+- Adjacent commands: `threads context`, `threads inspect`, `threads timeline`, `threads workspace`
 
 
 Global flags:
@@ -1405,7 +1411,7 @@ Generated Help: threads timeline
 - Output: Returns `{ thread, events, artifacts, topics, cards, documents }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `threads`, `timeline`
-- Adjacent commands: `threads inspect`, `threads list`, `threads workspace`
+- Adjacent commands: `threads context`, `threads inspect`, `threads list`, `threads workspace`
 
 Inputs:
   Required:
@@ -1422,6 +1428,34 @@ Note: by default, archived and tombstoned events are excluded from the timeline 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: oar --json threads timeline ... ; oar threads timeline ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `threads context`
+
+Get backing thread coordination context
+
+```text
+Generated Help: threads context
+
+- Command ID: `threads.context`
+- CLI path: `threads context`
+- HTTP: `GET /threads/{thread_id}/context`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Load a compact coordination bundle (thread, recent events, key artifacts, commitments, documents) for inspection and triage.
+- Output: Returns `{ thread, recent_events, key_artifacts, open_commitments, documents }` plus forward-compatible fields.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Concepts: `threads`, `inspection`
+- Adjacent commands: `threads inspect`, `threads list`, `threads timeline`, `threads workspace`
+
+Inputs:
+  Required:
+  - path `thread_id`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json threads context ... ; oar threads context ... --json
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1635,7 +1669,7 @@ Generated Help: cards list
 - Output: Returns `{ cards }`.
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `cards`
-- Adjacent commands: `cards get`, `cards move`, `cards patch`, `cards purge`, `cards restore`
+- Adjacent commands: `cards archive`, `cards get`, `cards move`, `cards patch`, `cards purge`, `cards restore`
 
 
 Global flags:
@@ -1660,7 +1694,7 @@ Generated Help: cards get
 - Output: Returns `{ card }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `cards`
-- Adjacent commands: `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`
+- Adjacent commands: `cards archive`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`
 
 Inputs:
   Required:
@@ -1688,7 +1722,7 @@ Generated Help: cards patch
 - Output: Returns `{ card }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `cards`, `write`, `concurrency`
-- Adjacent commands: `cards get`, `cards list`, `cards move`, `cards purge`, `cards restore`
+- Adjacent commands: `cards archive`, `cards get`, `cards list`, `cards move`, `cards purge`, `cards restore`
 
 Inputs:
   Required:
@@ -1733,7 +1767,7 @@ Generated Help: cards move
 - Output: Returns `{ card }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `cards`, `boards`, `write`
-- Adjacent commands: `cards get`, `cards list`, `cards patch`, `cards purge`, `cards restore`
+- Adjacent commands: `cards archive`, `cards get`, `cards list`, `cards patch`, `cards purge`, `cards restore`
 
 Inputs:
   Required:
@@ -1753,6 +1787,31 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
+## `artifacts list`
+
+List artifacts
+
+```text
+Generated Help: artifacts list
+
+- Command ID: `artifacts.list`
+- CLI path: `artifacts list`
+- HTTP: `GET /artifacts`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Search and filter immutable artifacts across the workspace.
+- Output: Returns `{ artifacts }`.
+- Error codes: `auth_required`, `invalid_token`
+- Concepts: `artifacts`
+- Adjacent commands: `artifacts create`, `artifacts get`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json artifacts list ... ; oar artifacts list ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
 ## `artifacts get`
 
 Get artifact metadata
@@ -1769,6 +1828,7 @@ Generated Help: artifacts get
 - Output: Returns `{ artifact }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `artifacts`
+- Adjacent commands: `artifacts create`, `artifacts list`
 
 Inputs:
   Required:
@@ -1777,6 +1837,38 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: oar --json artifacts get ... ; oar artifacts get ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `artifacts create`
+
+Create artifact
+
+```text
+Generated Help: artifacts create
+
+- Command ID: `artifacts.create`
+- CLI path: `artifacts create`
+- HTTP: `POST /artifacts`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Store content-addressed artifact metadata and payload (bytes, text, or structured packet JSON).
+- Output: Returns `{ artifact }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `conflict`
+- Concepts: `artifacts`, `write`
+- Adjacent commands: `artifacts get`, `artifacts list`
+
+Inputs:
+  Required:
+  - body `artifact` (object)
+  - body `content_type` (string)
+  Optional:
+  - body `actor_id` (string)
+  - body `content` (any)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json artifacts create ... ; oar artifacts create ... --json
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2173,7 +2265,7 @@ Generated Help: inbox acknowledge
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Suppress or clear a derived inbox item via a durable acknowledgment event.
-- Output: Returns `{ item, event }`.
+- Output: Returns `{ event }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
 - Concepts: `inbox`, `write`
 - Adjacent commands: `inbox list`
@@ -2181,7 +2273,10 @@ Generated Help: inbox acknowledge
 Inputs:
   Required:
   - path `inbox_id`
+  - body `thread_id` (string)
   Optional:
+  - body `actor_id` (string)
+  - body `inbox_item_id` (string)
   - body `note` (string)
   - body `refs` (list<any>)
 

@@ -33,6 +33,17 @@ type CommandSpec struct {
 
 var CommandRegistry = []CommandSpec{
 	{
+		CommandID: "artifacts.create",
+		CLIPath:   "artifacts create",
+		Group:     "artifacts",
+		Method:    "POST",
+		Path:      "/artifacts",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"artifacts", "write"},
+		Adjacent:  []string{"artifacts.get", "artifacts.list"},
+	},
+	{
 		CommandID:  "artifacts.get",
 		CLIPath:    "artifacts get",
 		Group:      "artifacts",
@@ -42,6 +53,18 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"artifacts"},
+		Adjacent:   []string{"artifacts.create", "artifacts.list"},
+	},
+	{
+		CommandID: "artifacts.list",
+		CLIPath:   "artifacts list",
+		Group:     "artifacts",
+		Method:    "GET",
+		Path:      "/artifacts",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"artifacts"},
+		Adjacent:  []string{"artifacts.create", "artifacts.get"},
 	},
 	{
 		CommandID:  "boards.cards.create",
@@ -138,6 +161,18 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:   []string{"boards.cards.create", "boards.cards.get", "boards.cards.list", "boards.create", "boards.get", "boards.list", "boards.patch"},
 	},
 	{
+		CommandID:  "cards.archive",
+		CLIPath:    "cards archive",
+		Group:      "cards",
+		Method:     "POST",
+		Path:       "/cards/{card_id}/archive",
+		PathParams: []string{"card_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"cards", "write"},
+		Adjacent:   []string{"cards.get", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore"},
+	},
+	{
 		CommandID:  "cards.get",
 		CLIPath:    "cards get",
 		Group:      "cards",
@@ -147,7 +182,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"cards"},
-		Adjacent:   []string{"cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore"},
+		Adjacent:   []string{"cards.archive", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore"},
 	},
 	{
 		CommandID: "cards.list",
@@ -158,7 +193,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"cards"},
-		Adjacent:  []string{"cards.get", "cards.move", "cards.patch", "cards.purge", "cards.restore"},
+		Adjacent:  []string{"cards.archive", "cards.get", "cards.move", "cards.patch", "cards.purge", "cards.restore"},
 	},
 	{
 		CommandID:  "cards.move",
@@ -170,7 +205,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "boards", "write"},
-		Adjacent:   []string{"cards.get", "cards.list", "cards.patch", "cards.purge", "cards.restore"},
+		Adjacent:   []string{"cards.archive", "cards.get", "cards.list", "cards.patch", "cards.purge", "cards.restore"},
 	},
 	{
 		CommandID:  "cards.patch",
@@ -182,7 +217,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "write", "concurrency"},
-		Adjacent:   []string{"cards.get", "cards.list", "cards.move", "cards.purge", "cards.restore"},
+		Adjacent:   []string{"cards.archive", "cards.get", "cards.list", "cards.move", "cards.purge", "cards.restore"},
 	},
 	{
 		CommandID:  "cards.purge",
@@ -194,7 +229,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "write"},
-		Adjacent:   []string{"cards.get", "cards.list", "cards.move", "cards.patch", "cards.restore"},
+		Adjacent:   []string{"cards.archive", "cards.get", "cards.list", "cards.move", "cards.patch", "cards.restore"},
 	},
 	{
 		CommandID:  "cards.restore",
@@ -206,7 +241,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "write"},
-		Adjacent:   []string{"cards.get", "cards.list", "cards.move", "cards.patch", "cards.purge"},
+		Adjacent:   []string{"cards.archive", "cards.get", "cards.list", "cards.move", "cards.patch", "cards.purge"},
 	},
 	{
 		CommandID: "docs.create",
@@ -390,6 +425,18 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:  []string{"packets.receipts.create", "packets.reviews.create"},
 	},
 	{
+		CommandID:  "threads.context",
+		CLIPath:    "threads context",
+		Group:      "threads",
+		Method:     "GET",
+		Path:       "/threads/{thread_id}/context",
+		PathParams: []string{"thread_id"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"threads", "inspection"},
+		Adjacent:   []string{"threads.inspect", "threads.list", "threads.timeline", "threads.workspace"},
+	},
+	{
 		CommandID:  "threads.inspect",
 		CLIPath:    "threads inspect",
 		Group:      "threads",
@@ -399,7 +446,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"threads", "inspection"},
-		Adjacent:   []string{"threads.list", "threads.timeline", "threads.workspace"},
+		Adjacent:   []string{"threads.context", "threads.list", "threads.timeline", "threads.workspace"},
 	},
 	{
 		CommandID: "threads.list",
@@ -410,7 +457,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"threads", "inspection"},
-		Adjacent:  []string{"threads.inspect", "threads.timeline", "threads.workspace"},
+		Adjacent:  []string{"threads.context", "threads.inspect", "threads.timeline", "threads.workspace"},
 	},
 	{
 		CommandID:  "threads.timeline",
@@ -422,7 +469,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"threads", "timeline"},
-		Adjacent:   []string{"threads.inspect", "threads.list", "threads.workspace"},
+		Adjacent:   []string{"threads.context", "threads.inspect", "threads.list", "threads.workspace"},
 	},
 	{
 		CommandID:  "threads.workspace",
@@ -434,7 +481,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"threads", "workspace"},
-		Adjacent:   []string{"threads.inspect", "threads.list", "threads.timeline"},
+		Adjacent:   []string{"threads.context", "threads.inspect", "threads.list", "threads.timeline"},
 	},
 	{
 		CommandID: "topics.create",
@@ -624,8 +671,16 @@ func renderPath(template string, pathParams map[string]string) (string, error) {
 	}
 }
 
+func (c *Client) ArtifactsCreate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "artifacts.create", nil, opts)
+}
+
 func (c *Client) ArtifactsGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "artifacts.get", pathParams, opts)
+}
+
+func (c *Client) ArtifactsList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "artifacts.list", nil, opts)
 }
 
 func (c *Client) BoardsCardsCreate(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
@@ -658,6 +713,10 @@ func (c *Client) BoardsPatch(ctx context.Context, pathParams map[string]string, 
 
 func (c *Client) BoardsWorkspace(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "boards.workspace", pathParams, opts)
+}
+
+func (c *Client) CardsArchive(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "cards.archive", pathParams, opts)
 }
 
 func (c *Client) CardsGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
@@ -746,6 +805,10 @@ func (c *Client) PacketsReviewsCreate(ctx context.Context, opts RequestOptions) 
 
 func (c *Client) PacketsWorkOrdersCreate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "packets.work-orders.create", nil, opts)
+}
+
+func (c *Client) ThreadsContext(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "threads.context", pathParams, opts)
 }
 
 func (c *Client) ThreadsInspect(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {

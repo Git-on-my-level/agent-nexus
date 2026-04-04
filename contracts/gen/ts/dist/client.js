@@ -1,5 +1,60 @@
 export const commandRegistry = [
     {
+        "command_id": "artifacts.create",
+        "cli_path": "artifacts create",
+        "group": "artifacts",
+        "method": "POST",
+        "path": "/artifacts",
+        "operation_id": "createArtifact",
+        "summary": "Create artifact",
+        "why": "Store content-addressed artifact metadata and payload (bytes, text, or structured packet JSON).",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ artifact }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "conflict"
+        ],
+        "concepts": [
+            "artifacts",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "artifact",
+                    "type": "object"
+                },
+                {
+                    "name": "content_type",
+                    "type": "string"
+                }
+            ],
+            "optional": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                },
+                {
+                    "name": "content",
+                    "type": "any"
+                }
+            ]
+        },
+        "adjacent_commands": [
+            "artifacts.get",
+            "artifacts.list"
+        ],
+        "go_method": "ArtifactsCreate",
+        "ts_method": "artifactsCreate"
+    },
+    {
         "command_id": "artifacts.get",
         "cli_path": "artifacts get",
         "group": "artifacts",
@@ -26,8 +81,42 @@ export const commandRegistry = [
         "path_params": [
             "artifact_id"
         ],
+        "adjacent_commands": [
+            "artifacts.create",
+            "artifacts.list"
+        ],
         "go_method": "ArtifactsGet",
         "ts_method": "artifactsGet"
+    },
+    {
+        "command_id": "artifacts.list",
+        "cli_path": "artifacts list",
+        "group": "artifacts",
+        "method": "GET",
+        "path": "/artifacts",
+        "operation_id": "listArtifacts",
+        "summary": "List artifacts",
+        "why": "Search and filter immutable artifacts across the workspace.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ artifacts }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token"
+        ],
+        "concepts": [
+            "artifacts"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "adjacent_commands": [
+            "artifacts.create",
+            "artifacts.get"
+        ],
+        "go_method": "ArtifactsList",
+        "ts_method": "artifactsList"
     },
     {
         "command_id": "boards.cards.create",
@@ -534,6 +623,59 @@ export const commandRegistry = [
         "ts_method": "boardsWorkspace"
     },
     {
+        "command_id": "cards.archive",
+        "cli_path": "cards archive",
+        "group": "cards",
+        "method": "POST",
+        "path": "/cards/{card_id}/archive",
+        "operation_id": "archiveCard",
+        "summary": "Archive card",
+        "why": "Soft-delete a first-class card by setting archived_at (board concurrency via if_board_updated_at).",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ board, card }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "not_found",
+            "conflict"
+        ],
+        "concepts": [
+            "cards",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "body_schema": {
+            "optional": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                },
+                {
+                    "name": "if_board_updated_at",
+                    "type": "datetime"
+                }
+            ]
+        },
+        "path_params": [
+            "card_id"
+        ],
+        "adjacent_commands": [
+            "cards.get",
+            "cards.list",
+            "cards.move",
+            "cards.patch",
+            "cards.purge",
+            "cards.restore"
+        ],
+        "go_method": "CardsArchive",
+        "ts_method": "cardsArchive"
+    },
+    {
         "command_id": "cards.get",
         "cli_path": "cards get",
         "group": "cards",
@@ -561,6 +703,7 @@ export const commandRegistry = [
             "card_id"
         ],
         "adjacent_commands": [
+            "cards.archive",
             "cards.list",
             "cards.move",
             "cards.patch",
@@ -594,6 +737,7 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "canonical",
         "adjacent_commands": [
+            "cards.archive",
             "cards.get",
             "cards.move",
             "cards.patch",
@@ -677,6 +821,7 @@ export const commandRegistry = [
             "card_id"
         ],
         "adjacent_commands": [
+            "cards.archive",
             "cards.get",
             "cards.list",
             "cards.patch",
@@ -802,6 +947,7 @@ export const commandRegistry = [
             "card_id"
         ],
         "adjacent_commands": [
+            "cards.archive",
             "cards.get",
             "cards.list",
             "cards.move",
@@ -850,6 +996,7 @@ export const commandRegistry = [
             "card_id"
         ],
         "adjacent_commands": [
+            "cards.archive",
             "cards.get",
             "cards.list",
             "cards.move",
@@ -902,6 +1049,7 @@ export const commandRegistry = [
             "card_id"
         ],
         "adjacent_commands": [
+            "cards.archive",
             "cards.get",
             "cards.list",
             "cards.move",
@@ -1347,7 +1495,7 @@ export const commandRegistry = [
         "streaming": {
             "mode": "none"
         },
-        "output_envelope": "Returns `{ item, event }`.",
+        "output_envelope": "Returns `{ event }`.",
         "error_codes": [
             "auth_required",
             "invalid_request",
@@ -1361,7 +1509,21 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "projection",
         "body_schema": {
+            "required": [
+                {
+                    "name": "thread_id",
+                    "type": "string"
+                }
+            ],
             "optional": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                },
+                {
+                    "name": "inbox_item_id",
+                    "type": "string"
+                },
                 {
                     "name": "note",
                     "type": "string"
@@ -1691,6 +1853,44 @@ export const commandRegistry = [
         "ts_method": "packetsWorkOrdersCreate"
     },
     {
+        "command_id": "threads.context",
+        "cli_path": "threads context",
+        "group": "threads",
+        "method": "GET",
+        "path": "/threads/{thread_id}/context",
+        "operation_id": "getThreadContext",
+        "summary": "Get backing thread coordination context",
+        "why": "Load a compact coordination bundle (thread, recent events, key artifacts, commitments, documents) for inspection and triage.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ thread, recent_events, key_artifacts, open_commitments, documents }` plus forward-compatible fields.",
+        "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "not_found"
+        ],
+        "concepts": [
+            "threads",
+            "inspection"
+        ],
+        "stability": "beta",
+        "surface": "projection",
+        "path_params": [
+            "thread_id"
+        ],
+        "adjacent_commands": [
+            "threads.inspect",
+            "threads.list",
+            "threads.timeline",
+            "threads.workspace"
+        ],
+        "go_method": "ThreadsContext",
+        "ts_method": "threadsContext"
+    },
+    {
         "command_id": "threads.inspect",
         "cli_path": "threads inspect",
         "group": "threads",
@@ -1719,6 +1919,7 @@ export const commandRegistry = [
             "thread_id"
         ],
         "adjacent_commands": [
+            "threads.context",
             "threads.list",
             "threads.timeline",
             "threads.workspace"
@@ -1751,6 +1952,7 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "canonical",
         "adjacent_commands": [
+            "threads.context",
             "threads.inspect",
             "threads.timeline",
             "threads.workspace"
@@ -1787,6 +1989,7 @@ export const commandRegistry = [
             "thread_id"
         ],
         "adjacent_commands": [
+            "threads.context",
             "threads.inspect",
             "threads.list",
             "threads.workspace"
@@ -1823,6 +2026,7 @@ export const commandRegistry = [
             "thread_id"
         ],
         "adjacent_commands": [
+            "threads.context",
             "threads.inspect",
             "threads.list",
             "threads.timeline"
@@ -2260,8 +2464,14 @@ export class OarClient {
         }
         return { status: response.status, headers: response.headers, body };
     }
+    artifactsCreate(options = {}) {
+        return this.invoke("artifacts.create", {}, options);
+    }
     artifactsGet(pathParams, options = {}) {
         return this.invoke("artifacts.get", pathParams, options);
+    }
+    artifactsList(options = {}) {
+        return this.invoke("artifacts.list", {}, options);
     }
     boardsCardsCreate(pathParams, options = {}) {
         return this.invoke("boards.cards.create", pathParams, options);
@@ -2286,6 +2496,9 @@ export class OarClient {
     }
     boardsWorkspace(pathParams, options = {}) {
         return this.invoke("boards.workspace", pathParams, options);
+    }
+    cardsArchive(pathParams, options = {}) {
+        return this.invoke("cards.archive", pathParams, options);
     }
     cardsGet(pathParams, options = {}) {
         return this.invoke("cards.get", pathParams, options);
@@ -2352,6 +2565,9 @@ export class OarClient {
     }
     packetsWorkOrdersCreate(options = {}) {
         return this.invoke("packets.work-orders.create", {}, options);
+    }
+    threadsContext(pathParams, options = {}) {
+        return this.invoke("threads.context", pathParams, options);
     }
     threadsInspect(pathParams, options = {}) {
         return this.invoke("threads.inspect", pathParams, options);

@@ -4,7 +4,19 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.3.0`
-- Commands: `41`
+- Commands: `45`
+
+## `artifacts.create`
+
+- CLI path: `artifacts create`
+- HTTP: `POST /artifacts`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Store content-addressed artifact metadata and payload (bytes, text, or structured packet JSON).
+- Concepts: `artifacts`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `conflict`
+- Output: Returns `{ artifact }`.
 
 ## `artifacts.get`
 
@@ -17,6 +29,18 @@ Generated from `contracts/oar-openapi.yaml`.
 - Concepts: `artifacts`
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Output: Returns `{ artifact }`.
+
+## `artifacts.list`
+
+- CLI path: `artifacts list`
+- HTTP: `GET /artifacts`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Search and filter immutable artifacts across the workspace.
+- Concepts: `artifacts`
+- Error codes: `auth_required`, `invalid_token`
+- Output: Returns `{ artifacts }`.
 
 ## `boards.cards.create`
 
@@ -113,6 +137,18 @@ Generated from `contracts/oar-openapi.yaml`.
 - Concepts: `boards`, `workspace`
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Output: Returns `{ board, primary_topic, primary_thread, cards, documents, inbox, board_summary, projection_freshness, section_kinds, generated_at }`.
+
+## `cards.archive`
+
+- CLI path: `cards archive`
+- HTTP: `POST /cards/{card_id}/archive`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Soft-delete a first-class card by setting archived_at (board concurrency via if_board_updated_at).
+- Concepts: `cards`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Output: Returns `{ board, card }`.
 
 ## `cards.get`
 
@@ -292,7 +328,7 @@ Generated from `contracts/oar-openapi.yaml`.
 - Why: Suppress or clear a derived inbox item via a durable acknowledgment event.
 - Concepts: `inbox`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
-- Output: Returns `{ item, event }`.
+- Output: Returns `{ event }`.
 
 ## `inbox.list`
 
@@ -375,6 +411,18 @@ Generated from `contracts/oar-openapi.yaml`.
 - Concepts: `packets`, `evidence`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Output: Returns `{ artifact, packet_kind, packet }`.
+
+## `threads.context`
+
+- CLI path: `threads context`
+- HTTP: `GET /threads/{thread_id}/context`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `none`
+- Why: Load a compact coordination bundle (thread, recent events, key artifacts, commitments, documents) for inspection and triage.
+- Concepts: `threads`, `inspection`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Output: Returns `{ thread, recent_events, key_artifacts, open_commitments, documents }` plus forward-compatible fields.
 
 ## `threads.inspect`
 

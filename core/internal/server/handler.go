@@ -2095,18 +2095,44 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 	})
 
 	registerRoute("/inbox/", func(r *http.Request) routeAccessRequirement {
-		inboxItemID := strings.TrimPrefix(r.URL.Path, "/inbox/")
-		if inboxItemID == "" || strings.Contains(inboxItemID, "/") || r.Method != http.MethodGet {
+		remainder := strings.TrimPrefix(r.URL.Path, "/inbox/")
+		if remainder == "" {
 			return routeAccessRequirement{}
 		}
-		return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+		if r.Method == http.MethodPost && strings.HasSuffix(remainder, "/acknowledge") {
+			prefix := strings.TrimSuffix(remainder, "/acknowledge")
+			prefix = strings.TrimSuffix(prefix, "/")
+			if prefix == "" || strings.Contains(prefix, "/") {
+				return routeAccessRequirement{}
+			}
+			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+		}
+		if r.Method == http.MethodGet && !strings.Contains(remainder, "/") {
+			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+		}
+		return routeAccessRequirement{}
 	}, func(w http.ResponseWriter, r *http.Request) {
+		remainder := strings.TrimPrefix(r.URL.Path, "/inbox/")
+		if remainder == "" {
+			writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+			return
+		}
+		if r.Method == http.MethodPost && strings.HasSuffix(remainder, "/acknowledge") {
+			inboxID := strings.TrimSuffix(remainder, "/acknowledge")
+			inboxID = strings.TrimSuffix(inboxID, "/")
+			if inboxID == "" || strings.Contains(inboxID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			handleAckInboxItem(w, r, opts, inboxID)
+			return
+		}
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
 			return
 		}
-		inboxItemID := strings.TrimPrefix(r.URL.Path, "/inbox/")
-		if inboxItemID == "" || strings.Contains(inboxItemID, "/") {
+		inboxItemID := remainder
+		if strings.Contains(inboxItemID, "/") {
 			writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
 			return
 		}
@@ -2126,7 +2152,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
 			return
 		}
-		handleAckInboxItem(w, r, opts)
+		handleAckInboxItem(w, r, opts, "")
 	})
 
 	registerRoute("/agent-notifications", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {

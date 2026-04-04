@@ -44,7 +44,9 @@ export declare class OarClient {
     private readonly fetchFn;
     constructor(baseUrl: string, fetchFn?: typeof fetch);
     invoke(commandId: string, pathParams?: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    artifactsCreate(options?: RequestOptions): Promise<InvokeResult>;
     artifactsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    artifactsList(options?: RequestOptions): Promise<InvokeResult>;
     boardsCardsCreate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     boardsCardsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     boardsCardsList(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
@@ -53,6 +55,7 @@ export declare class OarClient {
     boardsList(options?: RequestOptions): Promise<InvokeResult>;
     boardsPatch(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     boardsWorkspace(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    cardsArchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     cardsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     cardsList(options?: RequestOptions): Promise<InvokeResult>;
     cardsMove(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
@@ -75,6 +78,7 @@ export declare class OarClient {
     packetsReceiptsCreate(options?: RequestOptions): Promise<InvokeResult>;
     packetsReviewsCreate(options?: RequestOptions): Promise<InvokeResult>;
     packetsWorkOrdersCreate(options?: RequestOptions): Promise<InvokeResult>;
+    threadsContext(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     threadsInspect(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     threadsList(options?: RequestOptions): Promise<InvokeResult>;
     threadsTimeline(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;

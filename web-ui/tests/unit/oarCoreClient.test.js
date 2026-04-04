@@ -301,7 +301,7 @@ describe("oarCoreClient error messaging", () => {
     expect(body.packet.subject_ref).toBe("thread:thr-9");
   });
 
-  it("posts inbox acknowledgements to the core ack route", async () => {
+  it("posts inbox acknowledgements to the contract acknowledge path", async () => {
     const seenRequests = [];
     const client = createOarCoreClient({
       baseUrl: "http://core.test",
@@ -312,8 +312,8 @@ describe("oarCoreClient error messaging", () => {
           method: init?.method ?? "GET",
           body: init?.body ?? "",
         });
-        return new Response(JSON.stringify({ ok: true }), {
-          status: 200,
+        return new Response(JSON.stringify({ event: { id: "evt-ack" } }), {
+          status: 201,
           headers: { "content-type": "application/json" },
         });
       },
@@ -326,14 +326,13 @@ describe("oarCoreClient error messaging", () => {
 
     expect(seenRequests).toEqual([
       {
-        url: "http://core.test/inbox/ack",
+        url: "http://core.test/inbox/inbox%3Adecision_needed%3Athread-1%3Anone%3Aevt-1/acknowledge",
         method: "POST",
         body: expect.any(String),
       },
     ]);
     expect(JSON.parse(seenRequests[0].body)).toEqual({
       actor_id: "actor-1",
-      inbox_item_id: "inbox:decision_needed:thread-1:none:evt-1",
       thread_id: "thread-1",
     });
   });

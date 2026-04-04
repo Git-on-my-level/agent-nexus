@@ -75,10 +75,10 @@ func TestInboxDerivationAndAcknowledgmentSuppression(t *testing.T) {
 		t.Fatal("expected decision inbox item id")
 	}
 
-	ackResp := postJSONExpectStatus(t, h.baseURL+"/inbox/ack", `{
+	ackPath := h.baseURL + "/inbox/" + url.PathEscape(firstDecisionItemID) + "/acknowledge"
+	ackResp := postJSONExpectStatus(t, ackPath, `{
 		"actor_id":"actor-1",
-		"thread_id":"`+threadID+`",
-		"inbox_item_id":"`+firstDecisionItemID+`"
+		"thread_id":"`+threadID+`"
 	}`, http.StatusCreated)
 	var acked struct {
 		Event map[string]any `json:"event"`

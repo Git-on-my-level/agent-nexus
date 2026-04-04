@@ -936,18 +936,16 @@ export function createOarCoreClient(options = {}) {
           "ackInboxItem requires inbox_item_id (or inbox_id) in the payload.",
         );
       }
-      return invokeDirectJSON("/inbox/ack", {
-        method: "POST",
-        body: JSON.stringify(
-          withActorId({
-            ...payload,
-            inbox_item_id: String(inboxItemId),
-          }),
+      const body = { ...(payload ?? {}) };
+      delete body.inbox_item_id;
+      delete body.inbox_id;
+      delete body.inboxId;
+      return invokeJSON("inbox.acknowledge", () =>
+        generated.inboxAcknowledge(
+          { inbox_id: String(inboxItemId) },
+          { body: withActorId(body) },
         ),
-        headers: {
-          "content-type": "application/json",
-        },
-      });
+      );
     },
 
     createBoard: (payload) =>

@@ -227,7 +227,7 @@ func handleRebuildDerived(w http.ResponseWriter, r *http.Request, opts handlerOp
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
-func handleAckInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
+func handleAckInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOptions, pathInboxItemID string) {
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
@@ -257,11 +257,21 @@ func handleAckInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		return
 	}
 
-	req.InboxItemID = strings.TrimSpace(req.InboxItemID)
-	if req.InboxItemID == "" {
-		writeError(w, http.StatusBadRequest, "invalid_request", "inbox_item_id is required")
+	pathInboxItemID = strings.TrimSpace(pathInboxItemID)
+	bodyItemID := strings.TrimSpace(req.InboxItemID)
+	effectiveItemID := bodyItemID
+	if pathInboxItemID != "" {
+		if bodyItemID != "" && bodyItemID != pathInboxItemID {
+			writeError(w, http.StatusBadRequest, "invalid_request", "inbox_item_id must match path inbox_id")
+			return
+		}
+		effectiveItemID = pathInboxItemID
+	}
+	if effectiveItemID == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "inbox_item_id is required (body or path)")
 		return
 	}
+	req.InboxItemID = effectiveItemID
 
 	event := map[string]any{
 		"type":      "inbox_item_acknowledged",
