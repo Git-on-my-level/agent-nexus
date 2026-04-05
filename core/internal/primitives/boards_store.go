@@ -64,6 +64,7 @@ type AddBoardCardInput struct {
 	Resolution       *string
 	ResolutionRefs   []string
 	Refs             []string
+	Risk             *string
 	IfBoardUpdatedAt *string
 }
 
@@ -80,6 +81,7 @@ type UpdateBoardCardInput struct {
 	Resolution       *string
 	ResolutionRefs   *[]string
 	Refs             *[]string
+	Risk             *string
 	IfBoardUpdatedAt *string
 }
 
@@ -150,6 +152,7 @@ type boardCardRow struct {
 	PinnedDocumentID     sql.NullString
 	Assignee             sql.NullString
 	Priority             sql.NullString
+	Risk                 string
 	Status               string
 	Resolution           sql.NullString
 	ResolutionRefsJSON   string
@@ -180,6 +183,15 @@ const (
 	boardRankWidth     = 19
 	boardRankStep      = uint64(1024)
 )
+
+func canonicalBoardCardRisk(raw string) string {
+	switch strings.TrimSpace(strings.ToLower(raw)) {
+	case "medium", "high", "critical":
+		return strings.TrimSpace(strings.ToLower(raw))
+	default:
+		return "low"
+	}
+}
 
 func (s *Store) CreateBoard(ctx context.Context, actorID string, board map[string]any) (map[string]any, error) {
 	if s == nil || s.db == nil {
@@ -935,6 +947,10 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 	assignee := normalizeBoardOptionalPointer(input.Assignee)
 	priority := normalizeBoardOptionalPointer(input.Priority)
 	pinnedDocumentID := normalizeBoardOptionalPointer(input.PinnedDocumentID)
+	riskValue := canonicalBoardCardRisk("")
+	if input.Risk != nil {
+		riskValue = canonicalBoardCardRisk(*input.Risk)
+	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -1008,9 +1024,9 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 		ctx,
 		`INSERT INTO cards(
 			id, board_id, thread_id, title, body_markdown, due_at, definition_of_done_json, column_key, rank, version,
-			parent_thread_id, pinned_document_id, assignee, priority, status, resolution, resolution_refs_json, refs_json,
+			parent_thread_id, pinned_document_id, assignee, priority, risk, status, resolution, resolution_refs_json, refs_json,
 			created_at, created_by, updated_at, updated_by, provenance_json
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		cardID,
 		boardID,
 		backingThreadID,
@@ -1025,6 +1041,7 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 		nullableString(derefBoardString(pinnedDocumentID)),
 		nullableString(derefBoardString(assignee)),
 		nullableString(derefBoardString(priority)),
+		riskValue,
 		status,
 		nullableString(resolution),
 		string(resolutionRefsJSON),
@@ -1046,9 +1063,9 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 		ctx,
 		`INSERT INTO card_versions(
 			card_id, version, board_id, thread_id, title, body_markdown, due_at, definition_of_done_json, column_key, rank,
-			parent_thread_id, pinned_document_id, assignee, priority, status, resolution, resolution_refs_json, refs_json,
+			parent_thread_id, pinned_document_id, assignee, priority, risk, status, resolution, resolution_refs_json, refs_json,
 			created_at, created_by, provenance_json
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		cardID,
 		1,
 		boardID,
@@ -1063,6 +1080,7 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 		nullableString(derefBoardString(pinnedDocumentID)),
 		nullableString(derefBoardString(assignee)),
 		nullableString(derefBoardString(priority)),
+		riskValue,
 		status,
 		nullableString(resolution),
 		string(resolutionRefsJSON),
@@ -1256,6 +1274,10 @@ func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifie
 		}
 		nextRefsJSON = string(refsBytes)
 	}
+	nextRisk := canonicalBoardCardRisk(cardRow.Risk)
+	if input.Risk != nil {
+		nextRisk = canonicalBoardCardRisk(*input.Risk)
+	}
 
 	if nextParentThread != "" {
 		if err := ensureThreadExists(ctx, tx, nextParentThread); err != nil {
@@ -1289,7 +1311,8 @@ func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifie
 		nextDefinitionOfDoneJSON == cardRow.DefinitionOfDoneJSON &&
 		nextResolution == strings.TrimSpace(cardRow.Resolution.String) &&
 		nextResolutionRefsJSON == cardRow.ResolutionRefsJSON &&
-		nextRefsJSON == cardRow.RefsJSON {
+		nextRefsJSON == cardRow.RefsJSON &&
+		nextRisk == canonicalBoardCardRisk(cardRow.Risk) {
 		boardMap, mapErr := boardRow.toMap()
 		if mapErr != nil {
 			_ = tx.Rollback()
@@ -1310,9 +1333,9 @@ func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifie
 		ctx,
 		`INSERT INTO card_versions(
 			card_id, version, board_id, thread_id, title, body_markdown, due_at, definition_of_done_json, column_key, rank,
-			parent_thread_id, pinned_document_id, assignee, priority, status, resolution, resolution_refs_json, refs_json,
+			parent_thread_id, pinned_document_id, assignee, priority, risk, status, resolution, resolution_refs_json, refs_json,
 			created_at, created_by, provenance_json
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		cardRow.CardID,
 		nextVersion,
 		boardID,
@@ -1327,6 +1350,7 @@ func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifie
 		nullableString(nextPinnedDocumentID),
 		nullableString(nextAssignee),
 		nullableString(nextPriority),
+		nextRisk,
 		nextStatus,
 		nullableString(nextResolution),
 		nextResolutionRefsJSON,
@@ -1342,7 +1366,7 @@ func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifie
 		ctx,
 		`UPDATE cards
 		    SET board_id = ?, thread_id = ?, title = ?, body_markdown = ?, due_at = ?, definition_of_done_json = ?, column_key = ?, rank = ?, version = ?,
-		        parent_thread_id = ?, pinned_document_id = ?, assignee = ?, priority = ?, status = ?, resolution = ?, resolution_refs_json = ?, refs_json = ?,
+		        parent_thread_id = ?, pinned_document_id = ?, assignee = ?, priority = ?, risk = ?, status = ?, resolution = ?, resolution_refs_json = ?, refs_json = ?,
 		        updated_at = ?, updated_by = ?
 		  WHERE id = ?`,
 		boardID,
@@ -1358,6 +1382,7 @@ func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifie
 		nullableString(nextPinnedDocumentID),
 		nullableString(nextAssignee),
 		nullableString(nextPriority),
+		nextRisk,
 		nextStatus,
 		nullableString(nextResolution),
 		nextResolutionRefsJSON,
@@ -1502,9 +1527,9 @@ func (s *Store) MoveBoardCard(ctx context.Context, actorID, boardID, identifier 
 			ctx,
 			`INSERT INTO card_versions(
 				card_id, version, board_id, thread_id, title, body_markdown, due_at, definition_of_done_json, column_key, rank,
-				parent_thread_id, pinned_document_id, assignee, priority, status, resolution, resolution_refs_json, refs_json,
+				parent_thread_id, pinned_document_id, assignee, priority, risk, status, resolution, resolution_refs_json, refs_json,
 				created_at, created_by, provenance_json
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			cardRow.CardID,
 			nextVersion,
 			boardID,
@@ -1519,6 +1544,7 @@ func (s *Store) MoveBoardCard(ctx context.Context, actorID, boardID, identifier 
 			nullableString(cardRow.PinnedDocumentID.String),
 			nullableString(cardRow.Assignee.String),
 			nullableString(cardRow.Priority.String),
+			canonicalBoardCardRisk(cardRow.Risk),
 			cardRow.Status,
 			nullableString(nextResolution),
 			nextResolutionRefsJSON,
@@ -1819,7 +1845,7 @@ func (s *Store) ListBoardCardHistory(ctx context.Context, cardID string) ([]map[
 	}
 	rows, err := s.db.QueryContext(
 		ctx,
-		`SELECT card_id, version, board_id, thread_id, title, body_markdown, due_at, definition_of_done_json, column_key, rank, parent_thread_id, pinned_document_id, assignee, priority, status, resolution, resolution_refs_json, refs_json, created_at, created_by, provenance_json
+		`SELECT card_id, version, board_id, thread_id, title, body_markdown, due_at, definition_of_done_json, column_key, rank, parent_thread_id, pinned_document_id, assignee, priority, risk, status, resolution, resolution_refs_json, refs_json, created_at, created_by, provenance_json
 		   FROM card_versions
 		  WHERE card_id = ?
 		  ORDER BY version ASC`,
@@ -2149,7 +2175,7 @@ func (s *Store) loadBoardCardRowsByBoardIDs(ctx context.Context, boardIDs []stri
 			       COALESCE(json_extract(re.metadata_json, '$.column_key'), ?) AS column_key,
 			       COALESCE(json_extract(re.metadata_json, '$.rank'), '') AS rank,
 			       c.title, c.body_markdown, c.version, c.thread_id, c.parent_thread_id, c.due_at, c.definition_of_done_json,
-			       c.pinned_document_id, c.assignee, c.priority, c.status, c.resolution, c.resolution_refs_json, c.refs_json,
+	c.pinned_document_id, c.assignee, c.priority, c.risk, c.status, c.resolution, c.resolution_refs_json, c.refs_json,
 		       c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by
 			  FROM ref_edges re
 			  JOIN cards c ON c.id = re.target_id
@@ -2193,7 +2219,7 @@ func (s *Store) loadOrderedBoardCards(ctx context.Context, q queryRower, boardID
 			       COALESCE(json_extract(re.metadata_json, '$.column_key'), ?) AS column_key,
 			       COALESCE(json_extract(re.metadata_json, '$.rank'), '') AS rank,
 			       c.title, c.body_markdown, c.version, c.thread_id, c.parent_thread_id, c.due_at, c.definition_of_done_json,
-			       c.pinned_document_id, c.assignee, c.priority, c.status, c.resolution, c.resolution_refs_json, c.refs_json,
+	c.pinned_document_id, c.assignee, c.priority, c.risk, c.status, c.resolution, c.resolution_refs_json, c.refs_json,
 			       c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by
 			  FROM ref_edges re
 			  JOIN cards c ON c.id = re.target_id
@@ -2394,7 +2420,7 @@ func loadBoardCardsForColumn(ctx context.Context, db interface {
 		        COALESCE(json_extract(re.metadata_json, '$.column_key'), ?) AS column_key,
 		        COALESCE(json_extract(re.metadata_json, '$.rank'), '') AS rank,
 		        c.title, c.body_markdown, c.version, c.thread_id, c.parent_thread_id, c.due_at, c.definition_of_done_json,
-		        c.pinned_document_id, c.assignee, c.priority, c.status, c.resolution, c.resolution_refs_json, c.refs_json,
+	c.pinned_document_id, c.assignee, c.priority, c.risk, c.status, c.resolution, c.resolution_refs_json, c.refs_json,
 		        c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by
 		   FROM ref_edges re
 		   JOIN cards c ON c.id = re.target_id
@@ -2595,7 +2621,7 @@ func (s *Store) loadBoardCardByIdentifier(ctx context.Context, rower queryRower,
 			       COALESCE(json_extract(re.metadata_json, '$.column_key'), ?) AS column_key,
 			       COALESCE(json_extract(re.metadata_json, '$.rank'), '') AS rank,
 			       c.title, c.body_markdown, c.version, c.thread_id, c.parent_thread_id, c.due_at, c.definition_of_done_json,
-			       c.pinned_document_id, c.assignee, c.priority, c.status, c.resolution, c.resolution_refs_json, c.refs_json,
+	c.pinned_document_id, c.assignee, c.priority, c.risk, c.status, c.resolution, c.resolution_refs_json, c.refs_json,
 			       c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by
 			  FROM ref_edges re
 			  JOIN cards c ON c.id = re.target_id
@@ -2624,7 +2650,7 @@ func (s *Store) loadBoardCardByIdentifier(ctx context.Context, rower queryRower,
 			       COALESCE(json_extract(re.metadata_json, '$.column_key'), ?) AS column_key,
 			       COALESCE(json_extract(re.metadata_json, '$.rank'), '') AS rank,
 		        c.title, c.body_markdown, c.version, c.thread_id, c.parent_thread_id, c.due_at, c.definition_of_done_json,
-		        c.pinned_document_id, c.assignee, c.priority, c.status, c.resolution, c.resolution_refs_json, c.refs_json,
+	c.pinned_document_id, c.assignee, c.priority, c.risk, c.status, c.resolution, c.resolution_refs_json, c.refs_json,
 		        c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by
 			  FROM ref_edges re
 			  JOIN cards c ON c.id = re.target_id
@@ -2661,7 +2687,7 @@ func (s *Store) loadBoardCardByGlobalID(ctx context.Context, rower queryRower, c
 			       COALESCE(json_extract(re.metadata_json, '$.column_key'), ?) AS column_key,
 			       COALESCE(json_extract(re.metadata_json, '$.rank'), '') AS rank,
 			       c.title, c.body_markdown, c.version, c.thread_id, c.parent_thread_id, c.due_at, c.definition_of_done_json,
-			       c.pinned_document_id, c.assignee, c.priority, c.status, c.resolution, c.resolution_refs_json, c.refs_json,
+	c.pinned_document_id, c.assignee, c.priority, c.risk, c.status, c.resolution, c.resolution_refs_json, c.refs_json,
 			       c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by
 			  FROM ref_edges re
 			  JOIN cards c ON c.id = re.target_id
@@ -2782,6 +2808,7 @@ func scanBoardCardRow(scanner interface{ Scan(dest ...any) error }) (boardCardRo
 		&row.PinnedDocumentID,
 		&row.Assignee,
 		&row.Priority,
+		&row.Risk,
 		&row.Status,
 		&row.Resolution,
 		&row.ResolutionRefsJSON,
@@ -2814,6 +2841,7 @@ type boardCardVersionRow struct {
 	PinnedDocumentID     sql.NullString
 	Assignee             sql.NullString
 	Priority             sql.NullString
+	Risk                 string
 	Status               string
 	Resolution           sql.NullString
 	ResolutionRefsJSON   string
@@ -2840,6 +2868,7 @@ func scanBoardCardVersionRow(scanner interface{ Scan(dest ...any) error }) (boar
 		&row.PinnedDocumentID,
 		&row.Assignee,
 		&row.Priority,
+		&row.Risk,
 		&row.Status,
 		&row.Resolution,
 		&row.ResolutionRefsJSON,
@@ -3334,6 +3363,7 @@ func (r boardCardRow) toMap() (map[string]any, error) {
 		"document_ref":       boardTypedRefOrNil("document", r.PinnedDocumentID.String),
 		"assignee":           nullableBoardString(r.Assignee.String),
 		"priority":           nullableBoardString(r.Priority.String),
+		"risk":               canonicalBoardCardRisk(r.Risk),
 		"due_at":             nullableBoardString(r.DueAt.String),
 		"definition_of_done": definitionOfDone,
 		"status":             r.Status,
@@ -3373,6 +3403,7 @@ func (r boardCardVersionRow) toMap() map[string]any {
 		"pinned_document_id": nullableBoardString(r.PinnedDocumentID.String),
 		"assignee":           nullableBoardString(r.Assignee.String),
 		"priority":           nullableBoardString(r.Priority.String),
+		"risk":               canonicalBoardCardRisk(r.Risk),
 		"due_at":             nullableBoardString(r.DueAt.String),
 		"definition_of_done": decodeJSONListOrEmpty(r.DefinitionOfDoneJSON),
 		"column_key":         r.ColumnKey,

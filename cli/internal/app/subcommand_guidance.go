@@ -129,7 +129,7 @@ var provenanceSubcommandSpec = subcommandSpec{
 var threadsSubcommandSpec = subcommandSpec{
 	command:  "threads",
 	valid:    []string{"list", "get", "timeline", "context", "inspect", "workspace", "review", "recommendations"},
-	examples: []string{"oar threads list --status active", "oar threads inspect --thread-id <thread-id>", "oar threads workspace --status active --type initiative --full-id"},
+	examples: []string{"oar topics workspace --topic-id <topic-id>", "oar threads list --status active", "oar threads workspace --status active --type initiative --full-id"},
 	aliases: map[string]string{
 		"ls": "list",
 	},

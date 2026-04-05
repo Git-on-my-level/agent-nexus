@@ -123,11 +123,14 @@ func TestRunGeneratedHelpTopic(t *testing.T) {
 	if !strings.Contains(output, "threads inspect") {
 		t.Fatalf("expected local threads inspect helper in generated help output=%s", output)
 	}
-	if !strings.Contains(output, "Canonical coordination read path:") {
-		t.Fatalf("expected canonical coordination guidance in threads group help output=%s", output)
+	if !strings.Contains(output, "Read-only backing-thread diagnostics") {
+		t.Fatalf("expected backing-thread diagnostic guidance in threads group help output=%s", output)
+	}
+	if !strings.Contains(output, "oar topics workspace") {
+		t.Fatalf("expected topics workspace preference hint in threads group help output=%s", output)
 	}
 	if !strings.Contains(output, "oar threads workspace") {
-		t.Fatalf("expected canonical threads workspace command hint in threads group help output=%s", output)
+		t.Fatalf("expected threads workspace diagnostic hint in threads group help output=%s", output)
 	}
 	if !strings.Contains(output, "threads recommendations") {
 		t.Fatalf("expected local threads recommendations helper in generated help output=%s", output)
@@ -146,6 +149,34 @@ func TestRunGeneratedHelpTopic(t *testing.T) {
 	}
 	if !strings.Contains(output, "oar --json threads ...") {
 		t.Fatalf("expected global --json example in generated group help output=%s", output)
+	}
+}
+
+func TestRunGeneratedTopicsHelpMentionsPrimaryCoordination(t *testing.T) {
+	t.Parallel()
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	cli := New()
+	cli.Stdout = stdout
+	cli.Stderr = stderr
+	cli.Stdin = strings.NewReader("")
+	cli.StdinIsTTY = func() bool { return true }
+	cli.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	cli.ReadFile = func(path string) ([]byte, error) {
+		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
+	}
+
+	exitCode := cli.Run([]string{"help", "topics"})
+	if exitCode != 0 {
+		t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
+	}
+	output := stdout.String()
+	if !strings.Contains(output, "Primary operator coordination:") {
+		t.Fatalf("expected primary coordination supplement in topics group help output=%s", output)
+	}
+	if !strings.Contains(output, "topics workspace") {
+		t.Fatalf("expected topics workspace in topics group help output=%s", output)
 	}
 }
 
@@ -254,7 +285,7 @@ func TestInboxListHelpMentionsViewingAsAndCategories(t *testing.T) {
 	if !strings.Contains(output, "viewing_as") {
 		t.Fatalf("expected viewing_as scoping guidance output=%s", output)
 	}
-	if !strings.Contains(output, "`decision_needed`") || !strings.Contains(output, "`risk_review`") {
+	if !strings.Contains(output, "`decision_needed`") || !strings.Contains(output, "`work_item_risk`") {
 		t.Fatalf("expected inbox category reference output=%s", output)
 	}
 }

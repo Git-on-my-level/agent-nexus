@@ -24,7 +24,7 @@ describe("dashboard summaries", () => {
         label: "Needs Intervention",
         count: 0,
       },
-      { category: "risk_review", label: "Risk Review", count: 0 },
+      { category: "work_item_risk", label: "Work item risk", count: 0 },
       { category: "stale_topic", label: "Stale Topic", count: 1 },
       {
         category: "document_attention",

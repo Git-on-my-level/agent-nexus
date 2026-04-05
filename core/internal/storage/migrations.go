@@ -464,6 +464,13 @@ var migrations = []migration{
 			`CREATE INDEX IF NOT EXISTS idx_topic_projection_refresh_status_generations ON topic_projection_refresh_status (desired_generation, materialized_generation, in_progress_generation, queued_at, thread_id);`,
 		},
 	},
+	{
+		Version: 2,
+		Statements: []string{
+			`ALTER TABLE cards ADD COLUMN risk TEXT NOT NULL DEFAULT 'low';`,
+			`ALTER TABLE card_versions ADD COLUMN risk TEXT NOT NULL DEFAULT 'low';`,
+		},
+	},
 }
 
 func applyMigrations(ctx context.Context, db *sql.DB) error {

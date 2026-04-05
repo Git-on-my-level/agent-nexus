@@ -3,7 +3,7 @@
   "contract_version": "0.3.0",
   "generated_by": "core/cmd/contract-gen",
   "event_type_open_enum": true,
-  "rule_count": 23,
+  "rule_count": 27,
   "rules": {
     "agent_notification_dismissed": {
       "refs_must_include": [
@@ -15,6 +15,27 @@
         "artifact:\u003cwakeup_id\u003e"
       ]
     },
+    "board_card_added": {
+      "refs_must_include": [
+        "board:\u003cboard_id\u003e",
+        "card:\u003ccard_id\u003e"
+      ]
+    },
+    "board_card_archived": {
+      "refs_must_include": [
+        "board:\u003cboard_id\u003e",
+        "card:\u003ccard_id\u003e"
+      ]
+    },
+    "board_card_moved": {
+      "refs_must_include": [
+        "board:\u003cboard_id\u003e",
+        "card:\u003ccard_id\u003e"
+      ],
+      "payload_must_include": [
+        "column_key"
+      ]
+    },
     "board_created": {
       "refs_must_include": [
         "board:\u003cboard_id\u003e"
@@ -22,6 +43,12 @@
     },
     "board_updated": {
       "refs_must_include": [
+        "board:\u003cboard_id\u003e"
+      ]
+    },
+    "card_archived": {
+      "refs_must_include": [
+        "card:\u003ccard_id\u003e",
         "board:\u003cboard_id\u003e"
       ]
     },

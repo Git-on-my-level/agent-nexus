@@ -39,6 +39,47 @@ func TestWakePacketToContentUsesBridgeVersion(t *testing.T) {
 	}
 }
 
+func TestWakePacketToContentPrefersTopicsWorkspaceWhenTopicCLISet(t *testing.T) {
+	p := WakePacket{
+		WakeupID:             "w1",
+		Handle:               "bot",
+		ActorID:              "a1",
+		WorkspaceID:          "ws",
+		WorkspaceName:        "Main",
+		ThreadID:             "t1",
+		ThreadTitle:          "T",
+		SubjectRef:           "topic:top-1",
+		TriggerEventID:       "e1",
+		TriggerCreatedAt:     "2026-01-01T00:00:00Z",
+		TriggerAuthorActorID: "u1",
+		TriggerText:          "hi",
+		CurrentSummary:       "s",
+		SessionKey:           "sk",
+		OARBaseURL:           "http://x",
+		ThreadContextURL:     "http://x/threads/t1/context",
+		ThreadWorkspaceURL:   "http://x/threads/t1/workspace",
+		TopicWorkspaceURL:    "http://x/topics/top-1/workspace",
+		TriggerEventURL:      "http://x/events/e1",
+		CLIThreadInspect:     "inspect",
+		CLIThreadWorkspace:   "ws-cli",
+		CLITopicWorkspace:    "oar topics workspace --topic-id top-1 --json",
+		Version:              WakePacketVersion,
+	}
+	content := p.ToContent()
+	cf, _ := content["context_fetch"].(map[string]any)
+	if cf["preferred"] != "topics.workspace" {
+		t.Fatalf("preferred: got %#v", cf["preferred"])
+	}
+	cli, _ := cf["cli"].([]string)
+	if len(cli) != 3 || cli[0] != p.CLITopicWorkspace {
+		t.Fatalf("cli: got %#v", cli)
+	}
+	api, _ := cf["api"].(map[string]any)
+	if api["topic_workspace"] != "http://x/topics/top-1/workspace" {
+		t.Fatalf("api.topic_workspace: got %#v", api["topic_workspace"])
+	}
+}
+
 func TestWakePacketToContentIncludesSubjectAndReplyRefs(t *testing.T) {
 	p := WakePacket{
 		WakeupID:      "w1",

@@ -482,7 +482,7 @@ func buildTopicResourceBundle(ctx context.Context, opts handlerOptions, topic ma
 			cardsByBoard[boardID] = append(cardsByBoard[boardID], cards)
 			for _, card := range cards {
 				threadIDs = append(threadIDs, strings.TrimSpace(anyString(card["thread_id"])))
-				if pinnedDocumentID := strings.TrimSpace(anyString(card["pinned_document_id"])); pinnedDocumentID != "" {
+				if pinnedDocumentID := pinnedDocumentIDFromCard(card); pinnedDocumentID != "" {
 					documentIDs = append(documentIDs, pinnedDocumentID)
 				}
 			}
@@ -544,7 +544,9 @@ func buildTopicResourceBundle(ctx context.Context, opts handlerOptions, topic ma
 	cards := make([]map[string]any, 0)
 	for _, boardCardGroups := range cardsByBoard {
 		for _, boardCards := range boardCardGroups {
-			cards = append(cards, boardCards...)
+			for _, card := range boardCards {
+				cards = append(cards, publicCardView(card))
+			}
 		}
 	}
 

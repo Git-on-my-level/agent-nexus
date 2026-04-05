@@ -1,1 +1,1 @@
-<!-- Snapshot URLs redirect in +page.server.js -->
+<!-- Legacy snapshot: URLs redirect in +page.server.js -->

@@ -41,7 +41,7 @@ enums:
 
   inbox_category:
     enum_policy: strict
-    values: [decision_needed, intervention_needed, risk_review, stale_topic, work_item_risk, document_attention]
+    values: [decision_needed, intervention_needed, stale_topic, work_item_risk, document_attention]
 
   agent_notification_status:
     enum_policy: strict
@@ -81,9 +81,11 @@ enums:
       - board_updated
       - board_card_added
       - board_card_moved
+      - board_card_archived
       - card_created
       - card_updated
       - card_moved
+      - card_archived
       - card_resolved
       - exception_raised
       - inbox_item_acknowledged
@@ -300,6 +302,8 @@ resources:
       column_key: { type: string, required: true, ref: enums.board_column_key }
       rank: { type: string, required: true }
       assignee_refs: { type: "list<typed_ref>", required: true }
+      due_at: { type: datetime, required: false, description: "Optional due instant for the work item." }
+      definition_of_done: { type: "list<string>", required: false, description: "Acceptance lines for completing the card." }
       risk: { type: string, required: true, ref: enums.work_item_risk }
       resolution: { type: string, required: false, ref: enums.card_resolution, description: "Null while active; `done` or `canceled` when terminal." }
       resolution_refs: { type: "list<typed_ref>", required: true }
@@ -397,6 +401,16 @@ reference_conventions:
     board_updated:
       refs_must_include: ["board:<board_id>"]
 
+    board_card_added:
+      refs_must_include: ["board:<board_id>", "card:<card_id>"]
+
+    board_card_moved:
+      refs_must_include: ["board:<board_id>", "card:<card_id>"]
+      payload_must_include: ["column_key"]
+
+    board_card_archived:
+      refs_must_include: ["board:<board_id>", "card:<card_id>"]
+
     card_created:
       refs_must_include: ["card:<card_id>", "board:<board_id>"]
 
@@ -406,6 +420,9 @@ reference_conventions:
     card_moved:
       refs_must_include: ["card:<card_id>", "board:<board_id>"]
       payload_must_include: ["column_key"]
+
+    card_archived:
+      refs_must_include: ["card:<card_id>", "board:<board_id>"]
 
     card_resolved:
       refs_must_include: ["card:<card_id>", "board:<board_id>"]

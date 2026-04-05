@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"organization-autorunner-core/internal/auth"
@@ -232,6 +233,18 @@ func TestRouteMentionWakePacketIncludesSubjectFromThread(t *testing.T) {
 	evRefs, _ := lastEvent["refs"].([]string)
 	if len(evRefs) < 3 || evRefs[0] != "thread:thread-subj" || evRefs[1] != "topic:top-9" {
 		t.Fatalf("wake request refs: %#v", evRefs)
+	}
+	cf, _ := capturedContent["context_fetch"].(map[string]any)
+	if cf == nil || cf["preferred"] != "topics.workspace" {
+		t.Fatalf("context_fetch.preferred: %#v", capturedContent["context_fetch"])
+	}
+	cli, _ := cf["cli"].([]string)
+	if len(cli) < 1 || !strings.Contains(cli[0], "topics workspace --topic-id top-9") {
+		t.Fatalf("context_fetch.cli: %#v", cli)
+	}
+	api, _ := cf["api"].(map[string]any)
+	if api == nil || api["topic_workspace"] != "http://core.test/topics/top-9/workspace" {
+		t.Fatalf("context_fetch.api.topic_workspace: %#v", api)
 	}
 }
 

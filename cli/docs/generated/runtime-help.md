@@ -42,7 +42,7 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 - `topics create` (command): Create topic
 - `topics patch` (command): Patch topic
 - `topics timeline` (command): Get topic timeline
-- `topics workspace` (command): Get topic workspace view
+- `topics workspace` (command): Get topic workspace (primary operator coordination read)
 - `cards list` (command): List cards
 - `cards get` (command): Get card
 - `cards patch` (command): Patch card
@@ -72,8 +72,8 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 - `events validate` (local-helper): Validate an `events create` payload locally from stdin or `--from-file` without sending it.
 - `events explain` (local-helper): Explain known event-type conventions, required refs, and validation hints, including which type surfaces as a visible thread message.
 - `artifacts inspect` (local-helper): Fetch artifact metadata and resolved content in one command for operator inspection.
-- `threads inspect` (local-helper): Canonical thread coordination read path: compose one view from read-only thread data and related `inbox list` items.
-- `threads workspace` (local-helper): Single holistic thread coordination read: combine context, inbox, recommendation review, and related-thread signals in one command.
+- `threads inspect` (local-helper): Diagnostic backing-thread bundle: compose one view from read-only thread data and related `inbox list` items.
+- `threads workspace` (local-helper): Read-only backing-thread workspace projection: context, inbox, recommendation review, and related-thread signals in one command.
 - `threads recommendations` (local-helper): Compose a recommendation-oriented review of one thread with related follow-up context.
 - `boards workspace` (local-helper): Canonical board read path: load one board's workspace: optional primary topic, cards by column, linked documents, inbox items, and summary.
 - `boards cards list` (local-helper): List all cards on a board in canonical column order without hydrating thread details.
@@ -140,25 +140,25 @@ Use this command when you need to decide which primitive fits the task before yo
 
 Selection rules:
 - Use events for immutable facts.
-- Use topics for durable work subjects.
+- Use topics for durable work subjects and primary operator coordination (`topics workspace`).
 - Use cards for board-scoped planning and movement.
-- Use threads for read-only coordination and timeline inspection.
+- Use threads for read-only backing-thread diagnostics and timeline inspection — not as the default coordination surface.
 - Use docs for narrative knowledge that should be revised over time.
 - Use boards for cross-object workflow views, not source-of-truth content.
 - Use inbox for current attention signals from the active CLI identity's perspective.
 - Use draft when you want a local review checkpoint before a write.
 
-threads
-- Use when: You need read-only coordination data, provenance, and timeline inspection for an existing work subject.
-- Not for: Creating the work subject itself or storing long-lived planning state.
-- Examples: timeline inspection, workspace inspection, coordination view
-- Read next: oar threads list ; oar threads inspect ; oar threads workspace
-
 topics
-- Use when: You need the durable work subject itself with ownership, summary, related refs, and provenance.
-- Not for: Board-scoped task placement or low-level event history.
+- Use when: You need the durable work subject itself with ownership, summary, related refs, and provenance — including the primary operator coordination read.
+- Not for: Board-scoped task placement or low-level backing-thread-only diagnostics.
 - Examples: initiatives, incidents, cases, deliverables
 - Read next: oar topics list ; oar topics get ; oar topics workspace
+
+threads
+- Use when: You need read-only backing-thread diagnostics: timelines, raw thread records, or thread-scoped projection bundles for troubleshooting.
+- Not for: Primary operator triage when a topic exists — use topics workspace instead.
+- Examples: backing thread timeline, diagnostic workspace projection, compatibility inspection
+- Read next: oar threads list ; oar threads inspect ; oar threads workspace
 
 cards
 - Use when: You need board-scoped planning items with column, rank, assignee, and move/update operations.
@@ -199,7 +199,7 @@ draft
 Inbox categories:
 - `decision_needed`: A human must choose among multiple viable paths.
 - `intervention_needed`: The next step is clear, but a human must act because the agent cannot execute it.
-- `risk_review`: A card or work item is at risk or overdue and needs follow-up.
+- `work_item_risk`: A card or work item is at risk or overdue and needs follow-up.
 - `stale_topic`: A topic appears stale; review cadence or recent activity.
 - `document_attention`: A document needs human review or follow-up.
 
@@ -1104,7 +1104,12 @@ Commands:
   topics list              List topics
   topics patch             Patch topic
   topics timeline          Get topic timeline
-  topics workspace         Get topic workspace view
+  topics workspace         Get topic workspace (primary operator coordination read)
+
+Primary operator coordination:
+  topics workspace        Load the topic workspace (cards, docs, backing threads, inbox).
+  topics list / topics get   Discover and resolve topic ids.
+  Tip: start with `oar topics workspace --topic-id <topic-id>` for triage; use `oar topics list` to find ids. Add `--full-id` for copy/paste ids.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1150,14 +1155,14 @@ Commands:
   threads inspect          Inspect backing thread
   threads list             List backing threads
   threads timeline         Get backing thread timeline
-  threads workspace        Get backing thread workspace view
+  threads workspace        Get backing thread workspace projection (diagnostic)
 
-Canonical coordination read path:
-  threads recommendations   Compose a recommendation-focused review of a thread.
-  threads workspace           Compose one holistic thread workspace from context + inbox + related-thread review.
-  threads inspect             Compose one thread coordination view from context + inbox in one command.
-  threads timeline           Inspect the backing thread timeline.
-  Tip: start with `oar threads workspace` for the canonical coordination view, use `--status/--tag/--type initiative` to discover one thread, and use `oar threads get` (contract: `threads.inspect`) for a minimal `{thread}` read, or `oar threads inspect` for the composed coordination view. Add `--full-id` for copy/paste ids.
+Read-only backing-thread diagnostics (tooling):
+  threads recommendations   Recommendation-focused review for one backing thread.
+  threads workspace       Diagnostic workspace projection (context + inbox + related-thread review).
+  threads inspect          Smaller diagnostic bundle (context + inbox).
+  threads timeline         Backing thread timeline and expansions.
+  Tip: prefer `oar topics workspace` for normal operator coordination. Use `oar threads workspace` when you need the backing-thread projection or related-thread review; use `--status/--tag/--type initiative` to discover one thread. For a minimal `{thread}` read, use `oar threads get` (contract: `threads.inspect`). Add `--full-id` for copy/paste ids.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1552,7 +1557,7 @@ Inputs:
   - body `topic.provenance.by_field` (object)
   - body `topic.provenance.notes` (string)
   - body `topic.thread_id` (string)
-  Enum values: topic.status: active, archived, blocked, proposed, resolved; topic.type: decision, incident, initiative, note, objective, other, request, risk
+  Enum values: topic.status: active, archived, blocked, closed, paused, proposed, resolved; topic.type: case, decision, incident, initiative, note, objective, other, process, relationship, request, risk
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1595,7 +1600,7 @@ Inputs:
   - body `patch.thread_id` (string)
   - body `patch.title` (string)
   - body `patch.type` (string)
-  Enum values: patch.status: active, archived, blocked, proposed, resolved; patch.type: decision, incident, initiative, note, objective, other, request, risk
+  Enum values: patch.status: active, archived, blocked, closed, paused, proposed, resolved; patch.type: case, decision, incident, initiative, note, objective, other, process, relationship, request, risk
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1633,7 +1638,7 @@ Global flags:
 
 ## `topics workspace`
 
-Get topic workspace view
+Get topic workspace (primary operator coordination read)
 
 ```text
 Generated Help: topics workspace
@@ -1643,7 +1648,7 @@ Generated Help: topics workspace
 - HTTP: `GET /topics/{topic_id}/workspace`
 - Stability: `beta`
 - Input mode: `none`
-- Why: Retrieve the operator-focused topic workspace composed from linked cards, docs, threads, and inbox items.
+- Why: Primary operator coordination read — load the topic workspace composed from linked cards, docs, backing threads, and inbox items. Prefer this over thread workspace for triage and planning.
 - Output: Returns `{ topic, cards, boards, documents, threads, inbox, projection_freshness, generated_at }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `topics`, `workspace`
@@ -1737,7 +1742,9 @@ Inputs:
   - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
   - body `patch.assignee_refs` (list<any>)
   - body `patch.column_key` (string)
+  - body `patch.definition_of_done` (list<string>)
   - body `patch.document_ref` (string)
+  - body `patch.due_at` (datetime)
   - body `patch.provenance.by_field` (object)
   - body `patch.provenance.notes` (string)
   - body `patch.provenance.sources` (list<string>)
@@ -2111,7 +2118,9 @@ Inputs:
   - body `card.summary` (string)
   - body `card.title` (string)
   Optional:
+  - body `card.definition_of_done` (list<string>)
   - body `card.document_ref` (string)
+  - body `card.due_at` (datetime)
   - body `card.id` (string)
   - body `card.provenance.by_field` (object)
   - body `card.provenance.notes` (string)
@@ -2275,7 +2284,7 @@ Inputs:
   - body `event.provenance.by_field` (object)
   - body `event.provenance.notes` (string)
   - body `event.thread_ref` (string)
-  Enum values: event.type (open): agent_notification_dismissed, agent_notification_read, board_card_added, board_card_moved, board_created, board_updated, card_created, card_moved, card_resolved, card_updated, decision_made, decision_needed, document_created, document_revised, document_revision_created, document_tombstoned, exception_raised, inbox_item_acknowledged, intervention_needed, message_posted, receipt_added, review_completed, topic_archived, topic_created, topic_restored, topic_status_changed, topic_tombstoned, topic_updated, work_order_created
+  Enum values: event.type (open): agent_notification_dismissed, agent_notification_read, board_card_added, board_card_archived, board_card_moved, board_created, board_updated, card_archived, card_created, card_moved, card_resolved, card_updated, decision_made, decision_needed, document_created, document_revised, document_revision_created, document_tombstoned, exception_raised, inbox_item_acknowledged, intervention_needed, message_posted, receipt_added, review_completed, topic_archived, topic_created, topic_restored, topic_status_changed, topic_tombstoned, topic_updated, work_order_created
 
 Common authoring types:
   Communication: direct communication or important non-structured information
@@ -2340,7 +2349,7 @@ View scoping:
 Inbox categories:
   - `decision_needed`: A human must choose among multiple viable paths.
   - `intervention_needed`: The next step is clear, but a human must act because the agent cannot execute it.
-  - `risk_review`: A card or work item is at risk or overdue and needs follow-up.
+  - `work_item_risk`: A card or work item is at risk or overdue and needs follow-up.
   - `stale_topic`: A topic appears stale; review cadence or recent activity.
   - `document_attention`: A document needs human review or follow-up.
 
@@ -2600,14 +2609,14 @@ Global flags:
 
 ## `threads inspect`
 
-Canonical thread coordination read path: compose one view from read-only thread data and related `inbox list` items.
+Diagnostic backing-thread bundle: compose one view from read-only thread data and related `inbox list` items.
 
 ```text
 Local Help: threads inspect
 
 - Kind: `local helper`
-- Summary: Canonical thread coordination read path: compose one view from read-only thread data and related `inbox list` items.
-- Composition: Resolves one thread by id or discovery filters, loads the thread's read-only coordination views, then filters inbox items client-side by `thread_id` for one operator-focused coordination view.
+- Summary: Diagnostic backing-thread bundle: compose one view from read-only thread data and related `inbox list` items.
+- Composition: Resolves one thread by id or discovery filters, loads read-only thread projections, then filters inbox items client-side by `thread_id`. Prefer `topics workspace` for primary operator coordination when you have a topic id.
 - JSON body: `thread`, `context`, `collaboration`, `inbox`
 - Examples:
   - `oar threads inspect --thread-id <thread-id>`
@@ -2634,14 +2643,14 @@ Global flags:
 
 ## `threads workspace`
 
-Single holistic thread coordination read: combine context, inbox, recommendation review, and related-thread signals in one command.
+Read-only backing-thread workspace projection: context, inbox, recommendation review, and related-thread signals in one command.
 
 ```text
 Local Help: threads workspace
 
 - Kind: `local helper`
-- Summary: Single holistic thread coordination read: combine context, inbox, recommendation review, and related-thread signals in one command.
-- Composition: Resolves one thread by id or discovery filters, loads the thread's read-only coordination views, adds thread-scoped inbox items, and follows related thread refs for additional review context.
+- Summary: Read-only backing-thread workspace projection: context, inbox, recommendation review, and related-thread signals in one command.
+- Composition: Resolves one thread by id or discovery filters, loads read-only thread projections, adds thread-scoped inbox items, and follows related thread refs for diagnostic review. Prefer `topics workspace` for normal operator coordination.
 - JSON body: `thread`, `context`, `collaboration`, `inbox`, `pending_decisions`, `related_threads`, `related_recommendations`, `related_decisions`, `follow_up`
 - Examples:
   - `oar threads workspace --thread-id <thread-id> --full-id`

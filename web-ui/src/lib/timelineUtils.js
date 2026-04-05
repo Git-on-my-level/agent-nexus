@@ -70,7 +70,7 @@ function snapshotLabel(snapshot, id) {
   if (title) {
     return title;
   }
-  const kind = String(record.kind ?? record.type ?? "Snapshot").trim();
+  const kind = String(record.kind ?? record.type ?? "Record").trim();
   return `${kind} ${id}`.trim();
 }
 

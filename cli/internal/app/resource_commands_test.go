@@ -2237,7 +2237,7 @@ func TestThreadsContextRejectsMixedSelectionModesWithActionableGuidance(t *testi
 		t.Fatalf("unexpected error payload: %#v", payload)
 	}
 	message := anyStringValue(errObj["message"])
-	if !strings.Contains(message, "--thread-id cannot be combined with discovery filters") || !strings.Contains(message, "oar threads workspace --thread-id <thread-id>") || !strings.Contains(message, "oar threads inspect --thread-id <thread-id>") || !strings.Contains(message, "oar threads inspect --status active") {
+	if !strings.Contains(message, "--thread-id cannot be combined with discovery filters") || !strings.Contains(message, "oar threads workspace --thread-id <thread-id>") || !strings.Contains(message, "oar threads inspect --thread-id <thread-id>") || !strings.Contains(message, "oar topics workspace") || !strings.Contains(message, "oar threads inspect --status active") {
 		t.Fatalf("expected actionable threads context guidance, got %#v", payload)
 	}
 }
@@ -2551,7 +2551,8 @@ func TestThreadsInspectDiscoveryRequiresSingleThread(t *testing.T) {
 	if errObj == nil || anyStringValue(errObj["code"]) != "invalid_request" {
 		t.Fatalf("unexpected error payload: %#v", payload)
 	}
-	if !strings.Contains(anyStringValue(errObj["message"]), "exactly one thread") || !strings.Contains(anyStringValue(errObj["message"]), "oar threads workspace") {
+	msg := anyStringValue(errObj["message"])
+	if !strings.Contains(msg, "exactly one thread") || !strings.Contains(msg, "oar topics workspace") || !strings.Contains(msg, "oar threads workspace") {
 		t.Fatalf("expected single-thread guidance, got %#v", payload)
 	}
 }

@@ -480,7 +480,7 @@ func handleListBoardCards(w http.ResponseWriter, r *http.Request, opts handlerOp
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"board_id": boardID,
-		"cards":    cards,
+		"cards":    publicCardsView(cards),
 	})
 }
 
@@ -498,7 +498,7 @@ func handleGetBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load board card")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"card": card})
+	writeJSON(w, http.StatusOK, map[string]any{"card": publicCardPayload(card)})
 }
 
 func handleAddBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, boardID string) {
@@ -507,57 +507,12 @@ func handleAddBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		return
 	}
 
-	var req struct {
-		ActorID          string   `json:"actor_id"`
-		RequestKey       string   `json:"request_key"`
-		CardID           string   `json:"card_id"`
-		IfBoardUpdatedAt *string  `json:"if_board_updated_at"`
-		Title            string   `json:"title"`
-		Body             string   `json:"body"`
-		ParentThread     string   `json:"parent_thread"`
-		DueAt            *string  `json:"due_at"`
-		DefinitionOfDone []string `json:"definition_of_done"`
-		Assignee         *string  `json:"assignee"`
-		Priority         *string  `json:"priority"`
-		Status           string   `json:"status"`
-		ThreadID         string   `json:"thread_id"`
-		ColumnKey        string   `json:"column_key"`
-		BeforeCardID     string   `json:"before_card_id"`
-		AfterCardID      string   `json:"after_card_id"`
-		BeforeThreadID   string   `json:"before_thread_id"`
-		AfterThreadID    string   `json:"after_thread_id"`
-		PinnedDocumentID *string  `json:"pinned_document_id"`
-		Resolution       *string  `json:"resolution"`
-		ResolutionRefs   []string `json:"resolution_refs"`
-		Refs             []string `json:"refs"`
-	}
-	if !decodeJSONBody(w, r, &req) {
+	var raw map[string]any
+	if !decodeJSONBody(w, r, &raw) {
 		return
 	}
-	if strings.TrimSpace(req.Title) == "" && strings.TrimSpace(req.ThreadID) == "" && strings.TrimSpace(req.ParentThread) == "" {
-		writeError(w, http.StatusBadRequest, "invalid_request", "title is required unless thread_id or parent_thread is provided")
-		return
-	}
-	if req.IfBoardUpdatedAt != nil {
-		normalized, ok := normalizeRequiredTimestamp(w, req.IfBoardUpdatedAt, "if_board_updated_at")
-		if !ok {
-			return
-		}
-		req.IfBoardUpdatedAt = &normalized
-	}
-	if err := validateBoardCardCreateRequest(
-		req.CardID,
-		req.ParentThread,
-		req.ThreadID,
-		req.ColumnKey,
-		req.BeforeCardID,
-		req.AfterCardID,
-		req.BeforeThreadID,
-		req.AfterThreadID,
-		req.Status,
-		req.PinnedDocumentID,
-	); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+	req, ok := parseAddBoardCardJSON(w, raw)
+	if !ok {
 		return
 	}
 
@@ -566,7 +521,7 @@ func handleAddBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		return
 	}
 
-	replayRequest := req
+	replayRequest := raw
 	replayStatus, replayPayload, replayed, err := readIdempotencyReplay(r.Context(), opts.primitiveStore, "boards.cards.add", actorID, req.RequestKey, replayRequest)
 	if writeIdempotencyError(w, err) {
 		return
@@ -576,7 +531,7 @@ func handleAddBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		return
 	}
 	if replayed {
-		writeJSON(w, replayStatus, replayPayload)
+		writeJSON(w, replayStatus, normalizeBoardCardMutationReplayPayload(replayPayload))
 		return
 	}
 
@@ -599,28 +554,7 @@ func handleAddBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		}
 	}
 
-	result, err := opts.primitiveStore.CreateBoardCard(r.Context(), actorID, boardID, primitives.AddBoardCardInput{
-		CardID:           strings.TrimSpace(req.CardID),
-		Title:            strings.TrimSpace(req.Title),
-		Body:             req.Body,
-		ParentThreadID:   strings.TrimSpace(req.ParentThread),
-		DueAt:            req.DueAt,
-		DefinitionOfDone: req.DefinitionOfDone,
-		Assignee:         normalizeOptionalRequestStringPointer(req.Assignee),
-		Priority:         normalizeOptionalRequestStringPointer(req.Priority),
-		Status:           createStatus,
-		ThreadID:         strings.TrimSpace(req.ThreadID),
-		ColumnKey:        strings.TrimSpace(req.ColumnKey),
-		BeforeCardID:     strings.TrimSpace(req.BeforeCardID),
-		AfterCardID:      strings.TrimSpace(req.AfterCardID),
-		BeforeThreadID:   strings.TrimSpace(req.BeforeThreadID),
-		AfterThreadID:    strings.TrimSpace(req.AfterThreadID),
-		PinnedDocumentID: normalizeOptionalRequestStringPointer(req.PinnedDocumentID),
-		Resolution:       normalizeOptionalRequestStringPointer(req.Resolution),
-		ResolutionRefs:   uniqueSortedStrings(req.ResolutionRefs),
-		Refs:             uniqueSortedStrings(req.Refs),
-		IfBoardUpdatedAt: req.IfBoardUpdatedAt,
-	})
+	result, err := opts.primitiveStore.CreateBoardCard(r.Context(), actorID, boardID, addBoardCardStoreInput(req, createStatus))
 	if err != nil {
 		if errors.Is(err, primitives.ErrConflict) && strings.TrimSpace(req.RequestKey) != "" {
 			existingCard, loadCardErr := loadExistingBoardCardForCreateReplay(r.Context(), opts, boardID, req.CardID, req.ParentThread, req.ThreadID)
@@ -637,6 +571,12 @@ func handleAddBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOpti
 				req.Assignee,
 				req.Priority,
 				req.PinnedDocumentID,
+				req.DueAt,
+				req.Resolution,
+				req.DefinitionOfDone,
+				req.ResolutionRefs,
+				req.Refs,
+				req.Risk,
 			) {
 				response := map[string]any{"board": existingBoard, "card": existingCard}
 				status, payload, replayErr := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "boards.cards.add", actorID, req.RequestKey, replayRequest, http.StatusCreated, response)
@@ -644,7 +584,7 @@ func handleAddBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOpti
 					return
 				}
 				if replayErr == nil {
-					writeJSON(w, status, payload)
+					writeJSON(w, status, normalizeBoardCardMutationReplayPayload(payload))
 					return
 				}
 			}
@@ -667,8 +607,7 @@ func handleAddBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	}
 
 	emitCardLifecycleEventBestEffort(r.Context(), opts, actorID, buildCardCreatedEvent(result.Board, result.Card))
-	emitBoardLifecycleEventBestEffort(r.Context(), opts, actorID, buildBoardCardCreatedEvent(result.Board, result.Card))
-	emitBoardLifecycleEventBestEffort(r.Context(), opts, actorID, buildLegacyBoardCardAddedEvent(result.Board, result.Card))
+	emitBoardLifecycleEventBestEffort(r.Context(), opts, actorID, buildBoardCardAddedEvent(result.Board, result.Card))
 
 	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "boards.cards.add", actorID, req.RequestKey, replayRequest, http.StatusCreated, map[string]any{
 		"board": result.Board,
@@ -681,7 +620,7 @@ func handleAddBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to persist idempotency replay")
 		return
 	}
-	writeJSON(w, status, payload)
+	writeJSON(w, status, normalizeBoardCardMutationReplayPayload(payload))
 }
 
 func handleUpdateBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, boardID, cardKey string) {
@@ -744,7 +683,7 @@ func handleUpdateBoardCard(w http.ResponseWriter, r *http.Request, opts handlerO
 			writeError(w, http.StatusConflict, "conflict", "board has been updated; refresh and retry")
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"board": currentBoard, "card": beforeCard})
+		writeJSON(w, http.StatusOK, map[string]any{"board": currentBoard, "card": publicCardView(beforeCard)})
 		return
 	}
 
@@ -765,10 +704,9 @@ func handleUpdateBoardCard(w http.ResponseWriter, r *http.Request, opts handlerO
 
 	if anyString(result.Card["updated_at"]) != anyString(beforeCard["updated_at"]) || anyString(result.Card["version"]) != anyString(beforeCard["version"]) {
 		emitCardLifecycleEventBestEffort(r.Context(), opts, actorID, buildCardUpdatedEvent(result.Board, beforeCard, result.Card, changedFields))
-		emitBoardLifecycleEventBestEffort(r.Context(), opts, actorID, buildBoardCardUpdatedEvent(result.Board, beforeCard, result.Card, changedFields))
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"board": result.Board, "card": result.Card})
+	writeJSON(w, http.StatusOK, map[string]any{"board": result.Board, "card": publicCardView(result.Card)})
 }
 
 func handleMoveBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, boardID, cardKey string) {
@@ -889,11 +827,12 @@ func handleMoveCardMutation(w http.ResponseWriter, r *http.Request, opts handler
 	}
 
 	emitBoardLifecycleEventBestEffort(r.Context(), opts, actorID, buildBoardCardMovedEvent(result.Board, beforeCard, result.Card, req.BeforeCardID, req.AfterCardID, req.BeforeThreadID, req.AfterThreadID))
+	emitCardLifecycleEventBestEffort(r.Context(), opts, actorID, buildCardMovedEvent(result.Board, beforeCard, result.Card, req.BeforeCardID, req.AfterCardID, req.BeforeThreadID, req.AfterThreadID))
 	if anyString(result.Card["updated_at"]) != anyString(beforeCard["updated_at"]) || anyString(result.Card["version"]) != anyString(beforeCard["version"]) {
 		emitCardLifecycleEventBestEffort(r.Context(), opts, actorID, buildCardUpdatedEvent(result.Board, beforeCard, result.Card, []string{"resolution", "resolution_refs"}))
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"board": result.Board, "card": result.Card})
+	writeJSON(w, http.StatusOK, map[string]any{"board": result.Board, "card": publicCardView(result.Card)})
 }
 
 func handleRemoveBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, boardID, identifier string) {
@@ -942,11 +881,10 @@ func handleRemoveBoardCard(w http.ResponseWriter, r *http.Request, opts handlerO
 
 	emitCardLifecycleEventBestEffort(r.Context(), opts, actorID, buildCardArchivedEvent(result.Board, result.Card))
 	emitBoardLifecycleEventBestEffort(r.Context(), opts, actorID, buildBoardCardArchivedEvent(result.Board, result.Card))
-	emitBoardLifecycleEventBestEffort(r.Context(), opts, actorID, buildLegacyBoardCardRemovedEvent(result.Board, result.Card))
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"board":             result.Board,
-		"card":              result.Card,
+		"card":              publicCardView(result.Card),
 		"removed_thread_id": result.RemovedThreadID,
 	})
 }
@@ -992,8 +930,7 @@ func handleArchiveBoardCard(w http.ResponseWriter, r *http.Request, opts handler
 	}
 	emitCardLifecycleEventBestEffort(r.Context(), opts, actorID, buildCardArchivedEvent(result.Board, result.Card))
 	emitBoardLifecycleEventBestEffort(r.Context(), opts, actorID, buildBoardCardArchivedEvent(result.Board, result.Card))
-	emitBoardLifecycleEventBestEffort(r.Context(), opts, actorID, buildLegacyBoardCardRemovedEvent(result.Board, result.Card))
-	writeJSON(w, http.StatusOK, map[string]any{"board": result.Board, "card": result.Card})
+	writeJSON(w, http.StatusOK, map[string]any{"board": result.Board, "card": publicCardView(result.Card)})
 }
 
 func buildBoardWorkspacePayload(ctx context.Context, opts handlerOptions, boardID string) (map[string]any, error) {
@@ -1138,16 +1075,17 @@ func buildBoardWorkspaceCardsSection(ctx context.Context, opts handlerOptions, b
 
 		summary := boardCardDerivedSummary(card, threadID, states, time.Now().UTC())
 		freshness := boardCardDerivedFreshness(threadID, states)
+		pubCard := publicCardView(card)
 		items = append(items, map[string]any{
 			"board_ref":            "board:" + anyString(board["id"]),
-			"card":                 card,
+			"card":                 pubCard,
 			"summary":              summary,
 			"projection_freshness": freshness,
-			"membership":           card,
+			"membership":           pubCard,
 			"backing": map[string]any{
 				"thread_id":           nullableStringValue(threadID),
 				"thread":              thread,
-				"pinned_document_ref": nullableTypedRef("document", anyString(card["pinned_document_id"])),
+				"pinned_document_ref": nullableTypedRef("document", pinnedDocumentIDFromCard(card)),
 				"pinned_document":     pinnedDocument,
 			},
 			"derived": map[string]any{
@@ -1347,17 +1285,18 @@ func buildBoardUpdatedEvent(previousBoard, updatedBoard, patch map[string]any) m
 	return buildBoardLifecycleEvent("board_updated", updatedBoard, nil, payload, "Board updated: "+boardDisplayName(updatedBoard))
 }
 
-func buildBoardCardCreatedEvent(board, card map[string]any) map[string]any {
+func buildBoardCardAddedEvent(board, card map[string]any) map[string]any {
 	payload := map[string]any{
 		"board_id":           anyString(board["id"]),
 		"card_id":            anyString(card["id"]),
+		"thread_id":          nullableStringValue(anyString(card["thread_id"])),
 		"parent_thread":      nullableStringValue(anyString(card["parent_thread"])),
 		"column_key":         anyString(card["column_key"]),
 		"status":             nullableStringValue(anyString(card["status"])),
 		"assignee":           nullableStringValue(anyString(card["assignee"])),
 		"pinned_document_id": nullableStringValue(anyString(card["pinned_document_id"])),
 	}
-	return buildBoardLifecycleEvent("board_card_created", board, card, payload, "Board card created: "+cardDisplayName(card))
+	return buildBoardLifecycleEvent("board_card_added", board, card, payload, "Board card added: "+cardDisplayName(card))
 }
 
 func buildCardCreatedEvent(board, card map[string]any) map[string]any {
@@ -1374,17 +1313,6 @@ func buildCardCreatedEvent(board, card map[string]any) map[string]any {
 	return buildCardLifecycleEvent("card_created", board, card, payload, "Card created: "+cardDisplayName(card))
 }
 
-func buildLegacyBoardCardAddedEvent(board, card map[string]any) map[string]any {
-	payload := map[string]any{
-		"board_id":           anyString(board["id"]),
-		"thread_id":          nullableStringValue(anyString(card["thread_id"])),
-		"column_key":         anyString(card["column_key"]),
-		"status":             nullableStringValue(anyString(card["status"])),
-		"pinned_document_id": nullableStringValue(anyString(card["pinned_document_id"])),
-	}
-	return buildBoardLifecycleEvent("board_card_added", board, card, payload, "Board card added: "+cardDisplayName(card))
-}
-
 func buildCardUpdatedEvent(board, previousCard, updatedCard map[string]any, changedFields []string) map[string]any {
 	payload := map[string]any{
 		"board_id":       anyString(board["id"]),
@@ -1394,23 +1322,19 @@ func buildCardUpdatedEvent(board, previousCard, updatedCard map[string]any, chan
 		"changed_fields": changedFields,
 	}
 	for _, field := range changedFields {
-		payload["previous_"+field] = nullableStringValue(anyString(previousCard[field]))
-		payload[field] = nullableStringValue(anyString(updatedCard[field]))
+		switch field {
+		case "assignee_refs":
+			payload["previous_assignee_refs"] = publicAssigneeRefs(previousCard)
+			payload["assignee_refs"] = publicAssigneeRefs(updatedCard)
+		case "related_refs":
+			payload["previous_related_refs"] = mergeRelatedRefsForPublicView(previousCard)
+			payload["related_refs"] = mergeRelatedRefsForPublicView(updatedCard)
+		default:
+			payload["previous_"+field] = nullableStringValue(anyString(previousCard[field]))
+			payload[field] = nullableStringValue(anyString(updatedCard[field]))
+		}
 	}
 	return buildCardLifecycleEvent("card_updated", board, updatedCard, payload, "Card updated: "+cardDisplayName(updatedCard))
-}
-
-func buildBoardCardUpdatedEvent(board, previousCard, updatedCard map[string]any, changedFields []string) map[string]any {
-	payload := map[string]any{
-		"board_id":       anyString(board["id"]),
-		"card_id":        anyString(updatedCard["id"]),
-		"changed_fields": changedFields,
-	}
-	for _, field := range changedFields {
-		payload["previous_"+field] = nullableStringValue(anyString(previousCard[field]))
-		payload[field] = nullableStringValue(anyString(updatedCard[field]))
-	}
-	return buildBoardLifecycleEvent("board_card_updated", board, updatedCard, payload, "Board card updated: "+cardDisplayName(updatedCard))
 }
 
 func buildCardArchivedEvent(board, card map[string]any) map[string]any {
@@ -1437,6 +1361,20 @@ func buildBoardCardMovedEvent(board, previousCard, updatedCard map[string]any, b
 		"after_thread_id":  nullableStringValue(strings.TrimSpace(afterThreadID)),
 	}
 	return buildBoardLifecycleEvent("board_card_moved", board, updatedCard, payload, "Board card moved: "+cardDisplayName(updatedCard))
+}
+
+func buildCardMovedEvent(board, previousCard, updatedCard map[string]any, beforeCardID, afterCardID, beforeThreadID, afterThreadID string) map[string]any {
+	payload := map[string]any{
+		"board_id":         anyString(board["id"]),
+		"card_id":          anyString(updatedCard["id"]),
+		"from_column_key":  nullableStringValue(anyString(previousCard["column_key"])),
+		"column_key":       nullableStringValue(anyString(updatedCard["column_key"])),
+		"before_card_id":   nullableStringValue(strings.TrimSpace(beforeCardID)),
+		"after_card_id":    nullableStringValue(strings.TrimSpace(afterCardID)),
+		"before_thread_id": nullableStringValue(strings.TrimSpace(beforeThreadID)),
+		"after_thread_id":  nullableStringValue(strings.TrimSpace(afterThreadID)),
+	}
+	return buildCardLifecycleEvent("card_moved", board, updatedCard, payload, "Card moved: "+cardDisplayName(updatedCard))
 }
 
 func buildBoardCardArchivedEvent(board, card map[string]any) map[string]any {
@@ -1481,15 +1419,6 @@ func buildCardLifecycleEvent(eventType string, board, card map[string]any, paylo
 		"provenance": actorStatementProvenance(),
 	}
 	return event
-}
-
-func buildLegacyBoardCardRemovedEvent(board, card map[string]any) map[string]any {
-	payload := map[string]any{
-		"board_id":   anyString(board["id"]),
-		"thread_id":  nullableStringValue(anyString(card["thread_id"])),
-		"column_key": nullableStringValue(anyString(card["column_key"])),
-	}
-	return buildBoardLifecycleEvent("board_card_removed", board, card, payload, "Board card removed: "+cardDisplayName(card))
 }
 
 func buildBoardLifecycleEvent(eventType string, board, card map[string]any, payload map[string]any, summary string) map[string]any {
@@ -1576,7 +1505,7 @@ func boardMembershipSectionResponse(items []primitives.BoardMembership) map[stri
 	for _, item := range items {
 		out = append(out, map[string]any{
 			"board": item.Board,
-			"card":  item.Card,
+			"card":  publicCardView(item.Card),
 		})
 	}
 	return map[string]any{
@@ -1693,7 +1622,7 @@ func loadExistingBoardCardForCreateReplay(ctx context.Context, opts handlerOptio
 	return nil, primitives.ErrNotFound
 }
 
-func boardCardMatchesCreateReplay(existingCard map[string]any, explicitCardID, title, body, parentThreadID, legacyThreadID, columnKey, status string, assignee, priority, pinnedDocumentID *string) bool {
+func boardCardMatchesCreateReplay(existingCard map[string]any, explicitCardID, title, body, parentThreadID, legacyThreadID, columnKey, status string, assignee, priority, pinnedDocumentID, dueAt, resolution *string, definitionOfDone, resolutionRefs, refs []string, risk *string) bool {
 	explicitCardID = strings.TrimSpace(explicitCardID)
 	if explicitCardID != "" && strings.TrimSpace(anyString(existingCard["id"])) != explicitCardID {
 		return false
@@ -1727,7 +1656,81 @@ func boardCardMatchesCreateReplay(existingCard map[string]any, explicitCardID, t
 	if pinnedDocumentID != nil && strings.TrimSpace(anyString(existingCard["pinned_document_id"])) != strings.TrimSpace(*pinnedDocumentID) {
 		return false
 	}
+	expectedDueAt := ""
+	if dueAt != nil {
+		expectedDueAt = strings.TrimSpace(*dueAt)
+	}
+	if strings.TrimSpace(anyString(existingCard["due_at"])) != expectedDueAt {
+		return false
+	}
+	expectedDefinitionOfDone := uniqueSortedStrings(definitionOfDone)
+	existingDefinitionOfDone, err := extractStringSlice(existingCard["definition_of_done"])
+	if err != nil {
+		existingDefinitionOfDone = nil
+	}
+	if !stringSlicesEqual(uniqueSortedStrings(existingDefinitionOfDone), expectedDefinitionOfDone) {
+		return false
+	}
+	expectedResolution := replayExpectedCardResolution(normalizeOptionalRequestStringPointer(resolution), status)
+	if strings.TrimSpace(anyString(existingCard["resolution"])) != expectedResolution {
+		return false
+	}
+	existingResolutionRefs, err := extractStringSlice(existingCard["resolution_refs"])
+	if err != nil {
+		existingResolutionRefs = nil
+	}
+	if !stringSlicesEqual(uniqueSortedStrings(existingResolutionRefs), uniqueSortedStrings(resolutionRefs)) {
+		return false
+	}
+	existingRefs, err := extractStringSlice(existingCard["refs"])
+	if err != nil {
+		existingRefs = nil
+	}
+	if !stringSlicesEqual(uniqueSortedStrings(existingRefs), uniqueSortedStrings(refs)) {
+		return false
+	}
+	expectedRisk := "low"
+	if risk != nil && strings.TrimSpace(*risk) != "" {
+		expectedRisk = strings.TrimSpace(*risk)
+	}
+	if publicCardRisk(existingCard) != expectedRisk {
+		return false
+	}
 	return true
+}
+
+func stringSlicesEqual(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if left[i] != right[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func replayExpectedCardResolution(raw *string, status string) string {
+	if raw != nil {
+		value := strings.TrimSpace(*raw)
+		switch value {
+		case "completed", "superseded":
+			return "done"
+		case "unresolved", "":
+			return ""
+		default:
+			return value
+		}
+	}
+	switch strings.TrimSpace(status) {
+	case "done":
+		return "done"
+	case "cancelled":
+		return "canceled"
+	default:
+		return ""
+	}
 }
 
 func boardCardReplayPreconditionMatches(board map[string]any, ifBoardUpdatedAt *string) bool {
@@ -1796,6 +1799,12 @@ func parseBoardCardPatchInput(w http.ResponseWriter, patch map[string]any) (prim
 		writeError(w, http.StatusBadRequest, "invalid_request", "patch is required")
 		return primitives.UpdateBoardCardInput{}, nil, false
 	}
+	if _, hasRefs := patch["refs"]; hasRefs {
+		if _, hasRelated := patch["related_refs"]; hasRelated {
+			writeError(w, http.StatusBadRequest, "invalid_request", "patch.refs and patch.related_refs are mutually exclusive; prefer patch.related_refs")
+			return primitives.UpdateBoardCardInput{}, nil, false
+		}
+	}
 
 	var (
 		input                  primitives.UpdateBoardCardInput
@@ -1819,6 +1828,10 @@ func parseBoardCardPatchInput(w http.ResponseWriter, patch map[string]any) (prim
 			}
 			input.Title = &value
 			appendChanged(field)
+		case "summary":
+			value := strings.TrimSpace(anyString(raw))
+			input.Body = &value
+			appendChanged("summary")
 		case "body", "body_markdown":
 			value := strings.TrimSpace(anyString(raw))
 			input.Body = &value
@@ -1833,6 +1846,19 @@ func parseBoardCardPatchInput(w http.ResponseWriter, patch map[string]any) (prim
 			parentThreadAliasValue = value
 			input.ParentThreadID = &value
 			appendChanged("parent_thread")
+		case "assignee_refs":
+			value, err := extractStringSlice(raw)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_request", "patch.assignee_refs must be a list of strings")
+				return primitives.UpdateBoardCardInput{}, nil, false
+			}
+			if len(value) == 0 {
+				empty := ""
+				input.Assignee = &empty
+			} else {
+				input.Assignee = assigneeStorageStringFromRefs(uniqueSortedStrings(value))
+			}
+			appendChanged("assignee_refs")
 		case "assignee":
 			value := strings.TrimSpace(anyString(raw))
 			input.Assignee = &value
@@ -1887,6 +1913,24 @@ func parseBoardCardPatchInput(w http.ResponseWriter, patch map[string]any) (prim
 			}
 			input.ResolutionRefs = &value
 			appendChanged(field)
+		case "related_refs":
+			value, err := extractStringSlice(raw)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_request", "patch.related_refs must be a list of strings")
+				return primitives.UpdateBoardCardInput{}, nil, false
+			}
+			sorted := uniqueSortedStrings(value)
+			input.Refs = &sorted
+			appendChanged("related_refs")
+		case "document_ref":
+			ref := strings.TrimSpace(anyString(raw))
+			idPtr, err := pinnedDocumentIDFromTypedRef(ref)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+				return primitives.UpdateBoardCardInput{}, nil, false
+			}
+			input.PinnedDocumentID = idPtr
+			appendChanged("document_ref")
 		case "refs":
 			value, err := extractStringSlice(raw)
 			if err != nil {
@@ -1904,6 +1948,16 @@ func parseBoardCardPatchInput(w http.ResponseWriter, patch map[string]any) (prim
 				}
 			}
 			input.PinnedDocumentID = &value
+			appendChanged(field)
+		case "risk":
+			value := strings.TrimSpace(anyString(raw))
+			switch value {
+			case "low", "medium", "high", "critical":
+			default:
+				writeError(w, http.StatusBadRequest, "invalid_request", "patch.risk must be one of: low, medium, high, critical")
+				return primitives.UpdateBoardCardInput{}, nil, false
+			}
+			input.Risk = &value
 			appendChanged(field)
 		default:
 			continue

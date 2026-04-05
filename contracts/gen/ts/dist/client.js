@@ -197,8 +197,16 @@ export const commandRegistry = [
             ],
             "optional": [
                 {
+                    "name": "card.definition_of_done",
+                    "type": "list\u003cstring\u003e"
+                },
+                {
                     "name": "card.document_ref",
                     "type": "string"
+                },
+                {
+                    "name": "card.due_at",
+                    "type": "datetime"
                 },
                 {
                     "name": "card.id",
@@ -876,8 +884,16 @@ export const commandRegistry = [
                     ]
                 },
                 {
+                    "name": "patch.definition_of_done",
+                    "type": "list\u003cstring\u003e"
+                },
+                {
                     "name": "patch.document_ref",
                     "type": "string"
+                },
+                {
+                    "name": "patch.due_at",
+                    "type": "datetime"
                 },
                 {
                     "name": "patch.provenance.by_field",
@@ -1400,9 +1416,11 @@ export const commandRegistry = [
                         "agent_notification_dismissed",
                         "agent_notification_read",
                         "board_card_added",
+                        "board_card_archived",
                         "board_card_moved",
                         "board_created",
                         "board_updated",
+                        "card_archived",
                         "card_created",
                         "card_moved",
                         "card_resolved",
@@ -2006,8 +2024,8 @@ export const commandRegistry = [
         "method": "GET",
         "path": "/threads/{thread_id}/workspace",
         "operation_id": "getThreadWorkspace",
-        "summary": "Get backing thread workspace view",
-        "why": "Load related first-class resources attached to one backing thread.",
+        "summary": "Get backing thread workspace projection (diagnostic)",
+        "why": "Read-only diagnostic projection that bundles context, inbox, and related-thread signals for one backing thread. Prefer topics.workspace for normal operator coordination when a topic exists.",
         "input_mode": "none",
         "streaming": {
             "mode": "none"
@@ -2091,6 +2109,8 @@ export const commandRegistry = [
                         "active",
                         "archived",
                         "blocked",
+                        "closed",
+                        "paused",
                         "proposed",
                         "resolved"
                     ]
@@ -2107,12 +2127,15 @@ export const commandRegistry = [
                     "name": "topic.type",
                     "type": "string",
                     "enum_values": [
+                        "case",
                         "decision",
                         "incident",
                         "initiative",
                         "note",
                         "objective",
                         "other",
+                        "process",
+                        "relationship",
                         "request",
                         "risk"
                     ]
@@ -2282,6 +2305,8 @@ export const commandRegistry = [
                         "active",
                         "archived",
                         "blocked",
+                        "closed",
+                        "paused",
                         "proposed",
                         "resolved"
                     ]
@@ -2302,12 +2327,15 @@ export const commandRegistry = [
                     "name": "patch.type",
                     "type": "string",
                     "enum_values": [
+                        "case",
                         "decision",
                         "incident",
                         "initiative",
                         "note",
                         "objective",
                         "other",
+                        "process",
+                        "relationship",
                         "request",
                         "risk"
                     ]
@@ -2372,8 +2400,8 @@ export const commandRegistry = [
         "method": "GET",
         "path": "/topics/{topic_id}/workspace",
         "operation_id": "getTopicWorkspace",
-        "summary": "Get topic workspace view",
-        "why": "Retrieve the operator-focused topic workspace composed from linked cards, docs, threads, and inbox items.",
+        "summary": "Get topic workspace (primary operator coordination read)",
+        "why": "Primary operator coordination read — load the topic workspace composed from linked cards, docs, backing threads, and inbox items. Prefer this over thread workspace for triage and planning.",
         "input_mode": "none",
         "streaming": {
             "mode": "none"

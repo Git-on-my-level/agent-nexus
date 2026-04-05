@@ -23,7 +23,7 @@ func handleListCards(w http.ResponseWriter, r *http.Request, opts handlerOptions
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"cards": cards})
+	writeJSON(w, http.StatusOK, map[string]any{"cards": publicCardsView(cards)})
 }
 
 func handleGetCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, cardID string) {
@@ -95,10 +95,9 @@ func handlePatchCard(w http.ResponseWriter, r *http.Request, opts handlerOptions
 
 	if anyString(result.Card["updated_at"]) != anyString(beforeCard["updated_at"]) || anyString(result.Card["version"]) != anyString(beforeCard["version"]) {
 		emitCardLifecycleEventBestEffort(r.Context(), opts, actorID, buildCardUpdatedEvent(result.Board, beforeCard, result.Card, changedFields))
-		emitBoardLifecycleEventBestEffort(r.Context(), opts, actorID, buildBoardCardUpdatedEvent(result.Board, beforeCard, result.Card, changedFields))
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"card": result.Card})
+	writeJSON(w, http.StatusOK, map[string]any{"card": publicCardView(result.Card)})
 }
 
 func handleMoveCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, cardID string) {
@@ -165,7 +164,7 @@ func handleRestoreArchivedCard(w http.ResponseWriter, r *http.Request, opts hand
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"board": result.Board, "card": result.Card})
+	writeJSON(w, http.StatusOK, map[string]any{"board": result.Board, "card": publicCardView(result.Card)})
 }
 
 func handlePurgeArchivedCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, cardID string) {

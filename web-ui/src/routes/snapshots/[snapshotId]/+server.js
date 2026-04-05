@@ -21,5 +21,5 @@ export function GET({ params, url }) {
     return json({ snapshot: { ...card, kind: "card" } });
   }
 
-  return json({ error: "Snapshot not found." }, { status: 404 });
+  return json({ error: "Record not found." }, { status: 404 });
 }

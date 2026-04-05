@@ -112,9 +112,9 @@ var localHelperTopics = []localHelperTopic{
 	},
 	{
 		Path:        "threads inspect",
-		Summary:     "Canonical thread coordination read path: compose one view from read-only thread data and related `inbox list` items.",
+		Summary:     "Diagnostic backing-thread bundle: compose one view from read-only thread data and related `inbox list` items.",
 		JSONShape:   "`thread`, `context`, `collaboration`, `inbox`",
-		Composition: "Resolves one thread by id or discovery filters, loads the thread's read-only coordination views, then filters inbox items client-side by `thread_id` for one operator-focused coordination view.",
+		Composition: "Resolves one thread by id or discovery filters, loads read-only thread projections, then filters inbox items client-side by `thread_id`. Prefer `topics workspace` for primary operator coordination when you have a topic id.",
 		Examples: []string{
 			"oar threads inspect --thread-id <thread-id>",
 			"oar threads inspect --status active --type initiative --full-id",
@@ -134,9 +134,9 @@ var localHelperTopics = []localHelperTopic{
 	},
 	{
 		Path:        "threads workspace",
-		Summary:     "Single holistic thread coordination read: combine context, inbox, recommendation review, and related-thread signals in one command.",
+		Summary:     "Read-only backing-thread workspace projection: context, inbox, recommendation review, and related-thread signals in one command.",
 		JSONShape:   "`thread`, `context`, `collaboration`, `inbox`, `pending_decisions`, `related_threads`, `related_recommendations`, `related_decisions`, `follow_up`",
-		Composition: "Resolves one thread by id or discovery filters, loads the thread's read-only coordination views, adds thread-scoped inbox items, and follows related thread refs for additional review context.",
+		Composition: "Resolves one thread by id or discovery filters, loads read-only thread projections, adds thread-scoped inbox items, and follows related thread refs for diagnostic review. Prefer `topics workspace` for normal operator coordination.",
 		Examples: []string{
 			"oar threads workspace --thread-id <thread-id> --full-id",
 			"oar threads workspace --status active --type initiative --full-summary",
@@ -515,13 +515,18 @@ func formatGeneratedGroupHelp(topic string, commands []registry.Command) string 
 
 func localGroupHelpSupplement(topic string) string {
 	switch strings.TrimSpace(topic) {
+	case "topics":
+		return strings.TrimSpace(`Primary operator coordination:
+  topics workspace        Load the topic workspace (cards, docs, backing threads, inbox).
+  topics list / topics get   Discover and resolve topic ids.
+  Tip: start with ` + "`oar topics workspace --topic-id <topic-id>`" + ` for triage; use ` + "`oar topics list`" + ` to find ids. Add ` + "`--full-id`" + ` for copy/paste ids.`)
 	case "threads":
-		return strings.TrimSpace(`Canonical coordination read path:
-  threads recommendations   Compose a recommendation-focused review of a thread.
-  threads workspace           Compose one holistic thread workspace from context + inbox + related-thread review.
-  threads inspect             Compose one thread coordination view from context + inbox in one command.
-  threads timeline           Inspect the backing thread timeline.
-  Tip: start with ` + "`oar threads workspace`" + ` for the canonical coordination view, use ` + "`--status/--tag/--type initiative`" + ` to discover one thread, and use ` + "`oar threads get`" + ` (contract: ` + "`threads.inspect`" + `) for a minimal ` + "`{thread}`" + ` read, or ` + "`oar threads inspect`" + ` for the composed coordination view. Add ` + "`--full-id`" + ` for copy/paste ids.`)
+		return strings.TrimSpace(`Read-only backing-thread diagnostics (tooling):
+  threads recommendations   Recommendation-focused review for one backing thread.
+  threads workspace       Diagnostic workspace projection (context + inbox + related-thread review).
+  threads inspect          Smaller diagnostic bundle (context + inbox).
+  threads timeline         Backing thread timeline and expansions.
+  Tip: prefer ` + "`oar topics workspace`" + ` for normal operator coordination. Use ` + "`oar threads workspace`" + ` when you need the backing-thread projection or related-thread review; use ` + "`--status/--tag/--type initiative`" + ` to discover one thread. For a minimal ` + "`{thread}`" + ` read, use ` + "`oar threads get`" + ` (contract: ` + "`threads.inspect`" + `). Add ` + "`--full-id`" + ` for copy/paste ids.`)
 	case "events":
 		return strings.TrimSpace(`Local inspection helpers:
   events list              List timeline events with thread/type/actor filters, id mode, and preview summaries.
@@ -843,7 +848,7 @@ Note: by default, archived and tombstoned events are excluded from the timeline 
 Inbox categories:
   - ` + "`decision_needed`" + `: A human must choose among multiple viable paths.
   - ` + "`intervention_needed`" + `: The next step is clear, but a human must act because the agent cannot execute it.
-  - ` + "`risk_review`" + `: A card or work item is at risk or overdue and needs follow-up.
+  - ` + "`work_item_risk`" + `: A card or work item is at risk or overdue and needs follow-up.
   - ` + "`stale_topic`" + `: A topic appears stale; review cadence or recent activity.
   - ` + "`document_attention`" + `: A document needs human review or follow-up.`)
 	default:

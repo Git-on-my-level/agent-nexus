@@ -467,7 +467,7 @@ Generated from `contracts/oar-openapi.yaml`.
 - Stability: `beta`
 - Surface: `projection`
 - Input mode: `none`
-- Why: Load related first-class resources attached to one backing thread.
+- Why: Read-only diagnostic projection that bundles context, inbox, and related-thread signals for one backing thread. Prefer topics.workspace for normal operator coordination when a topic exists.
 - Concepts: `threads`, `workspace`
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Output: Returns `{ thread, related_topics, cards, documents, board_memberships, inbox, projection_freshness }`.
@@ -540,7 +540,7 @@ Generated from `contracts/oar-openapi.yaml`.
 - Stability: `beta`
 - Surface: `projection`
 - Input mode: `none`
-- Why: Retrieve the operator-focused topic workspace composed from linked cards, docs, threads, and inbox items.
+- Why: Primary operator coordination read — load the topic workspace composed from linked cards, docs, backing threads, and inbox items. Prefer this over thread workspace for triage and planning.
 - Concepts: `topics`, `workspace`
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Output: Returns `{ topic, cards, boards, documents, threads, inbox, projection_freshness, generated_at }`.

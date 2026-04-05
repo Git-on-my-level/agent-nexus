@@ -668,6 +668,77 @@ func TestBoardStoreMembershipValidationAndLookup(t *testing.T) {
 	}
 }
 
+func TestBoardCardRiskPersistAndUpdate(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	store := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+
+	primaryThread := createBoardTestThread(t, ctx, store, "Risk board primary")
+	cardThread := createBoardTestThread(t, ctx, store, "Risk card thread")
+	board, err := store.CreateBoard(ctx, "actor-1", map[string]any{
+		"title":     "Risk board",
+		"thread_id": primaryThread,
+	})
+	if err != nil {
+		t.Fatalf("create board: %v", err)
+	}
+	boardID := board["id"].(string)
+
+	high := "high"
+	added, err := store.AddBoardCard(ctx, "actor-2", boardID, primitives.AddBoardCardInput{
+		ThreadID:  cardThread,
+		ColumnKey: "backlog",
+		Risk:      &high,
+	})
+	if err != nil {
+		t.Fatalf("add card: %v", err)
+	}
+	if got := added.Card["risk"]; got != "high" {
+		t.Fatalf("expected risk high on create, got %#v", got)
+	}
+
+	cardID := added.Card["id"].(string)
+	medium := "medium"
+	updated, err := store.UpdateBoardCard(ctx, "actor-2", boardID, cardID, primitives.UpdateBoardCardInput{
+		Risk: &medium,
+	})
+	if err != nil {
+		t.Fatalf("update risk: %v", err)
+	}
+	if got := updated.Card["risk"]; got != "medium" {
+		t.Fatalf("expected risk medium after update, got %#v", got)
+	}
+
+	low := "low"
+	updated2, err := store.UpdateBoardCard(ctx, "actor-2", boardID, cardID, primitives.UpdateBoardCardInput{
+		Risk: &low,
+	})
+	if err != nil {
+		t.Fatalf("update risk low: %v", err)
+	}
+	if got := updated2.Card["risk"]; got != "low" {
+		t.Fatalf("expected risk low, got %#v", got)
+	}
+
+	addedDefault, err := store.AddBoardCard(ctx, "actor-2", boardID, primitives.AddBoardCardInput{
+		ThreadID:  createBoardTestThread(t, ctx, store, "Risk default thread"),
+		ColumnKey: "ready",
+	})
+	if err != nil {
+		t.Fatalf("add default-risk card: %v", err)
+	}
+	if got := addedDefault.Card["risk"]; got != "low" {
+		t.Fatalf("expected default risk low, got %#v", got)
+	}
+}
+
 func createBoardTestThread(t *testing.T, ctx context.Context, store *primitives.Store, title string) string {
 	t.Helper()
 

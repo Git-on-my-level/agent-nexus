@@ -189,14 +189,26 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 	}
 	boardID := asString(createdBoard.Board["id"])
 	boardUpdatedAt := asString(createdBoard.Board["updated_at"])
-	postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
+	cardCreateResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
 		"actor_id":"actor-1",
 		"if_board_updated_at":"`+boardUpdatedAt+`",
 		"thread_id":"`+threadID+`",
 		"title":"Comprehensive work item",
 		"column_key":"ready",
-		"due_at":"`+time.Now().UTC().Add(24*time.Hour).Format(time.RFC3339)+`"
-	}`, http.StatusCreated).Body.Close()
+		"due_at":"`+time.Now().UTC().Add(24*time.Hour).Format(time.RFC3339)+`",
+		"definition_of_done":["receipt","sign-off"]
+	}`, http.StatusCreated)
+	var comprehensiveCard struct {
+		Card map[string]any `json:"card"`
+	}
+	if err := json.NewDecoder(cardCreateResp.Body).Decode(&comprehensiveCard); err != nil {
+		t.Fatalf("decode card create: %v", err)
+	}
+	cardCreateResp.Body.Close()
+	dod, ok := comprehensiveCard.Card["definition_of_done"].([]any)
+	if !ok || len(dod) != 2 {
+		t.Fatalf("expected definition_of_done on card payload, got %#v", comprehensiveCard.Card["definition_of_done"])
+	}
 
 	postJSONExpectStatus(t, h.baseURL+"/derived/rebuild", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
 
@@ -205,8 +217,8 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 	for _, item := range inboxItems {
 		categories[asString(item["category"])] = true
 	}
-	if !categories["risk_review"] || !categories["stale_topic"] || !categories["decision_needed"] {
-		t.Fatalf("expected inbox categories risk_review/stale_topic/decision_needed, got %#v", categories)
+	if !categories["work_item_risk"] || !categories["stale_topic"] || !categories["decision_needed"] {
+		t.Fatalf("expected inbox categories work_item_risk/stale_topic/decision_needed, got %#v", categories)
 	}
 
 	decisionItem, ok := findInboxItem(inboxItems, func(item map[string]any) bool {

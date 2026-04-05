@@ -269,7 +269,7 @@ const inboxItems = [
   },
   {
     id: "inbox-003",
-    category: "risk_review",
+    category: "work_item_risk",
     title: "Summer launch at risk — lemon shortage blocks pilot batch",
     recommended_action:
       "Update summer menu thread with expected unblock date once lemon restock is confirmed.",
@@ -1920,9 +1920,14 @@ function deriveMockInboxSubjectRef(item) {
     return explicit;
   }
 
-  const topicId = String(item?.topic_id ?? item?.thread_id ?? "").trim();
+  const topicId = String(item?.topic_id ?? "").trim();
   if (topicId) {
     return `topic:${topicId}`;
+  }
+
+  const cardId = String(item?.card_id ?? item?.work_item_id ?? "").trim();
+  if (cardId) {
+    return `card:${cardId}`;
   }
 
   const boardId = String(item?.board_id ?? "").trim();
@@ -1935,9 +1940,9 @@ function deriveMockInboxSubjectRef(item) {
     return `document:${documentId}`;
   }
 
-  const cardId = String(item?.card_id ?? item?.work_item_id ?? "").trim();
-  if (cardId) {
-    return `card:${cardId}`;
+  const threadId = String(item?.thread_id ?? "").trim();
+  if (threadId) {
+    return `thread:${threadId}`;
   }
 
   return "";
@@ -2303,6 +2308,16 @@ function buildMockWorkspaceCollaboration(
   };
 }
 
+function mockThreadWorkspaceRefreshCommand(threadId, thread) {
+  const ref = String(thread?.topic_ref ?? thread?.subject_ref ?? "").trim();
+  const m = ref.match(/^topic:(.+)$/);
+  if (m && String(m[1] ?? "").trim()) {
+    const topicId = String(m[1]).trim();
+    return `oar topics workspace --topic-id ${topicId} --include-artifact-content --full-id --json`;
+  }
+  return `oar threads workspace --thread-id ${threadId} --include-artifact-content --full-id --json`;
+}
+
 export function getMockThreadWorkspace(
   threadId,
   { max_events = 20, include_artifact_content = false } = {},
@@ -2410,7 +2425,10 @@ export function getMockThreadWorkspace(
       collaboration.decision_requests.length +
       collaboration.decisions.length,
     follow_up: {
-      workspace_refresh_command: `oar threads workspace --thread-id ${threadId} --include-artifact-content --full-id --json`,
+      workspace_refresh_command: mockThreadWorkspaceRefreshCommand(
+        threadId,
+        thread,
+      ),
     },
     section_kinds: {
       thread: "canonical",

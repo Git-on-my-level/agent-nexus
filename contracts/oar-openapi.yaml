@@ -248,12 +248,12 @@ paths:
   /topics/{topic_id}/workspace:
     get:
       operationId: getTopicWorkspace
-      summary: Get topic workspace view
+      summary: Get topic workspace (primary operator coordination read)
       tags: [topics]
       x-oar-surface: projection
       x-oar-command-id: topics.workspace
       x-oar-cli-path: topics workspace
-      x-oar-why: Retrieve the operator-focused topic workspace composed from linked cards, docs, threads, and inbox items.
+      x-oar-why: Primary operator coordination read — load the topic workspace composed from linked cards, docs, backing threads, and inbox items. Prefer this over thread workspace for triage and planning.
       x-oar-input-mode: none
       x-oar-streaming: { mode: none }
       x-oar-output-envelope: "Returns `{ topic, cards, boards, documents, threads, inbox, projection_freshness, generated_at }`."
@@ -404,12 +404,12 @@ paths:
   /threads/{thread_id}/workspace:
     get:
       operationId: getThreadWorkspace
-      summary: Get backing thread workspace view
+      summary: Get backing thread workspace projection (diagnostic)
       tags: [threads]
       x-oar-surface: projection
       x-oar-command-id: threads.workspace
       x-oar-cli-path: threads workspace
-      x-oar-why: Load related first-class resources attached to one backing thread.
+      x-oar-why: Read-only diagnostic projection that bundles context, inbox, and related-thread signals for one backing thread. Prefer topics.workspace for normal operator coordination when a topic exists.
       x-oar-input-mode: none
       x-oar-streaming: { mode: none }
       x-oar-output-envelope: "Returns `{ thread, related_topics, cards, documents, board_memberships, inbox, projection_freshness }`."
@@ -1777,6 +1777,15 @@ components:
         assignee_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
+        due_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Optional due instant for the work item.
+        definition_of_done:
+          type: array
+          items: { type: string }
+          description: Acceptance lines for completing the card.
         risk:
           type: string
           enum: [low, medium, high, critical]
@@ -1851,7 +1860,7 @@ components:
         id: { type: string }
         category:
           type: string
-          enum: [decision_needed, intervention_needed, risk_review, stale_topic, document_attention]
+          enum: [decision_needed, intervention_needed, stale_topic, work_item_risk, document_attention]
         subject_ref: { $ref: '#/components/schemas/TypedRef' }
         source_event_ref: { $ref: '#/components/schemas/TypedRef' }
         title: { type: string }
@@ -1866,10 +1875,10 @@ components:
       properties:
         type:
           type: string
-          enum: [initiative, objective, decision, incident, risk, request, note, other]
+          enum: [case, process, relationship, initiative, objective, decision, incident, risk, request, note, other]
         status:
           type: string
-          enum: [proposed, active, blocked, resolved, archived]
+          enum: [proposed, active, paused, blocked, resolved, closed, archived]
         title: { type: string }
         summary: { type: string }
         owner_refs:
@@ -1895,10 +1904,10 @@ components:
       properties:
         type:
           type: string
-          enum: [initiative, objective, decision, incident, risk, request, note, other]
+          enum: [case, process, relationship, initiative, objective, decision, incident, risk, request, note, other]
         status:
           type: string
-          enum: [proposed, active, blocked, resolved, archived]
+          enum: [proposed, active, paused, blocked, resolved, closed, archived]
         title: { type: string }
         summary: { type: string }
         owner_refs:
@@ -2008,6 +2017,13 @@ components:
         related_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
+        due_at:
+          type: string
+          format: date-time
+          nullable: true
+        definition_of_done:
+          type: array
+          items: { type: string }
         provenance: { $ref: '#/components/schemas/Provenance' }
       required:
         [title, summary, column_key, assignee_refs, risk, resolution_refs, related_refs, provenance]
@@ -2041,6 +2057,13 @@ components:
         related_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
+        due_at:
+          type: string
+          format: date-time
+          nullable: true
+        definition_of_done:
+          type: array
+          items: { type: string }
         provenance: { $ref: '#/components/schemas/Provenance' }
 
     MoveCardInput:

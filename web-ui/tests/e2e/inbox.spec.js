@@ -30,7 +30,7 @@ test("inbox triage shows urgency summary and dismissing removes an item", async 
     },
     {
       id: "inbox-003",
-      category: "risk_review",
+      category: "work_item_risk",
       title: "Work item risk",
       recommended_action: "Adjust due date.",
       thread_id: "thread-incident-42",
@@ -130,7 +130,7 @@ test("inbox urgency filters reduce visible cards", async ({ page }) => {
     },
     {
       id: "inbox-003",
-      category: "risk_review",
+      category: "work_item_risk",
       title: "Work item risk",
       recommended_action: "Adjust due date.",
       thread_id: "thread-incident-42",

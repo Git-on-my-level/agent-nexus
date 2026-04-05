@@ -162,10 +162,10 @@ func TestInboxDerivationAndAcknowledgmentSuppression(t *testing.T) {
 
 	itemsWithRisk := getInboxItems(t, h.baseURL)
 	riskItem, ok := findInboxItem(itemsWithRisk, func(item map[string]any) bool {
-		return asString(item["category"]) == "risk_review" && asString(item["card_id"]) == cardID
+		return asString(item["category"]) == "work_item_risk" && asString(item["card_id"]) == cardID
 	})
 	if !ok {
-		t.Fatalf("expected risk_review inbox item, got %#v", itemsWithRisk)
+		t.Fatalf("expected work_item_risk inbox item, got %#v", itemsWithRisk)
 	}
 	riskItemID := asString(riskItem["id"])
 
@@ -179,7 +179,7 @@ func TestInboxDerivationAndAcknowledgmentSuppression(t *testing.T) {
 	if _, exists := findInboxItem(itemsAfterRiskAck, func(item map[string]any) bool {
 		return asString(item["id"]) == riskItemID
 	}); exists {
-		t.Fatalf("expected acknowledged risk_review item to be suppressed, got %#v", itemsAfterRiskAck)
+		t.Fatalf("expected acknowledged work_item_risk item to be suppressed, got %#v", itemsAfterRiskAck)
 	}
 
 	patchResp := patchJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards/"+threadID, `{
@@ -194,11 +194,281 @@ func TestInboxDerivationAndAcknowledgmentSuppression(t *testing.T) {
 		return asString(item["id"]) == riskItemID
 	})
 	if !ok {
-		t.Fatalf("expected risk_review item to reappear after new trigger, got %#v", itemsAfterStatusChange)
+		t.Fatalf("expected work_item_risk item to reappear after new trigger, got %#v", itemsAfterStatusChange)
 	}
-	if asString(reappearedRisk["category"]) != "risk_review" {
+	if asString(reappearedRisk["category"]) != "work_item_risk" {
 		t.Fatalf("unexpected reappeared risk item: %#v", reappearedRisk)
 	}
+}
+
+func TestInboxAcknowledgmentResolvesTopicSubjectRefToBackingThread(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	createTopicResp := postJSONExpectStatus(t, h.baseURL+"/topics", `{
+		"actor_id":"actor-1",
+		"topic":{
+			"type":"initiative",
+			"status":"active",
+			"title":"Ack subject topic",
+			"summary":"Topic for ack resolution",
+			"owner_refs":["actor:actor-1"],
+			"document_refs":[],
+			"board_refs":[],
+			"related_refs":[],
+			"provenance":{"sources":["seed:inbox-ack-subject"]}
+		}
+	}`, http.StatusCreated)
+	defer createTopicResp.Body.Close()
+
+	var createdTopic struct {
+		Topic map[string]any `json:"topic"`
+	}
+	if err := json.NewDecoder(createTopicResp.Body).Decode(&createdTopic); err != nil {
+		t.Fatalf("decode create topic response: %v", err)
+	}
+	topicID := asString(createdTopic.Topic["id"])
+	backingThreadID := asString(createdTopic.Topic["thread_id"])
+	if topicID == "" || backingThreadID == "" {
+		t.Fatalf("expected topic id and thread_id, got %#v", createdTopic.Topic)
+	}
+	if topicID == backingThreadID {
+		t.Fatalf("expected topic id to differ from backing thread id for this test, got topic=%q thread=%q", topicID, backingThreadID)
+	}
+
+	decisionResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
+		"actor_id":"actor-1",
+		"event":{
+			"type":"decision_needed",
+			"thread_id":"`+backingThreadID+`",
+			"refs":["topic:`+topicID+`"],
+			"summary":"Need a decision",
+			"payload":{},
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated)
+	defer decisionResp.Body.Close()
+
+	items := getInboxItems(t, h.baseURL)
+	decisionItem, ok := findInboxItem(items, func(item map[string]any) bool {
+		return asString(item["category"]) == "decision_needed" && asString(item["thread_id"]) == backingThreadID
+	})
+	if !ok {
+		t.Fatalf("expected decision inbox item, got %#v", items)
+	}
+	inboxItemID := asString(decisionItem["id"])
+
+	ackResp := postJSONExpectStatus(t, h.baseURL+"/inbox/ack", `{
+		"actor_id":"actor-1",
+		"subject_ref":"topic:`+topicID+`",
+		"inbox_item_id":"`+inboxItemID+`"
+	}`, http.StatusCreated)
+	var acked struct {
+		Event map[string]any `json:"event"`
+	}
+	if err := json.NewDecoder(ackResp.Body).Decode(&acked); err != nil {
+		t.Fatalf("decode ack response: %v", err)
+	}
+	ackResp.Body.Close()
+
+	if got := asString(acked.Event["thread_id"]); got != backingThreadID {
+		t.Fatalf("expected ack event thread_id=%q (backing thread), got %q", backingThreadID, got)
+	}
+}
+
+func TestLegacyRiskReviewAckStillSuppressesWorkItemRiskAfterRebuild(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	threadID := integrationSeedThread(t, h, "actor-1", map[string]any{
+		"title":            "Legacy risk ack thread",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p1",
+		"tags":             []any{"ops"},
+		"cadence":          "daily",
+		"next_check_in_at": "2026-03-05T00:00:00Z",
+		"current_summary":  "summary",
+		"next_actions":     []any{"do x"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
+
+	createBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
+		"actor_id":"actor-1",
+		"board":{
+			"title":"Legacy risk ack board",
+			"refs":["thread:`+threadID+`"]
+		}
+	}`, http.StatusCreated)
+	defer createBoardResp.Body.Close()
+	var createdBoard struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(createBoardResp.Body).Decode(&createdBoard); err != nil {
+		t.Fatalf("decode board response: %v", err)
+	}
+	boardID := asString(createdBoard.Board["id"])
+	boardUpdatedAt := asString(createdBoard.Board["updated_at"])
+
+	dueSoon := time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339)
+	cardResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+boardUpdatedAt+`",
+		"thread_id":"`+threadID+`",
+		"title":"Legacy-acked work item",
+		"column_key":"ready",
+		"due_at":"`+dueSoon+`"
+	}`, http.StatusCreated)
+	defer cardResp.Body.Close()
+	var createdCard struct {
+		Card map[string]any `json:"card"`
+	}
+	if err := json.NewDecoder(cardResp.Body).Decode(&createdCard); err != nil {
+		t.Fatalf("decode card response: %v", err)
+	}
+	cardID := asString(createdCard.Card["id"])
+	if cardID == "" {
+		t.Fatal("expected card id")
+	}
+
+	itemsWithRisk := getInboxItems(t, h.baseURL)
+	riskItem, ok := findInboxItem(itemsWithRisk, func(item map[string]any) bool {
+		return asString(item["category"]) == "work_item_risk" && asString(item["card_id"]) == cardID
+	})
+	if !ok {
+		t.Fatalf("expected work_item_risk inbox item, got %#v", itemsWithRisk)
+	}
+	canonicalRiskID := asString(riskItem["id"])
+	legacyRiskID := makeInboxItemID("risk_review", threadID, cardID, "")
+
+	postJSONExpectStatus(t, h.baseURL+"/inbox/ack", `{
+		"actor_id":"actor-1",
+		"thread_id":"`+threadID+`",
+		"inbox_item_id":"`+legacyRiskID+`"
+	}`, http.StatusCreated).Body.Close()
+
+	postJSONExpectStatus(t, h.baseURL+"/derived/rebuild", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
+
+	itemsAfterAckAndRebuild := getInboxItems(t, h.baseURL)
+	if _, exists := findInboxItem(itemsAfterAckAndRebuild, func(item map[string]any) bool {
+		return asString(item["id"]) == canonicalRiskID || (asString(item["category"]) == "work_item_risk" && asString(item["card_id"]) == cardID)
+	}); exists {
+		t.Fatalf("expected legacy risk_review ack to suppress canonical work_item_risk item after rebuild, got %#v", itemsAfterAckAndRebuild)
+	}
+}
+
+func TestInboxAcknowledgmentAcceptsLegacyTopicPrefixedBackingThreadID(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	threadID := integrationSeedThread(t, h, "actor-1", map[string]any{
+		"title":            "Legacy inbox ack thread",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p1",
+		"tags":             []any{"ops"},
+		"cadence":          "daily",
+		"next_check_in_at": "2026-03-05T00:00:00Z",
+		"current_summary":  "summary",
+		"next_actions":     []any{"do x"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
+
+	postJSONExpectStatus(t, h.baseURL+"/events", `{
+		"actor_id":"actor-1",
+		"event":{
+			"type":"decision_needed",
+			"thread_id":"`+threadID+`",
+			"refs":["topic:`+threadID+`"],
+			"summary":"Need a decision",
+			"payload":{},
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated).Body.Close()
+
+	items := getInboxItems(t, h.baseURL)
+	decisionItem, ok := findInboxItem(items, func(item map[string]any) bool {
+		return asString(item["category"]) == "decision_needed" && asString(item["thread_id"]) == threadID
+	})
+	if !ok {
+		t.Fatalf("expected decision inbox item, got %#v", items)
+	}
+	inboxItemID := asString(decisionItem["id"])
+
+	ackResp := postJSONExpectStatus(t, h.baseURL+"/inbox/ack", `{
+		"actor_id":"actor-1",
+		"subject_ref":"topic:`+threadID+`",
+		"inbox_item_id":"`+inboxItemID+`"
+	}`, http.StatusCreated)
+	var acked struct {
+		Event map[string]any `json:"event"`
+	}
+	if err := json.NewDecoder(ackResp.Body).Decode(&acked); err != nil {
+		t.Fatalf("decode ack response: %v", err)
+	}
+	ackResp.Body.Close()
+
+	if got := asString(acked.Event["thread_id"]); got != threadID {
+		t.Fatalf("expected ack event thread_id=%q, got %q", threadID, got)
+	}
+
+	itemsAfterAck := getInboxItems(t, h.baseURL)
+	if _, stillThere := findInboxItem(itemsAfterAck, func(item map[string]any) bool {
+		return asString(item["id"]) == inboxItemID
+	}); stillThere {
+		t.Fatalf("expected acknowledged decision item to be suppressed, got %#v", itemsAfterAck)
+	}
+}
+
+func TestInboxAcknowledgmentRejectsBoardSubjectRefWithoutBackingThread(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
+
+	primaryThreadID := createBoardThreadViaHTTP(t, h, "Board ack thread")
+	createBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
+		"actor_id":"actor-1",
+		"board":{
+			"title":"Ack board",
+			"refs":["thread:`+primaryThreadID+`"]
+		}
+	}`, http.StatusCreated)
+	defer createBoardResp.Body.Close()
+
+	var createdBoard struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(createBoardResp.Body).Decode(&createdBoard); err != nil {
+		t.Fatalf("decode create board response: %v", err)
+	}
+	boardID := asString(createdBoard.Board["id"])
+	if boardID == "" {
+		t.Fatalf("expected board id, got %#v", createdBoard.Board)
+	}
+
+	if _, err := h.workspace.DB().Exec(
+		`UPDATE boards SET thread_id = '' WHERE id = ?`,
+		boardID,
+	); err != nil {
+		t.Fatalf("blank board thread_id: %v", err)
+	}
+
+	resp := postJSONExpectStatus(t, h.baseURL+"/inbox/ack", `{
+		"actor_id":"actor-1",
+		"subject_ref":"board:`+boardID+`",
+		"inbox_item_id":"inbox:test"
+	}`, http.StatusBadRequest)
+	defer resp.Body.Close()
+	assertErrorCode(t, resp, "invalid_request")
 }
 
 func TestInterventionNeededDerivesInboxItem(t *testing.T) {

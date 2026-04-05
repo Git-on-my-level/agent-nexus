@@ -17,7 +17,7 @@ Each endpoint is classified with an `x-oar-surface` extension indicating its rol
 
 - **`canonical`**: CRUD/list/get endpoints over canonical resources (topics, cards, boards, documents, artifacts, events, packets, plus read-only thread compatibility endpoints). These are the durable substrate.
 
-- **`projection`**: Operator convenience surfaces that aggregate multiple canonical resources into workspace-friendly bundles. Examples: `threads.context`, `threads.workspace`, `boards.workspace`, `inbox.list/get/stream/ack`. The web UI intentionally uses projection endpoints for workspace/inbox/operator reads.
+- **`projection`**: Operator convenience surfaces that aggregate multiple canonical resources into workspace-friendly bundles. Examples: `topics.workspace` (primary coordination), `threads.context`, `threads.workspace` (backing-thread diagnostics), `boards.workspace`, `inbox.list/get/stream/ack`. The web UI intentionally uses projection endpoints for workspace/inbox/operator reads.
 
 - **`utility`**: Infrastructure endpoints for health, version, meta discovery, auth bootstrap, and maintenance. Examples: `/health`, `/version`, `/meta/*`, `/auth/*`, `/actors`, `/derived/rebuild`.
 

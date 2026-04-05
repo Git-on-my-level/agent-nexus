@@ -24,9 +24,11 @@ type WakePacket struct {
 	OARBaseURL           string
 	ThreadContextURL     string
 	ThreadWorkspaceURL   string
+	TopicWorkspaceURL    string
 	TriggerEventURL      string
 	CLIThreadInspect     string
 	CLIThreadWorkspace   string
+	CLITopicWorkspace    string
 	Version              string
 }
 
@@ -128,6 +130,21 @@ func (p WakePacket) ToContent() map[string]any {
 	if version == "" {
 		version = WakePacketVersion
 	}
+	preferred := "threads.workspace"
+	cliFetch := []string{p.CLIThreadWorkspace, p.CLIThreadInspect}
+	if strings.TrimSpace(p.CLITopicWorkspace) != "" {
+		preferred = "topics.workspace"
+		cliFetch = []string{p.CLITopicWorkspace, p.CLIThreadWorkspace, p.CLIThreadInspect}
+	}
+	apiFetch := map[string]any{
+		"thread":        strings.TrimRight(p.OARBaseURL, "/") + "/threads/" + p.ThreadID,
+		"context":       p.ThreadContextURL,
+		"workspace":     p.ThreadWorkspaceURL,
+		"trigger_event": p.TriggerEventURL,
+	}
+	if u := strings.TrimSpace(p.TopicWorkspaceURL); u != "" {
+		apiFetch["topic_workspace"] = u
+	}
 	out := map[string]any{
 		"version":   version,
 		"wakeup_id": p.WakeupID,
@@ -155,14 +172,9 @@ func (p WakePacket) ToContent() map[string]any {
 		},
 		"session_key": p.SessionKey,
 		"context_fetch": map[string]any{
-			"preferred": "threads.workspace",
-			"cli":       []string{p.CLIThreadWorkspace, p.CLIThreadInspect},
-			"api": map[string]any{
-				"thread":        strings.TrimRight(p.OARBaseURL, "/") + "/threads/" + p.ThreadID,
-				"context":       p.ThreadContextURL,
-				"workspace":     p.ThreadWorkspaceURL,
-				"trigger_event": p.TriggerEventURL,
-			},
+			"preferred": preferred,
+			"cli":       cliFetch,
+			"api":       apiFetch,
 		},
 	}
 	if s := strings.TrimSpace(p.SubjectRef); s != "" {

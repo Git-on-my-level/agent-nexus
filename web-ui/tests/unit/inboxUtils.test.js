@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   deriveInboxUrgency,
   enrichInboxItem,
+  getInboxSubjectRef,
   getInboxUrgencyLabel,
   groupInboxItems,
   summarizeInboxUrgency,
@@ -22,7 +23,7 @@ describe("inbox grouping", () => {
         },
         {
           id: "old-risk",
-          category: "risk_review",
+          category: "work_item_risk",
           title: "Aging risk",
           source_event_time: "2026-03-03T10:00:00.000Z",
         },
@@ -51,7 +52,7 @@ describe("inbox grouping", () => {
     expect(grouped.map((group) => group.category)).toEqual([
       "decision_needed",
       "intervention_needed",
-      "risk_review",
+      "work_item_risk",
       "stale_topic",
       "document_attention",
     ]);
@@ -90,7 +91,7 @@ describe("inbox urgency derivation", () => {
     );
     const normal = deriveInboxUrgency(
       {
-        category: "risk_review",
+        category: "work_item_risk",
         source_event_time: "2026-03-07T11:30:00.000Z",
       },
       { now },
@@ -130,7 +131,7 @@ describe("inbox urgency derivation", () => {
       },
       {
         id: "3",
-        category: "risk_review",
+        category: "work_item_risk",
       },
     ];
 
@@ -154,6 +155,36 @@ describe("inbox urgency derivation", () => {
 });
 
 describe("inbox typed-ref rendering targets", () => {
+  it("preserves explicit subject refs and prefers specific ids before thread fallback", () => {
+    expect(
+      getInboxSubjectRef({
+        subject_ref: "topic:topic-123",
+        topic_id: "topic-999",
+        thread_id: "thread-999",
+      }),
+    ).toBe("topic:topic-123");
+
+    expect(
+      getInboxSubjectRef({
+        topic_id: "topic-123",
+        thread_id: "thread-123",
+      }),
+    ).toBe("topic:topic-123");
+
+    expect(
+      getInboxSubjectRef({
+        card_id: "card-123",
+        thread_id: "thread-123",
+      }),
+    ).toBe("card:card-123");
+
+    expect(
+      getInboxSubjectRef({
+        thread_id: "thread-123",
+      }),
+    ).toBe("thread:thread-123");
+  });
+
   it("resolves thread/event/url refs used by inbox cards", () => {
     expect(resolveRefLink("thread:thread-onboarding")).toMatchObject({
       href: "/topics/thread-onboarding",

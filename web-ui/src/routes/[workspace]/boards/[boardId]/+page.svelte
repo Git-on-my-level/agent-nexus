@@ -162,11 +162,24 @@
     return r;
   }
 
+  /** Prefer a linked scope thread from related_refs when it differs from backing thread_id. */
+  function operatorThreadIdFromCard(card) {
+    const backing = String(card.thread_id ?? "").trim();
+    const refs = Array.isArray(card.related_refs) ? card.related_refs : [];
+    for (const r of refs) {
+      const s = String(r ?? "").trim();
+      if (!s.startsWith("thread:")) continue;
+      const id = s.slice("thread:".length).trim();
+      if (id && id !== backing) return id;
+    }
+    return backing || String(card.parent_thread ?? "").trim();
+  }
+
   function syncCardDrafts(cardItem) {
     const card = cardItem?.membership ?? {};
     manageTitle = card.title ?? "";
     manageSummary = card.summary ?? "";
-    manageThreadId = card.thread_id ?? card.parent_thread ?? "";
+    manageThreadId = operatorThreadIdFromCard(card);
     manageDocumentId = String(
       card.document_ref ?? card.pinned_document_id ?? "",
     )
@@ -532,6 +545,7 @@
       return "canceled";
     if (resolution === "superseded") return "paused";
     if (thread) return getThreadStatus(thread);
+    if (String(membership?.column_key ?? "").trim() === "done") return "done";
     const s = String(membership?.status ?? "").trim();
     if (s === "done") return "done";
     if (s === "cancelled") return "canceled";
@@ -1305,7 +1319,13 @@
         </div>
 
         <div class="mt-1 flex flex-wrap items-center gap-1 pl-4">
-          {#if String(membership?.status ?? "").trim()}
+          {#if String(membership?.column_key ?? "").trim()}
+            <span
+              class="rounded bg-[var(--ui-border)] px-1 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--ui-text-muted)]"
+            >
+              {String(membership.column_key).trim().replaceAll("_", " ")}
+            </span>
+          {:else if String(membership?.status ?? "").trim()}
             <span
               class="rounded bg-[var(--ui-border)] px-1 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--ui-text-muted)]"
             >

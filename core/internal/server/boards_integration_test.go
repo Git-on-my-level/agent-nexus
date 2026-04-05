@@ -8,6 +8,30 @@ import (
 	"time"
 )
 
+func cardDocumentRefLocalID(card map[string]any) string {
+	ref := strings.TrimSpace(asString(card["document_ref"]))
+	return strings.TrimPrefix(ref, "document:")
+}
+
+func cardRelatedRefsContainThread(card map[string]any, threadID string) bool {
+	want := "thread:" + threadID
+	switch x := card["related_refs"].(type) {
+	case []any:
+		for _, r := range x {
+			if strings.TrimSpace(asString(r)) == want {
+				return true
+			}
+		}
+	case []string:
+		for _, r := range x {
+			if strings.TrimSpace(r) == want {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func TestBoardsWorkspaceAndThreadWorkspaceMemberships(t *testing.T) {
 	t.Parallel()
 
@@ -74,8 +98,11 @@ func TestBoardsWorkspaceAndThreadWorkspaceMemberships(t *testing.T) {
 	if err := json.NewDecoder(addCardResp.Body).Decode(&addCardPayload); err != nil {
 		t.Fatalf("decode add card response: %v", err)
 	}
-	if asString(addCardPayload.Card["parent_thread"]) != memberThreadID || asString(addCardPayload.Card["column_key"]) != "ready" {
+	if !cardRelatedRefsContainThread(addCardPayload.Card, memberThreadID) || asString(addCardPayload.Card["column_key"]) != "ready" {
 		t.Fatalf("unexpected board card payload: %#v", addCardPayload.Card)
+	}
+	if cardDocumentRefLocalID(addCardPayload.Card) != memberDocumentID {
+		t.Fatalf("unexpected card document_ref, got %#v", addCardPayload.Card["document_ref"])
 	}
 
 	listResp, err := http.Get(h.baseURL + "/boards?status=active&label=ops&owner=actor-1")
@@ -169,7 +196,7 @@ func TestBoardsWorkspaceAndThreadWorkspaceMemberships(t *testing.T) {
 		t.Fatalf("expected one board workspace card, got %#v", workspacePayload.Cards)
 	}
 	cardItem := workspacePayload.Cards.Items[0]
-	if asString(cardItem.Membership["parent_thread"]) != memberThreadID || asString(cardItem.Backing.Thread["id"]) == "" {
+	if !cardRelatedRefsContainThread(cardItem.Membership, memberThreadID) || asString(cardItem.Backing.Thread["id"]) == "" {
 		t.Fatalf("unexpected board workspace card item: %#v", cardItem)
 	}
 	if asString(cardItem.Backing.PinnedDocument["id"]) != memberDocumentID {
@@ -284,8 +311,8 @@ func TestBoardsWorkspaceAndThreadWorkspaceMemberships(t *testing.T) {
 		t.Fatalf("unexpected board membership board ids: %#v", boardIDs)
 	}
 	for _, membership := range memberThreadWorkspace.BoardMemberships.Items {
-		if asString(membership.Card["parent_thread"]) != memberThreadID {
-			t.Fatalf("expected board membership parent_thread %q, got %#v", memberThreadID, membership.Card)
+		if !cardRelatedRefsContainThread(membership.Card, memberThreadID) {
+			t.Fatalf("expected board membership related_refs to include thread %q, got %#v", memberThreadID, membership.Card)
 		}
 	}
 }
@@ -435,8 +462,8 @@ func TestBoardLifecycleEventsAndConflictValidation(t *testing.T) {
 	if removeCardPayload.RemovedThreadID != memberThreadID {
 		t.Fatalf("unexpected removed_thread_id: %#v", removeCardPayload)
 	}
-	if asString(removeCardPayload.Card["parent_thread"]) != memberThreadID {
-		t.Fatalf("expected removed card parent_thread %q, got %#v", memberThreadID, removeCardPayload.Card)
+	if !cardRelatedRefsContainThread(removeCardPayload.Card, memberThreadID) {
+		t.Fatalf("expected removed card related_refs to include thread %q, got %#v", memberThreadID, removeCardPayload.Card)
 	}
 
 	timelineResp, err := http.Get(h.baseURL + "/threads/" + boardID + "/timeline")
@@ -462,7 +489,7 @@ func TestBoardLifecycleEventsAndConflictValidation(t *testing.T) {
 			boardEventsByType[eventType] = event
 		}
 	}
-	expectedBoardEvents := []string{"board_created", "board_updated", "board_card_added", "board_card_updated", "board_card_moved", "board_card_removed"}
+	expectedBoardEvents := []string{"board_created", "board_updated", "board_card_added", "board_card_moved", "board_card_archived"}
 	for _, eventType := range expectedBoardEvents {
 		event, ok := boardEventsByType[eventType]
 		if !ok {
@@ -479,11 +506,44 @@ func TestBoardLifecycleEventsAndConflictValidation(t *testing.T) {
 	if !containsAny(boardEventsByType["board_created"]["refs"].([]any), "thread:"+primaryThreadID) || !containsAny(boardEventsByType["board_created"]["refs"].([]any), "document:"+primaryDocumentID) {
 		t.Fatalf("expected primary thread/document refs on board_created, got %#v", boardEventsByType["board_created"]["refs"])
 	}
-	if !containsAny(boardEventsByType["board_card_updated"]["refs"].([]any), "document:"+pinnedDocumentID) {
-		t.Fatalf("expected pinned document ref on board_card_updated, got %#v", boardEventsByType["board_card_updated"]["refs"])
+	if !containsAny(boardEventsByType["board_card_moved"]["refs"].([]any), "card:"+asString(addCardPayload.Card["id"])) || !containsAny(boardEventsByType["board_card_archived"]["refs"].([]any), "card:"+asString(addCardPayload.Card["id"])) {
+		t.Fatalf("expected card refs on move/archive events, got moved=%#v archived=%#v", boardEventsByType["board_card_moved"]["refs"], boardEventsByType["board_card_archived"]["refs"])
 	}
-	if !containsAny(boardEventsByType["board_card_moved"]["refs"].([]any), "card:"+asString(addCardPayload.Card["id"])) || !containsAny(boardEventsByType["board_card_removed"]["refs"].([]any), "card:"+asString(addCardPayload.Card["id"])) {
-		t.Fatalf("expected card refs on move/remove events, got moved=%#v removed=%#v", boardEventsByType["board_card_moved"]["refs"], boardEventsByType["board_card_removed"]["refs"])
+
+	cardBackingThreadID := asString(addCardPayload.Card["thread_id"])
+	if cardBackingThreadID == "" {
+		t.Fatalf("expected card.thread_id for lifecycle timeline lookup, got %#v", addCardPayload.Card)
+	}
+	cardTimelineResp, err := http.Get(h.baseURL + "/threads/" + cardBackingThreadID + "/timeline")
+	if err != nil {
+		t.Fatalf("GET card backing thread timeline: %v", err)
+	}
+	defer cardTimelineResp.Body.Close()
+	if cardTimelineResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected card backing timeline status: got %d", cardTimelineResp.StatusCode)
+	}
+	var cardTimeline struct {
+		Events []map[string]any `json:"events"`
+	}
+	if err := json.NewDecoder(cardTimelineResp.Body).Decode(&cardTimeline); err != nil {
+		t.Fatalf("decode card backing timeline: %v", err)
+	}
+	var pinnedDocCardUpdated map[string]any
+	for _, event := range cardTimeline.Events {
+		if asString(event["type"]) != "card_updated" {
+			continue
+		}
+		refs, ok := event["refs"].([]any)
+		if !ok {
+			continue
+		}
+		if containsAny(refs, "document:"+pinnedDocumentID) {
+			pinnedDocCardUpdated = event
+			break
+		}
+	}
+	if pinnedDocCardUpdated == nil {
+		t.Fatalf("expected card_updated on card backing thread with pinned document ref, got %#v", cardTimeline.Events)
 	}
 }
 
@@ -551,11 +611,20 @@ func TestArchiveBoardCardGlobalRoute(t *testing.T) {
 	if asString(archivePayload.Card["id"]) != cardID {
 		t.Fatalf("expected archived card id %q, got %#v", cardID, archivePayload.Card["id"])
 	}
-	if asString(archivePayload.Card["board_id"]) != boardID {
-		t.Fatalf("expected archived board id %q, got %#v", boardID, archivePayload.Card["board_id"])
+	if want := "board:" + boardID; asString(archivePayload.Card["board_ref"]) != want {
+		t.Fatalf("expected archived board_ref %q, got %#v", want, archivePayload.Card["board_ref"])
 	}
 	if asString(archivePayload.Card["archived_at"]) == "" {
 		t.Fatalf("expected archived_at on archive response, got %#v", archivePayload.Card)
+	}
+	if _, ok := archivePayload.Card["status"]; ok {
+		t.Fatalf("expected archive response to omit legacy raw status field, got %#v", archivePayload.Card)
+	}
+	if _, ok := archivePayload.Card["pinned_document_id"]; ok {
+		t.Fatalf("expected archive response to omit raw pinned_document_id field, got %#v", archivePayload.Card)
+	}
+	if _, ok := archivePayload.Card["parent_thread"]; ok {
+		t.Fatalf("expected archive response to omit raw parent_thread field, got %#v", archivePayload.Card)
 	}
 
 	cardsResp, err := http.Get(h.baseURL + "/boards/" + boardID + "/cards")
@@ -592,6 +661,65 @@ func TestArchiveBoardCardGlobalRoute(t *testing.T) {
 	}`, http.StatusBadRequest)
 	defer moveArchivedResp.Body.Close()
 	assertErrorCode(t, moveArchivedResp, "invalid_request")
+}
+
+func TestBoardCardCreateRejectsInvalidResolutionCombinations(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
+
+	primaryThreadID := createBoardThreadViaHTTP(t, h, "Create resolution primary thread")
+	memberThreadID := createBoardThreadViaHTTP(t, h, "Create resolution member thread")
+
+	createBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
+		"actor_id":"actor-1",
+		"board":{
+			"title":"Create resolution board",
+			"refs":["thread:`+primaryThreadID+`"]
+		}
+	}`, http.StatusCreated)
+	defer createBoardResp.Body.Close()
+
+	var createBoardPayload struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(createBoardResp.Body).Decode(&createBoardPayload); err != nil {
+		t.Fatalf("decode create board response: %v", err)
+	}
+	boardID := asString(createBoardPayload.Board["id"])
+	boardUpdatedAt := asString(createBoardPayload.Board["updated_at"])
+
+	resp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+boardUpdatedAt+`",
+		"thread_id":"`+memberThreadID+`",
+		"column_key":"review",
+		"resolution":"done",
+		"resolution_refs":["event:done-1"]
+	}`, http.StatusBadRequest)
+	defer resp.Body.Close()
+	assertErrorCode(t, resp, "invalid_request")
+
+	resp = postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+boardUpdatedAt+`",
+		"thread_id":"`+memberThreadID+`",
+		"column_key":"done",
+		"resolution":"done"
+	}`, http.StatusBadRequest)
+	defer resp.Body.Close()
+	assertErrorCode(t, resp, "invalid_request")
+
+	resp = postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+boardUpdatedAt+`",
+		"thread_id":"`+memberThreadID+`",
+		"column_key":"done",
+		"resolution_refs":["event:done-1"]
+	}`, http.StatusBadRequest)
+	defer resp.Body.Close()
+	assertErrorCode(t, resp, "invalid_request")
 }
 
 func TestCardGlobalTrashListRestoreAndPurge(t *testing.T) {
@@ -655,6 +783,12 @@ func TestCardGlobalTrashListRestoreAndPurge(t *testing.T) {
 	}
 	if err := json.NewDecoder(archiveResp.Body).Decode(&archivePayload); err != nil {
 		t.Fatalf("decode archive response: %v", err)
+	}
+	if _, ok := archivePayload.Card["status"]; ok {
+		t.Fatalf("expected global archive response to omit legacy raw status field, got %#v", archivePayload.Card)
+	}
+	if _, ok := archivePayload.Card["parent_thread"]; ok {
+		t.Fatalf("expected global archive response to omit raw parent_thread field, got %#v", archivePayload.Card)
 	}
 
 	listActiveResp, err := http.Get(h.baseURL + "/cards")
@@ -812,7 +946,6 @@ func TestBoardCardPatchAllowsContractValidNoOpShapes(t *testing.T) {
 		t.Fatalf("decode add card response: %v", err)
 	}
 	cardUpdatedAt := asString(addCardPayload.Board["updated_at"])
-	cardStatus := asString(addCardPayload.Card["status"])
 
 	noopPatchResp := patchJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards/"+memberThreadID, `{
 		"actor_id":"actor-1",
@@ -831,8 +964,8 @@ func TestBoardCardPatchAllowsContractValidNoOpShapes(t *testing.T) {
 	if asString(noopPatchPayload.Board["updated_at"]) != cardUpdatedAt {
 		t.Fatalf("expected noop patch to keep board updated_at, got %#v want %#v", noopPatchPayload.Board["updated_at"], cardUpdatedAt)
 	}
-	if got := noopPatchPayload.Card["pinned_document_id"]; got != nil {
-		t.Fatalf("expected noop patch to keep pinned document nil, got %#v", got)
+	if got := strings.TrimSpace(asString(noopPatchPayload.Card["document_ref"])); got != "" {
+		t.Fatalf("expected noop patch to keep document_ref empty, got %#v", got)
 	}
 
 	staleNoopPatchResp := patchJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards/"+memberThreadID, `{
@@ -860,14 +993,14 @@ func TestBoardCardPatchAllowsContractValidNoOpShapes(t *testing.T) {
 	if asString(futurePatchPayload.Board["updated_at"]) != cardUpdatedAt {
 		t.Fatalf("expected unknown-field patch to keep board updated_at, got %#v want %#v", futurePatchPayload.Board["updated_at"], cardUpdatedAt)
 	}
-	if got := futurePatchPayload.Card["pinned_document_id"]; got != nil {
-		t.Fatalf("expected unknown-field patch to keep pinned document nil, got %#v", got)
+	if got := strings.TrimSpace(asString(futurePatchPayload.Card["document_ref"])); got != "" {
+		t.Fatalf("expected unknown-field patch to keep document_ref empty, got %#v", got)
 	}
 
 	sameValuePatchResp := patchJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards/"+memberThreadID, `{
 		"actor_id":"actor-1",
 		"if_board_updated_at":"`+cardUpdatedAt+`",
-		"patch":{"status":"`+cardStatus+`"}
+		"patch":{"status":"todo"}
 	}`, http.StatusOK)
 	defer sameValuePatchResp.Body.Close()
 
@@ -881,8 +1014,8 @@ func TestBoardCardPatchAllowsContractValidNoOpShapes(t *testing.T) {
 	if asString(sameValuePatchPayload.Board["updated_at"]) != cardUpdatedAt {
 		t.Fatalf("expected same-value patch to keep board updated_at, got %#v want %#v", sameValuePatchPayload.Board["updated_at"], cardUpdatedAt)
 	}
-	if asString(sameValuePatchPayload.Card["status"]) != cardStatus {
-		t.Fatalf("expected same-value patch to keep status %q, got %#v", cardStatus, sameValuePatchPayload.Card["status"])
+	if asString(sameValuePatchPayload.Card["column_key"]) != "ready" {
+		t.Fatalf("expected same-value patch to keep column_key ready, got %#v", sameValuePatchPayload.Card["column_key"])
 	}
 
 	mismatchedAliasResp := patchJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards/"+memberThreadID, `{
@@ -970,7 +1103,7 @@ func TestBoardCardAddRequestKeyFallbackOnlyReplaysEquivalentState(t *testing.T) 
 	if err := json.NewDecoder(retryFirstAddResp.Body).Decode(&retryFirstAddPayload); err != nil {
 		t.Fatalf("decode retried first add response: %v", err)
 	}
-	if asString(retryFirstAddPayload.Card["parent_thread"]) != memberThreadID || asString(retryFirstAddPayload.Card["column_key"]) != "ready" || asString(retryFirstAddPayload.Card["pinned_document_id"]) != memberDocumentID {
+	if !cardRelatedRefsContainThread(retryFirstAddPayload.Card, memberThreadID) || asString(retryFirstAddPayload.Card["column_key"]) != "ready" || cardDocumentRefLocalID(retryFirstAddPayload.Card) != memberDocumentID {
 		t.Fatalf("unexpected retried first add payload: %#v", retryFirstAddPayload)
 	}
 
@@ -989,7 +1122,7 @@ func TestBoardCardAddRequestKeyFallbackOnlyReplaysEquivalentState(t *testing.T) 
 	if err := json.NewDecoder(replayableAddResp.Body).Decode(&replayableAddPayload); err != nil {
 		t.Fatalf("decode replayable add response: %v", err)
 	}
-	if asString(replayableAddPayload.Card["parent_thread"]) != memberThreadID || asString(replayableAddPayload.Card["column_key"]) != "ready" || asString(replayableAddPayload.Card["pinned_document_id"]) != memberDocumentID {
+	if !cardRelatedRefsContainThread(replayableAddPayload.Card, memberThreadID) || asString(replayableAddPayload.Card["column_key"]) != "ready" || cardDocumentRefLocalID(replayableAddPayload.Card) != memberDocumentID {
 		t.Fatalf("unexpected replayable add payload: %#v", replayableAddPayload)
 	}
 
@@ -1277,12 +1410,25 @@ func TestCardMoveResolutionTransitionsAndEvents(t *testing.T) {
 	if err := json.NewDecoder(cardTimelineResp.Body).Decode(&cardTimelinePayload); err != nil {
 		t.Fatalf("decode card timeline response: %v", err)
 	}
+	var cardMovedEvent map[string]any
 	var cardUpdatedEvent map[string]any
 	for _, event := range cardTimelinePayload.Events {
-		if asString(event["type"]) == "card_updated" {
-			cardUpdatedEvent = event
-			break
+		switch asString(event["type"]) {
+		case "card_moved":
+			if cardMovedEvent == nil {
+				cardMovedEvent = event
+			}
+		case "card_updated":
+			if cardUpdatedEvent == nil {
+				cardUpdatedEvent = event
+			}
 		}
+	}
+	if cardMovedEvent == nil {
+		t.Fatalf("expected card_moved event in card timeline, got %#v", cardTimelinePayload.Events)
+	}
+	if !containsAny(cardMovedEvent["refs"].([]any), "board:"+boardID) || !containsAny(cardMovedEvent["refs"].([]any), "card:"+cardID) {
+		t.Fatalf("expected board and card refs on card_moved, got %#v", cardMovedEvent["refs"])
 	}
 	if cardUpdatedEvent == nil {
 		t.Fatalf("expected card_updated event in card timeline, got %#v", cardTimelinePayload.Events)

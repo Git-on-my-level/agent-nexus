@@ -35,7 +35,7 @@ function humanizedLabelForPrefix(prefix, value) {
   if (prefix === "card") return "Card";
   if (prefix === "thread") return "Topic";
   if (prefix === "topic") return "Topic";
-  if (prefix === "snapshot") return "Snapshot";
+  if (prefix === "snapshot") return "Record";
   if (prefix === "event") return "Event";
   if (prefix === "document") return `Document ${value}`.trim();
   if (prefix === "document_revision")

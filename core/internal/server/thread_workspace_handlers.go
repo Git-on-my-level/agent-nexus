@@ -183,7 +183,7 @@ func buildThreadWorkspacePayload(ctx context.Context, opts handlerOptions, threa
 		"related_decision_requests":   relatedThreadReview["related_decision_requests"],
 		"related_decisions":           relatedThreadReview["related_decisions"],
 		"total_review_items":          totalReviewItems,
-		"follow_up":                   buildThreadWorkspaceFollowUpHints(threadID, recommendations, decisionRequests, decisions),
+		"follow_up":                   buildThreadWorkspaceFollowUpHints(thread, threadID, recommendations, decisionRequests, decisions),
 		"workspace_summary":           cloneWorkspaceMap(projectionState.Projection.Data),
 		"projection_freshness":        cloneWorkspaceMap(projectionState.Freshness),
 		"workspace_summary_freshness": cloneWorkspaceMap(projectionState.Freshness),
@@ -362,7 +362,26 @@ func buildEmptyRelatedThreadReview() map[string]any {
 	}
 }
 
-func buildThreadWorkspaceFollowUpHints(threadID string, sections ...[]map[string]any) map[string]any {
+func topicIDFromThreadWorkspaceRefs(thread map[string]any) string {
+	if thread == nil {
+		return ""
+	}
+	for _, key := range []string{"topic_ref", "subject_ref"} {
+		ref := strings.TrimSpace(anyString(thread[key]))
+		if ref == "" {
+			continue
+		}
+		if strings.HasPrefix(ref, "topic:") {
+			id := strings.TrimSpace(strings.TrimPrefix(ref, "topic:"))
+			if id != "" {
+				return id
+			}
+		}
+	}
+	return ""
+}
+
+func buildThreadWorkspaceFollowUpHints(thread map[string]any, threadID string, sections ...[]map[string]any) map[string]any {
 	eventIDs := make([]string, 0, 8)
 	seen := make(map[string]struct{})
 
@@ -393,8 +412,11 @@ func buildThreadWorkspaceFollowUpHints(threadID string, sections ...[]map[string
 		"events_get_examples":       examples,
 		"workspace_refresh_command": "",
 	}
-	if strings.TrimSpace(threadID) != "" {
-		hints["workspace_refresh_command"] = "oar threads workspace --thread-id " + threadID + " --include-artifact-content --full-id --json"
+	tid := strings.TrimSpace(threadID)
+	if topicID := topicIDFromThreadWorkspaceRefs(thread); topicID != "" {
+		hints["workspace_refresh_command"] = "oar topics workspace --topic-id " + topicID + " --include-artifact-content --full-id --json"
+	} else if tid != "" {
+		hints["workspace_refresh_command"] = "oar threads workspace --thread-id " + tid + " --include-artifact-content --full-id --json"
 	}
 	return hints
 }

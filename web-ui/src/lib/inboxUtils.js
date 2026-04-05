@@ -3,7 +3,7 @@ import { parseTimestampMs } from "./dateUtils.js";
 export const INBOX_CATEGORY_ORDER = [
   "decision_needed",
   "intervention_needed",
-  "risk_review",
+  "work_item_risk",
   "stale_topic",
   "document_attention",
 ];
@@ -11,7 +11,7 @@ export const INBOX_CATEGORY_ORDER = [
 export const INBOX_CATEGORY_LABELS = {
   decision_needed: "Needs Decision",
   intervention_needed: "Needs Intervention",
-  risk_review: "Risk Review",
+  work_item_risk: "Work item risk",
   stale_topic: "Stale Topic",
   document_attention: "Document Attention",
 };
@@ -19,7 +19,7 @@ export const INBOX_CATEGORY_LABELS = {
 export const INBOX_CATEGORY_DESCRIPTIONS = {
   decision_needed: "Decision event pending",
   intervention_needed: "Human action required",
-  risk_review: "Work item risk needs review",
+  work_item_risk: "Work item risk needs review",
   stale_topic: "Topic appears stale",
   document_attention: "Document needs attention",
 };
@@ -39,13 +39,13 @@ export const INBOX_URGENCY_LABELS = {
 const INBOX_CATEGORY_URGENCY_BASE = {
   decision_needed: 76,
   intervention_needed: 74,
-  risk_review: 66,
+  work_item_risk: 66,
   stale_topic: 90,
   document_attention: 58,
 };
 
 const INBOX_CATEGORY_ALIASES = {
-  work_item_risk: "risk_review",
+  risk_review: "work_item_risk",
   exception: "stale_topic",
 };
 
@@ -86,11 +86,11 @@ export function getInboxSubjectRef(item) {
   const explicit = normalizeTypedRef(item?.subject_ref);
   if (explicit) return explicit;
 
-  const threadId = String(item?.thread_id ?? "").trim();
-  if (threadId) return `topic:${threadId}`;
-
   const topicId = String(item?.topic_id ?? "").trim();
   if (topicId) return `topic:${topicId}`;
+
+  const cardId = String(item?.card_id ?? item?.work_item_id ?? "").trim();
+  if (cardId) return `card:${cardId}`;
 
   const boardId = String(item?.board_id ?? "").trim();
   if (boardId) return `board:${boardId}`;
@@ -98,8 +98,8 @@ export function getInboxSubjectRef(item) {
   const documentId = String(item?.document_id ?? "").trim();
   if (documentId) return `document:${documentId}`;
 
-  const cardId = String(item?.card_id ?? item?.work_item_id ?? "").trim();
-  if (cardId) return `card:${cardId}`;
+  const threadId = String(item?.thread_id ?? "").trim();
+  if (threadId) return `thread:${threadId}`;
 
   return "";
 }

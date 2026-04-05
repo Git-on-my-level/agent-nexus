@@ -166,8 +166,8 @@ oar --agent agent-a reviews create --from-file review.json
 ```
 
 Board activity uses `board:<board-id>` typed refs on emitted events. When
-debugging board flows, inspect both `boards workspace` and the read-only thread
-timeline or thread workspace that backs the board.
+debugging board flows, inspect `boards workspace` and, when needed, the
+read-only backing-thread timeline or `threads workspace` diagnostic projection.
 
 Draft/commit flow:
 

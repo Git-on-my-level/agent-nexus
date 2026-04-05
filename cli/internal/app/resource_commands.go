@@ -104,7 +104,7 @@ func threadsMutationUnsupportedErr(subcmd string) error {
 	return errnorm.Usage(
 		"unsupported_command",
 		fmt.Sprintf(
-			"`oar threads %s` is not supported: backing threads are read-only in the current contract. Use `oar topics ...`, `oar cards ...`, `oar boards ...`, or `oar events create` for writes. For reads, use `oar threads list`, `oar threads get`, `oar threads inspect`, `oar threads workspace`, or `oar threads timeline`.",
+			"`oar threads %s` is not supported: backing threads are read-only in the current contract. Use `oar topics ...`, `oar cards ...`, `oar boards ...`, or `oar events create` for writes. For reads, prefer `oar topics workspace` when you have a topic id; use `oar threads list`, `oar threads get`, `oar threads inspect`, `oar threads workspace` (diagnostic projection), or `oar threads timeline` for backing-thread tooling.",
 			subcmd,
 		),
 	)
@@ -769,7 +769,7 @@ func (a *App) resolveThreadContextSelection(ctx context.Context, cfg config.Reso
 	if len(threadIDs) != 1 {
 		return nil, errnorm.Usage(
 			"invalid_request",
-			fmt.Sprintf("%s requires exactly one thread; refine filters or pass one --thread-id. For multi-thread views, use `oar threads workspace`.", commandName),
+			fmt.Sprintf("%s requires exactly one thread; refine filters or pass one --thread-id. For operator coordination across topics, use `oar topics list` and `oar topics workspace`. For a multi-thread diagnostic backing projection, use `oar threads workspace` with discovery filters.", commandName),
 		)
 	}
 	return threadIDs, nil
@@ -780,7 +780,7 @@ func mixedThreadSelectionMessage(commandName string) string {
 	discoveryExample := "oar threads inspect --status active"
 	switch strings.TrimSpace(commandName) {
 	case "threads context":
-		return base + " For one thread, use `oar threads inspect --thread-id <thread-id>` for raw inspection or `oar threads workspace --thread-id <thread-id>` for the canonical coordination view. For discovery, remove `--thread-id` and use `" + discoveryExample + "`."
+		return base + " For one thread, use `oar threads inspect --thread-id <thread-id>` or `oar threads workspace --thread-id <thread-id>` for backing-thread diagnostics. Prefer `oar topics workspace --topic-id <topic-id>` for primary coordination when you have a topic id. For discovery, remove `--thread-id` and use `" + discoveryExample + "`."
 	case "threads recommendations":
 		return base + " For one thread, use `oar threads recommendations --thread-id <thread-id>`. For discovery, remove `--thread-id` and use `" + discoveryExample + "`."
 	case "threads workspace":

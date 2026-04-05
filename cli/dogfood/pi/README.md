@@ -71,8 +71,9 @@ Constraints enforced by the run workspace:
 - in team mode, each agent gets its own profile/home/workspace but shares the same managed core
 
 Scenario command-shape guidance:
-- default to `oar threads workspace --thread-id <thread-id>` for the main coordination read
-- use `oar threads workspace --thread-id <thread-id> --include-related-event-content --include-artifact-content --verbose` when you want the richest one-command thread review
+- default to `oar topics workspace --topic-id <topic-id>` for the main operator coordination read
+- use `oar threads workspace --thread-id <thread-id>` for backing-thread diagnostic review when you do not have a topic id or need the thread-scoped projection
+- use `oar threads workspace --thread-id <thread-id> --include-related-event-content --include-artifact-content --verbose` when you want the richest one-command backing-thread diagnostic bundle
 - use `oar threads recommendations --thread-id <thread-id>` for recommendation/decision review
 - add `--include-related-event-content --verbose` when you need full related-thread recommendation content in one command
 - use `oar cards get --card-id <card-id>` when a card listed in workspace needs full detail
