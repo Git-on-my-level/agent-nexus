@@ -470,7 +470,7 @@ fi
 
 run_cli_json "$TMP_DIR/board-workspace.json" boards workspace --board-id "$BOARD_ID"
 assert_contains "$TMP_DIR/board-workspace.json" "\"board_id\"[[:space:]]*:[[:space:]]*\"$BOARD_ID\""
-assert_contains "$TMP_DIR/board-workspace.json" "\"parent_thread\"[[:space:]]*:[[:space:]]*\"$BOARD_THREAD_B_ID\""
+assert_contains "$TMP_DIR/board-workspace.json" "\"thread:${BOARD_THREAD_B_ID}\""
 assert_contains "$TMP_DIR/board-workspace.json" "\"column_key\"[[:space:]]*:[[:space:]]*\"review\""
 
 ACCESS_TOKEN="$(node -e 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(String(p.access_token||""));' "$PROFILE_PATH")"

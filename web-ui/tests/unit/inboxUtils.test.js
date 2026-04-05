@@ -187,7 +187,7 @@ describe("inbox typed-ref rendering targets", () => {
 
   it("resolves thread/event/url refs used by inbox cards", () => {
     expect(resolveRefLink("thread:thread-onboarding")).toMatchObject({
-      href: "/topics/thread-onboarding",
+      href: "/threads/thread-onboarding",
       isLink: true,
     });
 

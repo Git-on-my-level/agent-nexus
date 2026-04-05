@@ -50,7 +50,7 @@ describe("timeline utils", () => {
     });
     expect(view.resolvedRefs[1]).toMatchObject({
       kind: "thread",
-      href: "/topics/thread-1",
+      href: "/threads/thread-1",
       isLink: true,
     });
     expect(view.resolvedRefs[2]).toMatchObject({

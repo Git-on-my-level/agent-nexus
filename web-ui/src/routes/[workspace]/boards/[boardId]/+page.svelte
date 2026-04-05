@@ -20,6 +20,10 @@
   import { workspacePath } from "$lib/workspacePaths";
   import { enrichInboxItem } from "$lib/inboxUtils";
   import {
+    topicRouteSegmentFromBoardCardRow,
+    topicRouteSegmentFromBoardWorkspace,
+  } from "$lib/topicRouteUtils";
+  import {
     BOARD_STATUS_LABELS,
     boardBackingThreadId,
     boardCardLinkedThreadId,
@@ -694,6 +698,7 @@
 {:else if workspace}
   {@const board = workspace.board}
   {@const backingThreadId = boardBackingThreadId(board)}
+  {@const boardTopicSegment = topicRouteSegmentFromBoardWorkspace(workspace)}
   {@const backingThread =
     workspace.backing_thread ??
     (backingThreadId ? { id: backingThreadId, title: backingThreadId } : null)}
@@ -863,15 +868,15 @@
     <div
       class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[var(--ui-text-muted)]"
     >
-      {#if backingThread}
+      {#if backingThread && boardTopicSegment}
         <span class="text-[var(--ui-text-subtle)]">Topic</span>
         <a
           class="text-indigo-400 transition-colors hover:text-indigo-300"
           href={workspaceHref(
-            `/topics/${encodeURIComponent(backingThread.id)}`,
+            `/topics/${encodeURIComponent(boardTopicSegment)}`,
           )}
         >
-          {backingThread.title || backingThread.id}
+          {backingThread.title || boardTopicSegment}
         </a>
         <span class="text-[var(--ui-text-subtle)]">·</span>
       {/if}
@@ -1234,8 +1239,11 @@
     {@const derived = cardItem.derived}
     {@const thread = backing?.thread}
     {@const linkedThreadId = boardCardLinkedThreadId(membership)}
-    {@const hasResolvedThread = Boolean(thread)}
-    {@const showThreadNav = hasResolvedThread && Boolean(linkedThreadId)}
+    {@const topicSegment = topicRouteSegmentFromBoardCardRow(
+      membership,
+      thread,
+    )}
+    {@const showThreadNav = Boolean(topicSegment)}
     {@const cardRowId = boardCardStableId(membership)}
     {@const rowStatus = boardCardRowStatus(membership, thread)}
     {@const headerTitle = boardCardHeaderTitle(membership, thread)}
@@ -1280,7 +1288,7 @@
                   rowStatus,
                 )}"
                 href={workspaceHref(
-                  `/topics/${encodeURIComponent(linkedThreadId)}`,
+                  `/topics/${encodeURIComponent(topicSegment)}`,
                 )}
               >
                 {headerTitle}
@@ -1924,14 +1932,17 @@
         {#each boardWarnings as warning}
           <div class="text-[12px] text-amber-100">
             {warning.message || "Workspace warning"}
-            {#if warning.thread_id}
+            {#if warning.topic_id || warning.thread_id}
+              {@const warnTopicSeg =
+                String(warning.topic_id ?? "").trim() ||
+                String(warning.thread_id ?? "").trim()}
               <a
                 class="ml-1 font-medium text-amber-200 underline transition-colors hover:text-amber-100"
                 href={workspaceHref(
-                  `/topics/${encodeURIComponent(warning.thread_id)}`,
+                  `/topics/${encodeURIComponent(warnTopicSeg)}`,
                 )}
               >
-                {warning.thread_id}
+                {warnTopicSeg}
               </a>
             {/if}
           </div>

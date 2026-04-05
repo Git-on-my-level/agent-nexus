@@ -136,8 +136,11 @@
     const subjectRef = getInboxSubjectRef(item);
     const { prefix, id } = splitTypedRef(subjectRef);
 
-    if (prefix === "topic" || prefix === "thread") {
+    if (prefix === "topic") {
       return workspacePath(workspaceSlug, `/topics/${id}`);
+    }
+    if (prefix === "thread") {
+      return workspacePath(workspaceSlug, `/threads/${id}`);
     }
     if (prefix === "board") {
       return workspacePath(workspaceSlug, `/boards/${id}`);

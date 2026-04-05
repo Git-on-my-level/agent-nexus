@@ -39,6 +39,10 @@ function shouldBypassProxy(pathname, method) {
   );
 }
 
+function isDirectCoreProxyPath(method, pathname) {
+  return method.toUpperCase() === "GET" && pathname === "/meta/handshake";
+}
+
 async function refreshAndRetry(
   event,
   coreBaseUrl,
@@ -241,7 +245,8 @@ export async function handle({ event, resolve }) {
   const method = event.request.method;
   const documentNavigation = isDocumentNavigationRequest(event.request);
   const proxyableRequest =
-    isProxyableCommand(method, pathname) &&
+    (isProxyableCommand(method, pathname) ||
+      isDirectCoreProxyPath(method, pathname)) &&
     !documentNavigation &&
     !shouldBypassProxy(pathname, method);
 

@@ -13,7 +13,7 @@ describe("RefLink model", () => {
 
     expect(resolveRefLink("thread:thread-1")).toMatchObject({
       kind: "thread",
-      href: "/topics/thread-1",
+      href: "/threads/thread-1",
       isLink: true,
     });
 
@@ -78,7 +78,7 @@ describe("RefLink model", () => {
     expect(
       resolveRefLink("thread:thread-1", { workspaceSlug: "local" }),
     ).toMatchObject({
-      href: "/local/topics/thread-1",
+      href: "/local/threads/thread-1",
       isLink: true,
     });
   });

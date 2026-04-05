@@ -238,12 +238,19 @@ async function seedDocuments() {
     const actorId = pickActorId(
       firstRevision.created_by ?? sourceDocument.created_by,
     );
-    const threadId = normalizeMappedOptionalThreadId(sourceDocument.thread_id);
-    const refs = threadId ? [`thread:${threadId}`] : [];
+    const rawDocumentTopicRef = String(sourceDocument.thread_id ?? "").trim();
+    const topicRef = rawDocumentTopicRef
+      ? mapRef(
+          rawDocumentTopicRef.includes(":")
+            ? rawDocumentTopicRef
+            : `topic:${rawDocumentTopicRef}`,
+        )
+      : "";
+    const refs = topicRef ? [topicRef] : [];
 
     let createResponse;
     try {
-      createResponse = await request("POST", "/docs", {
+      createResponse = await requestRetryOnServerError("POST", "/docs", {
         actor_id: actorId,
         document: {
           id: documentId,
@@ -252,7 +259,6 @@ async function seedDocuments() {
           status: sourceDocument.status,
           labels: sourceDocument.labels,
           supersedes: sourceDocument.supersedes,
-          ...(threadId ? { thread_id: threadId } : {}),
         },
         refs,
         content: firstRevision.content,
@@ -284,7 +290,7 @@ async function seedDocuments() {
     documentIdMap.set(documentId, newDocumentId);
 
     for (const revision of revisions.slice(1)) {
-      const updateResponse = await request(
+      const updateResponse = await requestRetryOnServerError(
         "PATCH",
         `/docs/${encodeURIComponent(newDocumentId)}`,
         {
@@ -400,16 +406,6 @@ async function seedBoards() {
         : [];
 
   for (const sourceBoard of sourceBoards) {
-    const backingThreadId = normalizeMappedOptionalThreadRef(
-      sourceBoard.thread_id,
-    );
-    if (!backingThreadId) {
-      console.warn(
-        `Skipping board ${String(sourceBoard.id ?? "<unknown>")}: backing thread is not seedable.`,
-      );
-      continue;
-    }
-
     const actorId = pickActorId(
       sourceBoard.created_by ?? sourceBoard.updated_by,
     );
@@ -425,7 +421,6 @@ async function seedBoards() {
         status: sourceBoard.status,
         labels: sourceBoard.labels,
         owners: sourceBoard.owners,
-        thread_id: backingThreadId,
         ...(explicitRefs.length > 0 ? { refs: explicitRefs } : {}),
         ...(documentRefs.length > 0 ? { document_refs: documentRefs } : {}),
         ...(cardRefs.length > 0 ? { card_refs: cardRefs } : {}),
@@ -464,7 +459,10 @@ async function seedBoards() {
         );
         continue;
       }
-      if (linkedThreadId && linkedThreadId === backingThreadId) {
+      if (
+        linkedThreadId &&
+        linkedThreadId === String(currentBoard?.thread_id ?? "").trim()
+      ) {
         console.warn(
           `Skipping board card ${linkedThreadId} on ${newBoardId}: backing thread cannot be added as a card.`,
         );
@@ -581,6 +579,9 @@ async function seedEvents() {
   });
 
   for (const sourceEvent of sortedEvents) {
+    if (!shouldSeedLegacyEvent(sourceEvent)) {
+      continue;
+    }
     const actorId = pickActorId(sourceEvent.actor_id);
     const mappedThreadId = mapThreadId(sourceEvent.thread_id);
     const payload = normalizeEventPayload(
@@ -617,6 +618,22 @@ async function seedEvents() {
   return { posted, skipped };
 }
 
+const seedSkippedLegacyEventIds = new Set([
+  "evt-price-004",
+  "evt-price-006",
+  "evt-price-007",
+  "evt-price-009",
+  "evt-price-010",
+  "evt-menu-wo-created",
+  "evt-menu-receipt-added",
+  "evt-menu-review-completed",
+]);
+
+function shouldSeedLegacyEvent(event) {
+  const sourceId = String(event?.id ?? "").trim();
+  return !seedSkippedLegacyEventIds.has(sourceId);
+}
+
 async function rebuildDerived() {
   await request("POST", "/derived/rebuild", { actor_id: defaultActorId });
 }
@@ -648,14 +665,6 @@ function mapTopicId(topicId) {
   }
 
   return topicIdMap.get(raw) ?? raw;
-}
-
-function normalizeMappedOptionalThreadId(threadId) {
-  const raw = String(threadId ?? "").trim();
-  if (!raw) {
-    return "";
-  }
-  return threadIdMap.get(raw) ?? "";
 }
 
 function mapDocumentId(documentId) {

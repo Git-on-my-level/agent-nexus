@@ -26,6 +26,7 @@
     groupInboxItems,
     summarizeInboxUrgency,
   } from "$lib/inboxUtils";
+  import { inboxTopicRouteSegment } from "$lib/topicRouteUtils";
 
   let loading = $state(false);
   let error = $state("");
@@ -102,8 +103,16 @@
     const subjectRef = getInboxSubjectRef(item);
     const { prefix, id } = splitTypedRef(subjectRef);
 
-    if (prefix === "topic" || prefix === "thread") {
-      return workspaceHref(`/topics/${id}`);
+    if (prefix === "topic") {
+      const segment = inboxTopicRouteSegment(item) || id;
+      return segment
+        ? workspaceHref(`/topics/${encodeURIComponent(segment)}`)
+        : workspaceHref("/inbox");
+    }
+    if (prefix === "thread") {
+      return id
+        ? workspaceHref(`/threads/${encodeURIComponent(id)}`)
+        : workspaceHref("/inbox");
     }
     if (prefix === "board") {
       return workspaceHref(`/boards/${id}`);

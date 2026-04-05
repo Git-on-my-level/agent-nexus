@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
 
+function assertTypedRef(refValue) {
+  const value = String(refValue ?? "").trim();
+  const separator = value.indexOf(":");
+  expect(separator).toBeGreaterThan(0);
+  expect(separator).toBeLessThan(value.length - 1);
+}
+
 describe("mockCoreData parity behaviors", () => {
   describe("inbox ack is non-destructive", () => {
     it("module exports ackMockInboxItem and listMockInboxItems functions", async () => {
@@ -44,6 +51,40 @@ describe("mockCoreData parity behaviors", () => {
         "receipt",
         "review",
       ]);
+    });
+
+    it("normalizes topic related_refs into typed refs", async () => {
+      const mod = await import("../../src/lib/mockCoreData.js");
+      const seed = mod.getMockSeedData();
+
+      seed.topics.forEach((topic) => {
+        (topic.related_refs ?? []).forEach(assertTypedRef);
+      });
+      expect(
+        mod.getMockTopic("thread-lemon-shortage")?.related_refs ?? [],
+      ).toContain("artifact:artifact-supplier-sla");
+    });
+
+    it("keeps listed mock topic related_refs typed", async () => {
+      const mod = await import("../../src/lib/mockCoreData.js");
+
+      mod.listMockTopics().forEach((topic) => {
+        (topic.related_refs ?? []).forEach(assertTypedRef);
+      });
+    });
+
+    it("keeps decision events topic-scoped for migrated contracts", async () => {
+      const mod = await import("../../src/lib/mockCoreData.js");
+      const seed = mod.getMockSeedData();
+      const eventIds = new Set(["evt-price-003", "evt-price-008"]);
+
+      const migratedEvents = seed.events.filter((event) =>
+        eventIds.has(event.id),
+      );
+      expect(migratedEvents).toHaveLength(2);
+      migratedEvents.forEach((event) => {
+        expect(event.refs).toContain("topic:thread-pricing-glitch");
+      });
     });
   });
 

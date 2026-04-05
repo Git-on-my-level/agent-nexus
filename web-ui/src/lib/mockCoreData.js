@@ -648,6 +648,7 @@ const events = [
     actor_id: "actor-ops-ai",
     thread_id: "thread-pricing-glitch",
     refs: [
+      "topic:thread-pricing-glitch",
       "thread:thread-pricing-glitch",
       "artifact:artifact-pricing-evidence",
     ],
@@ -748,6 +749,7 @@ const events = [
     actor_id: "actor-ops-ai",
     thread_id: "thread-pricing-glitch",
     refs: [
+      "topic:thread-pricing-glitch",
       "thread:thread-pricing-glitch",
       "artifact:artifact-pricing-evidence",
       "card:thread-pricing-glitch",
@@ -1745,7 +1747,9 @@ function buildCanonicalTopicSeed(thread) {
   );
   const relatedRefs = [
     `thread:${threadId}`,
-    ...(Array.isArray(thread?.key_artifacts) ? thread.key_artifacts : []),
+    ...(Array.isArray(thread?.key_artifacts)
+      ? thread.key_artifacts.map(normalizeMockThreadKeyArtifactToTypedRef)
+      : []),
     ...(Array.isArray(thread?.open_cards)
       ? thread.open_cards.map((id) => `card:${id}`)
       : []),
@@ -2113,6 +2117,18 @@ function isTypedRef(refValue) {
   return separatorIndex < input.length - 1;
 }
 
+/** Bare artifact ids in thread.key_artifacts → `artifact:<id>` for topic related_refs and workspace. */
+function normalizeMockThreadKeyArtifactToTypedRef(refValue) {
+  const trimmed = String(refValue ?? "").trim();
+  if (!trimmed) {
+    return trimmed;
+  }
+  if (isTypedRef(trimmed)) {
+    return trimmed;
+  }
+  return `artifact:${trimmed}`;
+}
+
 function isThreadStale(thread) {
   if (!thread.next_check_in_at) {
     return false;
@@ -2226,7 +2242,9 @@ export function listMockTopics(filters = {}) {
       .map((board) => `board:${board.id}`),
     related_refs: [
       ...new Set([
-        ...(thread.key_artifacts ?? []).map((ref) => String(ref).trim()),
+        ...(thread.key_artifacts ?? []).map(
+          normalizeMockThreadKeyArtifactToTypedRef,
+        ),
         ...(thread.open_cards ?? []).map((id) => `card:${id}`),
         `thread:${thread.id}`,
       ]),
@@ -2334,9 +2352,10 @@ export function getMockThreadWorkspace(
   const openCards = listMockOpenCardsForThread(threadId);
   const documents = listMockDocuments({ thread_id: threadId });
   const keyArtifacts = normalizeRefList(thread.key_artifacts).map((ref) => {
-    const { prefix, id } = splitTypedRef(ref);
+    const normalizedRef = normalizeMockThreadKeyArtifactToTypedRef(ref);
+    const { prefix, id } = splitTypedRef(normalizedRef);
     const artifact = prefix === "artifact" ? getMockArtifact(id) : null;
-    const item = { ref, artifact };
+    const item = { ref: normalizedRef, artifact };
     if (include_artifact_content && artifact?.content_text) {
       item.content_preview = artifactContentPreview(artifact.content_text);
     }
@@ -4023,7 +4042,7 @@ function buildBoardWorkspaceCard(card) {
   const documents = listMockDocuments({ thread_id: threadId });
   const recentEvents = listMockTimelineEvents(threadId);
   const keyArtifacts = normalizeRefList(thread.key_artifacts).map((ref) => ({
-    ref,
+    ref: normalizeMockThreadKeyArtifactToTypedRef(ref),
     artifact: null,
   }));
   const openCards = listMockOpenCardsForThread(threadId);

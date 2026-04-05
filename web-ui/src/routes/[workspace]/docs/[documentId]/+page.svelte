@@ -7,6 +7,7 @@
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
   import { searchTopics as searchTopicRecords } from "$lib/searchHelpers";
+  import { topicDetailPathFromSubject } from "$lib/topicRouteUtils";
   import { workspacePath } from "$lib/workspacePaths";
   import {
     lookupActorDisplayName,
@@ -47,6 +48,14 @@
   let metadataExpanded = $state(false);
   let confirmModal = $state({ open: false, action: "" });
   let docLifecycleBusy = $state(false);
+  let documentTopicHref = $derived(
+    document
+      ? topicDetailPathFromSubject({
+          subjectRef: document.subject_ref,
+          threadId: document.thread_id,
+        })
+      : "",
+  );
 
   let displayedContent = $derived(
     selectedRevision?.content ?? headRevision?.content ?? "",
@@ -510,14 +519,15 @@
               >by {actorName(displayedRevision?.created_by)}</span
             >
           </div>
-          {#if document.thread_id}
+          {#if document.thread_id && documentTopicHref}
             <p class="mt-0.5 text-[12px] text-[var(--ui-text-muted)]">
               Linked thread:
               <a
                 class="text-indigo-400 transition-colors hover:text-indigo-300"
-                href={workspaceHref(
-                  `/topics/${encodeURIComponent(document.thread_id)}`,
-                )}>{document.thread_id}</a
+                href={workspaceHref(documentTopicHref)}
+                >{String(document.subject_ref ?? "")
+                  .replace(/^topic:/, "")
+                  .trim() || document.thread_id}</a
               >
             </p>
           {/if}

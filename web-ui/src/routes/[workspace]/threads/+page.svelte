@@ -679,8 +679,8 @@
   <div
     class="space-y-px rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] overflow-hidden"
   >
-    {#each threads as thread, i}
-      {@const staleness = computeStaleness(thread)}
+    {#each threads as topic, i}
+      {@const staleness = computeStaleness(topic)}
       <div
         class="flex items-stretch {i > 0
           ? 'border-t border-[var(--ui-border)]'
@@ -688,20 +688,20 @@
       >
         <a
           class="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--ui-border-subtle)]"
-          href={workspaceHref(`/topics/${thread.id}`)}
+          href={workspaceHref(`/topics/${encodeURIComponent(topic.id)}`)}
         >
           <span
             class="flex h-2 w-2 shrink-0 rounded-full {priorityDot(
-              thread.priority,
+              topic.priority,
             )}"
-            title={getPriorityLabel(thread.priority)}
+            title={getPriorityLabel(topic.priority)}
           ></span>
           <div class="min-w-0 flex-1">
             <div class="flex flex-wrap items-center gap-2">
               <p class="truncate text-[13px] font-medium text-[var(--ui-text)]">
-                {thread.title}
+                {topic.title}
               </p>
-              {#if isThreadArchived(thread)}
+              {#if isThreadArchived(topic)}
                 <span
                   class="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-medium text-amber-400"
                   >Archived</span
@@ -709,23 +709,23 @@
               {/if}
             </div>
             <p class="truncate text-[12px] text-[var(--ui-text-muted)]">
-              {thread.current_summary ?? thread.summary ?? ""}
+              {topic.current_summary ?? topic.summary ?? ""}
             </p>
           </div>
           <div class="flex shrink-0 items-center gap-1.5 text-[11px]">
-            <span class="font-medium capitalize {statusColor(thread.status)}"
-              >{thread.status}</span
+            <span class="font-medium capitalize {statusColor(topic.status)}"
+              >{topic.status}</span
             >
             <span class="hidden text-[var(--ui-text-muted)] sm:inline"
-              >{formatCadenceLabel(thread.cadence, {
+              >{formatCadenceLabel(topic.cadence, {
                 includeExpression: false,
               })}</span
             >
-            {#if (thread.tags ?? []).length > 0}
+            {#if (topic.tags ?? []).length > 0}
               <span
                 class="hidden rounded bg-[var(--ui-panel)] px-1.5 py-0.5 text-[var(--ui-text-muted)] sm:inline"
-                >{thread.tags[0]}{thread.tags.length > 1
-                  ? ` +${thread.tags.length - 1}`
+                >{topic.tags[0]}{topic.tags.length > 1
+                  ? ` +${topic.tags.length - 1}`
                   : ""}</span
               >
             {/if}
@@ -736,18 +736,18 @@
               >
             {/if}
             <span class="w-14 text-right text-[var(--ui-text-subtle)]"
-              >{formatTimestamp(thread.updated_at) || "—"}</span
+              >{formatTimestamp(topic.updated_at) || "—"}</span
             >
           </div>
         </a>
         <div
           class="flex shrink-0 items-center gap-1 border-l border-[var(--ui-border)] px-2"
         >
-          {#if isThreadArchived(thread)}
+          {#if isThreadArchived(topic)}
             <button
               class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2 py-1 text-[11px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] disabled:cursor-not-allowed disabled:opacity-50"
               disabled={Boolean(archiveBusyId) || Boolean(trashBusyId)}
-              onclick={() => void unarchiveTopicRow(thread.id)}
+              onclick={() => void unarchiveTopicRow(topic.id)}
               type="button"
             >
               Unarchive
@@ -760,7 +760,7 @@
                 void (confirmModal = {
                   open: true,
                   action: "archive",
-                  entityId: thread.id,
+                  entityId: topic.id,
                 })}
               title="Archive"
               type="button"
@@ -784,7 +784,7 @@
               (confirmModal = {
                 open: true,
                 action: "trash",
-                entityId: thread.id,
+                entityId: topic.id,
               })}
             title="Move to trash"
             type="button"

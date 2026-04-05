@@ -13,6 +13,7 @@
   import RefLink from "$lib/components/RefLink.svelte";
   import { buildReviewPayload } from "$lib/reviewUtils";
   import { toTimelineView } from "$lib/timelineUtils";
+  import { topicDetailPathFromRef } from "$lib/topicRouteUtils";
   import { parseRef } from "$lib/typedRefs";
   import {
     lookupActorDisplayName,
@@ -77,6 +78,29 @@
       !Array.isArray(artifactContent)
       ? artifactContent
       : null,
+  );
+  let artifactTopicRef = $derived.by(() => {
+    const candidates = [
+      String(receiptPacket?.subject_ref ?? "").trim(),
+      ...((artifact?.refs ?? []).map((ref) => String(ref ?? "").trim()) ?? []),
+      artifact?.thread_id ? `thread:${artifact.thread_id}` : "",
+    ];
+    return (
+      candidates.find((refValue) => {
+        const parsed = parseRef(refValue);
+        return (
+          (parsed.prefix === "topic" || parsed.prefix === "thread") &&
+          String(parsed.value ?? "").trim()
+        );
+      }) ?? ""
+    );
+  });
+  let artifactTopicHref = $derived(
+    artifactTopicRef ? topicDetailPathFromRef(artifactTopicRef) : "",
+  );
+  let artifactTopicLabel = $derived(
+    String(parseRef(artifactTopicRef).value ?? "").trim() ||
+      String(artifact?.thread_id ?? "").trim(),
   );
   let reviewPacket = $derived(
     artifact?.kind === "review" &&
@@ -283,9 +307,11 @@
         params.set("compose", "work-order");
         params.append("context_ref", `artifact:${artifact.id}`);
         params.append("context_ref", `artifact:${receiptPacket.work_order_id}`);
-        reviseFollowupLink = workspaceHref(
-          `/topics/${encodeURIComponent(artifact.thread_id)}?${params.toString()}#work-order-composer`,
-        );
+        reviseFollowupLink = artifactTopicHref
+          ? workspaceHref(
+              `${artifactTopicHref}?${params.toString()}#work-order-composer`,
+            )
+          : "";
       }
       await loadThreadTimeline(artifact.thread_id);
     } catch (e) {
@@ -573,16 +599,14 @@
         >by {actorName(artifact.created_by)}</span
       >
     </div>
-    {#if artifact.thread_id}
+    {#if artifact.thread_id && artifactTopicHref}
       <div class="mt-1.5 text-[12px] text-[var(--ui-text-muted)]">
         <span class="text-[var(--ui-text-subtle)]">Topic</span>
         <a
           class="ml-1 text-indigo-400 transition-colors hover:text-indigo-300"
-          href={workspaceHref(
-            `/topics/${encodeURIComponent(artifact.thread_id)}`,
-          )}
+          href={workspaceHref(artifactTopicHref)}
         >
-          {artifact.thread_id}
+          {artifactTopicLabel}
         </a>
       </div>
     {/if}

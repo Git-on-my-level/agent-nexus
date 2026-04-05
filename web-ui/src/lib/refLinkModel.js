@@ -82,7 +82,7 @@ const LINK_RESOLVERS = {
   artifact: ({ workspaceSlug, value }) =>
     buildInternalHref(workspaceSlug, `/artifacts/${asPathSegment(value)}`),
   thread: ({ workspaceSlug, value }) =>
-    buildInternalHref(workspaceSlug, `/topics/${asPathSegment(value)}`),
+    buildInternalHref(workspaceSlug, `/threads/${asPathSegment(value)}`),
   topic: ({ workspaceSlug, value }) =>
     buildInternalHref(workspaceSlug, `/topics/${asPathSegment(value)}`),
   card: ({ workspaceSlug, boardId, value }) =>

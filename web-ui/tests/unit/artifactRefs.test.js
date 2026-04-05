@@ -31,7 +31,7 @@ describe("artifact ref rendering", () => {
         value: "thread-onboarding",
         kind: "thread",
         label: "thread:thread-onboarding",
-        href: "/topics/thread-onboarding",
+        href: "/threads/thread-onboarding",
         isExternal: false,
         isLink: true,
       },
