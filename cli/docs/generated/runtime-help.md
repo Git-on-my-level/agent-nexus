@@ -67,13 +67,13 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 - `inbox acknowledge` (command): Acknowledge inbox item
 - `receipts create` (command): Create receipt packet
 - `reviews create` (command): Create review packet
-- `events list` (local-helper): Compose `threads timeline` responses with client-side thread/type/actor filters and preview summaries.
+- `events list` (local-helper): Compose backing-thread timeline reads with client-side thread/type/actor filters and preview summaries.
 - `events validate` (local-helper): Validate an `events create` payload locally from stdin or `--from-file` without sending it.
-- `events explain` (local-helper): Explain known event-type conventions, required refs, and validation hints, including which type surfaces as a visible thread message.
+- `events explain` (local-helper): Explain known event-type conventions, required refs, and validation hints, including when `message_posted` targets a backing-thread message stream.
 - `artifacts inspect` (local-helper): Fetch artifact metadata and resolved content in one command for operator inspection.
 - `threads inspect` (local-helper): Diagnostic backing-thread bundle: compose one view from read-only thread data and related `inbox list` items.
 - `threads workspace` (local-helper): Read-only backing-thread workspace projection: context, inbox, recommendation review, and related-thread signals in one command.
-- `threads recommendations` (local-helper): Compose a recommendation-oriented review of one thread with related follow-up context.
+- `threads recommendations` (local-helper): Compose a diagnostic recommendation-oriented review of one backing thread with related follow-up context.
 - `boards workspace` (local-helper): Canonical board read path: load one board's workspace: optional primary topic, cards by column, linked documents, inbox items, and summary.
 - `boards cards list` (local-helper): List all cards on a board in canonical column order without hydrating thread details.
 - `docs propose-update` (local-helper): Stage a document update proposal locally and show the content diff before applying it.
@@ -119,7 +119,7 @@ First commands to run
   oar --base-url http://127.0.0.1:8000 --agent <agent> auth bootstrap status
   oar --base-url http://127.0.0.1:8000 --agent <agent> auth register --username <username> --bootstrap-token <token>
   oar --agent <agent> auth whoami
-  oar --agent <agent> threads list
+  oar --agent <agent> topics list
   oar --agent <agent> inbox stream --max-events 1
 
 Next step
@@ -226,7 +226,9 @@ Operating posture
 Core model
 
 - `events`: immutable facts, observations, and updates. Use for append-only activity, audit trails, and streams.
-- `threads`: durable work objects and coordination state. Use for initiatives, incidents, cases, processes, relationships, and similar work units.
+- `topics`: the primary durable work subjects. Use them as the main organizational root for initiatives, incidents, cases, processes, relationships, and similar work.
+- `cards`: the primary work items. Use them for tracked execution on boards.
+- `threads`: backing timelines and packet-routing infrastructure. Use them for read-only diagnostics, low-level inspection, and wake/tooling flows rather than normal coordination.
 - `inbox`: work intake and notifications. Use to see what needs attention and ack handled items.
 - `draft`: staged or reviewable mutations. Use when a write should be inspected before commit.
 - `docs`: long-lived narrative knowledge. Use for plans, notes, decisions, summaries, and shared context.
@@ -236,9 +238,11 @@ Core model
 
 Heuristic:
 - Use `events` for facts.
-- Use `threads` for ongoing work and ownership.
+- Use `topics` for ongoing work, ownership, and operator coordination.
+- Use `cards` for concrete tracked execution and delivery state.
 - Use `docs` for narrative or reference material.
 - Use `boards` for portfolio or workflow visibility.
+- Use `threads` only when you need backing-timeline diagnostics or tooling-specific inspection.
 - Use `draft` when you want a checkpoint before applying change.
 
 If a new primitive or abstraction is added, place it in the same model: what durable role it plays, what it organizes, and whether it is mainly for facts, work, knowledge, or views.
@@ -248,7 +252,7 @@ Higher-level concepts
 
 - `docs` are the long-lived narrative layer. Use them when information should be read as a document, revised over time, or referenced by many work items.
 - `boards` are coordination views. Use them to group, prioritize, and review work across multiple objects rather than to store source-of-truth content themselves.
-- `threads` often back execution; `docs` explain; `boards` organize. Keep those roles distinct.
+- `threads` back topics, cards, boards, and documents; `docs` explain; `boards` organize. Keep those roles distinct.
 
 
 Standard workflow
@@ -259,7 +263,7 @@ Standard workflow
 4. Make the smallest valid mutation.
 5. Verify via read commands, timeline, stream, or resulting state.
 
-For interrupt-driven work, a common loop is: `inbox` -> inspect related `thread` or `doc` -> apply change directly or via `draft` -> verify -> ack inbox item.
+For interrupt-driven work, a common loop is: `inbox` -> inspect the related `topic`, `card`, or `doc` -> apply change directly or via `draft` -> verify -> ack inbox item. Reach for `threads ...` only when you need backing-thread diagnostics.
 
 
 Configuration
@@ -1538,7 +1542,6 @@ Inputs:
   Optional:
   - body `topic.provenance.by_field` (object)
   - body `topic.provenance.notes` (string)
-  - body `topic.thread_id` (string)
   Enum values: topic.status: active, archived, blocked, closed, paused, proposed, resolved; topic.type: case, decision, incident, initiative, note, objective, other, process, relationship, request, risk
 
 Global flags:
@@ -1579,7 +1582,6 @@ Inputs:
   - body `patch.related_refs` (list<any>)
   - body `patch.status` (string)
   - body `patch.summary` (string)
-  - body `patch.thread_id` (string)
   - body `patch.title` (string)
   - body `patch.type` (string)
   Enum values: patch.status: active, archived, blocked, closed, paused, proposed, resolved; patch.type: case, decision, incident, initiative, note, objective, other, process, relationship, request, risk
@@ -1723,7 +1725,6 @@ Inputs:
   Optional:
   - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
   - body `patch.assignee_refs` (list<any>)
-  - body `patch.column_key` (string)
   - body `patch.definition_of_done` (list<string>)
   - body `patch.document_ref` (string)
   - body `patch.due_at` (datetime)
@@ -1735,10 +1736,9 @@ Inputs:
   - body `patch.resolution_refs` (list<any>)
   - body `patch.risk` (string)
   - body `patch.summary` (string)
-  - body `patch.thread_id` (string)
   - body `patch.title` (string)
   - body `patch.topic_ref` (string)
-  Enum values: patch.column_key: backlog, blocked, done, in_progress, ready, review; patch.resolution: canceled, done; patch.risk: critical, high, low, medium
+  Enum values: patch.resolution: canceled, done; patch.risk: critical, high, low, medium
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1767,14 +1767,21 @@ Generated Help: cards move
 Inputs:
   Required:
   - path `card_id`
-  - body `move.column_key` (string)
+  - body `column_key` (string)
+  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `oar boards get --board-id <board-id>`, `oar boards workspace --board-id <board-id>`, or the latest board mutation response.
   Optional:
-  - body `move.after_card_ref` (string)
-  - body `move.before_card_ref` (string)
+  - body `actor_id` (string)
+  - body `after_card_id` (string)
+  - body `before_card_id` (string)
+  - body `move.after_card_id` (string)
+  - body `move.before_card_id` (string)
+  - body `move.column_key` (string)
   - body `move.if_board_updated_at` (datetime)
   - body `move.resolution` (string)
   - body `move.resolution_refs` (list<any>)
-  Enum values: move.column_key: backlog, blocked, done, in_progress, ready, review; move.resolution: canceled, done
+  - body `resolution` (string)
+  - body `resolution_refs` (list<any>)
+  Enum values: column_key: backlog, blocked, done, in_progress, ready, review; move.column_key: backlog, blocked, done, in_progress, ready, review; move.resolution: canceled, done; resolution: canceled, done
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2041,7 +2048,6 @@ Inputs:
   - body `board.primary_topic_ref` (string)
   - body `board.provenance.by_field` (object)
   - body `board.provenance.notes` (string)
-  - body `board.thread_id` (string)
   Enum values: board.status: active, closed, paused
 
 Global flags:
@@ -2128,6 +2134,8 @@ Inputs:
   - body `card.summary` (string)
   - body `card.title` (string)
   Optional:
+  - body `card.after_card_id` (string)
+  - body `card.before_card_id` (string)
   - body `card.definition_of_done` (list<string>)
   - body `card.document_ref` (string)
   - body `card.due_at` (datetime)
@@ -2135,7 +2143,6 @@ Inputs:
   - body `card.provenance.by_field` (object)
   - body `card.provenance.notes` (string)
   - body `card.resolution` (string)
-  - body `card.thread_id` (string)
   - body `card.topic_ref` (string)
   - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `oar boards get --board-id <board-id>`, `oar boards workspace --board-id <board-id>`, or the latest board mutation response.
   Enum values: card.column_key: backlog, blocked, done, in_progress, ready, review; card.resolution: canceled, done; card.risk: critical, high, low, medium
@@ -2468,14 +2475,14 @@ Global flags:
 
 ## `events list`
 
-Compose `threads timeline` responses with client-side thread/type/actor filters and preview summaries.
+Compose backing-thread timeline reads with client-side thread/type/actor filters and preview summaries.
 
 ```text
 Local Help: events list
 
 - Kind: `local helper`
-- Summary: Compose `threads timeline` responses with client-side thread/type/actor filters and preview summaries.
-- Composition: Fetches one or more thread timelines locally, then filters and summarizes the events without changing contracts or core behavior.
+- Summary: Compose backing-thread timeline reads with client-side thread/type/actor filters and preview summaries.
+- Composition: Fetches one or more backing-thread timelines locally, then filters and summarizes the events without changing contracts or core behavior. Use it as a diagnostic read; prefer `topics workspace` and card/board reads for normal coordination.
 - JSON body: `thread_id`, `thread_ids`, `events`, `total_events`, `returned_events`
 - Examples:
   - `oar events list --thread-id <thread-id> --type actor_statement --mine --full-id`
@@ -2528,14 +2535,14 @@ Global flags:
 
 ## `events explain`
 
-Explain known event-type conventions, required refs, and validation hints, including which type surfaces as a visible thread message.
+Explain known event-type conventions, required refs, and validation hints, including when `message_posted` targets a backing-thread message stream.
 
 ```text
 Local Help: events explain
 
 - Kind: `local helper`
-- Summary: Explain known event-type conventions, required refs, and validation hints, including which type surfaces as a visible thread message.
-- Composition: Formats the embedded event reference and validation guidance into a human-readable reference without sending a request. Use it to confirm when `message_posted` is required for a visible thread message in the web UI Messages tab.
+- Summary: Explain known event-type conventions, required refs, and validation hints, including when `message_posted` targets a backing-thread message stream.
+- Composition: Formats the embedded event reference and validation guidance into a human-readable reference without sending a request. Use it to confirm when `message_posted` is required for a visible backing-thread message in the web UI Messages tab.
 - JSON body: `event_type`, `known`, `required_refs`, `payload_requirements`, `examples`, `hint`
 - Examples:
   - `oar events explain`
@@ -2648,14 +2655,14 @@ Global flags:
 
 ## `threads recommendations`
 
-Compose a recommendation-oriented review of one thread with related follow-up context.
+Compose a diagnostic recommendation-oriented review of one backing thread with related follow-up context.
 
 ```text
 Local Help: threads recommendations
 
 - Kind: `local helper`
-- Summary: Compose a recommendation-oriented review of one thread with related follow-up context.
-- Composition: Loads the read-only thread context, inbox, and related-thread review context to highlight recommendation signals and follow-up hints without changing state.
+- Summary: Compose a diagnostic recommendation-oriented review of one backing thread with related follow-up context.
+- Composition: Loads the read-only thread context, inbox, and related-thread review context to highlight recommendation signals and follow-up hints without changing state. Prefer `topics workspace` for the main coordination read when a topic exists.
 - JSON body: `thread`, `recommendations`, `decision_requests`, `decisions`, `pending_decisions`, `related_threads`, `related_recommendations`, `related_decision_requests`, `related_decisions`, `warnings`, `follow_up`
 - Examples:
   - `oar threads recommendations --thread-id <thread-id>`

@@ -4190,6 +4190,28 @@ export function getMockCard(cardId) {
   );
 }
 
+function soleThreadIdFromRelatedRefsForCreate(relatedRefs) {
+  const ids = [];
+  for (const r of relatedRefs ?? []) {
+    const s = String(r ?? "").trim();
+    if (!s) continue;
+    const typed = splitTypedRef(s.includes(":") ? s : `thread:${s}`);
+    if (typed.prefix === "thread" && typed.id) {
+      ids.push(String(typed.id).trim());
+    }
+  }
+  const uniq = [...new Set(ids)];
+  if (uniq.length > 1) {
+    return {
+      ok: false,
+      threadId: "",
+      message:
+        "related_refs must include at most one thread ref for this board card.",
+    };
+  }
+  return { ok: true, threadId: uniq[0] || "", message: "" };
+}
+
 export function createMockBoardCard(boardId, payload) {
   const board = boards.find((candidate) => candidate.id === boardId);
   if (!board) {
@@ -4204,24 +4226,30 @@ export function createMockBoardCard(boardId, payload) {
     return boardConflict;
   }
 
+  const relatedRefsList = Array.isArray(payload.related_refs)
+    ? payload.related_refs
+    : [];
+  const soleRefs = soleThreadIdFromRelatedRefsForCreate(relatedRefsList);
+  if (!soleRefs.ok) {
+    return { error: "validation", message: soleRefs.message };
+  }
+
   const rawThreadRef = String(payload.thread_ref ?? "").trim();
   const parsedThreadRef = splitTypedRef(rawThreadRef);
   const threadId = String(
     payload.thread_id ??
-      (parsedThreadRef.prefix === "thread" ? parsedThreadRef.id : ""),
+      (parsedThreadRef.prefix === "thread" ? parsedThreadRef.id : "") ??
+      soleRefs.threadId,
   ).trim();
+  const title = String(payload.title ?? "").trim();
+  if (!title) {
+    return { error: "validation", message: "title is required." };
+  }
+
   const explicitSummary =
     String(payload.summary ?? "").trim() ||
-    String(payload.title ?? "").trim() ||
+    title ||
     String(payload.body ?? "").trim();
-
-  if (!threadId && !explicitSummary) {
-    return {
-      error: "validation",
-      message:
-        "Provide thread_id or a standalone card summary (summary, title, or body).",
-    };
-  }
 
   const columnKey = String(payload.column_key || "backlog").trim();
   if (!canonicalBoardColumnKeys.has(columnKey)) {
@@ -4676,6 +4704,19 @@ export function updateMockBoardCard(boardId, cardId, payload) {
     const current = normalizeCardRefList(card.related_refs);
     if (JSON.stringify(current) !== JSON.stringify(next)) {
       card.related_refs = next;
+      mutated = true;
+    }
+    const sole = soleThreadIdFromRelatedRefsForCreate(card.related_refs);
+    if (!sole.ok) {
+      return { error: "validation", message: sole.message };
+    }
+    if (
+      sole.threadId &&
+      sole.threadId !== String(card.thread_id ?? "").trim()
+    ) {
+      const err = validateCardThreadChange(sole.threadId);
+      if (err) return err;
+      card.thread_id = sole.threadId;
       mutated = true;
     }
   }

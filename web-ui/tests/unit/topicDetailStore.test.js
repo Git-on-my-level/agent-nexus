@@ -247,7 +247,7 @@ describe("topicDetailStore", () => {
     const topicId = "topic-99";
     const threadRow = {
       id: "thread-backing-99",
-      title: "Backing thread",
+      title: "Example thread",
       topic_ref: `topic:${topicId}`,
       updated_at: "2026-01-01T00:00:00Z",
       updated_by: "actor-1",

@@ -394,7 +394,7 @@ func TestRunLocalHelperHelpTopicsResolveAcrossEntryPoints(t *testing.T) {
 		if !strings.Contains(output, "Local Help: events list") {
 			t.Fatalf("expected local events list help header output=%s", output)
 		}
-		if !strings.Contains(output, "threads timeline") || !strings.Contains(output, "--full-id") {
+		if !strings.Contains(output, "backing-thread timelines") || !strings.Contains(output, "--full-id") {
 			t.Fatalf("expected events list local helper details output=%s", output)
 		}
 	}
@@ -418,7 +418,7 @@ func TestRunLocalHelperHelpTopicsResolveAcrossEntryPoints(t *testing.T) {
 		if !strings.Contains(output, "Local Help: threads recommendations") {
 			t.Fatalf("expected local threads recommendations help header output=%s", output)
 		}
-		if !strings.Contains(output, "Compose a recommendation-oriented review of one thread with related follow-up context.") || !strings.Contains(output, "Loads the read-only thread context, inbox, and related-thread review context") || !strings.Contains(output, "--include-related-event-content") {
+		if !strings.Contains(output, "Compose a diagnostic recommendation-oriented review of one backing thread with related follow-up context.") || !strings.Contains(output, "Loads the read-only thread context, inbox, and related-thread review context") || !strings.Contains(output, "--include-related-event-content") {
 			t.Fatalf("expected recommendations helper details output=%s", output)
 		}
 	}

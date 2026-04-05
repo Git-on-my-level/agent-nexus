@@ -1,7 +1,7 @@
 {
   "ok": true,
   "command": "events list",
-  "command_id": "threads.timeline",
+  "command_id": "events.list",
   "data": {
     "artifacts": {},
     "events": [

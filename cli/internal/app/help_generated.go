@@ -48,9 +48,9 @@ var runtimeGeneratedPacketResources = []string{"receipts", "reviews"}
 var localHelperTopics = []localHelperTopic{
 	{
 		Path:        "events list",
-		Summary:     "Compose `threads timeline` responses with client-side thread/type/actor filters and preview summaries.",
+		Summary:     "Compose backing-thread timeline reads with client-side thread/type/actor filters and preview summaries.",
 		JSONShape:   "`thread_id`, `thread_ids`, `events`, `total_events`, `returned_events`",
-		Composition: "Fetches one or more thread timelines locally, then filters and summarizes the events without changing contracts or core behavior.",
+		Composition: "Fetches one or more backing-thread timelines locally, then filters and summarizes the events without changing contracts or core behavior. Use it as a diagnostic read; prefer `topics workspace` and card/board reads for normal coordination.",
 		Examples: []string{
 			"oar events list --thread-id <thread-id> --type actor_statement --mine --full-id",
 			"oar events list --thread-id <thread-id> --max-events 10",
@@ -84,9 +84,9 @@ var localHelperTopics = []localHelperTopic{
 	},
 	{
 		Path:        "events explain",
-		Summary:     "Explain known event-type conventions, required refs, and validation hints, including which type surfaces as a visible thread message.",
+		Summary:     "Explain known event-type conventions, required refs, and validation hints, including when `message_posted` targets a backing-thread message stream.",
 		JSONShape:   "`event_type`, `known`, `required_refs`, `payload_requirements`, `examples`, `hint`",
-		Composition: "Formats the embedded event reference and validation guidance into a human-readable reference without sending a request. Use it to confirm when `message_posted` is required for a visible thread message in the web UI Messages tab.",
+		Composition: "Formats the embedded event reference and validation guidance into a human-readable reference without sending a request. Use it to confirm when `message_posted` is required for a visible backing-thread message in the web UI Messages tab.",
 		Examples: []string{
 			`oar events explain`,
 			`oar events explain message_posted`,
@@ -156,9 +156,9 @@ var localHelperTopics = []localHelperTopic{
 	},
 	{
 		Path:        "threads recommendations",
-		Summary:     "Compose a recommendation-oriented review of one thread with related follow-up context.",
+		Summary:     "Compose a diagnostic recommendation-oriented review of one backing thread with related follow-up context.",
 		JSONShape:   "`thread`, `recommendations`, `decision_requests`, `decisions`, `pending_decisions`, `related_threads`, `related_recommendations`, `related_decision_requests`, `related_decisions`, `warnings`, `follow_up`",
-		Composition: "Loads the read-only thread context, inbox, and related-thread review context to highlight recommendation signals and follow-up hints without changing state.",
+		Composition: "Loads the read-only thread context, inbox, and related-thread review context to highlight recommendation signals and follow-up hints without changing state. Prefer `topics workspace` for the main coordination read when a topic exists.",
 		Examples: []string{
 			"oar threads recommendations --thread-id <thread-id>",
 			"oar threads recommendations --status active --type initiative --full-summary",
@@ -956,7 +956,7 @@ First commands to run
   oar --base-url http://127.0.0.1:8000 --agent <agent> auth bootstrap status
   oar --base-url http://127.0.0.1:8000 --agent <agent> auth register --username <username> --bootstrap-token <token>
   oar --agent <agent> auth whoami
-  oar --agent <agent> threads list
+  oar --agent <agent> topics list
   oar --agent <agent> inbox stream --max-events 1
 
 Next step

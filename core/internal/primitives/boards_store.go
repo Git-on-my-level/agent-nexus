@@ -883,6 +883,26 @@ func (s *Store) GetBoardCard(ctx context.Context, boardID, identifier string) (m
 	return card, nil
 }
 
+// SoleThreadRefIDFromRefs returns the thread id when refs contains exactly one distinct thread: ref.
+func SoleThreadRefIDFromRefs(refs []string) (string, error) {
+	var out string
+	for _, r := range refs {
+		r = strings.TrimSpace(r)
+		if !strings.HasPrefix(r, "thread:") {
+			continue
+		}
+		id := strings.TrimSpace(strings.TrimPrefix(r, "thread:"))
+		if id == "" {
+			continue
+		}
+		if out != "" && out != id {
+			return "", fmt.Errorf("ambiguous thread refs in refs")
+		}
+		out = id
+	}
+	return out, nil
+}
+
 func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, input AddBoardCardInput) (BoardCardMutationResult, error) {
 	if s == nil || s.db == nil {
 		return BoardCardMutationResult{}, fmt.Errorf("primitives store database is not initialized")
@@ -899,14 +919,6 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 		return BoardCardMutationResult{}, invalidBoardRequestError(err)
 	}
 
-	sourceThreadID := strings.TrimSpace(firstNonEmpty(input.ParentThreadID, input.ThreadID))
-	if sourceThreadID != "" {
-		if err := validateThreadID(sourceThreadID); err != nil {
-			return BoardCardMutationResult{}, invalidBoardRequestError(err)
-		}
-	}
-	backingThreadID := uuid.NewString()
-
 	columnKey := strings.TrimSpace(input.ColumnKey)
 	if columnKey == "" {
 		columnKey = boardDefaultColumn
@@ -920,6 +932,27 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 	if err := validateBoardCardStatus(input.Status, true); err != nil {
 		return BoardCardMutationResult{}, invalidBoardRequestError(err)
 	}
+
+	refs := uniqueSortedStrings(input.Refs)
+	refsJSON, err := json.Marshal(refs)
+	if err != nil {
+		return BoardCardMutationResult{}, fmt.Errorf("marshal card refs: %w", err)
+	}
+
+	sourceThreadID := strings.TrimSpace(firstNonEmpty(input.ParentThreadID, input.ThreadID))
+	if sourceThreadID == "" {
+		derived, derr := SoleThreadRefIDFromRefs(refs)
+		if derr != nil {
+			return BoardCardMutationResult{}, invalidBoardRequestError(derr)
+		}
+		sourceThreadID = derived
+	}
+	if sourceThreadID != "" {
+		if err := validateThreadID(sourceThreadID); err != nil {
+			return BoardCardMutationResult{}, invalidBoardRequestError(err)
+		}
+	}
+	backingThreadID := uuid.NewString()
 
 	title := strings.TrimSpace(input.Title)
 	body := strings.TrimSpace(input.Body)
@@ -938,11 +971,6 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 	resolutionRefsJSON, err := json.Marshal(resolutionRefs)
 	if err != nil {
 		return BoardCardMutationResult{}, fmt.Errorf("marshal card resolution refs: %w", err)
-	}
-	refs := uniqueSortedStrings(input.Refs)
-	refsJSON, err := json.Marshal(refs)
-	if err != nil {
-		return BoardCardMutationResult{}, fmt.Errorf("marshal card refs: %w", err)
 	}
 	assignee := normalizeBoardOptionalPointer(input.Assignee)
 	priority := normalizeBoardOptionalPointer(input.Priority)
@@ -1097,7 +1125,8 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 		_ = tx.Rollback()
 		return BoardCardMutationResult{}, err
 	}
-	cardTargets := appendRefEdgeTarget(nil, refEdgeTypeCardParentThread, "thread", sourceThreadID)
+	cardTargets := typedRefEdgeTargets(refEdgeTypeRef, refs)
+	cardTargets = appendRefEdgeTarget(cardTargets, refEdgeTypeCardParentThread, "thread", sourceThreadID)
 	cardTargets = appendRefEdgeTarget(cardTargets, refEdgeTypeCardPinnedDocument, "document", derefBoardString(pinnedDocumentID))
 	if err := replaceRefEdges(ctx, tx, "card", cardID, cardTargets); err != nil {
 		_ = tx.Rollback()
@@ -1394,7 +1423,14 @@ func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifie
 		_ = tx.Rollback()
 		return BoardCardMutationResult{}, fmt.Errorf("update board card: %w", err)
 	}
-	cardTargets := appendRefEdgeTarget(nil, refEdgeTypeCardParentThread, "thread", nextParentThread)
+	var refsForEdges []string
+	if err := json.Unmarshal([]byte(nextRefsJSON), &refsForEdges); err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, fmt.Errorf("unmarshal card refs for ref_edges: %w", err)
+	}
+	refsForEdges = uniqueSortedStrings(refsForEdges)
+	cardTargets := typedRefEdgeTargets(refEdgeTypeRef, refsForEdges)
+	cardTargets = appendRefEdgeTarget(cardTargets, refEdgeTypeCardParentThread, "thread", nextParentThread)
 	cardTargets = appendRefEdgeTarget(cardTargets, refEdgeTypeCardPinnedDocument, "document", nextPinnedDocumentID)
 	if err := replaceRefEdges(ctx, tx, "card", cardRow.CardID, cardTargets); err != nil {
 		_ = tx.Rollback()

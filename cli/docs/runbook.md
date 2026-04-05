@@ -146,6 +146,7 @@ oar --agent agent-a topics list --status active
 oar --agent agent-a events stream --max-events 1
 oar --agent agent-a inbox stream --max-events 1
 oar --agent agent-a events stream --follow
+# Diagnostic/local helper over backing-thread timelines; prefer topics/cards/boards for primary coordination reads.
 oar --agent agent-a events list --thread-id thread_123 --thread-id thread_456 --type actor_statement --mine --full-id --max-events 20
 oar --json --agent agent-a provenance walk --from event:event_123 --depth 2
 oar --agent agent-a topics get --topic-id topic_123
@@ -158,8 +159,10 @@ oar --agent agent-a docs content --document-id product-constitution
 oar --agent agent-a artifacts inspect --artifact-id artifact_123
 oar --agent agent-a boards list --status active
 oar --agent agent-a boards workspace --board-id board_product_launch
-oar --agent agent-a boards cards create --board-id board_product_launch --thread-id thread_456 --column backlog
-oar --agent agent-a boards cards move --board-id board_product_launch --thread-id thread_456 --column review --if-board-updated-at 2026-03-08T00:00:00Z
+# Board cards: use card id and card-relative placement (not thread-id on writes). Pass `related_refs` / `thread:` via `--from-file` or stdin JSON when the card must associate with a collaboration thread (see OpenAPI / core).
+oar --agent agent-a boards cards create board_product_launch --title "Rescue digest" --column backlog --if-board-updated-at 2026-03-08T00:00:00Z
+oar --agent agent-a boards cards move board_product_launch card_789 --column review --before-card-id card_012 --if-board-updated-at 2026-03-08T00:00:05Z
+# Packet APIs are subject-based: `packet.subject_ref` must be `card:<card-id>`.
 oar --agent agent-a receipts create --from-file receipt.json
 oar --agent agent-a reviews create --from-file review.json
 ```
@@ -203,6 +206,7 @@ Generated board help lands in:
 Machine-facing notes for the targeted automation commands:
 
 - `events list`, `events get`, `events stream`, `inbox stream`, `topics workspace`, `threads inspect`, `threads context`, and `threads recommendations` include a stable `command_id` alongside `command`.
+- User-facing paths with registered contract ids report those ids in JSON envelopes even when the CLI composes lower-level reads underneath (`events list` currently composes backing-thread timelines); purely local helpers keep stable local ids.
 - `events tail` and `inbox tail` resolve to canonical machine command identity (`events stream` / `inbox stream`) in JSON success/error envelopes.
 - Stream frames expose a normalized payload contract:
   - `id`, `type`

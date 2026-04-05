@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -188,8 +189,8 @@ func parseAddBoardCardJSON(w http.ResponseWriter, raw map[string]any) (addBoardC
 		}
 	}
 
-	if m.Title == "" && m.ThreadID == "" && m.ParentThread == "" {
-		writeError(w, http.StatusBadRequest, "invalid_request", "title is required unless thread_id or parent_thread is provided")
+	if m.Title == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "title is required")
 		return m, false
 	}
 
@@ -263,6 +264,48 @@ func assigneeStringPtr(v any) *string {
 		return nil
 	}
 	return &s
+}
+
+// flattenLegacyMoveCardEnvelope promotes nested {"move":{...}} to the root when the root
+// does not already set column_key. Canonical shape is flat (refactor spec §8.1); a nested
+// move wrapper was historically described in OpenAPI.
+func flattenLegacyMoveCardEnvelope(raw map[string]any) {
+	if raw == nil {
+		return
+	}
+	moveObj, ok := raw["move"].(map[string]any)
+	if !ok || moveObj == nil {
+		return
+	}
+	if strings.TrimSpace(anyString(raw["column_key"])) != "" {
+		delete(raw, "move")
+		return
+	}
+	for k, v := range moveObj {
+		if _, exists := raw[k]; !exists {
+			raw[k] = v
+		}
+	}
+	delete(raw, "move")
+}
+
+// decodeMoveCardHTTPPayload decodes JSON then applies legacy move envelope flattening.
+func decodeMoveCardHTTPPayload(w http.ResponseWriter, r *http.Request, dst any) bool {
+	var raw map[string]any
+	if !decodeJSONBody(w, r, &raw) {
+		return false
+	}
+	flattenLegacyMoveCardEnvelope(raw)
+	payload, err := json.Marshal(raw)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+		return false
+	}
+	if err := json.Unmarshal(payload, dst); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON")
+		return false
+	}
+	return true
 }
 
 func addBoardCardStoreInput(m addBoardCardMerged, createStatus string) primitives.AddBoardCardInput {

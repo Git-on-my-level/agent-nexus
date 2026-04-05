@@ -429,7 +429,7 @@ Generated from `contracts/oar-openapi.yaml`.
 - CLI path: `threads inspect`
 - HTTP: `GET /threads/{thread_id}`
 - Stability: `beta`
-- Surface: `canonical`
+- Surface: `diagnostic`
 - Input mode: `none`
 - Why: Resolve one backing thread for low-level inspection and diagnostics.
 - Concepts: `threads`, `inspection`
@@ -441,7 +441,7 @@ Generated from `contracts/oar-openapi.yaml`.
 - CLI path: `threads list`
 - HTTP: `GET /threads`
 - Stability: `beta`
-- Surface: `canonical`
+- Surface: `diagnostic`
 - Input mode: `none`
 - Why: Inspect backing infrastructure threads without making them the primary planning noun.
 - Concepts: `threads`, `inspection`

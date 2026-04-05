@@ -1,6 +1,9 @@
 package server
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestValidateBoardCardCreateResolutionInput(t *testing.T) {
 	t.Parallel()
@@ -205,4 +208,59 @@ func TestBoardCardMatchesCreateReplayRejectsCanonicalFieldMismatches(t *testing.
 			t.Fatal("expected replay match when request risk matches stored card")
 		}
 	})
+}
+
+func TestValidateBoardCardCreateRejectsLegacyThreadFields(t *testing.T) {
+	t.Parallel()
+	if err := validateBoardCardCreateRequest("", "thr-1", "", "ready", "", "", "", "", "", nil); err == nil || !strings.Contains(err.Error(), "parent_thread must not") {
+		t.Fatalf("expected parent_thread rejection, got %v", err)
+	}
+	if err := validateBoardCardCreateRequest("", "", "thr-1", "ready", "", "", "", "", "", nil); err == nil || !strings.Contains(err.Error(), "thread_id must not") {
+		t.Fatalf("expected thread_id rejection, got %v", err)
+	}
+	if err := validateBoardCardCreateRequest("", "", "", "ready", "", "", "thr-1", "", "", nil); err == nil || !strings.Contains(err.Error(), "before_thread_id") {
+		t.Fatalf("expected before_thread_id rejection, got %v", err)
+	}
+}
+
+func TestValidateBoardCardMoveRejectsThreadAnchors(t *testing.T) {
+	t.Parallel()
+	if err := validateBoardCardMoveRequest("ready", "", "", "thr-1", ""); err == nil || !strings.Contains(err.Error(), "before_thread_id") {
+		t.Fatalf("expected thread anchor rejection, got %v", err)
+	}
+}
+
+func TestBoardCardMatchesCreateReplayDerivesParentFromRefs(t *testing.T) {
+	t.Parallel()
+	card := map[string]any{
+		"id":                 "card-1",
+		"title":              "Card title",
+		"parent_thread":      "thread-1",
+		"column_key":         "ready",
+		"status":             "todo",
+		"definition_of_done": []any{},
+		"resolution_refs":    []any{},
+		"refs":               []any{"topic:topic-1", "thread:thread-1"},
+	}
+	if !boardCardMatchesCreateReplay(
+		card,
+		"",
+		"Card title",
+		"",
+		"",
+		"",
+		"ready",
+		"todo",
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		[]string{"thread:thread-1", "topic:topic-1"},
+		nil,
+	) {
+		t.Fatal("expected replay match when parent is derived from refs only")
+	}
 }

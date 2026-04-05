@@ -1193,7 +1193,7 @@ Required for every command operation:
 - `+"`x-oar-error-codes`"+`: stable semantic error code list
 - `+"`x-oar-concepts`"+`: related concept tags
 - `+"`x-oar-stability`"+`: one of `+"`experimental|beta|stable`"+`
-- `+"`x-oar-surface`"+`: one of `+"`canonical|projection|utility`"+`
+- `+"`x-oar-surface`"+`: one of `+"`canonical|projection|diagnostic|utility`"+`
 - `+"`x-oar-agent-notes`"+`: idempotency/retry caveats
 
 Recommended:
@@ -1204,8 +1204,9 @@ Recommended:
 
 Surface classification:
 
-- `+"`canonical`"+`: CRUD/list/get endpoints over canonical resources (topics, cards, artifacts, documents, boards, threads, events)
+- `+"`canonical`"+`: CRUD/list/get endpoints over canonical durable resources (topics, cards, artifacts, documents, boards, events)
 - `+"`projection`"+`: operator convenience surfaces that aggregate multiple canonical resources (workspace/context endpoints, inbox)
+- `+"`diagnostic`"+`: read-only tooling and inspection surfaces over backing infrastructure (for example backing-thread list/get paths)
 - `+"`utility`"+`: meta/handshake, auth bootstrap, rebuild/repair, and similar non-domain endpoints
 `) + "\n"
 	return os.WriteFile(path, []byte(content), 0o644)
@@ -1713,8 +1714,28 @@ func deriveGroups(commands []command) []groupMeta {
 			CommandIDs:   commandIDs,
 		})
 	}
-	sort.Slice(groups, func(i, j int) bool { return groups[i].Name < groups[j].Name })
+	sort.Slice(groups, func(i, j int) bool {
+		pi, ni := commandGroupSortKey(groups[i].Name)
+		pj, nj := commandGroupSortKey(groups[j].Name)
+		if pi != pj {
+			return pi < pj
+		}
+		return ni < nj
+	})
 	return groups
+}
+
+// commandGroupSortKey orders CLI help groups: primary operator surface (topics) before
+// diagnostic threads tooling; everything else lexicographically.
+func commandGroupSortKey(name string) (prio int, sortName string) {
+	switch strings.TrimSpace(name) {
+	case "topics":
+		return 0, name
+	case "threads":
+		return 1, name
+	default:
+		return 10, name
+	}
 }
 
 func deriveConcepts(commands []command) []conceptMeta {

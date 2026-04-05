@@ -8,7 +8,7 @@ type machineCommandIdentity struct {
 }
 
 var machineCommandIdentityByPath = map[string]machineCommandIdentity{
-	"events list":     {Command: "events list", CommandID: "threads.timeline"},
+	"events list":     {Command: "events list", CommandID: "events.list"},
 	"events get":      {Command: "events get", CommandID: "events.get"},
 	"events stream":   {Command: "events stream", CommandID: "events.stream"},
 	"events tail":     {Command: "events stream", CommandID: "events.stream"},

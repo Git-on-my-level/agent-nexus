@@ -396,8 +396,8 @@ func TestInboxStreamSuppressesDuplicateItems(t *testing.T) {
 	postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
 		"actor_id":"actor-1",
 		"if_board_updated_at":"`+boardUpdatedAt+`",
-		"thread_id":"`+threadID+`",
 		"title":"At risk work item",
+		"related_refs":["thread:`+threadID+`"],
 		"column_key":"ready",
 		"due_at":"`+dueSoon+`"
 	}`, http.StatusCreated).Body.Close()

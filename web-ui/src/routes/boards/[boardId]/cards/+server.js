@@ -1,7 +1,6 @@
 import { json } from "@sveltejs/kit";
 
 import { listMockBoardCards, createMockBoardCard } from "$lib/mockCoreData";
-import { resolveBoardCardThreadIdField } from "$lib/topicRouteUtils";
 import {
   assertMockModeEnabled,
   mockResultToResponse,
@@ -34,22 +33,10 @@ export async function POST({ params, request, url }) {
     return json({ error: "actor_id is required." }, { status: 400 });
   }
 
-  const resolvedThreadId = resolveBoardCardThreadIdField(body);
-  const hasTitle = String(body.title ?? "").trim();
-  if (!resolvedThreadId && !hasTitle) {
-    return json(
-      {
-        error: "thread_id or title is required (standalone cards need title).",
-      },
-      { status: 400 },
-    );
+  if (!String(body.title ?? "").trim()) {
+    return json({ error: "title is required." }, { status: 400 });
   }
 
-  const payload =
-    resolvedThreadId && !String(body.thread_id ?? "").trim()
-      ? { ...body, thread_id: resolvedThreadId }
-      : body;
-
-  const result = createMockBoardCard(params.boardId, payload);
+  const result = createMockBoardCard(params.boardId, body);
   return mockResultToResponse(result, 201);
 }

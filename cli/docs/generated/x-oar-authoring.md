@@ -13,7 +13,7 @@ Required for every command operation:
 - `x-oar-error-codes`: stable semantic error code list
 - `x-oar-concepts`: related concept tags
 - `x-oar-stability`: one of `experimental|beta|stable`
-- `x-oar-surface`: one of `canonical|projection|utility`
+- `x-oar-surface`: one of `canonical|projection|diagnostic|utility`
 - `x-oar-agent-notes`: idempotency/retry caveats
 
 Recommended:
@@ -24,6 +24,7 @@ Recommended:
 
 Surface classification:
 
-- `canonical`: CRUD/list/get endpoints over canonical resources (topics, cards, artifacts, documents, boards, threads, events)
+- `canonical`: CRUD/list/get endpoints over canonical durable resources (topics, cards, artifacts, documents, boards, events)
 - `projection`: operator convenience surfaces that aggregate multiple canonical resources (workspace/context endpoints, inbox)
+- `diagnostic`: read-only tooling and inspection surfaces over backing infrastructure (for example backing-thread list/get paths)
 - `utility`: meta/handshake, auth bootstrap, rebuild/repair, and similar non-domain endpoints

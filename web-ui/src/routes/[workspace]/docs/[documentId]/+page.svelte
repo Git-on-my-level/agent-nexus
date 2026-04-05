@@ -6,7 +6,10 @@
   import SearchableEntityPicker from "$lib/components/SearchableEntityPicker.svelte";
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
-  import { searchTopics as searchTopicRecords } from "$lib/searchHelpers";
+  import {
+    searchTopics as searchTopicRecords,
+    topicSearchResultToPickerOption,
+  } from "$lib/searchHelpers";
   import { topicDetailPathFromSubject } from "$lib/topicRouteUtils";
   import { workspacePath } from "$lib/workspacePaths";
   import {
@@ -77,18 +80,9 @@
     return workspacePath(workspaceSlug, pathname);
   }
 
-  function toThreadOption(thread) {
-    return {
-      id: thread.id,
-      title: thread.title || thread.id,
-      subtitle: [thread.status, thread.priority].filter(Boolean).join(" · "),
-      keywords: [thread.type, ...(thread.tags ?? [])],
-    };
-  }
-
   async function searchThreadOptions(query) {
     const threads = await searchTopicRecords(query);
-    return threads.map(toThreadOption);
+    return threads.map(topicSearchResultToPickerOption);
   }
 
   async function setRequestedRevision(revisionId = "") {
@@ -521,7 +515,7 @@
           </div>
           {#if document.thread_id && documentTopicHref}
             <p class="mt-0.5 text-[12px] text-[var(--ui-text-muted)]">
-              Linked thread:
+              Thread (timeline):
               <a
                 class="text-indigo-400 transition-colors hover:text-indigo-300"
                 href={workspaceHref(documentTopicHref)}

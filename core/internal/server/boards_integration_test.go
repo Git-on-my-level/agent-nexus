@@ -84,7 +84,8 @@ func TestBoardsWorkspaceAndThreadWorkspaceMemberships(t *testing.T) {
 	addCardResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
 		"actor_id":"actor-1",
 		"if_board_updated_at":"`+boardUpdatedAt+`",
-		"thread_id":"`+memberThreadID+`",
+		"title":"Member card",
+		"related_refs":["thread:`+memberThreadID+`"],
 		"column_key":"ready",
 		"pinned_document_id":"`+memberDocumentID+`",
 		"due_at":"`+time.Now().UTC().Add(24*time.Hour).Format(time.RFC3339)+`"
@@ -276,7 +277,8 @@ func TestBoardsWorkspaceAndThreadWorkspaceMemberships(t *testing.T) {
 	postJSONExpectStatus(t, h.baseURL+"/boards/"+secondBoardID+"/cards", `{
 		"actor_id":"actor-1",
 		"if_board_updated_at":"`+secondBoardUpdatedAt+`",
-		"thread_id":"`+memberThreadID+`",
+		"title":"Member card",
+		"related_refs":["thread:`+memberThreadID+`"],
 		"column_key":"review"
 	}`, http.StatusCreated).Body.Close()
 
@@ -369,7 +371,8 @@ func TestBoardLifecycleEventsAndConflictValidation(t *testing.T) {
 	addCardResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
 		"actor_id":"actor-1",
 		"if_board_updated_at":"`+afterBoardUpdate+`",
-		"thread_id":"`+memberThreadID+`",
+		"title":"Member card",
+		"related_refs":["thread:`+memberThreadID+`"],
 		"column_key":"backlog"
 	}`, http.StatusCreated)
 	defer addCardResp.Body.Close()
@@ -385,15 +388,28 @@ func TestBoardLifecycleEventsAndConflictValidation(t *testing.T) {
 
 	duplicateAddResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
 		"actor_id":"actor-1",
-		"thread_id":"`+memberThreadID+`"
+		"title":"Duplicate member card",
+		"related_refs":["thread:`+memberThreadID+`"]
 	}`, http.StatusConflict)
 	duplicateAddResp.Body.Close()
 
-	invalidPrimaryCardResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
+	legacyThreadCreateResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
 		"actor_id":"actor-1",
-		"thread_id":"`+boardID+`"
+		"if_board_updated_at":"`+afterBoardUpdate+`",
+		"thread_id":"`+memberThreadID+`",
+		"title":"Legacy thread field",
+		"column_key":"backlog"
 	}`, http.StatusBadRequest)
-	invalidPrimaryCardResp.Body.Close()
+	legacyThreadCreateResp.Body.Close()
+
+	ambiguousThreadRefsResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+afterCardAdd+`",
+		"title":"Ambiguous refs",
+		"related_refs":["thread:`+memberThreadID+`","thread:`+primaryThreadID+`"],
+		"column_key":"backlog"
+	}`, http.StatusBadRequest)
+	ambiguousThreadRefsResp.Body.Close()
 
 	updateCardResp := patchJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards/"+memberThreadID, `{
 		"actor_id":"actor-1",
@@ -577,7 +593,8 @@ func TestArchiveBoardCardGlobalRoute(t *testing.T) {
 	addCardResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
 		"actor_id":"actor-1",
 		"if_board_updated_at":"`+boardUpdatedAt+`",
-		"thread_id":"`+memberThreadID+`",
+		"title":"Member card",
+		"related_refs":["thread:`+memberThreadID+`"],
 		"column_key":"review"
 	}`, http.StatusCreated)
 	defer addCardResp.Body.Close()
@@ -693,7 +710,8 @@ func TestBoardCardCreateRejectsInvalidResolutionCombinations(t *testing.T) {
 	resp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
 		"actor_id":"actor-1",
 		"if_board_updated_at":"`+boardUpdatedAt+`",
-		"thread_id":"`+memberThreadID+`",
+		"title":"Member card",
+		"related_refs":["thread:`+memberThreadID+`"],
 		"column_key":"review",
 		"resolution":"done",
 		"resolution_refs":["event:done-1"]
@@ -704,7 +722,8 @@ func TestBoardCardCreateRejectsInvalidResolutionCombinations(t *testing.T) {
 	resp = postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
 		"actor_id":"actor-1",
 		"if_board_updated_at":"`+boardUpdatedAt+`",
-		"thread_id":"`+memberThreadID+`",
+		"title":"Member card",
+		"related_refs":["thread:`+memberThreadID+`"],
 		"column_key":"done",
 		"resolution":"done"
 	}`, http.StatusBadRequest)
@@ -714,7 +733,8 @@ func TestBoardCardCreateRejectsInvalidResolutionCombinations(t *testing.T) {
 	resp = postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
 		"actor_id":"actor-1",
 		"if_board_updated_at":"`+boardUpdatedAt+`",
-		"thread_id":"`+memberThreadID+`",
+		"title":"Member card",
+		"related_refs":["thread:`+memberThreadID+`"],
 		"column_key":"done",
 		"resolution_refs":["event:done-1"]
 	}`, http.StatusBadRequest)
@@ -753,7 +773,8 @@ func TestCardGlobalTrashListRestoreAndPurge(t *testing.T) {
 	addCardResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
 		"actor_id":"actor-1",
 		"if_board_updated_at":"`+boardUpdatedAt+`",
-		"thread_id":"`+memberThreadID+`",
+		"title":"Member card",
+		"related_refs":["thread:`+memberThreadID+`"],
 		"column_key":"review"
 	}`, http.StatusCreated)
 	defer addCardResp.Body.Close()
@@ -933,7 +954,8 @@ func TestBoardCardPatchAllowsContractValidNoOpShapes(t *testing.T) {
 	addCardResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
 		"actor_id":"actor-1",
 		"if_board_updated_at":"`+boardUpdatedAt+`",
-		"thread_id":"`+memberThreadID+`",
+		"title":"Member card",
+		"related_refs":["thread:`+memberThreadID+`"],
 		"column_key":"ready"
 	}`, http.StatusCreated)
 	defer addCardResp.Body.Close()
@@ -1021,7 +1043,7 @@ func TestBoardCardPatchAllowsContractValidNoOpShapes(t *testing.T) {
 	mismatchedAliasResp := patchJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards/"+memberThreadID, `{
 		"actor_id":"actor-1",
 		"if_board_updated_at":"`+cardUpdatedAt+`",
-		"patch":{"parent_thread":"thread-parent-a","thread_id":"thread-parent-b"}
+		"patch":{"parent_thread":"thread-parent-a"}
 	}`, http.StatusBadRequest)
 	defer mismatchedAliasResp.Body.Close()
 	assertErrorCode(t, mismatchedAliasResp, "invalid_request")
@@ -1080,7 +1102,8 @@ func TestBoardCardAddRequestKeyFallbackOnlyReplaysEquivalentState(t *testing.T) 
 		"actor_id":"actor-1",
 		"request_key":"retry-derived-id-add",
 		"if_board_updated_at":"`+initialBoardUpdatedAt+`",
-		"thread_id":"`+memberThreadID+`",
+		"title":"Member card",
+		"related_refs":["thread:`+memberThreadID+`"],
 		"column_key":"ready",
 		"pinned_document_id":"`+memberDocumentID+`"
 	}`, http.StatusCreated)
@@ -1090,7 +1113,8 @@ func TestBoardCardAddRequestKeyFallbackOnlyReplaysEquivalentState(t *testing.T) 
 		"actor_id":"actor-1",
 		"request_key":"retry-derived-id-add",
 		"if_board_updated_at":"`+initialBoardUpdatedAt+`",
-		"thread_id":"`+memberThreadID+`",
+		"title":"Member card",
+		"related_refs":["thread:`+memberThreadID+`"],
 		"column_key":"ready",
 		"pinned_document_id":"`+memberDocumentID+`"
 	}`, http.StatusCreated)
@@ -1107,10 +1131,12 @@ func TestBoardCardAddRequestKeyFallbackOnlyReplaysEquivalentState(t *testing.T) 
 		t.Fatalf("unexpected retried first add payload: %#v", retryFirstAddPayload)
 	}
 
+	thirdThreadID := createBoardThreadViaHTTP(t, h, "Board idempotent third thread")
 	replayableAddResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
 		"actor_id":"actor-1",
 		"request_key":"retry-equivalent-add",
-		"thread_id":"`+memberThreadID+`",
+		"title":"Third thread card",
+		"related_refs":["thread:`+thirdThreadID+`"],
 		"column_key":"ready",
 		"pinned_document_id":"`+memberDocumentID+`"
 	}`, http.StatusCreated)
@@ -1122,14 +1148,15 @@ func TestBoardCardAddRequestKeyFallbackOnlyReplaysEquivalentState(t *testing.T) 
 	if err := json.NewDecoder(replayableAddResp.Body).Decode(&replayableAddPayload); err != nil {
 		t.Fatalf("decode replayable add response: %v", err)
 	}
-	if !cardRelatedRefsContainThread(replayableAddPayload.Card, memberThreadID) || asString(replayableAddPayload.Card["column_key"]) != "ready" || cardDocumentRefLocalID(replayableAddPayload.Card) != memberDocumentID {
+	if !cardRelatedRefsContainThread(replayableAddPayload.Card, thirdThreadID) || asString(replayableAddPayload.Card["column_key"]) != "ready" || cardDocumentRefLocalID(replayableAddPayload.Card) != memberDocumentID {
 		t.Fatalf("unexpected replayable add payload: %#v", replayableAddPayload)
 	}
 
 	conflictAddResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
 		"actor_id":"actor-1",
 		"request_key":"retry-mismatched-add",
-		"thread_id":"`+memberThreadID+`",
+		"title":"Member card",
+		"related_refs":["thread:`+memberThreadID+`"],
 		"column_key":"blocked"
 	}`, http.StatusConflict)
 	defer conflictAddResp.Body.Close()
@@ -1139,7 +1166,8 @@ func TestBoardCardAddRequestKeyFallbackOnlyReplaysEquivalentState(t *testing.T) 
 		"actor_id":"actor-1",
 		"request_key":"retry-stale-equivalent-add",
 		"if_board_updated_at":"`+initialBoardUpdatedAt+`",
-		"thread_id":"`+memberThreadID+`",
+		"title":"Member card",
+		"related_refs":["thread:`+memberThreadID+`"],
 		"column_key":"ready",
 		"pinned_document_id":"`+memberDocumentID+`"
 	}`, http.StatusConflict)
@@ -1178,7 +1206,8 @@ func TestBoardCardMoveRejectsInvalidPlacementAnchors(t *testing.T) {
 	addAResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
 		"actor_id":"actor-1",
 		"if_board_updated_at":"`+boardUpdatedAt+`",
-		"thread_id":"`+threadA+`",
+		"title":"Anchor card A",
+		"related_refs":["thread:`+threadA+`"],
 		"column_key":"backlog"
 	}`, http.StatusCreated)
 	defer addAResp.Body.Close()
@@ -1195,7 +1224,8 @@ func TestBoardCardMoveRejectsInvalidPlacementAnchors(t *testing.T) {
 	addBResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
 		"actor_id":"actor-1",
 		"if_board_updated_at":"`+afterAddA+`",
-		"thread_id":"`+threadB+`",
+		"title":"Anchor card B",
+		"related_refs":["thread:`+threadB+`"],
 		"column_key":"backlog"
 	}`, http.StatusCreated)
 	defer addBResp.Body.Close()
@@ -1237,7 +1267,7 @@ func TestBoardCardMoveRejectsInvalidPlacementAnchors(t *testing.T) {
 		"column_key":"ready",
 		"before_card_id":"`+cardBID+`",
 		"after_thread_id":"`+threadB+`"
-	}`, "card-id and thread-id placement anchors cannot be combined")
+	}`, "before_thread_id and after_thread_id must not be set on card move; use before_card_id / after_card_id")
 
 	assertMoveInvalidRequest(t, `{
 		"actor_id":"actor-1",
@@ -1245,7 +1275,7 @@ func TestBoardCardMoveRejectsInvalidPlacementAnchors(t *testing.T) {
 		"column_key":"ready",
 		"before_thread_id":"`+threadA+`",
 		"after_card_id":"`+cardBID+`"
-	}`, "card-id and thread-id placement anchors cannot be combined")
+	}`, "before_thread_id and after_thread_id must not be set on card move; use before_card_id / after_card_id")
 
 	assertMoveInvalidRequest(t, `{
 		"actor_id":"actor-1",
@@ -1285,7 +1315,8 @@ func TestCardMoveResolutionTransitionsAndEvents(t *testing.T) {
 	addResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
 		"actor_id":"actor-1",
 		"if_board_updated_at":"`+boardUpdatedAt+`",
-		"thread_id":"`+memberThreadID+`",
+		"title":"Member card",
+		"related_refs":["thread:`+memberThreadID+`"],
 		"column_key":"review"
 	}`, http.StatusCreated)
 	defer addResp.Body.Close()
@@ -1337,7 +1368,8 @@ func TestCardMoveResolutionTransitionsAndEvents(t *testing.T) {
 	cancelAddResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
 		"actor_id":"actor-1",
 		"if_board_updated_at":"`+asString(doneMovePayload.Board["updated_at"])+`",
-		"thread_id":"`+cancelThreadID+`",
+		"title":"Cancel flow card",
+		"related_refs":["thread:`+cancelThreadID+`"],
 		"column_key":"ready"
 	}`, http.StatusCreated)
 	defer cancelAddResp.Body.Close()

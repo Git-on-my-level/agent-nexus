@@ -32,6 +32,7 @@
   let {
     open = false,
     cardItem = null,
+    columnPeers = [],
     boardId = "",
     board = null,
     workspaceSlug = "",
@@ -125,10 +126,17 @@
   }
 
   function buildCardPatch() {
+    const related = parseDelimitedValues(manageRelatedRefs);
+    const opThread = manageThreadId.trim();
+    if (opThread) {
+      const token = opThread.includes(":") ? opThread : `thread:${opThread}`;
+      if (!related.includes(token)) {
+        related.push(token);
+      }
+    }
     return {
       title: manageTitle.trim(),
       summary: manageSummary.trim() || manageTitle.trim(),
-      thread_id: manageThreadId.trim() || null,
       document_ref: manageDocumentId.trim()
         ? `document:${manageDocumentId.trim()}`
         : null,
@@ -136,7 +144,7 @@
       risk: manageRisk,
       resolution: manageResolution.trim() || null,
       resolution_refs: parseDelimitedValues(manageResolutionRefs),
-      related_refs: parseDelimitedValues(manageRelatedRefs),
+      related_refs: related,
       due_at: manageDueAt.trim() || null,
       definition_of_done: parseDelimitedValues(manageDefinitionOfDone),
     };
@@ -195,6 +203,19 @@
   let relatedRefs = $derived(
     Array.isArray(membership?.related_refs) ? membership.related_refs : [],
   );
+  let moveUpBeforeCardId = $derived.by(() => {
+    if (!cardItem || !columnPeers?.length) {
+      return "";
+    }
+    const id = boardCardStableId(cardItem.membership);
+    const idx = columnPeers.findIndex(
+      (c) => boardCardStableId(c.membership) === id,
+    );
+    if (idx <= 0) {
+      return "";
+    }
+    return boardCardStableId(columnPeers[idx - 1].membership);
+  });
   let doD = $derived(
     Array.isArray(membership?.definition_of_done)
       ? membership.definition_of_done
@@ -259,6 +280,22 @@
       await onmovecard(
         cardItem,
         { column_key: manageMoveColumnKey },
+        "Card moved.",
+      );
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function handleMoveUp() {
+    if (!cardItem || busy || !moveUpBeforeCardId) return;
+    const col = String(cardItem.membership?.column_key ?? "").trim();
+    if (!col) return;
+    busy = true;
+    try {
+      await onmovecard(
+        cardItem,
+        { column_key: col, before_card_id: moveUpBeforeCardId },
         "Card moved.",
       );
     } finally {
@@ -444,7 +481,7 @@
                   />
                 </label>
                 <label class="{labelClass} md:col-span-2">
-                  Backing thread ID
+                  Card thread ID
                   <input
                     class={inputClass}
                     type="text"
@@ -729,6 +766,17 @@
           >
             {busy ? "…" : "Move"}
           </button>
+          <button
+            class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] hover:text-[var(--ui-text)] disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={busy || !moveUpBeforeCardId}
+            onclick={() => void handleMoveUp()}
+            title={moveUpBeforeCardId
+              ? "Order this card before its current predecessor in this column"
+              : "Already at the top of this column"}
+            type="button"
+          >
+            Move up
+          </button>
         </div>
         <div class="mt-2 flex flex-wrap items-center gap-2">
           {#if overviewEditMode}
@@ -738,7 +786,7 @@
               onclick={() => void handleSave()}
               type="button"
             >
-              Save card
+              Save card details
             </button>
             <button
               class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] hover:text-[var(--ui-text)] disabled:opacity-50"

@@ -167,7 +167,8 @@ func TestBoardAddCardSucceedsWhenLifecycleProjectionRefreshFails(t *testing.T) {
 	addCardResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
 		"actor_id":"actor-1",
 		"if_board_updated_at":"`+boardUpdatedAt+`",
-		"thread_id":"`+memberThreadID+`",
+		"title":"Reliability card",
+		"related_refs":["thread:`+memberThreadID+`"],
 		"column_key":"ready"
 	}`, http.StatusCreated)
 	defer addCardResp.Body.Close()

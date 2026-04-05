@@ -75,7 +75,8 @@ func TestTopicWorkspaceResolvesBoardsCardsAndDocsViaRefEdges(t *testing.T) {
 	addCardResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
 		"actor_id":"actor-1",
 		"if_board_updated_at":"`+boardUpdatedAt+`",
-		"parent_thread":"`+primaryThreadID+`",
+		"title":"Topic workspace card",
+		"related_refs":["thread:`+primaryThreadID+`"],
 		"column_key":"ready",
 		"pinned_document_id":"`+memberDocumentID+`"
 	}`, http.StatusCreated)

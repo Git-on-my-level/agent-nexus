@@ -27,8 +27,8 @@ func integrationSeedBoardAndCard(t *testing.T, h primitivesTestHarness, actorID,
 	cardResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", fmt.Sprintf(`{
 		"actor_id":%q,
 		"if_board_updated_at":%q,
-		"thread_id":%q,
 		"title":"Packet card",
+		"related_refs":["thread:%s"],
 		"column_key":"backlog"
 	}`, actorID, boardUpdatedAt, parentThreadID), http.StatusCreated)
 	defer cardResp.Body.Close()

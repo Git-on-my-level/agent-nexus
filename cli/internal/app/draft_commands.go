@@ -467,17 +467,17 @@ func validateDraftBody(commandID string, body map[string]any) []string {
 		return []string{fmt.Sprintf("command %q does not accept a request body", commandID)}
 	}
 	validators := map[string]func(map[string]any) []string{
-		"topics.create":              validateDraftTopicCreate,
-		"topics.patch":               validateDraftTopicPatch,
-		"cards.patch":                validateDraftCardPatch,
-		"cards.move":                 validateDraftCardMove,
-		"docs.revisions.create":      validateDraftDocsUpdate,
-		"events.create":              validateDraftEventCreate,
-		"artifacts.create":           validateDraftArtifactCreate,
-		"inbox.acknowledge":          validateDraftInboxAck,
-		"packets.receipts.create":    validateDraftReceiptCreate,
-		"packets.reviews.create":     validateDraftReviewCreate,
-		"derived.rebuild":            validateDraftDerivedRebuild,
+		"topics.create":           validateDraftTopicCreate,
+		"topics.patch":            validateDraftTopicPatch,
+		"cards.patch":             validateDraftCardPatch,
+		"cards.move":              validateDraftCardMove,
+		"docs.revisions.create":   validateDraftDocsUpdate,
+		"events.create":           validateDraftEventCreate,
+		"artifacts.create":        validateDraftArtifactCreate,
+		"inbox.acknowledge":       validateDraftInboxAck,
+		"packets.receipts.create": validateDraftReceiptCreate,
+		"packets.reviews.create":  validateDraftReviewCreate,
+		"derived.rebuild":         validateDraftDerivedRebuild,
 	}
 	validate, exists := validators[commandID]
 	if !exists {
@@ -710,18 +710,36 @@ func validateDraftCardPatch(body map[string]any) []string {
 func validateDraftCardMove(body map[string]any) []string {
 	out := make([]string, 0)
 	validateOptionalNonEmptyString(body, "actor_id", "actor_id", &out)
-	move, ok := requiredObjectField(body, "move", "move", &out)
-	if !ok {
+	move := effectiveCardMoveMutationMap(body)
+	if move == nil {
+		out = append(out, "column_key is required (flat body or nested move object)")
 		return out
 	}
-	requiredStringField(move, "column_key", "move.column_key", true, &out)
-	validateCardFields(move, false, "move", &out)
+	useNestedPath := nestedMutationMap(body, "move") != nil && strings.TrimSpace(anyString(body["column_key"])) == ""
+	path := "move"
+	if !useNestedPath {
+		path = ""
+	}
+	colPath := "column_key"
+	if useNestedPath {
+		colPath = "move.column_key"
+	}
+	requiredStringField(move, "column_key", colPath, true, &out)
+	ifBoardPath := "if_board_updated_at"
+	if useNestedPath {
+		ifBoardPath = "move.if_board_updated_at"
+	}
+	validateRequiredRFC3339(move, "if_board_updated_at", ifBoardPath, &out)
+	validateCardFields(move, false, path, &out)
 	return out
 }
 
 func validateCardFields(card map[string]any, createMode bool, path string, out *[]string) {
 	for field, raw := range card {
-		full := path + "." + field
+		full := field
+		if path != "" {
+			full = path + "." + field
+		}
 		switch field {
 		case "title", "summary", "risk", "resolution":
 			text, ok := raw.(string)
@@ -739,7 +757,7 @@ func validateCardFields(card map[string]any, createMode bool, path string, out *
 				continue
 			}
 			validateTypedRefs(values, full, out)
-		case "topic_ref", "thread_ref", "document_ref", "before_card_ref", "after_card_ref":
+		case "topic_ref", "thread_ref", "document_ref", "before_card_id", "after_card_id":
 			if raw == nil {
 				continue
 			}
@@ -1082,6 +1100,26 @@ func validateOptionalRFC3339(body map[string]any, key string, path string, out *
 	text, ok := raw.(string)
 	if !ok {
 		*out = append(*out, path+" must be an RFC3339 datetime string")
+		return
+	}
+	if _, err := time.Parse(time.RFC3339, text); err != nil {
+		*out = append(*out, path+" must be an RFC3339 datetime string")
+	}
+}
+
+func validateRequiredRFC3339(body map[string]any, key string, path string, out *[]string) {
+	raw, exists := body[key]
+	if !exists || raw == nil {
+		*out = append(*out, path+" is required")
+		return
+	}
+	text, ok := raw.(string)
+	if !ok {
+		*out = append(*out, path+" must be an RFC3339 datetime string")
+		return
+	}
+	if strings.TrimSpace(text) == "" {
+		*out = append(*out, path+" must be non-empty")
 		return
 	}
 	if _, err := time.Parse(time.RFC3339, text); err != nil {

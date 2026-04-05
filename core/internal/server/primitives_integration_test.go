@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"organization-autorunner-core/internal/blob"
 	"os"
 	"path/filepath"
@@ -2703,6 +2704,79 @@ func TestTopicArchiveLifecycle(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("expected topic back in default list after unarchive")
+	}
+}
+
+func TestListTopicsPaginationIncludesNextCursor(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	for _, title := range []string{"Pagination topic A", "Pagination topic B"} {
+		createResp := postJSONExpectStatus(t, h.baseURL+"/topics", fmt.Sprintf(`{
+		"actor_id":"actor-1",
+		"topic":{
+			"type":"incident",
+			"status":"active",
+			"title":%q,
+			"summary":"s",
+			"owner_refs":[],
+			"document_refs":[],
+			"board_refs":[],
+			"related_refs":[],
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, title), http.StatusCreated)
+		createResp.Body.Close()
+	}
+
+	firstResp, err := http.Get(h.baseURL + "/topics?limit=1")
+	if err != nil {
+		t.Fatalf("GET /topics?limit=1: %v", err)
+	}
+	defer firstResp.Body.Close()
+	if firstResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected status: %d", firstResp.StatusCode)
+	}
+	var firstPage struct {
+		Topics     []map[string]any `json:"topics"`
+		NextCursor string           `json:"next_cursor"`
+	}
+	if err := json.NewDecoder(firstResp.Body).Decode(&firstPage); err != nil {
+		t.Fatalf("decode first page: %v", err)
+	}
+	if len(firstPage.Topics) != 1 {
+		t.Fatalf("expected 1 topic, got %d", len(firstPage.Topics))
+	}
+	if firstPage.NextCursor == "" {
+		t.Fatal("expected next_cursor when more topics exist than limit")
+	}
+
+	secondURL := h.baseURL + "/topics?limit=1&cursor=" + url.QueryEscape(firstPage.NextCursor)
+	secondResp, err := http.Get(secondURL)
+	if err != nil {
+		t.Fatalf("GET second page: %v", err)
+	}
+	defer secondResp.Body.Close()
+	if secondResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected second page status: %d", secondResp.StatusCode)
+	}
+	var secondPage struct {
+		Topics     []map[string]any `json:"topics"`
+		NextCursor string           `json:"next_cursor"`
+	}
+	if err := json.NewDecoder(secondResp.Body).Decode(&secondPage); err != nil {
+		t.Fatalf("decode second page: %v", err)
+	}
+	if len(secondPage.Topics) != 1 {
+		t.Fatalf("expected 1 topic on second page, got %d", len(secondPage.Topics))
+	}
+	if firstPage.Topics[0]["id"] == secondPage.Topics[0]["id"] {
+		t.Fatal("expected second page to return a different topic")
+	}
+	if secondPage.NextCursor != "" {
+		t.Fatalf("expected empty next_cursor on last page, got %q", secondPage.NextCursor)
 	}
 }
 

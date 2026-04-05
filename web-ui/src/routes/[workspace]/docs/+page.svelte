@@ -6,7 +6,10 @@
   import { coreClient } from "$lib/coreClient";
   import { filterTopLevelDocuments } from "$lib/documentVisibility";
   import { formatTimestamp } from "$lib/formatDate";
-  import { searchTopics as searchTopicRecords } from "$lib/searchHelpers";
+  import {
+    searchTopics as searchTopicRecords,
+    topicSearchResultToPickerOption,
+  } from "$lib/searchHelpers";
   import { workspacePath } from "$lib/workspacePaths";
   import {
     lookupActorDisplayName,
@@ -84,18 +87,9 @@
     return workspacePath(workspaceSlug, pathname);
   }
 
-  function toThreadOption(thread) {
-    return {
-      id: thread.id,
-      title: thread.title || thread.id,
-      subtitle: [thread.status, thread.priority].filter(Boolean).join(" · "),
-      keywords: [thread.type, ...(thread.tags ?? [])],
-    };
-  }
-
   async function searchThreadOptions(query) {
     const threads = await searchTopicRecords(query);
-    return threads.map(toThreadOption);
+    return threads.map(topicSearchResultToPickerOption);
   }
 
   $effect(() => {
@@ -536,7 +530,7 @@
           </p>
           {#if doc.thread_id && !scopedThreadId}
             <p class="mt-0.5 text-[11px] text-[var(--ui-text-subtle)]">
-              Linked thread: {doc.thread_id}
+              Thread (timeline): {doc.thread_id}
             </p>
           {/if}
         </div>

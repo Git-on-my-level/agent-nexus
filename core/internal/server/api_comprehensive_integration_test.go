@@ -84,8 +84,8 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 	packetCardResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+packetBoardID+"/cards", `{
 		"actor_id":"actor-1",
 		"if_board_updated_at":"`+packetBoardUpdatedAt+`",
-		"thread_id":"`+threadID+`",
 		"title":"Comprehensive packet card",
+		"related_refs":["thread:`+threadID+`"],
 		"column_key":"ready"
 	}`, http.StatusCreated)
 	defer packetCardResp.Body.Close()
@@ -200,8 +200,8 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 	cardCreateResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
 		"actor_id":"actor-1",
 		"if_board_updated_at":"`+boardUpdatedAt+`",
-		"thread_id":"`+threadID+`",
 		"title":"Comprehensive work item",
+		"related_refs":["thread:`+threadID+`"],
 		"column_key":"ready",
 		"due_at":"`+time.Now().UTC().Add(24*time.Hour).Format(time.RFC3339)+`",
 		"definition_of_done":["receipt","sign-off"]

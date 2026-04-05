@@ -1280,7 +1280,7 @@ func TestEventsExplainListMode(t *testing.T) {
 	if !strings.Contains(raw, "Interventions: Single clear path exists, but a human must act to complete it.") {
 		t.Fatalf("expected interventions group in explain output, got %q", raw)
 	}
-	if !strings.Contains(raw, "- message_posted: Use for direct communication between entities on a thread.") {
+	if !strings.Contains(raw, "- message_posted: Use for direct communication that belongs on a backing thread; prefer topic/card/board surfaces as the primary operator nouns.") {
 		t.Fatalf("expected message_posted communication guidance in explain output, got %q", raw)
 	}
 	if !strings.Contains(raw, "- intervention_needed: Use when the next step is clear but a human must perform it.") {
@@ -1381,10 +1381,10 @@ func TestEventsExplainMessagePostedGuidance(t *testing.T) {
 	if !strings.Contains(raw, "Group: Communication") {
 		t.Fatalf("expected group heading in explain output, got %q", raw)
 	}
-	if !strings.Contains(raw, "Usage hint: Use for direct communication between entities on a thread.") {
+	if !strings.Contains(raw, "Usage hint: Use for direct communication that belongs on a backing thread; prefer topic/card/board surfaces as the primary operator nouns.") {
 		t.Fatalf("expected usage hint in explain output, got %q", raw)
 	}
-	if !strings.Contains(raw, "Use this type for messages, replies, or important non-structured information that should read like direct communication.") {
+	if !strings.Contains(raw, "Use this type for messages, replies, or important non-structured information that should read like direct communication on a backing thread.") {
 		t.Fatalf("expected direct communication guidance in explain output, got %q", raw)
 	}
 }
@@ -1617,7 +1617,7 @@ func TestNormalizeMutationBodyIDsResolvesInboxAcknowledgeSubjectRef(t *testing.T
 	defer server.Close()
 
 	body := map[string]any{
-		"subject_ref": "thread:thread_12345",
+		"subject_ref":   "thread:thread_12345",
 		"inbox_item_id": "inbox:decision_needed:thread_1234567890:none:event_1",
 	}
 
@@ -1830,12 +1830,12 @@ func TestBoardCommands(t *testing.T) {
 	t.Skip("obsolete compatibility coverage")
 
 	const (
-		boardID         = "board_product_launch_123456"
-		cardID          = "card_launch_123456"
-		cardThreadID    = "thread_card_123456"
-		secondaryThread = "thread_card_654321"
-		updatedAt       = "2026-03-08T00:00:00Z"
-		nextUpdatedAt   = "2026-03-08T00:05:00Z"
+		boardID       = "board_product_launch_123456"
+		cardID        = "card_launch_123456"
+		cardThreadID  = "thread_card_123456"
+		peerCardID    = "card_peer_654321"
+		updatedAt     = "2026-03-08T00:00:00Z"
+		nextUpdatedAt = "2026-03-08T00:05:00Z"
 	)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1877,8 +1877,8 @@ func TestBoardCommands(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 				t.Fatalf("decode boards cards create body: %v", err)
 			}
-			if got := anyStringValue(payload["parent_thread"]); got != cardThreadID {
-				t.Fatalf("expected create parent_thread %q, got %#v", cardThreadID, payload)
+			if _, hasParent := payload["parent_thread"]; hasParent {
+				t.Fatalf("unexpected parent_thread in create payload %#v", payload)
 			}
 			if got := anyStringValue(payload["request_key"]); got != "req-1" {
 				t.Fatalf("expected create request_key req-1, got %#v", payload)
@@ -1908,8 +1908,8 @@ func TestBoardCommands(t *testing.T) {
 			if got := anyStringValue(payload["column_key"]); got != "review" {
 				t.Fatalf("expected move column review, got %#v", payload)
 			}
-			if got := anyStringValue(payload["after_thread_id"]); got != secondaryThread {
-				t.Fatalf("expected move after_thread_id %q, got %#v", secondaryThread, payload)
+			if got := anyStringValue(payload["after_card_id"]); got != peerCardID {
+				t.Fatalf("expected move after_card_id %q, got %#v", peerCardID, payload)
 			}
 			_, _ = w.Write([]byte(`{"board":{"id":"` + boardID + `","updated_at":"` + nextUpdatedAt + `"},"card":{"id":"` + cardID + `","board_id":"` + boardID + `","thread_id":"` + cardThreadID + `","parent_thread":"` + cardThreadID + `","title":"Launch task","body":"","version":2,"column_key":"review","rank":"b","assignee":null,"priority":null,"status":"done","pinned_document_id":"doc_1","created_at":"` + updatedAt + `","created_by":"actor_1","updated_at":"` + nextUpdatedAt + `","updated_by":"actor_1","provenance":{"sources":["inferred"]}}}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/cards/"+cardID+"/archive":
@@ -1953,7 +1953,7 @@ func TestBoardCommands(t *testing.T) {
 		t.Fatalf("expected boards.cards.list command_id, got %#v", cardsListPayload)
 	}
 
-	createPayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "boards", "cards", "create", "--board-id", boardID, "--thread-id", cardThreadID, "--column", "backlog", "--request-key", "req-1", "--pinned-document-id", "doc_1"}))
+	createPayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "boards", "cards", "create", "--board-id", boardID, "--column", "backlog", "--request-key", "req-1", "--pinned-document-id", "doc_1"}))
 	if got := anyStringValue(createPayload["command_id"]); got != "boards.cards.create" {
 		t.Fatalf("expected boards.cards.create command_id, got %#v", createPayload)
 	}
@@ -1968,7 +1968,7 @@ func TestBoardCommands(t *testing.T) {
 		t.Fatalf("expected boards.cards.update command_id, got %#v", updateCardPayload)
 	}
 
-	movePayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "boards", "cards", "move", "--board-id", boardID, "--card-id", cardID, "--if-board-updated-at", updatedAt, "--column", "review", "--after", secondaryThread}))
+	movePayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "boards", "cards", "move", "--board-id", boardID, "--card-id", cardID, "--if-board-updated-at", updatedAt, "--column", "review", "--after-card-id", peerCardID}))
 	if got := anyStringValue(movePayload["command_id"]); got != "boards.cards.move" {
 		t.Fatalf("expected boards.cards.move command_id, got %#v", movePayload)
 	}
@@ -2039,18 +2039,18 @@ func TestBoardCardsMoveRejectsBeforeAndAfterFlags(t *testing.T) {
 		"--json",
 		"boards", "cards", "move",
 		"--board-id", "board_1234567890abcdef",
-		"--thread-id", "thread_1234567890abcdef",
+		"--card-id", "card_1234567890abcdef",
 		"--if-board-updated-at", "2026-03-08T00:00:00Z",
 		"--column", "review",
-		"--before", "thread_a",
-		"--after", "thread_b",
+		"--before-card-id", "card_a_1234567890abcdef",
+		"--after-card-id", "card_b_1234567890abcdef",
 	})
 	payload := assertEnvelopeError(t, raw)
 	errObj, _ := payload["error"].(map[string]any)
 	if errObj == nil || anyStringValue(errObj["code"]) != "invalid_request" {
 		t.Fatalf("unexpected error payload: %#v", payload)
 	}
-	if message := anyStringValue(errObj["message"]); !strings.Contains(message, "--before and --after cannot be combined") {
+	if message := anyStringValue(errObj["message"]); !strings.Contains(message, "--before-card-id and --after-card-id cannot be combined") {
 		t.Fatalf("expected placement flag guidance, got %q", message)
 	}
 }
@@ -4557,8 +4557,8 @@ func TestMachineFacingNonStreamErrorsIncludeCommandIdentity(t *testing.T) {
 	if got := anyStringValue(eventsListErr["command"]); got != "events list" {
 		t.Fatalf("expected events list error command, got %q payload=%#v", got, eventsListErr)
 	}
-	if got := anyStringValue(eventsListErr["command_id"]); got != "threads.timeline" {
-		t.Fatalf("expected threads.timeline command_id, got %q payload=%#v", got, eventsListErr)
+	if got := anyStringValue(eventsListErr["command_id"]); got != "events.list" {
+		t.Fatalf("expected events.list command_id, got %q payload=%#v", got, eventsListErr)
 	}
 
 	eventsGetErr := assertEnvelopeError(t, runCLIForTest(t, home, env, nil, []string{

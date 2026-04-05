@@ -316,11 +316,20 @@ async function resolveSharedTargets(baseUrl, config) {
 
   const documentResponse = await apiJSON(baseUrl, `/docs/${encodeURIComponent(config.documentId)}`);
 
+  const topicsResponse = await apiJSON(baseUrl, "/topics");
+  const topics = Array.isArray(topicsResponse?.topics) ? topicsResponse.topics : [];
+  const topicsByTitle = Object.fromEntries(topics.map((topic) => [valueFrom(topic, "title", "summary"), topic]));
+
   return {
     threads: {
       main: mainThread,
       feedback: feedbackThread,
       delivery: deliveryThread,
+    },
+    topics: {
+      main: topicsByTitle[config.threadTitles.main] ?? null,
+      feedback: topicsByTitle[config.threadTitles.feedback] ?? null,
+      delivery: topicsByTitle[config.threadTitles.delivery] ?? null,
     },
     artifacts,
     cards: {
@@ -348,6 +357,7 @@ function roleTargets(config, shared, role) {
     mainThread: shared.threads.main,
     primaryThread,
     relatedThreads,
+    topic: shared.topics?.[role.primaryThreadKey] ?? null,
     artifacts: roleArtifacts,
     cards: roleCards,
     inboxItems: relevantInboxItems,
@@ -425,17 +435,27 @@ function targetsGuide(role, targets) {
     "",
     "Use these resolved IDs directly. Do not spend turns rediscovering them.",
     "",
+    "Prefer topic workspace, cards, and boards for coordination; thread commands below are diagnostic (backing-thread tooling).",
+    "",
     `Shared goal thread: ${targets.mainThread.id}`,
     `Shared goal title: ${targets.mainThread.title}`,
     `Primary thread for your role: ${targets.primaryThread.id}`,
     `Primary thread title: ${targets.primaryThread.title}`,
+  ];
+  if (targets.topic?.id) {
+    lines.push(
+      `Topic workspace (primary read for this role): oar topics workspace --topic-id ${targets.topic.id}`,
+      `Topic record: oar topics get --topic-id ${targets.topic.id}`,
+    );
+  }
+  lines.push(
     `Canonical read shared goal thread: oar threads workspace --thread-id ${targets.mainThread.id}`,
     `Hydrated read shared goal thread: oar threads workspace --thread-id ${targets.mainThread.id} --include-related-event-content --include-artifact-content --verbose`,
     `Canonical read your primary thread: oar threads workspace --thread-id ${targets.primaryThread.id}`,
     `Recommendation review shared goal thread: oar threads recommendations --thread-id ${targets.mainThread.id}`,
     `Optional minimal thread record shared goal thread: oar threads get --thread-id ${targets.mainThread.id}`,
     `Optional minimal thread record your primary thread: oar threads get --thread-id ${targets.primaryThread.id}`,
-  ];
+  );
 
   if (targets.relatedThreads.length > 0) {
     lines.push("", "Related threads:");

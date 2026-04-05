@@ -546,11 +546,14 @@ func handleAddBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	}
 
 	createStatus := strings.TrimSpace(req.Status)
-	if createStatus == "" && strings.TrimSpace(firstNonEmptyString(req.ParentThread, req.ThreadID)) != "" {
-		if strings.TrimSpace(req.ColumnKey) == "done" {
-			createStatus = "done"
-		} else {
-			createStatus = "todo"
+	if createStatus == "" {
+		assocThread, _ := primitives.SoleThreadRefIDFromRefs(req.Refs)
+		if strings.TrimSpace(assocThread) != "" {
+			if strings.TrimSpace(req.ColumnKey) == "done" {
+				createStatus = "done"
+			} else {
+				createStatus = "todo"
+			}
 		}
 	}
 
@@ -730,7 +733,7 @@ func handleMoveCardMutation(w http.ResponseWriter, r *http.Request, opts handler
 		Resolution       *string  `json:"resolution"`
 		ResolutionRefs   []string `json:"resolution_refs"`
 	}
-	if !decodeJSONBody(w, r, &req) {
+	if !decodeMoveCardHTTPPayload(w, r, &req) {
 		return
 	}
 	if req.IfBoardUpdatedAt == nil {
@@ -1394,9 +1397,6 @@ func buildCardLifecycleEvent(eventType string, board, card map[string]any, paylo
 		if cardID := strings.TrimSpace(anyString(card["id"])); cardID != "" {
 			refs = append(refs, "card:"+cardID)
 		}
-		if parentThreadID := strings.TrimSpace(anyString(card["parent_thread"])); parentThreadID != "" {
-			refs = append(refs, "thread:"+parentThreadID)
-		}
 		if threadID := strings.TrimSpace(anyString(card["thread_id"])); threadID != "" {
 			refs = append(refs, "thread:"+threadID)
 		}
@@ -1628,6 +1628,11 @@ func boardCardMatchesCreateReplay(existingCard map[string]any, explicitCardID, t
 		return false
 	}
 	expectedParentThread := strings.TrimSpace(firstNonEmptyString(parentThreadID, legacyThreadID))
+	if expectedParentThread == "" {
+		if derived, err := primitives.SoleThreadRefIDFromRefs(refs); err == nil {
+			expectedParentThread = derived
+		}
+	}
 	if expectedParentThread != "" && strings.TrimSpace(anyString(existingCard["parent_thread"])) != expectedParentThread {
 		return false
 	}
@@ -1741,20 +1746,18 @@ func boardCardReplayPreconditionMatches(board map[string]any, ifBoardUpdatedAt *
 }
 
 func validateBoardCardCreateRequest(cardID, parentThreadID, legacyThreadID, columnKey, beforeCardID, afterCardID, beforeThreadID, afterThreadID, status string, pinnedDocumentID *string) error {
+	if strings.TrimSpace(parentThreadID) != "" {
+		return errors.New("parent_thread must not be set on board card create; use related_refs with a thread ref instead")
+	}
+	if strings.TrimSpace(legacyThreadID) != "" {
+		return errors.New("thread_id must not be set on board card create")
+	}
+	if strings.TrimSpace(beforeThreadID) != "" || strings.TrimSpace(afterThreadID) != "" {
+		return errors.New("before_thread_id and after_thread_id must not be set on board card create; use before_card_id / after_card_id")
+	}
 	if cardID = strings.TrimSpace(cardID); cardID != "" {
 		if strings.Contains(cardID, "/") || strings.Contains(cardID, `\`) {
 			return errors.New("card_id contains invalid path characters")
-		}
-	}
-	parentThreadID = strings.TrimSpace(parentThreadID)
-	legacyThreadID = strings.TrimSpace(legacyThreadID)
-	if parentThreadID != "" && legacyThreadID != "" && parentThreadID != legacyThreadID {
-		return errors.New("parent_thread and thread_id must match when both are provided")
-	}
-	resolvedThreadID := firstNonEmptyString(parentThreadID, legacyThreadID)
-	if resolvedThreadID != "" {
-		if strings.Contains(resolvedThreadID, "/") || strings.Contains(resolvedThreadID, `\`) {
-			return errors.New("thread_id contains invalid path characters")
 		}
 	}
 	if strings.TrimSpace(columnKey) != "" {
@@ -1776,12 +1779,6 @@ func validateBoardCardCreateRequest(cardID, parentThreadID, legacyThreadID, colu
 	}
 	if strings.TrimSpace(beforeThreadID) != "" && strings.TrimSpace(afterThreadID) != "" {
 		return errors.New("before_thread_id and after_thread_id are mutually exclusive")
-	}
-	if strings.TrimSpace(beforeCardID) != "" && strings.TrimSpace(beforeThreadID) != "" {
-		return errors.New("before_card_id and before_thread_id are mutually exclusive")
-	}
-	if strings.TrimSpace(afterCardID) != "" && strings.TrimSpace(afterThreadID) != "" {
-		return errors.New("after_card_id and after_thread_id are mutually exclusive")
 	}
 	if pinnedDocumentID != nil {
 		value := strings.TrimSpace(*pinnedDocumentID)
@@ -1807,10 +1804,8 @@ func parseBoardCardPatchInput(w http.ResponseWriter, patch map[string]any) (prim
 	}
 
 	var (
-		input                  primitives.UpdateBoardCardInput
-		changedFields          []string
-		parentThreadAliasSeen  bool
-		parentThreadAliasValue string
+		input         primitives.UpdateBoardCardInput
+		changedFields []string
 	)
 	appendChanged := func(field string) {
 		changedFields = append(changedFields, field)
@@ -1837,15 +1832,8 @@ func parseBoardCardPatchInput(w http.ResponseWriter, patch map[string]any) (prim
 			input.Body = &value
 			appendChanged("body")
 		case "parent_thread", "thread_id":
-			value := strings.TrimSpace(anyString(raw))
-			if parentThreadAliasSeen && value != parentThreadAliasValue {
-				writeError(w, http.StatusBadRequest, "invalid_request", "patch.parent_thread and patch.thread_id must match when both are provided")
-				return primitives.UpdateBoardCardInput{}, nil, false
-			}
-			parentThreadAliasSeen = true
-			parentThreadAliasValue = value
-			input.ParentThreadID = &value
-			appendChanged("parent_thread")
+			writeError(w, http.StatusBadRequest, "invalid_request", "patch."+field+" is not writable; use related_refs for associations")
+			return primitives.UpdateBoardCardInput{}, nil, false
 		case "assignee_refs":
 			value, err := extractStringSlice(raw)
 			if err != nil {
@@ -1969,13 +1957,16 @@ func parseBoardCardPatchInput(w http.ResponseWriter, patch map[string]any) (prim
 }
 
 func validateBoardCardMoveRequest(columnKey, beforeCardID, afterCardID, beforeThreadID, afterThreadID string) error {
+	if strings.TrimSpace(beforeThreadID) != "" || strings.TrimSpace(afterThreadID) != "" {
+		return errors.New("before_thread_id and after_thread_id must not be set on card move; use before_card_id / after_card_id")
+	}
 	if strings.TrimSpace(columnKey) == "" {
 		return errors.New("column_key is required")
 	}
-	if err := validateBoardPlacementRequest(columnKey, beforeThreadID, afterThreadID, nil); err != nil {
+	if err := validateBoardPlacementRequest(columnKey, "", "", nil); err != nil {
 		return err
 	}
-	if err := primitives.ValidateBoardPlacementAnchors(beforeCardID, afterCardID, beforeThreadID, afterThreadID); err != nil {
+	if err := primitives.ValidateBoardPlacementAnchors(beforeCardID, afterCardID, "", ""); err != nil {
 		return err
 	}
 	return nil

@@ -210,6 +210,7 @@ describe("mockCoreData parity behaviors", () => {
         actor_id: "actor-test",
         if_board_updated_at: mod.getMockBoard("board-product-launch")
           ?.updated_at,
+        title: "Invalid column card",
         thread_id: "thread-pricing-glitch",
         column_key: "triage",
       });
@@ -227,6 +228,7 @@ describe("mockCoreData parity behaviors", () => {
         actor_id: "actor-test",
         if_board_updated_at: mod.getMockBoard("board-product-launch")
           ?.updated_at,
+        title: "Missing doc ref card",
         thread_id: "thread-pricing-glitch",
         document_ref: "document:doc-does-not-exist",
       });

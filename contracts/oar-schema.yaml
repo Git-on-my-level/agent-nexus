@@ -290,11 +290,19 @@ resources:
     description: >
       First-class board work item. Cards can point at a topic, a backing thread,
       and supporting documents, but card identity is not derived from those refs.
+      On create, the server allocates a backing thread id; clients MUST NOT send
+      thread_id or parent_thread on board-card writes. Use related_refs with a
+      single thread ref when the card must associate with a collaboration thread.
+      Persisted workspaces may still store parent_thread_id internally for
+      historical board-row linkage; public HTTP card bodies (publicCardView) omit
+      parent_thread and callers MUST NOT treat parent_thread as a writable field.
+      Event audit payloads may include parent_thread for older lifecycle records until
+      those events are regenerated.
     fields:
       id: { type: string, required: true }
       board_ref: { type: typed_ref, required: true }
       topic_ref: { type: typed_ref, required: false }
-      thread_id: { type: string, required: false, description: "Backing thread id when the card is thread-scoped." }
+      thread_id: { type: string, required: true, description: "Backing thread id for the card; server-assigned when persisted." }
       document_ref: { type: typed_ref, required: false }
       title: { type: string, required: true }
       summary: { type: string, required: true }

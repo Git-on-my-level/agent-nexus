@@ -165,10 +165,10 @@ var knownEventTypeGuidance = []eventTypeGuidance{
 	{
 		Type:    "message_posted",
 		Group:   "Communication",
-		Summary: "Use for direct communication between entities on a thread.",
+		Summary: "Use for direct communication that belongs on a backing thread; prefer topic/card/board surfaces as the primary operator nouns.",
 		Constraints: []string{
-			"thread_id is required.",
-			"Use this type for messages, replies, or important non-structured information that should read like direct communication.",
+			"thread_id is required when posting directly to a backing thread timeline.",
+			"Use this type for messages, replies, or important non-structured information that should read like direct communication on a backing thread.",
 			`event.refs may include "event:<parent_event_id>" for replies and "artifact:<artifact_id>" mentions.`,
 		},
 	},
@@ -307,8 +307,8 @@ var knownEventTypeGuidance = []eventTypeGuidance{
 		Type:  "exception_raised",
 		Group: "Exceptions",
 		Constraints: []string{
-			"thread_id is required.",
 			`event.payload must include "subtype".`,
+			"Attach topic/card/document refs when possible so the exception stays connected to the primary resource surface.",
 		},
 	},
 	{
@@ -2570,6 +2570,9 @@ func (a *App) runEventsListCommand(ctx context.Context, args []string, cfg confi
 	headers := map[string][]string{"Content-Type": {"application/json"}}
 	capturedResponse := false
 	for _, threadID := range threadIDs {
+		// `events list` keeps the user-facing registry identity (`events.list`)
+		// even though the current implementation composes backing-thread
+		// timelines client-side.
 		timelineResult, callErr := a.invokeTypedJSONWithIDResolution(
 			ctx,
 			cfg,
@@ -3215,58 +3218,6 @@ func (a *App) parseIDAndBodyInputWithOptions(args []string, idFlag string, idLab
 	return id, body, dryRunFlag.set && dryRunFlag.value, nil
 }
 
-type boardCardMutationOptions struct {
-	allowRequestKey       bool
-	requireIfBoardUpdated bool
-	requireThreadTarget   bool
-	allowColumn           bool
-	requireColumn         bool
-	allowBeforeAfter      bool
-	allowPinnedDocument   bool
-	allowClearPinnedDoc   bool
-}
-
-var (
-	parseBoardCardAddMutationOptions = boardCardMutationOptions{
-		allowRequestKey:     true,
-		allowColumn:         true,
-		allowBeforeAfter:    true,
-		allowPinnedDocument: true,
-	}
-	parseBoardCardUpdateMutationOptions = boardCardMutationOptions{
-		requireIfBoardUpdated: true,
-		requireThreadTarget:   true,
-		allowPinnedDocument:   true,
-		allowClearPinnedDoc:   true,
-	}
-	parseBoardCardMoveMutationOptions = boardCardMutationOptions{
-		requireIfBoardUpdated: true,
-		requireThreadTarget:   true,
-		allowColumn:           true,
-		requireColumn:         true,
-		allowBeforeAfter:      true,
-	}
-)
-
-func (a *App) parseBoardIDAndCardMutationBodyInput(ctx context.Context, args []string, cfg config.Resolved, commandName string, options boardCardMutationOptions) (string, any, error) {
-	boardID, threadID, body, err := a.parseBoardCardMutationInput(ctx, args, cfg, commandName, options)
-	if err != nil {
-		return "", nil, err
-	}
-	if threadID != "" {
-		bodyMap, _ := body.(map[string]any)
-		if bodyMap == nil {
-			return "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `oar %s` must be an object", commandName))
-		}
-		bodyMap["thread_id"] = threadID
-	}
-	return boardID, body, nil
-}
-
-func (a *App) parseBoardCardTargetAndBodyInput(ctx context.Context, args []string, cfg config.Resolved, commandName string, options boardCardMutationOptions) (string, string, any, error) {
-	return a.parseBoardCardMutationInput(ctx, args, cfg, commandName, options)
-}
-
 func (a *App) parseBoardCardBoardScopedTarget(args []string, commandName string) (string, string, error) {
 	fs := newSilentFlagSet(commandName)
 	var boardIDFlag, cardIDFlag trackedString
@@ -3301,23 +3252,21 @@ func (a *App) parseBoardCardBoardScopedTarget(args []string, commandName string)
 func (a *App) parseBoardCardCreateInput(ctx context.Context, args []string, cfg config.Resolved, commandName string) (string, any, error) {
 	fs := newSilentFlagSet(commandName)
 	var boardIDFlag, cardIDFlag trackedString
-	var titleFlag, bodyFlag, parentThreadFlag, legacyThreadIDFlag trackedString
+	var titleFlag, bodyFlag trackedString
 	var actorIDFlag, requestKeyFlag, ifBoardUpdatedAtFlag, fromFileFlag trackedString
 	var columnFlag, assigneeFlag, priorityFlag, statusFlag trackedString
-	var beforeFlag, afterFlag trackedString
+	var beforeCardIDFlag, afterCardIDFlag trackedString
 	var pinnedDocumentIDFlag trackedString
 	fs.Var(&boardIDFlag, "board-id", "Board id")
 	fs.Var(&cardIDFlag, "card-id", "Card id")
 	fs.Var(&titleFlag, "title", "Card title")
 	fs.Var(&bodyFlag, "body", "Card body markdown")
-	fs.Var(&parentThreadFlag, "parent-thread", "Parent thread id")
-	fs.Var(&legacyThreadIDFlag, "thread-id", "Legacy parent thread id")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
 	fs.Var(&requestKeyFlag, "request-key", "Request key")
 	fs.Var(&ifBoardUpdatedAtFlag, "if-board-updated-at", "Board updated_at concurrency token")
 	fs.Var(&columnFlag, "column", "Target board column key")
-	fs.Var(&beforeFlag, "before", "Legacy place before this thread id")
-	fs.Var(&afterFlag, "after", "Legacy place after this thread id")
+	fs.Var(&beforeCardIDFlag, "before-card-id", "Place before this card id in the target column")
+	fs.Var(&afterCardIDFlag, "after-card-id", "Place after this card id in the target column")
 	fs.Var(&assigneeFlag, "assignee", "Assignee actor reference")
 	fs.Var(&priorityFlag, "priority", "Priority")
 	fs.Var(&statusFlag, "status", "Card status")
@@ -3338,14 +3287,17 @@ func (a *App) parseBoardCardCreateInput(ctx context.Context, args []string, cfg 
 	if err := validateID(boardID, "board id"); err != nil {
 		return "", nil, err
 	}
+	if err := validatePlacementFlags(beforeCardIDFlag.value, afterCardIDFlag.value, commandName); err != nil {
+		return "", nil, err
+	}
 
-	skipStdin := hasAnyBoardMutationFieldFlags(cardIDFlag, titleFlag, bodyFlag, parentThreadFlag, legacyThreadIDFlag, actorIDFlag, requestKeyFlag, ifBoardUpdatedAtFlag, columnFlag, beforeFlag, afterFlag, assigneeFlag, priorityFlag, statusFlag, pinnedDocumentIDFlag)
+	skipStdin := hasAnyBoardMutationFieldFlags(cardIDFlag, titleFlag, bodyFlag, actorIDFlag, requestKeyFlag, ifBoardUpdatedAtFlag, columnFlag, beforeCardIDFlag, afterCardIDFlag, assigneeFlag, priorityFlag, statusFlag, pinnedDocumentIDFlag)
 	payload, err := a.readBoardCardBodyInput(fromFileFlag.value, skipStdin)
 	if err != nil {
 		return "", nil, err
 	}
 	if len(payload) > 0 {
-		if hasAnyBoardMutationFieldFlags(cardIDFlag, titleFlag, bodyFlag, parentThreadFlag, legacyThreadIDFlag, actorIDFlag, requestKeyFlag, ifBoardUpdatedAtFlag, columnFlag, beforeFlag, afterFlag, assigneeFlag, priorityFlag, statusFlag, pinnedDocumentIDFlag) {
+		if hasAnyBoardMutationFieldFlags(cardIDFlag, titleFlag, bodyFlag, actorIDFlag, requestKeyFlag, ifBoardUpdatedAtFlag, columnFlag, beforeCardIDFlag, afterCardIDFlag, assigneeFlag, priorityFlag, statusFlag, pinnedDocumentIDFlag) {
 			return "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("field flags cannot be combined with JSON body input for `oar %s`", commandName))
 		}
 		body, err := decodeJSONPayload(payload)
@@ -3360,17 +3312,19 @@ func (a *App) parseBoardCardCreateInput(ctx context.Context, args []string, cfg 
 		if err != nil {
 			return "", nil, err
 		}
-		if err := a.normalizeBoardMutationThreadField(ctx, cfg, bodyMap, "parent_thread"); err != nil {
+		if err := a.normalizeBoardMutationCardAnchorField(ctx, cfg, resolvedBoardID, bodyMap, "before_card_id"); err != nil {
 			return "", nil, err
 		}
-		if err := a.normalizeBoardMutationThreadField(ctx, cfg, bodyMap, "thread_id"); err != nil {
+		if err := a.normalizeBoardMutationCardAnchorField(ctx, cfg, resolvedBoardID, bodyMap, "after_card_id"); err != nil {
 			return "", nil, err
 		}
-		if err := a.normalizeBoardMutationThreadField(ctx, cfg, bodyMap, "before_thread_id"); err != nil {
-			return "", nil, err
-		}
-		if err := a.normalizeBoardMutationThreadField(ctx, cfg, bodyMap, "after_thread_id"); err != nil {
-			return "", nil, err
+		if cardNest, ok := bodyMap["card"].(map[string]any); ok && cardNest != nil {
+			if err := a.normalizeBoardMutationCardAnchorField(ctx, cfg, resolvedBoardID, cardNest, "before_card_id"); err != nil {
+				return "", nil, err
+			}
+			if err := a.normalizeBoardMutationCardAnchorField(ctx, cfg, resolvedBoardID, cardNest, "after_card_id"); err != nil {
+				return "", nil, err
+			}
 		}
 		return resolvedBoardID, bodyMap, nil
 	}
@@ -3398,33 +3352,26 @@ func (a *App) parseBoardCardCreateInput(ctx context.Context, args []string, cfg 
 	if bodyText := strings.TrimSpace(bodyFlag.value); bodyText != "" {
 		body["body"] = bodyText
 	}
-	parentThreadID := strings.TrimSpace(parentThreadFlag.value)
-	if parentThreadID == "" {
-		parentThreadID = strings.TrimSpace(legacyThreadIDFlag.value)
-	}
-	if parentThreadID != "" {
-		resolvedThreadID, err := a.resolveMaybeThreadID(ctx, cfg, parentThreadID)
-		if err != nil {
-			return "", nil, err
-		}
-		body["parent_thread"] = resolvedThreadID
-	}
 	if column := strings.TrimSpace(columnFlag.value); column != "" {
 		body["column_key"] = column
 	}
-	if beforeThreadID := strings.TrimSpace(beforeFlag.value); beforeThreadID != "" {
-		resolvedThreadID, err := a.resolveMaybeThreadID(ctx, cfg, beforeThreadID)
-		if err != nil {
-			return "", nil, err
-		}
-		body["before_thread_id"] = resolvedThreadID
+	resolvedBoardID, err := a.resolveMaybeBoardID(ctx, cfg, boardID)
+	if err != nil {
+		return "", nil, err
 	}
-	if afterThreadID := strings.TrimSpace(afterFlag.value); afterThreadID != "" {
-		resolvedThreadID, err := a.resolveMaybeThreadID(ctx, cfg, afterThreadID)
+	if beforeCard := strings.TrimSpace(beforeCardIDFlag.value); beforeCard != "" {
+		resolved, err := a.resolveMaybeBoardCardID(ctx, cfg, resolvedBoardID, beforeCard)
 		if err != nil {
 			return "", nil, err
 		}
-		body["after_thread_id"] = resolvedThreadID
+		body["before_card_id"] = resolved
+	}
+	if afterCard := strings.TrimSpace(afterCardIDFlag.value); afterCard != "" {
+		resolved, err := a.resolveMaybeBoardCardID(ctx, cfg, resolvedBoardID, afterCard)
+		if err != nil {
+			return "", nil, err
+		}
+		body["after_card_id"] = resolved
 	}
 	if assignee := strings.TrimSpace(assigneeFlag.value); assignee != "" {
 		body["assignee"] = assignee
@@ -3438,25 +3385,20 @@ func (a *App) parseBoardCardCreateInput(ctx context.Context, args []string, cfg 
 	if pinnedDocumentID := strings.TrimSpace(pinnedDocumentIDFlag.value); pinnedDocumentID != "" {
 		body["pinned_document_id"] = pinnedDocumentID
 	}
-	resolvedBoardID, err := a.resolveMaybeBoardID(ctx, cfg, boardID)
-	if err != nil {
-		return "", nil, err
-	}
 	return resolvedBoardID, body, nil
 }
 
 func (a *App) parseBoardCardUpdateInput(ctx context.Context, args []string, cfg config.Resolved, commandName string) (map[string]string, any, error) {
 	fs := newSilentFlagSet(commandName)
 	var cardIDFlag trackedString
-	var titleFlag, bodyFlag, parentThreadFlag trackedString
+	var titleFlag, bodyFlag trackedString
 	var actorIDFlag, ifBoardUpdatedAtFlag, fromFileFlag trackedString
 	var assigneeFlag, priorityFlag, statusFlag trackedString
 	var pinnedDocumentIDFlag trackedString
-	var clearPinnedDocumentFlag, clearParentThreadFlag trackedBool
+	var clearPinnedDocumentFlag trackedBool
 	fs.Var(&cardIDFlag, "card-id", "Card id")
 	fs.Var(&titleFlag, "title", "Card title")
 	fs.Var(&bodyFlag, "body", "Card body markdown")
-	fs.Var(&parentThreadFlag, "parent-thread", "Parent thread id")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
 	fs.Var(&ifBoardUpdatedAtFlag, "if-board-updated-at", "Board updated_at concurrency token")
 	fs.Var(&assigneeFlag, "assignee", "Assignee actor reference")
@@ -3465,7 +3407,6 @@ func (a *App) parseBoardCardUpdateInput(ctx context.Context, args []string, cfg 
 	fs.Var(&pinnedDocumentIDFlag, "pinned-document-id", "Pinned document id")
 	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
 	fs.Var(&clearPinnedDocumentFlag, "clear-pinned-document", "Clear the pinned document id")
-	fs.Var(&clearParentThreadFlag, "clear-parent-thread", "Clear the parent thread")
 	if err := fs.Parse(args); err != nil {
 		return nil, nil, errnorm.Usage("invalid_flags", err.Error())
 	}
@@ -3482,13 +3423,13 @@ func (a *App) parseBoardCardUpdateInput(ctx context.Context, args []string, cfg 
 		return nil, nil, err
 	}
 
-	skipStdin := hasAnyBoardMutationFieldFlags(titleFlag, bodyFlag, parentThreadFlag, actorIDFlag, ifBoardUpdatedAtFlag, assigneeFlag, priorityFlag, statusFlag, pinnedDocumentIDFlag, clearPinnedDocumentFlag, clearParentThreadFlag)
+	skipStdin := hasAnyBoardMutationFieldFlags(titleFlag, bodyFlag, actorIDFlag, ifBoardUpdatedAtFlag, assigneeFlag, priorityFlag, statusFlag, pinnedDocumentIDFlag, clearPinnedDocumentFlag)
 	payload, err := a.readBoardCardBodyInput(fromFileFlag.value, skipStdin)
 	if err != nil {
 		return nil, nil, err
 	}
 	if len(payload) > 0 {
-		if hasAnyBoardMutationFieldFlags(titleFlag, bodyFlag, parentThreadFlag, actorIDFlag, ifBoardUpdatedAtFlag, assigneeFlag, priorityFlag, statusFlag, pinnedDocumentIDFlag, clearPinnedDocumentFlag, clearParentThreadFlag) {
+		if hasAnyBoardMutationFieldFlags(titleFlag, bodyFlag, actorIDFlag, ifBoardUpdatedAtFlag, assigneeFlag, priorityFlag, statusFlag, pinnedDocumentIDFlag, clearPinnedDocumentFlag) {
 			return nil, nil, errnorm.Usage("invalid_args", fmt.Sprintf("field flags cannot be combined with JSON body input for `oar %s`", commandName))
 		}
 		body, err := decodeJSONPayload(payload)
@@ -3498,15 +3439,6 @@ func (a *App) parseBoardCardUpdateInput(ctx context.Context, args []string, cfg 
 		bodyMap, _ := body.(map[string]any)
 		if bodyMap == nil {
 			return nil, nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `oar %s` must be an object", commandName))
-		}
-		if patch, _ := bodyMap["patch"].(map[string]any); patch != nil {
-			if rawParentThread, ok := patch["parent_thread"]; ok && strings.TrimSpace(anyString(rawParentThread)) != "" {
-				resolvedThreadID, err := a.resolveMaybeThreadID(ctx, cfg, anyString(rawParentThread))
-				if err != nil {
-					return nil, nil, err
-				}
-				patch["parent_thread"] = resolvedThreadID
-			}
 		}
 		pathParams, err := buildBoardCardCommandPathParams(cardID)
 		if err != nil {
@@ -3521,15 +3453,6 @@ func (a *App) parseBoardCardUpdateInput(ctx context.Context, args []string, cfg 
 	}
 	if bodyText := strings.TrimSpace(bodyFlag.value); bodyText != "" {
 		patch["body"] = bodyText
-	}
-	if clearParentThreadFlag.set && clearParentThreadFlag.value {
-		patch["parent_thread"] = nil
-	} else if parentThreadID := strings.TrimSpace(parentThreadFlag.value); parentThreadID != "" {
-		resolvedThreadID, err := a.resolveMaybeThreadID(ctx, cfg, parentThreadID)
-		if err != nil {
-			return nil, nil, err
-		}
-		patch["parent_thread"] = resolvedThreadID
 	}
 	if assignee := strings.TrimSpace(assigneeFlag.value); assignee != "" {
 		patch["assignee"] = assignee
@@ -3568,21 +3491,17 @@ func (a *App) parseBoardCardUpdateInput(ctx context.Context, args []string, cfg 
 
 func (a *App) parseBoardCardMoveInput(ctx context.Context, args []string, cfg config.Resolved, commandName string) (string, string, any, error) {
 	fs := newSilentFlagSet(commandName)
-	var boardIDFlag, cardIDFlag, legacyThreadIDFlag trackedString
+	var boardIDFlag, cardIDFlag trackedString
 	var actorIDFlag, ifBoardUpdatedAtFlag, fromFileFlag trackedString
 	var columnFlag, beforeCardIDFlag, afterCardIDFlag trackedString
-	var beforeThreadIDFlag, afterThreadIDFlag trackedString
 	fs.Var(&boardIDFlag, "board-id", "Board id")
 	fs.Var(&cardIDFlag, "card-id", "Card id")
-	fs.Var(&legacyThreadIDFlag, "thread-id", "Legacy board-card target thread id")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
 	fs.Var(&ifBoardUpdatedAtFlag, "if-board-updated-at", "Board updated_at concurrency token")
 	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
 	fs.Var(&columnFlag, "column", "Target board column key")
 	fs.Var(&beforeCardIDFlag, "before-card-id", "Place before this card id")
 	fs.Var(&afterCardIDFlag, "after-card-id", "Place after this card id")
-	fs.Var(&beforeThreadIDFlag, "before", "Legacy place before this thread id")
-	fs.Var(&afterThreadIDFlag, "after", "Legacy place after this thread id")
 	if err := fs.Parse(args); err != nil {
 		return "", "", nil, errnorm.Usage("invalid_flags", err.Error())
 	}
@@ -3600,30 +3519,27 @@ func (a *App) parseBoardCardMoveInput(ctx context.Context, args []string, cfg co
 	if len(positionals) > 0 {
 		return "", "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `oar %s`", commandName))
 	}
-	if err := validatePlacementFlags(beforeThreadIDFlag.value, afterThreadIDFlag.value, commandName); err != nil {
+	if err := validatePlacementFlags(beforeCardIDFlag.value, afterCardIDFlag.value, commandName); err != nil {
 		return "", "", nil, err
 	}
 	if err := validateID(boardID, "board id"); err != nil {
 		return "", "", nil, err
 	}
 	identifier := strings.TrimSpace(cardID)
-	if identifier == "" {
-		resolvedThreadID, err := a.resolveMaybeThreadID(ctx, cfg, legacyThreadIDFlag.value)
-		if err != nil {
-			return "", "", nil, err
-		}
-		identifier = strings.TrimSpace(resolvedThreadID)
-	}
 	if err := validateID(identifier, "card id"); err != nil {
 		return "", "", nil, err
 	}
-	skipStdin := hasAnyBoardMutationFieldFlags(actorIDFlag, ifBoardUpdatedAtFlag, columnFlag, beforeCardIDFlag, afterCardIDFlag, beforeThreadIDFlag, afterThreadIDFlag)
+	resolvedBoardID, err := a.resolveMaybeBoardID(ctx, cfg, boardID)
+	if err != nil {
+		return "", "", nil, err
+	}
+	skipStdin := hasAnyBoardMutationFieldFlags(actorIDFlag, ifBoardUpdatedAtFlag, columnFlag, beforeCardIDFlag, afterCardIDFlag)
 	payload, err := a.readBoardCardBodyInput(fromFileFlag.value, skipStdin)
 	if err != nil {
 		return "", "", nil, err
 	}
 	if len(payload) > 0 {
-		if hasAnyBoardMutationFieldFlags(actorIDFlag, ifBoardUpdatedAtFlag, columnFlag, beforeCardIDFlag, afterCardIDFlag, beforeThreadIDFlag, afterThreadIDFlag) {
+		if hasAnyBoardMutationFieldFlags(actorIDFlag, ifBoardUpdatedAtFlag, columnFlag, beforeCardIDFlag, afterCardIDFlag) {
 			return "", "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("field flags cannot be combined with JSON body input for `oar %s`", commandName))
 		}
 		body, err := decodeJSONPayload(payload)
@@ -3634,14 +3550,10 @@ func (a *App) parseBoardCardMoveInput(ctx context.Context, args []string, cfg co
 		if bodyMap == nil {
 			return "", "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `oar %s` must be an object", commandName))
 		}
-		if err := a.normalizeBoardMutationThreadField(ctx, cfg, bodyMap, "before_thread_id"); err != nil {
+		if err := a.normalizeBoardMutationCardAnchorField(ctx, cfg, resolvedBoardID, bodyMap, "before_card_id"); err != nil {
 			return "", "", nil, err
 		}
-		if err := a.normalizeBoardMutationThreadField(ctx, cfg, bodyMap, "after_thread_id"); err != nil {
-			return "", "", nil, err
-		}
-		resolvedBoardID, err := a.resolveMaybeBoardID(ctx, cfg, boardID)
-		if err != nil {
+		if err := a.normalizeBoardMutationCardAnchorField(ctx, cfg, resolvedBoardID, bodyMap, "after_card_id"); err != nil {
 			return "", "", nil, err
 		}
 		return resolvedBoardID, identifier, bodyMap, nil
@@ -3661,28 +3573,18 @@ func (a *App) parseBoardCardMoveInput(ctx context.Context, args []string, cfg co
 		body["column_key"] = column
 	}
 	if beforeCardID := strings.TrimSpace(beforeCardIDFlag.value); beforeCardID != "" {
-		body["before_card_id"] = beforeCardID
+		resolved, err := a.resolveMaybeBoardCardID(ctx, cfg, resolvedBoardID, beforeCardID)
+		if err != nil {
+			return "", "", nil, err
+		}
+		body["before_card_id"] = resolved
 	}
 	if afterCardID := strings.TrimSpace(afterCardIDFlag.value); afterCardID != "" {
-		body["after_card_id"] = afterCardID
-	}
-	if beforeThreadID := strings.TrimSpace(beforeThreadIDFlag.value); beforeThreadID != "" {
-		resolvedThreadID, err := a.resolveMaybeThreadID(ctx, cfg, beforeThreadID)
+		resolved, err := a.resolveMaybeBoardCardID(ctx, cfg, resolvedBoardID, afterCardID)
 		if err != nil {
 			return "", "", nil, err
 		}
-		body["before_thread_id"] = resolvedThreadID
-	}
-	if afterThreadID := strings.TrimSpace(afterThreadIDFlag.value); afterThreadID != "" {
-		resolvedThreadID, err := a.resolveMaybeThreadID(ctx, cfg, afterThreadID)
-		if err != nil {
-			return "", "", nil, err
-		}
-		body["after_thread_id"] = resolvedThreadID
-	}
-	resolvedBoardID, err := a.resolveMaybeBoardID(ctx, cfg, boardID)
-	if err != nil {
-		return "", "", nil, err
+		body["after_card_id"] = resolved
 	}
 	return resolvedBoardID, identifier, body, nil
 }
@@ -3761,19 +3663,6 @@ func buildBoardCardCommandPathParams(cardID string) (map[string]string, error) {
 	return map[string]string{"card_id": cardID}, nil
 }
 
-func (a *App) normalizeBoardMutationThreadField(ctx context.Context, cfg config.Resolved, body map[string]any, field string) error {
-	rawID := strings.TrimSpace(anyString(body[field]))
-	if rawID == "" {
-		return nil
-	}
-	resolvedID, err := a.resolveMaybeThreadID(ctx, cfg, rawID)
-	if err != nil {
-		return err
-	}
-	body[field] = resolvedID
-	return nil
-}
-
 func (a *App) normalizeBoardMutationCardAnchorField(ctx context.Context, cfg config.Resolved, boardID string, body map[string]any, field string) error {
 	rawID := strings.TrimSpace(anyString(body[field]))
 	if rawID == "" {
@@ -3828,206 +3717,9 @@ func (a *App) resolveMaybeBoardCardID(ctx context.Context, cfg config.Resolved, 
 	return "", missingResourceIDError(rawCardID, boardCardIDLookupSpec)
 }
 
-func (a *App) parseBoardCardMutationInput(ctx context.Context, args []string, cfg config.Resolved, commandName string, options boardCardMutationOptions) (string, string, any, error) {
-	fs := newSilentFlagSet(commandName)
-	var boardIDFlag, threadIDFlag trackedString
-	var fromFileFlag, actorIDFlag, requestKeyFlag trackedString
-	var ifBoardUpdatedAtFlag, columnFlag, beforeFlag, afterFlag trackedString
-	var pinnedDocumentIDFlag trackedString
-	var clearPinnedDocumentFlag trackedBool
-	fs.Var(&boardIDFlag, "board-id", "Board id")
-	fs.Var(&threadIDFlag, "thread-id", "Thread id")
-	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
-	fs.Var(&actorIDFlag, "actor-id", "Actor id")
-	if options.allowRequestKey {
-		fs.Var(&requestKeyFlag, "request-key", "Request key")
-	}
-	if options.requireIfBoardUpdated {
-		fs.Var(&ifBoardUpdatedAtFlag, "if-board-updated-at", "Board updated_at concurrency token")
-	}
-	if options.allowColumn {
-		fs.Var(&columnFlag, "column", "Target board column key")
-	}
-	if options.allowBeforeAfter {
-		fs.Var(&beforeFlag, "before", "Place before this thread id")
-		fs.Var(&afterFlag, "after", "Place after this thread id")
-	}
-	if options.allowPinnedDocument {
-		fs.Var(&pinnedDocumentIDFlag, "pinned-document-id", "Pinned document id")
-	}
-	if options.allowClearPinnedDoc {
-		fs.Var(&clearPinnedDocumentFlag, "clear-pinned-document", "Clear the pinned document id")
-	}
-	if err := fs.Parse(args); err != nil {
-		return "", "", nil, errnorm.Usage("invalid_flags", err.Error())
-	}
-	positionals := fs.Args()
-
-	boardID := strings.TrimSpace(boardIDFlag.value)
-	if boardID == "" && len(positionals) > 0 {
-		boardID = strings.TrimSpace(positionals[0])
-		positionals = positionals[1:]
-	}
-	if err := validateID(boardID, "board id"); err != nil {
-		return "", "", nil, err
-	}
-
-	threadID := strings.TrimSpace(threadIDFlag.value)
-	if options.requireThreadTarget && threadID == "" && len(positionals) > 0 {
-		threadID = strings.TrimSpace(positionals[0])
-		positionals = positionals[1:]
-	}
-	if !options.requireThreadTarget && threadID == "" && len(positionals) > 0 {
-		threadID = strings.TrimSpace(positionals[0])
-		positionals = positionals[1:]
-	}
-	if options.requireThreadTarget {
-		if err := validateID(threadID, "thread id"); err != nil {
-			return "", "", nil, err
-		}
-	}
-	if len(positionals) > 0 {
-		return "", "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `oar %s`", commandName))
-	}
-
-	if err := validatePlacementFlags(beforeFlag.value, afterFlag.value, commandName); err != nil {
-		return "", "", nil, err
-	}
-
-	skipStdin := hasAnyBoardMutationFieldFlags(actorIDFlag, requestKeyFlag, ifBoardUpdatedAtFlag, columnFlag, beforeFlag, afterFlag, pinnedDocumentIDFlag, clearPinnedDocumentFlag)
-	payload, err := a.readBoardCardBodyInput(fromFileFlag.value, skipStdin)
-	if err != nil {
-		return "", "", nil, err
-	}
-	if len(payload) > 0 {
-		if hasAnyBoardMutationFieldFlags(actorIDFlag, requestKeyFlag, ifBoardUpdatedAtFlag, columnFlag, beforeFlag, afterFlag, pinnedDocumentIDFlag, clearPinnedDocumentFlag) {
-			return "", "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("field flags cannot be combined with JSON body input for `oar %s`", commandName))
-		}
-		body, err := decodeJSONPayload(payload)
-		if err != nil {
-			return "", "", nil, err
-		}
-		bodyMap, _ := body.(map[string]any)
-		if bodyMap == nil {
-			return "", "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `oar %s` must be an object", commandName))
-		}
-		resolvedBoardID, err := a.resolveMaybeBoardID(ctx, cfg, boardID)
-		if err != nil {
-			return "", "", nil, err
-		}
-		resolvedThreadID, err := a.resolveMaybeThreadID(ctx, cfg, threadID)
-		if err != nil {
-			return "", "", nil, err
-		}
-		if !options.requireThreadTarget {
-			if err := a.normalizeBoardMutationThreadField(ctx, cfg, bodyMap, "thread_id"); err != nil {
-				return "", "", nil, err
-			}
-		}
-		if options.allowBeforeAfter {
-			if err := a.normalizeBoardMutationThreadField(ctx, cfg, bodyMap, "before_thread_id"); err != nil {
-				return "", "", nil, err
-			}
-			if err := a.normalizeBoardMutationThreadField(ctx, cfg, bodyMap, "after_thread_id"); err != nil {
-				return "", "", nil, err
-			}
-		}
-		return resolvedBoardID, resolvedThreadID, bodyMap, nil
-	}
-
-	body := map[string]any{}
-	actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
-	if err != nil {
-		return "", "", nil, err
-	}
-	if actorID != "" {
-		body["actor_id"] = actorID
-	}
-	if options.allowRequestKey && strings.TrimSpace(requestKeyFlag.value) != "" {
-		body["request_key"] = strings.TrimSpace(requestKeyFlag.value)
-	}
-	if options.requireIfBoardUpdated {
-		ifUpdatedAt := strings.TrimSpace(ifBoardUpdatedAtFlag.value)
-		if ifUpdatedAt == "" {
-			return "", "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("if_board_updated_at is required for `oar %s`", commandName))
-		}
-		body["if_board_updated_at"] = ifUpdatedAt
-	}
-	if options.allowColumn {
-		column := strings.TrimSpace(columnFlag.value)
-		if options.requireColumn && column == "" {
-			return "", "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("column is required for `oar %s`", commandName))
-		}
-		if column != "" {
-			body["column_key"] = column
-		}
-	}
-	if options.allowBeforeAfter {
-		if before := strings.TrimSpace(beforeFlag.value); before != "" {
-			body["before_thread_id"] = before
-		}
-		if after := strings.TrimSpace(afterFlag.value); after != "" {
-			body["after_thread_id"] = after
-		}
-	}
-	if options.allowPinnedDocument {
-		pinnedDocumentID := strings.TrimSpace(pinnedDocumentIDFlag.value)
-		if options.allowClearPinnedDoc && clearPinnedDocumentFlag.set && clearPinnedDocumentFlag.value {
-			if pinnedDocumentID != "" {
-				return "", "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("--pinned-document-id and --clear-pinned-document cannot be combined for `oar %s`", commandName))
-			}
-			body["patch"] = map[string]any{"pinned_document_id": nil}
-		} else if pinnedDocumentID != "" {
-			if options.allowClearPinnedDoc {
-				body["patch"] = map[string]any{"pinned_document_id": pinnedDocumentID}
-			} else {
-				body["pinned_document_id"] = pinnedDocumentID
-			}
-		}
-	}
-
-	if options.requireThreadTarget && threadID == "" {
-		return "", "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("thread id is required for `oar %s`", commandName))
-	}
-	if !options.requireThreadTarget {
-		if err := validateID(threadID, "thread id"); err != nil {
-			return "", "", nil, err
-		}
-	}
-	if options.allowPinnedDocument && options.allowClearPinnedDoc {
-		if patch, _ := body["patch"].(map[string]any); len(patch) == 0 {
-			return "", "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("patch is required for `oar %s`", commandName))
-		}
-	}
-	if !options.requireThreadTarget && body["thread_id"] == nil {
-		body["thread_id"] = threadID
-	}
-
-	resolvedBoardID, err := a.resolveMaybeBoardID(ctx, cfg, boardID)
-	if err != nil {
-		return "", "", nil, err
-	}
-	resolvedThreadID, err := a.resolveMaybeThreadID(ctx, cfg, threadID)
-	if err != nil {
-		return "", "", nil, err
-	}
-	if !options.requireThreadTarget && resolvedThreadID != "" {
-		body["thread_id"] = resolvedThreadID
-	}
-	if options.allowBeforeAfter {
-		if err := a.normalizeBoardMutationThreadField(ctx, cfg, body, "before_thread_id"); err != nil {
-			return "", "", nil, err
-		}
-		if err := a.normalizeBoardMutationThreadField(ctx, cfg, body, "after_thread_id"); err != nil {
-			return "", "", nil, err
-		}
-	}
-	return resolvedBoardID, resolvedThreadID, body, nil
-}
-
 func validatePlacementFlags(before string, after string, commandName string) error {
 	if strings.TrimSpace(before) != "" && strings.TrimSpace(after) != "" {
-		return errnorm.Usage("invalid_request", fmt.Sprintf("--before and --after cannot be combined for `oar %s`", commandName))
+		return errnorm.Usage("invalid_request", fmt.Sprintf("--before-card-id and --after-card-id cannot be combined for `oar %s`", commandName))
 	}
 	return nil
 }

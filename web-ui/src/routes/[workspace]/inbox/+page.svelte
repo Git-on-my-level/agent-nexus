@@ -389,7 +389,7 @@
     const actionThreadId = inboxActionThreadId(item);
 
     if (!actionThreadId) {
-      error = "Cannot record decision: no linked thread.";
+      error = "Cannot record decision: no topic or thread to attach.";
       return;
     }
 

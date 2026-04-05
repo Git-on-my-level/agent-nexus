@@ -15,8 +15,10 @@
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
   import {
+    backingThreadIdFromTopicRecord,
     searchDocuments as searchDocumentRecords,
     searchTopics as searchTopicRecords,
+    topicSearchResultToPickerOption,
   } from "$lib/searchHelpers";
   import { workspacePath } from "$lib/workspacePaths";
   import { enrichInboxItem } from "$lib/inboxUtils";
@@ -79,6 +81,22 @@
   let enrichedInboxItems = $derived(
     (workspace?.inbox?.items ?? []).map((item) => enrichInboxItem(item)),
   );
+  let detailModalColumnPeers = $derived.by(() => {
+    if (!detailModalCard || !workspace?.cards?.items || !workspace?.board) {
+      return [];
+    }
+    const col = String(detailModalCard.membership?.column_key ?? "").trim();
+    const grouped = groupBoardWorkspaceCards(
+      workspace.cards,
+      workspace.board.column_schema ?? [],
+    );
+    const peers = grouped[col] ?? [];
+    return [...peers].sort((a, b) => {
+      const ra = Number.parseInt(String(a.membership?.rank ?? "0"), 10);
+      const rb = Number.parseInt(String(b.membership?.rank ?? "0"), 10);
+      return ra - rb;
+    });
+  });
   let resolvedCards = $derived(
     (workspace?.cards?.items ?? []).filter((card) => {
       const r = String(card?.membership?.resolution ?? "").trim();
@@ -98,15 +116,6 @@
     return workspacePath(workspaceSlug, pathname);
   }
 
-  function toThreadOption(thread) {
-    return {
-      id: thread.id,
-      title: thread.title || thread.id,
-      subtitle: [thread.status, thread.priority].filter(Boolean).join(" · "),
-      keywords: [thread.type, ...(thread.tags ?? [])],
-    };
-  }
-
   function toDocumentOption(document) {
     return {
       id: document.id,
@@ -123,7 +132,7 @@
 
   async function searchThreadOptions(query) {
     const threads = await searchTopicRecords(query);
-    return threads.map(toThreadOption);
+    return threads.map(topicSearchResultToPickerOption);
   }
 
   async function searchDocumentOptions(query) {
@@ -277,12 +286,38 @@
   async function submitAddCard() {
     if (!workspace?.board) return;
 
-    const title = addCardTitle.trim();
+    let resolvedTitle = addCardTitle.trim();
     const summary = addCardSummary.trim();
     const threadId = addCardThreadId.trim();
-    if (!title && !threadId) {
+    if (!resolvedTitle && threadId) {
+      try {
+        const topics = await searchTopicRecords(threadId);
+        const match =
+          topics.find((t) => backingThreadIdFromTopicRecord(t) === threadId) ??
+          topics[0];
+        resolvedTitle = String(match?.title ?? "").trim() || threadId;
+      } catch {
+        resolvedTitle = threadId;
+      }
+    }
+    if (!resolvedTitle && !threadId) {
       mutationError = "Enter a card title or pick a backing thread.";
       return;
+    }
+    if (!resolvedTitle) {
+      mutationError = "Card title is required.";
+      return;
+    }
+
+    const related_refs = String(addCardRelatedRefs ?? "")
+      .split(/\r?\n|,/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+    if (threadId) {
+      const token = `thread:${threadId}`;
+      if (!related_refs.includes(token)) {
+        related_refs.push(token);
+      }
     }
 
     addingCard = true;
@@ -290,9 +325,8 @@
       () =>
         coreClient.addBoardCard(boardId, {
           if_board_updated_at: workspace.board.updated_at,
-          title,
-          summary: summary || title,
-          thread_id: threadId || null,
+          title: resolvedTitle,
+          summary: summary || resolvedTitle,
           column_key: addCardColumnKey,
           document_ref: addCardDocumentId.trim()
             ? `document:${addCardDocumentId.trim()}`
@@ -304,10 +338,7 @@
             .split(/\r?\n|,/)
             .map((item) => item.trim())
             .filter(Boolean),
-          related_refs: String(addCardRelatedRefs ?? "")
-            .split(/\r?\n|,/)
-            .map((item) => item.trim())
-            .filter(Boolean),
+          related_refs,
           due_at: addCardDueAt.trim() || null,
           definition_of_done: String(addCardDefinitionOfDone ?? "")
             .split(/\r?\n|,/)
@@ -780,7 +811,7 @@
           <div
             class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-2 text-[12px] text-[var(--ui-text-muted)]"
           >
-            Backing thread is fixed after board creation.
+            Board thread is fixed after creation (append-only event timeline).
             <div class="mt-1 text-[var(--ui-text)]">
               {backingThread?.title || backingThreadId}
             </div>
@@ -899,11 +930,11 @@
 
           <SearchableEntityPicker
             bind:value={addCardThreadId}
-            advancedLabel="Use a manual backing thread ID"
+            advancedLabel="Use a manual thread ID"
             disabledIds={[backingThreadId].filter(Boolean)}
-            helperText="Optional: link this card to an existing thread."
-            label="Backing thread"
-            manualLabel="Backing thread ID"
+            helperText="Optional legacy thread link; prefer topic: refs on the card when possible."
+            label="Topic / thread"
+            manualLabel="Thread ID"
             manualPlaceholder="thread-onboarding"
             placeholder="Search topics by title, ID, or tags"
             searchFn={searchThreadOptions}
@@ -1184,7 +1215,7 @@
           Workspace documents
         </h2>
         <p class="mt-1 text-[11px] text-[var(--ui-text-subtle)]">
-          Canonical doc lineages linked from the board's primary thread and
+          Canonical doc lineages linked from this board's thread timeline and
           cards.
         </p>
       </div>
@@ -1263,8 +1294,7 @@
           Review inbox
         </h2>
         <p class="mt-1 text-[11px] text-[var(--ui-text-subtle)]">
-          Derived risk and decision signals for the board's canonical thread
-          set.
+          Derived risk and decision signals for this board's threads and topics.
         </p>
       </div>
       <div class="px-4 py-3">
@@ -1324,6 +1354,7 @@
 <CardDetailModal
   open={detailModalCard !== null}
   cardItem={detailModalCard}
+  columnPeers={detailModalColumnPeers}
   {boardId}
   board={workspace?.board ?? null}
   {workspaceSlug}

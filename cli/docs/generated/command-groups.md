@@ -6,6 +6,27 @@ Generated from `contracts/oar-openapi.yaml`.
 - Contract version: `0.3.0`
 - Groups: `10`
 
+## `topics`
+
+- Commands: `6`
+- Command IDs:
+  - `topics.create` (`topics create`)
+  - `topics.get` (`topics get`)
+  - `topics.list` (`topics list`)
+  - `topics.patch` (`topics patch`)
+  - `topics.timeline` (`topics timeline`)
+  - `topics.workspace` (`topics workspace`)
+
+## `threads`
+
+- Commands: `5`
+- Command IDs:
+  - `threads.context` (`threads context`)
+  - `threads.inspect` (`threads inspect`)
+  - `threads.list` (`threads list`)
+  - `threads.timeline` (`threads timeline`)
+  - `threads.workspace` (`threads workspace`)
+
 ## `artifacts`
 
 - Commands: `3`
@@ -79,25 +100,4 @@ Generated from `contracts/oar-openapi.yaml`.
 - Command IDs:
   - `packets.receipts.create` (`packets receipts create`)
   - `packets.reviews.create` (`packets reviews create`)
-
-## `threads`
-
-- Commands: `5`
-- Command IDs:
-  - `threads.context` (`threads context`)
-  - `threads.inspect` (`threads inspect`)
-  - `threads.list` (`threads list`)
-  - `threads.timeline` (`threads timeline`)
-  - `threads.workspace` (`threads workspace`)
-
-## `topics`
-
-- Commands: `6`
-- Command IDs:
-  - `topics.create` (`topics create`)
-  - `topics.get` (`topics get`)
-  - `topics.list` (`topics list`)
-  - `topics.patch` (`topics patch`)
-  - `topics.timeline` (`topics timeline`)
-  - `topics.workspace` (`topics workspace`)
 

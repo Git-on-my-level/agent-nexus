@@ -10,6 +10,7 @@
   import {
     searchDocuments as searchDocumentRecords,
     searchTopics as searchTopicRecords,
+    topicSearchResultToPickerOption,
   } from "$lib/searchHelpers";
   import { workspacePath } from "$lib/workspacePaths";
   import {
@@ -71,15 +72,6 @@
     goto(workspaceHref(`/boards/${boardId}`));
   }
 
-  function toThreadOption(thread) {
-    return {
-      id: thread.id,
-      title: thread.title || thread.id,
-      subtitle: [thread.status, thread.priority].filter(Boolean).join(" · "),
-      keywords: [thread.type, ...(thread.tags ?? [])],
-    };
-  }
-
   function toDocumentOption(document) {
     return {
       id: document.id,
@@ -96,7 +88,7 @@
 
   async function searchThreadOptions(query) {
     const threads = await searchTopicRecords(query);
-    return threads.map(toThreadOption);
+    return threads.map(topicSearchResultToPickerOption);
   }
 
   async function searchDocumentOptions(query) {
@@ -328,10 +320,10 @@
 
         <SearchableEntityPicker
           bind:value={createBackingThreadId}
-          advancedLabel="Use a manual backing thread ID"
-          helperText="Pick the backing thread this board organizes around."
-          label="Backing thread"
-          manualLabel="Backing thread ID"
+          advancedLabel="Use a manual thread ID"
+          helperText="Bind a topic or enter this board's thread ID (append-only timeline for events on this board)."
+          label="Board timeline"
+          manualLabel="Thread ID"
           manualPlaceholder="thread-q2-initiative"
           placeholder="Search topics by title, ID, or tags"
           searchFn={searchThreadOptions}

@@ -57,7 +57,7 @@ func handleListTopics(w http.ResponseWriter, r *http.Request, opts handlerOption
 		limitFilter = &parsed
 	}
 
-	topics, _, err := opts.primitiveStore.ListTopics(r.Context(), primitives.TopicListFilter{
+	topics, nextCursor, err := opts.primitiveStore.ListTopics(r.Context(), primitives.TopicListFilter{
 		Type:              topicType,
 		Status:            status,
 		Query:             strings.TrimSpace(query.Get("q")),
@@ -77,7 +77,11 @@ func handleListTopics(w http.ResponseWriter, r *http.Request, opts handlerOption
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"topics": topics})
+	response := map[string]any{"topics": topics}
+	if nextCursor != "" {
+		response["next_cursor"] = nextCursor
+	}
+	writeJSON(w, http.StatusOK, response)
 }
 
 func handleCreateTopic(w http.ResponseWriter, r *http.Request, opts handlerOptions) {

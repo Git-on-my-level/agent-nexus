@@ -211,7 +211,7 @@
     hints[`artifact:${artifact.id}`] =
       `This ${kindLabel(artifact.kind).toLowerCase()}`;
     if (artifact.thread_id)
-      hints[`thread:${artifact.thread_id}`] = "Related thread";
+      hints[`thread:${artifact.thread_id}`] = "Thread (timeline)";
     if (receiptPacket?.receipt_id)
       hints[`artifact:${receiptPacket.receipt_id}`] = "Receipt";
     else if (artifact.kind === "receipt")

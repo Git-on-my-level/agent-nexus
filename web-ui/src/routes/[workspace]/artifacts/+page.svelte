@@ -449,7 +449,7 @@
               <RefLink
                 humanize
                 labelHints={{
-                  [`thread:${artifact.thread_id}`]: "Related thread",
+                  [`thread:${artifact.thread_id}`]: "Thread (timeline)",
                 }}
                 refValue={`thread:${artifact.thread_id}`}
                 showRaw

@@ -50,7 +50,7 @@ export function boardSummaryCounts(summary) {
   return counts;
 }
 
-/** Backing thread id for a board row (core `thread_id`). */
+/** Board thread id for a board row (core `thread_id`, event timeline). */
 export function boardBackingThreadId(board) {
   return String(board?.thread_id ?? "").trim();
 }

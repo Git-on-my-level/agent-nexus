@@ -6,6 +6,8 @@ import {
   searchActors,
   searchBoards,
   searchArtifacts,
+  backingThreadIdFromTopicRecord,
+  topicSearchResultToPickerOption,
 } from "../../src/lib/searchHelpers.js";
 
 vi.mock("../../src/lib/coreClient.js", () => ({
@@ -28,6 +30,38 @@ describe("searchHelpers", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  describe("backingThreadIdFromTopicRecord", () => {
+    it("prefers thread_id over topic id", () => {
+      expect(
+        backingThreadIdFromTopicRecord({
+          id: "topic-alpha",
+          thread_id: "thread-b",
+        }),
+      ).toBe("thread-b");
+    });
+
+    it("falls back to id when thread_id absent", () => {
+      expect(
+        backingThreadIdFromTopicRecord({ id: "topic-only", title: "T" }),
+      ).toBe("topic-only");
+    });
+  });
+
+  describe("topicSearchResultToPickerOption", () => {
+    it("uses backing thread id as picker value", () => {
+      const opt = topicSearchResultToPickerOption({
+        id: "topic-1",
+        thread_id: "thr-9",
+        title: "Coordination",
+        type: "incident",
+        status: "active",
+      });
+      expect(opt.id).toBe("thr-9");
+      expect(opt.title).toBe("Coordination");
+      expect(opt.keywords).toContain("incident");
+    });
   });
 
   describe("searchTopics", () => {

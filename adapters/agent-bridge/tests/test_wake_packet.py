@@ -22,6 +22,8 @@ def test_roundtrip_packet_content():
         trigger_event_url="http://localhost:8080/events/event_1",
         cli_thread_inspect="oar threads inspect --thread-id thread_1 --json",
         cli_thread_workspace="oar threads workspace --thread-id thread_1 --json",
+        topic_workspace_url="http://localhost:8080/topics/topic_1/workspace",
+        cli_topic_workspace="oar topics workspace --topic-id topic_1 --json",
         subject_ref="topic:topic_1",
         resolved_subject={
             "ref": "topic:topic_1",
@@ -36,3 +38,6 @@ def test_roundtrip_packet_content():
     assert restored.session_key == packet.session_key
     assert restored.subject_ref == packet.subject_ref
     assert restored.resolved_subject == packet.resolved_subject
+    assert restored.topic_workspace_url == packet.topic_workspace_url
+    assert restored.cli_topic_workspace == packet.cli_topic_workspace
+    assert restored.to_content()["context_fetch"]["preferred"] == "topics.workspace"

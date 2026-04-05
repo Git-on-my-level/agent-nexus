@@ -315,7 +315,7 @@
   </p>
 {:else if !topic}
   <p class="text-[13px] text-[var(--ui-text-muted)]">
-    {detailAsTopic ? "Topic not found." : "Backing thread not found."}
+    {detailAsTopic ? "Topic not found." : "Thread not found."}
   </p>
 {:else}
   <div
