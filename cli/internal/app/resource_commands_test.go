@@ -453,7 +453,6 @@ func TestEventsListCommandFiltersAndLimits(t *testing.T) {
 				{"id":"event_2","thread_id":"thread_1","type":"decision_needed","summary":"second"},
 				{"id":"event_3","thread_id":"thread_1","type":"actor_statement","summary":"third"}
 			],
-			"snapshots":{},
 			"artifacts":{}
 		}`))
 	}))
@@ -523,7 +522,6 @@ func TestEventsListCommandSupportsMineActorFilterAndFullID(t *testing.T) {
 				{"id":"` + mineEventID + `","thread_id":"thread_1","type":"actor_statement","actor_id":"` + mineActorID + `","payload":{"recommendation":"Ship Friday rescue scope"}},
 				{"id":"event_other_actor","thread_id":"thread_1","type":"actor_statement","actor_id":"actor-other","summary":"other recommendation"}
 			],
-			"snapshots":{},
 			"artifacts":{}
 		}`))
 	}))
@@ -611,12 +609,12 @@ func TestEventsListCommandSupportsMultipleThreadIDs(t *testing.T) {
 			_, _ = w.Write([]byte(`{"thread_id":"thread_1","events":[
 				{"id":"event_1","thread_id":"thread_1","type":"actor_statement","summary":"first","ts":"2026-03-06T12:01:00Z","created_at":"2026-03-06T12:10:00Z"},
 				{"id":"event_2","thread_id":"thread_1","type":"actor_statement","summary":"second","ts":"2026-03-06T12:02:00Z","created_at":"2026-03-06T12:11:00Z"}
-			],"snapshots":{"snapshot_1":{"id":"snapshot_1","title":"Snap One"}},"artifacts":{"artifact_1":{"id":"artifact_1","kind":"note"}}}`))
+			],"artifacts":{"artifact_1":{"id":"artifact_1","kind":"note"}}}`))
 		case "/threads/thread_2/timeline":
 			_, _ = w.Write([]byte(`{"thread_id":"thread_2","events":[
 				{"id":"event_3","thread_id":"thread_2","type":"actor_statement","summary":"third","ts":"2026-03-06T12:03:00Z","created_at":"2026-03-06T12:00:00Z"},
 				{"id":"event_4","thread_id":"thread_2","type":"actor_statement","summary":"fourth","ts":"2026-03-06T12:04:00Z","created_at":"2026-03-06T12:01:00Z"}
-			],"snapshots":{"snapshot_2":{"id":"snapshot_2","title":"Snap Two"}},"artifacts":{"artifact_2":{"id":"artifact_2","kind":"report"}}}`))
+			],"artifacts":{"artifact_2":{"id":"artifact_2","kind":"report"}}}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -651,10 +649,6 @@ func TestEventsListCommandSupportsMultipleThreadIDs(t *testing.T) {
 	second, _ := events[1].(map[string]any)
 	if anyStringValue(first["id"]) != "event_3" || anyStringValue(second["id"]) != "event_4" {
 		t.Fatalf("expected most recent cross-thread events, got %#v", data)
-	}
-	snapshots, _ := data["snapshots"].(map[string]any)
-	if len(snapshots) != 2 {
-		t.Fatalf("expected merged timeline snapshots, got %#v", data["snapshots"])
 	}
 	artifacts, _ := data["artifacts"].(map[string]any)
 	if len(artifacts) != 2 {
@@ -2219,7 +2213,6 @@ func TestBoardCardUpdateAndMoveAllowJSONBodyWithoutConcurrencyFlags(t *testing.T
 		"--from-file", moveFile,
 	}))
 }
-
 
 func TestThreadsContextRejectsMixedSelectionModesWithActionableGuidance(t *testing.T) {
 	t.Parallel()
@@ -4063,7 +4056,6 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 					{"id":"event_100","thread_id":"thread_123","type":"actor_statement","created_at":"2026-03-07T00:00:00Z","summary":"ship machine-facing fixes"},
 					{"id":"event_101","thread_id":"thread_123","type":"decision_needed","created_at":"2026-03-07T00:01:00Z","summary":"confirm frame shape"}
 				],
-				"snapshots":{},
 				"artifacts":{}
 			}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/events/event_456":

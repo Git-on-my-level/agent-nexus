@@ -151,14 +151,14 @@ var eventTypeGroupOrder = []string{
 }
 
 var eventTypeGroupDescriptions = map[string]string{
-	"Communication":         "Direct communication or important non-structured information.",
-	"Decisions":             "Request or record decisions tied to a topic.",
-	"Interventions":         "Single clear path exists, but a human must act to complete it.",
-	"Topics And Documents":  "Durable work-subject and document lifecycle signals.",
-	"Boards And Cards":      "Board and card workflow signals.",
-	"Exceptions":            "Surface problems, risks, or escalations.",
-	"Packet Lifecycle":      "Packet lifecycle facts, usually emitted by higher-level commands.",
-	"Inbox Lifecycle":       "Inbox lifecycle facts, usually emitted by higher-level commands.",
+	"Communication":        "Direct communication or important non-structured information.",
+	"Decisions":            "Request or record decisions tied to a topic.",
+	"Interventions":        "Single clear path exists, but a human must act to complete it.",
+	"Topics And Documents": "Durable work-subject and document lifecycle signals.",
+	"Boards And Cards":     "Board and card workflow signals.",
+	"Exceptions":           "Surface problems, risks, or escalations.",
+	"Packet Lifecycle":     "Packet lifecycle facts, usually emitted by higher-level commands.",
+	"Inbox Lifecycle":      "Inbox lifecycle facts, usually emitted by higher-level commands.",
 }
 
 var knownEventTypeGuidance = []eventTypeGuidance{
@@ -2584,7 +2584,6 @@ func (a *App) runEventsListCommand(ctx context.Context, args []string, cfg confi
 	resolvedThreadIDs := make([]string, 0, len(threadIDs))
 	allEvents := make([]any, 0, 32)
 	matching := make([]any, 0, 32)
-	expandedSnapshots := make(map[string]any)
 	expandedArtifacts := make(map[string]any)
 	statusCode := http.StatusOK
 	headers := map[string][]string{"Content-Type": {"application/json"}}
@@ -2621,7 +2620,6 @@ func (a *App) runEventsListCommand(ctx context.Context, args []string, cfg confi
 		filtered = filterEventsByActorID(filtered, resolvedActorID)
 		filtered = filterEventsByLifecycleState(filtered, includeArchived, archivedOnly, includeTombstoned, tombstonedOnly)
 		matching = append(matching, filtered...)
-		mergeExpandedTimelineObjects(expandedSnapshots, asMap(body["snapshots"]))
 		mergeExpandedTimelineObjects(expandedArtifacts, asMap(body["artifacts"]))
 		resolvedThreadID := firstNonEmpty(anyString(body["thread_id"]), eventThreadIDFromList(threadEvents), threadID)
 		if resolvedThreadID != "" {
@@ -2644,7 +2642,6 @@ func (a *App) runEventsListCommand(ctx context.Context, args []string, cfg confi
 		"events":          matching,
 		"total_events":    len(allEvents),
 		"returned_events": len(matching),
-		"snapshots":       expandedSnapshots,
 		"artifacts":       expandedArtifacts,
 	}
 	if len(resolvedThreadIDs) == 1 {

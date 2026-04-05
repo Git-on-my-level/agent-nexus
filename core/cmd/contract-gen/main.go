@@ -85,7 +85,7 @@ type oarSchemaDocument struct {
 	Enums                map[string]oarEnumDef             `yaml:"enums"`
 	Provenance           oarFieldContainer                 `yaml:"provenance"`
 	Primitives           map[string]oarMaybeFieldContainer `yaml:"primitives"`
-	Snapshots            map[string]oarMaybeFieldContainer `yaml:"snapshots"`
+	Threads              map[string]oarMaybeFieldContainer `yaml:"-"`
 	Packets              map[string]oarMaybeFieldContainer `yaml:"packets"`
 	ReferenceConventions oarReferenceConventions           `yaml:"reference_conventions"`
 }
@@ -176,6 +176,27 @@ func (c *oarMaybeFieldContainer) UnmarshalYAML(value *yaml.Node) error {
 		return err
 	}
 	c.Fields = decoded.Fields
+	return nil
+}
+
+func (d *oarSchemaDocument) UnmarshalYAML(value *yaml.Node) error {
+	type alias oarSchemaDocument
+	var decoded struct {
+		alias           `yaml:",inline"`
+		LegacySnapshots map[string]oarMaybeFieldContainer `yaml:"snapshots"`
+	}
+	if err := value.Decode(&decoded); err != nil {
+		return err
+	}
+	*d = oarSchemaDocument(decoded.alias)
+	d.Threads = make(map[string]oarMaybeFieldContainer, 1)
+	if source, ok := d.Primitives["thread"]; ok {
+		d.Threads["thread"] = source
+		return nil
+	}
+	if source, ok := decoded.LegacySnapshots["thread"]; ok {
+		d.Threads["thread"] = source
+	}
 	return nil
 }
 
@@ -680,13 +701,13 @@ func applyOARSchemaOverlays(acc map[string]bodyFieldState, schemaDoc oarSchemaDo
 			})
 		}
 	case "threads.create":
-		if source, ok := schemaDoc.Snapshots["thread"]; ok {
+		if source, ok := schemaDoc.Threads["thread"]; ok {
 			expandContainerFromOAR(acc, schemaDoc, "thread", source, oarExpansionOptions{
 				exclude: map[string]struct{}{"open_cards": {}},
 			})
 		}
 	case "threads.patch":
-		if source, ok := schemaDoc.Snapshots["thread"]; ok {
+		if source, ok := schemaDoc.Threads["thread"]; ok {
 			expandContainerFromOAR(acc, schemaDoc, "patch", source, oarExpansionOptions{
 				exclude:          map[string]struct{}{"open_cards": {}},
 				forceOptionalAll: true,

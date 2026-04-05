@@ -214,7 +214,6 @@ func formatThreadTimeline(body any) string {
 	root := asMap(body)
 	lines := []string{
 		fmt.Sprintf("Timeline events: %d", len(asSlice(root["events"]))),
-		fmt.Sprintf("Referenced threads: %d", len(asMap(root["snapshots"]))),
 		fmt.Sprintf("Referenced artifacts: %d", len(asMap(root["artifacts"]))),
 	}
 	lines = appendListSection(lines, "events", asSlice(root["events"]), renderEventListItem)
@@ -233,7 +232,6 @@ func formatEventsList(body any) string {
 	}
 	lines = appendScalar(lines, "total_events", root, "total_events")
 	lines = appendScalar(lines, "returned_events", root, "returned_events")
-	lines = append(lines, fmt.Sprintf("referenced_threads: %d", len(asMap(root["snapshots"]))))
 	lines = append(lines, fmt.Sprintf("referenced_artifacts: %d", len(asMap(root["artifacts"]))))
 	lines = appendStringList(lines, "types", stringList(root["types"]))
 	if actorID := strings.TrimSpace(anyString(root["actor_id"])); actorID != "" {

@@ -39,7 +39,7 @@ type ProvenanceSpec struct {
 	Fields map[string]FieldSpec
 }
 
-type SnapshotSchema struct {
+type ThreadSchema struct {
 	Name   string
 	Fields map[string]FieldSpec
 }
@@ -72,7 +72,7 @@ type Contract struct {
 	Enums            map[string]EnumSpec
 	TypedRefPrefixes map[string]struct{}
 	Provenance       ProvenanceSpec
-	Snapshots        map[string]SnapshotSchema
+	Threads          map[string]ThreadSchema
 	Packets          map[string]PacketSchema
 	ArtifactRefRules map[string][]string
 	EventRefRules    map[string]EventRefRule
@@ -88,8 +88,8 @@ type contractFile struct {
 	Enums                map[string]rawEnum
 	RefFormat            rawRefFormat `yaml:"ref_format"`
 	Provenance           rawProvenance
-	Primitives           rawSnapshots `yaml:"primitives"`
-	Snapshots            rawSnapshots
+	Primitives           rawThreads `yaml:"primitives"`
+	Snapshots            rawThreads
 	Packets              rawPackets
 	ReferenceConventions rawReferenceConventions `yaml:"reference_conventions"`
 }
@@ -179,11 +179,11 @@ type rawRefPrefixReq struct {
 	Prefix string `yaml:"prefix"`
 }
 
-type rawSnapshots struct {
-	Thread rawSnapshotSchema `yaml:"thread"`
+type rawThreads struct {
+	Thread rawThreadSchema `yaml:"thread"`
 }
 
-type rawSnapshotSchema struct {
+type rawThreadSchema struct {
 	Fields map[string]rawFieldSpec `yaml:"fields"`
 }
 
@@ -217,8 +217,8 @@ func Load(path string) (*Contract, error) {
 		Provenance: ProvenanceSpec{
 			Fields: make(map[string]FieldSpec, len(file.Provenance.Fields)),
 		},
-		Snapshots: make(map[string]SnapshotSchema, 1),
-		Packets:   make(map[string]PacketSchema, 3),
+		Threads: make(map[string]ThreadSchema, 1),
+		Packets: make(map[string]PacketSchema, 3),
 		ArtifactRefRules: map[string][]string{
 			"work_order": append([]string(nil), file.ReferenceConventions.ArtifactRefs.WorkOrder.RefsMustInclude...),
 			"receipt":    append([]string(nil), file.ReferenceConventions.ArtifactRefs.Receipt.RefsMustInclude...),
@@ -260,11 +260,11 @@ func Load(path string) (*Contract, error) {
 		}
 	}
 
-	snapshotSource := file.Primitives
-	if len(snapshotSource.Thread.Fields) == 0 {
-		snapshotSource = file.Snapshots
+	threadSource := file.Primitives
+	if len(threadSource.Thread.Fields) == 0 {
+		threadSource = file.Snapshots
 	}
-	contract.Snapshots["thread"] = normalizeSnapshot("thread", snapshotSource.Thread)
+	contract.Threads["thread"] = normalizeThread("thread", threadSource.Thread)
 
 	contract.Packets["work_order"] = normalizePacket("work_order", file.Packets.WorkOrder)
 	contract.Packets["receipt"] = normalizePacket("receipt", file.Packets.Receipt)
@@ -345,14 +345,14 @@ func normalizePacket(name string, raw rawPacketSchema) PacketSchema {
 	return packet
 }
 
-func normalizeSnapshot(name string, raw rawSnapshotSchema) SnapshotSchema {
-	snapshot := SnapshotSchema{
+func normalizeThread(name string, raw rawThreadSchema) ThreadSchema {
+	thread := ThreadSchema{
 		Name:   name,
 		Fields: make(map[string]FieldSpec, len(raw.Fields)),
 	}
 
 	for fieldName, field := range raw.Fields {
-		snapshot.Fields[fieldName] = FieldSpec{
+		thread.Fields[fieldName] = FieldSpec{
 			Type:     field.Type,
 			Required: field.Required,
 			MinItems: field.MinItems,
@@ -360,5 +360,5 @@ func normalizeSnapshot(name string, raw rawSnapshotSchema) SnapshotSchema {
 		}
 	}
 
-	return snapshot
+	return thread
 }

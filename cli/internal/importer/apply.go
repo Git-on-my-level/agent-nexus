@@ -123,7 +123,7 @@ func entityRef(kind string, response map[string]any) string {
 		if thread == nil {
 			return ""
 		}
-		id := firstNonEmpty(anyString(thread["id"]), anyString(thread["thread_id"]), anyString(thread["snapshot_id"]))
+		id := firstNonEmpty(anyString(thread["id"]), anyString(thread["thread_id"]))
 		if id == "" {
 			return ""
 		}

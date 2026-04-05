@@ -144,8 +144,8 @@ func TestThreadsCreatePatchListAndTimeline(t *testing.T) {
 
 	for _, event := range timeline.Events {
 		refs, ok := event["refs"].([]any)
-		if !ok || (!containsAny(refs, "snapshot:"+threadID) && !containsAny(refs, "thread:"+threadID)) {
-			t.Fatalf("timeline event missing thread or snapshot ref: %#v", event)
+		if !ok || !containsAny(refs, "thread:"+threadID) {
+			t.Fatalf("timeline event missing thread ref: %#v", event)
 		}
 		assertActorStatementProvenance(t, event)
 	}
