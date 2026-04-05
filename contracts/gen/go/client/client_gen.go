@@ -170,7 +170,18 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "write"},
-		Adjacent:   []string{"cards.get", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.timeline"},
+		Adjacent:   []string{"cards.create", "cards.get", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.timeline"},
+	},
+	{
+		CommandID: "cards.create",
+		CLIPath:   "cards create",
+		Group:     "cards",
+		Method:    "POST",
+		Path:      "/cards",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"cards", "boards", "write"},
+		Adjacent:  []string{"cards.archive", "cards.get", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.timeline"},
 	},
 	{
 		CommandID:  "cards.get",
@@ -182,7 +193,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"cards"},
-		Adjacent:   []string{"cards.archive", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.timeline"},
+		Adjacent:   []string{"cards.archive", "cards.create", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.timeline"},
 	},
 	{
 		CommandID: "cards.list",
@@ -193,7 +204,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"cards"},
-		Adjacent:  []string{"cards.archive", "cards.get", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.timeline"},
+		Adjacent:  []string{"cards.archive", "cards.create", "cards.get", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.timeline"},
 	},
 	{
 		CommandID:  "cards.move",
@@ -205,7 +216,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "boards", "write"},
-		Adjacent:   []string{"cards.archive", "cards.get", "cards.list", "cards.patch", "cards.purge", "cards.restore", "cards.timeline"},
+		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.list", "cards.patch", "cards.purge", "cards.restore", "cards.timeline"},
 	},
 	{
 		CommandID:  "cards.patch",
@@ -217,7 +228,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "write", "concurrency"},
-		Adjacent:   []string{"cards.archive", "cards.get", "cards.list", "cards.move", "cards.purge", "cards.restore", "cards.timeline"},
+		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.list", "cards.move", "cards.purge", "cards.restore", "cards.timeline"},
 	},
 	{
 		CommandID:  "cards.purge",
@@ -229,7 +240,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "write"},
-		Adjacent:   []string{"cards.archive", "cards.get", "cards.list", "cards.move", "cards.patch", "cards.restore", "cards.timeline"},
+		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.list", "cards.move", "cards.patch", "cards.restore", "cards.timeline"},
 	},
 	{
 		CommandID:  "cards.restore",
@@ -241,7 +252,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "write"},
-		Adjacent:   []string{"cards.archive", "cards.get", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.timeline"},
+		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.timeline"},
 	},
 	{
 		CommandID:  "cards.timeline",
@@ -253,7 +264,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "timeline"},
-		Adjacent:   []string{"cards.archive", "cards.get", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore"},
+		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore"},
 	},
 	{
 		CommandID: "docs.create",
@@ -426,6 +437,16 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:  []string{"packets.receipts.create"},
 	},
 	{
+		CommandID: "ref_edges.list",
+		CLIPath:   "ref-edges list",
+		Group:     "ref-edges",
+		Method:    "GET",
+		Path:      "/ref-edges",
+		InputMode: "query",
+		Stability: "beta",
+		Concepts:  []string{"refs", "inspection"},
+	},
+	{
 		CommandID:  "threads.context",
 		CLIPath:    "threads context",
 		Group:      "threads",
@@ -485,6 +506,18 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:   []string{"threads.context", "threads.inspect", "threads.list", "threads.timeline"},
 	},
 	{
+		CommandID:  "topics.archive",
+		CLIPath:    "topics archive",
+		Group:      "topics",
+		Method:     "POST",
+		Path:       "/topics/{topic_id}/archive",
+		PathParams: []string{"topic_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"topics", "write"},
+		Adjacent:   []string{"topics.create", "topics.get", "topics.list", "topics.patch", "topics.restore", "topics.timeline", "topics.tombstone", "topics.unarchive", "topics.workspace"},
+	},
+	{
 		CommandID: "topics.create",
 		CLIPath:   "topics create",
 		Group:     "topics",
@@ -493,7 +526,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"topics", "write"},
-		Adjacent:  []string{"topics.get", "topics.list", "topics.patch", "topics.timeline", "topics.workspace"},
+		Adjacent:  []string{"topics.archive", "topics.get", "topics.list", "topics.patch", "topics.restore", "topics.timeline", "topics.tombstone", "topics.unarchive", "topics.workspace"},
 	},
 	{
 		CommandID:  "topics.get",
@@ -505,7 +538,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"topics"},
-		Adjacent:   []string{"topics.create", "topics.list", "topics.patch", "topics.timeline", "topics.workspace"},
+		Adjacent:   []string{"topics.archive", "topics.create", "topics.list", "topics.patch", "topics.restore", "topics.timeline", "topics.tombstone", "topics.unarchive", "topics.workspace"},
 	},
 	{
 		CommandID: "topics.list",
@@ -516,7 +549,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"topics"},
-		Adjacent:  []string{"topics.create", "topics.get", "topics.patch", "topics.timeline", "topics.workspace"},
+		Adjacent:  []string{"topics.archive", "topics.create", "topics.get", "topics.patch", "topics.restore", "topics.timeline", "topics.tombstone", "topics.unarchive", "topics.workspace"},
 	},
 	{
 		CommandID:  "topics.patch",
@@ -528,7 +561,19 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"topics", "write", "concurrency"},
-		Adjacent:   []string{"topics.create", "topics.get", "topics.list", "topics.timeline", "topics.workspace"},
+		Adjacent:   []string{"topics.archive", "topics.create", "topics.get", "topics.list", "topics.restore", "topics.timeline", "topics.tombstone", "topics.unarchive", "topics.workspace"},
+	},
+	{
+		CommandID:  "topics.restore",
+		CLIPath:    "topics restore",
+		Group:      "topics",
+		Method:     "POST",
+		Path:       "/topics/{topic_id}/restore",
+		PathParams: []string{"topic_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"topics", "write"},
+		Adjacent:   []string{"topics.archive", "topics.create", "topics.get", "topics.list", "topics.patch", "topics.timeline", "topics.tombstone", "topics.unarchive", "topics.workspace"},
 	},
 	{
 		CommandID:  "topics.timeline",
@@ -540,7 +585,31 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"topics", "timeline"},
-		Adjacent:   []string{"topics.create", "topics.get", "topics.list", "topics.patch", "topics.workspace"},
+		Adjacent:   []string{"topics.archive", "topics.create", "topics.get", "topics.list", "topics.patch", "topics.restore", "topics.tombstone", "topics.unarchive", "topics.workspace"},
+	},
+	{
+		CommandID:  "topics.tombstone",
+		CLIPath:    "topics tombstone",
+		Group:      "topics",
+		Method:     "POST",
+		Path:       "/topics/{topic_id}/tombstone",
+		PathParams: []string{"topic_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"topics", "write"},
+		Adjacent:   []string{"topics.archive", "topics.create", "topics.get", "topics.list", "topics.patch", "topics.restore", "topics.timeline", "topics.unarchive", "topics.workspace"},
+	},
+	{
+		CommandID:  "topics.unarchive",
+		CLIPath:    "topics unarchive",
+		Group:      "topics",
+		Method:     "POST",
+		Path:       "/topics/{topic_id}/unarchive",
+		PathParams: []string{"topic_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"topics", "write"},
+		Adjacent:   []string{"topics.archive", "topics.create", "topics.get", "topics.list", "topics.patch", "topics.restore", "topics.timeline", "topics.tombstone", "topics.workspace"},
 	},
 	{
 		CommandID:  "topics.workspace",
@@ -552,7 +621,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"topics", "workspace"},
-		Adjacent:   []string{"topics.create", "topics.get", "topics.list", "topics.patch", "topics.timeline"},
+		Adjacent:   []string{"topics.archive", "topics.create", "topics.get", "topics.list", "topics.patch", "topics.restore", "topics.timeline", "topics.tombstone", "topics.unarchive"},
 	},
 }
 
@@ -720,6 +789,10 @@ func (c *Client) CardsArchive(ctx context.Context, pathParams map[string]string,
 	return c.Invoke(ctx, "cards.archive", pathParams, opts)
 }
 
+func (c *Client) CardsCreate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "cards.create", nil, opts)
+}
+
 func (c *Client) CardsGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "cards.get", pathParams, opts)
 }
@@ -808,6 +881,10 @@ func (c *Client) PacketsReviewsCreate(ctx context.Context, opts RequestOptions) 
 	return c.Invoke(ctx, "packets.reviews.create", nil, opts)
 }
 
+func (c *Client) RefEdgesList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "ref_edges.list", nil, opts)
+}
+
 func (c *Client) ThreadsContext(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "threads.context", pathParams, opts)
 }
@@ -828,6 +905,10 @@ func (c *Client) ThreadsWorkspace(ctx context.Context, pathParams map[string]str
 	return c.Invoke(ctx, "threads.workspace", pathParams, opts)
 }
 
+func (c *Client) TopicsArchive(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "topics.archive", pathParams, opts)
+}
+
 func (c *Client) TopicsCreate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "topics.create", nil, opts)
 }
@@ -844,8 +925,20 @@ func (c *Client) TopicsPatch(ctx context.Context, pathParams map[string]string, 
 	return c.Invoke(ctx, "topics.patch", pathParams, opts)
 }
 
+func (c *Client) TopicsRestore(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "topics.restore", pathParams, opts)
+}
+
 func (c *Client) TopicsTimeline(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "topics.timeline", pathParams, opts)
+}
+
+func (c *Client) TopicsTombstone(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "topics.tombstone", pathParams, opts)
+}
+
+func (c *Client) TopicsUnarchive(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "topics.unarchive", pathParams, opts)
 }
 
 func (c *Client) TopicsWorkspace(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {

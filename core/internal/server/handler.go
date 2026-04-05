@@ -95,6 +95,7 @@ type PrimitiveStore interface {
 	ListBoardCardHistory(ctx context.Context, cardID string) ([]map[string]any, error)
 	ListBoardMembershipsByThread(ctx context.Context, threadID string) ([]primitives.BoardMembership, error)
 	ListRefEdgesBySource(ctx context.Context, sourceType, sourceID string) ([]primitives.RefEdge, error)
+	ListRefEdgesByTarget(ctx context.Context, targetType, targetID string) ([]primitives.RefEdge, error)
 	ListTopics(ctx context.Context, filter primitives.TopicListFilter) ([]map[string]any, string, error)
 	CreateTopic(ctx context.Context, actorID string, topic map[string]any) (primitives.TopicPatchResult, error)
 	GetTopic(ctx context.Context, topicID string) (map[string]any, error)
@@ -1606,12 +1607,19 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 	})
 
-	registerRoute("/cards", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
-			return
+	registerRoute("/ref-edges", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
+		handleListRefEdges(w, r, opts)
+	})
+
+	registerRoute("/cards", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodGet, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			handleListCards(w, r, opts)
+		case http.MethodPost:
+			handleCreateCardGlobal(w, r, opts)
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET and POST are supported")
 		}
-		handleListCards(w, r, opts)
 	})
 
 	registerRoute("/cards/", func(r *http.Request) routeAccessRequirement {

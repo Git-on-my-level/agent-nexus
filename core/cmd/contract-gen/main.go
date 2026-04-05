@@ -182,8 +182,8 @@ func (c *oarMaybeFieldContainer) UnmarshalYAML(value *yaml.Node) error {
 func (d *oarSchemaDocument) UnmarshalYAML(value *yaml.Node) error {
 	type alias oarSchemaDocument
 	var decoded struct {
-		alias           `yaml:",inline"`
-		LegacySnapshots map[string]oarMaybeFieldContainer `yaml:"snapshots"`
+		alias              `yaml:",inline"`
+		LegacyThreadFields map[string]oarMaybeFieldContainer `yaml:"snapshots"`
 	}
 	if err := value.Decode(&decoded); err != nil {
 		return err
@@ -194,7 +194,7 @@ func (d *oarSchemaDocument) UnmarshalYAML(value *yaml.Node) error {
 		d.Threads["thread"] = source
 		return nil
 	}
-	if source, ok := decoded.LegacySnapshots["thread"]; ok {
+	if source, ok := decoded.LegacyThreadFields["thread"]; ok {
 		d.Threads["thread"] = source
 	}
 	return nil

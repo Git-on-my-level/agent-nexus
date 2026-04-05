@@ -1487,6 +1487,79 @@ func createBoardThreadViaHTTP(t *testing.T, h primitivesTestHarness, title strin
 	})
 }
 
+func TestPostCardsGlobalAndRefEdgesForwardLookup(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	memberThreadID := createBoardThreadViaHTTP(t, h, "Global card topic thread")
+	memberDocumentID := createBoardDocumentViaHTTP(t, h, memberThreadID, "Global card doc")
+
+	createBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
+		"actor_id":"actor-1",
+		"board":{
+			"title":"Global POST Board",
+			"status":"active",
+			"document_refs":["document:`+memberDocumentID+`"],
+			"pinned_refs":["thread:`+memberThreadID+`"],
+			"provenance":{"sources":["test:boards-global-card"]}
+		}
+	}`, http.StatusCreated)
+	defer createBoardResp.Body.Close()
+
+	var boardEnvelope struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(createBoardResp.Body).Decode(&boardEnvelope); err != nil {
+		t.Fatalf("decode create board: %v", err)
+	}
+	boardID := asString(boardEnvelope.Board["id"])
+	if boardID == "" {
+		t.Fatal("expected board id")
+	}
+	boardUpdatedAt := asString(boardEnvelope.Board["updated_at"])
+
+	globalCardResp := postJSONExpectStatus(t, h.baseURL+"/cards", `{
+		"actor_id":"actor-1",
+		"board_id":"`+boardID+`",
+		"if_board_updated_at":"`+boardUpdatedAt+`",
+		"title":"Created via POST /cards",
+		"column_key":"backlog",
+		"related_refs":["thread:`+memberThreadID+`"]
+	}`, http.StatusCreated)
+	defer globalCardResp.Body.Close()
+
+	var cardOut struct {
+		Card map[string]any `json:"card"`
+	}
+	if err := json.NewDecoder(globalCardResp.Body).Decode(&cardOut); err != nil {
+		t.Fatalf("decode global card create: %v", err)
+	}
+	cardID := asString(cardOut.Card["id"])
+	if cardID == "" {
+		t.Fatal("expected card id from global create")
+	}
+
+	refResp, err := http.Get(h.baseURL + "/ref-edges?source_type=card&source_id=" + cardID)
+	if err != nil {
+		t.Fatalf("GET ref-edges: %v", err)
+	}
+	defer refResp.Body.Close()
+	if refResp.StatusCode != http.StatusOK {
+		t.Fatalf("ref-edges: status %d", refResp.StatusCode)
+	}
+	var refPayload struct {
+		RefEdges []map[string]any `json:"ref_edges"`
+	}
+	if err := json.NewDecoder(refResp.Body).Decode(&refPayload); err != nil {
+		t.Fatalf("decode ref-edges: %v", err)
+	}
+	if len(refPayload.RefEdges) == 0 {
+		t.Fatal("expected ref_edges rows for new card")
+	}
+}
+
 func createBoardDocumentViaHTTP(t *testing.T, h primitivesTestHarness, threadID, title string) string {
 	t.Helper()
 

@@ -42,8 +42,13 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 - `topics patch` (command): Patch topic
 - `topics timeline` (command): Get topic timeline
 - `topics workspace` (command): Get topic workspace (primary operator coordination read)
+- `topics archive` (command): Archive topic
+- `topics unarchive` (command): Unarchive topic
+- `topics tombstone` (command): Tombstone topic
+- `topics restore` (command): Restore topic from tombstone
 - `cards list` (command): List cards
 - `cards get` (command): Get card
+- `cards create` (command): Create card (global path)
 - `cards patch` (command): Patch card
 - `cards move` (command): Move card
 - `cards archive` (command): Archive card
@@ -1102,11 +1107,15 @@ Manage durable work subjects
 Generated Help: topics
 
 Commands:
+  topics archive           Archive topic
   topics create            Create topic
   topics get               Get topic
   topics list              List topics
   topics patch             Patch topic
+  topics restore           Restore topic from tombstone
   topics timeline          Get topic timeline
+  topics tombstone         Tombstone topic
+  topics unarchive         Unarchive topic
   topics workspace         Get topic workspace (primary operator coordination read)
 
 Primary operator coordination:
@@ -1131,6 +1140,7 @@ Generated Help: cards
 
 Commands:
   cards archive            Archive card
+  cards create             Create card (global path)
   cards get                Get card
   cards list               List cards
   cards move               Move card
@@ -1472,7 +1482,7 @@ Generated Help: topics list
 - Output: Returns `{ topics }`.
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `topics`
-- Adjacent commands: `topics create`, `topics get`, `topics patch`, `topics timeline`, `topics workspace`
+- Adjacent commands: `topics archive`, `topics create`, `topics get`, `topics patch`, `topics restore`, `topics timeline`, `topics tombstone`, `topics unarchive`, `topics workspace`
 
 
 Global flags:
@@ -1497,7 +1507,7 @@ Generated Help: topics get
 - Output: Returns `{ topic }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `topics`
-- Adjacent commands: `topics create`, `topics list`, `topics patch`, `topics timeline`, `topics workspace`
+- Adjacent commands: `topics archive`, `topics create`, `topics list`, `topics patch`, `topics restore`, `topics timeline`, `topics tombstone`, `topics unarchive`, `topics workspace`
 
 Inputs:
   Required:
@@ -1526,7 +1536,7 @@ Generated Help: topics create
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `topics`, `write`
 - Agent notes: Replay-safe when the same request key and body are reused.
-- Adjacent commands: `topics get`, `topics list`, `topics patch`, `topics timeline`, `topics workspace`
+- Adjacent commands: `topics archive`, `topics get`, `topics list`, `topics patch`, `topics restore`, `topics timeline`, `topics tombstone`, `topics unarchive`, `topics workspace`
 
 Inputs:
   Required:
@@ -1566,7 +1576,7 @@ Generated Help: topics patch
 - Output: Returns `{ topic }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `topics`, `write`, `concurrency`
-- Adjacent commands: `topics create`, `topics get`, `topics list`, `topics timeline`, `topics workspace`
+- Adjacent commands: `topics archive`, `topics create`, `topics get`, `topics list`, `topics restore`, `topics timeline`, `topics tombstone`, `topics unarchive`, `topics workspace`
 
 Inputs:
   Required:
@@ -1608,7 +1618,7 @@ Generated Help: topics timeline
 - Output: Returns `{ topic, events, artifacts, cards, documents, threads }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `topics`, `timeline`
-- Adjacent commands: `topics create`, `topics get`, `topics list`, `topics patch`, `topics workspace`
+- Adjacent commands: `topics archive`, `topics create`, `topics get`, `topics list`, `topics patch`, `topics restore`, `topics tombstone`, `topics unarchive`, `topics workspace`
 
 Inputs:
   Required:
@@ -1636,7 +1646,7 @@ Generated Help: topics workspace
 - Output: Returns `{ topic, cards, boards, documents, threads, inbox, projection_freshness, generated_at }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `topics`, `workspace`
-- Adjacent commands: `topics create`, `topics get`, `topics list`, `topics patch`, `topics timeline`
+- Adjacent commands: `topics archive`, `topics create`, `topics get`, `topics list`, `topics patch`, `topics restore`, `topics timeline`, `topics tombstone`, `topics unarchive`
 
 Inputs:
   Required:
@@ -1645,6 +1655,127 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: oar --json topics workspace ... ; oar topics workspace ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `topics archive`
+
+Archive topic
+
+```text
+Generated Help: topics archive
+
+- Command ID: `topics.archive`
+- CLI path: `topics archive`
+- HTTP: `POST /topics/{topic_id}/archive`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Soft-archive a topic (orthogonal to business status; clears default list visibility).
+- Output: Returns `{ topic }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `topics`, `write`
+- Adjacent commands: `topics create`, `topics get`, `topics list`, `topics patch`, `topics restore`, `topics timeline`, `topics tombstone`, `topics unarchive`, `topics workspace`
+
+Inputs:
+  Required:
+  - path `topic_id`
+  Optional:
+  - body `actor_id` (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json topics archive ... ; oar topics archive ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `topics unarchive`
+
+Unarchive topic
+
+```text
+Generated Help: topics unarchive
+
+- Command ID: `topics.unarchive`
+- CLI path: `topics unarchive`
+- HTTP: `POST /topics/{topic_id}/unarchive`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Clear archived_at on a topic (restore default list visibility).
+- Output: Returns `{ topic }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `topics`, `write`
+- Adjacent commands: `topics archive`, `topics create`, `topics get`, `topics list`, `topics patch`, `topics restore`, `topics timeline`, `topics tombstone`, `topics workspace`
+
+Inputs:
+  Required:
+  - path `topic_id`
+  Optional:
+  - body `actor_id` (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json topics unarchive ... ; oar topics unarchive ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `topics tombstone`
+
+Tombstone topic
+
+```text
+Generated Help: topics tombstone
+
+- Command ID: `topics.tombstone`
+- CLI path: `topics tombstone`
+- HTTP: `POST /topics/{topic_id}/tombstone`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Mark topic as tombstoned with an explicit operator reason.
+- Output: Returns `{ topic }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `topics`, `write`
+- Adjacent commands: `topics archive`, `topics create`, `topics get`, `topics list`, `topics patch`, `topics restore`, `topics timeline`, `topics unarchive`, `topics workspace`
+
+Inputs:
+  Required:
+  - path `topic_id`
+  - body `reason` (string)
+  Optional:
+  - body `actor_id` (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json topics tombstone ... ; oar topics tombstone ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `topics restore`
+
+Restore topic from tombstone
+
+```text
+Generated Help: topics restore
+
+- Command ID: `topics.restore`
+- CLI path: `topics restore`
+- HTTP: `POST /topics/{topic_id}/restore`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Clear tombstone fields on a topic after an explicit restore action.
+- Output: Returns `{ topic }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `topics`, `write`
+- Adjacent commands: `topics archive`, `topics create`, `topics get`, `topics list`, `topics patch`, `topics timeline`, `topics tombstone`, `topics unarchive`, `topics workspace`
+
+Inputs:
+  Required:
+  - path `topic_id`
+  Optional:
+  - body `actor_id` (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json topics restore ... ; oar topics restore ... --json
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1664,7 +1795,7 @@ Generated Help: cards list
 - Output: Returns `{ cards }`.
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `cards`
-- Adjacent commands: `cards archive`, `cards get`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards timeline`
+- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards timeline`
 
 
 Global flags:
@@ -1689,7 +1820,7 @@ Generated Help: cards get
 - Output: Returns `{ card }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `cards`
-- Adjacent commands: `cards archive`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards timeline`
+- Adjacent commands: `cards archive`, `cards create`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards timeline`
 
 Inputs:
   Required:
@@ -1698,6 +1829,56 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: oar --json cards get ... ; oar cards get ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `cards create`
+
+Create card (global path)
+
+```text
+Generated Help: cards create
+
+- Command ID: `cards.create`
+- CLI path: `cards create`
+- HTTP: `POST /cards`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Create a card with the same body as POST /boards/{board_id}/cards, but supply board_id or board_ref here instead of a path segment. Interoperable with board-scoped create.
+- Output: Returns `{ board, card }` (same as board-scoped create).
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `cards`, `boards`, `write`
+- Adjacent commands: `cards archive`, `cards get`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards timeline`
+
+Inputs:
+  Required:
+  - body `card.assignee_refs` (list<any>)
+  - body `card.column_key` (string)
+  - body `card.provenance.sources` (list<string>)
+  - body `card.related_refs` (list<any>)
+  - body `card.resolution_refs` (list<any>)
+  - body `card.risk` (string)
+  - body `card.summary` (string)
+  - body `card.title` (string)
+  Optional:
+  - body `board_id` (string)
+  - body `board_ref` (any)
+  - body `card.after_card_id` (string)
+  - body `card.before_card_id` (string)
+  - body `card.definition_of_done` (list<string>)
+  - body `card.document_ref` (string)
+  - body `card.due_at` (datetime)
+  - body `card.id` (string)
+  - body `card.provenance.by_field` (object)
+  - body `card.provenance.notes` (string)
+  - body `card.resolution` (string)
+  - body `card.topic_ref` (string)
+  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `oar boards get --board-id <board-id>`, `oar boards workspace --board-id <board-id>`, or the latest board mutation response.
+  Enum values: card.column_key: backlog, blocked, done, in_progress, ready, review; card.resolution: canceled, done; card.risk: critical, high, low, medium
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json cards create ... ; oar cards create ... --json
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -1717,7 +1898,7 @@ Generated Help: cards patch
 - Output: Returns `{ card }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `cards`, `write`, `concurrency`
-- Adjacent commands: `cards archive`, `cards get`, `cards list`, `cards move`, `cards purge`, `cards restore`, `cards timeline`
+- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards list`, `cards move`, `cards purge`, `cards restore`, `cards timeline`
 
 Inputs:
   Required:
@@ -1762,7 +1943,7 @@ Generated Help: cards move
 - Output: Returns `{ card }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `cards`, `boards`, `write`
-- Adjacent commands: `cards archive`, `cards get`, `cards list`, `cards patch`, `cards purge`, `cards restore`, `cards timeline`
+- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards list`, `cards patch`, `cards purge`, `cards restore`, `cards timeline`
 
 Inputs:
   Required:
@@ -1805,7 +1986,7 @@ Generated Help: cards archive
 - Output: Returns `{ board, card }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `cards`, `write`
-- Adjacent commands: `cards get`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards timeline`
+- Adjacent commands: `cards create`, `cards get`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards timeline`
 
 Inputs:
   Required:
@@ -1836,7 +2017,7 @@ Generated Help: cards purge
 - Output: Returns `{ purged, card_id }`.
 - Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `cards`, `write`
-- Adjacent commands: `cards archive`, `cards get`, `cards list`, `cards move`, `cards patch`, `cards restore`, `cards timeline`
+- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards list`, `cards move`, `cards patch`, `cards restore`, `cards timeline`
 
 Inputs:
   Required:
@@ -1866,7 +2047,7 @@ Generated Help: cards restore
 - Output: Returns `{ board, card }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `cards`, `write`
-- Adjacent commands: `cards archive`, `cards get`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards timeline`
+- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards timeline`
 
 Inputs:
   Required:
@@ -1897,7 +2078,7 @@ Generated Help: cards timeline
 - Output: Returns `{ card, events, artifacts, cards, documents, threads }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `cards`, `timeline`
-- Adjacent commands: `cards archive`, `cards get`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`
+- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`
 
 Inputs:
   Required:
@@ -2134,6 +2315,8 @@ Inputs:
   - body `card.summary` (string)
   - body `card.title` (string)
   Optional:
+  - body `board_id` (string)
+  - body `board_ref` (any)
   - body `card.after_card_id` (string)
   - body `card.before_card_id` (string)
   - body `card.definition_of_done` (list<string>)

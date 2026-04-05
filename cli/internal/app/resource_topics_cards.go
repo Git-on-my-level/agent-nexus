@@ -10,9 +10,12 @@ import (
 )
 
 var topicsSubcommandSpec = subcommandSpec{
-	command:  "topics",
-	valid:    []string{"list", "get", "create", "patch", "timeline", "workspace"},
-	examples: []string{"oar topics list", "oar topics create --from-file topic.json", "oar topics workspace --topic-id <topic-id>"},
+	command: "topics",
+	valid: []string{
+		"list", "get", "create", "patch", "timeline", "workspace",
+		"archive", "unarchive", "tombstone", "restore",
+	},
+	examples: []string{"oar topics list", "oar topics create --from-file topic.json", "oar topics workspace --topic-id <topic-id>", "oar topics archive --topic-id <topic-id>"},
 	aliases: map[string]string{
 		"ls":     "list",
 		"show":   "get",
@@ -22,8 +25,8 @@ var topicsSubcommandSpec = subcommandSpec{
 
 var cardsSubcommandSpec = subcommandSpec{
 	command:  "cards",
-	valid:    []string{"list", "get", "patch", "move", "archive", "purge", "restore", "timeline"},
-	examples: []string{"oar cards list", "oar cards get --card-id <card-id>", "oar cards timeline --card-id <card-id>", "oar cards move --card-id <card-id> --from-file move.json", "oar cards archive --card-id <card-id>"},
+	valid:    []string{"list", "get", "create", "patch", "move", "archive", "purge", "restore", "timeline"},
+	examples: []string{"oar cards list", "oar cards create --from-file card.json", "oar cards get --card-id <card-id>", "oar cards timeline --card-id <card-id>", "oar cards move --card-id <card-id> --from-file move.json", "oar cards archive --card-id <card-id>"},
 	aliases: map[string]string{
 		"ls":     "list",
 		"show":   "get",
@@ -78,6 +81,34 @@ func (a *App) runTopicsCommand(ctx context.Context, args []string, cfg config.Re
 		}
 		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "topics workspace", "topics.workspace", "topic_id", id, topicIDLookupSpec, nil, nil)
 		return result, "topics workspace", callErr
+	case "archive":
+		id, body, err := a.parseTopicIDAndOptionalJSONBody(args[1:], "topics archive")
+		if err != nil {
+			return nil, "topics archive", err
+		}
+		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "topics archive", "topics.archive", "topic_id", id, topicIDLookupSpec, nil, body)
+		return result, "topics archive", callErr
+	case "unarchive":
+		id, body, err := a.parseTopicIDAndOptionalJSONBody(args[1:], "topics unarchive")
+		if err != nil {
+			return nil, "topics unarchive", err
+		}
+		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "topics unarchive", "topics.unarchive", "topic_id", id, topicIDLookupSpec, nil, body)
+		return result, "topics unarchive", callErr
+	case "tombstone":
+		id, body, err := a.parseTopicIDAndBodyInput(args[1:], "topics tombstone")
+		if err != nil {
+			return nil, "topics tombstone", err
+		}
+		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "topics tombstone", "topics.tombstone", "topic_id", id, topicIDLookupSpec, nil, body)
+		return result, "topics tombstone", callErr
+	case "restore":
+		id, body, err := a.parseTopicIDAndOptionalJSONBody(args[1:], "topics restore")
+		if err != nil {
+			return nil, "topics restore", err
+		}
+		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "topics restore", "topics.restore", "topic_id", id, topicIDLookupSpec, nil, body)
+		return result, "topics restore", callErr
 	default:
 		return nil, "topics", topicsSubcommandSpec.unknownError(args[0])
 	}
@@ -95,6 +126,13 @@ func (a *App) runCardsCommand(ctx context.Context, args []string, cfg config.Res
 	case "list":
 		result, err := a.invokeTypedJSON(ctx, cfg, "cards list", "cards.list", nil, nil, nil)
 		return result, "cards list", err
+	case "create":
+		body, err := a.parseJSONBodyInput(args[1:], "cards create")
+		if err != nil {
+			return nil, "cards create", err
+		}
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "cards create", "cards.create", nil, nil, body)
+		return result, "cards create", callErr
 	case "get":
 		id, err := parseIDArg(args[1:], "card-id", "card id")
 		if err != nil {
@@ -173,6 +211,8 @@ func (a *App) normalizeTopicMutationBody(ctx context.Context, cfg config.Resolve
 			return err
 		}
 		return nil
+	case "topics.tombstone":
+		return nil
 	default:
 		return nil
 	}
@@ -180,6 +220,22 @@ func (a *App) normalizeTopicMutationBody(ctx context.Context, cfg config.Resolve
 
 func (a *App) normalizeCardMutationBody(ctx context.Context, cfg config.Resolved, commandID string, body map[string]any) error {
 	switch commandID {
+	case "cards.create":
+		card := nestedMutationMap(body, "card")
+		if card == nil {
+			return nil
+		}
+		if err := a.normalizeMutationFields(ctx, cfg, body, []mutationFieldSpec{
+			{key: "board_ref", kind: mutationFieldTypedRef},
+		}); err != nil {
+			return err
+		}
+		return a.normalizeMutationFields(ctx, cfg, card, []mutationFieldSpec{
+			{key: "assignee_refs", kind: mutationFieldTypedRefList},
+			{key: "related_refs", kind: mutationFieldTypedRefList},
+			{key: "topic_ref", kind: mutationFieldTypedRef},
+			{key: "document_ref", kind: mutationFieldTypedRef},
+		})
 	case "cards.patch":
 		patch := nestedMutationMap(body, "patch")
 		if patch == nil {
@@ -225,6 +281,34 @@ func (a *App) normalizeMutationCommandBodyLegacy(ctx context.Context, cfg config
 		return a.normalizeMutationFields(ctx, cfg, nestedMutationMap(body, "patch"), []mutationFieldSpec{
 			{key: "pinned_refs", kind: mutationFieldTypedRefList},
 		})
+	case "cards.create":
+		rawBoardID := strings.TrimSpace(anyString(body["board_id"]))
+		if rawBoardID == "" {
+			refStr := strings.TrimSpace(anyString(body["board_ref"]))
+			if strings.HasPrefix(refStr, "board:") {
+				rawBoardID = strings.TrimSpace(strings.TrimPrefix(refStr, "board:"))
+			}
+		}
+		if rawBoardID == "" {
+			return nil
+		}
+		resolvedBoard, err := a.resolveMaybeBoardID(ctx, cfg, rawBoardID)
+		if err != nil {
+			return err
+		}
+		if err := a.normalizeBoardMutationCardAnchorField(ctx, cfg, resolvedBoard, body, "before_card_id"); err != nil {
+			return err
+		}
+		if err := a.normalizeBoardMutationCardAnchorField(ctx, cfg, resolvedBoard, body, "after_card_id"); err != nil {
+			return err
+		}
+		if cardNest, ok := body["card"].(map[string]any); ok && cardNest != nil {
+			if err := a.normalizeBoardMutationCardAnchorField(ctx, cfg, resolvedBoard, cardNest, "before_card_id"); err != nil {
+				return err
+			}
+			return a.normalizeBoardMutationCardAnchorField(ctx, cfg, resolvedBoard, cardNest, "after_card_id")
+		}
+		return nil
 	case "boards.cards.add", "boards.cards.create":
 		if pathParams == nil {
 			return nil
@@ -313,6 +397,56 @@ func (a *App) normalizeMutationCommandBodyLegacy(ctx context.Context, cfg config
 	}
 }
 
+func (a *App) parseTopicIDAndBodyInput(args []string, commandName string) (string, map[string]any, error) {
+	id, body, err := a.parseIDAndBodyInput(args, "topic-id", "topic id", commandName)
+	if err != nil {
+		return "", nil, err
+	}
+	bodyMap, ok := body.(map[string]any)
+	if !ok {
+		return "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `oar %s` must be an object", commandName))
+	}
+	return id, bodyMap, nil
+}
+
+func (a *App) parseTopicIDAndOptionalJSONBody(args []string, commandName string) (string, map[string]any, error) {
+	fs := newSilentFlagSet(commandName)
+	var topicIDFlag, fromFile trackedString
+	fs.Var(&topicIDFlag, "topic-id", "Topic id")
+	fs.Var(&fromFile, "from-file", "Load JSON body from file path")
+	if err := fs.Parse(args); err != nil {
+		return "", nil, errnorm.Usage("invalid_flags", err.Error())
+	}
+	positionals := fs.Args()
+	id := strings.TrimSpace(topicIDFlag.value)
+	if id == "" && len(positionals) > 0 {
+		id = strings.TrimSpace(positionals[0])
+		positionals = positionals[1:]
+	}
+	if err := validateID(id, "topic id"); err != nil {
+		return "", nil, err
+	}
+	if len(positionals) > 0 {
+		return "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `oar %s`", commandName))
+	}
+	payload, err := a.readBodyInput(strings.TrimSpace(fromFile.value))
+	if err != nil {
+		return "", nil, err
+	}
+	if len(payload) == 0 {
+		return id, map[string]any{}, nil
+	}
+	decoded, err := decodeJSONPayload(payload)
+	if err != nil {
+		return "", nil, err
+	}
+	bodyMap, ok := decoded.(map[string]any)
+	if !ok {
+		return "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `oar %s` must be an object", commandName))
+	}
+	return id, bodyMap, nil
+}
+
 func (a *App) parseCardIDAndOptionalJSONBody(args []string, commandName string) (string, map[string]any, error) {
 	fs := newSilentFlagSet(commandName)
 	var cardIDFlag, fromFile trackedString
@@ -349,4 +483,44 @@ func (a *App) parseCardIDAndOptionalJSONBody(args []string, commandName string) 
 		return "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `oar %s` must be an object", commandName))
 	}
 	return id, bodyMap, nil
+}
+
+var refEdgesSubcommandSpec = subcommandSpec{
+	command:  "ref-edges",
+	valid:    []string{"list"},
+	examples: []string{`oar ref-edges list --target-type card --target-id <card-id>`},
+}
+
+func (a *App) runRefEdgesCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
+	if len(args) == 0 || isHelpToken(args[0]) {
+		if text, ok := generatedHelpText("ref-edges"); ok {
+			return &commandResult{Text: text}, "ref-edges", nil
+		}
+		return nil, "ref-edges", refEdgesSubcommandSpec.requiredError()
+	}
+	sub := refEdgesSubcommandSpec.normalize(args[0])
+	if sub != "list" {
+		return nil, "ref-edges", refEdgesSubcommandSpec.unknownError(args[0])
+	}
+	fs := newSilentFlagSet("ref-edges list")
+	var sourceType, sourceID, targetType, targetID, edgeType trackedString
+	fs.Var(&sourceType, "source-type", "Index source_type filter")
+	fs.Var(&sourceID, "source-id", "Index source_id filter")
+	fs.Var(&targetType, "target-type", "Index target_type filter (reverse lookup)")
+	fs.Var(&targetID, "target-id", "Index target_id filter (reverse lookup)")
+	fs.Var(&edgeType, "edge-type", "Optional edge_type filter")
+	if err := fs.Parse(args[1:]); err != nil {
+		return nil, "ref-edges list", errnorm.Usage("invalid_flags", err.Error())
+	}
+	if len(fs.Args()) > 0 {
+		return nil, "ref-edges list", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar ref-edges list`")
+	}
+	q := make([]queryParam, 0, 5)
+	addSingleQuery(&q, "source_type", strings.TrimSpace(sourceType.value))
+	addSingleQuery(&q, "source_id", strings.TrimSpace(sourceID.value))
+	addSingleQuery(&q, "target_type", strings.TrimSpace(targetType.value))
+	addSingleQuery(&q, "target_id", strings.TrimSpace(targetID.value))
+	addSingleQuery(&q, "edge_type", strings.TrimSpace(edgeType.value))
+	result, err := a.invokeTypedJSON(ctx, cfg, "ref-edges list", "ref_edges.list", nil, q, nil)
+	return result, "ref-edges list", err
 }

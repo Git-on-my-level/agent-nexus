@@ -4,7 +4,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.3.0`
-- Concepts: `19`
+- Concepts: `20`
 
 ## `artifacts`
 
@@ -16,7 +16,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `boards`
 
-- Commands: `9`
+- Commands: `10`
 - Command IDs:
   - `boards.cards.create`
   - `boards.cards.get`
@@ -26,16 +26,18 @@ Generated from `contracts/oar-openapi.yaml`.
   - `boards.list`
   - `boards.patch`
   - `boards.workspace`
+  - `cards.create`
   - `cards.move`
 
 ## `cards`
 
-- Commands: `11`
+- Commands: `12`
 - Command IDs:
   - `boards.cards.create`
   - `boards.cards.get`
   - `boards.cards.list`
   - `cards.archive`
+  - `cards.create`
   - `cards.get`
   - `cards.list`
   - `cards.move`
@@ -99,8 +101,9 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `inspection`
 
-- Commands: `3`
+- Commands: `4`
 - Command IDs:
+  - `ref_edges.list`
   - `threads.context`
   - `threads.inspect`
   - `threads.list`
@@ -117,6 +120,12 @@ Generated from `contracts/oar-openapi.yaml`.
 - Commands: `1`
 - Command IDs:
   - `meta.readyz`
+
+## `refs`
+
+- Commands: `1`
+- Command IDs:
+  - `ref_edges.list`
 
 ## `revisions`
 
@@ -146,13 +155,17 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `topics`
 
-- Commands: `6`
+- Commands: `10`
 - Command IDs:
+  - `topics.archive`
   - `topics.create`
   - `topics.get`
   - `topics.list`
   - `topics.patch`
+  - `topics.restore`
   - `topics.timeline`
+  - `topics.tombstone`
+  - `topics.unarchive`
   - `topics.workspace`
 
 ## `workspace`
@@ -165,13 +178,14 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `write`
 
-- Commands: `15`
+- Commands: `20`
 - Command IDs:
   - `artifacts.create`
   - `boards.cards.create`
   - `boards.create`
   - `boards.patch`
   - `cards.archive`
+  - `cards.create`
   - `cards.move`
   - `cards.patch`
   - `cards.purge`
@@ -180,6 +194,10 @@ Generated from `contracts/oar-openapi.yaml`.
   - `docs.revisions.create`
   - `events.create`
   - `inbox.acknowledge`
+  - `topics.archive`
   - `topics.create`
   - `topics.patch`
+  - `topics.restore`
+  - `topics.tombstone`
+  - `topics.unarchive`
 

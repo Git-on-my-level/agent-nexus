@@ -242,6 +242,14 @@ export const commandRegistry: CommandSpec[] = [
       ],
       "optional": [
         {
+          "name": "board_id",
+          "type": "string"
+        },
+        {
+          "name": "board_ref",
+          "type": "any"
+        },
+        {
           "name": "card.after_card_id",
           "type": "string"
         },
@@ -712,6 +720,7 @@ export const commandRegistry: CommandSpec[] = [
       "card_id"
     ],
     "adjacent_commands": [
+      "cards.create",
       "cards.get",
       "cards.list",
       "cards.move",
@@ -722,6 +731,155 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "go_method": "CardsArchive",
     "ts_method": "cardsArchive"
+  },
+  {
+    "command_id": "cards.create",
+    "cli_path": "cards create",
+    "group": "cards",
+    "method": "POST",
+    "path": "/cards",
+    "operation_id": "createCard",
+    "summary": "Create card (global path)",
+    "why": "Create a card with the same body as POST /boards/{board_id}/cards, but supply board_id or board_ref here instead of a path segment. Interoperable with board-scoped create.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ board, card }` (same as board-scoped create).",
+    "error_codes": [
+      "auth_required",
+      "invalid_request",
+      "invalid_token",
+      "not_found",
+      "conflict"
+    ],
+    "concepts": [
+      "cards",
+      "boards",
+      "write"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "body_schema": {
+      "required": [
+        {
+          "name": "card.assignee_refs",
+          "type": "list\u003cany\u003e"
+        },
+        {
+          "name": "card.column_key",
+          "type": "string",
+          "enum_values": [
+            "backlog",
+            "blocked",
+            "done",
+            "in_progress",
+            "ready",
+            "review"
+          ]
+        },
+        {
+          "name": "card.provenance.sources",
+          "type": "list\u003cstring\u003e"
+        },
+        {
+          "name": "card.related_refs",
+          "type": "list\u003cany\u003e"
+        },
+        {
+          "name": "card.resolution_refs",
+          "type": "list\u003cany\u003e"
+        },
+        {
+          "name": "card.risk",
+          "type": "string",
+          "enum_values": [
+            "critical",
+            "high",
+            "low",
+            "medium"
+          ]
+        },
+        {
+          "name": "card.summary",
+          "type": "string"
+        },
+        {
+          "name": "card.title",
+          "type": "string"
+        }
+      ],
+      "optional": [
+        {
+          "name": "board_id",
+          "type": "string"
+        },
+        {
+          "name": "board_ref",
+          "type": "any"
+        },
+        {
+          "name": "card.after_card_id",
+          "type": "string"
+        },
+        {
+          "name": "card.before_card_id",
+          "type": "string"
+        },
+        {
+          "name": "card.definition_of_done",
+          "type": "list\u003cstring\u003e"
+        },
+        {
+          "name": "card.document_ref",
+          "type": "string"
+        },
+        {
+          "name": "card.due_at",
+          "type": "datetime"
+        },
+        {
+          "name": "card.id",
+          "type": "string"
+        },
+        {
+          "name": "card.provenance.by_field",
+          "type": "object"
+        },
+        {
+          "name": "card.provenance.notes",
+          "type": "string"
+        },
+        {
+          "name": "card.resolution",
+          "type": "string",
+          "enum_values": [
+            "canceled",
+            "done"
+          ]
+        },
+        {
+          "name": "card.topic_ref",
+          "type": "string"
+        },
+        {
+          "name": "if_board_updated_at",
+          "type": "datetime"
+        }
+      ]
+    },
+    "adjacent_commands": [
+      "cards.archive",
+      "cards.get",
+      "cards.list",
+      "cards.move",
+      "cards.patch",
+      "cards.purge",
+      "cards.restore",
+      "cards.timeline"
+    ],
+    "go_method": "CardsCreate",
+    "ts_method": "cardsCreate"
   },
   {
     "command_id": "cards.get",
@@ -752,6 +910,7 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "adjacent_commands": [
       "cards.archive",
+      "cards.create",
       "cards.list",
       "cards.move",
       "cards.patch",
@@ -787,6 +946,7 @@ export const commandRegistry: CommandSpec[] = [
     "surface": "canonical",
     "adjacent_commands": [
       "cards.archive",
+      "cards.create",
       "cards.get",
       "cards.move",
       "cards.patch",
@@ -912,6 +1072,7 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "adjacent_commands": [
       "cards.archive",
+      "cards.create",
       "cards.get",
       "cards.list",
       "cards.patch",
@@ -1029,6 +1190,7 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "adjacent_commands": [
       "cards.archive",
+      "cards.create",
       "cards.get",
       "cards.list",
       "cards.move",
@@ -1079,6 +1241,7 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "adjacent_commands": [
       "cards.archive",
+      "cards.create",
       "cards.get",
       "cards.list",
       "cards.move",
@@ -1133,6 +1296,7 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "adjacent_commands": [
       "cards.archive",
+      "cards.create",
       "cards.get",
       "cards.list",
       "cards.move",
@@ -1173,6 +1337,7 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "adjacent_commands": [
       "cards.archive",
+      "cards.create",
       "cards.get",
       "cards.list",
       "cards.move",
@@ -1914,6 +2079,34 @@ export const commandRegistry: CommandSpec[] = [
     "ts_method": "packetsReviewsCreate"
   },
   {
+    "command_id": "ref_edges.list",
+    "cli_path": "ref-edges list",
+    "group": "ref-edges",
+    "method": "GET",
+    "path": "/ref-edges",
+    "operation_id": "listRefEdges",
+    "summary": "List ref edges (forward or reverse indexed lookup)",
+    "why": "Query the write-through ref index by source or target (mutually exclusive); reverse lookup uses target_type+target_id.",
+    "input_mode": "query",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ ref_edges }`.",
+    "error_codes": [
+      "auth_required",
+      "invalid_request",
+      "invalid_token"
+    ],
+    "concepts": [
+      "refs",
+      "inspection"
+    ],
+    "stability": "beta",
+    "surface": "diagnostic",
+    "go_method": "RefEdgesList",
+    "ts_method": "refEdgesList"
+  },
+  {
     "command_id": "threads.context",
     "cli_path": "threads context",
     "group": "threads",
@@ -2096,6 +2289,58 @@ export const commandRegistry: CommandSpec[] = [
     "ts_method": "threadsWorkspace"
   },
   {
+    "command_id": "topics.archive",
+    "cli_path": "topics archive",
+    "group": "topics",
+    "method": "POST",
+    "path": "/topics/{topic_id}/archive",
+    "operation_id": "archiveTopic",
+    "summary": "Archive topic",
+    "why": "Soft-archive a topic (orthogonal to business status; clears default list visibility).",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ topic }`.",
+    "error_codes": [
+      "auth_required",
+      "invalid_request",
+      "invalid_token",
+      "not_found",
+      "conflict"
+    ],
+    "concepts": [
+      "topics",
+      "write"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "body_schema": {
+      "optional": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "topic_id"
+    ],
+    "adjacent_commands": [
+      "topics.create",
+      "topics.get",
+      "topics.list",
+      "topics.patch",
+      "topics.restore",
+      "topics.timeline",
+      "topics.tombstone",
+      "topics.unarchive",
+      "topics.workspace"
+    ],
+    "go_method": "TopicsArchive",
+    "ts_method": "topicsArchive"
+  },
+  {
     "command_id": "topics.create",
     "cli_path": "topics create",
     "group": "topics",
@@ -2194,10 +2439,14 @@ export const commandRegistry: CommandSpec[] = [
       ]
     },
     "adjacent_commands": [
+      "topics.archive",
       "topics.get",
       "topics.list",
       "topics.patch",
+      "topics.restore",
       "topics.timeline",
+      "topics.tombstone",
+      "topics.unarchive",
       "topics.workspace"
     ],
     "go_method": "TopicsCreate",
@@ -2231,10 +2480,14 @@ export const commandRegistry: CommandSpec[] = [
       "topic_id"
     ],
     "adjacent_commands": [
+      "topics.archive",
       "topics.create",
       "topics.list",
       "topics.patch",
+      "topics.restore",
       "topics.timeline",
+      "topics.tombstone",
+      "topics.unarchive",
       "topics.workspace"
     ],
     "go_method": "TopicsGet",
@@ -2264,10 +2517,14 @@ export const commandRegistry: CommandSpec[] = [
     "stability": "beta",
     "surface": "canonical",
     "adjacent_commands": [
+      "topics.archive",
       "topics.create",
       "topics.get",
       "topics.patch",
+      "topics.restore",
       "topics.timeline",
+      "topics.tombstone",
+      "topics.unarchive",
       "topics.workspace"
     ],
     "go_method": "TopicsList",
@@ -2379,14 +2636,70 @@ export const commandRegistry: CommandSpec[] = [
       "topic_id"
     ],
     "adjacent_commands": [
+      "topics.archive",
       "topics.create",
       "topics.get",
       "topics.list",
+      "topics.restore",
       "topics.timeline",
+      "topics.tombstone",
+      "topics.unarchive",
       "topics.workspace"
     ],
     "go_method": "TopicsPatch",
     "ts_method": "topicsPatch"
+  },
+  {
+    "command_id": "topics.restore",
+    "cli_path": "topics restore",
+    "group": "topics",
+    "method": "POST",
+    "path": "/topics/{topic_id}/restore",
+    "operation_id": "restoreTopic",
+    "summary": "Restore topic from tombstone",
+    "why": "Clear tombstone fields on a topic after an explicit restore action.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ topic }`.",
+    "error_codes": [
+      "auth_required",
+      "invalid_request",
+      "invalid_token",
+      "not_found",
+      "conflict"
+    ],
+    "concepts": [
+      "topics",
+      "write"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "body_schema": {
+      "optional": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "topic_id"
+    ],
+    "adjacent_commands": [
+      "topics.archive",
+      "topics.create",
+      "topics.get",
+      "topics.list",
+      "topics.patch",
+      "topics.timeline",
+      "topics.tombstone",
+      "topics.unarchive",
+      "topics.workspace"
+    ],
+    "go_method": "TopicsRestore",
+    "ts_method": "topicsRestore"
   },
   {
     "command_id": "topics.timeline",
@@ -2417,14 +2730,128 @@ export const commandRegistry: CommandSpec[] = [
       "topic_id"
     ],
     "adjacent_commands": [
+      "topics.archive",
       "topics.create",
       "topics.get",
       "topics.list",
       "topics.patch",
+      "topics.restore",
+      "topics.tombstone",
+      "topics.unarchive",
       "topics.workspace"
     ],
     "go_method": "TopicsTimeline",
     "ts_method": "topicsTimeline"
+  },
+  {
+    "command_id": "topics.tombstone",
+    "cli_path": "topics tombstone",
+    "group": "topics",
+    "method": "POST",
+    "path": "/topics/{topic_id}/tombstone",
+    "operation_id": "tombstoneTopic",
+    "summary": "Tombstone topic",
+    "why": "Mark topic as tombstoned with an explicit operator reason.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ topic }`.",
+    "error_codes": [
+      "auth_required",
+      "invalid_request",
+      "invalid_token",
+      "not_found",
+      "conflict"
+    ],
+    "concepts": [
+      "topics",
+      "write"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "body_schema": {
+      "required": [
+        {
+          "name": "reason",
+          "type": "string"
+        }
+      ],
+      "optional": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "topic_id"
+    ],
+    "adjacent_commands": [
+      "topics.archive",
+      "topics.create",
+      "topics.get",
+      "topics.list",
+      "topics.patch",
+      "topics.restore",
+      "topics.timeline",
+      "topics.unarchive",
+      "topics.workspace"
+    ],
+    "go_method": "TopicsTombstone",
+    "ts_method": "topicsTombstone"
+  },
+  {
+    "command_id": "topics.unarchive",
+    "cli_path": "topics unarchive",
+    "group": "topics",
+    "method": "POST",
+    "path": "/topics/{topic_id}/unarchive",
+    "operation_id": "unarchiveTopic",
+    "summary": "Unarchive topic",
+    "why": "Clear archived_at on a topic (restore default list visibility).",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ topic }`.",
+    "error_codes": [
+      "auth_required",
+      "invalid_request",
+      "invalid_token",
+      "not_found",
+      "conflict"
+    ],
+    "concepts": [
+      "topics",
+      "write"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "body_schema": {
+      "optional": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "topic_id"
+    ],
+    "adjacent_commands": [
+      "topics.archive",
+      "topics.create",
+      "topics.get",
+      "topics.list",
+      "topics.patch",
+      "topics.restore",
+      "topics.timeline",
+      "topics.tombstone",
+      "topics.workspace"
+    ],
+    "go_method": "TopicsUnarchive",
+    "ts_method": "topicsUnarchive"
   },
   {
     "command_id": "topics.workspace",
@@ -2455,11 +2882,15 @@ export const commandRegistry: CommandSpec[] = [
       "topic_id"
     ],
     "adjacent_commands": [
+      "topics.archive",
       "topics.create",
       "topics.get",
       "topics.list",
       "topics.patch",
-      "topics.timeline"
+      "topics.restore",
+      "topics.timeline",
+      "topics.tombstone",
+      "topics.unarchive"
     ],
     "go_method": "TopicsWorkspace",
     "ts_method": "topicsWorkspace"
@@ -2584,6 +3015,10 @@ export class OarClient {
     return this.invoke("cards.archive", pathParams, options);
   }
 
+  cardsCreate(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("cards.create", {}, options);
+  }
+
   cardsGet(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("cards.get", pathParams, options);
   }
@@ -2672,6 +3107,10 @@ export class OarClient {
     return this.invoke("packets.reviews.create", {}, options);
   }
 
+  refEdgesList(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("ref_edges.list", {}, options);
+  }
+
   threadsContext(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("threads.context", pathParams, options);
   }
@@ -2692,6 +3131,10 @@ export class OarClient {
     return this.invoke("threads.workspace", pathParams, options);
   }
 
+  topicsArchive(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("topics.archive", pathParams, options);
+  }
+
   topicsCreate(options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("topics.create", {}, options);
   }
@@ -2708,8 +3151,20 @@ export class OarClient {
     return this.invoke("topics.patch", pathParams, options);
   }
 
+  topicsRestore(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("topics.restore", pathParams, options);
+  }
+
   topicsTimeline(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("topics.timeline", pathParams, options);
+  }
+
+  topicsTombstone(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("topics.tombstone", pathParams, options);
+  }
+
+  topicsUnarchive(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("topics.unarchive", pathParams, options);
   }
 
   topicsWorkspace(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {

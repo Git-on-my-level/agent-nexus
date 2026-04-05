@@ -56,6 +56,7 @@ export declare class OarClient {
     boardsPatch(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     boardsWorkspace(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     cardsArchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    cardsCreate(options?: RequestOptions): Promise<InvokeResult>;
     cardsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     cardsList(options?: RequestOptions): Promise<InvokeResult>;
     cardsMove(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
@@ -78,15 +79,20 @@ export declare class OarClient {
     metaVersion(options?: RequestOptions): Promise<InvokeResult>;
     packetsReceiptsCreate(options?: RequestOptions): Promise<InvokeResult>;
     packetsReviewsCreate(options?: RequestOptions): Promise<InvokeResult>;
+    refEdgesList(options?: RequestOptions): Promise<InvokeResult>;
     threadsContext(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     threadsInspect(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     threadsList(options?: RequestOptions): Promise<InvokeResult>;
     threadsTimeline(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     threadsWorkspace(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    topicsArchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     topicsCreate(options?: RequestOptions): Promise<InvokeResult>;
     topicsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     topicsList(options?: RequestOptions): Promise<InvokeResult>;
     topicsPatch(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    topicsRestore(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     topicsTimeline(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    topicsTombstone(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    topicsUnarchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     topicsWorkspace(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
 }

@@ -84,12 +84,15 @@ func (c *Contract) HasKnownTypedRefPrefix(prefix string) bool {
 }
 
 type contractFile struct {
-	Version              string `yaml:"version"`
-	Enums                map[string]rawEnum
-	RefFormat            rawRefFormat `yaml:"ref_format"`
-	Provenance           rawProvenance
-	Primitives           rawThreads `yaml:"primitives"`
-	Snapshots            rawThreads
+	Version    string `yaml:"version"`
+	Enums      map[string]rawEnum
+	RefFormat  rawRefFormat `yaml:"ref_format"`
+	Provenance rawProvenance
+	Primitives rawThreads `yaml:"primitives"`
+	// LegacyThreadYAML holds deprecated schema YAML keyed as `snapshots` from pre-refactor
+	// bundles; kept only so older checked-in schema files still parse. Canonical thread
+	// field definitions live under `primitives.thread`.
+	LegacyThreadYAML     rawThreads `yaml:"snapshots"`
 	Packets              rawPackets
 	ReferenceConventions rawReferenceConventions `yaml:"reference_conventions"`
 }
@@ -259,7 +262,7 @@ func Load(path string) (*Contract, error) {
 
 	threadSource := file.Primitives
 	if len(threadSource.Thread.Fields) == 0 {
-		threadSource = file.Snapshots
+		threadSource = file.LegacyThreadYAML
 	}
 	contract.Threads["thread"] = normalizeThread("thread", threadSource.Thread)
 

@@ -27,6 +27,79 @@ func handleListCards(w http.ResponseWriter, r *http.Request, opts handlerOptions
 	writeJSON(w, http.StatusOK, map[string]any{"cards": publicCardsView(cards)})
 }
 
+func handleCreateCardGlobal(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	var raw map[string]any
+	if !decodeJSONBody(w, r, &raw) {
+		return
+	}
+	boardID, ok := resolveBoardIDForGlobalCardCreate(w, raw, opts.contract)
+	if !ok {
+		return
+	}
+	addBoardCardFromRaw(w, r, opts, boardID, raw, "cards.create")
+}
+
+func resolveBoardIDForGlobalCardCreate(w http.ResponseWriter, raw map[string]any, contract *schema.Contract) (string, bool) {
+	if raw == nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "body is required")
+		return "", false
+	}
+	boardID := strings.TrimSpace(anyString(raw["board_id"]))
+	refRaw := raw["board_ref"]
+	refStr := strings.TrimSpace(anyString(refRaw))
+	if refStr == "" && refRaw != nil {
+		if m, ok := refRaw.(map[string]any); ok {
+			refStr = strings.TrimSpace(anyString(m["ref"]))
+			if refStr == "" {
+				suffix := strings.TrimSpace(anyString(m["value"]))
+				prefix := strings.TrimSpace(anyString(m["prefix"]))
+				if prefix != "" && suffix != "" {
+					refStr = prefix + ":" + suffix
+				}
+			}
+		}
+	}
+	if boardID != "" && refStr != "" {
+		prefix, suffix, err := schema.SplitTypedRef(refStr)
+		if err == nil && prefix == "board" && strings.TrimSpace(suffix) != "" && strings.TrimSpace(suffix) != boardID {
+			writeError(w, http.StatusBadRequest, "invalid_request", "board_id and board_ref disagree")
+			return "", false
+		}
+	}
+	if boardID != "" {
+		return boardID, true
+	}
+	if refStr == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "board_id or board_ref is required for POST /cards")
+		return "", false
+	}
+	prefix, id, err := schema.SplitTypedRef(refStr)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "board_ref must be a typed ref (board:<id>)")
+		return "", false
+	}
+	if strings.TrimSpace(prefix) != "board" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "board_ref must use board: prefix")
+		return "", false
+	}
+	id = strings.TrimSpace(id)
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "board_ref must be board:<id>")
+		return "", false
+	}
+	if contract != nil {
+		if err := schema.ValidateTypedRefs(contract, []string{refStr}); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return "", false
+		}
+	}
+	return id, true
+}
+
 func handleGetCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, cardID string) {
 	handleGetBoardCard(w, r, opts, "", cardID)
 }

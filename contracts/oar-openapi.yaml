@@ -319,6 +319,211 @@ paths:
         '404':
           $ref: '#/components/responses/ErrorResponse'
 
+  /topics/{topic_id}/archive:
+    post:
+      operationId: archiveTopic
+      summary: Archive topic
+      tags: [topics]
+      x-oar-surface: canonical
+      x-oar-command-id: topics.archive
+      x-oar-cli-path: topics archive
+      x-oar-why: Soft-archive a topic (orthogonal to business status; clears default list visibility).
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ topic }`."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-oar-concepts: [topics, write]
+      x-oar-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/TopicID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicLifecycleMutationRequest'
+      responses:
+        '200':
+          description: Topic archived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /topics/{topic_id}/unarchive:
+    post:
+      operationId: unarchiveTopic
+      summary: Unarchive topic
+      tags: [topics]
+      x-oar-surface: canonical
+      x-oar-command-id: topics.unarchive
+      x-oar-cli-path: topics unarchive
+      x-oar-why: Clear archived_at on a topic (restore default list visibility).
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ topic }`."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-oar-concepts: [topics, write]
+      x-oar-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/TopicID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicLifecycleMutationRequest'
+      responses:
+        '200':
+          description: Topic unarchived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /topics/{topic_id}/tombstone:
+    post:
+      operationId: tombstoneTopic
+      summary: Tombstone topic
+      tags: [topics]
+      x-oar-surface: canonical
+      x-oar-command-id: topics.tombstone
+      x-oar-cli-path: topics tombstone
+      x-oar-why: Mark topic as tombstoned with an explicit operator reason.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ topic }`."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-oar-concepts: [topics, write]
+      x-oar-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/TopicID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicTombstoneRequest'
+      responses:
+        '200':
+          description: Topic tombstoned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /topics/{topic_id}/restore:
+    post:
+      operationId: restoreTopic
+      summary: Restore topic from tombstone
+      tags: [topics]
+      x-oar-surface: canonical
+      x-oar-command-id: topics.restore
+      x-oar-cli-path: topics restore
+      x-oar-why: Clear tombstone fields on a topic after an explicit restore action.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ topic }`."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-oar-concepts: [topics, write]
+      x-oar-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/TopicID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicLifecycleMutationRequest'
+      responses:
+        '200':
+          description: Topic restored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /ref-edges:
+    get:
+      operationId: listRefEdges
+      summary: List ref edges (forward or reverse indexed lookup)
+      tags: [refs]
+      x-oar-surface: diagnostic
+      x-oar-command-id: ref_edges.list
+      x-oar-cli-path: ref-edges list
+      x-oar-why: Query the write-through ref index by source or target (mutually exclusive); reverse lookup uses target_type+target_id.
+      x-oar-input-mode: query
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ ref_edges }`."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token]
+      x-oar-concepts: [refs, inspection]
+      x-oar-stability: beta
+      parameters:
+        - name: source_type
+          in: query
+          required: false
+          schema: { type: string }
+        - name: source_id
+          in: query
+          required: false
+          schema: { type: string }
+        - name: target_type
+          in: query
+          required: false
+          schema: { type: string }
+        - name: target_id
+          in: query
+          required: false
+          schema: { type: string }
+        - name: edge_type
+          in: query
+          required: false
+          description: When set, filter results to this edge_type.
+          schema: { type: string }
+      responses:
+        '200':
+          description: Ref edge rows
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefEdgesResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
   /threads:
     get:
       operationId: listThreads
@@ -941,6 +1146,43 @@ paths:
               schema:
                 $ref: '#/components/schemas/CardsResponse'
         '401':
+          $ref: '#/components/responses/ErrorResponse'
+    post:
+      operationId: createCard
+      summary: Create card (global path)
+      tags: [cards]
+      x-oar-surface: canonical
+      x-oar-command-id: cards.create
+      x-oar-cli-path: cards create
+      x-oar-why: >
+        Create a card with the same body as POST /boards/{board_id}/cards, but supply board_id or board_ref
+        here instead of a path segment. Interoperable with board-scoped create.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ board, card }` (same as board-scoped create)."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-oar-concepts: [cards, boards, write]
+      x-oar-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCardRequest'
+      responses:
+        '201':
+          description: Card created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardCardMutationResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
           $ref: '#/components/responses/ErrorResponse'
 
   /cards/{card_id}:
@@ -2227,6 +2469,15 @@ components:
     CreateCardRequest:
       type: object
       properties:
+        board_id:
+          type: string
+          description: >
+            Target board for POST /cards. Required unless board_ref is set. Ignored for
+            POST /boards/{board_id}/cards (path segment is authoritative).
+        board_ref:
+          allOf:
+            - $ref: '#/components/schemas/TypedRef'
+          description: Alternative to board_id; MUST be board:<board_id> for POST /cards.
         card: { $ref: '#/components/schemas/CardCreateInput' }
         if_board_updated_at:
           type: string
@@ -2294,6 +2545,39 @@ components:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
       required: [subject_ref]
+
+    TopicLifecycleMutationRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+
+    TopicTombstoneRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+        reason: { type: string }
+      required: [reason]
+
+    RefEdge:
+      type: object
+      properties:
+        source_type: { type: string }
+        source_id: { type: string }
+        target_type: { type: string }
+        target_id: { type: string }
+        edge_type: { type: string }
+        metadata:
+          type: object
+          additionalProperties: true
+      required: [source_type, source_id, target_type, target_id, edge_type]
+
+    RefEdgesResponse:
+      type: object
+      properties:
+        ref_edges:
+          type: array
+          items: { $ref: '#/components/schemas/RefEdge' }
+      required: [ref_edges]
 
     TopicResponse:
       type: object

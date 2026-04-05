@@ -511,6 +511,12 @@ func handleAddBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	if !decodeJSONBody(w, r, &raw) {
 		return
 	}
+	addBoardCardFromRaw(w, r, opts, boardID, raw, "boards.cards.add")
+}
+
+// addBoardCardFromRaw executes board-scoped card creation. idempotencyOp is the durable scope
+// key ("boards.cards.add" for POST /boards/{id}/cards, "cards.create" for POST /cards).
+func addBoardCardFromRaw(w http.ResponseWriter, r *http.Request, opts handlerOptions, boardID string, raw map[string]any, idempotencyOp string) {
 	req, ok := parseAddBoardCardJSON(w, raw)
 	if !ok {
 		return
@@ -522,7 +528,7 @@ func handleAddBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	}
 
 	replayRequest := raw
-	replayStatus, replayPayload, replayed, err := readIdempotencyReplay(r.Context(), opts.primitiveStore, "boards.cards.add", actorID, req.RequestKey, replayRequest)
+	replayStatus, replayPayload, replayed, err := readIdempotencyReplay(r.Context(), opts.primitiveStore, idempotencyOp, actorID, req.RequestKey, replayRequest)
 	if writeIdempotencyError(w, err) {
 		return
 	}
@@ -537,7 +543,11 @@ func handleAddBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOpti
 
 	derivedCardID := false
 	if strings.TrimSpace(req.RequestKey) != "" && strings.TrimSpace(req.CardID) == "" {
-		req.CardID = deriveRequestScopedID("boards.cards.create", actorID, req.RequestKey, "card")
+		deriveScope := "boards.cards.create"
+		if idempotencyOp == "cards.create" {
+			deriveScope = "cards.create"
+		}
+		req.CardID = deriveRequestScopedID(deriveScope, actorID, req.RequestKey, "card")
 		derivedCardID = true
 	}
 	explicitReplayCardID := strings.TrimSpace(req.CardID)
@@ -582,7 +592,7 @@ func handleAddBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOpti
 				req.Risk,
 			) {
 				response := map[string]any{"board": existingBoard, "card": existingCard}
-				status, payload, replayErr := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "boards.cards.add", actorID, req.RequestKey, replayRequest, http.StatusCreated, response)
+				status, payload, replayErr := persistIdempotencyReplay(r.Context(), opts.primitiveStore, idempotencyOp, actorID, req.RequestKey, replayRequest, http.StatusCreated, response)
 				if writeIdempotencyError(w, replayErr) {
 					return
 				}
@@ -612,7 +622,7 @@ func handleAddBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	emitCardLifecycleEventBestEffort(r.Context(), opts, actorID, buildCardCreatedEvent(result.Board, result.Card))
 	emitBoardLifecycleEventBestEffort(r.Context(), opts, actorID, buildBoardCardAddedEvent(result.Board, result.Card))
 
-	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "boards.cards.add", actorID, req.RequestKey, replayRequest, http.StatusCreated, map[string]any{
+	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, idempotencyOp, actorID, req.RequestKey, replayRequest, http.StatusCreated, map[string]any{
 		"board": result.Board,
 		"card":  result.Card,
 	})

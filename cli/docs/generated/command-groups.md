@@ -4,17 +4,21 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.3.0`
-- Groups: `10`
+- Groups: `11`
 
 ## `topics`
 
-- Commands: `6`
+- Commands: `10`
 - Command IDs:
+  - `topics.archive` (`topics archive`)
   - `topics.create` (`topics create`)
   - `topics.get` (`topics get`)
   - `topics.list` (`topics list`)
   - `topics.patch` (`topics patch`)
+  - `topics.restore` (`topics restore`)
   - `topics.timeline` (`topics timeline`)
+  - `topics.tombstone` (`topics tombstone`)
+  - `topics.unarchive` (`topics unarchive`)
   - `topics.workspace` (`topics workspace`)
 
 ## `threads`
@@ -50,9 +54,10 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `cards`
 
-- Commands: `8`
+- Commands: `9`
 - Command IDs:
   - `cards.archive` (`cards archive`)
+  - `cards.create` (`cards create`)
   - `cards.get` (`cards get`)
   - `cards.list` (`cards list`)
   - `cards.move` (`cards move`)
@@ -100,4 +105,10 @@ Generated from `contracts/oar-openapi.yaml`.
 - Command IDs:
   - `packets.receipts.create` (`packets receipts create`)
   - `packets.reviews.create` (`packets reviews create`)
+
+## `ref-edges`
+
+- Commands: `1`
+- Command IDs:
+  - `ref_edges.list` (`ref-edges list`)
 

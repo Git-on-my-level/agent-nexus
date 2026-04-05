@@ -340,6 +340,8 @@ func (a *App) runTypedResource(ctx context.Context, resource string, args []stri
 		return a.runThreadsCommand(ctx, args, cfg)
 	case "topics":
 		return a.runTopicsCommand(ctx, args, cfg)
+	case "ref-edges":
+		return a.runRefEdgesCommand(ctx, args, cfg)
 	case "cards":
 		return a.runCardsCommand(ctx, args, cfg)
 	case "artifacts":

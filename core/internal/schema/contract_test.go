@@ -95,11 +95,11 @@ func TestLoadExtractsCoreSchemaRules(t *testing.T) {
 		t.Fatalf("expected board_updated refs_must_include length=1, got %#v", boardUpdatedRule.RefsMustInclude)
 	}
 
-	threadSnapshot, ok := contract.Threads["thread"]
+	threadSchema, ok := contract.Threads["thread"]
 	if !ok {
-		t.Fatal("thread snapshot schema was not loaded")
+		t.Fatal("thread primitive schema was not loaded")
 	}
-	topicRef, ok := threadSnapshot.Fields["topic_ref"]
+	topicRef, ok := threadSchema.Fields["topic_ref"]
 	if !ok {
 		t.Fatal("thread.topic_ref field was not loaded")
 	}

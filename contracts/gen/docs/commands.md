@@ -4,7 +4,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.3.0`
-- Commands: `45`
+- Commands: `51`
 
 ## `artifacts.create`
 
@@ -149,6 +149,18 @@ Generated from `contracts/oar-openapi.yaml`.
 - Concepts: `cards`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ board, card }`.
+
+## `cards.create`
+
+- CLI path: `cards create`
+- HTTP: `POST /cards`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Create a card with the same body as POST /boards/{board_id}/cards, but supply board_id or board_ref here instead of a path segment. Interoperable with board-scoped create.
+- Concepts: `cards`, `boards`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Output: Returns `{ board, card }` (same as board-scoped create).
 
 ## `cards.get`
 
@@ -412,6 +424,18 @@ Generated from `contracts/oar-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Output: Returns `{ artifact, packet_kind, packet }`.
 
+## `ref_edges.list`
+
+- CLI path: `ref-edges list`
+- HTTP: `GET /ref-edges`
+- Stability: `beta`
+- Surface: `diagnostic`
+- Input mode: `query`
+- Why: Query the write-through ref index by source or target (mutually exclusive); reverse lookup uses target_type+target_id.
+- Concepts: `refs`, `inspection`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Output: Returns `{ ref_edges }`.
+
 ## `threads.context`
 
 - CLI path: `threads context`
@@ -472,6 +496,18 @@ Generated from `contracts/oar-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Output: Returns `{ thread, related_topics, cards, documents, board_memberships, inbox, projection_freshness }`.
 
+## `topics.archive`
+
+- CLI path: `topics archive`
+- HTTP: `POST /topics/{topic_id}/archive`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Soft-archive a topic (orthogonal to business status; clears default list visibility).
+- Concepts: `topics`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Output: Returns `{ topic }`.
+
 ## `topics.create`
 
 - CLI path: `topics create`
@@ -521,6 +557,18 @@ Generated from `contracts/oar-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ topic }`.
 
+## `topics.restore`
+
+- CLI path: `topics restore`
+- HTTP: `POST /topics/{topic_id}/restore`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Clear tombstone fields on a topic after an explicit restore action.
+- Concepts: `topics`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Output: Returns `{ topic }`.
+
 ## `topics.timeline`
 
 - CLI path: `topics timeline`
@@ -532,6 +580,30 @@ Generated from `contracts/oar-openapi.yaml`.
 - Concepts: `topics`, `timeline`
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Output: Returns `{ topic, events, artifacts, cards, documents, threads }`.
+
+## `topics.tombstone`
+
+- CLI path: `topics tombstone`
+- HTTP: `POST /topics/{topic_id}/tombstone`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Mark topic as tombstoned with an explicit operator reason.
+- Concepts: `topics`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Output: Returns `{ topic }`.
+
+## `topics.unarchive`
+
+- CLI path: `topics unarchive`
+- HTTP: `POST /topics/{topic_id}/unarchive`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Clear archived_at on a topic (restore default list visibility).
+- Concepts: `topics`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Output: Returns `{ topic }`.
 
 ## `topics.workspace`
 
