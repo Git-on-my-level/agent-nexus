@@ -4,6 +4,8 @@
   import RefLink from "$lib/components/RefLink.svelte";
   import { formatTimestamp } from "$lib/formatDate";
 
+  const MAX_REPLY_DEPTH = 48;
+
   let {
     message,
     threadId,
@@ -115,7 +117,7 @@
     </div>
   {/if}
 
-  {#if message.children.length > 0}
+  {#if message.children.length > 0 && depth < MAX_REPLY_DEPTH}
     <!-- -mx-4 cancels this article's horizontal padding so nested rows use the full card
       width; only the left border + pl indent the thread. Reply buttons stay on the
          same right edge as the root message. -->

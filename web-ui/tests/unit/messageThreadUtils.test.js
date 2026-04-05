@@ -101,6 +101,34 @@ describe("message thread utils", () => {
     expect(threads[0].displayRefs).toEqual(["artifact:a-1"]);
   });
 
+  it("breaks mutual reply-parent cycles so both messages stay renderable as roots", () => {
+    const threads = toMessageThreadView(
+      [
+        {
+          id: "a",
+          ts: "2026-03-03T10:00:00.000Z",
+          type: "message_posted",
+          thread_id: "thread-1",
+          refs: ["thread:thread-1", "event:b"],
+          summary: "Message: a",
+        },
+        {
+          id: "b",
+          ts: "2026-03-03T10:01:00.000Z",
+          type: "message_posted",
+          thread_id: "thread-1",
+          refs: ["thread:thread-1", "event:a"],
+          summary: "Message: b",
+        },
+      ],
+      { threadId: "thread-1" },
+    );
+
+    const ids = threads.map((t) => t.id).sort();
+    expect(ids).toEqual(["a", "b"]);
+    expect(threads.every((t) => t.children.length === 0)).toBe(true);
+  });
+
   it("flattens threaded messages for lookup helpers", () => {
     const threads = toMessageThreadView(
       [

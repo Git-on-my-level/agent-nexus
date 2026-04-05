@@ -1,6 +1,6 @@
 <script>
   import { browser } from "$app/environment";
-  import { tick } from "svelte";
+  import { tick, untrack } from "svelte";
   import { get } from "svelte/store";
 
   import {
@@ -151,7 +151,11 @@
     }
     void $authenticatedAgent?.agent_id;
     void workspaceId;
-    void refreshMentionCandidates();
+    // Mention loading reads actorRegistry/principalRegistry via get(); those must
+    // not become effect deps or any store churn retriggers this effect → tight loop.
+    untrack(() => {
+      void refreshMentionCandidates();
+    });
   });
 
   function updateMentionFromTextarea() {
