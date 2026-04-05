@@ -113,7 +113,7 @@ const threads = [
       "SqueezeBot's left pitcher arm is over-torquing by 12%, causing seed " +
       "contamination in ~14% of squeeze cycles (threshold: <5%). Running at 80% duty " +
       "cycle in degraded mode. Replacement torque limiter part #TL-3000-L ordered from " +
-      "RoboSupply Inc. — delivery ETA tomorrow 09:00. Thread paused pending part arrival.",
+      "RoboSupply Inc. — delivery ETA tomorrow 09:00. Timeline paused pending part arrival.",
     next_actions: [
       "Receive part #TL-3000-L delivery from RoboSupply Inc. (ETA: tomorrow 09:00)",
       "SqueezeBot to run recalibration sequence per maintenance card",
@@ -125,7 +125,7 @@ const threads = [
     updated_by: "actor-squeeze-bot",
     provenance: {
       sources: ["inferred"],
-      notes: "Thread paused pending part delivery from RoboSupply Inc.",
+      notes: "Timeline paused pending part delivery from RoboSupply Inc.",
     },
   },
   {
@@ -341,7 +341,7 @@ const events = [
     actor_id: "actor-ops-ai",
     thread_id: "thread-lemon-shortage",
     refs: ["thread:thread-lemon-shortage"],
-    summary: "Thread priority escalated to P0.",
+    summary: "Priority raised to P0.",
     payload: { changed_fields: ["priority", "current_summary"] },
     provenance: { sources: ["actor_statement:evt-supply-003"] },
   },
@@ -468,7 +468,7 @@ const events = [
     payload: {
       text:
         "Confirmed. Card created. Placed order with RoboSupply Inc. for torque " +
-        "limiter part #TL-3000-L — estimated delivery tomorrow 09:00. Thread paused " +
+        "limiter part #TL-3000-L — estimated delivery tomorrow 09:00. Timeline paused " +
         "pending part arrival. @SqueezeBot — continue reduced duty cycle in the interim. " +
         "FlavorMind will run a QA scan after repair to confirm seed contamination is back " +
         "under threshold before returning to full production.",
@@ -630,7 +630,7 @@ const events = [
     actor_id: "actor-ops-ai",
     thread_id: "thread-pricing-glitch",
     refs: [
-      "topic:thread-pricing-glitch",
+      "topic:pricing-glitch",
       "thread:thread-pricing-glitch",
       "artifact:artifact-pricing-evidence",
     ],
@@ -716,7 +716,7 @@ const events = [
     actor_id: "actor-ops-ai",
     thread_id: "thread-pricing-glitch",
     refs: [
-      "topic:thread-pricing-glitch",
+      "topic:pricing-glitch",
       "thread:thread-pricing-glitch",
       "artifact:artifact-pricing-evidence",
       "card:thread-pricing-glitch",
@@ -818,7 +818,7 @@ const events = [
     actor_id: "actor-ops-ai",
     thread_id: "thread-pricing-glitch",
     refs: ["thread:thread-pricing-glitch"],
-    summary: "Thread closed — incident fully resolved.",
+    summary: "Incident closed — timeline fully resolved.",
     payload: { changed_fields: ["status", "current_summary", "next_actions"] },
     provenance: { sources: ["actor_statement:evt-price-013"] },
   },
@@ -1314,14 +1314,14 @@ const artifacts = [
     refs: ["thread:thread-onboarding"],
     content_type: "text/plain",
     content_text:
-      "Dev seed: superseded onboarding notes. Safe to purge — not linked to any document revision.",
+      "Dev seed: superseded onboarding notes. Eligible for permanent delete — not linked to any document revision.",
     created_at: new Date(now - 3 * 24 * 60 * 60 * 1000).toISOString(),
     created_by: "actor-ops-ai",
     provenance: { sources: ["actor_statement:dev-trash-seed"] },
     trashed_at: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString(),
     trashed_by: "actor-ops-ai",
     trash_reason:
-      "Dev seed: removed from active use so operators can exercise Trash and purge locally.",
+      "Dev seed: removed from active use so operators can exercise Trash and permanent delete locally.",
   },
   {
     id: "artifact-dev-trash-ops-scratch",
@@ -1331,7 +1331,7 @@ const artifacts = [
     refs: ["thread:thread-onboarding"],
     content_type: "text/plain",
     content_text:
-      "Dev seed: ephemeral export blob. Purge from Trash to verify permanent delete.",
+      "Dev seed: ephemeral export blob. Delete permanently from Trash to verify removal.",
     created_at: new Date(now - 4 * 24 * 60 * 60 * 1000).toISOString(),
     created_by: "actor-flavor-ai",
     provenance: { sources: ["actor_statement:dev-trash-seed"] },
@@ -1617,6 +1617,21 @@ function cardResolutionFromRow(card) {
   return null;
 }
 
+/**
+ * Mock topic typed refs use a short id (strip leading `thread-`) so `topic:` refs do not
+ * look like thread ids. Canonical topic rows still use `thread-*` ids for URL/API parity.
+ */
+export function mockTopicRefSuffixFromThreadId(threadId) {
+  const tid = String(threadId ?? "").trim();
+  if (!tid) return "";
+  return tid.startsWith("thread-") ? tid.slice("thread-".length) : tid;
+}
+
+export function mockTopicRefFromThreadId(threadId) {
+  const suffix = mockTopicRefSuffixFromThreadId(threadId);
+  return suffix ? `topic:${suffix}` : "";
+}
+
 function buildCanonicalTopicSeed(thread) {
   const threadId = String(thread?.id ?? "").trim();
   const boardRefs = boards
@@ -1660,7 +1675,7 @@ function buildCanonicalCardSeed(card) {
   const thread = threadId
     ? threads.find((entry) => entry.id === threadId)
     : null;
-  const topicRef = threadId ? `topic:${threadId}` : null;
+  const topicRef = threadId ? mockTopicRefFromThreadId(threadId) : null;
   const threadTypedRef = threadId ? `thread:${threadId}` : null;
   const boardRef = boardId ? `board:${boardId}` : null;
   const documentId = String(card?.document_ref ?? "")
@@ -1806,7 +1821,7 @@ function deriveMockInboxSubjectRef(item) {
 
   const topicId = String(item?.topic_id ?? "").trim();
   if (topicId) {
-    return `topic:${topicId}`;
+    return mockTopicRefFromThreadId(topicId);
   }
 
   const cardId = String(item?.card_id ?? item?.work_item_id ?? "").trim();
@@ -1848,7 +1863,7 @@ function normalizeMockInboxItem(item) {
       relatedRefs.length > 0
         ? relatedRefs
         : item?.thread_id
-          ? [`topic:${item.thread_id}`]
+          ? [mockTopicRefFromThreadId(item.thread_id)]
           : [],
     subject_kind: splitLegacyTypedRef(subjectRef).prefix,
     subject_id: splitLegacyTypedRef(subjectRef).id,
@@ -1870,10 +1885,18 @@ export function ackMockInboxItem({ thread_id, subject_ref, inbox_item_id }) {
       correlation = raw.slice(sep + 1).trim();
     }
   }
+  const subjectRaw = String(subject_ref ?? "").trim();
+  const topicRefMatch = /^topic:(.+)$/.exec(subjectRaw);
+  const backingThreadFromTopic = topicRefMatch
+    ? String(getMockTopic(topicRefMatch[1].trim())?.thread_id ?? "").trim()
+    : "";
   const item = inboxItems.find(
     (item) =>
       item.id === inbox_item_id &&
-      (!correlation || String(item.thread_id) === String(correlation)),
+      (!correlation ||
+        String(item.thread_id) === String(correlation) ||
+        (backingThreadFromTopic &&
+          String(item.thread_id) === backingThreadFromTopic)),
   );
 
   if (!item) {
@@ -2133,7 +2156,16 @@ export function listMockTopics(filters = {}) {
 }
 
 export function getMockTopic(topicId) {
-  return listMockTopics().find((topic) => topic.id === topicId) ?? null;
+  const id = String(topicId ?? "").trim();
+  if (!id) return null;
+  const topics = listMockTopics();
+  const direct = topics.find((topic) => topic.id === id);
+  if (direct) return direct;
+  if (!id.startsWith("thread-")) {
+    const candidate = `thread-${id}`;
+    return topics.find((topic) => topic.id === candidate) ?? null;
+  }
+  return null;
 }
 
 function listMockOpenCardsForThread(threadId) {
@@ -2142,7 +2174,11 @@ function listMockOpenCardsForThread(threadId) {
     return [];
   }
 
-  const threadRefs = new Set([`thread:${tid}`, `topic:${tid}`]);
+  const threadRefs = new Set(
+    [`thread:${tid}`, `topic:${tid}`, mockTopicRefFromThreadId(tid)].filter(
+      Boolean,
+    ),
+  );
 
   return boardCards
     .filter((card) => {
@@ -2205,7 +2241,9 @@ function mockThreadWorkspaceRefreshCommand(threadId, thread) {
   const ref = String(thread?.topic_ref ?? thread?.subject_ref ?? "").trim();
   const m = ref.match(/^topic:(.+)$/);
   if (m && String(m[1] ?? "").trim()) {
-    const topicId = String(m[1]).trim();
+    const refId = String(m[1]).trim();
+    const topicRow = getMockTopic(refId);
+    const topicId = String(topicRow?.id ?? refId).trim();
     return `oar topics workspace --topic-id ${topicId} --include-artifact-content --full-id --json`;
   }
   return `oar threads workspace --thread-id ${threadId} --include-artifact-content --full-id --json`;
@@ -3063,7 +3101,7 @@ const boards = [
     refs: [
       "document:product-constitution",
       "thread:thread-q2-initiative",
-      "topic:thread-q2-initiative",
+      mockTopicRefFromThreadId("thread-q2-initiative"),
     ],
     column_schema: canonicalColumnSchema,
     pinned_refs: ["thread:thread-q2-initiative"],
@@ -3083,7 +3121,7 @@ const boards = [
       "artifact:artifact-supplier-sla",
       "document:incident-response-playbook",
       "thread:thread-lemon-shortage",
-      "topic:thread-lemon-shortage",
+      mockTopicRefFromThreadId("thread-lemon-shortage"),
     ],
     column_schema: canonicalColumnSchema,
     pinned_refs: [
@@ -3105,7 +3143,7 @@ const boards = [
     refs: [
       "document:onboarding-guide-v1",
       "thread:thread-summer-menu",
-      "topic:thread-summer-menu",
+      mockTopicRefFromThreadId("thread-summer-menu"),
     ],
     column_schema: canonicalColumnSchema,
     pinned_refs: ["thread:thread-summer-menu"],
@@ -3914,7 +3952,7 @@ export function buildMockTopicWorkspaceFromThreadWorkspace(
 
   const threadId = thread ? String(thread.id ?? "").trim() : "";
   const topicId = String(topicIdOverride ?? "").trim() || threadId;
-  const topicRefStr = topicId ? `topic:${topicId}` : "";
+  const topicRefStr = threadId ? mockTopicRefFromThreadId(threadId) : "";
 
   for (const ob of ownedItems) {
     const bid = String(ob?.id ?? "").trim();
@@ -5042,7 +5080,7 @@ export function createMockBoard(payload) {
     : [];
   const refsSet = new Set([
     `thread:${threadId}`,
-    `topic:${threadId}`,
+    mockTopicRefFromThreadId(threadId),
     ...documentRefStrings,
     ...pinnedRefsRaw,
   ]);

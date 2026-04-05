@@ -47,6 +47,24 @@ func TestFormatBoardCardRemoveResult_WithCardStandalone(t *testing.T) {
 	}
 }
 
+func TestFormatCardRecord_Trashed(t *testing.T) {
+	t.Parallel()
+	card := map[string]any{
+		"id":           "card_abc",
+		"short_id":     "c1",
+		"trashed_at":   "2026-01-01T00:00:00Z",
+		"trashed_by":   "actor_1",
+		"trash_reason": "cleanup",
+	}
+	got := formatCardRecord(card)
+	if !strings.Contains(got, "⚠ TRASHED") {
+		t.Fatalf("expected TRASHED banner, got %q", got)
+	}
+	if !strings.Contains(got, "trashed_at:") {
+		t.Fatalf("expected trashed_at, got %q", got)
+	}
+}
+
 func TestFormatBoardCardRemoveResult_LegacyRemovedThreadOnly(t *testing.T) {
 	t.Parallel()
 	body := map[string]any{

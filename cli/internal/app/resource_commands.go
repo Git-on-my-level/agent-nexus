@@ -1259,7 +1259,7 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 		var reasonFlag trackedString
 		fs.Var(&artifactIDFlag, "artifact-id", "Artifact id to trash")
 		fs.Var(&actorIDFlag, "actor-id", "Actor id")
-		fs.Var(&reasonFlag, "reason", "Reason for tombstoning")
+		fs.Var(&reasonFlag, "reason", "Reason for trashing")
 		if err := fs.Parse(args[1:]); err != nil {
 			return nil, "artifacts trash", errnorm.Usage("invalid_flags", err.Error())
 		}
@@ -1408,8 +1408,8 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 		fs := newSilentFlagSet("artifacts purge")
 		var artifactIDFlag trackedString
 		var reasonFlag trackedString
-		fs.Var(&artifactIDFlag, "artifact-id", "Artifact id to purge")
-		fs.Var(&reasonFlag, "reason", "Reason for purging")
+		fs.Var(&artifactIDFlag, "artifact-id", "Artifact id to permanently delete")
+		fs.Var(&reasonFlag, "reason", "Reason for permanent deletion")
 		if err := fs.Parse(args[1:]); err != nil {
 			return nil, "artifacts purge", errnorm.Usage("invalid_flags", err.Error())
 		}
@@ -1651,7 +1651,7 @@ func (a *App) runBoardsCommand(ctx context.Context, args []string, cfg config.Re
 		var reasonFlag trackedString
 		fs.Var(&boardIDFlag, "board-id", "Board id to trash")
 		fs.Var(&actorIDFlag, "actor-id", "Actor id")
-		fs.Var(&reasonFlag, "reason", "Reason for tombstoning")
+		fs.Var(&reasonFlag, "reason", "Reason for trashing")
 		if err := fs.Parse(args[1:]); err != nil {
 			return nil, "boards trash", errnorm.Usage("invalid_flags", err.Error())
 		}
@@ -1744,8 +1744,8 @@ func (a *App) runBoardsCommand(ctx context.Context, args []string, cfg config.Re
 		fs := newSilentFlagSet("boards purge")
 		var boardIDFlag trackedString
 		var reasonFlag trackedString
-		fs.Var(&boardIDFlag, "board-id", "Board id to purge")
-		fs.Var(&reasonFlag, "reason", "Reason for purging")
+		fs.Var(&boardIDFlag, "board-id", "Board id to permanently delete")
+		fs.Var(&reasonFlag, "reason", "Reason for permanent deletion")
 		if err := fs.Parse(args[1:]); err != nil {
 			return nil, "boards purge", errnorm.Usage("invalid_flags", err.Error())
 		}
@@ -2013,7 +2013,7 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 		var reasonFlag trackedString
 		fs.Var(&documentIDFlag, "document-id", "Document id to trash")
 		fs.Var(&actorIDFlag, "actor-id", "Actor id")
-		fs.Var(&reasonFlag, "reason", "Reason for tombstoning")
+		fs.Var(&reasonFlag, "reason", "Reason for trashing")
 		if err := fs.Parse(args[1:]); err != nil {
 			return nil, "docs trash", errnorm.Usage("invalid_flags", err.Error())
 		}
@@ -2162,8 +2162,8 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 		fs := newSilentFlagSet("docs purge")
 		var documentIDFlag trackedString
 		var reasonFlag trackedString
-		fs.Var(&documentIDFlag, "document-id", "Document id to purge")
-		fs.Var(&reasonFlag, "reason", "Reason for purging")
+		fs.Var(&documentIDFlag, "document-id", "Document id to permanently delete")
+		fs.Var(&reasonFlag, "reason", "Reason for permanent deletion")
 		if err := fs.Parse(args[1:]); err != nil {
 			return nil, "docs purge", errnorm.Usage("invalid_flags", err.Error())
 		}
@@ -2322,7 +2322,7 @@ func (a *App) runEventsCommand(ctx context.Context, args []string, cfg config.Re
 		var reasonFlag trackedString
 		fs.Var(&eventIDFlag, "event-id", "Event id to trash")
 		fs.Var(&actorIDFlag, "actor-id", "Actor id")
-		fs.Var(&reasonFlag, "reason", "Reason for tombstoning")
+		fs.Var(&reasonFlag, "reason", "Reason for trashing")
 		if err := fs.Parse(args[1:]); err != nil {
 			return nil, "events trash", errnorm.Usage("invalid_flags", err.Error())
 		}

@@ -121,8 +121,8 @@ export function getPilotRescueSeedData() {
         thread_id: "thread-pilot-feedback",
         summary: "Support feedback matrix for NorthWave and BriskPay pilot complaints",
         refs: [
-          "topic:thread-pilot-feedback",
-          "topic:thread-pilot-rescue-main",
+          "topic:pilot-feedback",
+          "topic:pilot-rescue-main",
         ],
         provenance: {
           sources: ["actor_statement:evt-feedback-001"],
@@ -136,7 +136,7 @@ export function getPilotRescueSeedData() {
         kind: "doc",
         thread_id: "thread-pilot-feedback",
         summary: "Direct customer quotes from NorthWave and BriskPay pilot feedback",
-        refs: ["topic:thread-pilot-feedback"],
+        refs: ["topic:pilot-feedback"],
         provenance: {
           sources: ["actor_statement:evt-feedback-001"],
         },
@@ -150,8 +150,8 @@ export function getPilotRescueSeedData() {
         thread_id: "thread-pilot-delivery",
         summary: "Friday pilot launch checklist and validation gates",
         refs: [
-          "topic:thread-pilot-delivery",
-          "topic:thread-pilot-rescue-main",
+          "topic:pilot-delivery",
+          "topic:pilot-rescue-main",
         ],
         provenance: {
           sources: ["actor_statement:evt-delivery-001"],
@@ -166,8 +166,8 @@ export function getPilotRescueSeedData() {
         thread_id: "thread-pilot-delivery",
         summary: "Delivery and rollout risk register for NorthWave pilot rescue",
         refs: [
-          "topic:thread-pilot-delivery",
-          "topic:thread-pilot-rescue-main",
+          "topic:pilot-delivery",
+          "topic:pilot-rescue-main",
         ],
         provenance: {
           sources: ["actor_statement:evt-delivery-001"],
@@ -181,7 +181,7 @@ export function getPilotRescueSeedData() {
         kind: "doc",
         thread_id: "thread-pilot-rescue-main",
         summary: "Pilot metrics and renewal risk snapshot",
-        refs: ["topic:thread-pilot-rescue-main"],
+        refs: ["topic:pilot-rescue-main"],
         provenance: {
           sources: ["actor_statement:evt-pilot-main-001"],
         },
@@ -201,9 +201,9 @@ export function getPilotRescueSeedData() {
           status: "draft",
         },
         refs: [
-          "topic:thread-pilot-rescue-main",
-          "topic:thread-pilot-feedback",
-          "topic:thread-pilot-delivery",
+          "topic:pilot-rescue-main",
+          "topic:pilot-feedback",
+          "topic:pilot-delivery",
           "artifact:artifact-feedback-matrix",
           "artifact:artifact-launch-checklist",
         ],
@@ -219,7 +219,7 @@ export function getPilotRescueSeedData() {
         type: "actor_statement",
         thread_id: "thread-pilot-rescue-main",
         refs: [
-          "topic:thread-pilot-rescue-main",
+          "topic:pilot-rescue-main",
           "artifact:artifact-pilot-metrics",
           "document:northwave-pilot-rescue-brief",
         ],
@@ -239,7 +239,7 @@ export function getPilotRescueSeedData() {
         type: "actor_statement",
         thread_id: "thread-pilot-feedback",
         refs: [
-          "topic:thread-pilot-feedback",
+          "topic:pilot-feedback",
           "artifact:artifact-feedback-matrix",
           "artifact:artifact-feedback-quotes",
         ],
@@ -259,7 +259,7 @@ export function getPilotRescueSeedData() {
         type: "actor_statement",
         thread_id: "thread-pilot-delivery",
         refs: [
-          "topic:thread-pilot-delivery",
+          "topic:pilot-delivery",
           "artifact:artifact-risk-register",
           "artifact:artifact-launch-checklist",
         ],
@@ -280,9 +280,9 @@ export function getPilotRescueSeedData() {
         type: "decision_needed",
         thread_id: "thread-pilot-rescue-main",
         refs: [
-          "topic:thread-pilot-rescue-main",
-          "topic:thread-pilot-feedback",
-          "topic:thread-pilot-delivery",
+          "topic:pilot-rescue-main",
+          "topic:pilot-feedback",
+          "topic:pilot-delivery",
           ],
         summary: "Need cross-functional rescue recommendation before Friday pilot gate",
         payload: {

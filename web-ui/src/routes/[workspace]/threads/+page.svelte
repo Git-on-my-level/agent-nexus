@@ -53,6 +53,14 @@
   let trashBusyId = $state("");
   let workspaceSlug = $derived($page.params.workspace);
 
+  /** `/topics` imports this module; `/threads` uses it directly. Data source and copy differ. */
+  let listSurface = $derived.by(() => {
+    const path = String($page.url.pathname ?? "").replace(/\/+$/, "");
+    return path.endsWith("/topics") ? "topics" : "threads";
+  });
+
+  let backingThreads = $state([]);
+
   let topicDraft = $state({
     title: "",
     summary: "",
@@ -67,7 +75,37 @@
     return workspacePath(workspaceSlug, pathname);
   }
 
+  /** @param {string} ref */
+  function topicSegmentFromTypedRef(ref) {
+    const s = String(ref ?? "").trim();
+    if (!s.startsWith("topic:")) return "";
+    return s.slice("topic:".length).trim();
+  }
+
+  async function loadBackingThreads() {
+    loading = true;
+    error = "";
+    try {
+      const response = await coreClient.listThreads({});
+      backingThreads = response.threads ?? [];
+    } catch (loadError) {
+      const reason =
+        loadError instanceof Error ? loadError.message : String(loadError);
+      error = `Failed to load threads: ${reason}`;
+      backingThreads = [];
+    } finally {
+      loading = false;
+    }
+  }
+
   $effect(() => {
+    workspaceSlug;
+    listSurface;
+    if (listSurface === "threads") {
+      void loadBackingThreads();
+      return;
+    }
+
     showArchived;
     const parsed = parseTopicListSearchParams($page.url.searchParams);
     filters = { ...defaultFilters, ...parsed };
@@ -348,63 +386,63 @@
   }
 </script>
 
-<div class="flex items-center justify-between mb-4">
-  <h1 class="text-lg font-semibold text-[var(--ui-text)]">Topics</h1>
+<div class="mb-4 flex flex-wrap items-start justify-between gap-4">
+  <div class="min-w-0 flex-1">
+    <h1 class="text-lg font-semibold text-[var(--ui-text)]">
+      {listSurface === "topics" ? "Topics" : "Threads"}
+    </h1>
+    {#if listSurface === "topics"}
+      <p class="mt-1 text-[12px] text-[var(--ui-text-muted)]">
+        Primary organizational surface. Each topic has a backing thread for
+        events and provenance.
+      </p>
+    {:else}
+      <p class="mt-1 text-[12px] text-[var(--ui-text-muted)]">
+        Diagnostic list of append-only backing threads (timelines). Not every
+        thread is a topic; prefer
+        <a
+          class="text-indigo-300 transition-colors hover:text-indigo-200"
+          href={workspaceHref("/topics")}>Topics</a
+        >
+        for triage and planning.
+      </p>
+    {/if}
+  </div>
   <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-1.5">
-    <label
-      class="inline-flex cursor-pointer items-center gap-1.5 text-[12px] text-[var(--ui-text-muted)]"
-    >
-      <input
-        bind:checked={showArchived}
-        class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--ui-border)] bg-[var(--ui-bg)] text-[var(--ui-accent-strong)] focus:ring-2 focus:ring-[var(--ui-accent)] focus:ring-offset-0"
-        type="checkbox"
-      />
-      Show archived
-    </label>
-    <span
-      class="inline-flex items-center gap-1 rounded border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2 py-1 text-[11px] text-[var(--ui-text-muted)]"
-    >
-      <svg
-        class="h-3 w-3"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-        stroke-width="2"
+    {#if listSurface === "topics"}
+      <label
+        class="inline-flex cursor-pointer items-center gap-1.5 text-[12px] text-[var(--ui-text-muted)]"
       >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+        <input
+          bind:checked={showArchived}
+          class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--ui-border)] bg-[var(--ui-bg)] text-[var(--ui-accent-strong)] focus:ring-2 focus:ring-[var(--ui-accent)] focus:ring-offset-0"
+          type="checkbox"
         />
-      </svg>
-      <kbd class="font-mono text-[10px]">⌘K</kbd>
-    </span>
-    <button
-      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)]"
-      onclick={() => (filtersOpen = !filtersOpen)}
-      type="button"
-    >
-      <svg
-        class="h-3.5 w-3.5"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-        stroke-width="2"
+        Show archived
+      </label>
+      <span
+        class="inline-flex items-center gap-1 rounded border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2 py-1 text-[11px] text-[var(--ui-text-muted)]"
       >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
-        />
-      </svg>
-      Filters
-    </button>
-    <button
-      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text)] transition-colors hover:bg-[var(--ui-border)]"
-      onclick={() => (createOpen = !createOpen)}
-      type="button"
-    >
-      {#if !createOpen}
+        <svg
+          class="h-3 w-3"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+          />
+        </svg>
+        <kbd class="font-mono text-[10px]">⌘K</kbd>
+      </span>
+      <button
+        class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)]"
+        onclick={() => (filtersOpen = !filtersOpen)}
+        type="button"
+      >
         <svg
           class="h-3.5 w-3.5"
           fill="none"
@@ -415,16 +453,43 @@
           <path
             stroke-linecap="round"
             stroke-linejoin="round"
-            d="M12 4v16m8-8H4"
+            d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
           />
         </svg>
-      {/if}
-      {createOpen ? "Cancel" : "New topic"}
-    </button>
+        Filters
+      </button>
+      <button
+        class="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text)] transition-colors hover:bg-[var(--ui-border)]"
+        onclick={() => (createOpen = !createOpen)}
+        type="button"
+      >
+        {#if !createOpen}
+          <svg
+            class="h-3.5 w-3.5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M12 4v16m8-8H4"
+            />
+          </svg>
+        {/if}
+        {createOpen ? "Cancel" : "New topic"}
+      </button>
+    {:else}
+      <a
+        class="rounded-md bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text)] transition-colors hover:bg-[var(--ui-border)]"
+        href={workspaceHref("/topics")}>Open topics</a
+      >
+    {/if}
   </div>
 </div>
 
-{#if hasActiveFilters}
+{#if listSurface === "topics" && hasActiveFilters}
   <div
     class="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-[var(--ui-text-muted)]"
     data-testid="topics-active-filters-summary"
@@ -449,7 +514,7 @@
   </div>
 {/if}
 
-{#if filtersOpen}
+{#if listSurface === "topics" && filtersOpen}
   <div
     class="mb-4 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-3"
   >
@@ -531,7 +596,7 @@
   </div>
 {/if}
 
-{#if createOpen}
+{#if listSurface === "topics" && createOpen}
   <form
     class="mb-4 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-4"
     onsubmit={(event) => {
@@ -639,7 +704,179 @@
   </form>
 {/if}
 
-{#if loading}
+{#if listSurface === "topics"}
+  {#if loading}
+    <div
+      class="mt-12 flex items-center justify-center gap-2 text-[13px] text-[var(--ui-text-muted)]"
+    >
+      <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+        <circle
+          class="opacity-25"
+          cx="12"
+          cy="12"
+          r="10"
+          stroke="currentColor"
+          stroke-width="4"
+        ></circle>
+        <path
+          class="opacity-75"
+          fill="currentColor"
+          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+        ></path>
+      </svg>
+      Loading topics...
+    </div>
+  {:else if topics.length === 0}
+    <div class="mt-8 text-center">
+      <p class="text-[13px] text-[var(--ui-text-muted)]">
+        No topics match the current filters.
+      </p>
+      {#if hasActiveFilters}
+        <button
+          class="mt-3 cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]"
+          onclick={resetFilters}
+          type="button"
+        >
+          Clear filters
+        </button>
+      {/if}
+    </div>
+  {:else}
+    <div
+      class="space-y-px overflow-hidden rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)]"
+    >
+      {#each topics as topic, i}
+        {@const staleness = computeStaleness(topic)}
+        <div
+          class="flex items-stretch {i > 0
+            ? 'border-t border-[var(--ui-border)]'
+            : ''}"
+        >
+          <a
+            class="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--ui-border-subtle)]"
+            href={workspaceHref(`/topics/${encodeURIComponent(topic.id)}`)}
+          >
+            <span
+              class="flex h-2 w-2 shrink-0 rounded-full {priorityDot(
+                topic.priority,
+              )}"
+              title={getPriorityLabel(topic.priority)}
+            ></span>
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-center gap-2">
+                <p
+                  class="truncate text-[13px] font-medium text-[var(--ui-text)]"
+                >
+                  {topic.title}
+                </p>
+                {#if isTopicArchived(topic)}
+                  <span
+                    class="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-medium text-amber-400"
+                    >Archived</span
+                  >
+                {/if}
+              </div>
+              <p class="truncate text-[12px] text-[var(--ui-text-muted)]">
+                {topic.current_summary ?? topic.summary ?? ""}
+              </p>
+            </div>
+            <div class="flex shrink-0 items-center gap-1.5 text-[11px]">
+              <span class="font-medium capitalize {statusColor(topic.status)}"
+                >{topic.status}</span
+              >
+              <span class="hidden text-[var(--ui-text-muted)] sm:inline"
+                >{formatCadenceLabel(topic.cadence, {
+                  includeExpression: false,
+                })}</span
+              >
+              {#if (topic.tags ?? []).length > 0}
+                <span
+                  class="hidden rounded bg-[var(--ui-panel)] px-1.5 py-0.5 text-[var(--ui-text-muted)] sm:inline"
+                  >{topic.tags[0]}{topic.tags.length > 1
+                    ? ` +${topic.tags.length - 1}`
+                    : ""}</span
+                >
+              {/if}
+              {#if staleness.stale}
+                <span
+                  class="rounded bg-red-500/10 px-1.5 py-0.5 font-medium text-red-400"
+                  >Stale</span
+                >
+              {/if}
+              <span class="w-14 text-right text-[var(--ui-text-subtle)]"
+                >{formatTimestamp(topic.updated_at) || "—"}</span
+              >
+            </div>
+          </a>
+          <div
+            class="flex shrink-0 items-center gap-1 border-l border-[var(--ui-border)] px-2"
+          >
+            {#if isTopicArchived(topic)}
+              <button
+                class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2 py-1 text-[11px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={Boolean(archiveBusyId) || Boolean(trashBusyId)}
+                onclick={() => void unarchiveTopicRow(topic.id)}
+                type="button"
+              >
+                Unarchive
+              </button>
+            {:else}
+              <button
+                class="cursor-pointer rounded-md p-1 text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border)] hover:text-[var(--ui-accent)] disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={Boolean(archiveBusyId) || Boolean(trashBusyId)}
+                onclick={() =>
+                  void (confirmModal = {
+                    open: true,
+                    action: "archive",
+                    entityId: topic.id,
+                  })}
+                title="Archive"
+                type="button"
+              >
+                <svg
+                  class="h-3.5 w-3.5"
+                  fill="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m8.25 3v6.75m0 0l-3-3m3 3l3-3M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"
+                  />
+                </svg>
+              </button>
+            {/if}
+            <button
+              class="cursor-pointer rounded-md p-1 text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border)] hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={Boolean(trashBusyId) || Boolean(archiveBusyId)}
+              onclick={() =>
+                (confirmModal = {
+                  open: true,
+                  action: "trash",
+                  entityId: topic.id,
+                })}
+              title="Move to trash"
+              type="button"
+            >
+              <svg
+                class="h-3.5 w-3.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
+                />
+              </svg>
+            </button>
+          </div>
+        </div>
+      {/each}
+    </div>
+  {/if}
+{:else if loading}
   <div
     class="mt-12 flex items-center justify-center gap-2 text-[13px] text-[var(--ui-text-muted)]"
   >
@@ -658,168 +895,86 @@
         d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
       ></path>
     </svg>
-    Loading topics...
+    Loading threads...
   </div>
-{:else if topics.length === 0}
+{:else if backingThreads.length === 0}
   <div class="mt-8 text-center">
-    <p class="text-[13px] text-[var(--ui-text-muted)]">
-      No topics match the current filters.
-    </p>
-    {#if hasActiveFilters}
-      <button
-        class="mt-3 cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]"
-        onclick={resetFilters}
-        type="button"
-      >
-        Clear filters
-      </button>
-    {/if}
+    <p class="text-[13px] text-[var(--ui-text-muted)]">No threads returned.</p>
   </div>
 {:else}
   <div
-    class="space-y-px rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] overflow-hidden"
+    class="space-y-px overflow-hidden rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)]"
   >
-    {#each topics as topic, i}
-      {@const staleness = computeStaleness(topic)}
+    {#each backingThreads as thread, i}
+      {@const topicSeg = topicSegmentFromTypedRef(thread.topic_ref)}
       <div
         class="flex items-stretch {i > 0
           ? 'border-t border-[var(--ui-border)]'
           : ''}"
       >
         <a
-          class="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--ui-border-subtle)]"
-          href={workspaceHref(`/topics/${encodeURIComponent(topic.id)}`)}
+          class="flex min-w-0 flex-1 flex-col gap-0.5 px-3 py-2.5 transition-colors hover:bg-[var(--ui-border-subtle)]"
+          href={workspaceHref(`/threads/${encodeURIComponent(thread.id)}`)}
         >
-          <span
-            class="flex h-2 w-2 shrink-0 rounded-full {priorityDot(
-              topic.priority,
-            )}"
-            title={getPriorityLabel(topic.priority)}
-          ></span>
-          <div class="min-w-0 flex-1">
-            <div class="flex flex-wrap items-center gap-2">
-              <p class="truncate text-[13px] font-medium text-[var(--ui-text)]">
-                {topic.title}
-              </p>
-              {#if isTopicArchived(topic)}
-                <span
-                  class="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-medium text-amber-400"
-                  >Archived</span
-                >
-              {/if}
-            </div>
-            <p class="truncate text-[12px] text-[var(--ui-text-muted)]">
-              {topic.current_summary ?? topic.summary ?? ""}
+          <div class="flex flex-wrap items-center gap-2">
+            <p class="truncate text-[13px] font-medium text-[var(--ui-text)]">
+              {thread.title || thread.id}
             </p>
-          </div>
-          <div class="flex shrink-0 items-center gap-1.5 text-[11px]">
-            <span class="font-medium capitalize {statusColor(topic.status)}"
-              >{topic.status}</span
-            >
-            <span class="hidden text-[var(--ui-text-muted)] sm:inline"
-              >{formatCadenceLabel(topic.cadence, {
-                includeExpression: false,
-              })}</span
-            >
-            {#if (topic.tags ?? []).length > 0}
+            {#if thread.status === "archived"}
               <span
-                class="hidden rounded bg-[var(--ui-panel)] px-1.5 py-0.5 text-[var(--ui-text-muted)] sm:inline"
-                >{topic.tags[0]}{topic.tags.length > 1
-                  ? ` +${topic.tags.length - 1}`
-                  : ""}</span
+                class="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-medium text-amber-400"
+                >Archived</span
               >
             {/if}
-            {#if staleness.stale}
-              <span
-                class="rounded bg-red-500/10 px-1.5 py-0.5 font-medium text-red-400"
-                >Stale</span
-              >
-            {/if}
-            <span class="w-14 text-right text-[var(--ui-text-subtle)]"
-              >{formatTimestamp(topic.updated_at) || "—"}</span
-            >
           </div>
-        </a>
-        <div
-          class="flex shrink-0 items-center gap-1 border-l border-[var(--ui-border)] px-2"
-        >
-          {#if isTopicArchived(topic)}
-            <button
-              class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2 py-1 text-[11px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={Boolean(archiveBusyId) || Boolean(trashBusyId)}
-              onclick={() => void unarchiveTopicRow(topic.id)}
-              type="button"
-            >
-              Unarchive
-            </button>
-          {:else}
-            <button
-              class="cursor-pointer rounded-md p-1 text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border)] hover:text-[var(--ui-accent)] disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={Boolean(archiveBusyId) || Boolean(trashBusyId)}
-              onclick={() =>
-                void (confirmModal = {
-                  open: true,
-                  action: "archive",
-                  entityId: topic.id,
-                })}
-              title="Archive"
-              type="button"
-            >
-              <svg
-                class="h-3.5 w-3.5"
-                fill="currentColor"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-              >
-                <path
-                  d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m8.25 3v6.75m0 0l-3-3m3 3l3-3M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"
-                />
-              </svg>
-            </button>
-          {/if}
-          <button
-            class="cursor-pointer rounded-md p-1 text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border)] hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={Boolean(trashBusyId) || Boolean(archiveBusyId)}
-            onclick={() =>
-              (confirmModal = {
-                open: true,
-                action: "trash",
-                entityId: topic.id,
-              })}
-            title="Move to trash"
-            type="button"
+          <p
+            class="truncate font-mono text-[11px] text-[var(--ui-text-subtle)]"
           >
-            <svg
-              class="h-3.5 w-3.5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              stroke-width="2"
+            {thread.id}
+          </p>
+          {#if topicSeg}
+            <p class="truncate text-[11px] text-[var(--ui-text-muted)]">
+              Linked topic:
+              <span class="text-[var(--ui-text)]">{topicSeg}</span>
+            </p>
+          {:else}
+            <p class="truncate text-[11px] text-[var(--ui-text-subtle)]">
+              No topic ref (non-topic or internal timeline)
+            </p>
+          {/if}
+          <p class="text-[11px] text-[var(--ui-text-subtle)]">
+            Updated {formatTimestamp(thread.updated_at) || "—"}
+          </p>
+        </a>
+        {#if topicSeg}
+          <div
+            class="flex shrink-0 items-center border-l border-[var(--ui-border)] px-2"
+          >
+            <a
+              class="text-[11px] font-medium text-indigo-300 transition-colors hover:text-indigo-200"
+              href={workspaceHref(`/topics/${encodeURIComponent(topicSeg)}`)}
+              >Topic</a
             >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
-              />
-            </svg>
-          </button>
-        </div>
+          </div>
+        {/if}
       </div>
     {/each}
   </div>
 {/if}
 
-<ConfirmModal
-  open={confirmModal.open}
-  title={confirmModal.action === "trash" ? "Move to trash" : "Archive topic"}
-  message={confirmModal.action === "trash"
-    ? "This topic will be moved to trash. You can restore it later."
-    : "This topic will be hidden from default views. You can unarchive it later."}
-  confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
-  variant={confirmModal.action === "trash" ? "danger" : "warning"}
-  busy={confirmModal.action === "trash"
-    ? Boolean(trashBusyId)
-    : Boolean(archiveBusyId)}
-  onconfirm={handleConfirm}
-  oncancel={() => (confirmModal = { open: false, action: "", entityId: "" })}
-/>
+{#if listSurface === "topics"}
+  <ConfirmModal
+    open={confirmModal.open}
+    title={confirmModal.action === "trash" ? "Move to trash" : "Archive topic"}
+    message={confirmModal.action === "trash"
+      ? "This topic will be moved to trash. You can restore it later."
+      : "This topic will be hidden from default views. You can unarchive it later."}
+    confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
+    variant={confirmModal.action === "trash" ? "danger" : "warning"}
+    busy={confirmModal.action === "trash"
+      ? Boolean(trashBusyId)
+      : Boolean(archiveBusyId)}
+    onconfirm={handleConfirm}
+    oncancel={() => (confirmModal = { open: false, action: "", entityId: "" })}
+  />
+{/if}

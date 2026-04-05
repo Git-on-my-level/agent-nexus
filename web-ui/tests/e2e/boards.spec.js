@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+import { mockTopicRefFromThreadId } from "../../src/lib/mockCoreData.js";
+
 const actorId = "actor-board-e2e";
 const columns = [
   { key: "backlog", title: "Backlog", wip_limit: null },
@@ -429,7 +431,9 @@ test("board UI supports create/edit and card mutation flows", async ({
       thread_id: threadId,
       refs: [
         ...new Set([
-          ...(threadId ? [`thread:${threadId}`, `topic:${threadId}`] : []),
+          ...(threadId
+            ? [`thread:${threadId}`, mockTopicRefFromThreadId(threadId)]
+            : []),
           ...docRefs,
           ...(payload.board.pinned_refs ?? []),
         ]),
@@ -925,7 +929,7 @@ test("board detail shows pending freshness and hides derived card counts until r
     refs: [
       "document:doc-runbook",
       "thread:thread-primary",
-      "topic:thread-primary",
+      mockTopicRefFromThreadId("thread-primary"),
     ],
     document_refs: ["document:doc-runbook"],
     column_schema: columns,
@@ -1044,7 +1048,7 @@ test("board edit conflict reloads latest state and allows retry", async ({
     refs: [
       "document:doc-runbook",
       "thread:thread-primary",
-      "topic:thread-primary",
+      mockTopicRefFromThreadId("thread-primary"),
     ],
     document_refs: ["document:doc-runbook"],
     column_schema: columns,

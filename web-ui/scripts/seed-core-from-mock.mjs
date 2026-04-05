@@ -145,7 +145,12 @@ async function seedTopics() {
       throw new Error(`Topic create returned incomplete data for ${sourceTopic.title}`);
     }
 
-    topicIdMap.set(String(sourceTopic.id ?? "").trim(), newId);
+    const sourceTopicId = String(sourceTopic.id ?? "").trim();
+    topicIdMap.set(sourceTopicId, newId);
+    const topicAlias = topicRefAliasFromThreadLikeId(sourceTopicId);
+    if (topicAlias && topicAlias !== sourceTopicId) {
+      topicIdMap.set(topicAlias, newId);
+    }
     threadIdMap.set(String(sourceTopic.id ?? "").trim(), backingThreadId);
   }
 }
@@ -471,24 +476,50 @@ async function seedBoards() {
       const columnKey =
         String(sourceCard.column_key ?? "backlog").trim() || "backlog";
       const afterAnchor = lastAnchorByColumn.get(columnKey);
-      const boardUpdatedAt = String(currentBoard?.updated_at ?? "").trim();
 
       const cardSummaryForWrite =
         String(sourceCard.summary ?? "").trim() ||
         String(sourceCard.title ?? "").trim() ||
         String(sourceCard.body ?? "").trim();
       const mappedAssigneeRefs = seedCardAssigneeRefs(sourceCard);
+      const rawTopicRef = String(sourceCard.topic_ref ?? "").trim();
+      let mappedTopicRef = rawTopicRef
+        ? mapRef(rawTopicRef.includes(":") ? rawTopicRef : `topic:${rawTopicRef}`)
+        : "";
+      const rawRelatedRefs = Array.isArray(sourceCard.related_refs)
+        ? sourceCard.related_refs.map((entry) => String(entry ?? "").trim()).filter(Boolean)
+        : [];
+      const rawSelfBoardRef = `board:${String(sourceCard.board_id ?? newBoardId).trim()}`;
+
+      let mappedRelatedRefs = Array.isArray(sourceCard.related_refs)
+        ? mapRefs(sourceCard.related_refs)
+        : [];
+      const explicitBoardCard =
+        Boolean(String(sourceCard.id ?? "").trim()) || Boolean(cardSummaryForWrite);
+      if (explicitBoardCard) {
+        mappedRelatedRefs = mappedRelatedRefs.filter((ref) => ref !== rawSelfBoardRef);
+      }
+      const rawThreadRefs = rawRelatedRefs.filter((ref) => ref.startsWith("thread:"));
+      if (!mappedTopicRef && explicitBoardCard && rawThreadRefs.length === 1) {
+        const rawThreadID = rawThreadRefs[0].slice("thread:".length);
+        const inferredTopicID = mapTopicId(rawThreadID);
+        const hasTopicForThread =
+          topicIdMap.has(rawThreadID) ||
+          topicIdMap.has(topicRefAliasFromThreadLikeId(rawThreadID));
+        if (inferredTopicID && hasTopicForThread) {
+          mappedTopicRef = `topic:${inferredTopicID}`;
+          mappedRelatedRefs = mappedRelatedRefs.filter((ref) => !ref.startsWith("thread:"));
+        }
+      }
+      const boardCardRelatedRefs =
+        !mappedTopicRef && linkedThreadId
+          ? uniqueSeedRefs([...mappedRelatedRefs, `thread:${linkedThreadId}`])
+          : mappedRelatedRefs;
 
       const baseBody = {
         actor_id: pickActorId(sourceCard.created_by ?? sourceCard.updated_by),
-        ...(boardUpdatedAt ? { if_board_updated_at: boardUpdatedAt } : {}),
         column_key: columnKey,
-        ...(threadId
-          ? {
-              topic_ref: `topic:${threadId}`,
-              thread_id: threadId,
-            }
-          : {}),
+        ...(mappedTopicRef ? { topic_ref: mappedTopicRef } : {}),
         ...(pinnedDocumentId ? { pinned_document_id: pinnedDocumentId } : {}),
         ...(cardSummaryForWrite
           ? {
@@ -502,9 +533,8 @@ async function seedBoards() {
               resolution: normalizeSeedCardResolution(sourceCard.resolution),
             }
           : {}),
-        ...(Array.isArray(sourceCard.related_refs) &&
-        sourceCard.related_refs.length > 0
-          ? { related_refs: mapRefs(sourceCard.related_refs) }
+        ...(boardCardRelatedRefs.length > 0
+          ? { related_refs: boardCardRelatedRefs }
           : {}),
         ...(Array.isArray(sourceCard.resolution_refs) &&
         sourceCard.resolution_refs.length > 0
@@ -519,36 +549,44 @@ async function seedBoards() {
         if (!anchor) {
           return {};
         }
-        const a = String(anchor);
-        if (a.startsWith("thread-")) {
-          return { after_thread_id: a };
-        }
-        return { after_card_id: a };
+        return { after_card_id: String(anchor) };
       };
 
       let addResponse;
-      if (linkedThreadId) {
-        addResponse = await requestRetryOnServerError(
-          "POST",
-          `/boards/${encodeURIComponent(newBoardId)}/cards`,
-          {
-            ...baseBody,
-            thread_id: linkedThreadId,
-            ...placementAfter(afterAnchor),
-          },
-        );
-      } else {
-        addResponse = await requestRetryOnServerError(
-          "POST",
-          `/boards/${encodeURIComponent(newBoardId)}/cards`,
-          {
-            ...baseBody,
-            ...placementAfter(afterAnchor),
-            ...(sourceCard.priority
-              ? { priority: String(sourceCard.priority) }
-              : {}),
-            ...(sourceCard.status ? { status: String(sourceCard.status) } : {}),
-          },
+      try {
+        if (linkedThreadId) {
+          addResponse = await requestRetryOnServerError(
+            "POST",
+            `/boards/${encodeURIComponent(newBoardId)}/cards`,
+            {
+              ...baseBody,
+              ...placementAfter(afterAnchor),
+            },
+          );
+        } else {
+          addResponse = await requestRetryOnServerError(
+            "POST",
+            `/boards/${encodeURIComponent(newBoardId)}/cards`,
+            {
+              ...baseBody,
+              ...placementAfter(afterAnchor),
+              ...(sourceCard.priority
+                ? { priority: String(sourceCard.priority) }
+                : {}),
+              ...(sourceCard.status ? { status: String(sourceCard.status) } : {}),
+            },
+          );
+        }
+      } catch (error) {
+        const sourceCardLabel =
+          String(sourceCard.id ?? "").trim() ||
+          String(sourceCard.thread_id ?? "").trim() ||
+          String(sourceCard.summary ?? "").trim() ||
+          "(anonymous source card)";
+        throw new Error(
+          `board ${newBoardId} card ${sourceCardLabel}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
         );
       }
 
@@ -668,6 +706,15 @@ function mapTopicId(topicId) {
   return topicIdMap.get(raw) ?? raw;
 }
 
+function topicRefAliasFromThreadLikeId(topicId) {
+  const raw = String(topicId ?? "").trim();
+  if (!raw) {
+    return "";
+  }
+
+  return raw.startsWith("thread-") ? raw.slice("thread-".length) : raw;
+}
+
 function mapDocumentId(documentId) {
   const raw = String(documentId ?? "").trim();
   if (!raw) {
@@ -732,6 +779,10 @@ function mapRefs(values) {
   }
 
   return values.map((entry) => mapRef(entry)).filter(Boolean);
+}
+
+function uniqueSeedRefs(values) {
+  return [...new Set((values ?? []).map((entry) => String(entry ?? "").trim()).filter(Boolean))];
 }
 
 function seedCardAssigneeRefs(sourceCard) {

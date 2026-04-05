@@ -61,7 +61,7 @@ describe("receipt draft validation", () => {
         changesSummary: "",
         knownGapsInput: "",
       },
-      { subjectRef: "topic:thread-1" },
+      { subjectRef: "topic:example-invalid-subject" },
     );
 
     expect(result.valid).toBe(false);

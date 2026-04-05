@@ -2,9 +2,9 @@
 
 ## 0. Purpose
 
-oar-ui is the human-facing interface for Organization Autorunner.
+oar-ui is the operator interface for Organization Autorunner.
 
-OAR is a manager and executive operating system, not a generic work-management tool. The product foundation and architecture decisions are documented in [docs/architecture/foundation.md](../../docs/architecture/foundation.md). oar-ui provides visibility into the workspace maintained by oar-core and a surface for human intervention: topics, boards, cards, documents, packets, and message posting. It is one of many possible clients of oar-core — agents should prefer the CLI and generated clients; humans interact through this UI.
+OAR is a manager and executive operating system, not a generic work-management tool. The product foundation and architecture decisions are documented in [docs/architecture/foundation.md](../../docs/architecture/foundation.md). oar-ui provides visibility into the workspace maintained by oar-core and a surface for operator intervention: topics, boards, cards, documents, packets, and message posting. It is one of many possible clients of oar-core — agents should prefer the CLI and generated clients; operators use this UI.
 
 oar-ui does **not**:
 
@@ -37,7 +37,7 @@ oar-ui does **not**:
 
 ### 1.4 Actor identity
 
-- The UI MUST authenticate the current user as an actor ID from the oar-core actor registry.
+- The UI MUST authenticate the current operator as an actor ID from the oar-core actor registry.
 - Every write operation MUST include the actor ID.
 - The UI displays actor `display_name` wherever `actor_id` appears.
 - **Auth-first model**: Production deployments require authenticated principals by default.
@@ -73,13 +73,15 @@ Operator-facing copy MUST use one term per concept. Banned aliases MUST NOT appe
 | Concept | Canonical term | Banned UI aliases | Allowed technical exceptions |
 | --- | --- | --- | --- |
 | Soft-delete lifecycle | Trash, trashed, move to trash, restore | tombstone, tombstoned | HTTP paths and machine identifiers follow `contracts/` (`/trash`, `trashed_at`, `trash_reason`, `include_trashed`, `trashed_only`) |
-| Root work item | Topic, Topics | backing thread, Threads (as user-facing label) | `thread_id`, `thread:` refs, `/threads` diagnostic routes |
+| Root work item | Topic, Topics | backing thread, Threads (as operator-facing label) | `thread_id`, `thread:` refs, `/threads` diagnostic routes |
 | Document collection | Docs | Documents (as collection label) | `document` for singular resources and API field names |
 | Inbox triage action | Acknowledge | Dismiss | — |
-| Human persona in prose | Operator | user, end user | `actor`, `principal` in identity and auth contexts |
+| Operator-facing actor in prose | Operator | user, end user | `actor`, `principal` in identity and auth contexts |
 | Irreversible removal | Permanently delete | Purge (primary copy) | CLI/command `purge` where it is the API surface name |
 
 `Artifact` remains the umbrella object; `Receipt` and `Review` are artifact kinds only.
+
+**Domain note:** A **thread** is a core primitive (durable event timeline, `thread_id`, backing streams). A **topic** is the operator-facing work item implemented on top of a thread. Cards, documents, and boards may also reference backing threads that are not the same as a navigable topic row; use **topic** in operator copy when the UI means the organizational unit, and **thread** when the meaning is the timeline primitive, a `thread:` ref, or a read-only inspection route.
 
 ---
 
@@ -124,7 +126,7 @@ Mutable topic and card fields are interpretive and versioned through events. The
 
 ### 3.1 Inbox
 
-A dedicated surface showing items that need human attention.
+A dedicated surface showing items that need operator attention.
 
 **Display:**
 
@@ -136,7 +138,7 @@ A dedicated surface showing items that need human attention.
 **Actions:**
 
 - Navigate to the relevant topic, board, card, thread, or artifact.
-- Acknowledge/dismiss an item → emits an `inbox_item_acknowledged` event with `inbox:<inbox_item_id>` in refs. Acknowledged items are suppressed from the inbox unless a new triggering event occurs after the acknowledgment.
+- Acknowledge an item → emits an `inbox_item_acknowledged` event with `inbox:<inbox_item_id>` in refs. Acknowledged items are suppressed from the inbox unless a new triggering event occurs after the acknowledgment.
 - Record a decision (creates a `decision_made` event with notes and typed refs).
 
 ### 3.2 Topic list
@@ -162,9 +164,9 @@ The primary working surface. Combines the workspace-style current-state view and
 - Linking artifacts to the topic/thread context (adds typed refs to `key_artifacts` where the schema allows).
 - Posting messages (creates `message_posted` events on the backing thread).
 
-### 3.4 Thread Work tab (coordination)
+### 3.4 Receipts and reviews from boards (no thread detail Work tab)
 
-The thread/topic detail **Work** tab has been removed. Operators create receipts and reviews from **card detail modals on boards**, where flows remain grounded in `card:<card_id>` subjects (see receipt and review packet contracts) and typed refs per reference conventions.
+Receipt and review authoring is not a separate thread/topic detail tab. Operators create receipts and reviews from **card detail modals on boards**, where flows remain grounded in `card:<card_id>` subjects (see receipt and review packet contracts) and typed refs per reference conventions.
 
 **Actions:**
 
@@ -176,9 +178,9 @@ A view for inspecting receipt artifacts.
 
 **Must show:** outputs (as navigable typed-ref links), verification evidence (as navigable typed-ref links), changes summary, known gaps.
 
-**Receipt intake:** The UI MUST support at least manual creation of a receipt artifact (fill in fields, attach evidence as typed refs, save). Agents will typically submit receipts via the CLI or generated clients, but humans need a UI path too.
+**Receipt intake:** The UI MUST support at least manual creation of a receipt artifact (fill in fields, attach evidence as typed refs, save). Agents will typically submit receipts via the CLI or generated clients, but operators still need a UI path for manual intake.
 
-**Review action:** From a receipt, the user can initiate a review — select outcome (accept / revise / escalate), write notes, attach evidence as typed refs. This creates a review artifact + `review_completed` event (with typed refs per reference conventions). If the outcome is `revise`, the UI SHOULD steer the operator back to the topic/card context for follow-up work.
+**Review action:** From a receipt, the operator can initiate a review — select outcome (accept / revise / escalate), write notes, attach evidence as typed refs. This creates a review artifact + `review_completed` event (with typed refs per reference conventions). If the outcome is `revise`, the UI SHOULD steer the operator back to the topic/card context for follow-up work.
 
 ### 3.6 Boards and docs as canonical operator surfaces
 
@@ -227,9 +229,9 @@ The Access page provides workspace-local operator visibility and intervention fo
 
 ### 4.1 Restricted transition enforcement
 
-When a user attempts to set a restricted state transition on a card or packet-backed field, the UI MUST:
+When an operator attempts to set a restricted state transition on a card or packet-backed field, the UI MUST:
 
-- Require the user to attach a receipt artifact reference as `artifact:<id>` or record an explicit decision event as `event:<id>` when the schema requires evidence.
+- Require the operator to attach a receipt artifact reference as `artifact:<id>` or record an explicit decision event as `event:<id>` when the schema requires evidence.
 - Block the save until the typed reference is provided.
 - Submit the transition through oar-core, which enforces the restriction server-side.
 - Display the resulting per-field provenance (from `provenance.by_field`) on the affected field.
@@ -258,9 +260,9 @@ Replies SHOULD reference the parent event ID as `event:<parent_event_id>` in the
 
 ## 6. Concurrency
 
-- oar-ui MUST assume multiple writers (humans and agents) may update oar-core concurrently.
+- oar-ui MUST assume multiple writers (operators and agents) may update oar-core concurrently.
 - The UI SHOULD poll or subscribe for changes and refresh when canonical state changes.
-- For v0, optimistic locking on current-state edits is sufficient: if a view's `updated_at` has changed since the UI loaded it, warn the user and reload before saving. Patch/merge semantics with wholesale list replacement reduce the risk of accidental field erasure.
+- For v0, optimistic locking on current-state edits is sufficient: if a view's `updated_at` has changed since the UI loaded it, warn the operator and reload before saving. Patch/merge semantics with wholesale list replacement reduce the risk of accidental field erasure.
 
 ---
 

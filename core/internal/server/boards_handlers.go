@@ -437,7 +437,7 @@ func handlePurgeBoard(w http.ResponseWriter, r *http.Request, opts handlerOption
 		if writeBoardLifecycleStoreError(w, err) {
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to purge board")
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to permanently delete board")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"purged": true, "board_id": boardID})

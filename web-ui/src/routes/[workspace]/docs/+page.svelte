@@ -523,7 +523,7 @@
           </p>
           {#if doc.thread_id && !scopedThreadId}
             <p class="mt-0.5 text-[11px] text-[var(--ui-text-subtle)]">
-              Thread (timeline): {doc.thread_id}
+              Backing thread (timeline): {doc.thread_id}
             </p>
           {/if}
         </div>

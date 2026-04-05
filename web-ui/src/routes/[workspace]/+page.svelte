@@ -101,7 +101,11 @@
       "boards",
       "Failed to load boards",
     );
-    docsState = toSectionState(docsResult, "documents", "Failed to load docs");
+    docsState = toSectionState(
+      docsResult,
+      "documents",
+      "Failed to load documents",
+    );
 
     refreshedAt = new Date().toISOString();
     loading = false;
@@ -554,7 +558,7 @@
     <section>
       <div class="flex items-center justify-between gap-2 mb-2">
         <h2 class="text-[13px] font-semibold text-[var(--ui-text)]">
-          Recent docs
+          Recent Docs
         </h2>
         <a
           class="text-[12px] font-medium text-[var(--ui-text-muted)] hover:text-[var(--ui-text)] transition-colors"
@@ -588,7 +592,9 @@
           {docsState.error}
         </p>
       {:else if recentDocs.length === 0}
-        <p class="text-[13px] text-[var(--ui-text-muted)] py-3">No docs yet.</p>
+        <p class="text-[13px] text-[var(--ui-text-muted)] py-3">
+          No documents yet.
+        </p>
       {:else}
         <div
           class="space-y-px rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] overflow-hidden"

@@ -209,35 +209,37 @@ Internal navigation links that sit inline: `text-indigo-400 hover:text-indigo-30
 
 ## Data Relationships & Navigation
 
-When building pages that display entities with parent/child or many-to-many relationships, follow these principles to avoid confusing users:
+**Thread vs topic:** Use **topic** as the default operator-facing noun for the primary work item (navigation, headers, list rows). **Thread** is correct for the timeline primitive, `thread:` / `thread_id` diagnostics, read-only `/threads` inspection, or when the UI explicitly means a backing stream that is not being presented as a topic.
+
+When building pages that display entities with parent/child or many-to-many relationships, follow these principles to avoid confusing operators:
 
 ### Parent/Owner Links
 
 Every detail page must clearly show its parent entity. Use a labeled inline link in the header area:
 
 ```svelte
-<span class="text-[var(--ui-text-subtle)]">Thread</span>
-<a class="ml-1 text-indigo-400 hover:text-indigo-300" href={threadHref}>
-  {threadTitle}
+<span class="text-[var(--ui-text-subtle)]">Topic</span>
+<a class="ml-1 text-indigo-400 hover:text-indigo-300" href={topicHref}>
+  {topicTitle}
 </a>
 ```
 
-Examples: Board → parent thread, Document → owning thread, Artifact → parent thread.
+Examples: Board → primary topic context, Document → owning topic (or backing-thread link surfaced as topic navigation where applicable), Artifact → topic context. Prefer **Backing thread** (or a neutral **Linked thread** label) only when the target is explicitly thread-indexed inspection, not the topic workspace.
 
 ### Navigational Symmetry
 
-If entity A links to entity B, users should be able to navigate from B back to A with equal prominence. When adding a link from a detail page to a related entity, check whether the reverse direction exists. If A owns B, A's detail page should list its B children in a dedicated panel (not a buried badge).
+If entity A links to entity B, operators should be able to navigate from B back to A with equal prominence. When adding a link from a detail page to a related entity, check whether the reverse direction exists. If A owns B, A's detail page should list its B children in a dedicated panel (not a buried badge).
 
 ### Attribution in Aggregated Lists
 
-When a page rolls up items from multiple child entities, each item must identify its source. Never show a flat list where users cannot tell which parent each item belongs to.
+When a page rolls up items from multiple child entities, each item must identify its source. Never show a flat list where operators cannot tell which parent each item belongs to.
 
-- On list pages: show the owner (e.g., thread badge on each document row).
-- On detail pages: filter items by relationship and label sections (e.g., "Owned by this thread" vs "Appears as card on").
+- On list pages: show the owner (e.g., topic badge on each document row).
+- On detail pages: filter items by relationship and label sections (e.g., "Owned by this topic" vs "Appears as card on").
 
 ### Avoid Duplicate Context
 
-The same relationship should not appear in multiple places on the same page with different labels. If a parent thread link is in the header, suppress it from a generic "Linked references" list. Use explicit structural rendering over generic ref dumps.
+The same relationship should not appear in multiple places on the same page with different labels. If a parent topic (or explicit backing-thread) link is in the header, suppress it from a generic "Linked references" list. Use explicit structural rendering over generic ref dumps.
 
 ### Relationship Labels
 
@@ -245,12 +247,13 @@ Use consistent labels for relationship types:
 
 | Relationship | Label | Where |
 |---|---|---|
-| Board → thread | `Thread` | Board header context line |
-| Document → thread | `Thread` | Document header |
-| Artifact → thread | `Thread` | Artifact header |
-| Thread → owned boards | Section: "Owned by this thread" | Thread boards panel |
-| Thread → board cards | Section: "Appears as card on" | Thread boards panel |
-| List item → thread | `Thread: {id}` | List row metadata |
+| Board → topic | `Topic` | Board header context line |
+| Document → topic | `Topic` | Document header (when linking to the organizational work item) |
+| Artifact → topic | `Topic` | Artifact header (same) |
+| Topic detail → owned boards | Section: "Owned by this topic" | Topic/boards panel |
+| Topic detail → board cards | Section: "Appears as card on" | Topic boards panel |
+| List item → topic | `Topic: {title or id}` | List row metadata |
+| Diagnostic / `thread:` target | `Backing thread` or `Thread` | Only when the route or ref is explicitly thread-scoped |
 
 ### Scope Labels for Counts
 

@@ -100,7 +100,7 @@
         class="inline-flex rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text)] transition-colors hover:bg-[var(--ui-border-subtle)]"
         href={workspaceHref("/docs")}
       >
-        Back to documents
+        Back to Docs
       </a>
     </div>
   {/if}

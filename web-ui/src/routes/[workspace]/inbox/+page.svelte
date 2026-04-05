@@ -359,7 +359,7 @@
       } catch (ackError) {
         const reason =
           ackError instanceof Error ? ackError.message : String(ackError);
-        error = `Failed to dismiss item: ${reason}`;
+        error = `Failed to acknowledge item: ${reason}`;
         items = [...items, item];
       } finally {
         ackInFlightById = { ...ackInFlightById, [item.id]: false };

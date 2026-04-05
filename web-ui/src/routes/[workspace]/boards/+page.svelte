@@ -126,7 +126,8 @@
     const backingThreadId = createBackingThreadId.trim();
 
     if (!title || !backingThreadId) {
-      createError = "Title and backing thread are required.";
+      createError =
+        "Title and board timeline ID (backing thread) are required.";
       return;
     }
 
@@ -318,7 +319,7 @@
         <SearchableEntityPicker
           bind:value={createBackingThreadId}
           advancedLabel="Use a manual thread ID"
-          helperText="Bind a topic or enter this board's thread ID (append-only timeline for events on this board)."
+          helperText="Pick a topic or enter this board's backing thread ID (append-only event timeline for the board)."
           label="Board timeline"
           manualLabel="Thread ID"
           manualPlaceholder="thread-q2-initiative"
@@ -333,7 +334,7 @@
           label="Board document"
           manualLabel="Document ID"
           manualPlaceholder="product-constitution"
-          placeholder="Search documents by title, ID, or thread"
+          placeholder="Search documents by title, ID, or timeline ID"
           searchFn={searchDocumentOptions}
         />
       </div>

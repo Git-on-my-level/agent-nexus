@@ -763,7 +763,7 @@ func handlePurgeDocument(w http.ResponseWriter, r *http.Request, opts handlerOpt
 			writeError(w, http.StatusConflict, "not_trashed", "document is not currently trashed")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to purge document")
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to permanently delete document")
 		return
 	}
 

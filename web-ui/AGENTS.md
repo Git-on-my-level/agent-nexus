@@ -6,14 +6,14 @@ Guide for work inside `web-ui/`.
 Read this after the root [AGENTS.md](../AGENTS.md). Keep this file focused on durable operator-facing purpose, UI boundaries, and the invariants that protect safe interaction with `oar-core`.
 
 ## Module Purpose
-`web-ui` is the human-operator control surface for Organization Autorunner.
+`web-ui` is the operator control surface for Organization Autorunner.
 
-It gives operators fast, glanceable visibility into the shared workspace maintained by `oar-core` and provides explicit paths for human intervention such as decisions, reviews, resource edits (topics, docs, boards, cards), acknowledgments, and message posting. It is a client of `oar-core`, not an agent runtime or orchestration layer.
+It gives operators fast, glanceable visibility into the shared workspace maintained by `oar-core` and provides explicit paths for operator intervention such as decisions, reviews, resource edits (topics, docs, boards, cards), acknowledgments, and message posting. It is a client of `oar-core`, not an agent runtime or orchestration layer.
 
 ## UI Responsibilities
 - Treat `oar-core` as the single source of truth for all durable state.
 - Optimize for operator usability: clear status, triage context, provenance visibility, and at-a-glance understanding of what needs attention.
-- Provide the main human workflow surfaces for inbox triage, topic and backing-thread inspection, boards and cards, artifacts, documents, and review flows.
+- Provide the main operator workflow surfaces for inbox triage, topic and backing-thread inspection, boards and cards, artifacts, documents, and review flows.
 - Handle forward-compatible data safely: unknown event types, artifact kinds, refs, and fields must remain visible rather than breaking the UI.
 - Gate writes safely through actor-aware and workspace-aware flows while preserving core contract semantics.
 
@@ -50,6 +50,6 @@ It gives operators fast, glanceable visibility into the shared workspace maintai
 - When contracts change, run `make contract-gen` and `make contract-check` from repo root.
 
 ## Maintenance Guidance
-- Keep this file centered on human-operator purpose and durable UI boundaries.
+- Keep this file centered on operator-facing purpose and durable UI boundaries.
 - Put route-by-route details and implementation specifics in specs, runbooks, or code-local docs.
 - Update this guide when the operator surface or its boundaries materially change.

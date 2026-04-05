@@ -391,7 +391,7 @@ func handlePurgeArchivedCard(w http.ResponseWriter, r *http.Request, opts handle
 			return
 		}
 		if !actorRegistryActorHasHumanTag(r.Context(), opts.actorRegistry, registeredID) {
-			writeError(w, http.StatusForbidden, "human_only", "only human-tagged actors may purge without authenticated passkey credentials")
+			writeError(w, http.StatusForbidden, "human_only", "only human-tagged actors may permanently delete without authenticated passkey credentials")
 			return
 		}
 	}
@@ -400,7 +400,7 @@ func handlePurgeArchivedCard(w http.ResponseWriter, r *http.Request, opts handle
 		if writeBoardCardPurgeStoreError(w, err) {
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to purge card")
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to permanently delete card")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"purged": true, "card_id": cardID})

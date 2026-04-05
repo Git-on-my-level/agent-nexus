@@ -500,7 +500,7 @@ test("thread detail handles snapshot update conflict and retries after reload", 
   let patchAttempt = 0;
   let threadSnapshot = {
     id: "thread-onboarding",
-    topic_ref: "topic:thread-onboarding",
+    topic_ref: "topic:onboarding",
     type: "process",
     title: "Customer Onboarding Workflow",
     status: "active",

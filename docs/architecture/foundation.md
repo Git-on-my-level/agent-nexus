@@ -48,7 +48,7 @@ This decision ensures:
 
 Implications:
 - **Boards** provide structured views over topics, cards, and related backing threads. They are first-class entities with their own storage, lifecycle, and identity. Boards can be persisted, shared, and referenced independently of any particular UI session.
-- **Documents** provide a first-class lifecycle with revision history, tombstoning, and Merkle-chain integrity. They are distinct from generic artifacts and have their own API surface.
+- **Documents** provide a first-class lifecycle with revision history, trash/archive semantics (per contract field names), and Merkle-chain integrity. They are distinct from generic artifacts and have their own API surface.
 - Both boards and documents exist in the core data model and can be manipulated through the canonical API, not just through the UI.
 
 This does not mean boards and documents replace threads, artifacts, or events. Those primitives remain the foundation. Boards and documents sit on top as durable organizing layers that help humans and agents navigate, curate, and reason about the underlying data.
@@ -105,7 +105,7 @@ This split preserves operational simplicity in hosted v1 while fixing a clear fo
 This foundation document defines product-level and architecture-level decisions. Implementation specs for individual modules (core, CLI, web-ui) describe how those decisions are realized in code:
 
 - **Core spec** (`core/docs/oar-core-spec.md`): defines how canonical state, evidence, and primitives are implemented and enforced.
-- **UI spec** (`web-ui/docs/oar-ui-spec.md`): defines how the human-facing interface exposes the foundation decisions to operators.
+- **UI spec** (`web-ui/docs/oar-ui-spec.md`): defines how the operator interface exposes the foundation decisions.
 - **Contract specs** (`contracts/`): define the schema and API boundaries that all modules must honor.
 
 When this document conflicts with module specs, **this document wins**. Module specs should be updated to align with the foundation.

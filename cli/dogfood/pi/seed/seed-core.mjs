@@ -128,8 +128,13 @@ async function seedTopics() {
       );
     }
 
-    topicIdMap.set(String(sourceThread.id ?? "").trim(), newTopicId);
-    threadIdMap.set(String(sourceThread.id ?? "").trim(), backingThreadId);
+    const sourceTopicId = String(sourceThread.id ?? "").trim();
+    topicIdMap.set(sourceTopicId, newTopicId);
+    const topicAlias = topicRefAliasFromThreadLikeId(sourceTopicId);
+    if (topicAlias && topicAlias !== sourceTopicId) {
+      topicIdMap.set(topicAlias, newTopicId);
+    }
+    threadIdMap.set(sourceTopicId, backingThreadId);
   }
 }
 
@@ -247,6 +252,14 @@ function mapRef(ref) {
     return `${prefix}:${topicIdMap.get(value) ?? value}`;
   }
   return text;
+}
+
+function topicRefAliasFromThreadLikeId(topicId) {
+  const raw = String(topicId ?? "").trim();
+  if (!raw) {
+    return "";
+  }
+  return raw.startsWith("thread-") ? raw.slice("thread-".length) : raw;
 }
 
 function mapRefs(values) {

@@ -405,6 +405,12 @@ func formatCardRecord(card map[string]any) string {
 	lines = appendStringList(lines, "assignee_refs", stringList(card["assignee_refs"]))
 	lines = appendStringList(lines, "resolution_refs", stringList(card["resolution_refs"]))
 	lines = appendStringList(lines, "related_refs", stringList(card["related_refs"]))
+	if trashedAt := anyString(card["trashed_at"]); trashedAt != "" {
+		lines = append(lines, "⚠ TRASHED")
+		lines = appendScalar(lines, "trashed_at", card, "trashed_at")
+		lines = appendScalar(lines, "trashed_by", card, "trashed_by")
+		lines = appendScalar(lines, "trash_reason", card, "trash_reason")
+	}
 	lines = appendScalar(lines, "updated_at", card, "updated_at")
 	return strings.Join(lines, "\n")
 }
@@ -573,7 +579,7 @@ func formatThreadRecord(thread map[string]any) string {
 	lines = appendStringList(lines, "key_artifacts", stringList(thread["key_artifacts"]))
 	lines = appendStringList(lines, "open_cards", stringList(thread["open_cards"]))
 	if trashedAt := anyString(thread["trashed_at"]); trashedAt != "" {
-		lines = append(lines, "⚠ TOMBSTONED")
+		lines = append(lines, "⚠ TRASHED")
 		lines = appendScalar(lines, "trashed_at", thread, "trashed_at")
 		lines = appendScalar(lines, "trashed_by", thread, "trashed_by")
 		lines = appendScalar(lines, "trash_reason", thread, "trash_reason")
@@ -598,7 +604,7 @@ func formatArtifactRecord(artifact map[string]any) string {
 	lines = appendScalar(lines, "content_hash", artifact, "content_hash")
 	lines = appendStringList(lines, "refs", stringList(artifact["refs"]))
 	if trashedAt := anyString(artifact["trashed_at"]); trashedAt != "" {
-		lines = append(lines, "⚠ TOMBSTONED")
+		lines = append(lines, "⚠ TRASHED")
 		lines = appendScalar(lines, "trashed_at", artifact, "trashed_at")
 		lines = appendScalar(lines, "trashed_by", artifact, "trashed_by")
 		lines = appendScalar(lines, "trash_reason", artifact, "trash_reason")
@@ -626,7 +632,7 @@ func formatEventRecord(event map[string]any) string {
 		lines = append(lines, indentBlock(formatPrettyBody(payload))...)
 	}
 	if trashedAt := anyString(event["trashed_at"]); trashedAt != "" {
-		lines = append(lines, "⚠ TOMBSTONED")
+		lines = append(lines, "⚠ TRASHED")
 		lines = appendScalar(lines, "trashed_at", event, "trashed_at")
 		lines = appendScalar(lines, "trashed_by", event, "trashed_by")
 		lines = appendScalar(lines, "trash_reason", event, "trash_reason")
@@ -650,7 +656,7 @@ func formatDocumentRecord(body any) string {
 	lines = appendScalar(lines, "revision_number", revision, "revision_number")
 	lines = appendScalar(lines, "content_type", revision, "content_type")
 	if trashedAt := anyString(document["trashed_at"]); trashedAt != "" {
-		lines = append(lines, "⚠ TOMBSTONED")
+		lines = append(lines, "⚠ TRASHED")
 		lines = appendScalar(lines, "trashed_at", document, "trashed_at")
 		lines = appendScalar(lines, "trashed_by", document, "trashed_by")
 		lines = appendScalar(lines, "trash_reason", document, "trash_reason")
@@ -1066,7 +1072,7 @@ func renderEventListItemWithMode(item map[string]any, fullID bool) string {
 	summary := firstNonEmpty(anyString(item["summary_preview"]), anyString(item["summary"]), anyString(item["created_at"]))
 	prefix := ""
 	if anyString(item["trashed_at"]) != "" {
-		prefix = "[TOMBSTONED] "
+		prefix = "[TRASHED] "
 	} else if anyString(item["archived_at"]) != "" {
 		prefix = "[ARCHIVED] "
 	}
@@ -1311,7 +1317,7 @@ func formatBoardRecord(board map[string]any) string {
 	lines = appendScalar(lines, "updated_at", board, "updated_at")
 	lines = appendScalar(lines, "created_at", board, "created_at")
 	if trashedAt := anyString(board["trashed_at"]); trashedAt != "" {
-		lines = append(lines, "⚠ TOMBSTONED")
+		lines = append(lines, "⚠ TRASHED")
 		lines = appendScalar(lines, "trashed_at", board, "trashed_at")
 		lines = appendScalar(lines, "trashed_by", board, "trashed_by")
 		lines = appendScalar(lines, "trash_reason", board, "trash_reason")

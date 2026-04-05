@@ -34,7 +34,7 @@ describe("mockCoreData parity behaviors", () => {
       expect(seed.cards[0]).toMatchObject({
         board_id: "board-product-launch",
         thread_id: "thread-summer-menu",
-        topic_ref: "topic:thread-summer-menu",
+        topic_ref: "topic:summer-menu",
         resolution: null,
       });
       expect(seed.cards[0].thread_ref).toBeUndefined();
@@ -81,7 +81,7 @@ describe("mockCoreData parity behaviors", () => {
       );
       expect(migratedEvents).toHaveLength(2);
       migratedEvents.forEach((event) => {
-        expect(event.refs).toContain("topic:thread-pricing-glitch");
+        expect(event.refs).toContain("topic:pricing-glitch");
       });
     });
   });

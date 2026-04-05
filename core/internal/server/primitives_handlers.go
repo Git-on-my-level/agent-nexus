@@ -503,7 +503,7 @@ func handlePurgeArtifact(w http.ResponseWriter, r *http.Request, opts handlerOpt
 			return
 		}
 		if !actorRegistryActorHasHumanTag(r.Context(), opts.actorRegistry, registeredID) {
-			writeError(w, http.StatusForbidden, "human_only", "only human-tagged actors may purge without authenticated passkey credentials")
+			writeError(w, http.StatusForbidden, "human_only", "only human-tagged actors may permanently delete without authenticated passkey credentials")
 			return
 		}
 	}
@@ -522,7 +522,7 @@ func handlePurgeArtifact(w http.ResponseWriter, r *http.Request, opts handlerOpt
 			writeError(w, http.StatusConflict, "artifact_in_use", "artifact is referenced by document revisions")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to purge artifact")
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to permanently delete artifact")
 		return
 	}
 

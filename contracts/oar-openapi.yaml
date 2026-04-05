@@ -946,7 +946,7 @@ paths:
               $ref: '#/components/schemas/PurgeDocumentRequest'
       responses:
         '200':
-          description: Document purged
+          description: Document permanently deleted
           content:
             application/json:
               schema:
@@ -1388,7 +1388,7 @@ paths:
               $ref: '#/components/schemas/PurgeBoardRequest'
       responses:
         '200':
-          description: Board purged
+          description: Board permanently deleted
           content:
             application/json:
               schema:
@@ -1865,7 +1865,7 @@ paths:
               $ref: '#/components/schemas/PurgeCardRequest'
       responses:
         '200':
-          description: Card purged
+          description: Card permanently deleted
           content:
             application/json:
               schema:
@@ -2467,7 +2467,7 @@ paths:
               $ref: '#/components/schemas/PurgeDocumentRequest'
       responses:
         '200':
-          description: Artifact purged
+          description: Artifact permanently deleted
           content:
             application/json:
               schema:

@@ -304,7 +304,8 @@
       }
     }
     if (!resolvedTitle && !threadId) {
-      mutationError = "Enter a card title or pick a backing thread.";
+      mutationError =
+        "Enter a card title, or link a topic or backing thread (timeline ID).";
       return;
     }
     if (!resolvedTitle) {
@@ -807,7 +808,7 @@
             label="Board document"
             manualLabel="Document ID"
             manualPlaceholder="incident-response-playbook"
-            placeholder="Search documents by title, ID, or thread"
+            placeholder="Search documents by title, ID, or timeline ID"
             searchFn={searchDocumentOptions}
           />
 
@@ -853,7 +854,7 @@
           <GuidedTypedRefsInput
             bind:value={boardPinnedRefs}
             addInputLabel="Add board pinned ref"
-            addInputPlaceholder="thread:thread-q2-initiative"
+            addInputPlaceholder="thread:board-q2-initiative"
             addButtonLabel="Add ref"
             emptyText="No pinned refs yet."
             helperText="These refs are shown at the top of the board."
@@ -935,8 +936,8 @@
             bind:value={addCardThreadId}
             advancedLabel="Use a manual thread ID"
             disabledIds={[backingThreadId].filter(Boolean)}
-            helperText="Optional legacy thread link; prefer topic: refs on the card when possible."
-            label="Topic / thread"
+            helperText="Optional: pick a topic (binds its backing thread) or paste a thread ID. Add further typed refs in Related refs."
+            label="Topic or backing thread"
             manualLabel="Thread ID"
             manualPlaceholder="thread-onboarding"
             placeholder="Search topics by title, ID, or tags"
@@ -950,7 +951,7 @@
             label="Document"
             manualLabel="Document ID"
             manualPlaceholder="onboarding-guide-v1"
-            placeholder="Search documents by title, ID, or thread"
+            placeholder="Search documents by title, ID, or timeline ID"
             searchFn={searchDocumentOptions}
           />
 
@@ -1018,10 +1019,10 @@
               bind:value={addCardRelatedRefs}
               {boardId}
               addInputLabel="Add related ref"
-              addInputPlaceholder="topic:thread-summer-menu"
+              addInputPlaceholder="topic:summer-menu-rollout"
               addButtonLabel="Add ref"
               emptyText="No related refs yet."
-              helperText="Optional typed refs for topics, documents, artifacts, or boards."
+              helperText="Optional typed refs (topic:, document:, board:, thread:, …)."
               textareaAriaLabel="Card related refs"
             />
           </div>
@@ -1218,8 +1219,8 @@
           Workspace documents
         </h2>
         <p class="mt-1 text-[11px] text-[var(--ui-text-subtle)]">
-          Canonical doc lineages linked from this board's thread timeline and
-          cards.
+          Canonical doc lineages linked from this board's backing thread
+          timeline and cards.
         </p>
       </div>
       <div class="px-4 py-3">
@@ -1297,7 +1298,8 @@
           Review inbox
         </h2>
         <p class="mt-1 text-[11px] text-[var(--ui-text-subtle)]">
-          Derived risk and decision signals for this board's threads and topics.
+          Derived risk and decision signals for resources tied to this board
+          (backing threads).
         </p>
       </div>
       <div class="px-4 py-3">
