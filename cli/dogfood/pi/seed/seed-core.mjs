@@ -26,7 +26,6 @@ const seed = getPilotRescueSeedData();
 const defaultActorId = seed.actors[0]?.id ?? "actor-product-lead";
 const topicIdMap = new Map();
 const threadIdMap = new Map();
-const snapshotIdMap = new Map();
 
 main().catch((error) => {
   const reason = error instanceof Error ? error.message : String(error);
@@ -131,7 +130,6 @@ async function seedTopics() {
 
     topicIdMap.set(String(sourceThread.id ?? "").trim(), newTopicId);
     threadIdMap.set(String(sourceThread.id ?? "").trim(), backingThreadId);
-    snapshotIdMap.set(String(sourceThread.id ?? "").trim(), backingThreadId);
   }
 }
 
@@ -248,9 +246,6 @@ function mapRef(ref) {
   if (prefix === "topic") {
     return `${prefix}:${topicIdMap.get(value) ?? value}`;
   }
-  if (prefix === "snapshot") {
-    return `${prefix}:${snapshotIdMap.get(value) ?? value}`;
-  }
   return text;
 }
 
@@ -286,11 +281,7 @@ function normalizeEventPayload(type, payload) {
 
 function normalizeEventRefs(type, refs, mappedThreadId) {
   const nextRefs = Array.isArray(refs) ? [...refs] : [];
-  if (
-    type === "snapshot_updated" ||
-    type === "thread_updated" ||
-    type === "thread_created"
-  ) {
+  if (type === "thread_updated" || type === "thread_created") {
     const hasThreadRef = nextRefs.some((ref) => ref.startsWith("thread:"));
     if (!hasThreadRef && mappedThreadId) {
       nextRefs.push(`thread:${mappedThreadId}`);

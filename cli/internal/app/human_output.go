@@ -66,7 +66,7 @@ func formatCommandSummary(commandID string, body any) string {
 		return formatCardTimeline(body)
 	case "topics.workspace":
 		return formatTopicWorkspace(body)
-	case "cards.get", "cards.patch", "cards.move", "cards.archive", "cards.restore":
+	case "cards.get", "cards.patch", "cards.move", "cards.archive", "cards.tombstone", "cards.restore":
 		if board := extractNestedMap(body, "board"); board != nil && extractNestedMap(body, "card") != nil {
 			return formatBoardCardMutationResult(body)
 		}

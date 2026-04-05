@@ -47,6 +47,7 @@ export declare class OarClient {
     artifactsCreate(options?: RequestOptions): Promise<InvokeResult>;
     artifactsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     artifactsList(options?: RequestOptions): Promise<InvokeResult>;
+    boardsArchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     boardsCardsCreate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     boardsCardsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     boardsCardsList(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
@@ -54,6 +55,10 @@ export declare class OarClient {
     boardsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     boardsList(options?: RequestOptions): Promise<InvokeResult>;
     boardsPatch(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    boardsPurge(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    boardsRestore(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    boardsTombstone(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    boardsUnarchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     boardsWorkspace(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     cardsArchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     cardsCreate(options?: RequestOptions): Promise<InvokeResult>;
@@ -64,12 +69,18 @@ export declare class OarClient {
     cardsPurge(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     cardsRestore(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     cardsTimeline(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    cardsTombstone(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    docsArchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsCreate(options?: RequestOptions): Promise<InvokeResult>;
     docsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsList(options?: RequestOptions): Promise<InvokeResult>;
+    docsPurge(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    docsRestore(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsRevisionsCreate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsRevisionsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsRevisionsList(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    docsTombstone(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    docsUnarchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     eventsCreate(options?: RequestOptions): Promise<InvokeResult>;
     eventsList(options?: RequestOptions): Promise<InvokeResult>;
     inboxAcknowledge(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;

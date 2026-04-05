@@ -25,8 +25,8 @@ var topicsSubcommandSpec = subcommandSpec{
 
 var cardsSubcommandSpec = subcommandSpec{
 	command:  "cards",
-	valid:    []string{"list", "get", "create", "patch", "move", "archive", "purge", "restore", "timeline"},
-	examples: []string{"oar cards list", "oar cards create --from-file card.json", "oar cards get --card-id <card-id>", "oar cards timeline --card-id <card-id>", "oar cards move --card-id <card-id> --from-file move.json", "oar cards archive --card-id <card-id>"},
+	valid:    []string{"list", "get", "create", "patch", "move", "archive", "tombstone", "purge", "restore", "timeline"},
+	examples: []string{"oar cards list", "oar cards create --from-file card.json", "oar cards get --card-id <card-id>", "oar cards timeline --card-id <card-id>", "oar cards move --card-id <card-id> --from-file move.json", "oar cards archive --card-id <card-id>", "oar cards tombstone --card-id <card-id> --from-file tombstone.json"},
 	aliases: map[string]string{
 		"ls":     "list",
 		"show":   "get",
@@ -168,6 +168,13 @@ func (a *App) runCardsCommand(ctx context.Context, args []string, cfg config.Res
 		}
 		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "cards archive", "cards.archive", "card_id", id, cardIDLookupSpec, nil, body)
 		return result, "cards archive", callErr
+	case "tombstone":
+		id, body, err := a.parseIDAndBodyInput(args[1:], "card-id", "card id", "cards tombstone")
+		if err != nil {
+			return nil, "cards tombstone", err
+		}
+		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "cards tombstone", "cards.tombstone", "card_id", id, cardIDLookupSpec, nil, body)
+		return result, "cards tombstone", callErr
 	case "restore":
 		id, body, err := a.parseCardIDAndOptionalJSONBody(args[1:], "cards restore")
 		if err != nil {

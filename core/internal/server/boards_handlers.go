@@ -934,6 +934,8 @@ func handleArchiveBoardCard(w http.ResponseWriter, r *http.Request, opts handler
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		case errors.Is(err, primitives.ErrNotFound):
 			writeError(w, http.StatusNotFound, "not_found", "board or card not found")
+		case errors.Is(err, primitives.ErrAlreadyTombstoned):
+			writeError(w, http.StatusConflict, "already_tombstoned", "card is tombstoned")
 		case errors.Is(err, primitives.ErrConflict):
 			writeError(w, http.StatusConflict, "conflict", "board has been updated; refresh and retry")
 		default:
@@ -943,6 +945,58 @@ func handleArchiveBoardCard(w http.ResponseWriter, r *http.Request, opts handler
 	}
 	emitCardLifecycleEventBestEffort(r.Context(), opts, actorID, buildCardArchivedEvent(result.Board, result.Card))
 	emitBoardLifecycleEventBestEffort(r.Context(), opts, actorID, buildBoardCardArchivedEvent(result.Board, result.Card))
+	writeJSON(w, http.StatusOK, map[string]any{"board": result.Board, "card": publicCardView(result.Card)})
+}
+
+func handleTombstoneBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, boardID, identifier string) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	var req struct {
+		ActorID          string  `json:"actor_id"`
+		Reason           string  `json:"reason"`
+		IfBoardUpdatedAt *string `json:"if_board_updated_at"`
+	}
+	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+	if req.IfBoardUpdatedAt != nil {
+		normalized, ok := normalizeRequiredTimestamp(w, req.IfBoardUpdatedAt, "if_board_updated_at")
+		if !ok {
+			return
+		}
+		req.IfBoardUpdatedAt = &normalized
+	}
+	req.Reason = strings.TrimSpace(req.Reason)
+	if req.Reason == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "reason is required")
+		return
+	}
+	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
+	if !ok {
+		return
+	}
+	result, err := opts.primitiveStore.TombstoneBoardCard(r.Context(), actorID, boardID, identifier, req.Reason, primitives.RemoveBoardCardInput{
+		IfBoardUpdatedAt: req.IfBoardUpdatedAt,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, primitives.ErrInvalidBoardRequest):
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		case errors.Is(err, primitives.ErrNotFound):
+			writeError(w, http.StatusNotFound, "not_found", "board or card not found")
+		case errors.Is(err, primitives.ErrConflict):
+			writeError(w, http.StatusConflict, "conflict", "board has been updated; refresh and retry")
+		default:
+			writeError(w, http.StatusInternalServerError, "internal_error", "failed to tombstone board card")
+		}
+		return
+	}
+	if result.Card == nil || result.Card["_mutation_applied"] != false {
+		emitCardLifecycleEventBestEffort(r.Context(), opts, actorID, buildCardTombstonedEvent(result.Board, result.Card))
+		emitBoardLifecycleEventBestEffort(r.Context(), opts, actorID, buildBoardCardTombstonedEvent(result.Board, result.Card))
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"board": result.Board, "card": publicCardView(result.Card)})
 }
 
@@ -1362,6 +1416,19 @@ func buildCardArchivedEvent(board, card map[string]any) map[string]any {
 	return buildCardLifecycleEvent("card_archived", board, card, payload, "Card archived: "+cardDisplayName(card))
 }
 
+func buildCardTombstonedEvent(board, card map[string]any) map[string]any {
+	payload := map[string]any{
+		"board_id":           anyString(board["id"]),
+		"card_id":            anyString(card["id"]),
+		"thread_id":          nullableStringValue(anyString(card["thread_id"])),
+		"parent_thread":      nullableStringValue(anyString(card["parent_thread"])),
+		"column_key":         nullableStringValue(anyString(card["column_key"])),
+		"pinned_document_id": nullableStringValue(anyString(card["pinned_document_id"])),
+		"tombstone_reason":   nullableStringValue(anyString(card["tombstone_reason"])),
+	}
+	return buildCardLifecycleEvent("card_tombstoned", board, card, payload, "Card tombstoned: "+cardDisplayName(card))
+}
+
 func buildBoardCardMovedEvent(board, previousCard, updatedCard map[string]any, beforeCardID, afterCardID, beforeThreadID, afterThreadID string) map[string]any {
 	payload := map[string]any{
 		"board_id":         anyString(board["id"]),
@@ -1399,6 +1466,18 @@ func buildBoardCardArchivedEvent(board, card map[string]any) map[string]any {
 		"pinned_document_id": nullableStringValue(anyString(card["pinned_document_id"])),
 	}
 	return buildBoardLifecycleEvent("board_card_archived", board, card, payload, "Board card archived: "+cardDisplayName(card))
+}
+
+func buildBoardCardTombstonedEvent(board, card map[string]any) map[string]any {
+	payload := map[string]any{
+		"board_id":           anyString(board["id"]),
+		"card_id":            anyString(card["id"]),
+		"parent_thread":      nullableStringValue(anyString(card["parent_thread"])),
+		"column_key":         nullableStringValue(anyString(card["column_key"])),
+		"pinned_document_id": nullableStringValue(anyString(card["pinned_document_id"])),
+		"tombstone_reason":   nullableStringValue(anyString(card["tombstone_reason"])),
+	}
+	return buildBoardLifecycleEvent("board_card_tombstoned", board, card, payload, "Board card tombstoned: "+cardDisplayName(card))
 }
 
 func buildCardLifecycleEvent(eventType string, board, card map[string]any, payload map[string]any, summary string) map[string]any {

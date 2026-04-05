@@ -24,6 +24,8 @@ type documentRow struct {
 	Status          sql.NullString
 	LabelsJSON      string
 	SupersedesJSON  string
+	RefsJSON        string
+	ProvenanceJSON  string
 	HeadRevisionID  string
 	HeadRevisionNum int
 	CreatedAt       string
@@ -41,8 +43,14 @@ type documentRow struct {
 	HeadCreatedBy   sql.NullString
 }
 
+func documentResourceRefEdgeTargets(threadID string, refs []string) []refEdgeTarget {
+	targets := appendRefEdgeTarget(nil, refEdgeTypeDocumentThread, "thread", strings.TrimSpace(threadID))
+	return append(targets, typedRefEdgeTargets(refEdgeTypeRef, refs)...)
+}
+
 func buildListDocumentsQuery(filter DocumentListFilter) (string, []any) {
 	query := `SELECT d.id, d.thread_id, d.title, d.slug, d.status, d.labels_json, d.supersedes_json,
+		d.refs_json, d.provenance_json,
 		d.head_revision_id, d.head_revision_number, d.created_at, d.created_by, d.updated_at, d.updated_by,
 		d.tombstoned_at, d.tombstoned_by, d.tombstone_reason,
 		d.archived_at, d.archived_by,
@@ -116,6 +124,8 @@ func (s *Store) ListDocuments(ctx context.Context, filter DocumentListFilter) ([
 			&row.Status,
 			&row.LabelsJSON,
 			&row.SupersedesJSON,
+			&row.RefsJSON,
+			&row.ProvenanceJSON,
 			&row.HeadRevisionID,
 			&row.HeadRevisionNum,
 			&row.CreatedAt,
@@ -238,6 +248,30 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 	revisionRefs = uniqueStrings(revisionRefs)
 	sortStringsStable(revisionRefs)
 
+	var docResourceRefs []string
+	if _, has := document["refs"]; has {
+		dr, err := optionalStringListField(document, "refs")
+		if err != nil {
+			return nil, nil, invalidDocumentRequestError(err)
+		}
+		docResourceRefs = uniqueStrings(dr)
+		sortStringsStable(docResourceRefs)
+	} else {
+		docResourceRefs = append([]string(nil), revisionRefs...)
+	}
+	docRefsJSON, err := json.Marshal(docResourceRefs)
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal document resource refs: %w", err)
+	}
+	docProvJSON := inferredProvenanceJSON()
+	if _, has := document["provenance"]; has {
+		_, pj, perr := marshalProvenance(document["provenance"], "marshal document")
+		if perr != nil {
+			return nil, nil, invalidDocumentRequestError(perr)
+		}
+		docProvJSON = pj
+	}
+
 	artifactMetadata := map[string]any{
 		"id":               artifactID,
 		"kind":             "doc",
@@ -318,9 +352,10 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		ctx,
 		`INSERT INTO documents(
 			id, thread_id, title, slug, status, labels_json, supersedes_json,
+			refs_json, provenance_json,
 			head_revision_id, head_revision_number,
 			created_at, created_by, updated_at, updated_by
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		documentID,
 		nullableString(threadID),
 		nullableString(title),
@@ -328,6 +363,8 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		nullableString(status),
 		string(labelsJSON),
 		string(supersedesJSON),
+		string(docRefsJSON),
+		docProvJSON,
 		revisionID,
 		revisionNumber,
 		now,
@@ -341,8 +378,7 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		}
 		return nil, nil, fmt.Errorf("insert document: %w", err)
 	}
-	documentTargets := appendRefEdgeTarget(nil, refEdgeTypeDocumentThread, "thread", threadID)
-	if err := replaceRefEdges(ctx, tx, "document", documentID, documentTargets); err != nil {
+	if err := replaceRefEdges(ctx, tx, "document", documentID, documentResourceRefEdgeTargets(threadID, docResourceRefs)); err != nil {
 		_ = tx.Rollback()
 		return nil, nil, err
 	}
@@ -415,6 +451,8 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		Status:          nullableString(status),
 		LabelsJSON:      string(labelsJSON),
 		SupersedesJSON:  string(supersedesJSON),
+		RefsJSON:        string(docRefsJSON),
+		ProvenanceJSON:  docProvJSON,
 		HeadRevisionID:  revisionID,
 		HeadRevisionNum: revisionNumber,
 		CreatedAt:       now,
@@ -498,6 +536,11 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 	nextStatus := nullStringValue(doc.Status)
 	nextLabels := decodeJSONListOrEmpty(doc.LabelsJSON)
 	nextSupersedes := decodeJSONListOrEmpty(doc.SupersedesJSON)
+	nextDocRefs := decodeJSONListOrEmpty(doc.RefsJSON)
+	nextDocProvJSON := strings.TrimSpace(doc.ProvenanceJSON)
+	if nextDocProvJSON == "" {
+		nextDocProvJSON = inferredProvenanceJSON()
+	}
 
 	if documentPatch != nil {
 		if _, exists := documentPatch["id"]; exists {
@@ -536,6 +579,26 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 			}
 			nextSupersedes = parsed
 		}
+		if value, exists := documentPatch["refs"]; exists {
+			parsed, parseErr := normalizeStringSlice(value)
+			if parseErr != nil {
+				return nil, nil, invalidDocumentRequest("document.refs must be a list of strings")
+			}
+			nextDocRefs = uniqueStrings(parsed)
+			sortStringsStable(nextDocRefs)
+		}
+		if _, exists := documentPatch["provenance"]; exists {
+			_, pj, perr := marshalProvenance(documentPatch["provenance"], "marshal document")
+			if perr != nil {
+				return nil, nil, invalidDocumentRequestError(perr)
+			}
+			nextDocProvJSON = pj
+		}
+	}
+
+	docResourceRefsJSON, err := json.Marshal(nextDocRefs)
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal document resource refs: %w", err)
 	}
 
 	encodedContent, err := encodeContent(content)
@@ -709,6 +772,8 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 			status = ?,
 			labels_json = ?,
 			supersedes_json = ?,
+			refs_json = ?,
+			provenance_json = ?,
 			head_revision_id = ?,
 			head_revision_number = ?,
 			updated_at = ?,
@@ -720,6 +785,8 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		nullableString(nextStatus),
 		string(labelsJSON),
 		string(supersedesJSON),
+		string(docResourceRefsJSON),
+		nextDocProvJSON,
 		revisionID,
 		nextRevisionNumber,
 		now,
@@ -740,8 +807,7 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		_ = tx.Rollback()
 		return nil, nil, ErrConflict
 	}
-	documentTargets := appendRefEdgeTarget(nil, refEdgeTypeDocumentThread, "thread", nextThreadID)
-	if err := replaceRefEdges(ctx, tx, "document", documentID, documentTargets); err != nil {
+	if err := replaceRefEdges(ctx, tx, "document", documentID, documentResourceRefEdgeTargets(nextThreadID, nextDocRefs)); err != nil {
 		_ = tx.Rollback()
 		return nil, nil, err
 	}
@@ -775,6 +841,8 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		Status:          nullableString(nextStatus),
 		LabelsJSON:      string(labelsJSON),
 		SupersedesJSON:  string(supersedesJSON),
+		RefsJSON:        string(docResourceRefsJSON),
+		ProvenanceJSON:  nextDocProvJSON,
 		HeadRevisionID:  revisionID,
 		HeadRevisionNum: nextRevisionNumber,
 		CreatedAt:       doc.CreatedAt,
@@ -1168,6 +1236,7 @@ func (s *Store) loadDocumentRow(ctx context.Context, documentID string) (documen
 	err := s.db.QueryRowContext(
 		ctx,
 		`SELECT id, thread_id, title, slug, status, labels_json, supersedes_json,
+			 refs_json, provenance_json,
 			 head_revision_id, head_revision_number, created_at, created_by, updated_at, updated_by,
 			 tombstoned_at, tombstoned_by, tombstone_reason,
 			 archived_at, archived_by
@@ -1181,6 +1250,8 @@ func (s *Store) loadDocumentRow(ctx context.Context, documentID string) (documen
 		&row.Status,
 		&row.LabelsJSON,
 		&row.SupersedesJSON,
+		&row.RefsJSON,
+		&row.ProvenanceJSON,
 		&row.HeadRevisionID,
 		&row.HeadRevisionNum,
 		&row.CreatedAt,
@@ -1348,6 +1419,17 @@ func (r documentRow) toMap() map[string]any {
 	if r.Status.Valid && strings.TrimSpace(r.Status.String) != "" {
 		out["status"] = r.Status.String
 	}
+	out["refs"] = decodeJSONListOrEmpty(r.RefsJSON)
+	provenance := map[string]any{}
+	if strings.TrimSpace(r.ProvenanceJSON) != "" {
+		if err := json.Unmarshal([]byte(r.ProvenanceJSON), &provenance); err != nil {
+			provenance = map[string]any{}
+		}
+	}
+	if len(provenance) == 0 {
+		provenance = map[string]any{"sources": []string{"inferred"}}
+	}
+	out["provenance"] = provenance
 	if r.TombstonedAt.Valid && strings.TrimSpace(r.TombstonedAt.String) != "" {
 		out["tombstoned_at"] = r.TombstonedAt.String
 	}

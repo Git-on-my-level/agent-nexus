@@ -16,7 +16,5 @@ export function GET({ params, url }) {
 
   return json({
     events: listMockTimelineEvents(params.threadId),
-    snapshots: [],
-    artifacts: [],
   });
 }

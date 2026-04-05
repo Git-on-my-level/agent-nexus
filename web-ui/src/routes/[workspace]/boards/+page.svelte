@@ -27,10 +27,7 @@
     isFreshnessCurrent,
     parseDelimitedValues,
   } from "$lib/boardUtils";
-  import {
-    boardPrimaryTopicRef,
-    topicDetailPathFromSubject,
-  } from "$lib/topicRouteUtils";
+  import { boardRowInspectNav } from "$lib/topicRouteUtils";
 
   let boards = $state([]);
   let loading = $state(false);
@@ -78,7 +75,7 @@
       title: document.title || document.id,
       subtitle: [
         document.status,
-        document.thread_id && `Topic ${document.thread_id}`,
+        document.thread_id && `Timeline ${document.thread_id}`,
       ]
         .filter(Boolean)
         .join(" · "),
@@ -443,6 +440,7 @@
       {@const summary = item.summary}
       {@const counts = boardSummaryCounts(summary)}
       {@const projectionFreshness = item.projection_freshness ?? null}
+      {@const rowNav = boardRowInspectNav(board)}
       <div
         class="flex items-stretch {i > 0
           ? 'border-t border-[var(--ui-border)]'
@@ -520,26 +518,31 @@
                       .join(", ")}
                   </span>
                 {/if}
-                <span>
-                  <span class="text-[var(--ui-text-subtle)]">Topic:</span>
-                  <a
-                    class="text-indigo-300 transition-colors hover:text-indigo-200"
-                    href={topicDetailPathFromSubject({
-                      topicRef: boardPrimaryTopicRef(board),
-                      threadId: board.thread_id,
-                    })
-                      ? workspaceHref(
-                          topicDetailPathFromSubject({
-                            topicRef: boardPrimaryTopicRef(board),
-                            threadId: board.thread_id,
-                          }),
-                        )
-                      : workspaceHref("/boards")}
-                    onclick={(event) => event.stopPropagation()}
-                  >
-                    {boardPrimaryTopicRef(board) || board.thread_id || "—"}
-                  </a>
-                </span>
+                {#if rowNav}
+                  <span>
+                    <span class="text-[var(--ui-text-subtle)]"
+                      >{rowNav.kind === "topic"
+                        ? "Topic"
+                        : "Backing thread"}:</span
+                    >
+                    <a
+                      class="text-indigo-300 transition-colors hover:text-indigo-200"
+                      href={workspaceHref(
+                        rowNav.kind === "topic"
+                          ? `/topics/${encodeURIComponent(rowNav.segment)}`
+                          : `/threads/${encodeURIComponent(rowNav.segment)}`,
+                      )}
+                      onclick={(event) => event.stopPropagation()}
+                    >
+                      {rowNav.display}
+                    </a>
+                  </span>
+                {:else}
+                  <span>
+                    <span class="text-[var(--ui-text-subtle)]">Context:</span>
+                    <span class="text-[var(--ui-text-muted)]">—</span>
+                  </span>
+                {/if}
                 <span>
                   Visual scan updated {formatTimestamp(board.updated_at) || "—"}
                 </span>

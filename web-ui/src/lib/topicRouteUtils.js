@@ -1,22 +1,11 @@
 import { splitTypedRef } from "$lib/inboxUtils";
 
 /**
- * Canonical backing-thread id for board card rows / create payloads.
- * Prefers `thread_id`, then legacy `parent_thread` (string or { thread_id | id }).
+ * Canonical backing-thread id for board card rows / create payloads (`thread_id` only).
  */
 export function resolveBoardCardThreadIdField(row) {
   const r = row && typeof row === "object" ? row : {};
-  const direct = String(r.thread_id ?? "").trim();
-  if (direct) return direct;
-  const pt = r.parent_thread;
-  if (typeof pt === "string") {
-    const s = String(pt).trim();
-    if (s) return s;
-  } else if (pt && typeof pt === "object") {
-    const id = String(pt.thread_id ?? pt.id ?? "").trim();
-    if (id) return id;
-  }
-  return "";
+  return String(r.thread_id ?? "").trim();
 }
 
 function encodeRouteSegment(value) {
@@ -78,11 +67,6 @@ export function topicRouteSegmentFromBackingThread(thread) {
 }
 
 /**
- * Path segment for `/topics/:segment` from board workspace card row data.
- * Prefers canonical `topic_ref` / `topic:` related refs, then backing thread's topic ref,
- * then linked backing thread ids (API/thread fields).
- */
-/**
  * Canonical `topic:<id>` ref for a board: prefer ordered `board.refs`, fall back to `primary_topic_ref`.
  */
 export function boardPrimaryTopicRef(board) {
@@ -111,42 +95,107 @@ export function boardOwnsTopicId(board, topicId) {
 }
 
 export function topicRouteSegmentFromBoardCardRow(membership, backingThread) {
+  const nav = boardCardInspectNav(membership, backingThread);
+  return nav ? nav.segment : "";
+}
+
+/**
+ * Navigation target for a board card title link: topic detail vs backing-thread detail.
+ * @returns {{ kind: 'topic' | 'thread', segment: string } | null}
+ */
+export function boardCardInspectNav(membership, backingThread) {
   const m = membership && typeof membership === "object" ? membership : {};
   const fromMembership = splitTypedRef(String(m.topic_ref ?? "").trim());
   if (fromMembership.prefix === "topic" && fromMembership.id) {
-    return fromMembership.id;
+    return { kind: "topic", segment: fromMembership.id };
   }
 
   const refs = Array.isArray(m.related_refs) ? m.related_refs : [];
   for (const raw of refs) {
     const p = splitTypedRef(String(raw ?? "").trim());
-    if (p.prefix === "topic" && p.id) return p.id;
+    if (p.prefix === "topic" && p.id) return { kind: "topic", segment: p.id };
   }
 
-  const fromBacking = topicRouteSegmentFromBackingThread(backingThread);
-  if (fromBacking) return fromBacking;
+  const bt =
+    backingThread && typeof backingThread === "object" ? backingThread : null;
+  const topicRefOnThread = splitTypedRef(String(bt?.topic_ref ?? "").trim());
+  if (topicRefOnThread.prefix === "topic" && topicRefOnThread.id) {
+    return { kind: "topic", segment: topicRefOnThread.id };
+  }
 
-  return resolveBoardCardThreadIdField(m);
+  const threadIdFromBacking = String(bt?.id ?? "").trim();
+  if (threadIdFromBacking)
+    return { kind: "thread", segment: threadIdFromBacking };
+
+  const threadIdFromRow = resolveBoardCardThreadIdField(m);
+  if (threadIdFromRow) return { kind: "thread", segment: threadIdFromRow };
+
+  return null;
 }
 
 /**
  * Board header / context line: canonical topic id for linking to `/topics/...`.
  */
 export function topicRouteSegmentFromBoardWorkspace(workspace) {
+  const nav = boardWorkspaceInspectNav(workspace);
+  return nav ? nav.segment : "";
+}
+
+/**
+ * Board workspace header: topic id vs backing thread id for correct /topics vs /threads links.
+ * @returns {{ kind: 'topic' | 'thread', segment: string } | null}
+ */
+export function boardWorkspaceInspectNav(workspace) {
   const ws = workspace && typeof workspace === "object" ? workspace : {};
   const primary = String(ws.primary_topic?.id ?? "").trim();
-  if (primary) return primary;
+  if (primary) return { kind: "topic", segment: primary };
 
   const board = ws.board && typeof ws.board === "object" ? ws.board : {};
   const fromBoardRef = splitTypedRef(boardPrimaryTopicRef(board));
-  if (fromBoardRef.prefix === "topic" && fromBoardRef.id)
-    return fromBoardRef.id;
+  if (fromBoardRef.prefix === "topic" && fromBoardRef.id) {
+    return { kind: "topic", segment: fromBoardRef.id };
+  }
 
   const bt = ws.backing_thread;
-  const fromThread = topicRouteSegmentFromBackingThread(bt);
-  if (fromThread) return fromThread;
+  const topicRefOnThread = splitTypedRef(String(bt?.topic_ref ?? "").trim());
+  if (topicRefOnThread.prefix === "topic" && topicRefOnThread.id) {
+    return { kind: "topic", segment: topicRefOnThread.id };
+  }
 
-  return String(bt?.id ?? board.thread_id ?? "").trim();
+  const threadId = String(bt?.id ?? board.thread_id ?? "").trim();
+  if (threadId) return { kind: "thread", segment: threadId };
+
+  return null;
+}
+
+/**
+ * Inbox/workspace warning row: prefer explicit topic_id for /topics; else thread_id → /threads.
+ * @returns {{ kind: 'topic' | 'thread', segment: string } | null}
+ */
+export function warningInspectNav(warning) {
+  const w = warning && typeof warning === "object" ? warning : {};
+  const topicId = String(w.topic_id ?? "").trim();
+  if (topicId) return { kind: "topic", segment: topicId };
+  const threadId = String(w.thread_id ?? "").trim();
+  if (threadId) return { kind: "thread", segment: threadId };
+  return null;
+}
+
+/**
+ * Board list row: topic ref vs backing thread for labels and /topics vs /threads links.
+ * @returns {{ kind: 'topic' | 'thread', segment: string, display: string } | null}
+ */
+export function boardRowInspectNav(board) {
+  const b = board && typeof board === "object" ? board : {};
+  const refRaw = boardPrimaryTopicRef(b);
+  const p = splitTypedRef(String(refRaw ?? "").trim());
+  if (p.prefix === "topic" && p.id) {
+    const display = refRaw || `topic:${p.id}`;
+    return { kind: "topic", segment: p.id, display };
+  }
+  const threadId = String(b.thread_id ?? "").trim();
+  if (threadId) return { kind: "thread", segment: threadId, display: threadId };
+  return null;
 }
 
 /**

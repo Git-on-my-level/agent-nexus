@@ -92,6 +92,21 @@ func publicCardView(card map[string]any) map[string]any {
 			out["archived_by"] = v
 		}
 	}
+	if v, ok := card["tombstoned_at"]; ok {
+		if s := strings.TrimSpace(anyString(v)); s != "" {
+			out["tombstoned_at"] = v
+		}
+	}
+	if v, ok := card["tombstoned_by"]; ok {
+		if s := strings.TrimSpace(anyString(v)); s != "" {
+			out["tombstoned_by"] = v
+		}
+	}
+	if v, ok := card["tombstone_reason"]; ok {
+		if s := strings.TrimSpace(anyString(v)); s != "" {
+			out["tombstone_reason"] = v
+		}
+	}
 	return out
 }
 

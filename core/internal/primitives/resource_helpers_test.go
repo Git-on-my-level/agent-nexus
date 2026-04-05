@@ -146,6 +146,8 @@ func TestSharedResourceWritesIndexRefEdges(t *testing.T) {
 
 	assertRefEdges(t, workspace.DB(), "document", documentID, []string{
 		refEdgeTypeDocumentThread + "|thread|" + primaryThreadID,
+		refEdgeTypeRef + "|customprefix|doc-ref",
+		refEdgeTypeRef + "|thread|" + primaryThreadID,
 	})
 	assertRefEdges(t, workspace.DB(), "document_revision", revisionID, []string{
 		refEdgeTypeRef + "|customprefix|doc-ref",

@@ -119,6 +119,61 @@ export const commandRegistry = [
         "ts_method": "artifactsList"
     },
     {
+        "command_id": "boards.archive",
+        "cli_path": "boards archive",
+        "group": "boards",
+        "method": "POST",
+        "path": "/boards/{board_id}/archive",
+        "operation_id": "archiveBoard",
+        "summary": "Archive board",
+        "why": "Soft-archive a board (orthogonal to business status; clears default list visibility).",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ board }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "not_found",
+            "conflict"
+        ],
+        "concepts": [
+            "boards",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "body_schema": {
+            "optional": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                }
+            ]
+        },
+        "path_params": [
+            "board_id"
+        ],
+        "adjacent_commands": [
+            "boards.cards.create",
+            "boards.cards.get",
+            "boards.cards.list",
+            "boards.create",
+            "boards.get",
+            "boards.list",
+            "boards.patch",
+            "boards.purge",
+            "boards.restore",
+            "boards.tombstone",
+            "boards.unarchive",
+            "boards.workspace"
+        ],
+        "go_method": "BoardsArchive",
+        "ts_method": "boardsArchive"
+    },
+    {
         "command_id": "boards.cards.create",
         "cli_path": "boards cards create",
         "group": "boards",
@@ -258,12 +313,17 @@ export const commandRegistry = [
             "board_id"
         ],
         "adjacent_commands": [
+            "boards.archive",
             "boards.cards.get",
             "boards.cards.list",
             "boards.create",
             "boards.get",
             "boards.list",
             "boards.patch",
+            "boards.purge",
+            "boards.restore",
+            "boards.tombstone",
+            "boards.unarchive",
             "boards.workspace"
         ],
         "go_method": "BoardsCardsCreate",
@@ -299,12 +359,17 @@ export const commandRegistry = [
             "card_id"
         ],
         "adjacent_commands": [
+            "boards.archive",
             "boards.cards.create",
             "boards.cards.list",
             "boards.create",
             "boards.get",
             "boards.list",
             "boards.patch",
+            "boards.purge",
+            "boards.restore",
+            "boards.tombstone",
+            "boards.unarchive",
             "boards.workspace"
         ],
         "go_method": "BoardsCardsGet",
@@ -339,12 +404,17 @@ export const commandRegistry = [
             "board_id"
         ],
         "adjacent_commands": [
+            "boards.archive",
             "boards.cards.create",
             "boards.cards.get",
             "boards.create",
             "boards.get",
             "boards.list",
             "boards.patch",
+            "boards.purge",
+            "boards.restore",
+            "boards.tombstone",
+            "boards.unarchive",
             "boards.workspace"
         ],
         "go_method": "BoardsCardsList",
@@ -419,12 +489,17 @@ export const commandRegistry = [
             ]
         },
         "adjacent_commands": [
+            "boards.archive",
             "boards.cards.create",
             "boards.cards.get",
             "boards.cards.list",
             "boards.get",
             "boards.list",
             "boards.patch",
+            "boards.purge",
+            "boards.restore",
+            "boards.tombstone",
+            "boards.unarchive",
             "boards.workspace"
         ],
         "go_method": "BoardsCreate",
@@ -458,12 +533,17 @@ export const commandRegistry = [
             "board_id"
         ],
         "adjacent_commands": [
+            "boards.archive",
             "boards.cards.create",
             "boards.cards.get",
             "boards.cards.list",
             "boards.create",
             "boards.list",
             "boards.patch",
+            "boards.purge",
+            "boards.restore",
+            "boards.tombstone",
+            "boards.unarchive",
             "boards.workspace"
         ],
         "go_method": "BoardsGet",
@@ -493,12 +573,17 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "canonical",
         "adjacent_commands": [
+            "boards.archive",
             "boards.cards.create",
             "boards.cards.get",
             "boards.cards.list",
             "boards.create",
             "boards.get",
             "boards.patch",
+            "boards.purge",
+            "boards.restore",
+            "boards.tombstone",
+            "boards.unarchive",
             "boards.workspace"
         ],
         "go_method": "BoardsList",
@@ -581,16 +666,247 @@ export const commandRegistry = [
             "board_id"
         ],
         "adjacent_commands": [
+            "boards.archive",
             "boards.cards.create",
             "boards.cards.get",
             "boards.cards.list",
             "boards.create",
             "boards.get",
             "boards.list",
+            "boards.purge",
+            "boards.restore",
+            "boards.tombstone",
+            "boards.unarchive",
             "boards.workspace"
         ],
         "go_method": "BoardsPatch",
         "ts_method": "boardsPatch"
+    },
+    {
+        "command_id": "boards.purge",
+        "cli_path": "boards purge",
+        "group": "boards",
+        "method": "POST",
+        "path": "/boards/{board_id}/purge",
+        "operation_id": "purgeBoard",
+        "summary": "Purge tombstoned board",
+        "why": "Permanently delete a tombstoned board (human-gated).",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ purged, board_id }`.",
+        "error_codes": [
+            "auth_required",
+            "human_only",
+            "invalid_token",
+            "not_found",
+            "conflict"
+        ],
+        "concepts": [
+            "boards",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "body_schema": {
+            "optional": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                }
+            ]
+        },
+        "path_params": [
+            "board_id"
+        ],
+        "adjacent_commands": [
+            "boards.archive",
+            "boards.cards.create",
+            "boards.cards.get",
+            "boards.cards.list",
+            "boards.create",
+            "boards.get",
+            "boards.list",
+            "boards.patch",
+            "boards.restore",
+            "boards.tombstone",
+            "boards.unarchive",
+            "boards.workspace"
+        ],
+        "go_method": "BoardsPurge",
+        "ts_method": "boardsPurge"
+    },
+    {
+        "command_id": "boards.restore",
+        "cli_path": "boards restore",
+        "group": "boards",
+        "method": "POST",
+        "path": "/boards/{board_id}/restore",
+        "operation_id": "restoreBoard",
+        "summary": "Restore board from tombstone",
+        "why": "Clear tombstone fields on a board after an explicit restore action.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ board }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "not_found",
+            "conflict"
+        ],
+        "concepts": [
+            "boards",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "body_schema": {
+            "optional": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                }
+            ]
+        },
+        "path_params": [
+            "board_id"
+        ],
+        "adjacent_commands": [
+            "boards.archive",
+            "boards.cards.create",
+            "boards.cards.get",
+            "boards.cards.list",
+            "boards.create",
+            "boards.get",
+            "boards.list",
+            "boards.patch",
+            "boards.purge",
+            "boards.tombstone",
+            "boards.unarchive",
+            "boards.workspace"
+        ],
+        "go_method": "BoardsRestore",
+        "ts_method": "boardsRestore"
+    },
+    {
+        "command_id": "boards.tombstone",
+        "cli_path": "boards tombstone",
+        "group": "boards",
+        "method": "POST",
+        "path": "/boards/{board_id}/tombstone",
+        "operation_id": "tombstoneBoard",
+        "summary": "Tombstone board",
+        "why": "Mark board as tombstoned with an explicit operator reason.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ board }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "not_found",
+            "conflict"
+        ],
+        "concepts": [
+            "boards",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "reason",
+                    "type": "string"
+                }
+            ],
+            "optional": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                }
+            ]
+        },
+        "path_params": [
+            "board_id"
+        ],
+        "adjacent_commands": [
+            "boards.archive",
+            "boards.cards.create",
+            "boards.cards.get",
+            "boards.cards.list",
+            "boards.create",
+            "boards.get",
+            "boards.list",
+            "boards.patch",
+            "boards.purge",
+            "boards.restore",
+            "boards.unarchive",
+            "boards.workspace"
+        ],
+        "go_method": "BoardsTombstone",
+        "ts_method": "boardsTombstone"
+    },
+    {
+        "command_id": "boards.unarchive",
+        "cli_path": "boards unarchive",
+        "group": "boards",
+        "method": "POST",
+        "path": "/boards/{board_id}/unarchive",
+        "operation_id": "unarchiveBoard",
+        "summary": "Unarchive board",
+        "why": "Clear archived_at on a board (restore default list visibility).",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ board }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "not_found",
+            "conflict"
+        ],
+        "concepts": [
+            "boards",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "body_schema": {
+            "optional": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                }
+            ]
+        },
+        "path_params": [
+            "board_id"
+        ],
+        "adjacent_commands": [
+            "boards.archive",
+            "boards.cards.create",
+            "boards.cards.get",
+            "boards.cards.list",
+            "boards.create",
+            "boards.get",
+            "boards.list",
+            "boards.patch",
+            "boards.purge",
+            "boards.restore",
+            "boards.tombstone",
+            "boards.workspace"
+        ],
+        "go_method": "BoardsUnarchive",
+        "ts_method": "boardsUnarchive"
     },
     {
         "command_id": "boards.workspace",
@@ -621,13 +937,18 @@ export const commandRegistry = [
             "board_id"
         ],
         "adjacent_commands": [
+            "boards.archive",
             "boards.cards.create",
             "boards.cards.get",
             "boards.cards.list",
             "boards.create",
             "boards.get",
             "boards.list",
-            "boards.patch"
+            "boards.patch",
+            "boards.purge",
+            "boards.restore",
+            "boards.tombstone",
+            "boards.unarchive"
         ],
         "go_method": "BoardsWorkspace",
         "ts_method": "boardsWorkspace"
@@ -651,7 +972,8 @@ export const commandRegistry = [
             "invalid_request",
             "invalid_token",
             "not_found",
-            "conflict"
+            "conflict",
+            "already_tombstoned"
         ],
         "concepts": [
             "cards",
@@ -682,7 +1004,8 @@ export const commandRegistry = [
             "cards.patch",
             "cards.purge",
             "cards.restore",
-            "cards.timeline"
+            "cards.timeline",
+            "cards.tombstone"
         ],
         "go_method": "CardsArchive",
         "ts_method": "cardsArchive"
@@ -831,7 +1154,8 @@ export const commandRegistry = [
             "cards.patch",
             "cards.purge",
             "cards.restore",
-            "cards.timeline"
+            "cards.timeline",
+            "cards.tombstone"
         ],
         "go_method": "CardsCreate",
         "ts_method": "cardsCreate"
@@ -871,7 +1195,8 @@ export const commandRegistry = [
             "cards.patch",
             "cards.purge",
             "cards.restore",
-            "cards.timeline"
+            "cards.timeline",
+            "cards.tombstone"
         ],
         "go_method": "CardsGet",
         "ts_method": "cardsGet"
@@ -907,7 +1232,8 @@ export const commandRegistry = [
             "cards.patch",
             "cards.purge",
             "cards.restore",
-            "cards.timeline"
+            "cards.timeline",
+            "cards.tombstone"
         ],
         "go_method": "CardsList",
         "ts_method": "cardsList"
@@ -1033,7 +1359,8 @@ export const commandRegistry = [
             "cards.patch",
             "cards.purge",
             "cards.restore",
-            "cards.timeline"
+            "cards.timeline",
+            "cards.tombstone"
         ],
         "go_method": "CardsMove",
         "ts_method": "cardsMove"
@@ -1151,7 +1478,8 @@ export const commandRegistry = [
             "cards.move",
             "cards.purge",
             "cards.restore",
-            "cards.timeline"
+            "cards.timeline",
+            "cards.tombstone"
         ],
         "go_method": "CardsPatch",
         "ts_method": "cardsPatch"
@@ -1163,8 +1491,8 @@ export const commandRegistry = [
         "method": "POST",
         "path": "/cards/{card_id}/purge",
         "operation_id": "purgeArchivedCard",
-        "summary": "Purge archived card",
-        "why": "Permanently delete an archived card (human-gated; requires archived_at).",
+        "summary": "Purge archived or tombstoned card",
+        "why": "Permanently delete an archived or tombstoned card (human-gated).",
         "input_mode": "json-body",
         "streaming": {
             "mode": "none"
@@ -1202,7 +1530,8 @@ export const commandRegistry = [
             "cards.move",
             "cards.patch",
             "cards.restore",
-            "cards.timeline"
+            "cards.timeline",
+            "cards.tombstone"
         ],
         "go_method": "CardsPurge",
         "ts_method": "cardsPurge"
@@ -1214,8 +1543,8 @@ export const commandRegistry = [
         "method": "POST",
         "path": "/cards/{card_id}/restore",
         "operation_id": "restoreArchivedCard",
-        "summary": "Restore archived card",
-        "why": "Clear archived_at on a soft-deleted card so it reappears on boards.",
+        "summary": "Restore archived or tombstoned card",
+        "why": "Clear archive or tombstone lifecycle fields on a card so it reappears on boards.",
         "input_mode": "json-body",
         "streaming": {
             "mode": "none"
@@ -1257,7 +1586,8 @@ export const commandRegistry = [
             "cards.move",
             "cards.patch",
             "cards.purge",
-            "cards.timeline"
+            "cards.timeline",
+            "cards.tombstone"
         ],
         "go_method": "CardsRestore",
         "ts_method": "cardsRestore"
@@ -1298,10 +1628,126 @@ export const commandRegistry = [
             "cards.move",
             "cards.patch",
             "cards.purge",
-            "cards.restore"
+            "cards.restore",
+            "cards.tombstone"
         ],
         "go_method": "CardsTimeline",
         "ts_method": "cardsTimeline"
+    },
+    {
+        "command_id": "cards.tombstone",
+        "cli_path": "cards tombstone",
+        "group": "cards",
+        "method": "POST",
+        "path": "/cards/{card_id}/tombstone",
+        "operation_id": "tombstoneCard",
+        "summary": "Tombstone card",
+        "why": "Mark a card as tombstoned with an explicit operator reason while keeping archive lifecycle distinct.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ board, card }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "not_found",
+            "conflict"
+        ],
+        "concepts": [
+            "cards",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "reason",
+                    "type": "string"
+                }
+            ],
+            "optional": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                },
+                {
+                    "name": "if_board_updated_at",
+                    "type": "datetime"
+                }
+            ]
+        },
+        "path_params": [
+            "card_id"
+        ],
+        "adjacent_commands": [
+            "cards.archive",
+            "cards.create",
+            "cards.get",
+            "cards.list",
+            "cards.move",
+            "cards.patch",
+            "cards.purge",
+            "cards.restore",
+            "cards.timeline"
+        ],
+        "go_method": "CardsTombstone",
+        "ts_method": "cardsTombstone"
+    },
+    {
+        "command_id": "docs.archive",
+        "cli_path": "docs archive",
+        "group": "docs",
+        "method": "POST",
+        "path": "/docs/{document_id}/archive",
+        "operation_id": "archiveDocument",
+        "summary": "Archive document",
+        "why": "Soft-archive a document lineage (orthogonal to head revision content).",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ document, revision }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "not_found",
+            "conflict"
+        ],
+        "concepts": [
+            "docs",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "body_schema": {
+            "optional": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                }
+            ]
+        },
+        "path_params": [
+            "document_id"
+        ],
+        "adjacent_commands": [
+            "docs.create",
+            "docs.get",
+            "docs.list",
+            "docs.purge",
+            "docs.restore",
+            "docs.revisions.create",
+            "docs.revisions.get",
+            "docs.revisions.list",
+            "docs.tombstone",
+            "docs.unarchive"
+        ],
+        "go_method": "DocsArchive",
+        "ts_method": "docsArchive"
     },
     {
         "command_id": "docs.create",
@@ -1367,11 +1813,16 @@ export const commandRegistry = [
             ]
         },
         "adjacent_commands": [
+            "docs.archive",
             "docs.get",
             "docs.list",
+            "docs.purge",
+            "docs.restore",
             "docs.revisions.create",
             "docs.revisions.get",
-            "docs.revisions.list"
+            "docs.revisions.list",
+            "docs.tombstone",
+            "docs.unarchive"
         ],
         "go_method": "DocsCreate",
         "ts_method": "docsCreate"
@@ -1404,11 +1855,16 @@ export const commandRegistry = [
             "document_id"
         ],
         "adjacent_commands": [
+            "docs.archive",
             "docs.create",
             "docs.list",
+            "docs.purge",
+            "docs.restore",
             "docs.revisions.create",
             "docs.revisions.get",
-            "docs.revisions.list"
+            "docs.revisions.list",
+            "docs.tombstone",
+            "docs.unarchive"
         ],
         "go_method": "DocsGet",
         "ts_method": "docsGet"
@@ -1437,14 +1893,129 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "canonical",
         "adjacent_commands": [
+            "docs.archive",
             "docs.create",
             "docs.get",
+            "docs.purge",
+            "docs.restore",
             "docs.revisions.create",
             "docs.revisions.get",
-            "docs.revisions.list"
+            "docs.revisions.list",
+            "docs.tombstone",
+            "docs.unarchive"
         ],
         "go_method": "DocsList",
         "ts_method": "docsList"
+    },
+    {
+        "command_id": "docs.purge",
+        "cli_path": "docs purge",
+        "group": "docs",
+        "method": "POST",
+        "path": "/docs/{document_id}/purge",
+        "operation_id": "purgeDocument",
+        "summary": "Purge tombstoned document",
+        "why": "Permanently delete a tombstoned document (human-gated).",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ purged, document_id }`.",
+        "error_codes": [
+            "auth_required",
+            "human_only",
+            "invalid_token",
+            "not_found",
+            "conflict"
+        ],
+        "concepts": [
+            "docs",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "body_schema": {
+            "optional": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                }
+            ]
+        },
+        "path_params": [
+            "document_id"
+        ],
+        "adjacent_commands": [
+            "docs.archive",
+            "docs.create",
+            "docs.get",
+            "docs.list",
+            "docs.restore",
+            "docs.revisions.create",
+            "docs.revisions.get",
+            "docs.revisions.list",
+            "docs.tombstone",
+            "docs.unarchive"
+        ],
+        "go_method": "DocsPurge",
+        "ts_method": "docsPurge"
+    },
+    {
+        "command_id": "docs.restore",
+        "cli_path": "docs restore",
+        "group": "docs",
+        "method": "POST",
+        "path": "/docs/{document_id}/restore",
+        "operation_id": "restoreDocument",
+        "summary": "Restore document from tombstone",
+        "why": "Clear tombstone state on a document after an explicit restore action.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ document, revision }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "not_found",
+            "conflict"
+        ],
+        "concepts": [
+            "docs",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "body_schema": {
+            "optional": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                },
+                {
+                    "name": "reason",
+                    "type": "string"
+                }
+            ]
+        },
+        "path_params": [
+            "document_id"
+        ],
+        "adjacent_commands": [
+            "docs.archive",
+            "docs.create",
+            "docs.get",
+            "docs.list",
+            "docs.purge",
+            "docs.revisions.create",
+            "docs.revisions.get",
+            "docs.revisions.list",
+            "docs.tombstone",
+            "docs.unarchive"
+        ],
+        "go_method": "DocsRestore",
+        "ts_method": "docsRestore"
     },
     {
         "command_id": "docs.revisions.create",
@@ -1516,11 +2087,16 @@ export const commandRegistry = [
             "document_id"
         ],
         "adjacent_commands": [
+            "docs.archive",
             "docs.create",
             "docs.get",
             "docs.list",
+            "docs.purge",
+            "docs.restore",
             "docs.revisions.get",
-            "docs.revisions.list"
+            "docs.revisions.list",
+            "docs.tombstone",
+            "docs.unarchive"
         ],
         "go_method": "DocsRevisionsCreate",
         "ts_method": "docsRevisionsCreate"
@@ -1555,11 +2131,16 @@ export const commandRegistry = [
             "revision_id"
         ],
         "adjacent_commands": [
+            "docs.archive",
             "docs.create",
             "docs.get",
             "docs.list",
+            "docs.purge",
+            "docs.restore",
             "docs.revisions.create",
-            "docs.revisions.list"
+            "docs.revisions.list",
+            "docs.tombstone",
+            "docs.unarchive"
         ],
         "go_method": "DocsRevisionsGet",
         "ts_method": "docsRevisionsGet"
@@ -1593,14 +2174,131 @@ export const commandRegistry = [
             "document_id"
         ],
         "adjacent_commands": [
+            "docs.archive",
             "docs.create",
             "docs.get",
             "docs.list",
+            "docs.purge",
+            "docs.restore",
             "docs.revisions.create",
-            "docs.revisions.get"
+            "docs.revisions.get",
+            "docs.tombstone",
+            "docs.unarchive"
         ],
         "go_method": "DocsRevisionsList",
         "ts_method": "docsRevisionsList"
+    },
+    {
+        "command_id": "docs.tombstone",
+        "cli_path": "docs tombstone",
+        "group": "docs",
+        "method": "POST",
+        "path": "/docs/{document_id}/tombstone",
+        "operation_id": "tombstoneDocument",
+        "summary": "Tombstone document",
+        "why": "Mark a document lineage as tombstoned with an explicit operator reason.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ document, revision }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "not_found",
+            "conflict"
+        ],
+        "concepts": [
+            "docs",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "reason",
+                    "type": "string"
+                }
+            ],
+            "optional": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                }
+            ]
+        },
+        "path_params": [
+            "document_id"
+        ],
+        "adjacent_commands": [
+            "docs.archive",
+            "docs.create",
+            "docs.get",
+            "docs.list",
+            "docs.purge",
+            "docs.restore",
+            "docs.revisions.create",
+            "docs.revisions.get",
+            "docs.revisions.list",
+            "docs.unarchive"
+        ],
+        "go_method": "DocsTombstone",
+        "ts_method": "docsTombstone"
+    },
+    {
+        "command_id": "docs.unarchive",
+        "cli_path": "docs unarchive",
+        "group": "docs",
+        "method": "POST",
+        "path": "/docs/{document_id}/unarchive",
+        "operation_id": "unarchiveDocument",
+        "summary": "Unarchive document",
+        "why": "Clear archived_at on a document so it returns to default visibility.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ document, revision }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "not_found",
+            "conflict"
+        ],
+        "concepts": [
+            "docs",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "body_schema": {
+            "optional": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                }
+            ]
+        },
+        "path_params": [
+            "document_id"
+        ],
+        "adjacent_commands": [
+            "docs.archive",
+            "docs.create",
+            "docs.get",
+            "docs.list",
+            "docs.purge",
+            "docs.restore",
+            "docs.revisions.create",
+            "docs.revisions.get",
+            "docs.revisions.list",
+            "docs.tombstone"
+        ],
+        "go_method": "DocsUnarchive",
+        "ts_method": "docsUnarchive"
     },
     {
         "command_id": "events.create",
@@ -2922,6 +3620,9 @@ export class OarClient {
     artifactsList(options = {}) {
         return this.invoke("artifacts.list", {}, options);
     }
+    boardsArchive(pathParams, options = {}) {
+        return this.invoke("boards.archive", pathParams, options);
+    }
     boardsCardsCreate(pathParams, options = {}) {
         return this.invoke("boards.cards.create", pathParams, options);
     }
@@ -2942,6 +3643,18 @@ export class OarClient {
     }
     boardsPatch(pathParams, options = {}) {
         return this.invoke("boards.patch", pathParams, options);
+    }
+    boardsPurge(pathParams, options = {}) {
+        return this.invoke("boards.purge", pathParams, options);
+    }
+    boardsRestore(pathParams, options = {}) {
+        return this.invoke("boards.restore", pathParams, options);
+    }
+    boardsTombstone(pathParams, options = {}) {
+        return this.invoke("boards.tombstone", pathParams, options);
+    }
+    boardsUnarchive(pathParams, options = {}) {
+        return this.invoke("boards.unarchive", pathParams, options);
     }
     boardsWorkspace(pathParams, options = {}) {
         return this.invoke("boards.workspace", pathParams, options);
@@ -2973,6 +3686,12 @@ export class OarClient {
     cardsTimeline(pathParams, options = {}) {
         return this.invoke("cards.timeline", pathParams, options);
     }
+    cardsTombstone(pathParams, options = {}) {
+        return this.invoke("cards.tombstone", pathParams, options);
+    }
+    docsArchive(pathParams, options = {}) {
+        return this.invoke("docs.archive", pathParams, options);
+    }
     docsCreate(options = {}) {
         return this.invoke("docs.create", {}, options);
     }
@@ -2982,6 +3701,12 @@ export class OarClient {
     docsList(options = {}) {
         return this.invoke("docs.list", {}, options);
     }
+    docsPurge(pathParams, options = {}) {
+        return this.invoke("docs.purge", pathParams, options);
+    }
+    docsRestore(pathParams, options = {}) {
+        return this.invoke("docs.restore", pathParams, options);
+    }
     docsRevisionsCreate(pathParams, options = {}) {
         return this.invoke("docs.revisions.create", pathParams, options);
     }
@@ -2990,6 +3715,12 @@ export class OarClient {
     }
     docsRevisionsList(pathParams, options = {}) {
         return this.invoke("docs.revisions.list", pathParams, options);
+    }
+    docsTombstone(pathParams, options = {}) {
+        return this.invoke("docs.tombstone", pathParams, options);
+    }
+    docsUnarchive(pathParams, options = {}) {
+        return this.invoke("docs.unarchive", pathParams, options);
     }
     eventsCreate(options = {}) {
         return this.invoke("events.create", {}, options);

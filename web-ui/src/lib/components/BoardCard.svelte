@@ -16,7 +16,7 @@
   } from "$lib/cardDisplayUtils";
   import { formatTimestamp } from "$lib/formatDate";
   import { getPriorityLabel } from "$lib/topicFilters";
-  import { topicRouteSegmentFromBoardCardRow } from "$lib/topicRouteUtils";
+  import { boardCardInspectNav } from "$lib/topicRouteUtils";
   import { workspacePath } from "$lib/workspacePaths";
 
   /**
@@ -42,10 +42,8 @@
   const derived = $derived(cardItem?.derived);
   const thread = $derived(backing?.thread);
 
-  const topicSegment = $derived(
-    topicRouteSegmentFromBoardCardRow(membership, thread),
-  );
-  const showThreadNav = $derived(Boolean(topicSegment && workspaceSlug));
+  const cardInspectNav = $derived(boardCardInspectNav(membership, thread));
+  const showThreadNav = $derived(Boolean(cardInspectNav && workspaceSlug));
   const cardRowId = $derived(boardCardStableId(membership));
 
   const rowStatus = $derived(boardCardRowStatus(membership, thread));
@@ -59,12 +57,13 @@
   );
 
   const topicHref = $derived.by(() => {
-    if (!workspaceSlug || !topicSegment) return "";
+    if (!workspaceSlug || !cardInspectNav) return "";
+    const path =
+      cardInspectNav.kind === "topic"
+        ? `/topics/${encodeURIComponent(cardInspectNav.segment)}`
+        : `/threads/${encodeURIComponent(cardInspectNav.segment)}`;
     try {
-      return workspacePath(
-        workspaceSlug,
-        `/topics/${encodeURIComponent(topicSegment)}`,
-      );
+      return workspacePath(workspaceSlug, path);
     } catch {
       return "";
     }

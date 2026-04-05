@@ -832,9 +832,9 @@ func TestCardGlobalTrashListRestoreAndPurge(t *testing.T) {
 		}
 	}
 
-	archivedOnlyResp, err := http.Get(h.baseURL + "/cards?tombstoned_only=true")
+	archivedOnlyResp, err := http.Get(h.baseURL + "/cards?archived_only=true")
 	if err != nil {
-		t.Fatalf("GET /cards?tombstoned_only=true: %v", err)
+		t.Fatalf("GET /cards?archived_only=true: %v", err)
 	}
 	defer archivedOnlyResp.Body.Close()
 	if archivedOnlyResp.StatusCode != http.StatusOK {
@@ -854,7 +854,7 @@ func TestCardGlobalTrashListRestoreAndPurge(t *testing.T) {
 		}
 	}
 	if !foundArchived {
-		t.Fatalf("expected archived card in tombstoned_only list, got %#v", archivedPayload.Cards)
+		t.Fatalf("expected archived card in archived_only list, got %#v", archivedPayload.Cards)
 	}
 
 	restoreResp := postJSONExpectStatus(t, h.baseURL+"/cards/"+cardID+"/restore", `{

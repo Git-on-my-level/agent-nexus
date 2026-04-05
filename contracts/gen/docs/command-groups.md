@@ -41,8 +41,9 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `boards`
 
-- Commands: `8`
+- Commands: `13`
 - Command IDs:
+  - `boards.archive` (`boards archive`)
   - `boards.cards.create` (`boards cards create`)
   - `boards.cards.get` (`boards cards get`)
   - `boards.cards.list` (`boards cards list`)
@@ -50,11 +51,15 @@ Generated from `contracts/oar-openapi.yaml`.
   - `boards.get` (`boards get`)
   - `boards.list` (`boards list`)
   - `boards.patch` (`boards patch`)
+  - `boards.purge` (`boards purge`)
+  - `boards.restore` (`boards restore`)
+  - `boards.tombstone` (`boards tombstone`)
+  - `boards.unarchive` (`boards unarchive`)
   - `boards.workspace` (`boards workspace`)
 
 ## `cards`
 
-- Commands: `9`
+- Commands: `10`
 - Command IDs:
   - `cards.archive` (`cards archive`)
   - `cards.create` (`cards create`)
@@ -65,17 +70,23 @@ Generated from `contracts/oar-openapi.yaml`.
   - `cards.purge` (`cards purge`)
   - `cards.restore` (`cards restore`)
   - `cards.timeline` (`cards timeline`)
+  - `cards.tombstone` (`cards tombstone`)
 
 ## `docs`
 
-- Commands: `6`
+- Commands: `11`
 - Command IDs:
+  - `docs.archive` (`docs archive`)
   - `docs.create` (`docs create`)
   - `docs.get` (`docs get`)
   - `docs.list` (`docs list`)
+  - `docs.purge` (`docs purge`)
+  - `docs.restore` (`docs restore`)
   - `docs.revisions.create` (`docs revisions create`)
   - `docs.revisions.get` (`docs revisions get`)
   - `docs.revisions.list` (`docs revisions list`)
+  - `docs.tombstone` (`docs tombstone`)
+  - `docs.unarchive` (`docs unarchive`)
 
 ## `events`
 

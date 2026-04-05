@@ -133,6 +133,17 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
+	if _, has := req.Document["refs"]; has {
+		docRefs, derr := optionalRefs(req.Document["refs"])
+		if derr != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", derr.Error())
+			return
+		}
+		if err := schema.ValidateTypedRefs(opts.contract, docRefs); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+	}
 
 	document, revision, err := opts.primitiveStore.CreateDocument(r.Context(), actorID, req.Document, req.Content, req.ContentType, refs)
 	if err != nil {
@@ -370,6 +381,19 @@ func handleUpdateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 	if err := schema.ValidateTypedRefs(opts.contract, refs); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
+	}
+	if req.Document != nil {
+		if _, has := req.Document["refs"]; has {
+			docRefs, derr := optionalRefs(req.Document["refs"])
+			if derr != nil {
+				writeError(w, http.StatusBadRequest, "invalid_request", derr.Error())
+				return
+			}
+			if err := schema.ValidateTypedRefs(opts.contract, docRefs); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+				return
+			}
+		}
 	}
 
 	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)

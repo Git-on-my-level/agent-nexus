@@ -22,7 +22,10 @@
   } from "$lib/searchHelpers";
   import { workspacePath } from "$lib/workspacePaths";
   import { enrichInboxItem } from "$lib/inboxUtils";
-  import { topicRouteSegmentFromBoardWorkspace } from "$lib/topicRouteUtils";
+  import {
+    boardWorkspaceInspectNav,
+    warningInspectNav,
+  } from "$lib/topicRouteUtils";
   import {
     BOARD_STATUS_LABELS,
     boardBackingThreadId,
@@ -122,7 +125,7 @@
       title: document.title || document.id,
       subtitle: [
         document.status,
-        document.thread_id && `Topic ${document.thread_id}`,
+        document.thread_id && `Timeline ${document.thread_id}`,
       ]
         .filter(Boolean)
         .join(" · "),
@@ -529,7 +532,7 @@
 {:else if workspace}
   {@const board = workspace.board}
   {@const backingThreadId = boardBackingThreadId(board)}
-  {@const boardTopicSegment = topicRouteSegmentFromBoardWorkspace(workspace)}
+  {@const boardInspectNav = boardWorkspaceInspectNav(workspace)}
   {@const backingThread =
     workspace.backing_thread ??
     (backingThreadId ? { id: backingThreadId, title: backingThreadId } : null)}
@@ -699,15 +702,19 @@
     <div
       class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[var(--ui-text-muted)]"
     >
-      {#if backingThread && boardTopicSegment}
-        <span class="text-[var(--ui-text-subtle)]">Topic</span>
+      {#if backingThread && boardInspectNav}
+        <span class="text-[var(--ui-text-subtle)]"
+          >{boardInspectNav.kind === "topic" ? "Topic" : "Backing thread"}</span
+        >
         <a
           class="text-indigo-400 transition-colors hover:text-indigo-300"
           href={workspaceHref(
-            `/topics/${encodeURIComponent(boardTopicSegment)}`,
+            boardInspectNav.kind === "topic"
+              ? `/topics/${encodeURIComponent(boardInspectNav.segment)}`
+              : `/threads/${encodeURIComponent(boardInspectNav.segment)}`,
           )}
         >
-          {backingThread.title || boardTopicSegment}
+          {backingThread.title || boardInspectNav.segment}
         </a>
         <span class="text-[var(--ui-text-subtle)]">·</span>
       {/if}
@@ -1312,7 +1319,7 @@
                   {item.title || item.summary || item.id}
                 </div>
                 <div class="mt-1 text-[11px] text-[var(--ui-text-subtle)]">
-                  {item.urgency_label} · Topic {item.thread_id}
+                  {item.urgency_label} · Backing thread {item.thread_id}
                 </div>
               </div>
             {/each}
@@ -1332,17 +1339,19 @@
           <div class="text-[12px] text-amber-100">
             {warning.message || "Workspace warning"}
             {#if warning.topic_id || warning.thread_id}
-              {@const warnTopicSeg =
-                String(warning.topic_id ?? "").trim() ||
-                String(warning.thread_id ?? "").trim()}
-              <a
-                class="ml-1 font-medium text-amber-200 underline transition-colors hover:text-amber-100"
-                href={workspaceHref(
-                  `/topics/${encodeURIComponent(warnTopicSeg)}`,
-                )}
-              >
-                {warnTopicSeg}
-              </a>
+              {@const warnNav = warningInspectNav(warning)}
+              {#if warnNav}
+                <a
+                  class="ml-1 font-medium text-amber-200 underline transition-colors hover:text-amber-100"
+                  href={workspaceHref(
+                    warnNav.kind === "topic"
+                      ? `/topics/${encodeURIComponent(warnNav.segment)}`
+                      : `/threads/${encodeURIComponent(warnNav.segment)}`,
+                  )}
+                >
+                  {warnNav.segment}
+                </a>
+              {/if}
             {/if}
           </div>
         {/each}

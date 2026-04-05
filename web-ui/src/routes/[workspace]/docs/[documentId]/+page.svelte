@@ -3,13 +3,8 @@
   import { page } from "$app/stores";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
-  import SearchableEntityPicker from "$lib/components/SearchableEntityPicker.svelte";
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
-  import {
-    searchTopics as searchTopicRecords,
-    topicSearchResultToPickerOption,
-  } from "$lib/searchHelpers";
   import { topicDetailPathFromSubject } from "$lib/topicRouteUtils";
   import { workspacePath } from "$lib/workspacePaths";
   import {
@@ -43,7 +38,6 @@
     title: "",
     status: "",
     labels: "",
-    thread_id: "",
   });
   let saving = $state(false);
   let saveError = $state("");
@@ -78,11 +72,6 @@
 
   function workspaceHref(pathname = "/") {
     return workspacePath(workspaceSlug, pathname);
-  }
-
-  async function searchThreadOptions(query) {
-    const threads = await searchTopicRecords(query);
-    return threads.map(topicSearchResultToPickerOption);
   }
 
   async function setRequestedRevision(revisionId = "") {
@@ -257,7 +246,6 @@
       title: document?.title ?? "",
       status: document?.status ?? "",
       labels: (document?.labels ?? []).join(", "),
-      thread_id: document?.thread_id ?? "",
     };
     saveError = "";
     editOpen = true;
@@ -304,12 +292,6 @@
       if (labelsChanged) {
         docPatch.labels = labels;
       }
-      const nextThreadId = editDraft.thread_id.trim();
-      const currentThreadId = String(document?.thread_id ?? "").trim();
-      if (nextThreadId !== currentThreadId) {
-        docPatch.thread_id = nextThreadId || null;
-      }
-
       const result = await coreClient.updateDocument(documentId, {
         content: editDraft.content.trim(),
         content_type: headContentType || "text",
@@ -711,16 +693,6 @@
                     type="text"
                   />
                 </label>
-                <SearchableEntityPicker
-                  bind:value={editDraft.thread_id}
-                  advancedLabel="Use a manual topic ID"
-                  helperText="Update the canonical topic linkage for this doc lineage."
-                  label="Topic linkage"
-                  manualLabel="Topic ID"
-                  manualPlaceholder="thread-..."
-                  placeholder="Search topics by title, ID, or tags"
-                  searchFn={searchThreadOptions}
-                />
               </div>
             {/if}
           </div>

@@ -67,6 +67,18 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:  []string{"artifacts.create", "artifacts.get"},
 	},
 	{
+		CommandID:  "boards.archive",
+		CLIPath:    "boards archive",
+		Group:      "boards",
+		Method:     "POST",
+		Path:       "/boards/{board_id}/archive",
+		PathParams: []string{"board_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"boards", "write"},
+		Adjacent:   []string{"boards.cards.create", "boards.cards.get", "boards.cards.list", "boards.create", "boards.get", "boards.list", "boards.patch", "boards.purge", "boards.restore", "boards.tombstone", "boards.unarchive", "boards.workspace"},
+	},
+	{
 		CommandID:  "boards.cards.create",
 		CLIPath:    "boards cards create",
 		Group:      "boards",
@@ -76,7 +88,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"boards", "cards", "write"},
-		Adjacent:   []string{"boards.cards.get", "boards.cards.list", "boards.create", "boards.get", "boards.list", "boards.patch", "boards.workspace"},
+		Adjacent:   []string{"boards.archive", "boards.cards.get", "boards.cards.list", "boards.create", "boards.get", "boards.list", "boards.patch", "boards.purge", "boards.restore", "boards.tombstone", "boards.unarchive", "boards.workspace"},
 	},
 	{
 		CommandID:  "boards.cards.get",
@@ -88,7 +100,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"boards", "cards"},
-		Adjacent:   []string{"boards.cards.create", "boards.cards.list", "boards.create", "boards.get", "boards.list", "boards.patch", "boards.workspace"},
+		Adjacent:   []string{"boards.archive", "boards.cards.create", "boards.cards.list", "boards.create", "boards.get", "boards.list", "boards.patch", "boards.purge", "boards.restore", "boards.tombstone", "boards.unarchive", "boards.workspace"},
 	},
 	{
 		CommandID:  "boards.cards.list",
@@ -100,7 +112,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"boards", "cards"},
-		Adjacent:   []string{"boards.cards.create", "boards.cards.get", "boards.create", "boards.get", "boards.list", "boards.patch", "boards.workspace"},
+		Adjacent:   []string{"boards.archive", "boards.cards.create", "boards.cards.get", "boards.create", "boards.get", "boards.list", "boards.patch", "boards.purge", "boards.restore", "boards.tombstone", "boards.unarchive", "boards.workspace"},
 	},
 	{
 		CommandID: "boards.create",
@@ -111,7 +123,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"boards", "write"},
-		Adjacent:  []string{"boards.cards.create", "boards.cards.get", "boards.cards.list", "boards.get", "boards.list", "boards.patch", "boards.workspace"},
+		Adjacent:  []string{"boards.archive", "boards.cards.create", "boards.cards.get", "boards.cards.list", "boards.get", "boards.list", "boards.patch", "boards.purge", "boards.restore", "boards.tombstone", "boards.unarchive", "boards.workspace"},
 	},
 	{
 		CommandID:  "boards.get",
@@ -123,7 +135,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"boards"},
-		Adjacent:   []string{"boards.cards.create", "boards.cards.get", "boards.cards.list", "boards.create", "boards.list", "boards.patch", "boards.workspace"},
+		Adjacent:   []string{"boards.archive", "boards.cards.create", "boards.cards.get", "boards.cards.list", "boards.create", "boards.list", "boards.patch", "boards.purge", "boards.restore", "boards.tombstone", "boards.unarchive", "boards.workspace"},
 	},
 	{
 		CommandID: "boards.list",
@@ -134,7 +146,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"boards"},
-		Adjacent:  []string{"boards.cards.create", "boards.cards.get", "boards.cards.list", "boards.create", "boards.get", "boards.patch", "boards.workspace"},
+		Adjacent:  []string{"boards.archive", "boards.cards.create", "boards.cards.get", "boards.cards.list", "boards.create", "boards.get", "boards.patch", "boards.purge", "boards.restore", "boards.tombstone", "boards.unarchive", "boards.workspace"},
 	},
 	{
 		CommandID:  "boards.patch",
@@ -146,7 +158,55 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"boards", "write", "concurrency"},
-		Adjacent:   []string{"boards.cards.create", "boards.cards.get", "boards.cards.list", "boards.create", "boards.get", "boards.list", "boards.workspace"},
+		Adjacent:   []string{"boards.archive", "boards.cards.create", "boards.cards.get", "boards.cards.list", "boards.create", "boards.get", "boards.list", "boards.purge", "boards.restore", "boards.tombstone", "boards.unarchive", "boards.workspace"},
+	},
+	{
+		CommandID:  "boards.purge",
+		CLIPath:    "boards purge",
+		Group:      "boards",
+		Method:     "POST",
+		Path:       "/boards/{board_id}/purge",
+		PathParams: []string{"board_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"boards", "write"},
+		Adjacent:   []string{"boards.archive", "boards.cards.create", "boards.cards.get", "boards.cards.list", "boards.create", "boards.get", "boards.list", "boards.patch", "boards.restore", "boards.tombstone", "boards.unarchive", "boards.workspace"},
+	},
+	{
+		CommandID:  "boards.restore",
+		CLIPath:    "boards restore",
+		Group:      "boards",
+		Method:     "POST",
+		Path:       "/boards/{board_id}/restore",
+		PathParams: []string{"board_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"boards", "write"},
+		Adjacent:   []string{"boards.archive", "boards.cards.create", "boards.cards.get", "boards.cards.list", "boards.create", "boards.get", "boards.list", "boards.patch", "boards.purge", "boards.tombstone", "boards.unarchive", "boards.workspace"},
+	},
+	{
+		CommandID:  "boards.tombstone",
+		CLIPath:    "boards tombstone",
+		Group:      "boards",
+		Method:     "POST",
+		Path:       "/boards/{board_id}/tombstone",
+		PathParams: []string{"board_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"boards", "write"},
+		Adjacent:   []string{"boards.archive", "boards.cards.create", "boards.cards.get", "boards.cards.list", "boards.create", "boards.get", "boards.list", "boards.patch", "boards.purge", "boards.restore", "boards.unarchive", "boards.workspace"},
+	},
+	{
+		CommandID:  "boards.unarchive",
+		CLIPath:    "boards unarchive",
+		Group:      "boards",
+		Method:     "POST",
+		Path:       "/boards/{board_id}/unarchive",
+		PathParams: []string{"board_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"boards", "write"},
+		Adjacent:   []string{"boards.archive", "boards.cards.create", "boards.cards.get", "boards.cards.list", "boards.create", "boards.get", "boards.list", "boards.patch", "boards.purge", "boards.restore", "boards.tombstone", "boards.workspace"},
 	},
 	{
 		CommandID:  "boards.workspace",
@@ -158,7 +218,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"boards", "workspace"},
-		Adjacent:   []string{"boards.cards.create", "boards.cards.get", "boards.cards.list", "boards.create", "boards.get", "boards.list", "boards.patch"},
+		Adjacent:   []string{"boards.archive", "boards.cards.create", "boards.cards.get", "boards.cards.list", "boards.create", "boards.get", "boards.list", "boards.patch", "boards.purge", "boards.restore", "boards.tombstone", "boards.unarchive"},
 	},
 	{
 		CommandID:  "cards.archive",
@@ -170,7 +230,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "write"},
-		Adjacent:   []string{"cards.create", "cards.get", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.timeline"},
+		Adjacent:   []string{"cards.create", "cards.get", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.timeline", "cards.tombstone"},
 	},
 	{
 		CommandID: "cards.create",
@@ -181,7 +241,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"cards", "boards", "write"},
-		Adjacent:  []string{"cards.archive", "cards.get", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.timeline"},
+		Adjacent:  []string{"cards.archive", "cards.get", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.timeline", "cards.tombstone"},
 	},
 	{
 		CommandID:  "cards.get",
@@ -193,7 +253,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"cards"},
-		Adjacent:   []string{"cards.archive", "cards.create", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.timeline"},
+		Adjacent:   []string{"cards.archive", "cards.create", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.timeline", "cards.tombstone"},
 	},
 	{
 		CommandID: "cards.list",
@@ -204,7 +264,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"cards"},
-		Adjacent:  []string{"cards.archive", "cards.create", "cards.get", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.timeline"},
+		Adjacent:  []string{"cards.archive", "cards.create", "cards.get", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.timeline", "cards.tombstone"},
 	},
 	{
 		CommandID:  "cards.move",
@@ -216,7 +276,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "boards", "write"},
-		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.list", "cards.patch", "cards.purge", "cards.restore", "cards.timeline"},
+		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.list", "cards.patch", "cards.purge", "cards.restore", "cards.timeline", "cards.tombstone"},
 	},
 	{
 		CommandID:  "cards.patch",
@@ -228,7 +288,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "write", "concurrency"},
-		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.list", "cards.move", "cards.purge", "cards.restore", "cards.timeline"},
+		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.list", "cards.move", "cards.purge", "cards.restore", "cards.timeline", "cards.tombstone"},
 	},
 	{
 		CommandID:  "cards.purge",
@@ -240,7 +300,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "write"},
-		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.list", "cards.move", "cards.patch", "cards.restore", "cards.timeline"},
+		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.list", "cards.move", "cards.patch", "cards.restore", "cards.timeline", "cards.tombstone"},
 	},
 	{
 		CommandID:  "cards.restore",
@@ -252,7 +312,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "write"},
-		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.timeline"},
+		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.timeline", "cards.tombstone"},
 	},
 	{
 		CommandID:  "cards.timeline",
@@ -264,7 +324,31 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "timeline"},
-		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore"},
+		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.tombstone"},
+	},
+	{
+		CommandID:  "cards.tombstone",
+		CLIPath:    "cards tombstone",
+		Group:      "cards",
+		Method:     "POST",
+		Path:       "/cards/{card_id}/tombstone",
+		PathParams: []string{"card_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"cards", "write"},
+		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.timeline"},
+	},
+	{
+		CommandID:  "docs.archive",
+		CLIPath:    "docs archive",
+		Group:      "docs",
+		Method:     "POST",
+		Path:       "/docs/{document_id}/archive",
+		PathParams: []string{"document_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"docs", "write"},
+		Adjacent:   []string{"docs.create", "docs.get", "docs.list", "docs.purge", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.revisions.list", "docs.tombstone", "docs.unarchive"},
 	},
 	{
 		CommandID: "docs.create",
@@ -275,7 +359,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"docs", "write"},
-		Adjacent:  []string{"docs.get", "docs.list", "docs.revisions.create", "docs.revisions.get", "docs.revisions.list"},
+		Adjacent:  []string{"docs.archive", "docs.get", "docs.list", "docs.purge", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.revisions.list", "docs.tombstone", "docs.unarchive"},
 	},
 	{
 		CommandID:  "docs.get",
@@ -287,7 +371,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"docs"},
-		Adjacent:   []string{"docs.create", "docs.list", "docs.revisions.create", "docs.revisions.get", "docs.revisions.list"},
+		Adjacent:   []string{"docs.archive", "docs.create", "docs.list", "docs.purge", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.revisions.list", "docs.tombstone", "docs.unarchive"},
 	},
 	{
 		CommandID: "docs.list",
@@ -298,7 +382,31 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"docs"},
-		Adjacent:  []string{"docs.create", "docs.get", "docs.revisions.create", "docs.revisions.get", "docs.revisions.list"},
+		Adjacent:  []string{"docs.archive", "docs.create", "docs.get", "docs.purge", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.revisions.list", "docs.tombstone", "docs.unarchive"},
+	},
+	{
+		CommandID:  "docs.purge",
+		CLIPath:    "docs purge",
+		Group:      "docs",
+		Method:     "POST",
+		Path:       "/docs/{document_id}/purge",
+		PathParams: []string{"document_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"docs", "write"},
+		Adjacent:   []string{"docs.archive", "docs.create", "docs.get", "docs.list", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.revisions.list", "docs.tombstone", "docs.unarchive"},
+	},
+	{
+		CommandID:  "docs.restore",
+		CLIPath:    "docs restore",
+		Group:      "docs",
+		Method:     "POST",
+		Path:       "/docs/{document_id}/restore",
+		PathParams: []string{"document_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"docs", "write"},
+		Adjacent:   []string{"docs.archive", "docs.create", "docs.get", "docs.list", "docs.purge", "docs.revisions.create", "docs.revisions.get", "docs.revisions.list", "docs.tombstone", "docs.unarchive"},
 	},
 	{
 		CommandID:  "docs.revisions.create",
@@ -310,7 +418,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "revisions", "write"},
-		Adjacent:   []string{"docs.create", "docs.get", "docs.list", "docs.revisions.get", "docs.revisions.list"},
+		Adjacent:   []string{"docs.archive", "docs.create", "docs.get", "docs.list", "docs.purge", "docs.restore", "docs.revisions.get", "docs.revisions.list", "docs.tombstone", "docs.unarchive"},
 	},
 	{
 		CommandID:  "docs.revisions.get",
@@ -322,7 +430,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "revisions"},
-		Adjacent:   []string{"docs.create", "docs.get", "docs.list", "docs.revisions.create", "docs.revisions.list"},
+		Adjacent:   []string{"docs.archive", "docs.create", "docs.get", "docs.list", "docs.purge", "docs.restore", "docs.revisions.create", "docs.revisions.list", "docs.tombstone", "docs.unarchive"},
 	},
 	{
 		CommandID:  "docs.revisions.list",
@@ -334,7 +442,31 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "revisions"},
-		Adjacent:   []string{"docs.create", "docs.get", "docs.list", "docs.revisions.create", "docs.revisions.get"},
+		Adjacent:   []string{"docs.archive", "docs.create", "docs.get", "docs.list", "docs.purge", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.tombstone", "docs.unarchive"},
+	},
+	{
+		CommandID:  "docs.tombstone",
+		CLIPath:    "docs tombstone",
+		Group:      "docs",
+		Method:     "POST",
+		Path:       "/docs/{document_id}/tombstone",
+		PathParams: []string{"document_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"docs", "write"},
+		Adjacent:   []string{"docs.archive", "docs.create", "docs.get", "docs.list", "docs.purge", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.revisions.list", "docs.unarchive"},
+	},
+	{
+		CommandID:  "docs.unarchive",
+		CLIPath:    "docs unarchive",
+		Group:      "docs",
+		Method:     "POST",
+		Path:       "/docs/{document_id}/unarchive",
+		PathParams: []string{"document_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"docs", "write"},
+		Adjacent:   []string{"docs.archive", "docs.create", "docs.get", "docs.list", "docs.purge", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.revisions.list", "docs.tombstone"},
 	},
 	{
 		CommandID: "events.create",
@@ -753,6 +885,10 @@ func (c *Client) ArtifactsList(ctx context.Context, opts RequestOptions) (*http.
 	return c.Invoke(ctx, "artifacts.list", nil, opts)
 }
 
+func (c *Client) BoardsArchive(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "boards.archive", pathParams, opts)
+}
+
 func (c *Client) BoardsCardsCreate(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "boards.cards.create", pathParams, opts)
 }
@@ -779,6 +915,22 @@ func (c *Client) BoardsList(ctx context.Context, opts RequestOptions) (*http.Res
 
 func (c *Client) BoardsPatch(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "boards.patch", pathParams, opts)
+}
+
+func (c *Client) BoardsPurge(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "boards.purge", pathParams, opts)
+}
+
+func (c *Client) BoardsRestore(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "boards.restore", pathParams, opts)
+}
+
+func (c *Client) BoardsTombstone(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "boards.tombstone", pathParams, opts)
+}
+
+func (c *Client) BoardsUnarchive(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "boards.unarchive", pathParams, opts)
 }
 
 func (c *Client) BoardsWorkspace(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
@@ -821,6 +973,14 @@ func (c *Client) CardsTimeline(ctx context.Context, pathParams map[string]string
 	return c.Invoke(ctx, "cards.timeline", pathParams, opts)
 }
 
+func (c *Client) CardsTombstone(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "cards.tombstone", pathParams, opts)
+}
+
+func (c *Client) DocsArchive(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "docs.archive", pathParams, opts)
+}
+
 func (c *Client) DocsCreate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "docs.create", nil, opts)
 }
@@ -833,6 +993,14 @@ func (c *Client) DocsList(ctx context.Context, opts RequestOptions) (*http.Respo
 	return c.Invoke(ctx, "docs.list", nil, opts)
 }
 
+func (c *Client) DocsPurge(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "docs.purge", pathParams, opts)
+}
+
+func (c *Client) DocsRestore(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "docs.restore", pathParams, opts)
+}
+
 func (c *Client) DocsRevisionsCreate(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "docs.revisions.create", pathParams, opts)
 }
@@ -843,6 +1011,14 @@ func (c *Client) DocsRevisionsGet(ctx context.Context, pathParams map[string]str
 
 func (c *Client) DocsRevisionsList(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "docs.revisions.list", pathParams, opts)
+}
+
+func (c *Client) DocsTombstone(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "docs.tombstone", pathParams, opts)
+}
+
+func (c *Client) DocsUnarchive(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "docs.unarchive", pathParams, opts)
 }
 
 func (c *Client) EventsCreate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {

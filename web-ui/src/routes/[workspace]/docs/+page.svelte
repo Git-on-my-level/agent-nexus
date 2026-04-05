@@ -2,14 +2,9 @@
   import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
-  import SearchableEntityPicker from "$lib/components/SearchableEntityPicker.svelte";
   import { coreClient } from "$lib/coreClient";
   import { filterTopLevelDocuments } from "$lib/documentVisibility";
   import { formatTimestamp } from "$lib/formatDate";
-  import {
-    searchTopics as searchTopicRecords,
-    topicSearchResultToPickerOption,
-  } from "$lib/searchHelpers";
   import { workspacePath } from "$lib/workspacePaths";
   import {
     lookupActorDisplayName,
@@ -79,7 +74,6 @@
     title: "",
     status: "draft",
     labels: "",
-    thread_id: "",
     content: "",
   });
 
@@ -87,14 +81,14 @@
     return workspacePath(workspaceSlug, pathname);
   }
 
-  async function searchThreadOptions(query) {
-    const threads = await searchTopicRecords(query);
-    return threads.map(topicSearchResultToPickerOption);
-  }
-
   $effect(() => {
     showArchived;
     const threadId = scopedThreadId;
+    if (threadId && createOpen) {
+      createOpen = false;
+      createError = "";
+      resetDraft();
+    }
     if (workspaceSlug) {
       void loadDocuments(threadId);
     }
@@ -123,12 +117,14 @@
       title: "",
       status: "draft",
       labels: "",
-      thread_id: scopedThreadId,
       content: "",
     };
   }
 
   function toggleCreate() {
+    if (scopedThreadId) {
+      return;
+    }
     createOpen = !createOpen;
     if (!createOpen) {
       createError = "";
@@ -161,7 +157,6 @@
         labels,
       };
       if (draft.id.trim()) docPayload.id = draft.id.trim();
-      if (draft.thread_id.trim()) docPayload.thread_id = draft.thread_id.trim();
 
       const result = await coreClient.createDocument({
         document: docPayload,
@@ -260,10 +255,10 @@
     </p>
     {#if scopedThreadId}
       <p class="mt-1 text-[12px] text-[var(--ui-text-muted)]">
-        Scoped to topic
+        Scoped to backing thread
         <a
           class="text-indigo-300 transition-colors hover:text-indigo-200"
-          href={workspaceHref(`/topics/${encodeURIComponent(scopedThreadId)}`)}
+          href={workspaceHref(`/threads/${encodeURIComponent(scopedThreadId)}`)}
         >
           {scopedThreadId}
         </a>
@@ -304,9 +299,13 @@
       </svg>
     </button>
     <button
-      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text)] transition-colors hover:bg-[var(--ui-border)]"
+      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text)] transition-colors hover:bg-[var(--ui-border)] disabled:cursor-not-allowed disabled:opacity-50"
+      disabled={Boolean(scopedThreadId)}
       onclick={toggleCreate}
       type="button"
+      title={scopedThreadId
+        ? "Clear the backing-thread scope to create a new document lineage."
+        : "Create a new document lineage"}
     >
       {#if !createOpen}
         <svg
@@ -333,7 +332,11 @@
     class="mb-4 flex items-center justify-between rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2"
   >
     <p class="text-[12px] text-[var(--ui-text-muted)]">
-      Showing only documents linked to this topic.
+      Showing only documents on this backing thread timeline.
+    </p>
+    <p class="text-[12px] text-[var(--ui-text-muted)]">
+      Create from the unscoped docs view. New document lineages always get their
+      own backing thread.
     </p>
     <a
       class="text-[12px] font-medium text-indigo-300 transition-colors hover:text-indigo-200"
@@ -400,16 +403,6 @@
           type="text"
         />
       </label>
-      <SearchableEntityPicker
-        bind:value={draft.thread_id}
-        advancedLabel="Use a manual topic ID"
-        helperText="Optional: link the doc lineage to its primary topic."
-        label="Topic linkage"
-        manualLabel="Topic ID"
-        manualPlaceholder="thread-..."
-        placeholder="Search topics by title, ID, or tags"
-        searchFn={searchThreadOptions}
-      />
       <label class="sm:col-span-2">
         <span class="text-[12px] font-medium text-[var(--ui-text-muted)]"
           >Head content (Markdown) <span class="text-red-400">*</span></span

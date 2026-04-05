@@ -16,9 +16,20 @@ func handleListCards(w http.ResponseWriter, r *http.Request, opts handlerOptions
 	}
 
 	query := r.URL.Query()
-	archivedOnly := strings.TrimSpace(query.Get("archived_only")) == "true" ||
-		strings.TrimSpace(query.Get("tombstoned_only")) == "true"
-	cards, err := opts.primitiveStore.ListCards(r.Context(), primitives.CardListFilter{ArchivedOnly: archivedOnly})
+	tombstonedOnly := strings.TrimSpace(query.Get("tombstoned_only")) == "true"
+	archivedOnly := strings.TrimSpace(query.Get("archived_only")) == "true"
+	includeArchived := strings.TrimSpace(query.Get("include_archived")) == "true"
+	includeTombstoned := strings.TrimSpace(query.Get("include_tombstoned")) == "true"
+	listFilter := primitives.CardListFilter{
+		IncludeArchived:   includeArchived,
+		IncludeTombstoned: includeTombstoned,
+	}
+	if tombstonedOnly {
+		listFilter.TombstonedOnly = true
+	} else if archivedOnly {
+		listFilter.ArchivedOnly = true
+	}
+	cards, err := opts.primitiveStore.ListCards(r.Context(), listFilter)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list cards")
 		return
@@ -275,6 +286,10 @@ func handleMoveCard(w http.ResponseWriter, r *http.Request, opts handlerOptions,
 
 func handleArchiveCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, cardID string) {
 	handleArchiveBoardCard(w, r, opts, "", cardID)
+}
+
+func handleTombstoneCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, cardID string) {
+	handleTombstoneBoardCard(w, r, opts, "", cardID)
 }
 
 func writeBoardCardPurgeStoreError(w http.ResponseWriter, err error) bool {

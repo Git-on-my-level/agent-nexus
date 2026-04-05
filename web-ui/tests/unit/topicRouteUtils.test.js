@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  boardCardInspectNav,
+  boardRowInspectNav,
+  boardWorkspaceInspectNav,
   inboxTopicRouteSegment,
   resolveBoardCardThreadIdField,
   topicDetailPathFromRef,
@@ -8,39 +11,19 @@ import {
   topicRouteSegmentFromBackingThread,
   topicRouteSegmentFromBoardCardRow,
   topicRouteSegmentFromBoardWorkspace,
+  warningInspectNav,
 } from "../../src/lib/topicRouteUtils.js";
 
 describe("topicRouteUtils", () => {
   describe("resolveBoardCardThreadIdField", () => {
-    it("prefers thread_id over parent_thread", () => {
-      expect(
-        resolveBoardCardThreadIdField({
-          thread_id: "a",
-          parent_thread: "b",
-        }),
-      ).toBe("a");
+    it("reads thread_id", () => {
+      expect(resolveBoardCardThreadIdField({ thread_id: "a" })).toBe("a");
     });
 
-    it("falls back to parent_thread string", () => {
+    it("returns empty when only legacy parent_thread is present", () => {
       expect(resolveBoardCardThreadIdField({ parent_thread: "thread-z" })).toBe(
-        "thread-z",
+        "",
       );
-    });
-
-    it("falls back to parent_thread.thread_id", () => {
-      expect(
-        resolveBoardCardThreadIdField({
-          parent_thread: { thread_id: "thread-nested" },
-        }),
-      ).toBe("thread-nested");
-    });
-
-    it("falls back to parent_thread.id", () => {
-      expect(
-        resolveBoardCardThreadIdField({
-          parent_thread: { id: "thread-by-id" },
-        }),
-      ).toBe("thread-by-id");
     });
   });
 
@@ -94,8 +77,59 @@ describe("topicRouteUtils", () => {
     });
   });
 
+  describe("boardCardInspectNav", () => {
+    it("uses membership.topic_ref for topic kind", () => {
+      expect(
+        boardCardInspectNav(
+          {
+            topic_ref: "topic:top-1",
+            thread_id: "thread-x",
+          },
+          { id: "thread-x", topic_ref: "topic:top-2" },
+        ),
+      ).toEqual({ kind: "topic", segment: "top-1" });
+    });
+
+    it("uses first topic: in related_refs", () => {
+      expect(
+        boardCardInspectNav(
+          {
+            thread_id: "thread-x",
+            related_refs: ["board:b1", "topic:top-from-ref"],
+          },
+          null,
+        ),
+      ).toEqual({ kind: "topic", segment: "top-from-ref" });
+    });
+
+    it("uses backing thread topic_ref when membership has no topic hint", () => {
+      expect(
+        boardCardInspectNav(
+          { thread_id: "thread-x" },
+          {
+            id: "thread-x",
+            topic_ref: "topic:via-backing",
+          },
+        ),
+      ).toEqual({ kind: "topic", segment: "via-backing" });
+    });
+
+    it("uses thread kind when only membership.thread_id", () => {
+      expect(boardCardInspectNav({ thread_id: "thread-z" }, null)).toEqual({
+        kind: "thread",
+        segment: "thread-z",
+      });
+    });
+
+    it("returns null when only legacy parent_thread is set", () => {
+      expect(
+        boardCardInspectNav({ parent_thread: "thread-legacy" }, null),
+      ).toBe(null);
+    });
+  });
+
   describe("topicRouteSegmentFromBoardCardRow", () => {
-    it("prefers membership.topic_ref", () => {
+    it("delegates segment from boardCardInspectNav", () => {
       expect(
         topicRouteSegmentFromBoardCardRow(
           {
@@ -107,45 +141,58 @@ describe("topicRouteUtils", () => {
       ).toBe("top-1");
     });
 
-    it("uses first topic: in related_refs", () => {
-      expect(
-        topicRouteSegmentFromBoardCardRow(
-          {
-            thread_id: "thread-x",
-            related_refs: ["board:b1", "topic:top-from-ref"],
-          },
-          null,
-        ),
-      ).toBe("top-from-ref");
-    });
-
-    it("uses backing thread topic_ref when membership has no topic hint", () => {
-      expect(
-        topicRouteSegmentFromBoardCardRow(
-          { thread_id: "thread-x" },
-          { id: "thread-x", topic_ref: "topic:via-backing" },
-        ),
-      ).toBe("via-backing");
-    });
-
-    it("falls back to thread_id", () => {
+    it("returns thread id segment when no topic ref", () => {
       expect(
         topicRouteSegmentFromBoardCardRow({ thread_id: "thread-z" }, null),
       ).toBe("thread-z");
     });
+  });
 
-    it("falls back to legacy parent_thread when thread_id absent", () => {
+  describe("boardWorkspaceInspectNav", () => {
+    it("prefers primary_topic.id as topic kind", () => {
       expect(
-        topicRouteSegmentFromBoardCardRow(
-          { parent_thread: "thread-legacy" },
-          null,
-        ),
-      ).toBe("thread-legacy");
+        boardWorkspaceInspectNav({
+          primary_topic: { id: "pt-1" },
+          board: { thread_id: "th-1" },
+        }),
+      ).toEqual({ kind: "topic", segment: "pt-1" });
+    });
+
+    it("prefers topic: in board.refs over primary_topic_ref", () => {
+      expect(
+        boardWorkspaceInspectNav({
+          board: {
+            thread_id: "th-1",
+            primary_topic_ref: "topic:legacy",
+            refs: ["board:b1", "topic:from-refs"],
+          },
+        }),
+      ).toEqual({ kind: "topic", segment: "from-refs" });
+    });
+
+    it("reads board.primary_topic_ref when refs omit topic", () => {
+      expect(
+        boardWorkspaceInspectNav({
+          board: {
+            thread_id: "th-1",
+            primary_topic_ref: "topic:from-ref",
+            refs: ["document:doc-1"],
+          },
+        }),
+      ).toEqual({ kind: "topic", segment: "from-ref" });
+    });
+
+    it("uses thread kind when only board.thread_id", () => {
+      expect(
+        boardWorkspaceInspectNav({
+          board: { thread_id: "th-only", refs: [] },
+        }),
+      ).toEqual({ kind: "thread", segment: "th-only" });
     });
   });
 
   describe("topicRouteSegmentFromBoardWorkspace", () => {
-    it("prefers primary_topic.id", () => {
+    it("returns segment string for topic workspace", () => {
       expect(
         topicRouteSegmentFromBoardWorkspace({
           primary_topic: { id: "pt-1" },
@@ -153,29 +200,50 @@ describe("topicRouteUtils", () => {
         }),
       ).toBe("pt-1");
     });
+  });
 
-    it("prefers topic: in board.refs over primary_topic_ref", () => {
+  describe("boardRowInspectNav", () => {
+    it("returns topic kind when primary_topic_ref is topic:", () => {
       expect(
-        topicRouteSegmentFromBoardWorkspace({
-          board: {
-            thread_id: "th-1",
-            primary_topic_ref: "topic:legacy",
-            refs: ["board:b1", "topic:from-refs"],
-          },
+        boardRowInspectNav({
+          thread_id: "t1",
+          primary_topic_ref: "topic:abc",
+          refs: [],
         }),
-      ).toBe("from-refs");
+      ).toEqual({
+        kind: "topic",
+        segment: "abc",
+        display: "topic:abc",
+      });
     });
 
-    it("reads board.primary_topic_ref when refs omit topic", () => {
+    it("returns thread kind when no topic ref", () => {
       expect(
-        topicRouteSegmentFromBoardWorkspace({
-          board: {
-            thread_id: "th-1",
-            primary_topic_ref: "topic:from-ref",
-            refs: ["document:doc-1"],
-          },
+        boardRowInspectNav({
+          thread_id: "th-row",
+          refs: [],
         }),
-      ).toBe("from-ref");
+      ).toEqual({
+        kind: "thread",
+        segment: "th-row",
+        display: "th-row",
+      });
+    });
+  });
+
+  describe("warningInspectNav", () => {
+    it("prefers topic_id", () => {
+      expect(warningInspectNav({ topic_id: "t1", thread_id: "th1" })).toEqual({
+        kind: "topic",
+        segment: "t1",
+      });
+    });
+
+    it("uses thread_id when no topic_id", () => {
+      expect(warningInspectNav({ thread_id: "th1" })).toEqual({
+        kind: "thread",
+        segment: "th1",
+      });
     });
   });
 

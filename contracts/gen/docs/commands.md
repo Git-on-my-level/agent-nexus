@@ -4,7 +4,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.3.0`
-- Commands: `51`
+- Commands: `62`
 
 ## `artifacts.create`
 
@@ -41,6 +41,18 @@ Generated from `contracts/oar-openapi.yaml`.
 - Concepts: `artifacts`
 - Error codes: `auth_required`, `invalid_token`
 - Output: Returns `{ artifacts }`.
+
+## `boards.archive`
+
+- CLI path: `boards archive`
+- HTTP: `POST /boards/{board_id}/archive`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Soft-archive a board (orthogonal to business status; clears default list visibility).
+- Concepts: `boards`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Output: Returns `{ board }`.
 
 ## `boards.cards.create`
 
@@ -126,6 +138,54 @@ Generated from `contracts/oar-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ board }`.
 
+## `boards.purge`
+
+- CLI path: `boards purge`
+- HTTP: `POST /boards/{board_id}/purge`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Permanently delete a tombstoned board (human-gated).
+- Concepts: `boards`, `write`
+- Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
+- Output: Returns `{ purged, board_id }`.
+
+## `boards.restore`
+
+- CLI path: `boards restore`
+- HTTP: `POST /boards/{board_id}/restore`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Clear tombstone fields on a board after an explicit restore action.
+- Concepts: `boards`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Output: Returns `{ board }`.
+
+## `boards.tombstone`
+
+- CLI path: `boards tombstone`
+- HTTP: `POST /boards/{board_id}/tombstone`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Mark board as tombstoned with an explicit operator reason.
+- Concepts: `boards`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Output: Returns `{ board }`.
+
+## `boards.unarchive`
+
+- CLI path: `boards unarchive`
+- HTTP: `POST /boards/{board_id}/unarchive`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Clear archived_at on a board (restore default list visibility).
+- Concepts: `boards`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Output: Returns `{ board }`.
+
 ## `boards.workspace`
 
 - CLI path: `boards workspace`
@@ -147,7 +207,7 @@ Generated from `contracts/oar-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Soft-delete a first-class card by setting archived_at (board concurrency via if_board_updated_at).
 - Concepts: `cards`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `already_tombstoned`
 - Output: Returns `{ board, card }`.
 
 ## `cards.create`
@@ -217,7 +277,7 @@ Generated from `contracts/oar-openapi.yaml`.
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `json-body`
-- Why: Permanently delete an archived card (human-gated; requires archived_at).
+- Why: Permanently delete an archived or tombstoned card (human-gated).
 - Concepts: `cards`, `write`
 - Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ purged, card_id }`.
@@ -229,7 +289,7 @@ Generated from `contracts/oar-openapi.yaml`.
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `json-body`
-- Why: Clear archived_at on a soft-deleted card so it reappears on boards.
+- Why: Clear archive or tombstone lifecycle fields on a card so it reappears on boards.
 - Concepts: `cards`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ board, card }`.
@@ -245,6 +305,30 @@ Generated from `contracts/oar-openapi.yaml`.
 - Concepts: `cards`, `timeline`
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Output: Returns `{ card, events, artifacts, cards, documents, threads }`.
+
+## `cards.tombstone`
+
+- CLI path: `cards tombstone`
+- HTTP: `POST /cards/{card_id}/tombstone`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Mark a card as tombstoned with an explicit operator reason while keeping archive lifecycle distinct.
+- Concepts: `cards`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Output: Returns `{ board, card }`.
+
+## `docs.archive`
+
+- CLI path: `docs archive`
+- HTTP: `POST /docs/{document_id}/archive`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Soft-archive a document lineage (orthogonal to head revision content).
+- Concepts: `docs`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Output: Returns `{ document, revision }`.
 
 ## `docs.create`
 
@@ -282,6 +366,30 @@ Generated from `contracts/oar-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_token`
 - Output: Returns `{ documents }`.
 
+## `docs.purge`
+
+- CLI path: `docs purge`
+- HTTP: `POST /docs/{document_id}/purge`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Permanently delete a tombstoned document (human-gated).
+- Concepts: `docs`, `write`
+- Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
+- Output: Returns `{ purged, document_id }`.
+
+## `docs.restore`
+
+- CLI path: `docs restore`
+- HTTP: `POST /docs/{document_id}/restore`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Clear tombstone state on a document after an explicit restore action.
+- Concepts: `docs`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Output: Returns `{ document, revision }`.
+
 ## `docs.revisions.create`
 
 - CLI path: `docs revisions create`
@@ -317,6 +425,30 @@ Generated from `contracts/oar-openapi.yaml`.
 - Concepts: `docs`, `revisions`
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Output: Returns `{ document_id, revisions }`.
+
+## `docs.tombstone`
+
+- CLI path: `docs tombstone`
+- HTTP: `POST /docs/{document_id}/tombstone`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Mark a document lineage as tombstoned with an explicit operator reason.
+- Concepts: `docs`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Output: Returns `{ document, revision }`.
+
+## `docs.unarchive`
+
+- CLI path: `docs unarchive`
+- HTTP: `POST /docs/{document_id}/unarchive`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Clear archived_at on a document so it returns to default visibility.
+- Concepts: `docs`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Output: Returns `{ document, revision }`.
 
 ## `events.create`
 

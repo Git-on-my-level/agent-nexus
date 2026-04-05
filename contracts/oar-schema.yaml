@@ -81,10 +81,12 @@ enums:
       - board_card_added
       - board_card_moved
       - board_card_archived
+      - board_card_tombstoned
       - card_created
       - card_updated
       - card_moved
       - card_archived
+      - card_tombstoned
       - card_resolved
       - exception_raised
       - inbox_item_acknowledged
@@ -187,6 +189,11 @@ primitives:
       updated_at: { type: datetime, required: true }
       updated_by: { type: string, required: true }
       provenance: { type: object, required: true, ref: provenance }
+      archived_at: { type: datetime, required: false }
+      archived_by: { type: string, required: false }
+      tombstoned_at: { type: datetime, required: false }
+      tombstoned_by: { type: string, required: false }
+      tombstone_reason: { type: string, required: false }
 
   artifact:
     description: >

@@ -35,8 +35,10 @@ type BoardListFilter struct {
 
 // CardListFilter scopes global card listing (GET /cards).
 type CardListFilter struct {
-	// ArchivedOnly returns cards with archived_at set (soft-deleted / trash lane).
-	ArchivedOnly bool
+	IncludeArchived   bool
+	ArchivedOnly      bool
+	IncludeTombstoned bool
+	TombstonedOnly    bool
 }
 
 type BoardListItem struct {
@@ -164,6 +166,9 @@ type boardCardRow struct {
 	ProvenanceJSON       string
 	ArchivedAt           sql.NullString
 	ArchivedBy           sql.NullString
+	TombstonedAt         sql.NullString
+	TombstonedBy         sql.NullString
+	TombstoneReason      sql.NullString
 }
 
 var canonicalBoardColumnOrder = []string{"backlog", "ready", "in_progress", "blocked", "review", "done"}
@@ -793,17 +798,29 @@ func (s *Store) ListCards(ctx context.Context, filter CardListFilter) ([]map[str
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("primitives store database is not initialized")
 	}
-	archivedClause := `archived_at IS NULL`
+	conditions := make([]string, 0, 4)
+	if filter.TombstonedOnly {
+		conditions = append(conditions, `tombstoned_at IS NOT NULL`)
+	} else if !filter.IncludeTombstoned {
+		conditions = append(conditions, `tombstoned_at IS NULL`)
+	}
 	if filter.ArchivedOnly {
-		archivedClause = `archived_at IS NOT NULL`
+		conditions = append(conditions, `archived_at IS NOT NULL AND tombstoned_at IS NULL`)
+	} else if !filter.IncludeArchived {
+		conditions = append(conditions, `archived_at IS NULL`)
+	}
+	whereSQL := `1=1`
+	if len(conditions) > 0 {
+		whereSQL = strings.Join(conditions, ` AND `)
 	}
 	rows, err := s.db.QueryContext(
 		ctx,
 		`SELECT board_id, id, column_key, rank, title, body_markdown, version, thread_id, parent_thread_id, due_at,
-		        definition_of_done_json, pinned_document_id, assignee, priority, status, resolution, resolution_refs_json, refs_json,
-		        created_at, created_by, updated_at, updated_by, provenance_json, archived_at, archived_by
+		        definition_of_done_json, pinned_document_id, assignee, priority, risk, status, resolution, resolution_refs_json, refs_json,
+		        created_at, created_by, updated_at, updated_by, provenance_json, archived_at, archived_by,
+		        tombstoned_at, tombstoned_by, tombstone_reason
 		   FROM cards
-		  WHERE `+archivedClause+`
+		  WHERE `+whereSQL+`
 		  ORDER BY board_id ASC, `+boardColumnOrderSQL("column_key")+`, rank ASC, id ASC`,
 	)
 	if err != nil {
@@ -829,6 +846,7 @@ func (s *Store) ListCards(ctx context.Context, filter CardListFilter) ([]map[str
 			&row.PinnedDocumentID,
 			&row.Assignee,
 			&row.Priority,
+			&row.Risk,
 			&row.Status,
 			&row.Resolution,
 			&row.ResolutionRefsJSON,
@@ -840,6 +858,9 @@ func (s *Store) ListCards(ctx context.Context, filter CardListFilter) ([]map[str
 			&row.ProvenanceJSON,
 			&row.ArchivedAt,
 			&row.ArchivedBy,
+			&row.TombstonedAt,
+			&row.TombstonedBy,
+			&row.TombstoneReason,
 		); err != nil {
 			return nil, fmt.Errorf("scan card row: %w", err)
 		}
@@ -1690,6 +1711,10 @@ func (s *Store) ArchiveBoardCard(ctx context.Context, actorID, boardID, identifi
 		_ = tx.Rollback()
 		return BoardCardMutationResult{}, err
 	}
+	if cardRow.TombstonedAt.Valid && strings.TrimSpace(cardRow.TombstonedAt.String) != "" {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, ErrAlreadyTombstoned
+	}
 	if cardRow.ArchivedAt.Valid && strings.TrimSpace(cardRow.ArchivedAt.String) != "" {
 		boardMap, mapErr := boardRow.toMap()
 		if mapErr != nil {
@@ -1767,7 +1792,9 @@ func (s *Store) RestoreArchivedBoardCard(ctx context.Context, actorID, boardID, 
 		_ = tx.Rollback()
 		return BoardCardMutationResult{}, err
 	}
-	if !cardRow.ArchivedAt.Valid || strings.TrimSpace(cardRow.ArchivedAt.String) == "" {
+	tombstoned := cardRow.TombstonedAt.Valid && strings.TrimSpace(cardRow.TombstonedAt.String) != ""
+	archived := cardRow.ArchivedAt.Valid && strings.TrimSpace(cardRow.ArchivedAt.String) != ""
+	if !tombstoned && !archived {
 		boardMap, mapErr := boardRow.toMap()
 		if mapErr != nil {
 			_ = tx.Rollback()
@@ -1782,12 +1809,22 @@ func (s *Store) RestoreArchivedBoardCard(ctx context.Context, actorID, boardID, 
 		return BoardCardMutationResult{Board: boardMap, Card: cardMap}, nil
 	}
 
-	if _, err := tx.ExecContext(ctx, `UPDATE cards SET archived_at = NULL, archived_by = NULL WHERE id = ?`, cardRow.CardID); err != nil {
-		_ = tx.Rollback()
-		return BoardCardMutationResult{}, fmt.Errorf("restore board card: %w", err)
+	if tombstoned {
+		if _, err := tx.ExecContext(ctx, `UPDATE cards SET tombstoned_at = NULL, tombstoned_by = NULL, tombstone_reason = NULL WHERE id = ?`, cardRow.CardID); err != nil {
+			_ = tx.Rollback()
+			return BoardCardMutationResult{}, fmt.Errorf("restore tombstoned board card: %w", err)
+		}
+		cardRow.TombstonedAt = sql.NullString{}
+		cardRow.TombstonedBy = sql.NullString{}
+		cardRow.TombstoneReason = sql.NullString{}
+	} else {
+		if _, err := tx.ExecContext(ctx, `UPDATE cards SET archived_at = NULL, archived_by = NULL WHERE id = ?`, cardRow.CardID); err != nil {
+			_ = tx.Rollback()
+			return BoardCardMutationResult{}, fmt.Errorf("restore board card: %w", err)
+		}
+		cardRow.ArchivedAt = sql.NullString{}
+		cardRow.ArchivedBy = sql.NullString{}
 	}
-	cardRow.ArchivedAt = sql.NullString{}
-	cardRow.ArchivedBy = sql.NullString{}
 
 	boardRow, err = touchBoardRow(ctx, tx, boardRow, actorID)
 	if err != nil {
@@ -1836,7 +1873,9 @@ func (s *Store) PurgeArchivedBoardCard(ctx context.Context, boardID, identifier 
 	if err != nil {
 		return err
 	}
-	if !cardRow.ArchivedAt.Valid || strings.TrimSpace(cardRow.ArchivedAt.String) == "" {
+	archived := cardRow.ArchivedAt.Valid && strings.TrimSpace(cardRow.ArchivedAt.String) != ""
+	tombstoned := cardRow.TombstonedAt.Valid && strings.TrimSpace(cardRow.TombstonedAt.String) != ""
+	if !archived && !tombstoned {
 		return ErrNotArchived
 	}
 	cardID := strings.TrimSpace(cardRow.CardID)
@@ -1852,7 +1891,7 @@ func (s *Store) PurgeArchivedBoardCard(ctx context.Context, boardID, identifier 
 	if _, err := tx.ExecContext(ctx, `DELETE FROM ref_edges WHERE target_type = ? AND target_id = ?`, "card", cardID); err != nil {
 		return fmt.Errorf("delete card target ref edges: %w", err)
 	}
-	res, err := tx.ExecContext(ctx, `DELETE FROM cards WHERE id = ? AND archived_at IS NOT NULL`, cardID)
+	res, err := tx.ExecContext(ctx, `DELETE FROM cards WHERE id = ? AND (archived_at IS NOT NULL OR tombstoned_at IS NOT NULL)`, cardID)
 	if err != nil {
 		return fmt.Errorf("delete card: %w", err)
 	}
@@ -1873,6 +1912,98 @@ func (s *Store) PurgeArchivedBoardCard(ctx context.Context, boardID, identifier 
 		return fmt.Errorf("commit purge card transaction: %w", err)
 	}
 	return nil
+}
+
+// TombstoneBoardCard records an operational tombstone and clears archive columns (distinct soft-delete lanes).
+func (s *Store) TombstoneBoardCard(ctx context.Context, actorID, boardID, identifier, reason string, input RemoveBoardCardInput) (BoardCardMutationResult, error) {
+	if s == nil || s.db == nil {
+		return BoardCardMutationResult{}, fmt.Errorf("primitives store database is not initialized")
+	}
+	if strings.TrimSpace(actorID) == "" {
+		return BoardCardMutationResult{}, invalidBoardRequest("actorID is required")
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return BoardCardMutationResult{}, fmt.Errorf("begin board card tombstone transaction: %w", err)
+	}
+
+	var cardRow boardCardRow
+	if strings.TrimSpace(boardID) != "" {
+		cardRow, err = s.loadBoardCardByIdentifier(ctx, tx, boardID, identifier, true)
+	} else {
+		cardRow, err = s.loadBoardCardByGlobalID(ctx, tx, identifier, true)
+	}
+	if err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, err
+	}
+	boardID = cardRow.BoardID
+	boardRow, err := loadBoardRow(ctx, tx, boardID)
+	if err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, err
+	}
+	if err := ensureBoardUpdatedAtMatches(boardRow, input.IfBoardUpdatedAt); err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, err
+	}
+	if cardRow.TombstonedAt.Valid && strings.TrimSpace(cardRow.TombstonedAt.String) != "" {
+		boardMap, mapErr := boardRow.toMap()
+		if mapErr != nil {
+			_ = tx.Rollback()
+			return BoardCardMutationResult{}, mapErr
+		}
+		cardMap, mapErr := cardRow.toMap()
+		if mapErr != nil {
+			_ = tx.Rollback()
+			return BoardCardMutationResult{}, mapErr
+		}
+		cardMap["_mutation_applied"] = false
+		_ = tx.Rollback()
+		return BoardCardMutationResult{Board: boardMap, Card: cardMap}, nil
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	reason = strings.TrimSpace(reason)
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE cards SET tombstoned_at = ?, tombstoned_by = ?, tombstone_reason = ?, archived_at = NULL, archived_by = NULL WHERE id = ?`,
+		now, actorID, reason, cardRow.CardID,
+	); err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, fmt.Errorf("tombstone board card: %w", err)
+	}
+	cardRow.TombstonedAt = sql.NullString{String: now, Valid: true}
+	cardRow.TombstonedBy = sql.NullString{String: actorID, Valid: true}
+	if reason != "" {
+		cardRow.TombstoneReason = sql.NullString{String: reason, Valid: true}
+	} else {
+		cardRow.TombstoneReason = sql.NullString{}
+	}
+	cardRow.ArchivedAt = sql.NullString{}
+	cardRow.ArchivedBy = sql.NullString{}
+
+	boardRow, err = touchBoardRow(ctx, tx, boardRow, actorID)
+	if err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, fmt.Errorf("commit board card tombstone transaction: %w", err)
+	}
+
+	boardMap, err := boardRow.toMap()
+	if err != nil {
+		return BoardCardMutationResult{}, err
+	}
+	cardMap, err := cardRow.toMap()
+	if err != nil {
+		return BoardCardMutationResult{}, err
+	}
+	cardMap["_mutation_applied"] = true
+	return BoardCardMutationResult{Board: boardMap, Card: cardMap}, nil
 }
 
 func (s *Store) ListBoardCardHistory(ctx context.Context, cardID string) ([]map[string]any, error) {
@@ -1925,7 +2056,7 @@ func (s *Store) ListBoardMembershipsByThread(ctx context.Context, threadID strin
 		  WHERE re.source_type = 'board'
 		    AND re.edge_type = ?
 		    AND c.parent_thread_id = ?
-		    AND c.archived_at IS NULL
+		    AND c.archived_at IS NULL AND c.tombstoned_at IS NULL
 		  ORDER BY b.updated_at DESC, b.id ASC`,
 		refEdgeTypeBoardCard,
 		threadID,
@@ -2212,13 +2343,13 @@ func (s *Store) loadBoardCardRowsByBoardIDs(ctx context.Context, boardIDs []stri
 			       COALESCE(json_extract(re.metadata_json, '$.rank'), '') AS rank,
 			       c.title, c.body_markdown, c.version, c.thread_id, c.parent_thread_id, c.due_at, c.definition_of_done_json,
 	c.pinned_document_id, c.assignee, c.priority, c.risk, c.status, c.resolution, c.resolution_refs_json, c.refs_json,
-		       c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by
+		       c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by, c.tombstoned_at, c.tombstoned_by, c.tombstone_reason
 			  FROM ref_edges re
 			  JOIN cards c ON c.id = re.target_id
 			 WHERE re.source_type = 'board'
 			   AND re.edge_type = ?
 			   AND re.source_id IN (` + strings.Join(placeholders, ", ") + `)
-			   AND c.archived_at IS NULL
+			   AND c.archived_at IS NULL AND c.tombstoned_at IS NULL
 		) AS ordered_cards
 		ORDER BY ` + boardColumnOrderSQL(`column_key`) + `, rank ASC, card_id ASC`
 	queryArgs := append([]any{boardDefaultColumn, refEdgeTypeBoardCard}, args...)
@@ -2256,13 +2387,13 @@ func (s *Store) loadOrderedBoardCards(ctx context.Context, q queryRower, boardID
 			       COALESCE(json_extract(re.metadata_json, '$.rank'), '') AS rank,
 			       c.title, c.body_markdown, c.version, c.thread_id, c.parent_thread_id, c.due_at, c.definition_of_done_json,
 	c.pinned_document_id, c.assignee, c.priority, c.risk, c.status, c.resolution, c.resolution_refs_json, c.refs_json,
-			       c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by
+			       c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by, c.tombstoned_at, c.tombstoned_by, c.tombstone_reason
 			  FROM ref_edges re
 			  JOIN cards c ON c.id = re.target_id
 			 WHERE re.source_type = 'board'
 			   AND re.edge_type = ?
 			   AND re.source_id = ?
-			   AND c.archived_at IS NULL`
+			   AND c.archived_at IS NULL AND c.tombstoned_at IS NULL`
 	args := []any{boardDefaultColumn, refEdgeTypeBoardCard, boardID}
 	if strings.TrimSpace(columnKey) != "" {
 		query += ` AND COALESCE(json_extract(re.metadata_json, '$.column_key'), ?) = ?`
@@ -2457,14 +2588,14 @@ func loadBoardCardsForColumn(ctx context.Context, db interface {
 		        COALESCE(json_extract(re.metadata_json, '$.rank'), '') AS rank,
 		        c.title, c.body_markdown, c.version, c.thread_id, c.parent_thread_id, c.due_at, c.definition_of_done_json,
 	c.pinned_document_id, c.assignee, c.priority, c.risk, c.status, c.resolution, c.resolution_refs_json, c.refs_json,
-		        c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by
+		        c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by, c.tombstoned_at, c.tombstoned_by, c.tombstone_reason
 		   FROM ref_edges re
 		   JOIN cards c ON c.id = re.target_id
 		  WHERE re.source_type = 'board'
 		    AND re.edge_type = ?
 		    AND re.source_id = ?
 		    AND COALESCE(json_extract(re.metadata_json, '$.column_key'), ?) = ?
-		    AND c.archived_at IS NULL
+		    AND c.archived_at IS NULL AND c.tombstoned_at IS NULL
 		  ORDER BY rank ASC, card_id ASC`,
 		boardDefaultColumn,
 		refEdgeTypeBoardCard,
@@ -2658,7 +2789,7 @@ func (s *Store) loadBoardCardByIdentifier(ctx context.Context, rower queryRower,
 			       COALESCE(json_extract(re.metadata_json, '$.rank'), '') AS rank,
 			       c.title, c.body_markdown, c.version, c.thread_id, c.parent_thread_id, c.due_at, c.definition_of_done_json,
 	c.pinned_document_id, c.assignee, c.priority, c.risk, c.status, c.resolution, c.resolution_refs_json, c.refs_json,
-			       c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by
+			       c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by, c.tombstoned_at, c.tombstoned_by, c.tombstone_reason
 			  FROM ref_edges re
 			  JOIN cards c ON c.id = re.target_id
 			 WHERE re.source_type = 'board'
@@ -2667,7 +2798,7 @@ func (s *Store) loadBoardCardByIdentifier(ctx context.Context, rower queryRower,
 			   AND re.target_id = ?`
 	args := []any{boardDefaultColumn, refEdgeTypeBoardCard, boardID, identifier}
 	if !includeArchived {
-		cardQuery += ` AND c.archived_at IS NULL`
+		cardQuery += ` AND c.archived_at IS NULL AND c.tombstoned_at IS NULL`
 	}
 	cardQuery += `
 		) AS ordered_cards`
@@ -2687,7 +2818,7 @@ func (s *Store) loadBoardCardByIdentifier(ctx context.Context, rower queryRower,
 			       COALESCE(json_extract(re.metadata_json, '$.rank'), '') AS rank,
 		        c.title, c.body_markdown, c.version, c.thread_id, c.parent_thread_id, c.due_at, c.definition_of_done_json,
 	c.pinned_document_id, c.assignee, c.priority, c.risk, c.status, c.resolution, c.resolution_refs_json, c.refs_json,
-		        c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by
+		        c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by, c.tombstoned_at, c.tombstoned_by, c.tombstone_reason
 			  FROM ref_edges re
 			  JOIN cards c ON c.id = re.target_id
 			 WHERE re.source_type = 'board'
@@ -2696,7 +2827,7 @@ func (s *Store) loadBoardCardByIdentifier(ctx context.Context, rower queryRower,
 			   AND c.parent_thread_id = ?`
 	threadArgs := []any{boardDefaultColumn, refEdgeTypeBoardCard, boardID, identifier}
 	if !includeArchived {
-		threadQuery += ` AND c.archived_at IS NULL`
+		threadQuery += ` AND c.archived_at IS NULL AND c.tombstoned_at IS NULL`
 	}
 	threadQuery += `
 		) AS ordered_cards
@@ -2724,7 +2855,7 @@ func (s *Store) loadBoardCardByGlobalID(ctx context.Context, rower queryRower, c
 			       COALESCE(json_extract(re.metadata_json, '$.rank'), '') AS rank,
 			       c.title, c.body_markdown, c.version, c.thread_id, c.parent_thread_id, c.due_at, c.definition_of_done_json,
 	c.pinned_document_id, c.assignee, c.priority, c.risk, c.status, c.resolution, c.resolution_refs_json, c.refs_json,
-			       c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by
+			       c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by, c.tombstoned_at, c.tombstoned_by, c.tombstone_reason
 			  FROM ref_edges re
 			  JOIN cards c ON c.id = re.target_id
 			 WHERE re.source_type = 'board'
@@ -2732,7 +2863,7 @@ func (s *Store) loadBoardCardByGlobalID(ctx context.Context, rower queryRower, c
 			   AND re.target_id = ?`
 	args := []any{boardDefaultColumn, refEdgeTypeBoardCard, cardID}
 	if !includeArchived {
-		query += ` AND c.archived_at IS NULL`
+		query += ` AND c.archived_at IS NULL AND c.tombstoned_at IS NULL`
 	}
 	query += `
 		) AS ordered_cards`
@@ -2760,7 +2891,7 @@ func ensureBoardCardParentThreadAvailable(ctx context.Context, rower queryRower,
 		    AND re.edge_type = ?
 		    AND re.source_id = ?
 		    AND c.parent_thread_id = ?
-		    AND c.archived_at IS NULL
+		    AND c.archived_at IS NULL AND c.tombstoned_at IS NULL
 		    AND c.id != ?
 		  LIMIT 1`,
 		refEdgeTypeBoardCard,
@@ -2856,6 +2987,9 @@ func scanBoardCardRow(scanner interface{ Scan(dest ...any) error }) (boardCardRo
 		&row.ProvenanceJSON,
 		&row.ArchivedAt,
 		&row.ArchivedBy,
+		&row.TombstonedAt,
+		&row.TombstonedBy,
+		&row.TombstoneReason,
 	); err != nil {
 		return boardCardRow{}, fmt.Errorf("scan board card row: %w", err)
 	}
@@ -3412,12 +3546,7 @@ func (r boardCardRow) toMap() (map[string]any, error) {
 		"updated_by":         r.UpdatedBy,
 		"provenance":         provenance,
 	}
-	if r.ArchivedAt.Valid && strings.TrimSpace(r.ArchivedAt.String) != "" {
-		m["archived_at"] = r.ArchivedAt.String
-	}
-	if r.ArchivedBy.Valid && strings.TrimSpace(r.ArchivedBy.String) != "" {
-		m["archived_by"] = r.ArchivedBy.String
-	}
+	lifecycleFieldsFromSQLColumns(r.ArchivedAt, r.ArchivedBy, r.TombstonedAt, r.TombstonedBy, r.TombstoneReason).apply(m)
 	return m, nil
 }
 
@@ -3807,6 +3936,9 @@ func ValidateBoardPlacementAnchors(beforeCardID, afterCardID, beforeThreadID, af
 }
 
 func ensureBoardCardMutable(card boardCardRow) error {
+	if card.TombstonedAt.Valid && strings.TrimSpace(card.TombstonedAt.String) != "" {
+		return invalidBoardRequest("card is tombstoned")
+	}
 	if card.ArchivedAt.Valid && strings.TrimSpace(card.ArchivedAt.String) != "" {
 		return invalidBoardRequest("card is archived")
 	}

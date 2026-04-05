@@ -765,6 +765,201 @@ paths:
         '404':
           $ref: '#/components/responses/ErrorResponse'
 
+  /docs/{document_id}/archive:
+    post:
+      operationId: archiveDocument
+      summary: Archive document
+      tags: [docs]
+      x-oar-surface: canonical
+      x-oar-command-id: docs.archive
+      x-oar-cli-path: docs archive
+      x-oar-why: Soft-archive a document lineage (orthogonal to head revision content).
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ document, revision }`."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-oar-concepts: [docs, write]
+      x-oar-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/DocumentID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentLifecycleMutationRequest'
+      responses:
+        '200':
+          description: Document archived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentWithRevisionResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /docs/{document_id}/unarchive:
+    post:
+      operationId: unarchiveDocument
+      summary: Unarchive document
+      tags: [docs]
+      x-oar-surface: canonical
+      x-oar-command-id: docs.unarchive
+      x-oar-cli-path: docs unarchive
+      x-oar-why: Clear archived_at on a document so it returns to default visibility.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ document, revision }`."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-oar-concepts: [docs, write]
+      x-oar-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/DocumentID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentLifecycleMutationRequest'
+      responses:
+        '200':
+          description: Document unarchived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentWithRevisionResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /docs/{document_id}/tombstone:
+    post:
+      operationId: tombstoneDocument
+      summary: Tombstone document
+      tags: [docs]
+      x-oar-surface: canonical
+      x-oar-command-id: docs.tombstone
+      x-oar-cli-path: docs tombstone
+      x-oar-why: Mark a document lineage as tombstoned with an explicit operator reason.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ document, revision }`."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-oar-concepts: [docs, write]
+      x-oar-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/DocumentID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicTombstoneRequest'
+      responses:
+        '200':
+          description: Document tombstoned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentWithRevisionResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /docs/{document_id}/restore:
+    post:
+      operationId: restoreDocument
+      summary: Restore document from tombstone
+      tags: [docs]
+      x-oar-surface: canonical
+      x-oar-command-id: docs.restore
+      x-oar-cli-path: docs restore
+      x-oar-why: Clear tombstone state on a document after an explicit restore action.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ document, revision }`."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-oar-concepts: [docs, write]
+      x-oar-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/DocumentID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentRestoreFromTombstoneRequest'
+      responses:
+        '200':
+          description: Document restored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentWithRevisionResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /docs/{document_id}/purge:
+    post:
+      operationId: purgeDocument
+      summary: Purge tombstoned document
+      tags: [docs]
+      x-oar-surface: canonical
+      x-oar-command-id: docs.purge
+      x-oar-cli-path: docs purge
+      x-oar-why: Permanently delete a tombstoned document (human-gated).
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ purged, document_id }`."
+      x-oar-error-codes: [auth_required, human_only, invalid_token, not_found, conflict]
+      x-oar-concepts: [docs, write]
+      x-oar-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/DocumentID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurgeDocumentRequest'
+      responses:
+        '200':
+          description: Document purged
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurgeDocumentResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
   /docs/{document_id}/revisions:
     get:
       operationId: listDocumentRevisions
@@ -1012,6 +1207,201 @@ paths:
         '404':
           $ref: '#/components/responses/ErrorResponse'
 
+  /boards/{board_id}/archive:
+    post:
+      operationId: archiveBoard
+      summary: Archive board
+      tags: [boards]
+      x-oar-surface: canonical
+      x-oar-command-id: boards.archive
+      x-oar-cli-path: boards archive
+      x-oar-why: Soft-archive a board (orthogonal to business status; clears default list visibility).
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ board }`."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-oar-concepts: [boards, write]
+      x-oar-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/BoardID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BoardLifecycleMutationRequest'
+      responses:
+        '200':
+          description: Board archived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardOnlyResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /boards/{board_id}/unarchive:
+    post:
+      operationId: unarchiveBoard
+      summary: Unarchive board
+      tags: [boards]
+      x-oar-surface: canonical
+      x-oar-command-id: boards.unarchive
+      x-oar-cli-path: boards unarchive
+      x-oar-why: Clear archived_at on a board (restore default list visibility).
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ board }`."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-oar-concepts: [boards, write]
+      x-oar-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/BoardID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BoardLifecycleMutationRequest'
+      responses:
+        '200':
+          description: Board unarchived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardOnlyResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /boards/{board_id}/tombstone:
+    post:
+      operationId: tombstoneBoard
+      summary: Tombstone board
+      tags: [boards]
+      x-oar-surface: canonical
+      x-oar-command-id: boards.tombstone
+      x-oar-cli-path: boards tombstone
+      x-oar-why: Mark board as tombstoned with an explicit operator reason.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ board }`."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-oar-concepts: [boards, write]
+      x-oar-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/BoardID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicTombstoneRequest'
+      responses:
+        '200':
+          description: Board tombstoned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardOnlyResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /boards/{board_id}/restore:
+    post:
+      operationId: restoreBoard
+      summary: Restore board from tombstone
+      tags: [boards]
+      x-oar-surface: canonical
+      x-oar-command-id: boards.restore
+      x-oar-cli-path: boards restore
+      x-oar-why: Clear tombstone fields on a board after an explicit restore action.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ board }`."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-oar-concepts: [boards, write]
+      x-oar-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/BoardID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BoardLifecycleMutationRequest'
+      responses:
+        '200':
+          description: Board restored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardOnlyResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /boards/{board_id}/purge:
+    post:
+      operationId: purgeBoard
+      summary: Purge tombstoned board
+      tags: [boards]
+      x-oar-surface: canonical
+      x-oar-command-id: boards.purge
+      x-oar-cli-path: boards purge
+      x-oar-why: Permanently delete a tombstoned board (human-gated).
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ purged, board_id }`."
+      x-oar-error-codes: [auth_required, human_only, invalid_token, not_found, conflict]
+      x-oar-concepts: [boards, write]
+      x-oar-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/BoardID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurgeBoardRequest'
+      responses:
+        '200':
+          description: Board purged
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurgeBoardResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
   /boards/{board_id}/cards:
     get:
       operationId: listBoardCards
@@ -1124,20 +1514,34 @@ paths:
       x-oar-concepts: [cards]
       x-oar-stability: beta
       parameters:
+        - name: include_archived
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: When true, include archived cards alongside active cards.
+        - name: include_tombstoned
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: When true, include tombstoned cards alongside active cards.
         - name: archived_only
           in: query
           required: false
           schema:
             type: boolean
             default: false
-          description: When true, return only archived (soft-deleted) cards.
+          description: When true, return only archived cards (distinct from tombstoned cards).
         - name: tombstoned_only
           in: query
           required: false
           schema:
             type: boolean
             default: false
-          description: Trash-list alias for archived_only (cards are archived, not tombstoned).
+          description: When true, return only tombstoned cards.
       responses:
         '200':
           description: Card list
@@ -1292,7 +1696,7 @@ paths:
       x-oar-input-mode: json-body
       x-oar-streaming: { mode: none }
       x-oar-output-envelope: "Returns `{ board, card }`."
-      x-oar-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, already_tombstoned]
       x-oar-concepts: [cards, write]
       x-oar-stability: beta
       parameters:
@@ -1306,6 +1710,45 @@ paths:
       responses:
         '200':
           description: Card archived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardCardMutationResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /cards/{card_id}/tombstone:
+    post:
+      operationId: tombstoneCard
+      summary: Tombstone card
+      tags: [cards]
+      x-oar-surface: canonical
+      x-oar-command-id: cards.tombstone
+      x-oar-cli-path: cards tombstone
+      x-oar-why: Mark a card as tombstoned with an explicit operator reason while keeping archive lifecycle distinct.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ board, card }`."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-oar-concepts: [cards, write]
+      x-oar-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/CardID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CardTombstoneRequest'
+      responses:
+        '200':
+          description: Card tombstoned
           content:
             application/json:
               schema:
@@ -1361,12 +1804,12 @@ paths:
   /cards/{card_id}/restore:
     post:
       operationId: restoreArchivedCard
-      summary: Restore archived card
+      summary: Restore archived or tombstoned card
       tags: [cards]
       x-oar-surface: canonical
       x-oar-command-id: cards.restore
       x-oar-cli-path: cards restore
-      x-oar-why: Clear archived_at on a soft-deleted card so it reappears on boards.
+      x-oar-why: Clear archive or tombstone lifecycle fields on a card so it reappears on boards.
       x-oar-input-mode: json-body
       x-oar-streaming: { mode: none }
       x-oar-output-envelope: "Returns `{ board, card }`."
@@ -1400,12 +1843,12 @@ paths:
   /cards/{card_id}/purge:
     post:
       operationId: purgeArchivedCard
-      summary: Purge archived card
+      summary: Purge archived or tombstoned card
       tags: [cards]
       x-oar-surface: canonical
       x-oar-command-id: cards.purge
       x-oar-cli-path: cards purge
-      x-oar-why: Permanently delete an archived card (human-gated; requires archived_at).
+      x-oar-why: Permanently delete an archived or tombstoned card (human-gated).
       x-oar-input-mode: json-body
       x-oar-streaming: { mode: none }
       x-oar-output-envelope: "Returns `{ purged, card_id }`."
@@ -2087,6 +2530,11 @@ components:
         updated_at: { type: string, format: date-time }
         updated_by: { type: string }
         provenance: { $ref: '#/components/schemas/Provenance' }
+        archived_at: { type: string, format: date-time }
+        archived_by: { type: string }
+        tombstoned_at: { type: string, format: date-time }
+        tombstoned_by: { type: string }
+        tombstone_reason: { type: string }
       required:
         [id, board_ref, thread_id, title, summary, column_key, rank, assignee_refs, risk, resolution_refs,
          related_refs, created_at, created_by, updated_at, updated_by, provenance]
@@ -2558,6 +3006,52 @@ components:
         reason: { type: string }
       required: [reason]
 
+    BoardLifecycleMutationRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+
+    BoardOnlyResponse:
+      type: object
+      properties:
+        board: { $ref: '#/components/schemas/Board' }
+      required: [board]
+
+    PurgeBoardRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+
+    PurgeBoardResponse:
+      type: object
+      properties:
+        purged: { type: boolean }
+        board_id: { type: string }
+      required: [purged, board_id]
+
+    DocumentLifecycleMutationRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+
+    DocumentRestoreFromTombstoneRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+        reason: { type: string }
+
+    PurgeDocumentRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+
+    PurgeDocumentResponse:
+      type: object
+      properties:
+        purged: { type: boolean }
+        document_id: { type: string }
+      required: [purged, document_id]
+
     RefEdge:
       type: object
       properties:
@@ -2828,6 +3322,16 @@ components:
         if_board_updated_at:
           type: string
           format: date-time
+
+    CardTombstoneRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+        reason: { type: string }
+        if_board_updated_at:
+          type: string
+          format: date-time
+      required: [reason]
 
     PurgeCardRequest:
       type: object

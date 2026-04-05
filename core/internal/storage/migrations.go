@@ -471,6 +471,25 @@ var migrations = []migration{
 			`ALTER TABLE card_versions ADD COLUMN risk TEXT NOT NULL DEFAULT 'low';`,
 		},
 	},
+	{
+		Version: 3,
+		Statements: []string{
+			`ALTER TABLE documents ADD COLUMN refs_json TEXT NOT NULL DEFAULT '[]';`,
+			`ALTER TABLE documents ADD COLUMN provenance_json TEXT NOT NULL DEFAULT '{}';`,
+			`ALTER TABLE cards ADD COLUMN tombstoned_at TEXT;`,
+			`ALTER TABLE cards ADD COLUMN tombstoned_by TEXT;`,
+			`ALTER TABLE cards ADD COLUMN tombstone_reason TEXT;`,
+			`CREATE INDEX IF NOT EXISTS idx_cards_tombstoned_at ON cards (tombstoned_at);`,
+			`CREATE TABLE IF NOT EXISTS derived_board_views (
+				board_id TEXT PRIMARY KEY,
+				stale INTEGER NOT NULL DEFAULT 0,
+				generated_at TEXT NOT NULL,
+				data_json TEXT NOT NULL DEFAULT '{}',
+				source_hash TEXT
+			);`,
+			`CREATE INDEX IF NOT EXISTS idx_derived_board_views_stale_generated_at ON derived_board_views (stale, generated_at DESC, board_id);`,
+		},
+	},
 }
 
 func applyMigrations(ctx context.Context, db *sql.DB) error {

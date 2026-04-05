@@ -516,6 +516,158 @@ func TestBoardStoreRejectsArchivedCardMutations(t *testing.T) {
 	}
 }
 
+func TestBoardStoreCardTombstoneVsArchiveLists(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	store := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+
+	primaryThreadID := createBoardTestThread(t, ctx, store, "Tombstone list board thread")
+	threadA := createBoardTestThread(t, ctx, store, "Card thread A")
+	threadB := createBoardTestThread(t, ctx, store, "Card thread B")
+
+	board, err := store.CreateBoard(ctx, "actor-1", map[string]any{
+		"title":     "Tombstone filter board",
+		"thread_id": primaryThreadID,
+	})
+	if err != nil {
+		t.Fatalf("create board: %v", err)
+	}
+	boardID := board["id"].(string)
+
+	addArchived, err := store.AddBoardCard(ctx, "actor-2", boardID, primitives.AddBoardCardInput{
+		ThreadID:  threadA,
+		ColumnKey: "backlog",
+	})
+	if err != nil {
+		t.Fatalf("add card A: %v", err)
+	}
+	addTomb, err := store.AddBoardCard(ctx, "actor-2", boardID, primitives.AddBoardCardInput{
+		ThreadID:  threadB,
+		ColumnKey: "ready",
+	})
+	if err != nil {
+		t.Fatalf("add card B: %v", err)
+	}
+	cardArchivedID := addArchived.Card["id"].(string)
+	cardTombID := addTomb.Card["id"].(string)
+	sleepBoardTick()
+	boardBeforeArchive, err := store.GetBoard(ctx, boardID)
+	if err != nil {
+		t.Fatalf("get board: %v", err)
+	}
+	ua := boardBeforeArchive["updated_at"].(string)
+	if _, err := store.ArchiveBoardCard(ctx, "actor-3", boardID, cardArchivedID, primitives.RemoveBoardCardInput{
+		IfBoardUpdatedAt: &ua,
+	}); err != nil {
+		t.Fatalf("archive card: %v", err)
+	}
+	sleepBoardTick()
+	boardBeforeTomb, err := store.GetBoard(ctx, boardID)
+	if err != nil {
+		t.Fatalf("get board: %v", err)
+	}
+	ub := boardBeforeTomb["updated_at"].(string)
+	if _, err := store.TombstoneBoardCard(ctx, "actor-3", boardID, cardTombID, "removed", primitives.RemoveBoardCardInput{
+		IfBoardUpdatedAt: &ub,
+	}); err != nil {
+		t.Fatalf("tombstone card: %v", err)
+	}
+
+	active, err := store.ListCards(ctx, primitives.CardListFilter{})
+	if err != nil {
+		t.Fatalf("list active cards: %v", err)
+	}
+	for _, c := range active {
+		id := c["id"].(string)
+		if id == cardArchivedID || id == cardTombID {
+			t.Fatalf("expected active list to omit archived/tombstoned, saw %q in %#v", id, active)
+		}
+	}
+
+	archivedOnly, err := store.ListCards(ctx, primitives.CardListFilter{ArchivedOnly: true})
+	if err != nil {
+		t.Fatalf("list archived_only: %v", err)
+	}
+	foundArch := false
+	for _, c := range archivedOnly {
+		if c["id"].(string) == cardArchivedID {
+			foundArch = true
+		}
+		if c["id"].(string) == cardTombID {
+			t.Fatalf("tombstoned card must not appear in archived_only")
+		}
+	}
+	if !foundArch {
+		t.Fatalf("expected archived card in archived_only, got %#v", archivedOnly)
+	}
+
+	tombOnly, err := store.ListCards(ctx, primitives.CardListFilter{TombstonedOnly: true})
+	if err != nil {
+		t.Fatalf("list tombstoned_only: %v", err)
+	}
+	foundTomb := false
+	for _, c := range tombOnly {
+		if c["id"].(string) == cardTombID {
+			foundTomb = true
+		}
+		if c["id"].(string) == cardArchivedID {
+			t.Fatalf("archived-only card must not appear in tombstoned_only")
+		}
+	}
+	if !foundTomb {
+		t.Fatalf("expected tombstoned card in tombstoned_only, got %#v", tombOnly)
+	}
+}
+
+func TestDocumentResourceRefsAndProvenancePersist(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	store := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+	threadID := createBoardTestThread(t, ctx, store, "Doc refs thread")
+
+	doc, _, err := store.CreateDocument(ctx, "actor-1", map[string]any{
+		"thread_id":  threadID,
+		"title":      "Spec",
+		"refs":       []string{"thread:" + threadID, "topic:nonexistent-will-still-store"},
+		"provenance": map[string]any{"sources": []string{"actor_statement"}},
+	}, "# Body", "text", []string{"thread:" + threadID})
+	if err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+	docID := doc["id"].(string)
+
+	loaded, _, err := store.GetDocument(ctx, docID)
+	if err != nil {
+		t.Fatalf("get document: %v", err)
+	}
+	refs, ok := loaded["refs"].([]string)
+	if !ok || len(refs) != 2 {
+		t.Fatalf("expected 2 document refs ([]string), got %#v", loaded["refs"])
+	}
+	prov, ok := loaded["provenance"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected provenance map, got %#v", loaded["provenance"])
+	}
+	src, _ := prov["sources"].([]any)
+	if len(src) != 1 || src[0] != "actor_statement" {
+		t.Fatalf("expected provenance.sources, got %#v", prov)
+	}
+}
+
 func TestBoardStoreRejectsMixedPlacementAnchorTypes(t *testing.T) {
 	t.Parallel()
 

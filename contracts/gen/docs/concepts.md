@@ -16,8 +16,9 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `boards`
 
-- Commands: `10`
+- Commands: `15`
 - Command IDs:
+  - `boards.archive`
   - `boards.cards.create`
   - `boards.cards.get`
   - `boards.cards.list`
@@ -25,13 +26,17 @@ Generated from `contracts/oar-openapi.yaml`.
   - `boards.get`
   - `boards.list`
   - `boards.patch`
+  - `boards.purge`
+  - `boards.restore`
+  - `boards.tombstone`
+  - `boards.unarchive`
   - `boards.workspace`
   - `cards.create`
   - `cards.move`
 
 ## `cards`
 
-- Commands: `12`
+- Commands: `13`
 - Command IDs:
   - `boards.cards.create`
   - `boards.cards.get`
@@ -45,6 +50,7 @@ Generated from `contracts/oar-openapi.yaml`.
   - `cards.purge`
   - `cards.restore`
   - `cards.timeline`
+  - `cards.tombstone`
 
 ## `compatibility`
 
@@ -62,14 +68,19 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `docs`
 
-- Commands: `6`
+- Commands: `11`
 - Command IDs:
+  - `docs.archive`
   - `docs.create`
   - `docs.get`
   - `docs.list`
+  - `docs.purge`
+  - `docs.restore`
   - `docs.revisions.create`
   - `docs.revisions.get`
   - `docs.revisions.list`
+  - `docs.tombstone`
+  - `docs.unarchive`
 
 ## `events`
 
@@ -178,20 +189,31 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `write`
 
-- Commands: `20`
+- Commands: `31`
 - Command IDs:
   - `artifacts.create`
+  - `boards.archive`
   - `boards.cards.create`
   - `boards.create`
   - `boards.patch`
+  - `boards.purge`
+  - `boards.restore`
+  - `boards.tombstone`
+  - `boards.unarchive`
   - `cards.archive`
   - `cards.create`
   - `cards.move`
   - `cards.patch`
   - `cards.purge`
   - `cards.restore`
+  - `cards.tombstone`
+  - `docs.archive`
   - `docs.create`
+  - `docs.purge`
+  - `docs.restore`
   - `docs.revisions.create`
+  - `docs.tombstone`
+  - `docs.unarchive`
   - `events.create`
   - `inbox.acknowledge`
   - `topics.archive`

@@ -135,7 +135,7 @@
 
     const subjectRef = getInboxSubjectRef(item);
     const { prefix, id } = splitTypedRef(subjectRef);
-    if (prefix === "topic" || prefix === "thread") {
+    if (prefix === "thread") {
       return id;
     }
 
@@ -389,7 +389,7 @@
     const actionThreadId = inboxActionThreadId(item);
 
     if (!actionThreadId) {
-      error = "Cannot record decision: no topic or thread to attach.";
+      error = "Cannot record decision: no backing thread to attach.";
       return;
     }
 
