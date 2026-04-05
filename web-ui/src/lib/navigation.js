@@ -43,7 +43,7 @@ export const settingsNavItems = [
     label: "Trash",
     href: "/trash",
     icon: "trash",
-    hint: "Tombstoned artifacts",
+    hint: "Trashed and restorable items",
   },
   {
     label: "Access",

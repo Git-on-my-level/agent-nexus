@@ -574,7 +574,7 @@ func TestBoardStoreCardTombstoneVsArchiveLists(t *testing.T) {
 		t.Fatalf("get board: %v", err)
 	}
 	ub := boardBeforeTomb["updated_at"].(string)
-	if _, err := store.TombstoneBoardCard(ctx, "actor-3", boardID, cardTombID, "removed", primitives.RemoveBoardCardInput{
+	if _, err := store.TrashBoardCard(ctx, "actor-3", boardID, cardTombID, "removed", primitives.RemoveBoardCardInput{
 		IfBoardUpdatedAt: &ub,
 	}); err != nil {
 		t.Fatalf("tombstone card: %v", err)
@@ -587,7 +587,7 @@ func TestBoardStoreCardTombstoneVsArchiveLists(t *testing.T) {
 	for _, c := range active {
 		id := c["id"].(string)
 		if id == cardArchivedID || id == cardTombID {
-			t.Fatalf("expected active list to omit archived/tombstoned, saw %q in %#v", id, active)
+			t.Fatalf("expected active list to omit archived/trashd, saw %q in %#v", id, active)
 		}
 	}
 
@@ -608,9 +608,9 @@ func TestBoardStoreCardTombstoneVsArchiveLists(t *testing.T) {
 		t.Fatalf("expected archived card in archived_only, got %#v", archivedOnly)
 	}
 
-	tombOnly, err := store.ListCards(ctx, primitives.CardListFilter{TombstonedOnly: true})
+	tombOnly, err := store.ListCards(ctx, primitives.CardListFilter{TrashedOnly: true})
 	if err != nil {
-		t.Fatalf("list tombstoned_only: %v", err)
+		t.Fatalf("list trashed_only: %v", err)
 	}
 	foundTomb := false
 	for _, c := range tombOnly {
@@ -618,11 +618,11 @@ func TestBoardStoreCardTombstoneVsArchiveLists(t *testing.T) {
 			foundTomb = true
 		}
 		if c["id"].(string) == cardArchivedID {
-			t.Fatalf("archived-only card must not appear in tombstoned_only")
+			t.Fatalf("archived-only card must not appear in trashed_only")
 		}
 	}
 	if !foundTomb {
-		t.Fatalf("expected tombstoned card in tombstoned_only, got %#v", tombOnly)
+		t.Fatalf("expected tombstoned card in trashed_only, got %#v", tombOnly)
 	}
 }
 

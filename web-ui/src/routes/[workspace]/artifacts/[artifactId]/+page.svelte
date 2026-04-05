@@ -361,7 +361,7 @@
   }
 
   async function handleArchiveArtifact() {
-    if (!artifact?.id || lifecycleBusy || artifact.tombstoned_at) return;
+    if (!artifact?.id || lifecycleBusy || artifact.trashed_at) return;
     lifecycleBusy = true;
     try {
       await coreClient.archiveArtifact(artifact.id, {});
@@ -373,7 +373,7 @@
 
   async function handleUnarchiveArtifact() {
     confirmModal = { open: false, action: "" };
-    if (!artifact?.id || lifecycleBusy || artifact.tombstoned_at) return;
+    if (!artifact?.id || lifecycleBusy || artifact.trashed_at) return;
     lifecycleBusy = true;
     try {
       await coreClient.unarchiveArtifact(artifact.id, {});
@@ -387,14 +387,14 @@
     const action = confirmModal.action;
     confirmModal = { open: false, action: "" };
     if (action === "archive") handleArchiveArtifact();
-    else if (action === "trash") handleTombstoneArtifact();
+    else if (action === "trash") handleTrashArtifact();
   }
 
-  async function handleTombstoneArtifact() {
+  async function handleTrashArtifact() {
     if (!artifact?.id || lifecycleBusy) return;
     lifecycleBusy = true;
     try {
-      await coreClient.tombstoneArtifact(artifact.id, {});
+      await coreClient.trashArtifact(artifact.id, {});
       await goto(workspaceHref("/artifacts"));
     } finally {
       lifecycleBusy = false;
@@ -454,24 +454,24 @@
     {loadError}
   </div>
 {:else if artifact}
-  {#if artifact?.tombstoned_at}
+  {#if artifact?.trashed_at}
     <div
-      class="tombstone-banner mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[13px] text-red-400"
+      class="trash-banner mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[13px] text-red-400"
     >
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2 font-semibold">
           <span>⚠</span>
-          <span>This artifact has been tombstoned</span>
+          <span>This artifact is in trash</span>
         </div>
-        {#if artifact.tombstone_reason}
-          <p class="mt-2">Reason: {artifact.tombstone_reason}</p>
+        {#if artifact.trash_reason}
+          <p class="mt-2">Reason: {artifact.trash_reason}</p>
         {/if}
         <p class="mt-1 text-[11px] text-red-400/80">
-          Tombstoned {#if artifact.tombstoned_by}by {actorName(
-              artifact.tombstoned_by,
+          Trashed {#if artifact.trashed_by}by {actorName(
+              artifact.trashed_by,
             )}{/if}
-          {#if artifact.tombstoned_at}
-            {formatTimestamp(artifact.tombstoned_at)}
+          {#if artifact.trashed_at}
+            {formatTimestamp(artifact.trashed_at)}
           {/if}
         </p>
       </div>
@@ -515,7 +515,7 @@
           {kindDescription(artifact.kind)}
         </p>
       </div>
-      {#if !artifact.tombstoned_at}
+      {#if !artifact.trashed_at}
         <div class="flex shrink-0 items-center gap-1.5">
           {#if !artifact.archived_at}
             <button
@@ -1003,7 +1003,7 @@
   open={confirmModal.open}
   title={confirmModal.action === "trash" ? "Move to trash" : "Archive artifact"}
   message={confirmModal.action === "trash"
-    ? "This artifact will be tombstoned. You can restore it from trash later."
+    ? "This artifact will be moved to trash. You can restore it later."
     : "This artifact will be hidden from default views. You can unarchive it later."}
   confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
   variant={confirmModal.action === "trash" ? "danger" : "warning"}

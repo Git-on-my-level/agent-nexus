@@ -87,7 +87,7 @@ describe("mockCoreData parity behaviors", () => {
   });
 
   describe("documents list matches contract behavior", () => {
-    it("filters tombstoned docs by default and sorts by updated_at desc", async () => {
+    it("filters trashed docs by default and sorts by updated_at desc", async () => {
       const mod = await import("../../src/lib/mockCoreData.js");
       const docs = mod.listMockDocuments();
 
@@ -98,9 +98,9 @@ describe("mockCoreData parity behaviors", () => {
       ]);
     });
 
-    it("includes tombstoned docs when requested", async () => {
+    it("includes trashed docs when requested", async () => {
       const mod = await import("../../src/lib/mockCoreData.js");
-      const docs = mod.listMockDocuments({ include_tombstoned: true });
+      const docs = mod.listMockDocuments({ include_trashed: true });
 
       expect(docs.map((doc) => doc.id)).toEqual([
         "product-constitution",
@@ -123,16 +123,16 @@ describe("mockCoreData parity behaviors", () => {
     });
   });
 
-  describe("artifacts trash list (tombstoned_only)", () => {
-    it("returns only tombstoned artifacts when tombstoned_only is true", async () => {
+  describe("artifacts trash list (trashed_only)", () => {
+    it("returns only trashed artifacts when trashed_only is true", async () => {
       const mod = await import("../../src/lib/mockCoreData.js");
-      const trashed = mod.listMockArtifacts({ tombstoned_only: true });
+      const trashed = mod.listMockArtifacts({ trashed_only: true });
       const ids = trashed.map((a) => a.id).sort();
 
       expect(ids).toContain("artifact-dev-trash-onboarding-draft");
       expect(ids).toContain("artifact-dev-trash-ops-scratch");
-      expect(ids).toContain("artifact-tombstoned-doc");
-      expect(trashed.every((a) => a.tombstoned_at != null)).toBe(true);
+      expect(ids).toContain("artifact-trashed-doc");
+      expect(trashed.every((a) => a.trashed_at != null)).toBe(true);
     });
   });
 

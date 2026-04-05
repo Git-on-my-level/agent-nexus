@@ -35,7 +35,7 @@
   }
 
   async function handleArchive() {
-    if (!threadId || lifecycleBusy || topic?.tombstoned_at || !detailAsTopic)
+    if (!threadId || lifecycleBusy || topic?.trashed_at || !detailAsTopic)
       return;
     lifecycleBusy = true;
     try {
@@ -48,7 +48,7 @@
 
   async function handleUnarchive() {
     confirmModal = { open: false, action: "" };
-    if (!threadId || lifecycleBusy || topic?.tombstoned_at || !detailAsTopic)
+    if (!threadId || lifecycleBusy || topic?.trashed_at || !detailAsTopic)
       return;
     lifecycleBusy = true;
     try {
@@ -63,14 +63,14 @@
     const action = confirmModal.action;
     confirmModal = { open: false, action: "" };
     if (action === "archive") handleArchive();
-    else if (action === "trash") handleTombstone();
+    else if (action === "trash") handleTrash();
   }
 
-  async function handleTombstone() {
+  async function handleTrash() {
     if (!threadId || lifecycleBusy || !detailAsTopic) return;
     lifecycleBusy = true;
     try {
-      await coreClient.tombstoneTopic(threadId, {});
+      await coreClient.trashTopic(threadId, {});
       await goto(workspacePath(workspaceSlug, "/topics"));
     } finally {
       lifecycleBusy = false;
@@ -102,7 +102,7 @@
   <a
     class="hover:text-[var(--ui-text)]"
     href={workspacePath(workspaceSlug, detailAsTopic ? "/topics" : "/threads")}
-    >{detailAsTopic ? "Topics" : "Threads"}</a
+    >{detailAsTopic ? "Topics" : "Topic (thread view)"}</a
   >
   <span class="text-[var(--ui-text-subtle)]">/</span>
   <span class="truncate text-[var(--ui-text)]" aria-current="page"
@@ -110,26 +110,22 @@
   >
 </nav>
 
-{#if topic?.tombstoned_at}
+{#if topic?.trashed_at}
   <div
     class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[13px] text-red-400"
   >
     <div class="min-w-0 flex-1">
       <div class="flex items-center gap-2 font-semibold">
         <span>⚠</span>
-        <span
-          >This {detailAsTopic ? "topic" : "backing thread"} has been tombstoned</span
-        >
+        <span>This topic is in trash</span>
       </div>
-      {#if topic.tombstone_reason}
-        <p class="mt-2">Reason: {topic.tombstone_reason}</p>
+      {#if topic.trash_reason}
+        <p class="mt-2">Reason: {topic.trash_reason}</p>
       {/if}
       <p class="mt-1 text-[11px] text-red-400/80">
-        Tombstoned {#if topic.tombstoned_by}by {actorName(
-            topic.tombstoned_by,
-          )}{/if}
-        {#if topic.tombstoned_at}
-          at {formatTimestamp(topic.tombstoned_at)}
+        Trashed {#if topic.trashed_by}by {actorName(topic.trashed_by)}{/if}
+        {#if topic.trashed_at}
+          at {formatTimestamp(topic.trashed_at)}
         {/if}
       </p>
     </div>
@@ -144,7 +140,7 @@
       </button>
     {:else}
       <p class="shrink-0 max-w-xs text-[11px] text-red-400/80">
-        Restore and lifecycle changes use the topic route; backing threads are
+        Restore and lifecycle changes use the topic route; this thread view is
         read-only here.
       </p>
     {/if}
@@ -170,7 +166,7 @@
       </button>
     {:else}
       <p class="shrink-0 max-w-xs text-[11px] text-amber-400/80">
-        Unarchive from the topic route; backing thread views are read-only.
+        Unarchive from the topic route; thread views here are read-only.
       </p>
     {/if}
   </div>
@@ -201,7 +197,7 @@
         class="rounded bg-[var(--ui-border)] px-2 py-0.5 text-[var(--ui-text-muted)]"
         >{getPriorityLabel(topic.priority)}</span
       >
-      {#if detailAsTopic && !topic.tombstoned_at && threadId}
+      {#if detailAsTopic && !topic.trashed_at && threadId}
         {#if !topic.archived_at}
           <button
             aria-label="Archive"
@@ -256,7 +252,7 @@
       ? "Archive topic"
       : "Archive thread"}
   message={confirmModal.action === "trash"
-    ? `This ${detailAsTopic ? "topic" : "backing thread"} will be tombstoned. You can restore it from trash later.`
+    ? "This topic will be moved to trash. You can restore it later."
     : `This ${detailAsTopic ? "topic" : "thread"} will be hidden from default views. You can unarchive it later.`}
   confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
   variant={confirmModal.action === "trash" ? "danger" : "warning"}

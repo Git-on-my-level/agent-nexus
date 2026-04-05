@@ -137,7 +137,7 @@ var threadsSubcommandSpec = subcommandSpec{
 
 var artifactsSubcommandSpec = subcommandSpec{
 	command:  "artifacts",
-	valid:    []string{"list", "get", "create", "content", "inspect", "archive", "unarchive", "tombstone", "restore", "purge"},
+	valid:    []string{"list", "get", "create", "content", "inspect", "archive", "unarchive", "trash", "restore", "purge"},
 	examples: []string{"oar artifacts list --kind packet", "oar artifacts inspect --artifact-id <artifact-id>"},
 	aliases: map[string]string{
 		"ls":   "list",
@@ -147,7 +147,7 @@ var artifactsSubcommandSpec = subcommandSpec{
 
 var boardsSubcommandSpec = subcommandSpec{
 	command:  "boards",
-	valid:    []string{"list", "create", "get", "update", "workspace", "archive", "unarchive", "tombstone", "restore", "purge", "cards"},
+	valid:    []string{"list", "create", "get", "update", "workspace", "archive", "unarchive", "trash", "restore", "purge", "cards"},
 	examples: []string{"oar boards list --status active", "oar boards workspace --board-id <board-id>", "oar boards cards create --board-id <board-id> --title \"Buy groceries\" --column backlog"},
 	aliases: map[string]string{
 		"ls":   "list",
@@ -169,7 +169,7 @@ var boardsCardsSubcommandSpec = subcommandSpec{
 
 var docsSubcommandSpec = subcommandSpec{
 	command:  "docs",
-	valid:    []string{"list", "create", "get", "content", "history", "revision", "tombstone", "archive", "unarchive", "restore", "purge"},
+	valid:    []string{"list", "create", "get", "content", "history", "revision", "trash", "archive", "unarchive", "restore", "purge"},
 	examples: []string{"oar docs list --thread-id <thread-id>", "oar docs content --document-id <document-id>", "oar docs apply --proposal-id <proposal-id>"},
 	aliases: map[string]string{
 		"ls":   "list",
@@ -186,7 +186,7 @@ var docsRevisionSubcommandSpec = subcommandSpec{
 
 var eventsSubcommandSpec = subcommandSpec{
 	command:  "events",
-	valid:    []string{"list", "get", "create", "validate", "stream", "tail", "explain", "archive", "unarchive", "tombstone", "restore"},
+	valid:    []string{"list", "get", "create", "validate", "stream", "tail", "explain", "archive", "unarchive", "trash", "restore"},
 	examples: []string{"oar events list --thread-id <thread-id> --type actor_statement --mine --full-id", "oar events tail --max-events 20"},
 	aliases: map[string]string{
 		"watch": "stream",

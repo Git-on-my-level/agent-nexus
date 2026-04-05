@@ -11,7 +11,7 @@ export function GET({ url }) {
   if (guardResponse) return guardResponse;
   const params = url.searchParams;
   const filters = {
-    include_tombstoned: params.get("include_tombstoned") === "true",
+    include_trashed: params.get("include_trashed") === "true",
     thread_id: params.get("thread_id") ?? undefined,
   };
   return json({ documents: listMockDocuments(filters) });

@@ -8,11 +8,16 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `artifacts`
 
-- Commands: `3`
+- Commands: `8`
 - Command IDs:
+  - `artifacts.archive`
   - `artifacts.create`
   - `artifacts.get`
   - `artifacts.list`
+  - `artifacts.purge`
+  - `artifacts.restore`
+  - `artifacts.trash`
+  - `artifacts.unarchive`
 
 ## `boards`
 
@@ -28,7 +33,7 @@ Generated from `contracts/oar-openapi.yaml`.
   - `boards.patch`
   - `boards.purge`
   - `boards.restore`
-  - `boards.tombstone`
+  - `boards.trash`
   - `boards.unarchive`
   - `boards.workspace`
   - `cards.create`
@@ -50,7 +55,7 @@ Generated from `contracts/oar-openapi.yaml`.
   - `cards.purge`
   - `cards.restore`
   - `cards.timeline`
-  - `cards.tombstone`
+  - `cards.trash`
 
 ## `compatibility`
 
@@ -79,15 +84,19 @@ Generated from `contracts/oar-openapi.yaml`.
   - `docs.revisions.create`
   - `docs.revisions.get`
   - `docs.revisions.list`
-  - `docs.tombstone`
+  - `docs.trash`
   - `docs.unarchive`
 
 ## `events`
 
-- Commands: `2`
+- Commands: `6`
 - Command IDs:
+  - `events.archive`
   - `events.create`
   - `events.list`
+  - `events.restore`
+  - `events.trash`
+  - `events.unarchive`
 
 ## `evidence`
 
@@ -175,7 +184,7 @@ Generated from `contracts/oar-openapi.yaml`.
   - `topics.patch`
   - `topics.restore`
   - `topics.timeline`
-  - `topics.tombstone`
+  - `topics.trash`
   - `topics.unarchive`
   - `topics.workspace`
 
@@ -189,16 +198,21 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `write`
 
-- Commands: `31`
+- Commands: `40`
 - Command IDs:
+  - `artifacts.archive`
   - `artifacts.create`
+  - `artifacts.purge`
+  - `artifacts.restore`
+  - `artifacts.trash`
+  - `artifacts.unarchive`
   - `boards.archive`
   - `boards.cards.create`
   - `boards.create`
   - `boards.patch`
   - `boards.purge`
   - `boards.restore`
-  - `boards.tombstone`
+  - `boards.trash`
   - `boards.unarchive`
   - `cards.archive`
   - `cards.create`
@@ -206,20 +220,24 @@ Generated from `contracts/oar-openapi.yaml`.
   - `cards.patch`
   - `cards.purge`
   - `cards.restore`
-  - `cards.tombstone`
+  - `cards.trash`
   - `docs.archive`
   - `docs.create`
   - `docs.purge`
   - `docs.restore`
   - `docs.revisions.create`
-  - `docs.tombstone`
+  - `docs.trash`
   - `docs.unarchive`
+  - `events.archive`
   - `events.create`
+  - `events.restore`
+  - `events.trash`
+  - `events.unarchive`
   - `inbox.acknowledge`
   - `topics.archive`
   - `topics.create`
   - `topics.patch`
   - `topics.restore`
-  - `topics.tombstone`
+  - `topics.trash`
   - `topics.unarchive`
 

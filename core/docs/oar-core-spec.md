@@ -78,7 +78,7 @@ A durable record that something happened or that an actor claims something happe
 
 **Fields:** per `oar-schema.yaml` → `primitives.event`
 
-**v0 event types:** `topic_created`, `topic_updated`, `topic_status_changed`, `message_posted`, `receipt_added`, `review_completed`, `decision_needed`, `intervention_needed`, `decision_made`, `document_created`, `document_revised`, `document_tombstoned`, `board_created`, `board_updated`, `card_created`, `card_updated`, `card_moved`, `card_resolved`, `exception_raised`, `inbox_item_acknowledged`
+**v0 event types:** `topic_created`, `topic_updated`, `topic_status_changed`, `message_posted`, `receipt_added`, `review_completed`, `decision_needed`, `intervention_needed`, `decision_made`, `document_created`, `document_revised`, `document_trashed`, `board_created`, `board_updated`, `card_created`, `card_updated`, `card_moved`, `card_resolved`, `exception_raised`, `inbox_item_acknowledged`
 
 ### 3.2 Mutable resources (topic/card/board/document)
 Topics, cards, boards, and documents are mutable current-state records.
@@ -160,12 +160,12 @@ Creating a review MUST emit a `review_completed` event. Per reference convention
 Documents are a first-class canonical domain with their own API and storage. A document is a long-lived lineage, not just stored text: it has a mutable head pointer for the current version and an ordered immutable revision chain for institutional memory. Documents are distinct from the generic artifact model: artifacts are immutable blobs linked only by refs, while documents provide a canonical lineage interface over those immutable revision artifacts.
 
 **Storage model:**
-- `documents` table: document metadata, head_revision_id, tombstone fields.
+- `documents` table: document metadata, head_revision_id, trash lifecycle fields (`trashed_at`, `trashed_by`, `trash_reason`).
 - `document_revisions` table: revision_id, document_id, revision_number, prev_revision_id, artifact_id, revision_hash.
 - Each revision's content is stored in an `artifacts` row with `kind: "doc"`. Content uses content-addressable storage (SHA-256 digest).
 - Revisions form a Merkle chain: `revision_hash` incorporates content_hash, prev_revision_hash, document_id, revision_number, created_at, created_by.
 
-**API surface:** `GET /docs`, `POST /docs`, `GET /docs/{document_id}`, `PATCH /docs/{document_id}`, `GET /docs/{document_id}/history`, `GET /docs/{document_id}/revisions/{revision_id}`, `POST /docs/{document_id}/tombstone`.
+**API surface:** `GET /docs`, `POST /docs`, `GET /docs/{document_id}`, `PATCH /docs/{document_id}`, `GET /docs/{document_id}/history`, `GET /docs/{document_id}/revisions/{revision_id}`, `POST /docs/{document_id}/trash`.
 
 **Relationship to artifacts:** Document revisions use artifacts internally for content storage. The docs API is the canonical interface for document lineages; clients should not treat documents as `GET /artifacts?kind=doc`. Documents complement canonical threads/events/artifacts rather than replacing them.
 
@@ -213,7 +213,7 @@ authenticated principal that resolves to one.
 
 ### 7.1 Read / query
 - Get topic by ID
-- List topics (filters: type, status, archive/tombstone state, search)
+- List topics (filters: type, status, archive/trash state, search)
 - Get topic timeline (events + referenced artifacts/cards/documents/threads, ordered by time)
 - Get topic workspace
 - Get card by ID
@@ -234,7 +234,7 @@ authenticated principal that resolves to one.
 - Move card → emits `card_moved` event
 - Resolve card → emits `card_resolved` event
 - Create artifact (metadata + content) → returns artifact ID; validates packet content for packet kinds; validates typed ref format
-- Create document, update document (new immutable revision), tombstone document
+- Create document, update document (new immutable revision), trash document
 - Append event (for messages, decisions, exceptions, acknowledgments) → validates required refs per reference conventions
 
 ### 7.3 Convenience operations

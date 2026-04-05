@@ -144,7 +144,7 @@ func isMeaningfulThreadActivityEvent(event map[string]any) bool {
 		"review_completed",
 		"document_created",
 		"document_updated",
-		"document_tombstoned",
+		"document_trashed",
 		"document_restored":
 		return true
 	case "inbox_item_acknowledged", "exception_raised":

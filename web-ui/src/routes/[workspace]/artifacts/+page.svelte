@@ -157,7 +157,7 @@
     trashBusyId = id;
     error = "";
     try {
-      await coreClient.tombstoneArtifact(id, {});
+      await coreClient.trashArtifact(id, {});
       confirmModal = { open: false, action: "", entityId: "" };
       const parsed = parseArtifactListSearchParams($page.url.searchParams);
       await loadArtifactsFromState(parsed);
@@ -480,7 +480,7 @@
   open={confirmModal.open}
   title={confirmModal.action === "trash" ? "Move to trash" : "Archive artifact"}
   message={confirmModal.action === "trash"
-    ? "This artifact will be tombstoned. You can restore it from trash later."
+    ? "This artifact will be moved to trash. You can restore it later."
     : "This artifact will be hidden from default views. You can unarchive it later."}
   confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
   variant={confirmModal.action === "trash" ? "danger" : "warning"}

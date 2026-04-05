@@ -32,20 +32,20 @@ func handleListDocuments(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		limitFilter = &parsed
 	}
 
-	includeTombstoned := strings.TrimSpace(r.URL.Query().Get("include_tombstoned")) == "true"
-	tombstonedOnly := strings.TrimSpace(r.URL.Query().Get("tombstoned_only")) == "true"
+	includeTrashed := strings.TrimSpace(r.URL.Query().Get("include_trashed")) == "true"
+	trashedOnly := strings.TrimSpace(r.URL.Query().Get("trashed_only")) == "true"
 	includeArchived := strings.TrimSpace(r.URL.Query().Get("include_archived")) == "true"
 	archivedOnly := strings.TrimSpace(r.URL.Query().Get("archived_only")) == "true"
 	threadID := strings.TrimSpace(r.URL.Query().Get("thread_id"))
 	documents, nextCursor, err := opts.primitiveStore.ListDocuments(r.Context(), primitives.DocumentListFilter{
-		ThreadID:          threadID,
-		IncludeTombstoned: includeTombstoned,
-		TombstonedOnly:    tombstonedOnly,
-		IncludeArchived:   includeArchived,
-		ArchivedOnly:      archivedOnly,
-		Query:             strings.TrimSpace(r.URL.Query().Get("q")),
-		Limit:             limitFilter,
-		Cursor:            strings.TrimSpace(r.URL.Query().Get("cursor")),
+		ThreadID:        threadID,
+		IncludeTrashed:  includeTrashed,
+		TrashedOnly:     trashedOnly,
+		IncludeArchived: includeArchived,
+		ArchivedOnly:    archivedOnly,
+		Query:           strings.TrimSpace(r.URL.Query().Get("q")),
+		Limit:           limitFilter,
+		Cursor:          strings.TrimSpace(r.URL.Query().Get("cursor")),
 	})
 	if err != nil {
 		if errors.Is(err, primitives.ErrInvalidCursor) {
@@ -548,7 +548,7 @@ func firstNonEmptyString(values ...any) string {
 	return ""
 }
 
-func handleTombstoneDocument(w http.ResponseWriter, r *http.Request, opts handlerOptions, documentID string) {
+func handleTrashDocument(w http.ResponseWriter, r *http.Request, opts handlerOptions, documentID string) {
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
@@ -571,7 +571,7 @@ func handleTombstoneDocument(w http.ResponseWriter, r *http.Request, opts handle
 		return
 	}
 
-	document, revision, err := opts.primitiveStore.TombstoneDocument(r.Context(), actorID, documentID, req.Reason)
+	document, revision, err := opts.primitiveStore.TrashDocument(r.Context(), actorID, documentID, req.Reason)
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "document not found")
@@ -581,7 +581,7 @@ func handleTombstoneDocument(w http.ResponseWriter, r *http.Request, opts handle
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to tombstone document")
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to trash document")
 		return
 	}
 	enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{anyString(document["thread_id"])}, time.Now().UTC())
@@ -620,8 +620,8 @@ func handleArchiveDocument(w http.ResponseWriter, r *http.Request, opts handlerO
 			writeError(w, http.StatusNotFound, "not_found", "document not found")
 			return
 		}
-		if errors.Is(err, primitives.ErrAlreadyTombstoned) {
-			writeError(w, http.StatusConflict, "already_tombstoned", "document is tombstoned")
+		if errors.Is(err, primitives.ErrAlreadyTrashed) {
+			writeError(w, http.StatusConflict, "already_trashed", "document is trashed")
 			return
 		}
 		if errors.Is(err, primitives.ErrInvalidDocumentRequest) {
@@ -715,8 +715,8 @@ func handleRestoreDocument(w http.ResponseWriter, r *http.Request, opts handlerO
 			writeError(w, http.StatusNotFound, "not_found", "document not found")
 			return
 		}
-		if errors.Is(err, primitives.ErrNotTombstoned) {
-			writeError(w, http.StatusConflict, "not_tombstoned", "document is not currently tombstoned")
+		if errors.Is(err, primitives.ErrNotTrashed) {
+			writeError(w, http.StatusConflict, "not_trashed", "document is not currently trashed")
 			return
 		}
 		if errors.Is(err, primitives.ErrInvalidDocumentRequest) {
@@ -759,8 +759,8 @@ func handlePurgeDocument(w http.ResponseWriter, r *http.Request, opts handlerOpt
 			writeError(w, http.StatusNotFound, "not_found", "document not found")
 			return
 		}
-		if errors.Is(err, primitives.ErrNotTombstoned) {
-			writeError(w, http.StatusConflict, "not_tombstoned", "document is not currently tombstoned")
+		if errors.Is(err, primitives.ErrNotTrashed) {
+			writeError(w, http.StatusConflict, "not_trashed", "document is not currently trashed")
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to purge document")

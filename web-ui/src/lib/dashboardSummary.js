@@ -202,7 +202,7 @@ export function inboxSummarySentence(categorySummary) {
 }
 
 export function selectRecentArtifacts(artifacts = [], limit = 5) {
-  const live = (artifacts ?? []).filter((a) => !a?.tombstoned_at);
+  const live = (artifacts ?? []).filter((a) => !a?.trashed_at);
   const byId = new Map(live.map((a) => [a.id, a]));
 
   // Artifacts superseded by a newer artifact of the same kind via an explicit artifact: ref.

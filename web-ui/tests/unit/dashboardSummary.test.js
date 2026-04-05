@@ -157,19 +157,19 @@ describe("dashboard summaries", () => {
     expect(result[0].versionCount).toBe(2);
   });
 
-  it("excludes tombstoned artifacts", () => {
+  it("excludes trashed artifacts", () => {
     const artifacts = [
       {
         id: "doc-live",
         kind: "doc",
         created_at: "2026-01-01T00:00:00.000Z",
-        tombstoned_at: null,
+        trashed_at: null,
       },
       {
         id: "doc-dead",
         kind: "doc",
         created_at: "2026-02-01T00:00:00.000Z",
-        tombstoned_at: "2026-02-02T00:00:00.000Z",
+        trashed_at: "2026-02-02T00:00:00.000Z",
       },
     ];
 

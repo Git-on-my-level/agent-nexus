@@ -307,37 +307,37 @@ async function seedDocuments() {
       }
     }
 
-    if (sourceDocument.tombstoned_at) {
+    if (sourceDocument.trashed_at) {
       await request(
         "POST",
-        `/docs/${encodeURIComponent(newDocumentId)}/tombstone`,
+        `/docs/${encodeURIComponent(newDocumentId)}/trash`,
         {
           actor_id: pickActorId(
-            sourceDocument.tombstoned_by ?? sourceDocument.updated_by,
+            sourceDocument.trashed_by ?? sourceDocument.updated_by,
           ),
           reason:
-            sourceDocument.tombstone_reason ??
-            "Tombstoned while seeding mock data.",
+            sourceDocument.trash_reason ??
+            "Trashed while seeding mock data.",
         },
       );
     }
   }
 }
 
-async function tombstoneSeedArtifactIfNeeded(sourceArtifact) {
-  if (!sourceArtifact?.tombstoned_at) {
+async function trashSeedArtifactIfNeeded(sourceArtifact) {
+  if (!sourceArtifact?.trashed_at) {
     return;
   }
   const id = String(sourceArtifact.id ?? "").trim();
   if (!id) {
     return;
   }
-  await request("POST", `/artifacts/${encodeURIComponent(id)}/tombstone`, {
+  await request("POST", `/artifacts/${encodeURIComponent(id)}/trash`, {
     actor_id: pickActorId(
-      sourceArtifact.tombstoned_by ?? sourceArtifact.created_by,
+      sourceArtifact.trashed_by ?? sourceArtifact.created_by,
     ),
     reason:
-      sourceArtifact.tombstone_reason ?? "Tombstoned while seeding mock data.",
+      sourceArtifact.trash_reason ?? "Trashed while seeding mock data.",
   });
 }
 
@@ -377,11 +377,11 @@ async function seedArtifacts() {
         content_type: contentType,
         content,
       });
-      await tombstoneSeedArtifactIfNeeded(sourceArtifact);
+      await trashSeedArtifactIfNeeded(sourceArtifact);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (isAlreadyExistsConflict(msg)) {
-        await tombstoneSeedArtifactIfNeeded(sourceArtifact);
+        await trashSeedArtifactIfNeeded(sourceArtifact);
         continue;
       }
       throw err;

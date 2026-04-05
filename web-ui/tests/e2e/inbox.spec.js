@@ -102,7 +102,7 @@ test("inbox triage shows urgency summary and dismissing removes an item", async 
   const targetCard = page.getByTestId("inbox-card-inbox-001");
   await expect(targetCard).toBeVisible();
 
-  await targetCard.getByRole("button", { name: "Dismiss" }).click();
+  await targetCard.getByRole("button", { name: "Acknowledge" }).click();
   await expect(targetCard).toHaveCount(0);
 });
 

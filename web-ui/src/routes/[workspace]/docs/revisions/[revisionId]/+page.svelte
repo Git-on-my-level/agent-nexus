@@ -43,7 +43,7 @@
 
     try {
       const listResponse = await coreClient.listDocuments({
-        include_tombstoned: true,
+        include_trashed: true,
       });
       const documents = listResponse.documents ?? [];
 

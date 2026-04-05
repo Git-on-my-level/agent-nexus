@@ -106,7 +106,7 @@
         "artifact:\u003cartifact_id\u003e"
       ]
     },
-    "document_tombstoned": {
+    "document_trashed": {
       "refs_must_include": [
         "document:\u003cdocument_id\u003e"
       ]

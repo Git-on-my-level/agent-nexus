@@ -13,7 +13,7 @@ var topicsSubcommandSpec = subcommandSpec{
 	command: "topics",
 	valid: []string{
 		"list", "get", "create", "patch", "timeline", "workspace",
-		"archive", "unarchive", "tombstone", "restore",
+		"archive", "unarchive", "trash", "restore",
 	},
 	examples: []string{"oar topics list", "oar topics create --from-file topic.json", "oar topics workspace --topic-id <topic-id>", "oar topics archive --topic-id <topic-id>"},
 	aliases: map[string]string{
@@ -25,8 +25,8 @@ var topicsSubcommandSpec = subcommandSpec{
 
 var cardsSubcommandSpec = subcommandSpec{
 	command:  "cards",
-	valid:    []string{"list", "get", "create", "patch", "move", "archive", "tombstone", "purge", "restore", "timeline"},
-	examples: []string{"oar cards list", "oar cards create --from-file card.json", "oar cards get --card-id <card-id>", "oar cards timeline --card-id <card-id>", "oar cards move --card-id <card-id> --from-file move.json", "oar cards archive --card-id <card-id>", "oar cards tombstone --card-id <card-id> --from-file tombstone.json"},
+	valid:    []string{"list", "get", "create", "patch", "move", "archive", "trash", "purge", "restore", "timeline"},
+	examples: []string{"oar cards list", "oar cards create --from-file card.json", "oar cards get --card-id <card-id>", "oar cards timeline --card-id <card-id>", "oar cards move --card-id <card-id> --from-file move.json", "oar cards archive --card-id <card-id>", "oar cards trash --card-id <card-id> --from-file trash.json"},
 	aliases: map[string]string{
 		"ls":     "list",
 		"show":   "get",
@@ -95,13 +95,13 @@ func (a *App) runTopicsCommand(ctx context.Context, args []string, cfg config.Re
 		}
 		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "topics unarchive", "topics.unarchive", "topic_id", id, topicIDLookupSpec, nil, body)
 		return result, "topics unarchive", callErr
-	case "tombstone":
-		id, body, err := a.parseTopicIDAndBodyInput(args[1:], "topics tombstone")
+	case "trash":
+		id, body, err := a.parseTopicIDAndBodyInput(args[1:], "topics trash")
 		if err != nil {
-			return nil, "topics tombstone", err
+			return nil, "topics trash", err
 		}
-		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "topics tombstone", "topics.tombstone", "topic_id", id, topicIDLookupSpec, nil, body)
-		return result, "topics tombstone", callErr
+		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "topics trash", "topics.trash", "topic_id", id, topicIDLookupSpec, nil, body)
+		return result, "topics trash", callErr
 	case "restore":
 		id, body, err := a.parseTopicIDAndOptionalJSONBody(args[1:], "topics restore")
 		if err != nil {
@@ -168,13 +168,13 @@ func (a *App) runCardsCommand(ctx context.Context, args []string, cfg config.Res
 		}
 		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "cards archive", "cards.archive", "card_id", id, cardIDLookupSpec, nil, body)
 		return result, "cards archive", callErr
-	case "tombstone":
-		id, body, err := a.parseIDAndBodyInput(args[1:], "card-id", "card id", "cards tombstone")
+	case "trash":
+		id, body, err := a.parseIDAndBodyInput(args[1:], "card-id", "card id", "cards trash")
 		if err != nil {
-			return nil, "cards tombstone", err
+			return nil, "cards trash", err
 		}
-		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "cards tombstone", "cards.tombstone", "card_id", id, cardIDLookupSpec, nil, body)
-		return result, "cards tombstone", callErr
+		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "cards trash", "cards.trash", "card_id", id, cardIDLookupSpec, nil, body)
+		return result, "cards trash", callErr
 	case "restore":
 		id, body, err := a.parseCardIDAndOptionalJSONBody(args[1:], "cards restore")
 		if err != nil {
@@ -218,7 +218,7 @@ func (a *App) normalizeTopicMutationBody(ctx context.Context, cfg config.Resolve
 			return err
 		}
 		return nil
-	case "topics.tombstone":
+	case "topics.trash":
 		return nil
 	default:
 		return nil

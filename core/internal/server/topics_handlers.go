@@ -58,15 +58,15 @@ func handleListTopics(w http.ResponseWriter, r *http.Request, opts handlerOption
 	}
 
 	topics, nextCursor, err := opts.primitiveStore.ListTopics(r.Context(), primitives.TopicListFilter{
-		Type:              topicType,
-		Status:            status,
-		Query:             strings.TrimSpace(query.Get("q")),
-		Limit:             limitFilter,
-		Cursor:            strings.TrimSpace(query.Get("cursor")),
-		IncludeArchived:   strings.TrimSpace(query.Get("include_archived")) == "true",
-		ArchivedOnly:      strings.TrimSpace(query.Get("archived_only")) == "true",
-		IncludeTombstoned: strings.TrimSpace(query.Get("include_tombstoned")) == "true",
-		TombstonedOnly:    strings.TrimSpace(query.Get("tombstoned_only")) == "true",
+		Type:            topicType,
+		Status:          status,
+		Query:           strings.TrimSpace(query.Get("q")),
+		Limit:           limitFilter,
+		Cursor:          strings.TrimSpace(query.Get("cursor")),
+		IncludeArchived: strings.TrimSpace(query.Get("include_archived")) == "true",
+		ArchivedOnly:    strings.TrimSpace(query.Get("archived_only")) == "true",
+		IncludeTrashed:  strings.TrimSpace(query.Get("include_trashed")) == "true",
+		TrashedOnly:     strings.TrimSpace(query.Get("trashed_only")) == "true",
 	})
 	if err != nil {
 		if errors.Is(err, primitives.ErrInvalidCursor) {
@@ -273,8 +273,8 @@ func handleUnarchiveTopic(w http.ResponseWriter, r *http.Request, opts handlerOp
 	handleTopicLifecycle(w, r, opts, topicID, "unarchive")
 }
 
-func handleTombstoneTopic(w http.ResponseWriter, r *http.Request, opts handlerOptions, topicID string) {
-	handleTopicLifecycleWithReason(w, r, opts, topicID, "tombstone")
+func handleTrashTopic(w http.ResponseWriter, r *http.Request, opts handlerOptions, topicID string) {
+	handleTopicLifecycleWithReason(w, r, opts, topicID, "trash")
 }
 
 func handleRestoreTopic(w http.ResponseWriter, r *http.Request, opts handlerOptions, topicID string) {
@@ -313,8 +313,8 @@ func handleTopicLifecycleWithReason(w http.ResponseWriter, r *http.Request, opts
 		topic, err = opts.primitiveStore.ArchiveTopic(r.Context(), actorID, topicID)
 	case "unarchive":
 		topic, err = opts.primitiveStore.UnarchiveTopic(r.Context(), actorID, topicID)
-	case "tombstone":
-		topic, err = opts.primitiveStore.TombstoneTopic(r.Context(), actorID, topicID, req.Reason)
+	case "trash":
+		topic, err = opts.primitiveStore.TrashTopic(r.Context(), actorID, topicID, req.Reason)
 	case "restore":
 		topic, err = opts.primitiveStore.RestoreTopic(r.Context(), actorID, topicID)
 	default:
@@ -609,11 +609,11 @@ func writeTopicLifecycleStoreError(w http.ResponseWriter, err error) bool {
 	case errors.Is(err, primitives.ErrNotArchived):
 		writeError(w, http.StatusConflict, "not_archived", "topic is not archived")
 		return true
-	case errors.Is(err, primitives.ErrNotTombstoned):
-		writeError(w, http.StatusConflict, "not_tombstoned", "topic is not tombstoned")
+	case errors.Is(err, primitives.ErrNotTrashed):
+		writeError(w, http.StatusConflict, "not_trashed", "topic is not trashed")
 		return true
-	case errors.Is(err, primitives.ErrAlreadyTombstoned):
-		writeError(w, http.StatusConflict, "already_tombstoned", "topic is tombstoned")
+	case errors.Is(err, primitives.ErrAlreadyTrashed):
+		writeError(w, http.StatusConflict, "already_trashed", "topic is trashed")
 		return true
 	case errors.Is(err, primitives.ErrInvalidTopicRequest):
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())

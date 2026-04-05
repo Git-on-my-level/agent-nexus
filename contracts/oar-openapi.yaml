@@ -145,11 +145,11 @@ paths:
           in: query
           required: false
           schema: { type: boolean, default: false }
-        - name: include_tombstoned
+        - name: include_trashed
           in: query
           required: false
           schema: { type: boolean, default: false }
-        - name: tombstoned_only
+        - name: trashed_only
           in: query
           required: false
           schema: { type: boolean, default: false }
@@ -397,15 +397,15 @@ paths:
         '409':
           $ref: '#/components/responses/ErrorResponse'
 
-  /topics/{topic_id}/tombstone:
+  /topics/{topic_id}/trash:
     post:
-      operationId: tombstoneTopic
-      summary: Tombstone topic
+      operationId: trashTopic
+      summary: Move topic to trash
       tags: [topics]
       x-oar-surface: canonical
-      x-oar-command-id: topics.tombstone
-      x-oar-cli-path: topics tombstone
-      x-oar-why: Mark topic as tombstoned with an explicit operator reason.
+      x-oar-command-id: topics.trash
+      x-oar-cli-path: topics trash
+      x-oar-why: Move topic to trash with an explicit operator reason.
       x-oar-input-mode: json-body
       x-oar-streaming: { mode: none }
       x-oar-output-envelope: "Returns `{ topic }`."
@@ -419,10 +419,10 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TopicTombstoneRequest'
+              $ref: '#/components/schemas/TopicTrashRequest'
       responses:
         '200':
-          description: Topic tombstoned
+          description: Topic moved to trash
           content:
             application/json:
               schema:
@@ -439,12 +439,12 @@ paths:
   /topics/{topic_id}/restore:
     post:
       operationId: restoreTopic
-      summary: Restore topic from tombstone
+      summary: Restore topic from trash
       tags: [topics]
       x-oar-surface: canonical
       x-oar-command-id: topics.restore
       x-oar-cli-path: topics restore
-      x-oar-why: Clear tombstone fields on a topic after an explicit restore action.
+      x-oar-why: Clear trash lifecycle fields on a topic after an explicit restore action.
       x-oar-input-mode: json-body
       x-oar-streaming: { mode: none }
       x-oar-output-envelope: "Returns `{ topic }`."
@@ -843,15 +843,15 @@ paths:
         '409':
           $ref: '#/components/responses/ErrorResponse'
 
-  /docs/{document_id}/tombstone:
+  /docs/{document_id}/trash:
     post:
-      operationId: tombstoneDocument
-      summary: Tombstone document
+      operationId: trashDocument
+      summary: Move document to trash
       tags: [docs]
       x-oar-surface: canonical
-      x-oar-command-id: docs.tombstone
-      x-oar-cli-path: docs tombstone
-      x-oar-why: Mark a document lineage as tombstoned with an explicit operator reason.
+      x-oar-command-id: docs.trash
+      x-oar-cli-path: docs trash
+      x-oar-why: Move a document lineage to trash with an explicit operator reason.
       x-oar-input-mode: json-body
       x-oar-streaming: { mode: none }
       x-oar-output-envelope: "Returns `{ document, revision }`."
@@ -865,10 +865,10 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TopicTombstoneRequest'
+              $ref: '#/components/schemas/TopicTrashRequest'
       responses:
         '200':
-          description: Document tombstoned
+          description: Document moved to trash
           content:
             application/json:
               schema:
@@ -885,12 +885,12 @@ paths:
   /docs/{document_id}/restore:
     post:
       operationId: restoreDocument
-      summary: Restore document from tombstone
+      summary: Restore document from trash
       tags: [docs]
       x-oar-surface: canonical
       x-oar-command-id: docs.restore
       x-oar-cli-path: docs restore
-      x-oar-why: Clear tombstone state on a document after an explicit restore action.
+      x-oar-why: Clear trash state on a document after an explicit restore action.
       x-oar-input-mode: json-body
       x-oar-streaming: { mode: none }
       x-oar-output-envelope: "Returns `{ document, revision }`."
@@ -904,7 +904,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/DocumentRestoreFromTombstoneRequest'
+              $ref: '#/components/schemas/DocumentRestoreFromTrashRequest'
       responses:
         '200':
           description: Document restored
@@ -924,12 +924,12 @@ paths:
   /docs/{document_id}/purge:
     post:
       operationId: purgeDocument
-      summary: Purge tombstoned document
+      summary: Permanently delete trashed document
       tags: [docs]
       x-oar-surface: canonical
       x-oar-command-id: docs.purge
       x-oar-cli-path: docs purge
-      x-oar-why: Permanently delete a tombstoned document (human-gated).
+      x-oar-why: Permanently delete a trashed document (human-gated).
       x-oar-input-mode: json-body
       x-oar-streaming: { mode: none }
       x-oar-output-envelope: "Returns `{ purged, document_id }`."
@@ -1285,15 +1285,15 @@ paths:
         '409':
           $ref: '#/components/responses/ErrorResponse'
 
-  /boards/{board_id}/tombstone:
+  /boards/{board_id}/trash:
     post:
-      operationId: tombstoneBoard
-      summary: Tombstone board
+      operationId: trashBoard
+      summary: Move board to trash
       tags: [boards]
       x-oar-surface: canonical
-      x-oar-command-id: boards.tombstone
-      x-oar-cli-path: boards tombstone
-      x-oar-why: Mark board as tombstoned with an explicit operator reason.
+      x-oar-command-id: boards.trash
+      x-oar-cli-path: boards trash
+      x-oar-why: Move board to trash with an explicit operator reason.
       x-oar-input-mode: json-body
       x-oar-streaming: { mode: none }
       x-oar-output-envelope: "Returns `{ board }`."
@@ -1307,10 +1307,10 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TopicTombstoneRequest'
+              $ref: '#/components/schemas/TopicTrashRequest'
       responses:
         '200':
-          description: Board tombstoned
+          description: Board moved to trash
           content:
             application/json:
               schema:
@@ -1327,12 +1327,12 @@ paths:
   /boards/{board_id}/restore:
     post:
       operationId: restoreBoard
-      summary: Restore board from tombstone
+      summary: Restore board from trash
       tags: [boards]
       x-oar-surface: canonical
       x-oar-command-id: boards.restore
       x-oar-cli-path: boards restore
-      x-oar-why: Clear tombstone fields on a board after an explicit restore action.
+      x-oar-why: Clear trash lifecycle fields on a board after an explicit restore action.
       x-oar-input-mode: json-body
       x-oar-streaming: { mode: none }
       x-oar-output-envelope: "Returns `{ board }`."
@@ -1366,12 +1366,12 @@ paths:
   /boards/{board_id}/purge:
     post:
       operationId: purgeBoard
-      summary: Purge tombstoned board
+      summary: Permanently delete trashed board
       tags: [boards]
       x-oar-surface: canonical
       x-oar-command-id: boards.purge
       x-oar-cli-path: boards purge
-      x-oar-why: Permanently delete a tombstoned board (human-gated).
+      x-oar-why: Permanently delete a trashed board (human-gated).
       x-oar-input-mode: json-body
       x-oar-streaming: { mode: none }
       x-oar-output-envelope: "Returns `{ purged, board_id }`."
@@ -1521,27 +1521,27 @@ paths:
             type: boolean
             default: false
           description: When true, include archived cards alongside active cards.
-        - name: include_tombstoned
+        - name: include_trashed
           in: query
           required: false
           schema:
             type: boolean
             default: false
-          description: When true, include tombstoned cards alongside active cards.
+          description: When true, include trashed cards alongside active cards.
         - name: archived_only
           in: query
           required: false
           schema:
             type: boolean
             default: false
-          description: When true, return only archived cards (distinct from tombstoned cards).
-        - name: tombstoned_only
+          description: When true, return only archived cards (distinct from trashed cards).
+        - name: trashed_only
           in: query
           required: false
           schema:
             type: boolean
             default: false
-          description: When true, return only tombstoned cards.
+          description: When true, return only trashed cards.
       responses:
         '200':
           description: Card list
@@ -1696,7 +1696,7 @@ paths:
       x-oar-input-mode: json-body
       x-oar-streaming: { mode: none }
       x-oar-output-envelope: "Returns `{ board, card }`."
-      x-oar-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, already_tombstoned]
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict, already_trashed]
       x-oar-concepts: [cards, write]
       x-oar-stability: beta
       parameters:
@@ -1723,15 +1723,15 @@ paths:
         '409':
           $ref: '#/components/responses/ErrorResponse'
 
-  /cards/{card_id}/tombstone:
+  /cards/{card_id}/trash:
     post:
-      operationId: tombstoneCard
-      summary: Tombstone card
+      operationId: trashCard
+      summary: Move card to trash
       tags: [cards]
       x-oar-surface: canonical
-      x-oar-command-id: cards.tombstone
-      x-oar-cli-path: cards tombstone
-      x-oar-why: Mark a card as tombstoned with an explicit operator reason while keeping archive lifecycle distinct.
+      x-oar-command-id: cards.trash
+      x-oar-cli-path: cards trash
+      x-oar-why: Move a card to trash with an explicit operator reason while keeping archive lifecycle distinct.
       x-oar-input-mode: json-body
       x-oar-streaming: { mode: none }
       x-oar-output-envelope: "Returns `{ board, card }`."
@@ -1745,10 +1745,10 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CardTombstoneRequest'
+              $ref: '#/components/schemas/CardTrashRequest'
       responses:
         '200':
-          description: Card tombstoned
+          description: Card moved to trash
           content:
             application/json:
               schema:
@@ -1804,12 +1804,12 @@ paths:
   /cards/{card_id}/restore:
     post:
       operationId: restoreArchivedCard
-      summary: Restore archived or tombstoned card
+      summary: Restore archived or trashed card
       tags: [cards]
       x-oar-surface: canonical
       x-oar-command-id: cards.restore
       x-oar-cli-path: cards restore
-      x-oar-why: Clear archive or tombstone lifecycle fields on a card so it reappears on boards.
+      x-oar-why: Clear archive or trash lifecycle fields on a card so it reappears on boards.
       x-oar-input-mode: json-body
       x-oar-streaming: { mode: none }
       x-oar-output-envelope: "Returns `{ board, card }`."
@@ -1843,12 +1843,12 @@ paths:
   /cards/{card_id}/purge:
     post:
       operationId: purgeArchivedCard
-      summary: Purge archived or tombstoned card
+      summary: Permanently delete archived or trashed card
       tags: [cards]
       x-oar-surface: canonical
       x-oar-command-id: cards.purge
       x-oar-cli-path: cards purge
-      x-oar-why: Permanently delete an archived or tombstoned card (human-gated).
+      x-oar-why: Permanently delete an archived or trashed card (human-gated).
       x-oar-input-mode: json-body
       x-oar-streaming: { mode: none }
       x-oar-output-envelope: "Returns `{ purged, card_id }`."
@@ -2001,6 +2001,160 @@ paths:
         '401':
           $ref: '#/components/responses/ErrorResponse'
 
+  /events/{event_id}/archive:
+    post:
+      operationId: archiveEvent
+      summary: Archive event
+      tags: [events]
+      x-oar-surface: canonical
+      x-oar-command-id: events.archive
+      x-oar-cli-path: events archive
+      x-oar-why: Set archived_at on an append-only event record for filtered views.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ event }`."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-oar-concepts: [events, write]
+      x-oar-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/EventID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicLifecycleMutationRequest'
+      responses:
+        '200':
+          description: Event archived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /events/{event_id}/unarchive:
+    post:
+      operationId: unarchiveEvent
+      summary: Unarchive event
+      tags: [events]
+      x-oar-surface: canonical
+      x-oar-command-id: events.unarchive
+      x-oar-cli-path: events unarchive
+      x-oar-why: Clear archived_at on an event.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ event }`."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-oar-concepts: [events, write]
+      x-oar-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/EventID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicLifecycleMutationRequest'
+      responses:
+        '200':
+          description: Event unarchived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /events/{event_id}/trash:
+    post:
+      operationId: trashEvent
+      summary: Move event to trash
+      tags: [events]
+      x-oar-surface: canonical
+      x-oar-command-id: events.trash
+      x-oar-cli-path: events trash
+      x-oar-why: Move event to trash with an explicit operator reason.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ event }`."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token, not_found]
+      x-oar-concepts: [events, write]
+      x-oar-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/EventID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicTrashRequest'
+      responses:
+        '200':
+          description: Event moved to trash
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /events/{event_id}/restore:
+    post:
+      operationId: restoreEvent
+      summary: Restore event from trash
+      tags: [events]
+      x-oar-surface: canonical
+      x-oar-command-id: events.restore
+      x-oar-cli-path: events restore
+      x-oar-why: Clear trash state on an event after an explicit restore action.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ event }`."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-oar-concepts: [events, write]
+      x-oar-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/EventID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicLifecycleMutationRequest'
+      responses:
+        '200':
+          description: Event restored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
   /artifacts:
     get:
       operationId: listArtifacts
@@ -2046,11 +2200,11 @@ paths:
           in: query
           required: false
           schema: { type: integer, minimum: 1 }
-        - name: include_tombstoned
+        - name: include_trashed
           in: query
           required: false
           schema: { type: boolean }
-        - name: tombstoned_only
+        - name: trashed_only
           in: query
           required: false
           schema: { type: boolean }
@@ -2132,6 +2286,199 @@ paths:
         '401':
           $ref: '#/components/responses/ErrorResponse'
         '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /artifacts/{artifact_id}/trash:
+    post:
+      operationId: trashArtifact
+      summary: Move artifact to trash
+      tags: [artifacts]
+      x-oar-surface: canonical
+      x-oar-command-id: artifacts.trash
+      x-oar-cli-path: artifacts trash
+      x-oar-why: Move artifact metadata to trash with an explicit operator reason.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ artifact }`."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token, not_found]
+      x-oar-concepts: [artifacts, write]
+      x-oar-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/ArtifactID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicTrashRequest'
+      responses:
+        '200':
+          description: Artifact moved to trash
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /artifacts/{artifact_id}/restore:
+    post:
+      operationId: restoreArtifact
+      summary: Restore artifact from trash
+      tags: [artifacts]
+      x-oar-surface: canonical
+      x-oar-command-id: artifacts.restore
+      x-oar-cli-path: artifacts restore
+      x-oar-why: Clear trash lifecycle fields on an artifact after an explicit restore action.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ artifact }`."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-oar-concepts: [artifacts, write]
+      x-oar-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/ArtifactID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicLifecycleMutationRequest'
+      responses:
+        '200':
+          description: Artifact restored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /artifacts/{artifact_id}/archive:
+    post:
+      operationId: archiveArtifact
+      summary: Archive artifact
+      tags: [artifacts]
+      x-oar-surface: canonical
+      x-oar-command-id: artifacts.archive
+      x-oar-cli-path: artifacts archive
+      x-oar-why: Set archived_at on artifact metadata (orthogonal to trash lifecycle).
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ artifact }`."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-oar-concepts: [artifacts, write]
+      x-oar-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/ArtifactID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicLifecycleMutationRequest'
+      responses:
+        '200':
+          description: Artifact archived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /artifacts/{artifact_id}/unarchive:
+    post:
+      operationId: unarchiveArtifact
+      summary: Unarchive artifact
+      tags: [artifacts]
+      x-oar-surface: canonical
+      x-oar-command-id: artifacts.unarchive
+      x-oar-cli-path: artifacts unarchive
+      x-oar-why: Clear archived_at on artifact metadata.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ artifact }`."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
+      x-oar-concepts: [artifacts, write]
+      x-oar-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/ArtifactID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicLifecycleMutationRequest'
+      responses:
+        '200':
+          description: Artifact unarchived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /artifacts/{artifact_id}/purge:
+    post:
+      operationId: purgeArtifact
+      summary: Permanently delete trashed artifact
+      tags: [artifacts]
+      x-oar-surface: canonical
+      x-oar-command-id: artifacts.purge
+      x-oar-cli-path: artifacts purge
+      x-oar-why: Permanently delete a trashed artifact (human-gated).
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ purged, artifact_id }`."
+      x-oar-error-codes: [auth_required, human_only, invalid_token, not_found, conflict]
+      x-oar-concepts: [artifacts, write]
+      x-oar-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/ArtifactID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurgeDocumentRequest'
+      responses:
+        '200':
+          description: Artifact purged
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurgeArtifactResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
           $ref: '#/components/responses/ErrorResponse'
 
   /inbox:
@@ -2269,6 +2616,11 @@ components:
     ArtifactID:
       in: path
       name: artifact_id
+      required: true
+      schema: { type: string }
+    EventID:
+      in: path
+      name: event_id
       required: true
       schema: { type: string }
     InboxID:
@@ -2532,9 +2884,9 @@ components:
         provenance: { $ref: '#/components/schemas/Provenance' }
         archived_at: { type: string, format: date-time }
         archived_by: { type: string }
-        tombstoned_at: { type: string, format: date-time }
-        tombstoned_by: { type: string }
-        tombstone_reason: { type: string }
+        trashed_at: { type: string, format: date-time }
+        trashed_by: { type: string }
+        trash_reason: { type: string }
       required:
         [id, board_ref, thread_id, title, summary, column_key, rank, assignee_refs, risk, resolution_refs,
          related_refs, created_at, created_by, updated_at, updated_by, provenance]
@@ -2999,7 +3351,7 @@ components:
       properties:
         actor_id: { type: string }
 
-    TopicTombstoneRequest:
+    TopicTrashRequest:
       type: object
       properties:
         actor_id: { type: string }
@@ -3034,7 +3386,7 @@ components:
       properties:
         actor_id: { type: string }
 
-    DocumentRestoreFromTombstoneRequest:
+    DocumentRestoreFromTrashRequest:
       type: object
       properties:
         actor_id: { type: string }
@@ -3051,6 +3403,13 @@ components:
         purged: { type: boolean }
         document_id: { type: string }
       required: [purged, document_id]
+
+    PurgeArtifactResponse:
+      type: object
+      properties:
+        purged: { type: boolean }
+        artifact_id: { type: string }
+      required: [purged, artifact_id]
 
     RefEdge:
       type: object
@@ -3323,7 +3682,7 @@ components:
           type: string
           format: date-time
 
-    CardTombstoneRequest:
+    CardTrashRequest:
       type: object
       properties:
         actor_id: { type: string }

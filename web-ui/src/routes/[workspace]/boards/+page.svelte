@@ -215,7 +215,7 @@
     trashBusyId = id;
     error = "";
     try {
-      await coreClient.tombstoneBoard(id, {});
+      await coreClient.trashBoard(id, {});
       confirmModal = { open: false, action: "", entityId: "" };
       await loadBoards();
     } catch (e) {
@@ -660,7 +660,7 @@
   open={confirmModal.open}
   title={confirmModal.action === "trash" ? "Move to trash" : "Archive board"}
   message={confirmModal.action === "trash"
-    ? "This board will be tombstoned. You can restore it from trash later."
+    ? "This board will be moved to trash. You can restore it later."
     : "This board will be hidden from default views. You can unarchive it later."}
   confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
   variant={confirmModal.action === "trash" ? "danger" : "warning"}

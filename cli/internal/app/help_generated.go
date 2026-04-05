@@ -65,8 +65,8 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--full-id", Description: "Render full event ids in human output."},
 			{Name: "--include-archived", Description: "Include archived events in results."},
 			{Name: "--archived-only", Description: "Show only archived events."},
-			{Name: "--include-tombstoned", Description: "Include tombstoned events in results."},
-			{Name: "--tombstoned-only", Description: "Show only tombstoned events."},
+			{Name: "--include-trashed", Description: "Include trashed events in results."},
+			{Name: "--trashed-only", Description: "Show only trashed events."},
 		},
 	},
 	{
@@ -811,7 +811,7 @@ func formatCommandSpecificHelpBlock(cmd registry.Command) string {
   - ` + "`intervention_needed`" + `
   Topics and documents: durable subject and document lifecycle signals
   - ` + "`topic_created`" + `, ` + "`topic_updated`" + `, ` + "`topic_status_changed`" + `
-  - ` + "`document_created`" + `, ` + "`document_revised`" + `, ` + "`document_tombstoned`" + `
+  - ` + "`document_created`" + `, ` + "`document_revised`" + `, ` + "`document_trashed`" + `
   Boards and cards: workflow placement and movement
   - ` + "`board_created`" + `, ` + "`board_updated`" + `
   - ` + "`card_created`" + `, ` + "`card_updated`" + `, ` + "`card_moved`" + `, ` + "`card_resolved`" + `
@@ -830,10 +830,10 @@ Local CLI notes:
 		return strings.TrimSpace(`Local CLI flags:
   --include-archived        Include archived events in the timeline.
   --archived-only           Show only archived events.
-  --include-tombstoned      Include tombstoned events in the timeline.
-  --tombstoned-only         Show only tombstoned events in the timeline.
+  --include-trashed      Include trashed events in the timeline.
+  --trashed-only         Show only trashed events in the timeline.
 
-Note: by default, archived and tombstoned events are excluded from the timeline output.`)
+Note: by default, archived and trashed events are excluded from the timeline output.`)
 	case "inbox.list":
 		return strings.TrimSpace(`View scoping:
   - ` + "`inbox list`" + ` is read from the active CLI identity's perspective.

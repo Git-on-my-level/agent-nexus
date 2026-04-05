@@ -227,7 +227,7 @@
     trashBusyId = id;
     error = "";
     try {
-      await coreClient.tombstoneDocument(id, {});
+      await coreClient.trashDocument(id, {});
       confirmModal = { open: false, action: "", entityId: "" };
       await loadDocuments(scopedThreadId);
     } catch (e) {
@@ -666,7 +666,7 @@
   open={confirmModal.open}
   title={confirmModal.action === "trash" ? "Move to trash" : "Archive document"}
   message={confirmModal.action === "trash"
-    ? "This document will be tombstoned. You can restore it from trash later."
+    ? "This document will be moved to trash. You can restore it later."
     : "This document will be hidden from default views. You can unarchive it later."}
   confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
   variant={confirmModal.action === "trash" ? "danger" : "warning"}

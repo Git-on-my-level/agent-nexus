@@ -22,7 +22,7 @@ test("document typed refs navigate from overview chips, timeline refs, and recei
     created_by: actorId,
     updated_at: "2026-03-08T14:30:00Z",
     updated_by: actorId,
-    tombstoned_at: null,
+    trashed_at: null,
   };
 
   const previousRevision = {

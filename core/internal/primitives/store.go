@@ -25,9 +25,9 @@ import (
 
 var ErrNotFound = errors.New("not found")
 var ErrConflict = errors.New("conflict")
-var ErrNotTombstoned = errors.New("entity is not tombstoned")
+var ErrNotTrashed = errors.New("entity is not trashed")
 var ErrNotArchived = errors.New("entity is not archived")
-var ErrAlreadyTombstoned = errors.New("entity is tombstoned")
+var ErrAlreadyTrashed = errors.New("entity is trashed")
 var ErrArtifactInUse = errors.New("artifact is referenced by document revisions")
 var ErrInvalidArtifactID = errors.New("invalid artifact id")
 var ErrInvalidDocumentRequest = errors.New("invalid document request")
@@ -36,56 +36,56 @@ var ErrInvalidCursor = errors.New("invalid cursor")
 const actorStatementEventIDPlaceholder = "<event_id>"
 
 type ArtifactListFilter struct {
-	Q                 string
-	Limit             *int
-	Kind              string
-	ThreadID          string
-	CreatedBefore     string
-	CreatedAfter      string
-	IncludeTombstoned bool
-	TombstonedOnly    bool
-	IncludeArchived   bool
-	ArchivedOnly      bool
+	Q               string
+	Limit           *int
+	Kind            string
+	ThreadID        string
+	CreatedBefore   string
+	CreatedAfter    string
+	IncludeTrashed  bool
+	TrashedOnly     bool
+	IncludeArchived bool
+	ArchivedOnly    bool
 }
 
 type DocumentListFilter struct {
-	ThreadID          string
-	IncludeTombstoned bool
-	TombstonedOnly    bool
-	IncludeArchived   bool
-	ArchivedOnly      bool
-	Query             string
-	Limit             *int
-	Cursor            string
+	ThreadID        string
+	IncludeTrashed  bool
+	TrashedOnly     bool
+	IncludeArchived bool
+	ArchivedOnly    bool
+	Query           string
+	Limit           *int
+	Cursor          string
 }
 
 type ThreadListFilter struct {
-	Status            string
-	Priority          string
-	Tag               string
-	Tags              []string
-	Cadences          []string
-	Stale             *bool
-	Now               time.Time
-	Query             string
-	Limit             *int
-	Cursor            string
-	IncludeArchived   bool
-	ArchivedOnly      bool
-	IncludeTombstoned bool
-	TombstonedOnly    bool
+	Status          string
+	Priority        string
+	Tag             string
+	Tags            []string
+	Cadences        []string
+	Stale           *bool
+	Now             time.Time
+	Query           string
+	Limit           *int
+	Cursor          string
+	IncludeArchived bool
+	ArchivedOnly    bool
+	IncludeTrashed  bool
+	TrashedOnly     bool
 }
 
 type TopicListFilter struct {
-	Type              string
-	Status            string
-	Query             string
-	Limit             *int
-	Cursor            string
-	IncludeArchived   bool
-	ArchivedOnly      bool
-	IncludeTombstoned bool
-	TombstonedOnly    bool
+	Type            string
+	Status          string
+	Query           string
+	Limit           *int
+	Cursor          string
+	IncludeArchived bool
+	ArchivedOnly    bool
+	IncludeTrashed  bool
+	TrashedOnly     bool
 }
 
 type EventListFilter struct {
@@ -152,8 +152,8 @@ func (s *Store) AppendEvent(ctx context.Context, actorID string, event map[strin
 	return prepared.Body, nil
 }
 
-func overlayEventLifecycleFromSQLColumns(body map[string]any, archivedAt, archivedBy, tombstonedAt, tombstonedBy, tombstoneReason sql.NullString) {
-	lifecycleFieldsFromSQLColumns(archivedAt, archivedBy, tombstonedAt, tombstonedBy, tombstoneReason).apply(body)
+func overlayEventLifecycleFromSQLColumns(body map[string]any, archivedAt, archivedBy, trashedAt, trashedBy, trashReason sql.NullString) {
+	lifecycleFieldsFromSQLColumns(archivedAt, archivedBy, trashedAt, trashedBy, trashReason).apply(body)
 }
 
 func decodeEventBodyFromRow(
@@ -201,28 +201,28 @@ func (s *Store) GetEvent(ctx context.Context, id string) (map[string]any, error)
 	}
 
 	var (
-		eventID         string
-		typeValue       string
-		ts              string
-		actorID         string
-		threadID        sql.NullString
-		refsJSON        string
-		payloadJSON     string
-		bodyJSON        sql.NullString
-		archivedAt      sql.NullString
-		archivedBy      sql.NullString
-		tombstonedAt    sql.NullString
-		tombstonedBy    sql.NullString
-		tombstoneReason sql.NullString
+		eventID     string
+		typeValue   string
+		ts          string
+		actorID     string
+		threadID    sql.NullString
+		refsJSON    string
+		payloadJSON string
+		bodyJSON    sql.NullString
+		archivedAt  sql.NullString
+		archivedBy  sql.NullString
+		trashedAt   sql.NullString
+		trashedBy   sql.NullString
+		trashReason sql.NullString
 	)
 	err := s.db.QueryRowContext(
 		ctx,
 		`SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json, body_json,
-			archived_at, archived_by, tombstoned_at, tombstoned_by, tombstone_reason
+			archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		 FROM events WHERE id = ?`,
 		id,
 	).Scan(&eventID, &typeValue, &ts, &actorID, &threadID, &refsJSON, &payloadJSON, &bodyJSON,
-		&archivedAt, &archivedBy, &tombstonedAt, &tombstonedBy, &tombstoneReason)
+		&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -234,7 +234,7 @@ func (s *Store) GetEvent(ctx context.Context, id string) (map[string]any, error)
 	if err != nil {
 		return nil, err
 	}
-	overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, tombstonedAt, tombstonedBy, tombstoneReason)
+	overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, trashedAt, trashedBy, trashReason)
 	return body, nil
 }
 
@@ -562,7 +562,7 @@ func (s *Store) ListArtifacts(ctx context.Context, filter ArtifactListFilter) ([
 	return artifacts, nil
 }
 
-func (s *Store) TombstoneArtifact(ctx context.Context, actorID string, artifactID string, reason string) (map[string]any, error) {
+func (s *Store) TrashArtifact(ctx context.Context, actorID string, artifactID string, reason string) (map[string]any, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("primitives store database is not initialized")
 	}
@@ -576,44 +576,44 @@ func (s *Store) TombstoneArtifact(ctx context.Context, actorID string, artifactI
 	}
 
 	var metadataJSON string
-	var tombstonedAt sql.NullString
-	var tombstonedBy sql.NullString
-	var tombstoneReason sql.NullString
+	var trashedAt sql.NullString
+	var trashedBy sql.NullString
+	var trashReason sql.NullString
 	err := s.db.QueryRowContext(
 		ctx,
-		`SELECT metadata_json, tombstoned_at, tombstoned_by, tombstone_reason FROM artifacts WHERE id = ?`,
+		`SELECT metadata_json, trashed_at, trashed_by, trash_reason FROM artifacts WHERE id = ?`,
 		artifactID,
-	).Scan(&metadataJSON, &tombstonedAt, &tombstonedBy, &tombstoneReason)
+	).Scan(&metadataJSON, &trashedAt, &trashedBy, &trashReason)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("query artifact for tombstone: %w", err)
+		return nil, fmt.Errorf("query artifact for trash: %w", err)
 	}
 
 	metadata, err := decodeArtifactMetadataJSON(metadataJSON)
 	if err != nil {
 		return nil, err
 	}
-	if tombstonedAt.Valid && strings.TrimSpace(tombstonedAt.String) != "" {
-		lifecycleFieldsFromSQLColumns(sql.NullString{}, sql.NullString{}, tombstonedAt, tombstonedBy, tombstoneReason).apply(metadata)
+	if trashedAt.Valid && strings.TrimSpace(trashedAt.String) != "" {
+		lifecycleFieldsFromSQLColumns(sql.NullString{}, sql.NullString{}, trashedAt, trashedBy, trashReason).apply(metadata)
 		return metadata, nil
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	applyTombstonedLifecycle(metadata, now, actorID, reason)
+	applyTrashedLifecycle(metadata, now, actorID, reason)
 
 	updatedMetadataJSON, err := json.Marshal(metadata)
 	if err != nil {
-		return nil, fmt.Errorf("encode tombstoned artifact metadata: %w", err)
+		return nil, fmt.Errorf("encode trashed artifact metadata: %w", err)
 	}
 
 	_, err = s.db.ExecContext(ctx,
-		`UPDATE artifacts SET tombstoned_at = ?, tombstoned_by = ?, tombstone_reason = ?, archived_at = NULL, archived_by = NULL, metadata_json = ? WHERE id = ?`,
+		`UPDATE artifacts SET trashed_at = ?, trashed_by = ?, trash_reason = ?, archived_at = NULL, archived_by = NULL, metadata_json = ? WHERE id = ?`,
 		now, actorID, strings.TrimSpace(reason), string(updatedMetadataJSON), artifactID,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("tombstone artifact: %w", err)
+		return nil, fmt.Errorf("trash artifact: %w", err)
 	}
 
 	return metadata, nil
@@ -633,14 +633,14 @@ func (s *Store) ArchiveArtifact(ctx context.Context, actorID, artifactID string)
 	}
 
 	var metadataJSON string
-	var tombstonedAt sql.NullString
+	var trashedAt sql.NullString
 	var archivedAt sql.NullString
 	var archivedBy sql.NullString
 	err := s.db.QueryRowContext(
 		ctx,
-		`SELECT metadata_json, tombstoned_at, archived_at, archived_by FROM artifacts WHERE id = ?`,
+		`SELECT metadata_json, trashed_at, archived_at, archived_by FROM artifacts WHERE id = ?`,
 		artifactID,
-	).Scan(&metadataJSON, &tombstonedAt, &archivedAt, &archivedBy)
+	).Scan(&metadataJSON, &trashedAt, &archivedAt, &archivedBy)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -648,8 +648,8 @@ func (s *Store) ArchiveArtifact(ctx context.Context, actorID, artifactID string)
 		return nil, fmt.Errorf("query artifact for archive: %w", err)
 	}
 
-	if tombstonedAt.Valid && strings.TrimSpace(tombstonedAt.String) != "" {
-		return nil, ErrAlreadyTombstoned
+	if trashedAt.Valid && strings.TrimSpace(trashedAt.String) != "" {
+		return nil, ErrAlreadyTrashed
 	}
 
 	metadata, err := decodeArtifactMetadataJSON(metadataJSON)
@@ -695,14 +695,14 @@ func (s *Store) UnarchiveArtifact(ctx context.Context, actorID, artifactID strin
 	}
 
 	var metadataJSON string
-	var tombstonedDiscard sql.NullString
+	var trashedDiscard sql.NullString
 	var archivedAt sql.NullString
 	var archivedByDiscard sql.NullString
 	err := s.db.QueryRowContext(
 		ctx,
-		`SELECT metadata_json, tombstoned_at, archived_at, archived_by FROM artifacts WHERE id = ?`,
+		`SELECT metadata_json, trashed_at, archived_at, archived_by FROM artifacts WHERE id = ?`,
 		artifactID,
-	).Scan(&metadataJSON, &tombstonedDiscard, &archivedAt, &archivedByDiscard)
+	).Scan(&metadataJSON, &trashedDiscard, &archivedAt, &archivedByDiscard)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -750,16 +750,16 @@ func (s *Store) RestoreArtifact(ctx context.Context, actorID, artifactID string)
 	}
 
 	var metadataJSON string
-	var tombstonedAt sql.NullString
-	var tombstonedBy sql.NullString
-	var tombstoneReason sql.NullString
+	var trashedAt sql.NullString
+	var trashedBy sql.NullString
+	var trashReason sql.NullString
 	err := s.db.QueryRowContext(
 		ctx,
-		`SELECT metadata_json, tombstoned_at, tombstoned_by, tombstone_reason FROM artifacts WHERE id = ?`,
+		`SELECT metadata_json, trashed_at, trashed_by, trash_reason FROM artifacts WHERE id = ?`,
 		artifactID,
-	).Scan(&metadataJSON, &tombstonedAt, &tombstonedBy, &tombstoneReason)
-	_ = tombstonedBy
-	_ = tombstoneReason
+	).Scan(&metadataJSON, &trashedAt, &trashedBy, &trashReason)
+	_ = trashedBy
+	_ = trashReason
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -767,15 +767,15 @@ func (s *Store) RestoreArtifact(ctx context.Context, actorID, artifactID string)
 		return nil, fmt.Errorf("query artifact for restore: %w", err)
 	}
 
-	if !tombstonedAt.Valid || strings.TrimSpace(tombstonedAt.String) == "" {
-		return nil, ErrNotTombstoned
+	if !trashedAt.Valid || strings.TrimSpace(trashedAt.String) == "" {
+		return nil, ErrNotTrashed
 	}
 
 	metadata, err := decodeArtifactMetadataJSON(metadataJSON)
 	if err != nil {
 		return nil, err
 	}
-	clearTombstonedLifecycle(metadata, "", "")
+	clearTrashedLifecycle(metadata, "", "")
 
 	updatedMetadataJSON, err := json.Marshal(metadata)
 	if err != nil {
@@ -783,7 +783,7 @@ func (s *Store) RestoreArtifact(ctx context.Context, actorID, artifactID string)
 	}
 
 	_, err = s.db.ExecContext(ctx,
-		`UPDATE artifacts SET tombstoned_at = NULL, tombstoned_by = NULL, tombstone_reason = NULL, metadata_json = ? WHERE id = ?`,
+		`UPDATE artifacts SET trashed_at = NULL, trashed_by = NULL, trash_reason = NULL, metadata_json = ? WHERE id = ?`,
 		string(updatedMetadataJSON), artifactID,
 	)
 	if err != nil {
@@ -851,34 +851,34 @@ func (s *Store) collectMessageDescendantIDs(ctx context.Context, threadID, paren
 
 func (s *Store) archiveEventCascadeChild(ctx context.Context, actorID, childID string) error {
 	var (
-		eventIDScan     string
-		typeValue       string
-		ts              string
-		actorIDScan     string
-		threadID        sql.NullString
-		refsJSON        string
-		payloadJSON     string
-		bodyJSON        sql.NullString
-		archivedAt      sql.NullString
-		archivedBy      sql.NullString
-		tombstonedAt    sql.NullString
-		tombstonedBy    sql.NullString
-		tombstoneReason sql.NullString
+		eventIDScan string
+		typeValue   string
+		ts          string
+		actorIDScan string
+		threadID    sql.NullString
+		refsJSON    string
+		payloadJSON string
+		bodyJSON    sql.NullString
+		archivedAt  sql.NullString
+		archivedBy  sql.NullString
+		trashedAt   sql.NullString
+		trashedBy   sql.NullString
+		trashReason sql.NullString
 	)
 	err := s.db.QueryRowContext(ctx,
 		`SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json, body_json,
-			archived_at, archived_by, tombstoned_at, tombstoned_by, tombstone_reason
+			archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		 FROM events WHERE id = ?`,
 		childID,
 	).Scan(&eventIDScan, &typeValue, &ts, &actorIDScan, &threadID, &refsJSON, &payloadJSON, &bodyJSON,
-		&archivedAt, &archivedBy, &tombstonedAt, &tombstonedBy, &tombstoneReason)
+		&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
 	if err != nil {
 		return fmt.Errorf("query event for cascade archive: %w", err)
 	}
-	if tombstonedAt.Valid && strings.TrimSpace(tombstonedAt.String) != "" {
+	if trashedAt.Valid && strings.TrimSpace(trashedAt.String) != "" {
 		return nil
 	}
 	if archivedAt.Valid && strings.TrimSpace(archivedAt.String) != "" {
@@ -889,7 +889,7 @@ func (s *Store) archiveEventCascadeChild(ctx context.Context, actorID, childID s
 	if err != nil {
 		return err
 	}
-	overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, tombstonedAt, tombstonedBy, tombstoneReason)
+	overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, trashedAt, trashedBy, trashReason)
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	applyArchivedLifecycle(body, now, actorID)
@@ -910,27 +910,27 @@ func (s *Store) archiveEventCascadeChild(ctx context.Context, actorID, childID s
 
 func (s *Store) unarchiveEventCascadeChild(ctx context.Context, childID string) error {
 	var (
-		eventIDScan     string
-		typeValue       string
-		ts              string
-		actorIDScan     string
-		threadID        sql.NullString
-		refsJSON        string
-		payloadJSON     string
-		bodyJSON        sql.NullString
-		archivedAt      sql.NullString
-		archivedBy      sql.NullString
-		tombstonedAt    sql.NullString
-		tombstonedBy    sql.NullString
-		tombstoneReason sql.NullString
+		eventIDScan string
+		typeValue   string
+		ts          string
+		actorIDScan string
+		threadID    sql.NullString
+		refsJSON    string
+		payloadJSON string
+		bodyJSON    sql.NullString
+		archivedAt  sql.NullString
+		archivedBy  sql.NullString
+		trashedAt   sql.NullString
+		trashedBy   sql.NullString
+		trashReason sql.NullString
 	)
 	err := s.db.QueryRowContext(ctx,
 		`SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json, body_json,
-			archived_at, archived_by, tombstoned_at, tombstoned_by, tombstone_reason
+			archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		 FROM events WHERE id = ?`,
 		childID,
 	).Scan(&eventIDScan, &typeValue, &ts, &actorIDScan, &threadID, &refsJSON, &payloadJSON, &bodyJSON,
-		&archivedAt, &archivedBy, &tombstonedAt, &tombstonedBy, &tombstoneReason)
+		&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
@@ -945,7 +945,7 @@ func (s *Store) unarchiveEventCascadeChild(ctx context.Context, childID string) 
 	if err != nil {
 		return err
 	}
-	overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, tombstonedAt, tombstonedBy, tombstoneReason)
+	overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, trashedAt, trashedBy, trashReason)
 	clearArchivedLifecycle(body)
 
 	updatedBodyJSON, err := json.Marshal(body)
@@ -963,36 +963,36 @@ func (s *Store) unarchiveEventCascadeChild(ctx context.Context, childID string) 
 	return nil
 }
 
-func (s *Store) tombstoneEventCascadeChild(ctx context.Context, actorID, childID, reason string) error {
+func (s *Store) trashEventCascadeChild(ctx context.Context, actorID, childID, reason string) error {
 	var (
-		eventIDScan     string
-		typeValue       string
-		ts              string
-		actorIDScan     string
-		threadID        sql.NullString
-		refsJSON        string
-		payloadJSON     string
-		bodyJSON        sql.NullString
-		archivedAt      sql.NullString
-		archivedBy      sql.NullString
-		tombstonedAt    sql.NullString
-		tombstonedBy    sql.NullString
-		tombstoneReason sql.NullString
+		eventIDScan string
+		typeValue   string
+		ts          string
+		actorIDScan string
+		threadID    sql.NullString
+		refsJSON    string
+		payloadJSON string
+		bodyJSON    sql.NullString
+		archivedAt  sql.NullString
+		archivedBy  sql.NullString
+		trashedAt   sql.NullString
+		trashedBy   sql.NullString
+		trashReason sql.NullString
 	)
 	err := s.db.QueryRowContext(ctx,
 		`SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json, body_json,
-			archived_at, archived_by, tombstoned_at, tombstoned_by, tombstone_reason
+			archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		 FROM events WHERE id = ?`,
 		childID,
 	).Scan(&eventIDScan, &typeValue, &ts, &actorIDScan, &threadID, &refsJSON, &payloadJSON, &bodyJSON,
-		&archivedAt, &archivedBy, &tombstonedAt, &tombstonedBy, &tombstoneReason)
+		&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("query event for cascade tombstone: %w", err)
+		return fmt.Errorf("query event for cascade trash: %w", err)
 	}
-	if tombstonedAt.Valid && strings.TrimSpace(tombstonedAt.String) != "" {
+	if trashedAt.Valid && strings.TrimSpace(trashedAt.String) != "" {
 		return nil
 	}
 
@@ -1000,56 +1000,56 @@ func (s *Store) tombstoneEventCascadeChild(ctx context.Context, actorID, childID
 	if err != nil {
 		return err
 	}
-	overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, tombstonedAt, tombstonedBy, tombstoneReason)
+	overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, trashedAt, trashedBy, trashReason)
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	applyTombstonedLifecycle(body, now, actorID, strings.TrimSpace(reason))
+	applyTrashedLifecycle(body, now, actorID, strings.TrimSpace(reason))
 
 	updatedBodyJSON, err := json.Marshal(body)
 	if err != nil {
-		return fmt.Errorf("encode cascade tombstoned event body: %w", err)
+		return fmt.Errorf("encode cascade trashed event body: %w", err)
 	}
 
 	_, err = s.db.ExecContext(ctx,
-		`UPDATE events SET tombstoned_at = ?, tombstoned_by = ?, tombstone_reason = ?, archived_at = NULL, archived_by = NULL, body_json = ? WHERE id = ?`,
+		`UPDATE events SET trashed_at = ?, trashed_by = ?, trash_reason = ?, archived_at = NULL, archived_by = NULL, body_json = ? WHERE id = ?`,
 		now, actorID, strings.TrimSpace(reason), string(updatedBodyJSON), childID,
 	)
 	if err != nil {
-		return fmt.Errorf("cascade tombstone event: %w", err)
+		return fmt.Errorf("cascade trash event: %w", err)
 	}
 	return nil
 }
 
 func (s *Store) restoreEventCascadeChild(ctx context.Context, childID string) error {
 	var (
-		eventIDScan     string
-		typeValue       string
-		ts              string
-		actorIDScan     string
-		threadID        sql.NullString
-		refsJSON        string
-		payloadJSON     string
-		bodyJSON        sql.NullString
-		archivedAt      sql.NullString
-		archivedBy      sql.NullString
-		tombstonedAt    sql.NullString
-		tombstonedBy    sql.NullString
-		tombstoneReason sql.NullString
+		eventIDScan string
+		typeValue   string
+		ts          string
+		actorIDScan string
+		threadID    sql.NullString
+		refsJSON    string
+		payloadJSON string
+		bodyJSON    sql.NullString
+		archivedAt  sql.NullString
+		archivedBy  sql.NullString
+		trashedAt   sql.NullString
+		trashedBy   sql.NullString
+		trashReason sql.NullString
 	)
 	err := s.db.QueryRowContext(ctx,
 		`SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json, body_json,
-			archived_at, archived_by, tombstoned_at, tombstoned_by, tombstone_reason
+			archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		 FROM events WHERE id = ?`,
 		childID,
 	).Scan(&eventIDScan, &typeValue, &ts, &actorIDScan, &threadID, &refsJSON, &payloadJSON, &bodyJSON,
-		&archivedAt, &archivedBy, &tombstonedAt, &tombstonedBy, &tombstoneReason)
+		&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
 	if err != nil {
 		return fmt.Errorf("query event for cascade restore: %w", err)
 	}
-	if !tombstonedAt.Valid || strings.TrimSpace(tombstonedAt.String) == "" {
+	if !trashedAt.Valid || strings.TrimSpace(trashedAt.String) == "" {
 		return nil
 	}
 
@@ -1057,8 +1057,8 @@ func (s *Store) restoreEventCascadeChild(ctx context.Context, childID string) er
 	if err != nil {
 		return err
 	}
-	overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, tombstonedAt, tombstonedBy, tombstoneReason)
-	clearTombstonedLifecycle(body, archivedAt.String, archivedBy.String)
+	overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, trashedAt, trashedBy, trashReason)
+	clearTrashedLifecycle(body, archivedAt.String, archivedBy.String)
 
 	updatedBodyJSON, err := json.Marshal(body)
 	if err != nil {
@@ -1066,7 +1066,7 @@ func (s *Store) restoreEventCascadeChild(ctx context.Context, childID string) er
 	}
 
 	_, err = s.db.ExecContext(ctx,
-		`UPDATE events SET tombstoned_at = NULL, tombstoned_by = NULL, tombstone_reason = NULL, body_json = ? WHERE id = ?`,
+		`UPDATE events SET trashed_at = NULL, trashed_by = NULL, trash_reason = NULL, body_json = ? WHERE id = ?`,
 		string(updatedBodyJSON), childID,
 	)
 	if err != nil {
@@ -1089,27 +1089,27 @@ func (s *Store) ArchiveEvent(ctx context.Context, actorID, eventID string) (map[
 	}
 
 	var (
-		eventIDScan     string
-		typeValue       string
-		ts              string
-		actorIDScan     string
-		threadID        sql.NullString
-		refsJSON        string
-		payloadJSON     string
-		bodyJSON        sql.NullString
-		archivedAt      sql.NullString
-		archivedBy      sql.NullString
-		tombstonedAt    sql.NullString
-		tombstonedBy    sql.NullString
-		tombstoneReason sql.NullString
+		eventIDScan string
+		typeValue   string
+		ts          string
+		actorIDScan string
+		threadID    sql.NullString
+		refsJSON    string
+		payloadJSON string
+		bodyJSON    sql.NullString
+		archivedAt  sql.NullString
+		archivedBy  sql.NullString
+		trashedAt   sql.NullString
+		trashedBy   sql.NullString
+		trashReason sql.NullString
 	)
 	err := s.db.QueryRowContext(ctx,
 		`SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json, body_json,
-			archived_at, archived_by, tombstoned_at, tombstoned_by, tombstone_reason
+			archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		 FROM events WHERE id = ?`,
 		eventID,
 	).Scan(&eventIDScan, &typeValue, &ts, &actorIDScan, &threadID, &refsJSON, &payloadJSON, &bodyJSON,
-		&archivedAt, &archivedBy, &tombstonedAt, &tombstonedBy, &tombstoneReason)
+		&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -1117,15 +1117,15 @@ func (s *Store) ArchiveEvent(ctx context.Context, actorID, eventID string) (map[
 		return nil, fmt.Errorf("query event for archive: %w", err)
 	}
 
-	if tombstonedAt.Valid && strings.TrimSpace(tombstonedAt.String) != "" {
-		return nil, ErrAlreadyTombstoned
+	if trashedAt.Valid && strings.TrimSpace(trashedAt.String) != "" {
+		return nil, ErrAlreadyTrashed
 	}
 
 	body, err := decodeEventBodyFromRow(eventIDScan, typeValue, ts, actorIDScan, threadID, refsJSON, payloadJSON, bodyJSON)
 	if err != nil {
 		return nil, err
 	}
-	overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, tombstonedAt, tombstonedBy, tombstoneReason)
+	overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, trashedAt, trashedBy, trashReason)
 
 	if archivedAt.Valid && strings.TrimSpace(archivedAt.String) != "" {
 		return body, nil
@@ -1176,27 +1176,27 @@ func (s *Store) UnarchiveEvent(ctx context.Context, actorID, eventID string) (ma
 	}
 
 	var (
-		eventIDScan     string
-		typeValue       string
-		ts              string
-		actorIDScan     string
-		threadID        sql.NullString
-		refsJSON        string
-		payloadJSON     string
-		bodyJSON        sql.NullString
-		archivedAt      sql.NullString
-		archivedBy      sql.NullString
-		tombstonedAt    sql.NullString
-		tombstonedBy    sql.NullString
-		tombstoneReason sql.NullString
+		eventIDScan string
+		typeValue   string
+		ts          string
+		actorIDScan string
+		threadID    sql.NullString
+		refsJSON    string
+		payloadJSON string
+		bodyJSON    sql.NullString
+		archivedAt  sql.NullString
+		archivedBy  sql.NullString
+		trashedAt   sql.NullString
+		trashedBy   sql.NullString
+		trashReason sql.NullString
 	)
 	err := s.db.QueryRowContext(ctx,
 		`SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json, body_json,
-			archived_at, archived_by, tombstoned_at, tombstoned_by, tombstone_reason
+			archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		 FROM events WHERE id = ?`,
 		eventID,
 	).Scan(&eventIDScan, &typeValue, &ts, &actorIDScan, &threadID, &refsJSON, &payloadJSON, &bodyJSON,
-		&archivedAt, &archivedBy, &tombstonedAt, &tombstonedBy, &tombstoneReason)
+		&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -1212,7 +1212,7 @@ func (s *Store) UnarchiveEvent(ctx context.Context, actorID, eventID string) (ma
 	if err != nil {
 		return nil, err
 	}
-	overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, tombstonedAt, tombstonedBy, tombstoneReason)
+	overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, trashedAt, trashedBy, trashReason)
 	delete(body, "archived_at")
 	delete(body, "archived_by")
 
@@ -1244,7 +1244,7 @@ func (s *Store) UnarchiveEvent(ctx context.Context, actorID, eventID string) (ma
 	return body, nil
 }
 
-func (s *Store) TombstoneEvent(ctx context.Context, actorID, eventID, reason string) (map[string]any, error) {
+func (s *Store) TrashEvent(ctx context.Context, actorID, eventID, reason string) (map[string]any, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("primitives store database is not initialized")
 	}
@@ -1258,41 +1258,41 @@ func (s *Store) TombstoneEvent(ctx context.Context, actorID, eventID, reason str
 	}
 
 	var (
-		eventIDScan     string
-		typeValue       string
-		ts              string
-		actorIDScan     string
-		threadID        sql.NullString
-		refsJSON        string
-		payloadJSON     string
-		bodyJSON        sql.NullString
-		archivedAt      sql.NullString
-		archivedBy      sql.NullString
-		tombstonedAt    sql.NullString
-		tombstonedBy    sql.NullString
-		tombstoneReason sql.NullString
+		eventIDScan string
+		typeValue   string
+		ts          string
+		actorIDScan string
+		threadID    sql.NullString
+		refsJSON    string
+		payloadJSON string
+		bodyJSON    sql.NullString
+		archivedAt  sql.NullString
+		archivedBy  sql.NullString
+		trashedAt   sql.NullString
+		trashedBy   sql.NullString
+		trashReason sql.NullString
 	)
 	err := s.db.QueryRowContext(ctx,
 		`SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json, body_json,
-			archived_at, archived_by, tombstoned_at, tombstoned_by, tombstone_reason
+			archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		 FROM events WHERE id = ?`,
 		eventID,
 	).Scan(&eventIDScan, &typeValue, &ts, &actorIDScan, &threadID, &refsJSON, &payloadJSON, &bodyJSON,
-		&archivedAt, &archivedBy, &tombstonedAt, &tombstonedBy, &tombstoneReason)
+		&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("query event for tombstone: %w", err)
+		return nil, fmt.Errorf("query event for trash: %w", err)
 	}
 
 	body, err := decodeEventBodyFromRow(eventIDScan, typeValue, ts, actorIDScan, threadID, refsJSON, payloadJSON, bodyJSON)
 	if err != nil {
 		return nil, err
 	}
-	overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, tombstonedAt, tombstonedBy, tombstoneReason)
+	overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, trashedAt, trashedBy, trashReason)
 
-	if tombstonedAt.Valid && strings.TrimSpace(tombstonedAt.String) != "" {
+	if trashedAt.Valid && strings.TrimSpace(trashedAt.String) != "" {
 		return body, nil
 	}
 
@@ -1300,23 +1300,23 @@ func (s *Store) TombstoneEvent(ctx context.Context, actorID, eventID, reason str
 	delete(body, "archived_by")
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	body["tombstoned_at"] = now
-	body["tombstoned_by"] = actorID
+	body["trashed_at"] = now
+	body["trashed_by"] = actorID
 	if strings.TrimSpace(reason) != "" {
-		body["tombstone_reason"] = strings.TrimSpace(reason)
+		body["trash_reason"] = strings.TrimSpace(reason)
 	}
 
 	updatedBodyJSON, err := json.Marshal(body)
 	if err != nil {
-		return nil, fmt.Errorf("encode tombstoned event body: %w", err)
+		return nil, fmt.Errorf("encode trashed event body: %w", err)
 	}
 
 	_, err = s.db.ExecContext(ctx,
-		`UPDATE events SET tombstoned_at = ?, tombstoned_by = ?, tombstone_reason = ?, archived_at = NULL, archived_by = NULL, body_json = ? WHERE id = ?`,
+		`UPDATE events SET trashed_at = ?, trashed_by = ?, trash_reason = ?, archived_at = NULL, archived_by = NULL, body_json = ? WHERE id = ?`,
 		now, actorID, strings.TrimSpace(reason), string(updatedBodyJSON), eventID,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("tombstone event: %w", err)
+		return nil, fmt.Errorf("trash event: %w", err)
 	}
 
 	if typeValue == "message_posted" && threadID.Valid && strings.TrimSpace(threadID.String) != "" {
@@ -1325,7 +1325,7 @@ func (s *Store) TombstoneEvent(ctx context.Context, actorID, eventID, reason str
 			return nil, err
 		}
 		for _, childID := range desc {
-			if err := s.tombstoneEventCascadeChild(ctx, actorID, childID, reason); err != nil {
+			if err := s.trashEventCascadeChild(ctx, actorID, childID, reason); err != nil {
 				return nil, err
 			}
 		}
@@ -1348,29 +1348,29 @@ func (s *Store) RestoreEvent(ctx context.Context, actorID, eventID string) (map[
 	}
 
 	var (
-		eventIDScan     string
-		typeValue       string
-		ts              string
-		actorIDScan     string
-		threadID        sql.NullString
-		refsJSON        string
-		payloadJSON     string
-		bodyJSON        sql.NullString
-		archivedAt      sql.NullString
-		archivedBy      sql.NullString
-		tombstonedAt    sql.NullString
-		tombstonedBy    sql.NullString
-		tombstoneReason sql.NullString
+		eventIDScan string
+		typeValue   string
+		ts          string
+		actorIDScan string
+		threadID    sql.NullString
+		refsJSON    string
+		payloadJSON string
+		bodyJSON    sql.NullString
+		archivedAt  sql.NullString
+		archivedBy  sql.NullString
+		trashedAt   sql.NullString
+		trashedBy   sql.NullString
+		trashReason sql.NullString
 	)
 	err := s.db.QueryRowContext(ctx,
 		`SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json, body_json,
-			archived_at, archived_by, tombstoned_at, tombstoned_by, tombstone_reason
+			archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		 FROM events WHERE id = ?`,
 		eventID,
 	).Scan(&eventIDScan, &typeValue, &ts, &actorIDScan, &threadID, &refsJSON, &payloadJSON, &bodyJSON,
-		&archivedAt, &archivedBy, &tombstonedAt, &tombstonedBy, &tombstoneReason)
-	_ = tombstonedBy
-	_ = tombstoneReason
+		&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason)
+	_ = trashedBy
+	_ = trashReason
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -1378,18 +1378,18 @@ func (s *Store) RestoreEvent(ctx context.Context, actorID, eventID string) (map[
 		return nil, fmt.Errorf("query event for restore: %w", err)
 	}
 
-	if !tombstonedAt.Valid || strings.TrimSpace(tombstonedAt.String) == "" {
-		return nil, ErrNotTombstoned
+	if !trashedAt.Valid || strings.TrimSpace(trashedAt.String) == "" {
+		return nil, ErrNotTrashed
 	}
 
 	body, err := decodeEventBodyFromRow(eventIDScan, typeValue, ts, actorIDScan, threadID, refsJSON, payloadJSON, bodyJSON)
 	if err != nil {
 		return nil, err
 	}
-	overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, tombstonedAt, tombstonedBy, tombstoneReason)
-	delete(body, "tombstoned_at")
-	delete(body, "tombstoned_by")
-	delete(body, "tombstone_reason")
+	overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, trashedAt, trashedBy, trashReason)
+	delete(body, "trashed_at")
+	delete(body, "trashed_by")
+	delete(body, "trash_reason")
 
 	updatedBodyJSON, err := json.Marshal(body)
 	if err != nil {
@@ -1397,7 +1397,7 @@ func (s *Store) RestoreEvent(ctx context.Context, actorID, eventID string) (map[
 	}
 
 	_, err = s.db.ExecContext(ctx,
-		`UPDATE events SET tombstoned_at = NULL, tombstoned_by = NULL, tombstone_reason = NULL, body_json = ? WHERE id = ?`,
+		`UPDATE events SET trashed_at = NULL, trashed_by = NULL, trash_reason = NULL, body_json = ? WHERE id = ?`,
 		string(updatedBodyJSON), eventID,
 	)
 	if err != nil {
@@ -1419,7 +1419,7 @@ func (s *Store) RestoreEvent(ctx context.Context, actorID, eventID string) (map[
 	return body, nil
 }
 
-func (s *Store) PurgeTombstonedArtifact(ctx context.Context, artifactID string) error {
+func (s *Store) PurgeTrashedArtifact(ctx context.Context, artifactID string) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("primitives store database is not initialized")
 	}
@@ -1436,7 +1436,7 @@ func (s *Store) PurgeTombstonedArtifact(ctx context.Context, artifactID string) 
 
 	var contentHash string
 	err = tx.QueryRowContext(ctx,
-		`SELECT content_hash FROM artifacts WHERE id = ? AND tombstoned_at IS NOT NULL`,
+		`SELECT content_hash FROM artifacts WHERE id = ? AND trashed_at IS NOT NULL`,
 		artifactID,
 	).Scan(&contentHash)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -1448,10 +1448,10 @@ func (s *Store) PurgeTombstonedArtifact(ctx context.Context, artifactID string) 
 		if err2 != nil {
 			return fmt.Errorf("check artifact existence: %w", err2)
 		}
-		return ErrNotTombstoned
+		return ErrNotTrashed
 	}
 	if err != nil {
-		return fmt.Errorf("select tombstoned artifact: %w", err)
+		return fmt.Errorf("select trashed artifact: %w", err)
 	}
 
 	var ref int
@@ -1849,8 +1849,8 @@ func (s *Store) ArchiveThread(ctx context.Context, actorID, threadID string) (ma
 	if row.Kind != "thread" {
 		return nil, ErrNotFound
 	}
-	if row.TombstonedAt.Valid && strings.TrimSpace(row.TombstonedAt.String) != "" {
-		return nil, ErrAlreadyTombstoned
+	if row.TrashedAt.Valid && strings.TrimSpace(row.TrashedAt.String) != "" {
+		return nil, ErrAlreadyTrashed
 	}
 	if row.ArchivedAt.Valid && strings.TrimSpace(row.ArchivedAt.String) != "" {
 		return row.ToThreadMap()
@@ -1904,7 +1904,7 @@ func (s *Store) UnarchiveThread(ctx context.Context, actorID, threadID string) (
 	return row.ToThreadMap()
 }
 
-func (s *Store) TombstoneThread(ctx context.Context, actorID, threadID, reason string) (map[string]any, error) {
+func (s *Store) TrashThread(ctx context.Context, actorID, threadID, reason string) (map[string]any, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("primitives store database is not initialized")
 	}
@@ -1923,15 +1923,15 @@ func (s *Store) TombstoneThread(ctx context.Context, actorID, threadID, reason s
 	if row.Kind != "thread" {
 		return nil, ErrNotFound
 	}
-	if row.TombstonedAt.Valid && strings.TrimSpace(row.TombstonedAt.String) != "" {
+	if row.TrashedAt.Valid && strings.TrimSpace(row.TrashedAt.String) != "" {
 		return row.ToThreadMap()
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if _, err := s.db.ExecContext(ctx,
-		`UPDATE threads SET tombstoned_at = ?, tombstoned_by = ?, tombstone_reason = ?, archived_at = NULL, archived_by = NULL WHERE id = ?`,
+		`UPDATE threads SET trashed_at = ?, trashed_by = ?, trash_reason = ?, archived_at = NULL, archived_by = NULL WHERE id = ?`,
 		now, actorID, strings.TrimSpace(reason), threadID,
 	); err != nil {
-		return nil, fmt.Errorf("tombstone thread: %w", err)
+		return nil, fmt.Errorf("trash thread: %w", err)
 	}
 	row, err = s.getThreadRow(ctx, threadID, "threads")
 	if err != nil {
@@ -1959,11 +1959,11 @@ func (s *Store) RestoreThread(ctx context.Context, actorID, threadID string) (ma
 	if row.Kind != "thread" {
 		return nil, ErrNotFound
 	}
-	if !row.TombstonedAt.Valid || strings.TrimSpace(row.TombstonedAt.String) == "" {
-		return nil, ErrNotTombstoned
+	if !row.TrashedAt.Valid || strings.TrimSpace(row.TrashedAt.String) == "" {
+		return nil, ErrNotTrashed
 	}
 	if _, err := s.db.ExecContext(ctx,
-		`UPDATE threads SET tombstoned_at = NULL, tombstoned_by = NULL, tombstone_reason = NULL WHERE id = ?`,
+		`UPDATE threads SET trashed_at = NULL, trashed_by = NULL, trash_reason = NULL WHERE id = ?`,
 		threadID,
 	); err != nil {
 		return nil, fmt.Errorf("restore thread: %w", err)
@@ -1992,7 +1992,7 @@ func (s *Store) PurgeThread(ctx context.Context, threadID string) error {
 
 	var foundID string
 	err = tx.QueryRowContext(ctx,
-		`SELECT id FROM threads WHERE id = ? AND tombstoned_at IS NOT NULL`,
+		`SELECT id FROM threads WHERE id = ? AND trashed_at IS NOT NULL`,
 		threadID,
 	).Scan(&foundID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -2004,10 +2004,10 @@ func (s *Store) PurgeThread(ctx context.Context, threadID string) error {
 		if err2 != nil {
 			return fmt.Errorf("check thread existence: %w", err2)
 		}
-		return ErrNotTombstoned
+		return ErrNotTrashed
 	}
 	if err != nil {
-		return fmt.Errorf("select tombstoned thread: %w", err)
+		return fmt.Errorf("select trashed thread: %w", err)
 	}
 
 	if _, err := tx.ExecContext(ctx, `DELETE FROM derived_topic_views WHERE thread_id = ?`, threadID); err != nil {
@@ -2037,7 +2037,7 @@ func (s *Store) ListEventsByThread(ctx context.Context, threadID string) ([]map[
 	rows, err := s.db.QueryContext(
 		ctx,
 		`SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json, body_json,
-			archived_at, archived_by, tombstoned_at, tombstoned_by, tombstone_reason
+			archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		 FROM events
 		 WHERE thread_id = ?
 		 ORDER BY ts ASC, id ASC`,
@@ -2051,22 +2051,22 @@ func (s *Store) ListEventsByThread(ctx context.Context, threadID string) ([]map[
 	events := make([]map[string]any, 0)
 	for rows.Next() {
 		var (
-			eventID         string
-			typeValue       string
-			ts              string
-			actorID         string
-			thread          sql.NullString
-			refsJSON        string
-			payloadJSON     string
-			bodyJSON        sql.NullString
-			archivedAt      sql.NullString
-			archivedBy      sql.NullString
-			tombstonedAt    sql.NullString
-			tombstonedBy    sql.NullString
-			tombstoneReason sql.NullString
+			eventID     string
+			typeValue   string
+			ts          string
+			actorID     string
+			thread      sql.NullString
+			refsJSON    string
+			payloadJSON string
+			bodyJSON    sql.NullString
+			archivedAt  sql.NullString
+			archivedBy  sql.NullString
+			trashedAt   sql.NullString
+			trashedBy   sql.NullString
+			trashReason sql.NullString
 		)
 		if err := rows.Scan(&eventID, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON, &bodyJSON,
-			&archivedAt, &archivedBy, &tombstonedAt, &tombstonedBy, &tombstoneReason); err != nil {
+			&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason); err != nil {
 			return nil, fmt.Errorf("scan thread event: %w", err)
 		}
 
@@ -2075,7 +2075,7 @@ func (s *Store) ListEventsByThread(ctx context.Context, threadID string) ([]map[
 			if err := json.Unmarshal([]byte(bodyJSON.String), &body); err != nil {
 				return nil, fmt.Errorf("decode event body: %w", err)
 			}
-			overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, tombstonedAt, tombstonedBy, tombstoneReason)
+			overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, trashedAt, trashedBy, trashReason)
 			events = append(events, body)
 			continue
 		}
@@ -2100,7 +2100,7 @@ func (s *Store) ListEventsByThread(ctx context.Context, threadID string) ([]map[
 		if thread.Valid {
 			event["thread_id"] = thread.String
 		}
-		overlayEventLifecycleFromSQLColumns(event, archivedAt, archivedBy, tombstonedAt, tombstonedBy, tombstoneReason)
+		overlayEventLifecycleFromSQLColumns(event, archivedAt, archivedBy, trashedAt, trashedBy, trashReason)
 		events = append(events, event)
 	}
 	if err := rows.Err(); err != nil {
@@ -2121,7 +2121,7 @@ func (s *Store) ListRecentEventsByThread(ctx context.Context, threadID string, l
 	rows, err := s.db.QueryContext(
 		ctx,
 		`SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json, body_json,
-			archived_at, archived_by, tombstoned_at, tombstoned_by, tombstone_reason
+			archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		 FROM events
 		 WHERE thread_id = ?
 		 ORDER BY ts DESC, id DESC
@@ -2137,22 +2137,22 @@ func (s *Store) ListRecentEventsByThread(ctx context.Context, threadID string, l
 	recentDescending := make([]map[string]any, 0, limit)
 	for rows.Next() {
 		var (
-			eventID         string
-			typeValue       string
-			ts              string
-			actorID         string
-			thread          sql.NullString
-			refsJSON        string
-			payloadJSON     string
-			bodyJSON        sql.NullString
-			archivedAt      sql.NullString
-			archivedBy      sql.NullString
-			tombstonedAt    sql.NullString
-			tombstonedBy    sql.NullString
-			tombstoneReason sql.NullString
+			eventID     string
+			typeValue   string
+			ts          string
+			actorID     string
+			thread      sql.NullString
+			refsJSON    string
+			payloadJSON string
+			bodyJSON    sql.NullString
+			archivedAt  sql.NullString
+			archivedBy  sql.NullString
+			trashedAt   sql.NullString
+			trashedBy   sql.NullString
+			trashReason sql.NullString
 		)
 		if err := rows.Scan(&eventID, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON, &bodyJSON,
-			&archivedAt, &archivedBy, &tombstonedAt, &tombstonedBy, &tombstoneReason); err != nil {
+			&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason); err != nil {
 			return nil, fmt.Errorf("scan recent thread event: %w", err)
 		}
 
@@ -2161,7 +2161,7 @@ func (s *Store) ListRecentEventsByThread(ctx context.Context, threadID string, l
 			if err := json.Unmarshal([]byte(bodyJSON.String), &body); err != nil {
 				return nil, fmt.Errorf("decode recent thread event body: %w", err)
 			}
-			overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, tombstonedAt, tombstonedBy, tombstoneReason)
+			overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, trashedAt, trashedBy, trashReason)
 			recentDescending = append(recentDescending, body)
 			continue
 		}
@@ -2186,7 +2186,7 @@ func (s *Store) ListRecentEventsByThread(ctx context.Context, threadID string, l
 		if thread.Valid {
 			event["thread_id"] = thread.String
 		}
-		overlayEventLifecycleFromSQLColumns(event, archivedAt, archivedBy, tombstonedAt, tombstonedBy, tombstoneReason)
+		overlayEventLifecycleFromSQLColumns(event, archivedAt, archivedBy, trashedAt, trashedBy, trashReason)
 		recentDescending = append(recentDescending, event)
 	}
 	if err := rows.Err(); err != nil {
@@ -2293,7 +2293,7 @@ func (s *Store) ListEvents(ctx context.Context, filter EventListFilter) ([]map[s
 	}
 
 	query := `SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json, body_json,
-		archived_at, archived_by, tombstoned_at, tombstoned_by, tombstone_reason
+		archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		FROM events
 		WHERE 1=1`
 	args := make([]any, 0)
@@ -2317,22 +2317,22 @@ func (s *Store) ListEvents(ctx context.Context, filter EventListFilter) ([]map[s
 	events := make([]map[string]any, 0)
 	for rows.Next() {
 		var (
-			eventID         string
-			typeValue       string
-			ts              string
-			actorID         string
-			thread          sql.NullString
-			refsJSON        string
-			payloadJSON     string
-			bodyJSON        sql.NullString
-			archivedAt      sql.NullString
-			archivedBy      sql.NullString
-			tombstonedAt    sql.NullString
-			tombstonedBy    sql.NullString
-			tombstoneReason sql.NullString
+			eventID     string
+			typeValue   string
+			ts          string
+			actorID     string
+			thread      sql.NullString
+			refsJSON    string
+			payloadJSON string
+			bodyJSON    sql.NullString
+			archivedAt  sql.NullString
+			archivedBy  sql.NullString
+			trashedAt   sql.NullString
+			trashedBy   sql.NullString
+			trashReason sql.NullString
 		)
 		if err := rows.Scan(&eventID, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON, &bodyJSON,
-			&archivedAt, &archivedBy, &tombstonedAt, &tombstonedBy, &tombstoneReason); err != nil {
+			&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason); err != nil {
 			return nil, fmt.Errorf("scan event: %w", err)
 		}
 
@@ -2341,7 +2341,7 @@ func (s *Store) ListEvents(ctx context.Context, filter EventListFilter) ([]map[s
 			if err := json.Unmarshal([]byte(bodyJSON.String), &body); err != nil {
 				return nil, fmt.Errorf("decode event body: %w", err)
 			}
-			overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, tombstonedAt, tombstonedBy, tombstoneReason)
+			overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, trashedAt, trashedBy, trashReason)
 			events = append(events, body)
 			continue
 		}
@@ -2366,7 +2366,7 @@ func (s *Store) ListEvents(ctx context.Context, filter EventListFilter) ([]map[s
 		if thread.Valid {
 			event["thread_id"] = thread.String
 		}
-		overlayEventLifecycleFromSQLColumns(event, archivedAt, archivedBy, tombstonedAt, tombstonedBy, tombstoneReason)
+		overlayEventLifecycleFromSQLColumns(event, archivedAt, archivedBy, trashedAt, trashedBy, trashReason)
 		events = append(events, event)
 	}
 	if err := rows.Err(); err != nil {
@@ -2385,7 +2385,7 @@ func (s *Store) ListEventsAfter(ctx context.Context, filter EventListFilter, cur
 	}
 
 	query := `SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json, body_json,
-		archived_at, archived_by, tombstoned_at, tombstoned_by, tombstone_reason
+		archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		FROM events
 		WHERE 1=1`
 	args := make([]any, 0, len(filter.Types)+3)
@@ -2414,22 +2414,22 @@ func (s *Store) ListEventsAfter(ctx context.Context, filter EventListFilter, cur
 	events := make([]map[string]any, 0)
 	for rows.Next() {
 		var (
-			eventID         string
-			typeValue       string
-			ts              string
-			actorID         string
-			thread          sql.NullString
-			refsJSON        string
-			payloadJSON     string
-			bodyJSON        sql.NullString
-			archivedAt      sql.NullString
-			archivedBy      sql.NullString
-			tombstonedAt    sql.NullString
-			tombstonedBy    sql.NullString
-			tombstoneReason sql.NullString
+			eventID     string
+			typeValue   string
+			ts          string
+			actorID     string
+			thread      sql.NullString
+			refsJSON    string
+			payloadJSON string
+			bodyJSON    sql.NullString
+			archivedAt  sql.NullString
+			archivedBy  sql.NullString
+			trashedAt   sql.NullString
+			trashedBy   sql.NullString
+			trashReason sql.NullString
 		)
 		if err := rows.Scan(&eventID, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON, &bodyJSON,
-			&archivedAt, &archivedBy, &tombstonedAt, &tombstonedBy, &tombstoneReason); err != nil {
+			&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason); err != nil {
 			return nil, fmt.Errorf("scan event after cursor: %w", err)
 		}
 
@@ -2438,7 +2438,7 @@ func (s *Store) ListEventsAfter(ctx context.Context, filter EventListFilter, cur
 			if err := json.Unmarshal([]byte(bodyJSON.String), &body); err != nil {
 				return nil, fmt.Errorf("decode event body after cursor: %w", err)
 			}
-			overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, tombstonedAt, tombstonedBy, tombstoneReason)
+			overlayEventLifecycleFromSQLColumns(body, archivedAt, archivedBy, trashedAt, trashedBy, trashReason)
 			events = append(events, body)
 			continue
 		}
@@ -2463,7 +2463,7 @@ func (s *Store) ListEventsAfter(ctx context.Context, filter EventListFilter, cur
 		if thread.Valid {
 			event["thread_id"] = thread.String
 		}
-		overlayEventLifecycleFromSQLColumns(event, archivedAt, archivedBy, tombstonedAt, tombstonedBy, tombstoneReason)
+		overlayEventLifecycleFromSQLColumns(event, archivedAt, archivedBy, trashedAt, trashedBy, trashReason)
 		events = append(events, event)
 	}
 	if err := rows.Err(); err != nil {
@@ -2473,18 +2473,18 @@ func (s *Store) ListEventsAfter(ctx context.Context, filter EventListFilter, cur
 }
 
 type threadRow struct {
-	ID              string
-	Kind            string
-	ThreadID        sql.NullString
-	UpdatedAt       string
-	UpdatedBy       string
-	BodyJSON        string
-	ProvenanceJSON  string
-	ArchivedAt      sql.NullString
-	ArchivedBy      sql.NullString
-	TombstonedAt    sql.NullString
-	TombstonedBy    sql.NullString
-	TombstoneReason sql.NullString
+	ID             string
+	Kind           string
+	ThreadID       sql.NullString
+	UpdatedAt      string
+	UpdatedBy      string
+	BodyJSON       string
+	ProvenanceJSON string
+	ArchivedAt     sql.NullString
+	ArchivedBy     sql.NullString
+	TrashedAt      sql.NullString
+	TrashedBy      sql.NullString
+	TrashReason    sql.NullString
 }
 
 type threadFilterColumns struct {
@@ -2509,9 +2509,9 @@ func getThreadRowFromQueryRower(ctx context.Context, db queryRower, id string, t
 	row := threadRow{}
 	err := db.QueryRowContext(
 		ctx,
-		fmt.Sprintf(`SELECT id, kind, thread_id, updated_at, updated_by, body_json, provenance_json, archived_at, archived_by, tombstoned_at, tombstoned_by, tombstone_reason FROM %s WHERE id = ?`, tableName),
+		fmt.Sprintf(`SELECT id, kind, thread_id, updated_at, updated_by, body_json, provenance_json, archived_at, archived_by, trashed_at, trashed_by, trash_reason FROM %s WHERE id = ?`, tableName),
 		id,
-	).Scan(&row.ID, &row.Kind, &row.ThreadID, &row.UpdatedAt, &row.UpdatedBy, &row.BodyJSON, &row.ProvenanceJSON, &row.ArchivedAt, &row.ArchivedBy, &row.TombstonedAt, &row.TombstonedBy, &row.TombstoneReason)
+	).Scan(&row.ID, &row.Kind, &row.ThreadID, &row.UpdatedAt, &row.UpdatedBy, &row.BodyJSON, &row.ProvenanceJSON, &row.ArchivedAt, &row.ArchivedBy, &row.TrashedAt, &row.TrashedBy, &row.TrashReason)
 	if errors.Is(err, sql.ErrNoRows) {
 		return threadRow{}, ErrNotFound
 	}
@@ -2523,7 +2523,7 @@ func getThreadRowFromQueryRower(ctx context.Context, db queryRower, id string, t
 
 func scanThreadRow(scanner interface{ Scan(dest ...any) error }) (threadRow, error) {
 	row := threadRow{}
-	if err := scanner.Scan(&row.ID, &row.Kind, &row.ThreadID, &row.UpdatedAt, &row.UpdatedBy, &row.BodyJSON, &row.ProvenanceJSON, &row.ArchivedAt, &row.ArchivedBy, &row.TombstonedAt, &row.TombstonedBy, &row.TombstoneReason); err != nil {
+	if err := scanner.Scan(&row.ID, &row.Kind, &row.ThreadID, &row.UpdatedAt, &row.UpdatedBy, &row.BodyJSON, &row.ProvenanceJSON, &row.ArchivedAt, &row.ArchivedBy, &row.TrashedAt, &row.TrashedBy, &row.TrashReason); err != nil {
 		return threadRow{}, fmt.Errorf("scan threads row: %w", err)
 	}
 	return row, nil
@@ -2561,14 +2561,14 @@ func (r threadRow) ToThreadMap() (map[string]any, error) {
 	if r.ArchivedBy.Valid && strings.TrimSpace(r.ArchivedBy.String) != "" {
 		body["archived_by"] = r.ArchivedBy.String
 	}
-	if r.TombstonedAt.Valid && strings.TrimSpace(r.TombstonedAt.String) != "" {
-		body["tombstoned_at"] = r.TombstonedAt.String
+	if r.TrashedAt.Valid && strings.TrimSpace(r.TrashedAt.String) != "" {
+		body["trashed_at"] = r.TrashedAt.String
 	}
-	if r.TombstonedBy.Valid && strings.TrimSpace(r.TombstonedBy.String) != "" {
-		body["tombstoned_by"] = r.TombstonedBy.String
+	if r.TrashedBy.Valid && strings.TrimSpace(r.TrashedBy.String) != "" {
+		body["trashed_by"] = r.TrashedBy.String
 	}
-	if r.TombstoneReason.Valid && strings.TrimSpace(r.TombstoneReason.String) != "" {
-		body["tombstone_reason"] = r.TombstoneReason.String
+	if r.TrashReason.Valid && strings.TrimSpace(r.TrashReason.String) != "" {
+		body["trash_reason"] = r.TrashReason.String
 	}
 
 	return body, nil
@@ -2742,19 +2742,19 @@ func buildThreadCadenceFilterClause(filters []string) (string, []any) {
 }
 
 func buildListThreadsQuery(filter ThreadListFilter) (string, []any) {
-	query := `SELECT threads.id, threads.kind, threads.thread_id, threads.updated_at, threads.updated_by, threads.body_json, threads.provenance_json, threads.archived_at, threads.archived_by, threads.tombstoned_at, threads.tombstoned_by, threads.tombstone_reason
+	query := `SELECT threads.id, threads.kind, threads.thread_id, threads.updated_at, threads.updated_by, threads.body_json, threads.provenance_json, threads.archived_at, threads.archived_by, threads.trashed_at, threads.trashed_by, threads.trash_reason
 		 FROM threads`
 	args := make([]any, 0, 9)
-	if filter.TombstonedOnly {
-		query += ` WHERE threads.tombstoned_at IS NOT NULL`
-	} else if !filter.IncludeTombstoned {
-		query += ` WHERE threads.tombstoned_at IS NULL`
+	if filter.TrashedOnly {
+		query += ` WHERE threads.trashed_at IS NOT NULL`
+	} else if !filter.IncludeTrashed {
+		query += ` WHERE threads.trashed_at IS NULL`
 	}
 	if filter.ArchivedOnly {
 		if strings.Contains(query, "WHERE") {
-			query += ` AND threads.archived_at IS NOT NULL AND threads.tombstoned_at IS NULL`
+			query += ` AND threads.archived_at IS NOT NULL AND threads.trashed_at IS NULL`
 		} else {
-			query += ` WHERE threads.archived_at IS NOT NULL AND threads.tombstoned_at IS NULL`
+			query += ` WHERE threads.archived_at IS NOT NULL AND threads.trashed_at IS NULL`
 		}
 	} else if !filter.IncludeArchived {
 		if strings.Contains(query, "WHERE") {
@@ -2831,16 +2831,16 @@ func buildListArtifactsQuery(filter ArtifactListFilter) (string, []any) {
 		}
 		primaryArgs := []any{threadID}
 		secondaryArgs := []any{threadID, "artifact", "thread", threadID, refEdgeTypeRef}
-		if filter.TombstonedOnly {
-			primaryClauses = append(primaryClauses, "tombstoned_at IS NOT NULL")
-			secondaryClauses = append(secondaryClauses, "artifacts.tombstoned_at IS NOT NULL")
-		} else if !filter.IncludeTombstoned {
-			primaryClauses = append(primaryClauses, "tombstoned_at IS NULL")
-			secondaryClauses = append(secondaryClauses, "artifacts.tombstoned_at IS NULL")
+		if filter.TrashedOnly {
+			primaryClauses = append(primaryClauses, "trashed_at IS NOT NULL")
+			secondaryClauses = append(secondaryClauses, "artifacts.trashed_at IS NOT NULL")
+		} else if !filter.IncludeTrashed {
+			primaryClauses = append(primaryClauses, "trashed_at IS NULL")
+			secondaryClauses = append(secondaryClauses, "artifacts.trashed_at IS NULL")
 		}
 		if filter.ArchivedOnly {
-			primaryClauses = append(primaryClauses, "archived_at IS NOT NULL", "tombstoned_at IS NULL")
-			secondaryClauses = append(secondaryClauses, "artifacts.archived_at IS NOT NULL", "artifacts.tombstoned_at IS NULL")
+			primaryClauses = append(primaryClauses, "archived_at IS NOT NULL", "trashed_at IS NULL")
+			secondaryClauses = append(secondaryClauses, "artifacts.archived_at IS NOT NULL", "artifacts.trashed_at IS NULL")
 		} else if !filter.IncludeArchived {
 			primaryClauses = append(primaryClauses, "archived_at IS NULL")
 			secondaryClauses = append(secondaryClauses, "artifacts.archived_at IS NULL")
@@ -2886,13 +2886,13 @@ func buildListArtifactsQuery(filter ArtifactListFilter) (string, []any) {
 
 	query := `SELECT metadata_json FROM artifacts WHERE 1=1`
 	args := make([]any, 0, 8)
-	if filter.TombstonedOnly {
-		query += ` AND tombstoned_at IS NOT NULL`
-	} else if !filter.IncludeTombstoned {
-		query += ` AND tombstoned_at IS NULL`
+	if filter.TrashedOnly {
+		query += ` AND trashed_at IS NOT NULL`
+	} else if !filter.IncludeTrashed {
+		query += ` AND trashed_at IS NULL`
 	}
 	if filter.ArchivedOnly {
-		query += ` AND archived_at IS NOT NULL AND tombstoned_at IS NULL`
+		query += ` AND archived_at IS NOT NULL AND trashed_at IS NULL`
 	} else if !filter.IncludeArchived {
 		query += ` AND archived_at IS NULL`
 	}

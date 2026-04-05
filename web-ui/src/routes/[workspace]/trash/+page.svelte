@@ -39,7 +39,7 @@
 
   let tabs = $derived([
     { id: "artifacts", label: "Artifacts", count: artifacts.length },
-    { id: "documents", label: "Documents", count: documents.length },
+    { id: "documents", label: "Docs", count: documents.length },
     { id: "topics", label: "Topics", count: threads.length },
     { id: "boards", label: "Boards", count: boards.length },
     { id: "cards", label: "Cards", count: cards.length },
@@ -116,27 +116,43 @@
     loading = true;
     error = "";
     try {
-      const [artifactResult, docResult, topicResult, boardResult, cardResult] =
-        await Promise.all([
-          coreClient.listArtifacts({ tombstoned_only: "true" }),
-          coreClient.listDocuments({ tombstoned_only: "true" }),
-          coreClient.listTopics({ tombstoned_only: "true" }),
-          coreClient.listBoards({ tombstoned_only: "true" }),
-          coreClient.listCards({ archived_only: "true" }),
-        ]);
+      const [
+        artifactResult,
+        docResult,
+        topicResult,
+        boardResult,
+        archivedCardResult,
+        trashedCardResult,
+      ] = await Promise.all([
+        coreClient.listArtifacts({ trashed_only: "true" }),
+        coreClient.listDocuments({ trashed_only: "true" }),
+        coreClient.listTopics({ trashed_only: "true" }),
+        coreClient.listBoards({ trashed_only: "true" }),
+        coreClient.listCards({ archived_only: "true" }),
+        coreClient.listCards({ trashed_only: "true" }),
+      ]);
       artifacts = artifactResult.artifacts ?? [];
       documents = docResult.documents ?? [];
       threads = (topicResult.topics ?? []).filter(
         (topic) =>
           Boolean(topic?.archived_at) ||
-          Boolean(topic?.tombstoned_at) ||
+          Boolean(topic?.trashed_at) ||
           String(topic?.status ?? "").trim() === "archived",
       );
       boards = (boardResult.boards ?? []).map((item) => item.board);
-      cards = (cardResult.cards ?? []).filter(
+      const cardById = new Map();
+      for (const c of archivedCardResult.cards ?? []) {
+        const id = String(c?.id ?? "").trim();
+        if (id) cardById.set(id, c);
+      }
+      for (const c of trashedCardResult.cards ?? []) {
+        const id = String(c?.id ?? "").trim();
+        if (id) cardById.set(id, c);
+      }
+      cards = [...cardById.values()].filter(
         (card) =>
           Boolean(card?.archived_at) ||
-          Boolean(card?.tombstoned_at) ||
+          Boolean(card?.trashed_at) ||
           String(card?.status ?? "").trim() === "archived",
       );
     } catch (e) {
@@ -165,8 +181,8 @@
     return String(topic?.summary ?? topic?.current_summary ?? "").trim();
   }
 
-  function tombstoneReason(entity) {
-    const r = String(entity?.tombstone_reason ?? "").trim();
+  function trashReason(entity) {
+    const r = String(entity?.trash_reason ?? "").trim();
     return r || "—";
   }
 
@@ -248,7 +264,7 @@
       purgeConfirmId = "";
       await loadTrash();
     } catch (e) {
-      error = `Purge failed: ${e instanceof Error ? e.message : String(e)}`;
+      error = `Permanent delete failed: ${e instanceof Error ? e.message : String(e)}`;
     } finally {
       busyItemId = "";
     }
@@ -278,17 +294,17 @@
   function emptyCategoryMessage(tab) {
     switch (tab) {
       case "artifacts":
-        return "No tombstoned artifacts in this category";
+        return "No trashed artifacts in this category";
       case "documents":
-        return "No tombstoned documents in this category";
+        return "No trashed docs in this category";
       case "topics":
-        return "No tombstoned topics in this category";
+        return "No trashed topics in this category";
       case "boards":
-        return "No tombstoned boards in this category";
+        return "No trashed boards in this category";
       case "cards":
-        return "No archived cards in this category";
+        return "No archived or trashed cards in this category";
       default:
-        return "No tombstoned items in this category";
+        return "No trashed items in this category";
     }
   }
 
@@ -329,7 +345,7 @@
     purgeAllOpen = false;
     purgeAllBusy = false;
     if (failed > 0) {
-      error = `Purge completed with ${failed} failure${failed > 1 ? "s" : ""}`;
+      error = `Permanent delete completed with ${failed} failure${failed > 1 ? "s" : ""}`;
     }
     await loadTrash();
   }
@@ -356,10 +372,10 @@
   <div>
     <h1 class="text-lg font-semibold text-[var(--ui-text)]">Trash</h1>
     <p class="mt-0.5 text-[12px] text-[var(--ui-text-muted)]">
-      Tombstoned items available for restore or permanent deletion. Restore
-      returns them to their normal lists; purge permanently removes supported
-      resource types (human principals only). Topics can be restored but not
-      purged from this surface yet. Tombstoned events and messages are restored
+      Trashed items available for restore or permanent deletion. Restore returns
+      them to their normal lists; permanent delete removes supported resource
+      types (human principals only). Topics can be restored but not permanently
+      deleted from this surface yet. Trashed events and messages are restored
       from within their timeline view.
     </p>
   </div>
@@ -373,7 +389,7 @@
         }}
         type="button"
       >
-        Purge all ({activeItems.length})
+        Permanently delete all ({activeItems.length})
       </button>
     </div>
   {/if}
@@ -426,7 +442,7 @@
         d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
       ></path>
     </svg>
-    Loading tombstoned items...
+    Loading trashed items...
   </div>
 {:else if activeItems.length === 0 && !error}
   <div class="mt-8 text-center">
@@ -471,14 +487,14 @@
                 {actorName(artifact.created_by)}
               </div>
               <div>
-                <span class="text-[var(--ui-text-subtle)]">Tombstoned</span>
-                {formatTimestamp(artifact.tombstoned_at) || "—"}
+                <span class="text-[var(--ui-text-subtle)]">Trashed</span>
+                {formatTimestamp(artifact.trashed_at) || "—"}
                 <span class="text-[var(--ui-text-subtle)]"> · </span>
-                {actorName(artifact.tombstoned_by)}
+                {actorName(artifact.trashed_by)}
               </div>
               <div class="sm:col-span-2 xl:col-span-1">
                 <span class="text-[var(--ui-text-subtle)]">Reason</span>
-                {tombstoneReason(artifact)}
+                {trashReason(artifact)}
               </div>
             </div>
           </div>
@@ -503,7 +519,7 @@
                     }}
                     type="button"
                   >
-                    Purge
+                    Permanently delete
                   </button>
                 {/if}
               {/if}
@@ -513,7 +529,7 @@
               <div
                 class="rounded-md border border-red-500/35 bg-red-500/5 p-2.5 text-[12px]"
                 role="region"
-                aria-label="Confirm purge"
+                aria-label="Confirm permanent delete"
               >
                 <p class="font-medium text-red-300">
                   {purgeConfirmLabel("artifacts")}
@@ -533,7 +549,7 @@
                     onclick={() => confirmPurgeEntity("artifacts", artifact.id)}
                     type="button"
                   >
-                    Confirm purge
+                    Confirm permanent delete
                   </button>
                 </div>
               </div>
@@ -579,14 +595,14 @@
                 {actorName(doc.created_by)}
               </div>
               <div>
-                <span class="text-[var(--ui-text-subtle)]">Tombstoned</span>
-                {formatTimestamp(doc.tombstoned_at) || "—"}
+                <span class="text-[var(--ui-text-subtle)]">Trashed</span>
+                {formatTimestamp(doc.trashed_at) || "—"}
                 <span class="text-[var(--ui-text-subtle)]"> · </span>
-                {actorName(doc.tombstoned_by)}
+                {actorName(doc.trashed_by)}
               </div>
               <div class="sm:col-span-2 xl:col-span-1">
                 <span class="text-[var(--ui-text-subtle)]">Reason</span>
-                {tombstoneReason(doc)}
+                {trashReason(doc)}
               </div>
             </div>
           </div>
@@ -610,7 +626,7 @@
                     }}
                     type="button"
                   >
-                    Purge
+                    Permanently delete
                   </button>
                 {/if}
               {/if}
@@ -619,7 +635,7 @@
               <div
                 class="rounded-md border border-red-500/35 bg-red-500/5 p-2.5 text-[12px]"
                 role="region"
-                aria-label="Confirm purge"
+                aria-label="Confirm permanent delete"
               >
                 <p class="font-medium text-red-300">
                   {purgeConfirmLabel("documents")}
@@ -638,7 +654,7 @@
                     onclick={() => confirmPurgeEntity("documents", doc.id)}
                     type="button"
                   >
-                    Confirm purge
+                    Confirm permanent delete
                   </button>
                 </div>
               </div>
@@ -697,14 +713,14 @@
                 {/if}
               </div>
               <div>
-                <span class="text-[var(--ui-text-subtle)]">Tombstoned</span>
-                {formatTimestamp(thread.tombstoned_at) || "—"}
+                <span class="text-[var(--ui-text-subtle)]">Trashed</span>
+                {formatTimestamp(thread.trashed_at) || "—"}
                 <span class="text-[var(--ui-text-subtle)]"> · </span>
-                {actorName(thread.tombstoned_by)}
+                {actorName(thread.trashed_by)}
               </div>
               <div class="sm:col-span-2 xl:col-span-1">
                 <span class="text-[var(--ui-text-subtle)]">Reason</span>
-                {tombstoneReason(thread)}
+                {trashReason(thread)}
               </div>
             </div>
           </div>
@@ -759,14 +775,14 @@
                 {actorName(board.created_by)}
               </div>
               <div>
-                <span class="text-[var(--ui-text-subtle)]">Tombstoned</span>
-                {formatTimestamp(board.tombstoned_at) || "—"}
+                <span class="text-[var(--ui-text-subtle)]">Trashed</span>
+                {formatTimestamp(board.trashed_at) || "—"}
                 <span class="text-[var(--ui-text-subtle)]"> · </span>
-                {actorName(board.tombstoned_by)}
+                {actorName(board.trashed_by)}
               </div>
               <div class="sm:col-span-2 xl:col-span-1">
                 <span class="text-[var(--ui-text-subtle)]">Reason</span>
-                {tombstoneReason(board)}
+                {trashReason(board)}
               </div>
             </div>
           </div>
@@ -790,7 +806,7 @@
                     }}
                     type="button"
                   >
-                    Purge
+                    Permanently delete
                   </button>
                 {/if}
               {/if}
@@ -799,7 +815,7 @@
               <div
                 class="rounded-md border border-red-500/35 bg-red-500/5 p-2.5 text-[12px]"
                 role="region"
-                aria-label="Confirm purge"
+                aria-label="Confirm permanent delete"
               >
                 <p class="font-medium text-red-300">
                   {purgeConfirmLabel("boards")}
@@ -818,7 +834,7 @@
                     onclick={() => confirmPurgeEntity("boards", board.id)}
                     type="button"
                   >
-                    Confirm purge
+                    Confirm permanent delete
                   </button>
                 </div>
               </div>
@@ -880,14 +896,14 @@
                 {actorName(card.archived_by)}
               </div>
               <div class="sm:col-span-2 xl:col-span-1">
-                <span class="text-[var(--ui-text-subtle)]">Tombstoned</span>
-                {formatTimestamp(card.tombstoned_at) || "—"}
+                <span class="text-[var(--ui-text-subtle)]">Trashed</span>
+                {formatTimestamp(card.trashed_at) || "—"}
                 <span class="text-[var(--ui-text-subtle)]"> · </span>
-                {actorName(card.tombstoned_by)}
+                {actorName(card.trashed_by)}
               </div>
               <div class="sm:col-span-2 xl:col-span-1">
                 <span class="text-[var(--ui-text-subtle)]">Reason</span>
-                {tombstoneReason(card)}
+                {trashReason(card)}
               </div>
             </div>
             <div class="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
@@ -942,7 +958,7 @@
                       }}
                       type="button"
                     >
-                      Purge
+                      Permanently delete
                     </button>
                   {/if}
                 {/if}
@@ -952,7 +968,7 @@
                 <div
                   class="rounded-md border border-red-500/35 bg-red-500/5 p-2.5 text-[12px]"
                   role="region"
-                  aria-label="Confirm purge"
+                  aria-label="Confirm permanent delete"
                 >
                   <p class="font-medium text-red-300">
                     {purgeConfirmLabel("cards")}
@@ -971,7 +987,7 @@
                       onclick={() => confirmPurgeEntity("cards", card.id)}
                       type="button"
                     >
-                      Confirm purge
+                      Confirm permanent delete
                     </button>
                   </div>
                 </div>
@@ -990,7 +1006,7 @@
   message="Permanently delete all {activeItems.length} {entitySingular(
     activeTab,
   )}{activeItems.length === 1 ? '' : 's'} in this tab. This cannot be undone."
-  confirmLabel="Purge all"
+  confirmLabel="Permanently delete all"
   variant="danger"
   busy={purgeAllBusy}
   typedConfirmation="Empty trash"

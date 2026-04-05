@@ -637,7 +637,7 @@ func TestThreadTimelineIncludesDocumentLifecycleEventsAndExpansions(t *testing.T
 		t.Fatalf("expected updated revision ids, got %#v", updatedDoc.Revision)
 	}
 
-	tombstoneResp := postJSONExpectStatus(t, h.baseURL+"/docs/"+documentID+"/tombstone", `{
+	tombstoneResp := postJSONExpectStatus(t, h.baseURL+"/docs/"+documentID+"/trash", `{
 		"actor_id":"actor-1",
 		"reason":"superseded by final document"
 	}`, http.StatusOK)
@@ -669,7 +669,7 @@ func TestThreadTimelineIncludesDocumentLifecycleEventsAndExpansions(t *testing.T
 			createdEvent = event
 		case "document_updated":
 			updatedEvent = event
-		case "document_tombstoned":
+		case "document_trashed":
 			tombstonedEvent = event
 		}
 	}
@@ -683,7 +683,7 @@ func TestThreadTimelineIncludesDocumentLifecycleEventsAndExpansions(t *testing.T
 
 	if doc, ok := timeline.Documents[documentID]; !ok {
 		t.Fatalf("expected document %q in timeline documents, got keys=%#v", documentID, mapKeysMapAny(timeline.Documents))
-	} else if doc["tombstoned_at"] == nil {
+	} else if doc["trashed_at"] == nil {
 		t.Fatalf("expected tombstoned document metadata in timeline documents, got %#v", doc)
 	}
 

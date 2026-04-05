@@ -66,7 +66,7 @@ func formatCommandSummary(commandID string, body any) string {
 		return formatCardTimeline(body)
 	case "topics.workspace":
 		return formatTopicWorkspace(body)
-	case "cards.get", "cards.patch", "cards.move", "cards.archive", "cards.tombstone", "cards.restore":
+	case "cards.get", "cards.patch", "cards.move", "cards.archive", "cards.trash", "cards.restore":
 		if board := extractNestedMap(body, "board"); board != nil && extractNestedMap(body, "card") != nil {
 			return formatBoardCardMutationResult(body)
 		}
@@ -90,7 +90,7 @@ func formatCommandSummary(commandID string, body any) string {
 		return formatThreadRecommendations(body)
 	case "threads.timeline":
 		return formatThreadTimeline(body)
-	case "artifacts.get", "artifacts.create", "artifacts.tombstone", "artifacts.restore", "artifacts.archive", "artifacts.unarchive":
+	case "artifacts.get", "artifacts.create", "artifacts.trash", "artifacts.restore", "artifacts.archive", "artifacts.unarchive":
 		return formatArtifactRecord(extractNestedMap(body, "artifact"))
 	case "artifacts.purge":
 		root := asMap(body)
@@ -101,9 +101,9 @@ func formatCommandSummary(commandID string, body any) string {
 		return formatPrettyBody(body)
 	case "artifacts.inspect":
 		return formatArtifactInspect(body)
-	case "events.get", "events.create", "events.archive", "events.unarchive", "events.tombstone", "events.restore":
+	case "events.get", "events.create", "events.archive", "events.unarchive", "events.trash", "events.restore":
 		return formatEventRecord(extractNestedMap(body, "event"))
-	case "docs.get", "docs.create", "docs.update", "docs.revisions.create", "docs.tombstone", "docs.archive", "docs.unarchive", "docs.restore":
+	case "docs.get", "docs.create", "docs.update", "docs.revisions.create", "docs.trash", "docs.archive", "docs.unarchive", "docs.restore":
 		return formatDocumentRecord(body)
 	case "docs.update.propose", "docs.revisions.create.propose":
 		return formatProposalPreview(body)
@@ -124,7 +124,7 @@ func formatCommandSummary(commandID string, body any) string {
 		return formatProvenanceWalkSummary(asMap(body))
 	case "boards.list":
 		return formatBoardsList(body)
-	case "boards.get", "boards.create", "boards.update", "boards.archive", "boards.unarchive", "boards.tombstone", "boards.restore":
+	case "boards.get", "boards.create", "boards.update", "boards.archive", "boards.unarchive", "boards.trash", "boards.restore":
 		return formatBoardRecord(extractNestedMap(body, "board"))
 	case "boards.purge":
 		root := asMap(body)
@@ -572,11 +572,11 @@ func formatThreadRecord(thread map[string]any) string {
 	lines = appendStringList(lines, "next_actions", stringList(thread["next_actions"]))
 	lines = appendStringList(lines, "key_artifacts", stringList(thread["key_artifacts"]))
 	lines = appendStringList(lines, "open_cards", stringList(thread["open_cards"]))
-	if tombstonedAt := anyString(thread["tombstoned_at"]); tombstonedAt != "" {
+	if trashedAt := anyString(thread["trashed_at"]); trashedAt != "" {
 		lines = append(lines, "⚠ TOMBSTONED")
-		lines = appendScalar(lines, "tombstoned_at", thread, "tombstoned_at")
-		lines = appendScalar(lines, "tombstoned_by", thread, "tombstoned_by")
-		lines = appendScalar(lines, "tombstone_reason", thread, "tombstone_reason")
+		lines = appendScalar(lines, "trashed_at", thread, "trashed_at")
+		lines = appendScalar(lines, "trashed_by", thread, "trashed_by")
+		lines = appendScalar(lines, "trash_reason", thread, "trash_reason")
 	} else if archivedAt := anyString(thread["archived_at"]); archivedAt != "" {
 		lines = append(lines, "⚠ ARCHIVED")
 		lines = appendScalar(lines, "archived_at", thread, "archived_at")
@@ -597,11 +597,11 @@ func formatArtifactRecord(artifact map[string]any) string {
 	lines = appendScalar(lines, "summary", artifact, "summary", "title")
 	lines = appendScalar(lines, "content_hash", artifact, "content_hash")
 	lines = appendStringList(lines, "refs", stringList(artifact["refs"]))
-	if tombstonedAt := anyString(artifact["tombstoned_at"]); tombstonedAt != "" {
+	if trashedAt := anyString(artifact["trashed_at"]); trashedAt != "" {
 		lines = append(lines, "⚠ TOMBSTONED")
-		lines = appendScalar(lines, "tombstoned_at", artifact, "tombstoned_at")
-		lines = appendScalar(lines, "tombstoned_by", artifact, "tombstoned_by")
-		lines = appendScalar(lines, "tombstone_reason", artifact, "tombstone_reason")
+		lines = appendScalar(lines, "trashed_at", artifact, "trashed_at")
+		lines = appendScalar(lines, "trashed_by", artifact, "trashed_by")
+		lines = appendScalar(lines, "trash_reason", artifact, "trash_reason")
 	} else if archivedAt := anyString(artifact["archived_at"]); archivedAt != "" {
 		lines = append(lines, "⚠ ARCHIVED")
 		lines = appendScalar(lines, "archived_at", artifact, "archived_at")
@@ -625,11 +625,11 @@ func formatEventRecord(event map[string]any) string {
 		lines = append(lines, "payload:")
 		lines = append(lines, indentBlock(formatPrettyBody(payload))...)
 	}
-	if tombstonedAt := anyString(event["tombstoned_at"]); tombstonedAt != "" {
+	if trashedAt := anyString(event["trashed_at"]); trashedAt != "" {
 		lines = append(lines, "⚠ TOMBSTONED")
-		lines = appendScalar(lines, "tombstoned_at", event, "tombstoned_at")
-		lines = appendScalar(lines, "tombstoned_by", event, "tombstoned_by")
-		lines = appendScalar(lines, "tombstone_reason", event, "tombstone_reason")
+		lines = appendScalar(lines, "trashed_at", event, "trashed_at")
+		lines = appendScalar(lines, "trashed_by", event, "trashed_by")
+		lines = appendScalar(lines, "trash_reason", event, "trash_reason")
 	} else if archivedAt := anyString(event["archived_at"]); archivedAt != "" {
 		lines = append(lines, "⚠ ARCHIVED")
 		lines = appendScalar(lines, "archived_at", event, "archived_at")
@@ -649,11 +649,11 @@ func formatDocumentRecord(body any) string {
 	lines = appendScalar(lines, "revision_id", revision, "revision_id")
 	lines = appendScalar(lines, "revision_number", revision, "revision_number")
 	lines = appendScalar(lines, "content_type", revision, "content_type")
-	if tombstonedAt := anyString(document["tombstoned_at"]); tombstonedAt != "" {
+	if trashedAt := anyString(document["trashed_at"]); trashedAt != "" {
 		lines = append(lines, "⚠ TOMBSTONED")
-		lines = appendScalar(lines, "tombstoned_at", document, "tombstoned_at")
-		lines = appendScalar(lines, "tombstoned_by", document, "tombstoned_by")
-		lines = appendScalar(lines, "tombstone_reason", document, "tombstone_reason")
+		lines = appendScalar(lines, "trashed_at", document, "trashed_at")
+		lines = appendScalar(lines, "trashed_by", document, "trashed_by")
+		lines = appendScalar(lines, "trash_reason", document, "trash_reason")
 	} else if archivedAt := anyString(document["archived_at"]); archivedAt != "" {
 		lines = append(lines, "⚠ ARCHIVED")
 		lines = appendScalar(lines, "archived_at", document, "archived_at")
@@ -1065,7 +1065,7 @@ func displayIDWithMode(item map[string]any, fullID bool) string {
 func renderEventListItemWithMode(item map[string]any, fullID bool) string {
 	summary := firstNonEmpty(anyString(item["summary_preview"]), anyString(item["summary"]), anyString(item["created_at"]))
 	prefix := ""
-	if anyString(item["tombstoned_at"]) != "" {
+	if anyString(item["trashed_at"]) != "" {
 		prefix = "[TOMBSTONED] "
 	} else if anyString(item["archived_at"]) != "" {
 		prefix = "[ARCHIVED] "
@@ -1310,11 +1310,11 @@ func formatBoardRecord(board map[string]any) string {
 	lines = appendStringList(lines, "owners", stringList(board["owners"]))
 	lines = appendScalar(lines, "updated_at", board, "updated_at")
 	lines = appendScalar(lines, "created_at", board, "created_at")
-	if tombstonedAt := anyString(board["tombstoned_at"]); tombstonedAt != "" {
+	if trashedAt := anyString(board["trashed_at"]); trashedAt != "" {
 		lines = append(lines, "⚠ TOMBSTONED")
-		lines = appendScalar(lines, "tombstoned_at", board, "tombstoned_at")
-		lines = appendScalar(lines, "tombstoned_by", board, "tombstoned_by")
-		lines = appendScalar(lines, "tombstone_reason", board, "tombstone_reason")
+		lines = appendScalar(lines, "trashed_at", board, "trashed_at")
+		lines = appendScalar(lines, "trashed_by", board, "trashed_by")
+		lines = appendScalar(lines, "trash_reason", board, "trash_reason")
 	} else if archivedAt := anyString(board["archived_at"]); archivedAt != "" {
 		lines = append(lines, "⚠ ARCHIVED")
 		lines = appendScalar(lines, "archived_at", board, "archived_at")

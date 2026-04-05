@@ -61,10 +61,10 @@
       <h2
         class="text-[12px] font-semibold uppercase tracking-wider text-[var(--ui-text-muted)]"
       >
-        Documents
+        Docs
       </h2>
       <p class="mt-0.5 text-[12px] text-[var(--ui-text-subtle)]">
-        Topic-linked docs and current head revisions.
+        Topic-linked documents and current head revisions.
       </p>
     </div>
     <a
@@ -77,7 +77,7 @@
 
   {#if documentsLoading}
     <p class="px-4 py-3 text-[13px] text-[var(--ui-text-muted)]">
-      Loading documents...
+      Loading docs...
     </p>
   {:else if documentsError}
     <p class="rounded-md bg-red-500/10 px-3 py-2 text-[13px] text-red-400">

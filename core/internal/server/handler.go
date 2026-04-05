@@ -42,7 +42,7 @@ type PrimitiveStore interface {
 	GetEvent(ctx context.Context, id string) (map[string]any, error)
 	ArchiveEvent(ctx context.Context, actorID, eventID string) (map[string]any, error)
 	UnarchiveEvent(ctx context.Context, actorID, eventID string) (map[string]any, error)
-	TombstoneEvent(ctx context.Context, actorID, eventID, reason string) (map[string]any, error)
+	TrashEvent(ctx context.Context, actorID, eventID, reason string) (map[string]any, error)
 	RestoreEvent(ctx context.Context, actorID, eventID string) (map[string]any, error)
 	CreateArtifact(ctx context.Context, actorID string, artifact map[string]any, content any, contentType string) (map[string]any, error)
 	CreateArtifactAndEvent(ctx context.Context, actorID string, artifact map[string]any, content any, contentType string, event map[string]any) (map[string]any, map[string]any, error)
@@ -90,7 +90,7 @@ type PrimitiveStore interface {
 	MoveBoardCard(ctx context.Context, actorID string, boardID string, threadID string, input primitives.MoveBoardCardInput) (primitives.BoardCardMutationResult, error)
 	RemoveBoardCard(ctx context.Context, actorID string, boardID string, identifier string, input primitives.RemoveBoardCardInput) (primitives.BoardCardRemovalResult, error)
 	ArchiveBoardCard(ctx context.Context, actorID string, boardID string, identifier string, input primitives.RemoveBoardCardInput) (primitives.BoardCardMutationResult, error)
-	TombstoneBoardCard(ctx context.Context, actorID string, boardID string, identifier string, reason string, input primitives.RemoveBoardCardInput) (primitives.BoardCardMutationResult, error)
+	TrashBoardCard(ctx context.Context, actorID string, boardID string, identifier string, reason string, input primitives.RemoveBoardCardInput) (primitives.BoardCardMutationResult, error)
 	RestoreArchivedBoardCard(ctx context.Context, actorID string, boardID string, identifier string, input primitives.RemoveBoardCardInput) (primitives.BoardCardMutationResult, error)
 	PurgeArchivedBoardCard(ctx context.Context, boardID string, identifier string) error
 	ListBoardCardHistory(ctx context.Context, cardID string) ([]map[string]any, error)
@@ -103,7 +103,7 @@ type PrimitiveStore interface {
 	PatchTopic(ctx context.Context, actorID string, topicID string, patch map[string]any, ifUpdatedAt *string) (primitives.TopicPatchResult, error)
 	ArchiveTopic(ctx context.Context, actorID string, topicID string) (map[string]any, error)
 	UnarchiveTopic(ctx context.Context, actorID string, topicID string) (map[string]any, error)
-	TombstoneTopic(ctx context.Context, actorID string, topicID string, reason string) (map[string]any, error)
+	TrashTopic(ctx context.Context, actorID string, topicID string, reason string) (map[string]any, error)
 	RestoreTopic(ctx context.Context, actorID string, topicID string) (map[string]any, error)
 	CreateThread(ctx context.Context, actorID string, thread map[string]any) (primitives.ThreadMutationResult, error)
 	GetThread(ctx context.Context, id string) (map[string]any, error)
@@ -112,24 +112,24 @@ type PrimitiveStore interface {
 	ListEventsByThread(ctx context.Context, threadID string) ([]map[string]any, error)
 	ListRecentEventsByThread(ctx context.Context, threadID string, limit int) ([]map[string]any, error)
 	ListEvents(ctx context.Context, filter primitives.EventListFilter) ([]map[string]any, error)
-	TombstoneArtifact(ctx context.Context, actorID string, artifactID string, reason string) (map[string]any, error)
+	TrashArtifact(ctx context.Context, actorID string, artifactID string, reason string) (map[string]any, error)
 	ArchiveArtifact(ctx context.Context, actorID string, artifactID string) (map[string]any, error)
 	UnarchiveArtifact(ctx context.Context, actorID string, artifactID string) (map[string]any, error)
 	RestoreArtifact(ctx context.Context, actorID string, artifactID string) (map[string]any, error)
-	PurgeTombstonedArtifact(ctx context.Context, artifactID string) error
-	TombstoneDocument(ctx context.Context, actorID string, documentID string, reason string) (map[string]any, map[string]any, error)
+	PurgeTrashedArtifact(ctx context.Context, artifactID string) error
+	TrashDocument(ctx context.Context, actorID string, documentID string, reason string) (map[string]any, map[string]any, error)
 	ArchiveDocument(ctx context.Context, actorID string, documentID string) (map[string]any, map[string]any, error)
 	UnarchiveDocument(ctx context.Context, actorID string, documentID string) (map[string]any, map[string]any, error)
 	RestoreDocument(ctx context.Context, actorID string, documentID string, reason string) (map[string]any, map[string]any, error)
 	PurgeDocument(ctx context.Context, documentID string) error
 	ArchiveThread(ctx context.Context, actorID string, threadID string) (map[string]any, error)
 	UnarchiveThread(ctx context.Context, actorID string, threadID string) (map[string]any, error)
-	TombstoneThread(ctx context.Context, actorID string, threadID string, reason string) (map[string]any, error)
+	TrashThread(ctx context.Context, actorID string, threadID string, reason string) (map[string]any, error)
 	RestoreThread(ctx context.Context, actorID string, threadID string) (map[string]any, error)
 	PurgeThread(ctx context.Context, threadID string) error
 	ArchiveBoard(ctx context.Context, actorID string, boardID string) (map[string]any, error)
 	UnarchiveBoard(ctx context.Context, actorID string, boardID string) (map[string]any, error)
-	TombstoneBoard(ctx context.Context, actorID string, boardID string, reason string) (map[string]any, error)
+	TrashBoard(ctx context.Context, actorID string, boardID string, reason string) (map[string]any, error)
 	RestoreBoard(ctx context.Context, actorID string, boardID string) (map[string]any, error)
 	PurgeBoard(ctx context.Context, boardID string) error
 }
@@ -912,7 +912,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
 			}
 			return routeAccessRequirement{}
-		case strings.HasSuffix(remainder, "/archive"), strings.HasSuffix(remainder, "/unarchive"), strings.HasSuffix(remainder, "/tombstone"), strings.HasSuffix(remainder, "/restore"):
+		case strings.HasSuffix(remainder, "/archive"), strings.HasSuffix(remainder, "/unarchive"), strings.HasSuffix(remainder, "/trash"), strings.HasSuffix(remainder, "/restore"):
 			if r.Method == http.MethodPost {
 				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
 			}
@@ -991,18 +991,18 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			return
 		}
 
-		if strings.HasSuffix(remainder, "/tombstone") {
+		if strings.HasSuffix(remainder, "/trash") {
 			if r.Method != http.MethodPost {
 				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
 				return
 			}
-			topicID := strings.TrimSuffix(remainder, "/tombstone")
+			topicID := strings.TrimSuffix(remainder, "/trash")
 			topicID = strings.TrimSuffix(topicID, "/")
 			if topicID == "" || strings.Contains(topicID, "/") {
 				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
 				return
 			}
-			handleTombstoneTopic(w, r, opts, topicID)
+			handleTrashTopic(w, r, opts, topicID)
 			return
 		}
 
@@ -1167,7 +1167,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
 			}
 			return routeAccessRequirement{}
-		case strings.HasSuffix(remainder, "/tombstone"):
+		case strings.HasSuffix(remainder, "/trash"):
 			if r.Method == http.MethodPost {
 				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
 			}
@@ -1261,18 +1261,18 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			return
 		}
 
-		if strings.HasSuffix(remainder, "/tombstone") {
+		if strings.HasSuffix(remainder, "/trash") {
 			if r.Method != http.MethodPost {
 				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
 				return
 			}
-			documentID := strings.TrimSuffix(remainder, "/tombstone")
+			documentID := strings.TrimSuffix(remainder, "/trash")
 			documentID = strings.TrimSuffix(documentID, "/")
 			if documentID == "" || strings.Contains(documentID, "/") {
 				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
 				return
 			}
-			handleTombstoneDocument(w, r, opts, documentID)
+			handleTrashDocument(w, r, opts, documentID)
 			return
 		}
 
@@ -1362,7 +1362,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
 			}
 			return routeAccessRequirement{}
-		case strings.HasSuffix(remainder, "/archive"), strings.HasSuffix(remainder, "/unarchive"), strings.HasSuffix(remainder, "/tombstone"), strings.HasSuffix(remainder, "/restore"), strings.HasSuffix(remainder, "/purge"):
+		case strings.HasSuffix(remainder, "/archive"), strings.HasSuffix(remainder, "/unarchive"), strings.HasSuffix(remainder, "/trash"), strings.HasSuffix(remainder, "/restore"), strings.HasSuffix(remainder, "/purge"):
 			if r.Method == http.MethodPost {
 				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
 			}
@@ -1375,7 +1375,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		case strings.Contains(remainder, "/cards/"):
 			cardRemainder := strings.TrimSpace(strings.SplitN(remainder, "/cards/", 2)[1])
 			switch {
-			case strings.HasSuffix(cardRemainder, "/move"), strings.HasSuffix(cardRemainder, "/remove"), strings.HasSuffix(cardRemainder, "/archive"), strings.HasSuffix(cardRemainder, "/tombstone"):
+			case strings.HasSuffix(cardRemainder, "/move"), strings.HasSuffix(cardRemainder, "/remove"), strings.HasSuffix(cardRemainder, "/archive"), strings.HasSuffix(cardRemainder, "/trash"):
 				if r.Method == http.MethodPost {
 					return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
 				}
@@ -1446,18 +1446,18 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			return
 		}
 
-		if strings.HasSuffix(remainder, "/tombstone") {
+		if strings.HasSuffix(remainder, "/trash") {
 			if r.Method != http.MethodPost {
 				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
 				return
 			}
-			boardID := strings.TrimSuffix(remainder, "/tombstone")
+			boardID := strings.TrimSuffix(remainder, "/trash")
 			boardID = strings.TrimSuffix(boardID, "/")
 			if boardID == "" || strings.Contains(boardID, "/") {
 				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
 				return
 			}
-			handleTombstoneBoard(w, r, opts, boardID)
+			handleTrashBoard(w, r, opts, boardID)
 			return
 		}
 
@@ -1552,18 +1552,18 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				return
 			}
 
-			if strings.HasSuffix(cardRemainder, "/tombstone") {
+			if strings.HasSuffix(cardRemainder, "/trash") {
 				if r.Method != http.MethodPost {
 					writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
 					return
 				}
-				cardID := strings.TrimSuffix(cardRemainder, "/tombstone")
+				cardID := strings.TrimSuffix(cardRemainder, "/trash")
 				cardID = strings.TrimSuffix(cardID, "/")
 				if cardID == "" || strings.Contains(cardID, "/") {
 					writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
 					return
 				}
-				handleTombstoneBoardCard(w, r, opts, boardID, cardID)
+				handleTrashBoardCard(w, r, opts, boardID, cardID)
 				return
 			}
 
@@ -1654,7 +1654,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
 			}
 			return routeAccessRequirement{}
-		case strings.HasSuffix(remainder, "/tombstone"):
+		case strings.HasSuffix(remainder, "/trash"):
 			if r.Method == http.MethodPost {
 				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
 			}
@@ -1715,18 +1715,18 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			handleArchiveCard(w, r, opts, cardID)
 			return
 		}
-		if strings.HasSuffix(remainder, "/tombstone") {
+		if strings.HasSuffix(remainder, "/trash") {
 			if r.Method != http.MethodPost {
 				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
 				return
 			}
-			cardID := strings.TrimSuffix(remainder, "/tombstone")
+			cardID := strings.TrimSuffix(remainder, "/trash")
 			cardID = strings.TrimSuffix(cardID, "/")
 			if cardID == "" || strings.Contains(cardID, "/") {
 				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
 				return
 			}
-			handleTombstoneCard(w, r, opts, cardID)
+			handleTrashCard(w, r, opts, cardID)
 			return
 		}
 		if strings.HasSuffix(remainder, "/restore") {
@@ -1800,7 +1800,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 		switch {
 		case strings.HasSuffix(remainder, "/archive"), strings.HasSuffix(remainder, "/unarchive"),
-			strings.HasSuffix(remainder, "/tombstone"), strings.HasSuffix(remainder, "/restore"):
+			strings.HasSuffix(remainder, "/trash"), strings.HasSuffix(remainder, "/restore"):
 			if r.Method == http.MethodPost {
 				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
 			}
@@ -1818,7 +1818,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			return
 		}
 
-		for _, suffix := range []string{"/archive", "/unarchive", "/tombstone", "/restore"} {
+		for _, suffix := range []string{"/archive", "/unarchive", "/trash", "/restore"} {
 			if strings.HasSuffix(remainder, suffix) {
 				if r.Method != http.MethodPost {
 					writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
@@ -1835,8 +1835,8 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 					handleArchiveEvent(w, r, opts, eventID)
 				case "/unarchive":
 					handleUnarchiveEvent(w, r, opts, eventID)
-				case "/tombstone":
-					handleTombstoneEvent(w, r, opts, eventID)
+				case "/trash":
+					handleTrashEvent(w, r, opts, eventID)
 				case "/restore":
 					handleRestoreEvent(w, r, opts, eventID)
 				}
@@ -1882,7 +1882,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
 			}
 			return routeAccessRequirement{}
-		case strings.HasSuffix(remainder, "/tombstone"):
+		case strings.HasSuffix(remainder, "/trash"):
 			if r.Method == http.MethodPost {
 				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
 			}
@@ -1946,18 +1946,18 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			return
 		}
 
-		if strings.HasSuffix(remainder, "/tombstone") {
+		if strings.HasSuffix(remainder, "/trash") {
 			if r.Method != http.MethodPost {
 				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
 				return
 			}
-			artifactID := strings.TrimSuffix(remainder, "/tombstone")
+			artifactID := strings.TrimSuffix(remainder, "/trash")
 			artifactID = strings.TrimSuffix(artifactID, "/")
 			if artifactID == "" || strings.Contains(artifactID, "/") {
 				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
 				return
 			}
-			handleTombstoneArtifact(w, r, opts, artifactID)
+			handleTrashArtifact(w, r, opts, artifactID)
 			return
 		}
 

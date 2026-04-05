@@ -74,18 +74,18 @@ func handleListThreads(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	}
 
 	threads, nextCursor, err := opts.primitiveStore.ListThreads(r.Context(), primitives.ThreadListFilter{
-		Status:            strings.TrimSpace(query.Get("status")),
-		Priority:          strings.TrimSpace(query.Get("priority")),
-		Tags:              tagsFilter,
-		Cadences:          cadenceFilter,
-		Stale:             staleFilter,
-		Query:             strings.TrimSpace(query.Get("q")),
-		Limit:             limitFilter,
-		Cursor:            strings.TrimSpace(query.Get("cursor")),
-		IncludeArchived:   strings.TrimSpace(query.Get("include_archived")) == "true",
-		ArchivedOnly:      strings.TrimSpace(query.Get("archived_only")) == "true",
-		IncludeTombstoned: strings.TrimSpace(query.Get("include_tombstoned")) == "true",
-		TombstonedOnly:    strings.TrimSpace(query.Get("tombstoned_only")) == "true",
+		Status:          strings.TrimSpace(query.Get("status")),
+		Priority:        strings.TrimSpace(query.Get("priority")),
+		Tags:            tagsFilter,
+		Cadences:        cadenceFilter,
+		Stale:           staleFilter,
+		Query:           strings.TrimSpace(query.Get("q")),
+		Limit:           limitFilter,
+		Cursor:          strings.TrimSpace(query.Get("cursor")),
+		IncludeArchived: strings.TrimSpace(query.Get("include_archived")) == "true",
+		ArchivedOnly:    strings.TrimSpace(query.Get("archived_only")) == "true",
+		IncludeTrashed:  strings.TrimSpace(query.Get("include_trashed")) == "true",
+		TrashedOnly:     strings.TrimSpace(query.Get("trashed_only")) == "true",
 	})
 	if err != nil {
 		if errors.Is(err, primitives.ErrInvalidCursor) {

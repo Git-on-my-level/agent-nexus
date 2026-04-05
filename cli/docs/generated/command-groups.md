@@ -17,7 +17,7 @@ Generated from `contracts/oar-openapi.yaml`.
   - `topics.patch` (`topics patch`)
   - `topics.restore` (`topics restore`)
   - `topics.timeline` (`topics timeline`)
-  - `topics.tombstone` (`topics tombstone`)
+  - `topics.trash` (`topics trash`)
   - `topics.unarchive` (`topics unarchive`)
   - `topics.workspace` (`topics workspace`)
 
@@ -33,11 +33,16 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `artifacts`
 
-- Commands: `3`
+- Commands: `8`
 - Command IDs:
+  - `artifacts.archive` (`artifacts archive`)
   - `artifacts.create` (`artifacts create`)
   - `artifacts.get` (`artifacts get`)
   - `artifacts.list` (`artifacts list`)
+  - `artifacts.purge` (`artifacts purge`)
+  - `artifacts.restore` (`artifacts restore`)
+  - `artifacts.trash` (`artifacts trash`)
+  - `artifacts.unarchive` (`artifacts unarchive`)
 
 ## `boards`
 
@@ -53,7 +58,7 @@ Generated from `contracts/oar-openapi.yaml`.
   - `boards.patch` (`boards patch`)
   - `boards.purge` (`boards purge`)
   - `boards.restore` (`boards restore`)
-  - `boards.tombstone` (`boards tombstone`)
+  - `boards.trash` (`boards trash`)
   - `boards.unarchive` (`boards unarchive`)
   - `boards.workspace` (`boards workspace`)
 
@@ -70,7 +75,7 @@ Generated from `contracts/oar-openapi.yaml`.
   - `cards.purge` (`cards purge`)
   - `cards.restore` (`cards restore`)
   - `cards.timeline` (`cards timeline`)
-  - `cards.tombstone` (`cards tombstone`)
+  - `cards.trash` (`cards trash`)
 
 ## `docs`
 
@@ -85,15 +90,19 @@ Generated from `contracts/oar-openapi.yaml`.
   - `docs.revisions.create` (`docs revisions create`)
   - `docs.revisions.get` (`docs revisions get`)
   - `docs.revisions.list` (`docs revisions list`)
-  - `docs.tombstone` (`docs tombstone`)
+  - `docs.trash` (`docs trash`)
   - `docs.unarchive` (`docs unarchive`)
 
 ## `events`
 
-- Commands: `2`
+- Commands: `6`
 - Command IDs:
+  - `events.archive` (`events archive`)
   - `events.create` (`events create`)
   - `events.list` (`events list`)
+  - `events.restore` (`events restore`)
+  - `events.trash` (`events trash`)
+  - `events.unarchive` (`events unarchive`)
 
 ## `inbox`
 

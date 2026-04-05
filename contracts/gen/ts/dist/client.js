@@ -1,5 +1,55 @@
 export const commandRegistry = [
     {
+        "command_id": "artifacts.archive",
+        "cli_path": "artifacts archive",
+        "group": "artifacts",
+        "method": "POST",
+        "path": "/artifacts/{artifact_id}/archive",
+        "operation_id": "archiveArtifact",
+        "summary": "Archive artifact",
+        "why": "Set archived_at on artifact metadata (orthogonal to trash lifecycle).",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ artifact }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "not_found",
+            "conflict"
+        ],
+        "concepts": [
+            "artifacts",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "body_schema": {
+            "optional": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                }
+            ]
+        },
+        "path_params": [
+            "artifact_id"
+        ],
+        "adjacent_commands": [
+            "artifacts.create",
+            "artifacts.get",
+            "artifacts.list",
+            "artifacts.purge",
+            "artifacts.restore",
+            "artifacts.trash",
+            "artifacts.unarchive"
+        ],
+        "go_method": "ArtifactsArchive",
+        "ts_method": "artifactsArchive"
+    },
+    {
         "command_id": "artifacts.create",
         "cli_path": "artifacts create",
         "group": "artifacts",
@@ -48,8 +98,13 @@ export const commandRegistry = [
             ]
         },
         "adjacent_commands": [
+            "artifacts.archive",
             "artifacts.get",
-            "artifacts.list"
+            "artifacts.list",
+            "artifacts.purge",
+            "artifacts.restore",
+            "artifacts.trash",
+            "artifacts.unarchive"
         ],
         "go_method": "ArtifactsCreate",
         "ts_method": "artifactsCreate"
@@ -82,8 +137,13 @@ export const commandRegistry = [
             "artifact_id"
         ],
         "adjacent_commands": [
+            "artifacts.archive",
             "artifacts.create",
-            "artifacts.list"
+            "artifacts.list",
+            "artifacts.purge",
+            "artifacts.restore",
+            "artifacts.trash",
+            "artifacts.unarchive"
         ],
         "go_method": "ArtifactsGet",
         "ts_method": "artifactsGet"
@@ -112,11 +172,221 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "canonical",
         "adjacent_commands": [
+            "artifacts.archive",
             "artifacts.create",
-            "artifacts.get"
+            "artifacts.get",
+            "artifacts.purge",
+            "artifacts.restore",
+            "artifacts.trash",
+            "artifacts.unarchive"
         ],
         "go_method": "ArtifactsList",
         "ts_method": "artifactsList"
+    },
+    {
+        "command_id": "artifacts.purge",
+        "cli_path": "artifacts purge",
+        "group": "artifacts",
+        "method": "POST",
+        "path": "/artifacts/{artifact_id}/purge",
+        "operation_id": "purgeArtifact",
+        "summary": "Permanently delete trashed artifact",
+        "why": "Permanently delete a trashed artifact (human-gated).",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ purged, artifact_id }`.",
+        "error_codes": [
+            "auth_required",
+            "human_only",
+            "invalid_token",
+            "not_found",
+            "conflict"
+        ],
+        "concepts": [
+            "artifacts",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "body_schema": {
+            "optional": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                }
+            ]
+        },
+        "path_params": [
+            "artifact_id"
+        ],
+        "adjacent_commands": [
+            "artifacts.archive",
+            "artifacts.create",
+            "artifacts.get",
+            "artifacts.list",
+            "artifacts.restore",
+            "artifacts.trash",
+            "artifacts.unarchive"
+        ],
+        "go_method": "ArtifactsPurge",
+        "ts_method": "artifactsPurge"
+    },
+    {
+        "command_id": "artifacts.restore",
+        "cli_path": "artifacts restore",
+        "group": "artifacts",
+        "method": "POST",
+        "path": "/artifacts/{artifact_id}/restore",
+        "operation_id": "restoreArtifact",
+        "summary": "Restore artifact from trash",
+        "why": "Clear trash lifecycle fields on an artifact after an explicit restore action.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ artifact }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "not_found",
+            "conflict"
+        ],
+        "concepts": [
+            "artifacts",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "body_schema": {
+            "optional": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                }
+            ]
+        },
+        "path_params": [
+            "artifact_id"
+        ],
+        "adjacent_commands": [
+            "artifacts.archive",
+            "artifacts.create",
+            "artifacts.get",
+            "artifacts.list",
+            "artifacts.purge",
+            "artifacts.trash",
+            "artifacts.unarchive"
+        ],
+        "go_method": "ArtifactsRestore",
+        "ts_method": "artifactsRestore"
+    },
+    {
+        "command_id": "artifacts.trash",
+        "cli_path": "artifacts trash",
+        "group": "artifacts",
+        "method": "POST",
+        "path": "/artifacts/{artifact_id}/trash",
+        "operation_id": "trashArtifact",
+        "summary": "Move artifact to trash",
+        "why": "Move artifact metadata to trash with an explicit operator reason.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ artifact }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "not_found"
+        ],
+        "concepts": [
+            "artifacts",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "reason",
+                    "type": "string"
+                }
+            ],
+            "optional": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                }
+            ]
+        },
+        "path_params": [
+            "artifact_id"
+        ],
+        "adjacent_commands": [
+            "artifacts.archive",
+            "artifacts.create",
+            "artifacts.get",
+            "artifacts.list",
+            "artifacts.purge",
+            "artifacts.restore",
+            "artifacts.unarchive"
+        ],
+        "go_method": "ArtifactsTrash",
+        "ts_method": "artifactsTrash"
+    },
+    {
+        "command_id": "artifacts.unarchive",
+        "cli_path": "artifacts unarchive",
+        "group": "artifacts",
+        "method": "POST",
+        "path": "/artifacts/{artifact_id}/unarchive",
+        "operation_id": "unarchiveArtifact",
+        "summary": "Unarchive artifact",
+        "why": "Clear archived_at on artifact metadata.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ artifact }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "not_found",
+            "conflict"
+        ],
+        "concepts": [
+            "artifacts",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "body_schema": {
+            "optional": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                }
+            ]
+        },
+        "path_params": [
+            "artifact_id"
+        ],
+        "adjacent_commands": [
+            "artifacts.archive",
+            "artifacts.create",
+            "artifacts.get",
+            "artifacts.list",
+            "artifacts.purge",
+            "artifacts.restore",
+            "artifacts.trash"
+        ],
+        "go_method": "ArtifactsUnarchive",
+        "ts_method": "artifactsUnarchive"
     },
     {
         "command_id": "boards.archive",
@@ -166,7 +436,7 @@ export const commandRegistry = [
             "boards.patch",
             "boards.purge",
             "boards.restore",
-            "boards.tombstone",
+            "boards.trash",
             "boards.unarchive",
             "boards.workspace"
         ],
@@ -322,7 +592,7 @@ export const commandRegistry = [
             "boards.patch",
             "boards.purge",
             "boards.restore",
-            "boards.tombstone",
+            "boards.trash",
             "boards.unarchive",
             "boards.workspace"
         ],
@@ -368,7 +638,7 @@ export const commandRegistry = [
             "boards.patch",
             "boards.purge",
             "boards.restore",
-            "boards.tombstone",
+            "boards.trash",
             "boards.unarchive",
             "boards.workspace"
         ],
@@ -413,7 +683,7 @@ export const commandRegistry = [
             "boards.patch",
             "boards.purge",
             "boards.restore",
-            "boards.tombstone",
+            "boards.trash",
             "boards.unarchive",
             "boards.workspace"
         ],
@@ -498,7 +768,7 @@ export const commandRegistry = [
             "boards.patch",
             "boards.purge",
             "boards.restore",
-            "boards.tombstone",
+            "boards.trash",
             "boards.unarchive",
             "boards.workspace"
         ],
@@ -542,7 +812,7 @@ export const commandRegistry = [
             "boards.patch",
             "boards.purge",
             "boards.restore",
-            "boards.tombstone",
+            "boards.trash",
             "boards.unarchive",
             "boards.workspace"
         ],
@@ -582,7 +852,7 @@ export const commandRegistry = [
             "boards.patch",
             "boards.purge",
             "boards.restore",
-            "boards.tombstone",
+            "boards.trash",
             "boards.unarchive",
             "boards.workspace"
         ],
@@ -675,7 +945,7 @@ export const commandRegistry = [
             "boards.list",
             "boards.purge",
             "boards.restore",
-            "boards.tombstone",
+            "boards.trash",
             "boards.unarchive",
             "boards.workspace"
         ],
@@ -689,8 +959,8 @@ export const commandRegistry = [
         "method": "POST",
         "path": "/boards/{board_id}/purge",
         "operation_id": "purgeBoard",
-        "summary": "Purge tombstoned board",
-        "why": "Permanently delete a tombstoned board (human-gated).",
+        "summary": "Permanently delete trashed board",
+        "why": "Permanently delete a trashed board (human-gated).",
         "input_mode": "json-body",
         "streaming": {
             "mode": "none"
@@ -730,7 +1000,7 @@ export const commandRegistry = [
             "boards.list",
             "boards.patch",
             "boards.restore",
-            "boards.tombstone",
+            "boards.trash",
             "boards.unarchive",
             "boards.workspace"
         ],
@@ -744,8 +1014,8 @@ export const commandRegistry = [
         "method": "POST",
         "path": "/boards/{board_id}/restore",
         "operation_id": "restoreBoard",
-        "summary": "Restore board from tombstone",
-        "why": "Clear tombstone fields on a board after an explicit restore action.",
+        "summary": "Restore board from trash",
+        "why": "Clear trash lifecycle fields on a board after an explicit restore action.",
         "input_mode": "json-body",
         "streaming": {
             "mode": "none"
@@ -785,7 +1055,7 @@ export const commandRegistry = [
             "boards.list",
             "boards.patch",
             "boards.purge",
-            "boards.tombstone",
+            "boards.trash",
             "boards.unarchive",
             "boards.workspace"
         ],
@@ -793,14 +1063,14 @@ export const commandRegistry = [
         "ts_method": "boardsRestore"
     },
     {
-        "command_id": "boards.tombstone",
-        "cli_path": "boards tombstone",
+        "command_id": "boards.trash",
+        "cli_path": "boards trash",
         "group": "boards",
         "method": "POST",
-        "path": "/boards/{board_id}/tombstone",
-        "operation_id": "tombstoneBoard",
-        "summary": "Tombstone board",
-        "why": "Mark board as tombstoned with an explicit operator reason.",
+        "path": "/boards/{board_id}/trash",
+        "operation_id": "trashBoard",
+        "summary": "Move board to trash",
+        "why": "Move board to trash with an explicit operator reason.",
         "input_mode": "json-body",
         "streaming": {
             "mode": "none"
@@ -850,8 +1120,8 @@ export const commandRegistry = [
             "boards.unarchive",
             "boards.workspace"
         ],
-        "go_method": "BoardsTombstone",
-        "ts_method": "boardsTombstone"
+        "go_method": "BoardsTrash",
+        "ts_method": "boardsTrash"
     },
     {
         "command_id": "boards.unarchive",
@@ -902,7 +1172,7 @@ export const commandRegistry = [
             "boards.patch",
             "boards.purge",
             "boards.restore",
-            "boards.tombstone",
+            "boards.trash",
             "boards.workspace"
         ],
         "go_method": "BoardsUnarchive",
@@ -947,7 +1217,7 @@ export const commandRegistry = [
             "boards.patch",
             "boards.purge",
             "boards.restore",
-            "boards.tombstone",
+            "boards.trash",
             "boards.unarchive"
         ],
         "go_method": "BoardsWorkspace",
@@ -973,7 +1243,7 @@ export const commandRegistry = [
             "invalid_token",
             "not_found",
             "conflict",
-            "already_tombstoned"
+            "already_trashed"
         ],
         "concepts": [
             "cards",
@@ -1005,7 +1275,7 @@ export const commandRegistry = [
             "cards.purge",
             "cards.restore",
             "cards.timeline",
-            "cards.tombstone"
+            "cards.trash"
         ],
         "go_method": "CardsArchive",
         "ts_method": "cardsArchive"
@@ -1155,7 +1425,7 @@ export const commandRegistry = [
             "cards.purge",
             "cards.restore",
             "cards.timeline",
-            "cards.tombstone"
+            "cards.trash"
         ],
         "go_method": "CardsCreate",
         "ts_method": "cardsCreate"
@@ -1196,7 +1466,7 @@ export const commandRegistry = [
             "cards.purge",
             "cards.restore",
             "cards.timeline",
-            "cards.tombstone"
+            "cards.trash"
         ],
         "go_method": "CardsGet",
         "ts_method": "cardsGet"
@@ -1233,7 +1503,7 @@ export const commandRegistry = [
             "cards.purge",
             "cards.restore",
             "cards.timeline",
-            "cards.tombstone"
+            "cards.trash"
         ],
         "go_method": "CardsList",
         "ts_method": "cardsList"
@@ -1360,7 +1630,7 @@ export const commandRegistry = [
             "cards.purge",
             "cards.restore",
             "cards.timeline",
-            "cards.tombstone"
+            "cards.trash"
         ],
         "go_method": "CardsMove",
         "ts_method": "cardsMove"
@@ -1479,7 +1749,7 @@ export const commandRegistry = [
             "cards.purge",
             "cards.restore",
             "cards.timeline",
-            "cards.tombstone"
+            "cards.trash"
         ],
         "go_method": "CardsPatch",
         "ts_method": "cardsPatch"
@@ -1491,8 +1761,8 @@ export const commandRegistry = [
         "method": "POST",
         "path": "/cards/{card_id}/purge",
         "operation_id": "purgeArchivedCard",
-        "summary": "Purge archived or tombstoned card",
-        "why": "Permanently delete an archived or tombstoned card (human-gated).",
+        "summary": "Permanently delete archived or trashed card",
+        "why": "Permanently delete an archived or trashed card (human-gated).",
         "input_mode": "json-body",
         "streaming": {
             "mode": "none"
@@ -1531,7 +1801,7 @@ export const commandRegistry = [
             "cards.patch",
             "cards.restore",
             "cards.timeline",
-            "cards.tombstone"
+            "cards.trash"
         ],
         "go_method": "CardsPurge",
         "ts_method": "cardsPurge"
@@ -1543,8 +1813,8 @@ export const commandRegistry = [
         "method": "POST",
         "path": "/cards/{card_id}/restore",
         "operation_id": "restoreArchivedCard",
-        "summary": "Restore archived or tombstoned card",
-        "why": "Clear archive or tombstone lifecycle fields on a card so it reappears on boards.",
+        "summary": "Restore archived or trashed card",
+        "why": "Clear archive or trash lifecycle fields on a card so it reappears on boards.",
         "input_mode": "json-body",
         "streaming": {
             "mode": "none"
@@ -1587,7 +1857,7 @@ export const commandRegistry = [
             "cards.patch",
             "cards.purge",
             "cards.timeline",
-            "cards.tombstone"
+            "cards.trash"
         ],
         "go_method": "CardsRestore",
         "ts_method": "cardsRestore"
@@ -1629,20 +1899,20 @@ export const commandRegistry = [
             "cards.patch",
             "cards.purge",
             "cards.restore",
-            "cards.tombstone"
+            "cards.trash"
         ],
         "go_method": "CardsTimeline",
         "ts_method": "cardsTimeline"
     },
     {
-        "command_id": "cards.tombstone",
-        "cli_path": "cards tombstone",
+        "command_id": "cards.trash",
+        "cli_path": "cards trash",
         "group": "cards",
         "method": "POST",
-        "path": "/cards/{card_id}/tombstone",
-        "operation_id": "tombstoneCard",
-        "summary": "Tombstone card",
-        "why": "Mark a card as tombstoned with an explicit operator reason while keeping archive lifecycle distinct.",
+        "path": "/cards/{card_id}/trash",
+        "operation_id": "trashCard",
+        "summary": "Move card to trash",
+        "why": "Move a card to trash with an explicit operator reason while keeping archive lifecycle distinct.",
         "input_mode": "json-body",
         "streaming": {
             "mode": "none"
@@ -1693,8 +1963,8 @@ export const commandRegistry = [
             "cards.restore",
             "cards.timeline"
         ],
-        "go_method": "CardsTombstone",
-        "ts_method": "cardsTombstone"
+        "go_method": "CardsTrash",
+        "ts_method": "cardsTrash"
     },
     {
         "command_id": "docs.archive",
@@ -1743,7 +2013,7 @@ export const commandRegistry = [
             "docs.revisions.create",
             "docs.revisions.get",
             "docs.revisions.list",
-            "docs.tombstone",
+            "docs.trash",
             "docs.unarchive"
         ],
         "go_method": "DocsArchive",
@@ -1821,7 +2091,7 @@ export const commandRegistry = [
             "docs.revisions.create",
             "docs.revisions.get",
             "docs.revisions.list",
-            "docs.tombstone",
+            "docs.trash",
             "docs.unarchive"
         ],
         "go_method": "DocsCreate",
@@ -1863,7 +2133,7 @@ export const commandRegistry = [
             "docs.revisions.create",
             "docs.revisions.get",
             "docs.revisions.list",
-            "docs.tombstone",
+            "docs.trash",
             "docs.unarchive"
         ],
         "go_method": "DocsGet",
@@ -1901,7 +2171,7 @@ export const commandRegistry = [
             "docs.revisions.create",
             "docs.revisions.get",
             "docs.revisions.list",
-            "docs.tombstone",
+            "docs.trash",
             "docs.unarchive"
         ],
         "go_method": "DocsList",
@@ -1914,8 +2184,8 @@ export const commandRegistry = [
         "method": "POST",
         "path": "/docs/{document_id}/purge",
         "operation_id": "purgeDocument",
-        "summary": "Purge tombstoned document",
-        "why": "Permanently delete a tombstoned document (human-gated).",
+        "summary": "Permanently delete trashed document",
+        "why": "Permanently delete a trashed document (human-gated).",
         "input_mode": "json-body",
         "streaming": {
             "mode": "none"
@@ -1954,7 +2224,7 @@ export const commandRegistry = [
             "docs.revisions.create",
             "docs.revisions.get",
             "docs.revisions.list",
-            "docs.tombstone",
+            "docs.trash",
             "docs.unarchive"
         ],
         "go_method": "DocsPurge",
@@ -1967,8 +2237,8 @@ export const commandRegistry = [
         "method": "POST",
         "path": "/docs/{document_id}/restore",
         "operation_id": "restoreDocument",
-        "summary": "Restore document from tombstone",
-        "why": "Clear tombstone state on a document after an explicit restore action.",
+        "summary": "Restore document from trash",
+        "why": "Clear trash state on a document after an explicit restore action.",
         "input_mode": "json-body",
         "streaming": {
             "mode": "none"
@@ -2011,7 +2281,7 @@ export const commandRegistry = [
             "docs.revisions.create",
             "docs.revisions.get",
             "docs.revisions.list",
-            "docs.tombstone",
+            "docs.trash",
             "docs.unarchive"
         ],
         "go_method": "DocsRestore",
@@ -2095,7 +2365,7 @@ export const commandRegistry = [
             "docs.restore",
             "docs.revisions.get",
             "docs.revisions.list",
-            "docs.tombstone",
+            "docs.trash",
             "docs.unarchive"
         ],
         "go_method": "DocsRevisionsCreate",
@@ -2139,7 +2409,7 @@ export const commandRegistry = [
             "docs.restore",
             "docs.revisions.create",
             "docs.revisions.list",
-            "docs.tombstone",
+            "docs.trash",
             "docs.unarchive"
         ],
         "go_method": "DocsRevisionsGet",
@@ -2182,21 +2452,21 @@ export const commandRegistry = [
             "docs.restore",
             "docs.revisions.create",
             "docs.revisions.get",
-            "docs.tombstone",
+            "docs.trash",
             "docs.unarchive"
         ],
         "go_method": "DocsRevisionsList",
         "ts_method": "docsRevisionsList"
     },
     {
-        "command_id": "docs.tombstone",
-        "cli_path": "docs tombstone",
+        "command_id": "docs.trash",
+        "cli_path": "docs trash",
         "group": "docs",
         "method": "POST",
-        "path": "/docs/{document_id}/tombstone",
-        "operation_id": "tombstoneDocument",
-        "summary": "Tombstone document",
-        "why": "Mark a document lineage as tombstoned with an explicit operator reason.",
+        "path": "/docs/{document_id}/trash",
+        "operation_id": "trashDocument",
+        "summary": "Move document to trash",
+        "why": "Move a document lineage to trash with an explicit operator reason.",
         "input_mode": "json-body",
         "streaming": {
             "mode": "none"
@@ -2244,8 +2514,8 @@ export const commandRegistry = [
             "docs.revisions.list",
             "docs.unarchive"
         ],
-        "go_method": "DocsTombstone",
-        "ts_method": "docsTombstone"
+        "go_method": "DocsTrash",
+        "ts_method": "docsTrash"
     },
     {
         "command_id": "docs.unarchive",
@@ -2295,10 +2565,58 @@ export const commandRegistry = [
             "docs.revisions.create",
             "docs.revisions.get",
             "docs.revisions.list",
-            "docs.tombstone"
+            "docs.trash"
         ],
         "go_method": "DocsUnarchive",
         "ts_method": "docsUnarchive"
+    },
+    {
+        "command_id": "events.archive",
+        "cli_path": "events archive",
+        "group": "events",
+        "method": "POST",
+        "path": "/events/{event_id}/archive",
+        "operation_id": "archiveEvent",
+        "summary": "Archive event",
+        "why": "Set archived_at on an append-only event record for filtered views.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ event }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "not_found",
+            "conflict"
+        ],
+        "concepts": [
+            "events",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "body_schema": {
+            "optional": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                }
+            ]
+        },
+        "path_params": [
+            "event_id"
+        ],
+        "adjacent_commands": [
+            "events.create",
+            "events.list",
+            "events.restore",
+            "events.trash",
+            "events.unarchive"
+        ],
+        "go_method": "EventsArchive",
+        "ts_method": "eventsArchive"
     },
     {
         "command_id": "events.create",
@@ -2352,19 +2670,21 @@ export const commandRegistry = [
                         "board_card_added",
                         "board_card_archived",
                         "board_card_moved",
+                        "board_card_trashed",
                         "board_created",
                         "board_updated",
                         "card_archived",
                         "card_created",
                         "card_moved",
                         "card_resolved",
+                        "card_trashed",
                         "card_updated",
                         "decision_made",
                         "decision_needed",
                         "document_created",
                         "document_revised",
                         "document_revision_created",
-                        "document_tombstoned",
+                        "document_trashed",
                         "exception_raised",
                         "inbox_item_acknowledged",
                         "intervention_needed",
@@ -2375,7 +2695,7 @@ export const commandRegistry = [
                         "topic_created",
                         "topic_restored",
                         "topic_status_changed",
-                        "topic_tombstoned",
+                        "topic_trashed",
                         "topic_updated"
                     ],
                     "enum_policy": "open"
@@ -2401,7 +2721,11 @@ export const commandRegistry = [
             ]
         },
         "adjacent_commands": [
-            "events.list"
+            "events.archive",
+            "events.list",
+            "events.restore",
+            "events.trash",
+            "events.unarchive"
         ],
         "go_method": "EventsCreate",
         "ts_method": "eventsCreate"
@@ -2430,10 +2754,163 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "canonical",
         "adjacent_commands": [
-            "events.create"
+            "events.archive",
+            "events.create",
+            "events.restore",
+            "events.trash",
+            "events.unarchive"
         ],
         "go_method": "EventsList",
         "ts_method": "eventsList"
+    },
+    {
+        "command_id": "events.restore",
+        "cli_path": "events restore",
+        "group": "events",
+        "method": "POST",
+        "path": "/events/{event_id}/restore",
+        "operation_id": "restoreEvent",
+        "summary": "Restore event from trash",
+        "why": "Clear trash state on an event after an explicit restore action.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ event }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "not_found",
+            "conflict"
+        ],
+        "concepts": [
+            "events",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "body_schema": {
+            "optional": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                }
+            ]
+        },
+        "path_params": [
+            "event_id"
+        ],
+        "adjacent_commands": [
+            "events.archive",
+            "events.create",
+            "events.list",
+            "events.trash",
+            "events.unarchive"
+        ],
+        "go_method": "EventsRestore",
+        "ts_method": "eventsRestore"
+    },
+    {
+        "command_id": "events.trash",
+        "cli_path": "events trash",
+        "group": "events",
+        "method": "POST",
+        "path": "/events/{event_id}/trash",
+        "operation_id": "trashEvent",
+        "summary": "Move event to trash",
+        "why": "Move event to trash with an explicit operator reason.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ event }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "not_found"
+        ],
+        "concepts": [
+            "events",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "reason",
+                    "type": "string"
+                }
+            ],
+            "optional": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                }
+            ]
+        },
+        "path_params": [
+            "event_id"
+        ],
+        "adjacent_commands": [
+            "events.archive",
+            "events.create",
+            "events.list",
+            "events.restore",
+            "events.unarchive"
+        ],
+        "go_method": "EventsTrash",
+        "ts_method": "eventsTrash"
+    },
+    {
+        "command_id": "events.unarchive",
+        "cli_path": "events unarchive",
+        "group": "events",
+        "method": "POST",
+        "path": "/events/{event_id}/unarchive",
+        "operation_id": "unarchiveEvent",
+        "summary": "Unarchive event",
+        "why": "Clear archived_at on an event.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ event }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "not_found",
+            "conflict"
+        ],
+        "concepts": [
+            "events",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "body_schema": {
+            "optional": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                }
+            ]
+        },
+        "path_params": [
+            "event_id"
+        ],
+        "adjacent_commands": [
+            "events.archive",
+            "events.create",
+            "events.list",
+            "events.restore",
+            "events.trash"
+        ],
+        "go_method": "EventsUnarchive",
+        "ts_method": "eventsUnarchive"
     },
     {
         "command_id": "inbox.acknowledge",
@@ -2986,7 +3463,7 @@ export const commandRegistry = [
             "topics.patch",
             "topics.restore",
             "topics.timeline",
-            "topics.tombstone",
+            "topics.trash",
             "topics.unarchive",
             "topics.workspace"
         ],
@@ -3098,7 +3575,7 @@ export const commandRegistry = [
             "topics.patch",
             "topics.restore",
             "topics.timeline",
-            "topics.tombstone",
+            "topics.trash",
             "topics.unarchive",
             "topics.workspace"
         ],
@@ -3139,7 +3616,7 @@ export const commandRegistry = [
             "topics.patch",
             "topics.restore",
             "topics.timeline",
-            "topics.tombstone",
+            "topics.trash",
             "topics.unarchive",
             "topics.workspace"
         ],
@@ -3176,7 +3653,7 @@ export const commandRegistry = [
             "topics.patch",
             "topics.restore",
             "topics.timeline",
-            "topics.tombstone",
+            "topics.trash",
             "topics.unarchive",
             "topics.workspace"
         ],
@@ -3295,7 +3772,7 @@ export const commandRegistry = [
             "topics.list",
             "topics.restore",
             "topics.timeline",
-            "topics.tombstone",
+            "topics.trash",
             "topics.unarchive",
             "topics.workspace"
         ],
@@ -3309,8 +3786,8 @@ export const commandRegistry = [
         "method": "POST",
         "path": "/topics/{topic_id}/restore",
         "operation_id": "restoreTopic",
-        "summary": "Restore topic from tombstone",
-        "why": "Clear tombstone fields on a topic after an explicit restore action.",
+        "summary": "Restore topic from trash",
+        "why": "Clear trash lifecycle fields on a topic after an explicit restore action.",
         "input_mode": "json-body",
         "streaming": {
             "mode": "none"
@@ -3347,7 +3824,7 @@ export const commandRegistry = [
             "topics.list",
             "topics.patch",
             "topics.timeline",
-            "topics.tombstone",
+            "topics.trash",
             "topics.unarchive",
             "topics.workspace"
         ],
@@ -3389,7 +3866,7 @@ export const commandRegistry = [
             "topics.list",
             "topics.patch",
             "topics.restore",
-            "topics.tombstone",
+            "topics.trash",
             "topics.unarchive",
             "topics.workspace"
         ],
@@ -3397,14 +3874,14 @@ export const commandRegistry = [
         "ts_method": "topicsTimeline"
     },
     {
-        "command_id": "topics.tombstone",
-        "cli_path": "topics tombstone",
+        "command_id": "topics.trash",
+        "cli_path": "topics trash",
         "group": "topics",
         "method": "POST",
-        "path": "/topics/{topic_id}/tombstone",
-        "operation_id": "tombstoneTopic",
-        "summary": "Tombstone topic",
-        "why": "Mark topic as tombstoned with an explicit operator reason.",
+        "path": "/topics/{topic_id}/trash",
+        "operation_id": "trashTopic",
+        "summary": "Move topic to trash",
+        "why": "Move topic to trash with an explicit operator reason.",
         "input_mode": "json-body",
         "streaming": {
             "mode": "none"
@@ -3451,8 +3928,8 @@ export const commandRegistry = [
             "topics.unarchive",
             "topics.workspace"
         ],
-        "go_method": "TopicsTombstone",
-        "ts_method": "topicsTombstone"
+        "go_method": "TopicsTrash",
+        "ts_method": "topicsTrash"
     },
     {
         "command_id": "topics.unarchive",
@@ -3500,7 +3977,7 @@ export const commandRegistry = [
             "topics.patch",
             "topics.restore",
             "topics.timeline",
-            "topics.tombstone",
+            "topics.trash",
             "topics.workspace"
         ],
         "go_method": "TopicsUnarchive",
@@ -3542,7 +4019,7 @@ export const commandRegistry = [
             "topics.patch",
             "topics.restore",
             "topics.timeline",
-            "topics.tombstone",
+            "topics.trash",
             "topics.unarchive"
         ],
         "go_method": "TopicsWorkspace",
@@ -3611,6 +4088,9 @@ export class OarClient {
         }
         return { status: response.status, headers: response.headers, body };
     }
+    artifactsArchive(pathParams, options = {}) {
+        return this.invoke("artifacts.archive", pathParams, options);
+    }
     artifactsCreate(options = {}) {
         return this.invoke("artifacts.create", {}, options);
     }
@@ -3619,6 +4099,18 @@ export class OarClient {
     }
     artifactsList(options = {}) {
         return this.invoke("artifacts.list", {}, options);
+    }
+    artifactsPurge(pathParams, options = {}) {
+        return this.invoke("artifacts.purge", pathParams, options);
+    }
+    artifactsRestore(pathParams, options = {}) {
+        return this.invoke("artifacts.restore", pathParams, options);
+    }
+    artifactsTrash(pathParams, options = {}) {
+        return this.invoke("artifacts.trash", pathParams, options);
+    }
+    artifactsUnarchive(pathParams, options = {}) {
+        return this.invoke("artifacts.unarchive", pathParams, options);
     }
     boardsArchive(pathParams, options = {}) {
         return this.invoke("boards.archive", pathParams, options);
@@ -3650,8 +4142,8 @@ export class OarClient {
     boardsRestore(pathParams, options = {}) {
         return this.invoke("boards.restore", pathParams, options);
     }
-    boardsTombstone(pathParams, options = {}) {
-        return this.invoke("boards.tombstone", pathParams, options);
+    boardsTrash(pathParams, options = {}) {
+        return this.invoke("boards.trash", pathParams, options);
     }
     boardsUnarchive(pathParams, options = {}) {
         return this.invoke("boards.unarchive", pathParams, options);
@@ -3686,8 +4178,8 @@ export class OarClient {
     cardsTimeline(pathParams, options = {}) {
         return this.invoke("cards.timeline", pathParams, options);
     }
-    cardsTombstone(pathParams, options = {}) {
-        return this.invoke("cards.tombstone", pathParams, options);
+    cardsTrash(pathParams, options = {}) {
+        return this.invoke("cards.trash", pathParams, options);
     }
     docsArchive(pathParams, options = {}) {
         return this.invoke("docs.archive", pathParams, options);
@@ -3716,17 +4208,29 @@ export class OarClient {
     docsRevisionsList(pathParams, options = {}) {
         return this.invoke("docs.revisions.list", pathParams, options);
     }
-    docsTombstone(pathParams, options = {}) {
-        return this.invoke("docs.tombstone", pathParams, options);
+    docsTrash(pathParams, options = {}) {
+        return this.invoke("docs.trash", pathParams, options);
     }
     docsUnarchive(pathParams, options = {}) {
         return this.invoke("docs.unarchive", pathParams, options);
+    }
+    eventsArchive(pathParams, options = {}) {
+        return this.invoke("events.archive", pathParams, options);
     }
     eventsCreate(options = {}) {
         return this.invoke("events.create", {}, options);
     }
     eventsList(options = {}) {
         return this.invoke("events.list", {}, options);
+    }
+    eventsRestore(pathParams, options = {}) {
+        return this.invoke("events.restore", pathParams, options);
+    }
+    eventsTrash(pathParams, options = {}) {
+        return this.invoke("events.trash", pathParams, options);
+    }
+    eventsUnarchive(pathParams, options = {}) {
+        return this.invoke("events.unarchive", pathParams, options);
     }
     inboxAcknowledge(pathParams, options = {}) {
         return this.invoke("inbox.acknowledge", pathParams, options);
@@ -3788,8 +4292,8 @@ export class OarClient {
     topicsTimeline(pathParams, options = {}) {
         return this.invoke("topics.timeline", pathParams, options);
     }
-    topicsTombstone(pathParams, options = {}) {
-        return this.invoke("topics.tombstone", pathParams, options);
+    topicsTrash(pathParams, options = {}) {
+        return this.invoke("topics.trash", pathParams, options);
     }
     topicsUnarchive(pathParams, options = {}) {
         return this.invoke("topics.unarchive", pathParams, options);

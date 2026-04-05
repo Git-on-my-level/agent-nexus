@@ -175,7 +175,7 @@ Projection endpoints return a `section_kinds` field to distinguish canonical vs 
   - Response: `{ "topic": <topic> }`
 
 - `GET /topics`
-  - Query (optional): `type`, `status`, `q`, `limit`, `cursor`, `include_archived`, `archived_only`, `include_tombstoned`, `tombstoned_only`
+  - Query (optional): `type`, `status`, `q`, `limit`, `cursor`, `include_archived`, `archived_only`, `include_trashed`, `trashed_only`
   - Response: `{ "topics": [<topic>...], "next_cursor"?: "..." }`
 
 - `GET /topics/{topic_id}`
@@ -206,7 +206,7 @@ Projection endpoints return a `section_kinds` field to distinguish canonical vs 
 
 - `POST /topics/{topic_id}/archive`
 - `POST /topics/{topic_id}/unarchive`
-- `POST /topics/{topic_id}/tombstone`
+- `POST /topics/{topic_id}/trash`
 - `POST /topics/{topic_id}/restore`
   - Each mutation responds with `{ "topic": <topic> }`.
 
@@ -303,7 +303,7 @@ Backing threads hold append-only timelines and anchor many packet subjects. They
   - Side effect: appends `document_created` to `events` on the document backing thread with thread/document/revision/artifact refs.
 
 - `GET /docs`
-  - Query (optional): `thread_id=<thread_id>`, `include_tombstoned=true|false`, `q`, `limit`, `cursor`
+  - Query (optional): `thread_id=<thread_id>`, `include_trashed=true|false`, `q`, `limit`, `cursor`
   - Response: `{ "documents": [<document>...], "next_cursor"?: "..." }`
   - Notes:
     - `thread_id` scopes the list to documents whose current `document.thread_id` matches the thread.
@@ -315,7 +315,7 @@ Backing threads hold append-only timelines and anchor many packet subjects. They
 - `PATCH /docs/{document_id}`
   - Body: `{ "actor_id": "...", "document"?: { title?, thread_id?, slug?, status?, labels?, supersedes? }, "if_base_revision": "<revision_id>", "refs"?: ["typed:ref"...], "content": <string|object|base64>, "content_type": "text|structured|binary" }`
   - Response: `{ "document": <document>, "revision": <document_revision_with_content> }`
-  - Side effect: appends `document_updated` to `events` on the current backing thread with thread/document/revision/artifact refs.
+  - Side effect: appends `document_revised` to `events` on the current backing thread with thread/document/revision/artifact refs.
 
 - `GET /docs/{document_id}/history`
   - Response: `{ "document_id": "<document_id>", "revisions": [<document_revision>...] }`
@@ -323,10 +323,10 @@ Backing threads hold append-only timelines and anchor many packet subjects. They
 - `GET /docs/{document_id}/revisions/{revision_id}`
   - Response: `{ "document_id": "<document_id>", "revision": <document_revision_with_content> }`
 
-- `POST /docs/{document_id}/tombstone`
+- `POST /docs/{document_id}/trash`
   - Body: `{ "actor_id": "...", "reason": "..." }`
   - Response: `{ "document": <document>, "revision": <document_revision_with_content> }`
-  - Side effect: appends `document_tombstoned` to `events` on the current backing thread with thread/document/current-revision/artifact refs.
+  - Side effect: appends `document_trashed` to `events` on the current backing thread with thread/document/current-revision/artifact refs.
 
 ### Events
 
@@ -340,7 +340,7 @@ Backing threads hold append-only timelines and anchor many packet subjects. They
   - SSE data envelope: `{ "event": <event> }`
   - Optional query: `thread_id`, repeated `type`, `types` (comma-separated), `last_event_id`
   - Resume supported via `Last-Event-ID` header or `last_event_id` query.
-  - Thread-linked document lifecycle operations emit `document_created`, `document_updated`, and `document_tombstoned` events with `document:*`, `document_revision:*`, and backing `artifact:*` refs.
+  - Thread-linked document lifecycle operations emit `document_created`, `document_revised`, and `document_trashed` events with `document:*`, `document_revision:*`, and backing `artifact:*` refs.
 
 - `GET /events/{event_id}`
   - Response: `{ "event": <event> }`
@@ -437,6 +437,6 @@ Backing threads hold append-only timelines and anchor many packet subjects. They
   - Standard GET responses never repair or recompute projections inline; they return the best currently materialized data plus freshness metadata.
 
 - Meaningful topic activity for stale-topic clearing:
-  - The current activity set is explicit: `actor_statement`, `topic_created`, `topic_updated`, `topic_status_changed`, `card_created`, `card_updated`, `card_moved`, `card_resolved`, `decision_needed`, `intervention_needed`, `decision_made`, `receipt_added`, `review_completed`, `document_created`, `document_revised`, `document_tombstoned`, `board_created`, `board_updated`, plus any non-create topic/card edits that materially change user-authored state.
+  - The current activity set is explicit: `actor_statement`, `topic_created`, `topic_updated`, `topic_status_changed`, `card_created`, `card_updated`, `card_moved`, `card_resolved`, `decision_needed`, `intervention_needed`, `decision_made`, `receipt_added`, `review_completed`, `document_created`, `document_revised`, `document_trashed`, `board_created`, `board_updated`, plus any non-create topic/card edits that materially change user-authored state.
   - Coordination noise does not count as activity: inbox acknowledgments, exception notifications, topic-creation bookkeeping, and derived board/card membership maintenance.
 - Topic, board, and card backing-thread linkage is exposed through `thread_id` on the canonical resource shape; keeping those backing links synchronized no longer emits a user-visible timeline event or bumps the topic’s visible update clock.

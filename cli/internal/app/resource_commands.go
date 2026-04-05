@@ -253,7 +253,7 @@ var knownEventTypeGuidance = []eventTypeGuidance{
 		},
 	},
 	{
-		Type:  "document_tombstoned",
+		Type:  "document_trashed",
 		Group: "Topics And Documents",
 		Constraints: []string{
 			`event.refs must include "document:<document_id>".`,
@@ -450,7 +450,7 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 		var statusFlag, priorityFlag, staleFlag, queryFlag, cursorFlag trackedString
 		var limitFlag trackedInt
 		var tagsFlag, cadenceFlag trackedStrings
-		var includeArchived, archivedOnly, includeTombstoned, tombstonedOnly bool
+		var includeArchived, archivedOnly, includeTrashed, trashedOnly bool
 		fs.Var(&statusFlag, "status", "Filter by status")
 		fs.Var(&priorityFlag, "priority", "Filter by priority")
 		fs.Var(&staleFlag, "stale", "Filter by stale state (true/false)")
@@ -461,8 +461,8 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 		fs.Var(&cadenceFlag, "cadence", "Filter by cadence (repeatable)")
 		fs.BoolVar(&includeArchived, "include-archived", false, "Include archived threads")
 		fs.BoolVar(&archivedOnly, "archived-only", false, "Show only archived threads")
-		fs.BoolVar(&includeTombstoned, "include-tombstoned", false, "Include tombstoned threads")
-		fs.BoolVar(&tombstonedOnly, "tombstoned-only", false, "Show only tombstoned threads")
+		fs.BoolVar(&includeTrashed, "include-trashed", false, "Include trashed threads")
+		fs.BoolVar(&trashedOnly, "trashed-only", false, "Show only trashed threads")
 		if err := fs.Parse(args[1:]); err != nil {
 			return nil, "threads list", errnorm.Usage("invalid_flags", err.Error())
 		}
@@ -489,11 +489,11 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 		if archivedOnly {
 			query = append(query, queryParam{name: "archived_only", values: []string{"true"}})
 		}
-		if includeTombstoned {
-			query = append(query, queryParam{name: "include_tombstoned", values: []string{"true"}})
+		if includeTrashed {
+			query = append(query, queryParam{name: "include_trashed", values: []string{"true"}})
 		}
-		if tombstonedOnly {
-			query = append(query, queryParam{name: "tombstoned_only", values: []string{"true"}})
+		if trashedOnly {
+			query = append(query, queryParam{name: "trashed_only", values: []string{"true"}})
 		}
 		result, err := a.invokeTypedJSON(ctx, cfg, "threads list", "threads.list", nil, query, nil)
 		return result, "threads list", err
@@ -525,12 +525,12 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 	case "timeline":
 		fs := newSilentFlagSet("threads timeline")
 		var threadIDFlag trackedString
-		var includeArchived, archivedOnly, includeTombstoned, tombstonedOnly bool
+		var includeArchived, archivedOnly, includeTrashed, trashedOnly bool
 		fs.Var(&threadIDFlag, "thread-id", "Thread id")
 		fs.BoolVar(&includeArchived, "include-archived", false, "Include archived events")
 		fs.BoolVar(&archivedOnly, "archived-only", false, "Show only archived events")
-		fs.BoolVar(&includeTombstoned, "include-tombstoned", false, "Include tombstoned events")
-		fs.BoolVar(&tombstonedOnly, "tombstoned-only", false, "Show only tombstoned events")
+		fs.BoolVar(&includeTrashed, "include-trashed", false, "Include trashed events")
+		fs.BoolVar(&trashedOnly, "trashed-only", false, "Show only trashed events")
 		if err := fs.Parse(args[1:]); err != nil {
 			return nil, "threads timeline", errnorm.Usage("invalid_flags", err.Error())
 		}
@@ -563,7 +563,7 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 		data := asMap(result.Data)
 		body := asMap(data["body"])
 		events := asSlice(body["events"])
-		filtered := filterEventsByLifecycleState(events, includeArchived, archivedOnly, includeTombstoned, tombstonedOnly)
+		filtered := filterEventsByLifecycleState(events, includeArchived, archivedOnly, includeTrashed, trashedOnly)
 		body["events"] = filtered
 		data["body"] = body
 		result.Data = data
@@ -595,8 +595,8 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 		return nil, "threads archive", threadsMutationUnsupportedErr("archive")
 	case "unarchive":
 		return nil, "threads unarchive", threadsMutationUnsupportedErr("unarchive")
-	case "tombstone":
-		return nil, "threads tombstone", threadsMutationUnsupportedErr("tombstone")
+	case "trash":
+		return nil, "threads trash", threadsMutationUnsupportedErr("trash")
 	case "restore":
 		return nil, "threads restore", threadsMutationUnsupportedErr("restore")
 	case "purge":
@@ -1164,16 +1164,16 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 	case "list":
 		fs := newSilentFlagSet("artifacts list")
 		var kindFlag, threadIDFlag, beforeFlag, afterFlag trackedString
-		var includeTombstoned bool
-		var tombstonedOnly bool
+		var includeTrashed bool
+		var trashedOnly bool
 		var includeArchived bool
 		var archivedOnly bool
 		fs.Var(&kindFlag, "kind", "Filter by artifact kind")
 		fs.Var(&threadIDFlag, "thread-id", "Filter by thread id")
 		fs.Var(&beforeFlag, "created-before", "Filter by created_at upper bound")
 		fs.Var(&afterFlag, "created-after", "Filter by created_at lower bound")
-		fs.BoolVar(&includeTombstoned, "include-tombstoned", false, "Include tombstoned artifacts")
-		fs.BoolVar(&tombstonedOnly, "tombstoned-only", false, "Show only tombstoned artifacts")
+		fs.BoolVar(&includeTrashed, "include-trashed", false, "Include trashed artifacts")
+		fs.BoolVar(&trashedOnly, "trashed-only", false, "Show only trashed artifacts")
 		fs.BoolVar(&includeArchived, "include-archived", false, "Include archived artifacts")
 		fs.BoolVar(&archivedOnly, "archived-only", false, "Show only archived artifacts")
 		if err := fs.Parse(args[1:]); err != nil {
@@ -1197,11 +1197,11 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 		addSingleQuery(&query, "thread_id", resolvedThreadID)
 		addSingleQuery(&query, "created_before", beforeFlag.value)
 		addSingleQuery(&query, "created_after", afterFlag.value)
-		if includeTombstoned {
-			query = append(query, queryParam{name: "include_tombstoned", values: []string{"true"}})
+		if includeTrashed {
+			query = append(query, queryParam{name: "include_trashed", values: []string{"true"}})
 		}
-		if tombstonedOnly {
-			query = append(query, queryParam{name: "tombstoned_only", values: []string{"true"}})
+		if trashedOnly {
+			query = append(query, queryParam{name: "trashed_only", values: []string{"true"}})
 		}
 		if includeArchived {
 			query = append(query, queryParam{name: "include_archived", values: []string{"true"}})
@@ -1252,16 +1252,16 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 	case "inspect":
 		result, callErr := a.runArtifactsInspectCommand(ctx, args[1:], cfg)
 		return result, "artifacts inspect", callErr
-	case "tombstone":
-		fs := newSilentFlagSet("artifacts tombstone")
+	case "trash":
+		fs := newSilentFlagSet("artifacts trash")
 		var artifactIDFlag trackedString
 		var actorIDFlag trackedString
 		var reasonFlag trackedString
-		fs.Var(&artifactIDFlag, "artifact-id", "Artifact id to tombstone")
+		fs.Var(&artifactIDFlag, "artifact-id", "Artifact id to trash")
 		fs.Var(&actorIDFlag, "actor-id", "Actor id")
 		fs.Var(&reasonFlag, "reason", "Reason for tombstoning")
 		if err := fs.Parse(args[1:]); err != nil {
-			return nil, "artifacts tombstone", errnorm.Usage("invalid_flags", err.Error())
+			return nil, "artifacts trash", errnorm.Usage("invalid_flags", err.Error())
 		}
 		positionals := fs.Args()
 		id := strings.TrimSpace(artifactIDFlag.value)
@@ -1270,15 +1270,15 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 			positionals = positionals[1:]
 		}
 		if err := validateID(id, "artifact id"); err != nil {
-			return nil, "artifacts tombstone", err
+			return nil, "artifacts trash", err
 		}
 		if len(positionals) > 0 {
-			return nil, "artifacts tombstone", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar artifacts tombstone`")
+			return nil, "artifacts trash", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar artifacts trash`")
 		}
 		body := map[string]any{}
 		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
 		if err != nil {
-			return nil, "artifacts tombstone", err
+			return nil, "artifacts trash", err
 		}
 		if actorID != "" {
 			body["actor_id"] = actorID
@@ -1288,8 +1288,8 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 		if strings.TrimSpace(reasonFlag.value) != "" {
 			body["reason"] = strings.TrimSpace(reasonFlag.value)
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "artifacts tombstone", "artifacts.tombstone", map[string]string{"artifact_id": id}, nil, body)
-		return result, "artifacts tombstone", callErr
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "artifacts trash", "artifacts.trash", map[string]string{"artifact_id": id}, nil, body)
+		return result, "artifacts trash", callErr
 	case "archive":
 		fs := newSilentFlagSet("artifacts archive")
 		var artifactIDFlag trackedString
@@ -1447,7 +1447,7 @@ func (a *App) runBoardsCommand(ctx context.Context, args []string, cfg config.Re
 		var statusFlag, queryFlag, cursorFlag trackedString
 		var limitFlag trackedInt
 		var labelFlag, ownerFlag trackedStrings
-		var includeArchived, archivedOnly, includeTombstoned, tombstonedOnly bool
+		var includeArchived, archivedOnly, includeTrashed, trashedOnly bool
 		fs.Var(&statusFlag, "status", "Filter by board status")
 		fs.Var(&queryFlag, "q", "Search by board id or title")
 		fs.Var(&limitFlag, "limit", "Limit the number of returned boards")
@@ -1456,8 +1456,8 @@ func (a *App) runBoardsCommand(ctx context.Context, args []string, cfg config.Re
 		fs.Var(&ownerFlag, "owner", "Filter by owner actor id (repeatable)")
 		fs.BoolVar(&includeArchived, "include-archived", false, "Include archived boards")
 		fs.BoolVar(&archivedOnly, "archived-only", false, "Show only archived boards")
-		fs.BoolVar(&includeTombstoned, "include-tombstoned", false, "Include tombstoned boards")
-		fs.BoolVar(&tombstonedOnly, "tombstoned-only", false, "Show only tombstoned boards")
+		fs.BoolVar(&includeTrashed, "include-trashed", false, "Include trashed boards")
+		fs.BoolVar(&trashedOnly, "trashed-only", false, "Show only trashed boards")
 		if err := fs.Parse(args[1:]); err != nil {
 			return nil, "boards list", errnorm.Usage("invalid_flags", err.Error())
 		}
@@ -1482,11 +1482,11 @@ func (a *App) runBoardsCommand(ctx context.Context, args []string, cfg config.Re
 		if archivedOnly {
 			query = append(query, queryParam{name: "archived_only", values: []string{"true"}})
 		}
-		if includeTombstoned {
-			query = append(query, queryParam{name: "include_tombstoned", values: []string{"true"}})
+		if includeTrashed {
+			query = append(query, queryParam{name: "include_trashed", values: []string{"true"}})
 		}
-		if tombstonedOnly {
-			query = append(query, queryParam{name: "tombstoned_only", values: []string{"true"}})
+		if trashedOnly {
+			query = append(query, queryParam{name: "trashed_only", values: []string{"true"}})
 		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "boards list", "boards.list", nil, query, nil)
 		return result, "boards list", callErr
@@ -1644,16 +1644,16 @@ func (a *App) runBoardsCommand(ctx context.Context, args []string, cfg config.Re
 			body,
 		)
 		return result, "boards unarchive", callErr
-	case "tombstone":
-		fs := newSilentFlagSet("boards tombstone")
+	case "trash":
+		fs := newSilentFlagSet("boards trash")
 		var boardIDFlag trackedString
 		var actorIDFlag trackedString
 		var reasonFlag trackedString
-		fs.Var(&boardIDFlag, "board-id", "Board id to tombstone")
+		fs.Var(&boardIDFlag, "board-id", "Board id to trash")
 		fs.Var(&actorIDFlag, "actor-id", "Actor id")
 		fs.Var(&reasonFlag, "reason", "Reason for tombstoning")
 		if err := fs.Parse(args[1:]); err != nil {
-			return nil, "boards tombstone", errnorm.Usage("invalid_flags", err.Error())
+			return nil, "boards trash", errnorm.Usage("invalid_flags", err.Error())
 		}
 		positionals := fs.Args()
 		id := strings.TrimSpace(boardIDFlag.value)
@@ -1662,15 +1662,15 @@ func (a *App) runBoardsCommand(ctx context.Context, args []string, cfg config.Re
 			positionals = positionals[1:]
 		}
 		if err := validateID(id, "board id"); err != nil {
-			return nil, "boards tombstone", err
+			return nil, "boards trash", err
 		}
 		if len(positionals) > 0 {
-			return nil, "boards tombstone", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar boards tombstone`")
+			return nil, "boards trash", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar boards trash`")
 		}
 		body := map[string]any{}
 		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
 		if err != nil {
-			return nil, "boards tombstone", err
+			return nil, "boards trash", err
 		}
 		if actorID != "" {
 			body["actor_id"] = actorID
@@ -1683,15 +1683,15 @@ func (a *App) runBoardsCommand(ctx context.Context, args []string, cfg config.Re
 		result, callErr := a.invokeTypedJSONWithIDResolution(
 			ctx,
 			cfg,
-			"boards tombstone",
-			"boards.tombstone",
+			"boards trash",
+			"boards.trash",
 			"board_id",
 			id,
 			boardIDLookupSpec,
 			nil,
 			body,
 		)
-		return result, "boards tombstone", callErr
+		return result, "boards trash", callErr
 	case "restore":
 		fs := newSilentFlagSet("boards restore")
 		var boardIDFlag trackedString
@@ -1857,9 +1857,9 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 		fs := newSilentFlagSet("docs list")
 		var threadIDFlag, queryFlag, cursorFlag trackedString
 		var limitFlag trackedInt
-		var includeTombstoned, tombstonedOnly, includeArchived, archivedOnly bool
-		fs.BoolVar(&includeTombstoned, "include-tombstoned", false, "Include tombstoned documents")
-		fs.BoolVar(&tombstonedOnly, "tombstoned-only", false, "Show only tombstoned documents")
+		var includeTrashed, trashedOnly, includeArchived, archivedOnly bool
+		fs.BoolVar(&includeTrashed, "include-trashed", false, "Include trashed documents")
+		fs.BoolVar(&trashedOnly, "trashed-only", false, "Show only trashed documents")
 		fs.BoolVar(&includeArchived, "include-archived", false, "Include archived documents")
 		fs.BoolVar(&archivedOnly, "archived-only", false, "Show only archived documents")
 		fs.Var(&threadIDFlag, "thread-id", "Filter by thread id")
@@ -1892,11 +1892,11 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 			addSingleQuery(&query, "limit", strconv.Itoa(limitFlag.value))
 		}
 		addSingleQuery(&query, "cursor", cursorFlag.value)
-		if includeTombstoned {
-			query = append(query, queryParam{name: "include_tombstoned", values: []string{"true"}})
+		if includeTrashed {
+			query = append(query, queryParam{name: "include_trashed", values: []string{"true"}})
 		}
-		if tombstonedOnly {
-			query = append(query, queryParam{name: "tombstoned_only", values: []string{"true"}})
+		if trashedOnly {
+			query = append(query, queryParam{name: "trashed_only", values: []string{"true"}})
 		}
 		if includeArchived {
 			query = append(query, queryParam{name: "include_archived", values: []string{"true"}})
@@ -2006,16 +2006,16 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 			nil,
 		)
 		return result, "docs revision get", callErr
-	case "tombstone":
-		fs := newSilentFlagSet("docs tombstone")
+	case "trash":
+		fs := newSilentFlagSet("docs trash")
 		var documentIDFlag trackedString
 		var actorIDFlag trackedString
 		var reasonFlag trackedString
-		fs.Var(&documentIDFlag, "document-id", "Document id to tombstone")
+		fs.Var(&documentIDFlag, "document-id", "Document id to trash")
 		fs.Var(&actorIDFlag, "actor-id", "Actor id")
 		fs.Var(&reasonFlag, "reason", "Reason for tombstoning")
 		if err := fs.Parse(args[1:]); err != nil {
-			return nil, "docs tombstone", errnorm.Usage("invalid_flags", err.Error())
+			return nil, "docs trash", errnorm.Usage("invalid_flags", err.Error())
 		}
 		positionals := fs.Args()
 		id := strings.TrimSpace(documentIDFlag.value)
@@ -2024,15 +2024,15 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 			positionals = positionals[1:]
 		}
 		if err := validateID(id, "document id"); err != nil {
-			return nil, "docs tombstone", err
+			return nil, "docs trash", err
 		}
 		if len(positionals) > 0 {
-			return nil, "docs tombstone", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar docs tombstone`")
+			return nil, "docs trash", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar docs trash`")
 		}
 		body := map[string]any{}
 		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
 		if err != nil {
-			return nil, "docs tombstone", err
+			return nil, "docs trash", err
 		}
 		if actorID != "" {
 			body["actor_id"] = actorID
@@ -2042,8 +2042,8 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 		if strings.TrimSpace(reasonFlag.value) != "" {
 			body["reason"] = strings.TrimSpace(reasonFlag.value)
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "docs tombstone", "docs.tombstone", map[string]string{"document_id": id}, nil, body)
-		return result, "docs tombstone", callErr
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "docs trash", "docs.trash", map[string]string{"document_id": id}, nil, body)
+		return result, "docs trash", callErr
 	case "archive":
 		fs := newSilentFlagSet("docs archive")
 		var documentIDFlag trackedString
@@ -2315,16 +2315,16 @@ func (a *App) runEventsCommand(ctx context.Context, args []string, cfg config.Re
 		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "events unarchive", "events.unarchive", map[string]string{"event_id": id}, nil, body)
 		return result, "events unarchive", callErr
-	case "tombstone":
-		fs := newSilentFlagSet("events tombstone")
+	case "trash":
+		fs := newSilentFlagSet("events trash")
 		var eventIDFlag trackedString
 		var actorIDFlag trackedString
 		var reasonFlag trackedString
-		fs.Var(&eventIDFlag, "event-id", "Event id to tombstone")
+		fs.Var(&eventIDFlag, "event-id", "Event id to trash")
 		fs.Var(&actorIDFlag, "actor-id", "Actor id")
 		fs.Var(&reasonFlag, "reason", "Reason for tombstoning")
 		if err := fs.Parse(args[1:]); err != nil {
-			return nil, "events tombstone", errnorm.Usage("invalid_flags", err.Error())
+			return nil, "events trash", errnorm.Usage("invalid_flags", err.Error())
 		}
 		positionals := fs.Args()
 		id := strings.TrimSpace(eventIDFlag.value)
@@ -2333,15 +2333,15 @@ func (a *App) runEventsCommand(ctx context.Context, args []string, cfg config.Re
 			positionals = positionals[1:]
 		}
 		if err := validateID(id, "event id"); err != nil {
-			return nil, "events tombstone", err
+			return nil, "events trash", err
 		}
 		if len(positionals) > 0 {
-			return nil, "events tombstone", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar events tombstone`")
+			return nil, "events trash", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar events trash`")
 		}
 		body := map[string]any{}
 		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
 		if err != nil {
-			return nil, "events tombstone", err
+			return nil, "events trash", err
 		}
 		if actorID != "" {
 			body["actor_id"] = actorID
@@ -2351,8 +2351,8 @@ func (a *App) runEventsCommand(ctx context.Context, args []string, cfg config.Re
 		if strings.TrimSpace(reasonFlag.value) != "" {
 			body["reason"] = strings.TrimSpace(reasonFlag.value)
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "events tombstone", "events.tombstone", map[string]string{"event_id": id}, nil, body)
-		return result, "events tombstone", callErr
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "events trash", "events.trash", map[string]string{"event_id": id}, nil, body)
+		return result, "events trash", callErr
 	case "restore":
 		fs := newSilentFlagSet("events restore")
 		var eventIDFlag trackedString
@@ -2518,7 +2518,7 @@ func (a *App) runEventsListCommand(ctx context.Context, args []string, cfg confi
 	var mineFlag trackedBool
 	var fullIDFlag trackedBool
 	var typeFlags trackedStrings
-	var includeArchived, archivedOnly, includeTombstoned, tombstonedOnly bool
+	var includeArchived, archivedOnly, includeTrashed, trashedOnly bool
 	fs.Var(&threadIDFlags, "thread-id", "Thread id (repeatable)")
 	fs.Var(&typeFlags, "type", "Filter by event type (repeatable)")
 	fs.Var(&typesCSVFlag, "types", "Comma-separated event types")
@@ -2528,8 +2528,8 @@ func (a *App) runEventsListCommand(ctx context.Context, args []string, cfg confi
 	fs.Var(&maxEventsFlag, "max-events", "Return at most N most-recent matching events (0 means unlimited)")
 	fs.BoolVar(&includeArchived, "include-archived", false, "Include archived events")
 	fs.BoolVar(&archivedOnly, "archived-only", false, "Show only archived events")
-	fs.BoolVar(&includeTombstoned, "include-tombstoned", false, "Include tombstoned events")
-	fs.BoolVar(&tombstonedOnly, "tombstoned-only", false, "Show only tombstoned events")
+	fs.BoolVar(&includeTrashed, "include-trashed", false, "Include trashed events")
+	fs.BoolVar(&trashedOnly, "trashed-only", false, "Show only trashed events")
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
@@ -2604,7 +2604,7 @@ func (a *App) runEventsListCommand(ctx context.Context, args []string, cfg confi
 		allEvents = append(allEvents, threadEvents...)
 		filtered := filterEventsByType(threadEvents, typeFilters)
 		filtered = filterEventsByActorID(filtered, resolvedActorID)
-		filtered = filterEventsByLifecycleState(filtered, includeArchived, archivedOnly, includeTombstoned, tombstonedOnly)
+		filtered = filterEventsByLifecycleState(filtered, includeArchived, archivedOnly, includeTrashed, trashedOnly)
 		matching = append(matching, filtered...)
 		mergeExpandedTimelineObjects(expandedArtifacts, asMap(body["artifacts"]))
 		resolvedThreadID := firstNonEmpty(anyString(body["thread_id"]), eventThreadIDFromList(threadEvents), threadID)
@@ -2648,11 +2648,11 @@ func (a *App) runEventsListCommand(ctx context.Context, args []string, cfg confi
 	if archivedOnly {
 		listBody["archived_only"] = true
 	}
-	if includeTombstoned {
-		listBody["include_tombstoned"] = true
+	if includeTrashed {
+		listBody["include_trashed"] = true
 	}
-	if tombstonedOnly {
-		listBody["tombstoned_only"] = true
+	if trashedOnly {
+		listBody["trashed_only"] = true
 	}
 
 	resultData := map[string]any{
@@ -4673,8 +4673,8 @@ func filterEventsByActorID(events []any, actorID string) []any {
 	return filtered
 }
 
-func filterEventsByLifecycleState(events []any, includeArchived, archivedOnly, includeTombstoned, tombstonedOnly bool) []any {
-	if includeArchived && !archivedOnly && includeTombstoned && !tombstonedOnly {
+func filterEventsByLifecycleState(events []any, includeArchived, archivedOnly, includeTrashed, trashedOnly bool) []any {
+	if includeArchived && !archivedOnly && includeTrashed && !trashedOnly {
 		return events
 	}
 	out := make([]any, 0, len(events))
@@ -4684,21 +4684,21 @@ func filterEventsByLifecycleState(events []any, includeArchived, archivedOnly, i
 			continue
 		}
 		isArchived := anyString(event["archived_at"]) != ""
-		isTombstoned := anyString(event["tombstoned_at"]) != ""
+		isTrashed := anyString(event["trashed_at"]) != ""
 
-		if tombstonedOnly {
-			if isTombstoned {
+		if trashedOnly {
+			if isTrashed {
 				out = append(out, raw)
 			}
 			continue
 		}
 		if archivedOnly {
-			if isArchived && !isTombstoned {
+			if isArchived && !isTrashed {
 				out = append(out, raw)
 			}
 			continue
 		}
-		if isTombstoned && !includeTombstoned {
+		if isTrashed && !includeTrashed {
 			continue
 		}
 		if isArchived && !includeArchived {

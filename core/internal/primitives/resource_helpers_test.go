@@ -32,32 +32,32 @@ func TestTypedRefHelpersLifecycleAndConcurrency(t *testing.T) {
 	}
 
 	body := map[string]any{
-		"archived_at":      "stale",
-		"archived_by":      "stale",
-		"tombstoned_at":    "stale",
-		"tombstoned_by":    "stale",
-		"tombstone_reason": "stale",
+		"archived_at":  "stale",
+		"archived_by":  "stale",
+		"trashed_at":   "stale",
+		"trashed_by":   "stale",
+		"trash_reason": "stale",
 	}
 	applyArchivedLifecycle(body, "2026-04-04T00:00:00Z", "actor-1")
 	if got := body["archived_at"]; got != "2026-04-04T00:00:00Z" {
 		t.Fatalf("applyArchivedLifecycle archived_at: %#v", got)
 	}
-	if _, exists := body["tombstoned_at"]; exists {
+	if _, exists := body["trashed_at"]; exists {
 		t.Fatalf("applyArchivedLifecycle should clear tombstone fields: %#v", body)
 	}
 
-	applyTombstonedLifecycle(body, "2026-04-05T00:00:00Z", "actor-2", "cleanup")
-	if got := body["tombstoned_at"]; got != "2026-04-05T00:00:00Z" {
-		t.Fatalf("applyTombstonedLifecycle tombstoned_at: %#v", got)
+	applyTrashedLifecycle(body, "2026-04-05T00:00:00Z", "actor-2", "cleanup")
+	if got := body["trashed_at"]; got != "2026-04-05T00:00:00Z" {
+		t.Fatalf("applyTrashedLifecycle trashed_at: %#v", got)
 	}
 	if _, exists := body["archived_at"]; exists {
-		t.Fatalf("applyTombstonedLifecycle should clear archived fields: %#v", body)
+		t.Fatalf("applyTrashedLifecycle should clear archived fields: %#v", body)
 	}
 
-	clearTombstonedLifecycle(body, "", "")
-	for _, key := range []string{"archived_at", "archived_by", "tombstoned_at", "tombstoned_by", "tombstone_reason"} {
+	clearTrashedLifecycle(body, "", "")
+	for _, key := range []string{"archived_at", "archived_by", "trashed_at", "trashed_by", "trash_reason"} {
 		if _, exists := body[key]; exists {
-			t.Fatalf("clearTombstonedLifecycle should clear %s: %#v", key, body)
+			t.Fatalf("clearTrashedLifecycle should clear %s: %#v", key, body)
 		}
 	}
 

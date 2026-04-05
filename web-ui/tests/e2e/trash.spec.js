@@ -12,9 +12,9 @@ test("trash page restores archived topics, boards, cards, documents, and artifac
       thread_id: "topic-trash-1",
       created_at: "2026-03-01T08:00:00.000Z",
       created_by: actorId,
-      tombstoned_at: "2026-03-05T08:00:00.000Z",
-      tombstoned_by: actorId,
-      tombstone_reason: "Seeded trash sample",
+      trashed_at: "2026-03-05T08:00:00.000Z",
+      trashed_by: actorId,
+      trash_reason: "Seeded trash sample",
     },
   ];
   let documents = [
@@ -28,9 +28,9 @@ test("trash page restores archived topics, boards, cards, documents, and artifac
       created_by: actorId,
       updated_at: "2026-03-01T08:00:00.000Z",
       updated_by: actorId,
-      tombstoned_at: "2026-03-05T08:00:00.000Z",
-      tombstoned_by: actorId,
-      tombstone_reason: "Seeded trash sample",
+      trashed_at: "2026-03-05T08:00:00.000Z",
+      trashed_by: actorId,
+      trash_reason: "Seeded trash sample",
     },
   ];
   let topics = [
@@ -49,9 +49,9 @@ test("trash page restores archived topics, boards, cards, documents, and artifac
       created_by: actorId,
       updated_at: "2026-03-01T08:00:00.000Z",
       updated_by: actorId,
-      tombstoned_at: "2026-03-05T08:00:00.000Z",
-      tombstoned_by: actorId,
-      tombstone_reason: "Seeded trash sample",
+      trashed_at: "2026-03-05T08:00:00.000Z",
+      trashed_by: actorId,
+      trash_reason: "Seeded trash sample",
     },
   ];
   let boards = [
@@ -77,9 +77,9 @@ test("trash page restores archived topics, boards, cards, documents, and artifac
         updated_by: actorId,
         archived_at: "2026-03-05T08:00:00.000Z",
         archived_by: actorId,
-        tombstoned_at: "2026-03-05T08:00:00.000Z",
-        tombstoned_by: actorId,
-        tombstone_reason: "Seeded trash sample",
+        trashed_at: "2026-03-05T08:00:00.000Z",
+        trashed_by: actorId,
+        trash_reason: "Seeded trash sample",
       },
       summary: {
         card_count: 1,
@@ -119,9 +119,9 @@ test("trash page restores archived topics, boards, cards, documents, and artifac
       updated_by: actorId,
       archived_at: "2026-03-05T08:00:00.000Z",
       archived_by: actorId,
-      tombstoned_at: "2026-03-05T08:00:00.000Z",
-      tombstoned_by: actorId,
-      tombstone_reason: "Seeded trash sample",
+      trashed_at: "2026-03-05T08:00:00.000Z",
+      trashed_by: actorId,
+      trash_reason: "Seeded trash sample",
     },
   ];
 
@@ -134,9 +134,9 @@ test("trash page restores archived topics, boards, cards, documents, and artifac
     Object.assign(item, patch, {
       archived_at: null,
       archived_by: null,
-      tombstoned_at: null,
-      tombstoned_by: null,
-      tombstone_reason: null,
+      trashed_at: null,
+      trashed_by: null,
+      trash_reason: null,
     });
     return item;
   }
@@ -153,9 +153,9 @@ test("trash page restores archived topics, boards, cards, documents, and artifac
       status: "active",
       archived_at: null,
       archived_by: null,
-      tombstoned_at: null,
-      tombstoned_by: null,
-      tombstone_reason: null,
+      trashed_at: null,
+      trashed_by: null,
+      trash_reason: null,
     });
     return wrapper.board;
   }
@@ -187,7 +187,7 @@ test("trash page restores archived topics, boards, cards, documents, and artifac
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        artifacts: artifacts.filter((artifact) => artifact.tombstoned_at),
+        artifacts: artifacts.filter((artifact) => artifact.trashed_at),
       }),
     });
   });
@@ -215,7 +215,7 @@ test("trash page restores archived topics, boards, cards, documents, and artifac
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        documents: documents.filter((document) => document.tombstoned_at),
+        documents: documents.filter((document) => document.trashed_at),
       }),
     });
   });
@@ -246,7 +246,7 @@ test("trash page restores archived topics, boards, cards, documents, and artifac
         topics: topics.filter(
           (topic) =>
             Boolean(topic.archived_at) ||
-            Boolean(topic.tombstoned_at) ||
+            Boolean(topic.trashed_at) ||
             String(topic.status ?? "").trim() === "archived",
         ),
       }),
@@ -276,7 +276,7 @@ test("trash page restores archived topics, boards, cards, documents, and artifac
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        boards: boards.filter((item) => item.board.tombstoned_at),
+        boards: boards.filter((item) => item.board.trashed_at),
       }),
     });
   });
@@ -304,7 +304,7 @@ test("trash page restores archived topics, boards, cards, documents, and artifac
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        cards: cards.filter((card) => card.tombstoned_at),
+        cards: cards.filter((card) => card.trashed_at),
       }),
     });
   });
@@ -387,9 +387,7 @@ test("trash page restores archived topics, boards, cards, documents, and artifac
   await expect(
     page.getByRole("tab", { name: /Artifacts \(1\)/ }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("tab", { name: /Documents \(1\)/ }),
-  ).toBeVisible();
+  await expect(page.getByRole("tab", { name: /Docs \(1\)/ })).toBeVisible();
   await expect(page.getByRole("tab", { name: /Topics \(1\)/ })).toBeVisible();
   await expect(page.getByRole("tab", { name: /Boards \(1\)/ })).toBeVisible();
   await expect(page.getByRole("tab", { name: /Cards \(1\)/ })).toBeVisible();
@@ -411,7 +409,7 @@ test("trash page restores archived topics, boards, cards, documents, and artifac
   await page.getByRole("button", { name: "Restore" }).click();
   await expect(page.getByText("Archived card", { exact: true })).toHaveCount(0);
 
-  await page.getByRole("tab", { name: /Documents/ }).click();
+  await page.getByRole("tab", { name: /^Docs/ }).click();
   await expect(page.getByText("Archived document")).toBeVisible();
   await page.getByRole("button", { name: "Restore" }).click();
   await expect(page.getByText("Archived document")).toHaveCount(0);
@@ -450,9 +448,9 @@ test("trash page purges a card after confirmation (human principal)", async ({
       updated_by: actorId,
       archived_at: "2026-03-05T08:00:00.000Z",
       archived_by: actorId,
-      tombstoned_at: "2026-03-05T08:00:00.000Z",
-      tombstoned_by: actorId,
-      tombstone_reason: "e2e purge",
+      trashed_at: "2026-03-05T08:00:00.000Z",
+      trashed_by: actorId,
+      trash_reason: "e2e purge",
     },
   ];
 
@@ -506,7 +504,7 @@ test("trash page purges a card after confirmation (human principal)", async ({
         cards: cards.filter(
           (card) =>
             Boolean(card?.archived_at) ||
-            Boolean(card?.tombstoned_at) ||
+            Boolean(card?.trashed_at) ||
             String(card?.status ?? "").trim() === "archived",
         ),
       }),
@@ -532,8 +530,8 @@ test("trash page purges a card after confirmation (human principal)", async ({
   await expect(
     page.getByText("Card pending purge", { exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Purge" }).click();
-  await page.getByRole("button", { name: "Confirm purge" }).click();
+  await page.getByRole("button", { name: "Permanently delete" }).click();
+  await page.getByRole("button", { name: "Confirm permanent delete" }).click();
   await expect(
     page.getByText("Card pending purge", { exact: true }),
   ).toHaveCount(0);

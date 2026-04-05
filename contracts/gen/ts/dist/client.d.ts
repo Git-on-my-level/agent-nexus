@@ -44,9 +44,14 @@ export declare class OarClient {
     private readonly fetchFn;
     constructor(baseUrl: string, fetchFn?: typeof fetch);
     invoke(commandId: string, pathParams?: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    artifactsArchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     artifactsCreate(options?: RequestOptions): Promise<InvokeResult>;
     artifactsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     artifactsList(options?: RequestOptions): Promise<InvokeResult>;
+    artifactsPurge(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    artifactsRestore(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    artifactsTrash(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    artifactsUnarchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     boardsArchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     boardsCardsCreate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     boardsCardsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
@@ -57,7 +62,7 @@ export declare class OarClient {
     boardsPatch(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     boardsPurge(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     boardsRestore(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
-    boardsTombstone(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    boardsTrash(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     boardsUnarchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     boardsWorkspace(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     cardsArchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
@@ -69,7 +74,7 @@ export declare class OarClient {
     cardsPurge(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     cardsRestore(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     cardsTimeline(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
-    cardsTombstone(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    cardsTrash(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsArchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsCreate(options?: RequestOptions): Promise<InvokeResult>;
     docsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
@@ -79,10 +84,14 @@ export declare class OarClient {
     docsRevisionsCreate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsRevisionsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsRevisionsList(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
-    docsTombstone(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    docsTrash(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsUnarchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    eventsArchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     eventsCreate(options?: RequestOptions): Promise<InvokeResult>;
     eventsList(options?: RequestOptions): Promise<InvokeResult>;
+    eventsRestore(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    eventsTrash(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    eventsUnarchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     inboxAcknowledge(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     inboxList(options?: RequestOptions): Promise<InvokeResult>;
     metaHealth(options?: RequestOptions): Promise<InvokeResult>;
@@ -103,7 +112,7 @@ export declare class OarClient {
     topicsPatch(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     topicsRestore(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     topicsTimeline(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
-    topicsTombstone(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    topicsTrash(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     topicsUnarchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     topicsWorkspace(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
 }

@@ -1520,7 +1520,7 @@ func TestArtifactTombstoneLifecycle(t *testing.T) {
 		t.Fatal("expected artifact in list before tombstone")
 	}
 
-	tombstoneResp := postJSONExpectStatus(t, h.baseURL+"/artifacts/"+artifactID+"/tombstone", `{
+	tombstoneResp := postJSONExpectStatus(t, h.baseURL+"/artifacts/"+artifactID+"/trash", `{
 		"actor_id":"actor-1",
 		"reason":"no longer needed"
 	}`, http.StatusOK)
@@ -1530,14 +1530,14 @@ func TestArtifactTombstoneLifecycle(t *testing.T) {
 	if err := json.NewDecoder(tombstoneResp.Body).Decode(&tombstoned); err != nil {
 		t.Fatalf("decode tombstone response: %v", err)
 	}
-	if tombstoned["artifact"]["tombstoned_at"] == nil {
-		t.Fatal("expected tombstoned_at to be set")
+	if tombstoned["artifact"]["trashed_at"] == nil {
+		t.Fatal("expected trashed_at to be set")
 	}
-	if tombstoned["artifact"]["tombstoned_by"] != "actor-1" {
-		t.Fatalf("expected tombstoned_by=actor-1, got %v", tombstoned["artifact"]["tombstoned_by"])
+	if tombstoned["artifact"]["trashed_by"] != "actor-1" {
+		t.Fatalf("expected trashed_by=actor-1, got %v", tombstoned["artifact"]["trashed_by"])
 	}
-	if tombstoned["artifact"]["tombstone_reason"] != "no longer needed" {
-		t.Fatalf("expected tombstone_reason='no longer needed', got %v", tombstoned["artifact"]["tombstone_reason"])
+	if tombstoned["artifact"]["trash_reason"] != "no longer needed" {
+		t.Fatalf("expected trash_reason='no longer needed', got %v", tombstoned["artifact"]["trash_reason"])
 	}
 
 	filteredResp, err := http.Get(h.baseURL + "/artifacts")
@@ -1555,14 +1555,14 @@ func TestArtifactTombstoneLifecycle(t *testing.T) {
 		}
 	}
 
-	withTombstonedResp, err := http.Get(h.baseURL + "/artifacts?include_tombstoned=true")
+	withTombstonedResp, err := http.Get(h.baseURL + "/artifacts?include_trashed=true")
 	if err != nil {
-		t.Fatalf("GET /artifacts?include_tombstoned=true: %v", err)
+		t.Fatalf("GET /artifacts?include_trashed=true: %v", err)
 	}
 	defer withTombstonedResp.Body.Close()
 	var withTombstoned map[string][]map[string]any
 	if err := json.NewDecoder(withTombstonedResp.Body).Decode(&withTombstoned); err != nil {
-		t.Fatalf("decode include_tombstoned list response: %v", err)
+		t.Fatalf("decode include_trashed list response: %v", err)
 	}
 	found = false
 	for _, a := range withTombstoned["artifacts"] {
@@ -1572,7 +1572,7 @@ func TestArtifactTombstoneLifecycle(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatal("expected tombstoned artifact in list with include_tombstoned=true")
+		t.Fatal("expected tombstoned artifact in list with include_trashed=true")
 	}
 
 	getResp, err := http.Get(h.baseURL + "/artifacts/" + artifactID)
@@ -1587,11 +1587,11 @@ func TestArtifactTombstoneLifecycle(t *testing.T) {
 	if err := json.NewDecoder(getResp.Body).Decode(&got); err != nil {
 		t.Fatalf("decode get response: %v", err)
 	}
-	if got["artifact"]["tombstoned_at"] == nil {
-		t.Fatal("expected tombstoned_at in direct get")
+	if got["artifact"]["trashed_at"] == nil {
+		t.Fatal("expected trashed_at in direct get")
 	}
 
-	reTombstoneResp := postJSONExpectStatus(t, h.baseURL+"/artifacts/"+artifactID+"/tombstone", `{
+	reTombstoneResp := postJSONExpectStatus(t, h.baseURL+"/artifacts/"+artifactID+"/trash", `{
 		"actor_id":"actor-1",
 		"reason":"still not needed"
 	}`, http.StatusOK)
@@ -1600,11 +1600,11 @@ func TestArtifactTombstoneLifecycle(t *testing.T) {
 	if err := json.NewDecoder(reTombstoneResp.Body).Decode(&reTombstoned); err != nil {
 		t.Fatalf("decode repeat tombstone response: %v", err)
 	}
-	if reTombstoned["artifact"]["tombstoned_at"] != tombstoned["artifact"]["tombstoned_at"] {
-		t.Fatalf("expected repeated tombstone to preserve tombstoned_at, first=%v second=%v", tombstoned["artifact"]["tombstoned_at"], reTombstoned["artifact"]["tombstoned_at"])
+	if reTombstoned["artifact"]["trashed_at"] != tombstoned["artifact"]["trashed_at"] {
+		t.Fatalf("expected repeated tombstone to preserve trashed_at, first=%v second=%v", tombstoned["artifact"]["trashed_at"], reTombstoned["artifact"]["trashed_at"])
 	}
-	if reTombstoned["artifact"]["tombstone_reason"] != tombstoned["artifact"]["tombstone_reason"] {
-		t.Fatalf("expected repeated tombstone to preserve tombstone_reason, first=%v second=%v", tombstoned["artifact"]["tombstone_reason"], reTombstoned["artifact"]["tombstone_reason"])
+	if reTombstoned["artifact"]["trash_reason"] != tombstoned["artifact"]["trash_reason"] {
+		t.Fatalf("expected repeated tombstone to preserve trash_reason, first=%v second=%v", tombstoned["artifact"]["trash_reason"], reTombstoned["artifact"]["trash_reason"])
 	}
 }
 
@@ -1635,7 +1635,7 @@ func TestArtifactRestoreLifecycle(t *testing.T) {
 		t.Fatal("expected created artifact id")
 	}
 
-	postJSONExpectStatus(t, h.baseURL+"/artifacts/"+artifactID+"/tombstone", `{
+	postJSONExpectStatus(t, h.baseURL+"/artifacts/"+artifactID+"/trash", `{
 		"actor_id":"actor-1",
 		"reason":"tmp"
 	}`, http.StatusOK).Body.Close()
@@ -1647,14 +1647,14 @@ func TestArtifactRestoreLifecycle(t *testing.T) {
 	if err := json.NewDecoder(restoreResp.Body).Decode(&restored); err != nil {
 		t.Fatalf("decode restore response: %v", err)
 	}
-	if restored["artifact"]["tombstoned_at"] != nil {
-		t.Fatalf("expected tombstoned_at cleared, got %#v", restored["artifact"]["tombstoned_at"])
+	if restored["artifact"]["trashed_at"] != nil {
+		t.Fatalf("expected trashed_at cleared, got %#v", restored["artifact"]["trashed_at"])
 	}
-	if restored["artifact"]["tombstoned_by"] != nil {
-		t.Fatalf("expected tombstoned_by cleared, got %#v", restored["artifact"]["tombstoned_by"])
+	if restored["artifact"]["trashed_by"] != nil {
+		t.Fatalf("expected trashed_by cleared, got %#v", restored["artifact"]["trashed_by"])
 	}
-	if restored["artifact"]["tombstone_reason"] != nil {
-		t.Fatalf("expected tombstone_reason cleared, got %#v", restored["artifact"]["tombstone_reason"])
+	if restored["artifact"]["trash_reason"] != nil {
+		t.Fatalf("expected trash_reason cleared, got %#v", restored["artifact"]["trash_reason"])
 	}
 
 	reRestoreResp, err := http.Post(h.baseURL+"/artifacts/"+artifactID+"/restore", "application/json", strings.NewReader(`{"actor_id":"actor-1"}`))
@@ -1715,7 +1715,7 @@ func TestArtifactPurgeLifecycle(t *testing.T) {
 		t.Fatal("expected created artifact id")
 	}
 
-	postJSONExpectStatus(t, h.baseURL+"/artifacts/"+artifactID+"/tombstone", `{
+	postJSONExpectStatus(t, h.baseURL+"/artifacts/"+artifactID+"/trash", `{
 		"actor_id":"actor-1",
 		"reason":"gone"
 	}`, http.StatusOK).Body.Close()
@@ -1743,7 +1743,7 @@ func TestArtifactPurgeLifecycle(t *testing.T) {
 		t.Fatalf("expected 404 after purge, got %d", getResp.StatusCode)
 	}
 
-	listResp, err := http.Get(h.baseURL + "/artifacts?include_tombstoned=true")
+	listResp, err := http.Get(h.baseURL + "/artifacts?include_trashed=true")
 	if err != nil {
 		t.Fatalf("GET /artifacts: %v", err)
 	}
@@ -1784,7 +1784,7 @@ func TestArtifactPurgeUnauthenticatedDevHumanTaggedActor(t *testing.T) {
 		t.Fatal("expected created artifact id")
 	}
 
-	postJSONExpectStatus(t, h.baseURL+"/artifacts/"+artifactID+"/tombstone", `{
+	postJSONExpectStatus(t, h.baseURL+"/artifacts/"+artifactID+"/trash", `{
 		"actor_id":"actor-1",
 		"reason":"dev purge prep"
 	}`, http.StatusOK).Body.Close()
@@ -1825,7 +1825,7 @@ func TestArtifactPurgeUnauthenticatedDevRejectsNonHumanTag(t *testing.T) {
 		t.Fatal("expected created artifact id")
 	}
 
-	postJSONExpectStatus(t, h.baseURL+"/artifacts/"+artifactID+"/tombstone", `{
+	postJSONExpectStatus(t, h.baseURL+"/artifacts/"+artifactID+"/trash", `{
 		"actor_id":"actor-1",
 		"reason":"dev purge prep"
 	}`, http.StatusOK).Body.Close()
@@ -1864,7 +1864,7 @@ func TestArtifactPurgeNotTombstoned(t *testing.T) {
 
 	purgeResp := postJSONExpectStatusBearer(t, h.baseURL+"/artifacts/"+artifactID+"/purge", `{}`, h.humanAccessToken, http.StatusConflict)
 	defer purgeResp.Body.Close()
-	assertErrorCode(t, purgeResp, "not_tombstoned")
+	assertErrorCode(t, purgeResp, "not_trashed")
 }
 
 func TestArtifactTombstonedOnlyListFilter(t *testing.T) {
@@ -1899,16 +1899,16 @@ func TestArtifactTombstonedOnlyListFilter(t *testing.T) {
 	}
 	idB, _ := payloadB["artifact"]["id"].(string)
 
-	postJSONExpectStatus(t, h.baseURL+"/artifacts/"+idA+"/tombstone", `{"actor_id":"actor-1","reason":"x"}`, http.StatusOK).Body.Close()
+	postJSONExpectStatus(t, h.baseURL+"/artifacts/"+idA+"/trash", `{"actor_id":"actor-1","reason":"x"}`, http.StatusOK).Body.Close()
 
-	onlyResp, err := http.Get(h.baseURL + "/artifacts?tombstoned_only=true")
+	onlyResp, err := http.Get(h.baseURL + "/artifacts?trashed_only=true")
 	if err != nil {
-		t.Fatalf("GET tombstoned_only: %v", err)
+		t.Fatalf("GET trashed_only: %v", err)
 	}
 	defer onlyResp.Body.Close()
 	var onlyListed map[string][]map[string]any
 	if err := json.NewDecoder(onlyResp.Body).Decode(&onlyListed); err != nil {
-		t.Fatalf("decode tombstoned_only list: %v", err)
+		t.Fatalf("decode trashed_only list: %v", err)
 	}
 	if len(onlyListed["artifacts"]) != 1 {
 		t.Fatalf("expected exactly one tombstoned artifact, got %d", len(onlyListed["artifacts"]))
@@ -1918,7 +1918,7 @@ func TestArtifactTombstonedOnlyListFilter(t *testing.T) {
 	}
 	for _, a := range onlyListed["artifacts"] {
 		if a["id"] == idB {
-			t.Fatal("non-tombstoned artifact must not appear in tombstoned_only list")
+			t.Fatal("non-tombstoned artifact must not appear in trashed_only list")
 		}
 	}
 }
@@ -1948,7 +1948,7 @@ func TestArtifactPurgeReferencedByDocRevision(t *testing.T) {
 		t.Fatal("expected revision artifact_id")
 	}
 
-	postJSONExpectStatus(t, h.baseURL+"/artifacts/"+artifactID+"/tombstone", `{"actor_id":"actor-1","reason":"try purge"}`, http.StatusOK).Body.Close()
+	postJSONExpectStatus(t, h.baseURL+"/artifacts/"+artifactID+"/trash", `{"actor_id":"actor-1","reason":"try purge"}`, http.StatusOK).Body.Close()
 
 	conflictResp := postJSONExpectStatusBearer(t, h.baseURL+"/artifacts/"+artifactID+"/purge", `{}`, h.humanAccessToken, http.StatusConflict)
 	defer conflictResp.Body.Close()
@@ -1978,7 +1978,7 @@ func TestDocumentTombstoneLifecycle(t *testing.T) {
 		t.Fatal("expected created document id")
 	}
 
-	tombstoneResp := postJSONExpectStatus(t, h.baseURL+"/docs/"+documentID+"/tombstone", `{
+	tombstoneResp := postJSONExpectStatus(t, h.baseURL+"/docs/"+documentID+"/trash", `{
 		"actor_id":"actor-1",
 		"reason":"replaced by v2"
 	}`, http.StatusOK)
@@ -1991,14 +1991,14 @@ func TestDocumentTombstoneLifecycle(t *testing.T) {
 	if err := json.NewDecoder(tombstoneResp.Body).Decode(&tombstonePayload); err != nil {
 		t.Fatalf("decode tombstone doc response: %v", err)
 	}
-	if tombstonePayload.Document["tombstoned_at"] == nil {
-		t.Fatal("expected tombstoned_at to be set on document")
+	if tombstonePayload.Document["trashed_at"] == nil {
+		t.Fatal("expected trashed_at to be set on document")
 	}
-	if tombstonePayload.Document["tombstoned_by"] != "actor-1" {
-		t.Fatalf("expected tombstoned_by=actor-1, got %v", tombstonePayload.Document["tombstoned_by"])
+	if tombstonePayload.Document["trashed_by"] != "actor-1" {
+		t.Fatalf("expected trashed_by=actor-1, got %v", tombstonePayload.Document["trashed_by"])
 	}
-	if tombstonePayload.Document["tombstone_reason"] != "replaced by v2" {
-		t.Fatalf("expected tombstone_reason='replaced by v2', got %v", tombstonePayload.Document["tombstone_reason"])
+	if tombstonePayload.Document["trash_reason"] != "replaced by v2" {
+		t.Fatalf("expected trash_reason='replaced by v2', got %v", tombstonePayload.Document["trash_reason"])
 	}
 	if tombstonePayload.Revision == nil {
 		t.Fatal("expected revision to be returned")
@@ -2018,8 +2018,8 @@ func TestDocumentTombstoneLifecycle(t *testing.T) {
 	if err := json.NewDecoder(getResp.Body).Decode(&gotDoc); err != nil {
 		t.Fatalf("decode get doc response: %v", err)
 	}
-	if gotDoc.Document["tombstoned_at"] == nil {
-		t.Fatal("expected tombstoned_at in direct get")
+	if gotDoc.Document["trashed_at"] == nil {
+		t.Fatal("expected trashed_at in direct get")
 	}
 
 	listResp, err := http.Get(h.baseURL + "/docs")
@@ -2040,31 +2040,31 @@ func TestDocumentTombstoneLifecycle(t *testing.T) {
 		t.Fatalf("expected tombstoned document to be hidden by default, got %#v", withoutTombstones.Documents)
 	}
 
-	withTombstonesResp, err := http.Get(h.baseURL + "/docs?include_tombstoned=true")
+	withTombstonesResp, err := http.Get(h.baseURL + "/docs?include_trashed=true")
 	if err != nil {
-		t.Fatalf("GET /docs?include_tombstoned=true: %v", err)
+		t.Fatalf("GET /docs?include_trashed=true: %v", err)
 	}
 	defer withTombstonesResp.Body.Close()
 	if withTombstonesResp.StatusCode != http.StatusOK {
-		t.Fatalf("unexpected docs list include_tombstoned status: got %d", withTombstonesResp.StatusCode)
+		t.Fatalf("unexpected docs list include_trashed status: got %d", withTombstonesResp.StatusCode)
 	}
 	var withTombstones struct {
 		Documents []map[string]any `json:"documents"`
 	}
 	if err := json.NewDecoder(withTombstonesResp.Body).Decode(&withTombstones); err != nil {
-		t.Fatalf("decode docs list include_tombstoned response: %v", err)
+		t.Fatalf("decode docs list include_trashed response: %v", err)
 	}
 	if len(withTombstones.Documents) != 1 {
-		t.Fatalf("expected one tombstoned document in include_tombstoned list, got %d", len(withTombstones.Documents))
+		t.Fatalf("expected one tombstoned document in include_trashed list, got %d", len(withTombstones.Documents))
 	}
 	if withTombstones.Documents[0]["id"] != documentID {
-		t.Fatalf("unexpected include_tombstoned document id: %#v", withTombstones.Documents[0]["id"])
+		t.Fatalf("unexpected include_trashed document id: %#v", withTombstones.Documents[0]["id"])
 	}
-	if withTombstones.Documents[0]["tombstoned_at"] == nil {
-		t.Fatalf("expected tombstoned document metadata in include_tombstoned list, got %#v", withTombstones.Documents[0])
+	if withTombstones.Documents[0]["trashed_at"] == nil {
+		t.Fatalf("expected tombstoned document metadata in include_trashed list, got %#v", withTombstones.Documents[0])
 	}
 
-	reTombstoneResp := postJSONExpectStatus(t, h.baseURL+"/docs/"+documentID+"/tombstone", `{
+	reTombstoneResp := postJSONExpectStatus(t, h.baseURL+"/docs/"+documentID+"/trash", `{
 		"actor_id":"actor-1",
 		"reason":"still replaced"
 	}`, http.StatusOK)
@@ -2075,11 +2075,11 @@ func TestDocumentTombstoneLifecycle(t *testing.T) {
 	if err := json.NewDecoder(reTombstoneResp.Body).Decode(&repeatPayload); err != nil {
 		t.Fatalf("decode repeat tombstone doc response: %v", err)
 	}
-	if repeatPayload.Document["tombstoned_at"] != tombstonePayload.Document["tombstoned_at"] {
-		t.Fatalf("expected repeated doc tombstone to preserve tombstoned_at, first=%v second=%v", tombstonePayload.Document["tombstoned_at"], repeatPayload.Document["tombstoned_at"])
+	if repeatPayload.Document["trashed_at"] != tombstonePayload.Document["trashed_at"] {
+		t.Fatalf("expected repeated doc tombstone to preserve trashed_at, first=%v second=%v", tombstonePayload.Document["trashed_at"], repeatPayload.Document["trashed_at"])
 	}
-	if repeatPayload.Document["tombstone_reason"] != tombstonePayload.Document["tombstone_reason"] {
-		t.Fatalf("expected repeated doc tombstone to preserve tombstone_reason, first=%v second=%v", tombstonePayload.Document["tombstone_reason"], repeatPayload.Document["tombstone_reason"])
+	if repeatPayload.Document["trash_reason"] != tombstonePayload.Document["trash_reason"] {
+		t.Fatalf("expected repeated doc tombstone to preserve trash_reason, first=%v second=%v", tombstonePayload.Document["trash_reason"], repeatPayload.Document["trash_reason"])
 	}
 }
 
@@ -2233,7 +2233,7 @@ func TestArtifactArchiveThenTrash(t *testing.T) {
 
 	postJSONExpectStatus(t, h.baseURL+"/artifacts/"+artifactID+"/archive", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
 
-	tombResp := postJSONExpectStatus(t, h.baseURL+"/artifacts/"+artifactID+"/tombstone", `{"actor_id":"actor-1","reason":"cleanup"}`, http.StatusOK)
+	tombResp := postJSONExpectStatus(t, h.baseURL+"/artifacts/"+artifactID+"/trash", `{"actor_id":"actor-1","reason":"cleanup"}`, http.StatusOK)
 	defer tombResp.Body.Close()
 	var tomb map[string]map[string]any
 	if err := json.NewDecoder(tombResp.Body).Decode(&tomb); err != nil {
@@ -2242,8 +2242,8 @@ func TestArtifactArchiveThenTrash(t *testing.T) {
 	if tomb["artifact"]["archived_at"] != nil {
 		t.Fatalf("expected archived_at cleared after tombstone, got %#v", tomb["artifact"]["archived_at"])
 	}
-	if tomb["artifact"]["tombstoned_at"] == nil {
-		t.Fatal("expected tombstoned_at set")
+	if tomb["artifact"]["trashed_at"] == nil {
+		t.Fatal("expected trashed_at set")
 	}
 
 	restoreResp := postJSONExpectStatus(t, h.baseURL+"/artifacts/"+artifactID+"/restore", `{"actor_id":"actor-1"}`, http.StatusOK)
@@ -2255,8 +2255,8 @@ func TestArtifactArchiveThenTrash(t *testing.T) {
 	if restored["artifact"]["archived_at"] != nil {
 		t.Fatalf("expected no archived_at after restore, got %#v", restored["artifact"]["archived_at"])
 	}
-	if restored["artifact"]["tombstoned_at"] != nil {
-		t.Fatalf("expected no tombstoned_at after restore, got %#v", restored["artifact"]["tombstoned_at"])
+	if restored["artifact"]["trashed_at"] != nil {
+		t.Fatalf("expected no trashed_at after restore, got %#v", restored["artifact"]["trashed_at"])
 	}
 }
 
@@ -2279,11 +2279,11 @@ func TestArtifactCannotArchiveTrashed(t *testing.T) {
 	}
 	artifactID := asString(created["artifact"]["id"])
 
-	postJSONExpectStatus(t, h.baseURL+"/artifacts/"+artifactID+"/tombstone", `{"actor_id":"actor-1","reason":"x"}`, http.StatusOK).Body.Close()
+	postJSONExpectStatus(t, h.baseURL+"/artifacts/"+artifactID+"/trash", `{"actor_id":"actor-1","reason":"x"}`, http.StatusOK).Body.Close()
 
 	conflict := postJSONExpectStatus(t, h.baseURL+"/artifacts/"+artifactID+"/archive", `{"actor_id":"actor-1"}`, http.StatusConflict)
 	defer conflict.Body.Close()
-	assertErrorCode(t, conflict, "already_tombstoned")
+	assertErrorCode(t, conflict, "already_trashed")
 }
 
 func TestDocumentArchiveLifecycle(t *testing.T) {
@@ -2437,7 +2437,7 @@ func TestDocumentRestoreLifecycle(t *testing.T) {
 	}
 	docID := asString(created["document"]["id"])
 
-	postJSONExpectStatus(t, h.baseURL+"/docs/"+docID+"/tombstone", `{"actor_id":"actor-1","reason":"r"}`, http.StatusOK).Body.Close()
+	postJSONExpectStatus(t, h.baseURL+"/docs/"+docID+"/trash", `{"actor_id":"actor-1","reason":"r"}`, http.StatusOK).Body.Close()
 
 	restoreResp := postJSONExpectStatus(t, h.baseURL+"/docs/"+docID+"/restore", `{"actor_id":"actor-1"}`, http.StatusOK)
 	defer restoreResp.Body.Close()
@@ -2447,14 +2447,14 @@ func TestDocumentRestoreLifecycle(t *testing.T) {
 	if err := json.NewDecoder(restoreResp.Body).Decode(&restored); err != nil {
 		t.Fatalf("decode restore: %v", err)
 	}
-	if restored.Document["tombstoned_at"] != nil {
-		t.Fatalf("expected tombstoned_at cleared, got %#v", restored.Document["tombstoned_at"])
+	if restored.Document["trashed_at"] != nil {
+		t.Fatalf("expected trashed_at cleared, got %#v", restored.Document["trashed_at"])
 	}
-	if restored.Document["tombstoned_by"] != nil {
-		t.Fatalf("expected tombstoned_by cleared, got %#v", restored.Document["tombstoned_by"])
+	if restored.Document["trashed_by"] != nil {
+		t.Fatalf("expected trashed_by cleared, got %#v", restored.Document["trashed_by"])
 	}
-	if restored.Document["tombstone_reason"] != nil {
-		t.Fatalf("expected tombstone_reason cleared, got %#v", restored.Document["tombstone_reason"])
+	if restored.Document["trash_reason"] != nil {
+		t.Fatalf("expected trash_reason cleared, got %#v", restored.Document["trash_reason"])
 	}
 
 	reRestore, err := http.Post(h.baseURL+"/docs/"+docID+"/restore", "application/json", strings.NewReader(`{"actor_id":"actor-1"}`))
@@ -2466,7 +2466,7 @@ func TestDocumentRestoreLifecycle(t *testing.T) {
 		b, _ := io.ReadAll(reRestore.Body)
 		t.Fatalf("expected 409 second restore, got %d body=%s", reRestore.StatusCode, string(b))
 	}
-	assertErrorCode(t, reRestore, "not_tombstoned")
+	assertErrorCode(t, reRestore, "not_trashed")
 }
 
 func TestDocumentPurgeLifecycle(t *testing.T) {
@@ -2488,7 +2488,7 @@ func TestDocumentPurgeLifecycle(t *testing.T) {
 	}
 	docID := asString(created["document"]["id"])
 
-	postJSONExpectStatus(t, h.baseURL+"/docs/"+docID+"/tombstone", `{"actor_id":"actor-1","reason":"gone"}`, http.StatusOK).Body.Close()
+	postJSONExpectStatus(t, h.baseURL+"/docs/"+docID+"/trash", `{"actor_id":"actor-1","reason":"gone"}`, http.StatusOK).Body.Close()
 
 	purgeResp := postJSONExpectStatusBearer(t, h.baseURL+"/docs/"+docID+"/purge", `{}`, h.humanAccessToken, http.StatusOK)
 	defer purgeResp.Body.Close()
@@ -2542,25 +2542,25 @@ func TestDocumentTombstonedOnlyFilter(t *testing.T) {
 	}
 	idB := asString(payloadB["document"]["id"])
 
-	postJSONExpectStatus(t, h.baseURL+"/docs/"+idA+"/tombstone", `{"actor_id":"actor-1","reason":"x"}`, http.StatusOK).Body.Close()
+	postJSONExpectStatus(t, h.baseURL+"/docs/"+idA+"/trash", `{"actor_id":"actor-1","reason":"x"}`, http.StatusOK).Body.Close()
 
-	onlyResp, err := http.Get(h.baseURL + "/docs?tombstoned_only=true")
+	onlyResp, err := http.Get(h.baseURL + "/docs?trashed_only=true")
 	if err != nil {
-		t.Fatalf("GET tombstoned_only: %v", err)
+		t.Fatalf("GET trashed_only: %v", err)
 	}
 	defer onlyResp.Body.Close()
 	var only struct {
 		Documents []map[string]any `json:"documents"`
 	}
 	if err := json.NewDecoder(onlyResp.Body).Decode(&only); err != nil {
-		t.Fatalf("decode tombstoned_only: %v", err)
+		t.Fatalf("decode trashed_only: %v", err)
 	}
 	if len(only.Documents) != 1 || only.Documents[0]["id"] != idA {
 		t.Fatalf("expected one tombstoned doc %q, got %#v", idA, only.Documents)
 	}
 	for _, d := range only.Documents {
 		if d["id"] == idB {
-			t.Fatal("live doc must not appear in tombstoned_only list")
+			t.Fatal("live doc must not appear in trashed_only list")
 		}
 	}
 }
@@ -2809,7 +2809,7 @@ func TestTopicTombstoneLifecycle(t *testing.T) {
 	}
 	topicID := asString(created.Topic["id"])
 
-	tomb1 := postJSONExpectStatus(t, h.baseURL+"/topics/"+topicID+"/tombstone", `{"actor_id":"actor-1","reason":"one"}`, http.StatusOK)
+	tomb1 := postJSONExpectStatus(t, h.baseURL+"/topics/"+topicID+"/trash", `{"actor_id":"actor-1","reason":"one"}`, http.StatusOK)
 	defer tomb1.Body.Close()
 	var firstTomb struct {
 		Topic map[string]any `json:"topic"`
@@ -2817,8 +2817,8 @@ func TestTopicTombstoneLifecycle(t *testing.T) {
 	if err := json.NewDecoder(tomb1.Body).Decode(&firstTomb); err != nil {
 		t.Fatalf("decode first tombstone: %v", err)
 	}
-	if firstTomb.Topic["tombstoned_at"] == nil {
-		t.Fatal("expected tombstoned_at")
+	if firstTomb.Topic["trashed_at"] == nil {
+		t.Fatal("expected trashed_at")
 	}
 
 	listDefault, err := http.Get(h.baseURL + "/topics")
@@ -2838,16 +2838,16 @@ func TestTopicTombstoneLifecycle(t *testing.T) {
 		}
 	}
 
-	withTomb, err := http.Get(h.baseURL + "/topics?include_tombstoned=true")
+	withTomb, err := http.Get(h.baseURL + "/topics?include_trashed=true")
 	if err != nil {
-		t.Fatalf("GET include_tombstoned: %v", err)
+		t.Fatalf("GET include_trashed: %v", err)
 	}
 	defer withTomb.Body.Close()
 	var incListed struct {
 		Topics []map[string]any `json:"topics"`
 	}
 	if err := json.NewDecoder(withTomb.Body).Decode(&incListed); err != nil {
-		t.Fatalf("decode include_tombstoned: %v", err)
+		t.Fatalf("decode include_trashed: %v", err)
 	}
 	found := false
 	for _, tp := range incListed.Topics {
@@ -2857,19 +2857,19 @@ func TestTopicTombstoneLifecycle(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatal("expected topic in include_tombstoned list")
+		t.Fatal("expected topic in include_trashed list")
 	}
 
-	onlyTomb, err := http.Get(h.baseURL + "/topics?tombstoned_only=true")
+	onlyTomb, err := http.Get(h.baseURL + "/topics?trashed_only=true")
 	if err != nil {
-		t.Fatalf("GET tombstoned_only: %v", err)
+		t.Fatalf("GET trashed_only: %v", err)
 	}
 	defer onlyTomb.Body.Close()
 	var onlyListed struct {
 		Topics []map[string]any `json:"topics"`
 	}
 	if err := json.NewDecoder(onlyTomb.Body).Decode(&onlyListed); err != nil {
-		t.Fatalf("decode tombstoned_only: %v", err)
+		t.Fatalf("decode trashed_only: %v", err)
 	}
 	if len(onlyListed.Topics) != 1 || onlyListed.Topics[0]["id"] != topicID {
 		t.Fatalf("expected exactly one tombstoned topic, got %#v", onlyListed.Topics)
@@ -2905,7 +2905,7 @@ func TestTopicRestoreLifecycle(t *testing.T) {
 	}
 	topicID := asString(created.Topic["id"])
 
-	postJSONExpectStatus(t, h.baseURL+"/topics/"+topicID+"/tombstone", `{"actor_id":"actor-1","reason":"t"}`, http.StatusOK).Body.Close()
+	postJSONExpectStatus(t, h.baseURL+"/topics/"+topicID+"/trash", `{"actor_id":"actor-1","reason":"t"}`, http.StatusOK).Body.Close()
 
 	restoreResp := postJSONExpectStatus(t, h.baseURL+"/topics/"+topicID+"/restore", `{"actor_id":"actor-1"}`, http.StatusOK)
 	defer restoreResp.Body.Close()
@@ -2915,8 +2915,8 @@ func TestTopicRestoreLifecycle(t *testing.T) {
 	if err := json.NewDecoder(restoreResp.Body).Decode(&restored); err != nil {
 		t.Fatalf("decode restore: %v", err)
 	}
-	if restored.Topic["tombstoned_at"] != nil {
-		t.Fatalf("expected tombstoned_at cleared, got %#v", restored.Topic["tombstoned_at"])
+	if restored.Topic["trashed_at"] != nil {
+		t.Fatalf("expected trashed_at cleared, got %#v", restored.Topic["trashed_at"])
 	}
 
 	reRestore, err := http.Post(h.baseURL+"/topics/"+topicID+"/restore", "application/json", strings.NewReader(`{"actor_id":"actor-1"}`))
@@ -2928,7 +2928,7 @@ func TestTopicRestoreLifecycle(t *testing.T) {
 		b, _ := io.ReadAll(reRestore.Body)
 		t.Fatalf("expected 409 second restore, got %d body=%s", reRestore.StatusCode, string(b))
 	}
-	assertErrorCode(t, reRestore, "not_tombstoned")
+	assertErrorCode(t, reRestore, "not_trashed")
 }
 
 func TestTopicArchiveThenTrash(t *testing.T) {
@@ -2962,7 +2962,7 @@ func TestTopicArchiveThenTrash(t *testing.T) {
 
 	postJSONExpectStatus(t, h.baseURL+"/topics/"+topicID+"/archive", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
 
-	tombResp := postJSONExpectStatus(t, h.baseURL+"/topics/"+topicID+"/tombstone", `{"actor_id":"actor-1","reason":"cleanup"}`, http.StatusOK)
+	tombResp := postJSONExpectStatus(t, h.baseURL+"/topics/"+topicID+"/trash", `{"actor_id":"actor-1","reason":"cleanup"}`, http.StatusOK)
 	defer tombResp.Body.Close()
 	var tomb struct {
 		Topic map[string]any `json:"topic"`
@@ -2973,8 +2973,8 @@ func TestTopicArchiveThenTrash(t *testing.T) {
 	if tomb.Topic["archived_at"] != nil {
 		t.Fatalf("expected archived_at cleared, got %#v", tomb.Topic["archived_at"])
 	}
-	if tomb.Topic["tombstoned_at"] == nil {
-		t.Fatal("expected tombstoned_at")
+	if tomb.Topic["trashed_at"] == nil {
+		t.Fatal("expected trashed_at")
 	}
 
 	restoreResp := postJSONExpectStatus(t, h.baseURL+"/topics/"+topicID+"/restore", `{"actor_id":"actor-1"}`, http.StatusOK)
@@ -2988,8 +2988,8 @@ func TestTopicArchiveThenTrash(t *testing.T) {
 	if restored.Topic["archived_at"] != nil {
 		t.Fatalf("expected no archived_at after restore, got %#v", restored.Topic["archived_at"])
 	}
-	if restored.Topic["tombstoned_at"] != nil {
-		t.Fatalf("expected no tombstoned_at after restore, got %#v", restored.Topic["tombstoned_at"])
+	if restored.Topic["trashed_at"] != nil {
+		t.Fatalf("expected no trashed_at after restore, got %#v", restored.Topic["trashed_at"])
 	}
 }
 
@@ -3154,7 +3154,7 @@ func TestBoardTombstoneLifecycle(t *testing.T) {
 	}
 	boardID := asString(createPayload.Board["id"])
 
-	postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/tombstone", `{"actor_id":"actor-1","reason":"done"}`, http.StatusOK).Body.Close()
+	postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/trash", `{"actor_id":"actor-1","reason":"done"}`, http.StatusOK).Body.Close()
 
 	listDefault, err := http.Get(h.baseURL + "/boards")
 	if err != nil {
@@ -3175,9 +3175,9 @@ func TestBoardTombstoneLifecycle(t *testing.T) {
 		}
 	}
 
-	onlyTomb, err := http.Get(h.baseURL + "/boards?tombstoned_only=true")
+	onlyTomb, err := http.Get(h.baseURL + "/boards?trashed_only=true")
 	if err != nil {
-		t.Fatalf("GET tombstoned_only boards: %v", err)
+		t.Fatalf("GET trashed_only boards: %v", err)
 	}
 	defer onlyTomb.Body.Close()
 	var onlyListed struct {
@@ -3186,7 +3186,7 @@ func TestBoardTombstoneLifecycle(t *testing.T) {
 		} `json:"boards"`
 	}
 	if err := json.NewDecoder(onlyTomb.Body).Decode(&onlyListed); err != nil {
-		t.Fatalf("decode tombstoned_only: %v", err)
+		t.Fatalf("decode trashed_only: %v", err)
 	}
 	if len(onlyListed.Boards) != 1 || asString(onlyListed.Boards[0].Board["id"]) != boardID {
 		t.Fatalf("expected one tombstoned board, got %#v", onlyListed.Boards)
@@ -3213,7 +3213,7 @@ func TestBoardRestoreLifecycle(t *testing.T) {
 	}
 	boardID := asString(createPayload.Board["id"])
 
-	postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/tombstone", `{"actor_id":"actor-1","reason":"x"}`, http.StatusOK).Body.Close()
+	postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/trash", `{"actor_id":"actor-1","reason":"x"}`, http.StatusOK).Body.Close()
 
 	restoreResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/restore", `{"actor_id":"actor-1"}`, http.StatusOK)
 	defer restoreResp.Body.Close()
@@ -3223,8 +3223,8 @@ func TestBoardRestoreLifecycle(t *testing.T) {
 	if err := json.NewDecoder(restoreResp.Body).Decode(&restored); err != nil {
 		t.Fatalf("decode restore: %v", err)
 	}
-	if restored.Board["tombstoned_at"] != nil {
-		t.Fatalf("expected tombstoned_at cleared, got %#v", restored.Board["tombstoned_at"])
+	if restored.Board["trashed_at"] != nil {
+		t.Fatalf("expected trashed_at cleared, got %#v", restored.Board["trashed_at"])
 	}
 
 	reRestore, err := http.Post(h.baseURL+"/boards/"+boardID+"/restore", "application/json", strings.NewReader(`{"actor_id":"actor-1"}`))
@@ -3236,7 +3236,7 @@ func TestBoardRestoreLifecycle(t *testing.T) {
 		b, _ := io.ReadAll(reRestore.Body)
 		t.Fatalf("expected 409 second restore, got %d body=%s", reRestore.StatusCode, string(b))
 	}
-	assertErrorCode(t, reRestore, "not_tombstoned")
+	assertErrorCode(t, reRestore, "not_trashed")
 }
 
 func TestDocumentArchiveThenTrash(t *testing.T) {
@@ -3273,7 +3273,7 @@ func TestDocumentArchiveThenTrash(t *testing.T) {
 		t.Fatal("expected archived_at after archive")
 	}
 
-	tombResp := postJSONExpectStatus(t, h.baseURL+"/docs/"+docID+"/tombstone", `{"actor_id":"actor-1","reason":"cleanup"}`, http.StatusOK)
+	tombResp := postJSONExpectStatus(t, h.baseURL+"/docs/"+docID+"/trash", `{"actor_id":"actor-1","reason":"cleanup"}`, http.StatusOK)
 	defer tombResp.Body.Close()
 	var tomb struct {
 		Document map[string]any `json:"document"`
@@ -3284,8 +3284,8 @@ func TestDocumentArchiveThenTrash(t *testing.T) {
 	if tomb.Document["archived_at"] != nil {
 		t.Fatalf("expected archived_at cleared after tombstone, got %#v", tomb.Document["archived_at"])
 	}
-	if tomb.Document["tombstoned_at"] == nil {
-		t.Fatal("expected tombstoned_at set")
+	if tomb.Document["trashed_at"] == nil {
+		t.Fatal("expected trashed_at set")
 	}
 
 	restoreResp := postJSONExpectStatus(t, h.baseURL+"/docs/"+docID+"/restore", `{"actor_id":"actor-1"}`, http.StatusOK)
@@ -3299,8 +3299,8 @@ func TestDocumentArchiveThenTrash(t *testing.T) {
 	if restored.Document["archived_at"] != nil {
 		t.Fatalf("expected no archived_at after restore, got %#v", restored.Document["archived_at"])
 	}
-	if restored.Document["tombstoned_at"] != nil {
-		t.Fatalf("expected no tombstoned_at after restore, got %#v", restored.Document["tombstoned_at"])
+	if restored.Document["trashed_at"] != nil {
+		t.Fatalf("expected no trashed_at after restore, got %#v", restored.Document["trashed_at"])
 	}
 }
 
@@ -3323,11 +3323,11 @@ func TestDocumentCannotArchiveTrashed(t *testing.T) {
 	}
 	docID := asString(created["document"]["id"])
 
-	postJSONExpectStatus(t, h.baseURL+"/docs/"+docID+"/tombstone", `{"actor_id":"actor-1","reason":"x"}`, http.StatusOK).Body.Close()
+	postJSONExpectStatus(t, h.baseURL+"/docs/"+docID+"/trash", `{"actor_id":"actor-1","reason":"x"}`, http.StatusOK).Body.Close()
 
 	conflict := postJSONExpectStatus(t, h.baseURL+"/docs/"+docID+"/archive", `{"actor_id":"actor-1"}`, http.StatusConflict)
 	defer conflict.Body.Close()
-	assertErrorCode(t, conflict, "already_tombstoned")
+	assertErrorCode(t, conflict, "already_trashed")
 }
 
 func TestTopicCannotArchiveTrashed(t *testing.T) {
@@ -3359,11 +3359,11 @@ func TestTopicCannotArchiveTrashed(t *testing.T) {
 	}
 	topicID := asString(created.Topic["id"])
 
-	postJSONExpectStatus(t, h.baseURL+"/topics/"+topicID+"/tombstone", `{"actor_id":"actor-1","reason":"x"}`, http.StatusOK).Body.Close()
+	postJSONExpectStatus(t, h.baseURL+"/topics/"+topicID+"/trash", `{"actor_id":"actor-1","reason":"x"}`, http.StatusOK).Body.Close()
 
 	conflict := postJSONExpectStatus(t, h.baseURL+"/topics/"+topicID+"/archive", `{"actor_id":"actor-1"}`, http.StatusConflict)
 	defer conflict.Body.Close()
-	assertErrorCode(t, conflict, "already_tombstoned")
+	assertErrorCode(t, conflict, "already_trashed")
 }
 
 func TestBoardArchiveThenTrash(t *testing.T) {
@@ -3401,7 +3401,7 @@ func TestBoardArchiveThenTrash(t *testing.T) {
 		t.Fatal("expected archived_at after archive")
 	}
 
-	tombResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/tombstone", `{"actor_id":"actor-1","reason":"cleanup"}`, http.StatusOK)
+	tombResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/trash", `{"actor_id":"actor-1","reason":"cleanup"}`, http.StatusOK)
 	defer tombResp.Body.Close()
 	var tomb struct {
 		Board map[string]any `json:"board"`
@@ -3412,8 +3412,8 @@ func TestBoardArchiveThenTrash(t *testing.T) {
 	if tomb.Board["archived_at"] != nil {
 		t.Fatalf("expected archived_at cleared after tombstone, got %#v", tomb.Board["archived_at"])
 	}
-	if tomb.Board["tombstoned_at"] == nil {
-		t.Fatal("expected tombstoned_at set")
+	if tomb.Board["trashed_at"] == nil {
+		t.Fatal("expected trashed_at set")
 	}
 
 	restoreResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/restore", `{"actor_id":"actor-1"}`, http.StatusOK)
@@ -3427,8 +3427,8 @@ func TestBoardArchiveThenTrash(t *testing.T) {
 	if restored.Board["archived_at"] != nil {
 		t.Fatalf("expected no archived_at after restore, got %#v", restored.Board["archived_at"])
 	}
-	if restored.Board["tombstoned_at"] != nil {
-		t.Fatalf("expected no tombstoned_at after restore, got %#v", restored.Board["tombstoned_at"])
+	if restored.Board["trashed_at"] != nil {
+		t.Fatalf("expected no trashed_at after restore, got %#v", restored.Board["trashed_at"])
 	}
 }
 
@@ -3452,11 +3452,11 @@ func TestBoardCannotArchiveTrashed(t *testing.T) {
 	}
 	boardID := asString(createPayload.Board["id"])
 
-	postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/tombstone", `{"actor_id":"actor-1","reason":"x"}`, http.StatusOK).Body.Close()
+	postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/trash", `{"actor_id":"actor-1","reason":"x"}`, http.StatusOK).Body.Close()
 
 	conflict := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/archive", `{"actor_id":"actor-1"}`, http.StatusConflict)
 	defer conflict.Body.Close()
-	assertErrorCode(t, conflict, "already_tombstoned")
+	assertErrorCode(t, conflict, "already_trashed")
 }
 
 func TestThreadPurgeRemovedFromPublicAPI(t *testing.T) {
@@ -3506,9 +3506,9 @@ func TestBoardPurgeLifecycle(t *testing.T) {
 
 	purgeEarly := postJSONExpectStatusBearer(t, h.baseURL+"/boards/"+boardID+"/purge", `{}`, h.humanAccessToken, http.StatusConflict)
 	defer purgeEarly.Body.Close()
-	assertErrorCode(t, purgeEarly, "not_tombstoned")
+	assertErrorCode(t, purgeEarly, "not_trashed")
 
-	postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/tombstone", `{"actor_id":"actor-1","reason":"gone"}`, http.StatusOK).Body.Close()
+	postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/trash", `{"actor_id":"actor-1","reason":"gone"}`, http.StatusOK).Body.Close()
 
 	purgeResp := postJSONExpectStatusBearer(t, h.baseURL+"/boards/"+boardID+"/purge", `{}`, h.humanAccessToken, http.StatusOK)
 	defer purgeResp.Body.Close()

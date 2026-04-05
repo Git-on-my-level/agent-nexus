@@ -65,7 +65,7 @@ enums:
       - topic_status_changed
       - topic_archived
       - topic_restored
-      - topic_tombstoned
+      - topic_trashed
       - message_posted
       - receipt_added
       - review_completed
@@ -75,18 +75,18 @@ enums:
       - document_created
       - document_revised
       - document_revision_created
-      - document_tombstoned
+      - document_trashed
       - board_created
       - board_updated
       - board_card_added
       - board_card_moved
       - board_card_archived
-      - board_card_tombstoned
+      - board_card_trashed
       - card_created
       - card_updated
       - card_moved
       - card_archived
-      - card_tombstoned
+      - card_trashed
       - card_resolved
       - exception_raised
       - inbox_item_acknowledged
@@ -191,9 +191,9 @@ primitives:
       provenance: { type: object, required: true, ref: provenance }
       archived_at: { type: datetime, required: false }
       archived_by: { type: string, required: false }
-      tombstoned_at: { type: datetime, required: false }
-      tombstoned_by: { type: string, required: false }
-      tombstone_reason: { type: string, required: false }
+      trashed_at: { type: datetime, required: false }
+      trashed_by: { type: string, required: false }
+      trash_reason: { type: string, required: false }
 
   artifact:
     description: >
@@ -208,9 +208,9 @@ primitives:
       content_hash: { type: string, required: true }
       refs: { type: "list<typed_ref>", required: true }
       summary: { type: string, required: false }
-      tombstoned_at: { type: datetime, required: false }
-      tombstoned_by: { type: string, required: false }
-      tombstone_reason: { type: string, required: false }
+      trashed_at: { type: datetime, required: false }
+      trashed_by: { type: string, required: false }
+      trash_reason: { type: string, required: false }
 
   ref_edge:
     description: >
@@ -388,7 +388,7 @@ reference_conventions:
     document_revised:
       refs_must_include: ["document:<document_id>", "document_revision:<revision_id>", "artifact:<artifact_id>"]
 
-    document_tombstoned:
+    document_trashed:
       refs_must_include: ["document:<document_id>"]
 
     board_created:

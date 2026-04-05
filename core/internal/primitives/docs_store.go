@@ -32,9 +32,9 @@ type documentRow struct {
 	CreatedBy       string
 	UpdatedAt       string
 	UpdatedBy       string
-	TombstonedAt    sql.NullString
-	TombstonedBy    sql.NullString
-	TombstoneReason sql.NullString
+	TrashedAt       sql.NullString
+	TrashedBy       sql.NullString
+	TrashReason     sql.NullString
 	ArchivedAt      sql.NullString
 	ArchivedBy      sql.NullString
 	HeadArtifactID  sql.NullString
@@ -52,7 +52,7 @@ func buildListDocumentsQuery(filter DocumentListFilter) (string, []any) {
 	query := `SELECT d.id, d.thread_id, d.title, d.slug, d.status, d.labels_json, d.supersedes_json,
 		d.refs_json, d.provenance_json,
 		d.head_revision_id, d.head_revision_number, d.created_at, d.created_by, d.updated_at, d.updated_by,
-		d.tombstoned_at, d.tombstoned_by, d.tombstone_reason,
+		d.trashed_at, d.trashed_by, d.trash_reason,
 		d.archived_at, d.archived_by,
 		dr.artifact_id, a.content_type, dr.created_at, dr.created_by
 		FROM documents d
@@ -64,13 +64,13 @@ func buildListDocumentsQuery(filter DocumentListFilter) (string, []any) {
 		conditions = append(conditions, "d.thread_id = ?")
 		args = append(args, threadID)
 	}
-	if filter.TombstonedOnly {
-		conditions = append(conditions, "d.tombstoned_at IS NOT NULL")
-	} else if !filter.IncludeTombstoned {
-		conditions = append(conditions, "d.tombstoned_at IS NULL")
+	if filter.TrashedOnly {
+		conditions = append(conditions, "d.trashed_at IS NOT NULL")
+	} else if !filter.IncludeTrashed {
+		conditions = append(conditions, "d.trashed_at IS NULL")
 	}
 	if filter.ArchivedOnly {
-		conditions = append(conditions, "d.archived_at IS NOT NULL AND d.tombstoned_at IS NULL")
+		conditions = append(conditions, "d.archived_at IS NOT NULL AND d.trashed_at IS NULL")
 	} else if !filter.IncludeArchived {
 		conditions = append(conditions, "d.archived_at IS NULL")
 	}
@@ -132,9 +132,9 @@ func (s *Store) ListDocuments(ctx context.Context, filter DocumentListFilter) ([
 			&row.CreatedBy,
 			&row.UpdatedAt,
 			&row.UpdatedBy,
-			&row.TombstonedAt,
-			&row.TombstonedBy,
-			&row.TombstoneReason,
+			&row.TrashedAt,
+			&row.TrashedBy,
+			&row.TrashReason,
 			&row.ArchivedAt,
 			&row.ArchivedBy,
 			&row.HeadArtifactID,
@@ -942,7 +942,7 @@ func (s *Store) GetDocumentRevisionByID(ctx context.Context, revisionID string) 
 	return s.loadDocumentRevision(ctx, documentID, revisionID, false)
 }
 
-func (s *Store) TombstoneDocument(ctx context.Context, actorID string, documentID string, reason string) (map[string]any, map[string]any, error) {
+func (s *Store) TrashDocument(ctx context.Context, actorID string, documentID string, reason string) (map[string]any, map[string]any, error) {
 	if s == nil || s.db == nil {
 		return nil, nil, fmt.Errorf("primitives store database is not initialized")
 	}
@@ -959,7 +959,7 @@ func (s *Store) TombstoneDocument(ctx context.Context, actorID string, documentI
 	if err != nil {
 		return nil, nil, err
 	}
-	if doc.TombstonedAt.Valid && strings.TrimSpace(doc.TombstonedAt.String) != "" {
+	if doc.TrashedAt.Valid && strings.TrimSpace(doc.TrashedAt.String) != "" {
 		revision, err := s.loadDocumentRevision(ctx, documentID, doc.HeadRevisionID, true)
 		if err != nil {
 			return nil, nil, err
@@ -975,19 +975,19 @@ func (s *Store) TombstoneDocument(ctx context.Context, actorID string, documentI
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, nil, fmt.Errorf("begin document tombstone transaction: %w", err)
+		return nil, nil, fmt.Errorf("begin document trash transaction: %w", err)
 	}
 	_, err = tx.ExecContext(ctx,
-		`UPDATE documents SET tombstoned_at = ?, tombstoned_by = ?, tombstone_reason = ?, archived_at = NULL, archived_by = NULL WHERE id = ?`,
+		`UPDATE documents SET trashed_at = ?, trashed_by = ?, trash_reason = ?, archived_at = NULL, archived_by = NULL WHERE id = ?`,
 		now, actorID, strings.TrimSpace(reason), documentID,
 	)
 	if err != nil {
 		_ = tx.Rollback()
-		return nil, nil, fmt.Errorf("tombstone document: %w", err)
+		return nil, nil, fmt.Errorf("trash document: %w", err)
 	}
 
 	lifecycleEvent, err := prepareEventForInsert(actorID, buildDocumentLifecycleEvent(
-		"document_tombstoned",
+		"document_trashed",
 		nullStringValue(doc.ThreadID),
 		documentID,
 		doc.HeadRevisionID,
@@ -1008,12 +1008,12 @@ func (s *Store) TombstoneDocument(ctx context.Context, actorID string, documentI
 	}
 	if err := tx.Commit(); err != nil {
 		_ = tx.Rollback()
-		return nil, nil, fmt.Errorf("commit document tombstone transaction: %w", err)
+		return nil, nil, fmt.Errorf("commit document trash transaction: %w", err)
 	}
 
-	doc.TombstonedAt = nullableString(now)
-	doc.TombstonedBy = nullableString(actorID)
-	doc.TombstoneReason = nullableString(reason)
+	doc.TrashedAt = nullableString(now)
+	doc.TrashedBy = nullableString(actorID)
+	doc.TrashReason = nullableString(reason)
 	doc.ArchivedAt = sql.NullString{}
 	doc.ArchivedBy = sql.NullString{}
 
@@ -1037,8 +1037,8 @@ func (s *Store) ArchiveDocument(ctx context.Context, actorID, documentID string)
 	if err != nil {
 		return nil, nil, err
 	}
-	if doc.TombstonedAt.Valid && strings.TrimSpace(doc.TombstonedAt.String) != "" {
-		return nil, nil, ErrAlreadyTombstoned
+	if doc.TrashedAt.Valid && strings.TrimSpace(doc.TrashedAt.String) != "" {
+		return nil, nil, ErrAlreadyTrashed
 	}
 	if doc.ArchivedAt.Valid && strings.TrimSpace(doc.ArchivedAt.String) != "" {
 		revision, err := s.loadDocumentRevision(ctx, documentID, doc.HeadRevisionID, true)
@@ -1123,8 +1123,8 @@ func (s *Store) RestoreDocument(ctx context.Context, actorID, documentID string,
 	if err != nil {
 		return nil, nil, err
 	}
-	if !doc.TombstonedAt.Valid || strings.TrimSpace(doc.TombstonedAt.String) == "" {
-		return nil, nil, ErrNotTombstoned
+	if !doc.TrashedAt.Valid || strings.TrimSpace(doc.TrashedAt.String) == "" {
+		return nil, nil, ErrNotTrashed
 	}
 
 	revision, err := s.loadDocumentRevision(ctx, documentID, doc.HeadRevisionID, true)
@@ -1137,7 +1137,7 @@ func (s *Store) RestoreDocument(ctx context.Context, actorID, documentID string,
 		return nil, nil, fmt.Errorf("begin document restore transaction: %w", err)
 	}
 	_, err = tx.ExecContext(ctx,
-		`UPDATE documents SET tombstoned_at = NULL, tombstoned_by = NULL, tombstone_reason = NULL WHERE id = ?`,
+		`UPDATE documents SET trashed_at = NULL, trashed_by = NULL, trash_reason = NULL WHERE id = ?`,
 		documentID,
 	)
 	if err != nil {
@@ -1170,9 +1170,9 @@ func (s *Store) RestoreDocument(ctx context.Context, actorID, documentID string,
 		return nil, nil, fmt.Errorf("commit document restore transaction: %w", err)
 	}
 
-	doc.TombstonedAt = sql.NullString{}
-	doc.TombstonedBy = sql.NullString{}
-	doc.TombstoneReason = sql.NullString{}
+	doc.TrashedAt = sql.NullString{}
+	doc.TrashedBy = sql.NullString{}
+	doc.TrashReason = sql.NullString{}
 	return doc.toMap(), revision, nil
 }
 
@@ -1196,7 +1196,7 @@ func (s *Store) PurgeDocument(ctx context.Context, documentID string) error {
 
 	var one int
 	err = tx.QueryRowContext(ctx,
-		`SELECT 1 FROM documents WHERE id = ? AND tombstoned_at IS NOT NULL`,
+		`SELECT 1 FROM documents WHERE id = ? AND trashed_at IS NOT NULL`,
 		documentID,
 	).Scan(&one)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -1208,10 +1208,10 @@ func (s *Store) PurgeDocument(ctx context.Context, documentID string) error {
 		if err2 != nil {
 			return fmt.Errorf("check document existence: %w", err2)
 		}
-		return ErrNotTombstoned
+		return ErrNotTrashed
 	}
 	if err != nil {
-		return fmt.Errorf("select tombstoned document: %w", err)
+		return fmt.Errorf("select trashed document: %w", err)
 	}
 
 	if _, err := tx.ExecContext(ctx, `DELETE FROM document_revisions WHERE document_id = ?`, documentID); err != nil {
@@ -1238,7 +1238,7 @@ func (s *Store) loadDocumentRow(ctx context.Context, documentID string) (documen
 		`SELECT id, thread_id, title, slug, status, labels_json, supersedes_json,
 			 refs_json, provenance_json,
 			 head_revision_id, head_revision_number, created_at, created_by, updated_at, updated_by,
-			 tombstoned_at, tombstoned_by, tombstone_reason,
+			 trashed_at, trashed_by, trash_reason,
 			 archived_at, archived_by
 		 FROM documents WHERE id = ?`,
 		documentID,
@@ -1258,9 +1258,9 @@ func (s *Store) loadDocumentRow(ctx context.Context, documentID string) (documen
 		&row.CreatedBy,
 		&row.UpdatedAt,
 		&row.UpdatedBy,
-		&row.TombstonedAt,
-		&row.TombstonedBy,
-		&row.TombstoneReason,
+		&row.TrashedAt,
+		&row.TrashedBy,
+		&row.TrashReason,
 		&row.ArchivedAt,
 		&row.ArchivedBy,
 	)
@@ -1430,14 +1430,14 @@ func (r documentRow) toMap() map[string]any {
 		provenance = map[string]any{"sources": []string{"inferred"}}
 	}
 	out["provenance"] = provenance
-	if r.TombstonedAt.Valid && strings.TrimSpace(r.TombstonedAt.String) != "" {
-		out["tombstoned_at"] = r.TombstonedAt.String
+	if r.TrashedAt.Valid && strings.TrimSpace(r.TrashedAt.String) != "" {
+		out["trashed_at"] = r.TrashedAt.String
 	}
-	if r.TombstonedBy.Valid && strings.TrimSpace(r.TombstonedBy.String) != "" {
-		out["tombstoned_by"] = r.TombstonedBy.String
+	if r.TrashedBy.Valid && strings.TrimSpace(r.TrashedBy.String) != "" {
+		out["trashed_by"] = r.TrashedBy.String
 	}
-	if r.TombstoneReason.Valid && strings.TrimSpace(r.TombstoneReason.String) != "" {
-		out["tombstone_reason"] = r.TombstoneReason.String
+	if r.TrashReason.Valid && strings.TrimSpace(r.TrashReason.String) != "" {
+		out["trash_reason"] = r.TrashReason.String
 	}
 	if r.ArchivedAt.Valid && strings.TrimSpace(r.ArchivedAt.String) != "" {
 		out["archived_at"] = r.ArchivedAt.String
@@ -1478,10 +1478,10 @@ func buildDocumentLifecycleEvent(eventType, threadID, documentID, revisionID, ar
 	}
 
 	summary := map[string]string{
-		"document_created":    "Document created",
-		"document_updated":    "Document updated",
-		"document_tombstoned": "Document tombstoned",
-		"document_restored":   "Document restored",
+		"document_created":  "Document created",
+		"document_updated":  "Document updated",
+		"document_trashed":  "Document trashed",
+		"document_restored": "Document restored",
 	}[eventType]
 	if summary == "" {
 		summary = "Document lifecycle event"

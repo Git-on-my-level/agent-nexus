@@ -33,14 +33,14 @@
 
   let filteredTimeline = $derived(
     timelineView.filter((event) => {
-      if (event.tombstoned_at) return false;
+      if (event.trashed_at) return false;
       if (!showArchived && event.archived_at) return false;
       return true;
     }),
   );
 
   let archivedCount = $derived(
-    timelineView.filter((e) => e.archived_at && !e.tombstoned_at).length,
+    timelineView.filter((e) => e.archived_at && !e.trashed_at).length,
   );
 
   async function refreshTimeline() {
@@ -51,7 +51,7 @@
     const { action, eventId } = confirmModal;
     confirmModal = { open: false, action: "", eventId: "" };
     if (action === "archive") archiveEvent(eventId);
-    else if (action === "trash") tombstoneEvent(eventId);
+    else if (action === "trash") trashEvent(eventId);
   }
 
   async function archiveEvent(eventId) {
@@ -82,12 +82,12 @@
     }
   }
 
-  async function tombstoneEvent(eventId) {
+  async function trashEvent(eventId) {
     if (!eventId || lifecycleBusy) return;
     lifecycleBusy = true;
     lifecycleError = "";
     try {
-      await coreClient.tombstoneEvent(eventId, {});
+      await coreClient.trashEvent(eventId, {});
       await refreshTimeline();
     } catch (e) {
       lifecycleError = `Trash failed: ${e instanceof Error ? e.message : String(e)}`;
@@ -297,7 +297,7 @@
     ? "Move event to trash"
     : "Archive event"}
   message={confirmModal.action === "trash"
-    ? "This event will be tombstoned. You can restore it from trash later."
+    ? "This event will be moved to trash. You can restore it later."
     : "This event will be hidden from the timeline. You can show archived events to see it again."}
   confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
   variant={confirmModal.action === "trash" ? "danger" : "warning"}

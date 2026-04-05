@@ -15,8 +15,8 @@ export function GET({ url }) {
     thread_id: params.get("thread_id") ?? undefined,
     created_before: params.get("created_before") ?? undefined,
     created_after: params.get("created_after") ?? undefined,
-    include_tombstoned: params.get("include_tombstoned") ?? undefined,
-    tombstoned_only: params.get("tombstoned_only") ?? undefined,
+    include_trashed: params.get("include_trashed") ?? undefined,
+    trashed_only: params.get("trashed_only") ?? undefined,
   };
 
   return json({

@@ -29,11 +29,11 @@ type refEdgeTarget struct {
 }
 
 type lifecycleFields struct {
-	ArchivedAt      sql.NullString
-	ArchivedBy      sql.NullString
-	TombstonedAt    sql.NullString
-	TombstonedBy    sql.NullString
-	TombstoneReason sql.NullString
+	ArchivedAt  sql.NullString
+	ArchivedBy  sql.NullString
+	TrashedAt   sql.NullString
+	TrashedBy   sql.NullString
+	TrashReason sql.NullString
 }
 
 func normalizeTypedRef(raw string) (string, string, bool) {
@@ -160,29 +160,29 @@ func replaceRefEdges(ctx context.Context, exec eventExec, sourceType, sourceID s
 	return nil
 }
 
-func lifecycleFieldsFromSQLColumns(archivedAt, archivedBy, tombstonedAt, tombstonedBy, tombstoneReason sql.NullString) lifecycleFields {
+func lifecycleFieldsFromSQLColumns(archivedAt, archivedBy, trashedAt, trashedBy, trashReason sql.NullString) lifecycleFields {
 	return lifecycleFields{
-		ArchivedAt:      archivedAt,
-		ArchivedBy:      archivedBy,
-		TombstonedAt:    tombstonedAt,
-		TombstonedBy:    tombstonedBy,
-		TombstoneReason: tombstoneReason,
+		ArchivedAt:  archivedAt,
+		ArchivedBy:  archivedBy,
+		TrashedAt:   trashedAt,
+		TrashedBy:   trashedBy,
+		TrashReason: trashReason,
 	}
 }
 
 func (fields lifecycleFields) apply(out map[string]any) {
 	delete(out, "archived_at")
 	delete(out, "archived_by")
-	delete(out, "tombstoned_at")
-	delete(out, "tombstoned_by")
-	delete(out, "tombstone_reason")
-	if fields.TombstonedAt.Valid && strings.TrimSpace(fields.TombstonedAt.String) != "" {
-		out["tombstoned_at"] = fields.TombstonedAt.String
-		if fields.TombstonedBy.Valid && strings.TrimSpace(fields.TombstonedBy.String) != "" {
-			out["tombstoned_by"] = fields.TombstonedBy.String
+	delete(out, "trashed_at")
+	delete(out, "trashed_by")
+	delete(out, "trash_reason")
+	if fields.TrashedAt.Valid && strings.TrimSpace(fields.TrashedAt.String) != "" {
+		out["trashed_at"] = fields.TrashedAt.String
+		if fields.TrashedBy.Valid && strings.TrimSpace(fields.TrashedBy.String) != "" {
+			out["trashed_by"] = fields.TrashedBy.String
 		}
-		if fields.TombstoneReason.Valid && strings.TrimSpace(fields.TombstoneReason.String) != "" {
-			out["tombstone_reason"] = fields.TombstoneReason.String
+		if fields.TrashReason.Valid && strings.TrimSpace(fields.TrashReason.String) != "" {
+			out["trash_reason"] = fields.TrashReason.String
 		}
 		return
 	}
@@ -205,15 +205,15 @@ func clearArchivedLifecycle(out map[string]any) {
 	lifecycleFields{}.apply(out)
 }
 
-func applyTombstonedLifecycle(out map[string]any, tombstonedAt, tombstonedBy, tombstoneReason string) {
+func applyTrashedLifecycle(out map[string]any, trashedAt, trashedBy, trashReason string) {
 	lifecycleFields{
-		TombstonedAt:    nullableString(tombstonedAt),
-		TombstonedBy:    nullableString(tombstonedBy),
-		TombstoneReason: nullableString(tombstoneReason),
+		TrashedAt:   nullableString(trashedAt),
+		TrashedBy:   nullableString(trashedBy),
+		TrashReason: nullableString(trashReason),
 	}.apply(out)
 }
 
-func clearTombstonedLifecycle(out map[string]any, archivedAt, archivedBy string) {
+func clearTrashedLifecycle(out map[string]any, archivedAt, archivedBy string) {
 	lifecycleFields{
 		ArchivedAt: nullableString(archivedAt),
 		ArchivedBy: nullableString(archivedBy),

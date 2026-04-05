@@ -312,7 +312,7 @@
   }
 
   async function handleArchiveDocument() {
-    if (!documentId || docLifecycleBusy || document?.tombstoned_at) return;
+    if (!documentId || docLifecycleBusy || document?.trashed_at) return;
     docLifecycleBusy = true;
     try {
       await coreClient.archiveDocument(documentId, {});
@@ -324,7 +324,7 @@
 
   async function handleUnarchiveDocument() {
     confirmModal = { open: false, action: "" };
-    if (!documentId || docLifecycleBusy || document?.tombstoned_at) return;
+    if (!documentId || docLifecycleBusy || document?.trashed_at) return;
     docLifecycleBusy = true;
     try {
       await coreClient.unarchiveDocument(documentId, {});
@@ -338,14 +338,14 @@
     const action = confirmModal.action;
     confirmModal = { open: false, action: "" };
     if (action === "archive") handleArchiveDocument();
-    else if (action === "trash") handleTombstoneDocument();
+    else if (action === "trash") handleTrashDocument();
   }
 
-  async function handleTombstoneDocument() {
+  async function handleTrashDocument() {
     if (!documentId || docLifecycleBusy) return;
     docLifecycleBusy = true;
     try {
-      await coreClient.tombstoneDocument(documentId, {});
+      await coreClient.trashDocument(documentId, {});
       await goto(workspacePath(workspaceSlug, "/docs"));
     } finally {
       docLifecycleBusy = false;
@@ -405,24 +405,24 @@
     {loadError}
   </div>
 {:else if document}
-  {#if document.tombstoned_at}
+  {#if document.trashed_at}
     <div
       class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[13px] text-red-400"
     >
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2 font-semibold">
           <span>⚠</span>
-          <span>This document has been tombstoned</span>
+          <span>This document is in trash</span>
         </div>
-        {#if document.tombstone_reason}
-          <p class="mt-2">Reason: {document.tombstone_reason}</p>
+        {#if document.trash_reason}
+          <p class="mt-2">Reason: {document.trash_reason}</p>
         {/if}
         <p class="mt-1 text-[11px] text-red-400/80">
-          Tombstoned {#if document.tombstoned_by}by {actorName(
-              document.tombstoned_by,
+          Trashed {#if document.trashed_by}by {actorName(
+              document.trashed_by,
             )}{/if}
-          {#if document.tombstoned_at}
-            at {formatTimestamp(document.tombstoned_at)}
+          {#if document.trashed_at}
+            at {formatTimestamp(document.trashed_at)}
           {/if}
         </p>
       </div>
@@ -508,7 +508,7 @@
             </p>
           {/if}
         </div>
-        {#if !document.tombstoned_at}
+        {#if !document.trashed_at}
           <div class="flex shrink-0 items-center gap-1.5">
             {#if isTextEditable}
               <button
@@ -966,7 +966,7 @@
   open={confirmModal.open}
   title={confirmModal.action === "trash" ? "Move to trash" : "Archive document"}
   message={confirmModal.action === "trash"
-    ? "This document will be tombstoned. You can restore it from trash later."
+    ? "This document will be moved to trash. You can restore it later."
     : "This document will be hidden from default views. You can unarchive it later."}
   confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
   variant={confirmModal.action === "trash" ? "danger" : "warning"}

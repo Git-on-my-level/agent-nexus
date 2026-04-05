@@ -636,7 +636,7 @@
         class="flex items-center justify-between gap-3 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-[12px] text-[var(--ui-text-muted)]"
       >
         <span class="truncate"
-          >Dismissed: <span class="font-medium text-[var(--ui-text)]"
+          >Acknowledged: <span class="font-medium text-[var(--ui-text)]"
             >{pending.item.title ?? pending.item.summary ?? "item"}</span
           ></span
         >
@@ -805,7 +805,9 @@
                   onclick={() => acknowledgeItem(item)}
                   type="button"
                 >
-                  {ackInFlightById[item.id] ? "Dismissing..." : "Dismiss"}
+                  {ackInFlightById[item.id]
+                    ? "Acknowledging..."
+                    : "Acknowledge"}
                 </button>
                 <button
                   class="cursor-pointer rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors {getDecisionForm(

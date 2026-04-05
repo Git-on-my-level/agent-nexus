@@ -623,15 +623,12 @@ export function createOarCoreClient(options = {}) {
           headers: { "content-type": "application/json" },
         },
       ),
-    tombstoneTopic: (topicId, payload) =>
-      invokeDirectJSON(
-        `/topics/${encodeURIComponent(String(topicId))}/tombstone`,
-        {
-          method: "POST",
-          body: JSON.stringify(withActorId(payload ?? {})),
-          headers: { "content-type": "application/json" },
-        },
-      ),
+    trashTopic: (topicId, payload) =>
+      invokeDirectJSON(`/topics/${encodeURIComponent(String(topicId))}/trash`, {
+        method: "POST",
+        body: JSON.stringify(withActorId(payload ?? {})),
+        headers: { "content-type": "application/json" },
+      }),
     restoreTopic: (topicId, payload) =>
       invokeDirectJSON(
         `/topics/${encodeURIComponent(String(topicId))}/restore`,
@@ -703,9 +700,9 @@ export function createOarCoreClient(options = {}) {
           headers: { "content-type": "application/json" },
         },
       ),
-    tombstoneArtifact: (artifactId, payload) =>
+    trashArtifact: (artifactId, payload) =>
       invokeDirectJSON(
-        `/artifacts/${encodeURIComponent(String(artifactId))}/tombstone`,
+        `/artifacts/${encodeURIComponent(String(artifactId))}/trash`,
         {
           method: "POST",
           body: JSON.stringify(withActorId(payload)),
@@ -778,9 +775,9 @@ export function createOarCoreClient(options = {}) {
         body: JSON.stringify(withActorId(payload)),
         headers: { "content-type": "application/json" },
       }),
-    tombstoneDocument: (documentId, payload) =>
+    trashDocument: (documentId, payload) =>
       invokeDirectJSON(
-        `/docs/${encodeURIComponent(String(documentId))}/tombstone`,
+        `/docs/${encodeURIComponent(String(documentId))}/trash`,
         {
           method: "POST",
           body: JSON.stringify(withActorId(payload)),
@@ -852,15 +849,12 @@ export function createOarCoreClient(options = {}) {
           headers: { "content-type": "application/json" },
         },
       ),
-    tombstoneEvent: (eventId, payload) =>
-      invokeDirectJSON(
-        `/events/${encodeURIComponent(String(eventId))}/tombstone`,
-        {
-          method: "POST",
-          body: JSON.stringify(withActorId(payload)),
-          headers: { "content-type": "application/json" },
-        },
-      ),
+    trashEvent: (eventId, payload) =>
+      invokeDirectJSON(`/events/${encodeURIComponent(String(eventId))}/trash`, {
+        method: "POST",
+        body: JSON.stringify(withActorId(payload)),
+        headers: { "content-type": "application/json" },
+      }),
     restoreEvent: (eventId, payload) =>
       invokeDirectJSON(
         `/events/${encodeURIComponent(String(eventId))}/restore`,
@@ -950,17 +944,14 @@ export function createOarCoreClient(options = {}) {
           },
         },
       ),
-    tombstoneBoard: (boardId, payload) =>
-      invokeDirectJSON(
-        `/boards/${encodeURIComponent(String(boardId))}/tombstone`,
-        {
-          method: "POST",
-          body: JSON.stringify(withActorId(payload)),
-          headers: {
-            "content-type": "application/json",
-          },
+    trashBoard: (boardId, payload) =>
+      invokeDirectJSON(`/boards/${encodeURIComponent(String(boardId))}/trash`, {
+        method: "POST",
+        body: JSON.stringify(withActorId(payload)),
+        headers: {
+          "content-type": "application/json",
         },
-      ),
+      }),
     restoreBoard: (boardId, payload) =>
       invokeDirectJSON(
         `/boards/${encodeURIComponent(String(boardId))}/restore`,

@@ -331,7 +331,7 @@ func TestEventsStreamEmitsDocumentLifecycleEventsForThread(t *testing.T) {
 	updateRevisionID := asString(updatedDoc.Revision["revision_id"])
 	updateArtifactID := asString(updatedDoc.Revision["artifact_id"])
 
-	tombstoneResp := postJSONExpectStatus(t, h.baseURL+"/docs/"+documentID+"/tombstone", `{
+	tombstoneResp := postJSONExpectStatus(t, h.baseURL+"/docs/"+documentID+"/trash", `{
 		"actor_id":"actor-1",
 		"reason":"stream verification"
 	}`, http.StatusOK)
@@ -342,7 +342,7 @@ func TestEventsStreamEmitsDocumentLifecycleEventsForThread(t *testing.T) {
 	third := awaitSSEEvent(t, reader, 2*time.Second)
 
 	events := []sseEvent{first, second, third}
-	expectedTypes := []string{"document_created", "document_updated", "document_tombstoned"}
+	expectedTypes := []string{"document_created", "document_updated", "document_trashed"}
 	for index, expectedType := range expectedTypes {
 		eventPayload, _ := events[index].Data["event"].(map[string]any)
 		if asString(eventPayload["type"]) != expectedType {

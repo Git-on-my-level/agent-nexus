@@ -66,6 +66,21 @@ oar-ui does **not**:
 - oar-ui MUST follow the reference conventions defined in `/contracts/oar-schema.yaml` → `reference_conventions` when creating events.
 - oar-ui relies on these conventions for deterministic navigation: e.g., a `receipt_added` event's `refs` will include `artifact:<receipt_id>` and the receipt's `card:<card_id>` subject anchor where applicable, enabling the UI to link to evidence and the card scope.
 
+### 1.8 Canonical operator vocabulary
+
+Operator-facing copy MUST use one term per concept. Banned aliases MUST NOT appear in navigation, buttons, banners, or empty states except where noted as technical exceptions.
+
+| Concept | Canonical term | Banned UI aliases | Allowed technical exceptions |
+| --- | --- | --- | --- |
+| Soft-delete lifecycle | Trash, trashed, move to trash, restore | tombstone, tombstoned | HTTP paths and machine identifiers follow `contracts/` (`/trash`, `trashed_at`, `trash_reason`, `include_trashed`, `trashed_only`) |
+| Root work item | Topic, Topics | backing thread, Threads (as user-facing label) | `thread_id`, `thread:` refs, `/threads` diagnostic routes |
+| Document collection | Docs | Documents (as collection label) | `document` for singular resources and API field names |
+| Inbox triage action | Acknowledge | Dismiss | — |
+| Human persona in prose | Operator | user, end user | `actor`, `principal` in identity and auth contexts |
+| Irreversible removal | Permanently delete | Purge (primary copy) | CLI/command `purge` where it is the API surface name |
+
+`Artifact` remains the umbrella object; `Receipt` and `Review` are artifact kinds only.
+
 ---
 
 ## 2. Core UX model: topic-and-board workflows

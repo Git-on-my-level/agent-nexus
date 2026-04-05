@@ -234,7 +234,7 @@ func requestBodyLimitForRequest(path string, method string, bucket routeAccessRe
 	}
 
 	if strings.HasPrefix(path, "/docs/") || strings.HasPrefix(path, "/artifacts/") || strings.HasPrefix(path, "/threads/") || strings.HasPrefix(path, "/boards/") {
-		if strings.HasSuffix(path, "/tombstone") || strings.HasSuffix(path, "/archive") || strings.HasSuffix(path, "/unarchive") ||
+		if strings.HasSuffix(path, "/trash") || strings.HasSuffix(path, "/archive") || strings.HasSuffix(path, "/unarchive") ||
 			strings.HasSuffix(path, "/restore") || strings.HasSuffix(path, "/purge") ||
 			strings.HasSuffix(path, "/history") || strings.Contains(path, "/revisions/") || strings.HasSuffix(path, "/content") {
 			return limits.Default

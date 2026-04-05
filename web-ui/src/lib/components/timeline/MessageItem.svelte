@@ -10,7 +10,7 @@
     actorName,
     onReply,
     onArchive = null,
-    onTombstone = null,
+    onTrash = null,
     onUnarchive = null,
     lifecycleBusy = false,
     depth = 0,
@@ -32,7 +32,7 @@
       </p>
     </div>
     <div class="flex shrink-0 items-center gap-0.5">
-      {#if onArchive && !message.archived_at && !message.tombstoned_at}
+      {#if onArchive && !message.archived_at && !message.trashed_at}
         <button
           aria-label="Archive message"
           class="cursor-pointer rounded p-1 text-[var(--ui-text-muted)] hover:bg-[var(--ui-bg-soft)] hover:text-[var(--ui-accent)] disabled:opacity-50"
@@ -52,7 +52,7 @@
           </svg>
         </button>
       {/if}
-      {#if onUnarchive && message.archived_at && !message.tombstoned_at}
+      {#if onUnarchive && message.archived_at && !message.trashed_at}
         <button
           aria-label="Unarchive message"
           class="cursor-pointer rounded p-1 text-amber-400 hover:bg-[var(--ui-bg-soft)] hover:text-amber-300 disabled:opacity-50"
@@ -72,12 +72,12 @@
           </svg>
         </button>
       {/if}
-      {#if onTombstone && !message.tombstoned_at}
+      {#if onTrash && !message.trashed_at}
         <button
           aria-label="Move message to trash"
           class="cursor-pointer rounded p-1 text-[var(--ui-text-muted)] hover:bg-[var(--ui-bg-soft)] hover:text-red-400 disabled:opacity-50"
           disabled={lifecycleBusy}
-          onclick={() => onTombstone(message.id)}
+          onclick={() => onTrash(message.id)}
           type="button"
         >
           <svg
@@ -95,7 +95,7 @@
           </svg>
         </button>
       {/if}
-      {#if !message.archived_at && !message.tombstoned_at}
+      {#if !message.archived_at && !message.trashed_at}
         <button
           class="cursor-pointer rounded px-2 py-0.5 text-[12px] text-[var(--ui-text-muted)] hover:bg-[var(--ui-bg-soft)] hover:text-[var(--ui-text)]"
           onclick={() => onReply(message.id)}
@@ -129,7 +129,7 @@
           {actorName}
           {onReply}
           {onArchive}
-          {onTombstone}
+          {onTrash}
           {onUnarchive}
           {lifecycleBusy}
           depth={depth + 1}

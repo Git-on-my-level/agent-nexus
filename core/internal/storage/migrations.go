@@ -35,15 +35,15 @@ var migrations = []migration{
 				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				archived_at TEXT,
 				archived_by TEXT,
-				tombstoned_at TEXT,
-				tombstoned_by TEXT,
-				tombstone_reason TEXT
+				trashed_at TEXT,
+				trashed_by TEXT,
+				trash_reason TEXT
 			);`,
 			`CREATE INDEX IF NOT EXISTS idx_events_thread_ts ON events (thread_id, ts);`,
 			`CREATE INDEX IF NOT EXISTS idx_events_archived_at ON events (archived_at);`,
-			`CREATE INDEX IF NOT EXISTS idx_events_tombstoned_at ON events (tombstoned_at);`,
+			`CREATE INDEX IF NOT EXISTS idx_events_trashed_at ON events (trashed_at);`,
 			`CREATE INDEX IF NOT EXISTS idx_events_thread_archived ON events (thread_id, archived_at);`,
-			`CREATE INDEX IF NOT EXISTS idx_events_thread_tombstoned ON events (thread_id, tombstoned_at);`,
+			`CREATE INDEX IF NOT EXISTS idx_events_thread_tombstoned ON events (thread_id, trashed_at);`,
 
 			`CREATE TABLE IF NOT EXISTS threads (
 				id TEXT PRIMARY KEY,
@@ -62,16 +62,16 @@ var migrations = []migration{
 				filter_tags_json TEXT NOT NULL DEFAULT '[]',
 				archived_at TEXT,
 				archived_by TEXT,
-				tombstoned_at TEXT,
-				tombstoned_by TEXT,
-				tombstone_reason TEXT
+				trashed_at TEXT,
+				trashed_by TEXT,
+				trash_reason TEXT
 			);`,
 			`CREATE INDEX IF NOT EXISTS idx_threads_updated_at ON threads (updated_at DESC, id);`,
 			`CREATE INDEX IF NOT EXISTS idx_threads_status_updated_at ON threads (filter_status, updated_at DESC, id);`,
 			`CREATE INDEX IF NOT EXISTS idx_threads_priority_updated_at ON threads (filter_priority, updated_at DESC, id);`,
 			`CREATE INDEX IF NOT EXISTS idx_threads_cadence_preset_updated_at ON threads (filter_cadence_preset, updated_at DESC, id);`,
 			`CREATE INDEX IF NOT EXISTS idx_threads_archived_at ON threads (archived_at);`,
-			`CREATE INDEX IF NOT EXISTS idx_threads_tombstoned_at ON threads (tombstoned_at);`,
+			`CREATE INDEX IF NOT EXISTS idx_threads_trashed_at ON threads (trashed_at);`,
 
 			`CREATE TABLE IF NOT EXISTS topics (
 				id TEXT PRIMARY KEY,
@@ -87,16 +87,16 @@ var migrations = []migration{
 				updated_by TEXT NOT NULL,
 				archived_at TEXT,
 				archived_by TEXT,
-				tombstoned_at TEXT,
-				tombstoned_by TEXT,
-				tombstone_reason TEXT
+				trashed_at TEXT,
+				trashed_by TEXT,
+				trash_reason TEXT
 			);`,
 			`CREATE INDEX IF NOT EXISTS idx_topics_status_updated_at ON topics (status, updated_at DESC, id);`,
 			`CREATE INDEX IF NOT EXISTS idx_topics_type_updated_at ON topics (type, updated_at DESC, id);`,
 			`CREATE INDEX IF NOT EXISTS idx_topics_thread_id ON topics (thread_id);`,
 			`CREATE INDEX IF NOT EXISTS idx_topics_updated_at ON topics (updated_at DESC, id);`,
 			`CREATE INDEX IF NOT EXISTS idx_topics_archived_at ON topics (archived_at);`,
-			`CREATE INDEX IF NOT EXISTS idx_topics_tombstoned_at ON topics (tombstoned_at);`,
+			`CREATE INDEX IF NOT EXISTS idx_topics_trashed_at ON topics (trashed_at);`,
 
 			`CREATE TABLE IF NOT EXISTS ref_edges (
 				id TEXT PRIMARY KEY,
@@ -123,19 +123,19 @@ var migrations = []migration{
 				content_hash TEXT NOT NULL,
 				refs_json TEXT NOT NULL DEFAULT '[]',
 				metadata_json TEXT NOT NULL DEFAULT '{}',
-				tombstoned_at TEXT,
-				tombstoned_by TEXT,
-				tombstone_reason TEXT,
+				trashed_at TEXT,
+				trashed_by TEXT,
+				trash_reason TEXT,
 				archived_at TEXT,
 				archived_by TEXT
 			);`,
 			`CREATE INDEX IF NOT EXISTS idx_artifacts_kind_created_at ON artifacts (kind, created_at);`,
 			`CREATE INDEX IF NOT EXISTS idx_artifacts_content_hash ON artifacts (content_hash);`,
-			`CREATE INDEX IF NOT EXISTS idx_artifacts_tombstoned_at ON artifacts (tombstoned_at);`,
+			`CREATE INDEX IF NOT EXISTS idx_artifacts_trashed_at ON artifacts (trashed_at);`,
 			`CREATE INDEX IF NOT EXISTS idx_artifacts_archived_at ON artifacts (archived_at);`,
-			`CREATE INDEX IF NOT EXISTS idx_artifacts_kind_tombstoned_created_at ON artifacts (kind, tombstoned_at, created_at, id);`,
-			`CREATE INDEX IF NOT EXISTS idx_artifacts_thread_tombstoned_created_at ON artifacts (thread_id, tombstoned_at, created_at, id);`,
-			`CREATE INDEX IF NOT EXISTS idx_artifacts_thread_kind_tombstoned_created_at ON artifacts (thread_id, kind, tombstoned_at, created_at, id);`,
+			`CREATE INDEX IF NOT EXISTS idx_artifacts_kind_tombstoned_created_at ON artifacts (kind, trashed_at, created_at, id);`,
+			`CREATE INDEX IF NOT EXISTS idx_artifacts_thread_tombstoned_created_at ON artifacts (thread_id, trashed_at, created_at, id);`,
+			`CREATE INDEX IF NOT EXISTS idx_artifacts_thread_kind_tombstoned_created_at ON artifacts (thread_id, kind, trashed_at, created_at, id);`,
 
 			`CREATE TABLE IF NOT EXISTS actors (
 				id TEXT PRIMARY KEY,
@@ -159,18 +159,18 @@ var migrations = []migration{
 				created_by TEXT NOT NULL,
 				updated_at TEXT NOT NULL,
 				updated_by TEXT NOT NULL,
-				tombstoned_at TEXT,
-				tombstoned_by TEXT,
-				tombstone_reason TEXT,
+				trashed_at TEXT,
+				trashed_by TEXT,
+				trash_reason TEXT,
 				archived_at TEXT,
 				archived_by TEXT
 			);`,
 			`CREATE INDEX IF NOT EXISTS idx_documents_head_revision_id ON documents (head_revision_id);`,
-			`CREATE INDEX IF NOT EXISTS idx_documents_tombstoned_at ON documents (tombstoned_at);`,
+			`CREATE INDEX IF NOT EXISTS idx_documents_trashed_at ON documents (trashed_at);`,
 			`CREATE INDEX IF NOT EXISTS idx_documents_archived_at ON documents (archived_at);`,
-			`CREATE INDEX IF NOT EXISTS idx_documents_tombstoned_updated_at ON documents (tombstoned_at, updated_at DESC, id);`,
-			`CREATE INDEX IF NOT EXISTS idx_documents_thread_tombstoned_updated_at ON documents (thread_id, tombstoned_at, updated_at DESC, id);`,
-			`CREATE INDEX IF NOT EXISTS idx_documents_status_tombstoned_updated_at ON documents (status, tombstoned_at, updated_at DESC, id);`,
+			`CREATE INDEX IF NOT EXISTS idx_documents_tombstoned_updated_at ON documents (trashed_at, updated_at DESC, id);`,
+			`CREATE INDEX IF NOT EXISTS idx_documents_thread_tombstoned_updated_at ON documents (thread_id, trashed_at, updated_at DESC, id);`,
+			`CREATE INDEX IF NOT EXISTS idx_documents_status_tombstoned_updated_at ON documents (status, trashed_at, updated_at DESC, id);`,
 
 			`CREATE TABLE IF NOT EXISTS document_revisions (
 				revision_id TEXT PRIMARY KEY,
@@ -203,14 +203,14 @@ var migrations = []migration{
 				updated_by TEXT NOT NULL,
 				archived_at TEXT,
 				archived_by TEXT,
-				tombstoned_at TEXT,
-				tombstoned_by TEXT,
-				tombstone_reason TEXT
+				trashed_at TEXT,
+				trashed_by TEXT,
+				trash_reason TEXT
 			);`,
 			`CREATE INDEX IF NOT EXISTS idx_boards_status_updated_at ON boards (status, updated_at DESC, id);`,
 			`CREATE INDEX IF NOT EXISTS idx_boards_thread_id ON boards (thread_id);`,
 			`CREATE INDEX IF NOT EXISTS idx_boards_archived_at ON boards (archived_at);`,
-			`CREATE INDEX IF NOT EXISTS idx_boards_tombstoned_at ON boards (tombstoned_at);`,
+			`CREATE INDEX IF NOT EXISTS idx_boards_trashed_at ON boards (trashed_at);`,
 
 			`CREATE TABLE IF NOT EXISTS cards (
 				id TEXT PRIMARY KEY,
@@ -476,10 +476,10 @@ var migrations = []migration{
 		Statements: []string{
 			`ALTER TABLE documents ADD COLUMN refs_json TEXT NOT NULL DEFAULT '[]';`,
 			`ALTER TABLE documents ADD COLUMN provenance_json TEXT NOT NULL DEFAULT '{}';`,
-			`ALTER TABLE cards ADD COLUMN tombstoned_at TEXT;`,
-			`ALTER TABLE cards ADD COLUMN tombstoned_by TEXT;`,
-			`ALTER TABLE cards ADD COLUMN tombstone_reason TEXT;`,
-			`CREATE INDEX IF NOT EXISTS idx_cards_tombstoned_at ON cards (tombstoned_at);`,
+			`ALTER TABLE cards ADD COLUMN trashed_at TEXT;`,
+			`ALTER TABLE cards ADD COLUMN trashed_by TEXT;`,
+			`ALTER TABLE cards ADD COLUMN trash_reason TEXT;`,
+			`CREATE INDEX IF NOT EXISTS idx_cards_trashed_at ON cards (trashed_at);`,
 			`CREATE TABLE IF NOT EXISTS derived_board_views (
 				board_id TEXT PRIMARY KEY,
 				stale INTEGER NOT NULL DEFAULT 0,
@@ -488,6 +488,32 @@ var migrations = []migration{
 				source_hash TEXT
 			);`,
 			`CREATE INDEX IF NOT EXISTS idx_derived_board_views_stale_generated_at ON derived_board_views (stale, generated_at DESC, board_id);`,
+		},
+	},
+	{
+		Version: 4,
+		Statements: []string{
+			`ALTER TABLE events RENAME COLUMN trashed_at TO trashed_at;`,
+			`ALTER TABLE events RENAME COLUMN trashed_by TO trashed_by;`,
+			`ALTER TABLE events RENAME COLUMN trash_reason TO trash_reason;`,
+			`ALTER TABLE threads RENAME COLUMN trashed_at TO trashed_at;`,
+			`ALTER TABLE threads RENAME COLUMN trashed_by TO trashed_by;`,
+			`ALTER TABLE threads RENAME COLUMN trash_reason TO trash_reason;`,
+			`ALTER TABLE topics RENAME COLUMN trashed_at TO trashed_at;`,
+			`ALTER TABLE topics RENAME COLUMN trashed_by TO trashed_by;`,
+			`ALTER TABLE topics RENAME COLUMN trash_reason TO trash_reason;`,
+			`ALTER TABLE artifacts RENAME COLUMN trashed_at TO trashed_at;`,
+			`ALTER TABLE artifacts RENAME COLUMN trashed_by TO trashed_by;`,
+			`ALTER TABLE artifacts RENAME COLUMN trash_reason TO trash_reason;`,
+			`ALTER TABLE documents RENAME COLUMN trashed_at TO trashed_at;`,
+			`ALTER TABLE documents RENAME COLUMN trashed_by TO trashed_by;`,
+			`ALTER TABLE documents RENAME COLUMN trash_reason TO trash_reason;`,
+			`ALTER TABLE boards RENAME COLUMN trashed_at TO trashed_at;`,
+			`ALTER TABLE boards RENAME COLUMN trashed_by TO trashed_by;`,
+			`ALTER TABLE boards RENAME COLUMN trash_reason TO trash_reason;`,
+			`ALTER TABLE cards RENAME COLUMN trashed_at TO trashed_at;`,
+			`ALTER TABLE cards RENAME COLUMN trashed_by TO trashed_by;`,
+			`ALTER TABLE cards RENAME COLUMN trash_reason TO trash_reason;`,
 		},
 	},
 }

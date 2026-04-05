@@ -22,23 +22,23 @@ type TopicPatchResult struct {
 }
 
 type topicRow struct {
-	ID              string
-	Type            sql.NullString
-	Status          sql.NullString
-	Title           sql.NullString
-	Summary         sql.NullString
-	ThreadID        sql.NullString
-	BodyJSON        string
-	ProvenanceJSON  string
-	CreatedAt       string
-	CreatedBy       string
-	UpdatedAt       string
-	UpdatedBy       string
-	ArchivedAt      sql.NullString
-	ArchivedBy      sql.NullString
-	TombstonedAt    sql.NullString
-	TombstonedBy    sql.NullString
-	TombstoneReason sql.NullString
+	ID             string
+	Type           sql.NullString
+	Status         sql.NullString
+	Title          sql.NullString
+	Summary        sql.NullString
+	ThreadID       sql.NullString
+	BodyJSON       string
+	ProvenanceJSON string
+	CreatedAt      string
+	CreatedBy      string
+	UpdatedAt      string
+	UpdatedBy      string
+	ArchivedAt     sql.NullString
+	ArchivedBy     sql.NullString
+	TrashedAt      sql.NullString
+	TrashedBy      sql.NullString
+	TrashReason    sql.NullString
 }
 
 func (r topicRow) toMap() (map[string]any, error) {
@@ -91,13 +91,13 @@ func (r topicRow) toMap() (map[string]any, error) {
 			body["archived_by"] = r.ArchivedBy.String
 		}
 	}
-	if r.TombstonedAt.Valid && strings.TrimSpace(r.TombstonedAt.String) != "" {
-		body["tombstoned_at"] = r.TombstonedAt.String
-		if r.TombstonedBy.Valid && strings.TrimSpace(r.TombstonedBy.String) != "" {
-			body["tombstoned_by"] = r.TombstonedBy.String
+	if r.TrashedAt.Valid && strings.TrimSpace(r.TrashedAt.String) != "" {
+		body["trashed_at"] = r.TrashedAt.String
+		if r.TrashedBy.Valid && strings.TrimSpace(r.TrashedBy.String) != "" {
+			body["trashed_by"] = r.TrashedBy.String
 		}
-		if r.TombstoneReason.Valid && strings.TrimSpace(r.TombstoneReason.String) != "" {
-			body["tombstone_reason"] = r.TombstoneReason.String
+		if r.TrashReason.Valid && strings.TrimSpace(r.TrashReason.String) != "" {
+			body["trash_reason"] = r.TrashReason.String
 		}
 	}
 
@@ -138,9 +138,9 @@ func (s *Store) ListTopics(ctx context.Context, filter TopicListFilter) ([]map[s
 			&row.UpdatedBy,
 			&row.ArchivedAt,
 			&row.ArchivedBy,
-			&row.TombstonedAt,
-			&row.TombstonedBy,
-			&row.TombstoneReason,
+			&row.TrashedAt,
+			&row.TrashedBy,
+			&row.TrashReason,
 		); err != nil {
 			return nil, "", fmt.Errorf("scan topic row: %w", err)
 		}
@@ -568,8 +568,8 @@ func (s *Store) UnarchiveTopic(ctx context.Context, actorID, topicID string) (ma
 	return s.applyTopicLifecycle(ctx, actorID, topicID, "unarchive")
 }
 
-func (s *Store) TombstoneTopic(ctx context.Context, actorID, topicID, reason string) (map[string]any, error) {
-	return s.applyTopicLifecycleWithReason(ctx, actorID, topicID, "tombstone", reason)
+func (s *Store) TrashTopic(ctx context.Context, actorID, topicID, reason string) (map[string]any, error) {
+	return s.applyTopicLifecycleWithReason(ctx, actorID, topicID, "trash", reason)
 }
 
 func (s *Store) RestoreTopic(ctx context.Context, actorID, topicID string) (map[string]any, error) {
@@ -588,11 +588,11 @@ func (s *Store) getTopicRow(ctx context.Context, topicID string) (topicRow, erro
 	err := s.db.QueryRowContext(
 		ctx,
 		`SELECT id, type, status, title, thread_id, body_json, provenance_json,
-			created_at, created_by, updated_at, updated_by, archived_at, archived_by, tombstoned_at, tombstoned_by, tombstone_reason
+			created_at, created_by, updated_at, updated_by, archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		 FROM topics WHERE id = ?`,
 		topicID,
 	).Scan(&row.ID, &row.Type, &row.Status, &row.Title, &row.ThreadID, &row.BodyJSON, &row.ProvenanceJSON,
-		&row.CreatedAt, &row.CreatedBy, &row.UpdatedAt, &row.UpdatedBy, &row.ArchivedAt, &row.ArchivedBy, &row.TombstonedAt, &row.TombstonedBy, &row.TombstoneReason)
+		&row.CreatedAt, &row.CreatedBy, &row.UpdatedAt, &row.UpdatedBy, &row.ArchivedAt, &row.ArchivedBy, &row.TrashedAt, &row.TrashedBy, &row.TrashReason)
 	if errors.Is(err, sql.ErrNoRows) {
 		return topicRow{}, ErrNotFound
 	}
@@ -623,8 +623,8 @@ func (s *Store) applyTopicLifecycleWithReason(ctx context.Context, actorID, topi
 	if err != nil {
 		return nil, err
 	}
-	if row.TombstonedAt.Valid && strings.TrimSpace(row.TombstonedAt.String) != "" && action != "restore" {
-		return nil, ErrAlreadyTombstoned
+	if row.TrashedAt.Valid && strings.TrimSpace(row.TrashedAt.String) != "" && action != "restore" {
+		return nil, ErrAlreadyTrashed
 	}
 
 	current, err := row.toMap()
@@ -634,14 +634,14 @@ func (s *Store) applyTopicLifecycleWithReason(ctx context.Context, actorID, topi
 	primaryThreadID := strings.TrimSpace(row.ThreadID.String)
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
-	if row.TombstonedAt.Valid && strings.TrimSpace(row.TombstonedAt.String) != "" {
+	if row.TrashedAt.Valid && strings.TrimSpace(row.TrashedAt.String) != "" {
 		switch action {
 		case "restore":
 			// handled below
-		case "tombstone":
+		case "trash":
 			return current, nil
 		default:
-			return nil, ErrAlreadyTombstoned
+			return nil, ErrAlreadyTrashed
 		}
 	}
 	if row.ArchivedAt.Valid && strings.TrimSpace(row.ArchivedAt.String) != "" {
@@ -652,7 +652,7 @@ func (s *Store) applyTopicLifecycleWithReason(ctx context.Context, actorID, topi
 			// handled below
 		case "restore":
 			// handled below
-		case "tombstone":
+		case "trash":
 			// handled below
 		default:
 			return nil, ErrInvalidTopicRequest
@@ -661,10 +661,10 @@ func (s *Store) applyTopicLifecycleWithReason(ctx context.Context, actorID, topi
 	if action == "unarchive" && (!row.ArchivedAt.Valid || strings.TrimSpace(row.ArchivedAt.String) == "") {
 		return nil, ErrNotArchived
 	}
-	if action == "restore" && (!row.TombstonedAt.Valid || strings.TrimSpace(row.TombstonedAt.String) == "") {
-		return nil, ErrNotTombstoned
+	if action == "restore" && (!row.TrashedAt.Valid || strings.TrimSpace(row.TrashedAt.String) == "") {
+		return nil, ErrNotTrashed
 	}
-	if action != "archive" && action != "unarchive" && action != "tombstone" && action != "restore" {
+	if action != "archive" && action != "unarchive" && action != "trash" && action != "restore" {
 		return nil, ErrInvalidTopicRequest
 	}
 
@@ -676,12 +676,12 @@ func (s *Store) applyTopicLifecycleWithReason(ctx context.Context, actorID, topi
 	delete(updatedTopic, "created_by")
 
 	switch action {
-	case "archive", "tombstone":
+	case "archive", "trash":
 		updatedTopic["status"] = "archived"
 	case "unarchive", "restore":
 		updatedTopic["status"] = "active"
 	}
-	if action == "tombstone" {
+	if action == "trash" {
 		delete(updatedTopic, "archived_at")
 		delete(updatedTopic, "archived_by")
 	}
@@ -709,7 +709,7 @@ func (s *Store) applyTopicLifecycleWithReason(ctx context.Context, actorID, topi
 	switch action {
 	case "archive":
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE topics SET status = ?, archived_at = ?, archived_by = ?, tombstoned_at = NULL, tombstoned_by = NULL, tombstone_reason = NULL, body_json = ?, updated_at = ?, updated_by = ? WHERE id = ?`,
+			`UPDATE topics SET status = ?, archived_at = ?, archived_by = ?, trashed_at = NULL, trashed_by = NULL, trash_reason = NULL, body_json = ?, updated_at = ?, updated_by = ? WHERE id = ?`,
 			"archived", now, actorID, string(topicBodyJSON), now, actorID, topicID,
 		); err != nil {
 			return nil, fmt.Errorf("archive topic: %w", err)
@@ -741,32 +741,32 @@ func (s *Store) applyTopicLifecycleWithReason(ctx context.Context, actorID, topi
 		); err != nil {
 			return nil, fmt.Errorf("unarchive topic backing thread: %w", err)
 		}
-	case "tombstone":
+	case "trash":
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE topics SET status = ?, tombstoned_at = ?, tombstoned_by = ?, tombstone_reason = ?, archived_at = NULL, archived_by = NULL, body_json = ?, updated_at = ?, updated_by = ? WHERE id = ?`,
+			`UPDATE topics SET status = ?, trashed_at = ?, trashed_by = ?, trash_reason = ?, archived_at = NULL, archived_by = NULL, body_json = ?, updated_at = ?, updated_by = ? WHERE id = ?`,
 			"archived", now, actorID, strings.TrimSpace(reason), string(topicBodyJSON), now, actorID, topicID,
 		); err != nil {
-			return nil, fmt.Errorf("tombstone topic: %w", err)
+			return nil, fmt.Errorf("trash topic: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE threads SET tombstoned_at = ?, tombstoned_by = ?, tombstone_reason = ?, archived_at = NULL, archived_by = NULL, body_json = ?, provenance_json = ?, updated_at = ?, updated_by = ?,
+			`UPDATE threads SET trashed_at = ?, trashed_by = ?, trash_reason = ?, archived_at = NULL, archived_by = NULL, body_json = ?, provenance_json = ?, updated_at = ?, updated_by = ?,
 			    filter_status = ?, filter_priority = ?, filter_owner = ?, filter_due_at = ?, filter_cadence = ?, filter_cadence_preset = ?, filter_tags_json = ?
 			  WHERE id = ?`,
 			now, actorID, strings.TrimSpace(reason), string(threadBodyJSON), inferredProvenanceJSON(), now, actorID,
 			nullableString(threadColumns.Status), nullableString(threadColumns.Priority), nil, nil, nullableString(threadColumns.Cadence), nullableString(threadColumns.CadencePreset), threadColumns.TagsJSON,
 			primaryThreadID,
 		); err != nil {
-			return nil, fmt.Errorf("tombstone topic backing thread: %w", err)
+			return nil, fmt.Errorf("trash topic backing thread: %w", err)
 		}
 	case "restore":
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE topics SET status = ?, tombstoned_at = NULL, tombstoned_by = NULL, tombstone_reason = NULL, body_json = ?, updated_at = ?, updated_by = ? WHERE id = ?`,
+			`UPDATE topics SET status = ?, trashed_at = NULL, trashed_by = NULL, trash_reason = NULL, body_json = ?, updated_at = ?, updated_by = ? WHERE id = ?`,
 			"active", string(topicBodyJSON), now, actorID, topicID,
 		); err != nil {
 			return nil, fmt.Errorf("restore topic: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE threads SET tombstoned_at = NULL, tombstoned_by = NULL, tombstone_reason = NULL, body_json = ?, provenance_json = ?, updated_at = ?, updated_by = ?,
+			`UPDATE threads SET trashed_at = NULL, trashed_by = NULL, trash_reason = NULL, body_json = ?, provenance_json = ?, updated_at = ?, updated_by = ?,
 			    filter_status = ?, filter_priority = ?, filter_owner = ?, filter_due_at = ?, filter_cadence = ?, filter_cadence_preset = ?, filter_tags_json = ?
 			  WHERE id = ?`,
 			string(threadBodyJSON), inferredProvenanceJSON(), now, actorID,
@@ -817,19 +817,19 @@ func (s *Store) applyTopicLifecycleWithReason(ctx context.Context, actorID, topi
 		delete(updatedTopic, "archived_at")
 		delete(updatedTopic, "archived_by")
 	}
-	if action == "tombstone" {
+	if action == "trash" {
 		delete(updatedTopic, "archived_at")
 		delete(updatedTopic, "archived_by")
-		updatedTopic["tombstoned_at"] = now
-		updatedTopic["tombstoned_by"] = actorID
+		updatedTopic["trashed_at"] = now
+		updatedTopic["trashed_by"] = actorID
 		if strings.TrimSpace(reason) != "" {
-			updatedTopic["tombstone_reason"] = strings.TrimSpace(reason)
+			updatedTopic["trash_reason"] = strings.TrimSpace(reason)
 		}
 	}
 	if action == "restore" {
-		delete(updatedTopic, "tombstoned_at")
-		delete(updatedTopic, "tombstoned_by")
-		delete(updatedTopic, "tombstone_reason")
+		delete(updatedTopic, "trashed_at")
+		delete(updatedTopic, "trashed_by")
+		delete(updatedTopic, "trash_reason")
 		delete(updatedTopic, "archived_at")
 		delete(updatedTopic, "archived_by")
 	}
@@ -838,17 +838,17 @@ func (s *Store) applyTopicLifecycleWithReason(ctx context.Context, actorID, topi
 }
 
 func buildListTopicsQuery(filter TopicListFilter) (string, []any) {
-	query := `SELECT id, type, status, title, thread_id, body_json, provenance_json, created_at, created_by, updated_at, updated_by, archived_at, archived_by, tombstoned_at, tombstoned_by, tombstone_reason
+	query := `SELECT id, type, status, title, thread_id, body_json, provenance_json, created_at, created_by, updated_at, updated_by, archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		FROM topics
 		WHERE 1=1`
 	args := make([]any, 0, 8)
-	if filter.TombstonedOnly {
-		query += ` AND tombstoned_at IS NOT NULL`
-	} else if !filter.IncludeTombstoned {
-		query += ` AND tombstoned_at IS NULL`
+	if filter.TrashedOnly {
+		query += ` AND trashed_at IS NOT NULL`
+	} else if !filter.IncludeTrashed {
+		query += ` AND trashed_at IS NULL`
 	}
 	if filter.ArchivedOnly {
-		query += ` AND archived_at IS NOT NULL AND tombstoned_at IS NULL`
+		query += ` AND archived_at IS NOT NULL AND trashed_at IS NULL`
 	} else if !filter.IncludeArchived {
 		query += ` AND archived_at IS NULL`
 	}
@@ -995,7 +995,7 @@ func buildTopicBackingThreadBody(topicID string, topic map[string]any, threadID,
 	status := "active"
 	if strings.EqualFold(strings.TrimSpace(anyStringValue(topic["status"])), "archived") ||
 		strings.TrimSpace(anyStringValue(topic["archived_at"])) != "" ||
-		strings.TrimSpace(anyStringValue(topic["tombstoned_at"])) != "" {
+		strings.TrimSpace(anyStringValue(topic["trashed_at"])) != "" {
 		status = "archived"
 	}
 	body := map[string]any{

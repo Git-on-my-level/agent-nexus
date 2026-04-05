@@ -949,7 +949,7 @@ const artifacts = [
     created_at: new Date(now - 20 * 60 * 60 * 1000).toISOString(),
     created_by: "actor-ops-ai",
     provenance: { sources: ["actor_statement:evt-supply-001"] },
-    tombstoned_at: null,
+    trashed_at: null,
   },
   {
     id: "artifact-supplier-sla-v2",
@@ -990,7 +990,7 @@ const artifacts = [
     created_at: new Date(now - 10 * 60 * 1000).toISOString(),
     created_by: "actor-ops-ai",
     provenance: { sources: ["actor_statement:evt-supply-001"] },
-    tombstoned_at: null,
+    trashed_at: null,
   },
   {
     id: "artifact-summer-menu-draft",
@@ -1046,7 +1046,7 @@ const artifacts = [
     created_at: new Date(now - 5 * 24 * 60 * 60 * 1000).toISOString(),
     created_by: "actor-flavor-ai",
     provenance: { sources: ["actor_statement:evt-menu-001"] },
-    tombstoned_at: null,
+    trashed_at: null,
   },
   {
     id: "artifact-tasting-log",
@@ -1071,7 +1071,7 @@ const artifacts = [
     created_at: new Date(now - 4 * 24 * 60 * 60 * 1000).toISOString(),
     created_by: "actor-squeeze-bot",
     provenance: { sources: ["actor_statement:evt-menu-002"] },
-    tombstoned_at: null,
+    trashed_at: null,
   },
   {
     id: "artifact-maintenance-log",
@@ -1096,7 +1096,7 @@ const artifacts = [
     created_at: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString(),
     created_by: "actor-squeeze-bot",
     provenance: { sources: ["actor_statement:evt-maint-001"] },
-    tombstoned_at: null,
+    trashed_at: null,
   },
   {
     id: "artifact-receipt-lavender-sourcing",
@@ -1124,7 +1124,7 @@ const artifacts = [
           "required until their API v2 ships in Q3 2026.",
       ],
     },
-    tombstoned_at: null,
+    trashed_at: null,
   },
   {
     id: "artifact-review-lavender-sourcing",
@@ -1154,7 +1154,7 @@ const artifacts = [
         "by SupplyRover and inventory is updated.",
       evidence_refs: ["artifact:artifact-summer-menu-draft"],
     },
-    tombstoned_at: null,
+    trashed_at: null,
   },
 
   // ── Pricing glitch artifacts ───────────────────────────────────────────────
@@ -1183,7 +1183,7 @@ const artifacts = [
     created_at: new Date(now - 10 * 24 * 60 * 60 * 1000).toISOString(),
     created_by: "actor-cashier-bot",
     provenance: { sources: ["actor_statement:evt-price-001"] },
-    tombstoned_at: null,
+    trashed_at: null,
   },
   {
     id: "artifact-receipt-pricing-v1",
@@ -1195,7 +1195,7 @@ const artifacts = [
     created_at: new Date(now - 9 * 24 * 60 * 60 * 1000).toISOString(),
     created_by: "actor-cashier-bot",
     provenance: { sources: ["actor_statement:evt-price-006"] },
-    tombstoned_at: null,
+    trashed_at: null,
     packet: {
       receipt_id: "artifact-receipt-pricing-v1",
       subject_ref: "card:thread-pricing-glitch",
@@ -1228,7 +1228,7 @@ const artifacts = [
     ).toISOString(),
     created_by: "actor-ops-ai",
     provenance: { sources: ["actor_statement:evt-price-007"] },
-    tombstoned_at: null,
+    trashed_at: null,
     packet: {
       review_id: "artifact-review-pricing-escalate",
       subject_ref: "card:thread-pricing-glitch",
@@ -1254,7 +1254,7 @@ const artifacts = [
     created_at: new Date(now - 8 * 24 * 60 * 60 * 1000).toISOString(),
     created_by: "actor-cashier-bot",
     provenance: { sources: ["actor_statement:evt-price-009"] },
-    tombstoned_at: null,
+    trashed_at: null,
     packet: {
       receipt_id: "artifact-receipt-pricing-v2",
       subject_ref: "card:thread-pricing-glitch",
@@ -1303,9 +1303,9 @@ const artifacts = [
         "artifact:artifact-receipt-pricing-v2",
       ],
     },
-    tombstoned_at: null,
+    trashed_at: null,
   },
-  // Tombstoned after seed create (see seed-core-from-mock.mjs) for Trash / purge in local dev.
+  // Trashed after seed create (see seed-core-from-mock.mjs) for Trash / permanent delete in local dev.
   {
     id: "artifact-dev-trash-onboarding-draft",
     kind: "evidence",
@@ -1318,9 +1318,9 @@ const artifacts = [
     created_at: new Date(now - 3 * 24 * 60 * 60 * 1000).toISOString(),
     created_by: "actor-ops-ai",
     provenance: { sources: ["actor_statement:dev-trash-seed"] },
-    tombstoned_at: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString(),
-    tombstoned_by: "actor-ops-ai",
-    tombstone_reason:
+    trashed_at: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    trashed_by: "actor-ops-ai",
+    trash_reason:
       "Dev seed: removed from active use so operators can exercise Trash and purge locally.",
   },
   {
@@ -1335,24 +1335,25 @@ const artifacts = [
     created_at: new Date(now - 4 * 24 * 60 * 60 * 1000).toISOString(),
     created_by: "actor-flavor-ai",
     provenance: { sources: ["actor_statement:dev-trash-seed"] },
-    tombstoned_at: new Date(now - 1 * 24 * 60 * 60 * 1000).toISOString(),
-    tombstoned_by: "actor-ops-ai",
-    tombstone_reason: "Dev seed: tombstoned for local purge workflow testing.",
+    trashed_at: new Date(now - 1 * 24 * 60 * 60 * 1000).toISOString(),
+    trashed_by: "actor-ops-ai",
+    trash_reason:
+      "Dev seed: trashed for local permanent-delete workflow testing.",
   },
   {
-    id: "artifact-tombstoned-doc",
+    id: "artifact-trashed-doc",
     kind: "doc",
     thread_id: "thread-pricing-glitch",
     summary: "Superseded draft — replaced by final evidence artifact",
     refs: ["thread:thread-pricing-glitch"],
     content_type: "text/plain",
-    content_text: "This artifact was superseded and tombstoned.",
+    content_text: "This artifact was superseded and moved to trash.",
     created_at: new Date(now - 11 * 24 * 60 * 60 * 1000).toISOString(),
     created_by: "actor-cashier-bot",
     provenance: { sources: ["actor_statement:evt-price-001"] },
-    tombstoned_at: new Date(now - 10 * 24 * 60 * 60 * 1000).toISOString(),
-    tombstoned_by: "actor-ops-ai",
-    tombstone_reason:
+    trashed_at: new Date(now - 10 * 24 * 60 * 60 * 1000).toISOString(),
+    trashed_by: "actor-ops-ai",
+    trash_reason:
       "Superseded by artifact-pricing-evidence; draft no longer needed.",
   },
 ];
@@ -1372,7 +1373,7 @@ const MOCK_DOCUMENTS = [
     created_by: "actor-ops-ai",
     updated_at: "2026-03-08T14:30:00Z",
     updated_by: "actor-ops-ai",
-    tombstoned_at: null,
+    trashed_at: null,
   },
   {
     id: "incident-response-playbook",
@@ -1388,7 +1389,7 @@ const MOCK_DOCUMENTS = [
     created_by: "actor-ops-ai",
     updated_at: "2026-03-05T11:00:00Z",
     updated_by: "actor-ops-ai",
-    tombstoned_at: null,
+    trashed_at: null,
   },
   {
     id: "onboarding-guide-v1",
@@ -1404,7 +1405,7 @@ const MOCK_DOCUMENTS = [
     created_by: "actor-ops-ai",
     updated_at: "2026-01-10T08:00:00Z",
     updated_by: "actor-ops-ai",
-    tombstoned_at: null,
+    trashed_at: null,
   },
   {
     id: "old-pricing-doc",
@@ -1419,9 +1420,9 @@ const MOCK_DOCUMENTS = [
     created_by: "actor-ops-ai",
     updated_at: "2026-03-01T10:00:00Z",
     updated_by: "actor-ops-ai",
-    tombstoned_at: "2026-03-01T10:00:00Z",
-    tombstoned_by: "actor-ops-ai",
-    tombstone_reason: "Superseded by updated pricing model",
+    trashed_at: "2026-03-01T10:00:00Z",
+    trashed_by: "actor-ops-ai",
+    trash_reason: "Superseded by updated pricing model",
   },
 ];
 
@@ -2422,24 +2423,22 @@ function resolveMockSubjectBackingThreadId(subjectRef, explicitThreadId = "") {
 }
 
 export function listMockArtifacts(filters = {}) {
-  const tombstonedOnly =
-    filters.tombstoned_only === true ||
-    String(filters.tombstoned_only) === "true";
-  const includeTombstoned =
-    tombstonedOnly ||
-    filters.include_tombstoned === true ||
-    String(filters.include_tombstoned) === "true";
+  const trashedOnly =
+    filters.trashed_only === true || String(filters.trashed_only) === "true";
+  const includeTrashed =
+    trashedOnly ||
+    filters.include_trashed === true ||
+    String(filters.include_trashed) === "true";
 
   return artifacts.filter((artifact) => {
-    const isTombstoned =
-      artifact.tombstoned_at != null &&
-      String(artifact.tombstoned_at).trim() !== "";
+    const isTrashed =
+      artifact.trashed_at != null && String(artifact.trashed_at).trim() !== "";
 
-    if (tombstonedOnly) {
-      if (!isTombstoned) {
+    if (trashedOnly) {
+      if (!isTrashed) {
         return false;
       }
-    } else if (!includeTombstoned && isTombstoned) {
+    } else if (!includeTrashed && isTrashed) {
       return false;
     }
 
@@ -2541,8 +2540,8 @@ export function listMockDocuments(filters = {}) {
       (doc) => String(doc.thread_id ?? "") === String(filters.thread_id),
     );
   }
-  if (!filters.include_tombstoned) {
-    docs = docs.filter((d) => !d.tombstoned_at);
+  if (!filters.include_trashed) {
+    docs = docs.filter((d) => !d.trashed_at);
   }
   return docs
     .map((doc) => {
@@ -2623,7 +2622,7 @@ export function createMockDocument({
     created_by: actor_id,
     updated_at: now,
     updated_by: actor_id,
-    tombstoned_at: null,
+    trashed_at: null,
   };
 
   const newRevision = {
@@ -3364,29 +3363,29 @@ function isArchivedBoardCard(card) {
   );
 }
 
-function isTombstonedBoardCard(card) {
-  return Boolean(card?.tombstoned_at);
+function isTrashedBoardCard(card) {
+  return Boolean(card?.trashed_at);
 }
 
 function isVisibleBoardCard(card) {
-  return !isArchivedBoardCard(card) && !isTombstonedBoardCard(card);
+  return !isArchivedBoardCard(card) && !isTrashedBoardCard(card);
 }
 
 function clearBoardCardLifecycle(card) {
   card.archived_at = null;
   card.archived_by = null;
-  card.tombstoned_at = null;
-  card.tombstoned_by = null;
-  card.tombstone_reason = null;
+  card.trashed_at = null;
+  card.trashed_by = null;
+  card.trash_reason = null;
 }
 
 function archiveBoardCard(card, actorId, reason = "") {
   const nowIso = new Date().toISOString();
   card.archived_at = nowIso;
   card.archived_by = actorId || card.archived_by || "unknown";
-  card.tombstoned_at = null;
-  card.tombstoned_by = null;
-  card.tombstone_reason = reason || null;
+  card.trashed_at = null;
+  card.trashed_by = null;
+  card.trash_reason = reason || null;
   card.version = (Number(card.version) || 0) + 1;
   card.updated_at = nowIso;
   if (actorId) {
@@ -3475,9 +3474,9 @@ function normalizeMockBoardCard(card) {
     document_ref: documentRef || null,
     archived_at: card.archived_at ?? null,
     archived_by: card.archived_by ?? null,
-    tombstoned_at: card.tombstoned_at ?? null,
-    tombstoned_by: card.tombstoned_by ?? null,
-    tombstone_reason: card.tombstone_reason ?? null,
+    trashed_at: card.trashed_at ?? null,
+    trashed_by: card.trashed_by ?? null,
+    trash_reason: card.trash_reason ?? null,
     title: String(card.title ?? "").trim() || summary,
     summary,
     due_at: dueAt || null,
@@ -4153,9 +4152,8 @@ export function listMockCards(filters = {}) {
   ).trim();
   const archivedOnly =
     filters.archived_only === true || String(filters.archived_only) === "true";
-  const tombstonedOnly =
-    filters.tombstoned_only === true ||
-    String(filters.tombstoned_only) === "true";
+  const trashedOnly =
+    filters.trashed_only === true || String(filters.trashed_only) === "true";
 
   return boardCards
     .filter((card) => {
@@ -4168,7 +4166,7 @@ export function listMockCards(filters = {}) {
       if (archivedOnly && !card.archived_at) {
         return false;
       }
-      if (tombstonedOnly && !card.tombstoned_at) {
+      if (trashedOnly && !card.trashed_at) {
         return false;
       }
       return true;
@@ -4363,9 +4361,9 @@ export function createMockBoardCard(boardId, payload) {
     updated_by: payload.actor_id || "unknown",
     archived_at: null,
     archived_by: null,
-    tombstoned_at: null,
-    tombstoned_by: null,
-    tombstone_reason: null,
+    trashed_at: null,
+    trashed_by: null,
+    trash_reason: null,
   });
 
   targetColumn.splice(resolveInsertIndex(targetColumn, payload), 0, newCard);

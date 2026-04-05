@@ -49,7 +49,7 @@
 
   let filteredTimeline = $derived(
     (Array.isArray(timeline) ? timeline : []).filter((event) => {
-      if (event.tombstoned_at) return false;
+      if (event.trashed_at) return false;
       if (!showArchived && event.archived_at) return false;
       return true;
     }),
@@ -64,7 +64,7 @@
       (e) =>
         String(e?.type ?? "") === "message_posted" &&
         e.archived_at &&
-        !e.tombstoned_at,
+        !e.trashed_at,
     ).length,
   );
   let timelineHasAnyMessagePosted = $derived(
@@ -72,9 +72,9 @@
       (e) => String(e?.type ?? "") === "message_posted",
     ),
   );
-  let hasAnyNonTombstonedMessage = $derived(
+  let hasAnyNonTrashedMessage = $derived(
     (Array.isArray(timeline) ? timeline : []).some(
-      (e) => String(e?.type ?? "") === "message_posted" && !e.tombstoned_at,
+      (e) => String(e?.type ?? "") === "message_posted" && !e.trashed_at,
     ),
   );
   let showSyncStatus = $derived(timelineLoading && timelineHasAnyMessagePosted);
@@ -246,7 +246,7 @@
     confirmModal = { open: true, action: "archive", eventId };
   }
 
-  function openTombstoneConfirm(eventId) {
+  function openTrashConfirm(eventId) {
     confirmModal = { open: true, action: "trash", eventId };
   }
 
@@ -254,7 +254,7 @@
     const { action, eventId } = confirmModal;
     confirmModal = { open: false, action: "", eventId: "" };
     if (action === "archive") doArchive(eventId);
-    else if (action === "trash") doTombstone(eventId);
+    else if (action === "trash") doTrash(eventId);
   }
 
   async function doArchive(eventId) {
@@ -285,12 +285,12 @@
     }
   }
 
-  async function doTombstone(eventId) {
+  async function doTrash(eventId) {
     if (!eventId || lifecycleBusy) return;
     lifecycleBusy = true;
     lifecycleError = "";
     try {
-      await coreClient.tombstoneEvent(eventId, {});
+      await coreClient.trashEvent(eventId, {});
       await refreshTimeline();
     } catch (e) {
       lifecycleError = `Trash failed: ${e instanceof Error ? e.message : String(e)}`;
@@ -490,13 +490,13 @@
       {/if}
     </div>
   </div>
-  {#if timelineError && !hasAnyNonTombstonedMessage}
+  {#if timelineError && !hasAnyNonTrashedMessage}
     <p class="rounded bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
       {timelineError}
     </p>
-  {:else if timelineLoading && !hasAnyNonTombstonedMessage}
+  {:else if timelineLoading && !hasAnyNonTrashedMessage}
     <p class="text-[13px] text-[var(--ui-text-muted)]">Loading messages...</p>
-  {:else if !hasAnyNonTombstonedMessage}
+  {:else if !hasAnyNonTrashedMessage}
     <p class="text-[13px] text-[var(--ui-text-muted)]">No messages yet.</p>
   {:else if !hasMessages}
     <p class="text-[13px] text-[var(--ui-text-muted)]">
@@ -521,7 +521,7 @@
           {actorName}
           onReply={setReplyTarget}
           onArchive={openArchiveConfirm}
-          onTombstone={openTombstoneConfirm}
+          onTrash={openTrashConfirm}
           onUnarchive={doUnarchive}
           {lifecycleBusy}
         />
@@ -536,7 +536,7 @@
     ? "Move message to trash"
     : "Archive message"}
   message={confirmModal.action === "trash"
-    ? "This message and all its replies will be tombstoned. You can restore them from trash later."
+    ? "This message and all its replies will be moved to trash. You can restore them later."
     : "This message and all its replies will be archived. Toggle 'Show archived' to see them again."}
   confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
   variant={confirmModal.action === "trash" ? "danger" : "warning"}

@@ -448,8 +448,7 @@
   });
 
   async function handleArchiveBoard() {
-    if (!boardId || boardLifecycleBusy || workspace?.board?.tombstoned_at)
-      return;
+    if (!boardId || boardLifecycleBusy || workspace?.board?.trashed_at) return;
     boardLifecycleBusy = true;
     try {
       await coreClient.archiveBoard(boardId, {});
@@ -461,8 +460,7 @@
 
   async function handleUnarchiveBoard() {
     confirmModal = { open: false, action: "" };
-    if (!boardId || boardLifecycleBusy || workspace?.board?.tombstoned_at)
-      return;
+    if (!boardId || boardLifecycleBusy || workspace?.board?.trashed_at) return;
     boardLifecycleBusy = true;
     try {
       await coreClient.unarchiveBoard(boardId, {});
@@ -476,14 +474,14 @@
     const action = confirmModal.action;
     confirmModal = { open: false, action: "" };
     if (action === "archive") handleArchiveBoard();
-    else if (action === "trash") handleTombstoneBoard();
+    else if (action === "trash") handleTrashBoard();
   }
 
-  async function handleTombstoneBoard() {
+  async function handleTrashBoard() {
     if (!boardId || boardLifecycleBusy) return;
     boardLifecycleBusy = true;
     try {
-      await coreClient.tombstoneBoard(boardId, {});
+      await coreClient.trashBoard(boardId, {});
       confirmModal = { open: false, action: "" };
       await goto(workspacePath(workspaceSlug, "/boards"));
     } finally {
@@ -549,24 +547,22 @@
   {@const backlogCards = cardsByColumn["backlog"] ?? []}
   {@const doneCards = cardsByColumn["done"] ?? []}
 
-  {#if board.tombstoned_at}
+  {#if board.trashed_at}
     <div
       class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[13px] text-red-400"
     >
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2 font-semibold">
           <span>⚠</span>
-          <span>This board has been tombstoned</span>
+          <span>This board is in trash</span>
         </div>
-        {#if board.tombstone_reason}
-          <p class="mt-2">Reason: {board.tombstone_reason}</p>
+        {#if board.trash_reason}
+          <p class="mt-2">Reason: {board.trash_reason}</p>
         {/if}
         <p class="mt-1 text-[11px] text-red-400/80">
-          Tombstoned {#if board.tombstoned_by}by {actorName(
-              board.tombstoned_by,
-            )}{/if}
-          {#if board.tombstoned_at}
-            at {formatTimestamp(board.tombstoned_at)}
+          Trashed {#if board.trashed_by}by {actorName(board.trashed_by)}{/if}
+          {#if board.trashed_at}
+            at {formatTimestamp(board.trashed_at)}
           {/if}
         </p>
       </div>
@@ -637,7 +633,7 @@
         </span>
       </div>
 
-      {#if !board.tombstoned_at}
+      {#if !board.trashed_at}
         <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
           {#if !board.archived_at}
             <button
@@ -1378,7 +1374,7 @@
   open={confirmModal.open}
   title={confirmModal.action === "trash" ? "Move to trash" : "Archive board"}
   message={confirmModal.action === "trash"
-    ? "This board will be tombstoned. You can restore it from trash later."
+    ? "This board will be moved to trash. You can restore it later."
     : "This board will be hidden from default views. You can unarchive it later."}
   confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
   variant={confirmModal.action === "trash" ? "danger" : "warning"}

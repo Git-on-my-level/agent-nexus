@@ -669,8 +669,8 @@ func TestDocsCommands(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/docs":
-			if got := strings.TrimSpace(r.URL.Query().Get("include_tombstoned")); got != "true" {
-				t.Fatalf("expected include_tombstoned=true query, got %q", got)
+			if got := strings.TrimSpace(r.URL.Query().Get("include_trashed")); got != "true" {
+				t.Fatalf("expected include_trashed=true query, got %q", got)
 			}
 			if got := strings.TrimSpace(r.URL.Query().Get("thread_id")); got != "thread_docs_1" {
 				t.Fatalf("expected thread_id=thread_docs_1 query, got %q", got)
@@ -704,7 +704,7 @@ func TestDocsCommands(t *testing.T) {
 	home := t.TempDir()
 	env := map[string]string{}
 
-	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "list", "--thread-id", "thread_docs_1", "--include-tombstoned"}))
+	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "list", "--thread-id", "thread_docs_1", "--include-trashed"}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"document":{"id":"doc_1"},"content":"initial","content_type":"text"}`), []string{"--json", "--base-url", server.URL, "docs", "create"}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "get", "--document-id", "doc_1"}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"actor_id":"actor_test","if_base_revision":"rev_1","content":"next","content_type":"text"}`), []string{"--json", "--base-url", server.URL, "docs", "update", "--document-id", "doc_1"}))
@@ -4682,8 +4682,8 @@ func TestFilterEventsByLifecycleState(t *testing.T) {
 
 	active := map[string]any{"id": "evt_a", "type": "actor_statement"}
 	archived := map[string]any{"id": "evt_b", "archived_at": "2024-01-01T00:00:00Z"}
-	tomb := map[string]any{"id": "evt_c", "tombstoned_at": "2024-01-02T00:00:00Z"}
-	archivedAndTomb := map[string]any{"id": "evt_d", "archived_at": "2024-01-01T00:00:00Z", "tombstoned_at": "2024-01-02T00:00:00Z"}
+	tomb := map[string]any{"id": "evt_c", "trashed_at": "2024-01-02T00:00:00Z"}
+	archivedAndTomb := map[string]any{"id": "evt_d", "archived_at": "2024-01-01T00:00:00Z", "trashed_at": "2024-01-02T00:00:00Z"}
 
 	events := []any{active, archived, tomb, archivedAndTomb}
 
@@ -4699,7 +4699,7 @@ func TestFilterEventsByLifecycleState(t *testing.T) {
 
 	tombOnly := filterEventsByLifecycleState(events, false, false, false, true)
 	if len(tombOnly) != 2 {
-		t.Fatalf("tombstoned-only: want 2, got %#v", tombOnly)
+		t.Fatalf("trashed-only: want 2, got %#v", tombOnly)
 	}
 
 	archOnly := filterEventsByLifecycleState(events, false, true, false, false)

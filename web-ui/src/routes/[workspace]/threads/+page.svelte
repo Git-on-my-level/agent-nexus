@@ -329,7 +329,7 @@
     trashBusyId = id;
     error = "";
     try {
-      await coreClient.tombstoneTopic(id, {});
+      await coreClient.trashTopic(id, {});
       confirmModal = { open: false, action: "", entityId: "" };
       await loadTopics();
     } catch (e) {
@@ -813,7 +813,7 @@
   open={confirmModal.open}
   title={confirmModal.action === "trash" ? "Move to trash" : "Archive topic"}
   message={confirmModal.action === "trash"
-    ? "This topic will be tombstoned. You can restore it from trash later."
+    ? "This topic will be moved to trash. You can restore it later."
     : "This topic will be hidden from default views. You can unarchive it later."}
   confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
   variant={confirmModal.action === "trash" ? "danger" : "warning"}

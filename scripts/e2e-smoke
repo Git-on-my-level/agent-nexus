@@ -569,13 +569,13 @@ node -e 'const fs=require("fs"); const data=JSON.parse(fs.readFileSync(process.a
   exit 1
 }
 
-# Tombstone lane (operational lifecycle, spec §3.6) — topics support tombstone; default topic list hides it.
-printf '{"topic":{"id":"topic-smoke-tombstone","type":"other","status":"active","title":"Smoke tombstone topic","summary":"Disposed after smoke","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":["topic:topic-smoke-tombstone"],"provenance":{"sources":["actor_statement:smoke"]}}}\n' \
-  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" topics create >"$TMP_DIR/tombstone-topic-create.json"
-printf '{"reason":"e2e-smoke tombstone lane assertion"}\n' \
-  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" topics tombstone --topic-id topic-smoke-tombstone >"$TMP_DIR/topic-tombstone.json"
-curl -fsS -H "Authorization: Bearer $ACCESS_TOKEN" "${CORE_BASE_URL}/topics?tombstoned_only=true" >"$TMP_DIR/topics-tombstoned-only.json"
-assert_contains "$TMP_DIR/topics-tombstoned-only.json" 'topic-smoke-tombstone'
+# Trash lane (operational lifecycle, spec §3.6) — topics support trash; default topic list hides trashed rows.
+printf '{"topic":{"id":"topic-smoke-trash","type":"other","status":"active","title":"Smoke trashed topic","summary":"Disposed after smoke","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":["topic:topic-smoke-trash"],"provenance":{"sources":["actor_statement:smoke"]}}}\n' \
+  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" topics create >"$TMP_DIR/trash-topic-create.json"
+printf '{"reason":"e2e-smoke trash lane assertion"}\n' \
+  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" topics trash --topic-id topic-smoke-trash >"$TMP_DIR/topic-trash.json"
+curl -fsS -H "Authorization: Bearer $ACCESS_TOKEN" "${CORE_BASE_URL}/topics?trashed_only=true" >"$TMP_DIR/topics-trashed-only.json"
+assert_contains "$TMP_DIR/topics-trashed-only.json" 'topic-smoke-trash'
 
 # Card trash lane (archive / archived_only inventory).
 printf '{"if_board_updated_at":"%s"}\n' "$BOARD_UPDATED_AT" \

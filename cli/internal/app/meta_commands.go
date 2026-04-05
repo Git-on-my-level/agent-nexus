@@ -420,7 +420,7 @@ Print one bundled Markdown topic from the runtime help catalog.
 
 Examples:
   oar meta doc agent-guide
-  oar meta doc "docs tombstone"
+  oar meta doc "docs trash"
   oar --json meta doc --topic "threads workspace"`)
 }
 
