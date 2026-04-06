@@ -78,6 +78,30 @@ func TestWorkspaceListQueriesUseIndexedPlans(t *testing.T) {
 	assertPlanUsesIndex(t, "documents", documentPlan, "idx_documents_thread_trashed_updated_at")
 }
 
+func TestBuildListThreadsQueryAddsWhereBeforeOptionalAndFilters(t *testing.T) {
+	t.Parallel()
+
+	stale := true
+	query, args := buildListThreadsQuery(ThreadListFilter{
+		IncludeArchived: true,
+		IncludeTrashed:  true,
+		Tag:             "ops",
+		Cadences:        []string{"daily"},
+		Query:           "plan",
+		Stale:           &stale,
+	})
+
+	if !strings.Contains(query, "FROM threads LEFT JOIN derived_topic_views ON derived_topic_views.thread_id = threads.id WHERE EXISTS") {
+		t.Fatalf("expected optional filters to start a WHERE clause, got query:\n%s", query)
+	}
+	if strings.Contains(query, "FROM threads LEFT JOIN derived_topic_views ON derived_topic_views.thread_id = threads.id AND") {
+		t.Fatalf("query appended AND without WHERE:\n%s", query)
+	}
+	if len(args) != 5 {
+		t.Fatalf("expected 5 query args, got %d (%#v)", len(args), args)
+	}
+}
+
 func explainQueryPlan(t *testing.T, db *sql.DB, query string, args ...any) string {
 	t.Helper()
 

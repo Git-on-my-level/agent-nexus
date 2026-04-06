@@ -194,7 +194,7 @@ describe("inbox typed-ref rendering targets", () => {
     expect(
       resolveRefLink("event:evt-1001", { threadId: "thread-onboarding" }),
     ).toMatchObject({
-      href: "/topics/thread-onboarding#event-evt-1001",
+      href: "/threads/thread-onboarding#event-evt-1001",
       isLink: true,
     });
 

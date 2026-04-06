@@ -2745,51 +2745,44 @@ func buildListThreadsQuery(filter ThreadListFilter) (string, []any) {
 	query := `SELECT threads.id, threads.kind, threads.thread_id, threads.updated_at, threads.updated_by, threads.body_json, threads.provenance_json, threads.archived_at, threads.archived_by, threads.trashed_at, threads.trashed_by, threads.trash_reason
 		 FROM threads`
 	args := make([]any, 0, 9)
+	hasWhere := false
+	appendClause := func(clause string) {
+		if hasWhere {
+			query += ` AND ` + clause
+			return
+		}
+		query += ` WHERE ` + clause
+		hasWhere = true
+	}
 	if filter.TrashedOnly {
-		query += ` WHERE threads.trashed_at IS NOT NULL`
+		appendClause(`threads.trashed_at IS NOT NULL`)
 	} else if !filter.IncludeTrashed {
-		query += ` WHERE threads.trashed_at IS NULL`
+		appendClause(`threads.trashed_at IS NULL`)
 	}
 	if filter.ArchivedOnly {
-		if strings.Contains(query, "WHERE") {
-			query += ` AND threads.archived_at IS NOT NULL AND threads.trashed_at IS NULL`
-		} else {
-			query += ` WHERE threads.archived_at IS NOT NULL AND threads.trashed_at IS NULL`
-		}
+		appendClause(`threads.archived_at IS NOT NULL AND threads.trashed_at IS NULL`)
 	} else if !filter.IncludeArchived {
-		if strings.Contains(query, "WHERE") {
-			query += ` AND threads.archived_at IS NULL`
-		} else {
-			query += ` WHERE threads.archived_at IS NULL`
-		}
+		appendClause(`threads.archived_at IS NULL`)
 	}
 	if status := strings.TrimSpace(filter.Status); status != "" {
-		if strings.Contains(query, "WHERE") {
-			query += ` AND filter_status = ?`
-		} else {
-			query += ` WHERE filter_status = ?`
-		}
+		appendClause(`filter_status = ?`)
 		args = append(args, status)
 	}
 	if priority := strings.TrimSpace(filter.Priority); priority != "" {
-		if strings.Contains(query, "WHERE") {
-			query += ` AND filter_priority = ?`
-		} else {
-			query += ` WHERE filter_priority = ?`
-		}
+		appendClause(`filter_priority = ?`)
 		args = append(args, priority)
 	}
 	for _, tag := range combineThreadTagFilters(filter) {
-		query += ` AND EXISTS (SELECT 1 FROM json_each(filter_tags_json) WHERE value = ?)`
+		appendClause(`EXISTS (SELECT 1 FROM json_each(filter_tags_json) WHERE value = ?)`)
 		args = append(args, tag)
 	}
 	if cadenceClause, cadenceArgs := buildThreadCadenceFilterClause(filter.Cadences); cadenceClause != "" {
-		query += ` AND ` + cadenceClause
+		appendClause(cadenceClause)
 		args = append(args, cadenceArgs...)
 	}
 	if q := strings.TrimSpace(filter.Query); q != "" {
 		searchPattern := "%" + strings.ToLower(q) + "%"
-		query += ` AND (LOWER(threads.id) LIKE ? OR LOWER(json_extract(body_json, '$.title')) LIKE ?)`
+		appendClause(`(LOWER(threads.id) LIKE ? OR LOWER(json_extract(body_json, '$.title')) LIKE ?)`)
 		args = append(args, searchPattern, searchPattern)
 	}
 	if filter.Stale != nil {
@@ -2799,7 +2792,7 @@ func buildListThreadsQuery(filter ThreadListFilter) (string, []any) {
 			"FROM threads LEFT JOIN derived_topic_views ON derived_topic_views.thread_id = threads.id",
 			1,
 		)
-		query += ` AND COALESCE(derived_topic_views.stale, 0) = ?`
+		appendClause(`COALESCE(derived_topic_views.stale, 0) = ?`)
 		args = append(args, boolToInt(*filter.Stale))
 	}
 	query += ` ORDER BY threads.updated_at DESC, threads.id ASC`

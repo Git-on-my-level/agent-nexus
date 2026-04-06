@@ -45,7 +45,7 @@ describe("timeline utils", () => {
     expect(view.changedFields).toEqual(["Status", "Summary"]);
     expect(view.resolvedRefs[0]).toMatchObject({
       kind: "event",
-      href: "/topics/thread-1#event-evt-z",
+      href: "/threads/thread-1#event-evt-z",
       isLink: true,
     });
     expect(view.resolvedRefs[1]).toMatchObject({

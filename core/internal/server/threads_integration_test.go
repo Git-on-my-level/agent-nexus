@@ -419,6 +419,12 @@ func TestListThreadsCadenceAndMultiTagFilters(t *testing.T) {
 	)
 
 	assertIDs(
+		listIDs(h.baseURL+"/threads?include_archived=true&include_trashed=true&tag=backend"),
+		[]string{threadCronDailyOps, threadDailyOpsBackend, threadReactiveOpsBackend, threadWeeklyBackend},
+		"tag filter with include_archived/include_trashed",
+	)
+
+	assertIDs(
 		listIDs(h.baseURL+"/threads?tag=ops&tag=backend"),
 		[]string{threadCronDailyOps, threadDailyOpsBackend, threadReactiveOpsBackend},
 		"multi tag AND filter",

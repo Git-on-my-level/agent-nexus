@@ -27,7 +27,7 @@ describe("RefLink model", () => {
       resolveRefLink("event:evt-9", { threadId: "thread-1" }),
     ).toMatchObject({
       kind: "event",
-      href: "/topics/thread-1#event-evt-9",
+      href: "/threads/thread-1#event-evt-9",
       isLink: true,
     });
 
@@ -118,7 +118,7 @@ describe("RefLink model", () => {
       kind: "event",
       label: "Event",
       secondaryLabel: "event:evt-9",
-      href: "/topics/thread-1#event-evt-9",
+      href: "/threads/thread-1#event-evt-9",
       isLink: true,
     });
 

@@ -95,7 +95,7 @@ const LINK_RESOLVERS = {
     threadId
       ? buildInternalHref(
           workspaceSlug,
-          `/topics/${asPathSegment(threadId)}#event-${asPathSegment(value)}`,
+          `/threads/${asPathSegment(threadId)}#event-${asPathSegment(value)}`,
         )
       : "",
   url: ({ value }) => value,
