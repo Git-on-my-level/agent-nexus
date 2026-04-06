@@ -1,6 +1,6 @@
 <script>
   import { browser } from "$app/environment";
-  import { onMount, untrack } from "svelte";
+  import { onMount } from "svelte";
   import { writable } from "svelte/store";
 
   import {
@@ -52,8 +52,6 @@
   import TimelineTab from "$lib/components/timeline/TimelineTab.svelte";
 
   let {
-    /** @type {import("svelte/store").Writable<"overview" | "messages" | "timeline">} */
-    cdmDetailPane,
     cardItem,
     columnPeers,
     boardId,
@@ -83,10 +81,13 @@
   let backing = $derived(cardItem?.backing);
   let derived = $derived(cardItem?.derived);
   let thread = $derived(backing?.thread);
+  let cdmDetailPane = $state("overview");
+  let previousCardKey = $state("");
 
   let linkedThreadId = $derived(
     String(membership?.thread_id ?? backing?.thread_id ?? "").trim(),
   );
+  let cardKey = $derived(boardCardStableId(membership));
 
   let cardInspectNav = $derived(boardCardInspectNav(membership, thread));
   let headerTitle = $derived(boardCardHeaderTitle(membership, thread));
@@ -237,14 +238,21 @@
     syncCardDraftsFromItem(cardItem);
   });
 
-  /** Load thread timeline when switching to Messages / Timeline (same as former pickDetailPane). */
   $effect(() => {
-    const unsub = cdmDetailPane.subscribe((pane) => {
-      if (pane !== "messages" && pane !== "timeline") return;
-      const tid = untrack(() => linkedThreadId);
-      if (tid) void timelineApi.loadTimeline(tid);
-    });
-    return unsub;
+    if (!cardKey) {
+      cdmDetailPane = "overview";
+      previousCardKey = "";
+      return;
+    }
+    if (cardKey !== previousCardKey) {
+      cdmDetailPane = "overview";
+      previousCardKey = cardKey;
+    }
+  });
+
+  $effect(() => {
+    if (cdmDetailPane !== "messages" && cdmDetailPane !== "timeline") return;
+    if (linkedThreadId) void timelineApi.loadTimeline(linkedThreadId);
   });
 
   async function searchThreadOptions(query) {
@@ -416,43 +424,10 @@
     }
   }
 
-  /** Explicit tab picks avoid native radio + controlled `checked` fighting Svelte `$bindable` updates in some runtimes. */
   function pickDetailPane(
     /** @type {"overview" | "messages" | "timeline"} */ pane,
   ) {
-    cdmDetailPane.set(pane);
-  }
-
-  /**
-   * Non-delegated DOM listener so tab clicks reliably call {@link pickDetailPane}.
-   * @param {HTMLElement} node
-   */
-  function cdmTablistNativeClick(node) {
-    /** @param {MouseEvent} e */
-    function handler(e) {
-      /** @type {HTMLElement | null} */
-      let host = null;
-      for (const n of e.composedPath()) {
-        if (n instanceof HTMLElement && n.dataset.cdmPaneTab) {
-          host = n;
-          break;
-        }
-      }
-      if (!host) return;
-      const pane = String(host.dataset.cdmPaneTab ?? "").trim();
-      if (pane !== "overview" && pane !== "messages" && pane !== "timeline") {
-        return;
-      }
-      pickDetailPane(
-        /** @type {"overview" | "messages" | "timeline"} */ (pane),
-      );
-    }
-    node.addEventListener("click", handler);
-    return {
-      destroy() {
-        node.removeEventListener("click", handler);
-      },
-    };
+    cdmDetailPane = pane;
   }
 
   onMount(() => {
@@ -572,7 +547,6 @@
       </div>
 
       <div
-        use:cdmTablistNativeClick
         class="relative mt-3 flex flex-wrap gap-0 border-b border-[var(--ui-border)]"
         aria-label="Card sections"
         role="tablist"
@@ -581,54 +555,48 @@
           type="button"
           role="tab"
           data-cdm-pane-tab="overview"
-          aria-selected={$cdmDetailPane === "overview"}
-          class={`relative inline-flex cursor-pointer border-0 bg-transparent px-3 py-2 text-[13px] font-medium transition-colors ${$cdmDetailPane === "overview" ? "text-[var(--ui-text)]" : "text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]"}`}
+          tabindex={cdmDetailPane === "overview" ? 0 : -1}
+          aria-selected={cdmDetailPane === "overview"}
+          class={`relative inline-flex cursor-pointer border-0 border-b-2 border-transparent bg-transparent px-3 py-2 text-[13px] font-medium transition-colors ${cdmDetailPane === "overview" ? "border-indigo-500 text-[var(--ui-text)]" : "text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]"}`}
+          onpointerdown={() => pickDetailPane("overview")}
+          onclick={() => pickDetailPane("overview")}
         >
           Overview
-          {#if $cdmDetailPane === "overview"}
-            <span
-              class="pointer-events-none absolute inset-x-0 -bottom-px h-0.5 bg-indigo-500"
-            ></span>
-          {/if}
         </button>
         <button
           type="button"
           role="tab"
           data-cdm-pane-tab="messages"
           data-testid="cdm-tab-messages"
-          aria-selected={$cdmDetailPane === "messages"}
-          class={`relative inline-flex cursor-pointer border-0 bg-transparent px-3 py-2 text-[13px] font-medium transition-colors ${$cdmDetailPane === "messages" ? "text-[var(--ui-text)]" : "text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]"}`}
+          tabindex={cdmDetailPane === "messages" ? 0 : -1}
+          aria-selected={cdmDetailPane === "messages"}
+          class={`relative inline-flex cursor-pointer border-0 border-b-2 border-transparent bg-transparent px-3 py-2 text-[13px] font-medium transition-colors ${cdmDetailPane === "messages" ? "border-indigo-500 text-[var(--ui-text)]" : "text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]"}`}
+          onpointerdown={() => pickDetailPane("messages")}
+          onclick={() => pickDetailPane("messages")}
         >
           Messages
-          {#if $cdmDetailPane === "messages"}
-            <span
-              class="pointer-events-none absolute inset-x-0 -bottom-px h-0.5 bg-indigo-500"
-            ></span>
-          {/if}
         </button>
         <button
           type="button"
           role="tab"
           data-cdm-pane-tab="timeline"
           data-testid="cdm-tab-timeline"
-          aria-selected={$cdmDetailPane === "timeline"}
-          class={`relative inline-flex cursor-pointer border-0 bg-transparent px-3 py-2 text-[13px] font-medium transition-colors ${$cdmDetailPane === "timeline" ? "text-[var(--ui-text)]" : "text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]"}`}
+          tabindex={cdmDetailPane === "timeline" ? 0 : -1}
+          aria-selected={cdmDetailPane === "timeline"}
+          class={`relative inline-flex cursor-pointer border-0 border-b-2 border-transparent bg-transparent px-3 py-2 text-[13px] font-medium transition-colors ${cdmDetailPane === "timeline" ? "border-indigo-500 text-[var(--ui-text)]" : "text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]"}`}
+          onpointerdown={() => pickDetailPane("timeline")}
+          onclick={() => pickDetailPane("timeline")}
         >
           Timeline
-          {#if $cdmDetailPane === "timeline"}
-            <span
-              class="pointer-events-none absolute inset-x-0 -bottom-px h-0.5 bg-indigo-500"
-            ></span>
-          {/if}
         </button>
       </div>
       <span class="hidden" data-testid="cdm-section-tab-val"
-        >{$cdmDetailPane}</span
+        >{cdmDetailPane}</span
       >
     </div>
 
     <div class="cdm-scroll">
-      {#if $cdmDetailPane === "overview"}
+      {#if cdmDetailPane === "overview"}
         <div class="p-4" data-cdm-panel="overview">
           {#if editOpen}
             <div class="space-y-3">
@@ -931,30 +899,31 @@
             </div>
           {/if}
         </div>
-      {:else if $cdmDetailPane === "messages"}
-        {#if linkedThreadId}
-          <div class="p-4">
+      {:else if cdmDetailPane === "messages"}
+        <div class="p-4" data-cdm-panel="messages">
+          {#if linkedThreadId}
             <MessagesTab
               threadId={linkedThreadId}
               onMessagePost={handleMessagePost}
               workspaceId=""
             />
-          </div>
-        {:else}
-          <p class="p-4 text-[13px] text-[var(--ui-text-muted)]">
-            This card has no backing thread; messages require a linked thread.
-          </p>
-        {/if}
-      {:else if $cdmDetailPane === "timeline"}
-        {#if linkedThreadId}
-          <div class="p-4">
+          {:else}
+            <p class="text-[13px] text-[var(--ui-text-muted)]">
+              This card has no backing thread; messages require a linked thread.
+            </p>
+          {/if}
+        </div>
+      {:else if cdmDetailPane === "timeline"}
+        <div class="p-4" data-cdm-panel="timeline">
+          {#if linkedThreadId}
             <TimelineTab threadId={linkedThreadId} />
-          </div>
-        {:else}
-          <p class="p-4 text-[13px] text-[var(--ui-text-muted)]">
-            This card has no backing thread; timeline requires a linked thread.
-          </p>
-        {/if}
+          {:else}
+            <p class="text-[13px] text-[var(--ui-text-muted)]">
+              This card has no backing thread; timeline requires a linked
+              thread.
+            </p>
+          {/if}
+        </div>
       {/if}
     </div>
 

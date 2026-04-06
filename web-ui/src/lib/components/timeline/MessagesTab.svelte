@@ -33,10 +33,12 @@
   let { threadId, onMessagePost, workspaceId = "" } = $props();
 
   const timelineCtx = getTimelineContext();
-  let timeline = $derived($timelineCtx.store.timeline);
-  let timelineLoading = $derived($timelineCtx.store.timelineLoading);
-  let timelineError = $derived($timelineCtx.store.timelineError);
-  let workspaceSlug = $derived($timelineCtx.workspaceSlug);
+  const timelineStore = timelineCtx.store;
+  const timelineWorkspaceSlug = timelineCtx.workspaceSlug;
+  let timeline = $derived($timelineStore.timeline);
+  let timelineLoading = $derived($timelineStore.timelineLoading);
+  let timelineError = $derived($timelineStore.timelineError);
+  let workspaceSlug = $derived($timelineWorkspaceSlug);
 
   let actorName = $derived((id) =>
     lookupActorDisplayName(id, $actorRegistry, $principalRegistry),

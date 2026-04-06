@@ -15,9 +15,10 @@
   let { threadId } = $props();
 
   const timelineCtx = getTimelineContext();
-  let timeline = $derived($timelineCtx.store.timeline);
-  let timelineLoading = $derived($timelineCtx.store.timelineLoading);
-  let timelineError = $derived($timelineCtx.store.timelineError);
+  const timelineStore = timelineCtx.store;
+  let timeline = $derived($timelineStore.timeline);
+  let timelineLoading = $derived($timelineStore.timelineLoading);
+  let timelineError = $derived($timelineStore.timelineError);
 
   let actorName = $derived((id) =>
     lookupActorDisplayName(id, $actorRegistry, $principalRegistry),
