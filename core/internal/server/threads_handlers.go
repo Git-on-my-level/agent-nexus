@@ -21,7 +21,7 @@ const (
 )
 
 // Backing threads are read-only on the public HTTP API (list, get, timeline, context, workspace).
-// Archive, tombstone, restore, and purge use topic/board/card/document lifecycle routes instead.
+// Archive, trash, restore, and purge use topic/board/card/document lifecycle routes instead.
 
 func handleGetThread(w http.ResponseWriter, r *http.Request, opts handlerOptions, threadID string) {
 	if opts.primitiveStore == nil {

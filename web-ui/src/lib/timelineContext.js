@@ -1,7 +1,8 @@
-import { writable, get } from "svelte/store";
+import { writable } from "svelte/store";
 import { setContext, getContext } from "svelte";
 
-const TIMELINE_KEY = Symbol("timeline-context");
+/** Use Symbol.for so HMR / duplicate module instances still share context. */
+const TIMELINE_KEY = Symbol.for("oar.timeline.context");
 
 function timelineEventsFromResult(res) {
   if (res && typeof res === "object" && Array.isArray(res.events)) {
@@ -16,11 +17,15 @@ export function createTimelineContext(coreClient) {
     timelineLoading: false,
     timelineError: "",
   });
-  get(store);
 
   let loadSeq = 0;
+  let lastScopeId = "";
 
   async function loadTimeline(scopeId, opts = {}) {
+    const trimmed = String(scopeId ?? "").trim();
+    if (trimmed) {
+      lastScopeId = trimmed;
+    }
     const seq = ++loadSeq;
     store.update((s) => ({
       ...s,
@@ -57,7 +62,12 @@ export function createTimelineContext(coreClient) {
     }
   }
 
-  function refreshTimeline() {}
+  function refreshTimeline() {
+    if (!lastScopeId) {
+      return Promise.resolve();
+    }
+    return loadTimeline(lastScopeId);
+  }
 
   return { store, loadTimeline, refreshTimeline };
 }

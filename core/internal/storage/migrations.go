@@ -43,7 +43,7 @@ var migrations = []migration{
 			`CREATE INDEX IF NOT EXISTS idx_events_archived_at ON events (archived_at);`,
 			`CREATE INDEX IF NOT EXISTS idx_events_trashed_at ON events (trashed_at);`,
 			`CREATE INDEX IF NOT EXISTS idx_events_thread_archived ON events (thread_id, archived_at);`,
-			`CREATE INDEX IF NOT EXISTS idx_events_thread_tombstoned ON events (thread_id, trashed_at);`,
+			`CREATE INDEX IF NOT EXISTS idx_events_thread_trashed ON events (thread_id, trashed_at);`,
 
 			`CREATE TABLE IF NOT EXISTS threads (
 				id TEXT PRIMARY KEY,
@@ -133,9 +133,9 @@ var migrations = []migration{
 			`CREATE INDEX IF NOT EXISTS idx_artifacts_content_hash ON artifacts (content_hash);`,
 			`CREATE INDEX IF NOT EXISTS idx_artifacts_trashed_at ON artifacts (trashed_at);`,
 			`CREATE INDEX IF NOT EXISTS idx_artifacts_archived_at ON artifacts (archived_at);`,
-			`CREATE INDEX IF NOT EXISTS idx_artifacts_kind_tombstoned_created_at ON artifacts (kind, trashed_at, created_at, id);`,
-			`CREATE INDEX IF NOT EXISTS idx_artifacts_thread_tombstoned_created_at ON artifacts (thread_id, trashed_at, created_at, id);`,
-			`CREATE INDEX IF NOT EXISTS idx_artifacts_thread_kind_tombstoned_created_at ON artifacts (thread_id, kind, trashed_at, created_at, id);`,
+			`CREATE INDEX IF NOT EXISTS idx_artifacts_kind_trashed_created_at ON artifacts (kind, trashed_at, created_at, id);`,
+			`CREATE INDEX IF NOT EXISTS idx_artifacts_thread_trashed_created_at ON artifacts (thread_id, trashed_at, created_at, id);`,
+			`CREATE INDEX IF NOT EXISTS idx_artifacts_thread_kind_trashed_created_at ON artifacts (thread_id, kind, trashed_at, created_at, id);`,
 
 			`CREATE TABLE IF NOT EXISTS actors (
 				id TEXT PRIMARY KEY,
@@ -168,9 +168,9 @@ var migrations = []migration{
 			`CREATE INDEX IF NOT EXISTS idx_documents_head_revision_id ON documents (head_revision_id);`,
 			`CREATE INDEX IF NOT EXISTS idx_documents_trashed_at ON documents (trashed_at);`,
 			`CREATE INDEX IF NOT EXISTS idx_documents_archived_at ON documents (archived_at);`,
-			`CREATE INDEX IF NOT EXISTS idx_documents_tombstoned_updated_at ON documents (trashed_at, updated_at DESC, id);`,
-			`CREATE INDEX IF NOT EXISTS idx_documents_thread_tombstoned_updated_at ON documents (thread_id, trashed_at, updated_at DESC, id);`,
-			`CREATE INDEX IF NOT EXISTS idx_documents_status_tombstoned_updated_at ON documents (status, trashed_at, updated_at DESC, id);`,
+			`CREATE INDEX IF NOT EXISTS idx_documents_trashed_updated_at ON documents (trashed_at, updated_at DESC, id);`,
+			`CREATE INDEX IF NOT EXISTS idx_documents_thread_trashed_updated_at ON documents (thread_id, trashed_at, updated_at DESC, id);`,
+			`CREATE INDEX IF NOT EXISTS idx_documents_status_trashed_updated_at ON documents (status, trashed_at, updated_at DESC, id);`,
 
 			`CREATE TABLE IF NOT EXISTS document_revisions (
 				revision_id TEXT PRIMARY KEY,
@@ -514,6 +514,25 @@ var migrations = []migration{
 			`ALTER TABLE cards RENAME COLUMN trashed_at TO trashed_at;`,
 			`ALTER TABLE cards RENAME COLUMN trashed_by TO trashed_by;`,
 			`ALTER TABLE cards RENAME COLUMN trash_reason TO trash_reason;`,
+		},
+	},
+	{
+		Version: 5,
+		Statements: []string{
+			`DROP INDEX IF EXISTS idx_events_thread_tombstoned;`,
+			`DROP INDEX IF EXISTS idx_artifacts_kind_tombstoned_created_at;`,
+			`DROP INDEX IF EXISTS idx_artifacts_thread_tombstoned_created_at;`,
+			`DROP INDEX IF EXISTS idx_artifacts_thread_kind_tombstoned_created_at;`,
+			`DROP INDEX IF EXISTS idx_documents_tombstoned_updated_at;`,
+			`DROP INDEX IF EXISTS idx_documents_thread_tombstoned_updated_at;`,
+			`DROP INDEX IF EXISTS idx_documents_status_tombstoned_updated_at;`,
+			`CREATE INDEX IF NOT EXISTS idx_events_thread_trashed ON events (thread_id, trashed_at);`,
+			`CREATE INDEX IF NOT EXISTS idx_artifacts_kind_trashed_created_at ON artifacts (kind, trashed_at, created_at, id);`,
+			`CREATE INDEX IF NOT EXISTS idx_artifacts_thread_trashed_created_at ON artifacts (thread_id, trashed_at, created_at, id);`,
+			`CREATE INDEX IF NOT EXISTS idx_artifacts_thread_kind_trashed_created_at ON artifacts (thread_id, kind, trashed_at, created_at, id);`,
+			`CREATE INDEX IF NOT EXISTS idx_documents_trashed_updated_at ON documents (trashed_at, updated_at DESC, id);`,
+			`CREATE INDEX IF NOT EXISTS idx_documents_thread_trashed_updated_at ON documents (thread_id, trashed_at, updated_at DESC, id);`,
+			`CREATE INDEX IF NOT EXISTS idx_documents_status_trashed_updated_at ON documents (status, trashed_at, updated_at DESC, id);`,
 		},
 	},
 }

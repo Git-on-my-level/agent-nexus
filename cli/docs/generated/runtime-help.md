@@ -160,7 +160,7 @@ Quick guide to the core OAR primitives and when to use each.
 ```text
 OAR concepts guide
 
-Use this command when you need to decide which primitive fits the task before you start issuing writes.
+Use this command when you need to decide which primitive fits the use case before you start issuing writes.
 
 Selection rules:
 - Use events for immutable facts.
@@ -174,7 +174,7 @@ Selection rules:
 
 topics
 - Use when: You need the durable work subject itself with ownership, summary, related refs, and provenance — including the primary operator coordination read.
-- Not for: Board-scoped task placement or low-level backing-thread-only diagnostics.
+- Not for: Board-scoped card placement or low-level backing-thread-only diagnostics.
 - Examples: initiatives, incidents, cases, deliverables
 - Read next: oar topics list ; oar topics get ; oar topics workspace
 
@@ -187,7 +187,7 @@ threads
 cards
 - Use when: You need board-scoped planning items with column, rank, assignee, and move/update operations.
 - Not for: The durable subject record or append-only event history.
-- Examples: board cards, task cards, workflow cards
+- Examples: board cards, tracked cards, workflow cards
 - Read next: oar cards list ; oar cards get ; oar cards move
 
 events

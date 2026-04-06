@@ -71,11 +71,11 @@ func TestWorkspaceListQueriesUseIndexedPlans(t *testing.T) {
 		Kind:     "receipt",
 	})
 	artifactPlan := explainQueryPlan(t, workspace.DB(), artifactQuery, artifactArgs...)
-	assertPlanUsesIndex(t, "artifacts", artifactPlan, "idx_artifacts_thread_kind_tombstoned_created_at")
+	assertPlanUsesIndex(t, "artifacts", artifactPlan, "idx_artifacts_thread_kind_trashed_created_at")
 
 	documentQuery, documentArgs := buildListDocumentsQuery(DocumentListFilter{ThreadID: threadID})
 	documentPlan := explainQueryPlan(t, workspace.DB(), documentQuery, documentArgs...)
-	assertPlanUsesIndex(t, "documents", documentPlan, "idx_documents_thread_tombstoned_updated_at")
+	assertPlanUsesIndex(t, "documents", documentPlan, "idx_documents_thread_trashed_updated_at")
 }
 
 func explainQueryPlan(t *testing.T, db *sql.DB, query string, args ...any) string {

@@ -1,6 +1,6 @@
 <script>
   import { browser } from "$app/environment";
-  import { tick, untrack } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
   import { get } from "svelte/store";
 
   import {
@@ -78,14 +78,14 @@
     ),
   );
   let showSyncStatus = $derived(timelineLoading && timelineHasAnyMessagePosted);
+
+  let messageText = $state("");
+  let replyToEventId = $state("");
   let replyTargetMessage = $derived(
     replyToEventId
       ? (allMessages.find((message) => message.id === replyToEventId) ?? null)
       : null,
   );
-
-  let messageText = $state("");
-  let replyToEventId = $state("");
   let postingMessage = $state(false);
   let postMessageError = $state("");
 
@@ -145,17 +145,29 @@
     }
   }
 
+  onMount(() => {
+    if (!browser) {
+      return;
+    }
+    let lastAgentId = "\u0000";
+    const onAgentIdentityChange = () => {
+      const agent = get(authenticatedAgent);
+      const id = String(agent?.agent_id ?? "");
+      if (id === lastAgentId) {
+        return;
+      }
+      lastAgentId = id;
+      void refreshMentionCandidates();
+    };
+    return authenticatedAgent.subscribe(onAgentIdentityChange);
+  });
+
   $effect(() => {
     if (!browser) {
       return;
     }
-    void $authenticatedAgent?.agent_id;
     void workspaceId;
-    // Mention loading reads actorRegistry/principalRegistry via get(); those must
-    // not become effect deps or any store churn retriggers this effect → tight loop.
-    untrack(() => {
-      void refreshMentionCandidates();
-    });
+    untrack(() => void refreshMentionCandidates());
   });
 
   function updateMentionFromTextarea() {

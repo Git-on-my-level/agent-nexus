@@ -693,7 +693,7 @@ test("board UI supports create/edit and card mutation flows", async ({
   ).toBeVisible();
   await expect(page.getByText("Paused", { exact: true })).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Workspace documents" }),
+    page.getByRole("heading", { name: "Workspace docs" }),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Resolved cards" }),

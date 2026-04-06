@@ -516,7 +516,7 @@ func TestBoardStoreRejectsArchivedCardMutations(t *testing.T) {
 	}
 }
 
-func TestBoardStoreCardTombstoneVsArchiveLists(t *testing.T) {
+func TestBoardStoreCardTrashVsArchiveLists(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -528,12 +528,12 @@ func TestBoardStoreCardTombstoneVsArchiveLists(t *testing.T) {
 
 	store := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
 
-	primaryThreadID := createBoardTestThread(t, ctx, store, "Tombstone list board thread")
+	primaryThreadID := createBoardTestThread(t, ctx, store, "Trash list board thread")
 	threadA := createBoardTestThread(t, ctx, store, "Card thread A")
 	threadB := createBoardTestThread(t, ctx, store, "Card thread B")
 
 	board, err := store.CreateBoard(ctx, "actor-1", map[string]any{
-		"title":     "Tombstone filter board",
+		"title":     "Trash filter board",
 		"thread_id": primaryThreadID,
 	})
 	if err != nil {
@@ -577,7 +577,7 @@ func TestBoardStoreCardTombstoneVsArchiveLists(t *testing.T) {
 	if _, err := store.TrashBoardCard(ctx, "actor-3", boardID, cardTombID, "removed", primitives.RemoveBoardCardInput{
 		IfBoardUpdatedAt: &ub,
 	}); err != nil {
-		t.Fatalf("tombstone card: %v", err)
+		t.Fatalf("trash card: %v", err)
 	}
 
 	active, err := store.ListCards(ctx, primitives.CardListFilter{})
@@ -601,7 +601,7 @@ func TestBoardStoreCardTombstoneVsArchiveLists(t *testing.T) {
 			foundArch = true
 		}
 		if c["id"].(string) == cardTombID {
-			t.Fatalf("tombstoned card must not appear in archived_only")
+			t.Fatalf("trashed card must not appear in archived_only")
 		}
 	}
 	if !foundArch {
@@ -622,7 +622,7 @@ func TestBoardStoreCardTombstoneVsArchiveLists(t *testing.T) {
 		}
 	}
 	if !foundTomb {
-		t.Fatalf("expected tombstoned card in trashed_only, got %#v", tombOnly)
+		t.Fatalf("expected trashed card in trashed_only, got %#v", tombOnly)
 	}
 }
 

@@ -23,7 +23,7 @@ var conceptsGuidePrimitives = []conceptsPrimitive{
 	{
 		Name:        "topics",
 		UseWhen:     "You need the durable work subject itself with ownership, summary, related refs, and provenance — including the primary operator coordination read.",
-		NotFor:      "Board-scoped task placement or low-level backing-thread-only diagnostics.",
+		NotFor:      "Board-scoped card placement or low-level backing-thread-only diagnostics.",
 		Examples:    []string{"initiatives", "incidents", "cases", "deliverables"},
 		RelatedRead: []string{"oar topics list", "oar topics get", "oar topics workspace"},
 	},
@@ -38,7 +38,7 @@ var conceptsGuidePrimitives = []conceptsPrimitive{
 		Name:        "cards",
 		UseWhen:     "You need board-scoped planning items with column, rank, assignee, and move/update operations.",
 		NotFor:      "The durable subject record or append-only event history.",
-		Examples:    []string{"board cards", "task cards", "workflow cards"},
+		Examples:    []string{"board cards", "tracked cards", "workflow cards"},
 		RelatedRead: []string{"oar cards list", "oar cards get", "oar cards move"},
 	},
 	{
@@ -141,7 +141,7 @@ func conceptsSelectionRules() []string {
 func conceptsGuideText() string {
 	var b strings.Builder
 	b.WriteString("OAR concepts guide\n\n")
-	b.WriteString("Use this command when you need to decide which primitive fits the task before you start issuing writes.\n\n")
+	b.WriteString("Use this command when you need to decide which primitive fits the use case before you start issuing writes.\n\n")
 	b.WriteString("Selection rules:\n")
 	for _, rule := range conceptsSelectionRules() {
 		b.WriteString("- ")

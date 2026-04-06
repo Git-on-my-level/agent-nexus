@@ -4,7 +4,7 @@ function hoursAgo(hours) {
   return new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
 }
 
-test("inbox triage shows urgency summary and dismissing removes an item", async ({
+test("inbox triage shows urgency summary and acknowledging removes an item", async ({
   page,
 }) => {
   const actorId = "actor-e2e";

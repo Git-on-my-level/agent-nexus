@@ -3,6 +3,37 @@ import { defineConfig } from "@playwright/test";
 const port = Number(process.env.PLAYWRIGHT_PORT ?? 4173);
 const basePathPort = Number(process.env.PLAYWRIGHT_BASE_PATH_PORT ?? 4174);
 const appBasePath = process.env.PLAYWRIGHT_APP_BASE_PATH ?? "/oar";
+const preview =
+  process.env.PLAYWRIGHT_PREVIEW === "1" ||
+  process.env.PLAYWRIGHT_PREVIEW === "true";
+
+const webServer = preview
+  ? [
+      {
+        command: `pnpm exec vite build && pnpm exec vite preview --host 127.0.0.1 --port ${port} --strictPort`,
+        port,
+        timeout: 300000,
+        reuseExistingServer: !process.env.CI,
+      },
+    ]
+  : [
+      {
+        command: `pnpm exec vite dev --host 127.0.0.1 --port ${port}`,
+        port,
+        timeout: 120000,
+        reuseExistingServer: !process.env.CI,
+      },
+      {
+        command: `pnpm exec vite dev --host 127.0.0.1 --port ${basePathPort}`,
+        env: {
+          ...process.env,
+          OAR_UI_BASE_PATH: appBasePath,
+        },
+        port: basePathPort,
+        timeout: 120000,
+        reuseExistingServer: !process.env.CI,
+      },
+    ];
 
 export default defineConfig({
   testDir: "tests/e2e",
@@ -31,22 +62,5 @@ export default defineConfig({
       },
     },
   ],
-  webServer: [
-    {
-      command: `pnpm exec vite dev --host 127.0.0.1 --port ${port}`,
-      port,
-      timeout: 120000,
-      reuseExistingServer: !process.env.CI,
-    },
-    {
-      command: `pnpm exec vite dev --host 127.0.0.1 --port ${basePathPort}`,
-      env: {
-        ...process.env,
-        OAR_UI_BASE_PATH: appBasePath,
-      },
-      port: basePathPort,
-      timeout: 120000,
-      reuseExistingServer: !process.env.CI,
-    },
-  ],
+  webServer,
 });

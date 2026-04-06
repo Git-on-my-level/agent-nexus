@@ -1216,7 +1216,7 @@
     >
       <div class="border-b border-[var(--ui-border)] px-4 py-2.5">
         <h2 class="text-[13px] font-medium text-[var(--ui-text)]">
-          Workspace documents
+          Workspace docs
         </h2>
         <p class="mt-1 text-[11px] text-[var(--ui-text-subtle)]">
           Canonical doc lineages linked from this board's backing thread

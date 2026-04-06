@@ -637,11 +637,11 @@ func TestThreadTimelineIncludesDocumentLifecycleEventsAndExpansions(t *testing.T
 		t.Fatalf("expected updated revision ids, got %#v", updatedDoc.Revision)
 	}
 
-	tombstoneResp := postJSONExpectStatus(t, h.baseURL+"/docs/"+documentID+"/trash", `{
+	trashResp := postJSONExpectStatus(t, h.baseURL+"/docs/"+documentID+"/trash", `{
 		"actor_id":"actor-1",
 		"reason":"superseded by final document"
 	}`, http.StatusOK)
-	defer tombstoneResp.Body.Close()
+	defer trashResp.Body.Close()
 
 	timelineResp, err := http.Get(h.baseURL + "/threads/" + threadID + "/timeline")
 	if err != nil {
@@ -662,7 +662,7 @@ func TestThreadTimelineIncludesDocumentLifecycleEventsAndExpansions(t *testing.T
 		t.Fatalf("decode timeline response: %v", err)
 	}
 
-	var createdEvent, updatedEvent, tombstonedEvent map[string]any
+	var createdEvent, updatedEvent, trashedEvent map[string]any
 	for _, event := range timeline.Events {
 		switch asString(event["type"]) {
 		case "document_created":
@@ -670,21 +670,21 @@ func TestThreadTimelineIncludesDocumentLifecycleEventsAndExpansions(t *testing.T
 		case "document_updated":
 			updatedEvent = event
 		case "document_trashed":
-			tombstonedEvent = event
+			trashedEvent = event
 		}
 	}
-	if createdEvent == nil || updatedEvent == nil || tombstonedEvent == nil {
+	if createdEvent == nil || updatedEvent == nil || trashedEvent == nil {
 		t.Fatalf("expected document lifecycle events in timeline, got %#v", timeline.Events)
 	}
 
 	assertDocLifecycleEventRefs(t, createdEvent, threadID, documentID, createRevisionID, createArtifactID)
 	assertDocLifecycleEventRefs(t, updatedEvent, threadID, documentID, updateRevisionID, updateArtifactID)
-	assertDocLifecycleEventRefs(t, tombstonedEvent, threadID, documentID, updateRevisionID, updateArtifactID)
+	assertDocLifecycleEventRefs(t, trashedEvent, threadID, documentID, updateRevisionID, updateArtifactID)
 
 	if doc, ok := timeline.Documents[documentID]; !ok {
 		t.Fatalf("expected document %q in timeline documents, got keys=%#v", documentID, mapKeysMapAny(timeline.Documents))
 	} else if doc["trashed_at"] == nil {
-		t.Fatalf("expected tombstoned document metadata in timeline documents, got %#v", doc)
+		t.Fatalf("expected trashed document metadata in timeline documents, got %#v", doc)
 	}
 
 	if revision, ok := timeline.DocumentRevisions[createRevisionID]; !ok {

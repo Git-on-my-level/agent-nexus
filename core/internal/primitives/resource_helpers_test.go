@@ -43,7 +43,7 @@ func TestTypedRefHelpersLifecycleAndConcurrency(t *testing.T) {
 		t.Fatalf("applyArchivedLifecycle archived_at: %#v", got)
 	}
 	if _, exists := body["trashed_at"]; exists {
-		t.Fatalf("applyArchivedLifecycle should clear tombstone fields: %#v", body)
+		t.Fatalf("applyArchivedLifecycle should clear trash fields: %#v", body)
 	}
 
 	applyTrashedLifecycle(body, "2026-04-05T00:00:00Z", "actor-2", "cleanup")

@@ -331,11 +331,11 @@ func TestEventsStreamEmitsDocumentLifecycleEventsForThread(t *testing.T) {
 	updateRevisionID := asString(updatedDoc.Revision["revision_id"])
 	updateArtifactID := asString(updatedDoc.Revision["artifact_id"])
 
-	tombstoneResp := postJSONExpectStatus(t, h.baseURL+"/docs/"+documentID+"/trash", `{
+	trashResp := postJSONExpectStatus(t, h.baseURL+"/docs/"+documentID+"/trash", `{
 		"actor_id":"actor-1",
 		"reason":"stream verification"
 	}`, http.StatusOK)
-	defer tombstoneResp.Body.Close()
+	defer trashResp.Body.Close()
 
 	first := awaitSSEEvent(t, reader, 2*time.Second)
 	second := awaitSSEEvent(t, reader, 2*time.Second)
