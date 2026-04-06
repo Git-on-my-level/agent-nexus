@@ -55,14 +55,18 @@ test("card detail modal Messages and Timeline tabs render without request storms
     thread_id: cardThreadId,
     title: "Modal Tab Card",
     summary: "summary",
-    related_refs: [`thread:${cardThreadId}`],
+    related_refs: [
+      "topic:topic-modal-card",
+      "card:card-one",
+      `thread:${cardThreadId}`,
+    ],
     column_key: "ready",
     rank: "0001",
     document_ref: null,
     assignee_refs: [],
     risk: "medium",
     resolution: null,
-    resolution_refs: [],
+    resolution_refs: ["artifact:artifact-modal-card"],
     due_at: null,
     definition_of_done: [],
     created_at: "2026-03-05T00:00:00.000Z",
@@ -285,6 +289,16 @@ test("card detail modal Messages and Timeline tabs render without request storms
 
   const dialog = page.getByRole("dialog", { name: "Card details" });
   await expect(dialog).toBeVisible();
+  await expect(
+    dialog.getByRole("link", { name: "topic:topic-modal-card" }),
+  ).toHaveAttribute("href", "/local/topics/topic-modal-card");
+  await expect(dialog.getByRole("link", { name: "card:card-one" })).toHaveAttribute(
+    "href",
+    `/local/boards/${boardId}?card=card-one`,
+  );
+  await expect(
+    dialog.getByRole("link", { name: "artifact:artifact-modal-card" }),
+  ).toHaveAttribute("href", "/local/artifacts/artifact-modal-card");
 
   const tabCount = await dialog
     .locator('[aria-label="Card sections"] [role="tab"]')
