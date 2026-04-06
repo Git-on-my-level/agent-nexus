@@ -3312,15 +3312,33 @@ components:
 
     CreateReceiptRequest:
       type: object
+      description: >
+        Artifact envelope plus structured packet. Core requires both `artifact` and `packet`;
+        `artifact.kind` defaults to `receipt` when omitted.
       properties:
+        actor_id: { type: string }
+        request_key: { type: string }
+        artifact:
+          type: object
+          additionalProperties: true
+          description: Artifact fields before persistence (kind, id, refs, summary, provenance, …).
         packet: { $ref: '#/components/schemas/ReceiptPacket' }
-      required: [packet]
+      required: [artifact, packet]
 
     CreateReviewRequest:
       type: object
+      description: >
+        Artifact envelope plus structured packet. Core requires both `artifact` and `packet`;
+        `artifact.kind` defaults to `review` when omitted.
       properties:
+        actor_id: { type: string }
+        request_key: { type: string }
+        artifact:
+          type: object
+          additionalProperties: true
+          description: Artifact fields before persistence (kind, id, refs, summary, provenance, …).
         packet: { $ref: '#/components/schemas/ReviewPacket' }
-      required: [packet]
+      required: [artifact, packet]
 
     CreateEventRequest:
       type: object

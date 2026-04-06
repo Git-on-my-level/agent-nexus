@@ -784,7 +784,7 @@
                   <ul class="space-y-1">
                     {#each relatedRefsList as ref}
                       <li class="text-[12px]">
-                        <RefLink refValue={ref} boardId={boardId} />
+                        <RefLink refValue={ref} {boardId} />
                       </li>
                     {/each}
                   </ul>
@@ -801,7 +801,7 @@
                   <ul class="space-y-1">
                     {#each resolutionRefsList as ref}
                       <li class="text-[12px]">
-                        <RefLink refValue={ref} boardId={boardId} />
+                        <RefLink refValue={ref} {boardId} />
                       </li>
                     {/each}
                   </ul>

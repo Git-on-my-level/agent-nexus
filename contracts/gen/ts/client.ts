@@ -3157,6 +3157,10 @@ export const commandRegistry: CommandSpec[] = [
     "body_schema": {
       "required": [
         {
+          "name": "artifact",
+          "type": "object"
+        },
+        {
           "name": "packet.changes_summary",
           "type": "string"
         },
@@ -3179,6 +3183,16 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "packet.verification_evidence",
           "type": "list\u003cany\u003e"
+        }
+      ],
+      "optional": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        },
+        {
+          "name": "request_key",
+          "type": "string"
         }
       ]
     },
@@ -3216,6 +3230,10 @@ export const commandRegistry: CommandSpec[] = [
     "body_schema": {
       "required": [
         {
+          "name": "artifact",
+          "type": "object"
+        },
+        {
           "name": "packet.evidence_refs",
           "type": "list\u003cany\u003e"
         },
@@ -3244,6 +3262,16 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "packet.subject_ref",
           "type": "typed_ref"
+        }
+      ],
+      "optional": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        },
+        {
+          "name": "request_key",
+          "type": "string"
         }
       ]
     },

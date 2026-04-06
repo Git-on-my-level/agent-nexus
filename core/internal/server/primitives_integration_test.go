@@ -660,6 +660,16 @@ func TestDocumentsLifecycleRoundTrip(t *testing.T) {
 	if openAPIHeadID == "" {
 		t.Fatal("expected revision_id after OpenAPI POST /revisions")
 	}
+
+	missingRefsResp := requestJSONExpectStatus(t, http.MethodPost, h.baseURL+"/docs/doc-1/revisions", `{
+		"actor_id":"actor-1",
+		"revision":{
+			"body_markdown":"fifth text",
+			"provenance":{"sources":["operator"]}
+		}
+	}`, http.StatusBadRequest)
+	defer missingRefsResp.Body.Close()
+
 	loadedOpenAPIRevResp, err := http.Get(h.baseURL + "/docs/doc-1/revisions/" + openAPIHeadID)
 	if err != nil {
 		t.Fatalf("GET revision after OpenAPI POST: %v", err)

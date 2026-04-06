@@ -3256,12 +3256,16 @@ Generated Help: receipts create
 
 Inputs:
   Required:
+  - body `artifact` (object)
   - body `packet.changes_summary` (string)
   - body `packet.known_gaps` (list<string>)
   - body `packet.outputs` (list<any>)
   - body `packet.receipt_id` (string)
   - body `packet.subject_ref` (typed_ref)
   - body `packet.verification_evidence` (list<any>)
+  Optional:
+  - body `actor_id` (string)
+  - body `request_key` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3289,12 +3293,16 @@ Generated Help: reviews create
 
 Inputs:
   Required:
+  - body `artifact` (object)
   - body `packet.evidence_refs` (list<any>)
   - body `packet.notes` (string)
   - body `packet.outcome` (string)
   - body `packet.receipt_ref` (string)
   - body `packet.review_id` (string)
   - body `packet.subject_ref` (typed_ref)
+  Optional:
+  - body `actor_id` (string)
+  - body `request_key` (string)
   Enum values: packet.outcome (strict): accept, escalate, revise
 
 Global flags:

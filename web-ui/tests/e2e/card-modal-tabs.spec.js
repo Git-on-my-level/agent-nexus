@@ -292,10 +292,9 @@ test("card detail modal Messages and Timeline tabs render without request storms
   await expect(
     dialog.getByRole("link", { name: "topic:topic-modal-card" }),
   ).toHaveAttribute("href", "/local/topics/topic-modal-card");
-  await expect(dialog.getByRole("link", { name: "card:card-one" })).toHaveAttribute(
-    "href",
-    `/local/boards/${boardId}?card=card-one`,
-  );
+  await expect(
+    dialog.getByRole("link", { name: "card:card-one" }),
+  ).toHaveAttribute("href", `/local/boards/${boardId}?card=card-one`);
   await expect(
     dialog.getByRole("link", { name: "artifact:artifact-modal-card" }),
   ).toHaveAttribute("href", "/local/artifacts/artifact-modal-card");

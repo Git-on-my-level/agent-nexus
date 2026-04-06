@@ -293,7 +293,11 @@ func handleCreateDocumentRevision(w http.ResponseWriter, r *http.Request, opts h
 			writeError(w, http.StatusBadRequest, "invalid_request", "revision.provenance must be an object")
 			return
 		}
-		refs, err := optionalRefs(rev["refs"])
+		if _, hasRefs := rev["refs"]; !hasRefs {
+			writeError(w, http.StatusBadRequest, "invalid_request", "revision.refs is required")
+			return
+		}
+		refs, err := extractStringSlice(rev["refs"])
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 			return
