@@ -4160,7 +4160,7 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 				"key_artifacts":[{"id":"artifact_ctx_1","kind":"receipt"}],
 				"open_cards":[{"id":"card_ctx_1","status":"open"}],
 					"documents":[
-						{"id":"doc_ctx_1","title":"Runbook","status":"active","updated_at":"2026-03-07T00:02:00Z","head_revision":{"revision_id":"rev_ctx_1","revision_number":3,"content_type":"text","artifact_id":"artifact_doc_ctx_1","created_at":"2026-03-07T00:02:00Z"}}
+						{"id":"doc_ctx_1","title":"Runbook","state":"active","updated_at":"2026-03-07T00:02:00Z","head_revision":{"revision_id":"rev_ctx_1","revision_number":3,"content_type":"text","artifact_id":"artifact_doc_ctx_1","created_at":"2026-03-07T00:02:00Z"}}
 					]
 				}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_123/workspace":
@@ -4176,7 +4176,7 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 						"key_artifacts":[{"id":"artifact_ctx_1","kind":"receipt"}],
 						"open_cards":[{"id":"card_ctx_1","status":"open"}],
 						"documents":[
-							{"id":"doc_ctx_1","title":"Runbook","status":"active","updated_at":"2026-03-07T00:02:00Z","head_revision":{"revision_id":"rev_ctx_1","revision_number":3,"content_type":"text","artifact_id":"artifact_doc_ctx_1","created_at":"2026-03-07T00:02:00Z"}}
+							{"id":"doc_ctx_1","title":"Runbook","state":"active","updated_at":"2026-03-07T00:02:00Z","head_revision":{"revision_id":"rev_ctx_1","revision_number":3,"content_type":"text","artifact_id":"artifact_doc_ctx_1","created_at":"2026-03-07T00:02:00Z"}}
 						]
 					},
 					"collaboration":{
@@ -4260,7 +4260,7 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 					],
 					"count":1
 				},
-				"documents":{"items":[{"id":"doc_ctx_1","title":"Runbook","status":"active"}],"count":1},
+				"documents":{"items":[{"id":"doc_ctx_1","title":"Runbook","state":"active"}],"count":1},
 				"inbox":{"items":[{"id":"inbox:decision_needed:thread_123:none:event_ctx_2","thread_id":"thread_123","type":"decision_needed"}],"count":1},
 				"board_summary":{
 					"card_count":1,
