@@ -535,6 +535,13 @@ var migrations = []migration{
 			`CREATE INDEX IF NOT EXISTS idx_documents_status_trashed_updated_at ON documents (status, trashed_at, updated_at DESC, id);`,
 		},
 	},
+	{
+		Version: 6,
+		Statements: []string{
+			`DROP INDEX IF EXISTS idx_documents_status_trashed_updated_at;`,
+			`ALTER TABLE documents DROP COLUMN status;`,
+		},
+	},
 }
 
 func applyMigrations(ctx context.Context, db *sql.DB) error {
