@@ -22,7 +22,7 @@ test("trash page restores archived topics, boards, cards, documents, and artifac
       id: "doc-trash-1",
       title: "Archived document",
       thread_id: "topic-trash-1",
-      status: "active",
+      state: "active",
       labels: [],
       created_at: "2026-03-01T08:00:00.000Z",
       created_by: actorId,
@@ -222,7 +222,7 @@ test("trash page restores archived topics, boards, cards, documents, and artifac
 
   await page.route(/\/docs\/[^/?]+\/restore$/, async (route) => {
     const documentId = route.request().url().split("/").at(-2) ?? "";
-    const restored = restoreById(documents, documentId, { status: "active" });
+    const restored = restoreById(documents, documentId, { state: "active" });
     await route.fulfill({
       status: restored ? 200 : 404,
       contentType: "application/json",

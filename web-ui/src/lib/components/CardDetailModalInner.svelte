@@ -247,7 +247,7 @@
       id: document.id,
       title: document.title || document.id,
       subtitle: [
-        document.status,
+        document.state,
         document.thread_id && `Timeline ${document.thread_id}`,
       ]
         .filter(Boolean)
