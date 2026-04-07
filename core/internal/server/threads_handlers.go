@@ -331,7 +331,6 @@ func buildThreadContextArtifacts(ctx context.Context, opts handlerOptions, threa
 		candidates := make([][2]string, 0, 2)
 		if threadID != "" {
 			candidates = append(candidates, [2]string{"thread", threadID})
-			candidates = append(candidates, [2]string{"topic", threadID})
 		}
 		if subjectRef != "" {
 			if prefix, id, err := schema.SplitTypedRef(subjectRef); err == nil && strings.TrimSpace(id) != "" {
@@ -344,15 +343,15 @@ func buildThreadContextArtifacts(ctx context.Context, opts handlerOptions, threa
 		seenArtifactIDs := map[string]struct{}{}
 		out := make([]map[string]any, 0)
 		for _, candidate := range candidates {
-			edges, err := opts.primitiveStore.ListRefEdgesByTarget(ctx, candidate[0], candidate[1])
+			edges, err := opts.primitiveStore.ListRefEdgesByTarget(ctx, candidate[0]+":"+candidate[1], "ref")
 			if err != nil {
 				return nil, err
 			}
 			for _, edge := range edges {
-				if edge.SourceType != "artifact" || edge.EdgeType != "ref" {
+				if edge.SourceRef == "" || !strings.HasPrefix(edge.SourceRef, "artifact:") {
 					continue
 				}
-				artifactID := strings.TrimSpace(edge.SourceID)
+				artifactID := strings.TrimSpace(strings.TrimPrefix(edge.SourceRef, "artifact:"))
 				if artifactID == "" {
 					continue
 				}

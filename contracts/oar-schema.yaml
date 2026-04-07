@@ -124,7 +124,7 @@ ref_format:
   rules:
     - "All refs MUST start with a typed prefix followed by a colon and value."
     - "Consumers MUST parse the prefix; they MUST NOT infer ref kind from raw ids."
-    - "Reverse lookups MUST be derived from typed refs and ref_edge records, not legacy foreign-key-only joins."
+    - "Reverse lookups MUST be derived from typed refs and ref_edge records."
     - "Unknown prefixes MUST be preserved and round-tripped."
 
 provenance:
@@ -215,7 +215,7 @@ primitives:
   ref_edge:
     description: >
       Normalized directional lookup edge derived from typed refs. Used for fast
-      reverse traversal without reintroducing legacy resource-specific join keys.
+      reverse traversal and cross-resource navigation.
     fields:
       source_ref: { type: typed_ref, required: true }
       target_ref: { type: typed_ref, required: true }
@@ -248,18 +248,11 @@ resources:
 
   document:
     description: >
-      Canonical mutable document lineage anchored to a typed subject ref.
-      Runtime or HTTP compatibility fields such as backing thread ids, slug-like
-      metadata, or head-revision summary helpers are not part of the canonical
-      lineage vocabulary; the contract surface here is `subject_ref`,
-      `head_revision_ref`, `state`, and `refs`. Canonical `state` is the
+      Canonical mutable document lineage anchored to a typed subject ref. The
+      contract surface is `subject_ref`, `head_revision_ref`, `state`, and
+      `refs` plus standard lifecycle/provenance fields. `state` is the sole
       document lifecycle field and uses the values `active`, `archived`, or
-      `trashed`. When compatibility-era runtime fields still exist, `state`
-      derives in this order: `trashed_at` present -> `trashed`,
-      `archived_at` present -> `archived`, otherwise a legacy `status` value if
-      one is still carried for compatibility, otherwise `active`. Legacy
-      `status` is compatibility-only and MUST NOT be treated as the canonical
-      document lifecycle field.
+      `trashed`.
     fields:
       id: { type: string, required: true }
       title: { type: string, required: true }
@@ -270,9 +263,9 @@ resources:
         required: true
         description: >
           Canonical document lifecycle state. Values are `active`, `archived`,
-          or `trashed`. If runtime compatibility fields are present, derive in
-          this order: `trashed_at`, then `archived_at`, then legacy `status`,
-          else `active`.
+          or `trashed`. Derived from lifecycle detail fields: `trashed_at`
+          present -> `trashed`, `archived_at` present -> `archived`, otherwise
+          `active`.
       refs: { type: "list<typed_ref>", required: true }
       created_at: { type: datetime, required: true }
       created_by: { type: string, required: true }
@@ -321,13 +314,7 @@ resources:
       First-class board work item. Cards can point at a topic, a backing thread,
       and supporting documents, but card identity is not derived from those refs.
       On create, the server allocates a backing thread id; clients MUST NOT send
-      thread_id or parent_thread on board-card writes. Use related_refs with a
-      single thread ref when the card must associate with a collaboration thread.
-      Persisted workspaces may still store parent_thread_id internally for
-      historical board-row linkage; public HTTP card bodies (publicCardView) omit
-      parent_thread and callers MUST NOT treat parent_thread as a writable field.
-      Event audit payloads may include parent_thread for older lifecycle records until
-      those events are regenerated.
+      thread_id on board-card writes.
     fields:
       id: { type: string, required: true }
       board_ref: { type: typed_ref, required: true }
@@ -533,7 +520,7 @@ lifecycle_rules:
 
   ref_lookup_rules:
     - "Reverse navigation MUST be reconstructible from typed refs and ref_edge rows."
-    - "Cards resolve related evidence through resolution_refs and related_refs, not legacy resource-specific join fields."
+    - "Cards resolve related evidence through resolution_refs and related_refs."
 
 grounding_rules:
   restricted_fields:

@@ -193,8 +193,10 @@ func backfillInboxRelatedRefsFromStoredData(m map[string]any, h inboxContractHin
 		merged = append(merged, "thread:"+tid)
 	}
 	if cat == "work_item_risk" {
-		if doc := strings.TrimSpace(anyString(m["pinned_document_id"])); doc != "" {
-			merged = append(merged, "document:"+doc)
+		if docRef := strings.TrimSpace(anyString(m["document_ref"])); docRef != "" {
+			if _, docID, err := schema.SplitTypedRef(docRef); err == nil && docID != "" {
+				merged = append(merged, "document:"+docID)
+			}
 		}
 	}
 	return typedRefStringsToAnyList(mergeUniqueSortedRefs(merged...))

@@ -811,8 +811,6 @@ func handleMoveCardMutation(w http.ResponseWriter, r *http.Request, opts handler
 		ColumnKey:        strings.TrimSpace(req.ColumnKey),
 		BeforeCardID:     strings.TrimSpace(req.BeforeCardID),
 		AfterCardID:      strings.TrimSpace(req.AfterCardID),
-		BeforeThreadID:   strings.TrimSpace(req.BeforeThreadID),
-		AfterThreadID:    strings.TrimSpace(req.AfterThreadID),
 		Resolution:       req.Resolution,
 		ResolutionRefs:   &req.ResolutionRefs,
 		IfBoardUpdatedAt: &ifBoardUpdatedAt,
@@ -1993,7 +1991,7 @@ func validateBoardCardMoveRequest(columnKey, beforeCardID, afterCardID, beforeTh
 	if err := validateBoardPlacementRequest(columnKey, "", "", nil); err != nil {
 		return err
 	}
-	if err := primitives.ValidateBoardPlacementAnchors(beforeCardID, afterCardID, "", ""); err != nil {
+	if err := primitives.ValidateBoardPlacementAnchors(beforeCardID, afterCardID); err != nil {
 		return err
 	}
 	return nil

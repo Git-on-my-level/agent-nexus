@@ -127,6 +127,62 @@ func TestListCommandsRejectInvalidPaginationLimit(t *testing.T) {
 	}
 }
 
+func TestRefEdgesListUsesTypedRefQueryShape(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/ref-edges" {
+			http.NotFound(w, r)
+			return
+		}
+		if got := r.URL.Query().Get("target_ref"); got != "card:card_123" {
+			t.Fatalf("expected target_ref=card:card_123, got %q", got)
+		}
+		if got := r.URL.Query().Get("relation"); got != "board_card" {
+			t.Fatalf("expected relation=board_card, got %q", got)
+		}
+		if got := r.URL.Query().Get("target_type"); got != "" || r.URL.Query().Get("target_id") != "" || r.URL.Query().Get("edge_type") != "" {
+			t.Fatalf("expected no legacy ref-edge query params, got %q", r.URL.RawQuery)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ref_edges":[]}`))
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json", "--base-url", server.URL,
+		"ref-edges", "list",
+		"--target-ref", "card:card_123",
+		"--relation", "board_card",
+	})
+	assertEnvelopeOK(t, raw)
+}
+
+func TestRefEdgesListRequiresExactlyOneSelector(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+
+	payload := assertEnvelopeError(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json", "ref-edges", "list",
+	}))
+	errObj, _ := payload["error"].(map[string]any)
+	if got := anyStringValue(errObj["code"]); got != "invalid_request" {
+		t.Fatalf("expected invalid_request for missing selector, got %#v", payload)
+	}
+
+	payload = assertEnvelopeError(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json", "ref-edges", "list",
+		"--source-ref", "topic:topic_123",
+		"--target-ref", "card:card_123",
+	}))
+	errObj, _ = payload["error"].(map[string]any)
+	if got := anyStringValue(errObj["code"]); got != "invalid_request" {
+		t.Fatalf("expected invalid_request for ambiguous selector, got %#v", payload)
+	}
+}
+
 func TestInboxUnknownSubcommandGuidance(t *testing.T) {
 	t.Parallel()
 
@@ -4160,7 +4216,7 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 				"key_artifacts":[{"id":"artifact_ctx_1","kind":"receipt"}],
 				"open_cards":[{"id":"card_ctx_1","status":"open"}],
 					"documents":[
-						{"id":"doc_ctx_1","title":"Runbook","status":"active","updated_at":"2026-03-07T00:02:00Z","head_revision":{"revision_id":"rev_ctx_1","revision_number":3,"content_type":"text","artifact_id":"artifact_doc_ctx_1","created_at":"2026-03-07T00:02:00Z"}}
+						{"id":"doc_ctx_1","title":"Runbook","state":"active","updated_at":"2026-03-07T00:02:00Z","head_revision":{"revision_id":"rev_ctx_1","revision_number":3,"content_type":"text","artifact_id":"artifact_doc_ctx_1","created_at":"2026-03-07T00:02:00Z"}}
 					]
 				}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_123/workspace":
@@ -4176,7 +4232,7 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 						"key_artifacts":[{"id":"artifact_ctx_1","kind":"receipt"}],
 						"open_cards":[{"id":"card_ctx_1","status":"open"}],
 						"documents":[
-							{"id":"doc_ctx_1","title":"Runbook","status":"active","updated_at":"2026-03-07T00:02:00Z","head_revision":{"revision_id":"rev_ctx_1","revision_number":3,"content_type":"text","artifact_id":"artifact_doc_ctx_1","created_at":"2026-03-07T00:02:00Z"}}
+							{"id":"doc_ctx_1","title":"Runbook","state":"active","updated_at":"2026-03-07T00:02:00Z","head_revision":{"revision_id":"rev_ctx_1","revision_number":3,"content_type":"text","artifact_id":"artifact_doc_ctx_1","created_at":"2026-03-07T00:02:00Z"}}
 						]
 					},
 					"collaboration":{
@@ -4260,7 +4316,7 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 					],
 					"count":1
 				},
-				"documents":{"items":[{"id":"doc_ctx_1","title":"Runbook","status":"active"}],"count":1},
+				"documents":{"items":[{"id":"doc_ctx_1","title":"Runbook","state":"active"}],"count":1},
 				"inbox":{"items":[{"id":"inbox:decision_needed:thread_123:none:event_ctx_2","thread_id":"thread_123","type":"decision_needed"}],"count":1},
 				"board_summary":{
 					"card_count":1,

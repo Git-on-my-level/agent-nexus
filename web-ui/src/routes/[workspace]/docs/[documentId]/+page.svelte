@@ -36,7 +36,6 @@
   let editDraft = $state({
     content: "",
     title: "",
-    status: "",
     labels: "",
   });
   let saving = $state(false);
@@ -244,7 +243,6 @@
     editDraft = {
       content: headRevision?.content ?? "",
       title: document?.title ?? "",
-      status: document?.status ?? "",
       labels: (document?.labels ?? []).join(", "),
     };
     saveError = "";
@@ -283,9 +281,6 @@
         editDraft.title.trim() !== document?.title
       ) {
         docPatch.title = editDraft.title.trim();
-      }
-      if (editDraft.status && editDraft.status !== document?.status) {
-        docPatch.status = editDraft.status;
       }
       const labelsChanged =
         JSON.stringify(labels) !== JSON.stringify(document?.labels ?? []);
@@ -466,14 +461,19 @@
               >{/if}
           </h1>
           <div class="mt-1 flex flex-wrap items-center gap-1.5 text-[12px]">
-            {#if document.status}
+            {#if document.state}
               <span
-                class="rounded px-1.5 py-0.5 font-medium {document.status ===
+                class="rounded px-1.5 py-0.5 font-medium {document.state ===
                 'active'
                   ? 'text-emerald-400 bg-emerald-500/10'
-                  : 'text-amber-400 bg-amber-500/10'}"
-                >{{ draft: "Draft", active: "Active" }[document.status] ??
-                  document.status}</span
+                  : document.state === 'trashed'
+                    ? 'text-red-400 bg-red-500/10'
+                    : 'text-amber-400 bg-amber-500/10'}"
+                >{{
+                  active: "Active",
+                  archived: "Archived",
+                  trashed: "Trashed",
+                }[document.state] ?? document.state}</span
               >
             {/if}
             {#each document.labels ?? [] as label}
@@ -651,8 +651,8 @@
               <p
                 class="mt-1 ml-5 truncate text-[11px] text-[var(--ui-text-subtle)]"
               >
-                Title: {editDraft.title || "—"} · Status: {editDraft.status ||
-                  "—"} · Labels: {editDraft.labels || "none"}
+                Title: {editDraft.title || "—"} · Labels: {editDraft.labels ||
+                  "none"}
               </p>
             {/if}
             {#if metadataExpanded}
@@ -667,19 +667,6 @@
                     class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-3 py-1.5 text-[13px] text-[var(--ui-text)]"
                     type="text"
                   />
-                </label>
-                <label>
-                  <span
-                    class="text-[12px] font-medium text-[var(--ui-text-muted)]"
-                    >Status</span
-                  >
-                  <select
-                    bind:value={editDraft.status}
-                    class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-2.5 py-1.5 text-[13px] text-[var(--ui-text)]"
-                  >
-                    <option value="draft">draft</option>
-                    <option value="active">active</option>
-                  </select>
                 </label>
                 <label>
                   <span

@@ -1,4 +1,4 @@
-# oar-core — Spec (v0.2.2)
+# oar-core — Spec (v0.3.0)
 
 ## 0. Purpose
 
@@ -78,7 +78,7 @@ A durable record that something happened or that an actor claims something happe
 
 **Fields:** per `oar-schema.yaml` → `primitives.event`
 
-**v0 event types:** `topic_created`, `topic_updated`, `topic_status_changed`, `message_posted`, `receipt_added`, `review_completed`, `decision_needed`, `intervention_needed`, `decision_made`, `document_created`, `document_revised`, `document_trashed`, `board_created`, `board_updated`, `card_created`, `card_updated`, `card_moved`, `card_resolved`, `exception_raised`, `inbox_item_acknowledged`
+**v0 event types:** `topic_created`, `topic_updated`, `topic_status_changed`, `topic_archived`, `topic_restored`, `topic_trashed`, `message_posted`, `receipt_added`, `review_completed`, `decision_needed`, `intervention_needed`, `decision_made`, `document_created`, `document_revised`, `document_revision_created`, `document_trashed`, `board_created`, `board_updated`, `board_card_added`, `board_card_moved`, `board_card_archived`, `board_card_trashed`, `card_created`, `card_updated`, `card_moved`, `card_archived`, `card_trashed`, `card_resolved`, `exception_raised`, `inbox_item_acknowledged`, `agent_notification_read`, `agent_notification_dismissed`
 
 ### 3.2 Mutable resources (topic/card/board/document)
 Topics, cards, boards, and documents are mutable current-state records.
@@ -161,35 +161,28 @@ Documents are a first-class canonical domain with their own API and storage. A d
 
 **Canonical document vocabulary:** The durable contract for documents is the
 schema shape in `oar-schema.yaml`: `subject_ref`, `head_revision_ref`, `state`,
-and `refs` plus standard lifecycle/provenance fields. Runtime-facing details
-such as `thread_id`, `head_revision_number`, and similar backing-thread or
-summary fields may still appear in implementation and HTTP payloads as
-compatibility or convenience output, but they are not the canonical contract
-vocabulary for document identity or lineage. Canonical `document.state` is the
-document lifecycle field and uses `active`, `archived`, or `trashed`. When
-runtime compatibility fields still exist, derive `state` in this order:
-`trashed_at` present -> `trashed`, `archived_at` present -> `archived`,
-otherwise a legacy `status` value if one is still carried for compatibility,
-otherwise `active`. Legacy `status` is compatibility-only and is not the
-canonical lifecycle field.
+and `refs` plus standard lifecycle/provenance fields. Canonical `document.state`
+is the sole document lifecycle field and uses `active`, `archived`, or
+`trashed`. It is derived from lifecycle detail fields: `trashed_at` present ->
+`trashed`, `archived_at` present -> `archived`, otherwise `active`.
 
 **Storage model:**
-- `documents` table: document metadata, head_revision_id, trash lifecycle fields (`trashed_at`, `trashed_by`, `trash_reason`).
+- `documents` table: document metadata, head_revision_id, trash lifecycle fields (`trashed_at`, `trashed_by`, `trash_reason`), archive lifecycle fields (`archived_at`, `archived_by`).
 - `document_revisions` table: revision_id, document_id, revision_number, prev_revision_id, artifact_id, revision_hash.
 - Each revision's content is stored in an `artifacts` row with `kind: "doc"`. Content uses content-addressable storage (SHA-256 digest).
 - Revisions form a Merkle chain: `revision_hash` incorporates content_hash, prev_revision_hash, document_id, revision_number, created_at, created_by.
 
-**API surface:** `GET /docs`, `POST /docs`, `GET /docs/{document_id}`, `PATCH /docs/{document_id}`, `GET /docs/{document_id}/history`, `GET /docs/{document_id}/revisions/{revision_id}`, `POST /docs/{document_id}/trash`.
+**API surface:** `GET /docs`, `POST /docs`, `GET /docs/{document_id}`, `PATCH /docs/{document_id}`, `GET /docs/{document_id}/revisions`, `GET /docs/{document_id}/revisions/{revision_id}`, `POST /docs/{document_id}/trash`, `POST /docs/{document_id}/archive`, `POST /docs/{document_id}/unarchive`, `POST /docs/{document_id}/restore`, `POST /docs/{document_id}/purge`.
 
 **Relationship to artifacts:** Document revisions use artifacts internally for content storage. The docs API is the canonical interface for document lineages; clients should not treat documents as `GET /artifacts?kind=doc`. Documents complement canonical threads/events/artifacts rather than replacing them.
 
 ### 5.5 Boards (canonical organizing layers)
 
-Boards are first-class canonical coordination resources. A board is not just UI sugar over threads: it is a durable organizational map over work with canonical board metadata plus canonical card membership over topics/backing threads, and optional canonical links to document lineages.
+Boards are first-class canonical coordination resources. A board is a durable organizational map over work with canonical board metadata, canonical card membership, and optional links to topics and document lineages, all expressed through typed refs.
 
 **Canonical storage:**
-- `boards` table: durable board metadata, owners, primary thread, optional primary document, and optimistic concurrency token.
-- `board_cards` table: explicit canonical board membership over threads, including column placement, ordering token, and optional pinned document lineage.
+- `boards` table: durable board metadata, owners, primary topic ref, backing thread, and optimistic concurrency token.
+- `board_cards` table: explicit canonical board membership, including column placement, ordering token, and optional linked document ref.
 
 **Projection boundary:** `boards.workspace` may hydrate canonical backing resources and derived summaries for operator convenience, but the payload must keep those layers explicit: canonical membership/backing refs stay distinct from derived summary/freshness. Derived board scans remain rebuildable from canonical state.
 
@@ -313,7 +306,6 @@ Topics define work freshness; staleness is evaluated against topic activity and 
 
 - `reactive`: no scheduled check-ins - the topic wakes on inbound events only.
 - `cron` (5-field expression): the topic is stale when `now > next_check_in_at` and no receipt or decision event has occurred since the previous expected cron run.
-- Legacy `daily | weekly | monthly | custom` values remain accepted for compatibility and retain their historical window behavior.
 
 When staleness is detected by background maintenance or a deterministic derived
 rebuild, oar-core MUST:

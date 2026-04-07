@@ -2536,6 +2536,12 @@ func (r threadRow) ToThreadMap() (map[string]any, error) {
 			return nil, fmt.Errorf("decode thread body: %w", err)
 		}
 	}
+	if subjectRef := strings.TrimSpace(anyStringValue(body["subject_ref"])); subjectRef == "" {
+		if legacyTopicRef := strings.TrimSpace(anyStringValue(body["topic_ref"])); legacyTopicRef != "" {
+			body["subject_ref"] = legacyTopicRef
+		}
+	}
+	delete(body, "topic_ref")
 
 	provenance := map[string]any{}
 	if strings.TrimSpace(r.ProvenanceJSON) != "" {

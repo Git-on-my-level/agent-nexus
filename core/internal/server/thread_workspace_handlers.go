@@ -366,16 +366,11 @@ func topicIDFromThreadWorkspaceRefs(thread map[string]any) string {
 	if thread == nil {
 		return ""
 	}
-	for _, key := range []string{"topic_ref", "subject_ref"} {
-		ref := strings.TrimSpace(anyString(thread[key]))
-		if ref == "" {
-			continue
-		}
-		if strings.HasPrefix(ref, "topic:") {
-			id := strings.TrimSpace(strings.TrimPrefix(ref, "topic:"))
-			if id != "" {
-				return id
-			}
+	ref := strings.TrimSpace(anyString(thread["subject_ref"]))
+	if strings.HasPrefix(ref, "topic:") {
+		id := strings.TrimSpace(strings.TrimPrefix(ref, "topic:"))
+		if id != "" {
+			return id
 		}
 	}
 	return ""

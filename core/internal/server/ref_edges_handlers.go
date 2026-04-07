@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
@@ -18,16 +19,12 @@ func handleListRefEdges(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	}
 
 	q := r.URL.Query()
-	srcType := strings.TrimSpace(q.Get("source_type"))
-	srcID := strings.TrimSpace(q.Get("source_id"))
-	dstType := strings.TrimSpace(q.Get("target_type"))
-	dstID := strings.TrimSpace(q.Get("target_id"))
-	edgeTypeFilter := strings.TrimSpace(q.Get("edge_type"))
+	sourceRef := strings.TrimSpace(q.Get("source_ref"))
+	targetRef := strings.TrimSpace(q.Get("target_ref"))
+	relation := strings.TrimSpace(q.Get("relation"))
 
-	srcOK := srcType != "" && srcID != ""
-	dstOK := dstType != "" && dstID != ""
-	if srcOK == dstOK {
-		writeError(w, http.StatusBadRequest, "invalid_request", "specify exactly one of: source_type+source_id or target_type+target_id")
+	if (sourceRef != "" && targetRef != "") || (sourceRef == "" && targetRef == "") {
+		writeError(w, http.StatusBadRequest, "invalid_request", "specify exactly one of: source_ref or target_ref")
 		return
 	}
 
@@ -35,34 +32,27 @@ func handleListRefEdges(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		edges []primitives.RefEdge
 		err   error
 	)
-	if srcOK {
-		edges, err = opts.primitiveStore.ListRefEdgesBySource(r.Context(), srcType, srcID)
+	if sourceRef != "" {
+		edges, err = opts.primitiveStore.ListRefEdgesBySource(r.Context(), sourceRef, relation)
 	} else {
-		edges, err = opts.primitiveStore.ListRefEdgesByTarget(r.Context(), dstType, dstID)
+		edges, err = opts.primitiveStore.ListRefEdgesByTarget(r.Context(), targetRef, relation)
 	}
 	if err != nil {
+		if errors.Is(err, primitives.ErrInvalidRefEdgeQuery) {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list ref edges")
 		return
-	}
-
-	if edgeTypeFilter != "" {
-		filtered := make([]primitives.RefEdge, 0, len(edges))
-		for _, e := range edges {
-			if strings.TrimSpace(e.EdgeType) == edgeTypeFilter {
-				filtered = append(filtered, e)
-			}
-		}
-		edges = filtered
 	}
 
 	out := make([]map[string]any, 0, len(edges))
 	for _, e := range edges {
 		row := map[string]any{
-			"source_type": e.SourceType,
-			"source_id":   e.SourceID,
-			"target_type": e.TargetType,
-			"target_id":   e.TargetID,
-			"edge_type":   e.EdgeType,
+			"source_ref":    e.SourceRef,
+			"target_ref":    e.TargetRef,
+			"relation":      e.Relation,
+			"discovered_at": e.DiscoveredAt,
 		}
 		if len(e.Metadata) > 0 {
 			row["metadata"] = e.Metadata

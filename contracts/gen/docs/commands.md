@@ -671,7 +671,7 @@ Generated from `contracts/oar-openapi.yaml`.
 - Stability: `beta`
 - Surface: `diagnostic`
 - Input mode: `query`
-- Why: Query the write-through ref index by source or target (mutually exclusive); reverse lookup uses target_type+target_id.
+- Why: Query the write-through ref index by source or target typed ref (mutually exclusive); reverse lookup uses target_ref.
 - Concepts: `refs`, `inspection`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Output: Returns `{ ref_edges }`.

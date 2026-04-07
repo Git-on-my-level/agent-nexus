@@ -1635,7 +1635,7 @@ func TestPostCardsGlobalAndRefEdgesForwardLookup(t *testing.T) {
 		t.Fatal("expected card id from global create")
 	}
 
-	refResp, err := http.Get(h.baseURL + "/ref-edges?source_type=card&source_id=" + cardID)
+	refResp, err := http.Get(h.baseURL + "/ref-edges?source_ref=card:" + cardID)
 	if err != nil {
 		t.Fatalf("GET ref-edges: %v", err)
 	}
@@ -1652,6 +1652,22 @@ func TestPostCardsGlobalAndRefEdgesForwardLookup(t *testing.T) {
 	if len(refPayload.RefEdges) == 0 {
 		t.Fatal("expected ref_edges rows for new card")
 	}
+}
+
+func TestRefEdgesRejectMalformedTypedRefs(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+
+	resp, err := http.Get(h.baseURL + "/ref-edges?source_ref=not-a-typed-ref")
+	if err != nil {
+		t.Fatalf("GET malformed ref-edges query: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 for malformed source_ref, got %d", resp.StatusCode)
+	}
+	assertErrorCode(t, resp, "invalid_request")
 }
 
 func createBoardDocumentViaHTTP(t *testing.T, h primitivesTestHarness, threadID, title string) string {

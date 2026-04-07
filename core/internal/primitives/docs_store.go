@@ -21,7 +21,6 @@ type documentRow struct {
 	ThreadID        sql.NullString
 	Title           sql.NullString
 	Slug            sql.NullString
-	Status          sql.NullString
 	LabelsJSON      string
 	SupersedesJSON  string
 	RefsJSON        string
@@ -49,7 +48,7 @@ func documentResourceRefEdgeTargets(threadID string, refs []string) []refEdgeTar
 }
 
 func buildListDocumentsQuery(filter DocumentListFilter) (string, []any) {
-	query := `SELECT d.id, d.thread_id, d.title, d.slug, d.status, d.labels_json, d.supersedes_json,
+	query := `SELECT d.id, d.thread_id, d.title, d.slug, d.labels_json, d.supersedes_json,
 		d.refs_json, d.provenance_json,
 		d.head_revision_id, d.head_revision_number, d.created_at, d.created_by, d.updated_at, d.updated_by,
 		d.trashed_at, d.trashed_by, d.trash_reason,
@@ -121,7 +120,6 @@ func (s *Store) ListDocuments(ctx context.Context, filter DocumentListFilter) ([
 			&row.ThreadID,
 			&row.Title,
 			&row.Slug,
-			&row.Status,
 			&row.LabelsJSON,
 			&row.SupersedesJSON,
 			&row.RefsJSON,
@@ -353,16 +351,15 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 	if _, err := tx.ExecContext(
 		ctx,
 		`INSERT INTO documents(
-			id, thread_id, title, slug, status, labels_json, supersedes_json,
+			id, thread_id, title, slug, labels_json, supersedes_json,
 			refs_json, provenance_json,
 			head_revision_id, head_revision_number,
 			created_at, created_by, updated_at, updated_by
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		documentID,
 		nullableString(threadID),
 		nullableString(title),
 		nullableString(slug),
-		nil,
 		string(labelsJSON),
 		string(supersedesJSON),
 		string(docRefsJSON),
@@ -450,7 +447,6 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		ThreadID:        nullableString(threadID),
 		Title:           nullableString(title),
 		Slug:            nullableString(slug),
-		Status:          sql.NullString{},
 		LabelsJSON:      string(labelsJSON),
 		SupersedesJSON:  string(supersedesJSON),
 		RefsJSON:        string(docRefsJSON),
@@ -773,7 +769,6 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 			thread_id = ?,
 			title = ?,
 			slug = ?,
-			status = ?,
 			labels_json = ?,
 			supersedes_json = ?,
 			refs_json = ?,
@@ -786,7 +781,6 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		nullableString(nextThreadID),
 		nullableString(nextTitle),
 		nullableString(nextSlug),
-		nil,
 		string(labelsJSON),
 		string(supersedesJSON),
 		string(docResourceRefsJSON),
@@ -842,7 +836,6 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		ThreadID:        nullableString(nextThreadID),
 		Title:           nullableString(nextTitle),
 		Slug:            nullableString(nextSlug),
-		Status:          sql.NullString{},
 		LabelsJSON:      string(labelsJSON),
 		SupersedesJSON:  string(supersedesJSON),
 		RefsJSON:        string(docResourceRefsJSON),
@@ -1239,7 +1232,7 @@ func (s *Store) loadDocumentRow(ctx context.Context, documentID string) (documen
 	var row documentRow
 	err := s.db.QueryRowContext(
 		ctx,
-		`SELECT id, thread_id, title, slug, status, labels_json, supersedes_json,
+		`SELECT id, thread_id, title, slug, labels_json, supersedes_json,
 			 refs_json, provenance_json,
 			 head_revision_id, head_revision_number, created_at, created_by, updated_at, updated_by,
 			 trashed_at, trashed_by, trash_reason,
@@ -1251,7 +1244,6 @@ func (s *Store) loadDocumentRow(ctx context.Context, documentID string) (documen
 		&row.ThreadID,
 		&row.Title,
 		&row.Slug,
-		&row.Status,
 		&row.LabelsJSON,
 		&row.SupersedesJSON,
 		&row.RefsJSON,
@@ -1760,13 +1752,7 @@ func threadSubjectRef(threadBody map[string]any) string {
 	if threadBody == nil {
 		return ""
 	}
-	for _, key := range []string{"subject_ref", "topic_ref"} {
-		value := strings.TrimSpace(anyStringValue(threadBody[key]))
-		if value != "" {
-			return value
-		}
-	}
-	return ""
+	return strings.TrimSpace(anyStringValue(threadBody["subject_ref"]))
 }
 
 func revisionRefsFromRevision(revision map[string]any) []string {

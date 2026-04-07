@@ -3244,7 +3244,7 @@ export const commandRegistry = [
         "path": "/ref-edges",
         "operation_id": "listRefEdges",
         "summary": "List ref edges (forward or reverse indexed lookup)",
-        "why": "Query the write-through ref index by source or target (mutually exclusive); reverse lookup uses target_type+target_id.",
+        "why": "Query the write-through ref index by source or target typed ref (mutually exclusive); reverse lookup uses target_ref.",
         "input_mode": "query",
         "streaming": {
             "mode": "none"
