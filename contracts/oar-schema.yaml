@@ -314,7 +314,7 @@ resources:
       First-class board work item. Cards can point at a topic, a backing thread,
       and supporting documents, but card identity is not derived from those refs.
       On create, the server allocates a backing thread id; clients MUST NOT send
-      thread_id or parent_thread on board-card writes.
+      thread_id on board-card writes.
     fields:
       id: { type: string, required: true }
       board_ref: { type: typed_ref, required: true }
