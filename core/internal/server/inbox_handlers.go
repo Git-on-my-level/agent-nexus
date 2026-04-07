@@ -587,7 +587,7 @@ func resolveInboxAckBackingThreadID(ctx context.Context, store PrimitiveStore, s
 			if strings.TrimSpace(anyString(card["id"])) != id {
 				continue
 			}
-			tid := strings.TrimSpace(firstNonEmptyString(card["parent_thread"], card["thread_id"]))
+			tid := strings.TrimSpace(primaryRelatedThreadID(card))
 			if tid == "" {
 				return "", fmt.Errorf("card %q has no backing thread_id", id)
 			}
@@ -851,7 +851,7 @@ func deriveEventBackedInboxItem(event map[string]any) (derivedInboxItem, bool) {
 }
 
 func deriveWorkItemRiskInboxItem(card map[string]any, now time.Time, riskHorizon time.Duration) (derivedInboxItem, bool) {
-	threadID := strings.TrimSpace(firstNonEmptyString(card["parent_thread"], card["thread_id"]))
+	threadID := strings.TrimSpace(primaryRelatedThreadID(card))
 	cardID := strings.TrimSpace(anyString(card["id"]))
 	if threadID == "" || cardID == "" {
 		return derivedInboxItem{}, false

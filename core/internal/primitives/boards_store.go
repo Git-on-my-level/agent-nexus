@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -2098,6 +2099,8 @@ func (s *Store) ListBoardMembershipsByThread(ctx context.Context, threadID strin
 				"title":              cardTitle,
 				"status":             cardStatus,
 				"column_key":         nullableBoardString(columnKey.String),
+				"related_refs":       boardCardRelatedRefs(nil, parentThreadID.String),
+				"document_ref":       boardTypedRefOrNil("document", pinnedDocumentID.String),
 				"parent_thread":      nullableBoardString(parentThreadID.String),
 				"pinned_document_id": nullableBoardString(pinnedDocumentID.String),
 				"due_at":             nullableBoardString(dueAt.String),
@@ -3129,19 +3132,12 @@ func ensureBoardBackingThreadTx(ctx context.Context, tx *sql.Tx, actorID, boardI
 		return invalidBoardRequest(fmt.Sprintf("board.thread_id %q is already bound to %q", threadID, existingSubjectRef))
 	}
 
-	delete(threadBody, "id")
-	delete(threadBody, "updated_at")
-	delete(threadBody, "updated_by")
 	provenance := cloneProvenance(threadBody["provenance"])
-	delete(threadBody, "provenance")
 	if len(provenance) == 0 {
 		provenance = map[string]any{"sources": []string{"inferred"}}
 	}
-
-	threadBody["subject_ref"] = subjectRef
-	if title != "" {
-		threadBody["title"] = title
-	}
+	threadBody = buildBoardBackingThreadBody(boardID, threadID, title)
+	threadBody["provenance"] = provenance
 
 	bodyJSON, err := json.Marshal(threadBody)
 	if err != nil {
@@ -3233,19 +3229,12 @@ func ensureCardBackingThreadTx(ctx context.Context, tx *sql.Tx, actorID, cardID,
 		return invalidBoardRequest(fmt.Sprintf("card.thread_id %q is already bound to %q", threadID, existingSubjectRef))
 	}
 
-	delete(threadBody, "id")
-	delete(threadBody, "updated_at")
-	delete(threadBody, "updated_by")
 	provenance := cloneProvenance(threadBody["provenance"])
-	delete(threadBody, "provenance")
 	if len(provenance) == 0 {
 		provenance = map[string]any{"sources": []string{"inferred"}}
 	}
-
-	threadBody["subject_ref"] = subjectRef
-	if title != "" {
-		threadBody["title"] = title
-	}
+	threadBody = buildCardBackingThreadBody(cardID, threadID, title)
+	threadBody["provenance"] = provenance
 
 	bodyJSON, err := json.Marshal(threadBody)
 	if err != nil {
@@ -3293,7 +3282,6 @@ func buildCardBackingThreadBody(cardID, threadID, title string) map[string]any {
 		"status":      "active",
 		"priority":    "p2",
 		"tags":        []string{},
-		"open_cards":  []string{},
 		"provenance":  map[string]any{"sources": []string{"inferred"}},
 	}
 }
@@ -3310,7 +3298,6 @@ func buildBoardBackingThreadBody(boardID, threadID, title string) map[string]any
 		"status":      "active",
 		"priority":    "p2",
 		"tags":        []string{},
-		"open_cards":  []string{},
 		"provenance":  map[string]any{"sources": []string{"inferred"}},
 	}
 }
@@ -3516,6 +3503,8 @@ func (r boardCardRow) toMap() (map[string]any, error) {
 	resolutionRefs := decodeJSONListOrEmpty(r.ResolutionRefsJSON)
 	refs := decodeJSONListOrEmpty(r.RefsJSON)
 	threadID := strings.TrimSpace(firstNonEmpty(r.ThreadID.String, r.ParentThreadID.String))
+	assigneeRefs := boardCardAssigneeRefs(r.Assignee.String)
+	relatedRefs := boardCardRelatedRefs(refs, r.ParentThreadID.String)
 	m := map[string]any{
 		"id":                 r.CardID,
 		"board_id":           r.BoardID,
@@ -3526,16 +3515,15 @@ func (r boardCardRow) toMap() (map[string]any, error) {
 		"title":              r.Title,
 		"summary":            r.Body,
 		"body":               r.Body,
-		"body_markdown":      r.Body,
 		"version":            r.Version,
 		"parent_thread":      nullableBoardString(r.ParentThreadID.String),
 		"pinned_document_id": nullableBoardString(r.PinnedDocumentID.String),
 		"document_ref":       boardTypedRefOrNil("document", r.PinnedDocumentID.String),
-		"assignee":           nullableBoardString(r.Assignee.String),
-		"priority":           nullableBoardString(r.Priority.String),
 		"risk":               canonicalBoardCardRisk(r.Risk),
 		"due_at":             nullableBoardString(r.DueAt.String),
 		"definition_of_done": definitionOfDone,
+		"assignee_refs":      assigneeRefs,
+		"related_refs":       relatedRefs,
 		"status":             r.Status,
 		"resolution":         canonicalizeCardResolutionForAPI(r.Resolution.String),
 		"resolution_refs":    resolutionRefs,
@@ -3556,31 +3544,59 @@ func (r boardCardVersionRow) toMap() map[string]any {
 		_ = json.Unmarshal([]byte(r.ProvenanceJSON), &provenance)
 	}
 	threadID := strings.TrimSpace(firstNonEmpty(r.ThreadID.String, r.ParentThreadID.String))
+	refs := decodeJSONListOrEmpty(r.RefsJSON)
 	return map[string]any{
 		"id":                 r.CardID,
 		"version":            r.Version,
 		"title":              r.Title,
 		"body":               r.Body,
-		"body_markdown":      r.Body,
 		"board_id":           r.BoardID,
 		"thread_id":          nullableBoardString(threadID),
 		"parent_thread":      nullableBoardString(r.ParentThreadID.String),
 		"pinned_document_id": nullableBoardString(r.PinnedDocumentID.String),
-		"assignee":           nullableBoardString(r.Assignee.String),
-		"priority":           nullableBoardString(r.Priority.String),
 		"risk":               canonicalBoardCardRisk(r.Risk),
 		"due_at":             nullableBoardString(r.DueAt.String),
 		"definition_of_done": decodeJSONListOrEmpty(r.DefinitionOfDoneJSON),
+		"assignee_refs":      boardCardAssigneeRefs(r.Assignee.String),
+		"related_refs":       boardCardRelatedRefs(refs, r.ParentThreadID.String),
 		"column_key":         r.ColumnKey,
 		"rank":               r.Rank,
 		"status":             r.Status,
 		"resolution":         canonicalizeCardResolutionForAPI(r.Resolution.String),
 		"resolution_refs":    decodeJSONListOrEmpty(r.ResolutionRefsJSON),
-		"refs":               decodeJSONListOrEmpty(r.RefsJSON),
+		"refs":               refs,
 		"created_at":         r.CreatedAt,
 		"created_by":         r.CreatedBy,
 		"provenance":         provenance,
 	}
+}
+
+func boardCardAssigneeRefs(rawAssignee string) []string {
+	assignee := strings.TrimSpace(rawAssignee)
+	if assignee == "" {
+		return []string{}
+	}
+	if strings.Contains(assignee, ":") {
+		return []string{assignee}
+	}
+	return []string{"actor:" + assignee}
+}
+
+func boardCardRelatedRefs(refs []string, parentThreadID string) []string {
+	out := uniqueSortedStrings(refs)
+	parentThreadID = strings.TrimSpace(parentThreadID)
+	if parentThreadID == "" {
+		return out
+	}
+	threadRef := "thread:" + parentThreadID
+	for _, ref := range out {
+		if ref == threadRef {
+			return out
+		}
+	}
+	out = append(out, threadRef)
+	sort.Strings(out)
+	return out
 }
 
 func normalizeBoardStatus(raw any, allowDefault bool) (string, error) {

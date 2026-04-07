@@ -78,7 +78,7 @@ func TestTopicWorkspaceResolvesBoardsCardsAndDocsViaRefEdges(t *testing.T) {
 		"title":"Topic workspace card",
 		"related_refs":["thread:`+primaryThreadID+`"],
 		"column_key":"ready",
-		"pinned_document_id":"`+memberDocumentID+`"
+		"document_ref":"document:`+memberDocumentID+`"
 	}`, http.StatusCreated)
 	defer addCardResp.Body.Close()
 	var createdCard struct {

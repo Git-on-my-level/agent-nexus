@@ -555,16 +555,9 @@ func addBoardCardFromRaw(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		explicitReplayCardID = ""
 	}
 
-	createStatus := strings.TrimSpace(req.Status)
-	if createStatus == "" {
-		assocThread, _ := primitives.SoleThreadRefIDFromRefs(req.Refs)
-		if strings.TrimSpace(assocThread) != "" {
-			if strings.TrimSpace(req.ColumnKey) == "done" {
-				createStatus = "done"
-			} else {
-				createStatus = "todo"
-			}
-		}
+	createStatus := "todo"
+	if strings.TrimSpace(req.ColumnKey) == "done" {
+		createStatus = "done"
 	}
 
 	result, err := opts.primitiveStore.CreateBoardCard(r.Context(), actorID, boardID, addBoardCardStoreInput(req, createStatus))
@@ -582,7 +575,6 @@ func addBoardCardFromRaw(w http.ResponseWriter, r *http.Request, opts handlerOpt
 				req.ColumnKey,
 				createStatus,
 				req.Assignee,
-				req.Priority,
 				req.PinnedDocumentID,
 				req.DueAt,
 				req.Resolution,
@@ -1354,28 +1346,28 @@ func buildBoardUpdatedEvent(previousBoard, updatedBoard, patch map[string]any) m
 
 func buildBoardCardAddedEvent(board, card map[string]any) map[string]any {
 	payload := map[string]any{
-		"board_id":           anyString(board["id"]),
-		"card_id":            anyString(card["id"]),
-		"thread_id":          nullableStringValue(anyString(card["thread_id"])),
-		"parent_thread":      nullableStringValue(anyString(card["parent_thread"])),
-		"column_key":         anyString(card["column_key"]),
-		"status":             nullableStringValue(anyString(card["status"])),
-		"assignee":           nullableStringValue(anyString(card["assignee"])),
-		"pinned_document_id": nullableStringValue(anyString(card["pinned_document_id"])),
+		"board_id":      anyString(board["id"]),
+		"card_id":       anyString(card["id"]),
+		"thread_id":     nullableStringValue(anyString(card["thread_id"])),
+		"column_key":    anyString(card["column_key"]),
+		"status":        nullableStringValue(anyString(card["status"])),
+		"assignee_refs": cardAssigneeRefsAny(card),
+		"document_ref":  nullableStringValue(documentRefForPublicCard(card)),
+		"related_refs":  typedRefStringsToAnyList(cardRelatedRefs(card)),
 	}
 	return buildBoardLifecycleEvent("board_card_added", board, card, payload, "Board card added: "+cardDisplayName(card))
 }
 
 func buildCardCreatedEvent(board, card map[string]any) map[string]any {
 	payload := map[string]any{
-		"board_id":           anyString(board["id"]),
-		"card_id":            anyString(card["id"]),
-		"thread_id":          nullableStringValue(anyString(card["thread_id"])),
-		"parent_thread":      nullableStringValue(anyString(card["parent_thread"])),
-		"column_key":         anyString(card["column_key"]),
-		"status":             nullableStringValue(anyString(card["status"])),
-		"assignee":           nullableStringValue(anyString(card["assignee"])),
-		"pinned_document_id": nullableStringValue(anyString(card["pinned_document_id"])),
+		"board_id":      anyString(board["id"]),
+		"card_id":       anyString(card["id"]),
+		"thread_id":     nullableStringValue(anyString(card["thread_id"])),
+		"column_key":    anyString(card["column_key"]),
+		"status":        nullableStringValue(anyString(card["status"])),
+		"assignee_refs": cardAssigneeRefsAny(card),
+		"document_ref":  nullableStringValue(documentRefForPublicCard(card)),
+		"related_refs":  typedRefStringsToAnyList(cardRelatedRefs(card)),
 	}
 	return buildCardLifecycleEvent("card_created", board, card, payload, "Card created: "+cardDisplayName(card))
 }
@@ -1385,14 +1377,15 @@ func buildCardUpdatedEvent(board, previousCard, updatedCard map[string]any, chan
 		"board_id":       anyString(board["id"]),
 		"card_id":        anyString(updatedCard["id"]),
 		"thread_id":      nullableStringValue(anyString(updatedCard["thread_id"])),
-		"parent_thread":  nullableStringValue(anyString(updatedCard["parent_thread"])),
+		"related_refs":   typedRefStringsToAnyList(cardRelatedRefs(updatedCard)),
+		"document_ref":   nullableStringValue(documentRefForPublicCard(updatedCard)),
 		"changed_fields": changedFields,
 	}
 	for _, field := range changedFields {
 		switch field {
 		case "assignee_refs":
-			payload["previous_assignee_refs"] = publicAssigneeRefs(previousCard)
-			payload["assignee_refs"] = publicAssigneeRefs(updatedCard)
+			payload["previous_assignee_refs"] = cardAssigneeRefsAny(previousCard)
+			payload["assignee_refs"] = cardAssigneeRefsAny(updatedCard)
 		case "related_refs":
 			payload["previous_related_refs"] = mergeRelatedRefsForPublicView(previousCard)
 			payload["related_refs"] = mergeRelatedRefsForPublicView(updatedCard)
@@ -1406,25 +1399,25 @@ func buildCardUpdatedEvent(board, previousCard, updatedCard map[string]any, chan
 
 func buildCardArchivedEvent(board, card map[string]any) map[string]any {
 	payload := map[string]any{
-		"board_id":           anyString(board["id"]),
-		"card_id":            anyString(card["id"]),
-		"thread_id":          nullableStringValue(anyString(card["thread_id"])),
-		"parent_thread":      nullableStringValue(anyString(card["parent_thread"])),
-		"column_key":         nullableStringValue(anyString(card["column_key"])),
-		"pinned_document_id": nullableStringValue(anyString(card["pinned_document_id"])),
+		"board_id":     anyString(board["id"]),
+		"card_id":      anyString(card["id"]),
+		"thread_id":    nullableStringValue(anyString(card["thread_id"])),
+		"column_key":   nullableStringValue(anyString(card["column_key"])),
+		"document_ref": nullableStringValue(documentRefForPublicCard(card)),
+		"related_refs": typedRefStringsToAnyList(cardRelatedRefs(card)),
 	}
 	return buildCardLifecycleEvent("card_archived", board, card, payload, "Card archived: "+cardDisplayName(card))
 }
 
 func buildCardTrashedEvent(board, card map[string]any) map[string]any {
 	payload := map[string]any{
-		"board_id":           anyString(board["id"]),
-		"card_id":            anyString(card["id"]),
-		"thread_id":          nullableStringValue(anyString(card["thread_id"])),
-		"parent_thread":      nullableStringValue(anyString(card["parent_thread"])),
-		"column_key":         nullableStringValue(anyString(card["column_key"])),
-		"pinned_document_id": nullableStringValue(anyString(card["pinned_document_id"])),
-		"trash_reason":       nullableStringValue(anyString(card["trash_reason"])),
+		"board_id":     anyString(board["id"]),
+		"card_id":      anyString(card["id"]),
+		"thread_id":    nullableStringValue(anyString(card["thread_id"])),
+		"column_key":   nullableStringValue(anyString(card["column_key"])),
+		"document_ref": nullableStringValue(documentRefForPublicCard(card)),
+		"related_refs": typedRefStringsToAnyList(cardRelatedRefs(card)),
+		"trash_reason": nullableStringValue(anyString(card["trash_reason"])),
 	}
 	return buildCardLifecycleEvent("card_trashed", board, card, payload, "Card trashed: "+cardDisplayName(card))
 }
@@ -1459,23 +1452,23 @@ func buildCardMovedEvent(board, previousCard, updatedCard map[string]any, before
 
 func buildBoardCardArchivedEvent(board, card map[string]any) map[string]any {
 	payload := map[string]any{
-		"board_id":           anyString(board["id"]),
-		"card_id":            anyString(card["id"]),
-		"parent_thread":      nullableStringValue(anyString(card["parent_thread"])),
-		"column_key":         nullableStringValue(anyString(card["column_key"])),
-		"pinned_document_id": nullableStringValue(anyString(card["pinned_document_id"])),
+		"board_id":     anyString(board["id"]),
+		"card_id":      anyString(card["id"]),
+		"column_key":   nullableStringValue(anyString(card["column_key"])),
+		"document_ref": nullableStringValue(documentRefForPublicCard(card)),
+		"related_refs": typedRefStringsToAnyList(cardRelatedRefs(card)),
 	}
 	return buildBoardLifecycleEvent("board_card_archived", board, card, payload, "Board card archived: "+cardDisplayName(card))
 }
 
 func buildBoardCardTrashedEvent(board, card map[string]any) map[string]any {
 	payload := map[string]any{
-		"board_id":           anyString(board["id"]),
-		"card_id":            anyString(card["id"]),
-		"parent_thread":      nullableStringValue(anyString(card["parent_thread"])),
-		"column_key":         nullableStringValue(anyString(card["column_key"])),
-		"pinned_document_id": nullableStringValue(anyString(card["pinned_document_id"])),
-		"trash_reason":       nullableStringValue(anyString(card["trash_reason"])),
+		"board_id":     anyString(board["id"]),
+		"card_id":      anyString(card["id"]),
+		"column_key":   nullableStringValue(anyString(card["column_key"])),
+		"document_ref": nullableStringValue(documentRefForPublicCard(card)),
+		"related_refs": typedRefStringsToAnyList(cardRelatedRefs(card)),
+		"trash_reason": nullableStringValue(anyString(card["trash_reason"])),
 	}
 	return buildBoardLifecycleEvent("board_card_trashed", board, card, payload, "Board card trashed: "+cardDisplayName(card))
 }
@@ -1489,11 +1482,11 @@ func buildCardLifecycleEvent(eventType string, board, card map[string]any, paylo
 		if threadID := strings.TrimSpace(anyString(card["thread_id"])); threadID != "" {
 			refs = append(refs, "thread:"+threadID)
 		}
-		if parentThreadID := strings.TrimSpace(anyString(card["parent_thread"])); parentThreadID != "" {
+		if parentThreadID := primaryRelatedThreadID(card); parentThreadID != "" {
 			refs = append(refs, "thread:"+parentThreadID)
 		}
-		if pinnedDocumentID := strings.TrimSpace(anyString(card["pinned_document_id"])); pinnedDocumentID != "" {
-			refs = append(refs, "document:"+pinnedDocumentID)
+		if documentRef := documentRefForPublicCard(card); documentRef != "" {
+			refs = append(refs, documentRef)
 		}
 	}
 	refs = uniqueSortedStrings(refs)
@@ -1523,8 +1516,8 @@ func buildBoardLifecycleEvent(eventType string, board, card map[string]any, payl
 		if threadID := strings.TrimSpace(anyString(card["thread_id"])); threadID != "" {
 			refs = append(refs, "thread:"+threadID)
 		}
-		if pinnedDocumentID := strings.TrimSpace(anyString(card["pinned_document_id"])); pinnedDocumentID != "" {
-			refs = append(refs, "document:"+pinnedDocumentID)
+		if documentRef := documentRefForPublicCard(card); documentRef != "" {
+			refs = append(refs, documentRef)
 		}
 	}
 	refs = uniqueSortedStrings(refs)
@@ -1566,7 +1559,15 @@ func emitCardLifecycleEvent(ctx context.Context, opts handlerOptions, actorID st
 	}
 	threadIDs := []string{anyString(stored["thread_id"])}
 	payload, _ := stored["payload"].(map[string]any)
-	threadIDs = append(threadIDs, anyString(payload["parent_thread"]))
+	if refs, err := extractStringSlice(payload["related_refs"]); err == nil {
+		for _, ref := range refs {
+			prefix, id, err := schema.SplitTypedRef(ref)
+			if err != nil || prefix != "thread" {
+				continue
+			}
+			threadIDs = append(threadIDs, id)
+		}
+	}
 	enqueueTopicProjectionsBestEffort(ctx, opts, threadIDs, time.Now().UTC())
 	for _, threadID := range uniqueServerStrings(threadIDs) {
 		_ = refreshDerivedTopicProjection(ctx, opts, threadID, time.Now().UTC(), actorID)
@@ -1670,7 +1671,7 @@ func validateBoardTypedRefs(contract *schema.Contract, board map[string]any, fie
 }
 
 func loadBoardCardPinnedDocument(ctx context.Context, opts handlerOptions, card map[string]any) (any, error) {
-	documentID := strings.TrimSpace(anyString(card["pinned_document_id"]))
+	documentID := strings.TrimSpace(pinnedDocumentIDFromCard(card))
 	if documentID == "" {
 		return nil, nil
 	}
@@ -1711,7 +1712,7 @@ func loadExistingBoardCardForCreateReplay(ctx context.Context, opts handlerOptio
 	return nil, primitives.ErrNotFound
 }
 
-func boardCardMatchesCreateReplay(existingCard map[string]any, explicitCardID, title, body, parentThreadID, legacyThreadID, columnKey, status string, assignee, priority, pinnedDocumentID, dueAt, resolution *string, definitionOfDone, resolutionRefs, refs []string, risk *string) bool {
+func boardCardMatchesCreateReplay(existingCard map[string]any, explicitCardID, title, body, parentThreadID, legacyThreadID, columnKey, status string, assignee, pinnedDocumentID, dueAt, resolution *string, definitionOfDone, resolutionRefs, refs []string, risk *string) bool {
 	explicitCardID = strings.TrimSpace(explicitCardID)
 	if explicitCardID != "" && strings.TrimSpace(anyString(existingCard["id"])) != explicitCardID {
 		return false
@@ -1722,7 +1723,7 @@ func boardCardMatchesCreateReplay(existingCard map[string]any, explicitCardID, t
 			expectedParentThread = derived
 		}
 	}
-	if expectedParentThread != "" && strings.TrimSpace(anyString(existingCard["parent_thread"])) != expectedParentThread {
+	if expectedParentThread != "" && primaryRelatedThreadID(existingCard) != expectedParentThread {
 		return false
 	}
 	expectedColumn := strings.TrimSpace(columnKey)
@@ -1732,22 +1733,16 @@ func boardCardMatchesCreateReplay(existingCard map[string]any, explicitCardID, t
 	if strings.TrimSpace(anyString(existingCard["column_key"])) != expectedColumn {
 		return false
 	}
-	if status = strings.TrimSpace(status); status != "" && strings.TrimSpace(anyString(existingCard["status"])) != status {
-		return false
-	}
 	if title = strings.TrimSpace(title); title != "" && strings.TrimSpace(anyString(existingCard["title"])) != title {
 		return false
 	}
-	if body = strings.TrimSpace(body); body != "" && strings.TrimSpace(anyString(existingCard["body"])) != body {
+	if body = strings.TrimSpace(body); body != "" && strings.TrimSpace(anyString(existingCard["summary"])) != body {
 		return false
 	}
-	if assignee != nil && strings.TrimSpace(anyString(existingCard["assignee"])) != strings.TrimSpace(*assignee) {
+	if assignee != nil && canonicalAssigneeStorageString(existingCard) != strings.TrimSpace(*assignee) {
 		return false
 	}
-	if priority != nil && strings.TrimSpace(anyString(existingCard["priority"])) != strings.TrimSpace(*priority) {
-		return false
-	}
-	if pinnedDocumentID != nil && strings.TrimSpace(anyString(existingCard["pinned_document_id"])) != strings.TrimSpace(*pinnedDocumentID) {
+	if pinnedDocumentID != nil && strings.TrimSpace(pinnedDocumentIDFromCard(existingCard)) != strings.TrimSpace(*pinnedDocumentID) {
 		return false
 	}
 	expectedDueAt := ""
@@ -1817,14 +1812,7 @@ func replayExpectedCardResolution(raw *string, status string) string {
 			return value
 		}
 	}
-	switch strings.TrimSpace(status) {
-	case "done":
-		return "done"
-	case "cancelled":
-		return "canceled"
-	default:
-		return ""
-	}
+	return ""
 }
 
 func boardCardReplayPreconditionMatches(board map[string]any, ifBoardUpdatedAt *string) bool {
@@ -1834,7 +1822,7 @@ func boardCardReplayPreconditionMatches(board map[string]any, ifBoardUpdatedAt *
 	return strings.TrimSpace(anyString(board["updated_at"])) == strings.TrimSpace(*ifBoardUpdatedAt)
 }
 
-func validateBoardCardCreateRequest(cardID, parentThreadID, legacyThreadID, columnKey, beforeCardID, afterCardID, beforeThreadID, afterThreadID, status string, pinnedDocumentID *string) error {
+func validateBoardCardCreateRequest(cardID, parentThreadID, legacyThreadID, columnKey, beforeCardID, afterCardID, beforeThreadID, afterThreadID string, pinnedDocumentID *string) error {
 	if strings.TrimSpace(parentThreadID) != "" {
 		return errors.New("parent_thread must not be set on board card create; use related_refs with a thread ref instead")
 	}
@@ -1854,13 +1842,6 @@ func validateBoardCardCreateRequest(cardID, parentThreadID, legacyThreadID, colu
 		case "backlog", "ready", "in_progress", "blocked", "review", "done":
 		default:
 			return errors.New("column_key must be one of: backlog, ready, in_progress, blocked, review, done")
-		}
-	}
-	if strings.TrimSpace(status) != "" {
-		switch strings.TrimSpace(status) {
-		case "todo", "in_progress", "done", "cancelled":
-		default:
-			return errors.New("card.status must be one of: todo, in_progress, done, cancelled")
 		}
 	}
 	if strings.TrimSpace(beforeCardID) != "" && strings.TrimSpace(afterCardID) != "" {
@@ -1885,11 +1866,8 @@ func parseBoardCardPatchInput(w http.ResponseWriter, patch map[string]any) (prim
 		writeError(w, http.StatusBadRequest, "invalid_request", "patch is required")
 		return primitives.UpdateBoardCardInput{}, nil, false
 	}
-	if _, hasRefs := patch["refs"]; hasRefs {
-		if _, hasRelated := patch["related_refs"]; hasRelated {
-			writeError(w, http.StatusBadRequest, "invalid_request", "patch.refs and patch.related_refs are mutually exclusive; prefer patch.related_refs")
-			return primitives.UpdateBoardCardInput{}, nil, false
-		}
+	if rejectMixedBoardCardPatchAliases(w, patch) {
+		return primitives.UpdateBoardCardInput{}, nil, false
 	}
 
 	var (
@@ -1916,10 +1894,6 @@ func parseBoardCardPatchInput(w http.ResponseWriter, patch map[string]any) (prim
 			value := strings.TrimSpace(anyString(raw))
 			input.Body = &value
 			appendChanged("summary")
-		case "body", "body_markdown":
-			value := strings.TrimSpace(anyString(raw))
-			input.Body = &value
-			appendChanged("body")
 		case "parent_thread", "thread_id":
 			writeError(w, http.StatusBadRequest, "invalid_request", "patch."+field+" is not writable; use related_refs for associations")
 			return primitives.UpdateBoardCardInput{}, nil, false
@@ -1936,24 +1910,6 @@ func parseBoardCardPatchInput(w http.ResponseWriter, patch map[string]any) (prim
 				input.Assignee = assigneeStorageStringFromRefs(uniqueSortedStrings(value))
 			}
 			appendChanged("assignee_refs")
-		case "assignee":
-			value := strings.TrimSpace(anyString(raw))
-			input.Assignee = &value
-			appendChanged(field)
-		case "priority":
-			value := strings.TrimSpace(anyString(raw))
-			input.Priority = &value
-			appendChanged(field)
-		case "status":
-			value := strings.TrimSpace(anyString(raw))
-			switch value {
-			case "todo", "in_progress", "done", "cancelled":
-			default:
-				writeError(w, http.StatusBadRequest, "invalid_request", "patch.status must be one of: todo, in_progress, done, cancelled")
-				return primitives.UpdateBoardCardInput{}, nil, false
-			}
-			input.Status = &value
-			appendChanged(field)
 		case "due_at":
 			value := strings.TrimSpace(anyString(raw))
 			input.DueAt = &value
@@ -2008,24 +1964,6 @@ func parseBoardCardPatchInput(w http.ResponseWriter, patch map[string]any) (prim
 			}
 			input.PinnedDocumentID = idPtr
 			appendChanged("document_ref")
-		case "refs":
-			value, err := extractStringSlice(raw)
-			if err != nil {
-				writeError(w, http.StatusBadRequest, "invalid_request", "patch.refs must be a list of strings")
-				return primitives.UpdateBoardCardInput{}, nil, false
-			}
-			input.Refs = &value
-			appendChanged(field)
-		case "pinned_document_id":
-			value := strings.TrimSpace(anyString(raw))
-			if value != "" {
-				if err := validateDocumentID(value); err != nil {
-					writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
-					return primitives.UpdateBoardCardInput{}, nil, false
-				}
-			}
-			input.PinnedDocumentID = &value
-			appendChanged(field)
 		case "risk":
 			value := strings.TrimSpace(anyString(raw))
 			switch value {

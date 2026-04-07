@@ -989,35 +989,21 @@ func normalizeTopicInput(topic map[string]any, createMode bool) (map[string]any,
 }
 
 func buildTopicBackingThreadBody(topicID string, topic map[string]any, threadID, actorID, now string) map[string]any {
+	_ = actorID
+	_ = now
 	title := strings.TrimSpace(anyStringValue(topic["title"]))
-	summary := strings.TrimSpace(anyStringValue(topic["summary"]))
-	topicType := strings.TrimSpace(anyStringValue(topic["type"]))
 	status := "active"
-	if strings.EqualFold(strings.TrimSpace(anyStringValue(topic["status"])), "archived") ||
-		strings.TrimSpace(anyStringValue(topic["archived_at"])) != "" ||
-		strings.TrimSpace(anyStringValue(topic["trashed_at"])) != "" {
+	if strings.TrimSpace(anyStringValue(topic["archived_at"])) != "" || strings.TrimSpace(anyStringValue(topic["trashed_at"])) != "" || strings.EqualFold(strings.TrimSpace(anyStringValue(topic["status"])), "archived") {
 		status = "archived"
 	}
 	body := map[string]any{
-		"id":              strings.TrimSpace(threadID),
-		"topic_ref":       "topic:" + strings.TrimSpace(topicID),
-		"title":           title,
-		"type":            topicType,
-		"status":          status,
-		"priority":        "p2",
-		"tags":            []string{},
-		"current_summary": summary,
-		"next_actions":    []string{},
-		"key_artifacts":   []string{},
-		"open_cards":      []string{},
-		"provenance":      map[string]any{"sources": []string{"inferred"}},
-		"created_at":      now,
-		"created_by":      actorID,
-		"updated_at":      now,
-		"updated_by":      actorID,
-	}
-	if refs, ok := topic["owner_refs"]; ok {
-		body["owner_refs"] = refs
+		"id":          strings.TrimSpace(threadID),
+		"subject_ref": "topic:" + strings.TrimSpace(topicID),
+		"title":       title,
+		"status":      status,
+		"priority":    "p2",
+		"tags":        []string{},
+		"provenance":  map[string]any{"sources": []string{"inferred"}},
 	}
 	return body
 }

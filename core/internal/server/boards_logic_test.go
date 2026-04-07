@@ -1,6 +1,8 @@
 package server
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -83,17 +85,16 @@ func TestBoardCardMatchesCreateReplayRejectsCanonicalFieldMismatches(t *testing.
 	baseCard := map[string]any{
 		"id":                 "card-1",
 		"title":              "Card title",
-		"body":               "Card summary",
-		"parent_thread":      "thread-1",
+		"summary":            "Card summary",
+		"thread_id":          "card-thread-1",
 		"column_key":         "ready",
-		"status":             "todo",
-		"assignee":           "actor-1",
-		"priority":           "high",
-		"pinned_document_id": "doc-1",
+		"assignee_refs":      []string{"actor:actor-1"},
+		"document_ref":       "document:doc-1",
 		"due_at":             "2026-04-06T00:00:00Z",
 		"definition_of_done": []string{"receipt", "sign-off"},
 		"resolution":         "",
 		"resolution_refs":    []string{},
+		"related_refs":       []string{"thread:thread-1"},
 		"refs":               []string{"topic:topic-1", "artifact:artifact-1"},
 		"risk":               "low",
 	}
@@ -109,7 +110,6 @@ func TestBoardCardMatchesCreateReplayRejectsCanonicalFieldMismatches(t *testing.
 			"ready",
 			"todo",
 			ptr("actor-1"),
-			ptr("high"),
 			ptr("doc-1"),
 			dueAt,
 			resolution,
@@ -165,7 +165,6 @@ func TestBoardCardMatchesCreateReplayRejectsCanonicalFieldMismatches(t *testing.
 			"ready",
 			"todo",
 			ptr("actor-1"),
-			ptr("high"),
 			ptr("doc-1"),
 			ptr("2026-04-06T00:00:00Z"),
 			nil,
@@ -196,7 +195,6 @@ func TestBoardCardMatchesCreateReplayRejectsCanonicalFieldMismatches(t *testing.
 			"ready",
 			"todo",
 			ptr("actor-1"),
-			ptr("high"),
 			ptr("doc-1"),
 			ptr("2026-04-06T00:00:00Z"),
 			nil,
@@ -212,13 +210,13 @@ func TestBoardCardMatchesCreateReplayRejectsCanonicalFieldMismatches(t *testing.
 
 func TestValidateBoardCardCreateRejectsLegacyThreadFields(t *testing.T) {
 	t.Parallel()
-	if err := validateBoardCardCreateRequest("", "thr-1", "", "ready", "", "", "", "", "", nil); err == nil || !strings.Contains(err.Error(), "parent_thread must not") {
+	if err := validateBoardCardCreateRequest("", "thr-1", "", "ready", "", "", "", "", nil); err == nil || !strings.Contains(err.Error(), "parent_thread must not") {
 		t.Fatalf("expected parent_thread rejection, got %v", err)
 	}
-	if err := validateBoardCardCreateRequest("", "", "thr-1", "ready", "", "", "", "", "", nil); err == nil || !strings.Contains(err.Error(), "thread_id must not") {
+	if err := validateBoardCardCreateRequest("", "", "thr-1", "ready", "", "", "", "", nil); err == nil || !strings.Contains(err.Error(), "thread_id must not") {
 		t.Fatalf("expected thread_id rejection, got %v", err)
 	}
-	if err := validateBoardCardCreateRequest("", "", "", "ready", "", "", "thr-1", "", "", nil); err == nil || !strings.Contains(err.Error(), "before_thread_id") {
+	if err := validateBoardCardCreateRequest("", "", "", "ready", "", "", "thr-1", "", nil); err == nil || !strings.Contains(err.Error(), "before_thread_id") {
 		t.Fatalf("expected before_thread_id rejection, got %v", err)
 	}
 }
@@ -235,11 +233,11 @@ func TestBoardCardMatchesCreateReplayDerivesParentFromRefs(t *testing.T) {
 	card := map[string]any{
 		"id":                 "card-1",
 		"title":              "Card title",
-		"parent_thread":      "thread-1",
+		"thread_id":          "card-thread-1",
 		"column_key":         "ready",
-		"status":             "todo",
 		"definition_of_done": []any{},
 		"resolution_refs":    []any{},
+		"related_refs":       []any{"thread:thread-1"},
 		"refs":               []any{"topic:topic-1", "thread:thread-1"},
 	}
 	if !boardCardMatchesCreateReplay(
@@ -250,8 +248,7 @@ func TestBoardCardMatchesCreateReplayDerivesParentFromRefs(t *testing.T) {
 		"",
 		"",
 		"ready",
-		"todo",
-		nil,
+		"",
 		nil,
 		nil,
 		nil,
@@ -262,5 +259,112 @@ func TestBoardCardMatchesCreateReplayDerivesParentFromRefs(t *testing.T) {
 		nil,
 	) {
 		t.Fatal("expected replay match when parent is derived from refs only")
+	}
+}
+
+func TestParseBoardCardPatchInputRejectsMixedAliases(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		patch map[string]any
+	}{
+		{
+			name: "summary with body",
+			patch: map[string]any{
+				"summary": "Canonical summary",
+				"body":    "Legacy body",
+			},
+		},
+		{
+			name: "body markdown alias",
+			patch: map[string]any{
+				"body_markdown": "Legacy body",
+			},
+		},
+		{
+			name: "status alias",
+			patch: map[string]any{
+				"status": "todo",
+			},
+		},
+		{
+			name: "assignee refs with assignee",
+			patch: map[string]any{
+				"assignee_refs": []any{"actor:alice"},
+				"assignee":      "alice",
+			},
+		},
+		{
+			name: "priority alias",
+			patch: map[string]any{
+				"priority": "high",
+			},
+		},
+		{
+			name: "document ref with pinned document id",
+			patch: map[string]any{
+				"document_ref":       "document:doc-1",
+				"pinned_document_id": "doc-1",
+			},
+		},
+		{
+			name: "pinned document id alias",
+			patch: map[string]any{
+				"pinned_document_id": "doc-1",
+			},
+		},
+		{
+			name: "related refs with refs",
+			patch: map[string]any{
+				"related_refs": []any{"thread:thr-1"},
+				"refs":         []any{"topic:top-1"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			rec := httptest.NewRecorder()
+			_, _, ok := parseBoardCardPatchInput(rec, tt.patch)
+			if ok {
+				t.Fatal("expected patch parse failure")
+			}
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("unexpected status: got %d want %d", rec.Code, http.StatusBadRequest)
+			}
+		})
+	}
+}
+
+func TestParseBoardCardPatchInputAcceptsCanonicalFields(t *testing.T) {
+	t.Parallel()
+
+	rec := httptest.NewRecorder()
+	input, changedFields, ok := parseBoardCardPatchInput(rec, map[string]any{
+		"summary":       "Canonical summary",
+		"assignee_refs": []any{"actor:alice"},
+		"document_ref":  "document:doc-1",
+		"related_refs":  []any{"thread:thr-1"},
+		"risk":          "high",
+	})
+	if !ok {
+		t.Fatalf("expected patch parse success, got status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if input.Body == nil || *input.Body != "Canonical summary" {
+		t.Fatalf("unexpected body: %#v", input.Body)
+	}
+	if input.Assignee == nil || *input.Assignee != "alice" {
+		t.Fatalf("unexpected assignee: %#v", input.Assignee)
+	}
+	if input.PinnedDocumentID == nil || *input.PinnedDocumentID != "doc-1" {
+		t.Fatalf("unexpected pinned document id: %#v", input.PinnedDocumentID)
+	}
+	if input.Refs == nil || len(*input.Refs) != 1 || (*input.Refs)[0] != "thread:thr-1" {
+		t.Fatalf("unexpected refs: %#v", input.Refs)
+	}
+	if len(changedFields) != 5 {
+		t.Fatalf("unexpected changed fields: %#v", changedFields)
 	}
 }

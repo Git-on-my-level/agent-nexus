@@ -741,7 +741,7 @@ func TestThreadContextBundlesRecentEventsArtifactsAndOpenCards(t *testing.T) {
 
 	createDocumentResp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
 		"actor_id":"actor-1",
-		"document":{"id":"ctx-doc-1","thread_id":"`+threadID+`","title":"Context runbook","status":"active","labels":["ops"]},
+		"document":{"id":"ctx-doc-1","thread_id":"`+threadID+`","title":"Context runbook","labels":["ops"]},
 		"content":"# Context runbook",
 		"content_type":"text"
 	}`, http.StatusCreated)
@@ -963,7 +963,7 @@ func TestThreadWorkspaceBundlesCanonicalAndDerivedSections(t *testing.T) {
 
 	postJSONExpectStatus(t, h.baseURL+"/docs", `{
 		"actor_id":"actor-1",
-		"document":{"id":"workspace-doc-1","thread_id":"`+rootThreadID+`","title":"Workspace runbook","status":"active","labels":["ops"]},
+		"document":{"id":"workspace-doc-1","thread_id":"`+rootThreadID+`","title":"Workspace runbook","labels":["ops"]},
 		"refs":["thread:`+rootThreadID+`"],
 		"content":"# Workspace runbook",
 		"content_type":"text"

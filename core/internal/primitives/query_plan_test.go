@@ -53,7 +53,6 @@ func TestWorkspaceListQueriesUseIndexedPlans(t *testing.T) {
 		"id":        "doc-plan-1",
 		"thread_id": threadID,
 		"title":     "Plan doc",
-		"status":    "active",
 	}, "doc content", "text", []string{"thread:" + threadID}); err != nil {
 		t.Fatalf("create document: %v", err)
 	}

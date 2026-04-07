@@ -236,3 +236,32 @@ func TestIsMeaningfulThreadActivityEvent(t *testing.T) {
 		})
 	}
 }
+
+func TestLatestThreadActivityFromCardsPrefersCanonicalRelatedThread(t *testing.T) {
+	t.Parallel()
+
+	relatedTS := time.Date(2026, 4, 7, 10, 0, 0, 0, time.UTC)
+	backingTS := time.Date(2026, 4, 7, 11, 0, 0, 0, time.UTC)
+
+	got := latestThreadActivityFromCards([]map[string]any{
+		{
+			"thread_id":    "card-thread",
+			"related_refs": []any{"topic:t1", "thread:topic-thread"},
+			"updated_at":   relatedTS.Format(time.RFC3339),
+		},
+		{
+			"thread_id":  "card-only-thread",
+			"updated_at": backingTS.Format(time.RFC3339),
+		},
+	})
+
+	if _, ok := got["card-thread"]; ok {
+		t.Fatalf("expected related thread to receive activity, got %#v", got)
+	}
+	if activity := got["topic-thread"]; !activity.Equal(relatedTS) {
+		t.Fatalf("expected topic-thread activity at %v, got %v", relatedTS, activity)
+	}
+	if activity := got["card-only-thread"]; !activity.Equal(backingTS) {
+		t.Fatalf("expected backing-thread fallback activity at %v, got %v", backingTS, activity)
+	}
+}

@@ -159,6 +159,20 @@ Creating a review MUST emit a `review_completed` event. Per reference convention
 
 Documents are a first-class canonical domain with their own API and storage. A document is a long-lived lineage, not just stored text: it has a mutable head pointer for the current version and an ordered immutable revision chain for institutional memory. Documents are distinct from the generic artifact model: artifacts are immutable blobs linked only by refs, while documents provide a canonical lineage interface over those immutable revision artifacts.
 
+**Canonical document vocabulary:** The durable contract for documents is the
+schema shape in `oar-schema.yaml`: `subject_ref`, `head_revision_ref`, `state`,
+and `refs` plus standard lifecycle/provenance fields. Runtime-facing details
+such as `thread_id`, `head_revision_number`, and similar backing-thread or
+summary fields may still appear in implementation and HTTP payloads as
+compatibility or convenience output, but they are not the canonical contract
+vocabulary for document identity or lineage. Canonical `document.state` is the
+document lifecycle field and uses `active`, `archived`, or `trashed`. When
+runtime compatibility fields still exist, derive `state` in this order:
+`trashed_at` present -> `trashed`, `archived_at` present -> `archived`,
+otherwise a legacy `status` value if one is still carried for compatibility,
+otherwise `active`. Legacy `status` is compatibility-only and is not the
+canonical lifecycle field.
+
 **Storage model:**
 - `documents` table: document metadata, head_revision_id, trash lifecycle fields (`trashed_at`, `trashed_by`, `trash_reason`).
 - `document_revisions` table: revision_id, document_id, revision_number, prev_revision_id, artifact_id, revision_hash.
@@ -281,7 +295,13 @@ oar-core MUST enforce these restrictions at the API level — reject the write i
 ### 8.3 Interpretive fields
 The following MAY be updated without receipts:
 - `topic.summary`
-- `topic.status`
+- `topic.status` in general, except the terminal `resolved` transition called
+  out below
+
+### 8.4 Evidence-backed topic resolution
+- `topic.status -> resolved` is the evidence-backed terminal case for topic
+  status and MUST be treated as a restricted transition even though other topic
+  status changes remain interpretive by default.
 
 These fields SHOULD include provenance indicating who updated them and on what basis.
 

@@ -123,7 +123,7 @@ func TestStalenessClearsAfterActorStatementAndDocumentActivity(t *testing.T) {
 
 	docCreateResp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
 		"actor_id":"actor-1",
-		"document":{"id":"stale-doc-1","thread_id":"`+threadID+`","title":"Runbook","status":"active","labels":["ops"]},
+		"document":{"id":"stale-doc-1","thread_id":"`+threadID+`","title":"Runbook","labels":["ops"]},
 		"refs":["topic:`+threadID+`"],
 		"content":"initial text",
 		"content_type":"text"

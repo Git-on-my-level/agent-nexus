@@ -2781,7 +2781,10 @@ components:
         title: { type: string }
         subject_ref: { $ref: '#/components/schemas/TypedRef' }
         head_revision_ref: { $ref: '#/components/schemas/TypedRef' }
-        state: { type: string }
+        state:
+          type: string
+          enum: [active, archived, trashed]
+          description: Canonical document lifecycle state.
         refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }

@@ -10,7 +10,7 @@ import (
 )
 
 // addBoardCardMerged is the normalized board card create request after merging the
-// contract `card` envelope with legacy top-level fields.
+// contract `card` envelope with the canonical top-level transport fields.
 type addBoardCardMerged struct {
 	ActorID          string
 	RequestKey       string
@@ -28,13 +28,42 @@ type addBoardCardMerged struct {
 	DueAt            *string
 	DefinitionOfDone []string
 	Assignee         *string
-	Priority         *string
-	Status           string
 	PinnedDocumentID *string
 	Resolution       *string
 	ResolutionRefs   []string
 	Refs             []string
 	Risk             *string
+}
+
+func mixedBoardCardAliasError(canonicalField string, legacyFields ...string) string {
+	if len(legacyFields) == 0 {
+		return canonicalField + " must not be combined with legacy aliases"
+	}
+	return canonicalField + " must not be combined with legacy aliases " + strings.Join(legacyFields, ", ")
+}
+
+func firstPresentBoardCardValue(raw map[string]any, cardObj map[string]any, key string) any {
+	if cardObj != nil {
+		if v, ok := cardObj[key]; ok && v != nil {
+			if s, ok := v.(string); !ok || strings.TrimSpace(s) != "" || key == "summary" || key == "title" {
+				return v
+			}
+		}
+	}
+	if v, ok := raw[key]; ok {
+		return v
+	}
+	return nil
+}
+
+func hasBoardCardField(raw map[string]any, cardObj map[string]any, key string) bool {
+	if cardObj != nil {
+		if _, ok := cardObj[key]; ok {
+			return true
+		}
+	}
+	_, ok := raw[key]
+	return ok
 }
 
 func parseAddBoardCardJSON(w http.ResponseWriter, raw map[string]any) (addBoardCardMerged, bool) {
@@ -59,19 +88,47 @@ func parseAddBoardCardJSON(w http.ResponseWriter, raw map[string]any) (addBoardC
 		cardObj = c
 	}
 
-	pick := func(key string) any {
-		if cardObj != nil {
-			if v, ok := cardObj[key]; ok && v != nil {
-				if s := strings.TrimSpace(anyString(v)); s != "" || key == "summary" || key == "title" {
-					// allow explicit empty strings for title/summary where provided
-					return v
-				}
-			}
-		}
-		if v, ok := raw[key]; ok {
-			return v
-		}
-		return nil
+	pick := func(key string) any { return firstPresentBoardCardValue(raw, cardObj, key) }
+
+	if hasBoardCardField(raw, cardObj, "summary") && (hasBoardCardField(raw, cardObj, "body") || hasBoardCardField(raw, cardObj, "body_markdown")) {
+		writeError(w, http.StatusBadRequest, "invalid_request", mixedBoardCardAliasError("summary", "body", "body_markdown"))
+		return m, false
+	}
+	if hasBoardCardField(raw, cardObj, "body") {
+		writeError(w, http.StatusBadRequest, "invalid_request", "body is not supported; use summary")
+		return m, false
+	}
+	if hasBoardCardField(raw, cardObj, "body_markdown") {
+		writeError(w, http.StatusBadRequest, "invalid_request", "body_markdown is not supported; use summary")
+		return m, false
+	}
+	if hasBoardCardField(raw, cardObj, "assignee") {
+		writeError(w, http.StatusBadRequest, "invalid_request", "assignee is not supported; use assignee_refs")
+		return m, false
+	}
+	if hasBoardCardField(raw, cardObj, "document_ref") && hasBoardCardField(raw, cardObj, "pinned_document_id") {
+		writeError(w, http.StatusBadRequest, "invalid_request", mixedBoardCardAliasError("document_ref", "pinned_document_id"))
+		return m, false
+	}
+	if hasBoardCardField(raw, cardObj, "pinned_document_id") {
+		writeError(w, http.StatusBadRequest, "invalid_request", "pinned_document_id is not supported; use document_ref")
+		return m, false
+	}
+	if hasBoardCardField(raw, cardObj, "related_refs") && hasBoardCardField(raw, cardObj, "refs") {
+		writeError(w, http.StatusBadRequest, "invalid_request", mixedBoardCardAliasError("related_refs", "refs"))
+		return m, false
+	}
+	if hasBoardCardField(raw, cardObj, "refs") {
+		writeError(w, http.StatusBadRequest, "invalid_request", "refs is not supported; use related_refs and topic_ref")
+		return m, false
+	}
+	if hasBoardCardField(raw, cardObj, "priority") {
+		writeError(w, http.StatusBadRequest, "invalid_request", "priority is not supported in the canonical card model")
+		return m, false
+	}
+	if hasBoardCardField(raw, cardObj, "status") {
+		writeError(w, http.StatusBadRequest, "invalid_request", "status is not supported on card create; column_key and resolution define lifecycle")
+		return m, false
 	}
 
 	m.CardID = strings.TrimSpace(anyString(pick("card_id")))
@@ -81,9 +138,6 @@ func parseAddBoardCardJSON(w http.ResponseWriter, raw map[string]any) (addBoardC
 
 	m.Title = strings.TrimSpace(anyString(pick("title")))
 	m.Body = strings.TrimSpace(anyString(pick("summary")))
-	if m.Body == "" {
-		m.Body = strings.TrimSpace(anyString(pick("body")))
-	}
 
 	m.ParentThread = strings.TrimSpace(anyString(pick("parent_thread")))
 	m.ThreadID = strings.TrimSpace(anyString(pick("thread_id")))
@@ -121,15 +175,6 @@ func parseAddBoardCardJSON(w http.ResponseWriter, raw map[string]any) (addBoardC
 			empty := ""
 			m.Assignee = &empty
 		}
-	} else {
-		m.Assignee = normalizeOptionalRequestStringPointer(assigneeStringPtr(pick("assignee")))
-	}
-
-	m.Priority = normalizeOptionalRequestStringPointer(assigneeStringPtr(pick("priority")))
-	m.Status = strings.TrimSpace(anyString(pick("status")))
-
-	if v := pick("pinned_document_id"); v != nil {
-		m.PinnedDocumentID = normalizeOptionalRequestStringPointer(assigneeStringPtr(v))
 	}
 	if dr := strings.TrimSpace(anyString(pick("document_ref"))); dr != "" {
 		pid, err := pinnedDocumentIDFromTypedRef(dr)
@@ -164,14 +209,6 @@ func parseAddBoardCardJSON(w http.ResponseWriter, raw map[string]any) (addBoardC
 			return m, false
 		}
 		refs = append(refs, rr...)
-	}
-	if rawLR := pick("refs"); rawLR != nil {
-		lr, err := extractStringSlice(rawLR)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "refs must be a list of strings")
-			return m, false
-		}
-		refs = append(refs, lr...)
 	}
 	if tr := strings.TrimSpace(anyString(pick("topic_ref"))); tr != "" {
 		refs = append(refs, tr)
@@ -211,7 +248,6 @@ func parseAddBoardCardJSON(w http.ResponseWriter, raw map[string]any) (addBoardC
 		m.AfterCardID,
 		m.BeforeThreadID,
 		m.AfterThreadID,
-		m.Status,
 		m.PinnedDocumentID,
 	); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
@@ -253,6 +289,63 @@ func validateBoardCardCreateResolutionInput(resolution *string, resolutionRefs [
 		return errors.New("resolution_refs require resolution")
 	}
 	return nil
+}
+
+func rejectMixedBoardCardPatchAliases(w http.ResponseWriter, patch map[string]any) bool {
+	if patch == nil {
+		return false
+	}
+	if _, hasSummary := patch["summary"]; hasSummary {
+		if _, hasBody := patch["body"]; hasBody {
+			writeError(w, http.StatusBadRequest, "invalid_request", mixedBoardCardAliasError("patch.summary", "patch.body"))
+			return true
+		}
+		if _, hasBodyMarkdown := patch["body_markdown"]; hasBodyMarkdown {
+			writeError(w, http.StatusBadRequest, "invalid_request", mixedBoardCardAliasError("patch.summary", "patch.body_markdown"))
+			return true
+		}
+	}
+	if _, hasBody := patch["body"]; hasBody {
+		writeError(w, http.StatusBadRequest, "invalid_request", "patch.body is not supported; use patch.summary")
+		return true
+	}
+	if _, hasAssignee := patch["assignee"]; hasAssignee {
+		writeError(w, http.StatusBadRequest, "invalid_request", "patch.assignee is not supported; use patch.assignee_refs")
+		return true
+	}
+	if _, hasDocumentRef := patch["document_ref"]; hasDocumentRef {
+		if _, hasPinnedDocumentID := patch["pinned_document_id"]; hasPinnedDocumentID {
+			writeError(w, http.StatusBadRequest, "invalid_request", mixedBoardCardAliasError("patch.document_ref", "patch.pinned_document_id"))
+			return true
+		}
+	}
+	if _, hasPinnedDocumentID := patch["pinned_document_id"]; hasPinnedDocumentID {
+		writeError(w, http.StatusBadRequest, "invalid_request", "patch.pinned_document_id is not supported; use patch.document_ref")
+		return true
+	}
+	if _, hasRelatedRefs := patch["related_refs"]; hasRelatedRefs {
+		if _, hasRefs := patch["refs"]; hasRefs {
+			writeError(w, http.StatusBadRequest, "invalid_request", mixedBoardCardAliasError("patch.related_refs", "patch.refs"))
+			return true
+		}
+	}
+	if _, hasRefs := patch["refs"]; hasRefs {
+		writeError(w, http.StatusBadRequest, "invalid_request", "patch.refs is not supported; use patch.related_refs and patch.topic_ref")
+		return true
+	}
+	if _, hasPriority := patch["priority"]; hasPriority {
+		writeError(w, http.StatusBadRequest, "invalid_request", "patch.priority is not supported in the canonical card model")
+		return true
+	}
+	if _, hasStatus := patch["status"]; hasStatus {
+		writeError(w, http.StatusBadRequest, "invalid_request", "patch.status is not supported; use the move endpoint and patch.resolution")
+		return true
+	}
+	if _, hasBodyMarkdown := patch["body_markdown"]; hasBodyMarkdown {
+		writeError(w, http.StatusBadRequest, "invalid_request", "patch.body_markdown is not supported; use patch.summary")
+		return true
+	}
+	return false
 }
 
 func assigneeStringPtr(v any) *string {
@@ -317,7 +410,6 @@ func addBoardCardStoreInput(m addBoardCardMerged, createStatus string) primitive
 		DueAt:            m.DueAt,
 		DefinitionOfDone: m.DefinitionOfDone,
 		Assignee:         m.Assignee,
-		Priority:         m.Priority,
 		Status:           createStatus,
 		ThreadID:         m.ThreadID,
 		ColumnKey:        m.ColumnKey,

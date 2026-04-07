@@ -111,16 +111,16 @@ func TestDeriveWorkItemRiskInboxItemContractFields(t *testing.T) {
 	now := time.Date(2026, 4, 5, 12, 0, 0, 0, time.UTC)
 	horizon := 7 * 24 * time.Hour
 	card := map[string]any{
-		"id":                 "card-42",
-		"parent_thread":      "thr-board",
-		"board_id":           "brd-1",
-		"title":              "Ship fix",
-		"column_key":         "ready",
-		"due_at":             now.Add(24 * time.Hour).Format(time.RFC3339),
-		"updated_at":         now.Format(time.RFC3339),
-		"refs":               []any{"topic:top-77"},
-		"related_refs":       []any{"document:doc-2"},
-		"pinned_document_id": "doc-pin",
+		"id":           "card-42",
+		"thread_id":    "thr-card",
+		"board_id":     "brd-1",
+		"title":        "Ship fix",
+		"column_key":   "ready",
+		"due_at":       now.Add(24 * time.Hour).Format(time.RFC3339),
+		"updated_at":   now.Format(time.RFC3339),
+		"refs":         []any{"topic:top-77"},
+		"related_refs": []any{"document:doc-2", "thread:thr-board"},
+		"document_ref": "document:doc-pin",
 	}
 	item, ok := deriveWorkItemRiskInboxItem(card, now, horizon)
 	if !ok {
@@ -136,6 +136,9 @@ func TestDeriveWorkItemRiskInboxItemContractFields(t *testing.T) {
 	wantRR := []string{"board:brd-1", "document:doc-2", "document:doc-pin", "thread:thr-board", "topic:top-77"}
 	if !reflect.DeepEqual(rr, wantRR) {
 		t.Fatalf("related_refs: got %#v want %#v", rr, wantRR)
+	}
+	if got := item.Data["thread_id"]; got != "thr-board" {
+		t.Fatalf("thread_id: got %#v want thr-board", got)
 	}
 }
 

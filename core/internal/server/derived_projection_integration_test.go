@@ -86,7 +86,7 @@ func TestRefreshDerivedTopicProjectionBasicFlow(t *testing.T) {
 
 	postJSONExpectStatus(t, h.baseURL+"/docs", `{
 		"actor_id":"actor-1",
-		"document":{"id":"proj-doc-1","thread_id":"`+threadID+`","title":"Projection doc","status":"active","labels":["ops"]},
+		"document":{"id":"proj-doc-1","thread_id":"`+threadID+`","title":"Projection doc","labels":["ops"]},
 		"refs":["thread:`+threadID+`"],
 		"content":"initial text",
 		"content_type":"text"
@@ -191,7 +191,7 @@ func TestDocumentThreadRetargetRefreshesBothDerivedProjections(t *testing.T) {
 
 	createDocResp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
 		"actor_id":"actor-1",
-		"document":{"id":"projection-retarget-doc","thread_id":"`+fromThreadID+`","title":"Projection move doc","status":"active"},
+		"document":{"id":"projection-retarget-doc","thread_id":"`+fromThreadID+`","title":"Projection move doc"},
 		"refs":["thread:`+fromThreadID+`"],
 		"content":"initial text",
 		"content_type":"text"

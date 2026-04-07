@@ -210,10 +210,6 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 	if err != nil {
 		return nil, nil, err
 	}
-	status, err := optionalStringField(document, "status")
-	if err != nil {
-		return nil, nil, err
-	}
 	labels, err := optionalStringListField(document, "labels")
 	if err != nil {
 		return nil, nil, invalidDocumentRequestError(err)
@@ -221,6 +217,12 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 	supersedes, err := optionalStringListField(document, "supersedes")
 	if err != nil {
 		return nil, nil, invalidDocumentRequestError(err)
+	}
+	if _, exists := document["status"]; exists {
+		return nil, nil, invalidDocumentRequest("document.status is not writable; canonical lifecycle uses document.state and lifecycle endpoints")
+	}
+	if _, exists := document["state"]; exists {
+		return nil, nil, invalidDocumentRequest("document.state is not writable on create; new documents start active")
 	}
 
 	encodedContent, err := encodeContent(content)
@@ -360,7 +362,7 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		nullableString(threadID),
 		nullableString(title),
 		nullableString(slug),
-		nullableString(status),
+		nil,
 		string(labelsJSON),
 		string(supersedesJSON),
 		string(docRefsJSON),
@@ -448,7 +450,7 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		ThreadID:        nullableString(threadID),
 		Title:           nullableString(title),
 		Slug:            nullableString(slug),
-		Status:          nullableString(status),
+		Status:          sql.NullString{},
 		LabelsJSON:      string(labelsJSON),
 		SupersedesJSON:  string(supersedesJSON),
 		RefsJSON:        string(docRefsJSON),
@@ -461,7 +463,7 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		UpdatedBy:       actorID,
 	}.toMap()
 
-	revisionMap := map[string]any{
+	revisionMap := applyDocumentRevisionAliases(map[string]any{
 		"document_id":      documentID,
 		"revision_id":      revisionID,
 		"artifact_id":      artifactID,
@@ -475,7 +477,7 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		"content_hash":     contentHash,
 		"revision_hash":    revisionHash,
 		"artifact":         artifactMetadata,
-	}
+	})
 	setDocumentContentValue(revisionMap, encodedContent, contentType)
 	return docMap, revisionMap, nil
 }
@@ -533,7 +535,6 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 	nextThreadID := nullStringValue(doc.ThreadID)
 	nextTitle := nullStringValue(doc.Title)
 	nextSlug := nullStringValue(doc.Slug)
-	nextStatus := nullStringValue(doc.Status)
 	nextLabels := decodeJSONListOrEmpty(doc.LabelsJSON)
 	nextSupersedes := decodeJSONListOrEmpty(doc.SupersedesJSON)
 	nextDocRefs := decodeJSONListOrEmpty(doc.RefsJSON)
@@ -562,8 +563,11 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		if value, exists := documentPatch["slug"]; exists {
 			nextSlug = strings.TrimSpace(anyStringValue(value))
 		}
-		if value, exists := documentPatch["status"]; exists {
-			nextStatus = strings.TrimSpace(anyStringValue(value))
+		if _, exists := documentPatch["status"]; exists {
+			return nil, nil, invalidDocumentRequest("document.status is not writable; canonical lifecycle uses document.state and lifecycle endpoints")
+		}
+		if _, exists := documentPatch["state"]; exists {
+			return nil, nil, invalidDocumentRequest("document.state is not writable in revision updates; use archive/trash/restore lifecycle endpoints")
 		}
 		if value, exists := documentPatch["labels"]; exists {
 			parsed, parseErr := normalizeStringSlice(value)
@@ -782,7 +786,7 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		nullableString(nextThreadID),
 		nullableString(nextTitle),
 		nullableString(nextSlug),
-		nullableString(nextStatus),
+		nil,
 		string(labelsJSON),
 		string(supersedesJSON),
 		string(docResourceRefsJSON),
@@ -838,7 +842,7 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		ThreadID:        nullableString(nextThreadID),
 		Title:           nullableString(nextTitle),
 		Slug:            nullableString(nextSlug),
-		Status:          nullableString(nextStatus),
+		Status:          sql.NullString{},
 		LabelsJSON:      string(labelsJSON),
 		SupersedesJSON:  string(supersedesJSON),
 		RefsJSON:        string(docResourceRefsJSON),
@@ -851,7 +855,7 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		UpdatedBy:       actorID,
 	}.toMap()
 
-	revisionMap := map[string]any{
+	revisionMap := applyDocumentRevisionAliases(map[string]any{
 		"document_id":      documentID,
 		"revision_id":      revisionID,
 		"artifact_id":      artifactID,
@@ -865,7 +869,7 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		"content_hash":     contentHash,
 		"revision_hash":    revisionHash,
 		"artifact":         artifactMetadata,
-	}
+	})
 	setDocumentContentValue(revisionMap, encodedContent, contentType)
 	if revisionProvenance != nil {
 		revisionMap["provenance"] = cloneProvenance(revisionProvenance)
@@ -1338,8 +1342,10 @@ func (s *Store) loadDocumentRevision(ctx context.Context, documentID string, rev
 
 	revision := map[string]any{
 		"document_id":     outDocumentID,
+		"document_ref":    "document:" + outDocumentID,
 		"revision_id":     outRevisionID,
 		"artifact_id":     artifactID,
+		"artifact_ref":    "artifact:" + artifactID,
 		"revision_number": revisionNumber,
 		"refs":            refs,
 		"created_at":      createdAt,
@@ -1353,9 +1359,13 @@ func (s *Store) loadDocumentRevision(ctx context.Context, documentID string, rev
 	}
 	if prevRevisionID.Valid && strings.TrimSpace(prevRevisionID.String) != "" {
 		revision["prev_revision_id"] = prevRevisionID.String
+		revision["prev_revision_ref"] = "document_revision:" + strings.TrimSpace(prevRevisionID.String)
 	}
 	if threadID.Valid && strings.TrimSpace(threadID.String) != "" {
 		revision["thread_id"] = threadID.String
+	}
+	if summary := strings.TrimSpace(anyStringValue(artifact["summary"])); summary != "" {
+		revision["summary"] = summary
 	}
 	if raw, ok := artifact["provenance"]; ok {
 		revision["provenance"] = cloneProvenance(raw)
@@ -1379,16 +1389,22 @@ func (s *Store) loadDocumentRevision(ctx context.Context, documentID string, rev
 }
 
 func (r documentRow) toMap() map[string]any {
+	state := canonicalDocumentState(r.ArchivedAt, r.TrashedAt)
 	out := map[string]any{
 		"id":                   r.ID,
+		"state":                state,
 		"labels":               decodeJSONListOrEmpty(r.LabelsJSON),
 		"supersedes":           decodeJSONListOrEmpty(r.SupersedesJSON),
 		"head_revision_id":     r.HeadRevisionID,
+		"head_revision_ref":    "document_revision:" + r.HeadRevisionID,
 		"head_revision_number": r.HeadRevisionNum,
 		"created_at":           r.CreatedAt,
 		"created_by":           r.CreatedBy,
 		"updated_at":           r.UpdatedAt,
 		"updated_by":           r.UpdatedBy,
+	}
+	if subjectRef := canonicalDocumentSubjectRef(nullStringValue(r.ThreadID)); subjectRef != "" {
+		out["subject_ref"] = subjectRef
 	}
 	headRevision := map[string]any{
 		"revision_id":     r.HeadRevisionID,
@@ -1415,9 +1431,6 @@ func (r documentRow) toMap() map[string]any {
 	}
 	if r.Slug.Valid && strings.TrimSpace(r.Slug.String) != "" {
 		out["slug"] = r.Slug.String
-	}
-	if r.Status.Valid && strings.TrimSpace(r.Status.String) != "" {
-		out["status"] = r.Status.String
 	}
 	out["refs"] = decodeJSONListOrEmpty(r.RefsJSON)
 	provenance := map[string]any{}
@@ -1446,6 +1459,47 @@ func (r documentRow) toMap() map[string]any {
 		out["archived_by"] = r.ArchivedBy.String
 	}
 	return out
+}
+
+func canonicalDocumentState(archivedAt, trashedAt sql.NullString) string {
+	if trashedAt.Valid && strings.TrimSpace(trashedAt.String) != "" {
+		return "trashed"
+	}
+	if archivedAt.Valid && strings.TrimSpace(archivedAt.String) != "" {
+		return "archived"
+	}
+	return "active"
+}
+
+func canonicalDocumentSubjectRef(threadID string) string {
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		return ""
+	}
+	return "thread:" + threadID
+}
+
+func applyDocumentRevisionAliases(revision map[string]any) map[string]any {
+	if revision == nil {
+		return nil
+	}
+	if documentID := strings.TrimSpace(anyStringValue(revision["document_id"])); documentID != "" {
+		revision["document_ref"] = "document:" + documentID
+	}
+	if artifactID := strings.TrimSpace(anyStringValue(revision["artifact_id"])); artifactID != "" {
+		revision["artifact_ref"] = "artifact:" + artifactID
+	}
+	if prevRevisionID := strings.TrimSpace(anyStringValue(revision["prev_revision_id"])); prevRevisionID != "" {
+		revision["prev_revision_ref"] = "document_revision:" + prevRevisionID
+	}
+	if summary := strings.TrimSpace(anyStringValue(revision["summary"])); summary != "" {
+		revision["summary"] = summary
+	} else if artifact, _ := revision["artifact"].(map[string]any); artifact != nil {
+		if summary := strings.TrimSpace(anyStringValue(artifact["summary"])); summary != "" {
+			revision["summary"] = summary
+		}
+	}
+	return revision
 }
 
 func buildDocumentLifecycleEvent(eventType, threadID, documentID, revisionID, artifactID string, revisionNumber int, title string, extraPayload map[string]any) map[string]any {
@@ -1564,19 +1618,18 @@ func ensureDocumentBackingThreadTx(ctx context.Context, tx *sql.Tx, actorID, doc
 		return "", invalidDocumentRequest(fmt.Sprintf("document.thread_id %q is already bound to %q", threadID, existingSubjectRef))
 	}
 
-	delete(threadBody, "id")
-	delete(threadBody, "updated_at")
-	delete(threadBody, "updated_by")
 	provenance := cloneProvenance(threadBody["provenance"])
-	delete(threadBody, "provenance")
 	if len(provenance) == 0 {
 		provenance = map[string]any{"sources": []string{"inferred"}}
 	}
-
-	threadBody["subject_ref"] = subjectRef
-	if strings.TrimSpace(anyStringValue(threadBody["title"])) == "" || existingSubjectRef == subjectRef {
-		threadBody["title"] = documentBackingThreadTitle(documentID, title)
+	existingBody := cloneMap(threadBody)
+	threadBody = buildDocumentBackingThreadBody(documentID, threadID, title)
+	for _, key := range []string{"current_summary", "key_artifacts", "tags", "cadence", "next_check_in_at", "status", "priority"} {
+		if value, exists := existingBody[key]; exists && value != nil {
+			threadBody[key] = value
+		}
 	}
+	threadBody["provenance"] = provenance
 
 	bodyJSON, err := json.Marshal(threadBody)
 	if err != nil {
@@ -1687,7 +1740,6 @@ func buildDocumentBackingThreadBody(documentID, threadID, title string) map[stri
 		"status":      "active",
 		"priority":    "p2",
 		"tags":        []string{},
-		"open_cards":  []string{},
 		"provenance":  map[string]any{"sources": []string{"inferred"}},
 	}
 }

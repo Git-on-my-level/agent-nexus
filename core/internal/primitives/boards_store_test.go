@@ -257,8 +257,17 @@ func TestBoardStoreCardOrderingAndMutations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("update board card: %v", err)
 	}
-	if updatedCard.Card["pinned_document_id"] != pinnedDocumentID {
-		t.Fatalf("expected pinned document to be set, got %#v", updatedCard.Card["pinned_document_id"])
+	if updatedCard.Card["document_ref"] != "document:"+pinnedDocumentID {
+		t.Fatalf("expected canonical document_ref to be set, got %#v", updatedCard.Card["document_ref"])
+	}
+	if _, ok := updatedCard.Card["body_markdown"]; ok {
+		t.Fatalf("expected card map to omit body_markdown alias, got %#v", updatedCard.Card)
+	}
+	if _, ok := updatedCard.Card["assignee"]; ok {
+		t.Fatalf("expected card map to omit assignee alias, got %#v", updatedCard.Card)
+	}
+	if _, ok := updatedCard.Card["priority"]; ok {
+		t.Fatalf("expected card map to omit priority alias, got %#v", updatedCard.Card)
 	}
 	if updatedCard.Board["updated_by"] != "actor-5" {
 		t.Fatalf("expected board updated_by actor-5 after card update, got %#v", updatedCard.Board["updated_by"])

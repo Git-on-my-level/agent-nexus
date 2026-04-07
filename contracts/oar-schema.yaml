@@ -247,13 +247,32 @@ resources:
       provenance: { type: object, required: true, ref: provenance }
 
   document:
-    description: Canonical mutable document lineage anchored to a typed subject ref.
+    description: >
+      Canonical mutable document lineage anchored to a typed subject ref.
+      Runtime or HTTP compatibility fields such as backing thread ids, slug-like
+      metadata, or head-revision summary helpers are not part of the canonical
+      lineage vocabulary; the contract surface here is `subject_ref`,
+      `head_revision_ref`, `state`, and `refs`. Canonical `state` is the
+      document lifecycle field and uses the values `active`, `archived`, or
+      `trashed`. When compatibility-era runtime fields still exist, `state`
+      derives in this order: `trashed_at` present -> `trashed`,
+      `archived_at` present -> `archived`, otherwise a legacy `status` value if
+      one is still carried for compatibility, otherwise `active`. Legacy
+      `status` is compatibility-only and MUST NOT be treated as the canonical
+      document lifecycle field.
     fields:
       id: { type: string, required: true }
       title: { type: string, required: true }
       subject_ref: { type: typed_ref, required: true }
       head_revision_ref: { type: typed_ref, required: true }
-      state: { type: string, required: true }
+      state:
+        type: string
+        required: true
+        description: >
+          Canonical document lifecycle state. Values are `active`, `archived`,
+          or `trashed`. If runtime compatibility fields are present, derive in
+          this order: `trashed_at`, then `archived_at`, then legacy `status`,
+          else `active`.
       refs: { type: "list<typed_ref>", required: true }
       created_at: { type: datetime, required: true }
       created_by: { type: string, required: true }
@@ -262,7 +281,11 @@ resources:
       provenance: { type: object, required: true, ref: provenance }
 
   document_revision:
-    description: Immutable append-only revision in a document lineage.
+    description: >
+      Immutable append-only revision in a document lineage. Revision lineage is
+      expressed canonically through typed refs (`document_ref`,
+      `prev_revision_ref`, `artifact_ref`) even when runtime/storage layers also
+      expose convenience fields such as revision numbers.
     fields:
       revision_id: { type: string, required: true }
       document_ref: { type: typed_ref, required: true }
@@ -514,7 +537,11 @@ lifecycle_rules:
 
 grounding_rules:
   restricted_fields:
-    description: Evidence-backed mutations require explicit provenance and refs.
+    description: >
+      Evidence-backed mutations require explicit provenance and refs. For topic
+      status, the restricted case is the terminal `resolved` transition; other
+      topic status changes remain interpretive by default unless the contract
+      later states otherwise.
     fields:
       - "card.resolution -> done"
       - "card.resolution -> canceled"

@@ -278,6 +278,84 @@ func TestInboxAcknowledgmentResolvesTopicSubjectRefToBackingThread(t *testing.T)
 	}
 }
 
+func TestInboxAcknowledgmentResolvesCardSubjectRefViaCardRelatedThread(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	memberThreadID := createBoardThreadViaHTTP(t, h, "Card member thread")
+
+	createBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
+		"actor_id":"actor-1",
+		"board":{
+			"title":"Card ack board",
+			"refs":[]
+		}
+	}`, http.StatusCreated)
+	defer createBoardResp.Body.Close()
+
+	var createdBoard struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(createBoardResp.Body).Decode(&createdBoard); err != nil {
+		t.Fatalf("decode board response: %v", err)
+	}
+	boardID := asString(createdBoard.Board["id"])
+	boardUpdatedAt := asString(createdBoard.Board["updated_at"])
+	if boardID == "" || boardUpdatedAt == "" {
+		t.Fatalf("expected board id and updated_at, got %#v", createdBoard.Board)
+	}
+
+	dueSoon := time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339)
+	cardResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+boardUpdatedAt+`",
+		"title":"Ack card by subject_ref",
+		"related_refs":["thread:`+memberThreadID+`"],
+		"column_key":"ready",
+		"due_at":"`+dueSoon+`"
+	}`, http.StatusCreated)
+	defer cardResp.Body.Close()
+
+	var createdCard struct {
+		Card map[string]any `json:"card"`
+	}
+	if err := json.NewDecoder(cardResp.Body).Decode(&createdCard); err != nil {
+		t.Fatalf("decode card response: %v", err)
+	}
+	cardID := asString(createdCard.Card["id"])
+	if cardID == "" {
+		t.Fatal("expected card id")
+	}
+
+	items := getInboxItems(t, h.baseURL)
+	riskItem, ok := findInboxItem(items, func(item map[string]any) bool {
+		return asString(item["category"]) == "work_item_risk" && asString(item["card_id"]) == cardID
+	})
+	if !ok {
+		t.Fatalf("expected work_item_risk inbox item, got %#v", items)
+	}
+	inboxItemID := asString(riskItem["id"])
+
+	ackResp := postJSONExpectStatus(t, h.baseURL+"/inbox/ack", `{
+		"actor_id":"actor-1",
+		"subject_ref":"card:`+cardID+`",
+		"inbox_item_id":"`+inboxItemID+`"
+	}`, http.StatusCreated)
+	defer ackResp.Body.Close()
+
+	var acked struct {
+		Event map[string]any `json:"event"`
+	}
+	if err := json.NewDecoder(ackResp.Body).Decode(&acked); err != nil {
+		t.Fatalf("decode ack response: %v", err)
+	}
+	if got := asString(acked.Event["thread_id"]); got != memberThreadID {
+		t.Fatalf("expected ack event thread_id=%q from card related thread, got %q", memberThreadID, got)
+	}
+}
+
 func TestLegacyRiskReviewAckStillSuppressesWorkItemRiskAfterRebuild(t *testing.T) {
 	t.Parallel()
 

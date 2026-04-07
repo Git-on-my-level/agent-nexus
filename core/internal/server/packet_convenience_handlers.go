@@ -258,7 +258,7 @@ func resolveSubjectRefThreadID(ctx context.Context, opts handlerOptions, subject
 			}
 			return "", err
 		}
-		threadID := strings.TrimSpace(anyString(document["thread_id"]))
+		threadID := documentBackingThreadID(document)
 		if threadID == "" {
 			return "", invalidPacketSubjectRef(subjectRef)
 		}

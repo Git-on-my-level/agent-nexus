@@ -97,7 +97,10 @@ func latestThreadActivityFromEvents(events []map[string]any) map[string]time.Tim
 func latestThreadActivityFromCards(cards []map[string]any) map[string]time.Time {
 	out := make(map[string]time.Time)
 	for _, card := range cards {
-		threadID := strings.TrimSpace(firstNonEmptyString(card["parent_thread"], card["thread_id"]))
+		threadID := strings.TrimSpace(primaryRelatedThreadID(card))
+		if threadID == "" {
+			threadID = strings.TrimSpace(anyString(card["thread_id"]))
+		}
 		if threadID == "" {
 			continue
 		}

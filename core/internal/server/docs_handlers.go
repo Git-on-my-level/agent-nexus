@@ -181,7 +181,7 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to create document")
 		return
 	}
-	enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{anyString(document["thread_id"])}, time.Now().UTC())
+	enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{documentBackingThreadID(document)}, time.Now().UTC())
 
 	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "docs.create", actorID, req.RequestKey, req, http.StatusCreated, map[string]any{
 		"document": document,
@@ -414,7 +414,7 @@ func handleUpdateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load document")
 		return
 	}
-	previousThreadID := anyString(previousDocument["thread_id"])
+	previousThreadID := documentBackingThreadID(previousDocument)
 
 	document, revision, err := opts.primitiveStore.UpdateDocument(
 		r.Context(),
@@ -444,8 +444,8 @@ func handleUpdateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 	}
 	refreshNow := time.Now().UTC()
 	threadIDsToRefresh := map[string]struct{}{
-		previousThreadID:                 {},
-		anyString(document["thread_id"]): {},
+		previousThreadID:                  {},
+		documentBackingThreadID(document): {},
 	}
 	threadIDs := make([]string, 0, len(threadIDsToRefresh))
 	for threadID := range threadIDsToRefresh {
@@ -552,6 +552,21 @@ func firstNonEmptyString(values ...any) string {
 	return ""
 }
 
+func documentBackingThreadID(document map[string]any) string {
+	if threadID := strings.TrimSpace(anyString(document["thread_id"])); threadID != "" {
+		return threadID
+	}
+	subjectRef := strings.TrimSpace(anyString(document["subject_ref"]))
+	if subjectRef == "" {
+		return ""
+	}
+	prefix, id, err := schema.SplitTypedRef(subjectRef)
+	if err != nil || prefix != "thread" {
+		return ""
+	}
+	return strings.TrimSpace(id)
+}
+
 func handleTrashDocument(w http.ResponseWriter, r *http.Request, opts handlerOptions, documentID string) {
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
@@ -588,7 +603,7 @@ func handleTrashDocument(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to trash document")
 		return
 	}
-	enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{anyString(document["thread_id"])}, time.Now().UTC())
+	enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{documentBackingThreadID(document)}, time.Now().UTC())
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"document": document,
@@ -635,7 +650,7 @@ func handleArchiveDocument(w http.ResponseWriter, r *http.Request, opts handlerO
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to archive document")
 		return
 	}
-	enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{anyString(document["thread_id"])}, time.Now().UTC())
+	enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{documentBackingThreadID(document)}, time.Now().UTC())
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"document": document,
@@ -682,7 +697,7 @@ func handleUnarchiveDocument(w http.ResponseWriter, r *http.Request, opts handle
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to unarchive document")
 		return
 	}
-	enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{anyString(document["thread_id"])}, time.Now().UTC())
+	enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{documentBackingThreadID(document)}, time.Now().UTC())
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"document": document,
@@ -730,7 +745,7 @@ func handleRestoreDocument(w http.ResponseWriter, r *http.Request, opts handlerO
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to restore document")
 		return
 	}
-	enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{anyString(document["thread_id"])}, time.Now().UTC())
+	enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{documentBackingThreadID(document)}, time.Now().UTC())
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"document": document,

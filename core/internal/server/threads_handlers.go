@@ -317,15 +317,77 @@ func handleThreadContext(w http.ResponseWriter, r *http.Request, opts handlerOpt
 
 func buildThreadContextArtifacts(ctx context.Context, opts handlerOptions, thread map[string]any, includeArtifactContent bool) ([]map[string]any, error) {
 	rawRefs, exists := thread["key_artifacts"]
-	if !exists || rawRefs == nil {
-		return []map[string]any{}, nil
-	}
-	refs, err := extractStringSlice(rawRefs)
-	if err != nil {
-		return nil, fmt.Errorf("thread.key_artifacts: %w", err)
+	refs := []string{}
+	if exists && rawRefs != nil {
+		parsed, err := extractStringSlice(rawRefs)
+		if err != nil {
+			return nil, fmt.Errorf("thread.key_artifacts: %w", err)
+		}
+		refs = parsed
 	}
 	if len(refs) == 0 {
-		return []map[string]any{}, nil
+		threadID := strings.TrimSpace(anyString(thread["id"]))
+		subjectRef := strings.TrimSpace(anyString(thread["subject_ref"]))
+		candidates := make([][2]string, 0, 2)
+		if threadID != "" {
+			candidates = append(candidates, [2]string{"thread", threadID})
+			candidates = append(candidates, [2]string{"topic", threadID})
+		}
+		if subjectRef != "" {
+			if prefix, id, err := schema.SplitTypedRef(subjectRef); err == nil && strings.TrimSpace(id) != "" {
+				candidates = append(candidates, [2]string{prefix, id})
+			}
+		}
+		if len(candidates) == 0 {
+			return []map[string]any{}, nil
+		}
+		seenArtifactIDs := map[string]struct{}{}
+		out := make([]map[string]any, 0)
+		for _, candidate := range candidates {
+			edges, err := opts.primitiveStore.ListRefEdgesByTarget(ctx, candidate[0], candidate[1])
+			if err != nil {
+				return nil, err
+			}
+			for _, edge := range edges {
+				if edge.SourceType != "artifact" || edge.EdgeType != "ref" {
+					continue
+				}
+				artifactID := strings.TrimSpace(edge.SourceID)
+				if artifactID == "" {
+					continue
+				}
+				if _, exists := seenArtifactIDs[artifactID]; exists {
+					continue
+				}
+				artifact, err := opts.primitiveStore.GetArtifact(ctx, artifactID)
+				if err != nil {
+					if errors.Is(err, primitives.ErrNotFound) {
+						continue
+					}
+					return nil, err
+				}
+				if strings.TrimSpace(anyString(artifact["document_id"])) != "" || strings.TrimSpace(anyString(artifact["revision_id"])) != "" {
+					continue
+				}
+				seenArtifactIDs[artifactID] = struct{}{}
+				item := map[string]any{
+					"ref":      "artifact:" + artifactID,
+					"artifact": artifact,
+				}
+				if includeArtifactContent {
+					content, _, err := opts.primitiveStore.GetArtifactContent(ctx, artifactID)
+					if err != nil {
+						if !errors.Is(err, primitives.ErrNotFound) {
+							return nil, err
+						}
+					} else if preview := artifactContentPreview(content); preview != "" {
+						item["content_preview"] = preview
+					}
+				}
+				out = append(out, item)
+			}
+		}
+		return out, nil
 	}
 
 	artifacts := make([]map[string]any, 0, len(refs))

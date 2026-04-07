@@ -7,10 +7,7 @@ import (
 	"organization-autorunner-core/internal/schema"
 )
 
-// publicCardView maps a store-backed card record to the contract-first JSON shape
-// returned by HTTP handlers. Internal-only keys (legacy aliases, duplicate bodies,
-// scalar assignee, legacy status, board_id) are omitted.
-func publicCardView(card map[string]any) map[string]any {
+func canonicalCardView(card map[string]any) map[string]any {
 	if card == nil {
 		return nil
 	}
@@ -18,12 +15,7 @@ func publicCardView(card map[string]any) map[string]any {
 
 	out["id"] = card["id"]
 	out["title"] = card["title"]
-
-	summary := strings.TrimSpace(anyString(card["summary"]))
-	if summary == "" {
-		summary = strings.TrimSpace(anyString(card["body"]))
-	}
-	out["summary"] = summary
+	out["summary"] = strings.TrimSpace(anyString(card["summary"]))
 
 	boardRef := strings.TrimSpace(anyString(card["board_ref"]))
 	if boardRef == "" {
@@ -50,7 +42,7 @@ func publicCardView(card map[string]any) map[string]any {
 	out["column_key"] = card["column_key"]
 	out["rank"] = card["rank"]
 
-	out["assignee_refs"] = publicAssigneeRefs(card)
+	out["assignee_refs"] = cardAssigneeRefsAny(card)
 
 	if v, ok := card["due_at"]; ok {
 		if s := strings.TrimSpace(anyString(v)); s != "" {
@@ -74,7 +66,7 @@ func publicCardView(card map[string]any) map[string]any {
 	}
 
 	out["resolution_refs"] = stringSliceAsAnyList(card["resolution_refs"])
-	out["related_refs"] = mergeRelatedRefsForPublicView(card)
+	out["related_refs"] = typedRefStringsToAnyList(cardRelatedRefs(card))
 
 	out["created_at"] = card["created_at"]
 	out["created_by"] = card["created_by"]
@@ -108,6 +100,13 @@ func publicCardView(card map[string]any) map[string]any {
 		}
 	}
 	return out
+}
+
+// publicCardView maps a store-backed card record to the contract-first JSON shape
+// returned by HTTP handlers. Internal-only keys (legacy aliases, duplicate bodies,
+// scalar assignee, legacy status, board_id) are omitted.
+func publicCardView(card map[string]any) map[string]any {
+	return canonicalCardView(card)
 }
 
 func normalizeBoardCardMutationReplayPayload(payload map[string]any) map[string]any {
@@ -169,13 +168,7 @@ func publicCardHistoryList(raw any) any {
 }
 
 func documentRefForPublicCard(card map[string]any) string {
-	if dr := strings.TrimSpace(anyString(card["document_ref"])); dr != "" {
-		return dr
-	}
-	if pid := strings.TrimSpace(anyString(card["pinned_document_id"])); pid != "" {
-		return "document:" + pid
-	}
-	return ""
+	return strings.TrimSpace(anyString(card["document_ref"]))
 }
 
 func pinnedDocumentIDFromCard(card map[string]any) string {
@@ -193,22 +186,33 @@ func pinnedDocumentIDFromCard(card map[string]any) string {
 	return id
 }
 
-func mergeRelatedRefsForPublicView(card map[string]any) []any {
-	refs := stringSliceAsAnyList(card["refs"])
-	parent := strings.TrimSpace(anyString(card["parent_thread"]))
-	if parent == "" {
-		return refs
+func cardRelatedRefs(card map[string]any) []string {
+	if refs, err := extractStringSlice(card["related_refs"]); err == nil {
+		return uniqueSortedStrings(refs)
 	}
-	want := "thread:" + parent
-	for _, r := range refs {
-		if strings.TrimSpace(anyString(r)) == want {
-			return refs
+	return []string{}
+}
+
+func mergeRelatedRefsForPublicView(card map[string]any) []any {
+	return typedRefStringsToAnyList(cardRelatedRefs(card))
+}
+
+func primaryRelatedThreadID(card map[string]any) string {
+	cardThreadID := strings.TrimSpace(anyString(card["thread_id"]))
+	firstThreadID := ""
+	for _, ref := range cardRelatedRefs(card) {
+		prefix, id, err := schema.SplitTypedRef(ref)
+		if err != nil || prefix != "thread" {
+			continue
+		}
+		if firstThreadID == "" && id != "" {
+			firstThreadID = id
+		}
+		if id != "" && id != cardThreadID {
+			return id
 		}
 	}
-	out := make([]any, 0, len(refs)+1)
-	out = append(out, want)
-	out = append(out, refs...)
-	return out
+	return firstThreadID
 }
 
 func topicRefFromCardRefs(card map[string]any) string {
@@ -226,21 +230,29 @@ func topicRefFromCardRefs(card map[string]any) string {
 	return ""
 }
 
-func publicAssigneeRefs(card map[string]any) []any {
+func cardAssigneeRefs(card map[string]any) []string {
 	if raw := card["assignee_refs"]; raw != nil {
 		if refs, err := extractStringSlice(raw); err == nil && len(refs) > 0 {
-			out := make([]any, len(refs))
+			out := make([]string, len(refs))
 			for i, r := range refs {
 				out[i] = normalizeAssigneeTypedRef(r)
 			}
 			return out
 		}
 	}
-	a := strings.TrimSpace(anyString(card["assignee"]))
-	if a == "" {
-		return []any{}
+	return []string{}
+}
+
+func cardAssigneeRefsAny(card map[string]any) []any {
+	return typedRefStringsToAnyList(cardAssigneeRefs(card))
+}
+
+func canonicalAssigneeStorageString(card map[string]any) string {
+	refs := cardAssigneeRefs(card)
+	if value := assigneeStorageStringFromRefs(refs); value != nil {
+		return strings.TrimSpace(*value)
 	}
-	return []any{normalizeAssigneeTypedRef(a)}
+	return ""
 }
 
 func normalizeAssigneeTypedRef(raw string) string {

@@ -297,8 +297,11 @@ Backing threads hold append-only timelines and anchor many packet subjects. They
   - Body: `{ "actor_id": "...", "request_key"?: "...", "document": { id?, thread_id?, title?, slug?, status?, labels?, supersedes? }, "refs"?: ["typed:ref"...], "content": <string|object|base64>, "content_type": "text|structured|binary" }`
   - Response: `{ "document": <document>, "revision": <document_revision_with_content> }`
   - Notes:
+    - The canonical document lineage contract is the schema vocabulary in `oar-schema.yaml`: `subject_ref`, `head_revision_ref`, `state`, and `refs`.
+    - Canonical `document.state` uses `active`, `archived`, or `trashed`. If compatibility lifecycle fields are also present in runtime storage/output, derive `state` in this order: `trashed_at`, then `archived_at`, then legacy `status`, else `active`.
     - Every document has a backing `thread_id`. If the caller omits `document.thread_id`, core creates one and returns it on the stored document.
     - Core sets the backing thread `subject_ref` to `document:<document_id>`.
+    - Fields such as `thread_id`, `slug`, legacy `status`, `labels`, `supersedes`, and `head_revision_number` remain implementation/compatibility details of the current HTTP/runtime shape rather than the canonical lineage vocabulary. In particular, legacy `status` is compatibility-only and is not the canonical document lifecycle field.
     - Non-lineage links belong in `refs`; revision lineage remains explicit via `prev_revision_id`.
   - Side effect: appends `document_created` to `events` on the document backing thread with thread/document/revision/artifact refs.
 
@@ -307,7 +310,7 @@ Backing threads hold append-only timelines and anchor many packet subjects. They
   - Response: `{ "documents": [<document>...], "next_cursor"?: "..." }`
   - Notes:
     - `thread_id` scopes the list to documents whose current `document.thread_id` matches the thread.
-    - Each listed document includes `head_revision` summary metadata (`revision_id`, `revision_number`, `artifact_id`, `content_type`, `created_at`, `created_by`) alongside the existing top-level head revision fields.
+    - Each listed document includes `head_revision` summary metadata (`revision_id`, `revision_number`, `artifact_id`, `content_type`, `created_at`, `created_by`) as convenience output alongside the existing top-level head revision fields. `head_revision` is a summary shape, not a second canonical lineage contract.
 
 - `GET /docs/{document_id}`
   - Response: `{ "document": <document>, "revision": <document_revision_with_content> }`
@@ -315,6 +318,8 @@ Backing threads hold append-only timelines and anchor many packet subjects. They
 - `PATCH /docs/{document_id}`
   - Body: `{ "actor_id": "...", "document"?: { title?, thread_id?, slug?, status?, labels?, supersedes? }, "if_base_revision": "<revision_id>", "refs"?: ["typed:ref"...], "content": <string|object|base64>, "content_type": "text|structured|binary" }`
   - Response: `{ "document": <document>, "revision": <document_revision_with_content> }`
+  - Notes:
+    - `document.status` in the patch body is a compatibility-era input when present; the canonical lifecycle field on stored/read document resources is `state`.
   - Side effect: appends `document_revised` to `events` on the current backing thread with thread/document/revision/artifact refs.
 
 - `GET /docs/{document_id}/history`

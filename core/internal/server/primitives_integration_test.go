@@ -453,9 +453,27 @@ func TestDocumentsLifecycleRoundTrip(t *testing.T) {
 	if documentThreadID == "" {
 		t.Fatalf("expected document backing thread id, got %#v", created["document"])
 	}
+	if got := asString(created["document"]["subject_ref"]); got != "thread:"+documentThreadID {
+		t.Fatalf("expected canonical document subject_ref, got %#v", created["document"])
+	}
+	if got := asString(created["document"]["state"]); got != "active" {
+		t.Fatalf("expected canonical document state=active, got %#v", created["document"])
+	}
 	headRevisionID, _ := created["revision"]["revision_id"].(string)
 	if headRevisionID == "" {
 		t.Fatal("expected created revision id")
+	}
+	if got := asString(created["document"]["head_revision_ref"]); got != "document_revision:"+headRevisionID {
+		t.Fatalf("expected canonical head_revision_ref, got %#v", created["document"])
+	}
+	if got := asString(created["revision"]["document_ref"]); got != "document:doc-1" {
+		t.Fatalf("expected canonical revision document_ref, got %#v", created["revision"])
+	}
+	if got := asString(created["revision"]["artifact_ref"]); got != "artifact:"+asString(created["revision"]["artifact_id"]) {
+		t.Fatalf("expected canonical revision artifact_ref, got %#v", created["revision"])
+	}
+	if _, exists := created["revision"]["prev_revision_ref"]; exists {
+		t.Fatalf("did not expect prev_revision_ref on first revision, got %#v", created["revision"])
 	}
 
 	createContentHash, _ := created["revision"]["content_hash"].(string)
@@ -505,6 +523,15 @@ func TestDocumentsLifecycleRoundTrip(t *testing.T) {
 	}
 	if listed.Documents[0]["id"] != "doc-1" {
 		t.Fatalf("unexpected listed document id: %#v", listed.Documents[0]["id"])
+	}
+	if got := asString(listed.Documents[0]["subject_ref"]); got != "thread:"+documentThreadID {
+		t.Fatalf("expected listed document subject_ref, got %#v", listed.Documents[0])
+	}
+	if got := asString(listed.Documents[0]["head_revision_ref"]); got != "document_revision:"+headRevisionID {
+		t.Fatalf("expected listed document head_revision_ref, got %#v", listed.Documents[0])
+	}
+	if got := asString(listed.Documents[0]["state"]); got != "active" {
+		t.Fatalf("expected listed document state=active, got %#v", listed.Documents[0])
 	}
 	if _, ok := listed.Documents[0]["title"].(string); !ok {
 		t.Fatalf("expected listed document title, got %#v", listed.Documents[0]["title"])
@@ -564,6 +591,9 @@ func TestDocumentsLifecycleRoundTrip(t *testing.T) {
 	if got := threadDocs.Documents[0]["thread_id"]; got != documentThreadID {
 		t.Fatalf("expected thread-filtered document thread_id=%s, got %#v", documentThreadID, got)
 	}
+	if got := asString(threadDocs.Documents[0]["subject_ref"]); got != "thread:"+documentThreadID {
+		t.Fatalf("expected thread-filtered document subject_ref, got %#v", threadDocs.Documents[0])
+	}
 
 	updateResp := requestJSONExpectStatus(t, http.MethodPatch, h.baseURL+"/docs/doc-1", `{
 		"actor_id":"actor-1",
@@ -584,6 +614,18 @@ func TestDocumentsLifecycleRoundTrip(t *testing.T) {
 	newHeadRevisionID, _ := updated["revision"]["revision_id"].(string)
 	if newHeadRevisionID == "" || newHeadRevisionID == headRevisionID {
 		t.Fatalf("unexpected new revision id: old=%q new=%q", headRevisionID, newHeadRevisionID)
+	}
+	if got := asString(updated["document"]["head_revision_ref"]); got != "document_revision:"+newHeadRevisionID {
+		t.Fatalf("expected updated head_revision_ref, got %#v", updated["document"])
+	}
+	if got := asString(updated["revision"]["document_ref"]); got != "document:doc-1" {
+		t.Fatalf("expected updated revision document_ref, got %#v", updated["revision"])
+	}
+	if got := asString(updated["revision"]["prev_revision_ref"]); got != "document_revision:"+headRevisionID {
+		t.Fatalf("expected updated revision prev_revision_ref, got %#v", updated["revision"])
+	}
+	if got := asString(updated["revision"]["artifact_ref"]); got != "artifact:"+asString(updated["revision"]["artifact_id"]) {
+		t.Fatalf("expected updated revision artifact_ref, got %#v", updated["revision"])
 	}
 
 	updateContentHash, _ := updated["revision"]["content_hash"].(string)
@@ -707,6 +749,17 @@ func TestDocumentsLifecycleRoundTrip(t *testing.T) {
 	if len(revisions) != 4 {
 		t.Fatalf("expected four revisions in history, got %d payload=%#v", len(revisions), historyPayload)
 	}
+	firstHistory, _ := revisions[0].(map[string]any)
+	if got := asString(firstHistory["document_ref"]); got != "document:doc-1" {
+		t.Fatalf("expected history revision document_ref, got %#v", firstHistory)
+	}
+	if got := asString(firstHistory["artifact_ref"]); got == "" {
+		t.Fatalf("expected history revision artifact_ref, got %#v", firstHistory)
+	}
+	secondHistory, _ := revisions[1].(map[string]any)
+	if got := asString(secondHistory["prev_revision_ref"]); got != "document_revision:"+headRevisionID {
+		t.Fatalf("expected history revision prev_revision_ref, got %#v", secondHistory)
+	}
 
 	revisionResp, err := http.Get(h.baseURL + "/docs/doc-1/revisions/" + headRevisionID)
 	if err != nil {
@@ -722,6 +775,12 @@ func TestDocumentsLifecycleRoundTrip(t *testing.T) {
 	}
 	if revisionPayload["revision"]["content"] != "initial text" {
 		t.Fatalf("unexpected revision content: %#v", revisionPayload["revision"]["content"])
+	}
+	if got := asString(revisionPayload["revision"]["document_ref"]); got != "document:doc-1" {
+		t.Fatalf("expected fetched revision document_ref, got %#v", revisionPayload["revision"])
+	}
+	if got := asString(revisionPayload["revision"]["artifact_ref"]); got != "artifact:"+asString(revisionPayload["revision"]["artifact_id"]) {
+		t.Fatalf("expected fetched revision artifact_ref, got %#v", revisionPayload["revision"])
 	}
 	loadedRevisionHash, _ := revisionPayload["revision"]["revision_hash"].(string)
 	if loadedRevisionHash != createRevisionHash {
@@ -1199,6 +1258,15 @@ func TestDocumentsInvalidInputReturnsInvalidRequest(t *testing.T) {
 	defer createInvalidResp.Body.Close()
 	assertErrorCode(t, createInvalidResp, "invalid_request")
 
+	createLegacyLifecycleResp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
+		"actor_id":"actor-1",
+		"document":{"id":"doc-invalid-state","status":"active"},
+		"content":"invalid",
+		"content_type":"text"
+	}`, http.StatusBadRequest)
+	defer createLegacyLifecycleResp.Body.Close()
+	assertErrorCode(t, createLegacyLifecycleResp, "invalid_request")
+
 	createResp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
 		"actor_id":"actor-1",
 		"document":{"id":"doc-invalid-update"},
@@ -1225,6 +1293,16 @@ func TestDocumentsInvalidInputReturnsInvalidRequest(t *testing.T) {
 	}`, http.StatusBadRequest)
 	defer updateInvalidResp.Body.Close()
 	assertErrorCode(t, updateInvalidResp, "invalid_request")
+
+	updateLegacyLifecycleResp := requestJSONExpectStatus(t, http.MethodPatch, h.baseURL+"/docs/doc-invalid-update", `{
+		"actor_id":"actor-1",
+		"if_base_revision":"`+baseRevision+`",
+		"document":{"state":"archived"},
+		"content":"next",
+		"content_type":"text"
+	}`, http.StatusBadRequest)
+	defer updateLegacyLifecycleResp.Body.Close()
+	assertErrorCode(t, updateLegacyLifecycleResp, "invalid_request")
 }
 
 func TestInvalidTypedRefsRejectedForEventsAndArtifacts(t *testing.T) {
