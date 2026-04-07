@@ -17,6 +17,9 @@ export const CANONICAL_BOARD_COLUMN_KEYS = CANONICAL_BOARD_COLUMNS.map(
   (column) => column.key,
 );
 
+/** Preview row count for board workspace side panels (docs, resolved cards, inbox). */
+export const BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT = 6;
+
 export function createEmptyBoardColumnCounts() {
   return CANONICAL_BOARD_COLUMNS.reduce((counts, column) => {
     counts[column.key] = 0;
@@ -90,6 +93,15 @@ export function boardCardStableId(membership) {
   const parts = [col, rank, created].filter(Boolean).join(":");
   if (parts) return `anon:${parts}`;
   return "anon:board-card";
+}
+
+/** Card row title: membership title, else backing thread title, else stable id. */
+export function boardCardHeaderTitle(membership, thread) {
+  const cardTitle = String(membership?.title ?? "").trim();
+  if (cardTitle) return cardTitle;
+  const threadTitle = String(thread?.title ?? "").trim();
+  if (threadTitle) return threadTitle;
+  return boardCardStableId(membership);
 }
 
 export function groupBoardWorkspaceCards(cardsSection, columnSchema = []) {

@@ -112,7 +112,7 @@
   {#if message.displayRefs.length > 0}
     <div class="mt-2 flex flex-wrap gap-1.5 text-[12px]">
       {#each message.displayRefs as refValue}
-        <RefLink {refValue} {threadId} />
+        <RefLink {refValue} {threadId} humanize showRaw />
       {/each}
     </div>
   {/if}

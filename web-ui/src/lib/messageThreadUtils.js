@@ -18,15 +18,6 @@ function compareEventsOldestFirst(a, b) {
   return String(a.id ?? "").localeCompare(String(b.id ?? ""));
 }
 
-function compareEventsNewestFirst(a, b) {
-  const tb = parseEventTimeMs(b);
-  const ta = parseEventTimeMs(a);
-  if (tb !== ta) {
-    return tb - ta;
-  }
-  return String(b.id ?? "").localeCompare(String(a.id ?? ""));
-}
-
 function collectEventRefIds(event) {
   const refs = Array.isArray(event?.refs) ? event.refs : [];
   const ids = [];

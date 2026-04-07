@@ -33,8 +33,8 @@ function shouldHumanizeByDefault(prefix) {
 function humanizedLabelForPrefix(prefix, value) {
   if (prefix === "artifact") return "Artifact";
   if (prefix === "card") return "Card";
-  if (prefix === "thread") return "Topic";
-  if (prefix === "topic") return "Topic";
+  if (prefix === "thread") return `Thread ${value}`.trim();
+  if (prefix === "topic") return `Topic ${value}`.trim();
   if (prefix === "event") return "Event";
   if (prefix === "document") return `Document ${value}`.trim();
   if (prefix === "document_revision")

@@ -8,6 +8,7 @@
     boardId = "",
     board = null,
     workspaceSlug = "",
+    primaryTopic = null,
     actorName = (id) => id,
     onclose = () => {},
     onmovecard = async () => {},
@@ -23,6 +24,7 @@
     {boardId}
     {board}
     {workspaceSlug}
+    {primaryTopic}
     {actorName}
     {onclose}
     {onmovecard}

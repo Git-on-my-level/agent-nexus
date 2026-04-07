@@ -41,6 +41,38 @@ export function priorityBadgeClasses(priority) {
   }
 }
 
+/**
+ * Priority chip for board cards / card detail (non-p0–p3 uses `getPriorityLabelFn`).
+ * @param {string} threadPriorityRaw - e.g. thread?.priority
+ * @param {(raw: string) => string} getPriorityLabelFn
+ * @returns {{ label: string, class: string } | null}
+ */
+export function resolvePriorityBadge(threadPriorityRaw, getPriorityLabelFn) {
+  const p = String(threadPriorityRaw ?? "")
+    .trim()
+    .toLowerCase();
+  if (!p) return null;
+  let label;
+  switch (p) {
+    case "p0":
+      label = "P0";
+      break;
+    case "p1":
+      label = "P1";
+      break;
+    case "p2":
+      label = "P2";
+      break;
+    case "p3":
+      label = "P3";
+      break;
+    default:
+      label = getPriorityLabelFn(threadPriorityRaw);
+      break;
+  }
+  return { label, class: priorityBadgeClasses(p) };
+}
+
 export function dueDateDisplay(dueAt) {
   const raw = String(dueAt ?? "").trim();
   if (!raw) return "";

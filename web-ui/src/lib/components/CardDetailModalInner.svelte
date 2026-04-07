@@ -9,6 +9,7 @@
     principalRegistry,
   } from "$lib/actorSession";
   import {
+    boardCardHeaderTitle,
     boardCardStableId,
     boardColumnTitle,
     freshnessStatusLabel,
@@ -21,7 +22,7 @@
     cardResolutionTone,
     dueDateDisplay,
     isOverdue,
-    priorityBadgeClasses,
+    resolvePriorityBadge,
   } from "$lib/cardDisplayUtils";
   import { coreClient } from "$lib/coreClient";
   import {
@@ -57,6 +58,8 @@
     boardId,
     board,
     workspaceSlug,
+    /** @type {{ id?: string, title?: string } | null | undefined} */
+    primaryTopic = null,
     actorName,
     onclose,
     onmovecard,
@@ -94,34 +97,9 @@
   let cardResolution = $derived(String(membership?.resolution ?? "").trim());
   let summaryText = $derived(String(membership?.summary ?? "").trim());
 
-  let priorityKey = $derived(
-    String(thread?.priority ?? "")
-      .trim()
-      .toLowerCase(),
+  let priorityBadge = $derived(
+    resolvePriorityBadge(thread?.priority, getPriorityLabel),
   );
-  let priorityBadge = $derived.by(() => {
-    const p = priorityKey;
-    if (!p) return null;
-    let label;
-    switch (p) {
-      case "p0":
-        label = "P0";
-        break;
-      case "p1":
-        label = "P1";
-        break;
-      case "p2":
-        label = "P2";
-        break;
-      case "p3":
-        label = "P3";
-        break;
-      default:
-        label = getPriorityLabel(thread?.priority);
-        break;
-    }
-    return { label, class: priorityBadgeClasses(p) };
-  });
 
   let assigneeRefs = $derived(
     Array.isArray(membership?.assignee_refs) ? membership.assignee_refs : [],
@@ -193,13 +171,16 @@
   });
   let canMoveUp = $derived(peerIndex > 0);
 
-  function boardCardHeaderTitle(m, t) {
-    const cardTitle = String(m?.title ?? "").trim();
-    if (cardTitle) return cardTitle;
-    const threadTitle = String(t?.title ?? "").trim();
-    if (threadTitle) return threadTitle;
-    return boardCardStableId(m);
-  }
+  let topicDisplayName = $derived.by(() => {
+    if (!cardInspectNav) return "";
+    if (
+      cardInspectNav.kind === "topic" &&
+      primaryTopic?.id === cardInspectNav.segment
+    ) {
+      return String(primaryTopic.title ?? "").trim() || cardInspectNav.segment;
+    }
+    return cardInspectNav.segment;
+  });
 
   function documentIdFromRef(ref) {
     const s = String(ref ?? "").trim();
@@ -558,7 +539,10 @@
             {/if}
           </div>
           {#if assigneeNames.length > 0}
-            <div class="mt-2 flex flex-wrap gap-1">
+            <div class="mt-2 flex flex-wrap items-center gap-1">
+              <span class="text-[11px] text-[var(--ui-text-subtle)]"
+                >Assigned</span
+              >
               {#each assigneeNames as name}
                 <span
                   class="max-w-[10rem] truncate rounded-md bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] text-[var(--ui-text-subtle)]"
@@ -579,10 +563,23 @@
         </div>
         <button
           type="button"
-          class="shrink-0 rounded-md border border-[var(--ui-border)] px-2.5 py-1 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] hover:text-[var(--ui-text)]"
+          class="shrink-0 rounded-md border border-[var(--ui-border)] p-1.5 text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] hover:text-[var(--ui-text)]"
           onclick={() => onclose()}
+          aria-label="Close"
         >
-          Close
+          <svg
+            class="h-4 w-4"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M6 18L18 6M6 6l12 12"
+            />
+          </svg>
         </button>
       </div>
 
@@ -847,7 +844,13 @@
                   <ul class="space-y-1">
                     {#each resolutionRefsList as ref}
                       <li class="text-[12px]">
-                        <RefLink refValue={ref} {boardId} />
+                        <RefLink
+                          refValue={ref}
+                          {boardId}
+                          humanize
+                          showRaw
+                          labelHints={refLabelHints}
+                        />
                       </li>
                     {/each}
                   </ul>
@@ -858,17 +861,13 @@
                 <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5">
                   <span class="flex items-center gap-1.5">
                     <span class="text-[var(--ui-text-muted)]">Risk</span>
-                    <span
-                      class="font-medium capitalize text-[var(--ui-text)]"
-                    >
+                    <span class="font-medium capitalize text-[var(--ui-text)]">
                       {String(membership?.risk ?? "—")}
                     </span>
                   </span>
                   {#if cardFreshness}
                     <span class="flex items-center gap-1.5">
-                      <span class="text-[var(--ui-text-muted)]"
-                        >Freshness</span
-                      >
+                      <span class="text-[var(--ui-text-muted)]">Freshness</span>
                       <span
                         class="rounded-md px-1.5 py-0.5 font-medium {freshnessStatusTone(
                           cardFreshness.status,
@@ -885,13 +884,10 @@
                   {/if}
                   {#if derivedSummary?.latest_activity_at}
                     <span class="flex items-center gap-1.5">
-                      <span class="text-[var(--ui-text-muted)]"
-                        >Activity</span
-                      >
+                      <span class="text-[var(--ui-text-muted)]">Activity</span>
                       <span class="text-[var(--ui-text)]">
-                        {formatTimestamp(
-                          derivedSummary.latest_activity_at,
-                        ) || "—"}
+                        {formatTimestamp(derivedSummary.latest_activity_at) ||
+                          "—"}
                       </span>
                     </span>
                   {/if}
@@ -909,9 +905,7 @@
                       <span
                         class="rounded-md bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px]"
                       >
-                        <span class="text-[var(--ui-text-muted)]"
-                          >{label}</span
-                        >
+                        <span class="text-[var(--ui-text-muted)]">{label}</span>
                         <span class="font-medium text-[var(--ui-text)]">
                           {count}
                         </span>
@@ -932,7 +926,7 @@
                     class="text-indigo-400 hover:text-indigo-300"
                     href={topicHref}
                   >
-                    {cardInspectNav.segment}
+                    {topicDisplayName}
                   </a>
                 </div>
               {/if}
@@ -1000,7 +994,7 @@
             {/each}
           </select>
         </label>
-        <div class="flex flex-wrap gap-2">
+        <div class="flex flex-wrap items-center gap-2">
           <button
             type="button"
             class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text)] transition-colors hover:bg-[var(--ui-border-subtle)]"
@@ -1033,6 +1027,10 @@
           >
             Move up
           </button>
+          <span
+            class="mx-1 hidden h-5 border-l border-[var(--ui-border)] sm:inline-block"
+            aria-hidden="true"
+          ></span>
           {#if editOpen}
             <button
               type="button"

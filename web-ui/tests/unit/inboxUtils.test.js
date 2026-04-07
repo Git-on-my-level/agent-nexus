@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   deriveInboxUrgency,
   enrichInboxItem,
+  formatInboxItemBoardPanelResourceLine,
   getInboxSubjectRef,
   getInboxUrgencyLabel,
   groupInboxItems,
@@ -183,6 +184,64 @@ describe("inbox typed-ref rendering targets", () => {
         thread_id: "thread-123",
       }),
     ).toBe("thread:thread-123");
+  });
+
+  it("formats board panel resource line from subject_ref, not misleading topic_id", () => {
+    const cardAnchored = enrichInboxItem({
+      id: "1",
+      category: "work_item_risk",
+      subject_ref: "card:card-1",
+      title: "Risk",
+      topic_id: "topic-extra",
+      thread_id: "thread-extra",
+    });
+    expect(formatInboxItemBoardPanelResourceLine(cardAnchored)).toBe(
+      "Card card-1",
+    );
+
+    const topicAnchored = enrichInboxItem({
+      id: "2",
+      category: "stale_topic",
+      subject_ref: "topic:topic-1",
+      title: "Stale",
+      thread_id: "thread-1",
+    });
+    expect(formatInboxItemBoardPanelResourceLine(topicAnchored)).toBe(
+      "Topic topic-1",
+    );
+
+    const threadAnchored = enrichInboxItem({
+      id: "3",
+      category: "decision_needed",
+      subject_ref: "thread:thread-1",
+      title: "Decide",
+      topic_id: "topic-1",
+    });
+    expect(formatInboxItemBoardPanelResourceLine(threadAnchored)).toBe(
+      "Thread thread-1",
+    );
+
+    expect(
+      formatInboxItemBoardPanelResourceLine(
+        enrichInboxItem({
+          id: "4",
+          category: "document_attention",
+          subject_ref: "document:doc-1",
+          title: "Doc",
+        }),
+      ),
+    ).toBe("Document doc-1");
+
+    expect(
+      formatInboxItemBoardPanelResourceLine(
+        enrichInboxItem({
+          id: "5",
+          thread_id: "thread-only",
+          category: "stale_topic",
+          title: "Legacy",
+        }),
+      ),
+    ).toBe("Thread thread-only");
   });
 
   it("resolves thread/event/url refs used by inbox cards", () => {

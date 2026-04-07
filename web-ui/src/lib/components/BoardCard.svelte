@@ -5,6 +5,7 @@
     principalRegistry,
   } from "$lib/actorSession";
   import {
+    boardCardHeaderTitle,
     boardCardStableId,
     freshnessStatusLabel,
     freshnessStatusTone,
@@ -12,7 +13,7 @@
   import {
     cardResolutionLabel,
     cardResolutionTone,
-    priorityBadgeClasses,
+    resolvePriorityBadge,
   } from "$lib/cardDisplayUtils";
   import { formatTimestamp } from "$lib/formatDate";
   import { getPriorityLabel } from "$lib/topicFilters";
@@ -52,35 +53,9 @@
     return d.getTime() < Date.now();
   });
 
-  const priorityKey = $derived(
-    String(thread?.priority ?? "")
-      .trim()
-      .toLowerCase(),
+  const priorityBadge = $derived(
+    resolvePriorityBadge(thread?.priority, getPriorityLabel),
   );
-
-  const priorityBadge = $derived.by(() => {
-    const p = priorityKey;
-    if (!p) return null;
-    let label;
-    switch (p) {
-      case "p0":
-        label = "P0";
-        break;
-      case "p1":
-        label = "P1";
-        break;
-      case "p2":
-        label = "P2";
-        break;
-      case "p3":
-        label = "P3";
-        break;
-      default:
-        label = getPriorityLabel(thread?.priority);
-        break;
-    }
-    return { label, class: priorityBadgeClasses(p) };
-  });
 
   const assigneeNames = $derived.by(() => {
     const actors = $actorRegistry;
@@ -159,13 +134,9 @@
     return "active";
   }
 
-  function boardCardHeaderTitle(m, t) {
-    const cardTitle = String(m?.title ?? "").trim();
-    if (cardTitle) return cardTitle;
-    const threadTitle = String(t?.title ?? "").trim();
-    if (threadTitle) return threadTitle;
-    return boardCardStableId(m);
-  }
+  const showSummary = $derived(
+    Boolean(summaryText) && summaryText !== headerTitle,
+  );
 
   /** @param {KeyboardEvent} e */
   function handleCardKeydown(e) {
@@ -257,7 +228,7 @@
           {/if}
         </div>
 
-        {#if summaryText}
+        {#if showSummary}
           <p class="mt-1 truncate text-[11px] text-[var(--ui-text-muted)]">
             {summaryText}
           </p>

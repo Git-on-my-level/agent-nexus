@@ -213,6 +213,44 @@ export function deriveInboxUrgency(item, options = {}) {
   };
 }
 
+/**
+ * Secondary line text for board workspace inbox preview rows (after urgency label).
+ * Labels are aligned with `inbox_item.subject_ref` (see oar-schema `inbox_item`):
+ * we use enriched `subject_kind` / `subject_id` only, so a denormalized `topic_id`
+ * on a card- or thread-anchored item never produces a misleading "Topic …" label.
+ *
+ * @param {object} item - Raw or enriched inbox item (`enrichInboxItem` adds subject_kind / subject_id).
+ * @returns {string} e.g. "Topic abc", or "" when no resource id is available.
+ */
+export function formatInboxItemBoardPanelResourceLine(item) {
+  const kind = String(item?.subject_kind ?? "")
+    .trim()
+    .toLowerCase();
+  const sid = String(item?.subject_id ?? "").trim();
+  const threadId = String(item?.thread_id ?? "").trim();
+  const topicId = String(item?.topic_id ?? "").trim();
+
+  /** @type {Record<string, string>} */
+  const kindLabels = {
+    topic: "Topic",
+    thread: "Thread",
+    card: "Card",
+    board: "Board",
+    document: "Document",
+  };
+
+  if (kind && sid) {
+    const label =
+      kindLabels[kind] ?? `${kind.charAt(0).toUpperCase()}${kind.slice(1)}`;
+    return `${label} ${sid}`;
+  }
+
+  // Partial/legacy payloads with no resolved typed subject (unordered fields only).
+  if (topicId) return `Topic ${topicId}`;
+  if (threadId) return `Thread ${threadId}`;
+  return "";
+}
+
 export function enrichInboxItem(item, options = {}) {
   const urgency = deriveInboxUrgency(item, options);
   const subjectRef = getInboxSubjectRef(item);

@@ -21,13 +21,18 @@
     topicSearchResultToPickerOption,
   } from "$lib/searchHelpers";
   import { workspacePath } from "$lib/workspacePaths";
-  import { enrichInboxItem } from "$lib/inboxUtils";
+  import {
+    enrichInboxItem,
+    formatInboxItemBoardPanelResourceLine,
+  } from "$lib/inboxUtils";
   import {
     boardWorkspaceInspectNav,
     warningInspectNav,
   } from "$lib/topicRouteUtils";
+  import RefLink from "$lib/components/RefLink.svelte";
   import {
     BOARD_STATUS_LABELS,
+    BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT,
     boardBackingThreadId,
     boardCardStableId,
     boardColumnTitle,
@@ -1229,7 +1234,7 @@
           </p>
         {:else}
           <div class="space-y-2">
-            {#each workspace.documents.items.slice(0, 6) as document}
+            {#each workspace.documents.items.slice(0, BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT) as document}
               <a
                 class="block rounded border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-2 text-[12px] transition-colors hover:border-[var(--ui-border-strong)]"
                 href={workspaceHref(`/docs/${encodeURIComponent(document.id)}`)}
@@ -1245,6 +1250,12 @@
               </a>
             {/each}
           </div>
+          {#if (workspace.documents?.items ?? []).length > BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT}
+            <p class="mt-2 text-[11px] text-[var(--ui-text-muted)]">
+              Showing {BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT} of {workspace
+                .documents.items.length}
+            </p>
+          {/if}
         {/if}
       </div>
     </section>
@@ -1267,7 +1278,7 @@
           </p>
         {:else}
           <div class="space-y-2">
-            {#each resolvedCards.slice(0, 6) as cardItem}
+            {#each resolvedCards.slice(0, BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT) as cardItem}
               {@const membership = cardItem.membership}
               <div
                 class="rounded border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-2"
@@ -1285,6 +1296,11 @@
               </div>
             {/each}
           </div>
+          {#if resolvedCards.length > BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT}
+            <p class="mt-2 text-[11px] text-[var(--ui-text-muted)]">
+              Showing {BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT} of {resolvedCards.length}
+            </p>
+          {/if}
         {/if}
       </div>
     </section>
@@ -1308,7 +1324,9 @@
           </p>
         {:else}
           <div class="space-y-2">
-            {#each enrichedInboxItems.slice(0, 6) as item}
+            {#each enrichedInboxItems.slice(0, BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT) as item}
+              {@const inboxResourceLine =
+                formatInboxItemBoardPanelResourceLine(item)}
               <div
                 class="rounded border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-2"
               >
@@ -1316,11 +1334,19 @@
                   {item.title || item.summary || item.id}
                 </div>
                 <div class="mt-1 text-[11px] text-[var(--ui-text-subtle)]">
-                  {item.urgency_label} · Backing thread {item.thread_id}
+                  {item.urgency_label}
+                  {#if inboxResourceLine}
+                    · {inboxResourceLine}
+                  {/if}
                 </div>
               </div>
             {/each}
           </div>
+          {#if enrichedInboxItems.length > BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT}
+            <p class="mt-2 text-[11px] text-[var(--ui-text-muted)]">
+              Showing {BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT} of {enrichedInboxItems.length}
+            </p>
+          {/if}
         {/if}
       </div>
     </section>
@@ -1338,16 +1364,15 @@
             {#if warning.topic_id || warning.thread_id}
               {@const warnNav = warningInspectNav(warning)}
               {#if warnNav}
-                <a
-                  class="ml-1 font-medium text-amber-200 underline transition-colors hover:text-amber-100"
-                  href={workspaceHref(
-                    warnNav.kind === "topic"
-                      ? `/topics/${encodeURIComponent(warnNav.segment)}`
-                      : `/threads/${encodeURIComponent(warnNav.segment)}`,
-                  )}
+                {@const warnRef =
+                  warnNav.kind === "topic"
+                    ? `topic:${warnNav.segment}`
+                    : `thread:${warnNav.segment}`}
+                <span
+                  class="ml-1 inline [&_a]:font-medium [&_a]:text-amber-200 [&_a]:underline [&_a]:transition-colors [&_a:hover]:text-amber-100"
                 >
-                  {warnNav.segment}
-                </a>
+                  <RefLink refValue={warnRef} {boardId} humanize showRaw />
+                </span>
               {/if}
             {/if}
           </div>
@@ -1364,6 +1389,7 @@
   {boardId}
   board={workspace?.board ?? null}
   {workspaceSlug}
+  primaryTopic={workspace?.primary_topic ?? null}
   {actorName}
   onclose={closeCardDetailModal}
   onmovecard={moveCard}

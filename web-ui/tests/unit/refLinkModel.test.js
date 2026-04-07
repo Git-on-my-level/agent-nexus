@@ -128,10 +128,23 @@ describe("RefLink model", () => {
 
     expect(topicRef).toMatchObject({
       kind: "topic",
-      label: "Topic",
-      primaryLabel: "Topic",
+      label: "Topic topic-1",
+      primaryLabel: "Topic topic-1",
       secondaryLabel: "topic:topic-1",
       href: "/topics/topic-1",
+      isLink: true,
+    });
+
+    const threadRef = resolveRefLink("thread:thread-1", {
+      humanize: true,
+    });
+
+    expect(threadRef).toMatchObject({
+      kind: "thread",
+      label: "Thread thread-1",
+      primaryLabel: "Thread thread-1",
+      secondaryLabel: "thread:thread-1",
+      href: "/threads/thread-1",
       isLink: true,
     });
 
