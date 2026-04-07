@@ -619,8 +619,12 @@
       </div>
 
       {#if editOpen}
-        <div
+        <form
           class="mt-3 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-4"
+          onsubmit={(e) => {
+            e.preventDefault();
+            void handleSave();
+          }}
         >
           <div class="mb-3">
             <button
@@ -699,8 +703,7 @@
             <button
               class="cursor-pointer rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
               disabled={saving}
-              onclick={handleSave}
-              type="button"
+              type="submit"
             >
               {saving ? "Saving…" : "Save revision"}
             </button>
@@ -726,7 +729,7 @@
               >{headRevision?.revision_id ?? "—"}</span
             > — optimistic concurrency is enforced.
           </p>
-        </div>
+        </form>
       {/if}
 
       {#if isViewingOldRevision}

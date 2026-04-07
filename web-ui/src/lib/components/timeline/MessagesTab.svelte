@@ -239,7 +239,7 @@
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       mentionHighlight = (mentionHighlight - 1 + list.length) % list.length;
-    } else if (e.key === "Enter" && !e.shiftKey) {
+    } else if (e.key === "Enter" && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
       e.preventDefault();
       void insertMention(list[mentionHighlight].handle);
     } else if (e.key === "Tab" && !e.shiftKey) {
@@ -417,8 +417,12 @@
   {/if}
 </div>
 
-<div
+<form
   class="mt-4 rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] p-3"
+  onsubmit={(e) => {
+    e.preventDefault();
+    void handlePostMessage();
+  }}
 >
   {#if postMessageError}
     <p class="mb-2 rounded bg-red-500/10 px-3 py-1.5 text-[12px] text-red-400">
@@ -535,14 +539,13 @@
       <button
         class="cursor-pointer rounded bg-indigo-600 px-3 py-1 text-[12px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
         disabled={!canPost}
-        onclick={handlePostMessage}
-        type="button"
+        type="submit"
       >
         {postingMessage ? "Posting..." : "Post message"}
       </button>
     </div>
   </div>
-</div>
+</form>
 
 <ConfirmModal
   open={confirmModal.open}

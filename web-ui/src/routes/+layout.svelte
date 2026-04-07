@@ -39,6 +39,7 @@
     devActorMode,
     devActorModeReady,
   } from "$lib/workspaceContext";
+  import { handleModEnterFormSubmit } from "$lib/formSubmitShortcut.js";
   import {
     workspacePath,
     stripBasePath,
@@ -413,6 +414,7 @@
       }
       return;
     }
+    handleModEnterFormSubmit(event, { commandPaletteOpen });
     if (event.key === "Escape") {
       if (workspacePickerOpen) closeWorkspacePicker();
       if (mobileNavOpen) closeMobileNav();

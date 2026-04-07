@@ -348,8 +348,12 @@
 {/if}
 
 {#if createOpen}
-  <div
+  <form
     class="mb-4 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-4"
+    onsubmit={(e) => {
+      e.preventDefault();
+      void handleCreate();
+    }}
   >
     <h2 class="mb-3 text-[13px] font-semibold text-[var(--ui-text)]">
       New doc lineage
@@ -428,8 +432,7 @@
       <button
         class="cursor-pointer rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
         disabled={creating}
-        onclick={handleCreate}
-        type="button"
+        type="submit"
       >
         {creating ? "Creating…" : "Create doc"}
       </button>
@@ -441,7 +444,7 @@
         Cancel
       </button>
     </div>
-  </div>
+  </form>
 {/if}
 
 {#if loading}
