@@ -18,11 +18,6 @@ func canonicalCardView(card map[string]any) map[string]any {
 	out["summary"] = strings.TrimSpace(anyString(card["summary"]))
 
 	boardRef := strings.TrimSpace(anyString(card["board_ref"]))
-	if boardRef == "" {
-		if bid := strings.TrimSpace(anyString(card["board_id"])); bid != "" {
-			boardRef = "board:" + bid
-		}
-	}
 	if boardRef != "" {
 		out["board_ref"] = boardRef
 	}
@@ -172,9 +167,6 @@ func documentRefForPublicCard(card map[string]any) string {
 }
 
 func pinnedDocumentIDFromCard(card map[string]any) string {
-	if pid := strings.TrimSpace(anyString(card["pinned_document_id"])); pid != "" {
-		return pid
-	}
 	ref := strings.TrimSpace(anyString(card["document_ref"]))
 	if ref == "" {
 		return ""
