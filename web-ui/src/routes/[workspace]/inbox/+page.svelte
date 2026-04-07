@@ -14,6 +14,7 @@
     INBOX_CATEGORY_DESCRIPTIONS,
     INBOX_URGENCY_LEVELS,
     INBOX_URGENCY_LABELS,
+    decisionMadeTopicRefForInboxItem,
     enrichInboxItem,
     getInboxCategoryLabel,
     normalizeInboxCategory,
@@ -398,10 +399,17 @@
       return;
     }
 
+    const topicRef = decisionMadeTopicRefForInboxItem(item);
+    if (!topicRef) {
+      error =
+        "Cannot record decision: no topic reference could be derived for this inbox item.";
+      return;
+    }
+
     decisionInFlightById = { ...decisionInFlightById, [item.id]: true };
 
     const refs = Array.from(
-      new Set([...(item.refs ?? []), `inbox:${item.id}`]),
+      new Set([...(item.refs ?? []), `inbox:${item.id}`, topicRef]),
     );
 
     try {

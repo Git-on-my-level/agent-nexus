@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  decisionMadeTopicRefForInboxItem,
   deriveInboxUrgency,
   enrichInboxItem,
   formatInboxItemBoardPanelResourceLine,
@@ -156,6 +157,65 @@ describe("inbox urgency derivation", () => {
 });
 
 describe("inbox typed-ref rendering targets", () => {
+  it("derives topic ref for decision_made when inbox carries thread-shaped subject", () => {
+    expect(
+      decisionMadeTopicRefForInboxItem({
+        id: "in-1",
+        thread_id: "thread-pricing-glitch",
+        refs: [
+          "thread:thread-pricing-glitch",
+          "artifact:artifact-pricing-evidence",
+        ],
+      }),
+    ).toBe("topic:thread-pricing-glitch");
+
+    expect(
+      decisionMadeTopicRefForInboxItem({
+        id: "in-1b",
+        subject_ref: "artifact:artifact-pricing-evidence",
+        thread_id: "thread-pricing-glitch",
+        refs: ["artifact:artifact-pricing-evidence"],
+      }),
+    ).toBe("topic:thread-pricing-glitch");
+
+    expect(
+      decisionMadeTopicRefForInboxItem({
+        id: "in-1c",
+        subject_ref: "artifact:artifact-pricing-evidence",
+        refs: [
+          "thread:thread-pricing-glitch",
+          "artifact:artifact-pricing-evidence",
+        ],
+      }),
+    ).toBe("topic:thread-pricing-glitch");
+
+    expect(
+      decisionMadeTopicRefForInboxItem({
+        id: "in-2",
+        refs: ["topic:real-topic-id", "thread:thr-1"],
+      }),
+    ).toBe("topic:real-topic-id");
+
+    expect(
+      decisionMadeTopicRefForInboxItem({
+        id: "in-3",
+        subject_ref: "topic:top-77",
+        refs: [],
+      }),
+    ).toBe("topic:top-77");
+
+    expect(
+      decisionMadeTopicRefForInboxItem({
+        id: "in-4",
+        subject_ref: "thread:thr-x",
+        topic_id: "top-from-row",
+        refs: [],
+      }),
+    ).toBe("topic:top-from-row");
+
+    expect(decisionMadeTopicRefForInboxItem({ id: "in-5", refs: [] })).toBe("");
+  });
+
   it("preserves explicit subject refs and prefers specific ids before thread fallback", () => {
     expect(
       getInboxSubjectRef({
