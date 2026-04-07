@@ -1072,7 +1072,6 @@
     <BoardCard
       {cardItem}
       {boardId}
-      {workspaceSlug}
       onclick={() => openCardDetailModal(cardItem)}
     />
   {/snippet}

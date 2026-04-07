@@ -750,7 +750,7 @@ test("board UI supports create/edit and card mutation flows", async ({
   await page.getByRole("button", { name: /Incident Playbook/ }).click();
   await page.getByRole("button", { name: "Add card", exact: true }).click();
   await expect(
-    page.getByRole("link", { name: "Execution Track" }),
+    page.getByRole("button", { name: "Manage Execution Track" }),
   ).toBeVisible();
 
   await page.getByRole("button", { name: "Add card", exact: true }).click();
@@ -760,7 +760,9 @@ test("board UI supports create/edit and card mutation flows", async ({
   await page.getByRole("button", { name: /Review Prep/ }).click();
   await page.getByLabel("Target column").selectOption("ready");
   await page.getByRole("button", { name: "Add card", exact: true }).click();
-  await expect(page.getByRole("link", { name: "Review Prep" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Manage Review Prep" }),
+  ).toBeVisible();
   await expect(
     page.locator("#card-thread-review").locator(".text-orange-400"),
   ).toBeVisible();
@@ -772,12 +774,12 @@ test("board UI supports create/edit and card mutation flows", async ({
   const readySection = page
     .locator("section")
     .filter({ has: page.getByRole("heading", { name: "Ready" }) });
-  await expect(
-    readySection.locator('a[href*="/topics/"]').nth(0),
-  ).toContainText("Execution Track");
-  await expect(
-    readySection.locator('a[href*="/topics/"]').nth(1),
-  ).toContainText("Review Prep");
+  await expect(readySection.locator("#card-thread-execution")).toContainText(
+    "Execution Track",
+  );
+  await expect(readySection.locator("#card-thread-review")).toContainText(
+    "Review Prep",
+  );
 
   await page.getByLabel("Move to column").selectOption("done");
   await page.getByRole("button", { name: "Move", exact: true }).click();
@@ -788,7 +790,9 @@ test("board UI supports create/edit and card mutation flows", async ({
     .click();
 
   await page.getByRole("button", { name: "Done 1" }).click();
-  await expect(page.getByRole("link", { name: "Review Prep" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Manage Review Prep" }),
+  ).toBeVisible();
 
   await page.getByRole("button", { name: "Manage Execution Track" }).click();
   const executionDialog = page.getByRole("dialog", { name: "Card details" });
@@ -800,7 +804,7 @@ test("board UI supports create/edit and card mutation flows", async ({
 
   await executionDialog.getByRole("button", { name: "Remove card" }).click();
   await expect(
-    readySection.getByRole("link", { name: "Execution Track" }),
+    readySection.getByRole("button", { name: "Manage Execution Track" }),
   ).toHaveCount(0);
 
   expect(addCardPayloads).toEqual([

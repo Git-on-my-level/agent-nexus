@@ -1,11 +1,12 @@
 import { json } from "@sveltejs/kit";
 
-import { getMockThread, updateMockThread } from "$lib/mockCoreData";
+import { getMockTopic, updateMockThread } from "$lib/mockCoreData";
 import {
   assertMockModeEnabled,
   mockResultToResponse,
   readMockJsonBody,
 } from "$lib/server/mockGuard";
+import { mapTopicPatchToThreadPatch } from "$lib/server/mockTopicMappers";
 
 export function GET({ params, url }) {
   const guardResponse = assertMockModeEnabled(url.pathname);
@@ -13,13 +14,13 @@ export function GET({ params, url }) {
     return guardResponse;
   }
 
-  const topic = getMockThread(params.topicId);
+  const topic = getMockTopic(params.topicId);
 
   if (!topic) {
     return json({ error: "Topic not found." }, { status: 404 });
   }
 
-  return json({ thread: topic });
+  return json({ topic });
 }
 
 export async function PATCH({ params, request, url }) {
@@ -38,12 +39,27 @@ export async function PATCH({ params, request, url }) {
     return json({ error: "actor_id and patch are required." }, { status: 400 });
   }
 
+  const topicRow = getMockTopic(params.topicId);
+  if (!topicRow) {
+    return json({ error: "Topic not found." }, { status: 404 });
+  }
+
+  const threadPatch = mapTopicPatchToThreadPatch(body.patch);
   const result = updateMockThread({
     actor_id: body.actor_id,
-    thread_id: params.topicId,
-    patch: body.patch,
+    thread_id: topicRow.thread_id,
+    patch: threadPatch,
     if_updated_at: body.if_updated_at,
   });
 
-  return mockResultToResponse(result);
+  if (result?.error) {
+    return mockResultToResponse(result);
+  }
+
+  const nextTopic = getMockTopic(params.topicId);
+  if (!nextTopic) {
+    return json({ error: "Topic not found after update." }, { status: 404 });
+  }
+
+  return json({ topic: nextTopic });
 }

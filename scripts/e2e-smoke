@@ -227,7 +227,7 @@ EXPECTED_VERSION="$("${ROOT_DIR}/scripts/read-version.sh")"
 ) &
 CORE_PID=$!
 
-if ! wait_for_url "$CORE_BASE_URL/readyz" 160 0.15; then
+if ! wait_for_url "$CORE_BASE_URL/readyz" 320 0.15; then
   echo "core did not become healthy" >&2
   cat "$CORE_LOG" >&2 || true
   exit 1

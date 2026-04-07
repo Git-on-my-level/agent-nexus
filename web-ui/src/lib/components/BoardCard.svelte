@@ -16,34 +16,23 @@
   } from "$lib/cardDisplayUtils";
   import { formatTimestamp } from "$lib/formatDate";
   import { getPriorityLabel } from "$lib/topicFilters";
-  import { boardCardInspectNav } from "$lib/topicRouteUtils";
-  import { workspacePath } from "$lib/workspacePaths";
 
   /**
    * @typedef {object} BoardCardProps
    * @property {object} cardItem
    * @property {string} [boardId]
-   * @property {string} [workspaceSlug]
    * @property {() => void} [onclick]
    * @property {import("svelte").Snippet} [footer]
    */
 
   /** @type {BoardCardProps} */
-  let {
-    cardItem,
-    boardId = "",
-    workspaceSlug = "",
-    onclick = () => {},
-    footer,
-  } = $props();
+  let { cardItem, boardId = "", onclick = () => {}, footer } = $props();
 
   const membership = $derived(cardItem?.membership);
   const backing = $derived(cardItem?.backing);
   const derived = $derived(cardItem?.derived);
   const thread = $derived(backing?.thread);
 
-  const cardInspectNav = $derived(boardCardInspectNav(membership, thread));
-  const showThreadNav = $derived(Boolean(cardInspectNav && workspaceSlug));
   const cardRowId = $derived(boardCardStableId(membership));
 
   const rowStatus = $derived(boardCardRowStatus(membership, thread));
@@ -55,19 +44,6 @@
   const assigneeRefs = $derived(
     Array.isArray(membership?.assignee_refs) ? membership.assignee_refs : [],
   );
-
-  const topicHref = $derived.by(() => {
-    if (!workspaceSlug || !cardInspectNav) return "";
-    const path =
-      cardInspectNav.kind === "topic"
-        ? `/topics/${encodeURIComponent(cardInspectNav.segment)}`
-        : `/threads/${encodeURIComponent(cardInspectNav.segment)}`;
-    try {
-      return workspacePath(workspaceSlug, path);
-    } catch {
-      return "";
-    }
-  });
 
   const dueOverdue = $derived.by(() => {
     if (!cardDueAt) return false;
@@ -219,21 +195,11 @@
         class="mt-[5px] h-2 w-2 shrink-0 rounded-full {statusDotClass}"
       ></span>
       <div class="min-w-0 flex-1">
-        {#if showThreadNav && topicHref}
-          <a
-            class="block truncate text-[13px] font-medium leading-snug transition-colors hover:text-indigo-300 {titleColorClass}"
-            href={topicHref}
-            onclick={(e) => e.stopPropagation()}
-          >
-            {headerTitle}
-          </a>
-        {:else}
-          <span
-            class="block truncate text-[13px] font-medium leading-snug {titleColorClass}"
-          >
-            {headerTitle}
-          </span>
-        {/if}
+        <span
+          class="block truncate text-[13px] font-medium leading-snug {titleColorClass}"
+        >
+          {headerTitle}
+        </span>
 
         <div class="mt-1 flex flex-wrap items-center gap-1">
           <span
