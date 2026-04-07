@@ -1,4 +1,4 @@
-# OAR HTTP API Contract (v0)
+# OAR HTTP API Contract (v0.3.0)
 
 This document defines the **concrete HTTP/JSON surface** used for integration between **oar-core** and clients (including **oar-ui** and agents).
 
@@ -63,7 +63,7 @@ Projection endpoints return a `section_kinds` field to distinguish canonical vs 
 ### Version
 
 - `GET /version`
-  - Response: `{ "schema_version": "0.2.2" }`
+  - Response: `{ "schema_version": "0.3.0" }`
 
 - `GET /meta/handshake`
   - Response: `{ "core_version", "api_version", "schema_version", "min_cli_version", "recommended_cli_version", "cli_download_url", "core_instance_id", "dev_actor_mode" }`
@@ -294,14 +294,14 @@ Backing threads hold append-only timelines and anchor many packet subjects. They
 ### Documents
 
 - `POST /docs`
-  - Body: `{ "actor_id": "...", "request_key"?: "...", "document": { id?, thread_id?, title?, slug?, status?, labels?, supersedes? }, "refs"?: ["typed:ref"...], "content": <string|object|base64>, "content_type": "text|structured|binary" }`
+  - Body: `{ "actor_id": "...", "request_key"?: "...", "document": { id?, title?, slug?, labels?, supersedes? }, "refs"?: ["typed:ref"...], "content": <string|object|base64>, "content_type": "text|structured|binary" }`
   - Response: `{ "document": <document>, "revision": <document_revision_with_content> }`
   - Notes:
     - The canonical document lineage contract is the schema vocabulary in `oar-schema.yaml`: `subject_ref`, `head_revision_ref`, `state`, and `refs`.
-    - Canonical `document.state` uses `active`, `archived`, or `trashed`. If compatibility lifecycle fields are also present in runtime storage/output, derive `state` in this order: `trashed_at`, then `archived_at`, then legacy `status`, else `active`.
+    - `state` uses `active`, `archived`, or `trashed`, derived from lifecycle detail fields (`trashed_at`, `archived_at`).
     - Every document has a backing `thread_id`. If the caller omits `document.thread_id`, core creates one and returns it on the stored document.
     - Core sets the backing thread `subject_ref` to `document:<document_id>`.
-    - Fields such as `thread_id`, `slug`, legacy `status`, `labels`, `supersedes`, and `head_revision_number` remain implementation/compatibility details of the current HTTP/runtime shape rather than the canonical lineage vocabulary. In particular, legacy `status` is compatibility-only and is not the canonical document lifecycle field.
+    - Convenience fields such as `thread_id`, `slug`, `labels`, `supersedes`, `head_revision_number`, and `head_revision` summary are implementation details of the current HTTP/runtime shape rather than the canonical lineage vocabulary.
     - Non-lineage links belong in `refs`; revision lineage remains explicit via `prev_revision_id`.
   - Side effect: appends `document_created` to `events` on the document backing thread with thread/document/revision/artifact refs.
 
@@ -316,10 +316,8 @@ Backing threads hold append-only timelines and anchor many packet subjects. They
   - Response: `{ "document": <document>, "revision": <document_revision_with_content> }`
 
 - `PATCH /docs/{document_id}`
-  - Body: `{ "actor_id": "...", "document"?: { title?, thread_id?, slug?, status?, labels?, supersedes? }, "if_base_revision": "<revision_id>", "refs"?: ["typed:ref"...], "content": <string|object|base64>, "content_type": "text|structured|binary" }`
+  - Body: `{ "actor_id": "...", "document"?: { title?, thread_id?, slug?, labels?, supersedes? }, "if_base_revision": "<revision_id>", "refs"?: ["typed:ref"...], "content": <string|object|base64>, "content_type": "text|structured|binary" }`
   - Response: `{ "document": <document>, "revision": <document_revision_with_content> }`
-  - Notes:
-    - `document.status` in the patch body is a compatibility-era input when present; the canonical lifecycle field on stored/read document resources is `state`.
   - Side effect: appends `document_revised` to `events` on the current backing thread with thread/document/revision/artifact refs.
 
 - `GET /docs/{document_id}/history`
@@ -355,14 +353,14 @@ Backing threads hold append-only timelines and anchor many packet subjects. They
 - `POST /receipts`
   - Body: `{ "actor_id": "...", "request_key"?: "...", "artifact": <artifact_metadata>, "packet": { "receipt_id"?, "subject_ref": "card:<card_id>", ... } }`
   - `artifact.id` and `packet.receipt_id` MAY be omitted together; core issues the canonical artifact id and returns it in both artifact metadata and packet content.
-  - `packet.subject_ref` is required and MUST be `card:<card_id>`. Legacy `packet.thread_id` payloads are rejected.
+  - `packet.subject_ref` is required and MUST be `card:<card_id>`.
   - Core resolves `packet.subject_ref` to the correct backing thread internally before emitting `receipt_added`.
   - Core normalizes packet artifact refs to include the packet artifact self-ref and `packet.subject_ref`.
   - Response: `{ "artifact": <artifact_metadata>, "event": <event> }`
 
 - `POST /reviews`
   - Body: `{ "actor_id": "...", "request_key"?: "...", "artifact": <artifact_metadata>, "packet": { "review_id"?, "subject_ref": "card:<card_id>", "receipt_ref"?, "receipt_id"?, ... } }`
-  - `packet.subject_ref` is required and MUST be `card:<card_id>`. Legacy `packet.thread_id` payloads are rejected.
+  - `packet.subject_ref` is required and MUST be `card:<card_id>`.
   - Core resolves `packet.subject_ref` to the correct backing thread internally before emitting `review_completed`.
   - Core normalizes packet artifact refs to include the packet artifact self-ref, `packet.subject_ref`, and the linked receipt artifact ref.
   - Response: `{ "artifact": <artifact_metadata>, "event": <event> }`
