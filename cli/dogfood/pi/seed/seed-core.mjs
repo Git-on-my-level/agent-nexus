@@ -172,12 +172,19 @@ async function seedDocuments() {
   for (const sourceDocument of seed.documents ?? []) {
     await request("POST", "/docs", {
       actor_id: pickActorId(sourceDocument.actor_id),
-      document: sourceDocument.document,
+      document: sanitizeDocumentWrite(sourceDocument.document),
       refs: mapRefs(sourceDocument.refs),
       content: sourceDocument.content,
       content_type: sourceDocument.content_type,
     }, [201, 409]);
   }
+}
+
+function sanitizeDocumentWrite(document) {
+  const next = { ...(document ?? {}) };
+  delete next.status;
+  delete next.state;
+  return next;
 }
 
 async function seedEvents() {

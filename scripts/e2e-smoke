@@ -393,10 +393,10 @@ fi
 PRIMARY_DOC_ID="doc-smoke-board-primary"
 CARD_DOC_ID="doc-smoke-board-card"
 
-printf '{"document":{"id":"%s","title":"Smoke Board Primary Doc","status":"active","labels":["smoke","board"]},"refs":["topic:%s","thread:%s"],"content":"Primary board document","content_type":"text"}\n' "$PRIMARY_DOC_ID" "$MAIN_TOPIC_ID" "$THREAD_ID" \
+printf '{"document":{"id":"%s","title":"Smoke Board Primary Doc","labels":["smoke","board"]},"refs":["topic:%s","thread:%s"],"content":"Primary board document","content_type":"text"}\n' "$PRIMARY_DOC_ID" "$MAIN_TOPIC_ID" "$THREAD_ID" \
   | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" docs create >"$TMP_DIR/board-primary-doc-create.json"
 
-printf '{"document":{"id":"%s","title":"Smoke Board Card Doc","status":"active","labels":["smoke","board"]},"refs":["topic:%s","thread:%s"],"content":"Pinned card document","content_type":"text"}\n' "$CARD_DOC_ID" "$BOARD_TOPIC_A_ID" "$BOARD_THREAD_A_ID" \
+printf '{"document":{"id":"%s","title":"Smoke Board Card Doc","labels":["smoke","board"]},"refs":["topic:%s","thread:%s"],"content":"Pinned card document","content_type":"text"}\n' "$CARD_DOC_ID" "$BOARD_TOPIC_A_ID" "$BOARD_THREAD_A_ID" \
   | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" docs create >"$TMP_DIR/board-card-doc-create.json"
 
 BOARD_ID="board-smoke"

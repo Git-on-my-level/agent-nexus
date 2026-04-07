@@ -123,9 +123,15 @@ class OARClient:
     def get_document(self, document_id: str) -> dict[str, Any]:
         return self.raw_request("GET", f"/docs/{document_id}")
 
+    def _sanitize_document_write(self, document: dict[str, Any]) -> dict[str, Any]:
+        sanitized = dict(document)
+        sanitized.pop("status", None)
+        sanitized.pop("state", None)
+        return sanitized
+
     def create_document(self, *, document: dict[str, Any], content: Any, content_type: str = "structured", request_key: str | None = None) -> dict[str, Any]:
         body: dict[str, Any] = {
-            "document": document,
+            "document": self._sanitize_document_write(document),
             "content": content,
             "content_type": content_type,
         }
@@ -146,7 +152,7 @@ class OARClient:
         if actor_id:
             body["actor_id"] = actor_id
         if document is not None:
-            body["document"] = document
+            body["document"] = self._sanitize_document_write(document)
         return self.raw_request("PATCH", f"/docs/{document_id}", json_body=body)
 
     def upsert_document(self, document_id: str, *, document: dict[str, Any], content: Any, content_type: str = "structured", request_key: str | None = None) -> dict[str, Any]:
@@ -155,11 +161,11 @@ class OARClient:
         except OARClientError as exc:
             if exc.status_code != 404:
                 raise
-            document = dict(document)
+            document = self._sanitize_document_write(document)
             document.setdefault("document_id", document_id)
             return self.create_document(document=document, content=content, content_type=content_type, request_key=request_key)
         revision = current["revision"]
-        update_document = dict(document)
+        update_document = self._sanitize_document_write(document)
         update_document.pop("document_id", None)
         return self.update_document(document_id, if_base_revision=str(revision["revision_id"]), document=update_document, content=content, content_type=content_type)
 

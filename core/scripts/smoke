@@ -201,7 +201,6 @@ post_json "/docs" "$(cat <<JSON
   "document": {
     "id": "${PRIMARY_DOC_ID}",
     "title": "Smoke Board Primary Doc",
-    "status": "active",
     "labels": ["smoke", "board"]
   },
   "refs": ["topic:${MAIN_TOPIC_ID}", "thread:${MAIN_TOPIC_THREAD_ID}"],
@@ -217,7 +216,6 @@ post_json "/docs" "$(cat <<JSON
   "document": {
     "id": "${CARD_DOC_ID}",
     "title": "Smoke Board Card Doc",
-    "status": "active",
     "labels": ["smoke", "board"]
   },
   "refs": ["topic:${CARD_A_TOPIC_ID}", "thread:${CARD_A_THREAD_ID}"],

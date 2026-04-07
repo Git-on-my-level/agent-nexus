@@ -51,6 +51,27 @@ def test_create_document_includes_actor_id_from_auth_state(monkeypatch):
     assert captured["body"]["actor_id"] == "actor-123"
 
 
+def test_create_document_strips_legacy_lifecycle_fields(monkeypatch):
+    client = OARClient("http://oar.test", auth_manager=DummyAuthManager())
+    captured = {}
+
+    def fake_raw_request(method, path, **kwargs):
+        captured["method"] = method
+        captured["path"] = path
+        captured["body"] = kwargs["json_body"]
+        return {}
+
+    monkeypatch.setattr(client, "raw_request", fake_raw_request)
+
+    client.create_document(
+        document={"document_id": "doc-1", "title": "Title", "status": "active", "state": "trashed"},
+        content={"ok": True},
+    )
+
+    assert captured["path"] == "/docs"
+    assert captured["body"]["document"] == {"document_id": "doc-1", "title": "Title"}
+
+
 def test_upsert_document_omits_document_id_on_patch(monkeypatch):
     client = OARClient("http://oar.test", auth_manager=DummyAuthManager())
     captured = {}
@@ -71,7 +92,7 @@ def test_upsert_document_omits_document_id_on_patch(monkeypatch):
     )
 
     assert captured["document_id"] == "doc-1"
-    assert captured["kwargs"]["document"] == {"title": "Title", "status": "active"}
+    assert captured["kwargs"]["document"] == {"title": "Title"}
     assert captured["kwargs"]["if_base_revision"] == "rev-1"
 
 

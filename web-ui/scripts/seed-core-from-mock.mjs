@@ -254,7 +254,6 @@ async function seedDocuments() {
           id: documentId,
           title: sourceDocument.title,
           slug: sourceDocument.slug,
-          status: sourceDocument.status,
           labels: sourceDocument.labels,
           supersedes: sourceDocument.supersedes,
         },
