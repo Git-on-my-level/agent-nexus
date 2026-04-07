@@ -14,6 +14,8 @@ import (
 	"organization-autorunner-core/internal/primitives"
 	"organization-autorunner-core/internal/server"
 	"organization-autorunner-core/internal/storage"
+
+	_ "modernc.org/sqlite"
 )
 
 func TestWorkspaceInitializationAndRestart(t *testing.T) {
@@ -203,6 +205,85 @@ func TestProjectionQueueStatsAndListingRecoverStrandedGenerationRows(t *testing.
 	}
 	if stats.OldestDirtyAt != "2026-03-21T10:00:00Z" {
 		t.Fatalf("expected oldest dirty timestamp from stranded status row, got %#v", stats)
+	}
+}
+
+func TestWorkspaceMigrationV6BackfillsLegacyDocumentLifecycleBeforeDroppingStatus(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	workspaceRoot := t.TempDir()
+	layout := storage.NewLayout(workspaceRoot)
+
+	db, err := sql.Open("sqlite", "file:"+layout.DatabasePath)
+	if err != nil {
+		t.Fatalf("open legacy sqlite database: %v", err)
+	}
+
+	statements := []string{
+		`CREATE TABLE schema_migrations (
+			version INTEGER PRIMARY KEY,
+			applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);`,
+		`CREATE TABLE documents (
+			id TEXT PRIMARY KEY,
+			status TEXT,
+			created_at TEXT NOT NULL,
+			created_by TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			updated_by TEXT NOT NULL,
+			trashed_at TEXT,
+			trashed_by TEXT,
+			trash_reason TEXT,
+			archived_at TEXT,
+			archived_by TEXT
+		);`,
+		`CREATE INDEX idx_documents_status_trashed_updated_at ON documents (status, trashed_at, updated_at DESC, id);`,
+		`INSERT INTO documents(id, status, created_at, created_by, updated_at, updated_by) VALUES
+			('doc-archived', 'archived', '2026-03-01T00:00:00Z', 'actor-create', '2026-03-02T00:00:00Z', 'actor-update'),
+			('doc-trashed', 'trashed', '2026-03-03T00:00:00Z', 'actor-create-2', '2026-03-04T00:00:00Z', 'actor-update-2');`,
+	}
+	for _, statement := range statements {
+		if _, err := db.ExecContext(ctx, statement); err != nil {
+			t.Fatalf("seed legacy schema: %v", err)
+		}
+	}
+	for version := 1; version <= 5; version++ {
+		if _, err := db.ExecContext(ctx, `INSERT INTO schema_migrations(version, applied_at) VALUES (?, CURRENT_TIMESTAMP)`, version); err != nil {
+			t.Fatalf("seed schema migration %d: %v", version, err)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close seeded database: %v", err)
+	}
+
+	workspace, err := storage.InitializeWorkspace(ctx, workspaceRoot)
+	if err != nil {
+		t.Fatalf("initialize migrated workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	assertColumnAbsent(t, workspace.DB(), "documents", "status")
+
+	var (
+		archivedAt  string
+		archivedBy  string
+		trashedAt   string
+		trashedBy   string
+		trashReason string
+	)
+	if err := workspace.DB().QueryRowContext(ctx, `SELECT archived_at, archived_by FROM documents WHERE id = ?`, "doc-archived").Scan(&archivedAt, &archivedBy); err != nil {
+		t.Fatalf("query archived document lifecycle: %v", err)
+	}
+	if archivedAt != "2026-03-02T00:00:00Z" || archivedBy != "actor-update" {
+		t.Fatalf("unexpected archived lifecycle backfill: archived_at=%q archived_by=%q", archivedAt, archivedBy)
+	}
+
+	if err := workspace.DB().QueryRowContext(ctx, `SELECT trashed_at, trashed_by, trash_reason FROM documents WHERE id = ?`, "doc-trashed").Scan(&trashedAt, &trashedBy, &trashReason); err != nil {
+		t.Fatalf("query trashed document lifecycle: %v", err)
+	}
+	if trashedAt != "2026-03-04T00:00:00Z" || trashedBy != "actor-update-2" || trashReason != "legacy status migration" {
+		t.Fatalf("unexpected trashed lifecycle backfill: trashed_at=%q trashed_by=%q trash_reason=%q", trashedAt, trashedBy, trashReason)
 	}
 }
 

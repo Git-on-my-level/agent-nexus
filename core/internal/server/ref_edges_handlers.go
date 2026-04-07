@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
@@ -37,6 +38,10 @@ func handleListRefEdges(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		edges, err = opts.primitiveStore.ListRefEdgesByTarget(r.Context(), targetRef, relation)
 	}
 	if err != nil {
+		if errors.Is(err, primitives.ErrInvalidRefEdgeQuery) {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list ref edges")
 		return
 	}

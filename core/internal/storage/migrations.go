@@ -539,6 +539,18 @@ var migrations = []migration{
 		Version: 6,
 		Statements: []string{
 			`DROP INDEX IF EXISTS idx_documents_status_trashed_updated_at;`,
+			`UPDATE documents
+			    SET archived_at = COALESCE(NULLIF(archived_at, ''), updated_at, created_at),
+			        archived_by = COALESCE(NULLIF(archived_by, ''), updated_by, created_by)
+			  WHERE status = 'archived'
+			    AND COALESCE(NULLIF(archived_at, ''), '') = ''
+			    AND COALESCE(NULLIF(trashed_at, ''), '') = '';`,
+			`UPDATE documents
+			    SET trashed_at = COALESCE(NULLIF(trashed_at, ''), updated_at, created_at),
+			        trashed_by = COALESCE(NULLIF(trashed_by, ''), updated_by, created_by),
+			        trash_reason = COALESCE(NULLIF(trash_reason, ''), 'legacy status migration')
+			  WHERE status = 'trashed'
+			    AND COALESCE(NULLIF(trashed_at, ''), '') = '';`,
 			`ALTER TABLE documents DROP COLUMN status;`,
 		},
 	},

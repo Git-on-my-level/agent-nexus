@@ -495,7 +495,7 @@ func (a *App) parseCardIDAndOptionalJSONBody(args []string, commandName string) 
 var refEdgesSubcommandSpec = subcommandSpec{
 	command:  "ref-edges",
 	valid:    []string{"list"},
-	examples: []string{`oar ref-edges list --target-type card --target-id <card-id>`},
+	examples: []string{`oar ref-edges list --target-ref card:<card-id>`},
 }
 
 func (a *App) runRefEdgesCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
@@ -510,24 +510,25 @@ func (a *App) runRefEdgesCommand(ctx context.Context, args []string, cfg config.
 		return nil, "ref-edges", refEdgesSubcommandSpec.unknownError(args[0])
 	}
 	fs := newSilentFlagSet("ref-edges list")
-	var sourceType, sourceID, targetType, targetID, edgeType trackedString
-	fs.Var(&sourceType, "source-type", "Index source_type filter")
-	fs.Var(&sourceID, "source-id", "Index source_id filter")
-	fs.Var(&targetType, "target-type", "Index target_type filter (reverse lookup)")
-	fs.Var(&targetID, "target-id", "Index target_id filter (reverse lookup)")
-	fs.Var(&edgeType, "edge-type", "Optional edge_type filter")
+	var sourceRef, targetRef, relation trackedString
+	fs.Var(&sourceRef, "source-ref", "Typed source ref for forward lookup")
+	fs.Var(&targetRef, "target-ref", "Typed target ref for reverse lookup")
+	fs.Var(&relation, "relation", "Optional relation filter")
 	if err := fs.Parse(args[1:]); err != nil {
 		return nil, "ref-edges list", errnorm.Usage("invalid_flags", err.Error())
 	}
 	if len(fs.Args()) > 0 {
 		return nil, "ref-edges list", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar ref-edges list`")
 	}
-	q := make([]queryParam, 0, 5)
-	addSingleQuery(&q, "source_type", strings.TrimSpace(sourceType.value))
-	addSingleQuery(&q, "source_id", strings.TrimSpace(sourceID.value))
-	addSingleQuery(&q, "target_type", strings.TrimSpace(targetType.value))
-	addSingleQuery(&q, "target_id", strings.TrimSpace(targetID.value))
-	addSingleQuery(&q, "edge_type", strings.TrimSpace(edgeType.value))
+	sourceRefValue := strings.TrimSpace(sourceRef.value)
+	targetRefValue := strings.TrimSpace(targetRef.value)
+	if (sourceRefValue == "" && targetRefValue == "") || (sourceRefValue != "" && targetRefValue != "") {
+		return nil, "ref-edges list", errnorm.Usage("invalid_request", "specify exactly one of --source-ref or --target-ref")
+	}
+	q := make([]queryParam, 0, 3)
+	addSingleQuery(&q, "source_ref", sourceRefValue)
+	addSingleQuery(&q, "target_ref", targetRefValue)
+	addSingleQuery(&q, "relation", strings.TrimSpace(relation.value))
 	result, err := a.invokeTypedJSON(ctx, cfg, "ref-edges list", "ref_edges.list", nil, q, nil)
 	return result, "ref-edges list", err
 }

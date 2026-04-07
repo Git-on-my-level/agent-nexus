@@ -4,9 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 )
+
+var ErrInvalidRefEdgeQuery = errors.New("invalid ref edge query")
 
 type RefEdge struct {
 	SourceRef    string
@@ -28,7 +31,7 @@ func (s *Store) ListRefEdgesBySource(ctx context.Context, sourceRef string, rela
 
 	sourceType, sourceID, ok := splitTypedRef(sourceRef)
 	if !ok {
-		return nil, fmt.Errorf("invalid source_ref %q: must be typed-ref format", sourceRef)
+		return nil, fmt.Errorf("%w: source_ref must be typed-ref format", ErrInvalidRefEdgeQuery)
 	}
 
 	query := `SELECT source_type, source_id, target_type, target_id, edge_type, created_at, metadata_json
@@ -65,7 +68,7 @@ func (s *Store) ListRefEdgesByTarget(ctx context.Context, targetRef string, rela
 
 	targetType, targetID, ok := splitTypedRef(targetRef)
 	if !ok {
-		return nil, fmt.Errorf("invalid target_ref %q: must be typed-ref format", targetRef)
+		return nil, fmt.Errorf("%w: target_ref must be typed-ref format", ErrInvalidRefEdgeQuery)
 	}
 
 	query := `SELECT source_type, source_id, target_type, target_id, edge_type, created_at, metadata_json

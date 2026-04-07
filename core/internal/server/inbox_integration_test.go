@@ -440,7 +440,7 @@ func TestLegacyRiskReviewAckStillSuppressesWorkItemRiskAfterRebuild(t *testing.T
 	}
 }
 
-func TestInboxAcknowledgmentRejectsLegacyTopicPrefixedBackingThreadID(t *testing.T) {
+func TestInboxAcknowledgmentAcceptsLegacyTopicPrefixedBackingThreadID(t *testing.T) {
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
@@ -485,14 +485,24 @@ func TestInboxAcknowledgmentRejectsLegacyTopicPrefixedBackingThreadID(t *testing
 		"actor_id":"actor-1",
 		"subject_ref":"topic:`+threadID+`",
 		"inbox_item_id":"`+inboxItemID+`"
-	}`, http.StatusBadRequest)
+	}`, http.StatusCreated)
+	var acked struct {
+		Event map[string]any `json:"event"`
+	}
+	if err := json.NewDecoder(ackResp.Body).Decode(&acked); err != nil {
+		t.Fatalf("decode ack response: %v", err)
+	}
 	ackResp.Body.Close()
 
-	itemsAfterRejectedAck := getInboxItems(t, h.baseURL)
-	if _, stillThere := findInboxItem(itemsAfterRejectedAck, func(item map[string]any) bool {
+	if got := asString(acked.Event["thread_id"]); got != threadID {
+		t.Fatalf("expected ack event thread_id=%q, got %q", threadID, got)
+	}
+
+	itemsAfterAck := getInboxItems(t, h.baseURL)
+	if _, stillThere := findInboxItem(itemsAfterAck, func(item map[string]any) bool {
 		return asString(item["id"]) == inboxItemID
-	}); !stillThere {
-		t.Fatalf("expected rejected ack to leave inbox item in place, got %#v", itemsAfterRejectedAck)
+	}); stillThere {
+		t.Fatalf("expected acknowledged decision item to be suppressed, got %#v", itemsAfterAck)
 	}
 }
 
