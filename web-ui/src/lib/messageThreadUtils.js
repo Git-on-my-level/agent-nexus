@@ -172,7 +172,7 @@ export function toMessageThreadView(events = [], options = {}) {
   for (const root of roots) {
     sortChildren(root);
   }
-  roots.sort(compareEventsNewestFirst);
+  roots.sort(compareEventsOldestFirst);
 
   return roots;
 }

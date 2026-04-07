@@ -458,6 +458,55 @@
       ? membership.resolution_refs
       : [],
   );
+
+  let dedupedRelatedRefs = $derived.by(() => {
+    const tid = linkedThreadId;
+    const nav = cardInspectNav;
+    return relatedRefsList.filter((ref) => {
+      const s = String(ref ?? "").trim();
+      if (tid && s === `thread:${tid}`) return false;
+      if (nav?.kind === "topic" && s === `topic:${nav.segment}`) return false;
+      if (nav?.kind === "thread" && s === `thread:${nav.segment}`) return false;
+      return true;
+    });
+  });
+
+  let refLabelHints = $derived.by(() => {
+    const hints = {};
+    const t = thread;
+    if (t && typeof t === "object") {
+      const title = String(t.title ?? "").trim();
+      if (title) {
+        if (t.id) hints[`thread:${t.id}`] = title;
+        const topicRef = String(t.topic_ref ?? "").trim();
+        if (topicRef) hints[topicRef] = title;
+      }
+    }
+    return hints;
+  });
+
+  let showSummary = $derived(
+    Boolean(summaryText) && summaryText !== headerTitle,
+  );
+
+  let nonZeroDerivedCounts = $derived.by(() => {
+    if (!derivedSummary || typeof derivedSummary !== "object") return [];
+    const entries = [
+      { label: "Open cards", count: derivedSummary.open_card_count },
+      {
+        label: "Decision requests",
+        count: derivedSummary.decision_request_count,
+      },
+      { label: "Decisions", count: derivedSummary.decision_count },
+      {
+        label: "Recommendations",
+        count: derivedSummary.recommendation_count,
+      },
+      { label: "Documents", count: derivedSummary.document_count },
+      { label: "Inbox", count: derivedSummary.inbox_count },
+    ];
+    return entries.filter((e) => e.count != null && e.count > 0);
+  });
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -477,20 +526,11 @@
       <div class="flex items-start justify-between gap-3">
         <div class="min-w-0 flex-1">
           <div class="flex flex-wrap items-center gap-2">
-            {#if cardInspectNav && topicHref}
-              <a
-                class="truncate text-[15px] font-semibold text-[var(--ui-text)] transition-colors hover:text-indigo-300"
-                href={topicHref}
-              >
-                {headerTitle}
-              </a>
-            {:else}
-              <h2
-                class="truncate text-[15px] font-semibold text-[var(--ui-text)]"
-              >
-                {headerTitle}
-              </h2>
-            {/if}
+            <h2
+              class="truncate text-[15px] font-semibold text-[var(--ui-text)]"
+            >
+              {headerTitle}
+            </h2>
             <span
               class="rounded-md px-1.5 py-0.5 text-[11px] font-medium {cardResolutionTone(
                 cardResolution,
@@ -744,7 +784,7 @@
             </div>
           {:else}
             <div class="space-y-4 text-[13px] text-[var(--ui-text)]">
-              {#if summaryText}
+              {#if showSummary}
                 <section>
                   <h3
                     class="mb-1.5 text-[12px] font-medium text-[var(--ui-text-muted)]"
@@ -774,7 +814,7 @@
                 </section>
               {/if}
 
-              {#if relatedRefsList.length > 0}
+              {#if dedupedRelatedRefs.length > 0}
                 <section>
                   <h3
                     class="mb-1.5 text-[12px] font-medium text-[var(--ui-text-muted)]"
@@ -782,9 +822,15 @@
                     Related refs
                   </h3>
                   <ul class="space-y-1">
-                    {#each relatedRefsList as ref}
+                    {#each dedupedRelatedRefs as ref}
                       <li class="text-[12px]">
-                        <RefLink refValue={ref} {boardId} />
+                        <RefLink
+                          refValue={ref}
+                          {boardId}
+                          humanize
+                          showRaw
+                          labelHints={refLabelHints}
+                        />
                       </li>
                     {/each}
                   </ul>
@@ -808,82 +854,87 @@
                 </section>
               {/if}
 
-              <section class="flex flex-wrap gap-2 text-[12px]">
-                <span class="text-[var(--ui-text-muted)]">Risk</span>
-                <span class="font-medium capitalize text-[var(--ui-text)]">
-                  {String(membership?.risk ?? "—")}
-                </span>
-              </section>
-
-              {#if derivedSummary && typeof derivedSummary === "object"}
-                <section>
-                  <h3
-                    class="mb-1.5 text-[12px] font-medium text-[var(--ui-text-muted)]"
-                  >
-                    Derived summary
-                  </h3>
-                  <dl class="grid grid-cols-2 gap-x-3 gap-y-1 text-[12px]">
-                    {#if derivedSummary.open_card_count != null}
-                      <dt class="text-[var(--ui-text-muted)]">Open cards</dt>
-                      <dd>{derivedSummary.open_card_count}</dd>
-                    {/if}
-                    {#if derivedSummary.decision_request_count != null}
-                      <dt class="text-[var(--ui-text-muted)]">
-                        Decision requests
-                      </dt>
-                      <dd>{derivedSummary.decision_request_count}</dd>
-                    {/if}
-                    {#if derivedSummary.decision_count != null}
-                      <dt class="text-[var(--ui-text-muted)]">Decisions</dt>
-                      <dd>{derivedSummary.decision_count}</dd>
-                    {/if}
-                    {#if derivedSummary.recommendation_count != null}
-                      <dt class="text-[var(--ui-text-muted)]">
-                        Recommendations
-                      </dt>
-                      <dd>{derivedSummary.recommendation_count}</dd>
-                    {/if}
-                    {#if derivedSummary.document_count != null}
-                      <dt class="text-[var(--ui-text-muted)]">Documents</dt>
-                      <dd>{derivedSummary.document_count}</dd>
-                    {/if}
-                    {#if derivedSummary.inbox_count != null}
-                      <dt class="text-[var(--ui-text-muted)]">Inbox</dt>
-                      <dd>{derivedSummary.inbox_count}</dd>
-                    {/if}
-                    {#if derivedSummary.latest_activity_at}
-                      <dt class="text-[var(--ui-text-muted)]">
-                        Latest activity
-                      </dt>
-                      <dd>
-                        {formatTimestamp(derivedSummary.latest_activity_at) ||
-                          "—"}
-                      </dd>
-                    {/if}
-                    {#if derivedSummary.stale != null}
-                      <dt class="text-[var(--ui-text-muted)]">Stale scan</dt>
-                      <dd>{derivedSummary.stale ? "Yes" : "No"}</dd>
-                    {/if}
-                  </dl>
-                </section>
-              {/if}
-
-              {#if cardFreshness}
-                <section class="flex flex-wrap items-center gap-2 text-[12px]">
-                  <span class="text-[var(--ui-text-muted)]">Freshness</span>
-                  <span
-                    class="rounded-md px-1.5 py-0.5 font-medium {freshnessStatusTone(
-                      cardFreshness.status,
-                    )}"
-                  >
-                    {freshnessStatusLabel(cardFreshness.status)}
+              <section class="space-y-2 text-[12px]">
+                <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                  <span class="flex items-center gap-1.5">
+                    <span class="text-[var(--ui-text-muted)]">Risk</span>
+                    <span
+                      class="font-medium capitalize text-[var(--ui-text)]"
+                    >
+                      {String(membership?.risk ?? "—")}
+                    </span>
                   </span>
-                  {#if cardFreshness.generated_at}
-                    <span class="text-[var(--ui-text-muted)]">
-                      · {formatTimestamp(cardFreshness.generated_at)}
+                  {#if cardFreshness}
+                    <span class="flex items-center gap-1.5">
+                      <span class="text-[var(--ui-text-muted)]"
+                        >Freshness</span
+                      >
+                      <span
+                        class="rounded-md px-1.5 py-0.5 font-medium {freshnessStatusTone(
+                          cardFreshness.status,
+                        )}"
+                      >
+                        {freshnessStatusLabel(cardFreshness.status)}
+                      </span>
+                      {#if cardFreshness.generated_at}
+                        <span class="text-[var(--ui-text-muted)]">
+                          · {formatTimestamp(cardFreshness.generated_at)}
+                        </span>
+                      {/if}
                     </span>
                   {/if}
-                </section>
+                  {#if derivedSummary?.latest_activity_at}
+                    <span class="flex items-center gap-1.5">
+                      <span class="text-[var(--ui-text-muted)]"
+                        >Activity</span
+                      >
+                      <span class="text-[var(--ui-text)]">
+                        {formatTimestamp(
+                          derivedSummary.latest_activity_at,
+                        ) || "—"}
+                      </span>
+                    </span>
+                  {/if}
+                  {#if derivedSummary?.stale}
+                    <span
+                      class="rounded-md bg-amber-500/10 px-1.5 py-0.5 font-medium text-amber-400"
+                    >
+                      Stale
+                    </span>
+                  {/if}
+                </div>
+                {#if nonZeroDerivedCounts.length > 0}
+                  <div class="flex flex-wrap gap-1.5">
+                    {#each nonZeroDerivedCounts as { label, count }}
+                      <span
+                        class="rounded-md bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px]"
+                      >
+                        <span class="text-[var(--ui-text-muted)]"
+                          >{label}</span
+                        >
+                        <span class="font-medium text-[var(--ui-text)]">
+                          {count}
+                        </span>
+                      </span>
+                    {/each}
+                  </div>
+                {/if}
+              </section>
+
+              {#if cardInspectNav && topicHref}
+                <div class="flex items-center gap-1.5 text-[12px]">
+                  <span class="text-[var(--ui-text-muted)]"
+                    >{cardInspectNav.kind === "topic"
+                      ? "Topic"
+                      : "Thread"}</span
+                  >
+                  <a
+                    class="text-indigo-400 hover:text-indigo-300"
+                    href={topicHref}
+                  >
+                    {cardInspectNav.segment}
+                  </a>
+                </div>
               {/if}
 
               {#if membership?.updated_at}

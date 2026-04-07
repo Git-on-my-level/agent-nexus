@@ -348,6 +348,75 @@
   }
 </script>
 
+<div>
+  <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+    <div class="flex flex-wrap items-center gap-3">
+      <h2
+        class="text-[12px] font-semibold uppercase tracking-wider text-[var(--ui-text-muted)]"
+      >
+        Messages
+      </h2>
+      {#if archivedMessageCount > 0}
+        <label
+          class="flex items-center gap-1.5 text-[11px] text-[var(--ui-text-muted)]"
+        >
+          <input
+            type="checkbox"
+            bind:checked={showArchived}
+            class="accent-[var(--ui-accent)]"
+          />
+          Show archived ({archivedMessageCount})
+        </label>
+      {/if}
+    </div>
+    <div class="min-h-[1rem] text-right" aria-live="polite">
+      {#if showSyncStatus}
+        <p class="text-[11px] text-[var(--ui-text-muted)]">Syncing…</p>
+      {/if}
+    </div>
+  </div>
+  {#if timelineError && !hasAnyNonTrashedMessage}
+    <p class="rounded bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
+      {timelineError}
+    </p>
+  {:else if timelineLoading && !hasAnyNonTrashedMessage}
+    <p class="text-[13px] text-[var(--ui-text-muted)]">Loading messages...</p>
+  {:else if !hasAnyNonTrashedMessage}
+    <p class="py-6 text-center text-[13px] text-[var(--ui-text-muted)]">
+      No messages yet. Post a message below to start the conversation.
+    </p>
+  {:else if !hasMessages}
+    <p class="text-[13px] text-[var(--ui-text-muted)]">
+      No messages in view. Turn on Show archived to see archived topics.
+    </p>
+  {:else}
+    {#if lifecycleError}
+      <p class="mb-2 rounded bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
+        {lifecycleError}
+      </p>
+    {/if}
+    {#if timelineError}
+      <p class="mb-2 rounded bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
+        {timelineError}
+      </p>
+    {/if}
+    <div class="space-y-3">
+      {#each messageThreads as message (message.id)}
+        <MessageItem
+          {message}
+          {threadId}
+          {actorName}
+          onReply={setReplyTarget}
+          onArchive={openArchiveConfirm}
+          onTrash={openTrashConfirm}
+          onUnarchive={doUnarchive}
+          {lifecycleBusy}
+        />
+      {/each}
+    </div>
+  {/if}
+</div>
+
 <div
   class="mt-4 rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] p-3"
 >
@@ -356,12 +425,6 @@
       {postMessageError}
     </p>
   {/if}
-  <label
-    class="mb-1.5 block text-[12px] font-medium text-[var(--ui-text-muted)]"
-    for="message-text"
-  >
-    Message
-  </label>
   <div class="relative">
     <textarea
       bind:this={textareaRef}
@@ -378,7 +441,7 @@
     ></textarea>
     {#if mentionOpen}
       <div
-        class="absolute left-0 right-0 top-full z-20 mt-1 max-h-48 overflow-auto rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] py-1"
+        class="absolute bottom-full left-0 right-0 z-20 mb-1 max-h-48 overflow-auto rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] py-1"
         id="message-mention-list"
         role="listbox"
         aria-label="Agent handles"
@@ -479,73 +542,6 @@
       </button>
     </div>
   </div>
-</div>
-
-<div class="mt-4">
-  <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
-    <div class="flex flex-wrap items-center gap-3">
-      <h2
-        class="text-[12px] font-semibold uppercase tracking-wider text-[var(--ui-text-muted)]"
-      >
-        Messages
-      </h2>
-      {#if archivedMessageCount > 0}
-        <label
-          class="flex items-center gap-1.5 text-[11px] text-[var(--ui-text-muted)]"
-        >
-          <input
-            type="checkbox"
-            bind:checked={showArchived}
-            class="accent-[var(--ui-accent)]"
-          />
-          Show archived ({archivedMessageCount})
-        </label>
-      {/if}
-    </div>
-    <div class="min-h-[1rem] text-right" aria-live="polite">
-      {#if showSyncStatus}
-        <p class="text-[11px] text-[var(--ui-text-muted)]">Syncing…</p>
-      {/if}
-    </div>
-  </div>
-  {#if timelineError && !hasAnyNonTrashedMessage}
-    <p class="rounded bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
-      {timelineError}
-    </p>
-  {:else if timelineLoading && !hasAnyNonTrashedMessage}
-    <p class="text-[13px] text-[var(--ui-text-muted)]">Loading messages...</p>
-  {:else if !hasAnyNonTrashedMessage}
-    <p class="text-[13px] text-[var(--ui-text-muted)]">No messages yet.</p>
-  {:else if !hasMessages}
-    <p class="text-[13px] text-[var(--ui-text-muted)]">
-      No messages in view. Turn on Show archived to see archived topics.
-    </p>
-  {:else}
-    {#if lifecycleError}
-      <p class="mb-2 rounded bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
-        {lifecycleError}
-      </p>
-    {/if}
-    {#if timelineError}
-      <p class="mb-2 rounded bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
-        {timelineError}
-      </p>
-    {/if}
-    <div class="space-y-3">
-      {#each messageThreads as message (message.id)}
-        <MessageItem
-          {message}
-          {threadId}
-          {actorName}
-          onReply={setReplyTarget}
-          onArchive={openArchiveConfirm}
-          onTrash={openTrashConfirm}
-          onUnarchive={doUnarchive}
-          {lifecycleBusy}
-        />
-      {/each}
-    </div>
-  {/if}
 </div>
 
 <ConfirmModal
