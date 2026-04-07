@@ -36,6 +36,10 @@ type lifecycleFields struct {
 	TrashReason sql.NullString
 }
 
+func makeTypedRef(prefix, id string) string {
+	return prefix + ":" + id
+}
+
 func normalizeTypedRef(raw string) (string, string, bool) {
 	prefix, value, ok := splitTypedRef(strings.TrimSpace(raw))
 	if !ok {

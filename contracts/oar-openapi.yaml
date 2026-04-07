@@ -483,7 +483,7 @@ paths:
       x-oar-surface: diagnostic
       x-oar-command-id: ref_edges.list
       x-oar-cli-path: ref-edges list
-      x-oar-why: Query the write-through ref index by source or target (mutually exclusive); reverse lookup uses target_type+target_id.
+      x-oar-why: Query the write-through ref index by source or target typed ref (mutually exclusive); reverse lookup uses target_ref.
       x-oar-input-mode: query
       x-oar-streaming: { mode: none }
       x-oar-output-envelope: "Returns `{ ref_edges }`."
@@ -491,26 +491,20 @@ paths:
       x-oar-concepts: [refs, inspection]
       x-oar-stability: beta
       parameters:
-        - name: source_type
+        - name: source_ref
           in: query
           required: false
+          description: Typed ref for forward lookup (e.g. "board:abc123"). Mutually exclusive with target_ref.
           schema: { type: string }
-        - name: source_id
+        - name: target_ref
           in: query
           required: false
+          description: Typed ref for reverse lookup (e.g. "thread:def456"). Mutually exclusive with source_ref.
           schema: { type: string }
-        - name: target_type
+        - name: relation
           in: query
           required: false
-          schema: { type: string }
-        - name: target_id
-          in: query
-          required: false
-          schema: { type: string }
-        - name: edge_type
-          in: query
-          required: false
-          description: When set, filter results to this edge_type.
+          description: When set, filter results to this relation type.
           schema: { type: string }
       responses:
         '200':
@@ -3435,15 +3429,14 @@ components:
     RefEdge:
       type: object
       properties:
-        source_type: { type: string }
-        source_id: { type: string }
-        target_type: { type: string }
-        target_id: { type: string }
-        edge_type: { type: string }
+        source_ref: { type: string, description: "Typed ref for the edge source (e.g. board:abc123)" }
+        target_ref: { type: string, description: "Typed ref for the edge target (e.g. card:def456)" }
+        relation: { type: string, description: "Edge relation type" }
+        discovered_at: { type: string, format: date-time, description: "When this edge was first recorded" }
         metadata:
           type: object
           additionalProperties: true
-      required: [source_type, source_id, target_type, target_id, edge_type]
+      required: [source_ref, target_ref, relation, discovered_at]
 
     RefEdgesResponse:
       type: object

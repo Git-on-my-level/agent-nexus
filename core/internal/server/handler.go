@@ -95,8 +95,8 @@ type PrimitiveStore interface {
 	PurgeArchivedBoardCard(ctx context.Context, boardID string, identifier string) error
 	ListBoardCardHistory(ctx context.Context, cardID string) ([]map[string]any, error)
 	ListBoardMembershipsByThread(ctx context.Context, threadID string) ([]primitives.BoardMembership, error)
-	ListRefEdgesBySource(ctx context.Context, sourceType, sourceID string) ([]primitives.RefEdge, error)
-	ListRefEdgesByTarget(ctx context.Context, targetType, targetID string) ([]primitives.RefEdge, error)
+	ListRefEdgesBySource(ctx context.Context, sourceRef string, relationFilter string) ([]primitives.RefEdge, error)
+	ListRefEdgesByTarget(ctx context.Context, targetRef string, relationFilter string) ([]primitives.RefEdge, error)
 	ListTopics(ctx context.Context, filter primitives.TopicListFilter) ([]map[string]any, string, error)
 	CreateTopic(ctx context.Context, actorID string, topic map[string]any) (primitives.TopicPatchResult, error)
 	GetTopic(ctx context.Context, topicID string) (map[string]any, error)

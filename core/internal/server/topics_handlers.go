@@ -444,7 +444,7 @@ func buildTopicResourceBundle(ctx context.Context, opts handlerOptions, topic ma
 		return topicResourceBundle{}, err
 	}
 
-	refEdges, err := opts.primitiveStore.ListRefEdgesBySource(ctx, "topic", anyString(topic["id"]))
+	refEdges, err := opts.primitiveStore.ListRefEdgesBySource(ctx, "topic:"+anyString(topic["id"]), "ref")
 	if err != nil {
 		return topicResourceBundle{}, err
 	}
@@ -577,14 +577,26 @@ func buildTopicResourceBundle(ctx context.Context, opts handlerOptions, topic ma
 func collectTopicRefEdgeTargetIDs(edges []primitives.RefEdge, targetType string) []string {
 	out := make([]string, 0, len(edges))
 	for _, edge := range edges {
-		if strings.TrimSpace(edge.EdgeType) != "ref" || strings.TrimSpace(edge.TargetType) != strings.TrimSpace(targetType) {
+		if strings.TrimSpace(edge.Relation) != "ref" {
 			continue
 		}
-		if targetID := strings.TrimSpace(edge.TargetID); targetID != "" {
+		prefix, id, ok := splitTypedRefFromEdge(edge.TargetRef)
+		if !ok || strings.TrimSpace(prefix) != strings.TrimSpace(targetType) {
+			continue
+		}
+		if targetID := strings.TrimSpace(id); targetID != "" {
 			out = append(out, targetID)
 		}
 	}
 	return uniqueTopicIDs(out)
+}
+
+func splitTypedRefFromEdge(ref string) (string, string, bool) {
+	idx := strings.Index(ref, ":")
+	if idx <= 0 || idx >= len(ref)-1 {
+		return "", "", false
+	}
+	return ref[:idx], ref[idx+1:], true
 }
 
 func topicBoardDocumentIDs(board map[string]any) []string {

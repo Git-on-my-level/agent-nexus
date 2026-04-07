@@ -295,6 +295,125 @@ func assertRefEdges(t *testing.T, db *sql.DB, sourceType, sourceID string, expec
 	}
 }
 
+func TestRefEdgesStoreTypedRefRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	store := NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+
+	threadID := createPrimitiveTestThread(t, ctx, store, "RoundTrip")
+
+	board, err := store.CreateBoard(ctx, "actor-1", map[string]any{
+		"id":            "board-rt-1",
+		"title":         "RoundTrip Board",
+		"document_refs": []string{},
+		"pinned_refs":   []string{},
+	})
+	if err != nil {
+		t.Fatalf("create board: %v", err)
+	}
+	boardID := board["id"].(string)
+
+	cardResult, err := store.CreateBoardCard(ctx, "actor-1", boardID, AddBoardCardInput{
+		CardID:         "card-rt-1",
+		Title:          "RoundTrip Card",
+		ParentThreadID: threadID,
+		Status:         "todo",
+	})
+	if err != nil {
+		t.Fatalf("create card: %v", err)
+	}
+	cardID := cardResult.Card["id"].(string)
+
+	t.Run("forward lookup by source_ref", func(t *testing.T) {
+		edges, err := store.ListRefEdgesBySource(ctx, "board:"+boardID, "")
+		if err != nil {
+			t.Fatalf("ListRefEdgesBySource: %v", err)
+		}
+		if len(edges) == 0 {
+			t.Fatal("expected ref edges for board")
+		}
+		for _, e := range edges {
+			if e.SourceRef != "board:"+boardID {
+				t.Fatalf("expected source_ref board:%s, got %s", boardID, e.SourceRef)
+			}
+			if !strings.HasPrefix(e.TargetRef, "card:") && e.Relation != "ref" {
+				t.Fatalf("unexpected edge: source_ref=%s target_ref=%s relation=%s", e.SourceRef, e.TargetRef, e.Relation)
+			}
+			if e.Relation == "" {
+				t.Fatal("relation must not be empty")
+			}
+			if e.DiscoveredAt == "" {
+				t.Fatal("discovered_at must not be empty")
+			}
+		}
+	})
+
+	t.Run("reverse lookup by target_ref", func(t *testing.T) {
+		edges, err := store.ListRefEdgesByTarget(ctx, "card:"+cardID, "")
+		if err != nil {
+			t.Fatalf("ListRefEdgesByTarget: %v", err)
+		}
+		if len(edges) == 0 {
+			t.Fatal("expected ref edges pointing at card")
+		}
+		for _, e := range edges {
+			if e.TargetRef != "card:"+cardID {
+				t.Fatalf("expected target_ref card:%s, got %s", cardID, e.TargetRef)
+			}
+		}
+	})
+
+	t.Run("relation filter", func(t *testing.T) {
+		edges, err := store.ListRefEdgesBySource(ctx, "board:"+boardID, "board_card")
+		if err != nil {
+			t.Fatalf("ListRefEdgesBySource with relation filter: %v", err)
+		}
+		if len(edges) != 1 {
+			t.Fatalf("expected exactly 1 board_card edge, got %d", len(edges))
+		}
+		if edges[0].Relation != "board_card" {
+			t.Fatalf("expected relation board_card, got %s", edges[0].Relation)
+		}
+		if edges[0].TargetRef != "card:"+cardID {
+			t.Fatalf("expected target_ref card:%s, got %s", cardID, edges[0].TargetRef)
+		}
+	})
+
+	t.Run("empty source_ref returns empty", func(t *testing.T) {
+		edges, err := store.ListRefEdgesBySource(ctx, "", "")
+		if err != nil {
+			t.Fatalf("ListRefEdgesBySource empty: %v", err)
+		}
+		if len(edges) != 0 {
+			t.Fatalf("expected 0 edges for empty source_ref, got %d", len(edges))
+		}
+	})
+
+	t.Run("invalid typed_ref returns error", func(t *testing.T) {
+		_, err := store.ListRefEdgesBySource(ctx, "not-a-typed-ref", "")
+		if err == nil {
+			t.Fatal("expected error for invalid typed ref")
+		}
+	})
+
+	t.Run("unknown ref returns empty", func(t *testing.T) {
+		edges, err := store.ListRefEdgesBySource(ctx, "board:nonexistent-id", "")
+		if err != nil {
+			t.Fatalf("ListRefEdgesBySource nonexistent: %v", err)
+		}
+		if len(edges) != 0 {
+			t.Fatalf("expected 0 edges for nonexistent source, got %d", len(edges))
+		}
+	})
+}
+
 func stringPointer(value string) *string {
 	value = strings.TrimSpace(value)
 	return &value

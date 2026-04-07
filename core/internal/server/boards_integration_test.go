@@ -1635,7 +1635,7 @@ func TestPostCardsGlobalAndRefEdgesForwardLookup(t *testing.T) {
 		t.Fatal("expected card id from global create")
 	}
 
-	refResp, err := http.Get(h.baseURL + "/ref-edges?source_type=card&source_id=" + cardID)
+	refResp, err := http.Get(h.baseURL + "/ref-edges?source_ref=card:" + cardID)
 	if err != nil {
 		t.Fatalf("GET ref-edges: %v", err)
 	}
