@@ -1,5 +1,5 @@
 <script>
-  import { goto } from "$app/navigation";
+  import { goto, replaceState } from "$app/navigation";
   import { page } from "$app/stores";
   import BoardCard from "$lib/components/BoardCard.svelte";
   import CardDetailModal from "$lib/components/CardDetailModal.svelte";
@@ -43,6 +43,7 @@
     joinDelimitedValues,
     parseDelimitedValues,
   } from "$lib/boardUtils";
+  import { withUpdatedSearchParams } from "$lib/urlState";
 
   let workspace = $state(null);
   let loading = $state(false);
@@ -81,6 +82,8 @@
   let addCardDueAt = $state("");
   let addCardDefinitionOfDone = $state("");
 
+  let previousBoardId = $state("");
+  let previousCardUrlParam = $state("");
   let workspaceSlug = $derived($page.params.workspace);
   let boardId = $derived($page.params.boardId);
   let actorName = $derived((id) =>
@@ -158,11 +161,15 @@
   }
 
   function openCardDetailModal(cardItem) {
+    const id = boardCardStableId(cardItem?.membership);
+    if (!id) return;
     detailModalCard = cardItem;
+    replaceState(withUpdatedSearchParams($page.url, { card: id }), {});
   }
 
   function closeCardDetailModal() {
     detailModalCard = null;
+    replaceState(withUpdatedSearchParams($page.url, { card: "" }), {});
   }
 
   function cardResolutionLabel(resolution) {
@@ -442,14 +449,37 @@
   });
 
   $effect(() => {
-    const cardParam = $page.url.searchParams.get("card");
-    if (!cardParam || !workspace?.cards?.items) return;
-    const allCards = workspace.cards.items;
-    const match = allCards.find(
+    const id = boardId;
+    if (previousBoardId && previousBoardId !== id) {
+      detailModalCard = null;
+    }
+    previousBoardId = id;
+  });
+
+  $effect(() => {
+    const cardParam = String($page.url.searchParams.get("card") ?? "").trim();
+    if (previousCardUrlParam && !cardParam) {
+      detailModalCard = null;
+    }
+    previousCardUrlParam = cardParam;
+  });
+
+  $effect(() => {
+    const cardParam = String($page.url.searchParams.get("card") ?? "").trim();
+    if (!cardParam) {
+      return;
+    }
+    const items = workspace?.cards?.items;
+    if (!items) return;
+
+    const match = items.find(
       (c) => boardCardStableId(c.membership) === cardParam,
     );
-    if (match && detailModalCard === null) {
+    if (match) {
       detailModalCard = match;
+    } else {
+      detailModalCard = null;
+      replaceState(withUpdatedSearchParams($page.url, { card: "" }), {});
     }
   });
 

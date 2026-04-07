@@ -1,5 +1,7 @@
 <script>
   import { onMount } from "svelte";
+  import { goto, replaceState } from "$app/navigation";
+  import { page } from "$app/stores";
 
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
@@ -20,8 +22,10 @@
   import { kindColor, kindLabel } from "$lib/artifactKinds";
   import { formatTimestamp } from "$lib/formatDate";
   import { getPriorityLabel } from "$lib/topicFilters";
+  import { readEnumSearchParam, withUpdatedSearchParams } from "$lib/urlState";
 
   const DOC_STATUS_LABELS = { draft: "Draft", active: "Active" };
+  const TRASH_TAB_IDS = ["artifacts", "documents", "topics", "boards", "cards"];
 
   let artifacts = $state([]);
   let documents = $state([]);
@@ -87,10 +91,30 @@
     return `${type}:${String(id ?? "").trim()}`;
   }
 
-  function switchTab(tabId) {
-    activeTab = tabId;
+  $effect(() => {
+    const raw = String($page.url.searchParams.get("tab") ?? "").trim();
+    const normalized = readEnumSearchParam(
+      $page.url.searchParams,
+      "tab",
+      TRASH_TAB_IDS,
+      "",
+    );
+    if (raw && !normalized) {
+      replaceState(withUpdatedSearchParams($page.url, { tab: "" }), {});
+      return;
+    }
+    activeTab = normalized || "artifacts";
+  });
+
+  async function switchTab(tabId) {
+    if (!TRASH_TAB_IDS.includes(tabId)) return;
     purgeConfirmId = "";
     purgeAllOpen = false;
+    await goto(withUpdatedSearchParams($page.url, { tab: tabId }), {
+      replaceState: true,
+      noScroll: true,
+      keepFocus: true,
+    });
   }
 
   function docStatusColor(status) {
@@ -402,7 +426,7 @@
       tab.id
         ? 'border-b-2 border-[var(--ui-accent)] text-[var(--ui-text)]'
         : 'text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]'}"
-      onclick={() => switchTab(tab.id)}
+      onclick={() => void switchTab(tab.id)}
       role="tab"
       aria-selected={activeTab === tab.id}
       type="button"

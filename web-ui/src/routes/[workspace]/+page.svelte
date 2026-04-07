@@ -157,9 +157,9 @@
         (ref) => splitTypedRef(ref).prefix === "board",
       );
       const { id: boardId } = splitTypedRef(boardRef);
-      return boardId
-        ? workspacePath(workspaceSlug, `/boards/${boardId}`)
-        : workspacePath(workspaceSlug, "/inbox");
+      if (!boardId) return workspacePath(workspaceSlug, "/inbox");
+      const base = workspacePath(workspaceSlug, `/boards/${boardId}`);
+      return id ? `${base}?card=${encodeURIComponent(id)}` : base;
     }
     return workspacePath(workspaceSlug, "/inbox");
   }

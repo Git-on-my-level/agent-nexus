@@ -1,6 +1,6 @@
 <script>
   import { page } from "$app/stores";
-  import { BOARD_STATUS_LABELS } from "$lib/boardUtils";
+  import { BOARD_STATUS_LABELS, boardCardStableId } from "$lib/boardUtils";
   import { formatTimestamp } from "$lib/formatDate";
   import { workspacePath } from "$lib/workspacePaths";
   import { topicDetailStore } from "$lib/topicDetailStore";
@@ -129,12 +129,18 @@
             {@const pinnedDocumentId = documentIdFromCardRef(
               membership?.card?.document_ref ?? membership?.document_ref ?? "",
             )}
+            {@const cardMembership = membership?.card}
+            {@const boardCardHref = cardMembership
+              ? `${workspacePath(workspaceSlug, `/boards/${boardId}`)}?card=${encodeURIComponent(
+                  boardCardStableId(cardMembership),
+                )}`
+              : workspacePath(workspaceSlug, `/boards/${boardId}`)}
             {#if boardId}
               <div class="px-4 py-2.5">
                 <div class="flex items-center justify-between gap-3">
                   <a
                     class="flex min-w-0 items-center gap-2 transition-colors hover:text-indigo-300"
-                    href={workspacePath(workspaceSlug, `/boards/${boardId}`)}
+                    href={boardCardHref}
                   >
                     <span
                       class="truncate text-[13px] font-medium text-[var(--ui-text)]"

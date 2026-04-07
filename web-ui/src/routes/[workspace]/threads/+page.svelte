@@ -11,6 +11,7 @@
     TOPIC_PRIORITY_LABELS,
     TOPIC_STATUSES,
     applyTopicListClientFilters,
+    buildThreadFilterQueryParamsFromThreadListState,
     buildTopicListApiQueryParams,
     buildTopicListSearchString,
     computeStaleness,
@@ -61,6 +62,10 @@
 
   let backingThreads = $state([]);
 
+  let filteredBackingThreads = $derived(
+    applyTopicListClientFilters(backingThreads, filters),
+  );
+
   let topicDraft = $state({
     title: "",
     summary: "",
@@ -86,7 +91,8 @@
     loading = true;
     error = "";
     try {
-      const response = await coreClient.listThreads({});
+      const query = buildThreadFilterQueryParamsFromThreadListState(filters);
+      const response = await coreClient.listThreads(query);
       backingThreads = response.threads ?? [];
     } catch (loadError) {
       const reason =
@@ -102,6 +108,11 @@
     workspaceSlug;
     listSurface;
     if (listSurface === "threads") {
+      const parsed = parseTopicListSearchParams($page.url.searchParams);
+      filters = { ...defaultFilters, ...parsed };
+      if ([...$page.url.searchParams.keys()].length > 0) {
+        filtersOpen = true;
+      }
       void loadBackingThreads();
       return;
     }
@@ -143,7 +154,10 @@
 
   async function applyFilters() {
     const qs = buildTopicListSearchString(filters);
-    const path = workspaceHref("/topics");
+    const path =
+      listSurface === "topics"
+        ? workspaceHref("/topics")
+        : workspaceHref("/threads");
     await goto(`${path}${qs ? `?${qs}` : ""}`, {
       replaceState: true,
       noScroll: true,
@@ -152,7 +166,11 @@
   }
 
   async function resetFilters() {
-    await goto(workspaceHref("/topics"), {
+    const path =
+      listSurface === "topics"
+        ? workspaceHref("/topics")
+        : workspaceHref("/threads");
+    await goto(path, {
       replaceState: true,
       noScroll: true,
       keepFocus: true,
@@ -481,6 +499,26 @@
         {createOpen ? "Cancel" : "New topic"}
       </button>
     {:else}
+      <button
+        class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)]"
+        onclick={() => (filtersOpen = !filtersOpen)}
+        type="button"
+      >
+        <svg
+          class="h-3.5 w-3.5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+          />
+        </svg>
+        Filters
+      </button>
       <a
         class="rounded-md bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text)] transition-colors hover:bg-[var(--ui-border)]"
         href={workspaceHref("/topics")}>Open topics</a
@@ -489,7 +527,7 @@
   </div>
 </div>
 
-{#if listSurface === "topics" && hasActiveFilters}
+{#if (listSurface === "topics" || listSurface === "threads") && hasActiveFilters}
   <div
     class="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-[var(--ui-text-muted)]"
     data-testid="topics-active-filters-summary"
@@ -514,7 +552,7 @@
   </div>
 {/if}
 
-{#if listSurface === "topics" && filtersOpen}
+{#if (listSurface === "topics" || listSurface === "threads") && filtersOpen}
   <div
     class="mb-4 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-3"
   >
@@ -901,11 +939,26 @@
   <div class="mt-8 text-center">
     <p class="text-[13px] text-[var(--ui-text-muted)]">No threads returned.</p>
   </div>
+{:else if filteredBackingThreads.length === 0}
+  <div class="mt-8 text-center">
+    <p class="text-[13px] text-[var(--ui-text-muted)]">
+      No threads match the current filters.
+    </p>
+    {#if hasActiveFilters}
+      <button
+        class="mt-3 cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]"
+        onclick={resetFilters}
+        type="button"
+      >
+        Clear filters
+      </button>
+    {/if}
+  </div>
 {:else}
   <div
     class="space-y-px overflow-hidden rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)]"
   >
-    {#each backingThreads as thread, i}
+    {#each filteredBackingThreads as thread, i}
       {@const topicSeg = topicSegmentFromTypedRef(thread.topic_ref)}
       <div
         class="flex items-stretch {i > 0

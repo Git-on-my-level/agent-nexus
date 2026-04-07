@@ -96,8 +96,15 @@
     const boardRef = (item?.related_refs ?? []).find(
       (ref) => splitTypedRef(ref).prefix === "board",
     );
-    const { id } = splitTypedRef(boardRef);
-    return id ? workspaceHref(`/boards/${id}`) : "";
+    const { id: boardId } = splitTypedRef(boardRef);
+    if (!boardId) return "";
+    const base = workspaceHref(`/boards/${boardId}`);
+    const subjectRef = getInboxSubjectRef(item);
+    const subj = splitTypedRef(subjectRef);
+    if (subj.prefix === "card" && subj.id) {
+      return `${base}?card=${encodeURIComponent(subj.id)}`;
+    }
+    return base;
   }
 
   function inboxItemHref(item) {

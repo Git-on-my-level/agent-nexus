@@ -287,16 +287,28 @@ test("card detail modal Messages and Timeline tabs render without request storms
     .count();
   expect(dialogCount, "expected single card modal in DOM").toBe(1);
 
-  const dialog = page.getByRole("dialog", { name: "Card details" });
+  let dialog = page.getByRole("dialog", { name: "Card details" });
   await expect(dialog).toBeVisible();
+
+  await expect(page).toHaveURL(
+    new RegExp(`[?&]card=${encodeURIComponent("card-one")}`),
+  );
+  await page.reload();
+  await page.waitForLoadState("networkidle");
+  dialog = page.getByRole("dialog", { name: "Card details" });
+  await expect(dialog).toBeVisible({
+    timeout: 15_000,
+  });
+
   await expect(
-    dialog.getByRole("link", { name: "topic:topic-modal-card" }),
+    dialog.getByRole("link", { name: "topic-modal-card" }),
   ).toHaveAttribute("href", "/local/topics/topic-modal-card");
+  await expect(dialog.getByRole("link", { name: /card-one/ })).toHaveAttribute(
+    "href",
+    `/local/boards/${boardId}?card=card-one`,
+  );
   await expect(
-    dialog.getByRole("link", { name: "card:card-one" }),
-  ).toHaveAttribute("href", `/local/boards/${boardId}?card=card-one`);
-  await expect(
-    dialog.getByRole("link", { name: "artifact:artifact-modal-card" }),
+    dialog.getByRole("link", { name: /artifact-modal-card/ }),
   ).toHaveAttribute("href", "/local/artifacts/artifact-modal-card");
 
   const tabCount = await dialog
