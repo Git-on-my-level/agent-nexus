@@ -50,7 +50,7 @@ func TestBoardsWorkspaceAndThreadWorkspaceMemberships(t *testing.T) {
 		"event":{
 			"type":"decision_needed",
 			"thread_id":"`+memberThreadID+`",
-			"refs":["topic:`+memberThreadID+`"],
+			"refs":["thread:`+memberThreadID+`"],
 			"summary":"Need member-thread decision",
 			"payload":{"decision":"Approve board work"},
 			"provenance":{"sources":["seed:board-workspace"]}

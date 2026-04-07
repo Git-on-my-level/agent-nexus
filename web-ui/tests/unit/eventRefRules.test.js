@@ -117,6 +117,19 @@ describe("eventRefRules", () => {
       );
       expect(result.valid).toBe(true);
     });
+
+    it("requires thread refs for decision events", () => {
+      const bad = validateEventRefRule("decision_made", ["topic:topic-1"], {});
+      expect(bad.valid).toBe(false);
+      expect(bad.error).toContain("thread:<id>");
+
+      const good = validateEventRefRule(
+        "decision_made",
+        ["thread:thread-1"],
+        {},
+      );
+      expect(good.valid).toBe(true);
+    });
   });
 
   describe("getPayloadStringAtPath", () => {

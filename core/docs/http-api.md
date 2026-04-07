@@ -335,6 +335,7 @@ Backing threads hold append-only timelines and anchor many packet subjects. They
 
 - `POST /events`
   - Body: `{ "actor_id": "...", "request_key"?: "...", "event": <event_fields_without_id_ts_actor_id> }`
+  - Decision lifecycle events (`decision_needed`, `intervention_needed`, `decision_made`) are thread-grounded writes: `event.refs` must include `thread:<thread_id>`. Clients may still include `topic:` refs when a topic exists, but `thread:` is the required durable anchor.
   - Response: `{ "event": <event> }`
 
 - `GET /events/stream`

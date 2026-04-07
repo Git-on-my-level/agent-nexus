@@ -986,7 +986,7 @@ func TestThreadWorkspaceBundlesCanonicalAndDerivedSections(t *testing.T) {
 		"event":{
 			"type":"decision_needed",
 			"thread_id":"`+rootThreadID+`",
-			"refs":["topic:`+rootThreadID+`"],
+			"refs":["thread:`+rootThreadID+`"],
 			"summary":"Need approval on rollout",
 			"payload":{"decision":"Approve rollout"},
 			"provenance":{"sources":["seed:workspace-root"]}

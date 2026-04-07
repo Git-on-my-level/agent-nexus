@@ -247,7 +247,7 @@ authenticated principal that resolves to one.
 ### 7.3 Convenience operations
 - Submit receipt (validates evidence + packet + refs, creates artifact + emits `receipt_added` with required typed refs)
 - Submit review (validates packet + refs, creates artifact + emits `review_completed` with required typed refs)
-- Record decision (`decision_needed` or `decision_made` event + optional artifact)
+- Record decision (`decision_needed` or `decision_made` event + optional artifact, grounded by `thread:<thread_id>` in refs)
 - Acknowledge inbox item (emits `inbox_item_acknowledged` event with `inbox:<inbox_item_id>` in refs)
 
 ### 7.4 Derived views

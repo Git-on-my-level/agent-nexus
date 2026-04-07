@@ -2940,6 +2940,9 @@ components:
         category:
           type: string
           enum: [decision_needed, intervention_needed, stale_topic, work_item_risk, document_attention]
+        thread_id:
+          type: string
+          description: Backing thread id for the inbox item and decision actions.
         subject_ref: { $ref: '#/components/schemas/TypedRef' }
         source_event_ref: { $ref: '#/components/schemas/TypedRef' }
         title: { type: string }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  decisionMadeTopicRefForInboxItem,
+  decisionGroundingRefForInboxItem,
   deriveInboxUrgency,
   enrichInboxItem,
   formatInboxItemBoardPanelResourceLine,
@@ -157,63 +157,65 @@ describe("inbox urgency derivation", () => {
 });
 
 describe("inbox typed-ref rendering targets", () => {
-  it("derives topic ref for decision_made when inbox carries thread-shaped subject", () => {
+  it("derives thread grounding ref for decision flows from inbox data", () => {
     expect(
-      decisionMadeTopicRefForInboxItem({
+      decisionGroundingRefForInboxItem({
         id: "in-1",
         thread_id: "thread-pricing-glitch",
-        refs: [
+        related_refs: [
           "thread:thread-pricing-glitch",
           "artifact:artifact-pricing-evidence",
         ],
       }),
-    ).toBe("topic:thread-pricing-glitch");
+    ).toBe("thread:thread-pricing-glitch");
 
     expect(
-      decisionMadeTopicRefForInboxItem({
+      decisionGroundingRefForInboxItem({
         id: "in-1b",
         subject_ref: "artifact:artifact-pricing-evidence",
         thread_id: "thread-pricing-glitch",
-        refs: ["artifact:artifact-pricing-evidence"],
+        related_refs: ["artifact:artifact-pricing-evidence"],
       }),
-    ).toBe("topic:thread-pricing-glitch");
+    ).toBe("thread:thread-pricing-glitch");
 
     expect(
-      decisionMadeTopicRefForInboxItem({
+      decisionGroundingRefForInboxItem({
         id: "in-1c",
         subject_ref: "artifact:artifact-pricing-evidence",
-        refs: [
+        related_refs: [
           "thread:thread-pricing-glitch",
           "artifact:artifact-pricing-evidence",
         ],
       }),
-    ).toBe("topic:thread-pricing-glitch");
+    ).toBe("thread:thread-pricing-glitch");
 
     expect(
-      decisionMadeTopicRefForInboxItem({
+      decisionGroundingRefForInboxItem({
         id: "in-2",
-        refs: ["topic:real-topic-id", "thread:thr-1"],
+        related_refs: ["topic:real-topic-id", "thread:thr-1"],
       }),
-    ).toBe("topic:real-topic-id");
+    ).toBe("thread:thr-1");
 
     expect(
-      decisionMadeTopicRefForInboxItem({
+      decisionGroundingRefForInboxItem({
         id: "in-3",
-        subject_ref: "topic:top-77",
-        refs: [],
+        subject_ref: "thread:thr-77",
+        related_refs: [],
       }),
-    ).toBe("topic:top-77");
+    ).toBe("thread:thr-77");
 
     expect(
-      decisionMadeTopicRefForInboxItem({
+      decisionGroundingRefForInboxItem({
         id: "in-4",
-        subject_ref: "thread:thr-x",
-        topic_id: "top-from-row",
-        refs: [],
+        subject_ref: "artifact:artifact-1",
+        thread_id: "thr-x",
+        related_refs: [],
       }),
-    ).toBe("topic:top-from-row");
+    ).toBe("thread:thr-x");
 
-    expect(decisionMadeTopicRefForInboxItem({ id: "in-5", refs: [] })).toBe("");
+    expect(
+      decisionGroundingRefForInboxItem({ id: "in-5", related_refs: [] }),
+    ).toBe("");
   });
 
   it("preserves explicit subject refs and prefers specific ids before thread fallback", () => {

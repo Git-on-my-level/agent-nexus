@@ -198,6 +198,7 @@ test("recording a decision marks only the selected inbox item", async ({
   const decidedItemId = "inbox-001";
   const otherItemId = "inbox-002";
   let inboxRequestCount = 0;
+  let lastDecisionRequest = null;
   let inboxItems = [
     {
       id: decidedItemId,
@@ -205,7 +206,7 @@ test("recording a decision marks only the selected inbox item", async ({
       title: "Approve onboarding exception handling",
       recommended_action: "Record a decision on escalation path.",
       thread_id: sharedThreadId,
-      refs: [`thread:${sharedThreadId}`],
+      related_refs: [`thread:${sharedThreadId}`],
       source_event_time: hoursAgo(30),
     },
     {
@@ -214,7 +215,7 @@ test("recording a decision marks only the selected inbox item", async ({
       title: "Missing legal signer",
       recommended_action: "Acknowledge and assign owner.",
       thread_id: sharedThreadId,
-      refs: ["event:evt-1001"],
+      related_refs: ["event:evt-1001"],
       source_event_time: hoursAgo(1),
     },
   ];
@@ -252,6 +253,7 @@ test("recording a decision marks only the selected inbox item", async ({
 
   await page.route(/\/events(\?.*)?$/, async (route) => {
     const requestBody = JSON.parse(route.request().postData() ?? "{}");
+    lastDecisionRequest = requestBody;
     await route.fulfill({
       status: 201,
       contentType: "application/json",
@@ -281,6 +283,12 @@ test("recording a decision marks only the selected inbox item", async ({
   await expect(decidedCard).toHaveCount(0);
   await expect(otherCard).toBeVisible();
   await expect(page.getByText(/Decision recorded/)).toHaveCount(0);
+  expect(lastDecisionRequest?.event?.refs ?? []).toContain(
+    `thread:${sharedThreadId}`,
+  );
+  expect(lastDecisionRequest?.event?.refs ?? []).toContain(
+    `inbox:${decidedItemId}`,
+  );
 });
 
 test("inbox thread context shows subject link for decisions", async ({

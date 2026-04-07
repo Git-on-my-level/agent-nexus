@@ -435,13 +435,13 @@ reference_conventions:
       payload_must_include: ["resolution"]
 
     decision_needed:
-      refs_must_include: ["topic:<topic_id>"]
+      refs_must_include: ["thread:<thread_id>"]
 
     intervention_needed:
-      refs_must_include: ["topic:<topic_id>"]
+      refs_must_include: ["thread:<thread_id>"]
 
     decision_made:
-      refs_must_include: ["topic:<topic_id>"]
+      refs_must_include: ["thread:<thread_id>"]
 
     exception_raised:
       payload_must_include: ["subtype"]
@@ -488,6 +488,7 @@ derived:
     fields:
       id: { type: string, required: true }
       category: { type: string, required: true, ref: enums.inbox_category }
+      thread_id: { type: string, required: false, description: "Backing thread id for the inbox item and decision actions." }
       subject_ref: { type: typed_ref, required: true }
       source_event_ref: { type: typed_ref, required: false }
       title: { type: string, required: true }

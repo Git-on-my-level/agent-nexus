@@ -139,7 +139,7 @@ A dedicated surface showing items that need operator attention.
 
 - Navigate to the relevant topic, board, card, thread, or artifact.
 - Acknowledge an item → emits an `inbox_item_acknowledged` event with `inbox:<inbox_item_id>` in refs. Acknowledged items are suppressed from the inbox unless a new triggering event occurs after the acknowledgment.
-- Record a decision (creates a `decision_made` event with notes and typed refs).
+- Record a decision (creates a `decision_made` event with notes and typed refs, grounded by the inbox item's backing `thread_id` / `thread:` ref).
 
 ### 3.2 Topic list
 

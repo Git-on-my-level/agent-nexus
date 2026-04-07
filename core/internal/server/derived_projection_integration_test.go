@@ -52,7 +52,7 @@ func TestRefreshDerivedTopicProjectionBasicFlow(t *testing.T) {
 		"event":{
 			"type":"decision_needed",
 			"thread_id":"`+threadID+`",
-			"refs":["topic:`+threadID+`"],
+			"refs":["thread:`+threadID+`"],
 			"summary":"Need a decision",
 			"payload":{},
 			"provenance":{"sources":["inferred"]}

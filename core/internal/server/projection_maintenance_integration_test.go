@@ -190,7 +190,7 @@ func TestProjectionMaintainerSuppressesStaleInboxAfterNewActivity(t *testing.T) 
 		"event":{
 			"type":"actor_statement",
 			"thread_id":"`+threadID+`",
-			"refs":["topic:`+threadID+`"],
+			"refs":["thread:`+threadID+`"],
 			"summary":"progress update",
 			"payload":{"statement":"on it"},
 			"provenance":{"sources":["inferred"]}
@@ -455,7 +455,7 @@ func TestProjectionMaintainerKeepsProjectionPendingForConcurrentWrites(t *testin
 		"event":{
 			"type":"decision_needed",
 			"thread_id":"`+threadID+`",
-			"refs":["topic:`+threadID+`"],
+			"refs":["thread:`+threadID+`"],
 			"summary":"Need a first decision",
 			"payload":{},
 			"provenance":{"sources":["inferred"]}
@@ -486,7 +486,7 @@ func TestProjectionMaintainerKeepsProjectionPendingForConcurrentWrites(t *testin
 		"event":{
 			"type":"decision_needed",
 			"thread_id":"`+threadID+`",
-			"refs":["topic:`+threadID+`"],
+			"refs":["thread:`+threadID+`"],
 			"summary":"Need a second decision",
 			"payload":{},
 			"provenance":{"sources":["inferred"]}

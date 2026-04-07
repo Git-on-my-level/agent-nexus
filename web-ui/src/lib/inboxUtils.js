@@ -105,49 +105,34 @@ export function getInboxSubjectRef(item) {
 }
 
 /**
- * `decision_made` / `decision_needed` convention (contracts): `event.refs` must include
- * `topic:<id>`. Inbox items often carry `thread:` / `artifact:` refs only; derive a
- * stable topic ref for POST /events. Core accepts `topic:<backing_thread_id>` when no
- * topic row exists (legacy operator shape — see inbox ack resolution).
+ * Decision lifecycle events are grounded by the inbox item's backing thread.
  *
  * @param {object} item
- * @returns {string} normalized `topic:...` or "" if none can be inferred
+ * @returns {string} normalized `thread:...` or "" if none can be inferred
  */
-export function decisionMadeTopicRefForInboxItem(item) {
-  const refs = Array.isArray(item?.refs) ? item.refs : [];
-  for (const ref of refs) {
+export function decisionGroundingRefForInboxItem(item) {
+  const relatedRefs = Array.isArray(item?.related_refs)
+    ? item.related_refs
+    : Array.isArray(item?.refs)
+      ? item.refs
+      : [];
+
+  for (const ref of relatedRefs) {
     const normalized = normalizeTypedRef(ref);
-    if (splitTypedRef(normalized).prefix === "topic") {
+    if (splitTypedRef(normalized).prefix === "thread") {
       return normalized;
     }
   }
 
   const subjectRef = getInboxSubjectRef(item);
   const { prefix, id } = splitTypedRef(subjectRef);
-  if (prefix === "topic" && id) {
-    return `topic:${id}`;
-  }
-
-  const topicId = String(item?.topic_id ?? "").trim();
-  if (topicId) {
-    return `topic:${topicId}`;
-  }
-
-  for (const ref of refs) {
-    const normalized = normalizeTypedRef(ref);
-    if (splitTypedRef(normalized).prefix === "thread") {
-      const tid = splitTypedRef(normalized).id;
-      if (tid) return `topic:${tid}`;
-    }
-  }
-
   if (prefix === "thread" && id) {
-    return `topic:${id}`;
+    return `thread:${id}`;
   }
 
   const backingThreadId = String(item?.thread_id ?? "").trim();
   if (backingThreadId) {
-    return `topic:${backingThreadId}`;
+    return `thread:${backingThreadId}`;
   }
 
   return "";

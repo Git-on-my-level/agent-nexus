@@ -301,7 +301,13 @@ function normalizeEventPayload(type, payload) {
 
 function normalizeEventRefs(type, refs, mappedThreadId) {
   const nextRefs = Array.isArray(refs) ? [...refs] : [];
-  if (type === "thread_updated" || type === "thread_created") {
+  if (
+    type === "thread_updated" ||
+    type === "thread_created" ||
+    type === "decision_needed" ||
+    type === "intervention_needed" ||
+    type === "decision_made"
+  ) {
     const hasThreadRef = nextRefs.some((ref) => ref.startsWith("thread:"));
     if (!hasThreadRef && mappedThreadId) {
       nextRefs.push(`thread:${mappedThreadId}`);

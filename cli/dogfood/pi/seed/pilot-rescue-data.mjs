@@ -280,10 +280,11 @@ export function getPilotRescueSeedData() {
         type: "decision_needed",
         thread_id: "thread-pilot-rescue-main",
         refs: [
+          "thread:thread-pilot-rescue-main",
           "topic:pilot-rescue-main",
           "topic:pilot-feedback",
           "topic:pilot-delivery",
-          ],
+        ],
         summary: "Need cross-functional rescue recommendation before Friday pilot gate",
         payload: {
           ask: "Support, Delivery, and PM should post role-specific recommendations. Product will publish final rescue brief after reviewing them.",
