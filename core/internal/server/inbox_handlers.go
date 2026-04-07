@@ -562,13 +562,6 @@ func resolveInboxAckBackingThreadID(ctx context.Context, store PrimitiveStore, s
 		topic, err := store.GetTopic(ctx, id)
 		if err != nil {
 			if errors.Is(err, primitives.ErrNotFound) {
-				// Tolerate legacy UI-shaped values that synthesized `topic:<thread_id>`
-				// when only a backing thread id was available.
-				if _, threadErr := store.GetThread(ctx, id); threadErr == nil {
-					return id, nil
-				} else if !errors.Is(threadErr, primitives.ErrNotFound) {
-					return "", threadErr
-				}
 				return "", fmt.Errorf("topic not found for subject_ref %q", subjectRef)
 			}
 			return "", err

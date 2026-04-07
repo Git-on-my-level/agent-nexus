@@ -1760,13 +1760,7 @@ func threadSubjectRef(threadBody map[string]any) string {
 	if threadBody == nil {
 		return ""
 	}
-	for _, key := range []string{"subject_ref", "topic_ref"} {
-		value := strings.TrimSpace(anyStringValue(threadBody[key]))
-		if value != "" {
-			return value
-		}
-	}
-	return ""
+	return strings.TrimSpace(anyStringValue(threadBody["subject_ref"]))
 }
 
 func revisionRefsFromRevision(revision map[string]any) []string {

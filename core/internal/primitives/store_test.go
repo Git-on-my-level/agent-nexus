@@ -851,6 +851,54 @@ func TestPatchThreadPreservesUnknownFieldsAndEmitsChangedFields(t *testing.T) {
 	}
 }
 
+func TestGetThreadCanonicalizesLegacyTopicRefToSubjectRef(t *testing.T) {
+	t.Parallel()
+
+	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	store := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+
+	initialBodyJSON, err := json.Marshal(map[string]any{
+		"title":     "legacy backing thread",
+		"topic_ref": "topic:topic-legacy-1",
+	})
+	if err != nil {
+		t.Fatalf("marshal initial thread body: %v", err)
+	}
+
+	_, err = workspace.DB().ExecContext(
+		context.Background(),
+		`INSERT INTO threads(id, kind, thread_id, updated_at, updated_by, body_json, provenance_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		"thread-legacy-1",
+		"thread",
+		"thread-legacy-1",
+		"2026-03-04T00:00:00Z",
+		"actor-0",
+		string(initialBodyJSON),
+		`{"sources":["inferred"]}`,
+	)
+	if err != nil {
+		t.Fatalf("insert legacy thread row: %v", err)
+	}
+
+	thread, err := store.GetThread(context.Background(), "thread-legacy-1")
+	if err != nil {
+		t.Fatalf("get thread: %v", err)
+	}
+
+	if got, _ := thread["subject_ref"].(string); got != "topic:topic-legacy-1" {
+		t.Fatalf("expected canonical subject_ref, got %#v", thread)
+	}
+	if _, exists := thread["topic_ref"]; exists {
+		t.Fatalf("expected legacy topic_ref to be hidden from thread reads, got %#v", thread)
+	}
+}
+
 func TestPatchThreadOptimisticLockingIfUpdatedAt(t *testing.T) {
 	t.Parallel()
 

@@ -331,7 +331,6 @@ func buildThreadContextArtifacts(ctx context.Context, opts handlerOptions, threa
 		candidates := make([][2]string, 0, 2)
 		if threadID != "" {
 			candidates = append(candidates, [2]string{"thread", threadID})
-			candidates = append(candidates, [2]string{"topic", threadID})
 		}
 		if subjectRef != "" {
 			if prefix, id, err := schema.SplitTypedRef(subjectRef); err == nil && strings.TrimSpace(id) != "" {

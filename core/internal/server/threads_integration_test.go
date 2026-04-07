@@ -954,7 +954,7 @@ func TestThreadWorkspaceBundlesCanonicalAndDerivedSections(t *testing.T) {
 		"artifact":{
 			"id":"workspace-artifact-1",
 			"kind":"doc",
-			"refs":["topic:`+rootThreadID+`"],
+			"refs":["thread:`+rootThreadID+`"],
 			"summary":"workspace artifact"
 		},
 		"content":"Workspace artifact content",
