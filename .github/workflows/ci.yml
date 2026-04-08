@@ -103,7 +103,7 @@ jobs:
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Verify generated contracts
-        run: ./scripts/contract-check
+        run: ./scripts/contract-check --committed
 
   core-checks:
     runs-on: ubuntu-latest

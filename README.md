@@ -129,7 +129,8 @@ See `runbooks/release.md` for version-pinning and custom install directory optio
 
 - `make check`: run repo, core, cli, and web-ui checks
 - `make workflow-check`: lint GitHub Actions workflows with the pinned repo-local `actionlint`
-- `make contract-check`: verify generated contract artifacts are up to date
+- `make contract-check`: regenerate contracts and validate the working tree (no Git drift step)
+- `make contract-check-committed`: same, plus assert generated outputs match Git (CI behavior)
 - `make cli-check`: run CLI tests
 - `make hosted-smoke`: run hosted-v1 production smoke suite (auth gate, onboarding, workspace access, staleness)
 - `make hosted-ops-test`: run hosted provisioning/backup/restore verification tests

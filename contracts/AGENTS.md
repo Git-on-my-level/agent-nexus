@@ -36,7 +36,7 @@ It defines the durable language that `core`, `cli`, and `web-ui` use to interope
 
 ## Validation
 - `make contract-gen`
-- `make contract-check`
+- `make contract-check` (or `make contract-check-committed` / CI for Git drift)
 - Run the relevant consumer checks in `core`, `cli`, and `web-ui` when the shared contract changes.
 
 ## Maintenance Guidance

@@ -29,7 +29,7 @@ Organization Autorunner is split into a small set of modules with different jobs
 
 ## Source Of Truth
 - Contracts are authoritative: HTTP/API in `contracts/oar-openapi.yaml`, domain/schema in `contracts/oar-schema.yaml`.
-- Generated artifacts are derived outputs. Regenerate with `make contract-gen` and verify drift with `make contract-check`.
+- Generated artifacts are derived outputs. Regenerate with `make contract-gen`. Use `make contract-check` to validate the working tree after generation, and `make contract-check-committed` (or CI) to verify generated files match Git.
 - Runtime behavior in `core`, `cli`, `web-ui`, and adapter integrations must remain contract-compatible.
 
 ## Cross-Module Boundaries
@@ -57,6 +57,7 @@ When contracts change:
 
 - `make contract-gen`
 - `make contract-check`
+- Before push/handoff: `make contract-check-committed` (or rely on CI)
 
 Before handoff on cross-module work:
 

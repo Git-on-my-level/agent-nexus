@@ -19,7 +19,7 @@ already occupied. Set `AUTO_SELECT_PORTS=0` to keep the old fail-fast behavior.
 
 Required outcomes:
 
-- contract drift check passes (`make contract-check`)
+- contract drift check passes (`make contract-check-committed`)
 - core, cli, and web-ui checks pass
 - end-to-end smoke script passes (core startup, CLI auth/token refresh/typed commands/streams, UI startup compatibility)
 
@@ -198,7 +198,7 @@ oar --json --base-url http://127.0.0.1:8000 --agent release-check api call --pat
 3. Confirm generated docs and meta are current:
 
 ```bash
-./scripts/contract-check
+./scripts/contract-check --committed
 ```
 
 ## Failure recovery

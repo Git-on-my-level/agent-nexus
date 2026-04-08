@@ -38,10 +38,16 @@ This writes deterministic outputs under:
 
 ## Drift Check
 
-Validate generated outputs are committed and not stale:
+Regenerate and validate compilation/tests (staging-safe; does not run `git diff`):
 
 ```bash
 ./scripts/contract-check
 ```
 
-CI runs the same check and fails when artifacts drift.
+Assert generated outputs match the repository (same as CI):
+
+```bash
+./scripts/contract-check --committed
+```
+
+CI runs `contract-check --committed` and fails when artifacts drift.

@@ -21,7 +21,7 @@ FORCE_SEED ?= 0
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup check serve serve-control-plane lint test format contract-gen contract-check workflow-check version-sync version-check e2e-smoke hosted-smoke hosted-ops-test hosted-ops-smoke saas-smoke saas-e2e saas-load-smoke packed-host-smoke cli-check cli-test cli-build cli-integration-test bridge-setup bridge-doctor bridge-test release-check release-patch platform-constraints core-% bridge-% web-ui-%
+.PHONY: help setup check serve serve-control-plane lint test format contract-gen contract-check contract-check-committed workflow-check version-sync version-check e2e-smoke hosted-smoke hosted-ops-test hosted-ops-smoke saas-smoke saas-e2e saas-load-smoke packed-host-smoke cli-check cli-test cli-build cli-integration-test bridge-setup bridge-doctor bridge-test release-check release-patch platform-constraints core-% bridge-% web-ui-%
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z0-9_.-]+:.*##/ {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -56,8 +56,11 @@ format: ## Apply formatting in both core and web-ui
 contract-gen: ## Regenerate OpenAPI-derived contract artifacts
 	./scripts/contract-gen
 
-contract-check: ## Verify generated contract artifacts are committed
+contract-check: ## Regenerate contracts and validate working tree (Go tests + TS compile)
 	./scripts/contract-check
+
+contract-check-committed: ## Like contract-check, plus Git drift check (matches CI contract job)
+	./scripts/contract-check --committed
 
 workflow-check: ## Lint GitHub Actions workflows
 	./scripts/install-actionlint.sh
