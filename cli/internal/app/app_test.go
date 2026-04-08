@@ -544,3 +544,30 @@ func TestRunAPICallUsageFailureExitCode2(t *testing.T) {
 		t.Fatalf("expected ok=false payload=%#v", payload)
 	}
 }
+
+func TestAPICallHelpRunsWithoutResolvableConfig(t *testing.T) {
+	t.Parallel()
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	cli := New()
+	cli.Stdout = stdout
+	cli.Stderr = stderr
+	cli.Stdin = strings.NewReader("")
+	cli.StdinIsTTY = func() bool { return true }
+	env := map[string]string{}
+	cli.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	cli.ReadFile = func(path string) ([]byte, error) {
+		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
+	}
+	cli.Getenv = func(key string) string { return env[key] }
+
+	exitCode := cli.Run([]string{"api", "call", "--help"})
+	if exitCode != 0 {
+		t.Fatalf("expected exit 0, got %d stderr=%s", exitCode, stderr.String())
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "Local Help: api call") || !strings.Contains(out, "--path") {
+		t.Fatalf("expected api call help text, got:\n%s", out)
+	}
+}

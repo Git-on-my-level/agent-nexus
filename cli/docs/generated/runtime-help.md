@@ -38,6 +38,7 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 - `auth invites revoke` (command): Revoke invite
 - `auth bootstrap status` (command): Bootstrap registration availability
 - `threads list` (command): List backing threads
+- `threads get` (command): Inspect backing thread
 - `threads timeline` (command): Get backing thread timeline
 - `threads context` (command): Get backing thread coordination context
 - `topics list` (command): List topics
@@ -98,6 +99,7 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 - `inbox list` (command): List inbox items
 - `inbox get` (command): Get one inbox item
 - `inbox acknowledge` (command): Acknowledge inbox item
+- `inbox ack` (command): Acknowledge inbox item
 - `inbox stream` (command): Stream inbox items (SSE)
 - `inbox tail` (command): Stream inbox items (SSE)
 - `derived rebuild` (command): Rebuild derived projections
@@ -142,22 +144,26 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 Offline quick-start mental model and first command flow.
 
 ```text
-Onboarding: first steps
+Onboarding: first steps (agents / automation)
 
-Use onboarding to get a working session quickly. For the fuller operating model, read `oar meta doc agent-guide`.
+This CLI is for agent principals. For the full operating model, read `oar meta doc agent-guide`.
 
 1. Point the CLI at the core API with `--base-url` or `OAR_BASE_URL`.
-2. Register or select a reusable agent/profile with `--agent`.
-3. Confirm connectivity and identity with `oar doctor` and `oar auth whoami`.
-4. Run a cheap read command before any mutation.
-5. Use `oar meta skill cursor` if you want a bundled Cursor skill file generated from the shipped guide.
-6. Read `oar meta doc wake-routing` if this agent should be wakeable via thread-message `@handle` mentions.
+2. Choose a profile name and pass it with `--agent` (or `OAR_AGENT`).
+3. Run `oar doctor`, then `oar auth bootstrap status` to see whether first-principal bootstrap is still open on this workspace.
+4. Register the agent profile:
+   - If bootstrap is available: `oar auth register --username <username> --bootstrap-token <token>` (token comes from workspace operators / deployment).
+   - If bootstrap is closed: obtain a one-time invite (`auth invites create --kind agent` from an already-authorized principal on that workspace), then `oar auth register --username <username> --invite-token <token>`.
+5. Confirm with `oar auth whoami`, run a cheap read (`topics list`), then mutate deliberately.
+6. Use `oar meta skill cursor` to export a bundled Cursor skill from the shipped guide if desired.
+7. Read `oar meta doc wake-routing` if this agent should be wakeable via thread-message `@handle` mentions.
 
 First commands to run
 
   oar --base-url http://127.0.0.1:8000 --agent <agent> doctor
   oar --base-url http://127.0.0.1:8000 --agent <agent> auth bootstrap status
-  oar --base-url http://127.0.0.1:8000 --agent <agent> auth register --username <username> --bootstrap-token <token>
+  oar --base-url http://127.0.0.1:8000 --agent <agent> auth register --username <username> --bootstrap-token <token>   # only when bootstrap is open
+  oar --base-url http://127.0.0.1:8000 --agent <new-agent> auth register --username <username> --invite-token <token>   # when bootstrap is closed
   oar --agent <agent> auth whoami
   oar --agent <agent> topics list
   oar --agent <agent> inbox stream --max-events 1
@@ -1453,7 +1459,7 @@ Generated Help: auth invites list
 - Output: Returns `{ invites }`.
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `auth`
-- Adjacent commands: `auth register`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites revoke`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth register`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 
 Global flags:
@@ -1478,7 +1484,7 @@ Generated Help: auth invites create
 - Output: Returns `{ invite, token }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `auth`
-- Adjacent commands: `auth register`, `auth audit list`, `auth bootstrap status`, `auth invites list`, `auth invites revoke`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth register`, `auth audit list`, `auth bootstrap status`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 
 Global flags:
@@ -1503,7 +1509,7 @@ Generated Help: auth invites revoke
 - Output: Returns `{ invite }`.
 - Error codes: `auth_required`, `invalid_request`, `not_found`, `invalid_token`
 - Concepts: `auth`
-- Adjacent commands: `auth register`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth register`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 Inputs:
   Required:
@@ -1528,9 +1534,9 @@ Generated Help: auth bootstrap status
 - Stability: `beta`
 - Input mode: `none`
 - Why: Report whether first-principal bootstrap registration is still available.
-- Output: Returns `{ bootstrap_registration_available }`.
+- Output: Returns `{ bootstrap_registration_available, dev_passkey_bypass_available? }`, where the dev bypass field reflects the effective local-only passkey bypass capability.
 - Concepts: `auth`
-- Adjacent commands: `auth register`, `auth audit list`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth register`, `auth audit list`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 
 Global flags:
@@ -1561,6 +1567,34 @@ Generated Help: threads list
 Global flags:
   Global flags can appear before or after the command path.
   Examples: oar --json threads list ... ; oar threads list ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `threads get`
+
+Inspect backing thread
+
+```text
+Generated Help: threads get
+
+- Command ID: `threads.inspect`
+- CLI path: `threads inspect`
+- HTTP: `GET /threads/{thread_id}`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Resolve one backing thread for low-level inspection and diagnostics.
+- Output: Returns `{ thread }`.
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Concepts: `threads`, `inspection`
+- Adjacent commands: `threads context`, `threads list`, `threads timeline`, `threads workspace`
+
+Inputs:
+  Required:
+  - path `thread_id`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json threads get ... ; oar threads get ... --json
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3458,9 +3492,59 @@ Inputs:
   - body `note` (string)
   - body `refs` (list<any>)
 
+CLI flags (`inbox acknowledge` / `inbox ack`):
+  --inbox-item-id <id>   Inbox item id or list alias (see `inbox list`).
+  --subject-ref <ref>    Typed subject ref; omitted ids may be resolved from `inbox list`.
+  --actor-id <id>        Actor id (`me` uses the active profile's actor when configured).
+  --from-file <path>     JSON body file (API request shape).
+  Positional: inbox item id when not given via `--inbox-item-id`.
+  Otherwise: JSON object on stdin (`inbox_item_id`, `subject_ref`, optional fields).
+
 Global flags:
   Global flags can appear before or after the command path.
   Examples: oar --json inbox acknowledge ... ; oar inbox acknowledge ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `inbox ack`
+
+Acknowledge inbox item
+
+```text
+Generated Help: inbox ack
+
+- Command ID: `inbox.acknowledge`
+- CLI path: `inbox acknowledge`
+- HTTP: `POST /inbox/{inbox_id}/acknowledge`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Suppress or clear a derived inbox item via a durable acknowledgment event.
+- Output: Returns `{ event }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Concepts: `inbox`, `write`
+- Adjacent commands: `inbox get`, `inbox list`, `inbox stream`
+
+Inputs:
+  Required:
+  - path `inbox_id`
+  - body `subject_ref` (string)
+  Optional:
+  - body `actor_id` (string)
+  - body `inbox_item_id` (string)
+  - body `note` (string)
+  - body `refs` (list<any>)
+
+CLI flags (`inbox acknowledge` / `inbox ack`):
+  --inbox-item-id <id>   Inbox item id or list alias (see `inbox list`).
+  --subject-ref <ref>    Typed subject ref; omitted ids may be resolved from `inbox list`.
+  --actor-id <id>        Actor id (`me` uses the active profile's actor when configured).
+  --from-file <path>     JSON body file (API request shape).
+  Positional: inbox item id when not given via `--inbox-item-id`.
+  Otherwise: JSON object on stdin (`inbox_item_id`, `subject_ref`, optional fields).
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json inbox ack ... ; oar inbox ack ... --json
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3741,6 +3825,7 @@ Flags:
   --actor-id <actor-id>        Filter to one actor id.
   --mine                       Resolve to the active profile actor_id.
   --max-events <n>             Keep the most recent matching events.
+  --max <n>                    Alias for --max-events.
   --full-id                    Render full event ids in human output.
   --include-archived           Include archived events in results.
   --archived-only              Show only archived events.

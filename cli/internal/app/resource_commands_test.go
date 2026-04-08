@@ -561,6 +561,42 @@ func TestEventsListCommandFiltersAndLimits(t *testing.T) {
 	}
 }
 
+func TestEventsListMaxFlagAliasMatchesMaxEvents(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/threads/thread_1/timeline" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"events":[
+				{"id":"event_1","thread_id":"thread_1","type":"actor_statement","summary":"first"},
+				{"id":"event_2","thread_id":"thread_1","type":"actor_statement","summary":"second"}
+			],
+			"artifacts":{}
+		}`))
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"events", "list",
+		"--thread-id", "thread_1",
+		"--type", "actor_statement",
+		"--max", "1",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+	returnedEvents, _ := data["returned_events"].(float64)
+	if int(returnedEvents) != 1 {
+		t.Fatalf("expected returned_events=1 with --max alias, got %#v", data)
+	}
+}
+
 func TestEventsListCommandSupportsMineActorFilterAndFullID(t *testing.T) {
 	t.Parallel()
 
@@ -3881,6 +3917,47 @@ func TestInboxAckActorIDMeAliasFromProfile(t *testing.T) {
 		"--subject-ref", "thread:thread_1",
 		"--inbox-item-id", "inbox:1",
 		"--actor-id", "me",
+	})
+	assertEnvelopeOK(t, raw)
+}
+
+// failingStdinReader causes Read to error if stdin is ever probed (non-TTY path).
+type failingStdinReader struct{}
+
+func (failingStdinReader) Read(p []byte) (int, error) {
+	return 0, io.ErrUnexpectedEOF
+}
+
+func TestInboxAckSkipsStdinWhenInboxItemIDFromFlags(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"items":[{"id":"inbox:1","subject_ref":"thread:t1"}]}`))
+			return
+		case r.Method == http.MethodPost && r.URL.Path == "/inbox/"+url.PathEscape("inbox:1")+"/acknowledge":
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"event":{"id":"event_ack_stdin_skip"}}`))
+			return
+		default:
+			http.NotFound(w, r)
+			return
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor-a1","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+
+	raw := runCLIForTest(t, home, map[string]string{}, failingStdinReader{}, []string{
+		"--json",
+		"--base-url", server.URL,
+		"--agent", "agent-a",
+		"inbox", "ack",
+		"--inbox-item-id", "inbox:1",
 	})
 	assertEnvelopeOK(t, raw)
 }

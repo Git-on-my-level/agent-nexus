@@ -2526,6 +2526,7 @@ func (a *App) runEventsListCommand(ctx context.Context, args []string, cfg confi
 	fs.Var(&mineFlag, "mine", "Filter to events authored by active profile actor_id")
 	fs.Var(&fullIDFlag, "full-id", "Render full IDs in human output")
 	fs.Var(&maxEventsFlag, "max-events", "Return at most N most-recent matching events (0 means unlimited)")
+	fs.Var(&maxEventsFlag, "max", "Alias for --max-events")
 	fs.BoolVar(&includeArchived, "include-archived", false, "Include archived events")
 	fs.BoolVar(&archivedOnly, "archived-only", false, "Show only archived events")
 	fs.BoolVar(&includeTrashed, "include-trashed", false, "Include trashed events")
@@ -3864,7 +3865,24 @@ func (a *App) parseAckBodyInput(ctx context.Context, args []string, cfg config.R
 	}
 	positionals := fs.Args()
 
-	payload, err := a.readBodyInput(strings.TrimSpace(fromFileFlag.value))
+	fromFile := strings.TrimSpace(fromFileFlag.value)
+	var payload []byte
+	var err error
+	if fromFile != "" {
+		payload, err = a.readBodyInput(fromFile)
+	} else {
+		inboxTentative := strings.TrimSpace(inboxItemIDFlag.value)
+		if inboxTentative == "" && len(positionals) > 0 {
+			inboxTentative = strings.TrimSpace(positionals[0])
+		}
+		if inboxTentative != "" {
+			// Flag or positional inbox id fully specifies the non-JSON path; do not probe stdin
+			// (non-TTY stdin breaks automation without </dev/null).
+			payload = nil
+		} else {
+			payload, err = a.readBodyInput("")
+		}
+	}
 	if err != nil {
 		return nil, err
 	}

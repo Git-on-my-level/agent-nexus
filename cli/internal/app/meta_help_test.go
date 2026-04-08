@@ -436,6 +436,92 @@ func TestRunLocalHelperHelpTopicsResolveAcrossEntryPoints(t *testing.T) {
 	}
 }
 
+func TestJSONModeTrailingHelpShowsHelpEnvelope(t *testing.T) {
+	t.Parallel()
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	cli := New()
+	cli.Stdout = stdout
+	cli.Stderr = stderr
+	cli.Stdin = strings.NewReader("")
+	cli.StdinIsTTY = func() bool { return true }
+	cli.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	cli.ReadFile = func(path string) ([]byte, error) {
+		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
+	}
+	exit := cli.Run([]string{"--json", "--base-url", "http://127.0.0.1:8000", "inbox", "ack", "--help"})
+	if exit != 0 {
+		t.Fatalf("exit=%d stderr=%s", exit, stderr.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("decode stdout: %v raw=%q", err, stdout.String())
+	}
+	if payload["ok"] != true {
+		t.Fatalf("expected ok=true: %#v", payload)
+	}
+	data, _ := payload["data"].(map[string]any)
+	txt := anyString(data["help_text"])
+	if txt == "" || !strings.Contains(txt, "inbox.acknowledge") {
+		t.Fatalf("expected help_text with inbox acknowledge help, got %q", txt)
+	}
+}
+
+func TestRootUsageAuthNotDuplicatedInGeneratedGroups(t *testing.T) {
+	t.Parallel()
+
+	text := New().rootUsageText()
+	genIdx := strings.Index(text, "Generated Command Groups:")
+	if genIdx < 0 {
+		t.Fatalf("expected Generated Command Groups section in root usage")
+	}
+	generated := text[genIdx:]
+	if strings.Contains(generated, "\n  auth ") {
+		t.Fatalf("auth should not repeat under Generated Command Groups; output:\n%s", text)
+	}
+	if !strings.Contains(text, "Core Commands:") || !strings.Contains(text, "auth          Manage agent registration") {
+		t.Fatalf("expected auth under Core Commands only; output:\n%s", text)
+	}
+}
+
+func TestHelpResolvesRuntimeAliasesThreadsGetInboxAck(t *testing.T) {
+	t.Parallel()
+
+	run := func(args []string) string {
+		t.Helper()
+		stdout := &bytes.Buffer{}
+		stderr := &bytes.Buffer{}
+		cli := New()
+		cli.Stdout = stdout
+		cli.Stderr = stderr
+		cli.Stdin = strings.NewReader("")
+		cli.StdinIsTTY = func() bool { return true }
+		cli.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+		cli.ReadFile = func(path string) ([]byte, error) {
+			return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
+		}
+		exitCode := cli.Run(args)
+		if exitCode != 0 {
+			t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
+		}
+		return stdout.String()
+	}
+
+	threadsGet := run([]string{"help", "threads", "get"})
+	if !strings.Contains(threadsGet, "Generated Help: threads get") || !strings.Contains(threadsGet, "Command ID: `threads.inspect`") {
+		t.Fatalf("expected threads get alias to resolve to inspect command help, output=%s", threadsGet)
+	}
+
+	inboxAck := run([]string{"help", "inbox", "ack"})
+	if !strings.Contains(inboxAck, "Generated Help: inbox ack") || !strings.Contains(inboxAck, "Command ID: `inbox.acknowledge`") {
+		t.Fatalf("expected inbox ack alias to resolve to acknowledge command help, output=%s", inboxAck)
+	}
+	if !strings.Contains(inboxAck, "CLI flags") || !strings.Contains(inboxAck, "--inbox-item-id") || !strings.Contains(inboxAck, "--from-file") {
+		t.Fatalf("expected inbox acknowledge help to document CLI flags, output=%s", inboxAck)
+	}
+}
+
 func TestRunDocsHelpMentionsLocalValidateUpdate(t *testing.T) {
 	t.Parallel()
 

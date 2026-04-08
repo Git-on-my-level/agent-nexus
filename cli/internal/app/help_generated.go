@@ -62,6 +62,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--actor-id <actor-id>", Description: "Filter to one actor id."},
 			{Name: "--mine", Description: "Resolve to the active profile actor_id."},
 			{Name: "--max-events <n>", Description: "Keep the most recent matching events."},
+			{Name: "--max <n>", Description: "Alias for --max-events."},
 			{Name: "--full-id", Description: "Render full event ids in human output."},
 			{Name: "--include-archived", Description: "Include archived events in results."},
 			{Name: "--archived-only", Description: "Show only archived events."},
@@ -296,6 +297,10 @@ Core Commands:
 	if err == nil {
 		b.WriteString("\nGenerated Command Groups:\n")
 		for _, topic := range runtimeGeneratedTopics {
+			if topic.Path == "auth" {
+				// Listed under Core Commands; omit duplicate row here.
+				continue
+			}
 			count := len(runtimeCommandsForTopic(meta, topic.Path))
 			if count == 0 {
 				continue
@@ -398,6 +403,9 @@ Reference commands:
 	}
 	if topic == "bridge" {
 		return bridgeUsageText(), true
+	}
+	if topic == "api call" {
+		return apiCallUsageText() + "\n", true
 	}
 	if topic == "agent-guide" {
 		return agentGuideText(), true
@@ -846,6 +854,14 @@ Inbox categories:
   - ` + "`work_item_risk`" + `: A card or work item is at risk or overdue and needs follow-up.
   - ` + "`stale_topic`" + `: A topic appears stale; review cadence or recent activity.
   - ` + "`document_attention`" + `: A document needs human review or follow-up.`)
+	case "inbox.acknowledge":
+		return strings.TrimSpace(`CLI flags (` + "`inbox acknowledge`" + ` / ` + "`inbox ack`" + `):
+  --inbox-item-id <id>   Inbox item id or list alias (see ` + "`inbox list`" + `).
+  --subject-ref <ref>    Typed subject ref; omitted ids may be resolved from ` + "`inbox list`" + `.
+  --actor-id <id>        Actor id (` + "`me`" + ` uses the active profile's actor when configured).
+  --from-file <path>     JSON body file (API request shape).
+  Positional: inbox item id when not given via ` + "`--inbox-item-id`" + `.
+  Otherwise: JSON object on stdin (` + "`inbox_item_id`" + `, ` + "`subject_ref`" + `, optional fields).`)
 	default:
 		return ""
 	}
@@ -939,22 +955,26 @@ func runtimeGeneratedRegistryPaths() []string {
 }
 
 func onboardingHelpText() string {
-	return strings.TrimSpace(`Onboarding: first steps
+	return strings.TrimSpace(`Onboarding: first steps (agents / automation)
 
-Use onboarding to get a working session quickly. For the fuller operating model, read ` + "`oar meta doc agent-guide`" + `.
+This CLI is for agent principals. For the full operating model, read ` + "`oar meta doc agent-guide`" + `.
 
 1. Point the CLI at the core API with ` + "`--base-url`" + ` or ` + "`OAR_BASE_URL`" + `.
-2. Register or select a reusable agent/profile with ` + "`--agent`" + `.
-3. Confirm connectivity and identity with ` + "`oar doctor`" + ` and ` + "`oar auth whoami`" + `.
-4. Run a cheap read command before any mutation.
-5. Use ` + "`oar meta skill cursor`" + ` if you want a bundled Cursor skill file generated from the shipped guide.
-6. Read ` + "`oar meta doc wake-routing`" + ` if this agent should be wakeable via thread-message ` + "`@handle`" + ` mentions.
+2. Choose a profile name and pass it with ` + "`--agent`" + ` (or ` + "`OAR_AGENT`" + `).
+3. Run ` + "`oar doctor`" + `, then ` + "`oar auth bootstrap status`" + ` to see whether first-principal bootstrap is still open on this workspace.
+4. Register the agent profile:
+   - If bootstrap is available: ` + "`oar auth register --username <username> --bootstrap-token <token>`" + ` (token comes from workspace operators / deployment).
+   - If bootstrap is closed: obtain a one-time invite (` + "`auth invites create --kind agent`" + ` from an already-authorized principal on that workspace), then ` + "`oar auth register --username <username> --invite-token <token>`" + `.
+5. Confirm with ` + "`oar auth whoami`" + `, run a cheap read (` + "`topics list`" + `), then mutate deliberately.
+6. Use ` + "`oar meta skill cursor`" + ` to export a bundled Cursor skill from the shipped guide if desired.
+7. Read ` + "`oar meta doc wake-routing`" + ` if this agent should be wakeable via thread-message ` + "`@handle`" + ` mentions.
 
 First commands to run
 
   oar --base-url http://127.0.0.1:8000 --agent <agent> doctor
   oar --base-url http://127.0.0.1:8000 --agent <agent> auth bootstrap status
-  oar --base-url http://127.0.0.1:8000 --agent <agent> auth register --username <username> --bootstrap-token <token>
+  oar --base-url http://127.0.0.1:8000 --agent <agent> auth register --username <username> --bootstrap-token <token>   # only when bootstrap is open
+  oar --base-url http://127.0.0.1:8000 --agent <new-agent> auth register --username <username> --invite-token <token>   # when bootstrap is closed
   oar --agent <agent> auth whoami
   oar --agent <agent> topics list
   oar --agent <agent> inbox stream --max-events 1
@@ -981,6 +1001,8 @@ func mapRuntimePathToRegistryPath(path string) string {
 		"topics update":     "topics patch",
 		"events tail":       "events stream",
 		"inbox tail":        "inbox stream",
+		"inbox ack":         "inbox acknowledge",
+		"threads get":       "threads inspect",
 		"artifacts content": "artifacts content get",
 		"meta commands":     "meta commands list",
 		"meta command":      "meta commands get",
