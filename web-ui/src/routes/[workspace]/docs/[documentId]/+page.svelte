@@ -299,6 +299,10 @@
       selectedRevision = null;
       revisions = [];
       editOpen = false;
+      // Drop ?revision= so we show the new head instead of re-resolving the prior URL.
+      if (requestedRevisionId) {
+        await setRequestedRevision("");
+      }
     } catch (e) {
       saveError = `Failed to save revision: ${e instanceof Error ? e.message : String(e)}`;
     } finally {
