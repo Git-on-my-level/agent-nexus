@@ -227,9 +227,10 @@
     }
   }
 
-  async function handleMessagePost(threadId, event) {
+  /** @param {string} routeScopeId topic id or thread id for listTopicTimeline / refresh coalescing */
+  async function handleMessagePost(routeScopeId, event) {
     await coreClient.createEvent({ event });
-    await topicDetailStore.queueRefreshTopicDetail(threadId, {
+    await topicDetailStore.queueRefreshTopicDetail(routeScopeId, {
       workspace: true,
       timeline: true,
     });
@@ -358,7 +359,8 @@
   {#if activeTab === "messages"}
     <div role="tabpanel" tabindex="0">
       <MessagesTab
-        {threadId}
+        threadId={String(topic.id)}
+        postRouteScopeId={threadId}
         onMessagePost={handleMessagePost}
         workspaceId={data?.workspaceId ?? ""}
       />
@@ -367,7 +369,7 @@
 
   {#if activeTab === "timeline"}
     <div role="tabpanel" tabindex="0">
-      <TimelineTab {threadId} />
+      <TimelineTab threadId={String(topic.id)} />
     </div>
   {/if}
 {/if}

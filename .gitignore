@@ -13,3 +13,6 @@ _ui_working_tree.patch
 .oar-import/
 .desloppify/
 .superset/
+
+# Cursor debug-session NDJSON (local only)
+.cursor/debug-*.log

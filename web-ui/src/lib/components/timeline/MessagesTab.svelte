@@ -26,7 +26,17 @@
   import { getTimelineContext } from "$lib/timelineContext";
   import { workspacePath } from "$lib/workspacePaths";
 
-  let { threadId, onMessagePost, workspaceId = "" } = $props();
+  let {
+    threadId,
+    /** Topic id or URL scope for refresh APIs; defaults to threadId */
+    postRouteScopeId = "",
+    onMessagePost,
+    workspaceId = "",
+  } = $props();
+
+  let routeScopeForPost = $derived(
+    String(postRouteScopeId || threadId || "").trim(),
+  );
 
   const timelineCtx = getTimelineContext();
   const timelineStore = timelineCtx.store;
@@ -316,7 +326,7 @@
     postingMessage = true;
     postMessageError = "";
     try {
-      await onMessagePost(threadId, {
+      await onMessagePost(routeScopeForPost, {
         type: "message_posted",
         thread_id: threadId,
         thread_ref: `thread:${threadId}`,
