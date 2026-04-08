@@ -171,9 +171,17 @@ function createTopicDetailStore() {
 
       let timelinePatch;
       if (asTopic) {
-        timelinePatch = canReuseTimeline
-          ? {}
-          : { timeline: [], timelineThreadId: "" };
+        // Topic timelines come only from `listTopicTimeline`, never from workspace payloads.
+        // Clear only when switching topics — not when the in-flight timeline is empty (e.g. parallel
+        // workspace+timeline refresh after posting would otherwise wipe the store and lose new events).
+        const prevTimelineScope = String(
+          latestState.timelineThreadId ?? "",
+        ).trim();
+        const timelineStale =
+          prevTimelineScope !== "" && prevTimelineScope !== threadId;
+        timelinePatch = timelineStale
+          ? { timeline: [], timelineThreadId: "" }
+          : {};
       } else {
         const context =
           workspace && typeof workspace.context === "object"

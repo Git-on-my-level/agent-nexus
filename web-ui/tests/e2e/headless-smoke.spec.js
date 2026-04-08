@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { buildMockTopicWorkspaceFromThreadWorkspace } from "../../src/lib/mockCoreData.js";
+import { buildMockTopicWorkspaceFromThreadWorkspace } from "../../src/lib/devSeedData.js";
 
 test("mocked core smoke flow: inbox -> threads -> thread detail -> post message + unknown event rendering", async ({
   page,

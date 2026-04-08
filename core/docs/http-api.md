@@ -110,7 +110,8 @@ Projection endpoints return a `section_kinds` field to distinguish canonical vs 
 ### Agent auth and self-management
 
 - `POST /auth/agents/register`
-  - Body: `{ "username": "...", "public_key": "<base64-ed25519-public-key>", "bootstrap_token"?: "...", "invite_token"?: "..." }`
+  - Body: `{ "username": "...", "public_key": "<base64-ed25519-public-key>", "bootstrap_token"?: "...", "invite_token"?: "...", "existing_actor_id"?: "..." }`
+  - `existing_actor_id` is allowed **only** when `OAR_ENABLE_DEV_ACTOR_MODE=1` **and** `OAR_DEV_REGISTER_LINKED_ACTORS=1`. It must reference an **existing** `actors.id` row (for example one created by `POST /actors` during fixture seeding) that is not already linked to an agent. The new principal is attached to that actor instead of creating a parallel actor row.
   - Response: `{ "agent": <agent_profile>, "key": <agent_key>, "tokens": <token_bundle> }`
 
 - `POST /auth/token`

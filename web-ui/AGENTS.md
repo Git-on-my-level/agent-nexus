@@ -42,7 +42,7 @@ It gives operators fast, glanceable visibility into the shared workspace maintai
 ## Edit Routing
 - Shared API or schema changes start in [../contracts/AGENTS.md](../contracts/AGENTS.md).
 - UI behavior changes should be checked against operator clarity first, then contract compatibility.
-- Routing, proxy, and mock-mode changes must preserve the single-source-of-truth model and startup compatibility checks.
+- Routing and **core proxy** behavior must preserve the single-source-of-truth model (no in-UI synthetic core APIs) and startup compatibility checks.
 - Presentation changes should preserve glanceability and safe fallback behavior for unknown data.
 
 ## Validation

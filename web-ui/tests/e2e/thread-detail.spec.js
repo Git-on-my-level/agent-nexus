@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { buildMockTopicWorkspaceFromThreadWorkspace } from "../../src/lib/mockCoreData.js";
+import { buildMockTopicWorkspaceFromThreadWorkspace } from "../../src/lib/devSeedData.js";
 
 test("thread detail separates messages from timeline and nests replies", async ({
   page,

@@ -90,6 +90,7 @@ export declare class OarClient {
     eventsCreate(options?: RequestOptions): Promise<InvokeResult>;
     eventsList(options?: RequestOptions): Promise<InvokeResult>;
     eventsRestore(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    eventsStream(options?: RequestOptions): Promise<InvokeResult>;
     eventsTrash(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     eventsUnarchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     inboxAcknowledge(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;

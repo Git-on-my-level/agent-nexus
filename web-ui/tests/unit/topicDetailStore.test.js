@@ -336,6 +336,102 @@ describe("topicDetailStore", () => {
     );
   });
 
+  it("asTopic: parallel workspace+timeline refresh keeps same-topic scope (empty timeline ok)", async () => {
+    const topicId = "topic-post-refresh";
+    const workspacePayload = {
+      topic: {
+        id: topicId,
+        thread_id: "th-1",
+        title: "Topic",
+        summary: "",
+        type: "other",
+        status: "active",
+        owner_refs: [],
+        document_refs: [],
+        board_refs: [],
+        related_refs: [],
+        created_at: "2026-01-01T00:00:00Z",
+        created_by: "actor-1",
+        updated_at: "2026-01-01T00:00:00Z",
+        updated_by: "actor-1",
+        provenance: { sources: [] },
+      },
+      documents: [],
+      boards: [],
+      cards: [],
+      threads: [{ id: "th-1", topic_ref: `topic:${topicId}`, title: "T" }],
+      inbox: [],
+      projection_freshness: {},
+      generated_at: "2026-01-01T00:00:00Z",
+    };
+    coreClientMocks.getTopicWorkspace
+      .mockResolvedValueOnce(workspacePayload)
+      .mockResolvedValueOnce(workspacePayload);
+    coreClientMocks.listTopicTimeline.mockResolvedValueOnce({
+      events: [{ id: "m1", type: "message_posted", thread_id: "th-1" }],
+    });
+
+    await topicDetailStore.fullRefresh(topicId, { asTopic: true });
+    expect(get(topicDetailStore).timeline).toEqual([]);
+
+    await topicDetailStore.refreshTopicDetail(topicId, {
+      workspace: true,
+      timeline: true,
+    });
+
+    expect(get(topicDetailStore)).toMatchObject({
+      timelineThreadId: topicId,
+      timeline: [{ id: "m1", type: "message_posted", thread_id: "th-1" }],
+    });
+  });
+
+  it("asTopic: workspace load clears timeline only when route topic id changes", async () => {
+    const workspacePayload = (topicId) => ({
+      topic: {
+        id: topicId,
+        thread_id: `th-${topicId}`,
+        title: `Topic ${topicId}`,
+        summary: "",
+        type: "other",
+        status: "active",
+        owner_refs: [],
+        document_refs: [],
+        board_refs: [],
+        related_refs: [],
+        created_at: "2026-01-01T00:00:00Z",
+        created_by: "actor-1",
+        updated_at: "2026-01-01T00:00:00Z",
+        updated_by: "actor-1",
+        provenance: { sources: [] },
+      },
+      documents: [],
+      boards: [],
+      cards: [],
+      threads: [{ id: `th-${topicId}`, topic_ref: `topic:${topicId}` }],
+      inbox: [],
+      projection_freshness: {},
+      generated_at: "2026-01-01T00:00:00Z",
+    });
+
+    coreClientMocks.getTopicWorkspace
+      .mockResolvedValueOnce(workspacePayload("topic-a"))
+      .mockResolvedValueOnce(workspacePayload("topic-b"));
+
+    await topicDetailStore.fullRefresh("topic-a", { asTopic: true });
+    coreClientMocks.listTopicTimeline.mockResolvedValueOnce({
+      events: [{ id: "e-a", type: "message_posted" }],
+    });
+    await topicDetailStore.loadTimeline("topic-a", { asTopic: true });
+
+    await topicDetailStore.loadWorkspace("topic-b", { asTopic: true });
+
+    expect(get(topicDetailStore)).toMatchObject({
+      topic: expect.objectContaining({ id: `th-topic-b` }),
+      timeline: [],
+      timelineThreadId: "",
+    });
+  });
+
   it("coalesces queued refresh requests while a refresh is in flight", async () => {
     const firstRefresh = deferred();
 

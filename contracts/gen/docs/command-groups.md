@@ -95,12 +95,13 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `events`
 
-- Commands: `6`
+- Commands: `7`
 - Command IDs:
   - `events.archive` (`events archive`)
   - `events.create` (`events create`)
   - `events.list` (`events list`)
   - `events.restore` (`events restore`)
+  - `events.stream` (`events stream`)
   - `events.trash` (`events trash`)
   - `events.unarchive` (`events unarchive`)
 

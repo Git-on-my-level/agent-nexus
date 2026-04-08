@@ -4,7 +4,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.3.0`
-- Commands: `71`
+- Commands: `72`
 
 ## `artifacts.archive`
 
@@ -557,6 +557,18 @@ Generated from `contracts/oar-openapi.yaml`.
 - Concepts: `events`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ event }`.
+
+## `events.stream`
+
+- CLI path: `events stream`
+- HTTP: `GET /events/stream`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Long-lived SSE feed of workspace events with optional thread/type filters and Last-Event-ID resume.
+- Concepts: `events`
+- Error codes: `auth_required`, `invalid_token`
+- Output: Each SSE message is `event: …` with JSON data `{ "event": <event> }` (see core/docs/http-api.md).
 
 ## `events.trash`
 

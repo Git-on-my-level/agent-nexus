@@ -7,9 +7,9 @@ import {
   isProxyableCommand,
 } from "../../src/lib/coreRouteCatalog.js";
 import {
-  mockSupportedCommands,
+  catalogCommandIds,
   proxyOnlyCommands,
-} from "../../src/lib/mockParityProfile.js";
+} from "../../src/lib/catalogParityProfile.js";
 
 describe("proxyContractParity", () => {
   describe("isProxyableCommand", () => {
@@ -55,6 +55,10 @@ describe("proxyContractParity", () => {
 
     it("matches GET /meta/version", () => {
       expect(isProxyableCommand("GET", "/version")).toBe(true);
+    });
+
+    it("matches GET /events/stream (SSE; registered contract path)", () => {
+      expect(isProxyableCommand("GET", "/events/stream")).toBe(true);
     });
 
     it("returns false for non-contract paths", () => {
@@ -104,19 +108,16 @@ describe("proxyContractParity", () => {
     });
   });
 
-  describe("mockParityProfile", () => {
-    it("classifies every command id as mock-supported or proxy-only", () => {
+  describe("catalogParityProfile", () => {
+    it("classifies every command id as catalog-routed or proxy-only", () => {
       const catalogIds = new Set(
         Array.from(getCatalogEntries().values()).map((e) => e.commandId),
       );
-      const classified = new Set([
-        ...mockSupportedCommands,
-        ...proxyOnlyCommands,
-      ]);
+      const classified = new Set([...catalogCommandIds, ...proxyOnlyCommands]);
       expect(classified.size).toBe(catalogIds.size);
       for (const id of catalogIds) {
         expect(
-          mockSupportedCommands.includes(id) !== proxyOnlyCommands.includes(id),
+          catalogCommandIds.includes(id) !== proxyOnlyCommands.includes(id),
         ).toBe(true);
       }
     });

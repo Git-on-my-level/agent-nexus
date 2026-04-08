@@ -9,10 +9,6 @@
     principalRegistry,
   } from "$lib/actorSession";
   import { authenticatedAgent } from "$lib/authSession";
-  import {
-    getAccessDevMockData,
-    isAccessDevPreview,
-  } from "$lib/accessDevMock.js";
   import { listAllPrincipals } from "$lib/authPrincipals";
   import { coreClient } from "$lib/coreClient";
   import { enrichPrincipalsWithWakeRouting } from "$lib/principalWakeRouting.js";
@@ -130,11 +126,6 @@
         );
         mentionCandidates = taggableAgentHandlesFromPrincipals(
           enrichedPrincipals,
-          nameFn,
-        );
-      } else if (isAccessDevPreview) {
-        mentionCandidates = taggableAgentHandlesFromPrincipals(
-          getAccessDevMockData().principals,
           nameFn,
         );
       } else {

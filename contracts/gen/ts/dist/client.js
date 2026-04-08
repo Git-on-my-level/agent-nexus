@@ -2612,6 +2612,7 @@ export const commandRegistry = [
             "events.create",
             "events.list",
             "events.restore",
+            "events.stream",
             "events.trash",
             "events.unarchive"
         ],
@@ -2724,6 +2725,7 @@ export const commandRegistry = [
             "events.archive",
             "events.list",
             "events.restore",
+            "events.stream",
             "events.trash",
             "events.unarchive"
         ],
@@ -2757,6 +2759,7 @@ export const commandRegistry = [
             "events.archive",
             "events.create",
             "events.restore",
+            "events.stream",
             "events.trash",
             "events.unarchive"
         ],
@@ -2805,11 +2808,46 @@ export const commandRegistry = [
             "events.archive",
             "events.create",
             "events.list",
+            "events.stream",
             "events.trash",
             "events.unarchive"
         ],
         "go_method": "EventsRestore",
         "ts_method": "eventsRestore"
+    },
+    {
+        "command_id": "events.stream",
+        "cli_path": "events stream",
+        "group": "events",
+        "method": "GET",
+        "path": "/events/stream",
+        "operation_id": "streamEvents",
+        "summary": "Stream events (SSE)",
+        "why": "Long-lived SSE feed of workspace events with optional thread/type filters and Last-Event-ID resume.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "sse"
+        },
+        "output_envelope": "Each SSE message is `event: …` with JSON data `{ \"event\": \u003cevent\u003e }` (see core/docs/http-api.md).",
+        "error_codes": [
+            "auth_required",
+            "invalid_token"
+        ],
+        "concepts": [
+            "events"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "adjacent_commands": [
+            "events.archive",
+            "events.create",
+            "events.list",
+            "events.restore",
+            "events.trash",
+            "events.unarchive"
+        ],
+        "go_method": "EventsStream",
+        "ts_method": "eventsStream"
     },
     {
         "command_id": "events.trash",
@@ -2859,6 +2897,7 @@ export const commandRegistry = [
             "events.create",
             "events.list",
             "events.restore",
+            "events.stream",
             "events.unarchive"
         ],
         "go_method": "EventsTrash",
@@ -2907,6 +2946,7 @@ export const commandRegistry = [
             "events.create",
             "events.list",
             "events.restore",
+            "events.stream",
             "events.trash"
         ],
         "go_method": "EventsUnarchive",
@@ -4253,6 +4293,9 @@ export class OarClient {
     }
     eventsRestore(pathParams, options = {}) {
         return this.invoke("events.restore", pathParams, options);
+    }
+    eventsStream(options = {}) {
+        return this.invoke("events.stream", {}, options);
     }
     eventsTrash(pathParams, options = {}) {
         return this.invoke("events.trash", pathParams, options);

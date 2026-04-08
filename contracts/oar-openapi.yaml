@@ -1995,6 +1995,57 @@ paths:
         '401':
           $ref: '#/components/responses/ErrorResponse'
 
+  /events/stream:
+    get:
+      operationId: streamEvents
+      summary: Stream events (SSE)
+      tags: [events]
+      x-oar-surface: canonical
+      x-oar-command-id: events.stream
+      x-oar-cli-path: events stream
+      x-oar-why: Long-lived SSE feed of workspace events with optional thread/type filters and Last-Event-ID resume.
+      x-oar-input-mode: none
+      x-oar-streaming: { mode: sse }
+      x-oar-output-envelope: "Each SSE message is `event: …` with JSON data `{ \"event\": <event> }` (see core/docs/http-api.md)."
+      x-oar-error-codes: [auth_required, invalid_token]
+      x-oar-concepts: [events]
+      x-oar-stability: beta
+      parameters:
+        - name: thread_id
+          in: query
+          required: false
+          description: Limit stream to events for this backing thread.
+          schema: { type: string }
+        - name: type
+          in: query
+          required: false
+          description: Event type filter (repeatable; comma-separated values allowed per parameter).
+          schema: { type: string }
+        - name: types
+          in: query
+          required: false
+          description: Comma-separated event type filters (alias of repeated `type`).
+          schema: { type: string }
+        - name: last_event_id
+          in: query
+          required: false
+          description: Resume after this event id (alternative to `Last-Event-ID` header).
+          schema: { type: string }
+        - name: Last-Event-ID
+          in: header
+          required: false
+          description: SSE standard resume header (alternative to `last_event_id` query).
+          schema: { type: string }
+      responses:
+        '200':
+          description: Server-sent events stream (`text/event-stream`).
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
   /events/{event_id}/archive:
     post:
       operationId: archiveEvent

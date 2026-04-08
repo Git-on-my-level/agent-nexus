@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { mockTopicRefFromThreadId } from "../../src/lib/mockCoreData.js";
+import { mockTopicRefFromThreadId } from "../../src/lib/devSeedData.js";
 
 const actorId = "actor-board-e2e";
 const columns = [

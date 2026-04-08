@@ -83,6 +83,7 @@ func main() {
 		staleScanInterval          = envDuration("OAR_PROJECTION_STALE_SCAN_INTERVAL", 30*time.Second)
 		projectionBatchSize        = envInt("OAR_PROJECTION_MAINTENANCE_BATCH_SIZE", 50)
 		enableDevActorMode         = envBool("OAR_ENABLE_DEV_ACTOR_MODE", false)
+		devRegisterLinkedActors    = envBool("OAR_DEV_REGISTER_LINKED_ACTORS", false)
 		allowUnauthenticatedWrites = envBool("OAR_ALLOW_UNAUTHENTICATED_WRITES", false)
 		allowLoopbackVerifyReads   = envBool("OAR_ALLOW_LOOPBACK_VERIFICATION_READS", false)
 		bootstrapToken             = envString("OAR_BOOTSTRAP_TOKEN", "")
@@ -223,7 +224,11 @@ func main() {
 		fmt.Fprintf(os.Stderr, "failed to seed system actor: %v\n", err)
 		os.Exit(1)
 	}
-	authStore := auth.NewStore(workspace.DB(), auth.WithBootstrapToken(bootstrapToken))
+	authStore := auth.NewStore(
+		workspace.DB(),
+		auth.WithBootstrapToken(bootstrapToken),
+		auth.WithAllowDevRegisterLinkedActor(enableDevActorMode && devRegisterLinkedActors),
+	)
 	passkeySessionStore := auth.NewPasskeySessionStore(auth.DefaultPasskeySessionTTL)
 	defer passkeySessionStore.Close()
 	var (

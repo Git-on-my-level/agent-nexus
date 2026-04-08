@@ -1,13 +1,18 @@
 #!/usr/bin/env node
 
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 import {
   failWithPrefix,
   normalizeBaseUrl,
+  parseJson,
   requestJson,
   sleep,
   waitForCore,
 } from "../../scripts/seed-core-lib.mjs";
-import { getMockSeedData } from "../src/lib/mockCoreData.js";
+import { DEV_FIXTURE_PERSONAS, getDevSeedData } from "../src/lib/devSeedData.js";
 
 const coreBaseUrl = normalizeBaseUrl(
   process.env.OAR_CORE_BASE_URL ?? "http://127.0.0.1:8000",
@@ -23,7 +28,7 @@ if (!coreBaseUrl) {
   );
 }
 
-const seed = getMockSeedData();
+const seed = getDevSeedData();
 const defaultActorId = seed.actors[0]?.id ?? "actor-ops-ai";
 
 function normalizeSeedCardResolution(raw) {
@@ -56,26 +61,33 @@ async function main() {
     probes: ["/version", "/readyz"],
   });
 
+  let domainSeeded = true;
   if (skipIfPresent && !forceSeed) {
     const alreadySeeded = await detectSeededState();
     if (alreadySeeded) {
-      console.log("Seed data already present; skipping.");
-      return;
+      console.log("Seed data already present; skipping domain seed.");
+      domainSeeded = false;
     }
   }
 
-  await seedActors();
-  await seedTopics();
-  await seedDocuments();
-  await seedBoards();
-  await seedPackets();
-  await seedArtifacts();
-  const eventStats = await seedEvents();
-  await rebuildDerived();
+  if (domainSeeded) {
+    await seedActors();
+    await seedTopics();
+    await seedDocuments();
+    await seedBoards();
+    await seedPackets();
+    await seedArtifacts();
+    const eventStats = await seedEvents();
+    await rebuildDerived();
 
-  console.log(
-    `Seed complete. Events posted=${eventStats.posted}, events skipped=${eventStats.skipped}.`,
-  );
+    console.log(
+      `Seed complete. Events posted=${eventStats.posted}, events skipped=${eventStats.skipped}.`,
+    );
+  }
+
+  if (process.env.OAR_DEV_SEED_IDENTITIES === "1") {
+    await seedDevFixtureIdentities();
+  }
 }
 
 async function detectSeededState() {
@@ -876,6 +888,156 @@ function normalizeEventPayload(type, payload) {
   }
 
   return next;
+}
+
+async function ed25519PublicKeyBase64() {
+  const pair = await globalThis.crypto.subtle.generateKey(
+    { name: "Ed25519" },
+    true,
+    ["sign", "verify"],
+  );
+  const raw = await globalThis.crypto.subtle.exportKey("raw", pair.publicKey);
+  return Buffer.from(raw).toString("base64");
+}
+
+async function requestAuthJson(
+  method,
+  requestPath,
+  body,
+  accessToken,
+  okStatuses = [200, 201],
+) {
+  const headers = {
+    accept: "application/json",
+    "content-type": "application/json",
+    authorization: `Bearer ${accessToken}`,
+  };
+  const response = await fetch(`${coreBaseUrl}${requestPath}`, {
+    method,
+    headers,
+    body: JSON.stringify(body),
+  });
+  const rawText = await response.text();
+  const parsed = parseJson(rawText);
+  if (!okStatuses.includes(response.status)) {
+    const message =
+      parsed?.error?.message ?? rawText ?? `${method} ${requestPath} failed`;
+    throw new Error(`${method} ${requestPath} -> ${response.status}: ${message}`);
+  }
+  return parsed;
+}
+
+async function seedDevFixtureIdentities() {
+  const bootstrapToken = String(process.env.OAR_BOOTSTRAP_TOKEN ?? "").trim();
+  if (!bootstrapToken) {
+    console.warn(
+      "OAR_DEV_SEED_IDENTITIES=1 but OAR_BOOTSTRAP_TOKEN is empty; skipping dev identity bundle.",
+    );
+    return;
+  }
+
+  const status = await request("GET", "/auth/bootstrap/status");
+  if (status?.bootstrap_registration_available !== true) {
+    console.log(
+      "Dev fixture identities skipped (bootstrap already consumed). Keep web-ui/.dev/local-identities.json from the initial seed or reset the dev workspace.",
+    );
+    return;
+  }
+
+  const personas = [...DEV_FIXTURE_PERSONAS].sort(
+    (a, b) => (a.default === true ? 0 : 1) - (b.default === true ? 0 : 1),
+  );
+  const bundle = [];
+  let inviteIssuerAccess = null;
+
+  for (let i = 0; i < personas.length; i++) {
+    const p = personas[i];
+    const publicKey = await ed25519PublicKeyBase64();
+    const body = {
+      username: p.auth_username,
+      public_key: publicKey,
+      existing_actor_id: p.actor_id,
+    };
+    if (i === 0) {
+      body.bootstrap_token = bootstrapToken;
+    } else {
+      const inv = await requestAuthJson(
+        "POST",
+        "/auth/invites",
+        { kind: "agent" },
+        inviteIssuerAccess,
+        [201],
+      );
+      body.invite_token = inv.token;
+    }
+
+    const reg = await requestJson(
+      coreBaseUrl,
+      "POST",
+      "/auth/agents/register",
+      body,
+      [201],
+    );
+    if (reg?.tokens?.access_token) {
+      inviteIssuerAccess = reg.tokens.access_token;
+    }
+    const agent = reg.agent ?? {};
+    bundle.push({
+      persona_id: p.persona_id,
+      actor_id: p.actor_id,
+      agent_id: agent.agent_id,
+      display_label: p.display_label,
+      principal_kind: p.principal_kind,
+      dev_bridge: p.dev_bridge,
+      refresh_token: reg.tokens?.refresh_token,
+    });
+  }
+
+  const outDir = path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "..",
+    ".dev",
+  );
+  await mkdir(outDir, { recursive: true });
+  const outPath = path.join(outDir, "local-identities.json");
+  await writeFile(
+    outPath,
+    `${JSON.stringify({ generated_at: new Date().toISOString(), personas: bundle }, null, 2)}\n`,
+    "utf8",
+  );
+  console.log(
+    `Wrote dev identity bundle (${bundle.length} personas) to ${outPath}`,
+  );
+
+  const bridgePersonas = bundle.filter((row) => row.dev_bridge === true);
+  if (bridgePersonas.length > 0) {
+    const hintsPath = path.join(outDir, "deterministic-bridge.md");
+    const lines = [
+      "# Deterministic agent bridge (local dev)",
+      "",
+      "Fixture personas with `dev_bridge: true` were seeded as workspace agents.",
+      "The Python bridge keeps its **own** auth state; register once per config via:",
+      "",
+      "```bash",
+      "cd adapters/agent-bridge",
+      "oar-agent-bridge auth register --config examples/deterministic.toml --invite-token <token> --apply-registration",
+      "```",
+      "",
+      "Align `agent.handle` in `examples/deterministic.toml` with a seeded persona id",
+      "(e.g. `zara`). Create a fresh invite with a seeded operator/agent when bootstrap",
+      "is already consumed. See `adapters/agent-bridge/README.md` and `scripts/run-deterministic-bridge.sh`.",
+      "",
+      "Seeded bridge-marked personas (this run):",
+      "",
+      ...bridgePersonas.map(
+        (p) =>
+          `- ${p.persona_id} — ${p.display_label} (actor_id=${p.actor_id}, agent_id=${p.agent_id ?? ""})`,
+      ),
+      "",
+    ];
+    await writeFile(hintsPath, `${lines.join("\n")}\n`, "utf8");
+    console.log(`Wrote bridge hints to ${hintsPath}`);
+  }
 }
 
 async function request(method, path, body, okStatuses = [200, 201]) {

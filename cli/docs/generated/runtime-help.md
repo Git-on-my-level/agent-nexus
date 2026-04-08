@@ -84,6 +84,8 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 - `docs restore` (command): Restore document from trash
 - `docs purge` (command): Permanently delete trashed document
 - `events create` (command): Create event
+- `events stream` (command): Stream events (SSE)
+- `events tail` (command): Stream events (SSE)
 - `events archive` (command): Archive event
 - `events unarchive` (command): Unarchive event
 - `events trash` (command): Move event to trash
@@ -1307,6 +1309,7 @@ Commands:
   events create            Create event
   events list              List events
   events restore           Restore event from trash
+  events stream            Stream events (SSE)
   events trash             Move event to trash
   events unarchive         Unarchive event
 
@@ -2997,7 +3000,7 @@ Generated Help: events create
 - Output: Returns `{ event }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `events`, `write`
-- Adjacent commands: `events archive`, `events list`, `events restore`, `events trash`, `events unarchive`
+- Adjacent commands: `events archive`, `events list`, `events restore`, `events stream`, `events trash`, `events unarchive`
 
 Inputs:
   Required:
@@ -3045,6 +3048,56 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
+## `events stream`
+
+Stream events (SSE)
+
+```text
+Generated Help: events stream
+
+- Command ID: `events.stream`
+- CLI path: `events stream`
+- HTTP: `GET /events/stream`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Long-lived SSE feed of workspace events with optional thread/type filters and Last-Event-ID resume.
+- Output: Each SSE message is `event: …` with JSON data `{ "event": <event> }` (see core/docs/http-api.md).
+- Error codes: `auth_required`, `invalid_token`
+- Concepts: `events`
+- Adjacent commands: `events archive`, `events create`, `events list`, `events restore`, `events trash`, `events unarchive`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json events stream ... ; oar events stream ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `events tail`
+
+Stream events (SSE)
+
+```text
+Generated Help: events tail
+
+- Command ID: `events.stream`
+- CLI path: `events stream`
+- HTTP: `GET /events/stream`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Long-lived SSE feed of workspace events with optional thread/type filters and Last-Event-ID resume.
+- Output: Each SSE message is `event: …` with JSON data `{ "event": <event> }` (see core/docs/http-api.md).
+- Error codes: `auth_required`, `invalid_token`
+- Concepts: `events`
+- Adjacent commands: `events archive`, `events create`, `events list`, `events restore`, `events trash`, `events unarchive`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json events tail ... ; oar events tail ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
 ## `events archive`
 
 Archive event
@@ -3061,7 +3114,7 @@ Generated Help: events archive
 - Output: Returns `{ event }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `events`, `write`
-- Adjacent commands: `events create`, `events list`, `events restore`, `events trash`, `events unarchive`
+- Adjacent commands: `events create`, `events list`, `events restore`, `events stream`, `events trash`, `events unarchive`
 
 Inputs:
   Required:
@@ -3091,7 +3144,7 @@ Generated Help: events unarchive
 - Output: Returns `{ event }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `events`, `write`
-- Adjacent commands: `events archive`, `events create`, `events list`, `events restore`, `events trash`
+- Adjacent commands: `events archive`, `events create`, `events list`, `events restore`, `events stream`, `events trash`
 
 Inputs:
   Required:
@@ -3121,7 +3174,7 @@ Generated Help: events trash
 - Output: Returns `{ event }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
 - Concepts: `events`, `write`
-- Adjacent commands: `events archive`, `events create`, `events list`, `events restore`, `events unarchive`
+- Adjacent commands: `events archive`, `events create`, `events list`, `events restore`, `events stream`, `events unarchive`
 
 Inputs:
   Required:
@@ -3152,7 +3205,7 @@ Generated Help: events restore
 - Output: Returns `{ event }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `events`, `write`
-- Adjacent commands: `events archive`, `events create`, `events list`, `events trash`, `events unarchive`
+- Adjacent commands: `events archive`, `events create`, `events list`, `events stream`, `events trash`, `events unarchive`
 
 Inputs:
   Required:

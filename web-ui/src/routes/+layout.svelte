@@ -41,6 +41,7 @@
   } from "$lib/workspaceContext";
   import { handleModEnterFormSubmit } from "$lib/formSubmitShortcut.js";
   import {
+    appPath,
     workspacePath,
     stripBasePath,
     stripWorkspacePath,
@@ -73,6 +74,8 @@
   let hydratedWorkspaceSlug = $state("");
   let workspacePickerOpen = $state(false);
   let commandPaletteOpen = $state(false);
+  let devFixturePersonas = $state([]);
+  let devPersonaBusy = $state(false);
 
   let activeWorkspace = $derived($page.data.workspace ?? null);
   let activeWorkspaceSlug = $derived(activeWorkspace?.slug ?? "");
@@ -197,6 +200,55 @@
     const seedPrincipal = $authenticatedAgent ? [$authenticatedAgent] : [];
     void refreshPrincipals(workspaceSlug, seedPrincipal);
   });
+
+  $effect(() => {
+    if (
+      !browser ||
+      !$devActorMode ||
+      !$devActorModeReady ||
+      !activeWorkspaceSlug
+    ) {
+      return;
+    }
+    void loadDevFixturePersonas();
+  });
+
+  async function loadDevFixturePersonas() {
+    try {
+      const response = await fetch(appPath("/auth/dev/identities"));
+      if (!response.ok) {
+        devFixturePersonas = [];
+        return;
+      }
+      const payload = await response.json();
+      devFixturePersonas = Array.isArray(payload.personas)
+        ? payload.personas
+        : [];
+    } catch {
+      devFixturePersonas = [];
+    }
+  }
+
+  async function switchDevFixturePersona(personaId) {
+    const trimmed = String(personaId ?? "").trim();
+    if (!activeWorkspaceSlug || devPersonaBusy || !trimmed) {
+      return;
+    }
+    devPersonaBusy = true;
+    try {
+      const response = await fetch(appPath("/auth/dev/session"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ persona_id: trimmed }),
+      });
+      if (!response.ok) {
+        return;
+      }
+      await hydrateWorkspace(activeWorkspaceSlug);
+    } finally {
+      devPersonaBusy = false;
+    }
+  }
 
   async function hydrateWorkspace(workspaceSlug) {
     setDevActorModeReady(false);
@@ -685,6 +737,31 @@
             class="shell-actor-panel"
             aria-label="Identity and workspace links"
           >
+            {#if $devActorMode && devFixturePersonas.length > 0}
+              <div class="shell-dev-personas">
+                <p class="shell-actor-label">Fixture persona</p>
+                <select
+                  class="shell-dev-persona-select"
+                  disabled={devPersonaBusy}
+                  onchange={(event) => {
+                    const value = String(
+                      event.currentTarget.value ?? "",
+                    ).trim();
+                    if (value) {
+                      void switchDevFixturePersona(value);
+                    }
+                    event.currentTarget.value = "";
+                  }}
+                >
+                  <option value="">Switch authenticated session…</option>
+                  {#each devFixturePersonas as persona}
+                    <option value={persona.persona_id}
+                      >{persona.display_label}</option
+                    >
+                  {/each}
+                </select>
+              </div>
+            {/if}
             <nav class="shell-secondary-nav" aria-label="Workspace">
               <div class="shell-settings-links">
                 {#each settingsNavItems as item}

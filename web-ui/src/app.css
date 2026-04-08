@@ -580,6 +580,27 @@ a:focus-visible {
   padding: 0.625rem;
 }
 
+.shell-dev-personas {
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--ui-border);
+  display: grid;
+  gap: 0.375rem;
+}
+
+.shell-dev-persona-select {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 0.3125rem 0.5rem;
+  border-radius: var(--ui-radius-sm);
+  border: 1px solid var(--ui-border);
+  background: var(--ui-bg);
+  color: var(--ui-text);
+  font-size: 0.75rem;
+  font-family: var(--ui-font-sans);
+}
+
 .shell-actor-label {
   margin: 0;
   font-size: 0.6875rem;

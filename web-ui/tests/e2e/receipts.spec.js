@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { buildMockTopicWorkspaceFromThreadWorkspace } from "../../src/lib/mockCoreData.js";
+import { buildMockTopicWorkspaceFromThreadWorkspace } from "../../src/lib/devSeedData.js";
 
 test("thread work tab points operators to card-scoped receipts", async ({
   page,

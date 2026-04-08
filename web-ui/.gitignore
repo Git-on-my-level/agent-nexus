@@ -1,4 +1,5 @@
 node_modules/
+.dev/
 .svelte-kit/
 build/
 coverage/

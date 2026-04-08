@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { buildMockTopicWorkspaceFromThreadWorkspace } from "../../src/lib/mockCoreData.js";
+import { buildMockTopicWorkspaceFromThreadWorkspace } from "../../src/lib/devSeedData.js";
 
 test("document typed refs navigate from overview chips, timeline refs, and receipt outputs", async ({
   page,

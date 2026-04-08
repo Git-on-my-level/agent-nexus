@@ -538,7 +538,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"events", "write"},
-		Adjacent:   []string{"events.create", "events.list", "events.restore", "events.trash", "events.unarchive"},
+		Adjacent:   []string{"events.create", "events.list", "events.restore", "events.stream", "events.trash", "events.unarchive"},
 	},
 	{
 		CommandID: "events.create",
@@ -549,7 +549,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"events", "write"},
-		Adjacent:  []string{"events.archive", "events.list", "events.restore", "events.trash", "events.unarchive"},
+		Adjacent:  []string{"events.archive", "events.list", "events.restore", "events.stream", "events.trash", "events.unarchive"},
 	},
 	{
 		CommandID: "events.list",
@@ -560,7 +560,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"events"},
-		Adjacent:  []string{"events.archive", "events.create", "events.restore", "events.trash", "events.unarchive"},
+		Adjacent:  []string{"events.archive", "events.create", "events.restore", "events.stream", "events.trash", "events.unarchive"},
 	},
 	{
 		CommandID:  "events.restore",
@@ -572,7 +572,18 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"events", "write"},
-		Adjacent:   []string{"events.archive", "events.create", "events.list", "events.trash", "events.unarchive"},
+		Adjacent:   []string{"events.archive", "events.create", "events.list", "events.stream", "events.trash", "events.unarchive"},
+	},
+	{
+		CommandID: "events.stream",
+		CLIPath:   "events stream",
+		Group:     "events",
+		Method:    "GET",
+		Path:      "/events/stream",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"events"},
+		Adjacent:  []string{"events.archive", "events.create", "events.list", "events.restore", "events.trash", "events.unarchive"},
 	},
 	{
 		CommandID:  "events.trash",
@@ -584,7 +595,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"events", "write"},
-		Adjacent:   []string{"events.archive", "events.create", "events.list", "events.restore", "events.unarchive"},
+		Adjacent:   []string{"events.archive", "events.create", "events.list", "events.restore", "events.stream", "events.unarchive"},
 	},
 	{
 		CommandID:  "events.unarchive",
@@ -596,7 +607,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"events", "write"},
-		Adjacent:   []string{"events.archive", "events.create", "events.list", "events.restore", "events.trash"},
+		Adjacent:   []string{"events.archive", "events.create", "events.list", "events.restore", "events.stream", "events.trash"},
 	},
 	{
 		CommandID:  "inbox.acknowledge",
@@ -1163,6 +1174,10 @@ func (c *Client) EventsList(ctx context.Context, opts RequestOptions) (*http.Res
 
 func (c *Client) EventsRestore(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "events.restore", pathParams, opts)
+}
+
+func (c *Client) EventsStream(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "events.stream", nil, opts)
 }
 
 func (c *Client) EventsTrash(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {

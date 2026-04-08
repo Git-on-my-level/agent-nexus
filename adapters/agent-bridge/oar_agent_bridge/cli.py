@@ -12,7 +12,7 @@ from .bridge import AgentBridge
 from .config import LoadedConfig, load_config
 from .oar_client import OARClient
 from .registry import apply_registration, registration_status
-from .adapters import HermesACPAdapter, ZeroClawGatewayAdapter
+from .adapters import DeterministicAckAdapter, HermesACPAdapter, ZeroClawGatewayAdapter
 from .state_store import JSONStateStore
 from .util import configure_logging
 
@@ -45,6 +45,8 @@ def build_adapter(config: LoadedConfig):
             request_timeout_seconds=config.adapter.get_int("request_timeout_seconds", 600),
             session_header_name=config.adapter.get_str("session_header_name", "X-Session-Id") or "X-Session-Id",
         )
+    if kind == "deterministic_ack":
+        return DeterministicAckAdapter()
     raise ValueError(f"Unsupported adapter kind: {kind}")
 
 

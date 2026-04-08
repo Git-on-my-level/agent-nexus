@@ -63,8 +63,11 @@ Single-core fallback:
 
 - If `OAR_WORKSPACES` is unset, `OAR_CORE_BASE_URL` still creates one default
   `local` workspace for dev/integration use.
-- If neither variable is set, the default `local` workspace uses same-origin mock
-  routes.
+- If neither `OAR_WORKSPACES` nor `OAR_CORE_BASE_URL` resolves a `coreBaseUrl`
+  for the workspace, **catalog-backed API paths** return **503** (`core_not_configured`)
+  instead of being served locally. Run a real core (for example `make serve` /
+  `./scripts/e2e-smoke`) or set `OAR_WORKSPACES` / `OAR_CORE_BASE_URL` per
+  **Local integration** below.
 
 ### SaaS packed-host workspace routing
 
@@ -137,7 +140,8 @@ Identity is workspace-scoped.
 - Actor-selection mode (dev only):
   - Selected actor is stored in `localStorage` per workspace.
   - Only available when `dev_actor_mode=true`.
-  - Same-origin mock write routes trust the submitted `actor_id` in this mode.
+  - Writes still go to **oar-core** via the proxy; core may honor the dev-selected
+    `actor_id` only when dev/unauthenticated-write flags allow it.
   - This is a local-development convenience only; it is not an auth boundary.
 
 Switching from `/dtrinity/...` to `/scalingforever/...` preserves each workspace's
@@ -188,13 +192,18 @@ OAR_DEFAULT_WORKSPACE=local \
 ./scripts/e2e-with-core
 ```
 
-Representative seeded local data, including boards/cards/docs from mock mode,
-can be pushed into a live core with:
+Representative **dev fixture** data (boards/cards/docs/events) can be pushed
+into a live core with:
 
 ```bash
 OAR_CORE_BASE_URL=http://127.0.0.1:8000 \
 node ./scripts/seed-core-from-mock.mjs
 ```
+
+With **`make serve`** (or matching env), the seed also writes **`web-ui/.dev/local-identities.json`**
+(gitignored) when `OAR_DEV_SEED_IDENTITIES=1`, core has `OAR_BOOTSTRAP_TOKEN`, and
+`OAR_DEV_REGISTER_LINKED_ACTORS=1` on oar-core. The sidebar **Fixture persona**
+control then switches cookie-backed sessions among seeded principals.
 
 Primary board UI entry points:
 

@@ -77,7 +77,7 @@ make contract-gen
 - core: `http://127.0.0.1:8000`
 - embedded wake-routing sidecar: starts inside `oar-core` by default
 - web-ui: `http://127.0.0.1:5173`
-- before UI startup, `web-ui/scripts/seed-core-from-mock.mjs` populates core using the mock dataset (topics, documents, boards, cards, packets, and derived events)
+- before UI startup, `web-ui/scripts/seed-core-from-mock.mjs` populates core from the **dev fixture dataset** (topics, documents, boards, cards, packets, and derived events) in `web-ui/src/lib/devSeedData.js`
 
 For SaaS-v-next control-plane work, start the shared control plane in a second
 terminal:

@@ -14,6 +14,7 @@ import {
 } from "$lib/server/authSession";
 import { buildProxyRequestInit } from "$lib/server/coreProxy";
 import { resolveProxyTarget } from "$lib/server/proxyWorkspaceTarget";
+import { isDirectCoreProxyPath } from "$lib/server/directCoreProxyPaths";
 
 function isDocumentNavigationRequest(request) {
   const method = request.method.toUpperCase();
@@ -36,17 +37,6 @@ function shouldBypassProxy(pathname, method) {
     normalizedMethod === "POST" &&
     (pathname === "/auth/passkey/login/verify" ||
       pathname === "/auth/passkey/register/verify")
-  );
-}
-
-function isDirectCoreAuthPath(pathname) {
-  return pathname.startsWith("/auth/");
-}
-
-function isDirectCoreProxyPath(method, pathname) {
-  return (
-    (method.toUpperCase() === "GET" && pathname === "/meta/handshake") ||
-    isDirectCoreAuthPath(pathname)
   );
 }
 
@@ -281,6 +271,23 @@ export async function handle({ event, resolve }) {
       response.headers.set("X-OAR-UI-Version", CURRENT_VERSION);
       return response;
     }
+
+    return new Response(
+      JSON.stringify({
+        error: {
+          code: "core_not_configured",
+          message:
+            "Workspace is configured but coreBaseUrl is missing. Set OAR_CORE_BASE_URL or add coreBaseUrl to OAR_WORKSPACES for this workspace.",
+        },
+      }),
+      {
+        status: 503,
+        headers: {
+          "content-type": "application/json",
+          "X-OAR-UI-Version": CURRENT_VERSION,
+        },
+      },
+    );
   }
 
   const response = await resolve(event);
