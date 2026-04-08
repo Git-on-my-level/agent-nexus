@@ -35,14 +35,16 @@ import (
 const testBootstrapToken = "bootstrap-token-for-tests"
 
 type authIntegrationOptions struct {
-	bootstrapToken             string
-	enableDevActorMode         bool
-	allowUnauthenticatedWrites bool
-	webAuthnConfig             WebAuthnConfig
-	humanAuthMode              string
-	controlPlaneVerifier       *controlplaneauth.WorkspaceHumanVerifier
-	workspaceServiceIdentity   *controlplaneauth.WorkspaceServiceIdentity
-	workspaceID                string
+	bootstrapToken              string
+	enableDevActorMode          bool
+	allowPasskeyDevBypass       bool
+	allowDevRegisterLinkedActor bool
+	allowUnauthenticatedWrites  bool
+	webAuthnConfig              WebAuthnConfig
+	humanAuthMode               string
+	controlPlaneVerifier        *controlplaneauth.WorkspaceHumanVerifier
+	workspaceServiceIdentity    *controlplaneauth.WorkspaceServiceIdentity
+	workspaceID                 string
 }
 
 type authIntegrationEnv struct {
@@ -83,6 +85,9 @@ func newAuthIntegrationEnv(t *testing.T, options authIntegrationOptions) authInt
 	if strings.TrimSpace(options.bootstrapToken) != "" {
 		authOptions = append(authOptions, auth.WithBootstrapToken(options.bootstrapToken))
 	}
+	if options.allowDevRegisterLinkedActor {
+		authOptions = append(authOptions, auth.WithAllowDevRegisterLinkedActor(true))
+	}
 	authStore := auth.NewStore(workspace.DB(), authOptions...)
 	passkeySessionStore := auth.NewPasskeySessionStore(auth.DefaultPasskeySessionTTL)
 
@@ -113,6 +118,7 @@ func newAuthIntegrationEnv(t *testing.T, options authIntegrationOptions) authInt
 		WithWorkspaceServiceIdentity(options.workspaceServiceIdentity),
 		WithWorkspaceID(workspaceID),
 		WithEnableDevActorMode(options.enableDevActorMode),
+		WithAllowPasskeyDevBypass(options.allowPasskeyDevBypass),
 		WithAllowUnauthenticatedWrites(options.allowUnauthenticatedWrites),
 	)
 	server := httptest.NewServer(handler)
@@ -651,7 +657,7 @@ func TestBootstrapAndInviteGatedRegistrationFlow(t *testing.T) {
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{bootstrapToken: testBootstrapToken})
 	serverURL := env.server.URL
 
-	if available := getBootstrapStatus(t, serverURL); !available {
+	if status := getBootstrapStatus(t, serverURL); !status.Available {
 		t.Fatal("expected bootstrap registration to be available before first principal")
 	}
 
@@ -685,7 +691,7 @@ func TestBootstrapAndInviteGatedRegistrationFlow(t *testing.T) {
 		t.Fatalf("decode bootstrap register response: %v", err)
 	}
 
-	if available := getBootstrapStatus(t, serverURL); available {
+	if status := getBootstrapStatus(t, serverURL); status.Available {
 		t.Fatal("expected bootstrap registration to be unavailable after first principal")
 	}
 
@@ -1360,7 +1366,7 @@ func TestFirstPasskeyRegistrationWithBootstrapToken(t *testing.T) {
 	if !strings.HasPrefix(verifyPayload.Agent.Username, "passkey.testuser1.") {
 		t.Fatalf("unexpected passkey username: %q", verifyPayload.Agent.Username)
 	}
-	if available := getBootstrapStatus(t, serverURL); available {
+	if status := getBootstrapStatus(t, serverURL); status.Available {
 		t.Fatal("expected bootstrap registration to be unavailable after first passkey principal")
 	}
 }
@@ -1706,18 +1712,28 @@ func TestConcurrentFreshAuthRegistrationsSucceed(t *testing.T) {
 	}
 }
 
-func getBootstrapStatus(t *testing.T, serverURL string) bool {
+func getBootstrapStatus(t *testing.T, serverURL string) struct {
+	Available              bool
+	DevPasskeyBypassActive bool
+} {
 	t.Helper()
 	resp := getJSONExpectStatusWithAuth(t, serverURL+"/auth/bootstrap/status", "", http.StatusOK)
 	defer resp.Body.Close()
 
 	var payload struct {
-		Available bool `json:"bootstrap_registration_available"`
+		Available              bool `json:"bootstrap_registration_available"`
+		DevPasskeyBypassActive bool `json:"dev_passkey_bypass_available"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode bootstrap status response: %v", err)
 	}
-	return payload.Available
+	return struct {
+		Available              bool
+		DevPasskeyBypassActive bool
+	}{
+		Available:              payload.Available,
+		DevPasskeyBypassActive: payload.DevPasskeyBypassActive,
+	}
 }
 
 func createInviteToken(t *testing.T, serverURL string, accessToken string, payload map[string]any) string {
@@ -2185,6 +2201,199 @@ func mustDecodeJSONObject(t *testing.T, raw string) map[string]any {
 		t.Fatalf("decode JSON object: %v", err)
 	}
 	return payload
+}
+
+func TestPasskeyDevBypassDisabledWithoutDedicatedFlag(t *testing.T) {
+	t.Parallel()
+
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{
+		bootstrapToken:        testBootstrapToken,
+		enableDevActorMode:    true,
+		allowPasskeyDevBypass: false,
+	})
+	serverURL := env.server.URL
+
+	status := getBootstrapStatus(t, serverURL)
+	if status.DevPasskeyBypassActive {
+		t.Fatal("expected bootstrap status to report passkey dev bypass unavailable")
+	}
+
+	resp := postJSONExpectStatusWithHeaders(t, serverURL+"/auth/passkey/dev/register", map[string]any{
+		"display_name":    "Dev Human",
+		"bootstrap_token": testBootstrapToken,
+	}, nil, http.StatusForbidden)
+	defer resp.Body.Close()
+	assertErrorCode(t, resp, "dev_passkey_bypass_disabled")
+}
+
+func TestPasskeyDevBypassCanRunWithoutDevActorMode(t *testing.T) {
+	t.Parallel()
+
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{
+		bootstrapToken:        testBootstrapToken,
+		enableDevActorMode:    false,
+		allowPasskeyDevBypass: true,
+	})
+	serverURL := env.server.URL
+
+	status := getBootstrapStatus(t, serverURL)
+	if !status.DevPasskeyBypassActive {
+		t.Fatal("expected bootstrap status to report passkey dev bypass available")
+	}
+
+	regResp := postJSONExpectStatusWithHeaders(t, serverURL+"/auth/passkey/dev/register", map[string]any{
+		"display_name":    "Dev Operator",
+		"bootstrap_token": testBootstrapToken,
+	}, nil, http.StatusCreated)
+	defer regResp.Body.Close()
+	var regPayload struct {
+		Agent struct {
+			AgentID       string  `json:"agent_id"`
+			Username      string  `json:"username"`
+			PrincipalKind *string `json:"principal_kind"`
+			AuthMethod    *string `json:"auth_method"`
+		} `json:"agent"`
+		Tokens struct {
+			AccessToken string `json:"access_token"`
+		} `json:"tokens"`
+	}
+	if err := json.NewDecoder(regResp.Body).Decode(&regPayload); err != nil {
+		t.Fatalf("decode dev register: %v", err)
+	}
+	if regPayload.Agent.AgentID == "" || regPayload.Tokens.AccessToken == "" {
+		t.Fatalf("unexpected payload %#v", regPayload)
+	}
+	if regPayload.Agent.PrincipalKind == nil || *regPayload.Agent.PrincipalKind != "human" {
+		t.Fatalf("expected human principal, got %#v", regPayload.Agent)
+	}
+	if regPayload.Agent.AuthMethod == nil || *regPayload.Agent.AuthMethod != auth.AuthMethodPasskey {
+		t.Fatalf("expected passkey auth_method, got %#v", regPayload.Agent)
+	}
+
+	loginResp := postJSONExpectStatusWithHeaders(t, serverURL+"/auth/passkey/dev/login", map[string]any{}, nil, http.StatusOK)
+	defer loginResp.Body.Close()
+	var loginPayload struct {
+		Agent struct {
+			AgentID string `json:"agent_id"`
+		} `json:"agent"`
+		Tokens struct {
+			AccessToken string `json:"access_token"`
+		} `json:"tokens"`
+	}
+	if err := json.NewDecoder(loginResp.Body).Decode(&loginPayload); err != nil {
+		t.Fatalf("decode dev login: %v", err)
+	}
+	if loginPayload.Agent.AgentID != regPayload.Agent.AgentID {
+		t.Fatalf("expected same agent, got %q vs %q", loginPayload.Agent.AgentID, regPayload.Agent.AgentID)
+	}
+	if loginPayload.Tokens.AccessToken == "" {
+		t.Fatal("expected access token on dev login")
+	}
+}
+
+func TestPasskeyDevRegisterLinkedSeedActorAndSoleLogin(t *testing.T) {
+	t.Parallel()
+
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{
+		bootstrapToken:              testBootstrapToken,
+		enableDevActorMode:          false,
+		allowPasskeyDevBypass:       true,
+		allowDevRegisterLinkedActor: true,
+	})
+	serverURL := env.server.URL
+
+	ctx := context.Background()
+	_, err := env.workspace.DB().ExecContext(ctx, `
+		INSERT INTO actors(id, display_name, tags_json, created_at, metadata_json)
+		VALUES (?, ?, ?, ?, ?)`,
+		"actor-dev-human-operator",
+		"Jordan (Human operator)",
+		`["human","operator"]`,
+		"2026-01-01T07:55:00.000Z",
+		`{}`,
+	)
+	if err != nil {
+		t.Fatalf("seed fixture actor: %v", err)
+	}
+
+	regResp := postJSONExpectStatusWithHeaders(t, serverURL+"/auth/passkey/dev/register", map[string]any{
+		"display_name":      "Jordan (Human operator)",
+		"bootstrap_token":   testBootstrapToken,
+		"existing_actor_id": "actor-dev-human-operator",
+	}, nil, http.StatusCreated)
+	defer regResp.Body.Close()
+
+	loginResp := postJSONExpectStatusWithHeaders(t, serverURL+"/auth/passkey/dev/login", map[string]any{}, nil, http.StatusOK)
+	defer loginResp.Body.Close()
+	var loginPayload struct {
+		Agent struct {
+			ActorID string `json:"actor_id"`
+		} `json:"agent"`
+	}
+	if err := json.NewDecoder(loginResp.Body).Decode(&loginPayload); err != nil {
+		t.Fatalf("decode dev login: %v", err)
+	}
+	if loginPayload.Agent.ActorID != "actor-dev-human-operator" {
+		t.Fatalf("expected linked actor id, got %q", loginPayload.Agent.ActorID)
+	}
+}
+
+func TestPasskeyDevLoginRequiresDisambiguation(t *testing.T) {
+	t.Parallel()
+
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{
+		bootstrapToken:        testBootstrapToken,
+		enableDevActorMode:    false,
+		allowPasskeyDevBypass: true,
+	})
+	serverURL := env.server.URL
+
+	reg1Resp := postJSONExpectStatusWithHeaders(t, serverURL+"/auth/passkey/dev/register", map[string]any{
+		"display_name":    "Operator One",
+		"bootstrap_token": testBootstrapToken,
+	}, nil, http.StatusCreated)
+	defer reg1Resp.Body.Close()
+	var reg1 struct {
+		Agent struct {
+			Username string `json:"username"`
+		} `json:"agent"`
+		Tokens struct {
+			AccessToken string `json:"access_token"`
+		} `json:"tokens"`
+	}
+	if err := json.NewDecoder(reg1Resp.Body).Decode(&reg1); err != nil {
+		t.Fatalf("decode first dev register: %v", err)
+	}
+
+	_, inviteToken := createInvite(t, serverURL, reg1.Tokens.AccessToken, map[string]any{
+		"kind": "human",
+	})
+
+	reg2Resp := postJSONExpectStatusWithHeaders(t, serverURL+"/auth/passkey/dev/register", map[string]any{
+		"display_name": "Operator Two",
+		"invite_token": inviteToken,
+	}, nil, http.StatusCreated)
+	defer reg2Resp.Body.Close()
+
+	ambResp := postJSONExpectStatusWithHeaders(t, serverURL+"/auth/passkey/dev/login", map[string]any{}, nil, http.StatusBadRequest)
+	defer ambResp.Body.Close()
+	assertErrorCode(t, ambResp, "invalid_request")
+
+	okResp := postJSONExpectStatusWithHeaders(t, serverURL+"/auth/passkey/dev/login", map[string]any{
+		"username": reg1.Agent.Username,
+	}, nil, http.StatusOK)
+	defer okResp.Body.Close()
+	var okPayload struct {
+		Agent struct {
+			Username string `json:"username"`
+		} `json:"agent"`
+	}
+	if err := json.NewDecoder(okResp.Body).Decode(&okPayload); err != nil {
+		t.Fatalf("decode disambiguated dev login: %v", err)
+	}
+	if okPayload.Agent.Username != reg1.Agent.Username {
+		t.Fatalf("expected username %q, got %q", reg1.Agent.Username, okPayload.Agent.Username)
+	}
 }
 
 const samplePasskeyCredentialJSON = `{

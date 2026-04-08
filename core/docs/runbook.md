@@ -43,6 +43,7 @@ For packed-host SaaS operations, see:
 | Embedded router poll interval | n/a | `OAR_SIDECAR_ROUTER_POLL_INTERVAL` | `1s` |
 | Embedded router principal cache TTL | n/a | `OAR_SIDECAR_ROUTER_PRINCIPAL_CACHE_TTL` | `60s` |
 | Enable dev actor mode | n/a | `OAR_ENABLE_DEV_ACTOR_MODE` | `false` |
+| Allow local passkey dev bypass | n/a | `OAR_ALLOW_PASSKEY_DEV_BYPASS` | `false` |
 | Allow unauthenticated writes | n/a | `OAR_ALLOW_UNAUTHENTICATED_WRITES` | `false` |
 | Bootstrap token for first principal registration | n/a | `OAR_BOOTSTRAP_TOKEN` | unset |
 | WebAuthn RP ID | n/a | `OAR_WEBAUTHN_RPID` | derived from browser origin host |
@@ -241,10 +242,13 @@ request from the browser origin forwarded by the UI proxy. Set
 `OAR_WEBAUTHN_ALLOWED_ORIGINS` is set, it takes precedence over the single
 origin and the browser origin must be one of the configured values.
 
-`./scripts/dev` defaults `OAR_ENABLE_DEV_ACTOR_MODE=1` and
-`OAR_ALLOW_UNAUTHENTICATED_WRITES=1` so local actor-selection, reads, and seed
-workflows keep working. Production-like runs should leave both unset unless an
-explicitly open local workflow is required.
+`./scripts/dev` defaults `OAR_ENABLE_DEV_ACTOR_MODE=1`,
+`OAR_ALLOW_PASSKEY_DEV_BYPASS=1`, and `OAR_ALLOW_UNAUTHENTICATED_WRITES=1` so
+local actor-selection, passkey seed flows, and dev writes keep working. The
+passkey bypass additionally requires the workspace marker
+`.oar-dev-insecure-auth`, which `./scripts/dev` creates inside the workspace
+root. Production-like runs should leave these unset unless an explicitly open
+local workflow is required.
 
 `OAR_HUMAN_AUTH_MODE=control_plane` enables the SaaS-v-next split. In that
 mode, workspace-local passkey human auth is disabled, workspace-local Ed25519
@@ -410,8 +414,8 @@ on core-specific runtime behavior inside that operator model.
 
 ### Auth model
 
-In production, `OAR_ENABLE_DEV_ACTOR_MODE` and
-`OAR_ALLOW_UNAUTHENTICATED_WRITES` must both be `false` (the defaults).
+In production, `OAR_ENABLE_DEV_ACTOR_MODE`, `OAR_ALLOW_PASSKEY_DEV_BYPASS`,
+and `OAR_ALLOW_UNAUTHENTICATED_WRITES` must all be `false` (the defaults).
 Workspace reads and writes require a valid Bearer token, and `POST /actors`
 must remain disabled. Two principal types are supported:
 
@@ -511,6 +515,7 @@ docker run -d --restart unless-stopped \
   -v oar-workspace:/var/lib/oar/workspace \
   -e OAR_LISTEN_ADDR=0.0.0.0:8000 \
   -e OAR_ENABLE_DEV_ACTOR_MODE=false \
+  -e OAR_ALLOW_PASSKEY_DEV_BYPASS=false \
   -e OAR_ALLOW_UNAUTHENTICATED_WRITES=false \
   -e OAR_WEBAUTHN_RPID=oar.example.com \
   -e OAR_WEBAUTHN_ALLOWED_ORIGINS=https://oar.example.com,https://oar.tailnet.ts.net \

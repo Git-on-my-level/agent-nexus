@@ -127,13 +127,6 @@
     }
   });
 
-  let columnTitle = $derived(
-    boardColumnTitle(
-      String(membership?.column_key ?? "").trim(),
-      board?.column_schema ?? [],
-    ),
-  );
-
   let actorOptions = $derived(
     $actorRegistry.map((actor) => ({
       id: actor.id,
@@ -500,9 +493,7 @@
 >
   <div class="cdm-overlay" onclick={handleBackdropClick}></div>
   <div class="cdm-panel">
-    <div
-      class="sticky top-0 z-10 border-b border-[var(--ui-border)] bg-[var(--ui-panel)] px-4 py-3"
-    >
+    <div class="sticky top-0 z-10 bg-[var(--ui-panel)] px-4 pt-3">
       <div class="flex items-start justify-between gap-3">
         <div class="min-w-0 flex-1">
           <div class="flex flex-wrap items-center gap-2">
@@ -555,9 +546,6 @@
           <div class="mt-2 text-[12px] text-[var(--ui-text-muted)]">
             <span class="text-[var(--ui-text-subtle)]">Board</span>
             {board?.title ?? boardId}
-            <span class="text-[var(--ui-text-subtle)]"> · </span>
-            <span class="text-[var(--ui-text-subtle)]">Column</span>
-            {columnTitle}
           </div>
         </div>
         <button
@@ -977,14 +965,20 @@
       <div
         class="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-end md:justify-between"
       >
-        <label
-          class="text-[12px] font-medium text-[var(--ui-text-muted)] md:min-w-[12rem]"
+        <div
+          class="flex min-w-0 max-w-full items-stretch rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] md:w-60"
         >
-          Move to column
+          <span
+            class="flex shrink-0 items-center border-r border-[var(--ui-border)] px-2.5 py-1.5 text-[11px] text-[var(--ui-text-muted)]"
+            aria-hidden="true"
+          >
+            Column
+          </span>
           <select
             bind:value={moveColumnKey}
             onchange={handleColumnSelectChange}
-            class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-1.5 text-[13px] text-[var(--ui-text)]"
+            aria-label="Column"
+            class="min-w-0 flex-1 cursor-pointer rounded-r-md border-0 bg-transparent px-2 py-1.5 pr-7 text-[13px] text-[var(--ui-text)] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[var(--ui-accent)]"
           >
             {#each board?.column_schema ?? [] as column}
               <option value={column.key}>
@@ -993,7 +987,7 @@
               </option>
             {/each}
           </select>
-        </label>
+        </div>
         <div class="flex flex-wrap items-center gap-2">
           {#if editOpen}
             <button

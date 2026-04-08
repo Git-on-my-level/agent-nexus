@@ -48,7 +48,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `auth`
 
-- Commands: `19`
+- Commands: `21`
 - Command IDs:
   - `actors.create`
   - `actors.list`
@@ -62,6 +62,8 @@ Generated from `contracts/oar-openapi.yaml`.
   - `auth.invites.create`
   - `auth.invites.list`
   - `auth.invites.revoke`
+  - `auth.passkey.dev.login`
+  - `auth.passkey.dev.register`
   - `auth.passkey.login.options`
   - `auth.passkey.login.verify`
   - `auth.passkey.register.options`
@@ -222,8 +224,10 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `passkeys`
 
-- Commands: `4`
+- Commands: `6`
 - Command IDs:
+  - `auth.passkey.dev.login`
+  - `auth.passkey.dev.register`
   - `auth.passkey.login.options`
   - `auth.passkey.login.verify`
   - `auth.passkey.register.options`

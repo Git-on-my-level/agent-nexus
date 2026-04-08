@@ -300,8 +300,8 @@ async function seedDocuments() {
 
     for (const revision of revisions.slice(1)) {
       const updateResponse = await requestRetryOnServerError(
-        "PATCH",
-        `/docs/${encodeURIComponent(newDocumentId)}`,
+        "POST",
+        `/docs/${encodeURIComponent(newDocumentId)}/revisions`,
         {
           actor_id: pickActorId(
             revision.created_by ?? sourceDocument.updated_by,
@@ -952,32 +952,52 @@ async function seedDevFixtureIdentities() {
 
   for (let i = 0; i < personas.length; i++) {
     const p = personas[i];
-    const publicKey = await ed25519PublicKeyBase64();
-    const body = {
-      username: p.auth_username,
-      public_key: publicKey,
-      existing_actor_id: p.actor_id,
-    };
-    if (i === 0) {
-      body.bootstrap_token = bootstrapToken;
-    } else {
-      const inv = await requestAuthJson(
+    const usePasskeyDevHuman =
+      i === 0 &&
+      String(p.principal_kind).toLowerCase() === "human" &&
+      status?.dev_passkey_bypass_available === true;
+
+    let reg;
+    if (usePasskeyDevHuman) {
+      reg = await requestJson(
+        coreBaseUrl,
         "POST",
-        "/auth/invites",
-        { kind: "agent" },
-        inviteIssuerAccess,
+        "/auth/passkey/dev/register",
+        {
+          display_name: p.display_label,
+          bootstrap_token: bootstrapToken,
+          existing_actor_id: p.actor_id,
+        },
         [201],
       );
-      body.invite_token = inv.token;
-    }
+    } else {
+      const publicKey = await ed25519PublicKeyBase64();
+      const body = {
+        username: p.auth_username,
+        public_key: publicKey,
+        existing_actor_id: p.actor_id,
+      };
+      if (i === 0) {
+        body.bootstrap_token = bootstrapToken;
+      } else {
+        const inv = await requestAuthJson(
+          "POST",
+          "/auth/invites",
+          { kind: "agent" },
+          inviteIssuerAccess,
+          [201],
+        );
+        body.invite_token = inv.token;
+      }
 
-    const reg = await requestJson(
-      coreBaseUrl,
-      "POST",
-      "/auth/agents/register",
-      body,
-      [201],
-    );
+      reg = await requestJson(
+        coreBaseUrl,
+        "POST",
+        "/auth/agents/register",
+        body,
+        [201],
+      );
+    }
     if (reg?.tokens?.access_token) {
       inviteIssuerAccess = reg.tokens.access_token;
     }

@@ -218,6 +218,41 @@ func (s *Store) RegisterAgent(ctx context.Context, input RegisterAgentInput, cla
 	return Agent{}, AgentKey{}, TokenBundle{}, lastErr
 }
 
+func (s *Store) ensureExistingActorReadyForAgentLinkTx(ctx context.Context, tx *sql.Tx, actorID string) error {
+	actorID = strings.TrimSpace(actorID)
+	if actorID == "" {
+		return fmt.Errorf("%w: existing actor not found", ErrInvalidRequest)
+	}
+	var placeholder int
+	err := tx.QueryRowContext(
+		ctx,
+		`SELECT 1 FROM actors WHERE id = ? LIMIT 1`,
+		actorID,
+	).Scan(&placeholder)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("%w: existing actor not found", ErrInvalidRequest)
+	}
+	if err != nil {
+		return fmt.Errorf("lookup existing actor: %w", err)
+	}
+	var occupyingAgent string
+	err = tx.QueryRowContext(
+		ctx,
+		`SELECT id FROM agents WHERE actor_id = ? AND revoked_at IS NULL LIMIT 1`,
+		actorID,
+	).Scan(&occupyingAgent)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = nil
+	}
+	if err != nil {
+		return fmt.Errorf("check actor link: %w", err)
+	}
+	if occupyingAgent != "" {
+		return fmt.Errorf("%w: actor already linked to an agent", ErrInvalidRequest)
+	}
+	return nil
+}
+
 func (s *Store) registerAgentOnce(ctx context.Context, username string, publicKey string, claim OnboardingClaim, existingActorID string) (Agent, AgentKey, TokenBundle, error) {
 	now := time.Now().UTC()
 	nowText := now.Format(time.RFC3339Nano)
@@ -239,36 +274,9 @@ func (s *Store) registerAgentOnce(ctx context.Context, username string, publicKe
 	}
 
 	if strings.TrimSpace(existingActorID) != "" {
-		var placeholder int
-		err = tx.QueryRowContext(
-			ctx,
-			`SELECT 1 FROM actors WHERE id = ? LIMIT 1`,
-			actorID,
-		).Scan(&placeholder)
-		if errors.Is(err, sql.ErrNoRows) {
+		if err := s.ensureExistingActorReadyForAgentLinkTx(ctx, tx, actorID); err != nil {
 			_ = tx.Rollback()
-			return Agent{}, AgentKey{}, TokenBundle{}, fmt.Errorf("%w: existing actor not found", ErrInvalidRequest)
-		}
-		if err != nil {
-			_ = tx.Rollback()
-			return Agent{}, AgentKey{}, TokenBundle{}, fmt.Errorf("lookup existing actor: %w", err)
-		}
-		var occupyingAgent string
-		err = tx.QueryRowContext(
-			ctx,
-			`SELECT id FROM agents WHERE actor_id = ? AND revoked_at IS NULL LIMIT 1`,
-			actorID,
-		).Scan(&occupyingAgent)
-		if errors.Is(err, sql.ErrNoRows) {
-			err = nil
-		}
-		if err != nil {
-			_ = tx.Rollback()
-			return Agent{}, AgentKey{}, TokenBundle{}, fmt.Errorf("check actor link: %w", err)
-		}
-		if occupyingAgent != "" {
-			_ = tx.Rollback()
-			return Agent{}, AgentKey{}, TokenBundle{}, fmt.Errorf("%w: actor already linked to an agent", ErrInvalidRequest)
+			return Agent{}, AgentKey{}, TokenBundle{}, err
 		}
 	}
 

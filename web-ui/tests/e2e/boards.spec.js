@@ -781,7 +781,7 @@ test("board UI supports create/edit and card mutation flows", async ({
     "Review Prep",
   );
 
-  await page.getByLabel("Move to column").selectOption("done");
+  await page.getByLabel("Column").selectOption("done");
   await page.getByRole("button", { name: "Move", exact: true }).click();
 
   await page

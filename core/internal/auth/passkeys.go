@@ -19,10 +19,37 @@ import (
 
 var ErrPasskeyNotFound = errors.New("passkey_not_found")
 
+// ErrAmbiguousPasskeyPrincipal is returned when multiple passkey-backed principals
+// match a dev-only lookup that requires a unique selection (for example sole-principal sign-in).
+var ErrAmbiguousPasskeyPrincipal = errors.New("ambiguous_passkey_principal")
+
+// DevSyntheticPasskeyCredential returns a placeholder WebAuthn credential used when
+// registration bypasses the browser ceremony in development. It cannot satisfy real assertion verification.
+func DevSyntheticPasskeyCredential() (webauthn.Credential, error) {
+	id := make([]byte, 32)
+	if _, err := rand.Read(id); err != nil {
+		return webauthn.Credential{}, err
+	}
+	return webauthn.Credential{
+		ID:              id,
+		PublicKey:       []byte{0x01},
+		AttestationType: "none",
+		Authenticator: webauthn.Authenticator{
+			SignCount: 0,
+			// Non-empty slice so SQLite driver binds a BLOB (nil/empty AAGUID would store NULL).
+			AAGUID: make([]byte, 16),
+		},
+	}, nil
+}
+
 type RegisterPasskeyAgentInput struct {
 	DisplayName string
 	UserHandle  []byte
 	Credential  *webauthn.Credential
+	// ExistingActorID, when set, links the new passkey agent to a pre-seeded actor row
+	// when the explicit local passkey bypass capability and OAR_DEV_REGISTER_LINKED_ACTORS
+	// are both enabled for this core instance.
+	ExistingActorID string
 }
 
 type PasskeyIdentity struct {
@@ -51,10 +78,18 @@ func (s *Store) RegisterPasskeyAgent(ctx context.Context, input RegisterPasskeyA
 		return Agent{}, TokenBundle{}, fmt.Errorf("%w: passkey credential is required", ErrInvalidRequest)
 	}
 
+	existingActorID := strings.TrimSpace(input.ExistingActorID)
+	if existingActorID != "" && !s.allowDevRegisterLinkedActor {
+		return Agent{}, TokenBundle{}, fmt.Errorf("%w: existing_actor_id is not enabled for this core instance", ErrInvalidRequest)
+	}
+
 	now := time.Now().UTC()
 	nowText := now.Format(time.RFC3339Nano)
 	agentID := "agent_" + uuid.NewString()
 	actorID := agentID
+	if existingActorID != "" {
+		actorID = existingActorID
+	}
 	username, err := generatePasskeyUsername(displayName)
 	if err != nil {
 		return Agent{}, TokenBundle{}, fmt.Errorf("%w: %v", ErrInvalidRequest, err)
@@ -68,6 +103,13 @@ func (s *Store) RegisterPasskeyAgent(ctx context.Context, input RegisterPasskeyA
 	if err := s.consumeOnboardingClaimTx(ctx, tx, claim, agentID, actorID, now); err != nil {
 		_ = tx.Rollback()
 		return Agent{}, TokenBundle{}, err
+	}
+
+	if existingActorID != "" {
+		if err := s.ensureExistingActorReadyForAgentLinkTx(ctx, tx, actorID); err != nil {
+			_ = tx.Rollback()
+			return Agent{}, TokenBundle{}, err
+		}
 	}
 
 	agentMetadataJSON, err := principalMetadataJSON(PrincipalKindHuman, AuthMethodPasskey, nil)
@@ -96,19 +138,32 @@ func (s *Store) RegisterPasskeyAgent(ctx context.Context, input RegisterPasskeyA
 		_ = tx.Rollback()
 		return Agent{}, TokenBundle{}, fmt.Errorf("encode passkey actor metadata: %w", err)
 	}
-	_, err = tx.ExecContext(
-		ctx,
-		`INSERT INTO actors(id, display_name, tags_json, created_at, metadata_json)
-		 VALUES (?, ?, ?, ?, ?)`,
-		actorID,
-		displayName,
-		`["agent","human","passkey"]`,
-		nowText,
-		actorMetadataValue,
-	)
-	if err != nil {
-		_ = tx.Rollback()
-		return Agent{}, TokenBundle{}, fmt.Errorf("insert passkey actor: %w", err)
+	if existingActorID == "" {
+		_, err = tx.ExecContext(
+			ctx,
+			`INSERT INTO actors(id, display_name, tags_json, created_at, metadata_json)
+			 VALUES (?, ?, ?, ?, ?)`,
+			actorID,
+			displayName,
+			`["agent","human","passkey"]`,
+			nowText,
+			actorMetadataValue,
+		)
+		if err != nil {
+			_ = tx.Rollback()
+			return Agent{}, TokenBundle{}, fmt.Errorf("insert passkey actor: %w", err)
+		}
+	} else {
+		_, err = tx.ExecContext(
+			ctx,
+			`UPDATE actors SET metadata_json = ? WHERE id = ?`,
+			actorMetadataValue,
+			actorID,
+		)
+		if err != nil {
+			_ = tx.Rollback()
+			return Agent{}, TokenBundle{}, fmt.Errorf("update linked actor metadata for passkey: %w", err)
+		}
 	}
 
 	if err := insertPasskeyCredentialTx(ctx, tx, agentID, input.UserHandle, *input.Credential, nowText); err != nil {
@@ -343,6 +398,78 @@ func (s *Store) getPasskeyIdentity(ctx context.Context, whereClause string, valu
 	}
 
 	return identity, nil
+}
+
+// GetPasskeyIdentityByDisplayName returns the passkey identity for the unique principal whose
+// actor display name matches (trimmed). It returns ErrAmbiguousPasskeyPrincipal if more than one principal matches.
+func (s *Store) GetPasskeyIdentityByDisplayName(ctx context.Context, displayName string) (PasskeyIdentity, error) {
+	displayName = strings.TrimSpace(displayName)
+	if displayName == "" {
+		return PasskeyIdentity{}, ErrPasskeyNotFound
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT DISTINCT a.id
+		FROM agents a
+		INNER JOIN passkey_credentials pc ON pc.agent_id = a.id
+		INNER JOIN actors ac ON ac.id = a.actor_id
+		WHERE a.revoked_at IS NULL AND ac.display_name = ?`, displayName)
+	if err != nil {
+		return PasskeyIdentity{}, fmt.Errorf("query passkey principals by display name: %w", err)
+	}
+	defer rows.Close()
+
+	var agentIDs []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return PasskeyIdentity{}, fmt.Errorf("scan agent id: %w", err)
+		}
+		agentIDs = append(agentIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		return PasskeyIdentity{}, err
+	}
+	switch len(agentIDs) {
+	case 0:
+		return PasskeyIdentity{}, ErrPasskeyNotFound
+	case 1:
+		return s.getPasskeyIdentity(ctx, `a.id = ?`, agentIDs[0])
+	default:
+		return PasskeyIdentity{}, ErrAmbiguousPasskeyPrincipal
+	}
+}
+
+// GetSolePasskeyIdentity returns the identity when exactly one non-revoked passkey principal exists.
+func (s *Store) GetSolePasskeyIdentity(ctx context.Context) (PasskeyIdentity, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT DISTINCT a.id
+		FROM agents a
+		INNER JOIN passkey_credentials pc ON pc.agent_id = a.id
+		WHERE a.revoked_at IS NULL`)
+	if err != nil {
+		return PasskeyIdentity{}, fmt.Errorf("query passkey principals: %w", err)
+	}
+	defer rows.Close()
+
+	var agentIDs []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return PasskeyIdentity{}, fmt.Errorf("scan agent id: %w", err)
+		}
+		agentIDs = append(agentIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		return PasskeyIdentity{}, err
+	}
+	switch len(agentIDs) {
+	case 0:
+		return PasskeyIdentity{}, ErrPasskeyNotFound
+	case 1:
+		return s.getPasskeyIdentity(ctx, `a.id = ?`, agentIDs[0])
+	default:
+		return PasskeyIdentity{}, ErrAmbiguousPasskeyPrincipal
+	}
 }
 
 func insertPasskeyCredentialTx(ctx context.Context, tx *sql.Tx, agentID string, userHandle []byte, credential webauthn.Credential, createdAt string) error {

@@ -2933,7 +2933,7 @@ paths:
       x-oar-why: Report whether first-principal bootstrap registration is still available.
       x-oar-input-mode: none
       x-oar-streaming: { mode: none }
-      x-oar-output-envelope: "Returns `{ bootstrap_registration_available }`."
+      x-oar-output-envelope: "Returns `{ bootstrap_registration_available, dev_passkey_bypass_available? }`, where the dev bypass field reflects the effective local-only passkey bypass capability."
       x-oar-error-codes: []
       x-oar-concepts: [auth]
       x-oar-stability: beta
@@ -3196,6 +3196,74 @@ paths:
               schema:
                 $ref: '#/components/schemas/JsonValue'
         '400':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/passkey/dev/register:
+    post:
+      operationId: passkeyDevRegister
+      summary: Complete passkey registration without WebAuthn (dev only)
+      tags: [auth]
+      x-oar-surface: utility
+      x-oar-command-id: auth.passkey.dev.register
+      x-oar-cli-path: auth passkey dev register
+      x-oar-why: Local development bypass for human onboarding when OAR_ALLOW_PASSKEY_DEV_BYPASS=1 and the workspace carries the local-only .oar-dev-insecure-auth marker; stores a synthetic credential. Optional existing_actor_id links a pre-seeded actor when OAR_DEV_REGISTER_LINKED_ACTORS=1.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ agent, tokens }`."
+      x-oar-error-codes: [invalid_request, invalid_token, dev_passkey_bypass_disabled]
+      x-oar-concepts: [auth, passkeys]
+      x-oar-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '201':
+          description: Registration completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/passkey/dev/login:
+    post:
+      operationId: passkeyDevLogin
+      summary: Issue session for passkey principal without WebAuthn (dev only)
+      tags: [auth]
+      x-oar-surface: utility
+      x-oar-command-id: auth.passkey.dev.login
+      x-oar-cli-path: auth passkey dev login
+      x-oar-why: Local development bypass when OAR_ALLOW_PASSKEY_DEV_BYPASS=1 and the workspace carries the local-only .oar-dev-insecure-auth marker; optional username or display_name, or sole passkey principal.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ agent, tokens }`."
+      x-oar-error-codes: [invalid_request, not_found, dev_passkey_bypass_disabled]
+      x-oar-concepts: [auth, passkeys]
+      x-oar-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Login completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
           $ref: '#/components/responses/ErrorResponse'
 
   /auth/principals:

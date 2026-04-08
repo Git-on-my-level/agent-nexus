@@ -23,6 +23,7 @@ func handleBootstrapStatus(w http.ResponseWriter, r *http.Request, opts handlerO
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"bootstrap_registration_available": available,
+		"dev_passkey_bypass_available":     opts.allowPasskeyDevBypass,
 	})
 }
 

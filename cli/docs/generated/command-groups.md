@@ -71,7 +71,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `auth`
 
-- Commands: `13`
+- Commands: `15`
 - Command IDs:
   - `auth.agents.register` (`auth agents register`)
   - `auth.audit.list` (`auth audit list`)
@@ -79,6 +79,8 @@ Generated from `contracts/oar-openapi.yaml`.
   - `auth.invites.create` (`auth invites create`)
   - `auth.invites.list` (`auth invites list`)
   - `auth.invites.revoke` (`auth invites revoke`)
+  - `auth.passkey.dev.login` (`auth passkey dev login`)
+  - `auth.passkey.dev.register` (`auth passkey dev register`)
   - `auth.passkey.login.options` (`auth passkey login options`)
   - `auth.passkey.login.verify` (`auth passkey login verify`)
   - `auth.passkey.register.options` (`auth passkey register options`)

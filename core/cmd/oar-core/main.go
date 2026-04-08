@@ -31,12 +31,13 @@ import (
 )
 
 const (
-	defaultHost          = "127.0.0.1"
-	defaultPort          = 8000
-	defaultSchemaPath    = "../contracts/oar-schema.yaml"
-	defaultWorkspaceRoot = ".oar-workspace"
-	defaultAPIVersion    = "v0"
-	defaultInstanceID    = "core-local"
+	defaultHost                = "127.0.0.1"
+	defaultPort                = 8000
+	defaultSchemaPath          = "../contracts/oar-schema.yaml"
+	defaultWorkspaceRoot       = ".oar-workspace"
+	defaultAPIVersion          = "v0"
+	defaultInstanceID          = "core-local"
+	devPasskeyBypassMarkerName = ".oar-dev-insecure-auth"
 
 	defaultWorkspaceMaxBlobBytes         int64 = 1 << 30
 	defaultWorkspaceMaxArtifacts         int64 = 100000
@@ -83,6 +84,7 @@ func main() {
 		staleScanInterval          = envDuration("OAR_PROJECTION_STALE_SCAN_INTERVAL", 30*time.Second)
 		projectionBatchSize        = envInt("OAR_PROJECTION_MAINTENANCE_BATCH_SIZE", 50)
 		enableDevActorMode         = envBool("OAR_ENABLE_DEV_ACTOR_MODE", false)
+		allowPasskeyDevBypass      = envBool("OAR_ALLOW_PASSKEY_DEV_BYPASS", false)
 		devRegisterLinkedActors    = envBool("OAR_DEV_REGISTER_LINKED_ACTORS", false)
 		allowUnauthenticatedWrites = envBool("OAR_ALLOW_UNAUTHENTICATED_WRITES", false)
 		allowLoopbackVerifyReads   = envBool("OAR_ALLOW_LOOPBACK_VERIFICATION_READS", false)
@@ -224,10 +226,18 @@ func main() {
 		fmt.Fprintf(os.Stderr, "failed to seed system actor: %v\n", err)
 		os.Exit(1)
 	}
+	passkeyDevBypassConfigured := allowPasskeyDevBypass
+	passkeyDevBypassMarkerPath := filepath.Join(workspace.Layout().RootDir, devPasskeyBypassMarkerName)
+	passkeyDevBypassMarkerPresent, err := fileExists(passkeyDevBypassMarkerPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to inspect passkey dev bypass marker: %v\n", err)
+		os.Exit(1)
+	}
+	passkeyDevBypassEffective := passkeyDevBypassConfigured && passkeyDevBypassMarkerPresent
 	authStore := auth.NewStore(
 		workspace.DB(),
 		auth.WithBootstrapToken(bootstrapToken),
-		auth.WithAllowDevRegisterLinkedActor(enableDevActorMode && devRegisterLinkedActors),
+		auth.WithAllowDevRegisterLinkedActor(passkeyDevBypassEffective && devRegisterLinkedActors),
 	)
 	passkeySessionStore := auth.NewPasskeySessionStore(auth.DefaultPasskeySessionTTL)
 	defer passkeySessionStore.Close()
@@ -402,6 +412,7 @@ func main() {
 		server.WithWorkspaceServiceIdentity(serviceIdentity),
 		server.WithWorkspaceID(workspaceID),
 		server.WithEnableDevActorMode(enableDevActorMode),
+		server.WithAllowPasskeyDevBypass(passkeyDevBypassEffective),
 		server.WithAllowUnauthenticatedWrites(allowUnauthenticatedWrites),
 		server.WithAllowLoopbackVerificationReads(allowLoopbackVerifyReads),
 		server.WithCoreVersion(coreVersion),
@@ -449,6 +460,11 @@ func main() {
 		if enableDevActorMode {
 			fmt.Println("  WARNING: dev actor mode enabled (anonymous workspace reads and legacy actor flows)")
 		}
+		if passkeyDevBypassEffective {
+			fmt.Printf("  WARNING: passkey dev bypass enabled (marker=%s)\n", passkeyDevBypassMarkerPath)
+		} else if passkeyDevBypassConfigured {
+			fmt.Printf("  WARNING: passkey dev bypass requested but inactive (missing marker %s)\n", passkeyDevBypassMarkerPath)
+		}
 		if strings.TrimSpace(humanAuthMode) == controlplaneauth.HumanAuthModeControlPlane {
 			fmt.Printf("  human auth mode: %s (workspace_id=%s, service_identity=%s)\n", humanAuthMode, controlPlaneWorkspaceID, serviceIdentity.ID())
 		}
@@ -479,6 +495,17 @@ func main() {
 		}
 		fmt.Println("server stopped")
 	}
+}
+
+func fileExists(path string) (bool, error) {
+	_, err := os.Stat(strings.TrimSpace(path))
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
 }
 
 func envString(name string, fallback string) string {

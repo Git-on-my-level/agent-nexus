@@ -350,32 +350,29 @@
 </script>
 
 <div>
-  <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
-    <div class="flex flex-wrap items-center gap-3">
-      <h2
-        class="text-[12px] font-semibold uppercase tracking-wider text-[var(--ui-text-muted)]"
-      >
-        Messages
-      </h2>
-      {#if archivedMessageCount > 0}
-        <label
-          class="flex items-center gap-1.5 text-[11px] text-[var(--ui-text-muted)]"
-        >
-          <input
-            type="checkbox"
-            bind:checked={showArchived}
-            class="accent-[var(--ui-accent)]"
-          />
-          Show archived ({archivedMessageCount})
-        </label>
-      {/if}
+  {#if archivedMessageCount > 0 || showSyncStatus}
+    <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex flex-wrap items-center gap-3">
+        {#if archivedMessageCount > 0}
+          <label
+            class="flex items-center gap-1.5 text-[11px] text-[var(--ui-text-muted)]"
+          >
+            <input
+              type="checkbox"
+              bind:checked={showArchived}
+              class="accent-[var(--ui-accent)]"
+            />
+            Show archived ({archivedMessageCount})
+          </label>
+        {/if}
+      </div>
+      <div class="min-h-[1rem] text-right" aria-live="polite">
+        {#if showSyncStatus}
+          <p class="text-[11px] text-[var(--ui-text-muted)]">Syncing…</p>
+        {/if}
+      </div>
     </div>
-    <div class="min-h-[1rem] text-right" aria-live="polite">
-      {#if showSyncStatus}
-        <p class="text-[11px] text-[var(--ui-text-muted)]">Syncing…</p>
-      {/if}
-    </div>
-  </div>
+  {/if}
   {#if timelineError && !hasAnyNonTrashedMessage}
     <p class="rounded bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
       {timelineError}

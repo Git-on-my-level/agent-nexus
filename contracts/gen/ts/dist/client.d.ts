@@ -68,6 +68,8 @@ export declare class OarClient {
     authInvitesCreate(options?: RequestOptions): Promise<InvokeResult>;
     authInvitesList(options?: RequestOptions): Promise<InvokeResult>;
     authInvitesRevoke(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    authPasskeyDevLogin(options?: RequestOptions): Promise<InvokeResult>;
+    authPasskeyDevRegister(options?: RequestOptions): Promise<InvokeResult>;
     authPasskeyLoginOptions(options?: RequestOptions): Promise<InvokeResult>;
     authPasskeyLoginVerify(options?: RequestOptions): Promise<InvokeResult>;
     authPasskeyRegisterOptions(options?: RequestOptions): Promise<InvokeResult>;

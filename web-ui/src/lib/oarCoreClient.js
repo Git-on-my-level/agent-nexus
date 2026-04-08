@@ -488,6 +488,14 @@ export function createOarCoreClient(options = {}) {
       invokeJSON("auth.passkey.login.verify", () =>
         generated.authPasskeyLoginVerify({ body: payload }),
       ),
+    passkeyDevRegister: (payload) =>
+      invokeJSON("auth.passkey.dev.register", () =>
+        generated.authPasskeyDevRegister({ body: payload }),
+      ),
+    passkeyDevLogin: (payload) =>
+      invokeJSON("auth.passkey.dev.login", () =>
+        generated.authPasskeyDevLogin({ body: payload }),
+      ),
     bootstrapStatus: () =>
       invokeJSON("auth.bootstrap.status", () =>
         generated.authBootstrapStatus(),

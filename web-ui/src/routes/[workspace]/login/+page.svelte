@@ -24,6 +24,11 @@
   let loadingLogin = $state(false);
   let loadingBootstrapStatus = $state(true);
   let bootstrapAvailable = $state(false);
+  let devPasskeyBypassAvailable = $state(false);
+  let devLoginUsername = $state("");
+  let devLoginDisplayName = $state("");
+  let devLoginError = $state("");
+  let loadingDevLogin = $state(false);
   let workspaceSlug = $derived($page.params.workspace);
 
   onMount(async () => {
@@ -40,8 +45,10 @@
     try {
       const status = await coreClient.bootstrapStatus();
       bootstrapAvailable = status.bootstrap_registration_available ?? false;
+      devPasskeyBypassAvailable = status.dev_passkey_bypass_available ?? false;
     } catch {
       bootstrapAvailable = false;
+      devPasskeyBypassAvailable = false;
     } finally {
       loadingBootstrapStatus = false;
     }
@@ -99,6 +106,42 @@
     }
   }
 
+  async function handleDevRegistration() {
+    if (!registrationName.trim()) {
+      registrationError = "Display name is required.";
+      return;
+    }
+
+    if (!registrationToken.trim()) {
+      registrationError = bootstrapAvailable
+        ? "A bootstrap token is required for registration."
+        : "An invite token is required for registration.";
+      return;
+    }
+
+    loadingRegistration = true;
+    registrationError = "";
+    loginError = "";
+    devLoginError = "";
+
+    try {
+      const registrationTokenValue = registrationToken.trim();
+      const tokenKey = bootstrapAvailable ? "bootstrap_token" : "invite_token";
+      const body = {
+        display_name: registrationName.trim(),
+        [tokenKey]: registrationTokenValue,
+      };
+      const result = await coreClient.passkeyDevRegister(body);
+      completeAuthSession(result.agent, workspaceSlug);
+      await goto(workspacePath(workspaceSlug));
+    } catch (error) {
+      registrationError =
+        error instanceof Error ? error.message : "Dev registration failed.";
+    } finally {
+      loadingRegistration = false;
+    }
+  }
+
   async function handleLogin() {
     loadingLogin = true;
     loginError = "";
@@ -118,6 +161,34 @@
         error instanceof Error ? error.message : "Passkey sign-in failed.";
     } finally {
       loadingLogin = false;
+    }
+  }
+
+  async function handleDevLogin() {
+    const u = devLoginUsername.trim();
+    const d = devLoginDisplayName.trim();
+    if (u && d) {
+      devLoginError = "Enter a principal username or a display name, not both.";
+      return;
+    }
+
+    loadingDevLogin = true;
+    devLoginError = "";
+    loginError = "";
+    registrationError = "";
+
+    try {
+      const result = await coreClient.passkeyDevLogin({
+        ...(u ? { username: u } : {}),
+        ...(d ? { display_name: d } : {}),
+      });
+      completeAuthSession(result.agent, workspaceSlug);
+      await goto(workspacePath(workspaceSlug));
+    } catch (error) {
+      devLoginError =
+        error instanceof Error ? error.message : "Dev sign-in failed.";
+    } finally {
+      loadingDevLogin = false;
     }
   }
 </script>
@@ -182,6 +253,69 @@
           <p class="text-[12px] text-[var(--ui-text-muted)]">
             This uses discoverable WebAuthn login. No username step is required.
           </p>
+
+          {#if devPasskeyBypassAvailable}
+            <div class="mt-4 space-y-3 border-t border-[var(--ui-border)] pt-3">
+              <p
+                class="text-[11px] font-medium uppercase tracking-wide text-[var(--ui-text-muted)]"
+              >
+                Local development
+              </p>
+              <p class="text-[12px] text-[var(--ui-text-muted)]">
+                Sign in as a human principal without creating a browser passkey.
+                After a fresh <span class="font-mono">make serve</span> seed, leave
+                the fields empty (one passkey principal). With several, set principal
+                username (Access) or exact display name.
+              </p>
+              <div>
+                <label
+                  class="block text-[12px] font-medium text-[var(--ui-text-muted)]"
+                  for="dev-login-username"
+                >
+                  Principal username (optional)
+                </label>
+                <input
+                  bind:value={devLoginUsername}
+                  class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 font-mono text-[13px] text-[var(--ui-text)]"
+                  id="dev-login-username"
+                  placeholder="e.g. passkey.ops.lead.a1b2"
+                  type="text"
+                />
+              </div>
+              <div>
+                <label
+                  class="block text-[12px] font-medium text-[var(--ui-text-muted)]"
+                  for="dev-login-display"
+                >
+                  Display name (optional)
+                </label>
+                <input
+                  bind:value={devLoginDisplayName}
+                  class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-[13px] text-[var(--ui-text)]"
+                  id="dev-login-display"
+                  placeholder="Exact match when username is unknown"
+                  type="text"
+                />
+              </div>
+              <button
+                class="cursor-pointer w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-[12px] font-medium text-[var(--ui-text)] hover:bg-[var(--ui-border-subtle)] disabled:opacity-50"
+                disabled={loadingDevLogin}
+                onclick={handleDevLogin}
+                type="button"
+              >
+                {loadingDevLogin
+                  ? "Signing in..."
+                  : "Sign in without passkey (dev)"}
+              </button>
+              {#if devLoginError}
+                <div
+                  class="rounded-md bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
+                >
+                  {devLoginError}
+                </div>
+              {/if}
+            </div>
+          {/if}
         </div>
       </section>
 
@@ -280,6 +414,21 @@
                 ? "Waiting for passkey..."
                 : "Create passkey and join"}
             </button>
+            {#if devPasskeyBypassAvailable}
+              <button
+                class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-[12px] font-medium text-[var(--ui-text)] hover:bg-[var(--ui-border-subtle)] disabled:opacity-50"
+                disabled={loadingRegistration || !registrationToken.trim()}
+                onclick={(e) => {
+                  e.preventDefault();
+                  handleDevRegistration();
+                }}
+                type="button"
+              >
+                {loadingRegistration
+                  ? "Working..."
+                  : "Join without passkey (dev)"}
+              </button>
+            {/if}
             {#if $devActorMode}
               <a
                 class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]"

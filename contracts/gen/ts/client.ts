@@ -804,6 +804,8 @@ export const commandRegistry: CommandSpec[] = [
       "auth.invites.create",
       "auth.invites.list",
       "auth.invites.revoke",
+      "auth.passkey.dev.login",
+      "auth.passkey.dev.register",
       "auth.passkey.login.options",
       "auth.passkey.login.verify",
       "auth.passkey.register.options",
@@ -845,6 +847,8 @@ export const commandRegistry: CommandSpec[] = [
       "auth.invites.create",
       "auth.invites.list",
       "auth.invites.revoke",
+      "auth.passkey.dev.login",
+      "auth.passkey.dev.register",
       "auth.passkey.login.options",
       "auth.passkey.login.verify",
       "auth.passkey.register.options",
@@ -869,7 +873,7 @@ export const commandRegistry: CommandSpec[] = [
     "streaming": {
       "mode": "none"
     },
-    "output_envelope": "Returns `{ bootstrap_registration_available }`.",
+    "output_envelope": "Returns `{ bootstrap_registration_available, dev_passkey_bypass_available? }`, where the dev bypass field reflects the effective local-only passkey bypass capability.",
     "concepts": [
       "auth"
     ],
@@ -881,6 +885,8 @@ export const commandRegistry: CommandSpec[] = [
       "auth.invites.create",
       "auth.invites.list",
       "auth.invites.revoke",
+      "auth.passkey.dev.login",
+      "auth.passkey.dev.register",
       "auth.passkey.login.options",
       "auth.passkey.login.verify",
       "auth.passkey.register.options",
@@ -922,6 +928,8 @@ export const commandRegistry: CommandSpec[] = [
       "auth.bootstrap.status",
       "auth.invites.list",
       "auth.invites.revoke",
+      "auth.passkey.dev.login",
+      "auth.passkey.dev.register",
       "auth.passkey.login.options",
       "auth.passkey.login.verify",
       "auth.passkey.register.options",
@@ -962,6 +970,8 @@ export const commandRegistry: CommandSpec[] = [
       "auth.bootstrap.status",
       "auth.invites.create",
       "auth.invites.revoke",
+      "auth.passkey.dev.login",
+      "auth.passkey.dev.register",
       "auth.passkey.login.options",
       "auth.passkey.login.verify",
       "auth.passkey.register.options",
@@ -1007,6 +1017,8 @@ export const commandRegistry: CommandSpec[] = [
       "auth.bootstrap.status",
       "auth.invites.create",
       "auth.invites.list",
+      "auth.passkey.dev.login",
+      "auth.passkey.dev.register",
       "auth.passkey.login.options",
       "auth.passkey.login.verify",
       "auth.passkey.register.options",
@@ -1017,6 +1029,94 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "go_method": "AuthInvitesRevoke",
     "ts_method": "authInvitesRevoke"
+  },
+  {
+    "command_id": "auth.passkey.dev.login",
+    "cli_path": "auth passkey dev login",
+    "group": "auth",
+    "method": "POST",
+    "path": "/auth/passkey/dev/login",
+    "operation_id": "passkeyDevLogin",
+    "summary": "Issue session for passkey principal without WebAuthn (dev only)",
+    "why": "Local development bypass when OAR_ALLOW_PASSKEY_DEV_BYPASS=1 and the workspace carries the local-only .oar-dev-insecure-auth marker; optional username or display_name, or sole passkey principal.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ agent, tokens }`.",
+    "error_codes": [
+      "invalid_request",
+      "not_found",
+      "dev_passkey_bypass_disabled"
+    ],
+    "concepts": [
+      "auth",
+      "passkeys"
+    ],
+    "stability": "beta",
+    "surface": "utility",
+    "adjacent_commands": [
+      "auth.agents.register",
+      "auth.audit.list",
+      "auth.bootstrap.status",
+      "auth.invites.create",
+      "auth.invites.list",
+      "auth.invites.revoke",
+      "auth.passkey.dev.register",
+      "auth.passkey.login.options",
+      "auth.passkey.login.verify",
+      "auth.passkey.register.options",
+      "auth.passkey.register.verify",
+      "auth.principals.list",
+      "auth.principals.revoke",
+      "auth.token"
+    ],
+    "go_method": "AuthPasskeyDevLogin",
+    "ts_method": "authPasskeyDevLogin"
+  },
+  {
+    "command_id": "auth.passkey.dev.register",
+    "cli_path": "auth passkey dev register",
+    "group": "auth",
+    "method": "POST",
+    "path": "/auth/passkey/dev/register",
+    "operation_id": "passkeyDevRegister",
+    "summary": "Complete passkey registration without WebAuthn (dev only)",
+    "why": "Local development bypass for human onboarding when OAR_ALLOW_PASSKEY_DEV_BYPASS=1 and the workspace carries the local-only .oar-dev-insecure-auth marker; stores a synthetic credential. Optional existing_actor_id links a pre-seeded actor when OAR_DEV_REGISTER_LINKED_ACTORS=1.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ agent, tokens }`.",
+    "error_codes": [
+      "invalid_request",
+      "invalid_token",
+      "dev_passkey_bypass_disabled"
+    ],
+    "concepts": [
+      "auth",
+      "passkeys"
+    ],
+    "stability": "beta",
+    "surface": "utility",
+    "adjacent_commands": [
+      "auth.agents.register",
+      "auth.audit.list",
+      "auth.bootstrap.status",
+      "auth.invites.create",
+      "auth.invites.list",
+      "auth.invites.revoke",
+      "auth.passkey.dev.login",
+      "auth.passkey.login.options",
+      "auth.passkey.login.verify",
+      "auth.passkey.register.options",
+      "auth.passkey.register.verify",
+      "auth.principals.list",
+      "auth.principals.revoke",
+      "auth.token"
+    ],
+    "go_method": "AuthPasskeyDevRegister",
+    "ts_method": "authPasskeyDevRegister"
   },
   {
     "command_id": "auth.passkey.login.options",
@@ -1048,6 +1148,8 @@ export const commandRegistry: CommandSpec[] = [
       "auth.invites.create",
       "auth.invites.list",
       "auth.invites.revoke",
+      "auth.passkey.dev.login",
+      "auth.passkey.dev.register",
       "auth.passkey.login.verify",
       "auth.passkey.register.options",
       "auth.passkey.register.verify",
@@ -1089,6 +1191,8 @@ export const commandRegistry: CommandSpec[] = [
       "auth.invites.create",
       "auth.invites.list",
       "auth.invites.revoke",
+      "auth.passkey.dev.login",
+      "auth.passkey.dev.register",
       "auth.passkey.login.options",
       "auth.passkey.register.options",
       "auth.passkey.register.verify",
@@ -1129,6 +1233,8 @@ export const commandRegistry: CommandSpec[] = [
       "auth.invites.create",
       "auth.invites.list",
       "auth.invites.revoke",
+      "auth.passkey.dev.login",
+      "auth.passkey.dev.register",
       "auth.passkey.login.options",
       "auth.passkey.login.verify",
       "auth.passkey.register.verify",
@@ -1170,6 +1276,8 @@ export const commandRegistry: CommandSpec[] = [
       "auth.invites.create",
       "auth.invites.list",
       "auth.invites.revoke",
+      "auth.passkey.dev.login",
+      "auth.passkey.dev.register",
       "auth.passkey.login.options",
       "auth.passkey.login.verify",
       "auth.passkey.register.options",
@@ -1210,6 +1318,8 @@ export const commandRegistry: CommandSpec[] = [
       "auth.invites.create",
       "auth.invites.list",
       "auth.invites.revoke",
+      "auth.passkey.dev.login",
+      "auth.passkey.dev.register",
       "auth.passkey.login.options",
       "auth.passkey.login.verify",
       "auth.passkey.register.options",
@@ -1256,6 +1366,8 @@ export const commandRegistry: CommandSpec[] = [
       "auth.invites.create",
       "auth.invites.list",
       "auth.invites.revoke",
+      "auth.passkey.dev.login",
+      "auth.passkey.dev.register",
       "auth.passkey.login.options",
       "auth.passkey.login.verify",
       "auth.passkey.register.options",
@@ -1296,6 +1408,8 @@ export const commandRegistry: CommandSpec[] = [
       "auth.invites.create",
       "auth.invites.list",
       "auth.invites.revoke",
+      "auth.passkey.dev.login",
+      "auth.passkey.dev.register",
       "auth.passkey.login.options",
       "auth.passkey.login.verify",
       "auth.passkey.register.options",
@@ -5648,6 +5762,14 @@ export class OarClient {
 
   authInvitesRevoke(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("auth.invites.revoke", pathParams, options);
+  }
+
+  authPasskeyDevLogin(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("auth.passkey.dev.login", {}, options);
+  }
+
+  authPasskeyDevRegister(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("auth.passkey.dev.register", {}, options);
   }
 
   authPasskeyLoginOptions(options: RequestOptions = {}): Promise<InvokeResult> {

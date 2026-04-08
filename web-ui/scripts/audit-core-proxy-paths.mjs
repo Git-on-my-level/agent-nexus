@@ -24,6 +24,8 @@ const samples = /** @type {Sample[]} */ ([
   { method: "POST", path: "/auth/passkey/register/verify" },
   { method: "POST", path: "/auth/passkey/login/options" },
   { method: "POST", path: "/auth/passkey/login/verify" },
+  { method: "POST", path: "/auth/passkey/dev/register" },
+  { method: "POST", path: "/auth/passkey/dev/login" },
   { method: "GET", path: "/auth/bootstrap/status" },
   { method: "GET", path: "/auth/invites" },
   { method: "POST", path: "/auth/invites" },

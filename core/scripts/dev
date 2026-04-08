@@ -9,9 +9,16 @@ PORT="${PORT:-8000}"
 WORKSPACE_ROOT="${WORKSPACE_ROOT:-$ROOT_DIR/.oar-workspace}"
 SCHEMA_PATH="${SCHEMA_PATH:-$ROOT_DIR/../contracts/oar-schema.yaml}"
 OAR_ENABLE_DEV_ACTOR_MODE="${OAR_ENABLE_DEV_ACTOR_MODE:-1}"
+OAR_ALLOW_PASSKEY_DEV_BYPASS="${OAR_ALLOW_PASSKEY_DEV_BYPASS:-1}"
 OAR_ALLOW_UNAUTHENTICATED_WRITES="${OAR_ALLOW_UNAUTHENTICATED_WRITES:-1}"
 export OAR_ENABLE_DEV_ACTOR_MODE
+export OAR_ALLOW_PASSKEY_DEV_BYPASS
 export OAR_ALLOW_UNAUTHENTICATED_WRITES
+
+# Keep the insecure marker colocated with the workspace so local dev opt-in is explicit
+# and production-like launches do not accidentally inherit passkey bypass.
+mkdir -p "$WORKSPACE_ROOT"
+touch "$WORKSPACE_ROOT/.oar-dev-insecure-auth"
 
 exec go run ./cmd/oar-core \
   --host "$HOST" \

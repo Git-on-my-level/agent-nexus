@@ -145,6 +145,7 @@ type handlerOptions struct {
 	contract                       *schema.Contract
 	webAuthnConfig                 WebAuthnConfig
 	enableDevActorMode             bool
+	allowPasskeyDevBypass          bool
 	allowUnauthenticatedWrites     bool
 	allowLoopbackVerificationReads bool
 	inboxRiskHorizon               time.Duration
@@ -238,6 +239,12 @@ func WithWebAuthnConfig(config WebAuthnConfig) HandlerOption {
 func WithEnableDevActorMode(enable bool) HandlerOption {
 	return func(opts *handlerOptions) {
 		opts.enableDevActorMode = enable
+	}
+}
+
+func WithAllowPasskeyDevBypass(allow bool) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.allowPasskeyDevBypass = allow
 	}
 }
 
@@ -861,6 +868,22 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			return
 		}
 		handlePasskeyLoginVerify(w, r, opts)
+	})
+
+	registerRoute("/auth/passkey/dev/register", exactRouteAccess(routeAccessPublicAuthCeremony, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+			return
+		}
+		handlePasskeyDevRegister(w, r, opts)
+	})
+
+	registerRoute("/auth/passkey/dev/login", exactRouteAccess(routeAccessPublicAuthCeremony, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+			return
+		}
+		handlePasskeyDevLogin(w, r, opts)
 	})
 
 	registerRoute("/agents/me", exactRouteAccess(routeAccessAuthenticatedPrincipal, http.MethodGet, http.MethodPatch), func(w http.ResponseWriter, r *http.Request) {

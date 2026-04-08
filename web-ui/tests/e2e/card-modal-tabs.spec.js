@@ -341,9 +341,10 @@ test("card detail modal Messages and Timeline tabs render without request storms
   ).toBeVisible();
 
   await dialog.getByTestId("cdm-tab-timeline").click();
-  await expect(
-    dialog.getByRole("heading", { name: "Timeline", exact: true }),
-  ).toBeVisible({ timeout: 15_000 });
+  await expect(dialog.getByTestId("cdm-section-tab-val")).toHaveText(
+    "timeline",
+    { timeout: 15_000 },
+  );
   await expect(
     dialog.getByText("hello from modal card thread", { exact: false }),
   ).toBeVisible();
