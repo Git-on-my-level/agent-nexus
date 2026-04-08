@@ -224,7 +224,7 @@ func handlePatchCard(w http.ResponseWriter, r *http.Request, opts handlerOptions
 	if !decodeJSONBody(w, r, &req) {
 		return
 	}
-	if req.Patch == nil || len(req.Patch) == 0 {
+	if req.Patch == nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", "patch is required")
 		return
 	}

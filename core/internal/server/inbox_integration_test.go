@@ -154,9 +154,9 @@ func TestInboxDerivationAndAcknowledgmentSuppression(t *testing.T) {
 		t.Fatalf("decode card response: %v", err)
 	}
 	cardID := asString(createdCard.Card["id"])
-	cardBoardUpdatedAt := asString(createdCard.Board["updated_at"])
-	if cardID == "" {
-		t.Fatal("expected card id")
+	cardUpdatedAt := asString(createdCard.Card["updated_at"])
+	if cardID == "" || cardUpdatedAt == "" {
+		t.Fatal("expected card id and updated_at")
 	}
 
 	itemsWithRisk := getInboxItems(t, h.baseURL)
@@ -180,9 +180,9 @@ func TestInboxDerivationAndAcknowledgmentSuppression(t *testing.T) {
 		t.Fatalf("expected acknowledged work_item_risk item to be suppressed, got %#v", itemsAfterRiskAck)
 	}
 
-	patchResp := patchJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards/"+threadID, `{
+	patchResp := patchJSONExpectStatus(t, h.baseURL+"/cards/"+cardID, `{
 		"actor_id":"actor-1",
-		"if_board_updated_at":"`+cardBoardUpdatedAt+`",
+		"if_updated_at":"`+cardUpdatedAt+`",
 		"patch":{"title":"At-risk work item updated"}
 	}`, http.StatusOK)
 	patchResp.Body.Close()

@@ -4,7 +4,6 @@
   let {
     open = false,
     cardItem = null,
-    columnPeers = [],
     boardId = "",
     board = null,
     workspaceSlug = "",
@@ -20,7 +19,6 @@
 {#if open && cardItem}
   <CardDetailModalInner
     {cardItem}
-    {columnPeers}
     {boardId}
     {board}
     {workspaceSlug}

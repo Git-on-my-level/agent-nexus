@@ -313,13 +313,13 @@ func TestEventsStreamEmitsDocumentLifecycleEventsForThread(t *testing.T) {
 	createRevisionID := asString(createdDoc.Revision["revision_id"])
 	createArtifactID := asString(createdDoc.Revision["artifact_id"])
 
-	updateDocResp := requestJSONExpectStatus(t, http.MethodPatch, h.baseURL+"/docs/"+documentID, fmt.Sprintf(`{
+	updateDocResp := requestJSONExpectStatus(t, http.MethodPost, h.baseURL+"/docs/"+documentID+"/revisions", fmt.Sprintf(`{
 		"actor_id":"actor-1",
 		"document":{"title":"Stream Document v2"},
 		"if_base_revision":"%s",
 		"content":"draft v2",
 		"content_type":"text"
-	}`, createRevisionID), http.StatusOK)
+	}`, createRevisionID), http.StatusCreated)
 	defer updateDocResp.Body.Close()
 
 	var updatedDoc struct {

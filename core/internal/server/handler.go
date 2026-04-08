@@ -1189,7 +1189,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			return routeAccessRequirement{}
 		case strings.Contains(remainder, "/"):
 			return routeAccessRequirement{}
-		case r.Method == http.MethodGet || r.Method == http.MethodPatch:
+		case r.Method == http.MethodGet:
 			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
 		default:
 			return routeAccessRequirement{}
@@ -1330,14 +1330,11 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			return
 		}
 
-		switch r.Method {
-		case http.MethodGet:
-			handleGetDocument(w, r, opts, remainder)
-		case http.MethodPatch:
-			handleUpdateDocument(w, r, opts, remainder, http.StatusOK)
-		default:
-			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET and PATCH are supported")
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+			return
 		}
+		handleGetDocument(w, r, opts, remainder)
 	})
 
 	registerRoute("/boards", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodGet, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
@@ -1375,14 +1372,14 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		case strings.Contains(remainder, "/cards/"):
 			cardRemainder := strings.TrimSpace(strings.SplitN(remainder, "/cards/", 2)[1])
 			switch {
-			case strings.HasSuffix(cardRemainder, "/move"), strings.HasSuffix(cardRemainder, "/remove"), strings.HasSuffix(cardRemainder, "/archive"), strings.HasSuffix(cardRemainder, "/trash"):
+			case strings.HasSuffix(cardRemainder, "/archive"), strings.HasSuffix(cardRemainder, "/trash"):
 				if r.Method == http.MethodPost {
 					return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
 				}
 				return routeAccessRequirement{}
 			case strings.Contains(cardRemainder, "/"):
 				return routeAccessRequirement{}
-			case r.Method == http.MethodGet || r.Method == http.MethodPatch:
+			case r.Method == http.MethodGet:
 				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
 			default:
 				return routeAccessRequirement{}
@@ -1522,21 +1519,6 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				return
 			}
 
-			if strings.HasSuffix(cardRemainder, "/move") {
-				if r.Method != http.MethodPost {
-					writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
-					return
-				}
-				cardKey := strings.TrimSuffix(cardRemainder, "/move")
-				cardKey = strings.TrimSuffix(cardKey, "/")
-				if cardKey == "" || strings.Contains(cardKey, "/") {
-					writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
-					return
-				}
-				handleMoveBoardCard(w, r, opts, boardID, cardKey)
-				return
-			}
-
 			if strings.HasSuffix(cardRemainder, "/archive") {
 				if r.Method != http.MethodPost {
 					writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
@@ -1567,33 +1549,15 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				return
 			}
 
-			if strings.HasSuffix(cardRemainder, "/remove") {
-				if r.Method != http.MethodPost {
-					writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
-					return
-				}
-				identifier := strings.TrimSuffix(cardRemainder, "/remove")
-				identifier = strings.TrimSuffix(identifier, "/")
-				if identifier == "" || strings.Contains(identifier, "/") {
-					writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
-					return
-				}
-				handleRemoveBoardCard(w, r, opts, boardID, identifier)
-				return
-			}
-
 			if strings.Contains(cardRemainder, "/") {
 				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
 				return
 			}
-			switch r.Method {
-			case http.MethodGet:
-				handleGetBoardCard(w, r, opts, boardID, cardRemainder)
-			case http.MethodPatch:
-				handleUpdateBoardCard(w, r, opts, boardID, cardRemainder)
-			default:
-				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET and PATCH are supported")
+			if r.Method != http.MethodGet {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+				return
 			}
+			handleGetBoardCard(w, r, opts, boardID, cardRemainder)
 			return
 		}
 
@@ -2013,22 +1977,6 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 
 		handleGetArtifact(w, r, opts, remainder)
-	})
-
-	registerRoute("/receipts", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
-			return
-		}
-		handleCreateReceipt(w, r, opts)
-	})
-
-	registerRoute("/reviews", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
-			return
-		}
-		handleCreateReview(w, r, opts)
 	})
 
 	registerRoute("/packets/receipts", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {

@@ -19,6 +19,7 @@ serve: ## Run local development server
 check: ## Run cheap checks (eslint, prettier --check, unit tests)
 	$(PNPM) run lint
 	$(PNPM) run test:unit
+	node scripts/audit-core-proxy-paths.mjs
 
 format: ## Apply formatting
 	$(PNPM) run format

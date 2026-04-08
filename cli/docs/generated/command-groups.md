@@ -4,7 +4,7 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.3.0`
-- Groups: `11`
+- Groups: `17`
 
 ## `topics`
 
@@ -31,11 +31,36 @@ Generated from `contracts/oar-openapi.yaml`.
   - `threads.timeline` (`threads timeline`)
   - `threads.workspace` (`threads workspace`)
 
+## `actors`
+
+- Commands: `2`
+- Command IDs:
+  - `actors.create` (`actors create`)
+  - `actors.list` (`actors list`)
+
+## `agent`
+
+- Commands: `3`
+- Command IDs:
+  - `agent.notifications.dismiss` (`agent notifications dismiss`)
+  - `agent.notifications.list` (`agent notifications list`)
+  - `agent.notifications.read` (`agent notifications read`)
+
+## `agents`
+
+- Commands: `4`
+- Command IDs:
+  - `agents.me.get` (`agents me`)
+  - `agents.me.keys.rotate` (`agents me keys rotate`)
+  - `agents.me.patch` (`agents me patch`)
+  - `agents.me.revoke` (`agents me revoke`)
+
 ## `artifacts`
 
-- Commands: `8`
+- Commands: `9`
 - Command IDs:
   - `artifacts.archive` (`artifacts archive`)
+  - `artifacts.content` (`artifacts content`)
   - `artifacts.create` (`artifacts create`)
   - `artifacts.get` (`artifacts get`)
   - `artifacts.list` (`artifacts list`)
@@ -43,6 +68,24 @@ Generated from `contracts/oar-openapi.yaml`.
   - `artifacts.restore` (`artifacts restore`)
   - `artifacts.trash` (`artifacts trash`)
   - `artifacts.unarchive` (`artifacts unarchive`)
+
+## `auth`
+
+- Commands: `13`
+- Command IDs:
+  - `auth.agents.register` (`auth agents register`)
+  - `auth.audit.list` (`auth audit list`)
+  - `auth.bootstrap.status` (`auth bootstrap status`)
+  - `auth.invites.create` (`auth invites create`)
+  - `auth.invites.list` (`auth invites list`)
+  - `auth.invites.revoke` (`auth invites revoke`)
+  - `auth.passkey.login.options` (`auth passkey login options`)
+  - `auth.passkey.login.verify` (`auth passkey login verify`)
+  - `auth.passkey.register.options` (`auth passkey register options`)
+  - `auth.passkey.register.verify` (`auth passkey register verify`)
+  - `auth.principals.list` (`auth principals list`)
+  - `auth.principals.revoke` (`auth principals revoke`)
+  - `auth.token` (`auth token`)
 
 ## `boards`
 
@@ -77,6 +120,12 @@ Generated from `contracts/oar-openapi.yaml`.
   - `cards.timeline` (`cards timeline`)
   - `cards.trash` (`cards trash`)
 
+## `derived`
+
+- Commands: `1`
+- Command IDs:
+  - `derived.rebuild` (`derived rebuild`)
+
 ## `docs`
 
 - Commands: `11`
@@ -95,10 +144,11 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `events`
 
-- Commands: `7`
+- Commands: `8`
 - Command IDs:
   - `events.archive` (`events archive`)
   - `events.create` (`events create`)
+  - `events.get` (`events get`)
   - `events.list` (`events list`)
   - `events.restore` (`events restore`)
   - `events.stream` (`events stream`)
@@ -107,18 +157,34 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `inbox`
 
-- Commands: `2`
+- Commands: `4`
 - Command IDs:
   - `inbox.acknowledge` (`inbox acknowledge`)
+  - `inbox.get` (`inbox get`)
   - `inbox.list` (`inbox list`)
+  - `inbox.stream` (`inbox stream`)
 
 ## `meta`
 
-- Commands: `3`
+- Commands: `9`
 - Command IDs:
+  - `meta.commands.get` (`meta commands get`)
+  - `meta.commands.list` (`meta commands list`)
+  - `meta.concepts.get` (`meta concepts get`)
+  - `meta.concepts.list` (`meta concepts list`)
+  - `meta.handshake` (`meta handshake`)
   - `meta.health` (`meta health`)
+  - `meta.livez` (`meta livez`)
   - `meta.readyz` (`meta readyz`)
   - `meta.version` (`meta version`)
+
+## `ops`
+
+- Commands: `3`
+- Command IDs:
+  - `ops.blob.usage.rebuild` (`ops blob usage rebuild`)
+  - `ops.health` (`ops health`)
+  - `ops.usage.summary` (`ops usage summary`)
 
 ## `packets`
 

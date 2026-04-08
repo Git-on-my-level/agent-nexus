@@ -2,13 +2,374 @@
   "openapi_version": "3.1.0",
   "contract_version": "0.3.0",
   "generated_by": "core/cmd/contract-gen",
-  "concept_count": 20,
+  "concept_count": 30,
   "concepts": [
     {
-      "name": "artifacts",
+      "name": "actors",
+      "command_count": 2,
+      "command_ids": [
+        "actors.create",
+        "actors.list"
+      ],
+      "commands": [
+        {
+          "command_id": "actors.create",
+          "cli_path": "actors create",
+          "group": "actors",
+          "method": "POST",
+          "path": "/actors",
+          "operation_id": "createActor",
+          "summary": "Create actor (dev fixture)",
+          "why": "Legacy dev actor registration when dev_actor_mode is enabled.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ actor }`.",
+          "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "dev_actor_mode_disabled"
+          ],
+          "concepts": [
+            "actors",
+            "auth"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "adjacent_commands": [
+            "actors.list"
+          ],
+          "go_method": "ActorsCreate",
+          "ts_method": "actorsCreate"
+        },
+        {
+          "command_id": "actors.list",
+          "cli_path": "actors list",
+          "group": "actors",
+          "method": "GET",
+          "path": "/actors",
+          "operation_id": "listActors",
+          "summary": "List actors",
+          "why": "Enumerate durable actor records for operator UI and dev fixtures.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ actors, next_cursor? }`.",
+          "error_codes": [
+            "auth_required",
+            "invalid_token"
+          ],
+          "concepts": [
+            "actors",
+            "auth"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "adjacent_commands": [
+            "actors.create"
+          ],
+          "go_method": "ActorsList",
+          "ts_method": "actorsList"
+        }
+      ]
+    },
+    {
+      "name": "agents",
       "command_count": 8,
       "command_ids": [
+        "agent.notifications.dismiss",
+        "agent.notifications.list",
+        "agent.notifications.read",
+        "agents.me.get",
+        "agents.me.keys.rotate",
+        "agents.me.patch",
+        "agents.me.revoke",
+        "auth.agents.register"
+      ],
+      "commands": [
+        {
+          "command_id": "agent.notifications.dismiss",
+          "cli_path": "agent notifications dismiss",
+          "group": "agent",
+          "method": "POST",
+          "path": "/agent-notifications/dismiss",
+          "operation_id": "dismissAgentNotification",
+          "summary": "Dismiss agent notification",
+          "why": "Dismiss a wake notification for the authenticated agent.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ event, notification }`.",
+          "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "not_found"
+          ],
+          "concepts": [
+            "agents",
+            "notifications",
+            "write"
+          ],
+          "stability": "beta",
+          "surface": "projection",
+          "adjacent_commands": [
+            "agent.notifications.list",
+            "agent.notifications.read"
+          ],
+          "go_method": "AgentNotificationsDismiss",
+          "ts_method": "agentNotificationsDismiss"
+        },
+        {
+          "command_id": "agent.notifications.list",
+          "cli_path": "agent notifications list",
+          "group": "agent",
+          "method": "GET",
+          "path": "/agent-notifications",
+          "operation_id": "listAgentNotifications",
+          "summary": "List agent wake notifications",
+          "why": "Derived read of notifications for the authenticated agent.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ items, generated_at }`.",
+          "error_codes": [
+            "auth_required",
+            "invalid_token"
+          ],
+          "concepts": [
+            "agents",
+            "notifications"
+          ],
+          "stability": "beta",
+          "surface": "projection",
+          "adjacent_commands": [
+            "agent.notifications.dismiss",
+            "agent.notifications.read"
+          ],
+          "go_method": "AgentNotificationsList",
+          "ts_method": "agentNotificationsList"
+        },
+        {
+          "command_id": "agent.notifications.read",
+          "cli_path": "agent notifications read",
+          "group": "agent",
+          "method": "POST",
+          "path": "/agent-notifications/read",
+          "operation_id": "markAgentNotificationRead",
+          "summary": "Mark agent notification read",
+          "why": "Record read state for a wake notification.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ event, notification }`.",
+          "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "not_found"
+          ],
+          "concepts": [
+            "agents",
+            "notifications",
+            "write"
+          ],
+          "stability": "beta",
+          "surface": "projection",
+          "adjacent_commands": [
+            "agent.notifications.dismiss",
+            "agent.notifications.list"
+          ],
+          "go_method": "AgentNotificationsRead",
+          "ts_method": "agentNotificationsRead"
+        },
+        {
+          "command_id": "agents.me.get",
+          "cli_path": "agents me",
+          "group": "agents",
+          "method": "GET",
+          "path": "/agents/me",
+          "operation_id": "getCurrentAgent",
+          "summary": "Get current authenticated agent",
+          "why": "Resolve bearer principal to agent profile and keys.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ agent, keys }`.",
+          "error_codes": [
+            "auth_required",
+            "invalid_token"
+          ],
+          "concepts": [
+            "auth",
+            "agents"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "adjacent_commands": [
+            "agents.me.keys.rotate",
+            "agents.me.patch",
+            "agents.me.revoke"
+          ],
+          "go_method": "AgentsMeGet",
+          "ts_method": "agentsMeGet"
+        },
+        {
+          "command_id": "agents.me.keys.rotate",
+          "cli_path": "agents me keys rotate",
+          "group": "agents",
+          "method": "POST",
+          "path": "/agents/me/keys/rotate",
+          "operation_id": "rotateAgentKeys",
+          "summary": "Rotate agent signing keys",
+          "why": "Add a new Ed25519 key for assertions.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ key }`.",
+          "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token"
+          ],
+          "concepts": [
+            "auth",
+            "agents"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "adjacent_commands": [
+            "agents.me.get",
+            "agents.me.patch",
+            "agents.me.revoke"
+          ],
+          "go_method": "AgentsMeKeysRotate",
+          "ts_method": "agentsMeKeysRotate"
+        },
+        {
+          "command_id": "agents.me.patch",
+          "cli_path": "agents me patch",
+          "group": "agents",
+          "method": "PATCH",
+          "path": "/agents/me",
+          "operation_id": "patchCurrentAgent",
+          "summary": "Update current agent profile",
+          "why": "Rename or adjust profile fields for the authenticated agent.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ agent }`.",
+          "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token"
+          ],
+          "concepts": [
+            "auth",
+            "agents"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "adjacent_commands": [
+            "agents.me.get",
+            "agents.me.keys.rotate",
+            "agents.me.revoke"
+          ],
+          "go_method": "AgentsMePatch",
+          "ts_method": "agentsMePatch"
+        },
+        {
+          "command_id": "agents.me.revoke",
+          "cli_path": "agents me revoke",
+          "group": "agents",
+          "method": "POST",
+          "path": "/agents/me/revoke",
+          "operation_id": "revokeCurrentAgent",
+          "summary": "Revoke current agent credentials",
+          "why": "Self-revocation or admin-style revocation flow for the active principal.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ ok: true }`.",
+          "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "conflict"
+          ],
+          "concepts": [
+            "auth",
+            "agents"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "adjacent_commands": [
+            "agents.me.get",
+            "agents.me.keys.rotate",
+            "agents.me.patch"
+          ],
+          "go_method": "AgentsMeRevoke",
+          "ts_method": "agentsMeRevoke"
+        },
+        {
+          "command_id": "auth.agents.register",
+          "cli_path": "auth agents register",
+          "group": "auth",
+          "method": "POST",
+          "path": "/auth/agents/register",
+          "operation_id": "registerAgent",
+          "summary": "Register workspace agent principal",
+          "why": "Bootstrap or invite-gated agent registration with key material.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ agent, tokens, ... }` per core auth handlers.",
+          "error_codes": [
+            "invalid_request",
+            "invalid_token",
+            "auth_required"
+          ],
+          "concepts": [
+            "auth",
+            "agents"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "adjacent_commands": [
+            "auth.audit.list",
+            "auth.bootstrap.status",
+            "auth.invites.create",
+            "auth.invites.list",
+            "auth.invites.revoke",
+            "auth.passkey.login.options",
+            "auth.passkey.login.verify",
+            "auth.passkey.register.options",
+            "auth.passkey.register.verify",
+            "auth.principals.list",
+            "auth.principals.revoke",
+            "auth.token"
+          ],
+          "go_method": "AuthAgentsRegister",
+          "ts_method": "authAgentsRegister"
+        }
+      ]
+    },
+    {
+      "name": "artifacts",
+      "command_count": 9,
+      "command_ids": [
         "artifacts.archive",
+        "artifacts.content",
         "artifacts.create",
         "artifacts.get",
         "artifacts.list",
@@ -57,6 +418,7 @@
             "artifact_id"
           ],
           "adjacent_commands": [
+            "artifacts.content",
             "artifacts.create",
             "artifacts.get",
             "artifacts.list",
@@ -67,6 +429,46 @@
           ],
           "go_method": "ArtifactsArchive",
           "ts_method": "artifactsArchive"
+        },
+        {
+          "command_id": "artifacts.content",
+          "cli_path": "artifacts content",
+          "group": "artifacts",
+          "method": "GET",
+          "path": "/artifacts/{artifact_id}/content",
+          "operation_id": "getArtifactContent",
+          "summary": "Download artifact bytes",
+          "why": "Return raw artifact payload with varying content types.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Raw bytes or JSON/text depending on artifact.",
+          "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "not_found"
+          ],
+          "concepts": [
+            "artifacts"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "path_params": [
+            "artifact_id"
+          ],
+          "adjacent_commands": [
+            "artifacts.archive",
+            "artifacts.create",
+            "artifacts.get",
+            "artifacts.list",
+            "artifacts.purge",
+            "artifacts.restore",
+            "artifacts.trash",
+            "artifacts.unarchive"
+          ],
+          "go_method": "ArtifactsContent",
+          "ts_method": "artifactsContent"
         },
         {
           "command_id": "artifacts.create",
@@ -118,6 +520,7 @@
           },
           "adjacent_commands": [
             "artifacts.archive",
+            "artifacts.content",
             "artifacts.get",
             "artifacts.list",
             "artifacts.purge",
@@ -157,6 +560,7 @@
           ],
           "adjacent_commands": [
             "artifacts.archive",
+            "artifacts.content",
             "artifacts.create",
             "artifacts.list",
             "artifacts.purge",
@@ -192,6 +596,7 @@
           "surface": "canonical",
           "adjacent_commands": [
             "artifacts.archive",
+            "artifacts.content",
             "artifacts.create",
             "artifacts.get",
             "artifacts.purge",
@@ -242,6 +647,7 @@
           ],
           "adjacent_commands": [
             "artifacts.archive",
+            "artifacts.content",
             "artifacts.create",
             "artifacts.get",
             "artifacts.list",
@@ -292,6 +698,7 @@
           ],
           "adjacent_commands": [
             "artifacts.archive",
+            "artifacts.content",
             "artifacts.create",
             "artifacts.get",
             "artifacts.list",
@@ -347,6 +754,7 @@
           ],
           "adjacent_commands": [
             "artifacts.archive",
+            "artifacts.content",
             "artifacts.create",
             "artifacts.get",
             "artifacts.list",
@@ -397,6 +805,7 @@
           ],
           "adjacent_commands": [
             "artifacts.archive",
+            "artifacts.content",
             "artifacts.create",
             "artifacts.get",
             "artifacts.list",
@@ -406,6 +815,809 @@
           ],
           "go_method": "ArtifactsUnarchive",
           "ts_method": "artifactsUnarchive"
+        }
+      ]
+    },
+    {
+      "name": "audit",
+      "command_count": 1,
+      "command_ids": [
+        "auth.audit.list"
+      ],
+      "commands": [
+        {
+          "command_id": "auth.audit.list",
+          "cli_path": "auth audit list",
+          "group": "auth",
+          "method": "GET",
+          "path": "/auth/audit",
+          "operation_id": "listAuthAudit",
+          "summary": "List auth audit entries",
+          "why": "Operator audit trail for auth-sensitive actions.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns audit list JSON.",
+          "error_codes": [
+            "auth_required",
+            "invalid_token"
+          ],
+          "concepts": [
+            "auth",
+            "audit"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "adjacent_commands": [
+            "auth.agents.register",
+            "auth.bootstrap.status",
+            "auth.invites.create",
+            "auth.invites.list",
+            "auth.invites.revoke",
+            "auth.passkey.login.options",
+            "auth.passkey.login.verify",
+            "auth.passkey.register.options",
+            "auth.passkey.register.verify",
+            "auth.principals.list",
+            "auth.principals.revoke",
+            "auth.token"
+          ],
+          "go_method": "AuthAuditList",
+          "ts_method": "authAuditList"
+        }
+      ]
+    },
+    {
+      "name": "auth",
+      "command_count": 19,
+      "command_ids": [
+        "actors.create",
+        "actors.list",
+        "agents.me.get",
+        "agents.me.keys.rotate",
+        "agents.me.patch",
+        "agents.me.revoke",
+        "auth.agents.register",
+        "auth.audit.list",
+        "auth.bootstrap.status",
+        "auth.invites.create",
+        "auth.invites.list",
+        "auth.invites.revoke",
+        "auth.passkey.login.options",
+        "auth.passkey.login.verify",
+        "auth.passkey.register.options",
+        "auth.passkey.register.verify",
+        "auth.principals.list",
+        "auth.principals.revoke",
+        "auth.token"
+      ],
+      "commands": [
+        {
+          "command_id": "actors.create",
+          "cli_path": "actors create",
+          "group": "actors",
+          "method": "POST",
+          "path": "/actors",
+          "operation_id": "createActor",
+          "summary": "Create actor (dev fixture)",
+          "why": "Legacy dev actor registration when dev_actor_mode is enabled.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ actor }`.",
+          "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "dev_actor_mode_disabled"
+          ],
+          "concepts": [
+            "actors",
+            "auth"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "adjacent_commands": [
+            "actors.list"
+          ],
+          "go_method": "ActorsCreate",
+          "ts_method": "actorsCreate"
+        },
+        {
+          "command_id": "actors.list",
+          "cli_path": "actors list",
+          "group": "actors",
+          "method": "GET",
+          "path": "/actors",
+          "operation_id": "listActors",
+          "summary": "List actors",
+          "why": "Enumerate durable actor records for operator UI and dev fixtures.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ actors, next_cursor? }`.",
+          "error_codes": [
+            "auth_required",
+            "invalid_token"
+          ],
+          "concepts": [
+            "actors",
+            "auth"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "adjacent_commands": [
+            "actors.create"
+          ],
+          "go_method": "ActorsList",
+          "ts_method": "actorsList"
+        },
+        {
+          "command_id": "agents.me.get",
+          "cli_path": "agents me",
+          "group": "agents",
+          "method": "GET",
+          "path": "/agents/me",
+          "operation_id": "getCurrentAgent",
+          "summary": "Get current authenticated agent",
+          "why": "Resolve bearer principal to agent profile and keys.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ agent, keys }`.",
+          "error_codes": [
+            "auth_required",
+            "invalid_token"
+          ],
+          "concepts": [
+            "auth",
+            "agents"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "adjacent_commands": [
+            "agents.me.keys.rotate",
+            "agents.me.patch",
+            "agents.me.revoke"
+          ],
+          "go_method": "AgentsMeGet",
+          "ts_method": "agentsMeGet"
+        },
+        {
+          "command_id": "agents.me.keys.rotate",
+          "cli_path": "agents me keys rotate",
+          "group": "agents",
+          "method": "POST",
+          "path": "/agents/me/keys/rotate",
+          "operation_id": "rotateAgentKeys",
+          "summary": "Rotate agent signing keys",
+          "why": "Add a new Ed25519 key for assertions.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ key }`.",
+          "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token"
+          ],
+          "concepts": [
+            "auth",
+            "agents"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "adjacent_commands": [
+            "agents.me.get",
+            "agents.me.patch",
+            "agents.me.revoke"
+          ],
+          "go_method": "AgentsMeKeysRotate",
+          "ts_method": "agentsMeKeysRotate"
+        },
+        {
+          "command_id": "agents.me.patch",
+          "cli_path": "agents me patch",
+          "group": "agents",
+          "method": "PATCH",
+          "path": "/agents/me",
+          "operation_id": "patchCurrentAgent",
+          "summary": "Update current agent profile",
+          "why": "Rename or adjust profile fields for the authenticated agent.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ agent }`.",
+          "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token"
+          ],
+          "concepts": [
+            "auth",
+            "agents"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "adjacent_commands": [
+            "agents.me.get",
+            "agents.me.keys.rotate",
+            "agents.me.revoke"
+          ],
+          "go_method": "AgentsMePatch",
+          "ts_method": "agentsMePatch"
+        },
+        {
+          "command_id": "agents.me.revoke",
+          "cli_path": "agents me revoke",
+          "group": "agents",
+          "method": "POST",
+          "path": "/agents/me/revoke",
+          "operation_id": "revokeCurrentAgent",
+          "summary": "Revoke current agent credentials",
+          "why": "Self-revocation or admin-style revocation flow for the active principal.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ ok: true }`.",
+          "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "conflict"
+          ],
+          "concepts": [
+            "auth",
+            "agents"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "adjacent_commands": [
+            "agents.me.get",
+            "agents.me.keys.rotate",
+            "agents.me.patch"
+          ],
+          "go_method": "AgentsMeRevoke",
+          "ts_method": "agentsMeRevoke"
+        },
+        {
+          "command_id": "auth.agents.register",
+          "cli_path": "auth agents register",
+          "group": "auth",
+          "method": "POST",
+          "path": "/auth/agents/register",
+          "operation_id": "registerAgent",
+          "summary": "Register workspace agent principal",
+          "why": "Bootstrap or invite-gated agent registration with key material.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ agent, tokens, ... }` per core auth handlers.",
+          "error_codes": [
+            "invalid_request",
+            "invalid_token",
+            "auth_required"
+          ],
+          "concepts": [
+            "auth",
+            "agents"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "adjacent_commands": [
+            "auth.audit.list",
+            "auth.bootstrap.status",
+            "auth.invites.create",
+            "auth.invites.list",
+            "auth.invites.revoke",
+            "auth.passkey.login.options",
+            "auth.passkey.login.verify",
+            "auth.passkey.register.options",
+            "auth.passkey.register.verify",
+            "auth.principals.list",
+            "auth.principals.revoke",
+            "auth.token"
+          ],
+          "go_method": "AuthAgentsRegister",
+          "ts_method": "authAgentsRegister"
+        },
+        {
+          "command_id": "auth.audit.list",
+          "cli_path": "auth audit list",
+          "group": "auth",
+          "method": "GET",
+          "path": "/auth/audit",
+          "operation_id": "listAuthAudit",
+          "summary": "List auth audit entries",
+          "why": "Operator audit trail for auth-sensitive actions.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns audit list JSON.",
+          "error_codes": [
+            "auth_required",
+            "invalid_token"
+          ],
+          "concepts": [
+            "auth",
+            "audit"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "adjacent_commands": [
+            "auth.agents.register",
+            "auth.bootstrap.status",
+            "auth.invites.create",
+            "auth.invites.list",
+            "auth.invites.revoke",
+            "auth.passkey.login.options",
+            "auth.passkey.login.verify",
+            "auth.passkey.register.options",
+            "auth.passkey.register.verify",
+            "auth.principals.list",
+            "auth.principals.revoke",
+            "auth.token"
+          ],
+          "go_method": "AuthAuditList",
+          "ts_method": "authAuditList"
+        },
+        {
+          "command_id": "auth.bootstrap.status",
+          "cli_path": "auth bootstrap status",
+          "group": "auth",
+          "method": "GET",
+          "path": "/auth/bootstrap/status",
+          "operation_id": "getAuthBootstrapStatus",
+          "summary": "Bootstrap registration availability",
+          "why": "Report whether first-principal bootstrap registration is still available.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ bootstrap_registration_available }`.",
+          "concepts": [
+            "auth"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "adjacent_commands": [
+            "auth.agents.register",
+            "auth.audit.list",
+            "auth.invites.create",
+            "auth.invites.list",
+            "auth.invites.revoke",
+            "auth.passkey.login.options",
+            "auth.passkey.login.verify",
+            "auth.passkey.register.options",
+            "auth.passkey.register.verify",
+            "auth.principals.list",
+            "auth.principals.revoke",
+            "auth.token"
+          ],
+          "go_method": "AuthBootstrapStatus",
+          "ts_method": "authBootstrapStatus"
+        },
+        {
+          "command_id": "auth.invites.create",
+          "cli_path": "auth invites create",
+          "group": "auth",
+          "method": "POST",
+          "path": "/auth/invites",
+          "operation_id": "createAuthInvite",
+          "summary": "Create invite token",
+          "why": "Issue a one-time invite for human or agent principals.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ invite, token }`.",
+          "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token"
+          ],
+          "concepts": [
+            "auth"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "adjacent_commands": [
+            "auth.agents.register",
+            "auth.audit.list",
+            "auth.bootstrap.status",
+            "auth.invites.list",
+            "auth.invites.revoke",
+            "auth.passkey.login.options",
+            "auth.passkey.login.verify",
+            "auth.passkey.register.options",
+            "auth.passkey.register.verify",
+            "auth.principals.list",
+            "auth.principals.revoke",
+            "auth.token"
+          ],
+          "go_method": "AuthInvitesCreate",
+          "ts_method": "authInvitesCreate"
+        },
+        {
+          "command_id": "auth.invites.list",
+          "cli_path": "auth invites list",
+          "group": "auth",
+          "method": "GET",
+          "path": "/auth/invites",
+          "operation_id": "listAuthInvites",
+          "summary": "List invite tokens",
+          "why": "Operator listing of outstanding invites.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ invites }`.",
+          "error_codes": [
+            "auth_required",
+            "invalid_token"
+          ],
+          "concepts": [
+            "auth"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "adjacent_commands": [
+            "auth.agents.register",
+            "auth.audit.list",
+            "auth.bootstrap.status",
+            "auth.invites.create",
+            "auth.invites.revoke",
+            "auth.passkey.login.options",
+            "auth.passkey.login.verify",
+            "auth.passkey.register.options",
+            "auth.passkey.register.verify",
+            "auth.principals.list",
+            "auth.principals.revoke",
+            "auth.token"
+          ],
+          "go_method": "AuthInvitesList",
+          "ts_method": "authInvitesList"
+        },
+        {
+          "command_id": "auth.invites.revoke",
+          "cli_path": "auth invites revoke",
+          "group": "auth",
+          "method": "POST",
+          "path": "/auth/invites/{invite_id}/revoke",
+          "operation_id": "revokeAuthInvite",
+          "summary": "Revoke invite",
+          "why": "Invalidate an outstanding invite by id.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ invite }`.",
+          "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "not_found",
+            "invalid_token"
+          ],
+          "concepts": [
+            "auth"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "path_params": [
+            "invite_id"
+          ],
+          "adjacent_commands": [
+            "auth.agents.register",
+            "auth.audit.list",
+            "auth.bootstrap.status",
+            "auth.invites.create",
+            "auth.invites.list",
+            "auth.passkey.login.options",
+            "auth.passkey.login.verify",
+            "auth.passkey.register.options",
+            "auth.passkey.register.verify",
+            "auth.principals.list",
+            "auth.principals.revoke",
+            "auth.token"
+          ],
+          "go_method": "AuthInvitesRevoke",
+          "ts_method": "authInvitesRevoke"
+        },
+        {
+          "command_id": "auth.passkey.login.options",
+          "cli_path": "auth passkey login options",
+          "group": "auth",
+          "method": "POST",
+          "path": "/auth/passkey/login/options",
+          "operation_id": "passkeyLoginOptions",
+          "summary": "Begin passkey login",
+          "why": "WebAuthn assertion challenge for returning principals.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ session_id, options }`.",
+          "error_codes": [
+            "invalid_request"
+          ],
+          "concepts": [
+            "auth",
+            "passkeys"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "adjacent_commands": [
+            "auth.agents.register",
+            "auth.audit.list",
+            "auth.bootstrap.status",
+            "auth.invites.create",
+            "auth.invites.list",
+            "auth.invites.revoke",
+            "auth.passkey.login.verify",
+            "auth.passkey.register.options",
+            "auth.passkey.register.verify",
+            "auth.principals.list",
+            "auth.principals.revoke",
+            "auth.token"
+          ],
+          "go_method": "AuthPasskeyLoginOptions",
+          "ts_method": "authPasskeyLoginOptions"
+        },
+        {
+          "command_id": "auth.passkey.login.verify",
+          "cli_path": "auth passkey login verify",
+          "group": "auth",
+          "method": "POST",
+          "path": "/auth/passkey/login/verify",
+          "operation_id": "passkeyLoginVerify",
+          "summary": "Complete passkey login",
+          "why": "Verify WebAuthn assertion and issue tokens.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ agent, tokens }`.",
+          "error_codes": [
+            "invalid_request",
+            "invalid_token"
+          ],
+          "concepts": [
+            "auth",
+            "passkeys"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "adjacent_commands": [
+            "auth.agents.register",
+            "auth.audit.list",
+            "auth.bootstrap.status",
+            "auth.invites.create",
+            "auth.invites.list",
+            "auth.invites.revoke",
+            "auth.passkey.login.options",
+            "auth.passkey.register.options",
+            "auth.passkey.register.verify",
+            "auth.principals.list",
+            "auth.principals.revoke",
+            "auth.token"
+          ],
+          "go_method": "AuthPasskeyLoginVerify",
+          "ts_method": "authPasskeyLoginVerify"
+        },
+        {
+          "command_id": "auth.passkey.register.options",
+          "cli_path": "auth passkey register options",
+          "group": "auth",
+          "method": "POST",
+          "path": "/auth/passkey/register/options",
+          "operation_id": "passkeyRegisterOptions",
+          "summary": "Begin passkey registration",
+          "why": "WebAuthn registration challenge for workspace agents.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ session_id, options }`.",
+          "error_codes": [
+            "invalid_request"
+          ],
+          "concepts": [
+            "auth",
+            "passkeys"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "adjacent_commands": [
+            "auth.agents.register",
+            "auth.audit.list",
+            "auth.bootstrap.status",
+            "auth.invites.create",
+            "auth.invites.list",
+            "auth.invites.revoke",
+            "auth.passkey.login.options",
+            "auth.passkey.login.verify",
+            "auth.passkey.register.verify",
+            "auth.principals.list",
+            "auth.principals.revoke",
+            "auth.token"
+          ],
+          "go_method": "AuthPasskeyRegisterOptions",
+          "ts_method": "authPasskeyRegisterOptions"
+        },
+        {
+          "command_id": "auth.passkey.register.verify",
+          "cli_path": "auth passkey register verify",
+          "group": "auth",
+          "method": "POST",
+          "path": "/auth/passkey/register/verify",
+          "operation_id": "passkeyRegisterVerify",
+          "summary": "Complete passkey registration",
+          "why": "Verify WebAuthn attestation and issue tokens.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ agent, tokens }`.",
+          "error_codes": [
+            "invalid_request",
+            "invalid_token"
+          ],
+          "concepts": [
+            "auth",
+            "passkeys"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "adjacent_commands": [
+            "auth.agents.register",
+            "auth.audit.list",
+            "auth.bootstrap.status",
+            "auth.invites.create",
+            "auth.invites.list",
+            "auth.invites.revoke",
+            "auth.passkey.login.options",
+            "auth.passkey.login.verify",
+            "auth.passkey.register.options",
+            "auth.principals.list",
+            "auth.principals.revoke",
+            "auth.token"
+          ],
+          "go_method": "AuthPasskeyRegisterVerify",
+          "ts_method": "authPasskeyRegisterVerify"
+        },
+        {
+          "command_id": "auth.principals.list",
+          "cli_path": "auth principals list",
+          "group": "auth",
+          "method": "GET",
+          "path": "/auth/principals",
+          "operation_id": "listAuthPrincipals",
+          "summary": "List principals",
+          "why": "Operator visibility into registered principals for the workspace.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns principal list JSON.",
+          "error_codes": [
+            "auth_required",
+            "invalid_token"
+          ],
+          "concepts": [
+            "auth"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "adjacent_commands": [
+            "auth.agents.register",
+            "auth.audit.list",
+            "auth.bootstrap.status",
+            "auth.invites.create",
+            "auth.invites.list",
+            "auth.invites.revoke",
+            "auth.passkey.login.options",
+            "auth.passkey.login.verify",
+            "auth.passkey.register.options",
+            "auth.passkey.register.verify",
+            "auth.principals.revoke",
+            "auth.token"
+          ],
+          "go_method": "AuthPrincipalsList",
+          "ts_method": "authPrincipalsList"
+        },
+        {
+          "command_id": "auth.principals.revoke",
+          "cli_path": "auth principals revoke",
+          "group": "auth",
+          "method": "POST",
+          "path": "/auth/principals/{principal_id}/revoke",
+          "operation_id": "revokeAuthPrincipal",
+          "summary": "Revoke principal by agent id",
+          "why": "Administrative revocation of a principal linkage.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns result JSON.",
+          "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "not_found",
+            "invalid_token",
+            "conflict"
+          ],
+          "concepts": [
+            "auth"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "path_params": [
+            "principal_id"
+          ],
+          "adjacent_commands": [
+            "auth.agents.register",
+            "auth.audit.list",
+            "auth.bootstrap.status",
+            "auth.invites.create",
+            "auth.invites.list",
+            "auth.invites.revoke",
+            "auth.passkey.login.options",
+            "auth.passkey.login.verify",
+            "auth.passkey.register.options",
+            "auth.passkey.register.verify",
+            "auth.principals.list",
+            "auth.token"
+          ],
+          "go_method": "AuthPrincipalsRevoke",
+          "ts_method": "authPrincipalsRevoke"
+        },
+        {
+          "command_id": "auth.token",
+          "cli_path": "auth token",
+          "group": "auth",
+          "method": "POST",
+          "path": "/auth/token",
+          "operation_id": "issueAuthToken",
+          "summary": "Issue or refresh auth tokens",
+          "why": "Assertion or refresh-token exchange for bearer access.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ tokens }` envelope.",
+          "error_codes": [
+            "invalid_request",
+            "invalid_token"
+          ],
+          "concepts": [
+            "auth"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "adjacent_commands": [
+            "auth.agents.register",
+            "auth.audit.list",
+            "auth.bootstrap.status",
+            "auth.invites.create",
+            "auth.invites.list",
+            "auth.invites.revoke",
+            "auth.passkey.login.options",
+            "auth.passkey.login.verify",
+            "auth.passkey.register.options",
+            "auth.passkey.register.verify",
+            "auth.principals.list",
+            "auth.principals.revoke"
+          ],
+          "go_method": "AuthToken",
+          "ts_method": "authToken"
         }
       ]
     },
@@ -2557,11 +3769,199 @@
     },
     {
       "name": "compatibility",
-      "command_count": 1,
+      "command_count": 6,
       "command_ids": [
+        "meta.commands.get",
+        "meta.commands.list",
+        "meta.concepts.get",
+        "meta.concepts.list",
+        "meta.handshake",
         "meta.version"
       ],
       "commands": [
+        {
+          "command_id": "meta.commands.get",
+          "cli_path": "meta commands get",
+          "group": "meta",
+          "method": "GET",
+          "path": "/meta/commands/{command_id}",
+          "operation_id": "getMetaCommandById",
+          "summary": "Get one command metadata entry",
+          "why": "Resolve command metadata by stable command id.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ command }`.",
+          "error_codes": [
+            "meta_unavailable",
+            "not_found"
+          ],
+          "concepts": [
+            "compatibility"
+          ],
+          "stability": "stable",
+          "surface": "utility",
+          "path_params": [
+            "command_id"
+          ],
+          "adjacent_commands": [
+            "meta.commands.list",
+            "meta.concepts.get",
+            "meta.concepts.list",
+            "meta.handshake",
+            "meta.health",
+            "meta.livez",
+            "meta.readyz",
+            "meta.version"
+          ],
+          "go_method": "MetaCommandsGet",
+          "ts_method": "metaCommandsGet"
+        },
+        {
+          "command_id": "meta.commands.list",
+          "cli_path": "meta commands list",
+          "group": "meta",
+          "method": "GET",
+          "path": "/meta/commands",
+          "operation_id": "listMetaCommands",
+          "summary": "List command registry metadata",
+          "why": "Expose embedded OAR command metadata for discovery and codegen parity.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns generated command registry JSON.",
+          "error_codes": [
+            "meta_unavailable"
+          ],
+          "concepts": [
+            "compatibility"
+          ],
+          "stability": "stable",
+          "surface": "utility",
+          "adjacent_commands": [
+            "meta.commands.get",
+            "meta.concepts.get",
+            "meta.concepts.list",
+            "meta.handshake",
+            "meta.health",
+            "meta.livez",
+            "meta.readyz",
+            "meta.version"
+          ],
+          "go_method": "MetaCommandsList",
+          "ts_method": "metaCommandsList"
+        },
+        {
+          "command_id": "meta.concepts.get",
+          "cli_path": "meta concepts get",
+          "group": "meta",
+          "method": "GET",
+          "path": "/meta/concepts/{concept_name}",
+          "operation_id": "getMetaConceptByName",
+          "summary": "Get commands grouped by concept",
+          "why": "Expand one concept into related commands.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ concept: {...} }`.",
+          "error_codes": [
+            "meta_unavailable",
+            "not_found"
+          ],
+          "concepts": [
+            "compatibility"
+          ],
+          "stability": "stable",
+          "surface": "utility",
+          "path_params": [
+            "concept_name"
+          ],
+          "adjacent_commands": [
+            "meta.commands.get",
+            "meta.commands.list",
+            "meta.concepts.list",
+            "meta.handshake",
+            "meta.health",
+            "meta.livez",
+            "meta.readyz",
+            "meta.version"
+          ],
+          "go_method": "MetaConceptsGet",
+          "ts_method": "metaConceptsGet"
+        },
+        {
+          "command_id": "meta.concepts.list",
+          "cli_path": "meta concepts list",
+          "group": "meta",
+          "method": "GET",
+          "path": "/meta/concepts",
+          "operation_id": "listMetaConcepts",
+          "summary": "List concept index",
+          "why": "Group command metadata by concept tags.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ concepts: [...] }`.",
+          "error_codes": [
+            "meta_unavailable"
+          ],
+          "concepts": [
+            "compatibility"
+          ],
+          "stability": "stable",
+          "surface": "utility",
+          "adjacent_commands": [
+            "meta.commands.get",
+            "meta.commands.list",
+            "meta.concepts.get",
+            "meta.handshake",
+            "meta.health",
+            "meta.livez",
+            "meta.readyz",
+            "meta.version"
+          ],
+          "go_method": "MetaConceptsList",
+          "ts_method": "metaConceptsList"
+        },
+        {
+          "command_id": "meta.handshake",
+          "cli_path": "meta handshake",
+          "group": "meta",
+          "method": "GET",
+          "path": "/meta/handshake",
+          "operation_id": "getMetaHandshake",
+          "summary": "Compatibility handshake",
+          "why": "Surface schema version, command registry digest, CLI gates, and instance metadata.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ core_version, api_version, schema_version, command_registry_digest, ... }`.",
+          "error_codes": [
+            "meta_unavailable"
+          ],
+          "concepts": [
+            "compatibility"
+          ],
+          "stability": "stable",
+          "surface": "utility",
+          "adjacent_commands": [
+            "meta.commands.get",
+            "meta.commands.list",
+            "meta.concepts.get",
+            "meta.concepts.list",
+            "meta.health",
+            "meta.livez",
+            "meta.readyz",
+            "meta.version"
+          ],
+          "go_method": "MetaHandshake",
+          "ts_method": "metaHandshake"
+        },
         {
           "command_id": "meta.version",
           "cli_path": "meta version",
@@ -2582,7 +3982,13 @@
           "stability": "stable",
           "surface": "utility",
           "adjacent_commands": [
+            "meta.commands.get",
+            "meta.commands.list",
+            "meta.concepts.get",
+            "meta.concepts.list",
+            "meta.handshake",
             "meta.health",
+            "meta.livez",
             "meta.readyz"
           ],
           "go_method": "MetaVersion",
@@ -3557,10 +4963,11 @@
     },
     {
       "name": "events",
-      "command_count": 7,
+      "command_count": 8,
       "command_ids": [
         "events.archive",
         "events.create",
+        "events.get",
         "events.list",
         "events.restore",
         "events.stream",
@@ -3608,6 +5015,7 @@
           ],
           "adjacent_commands": [
             "events.create",
+            "events.get",
             "events.list",
             "events.restore",
             "events.stream",
@@ -3721,6 +5129,7 @@
           },
           "adjacent_commands": [
             "events.archive",
+            "events.get",
             "events.list",
             "events.restore",
             "events.stream",
@@ -3729,6 +5138,45 @@
           ],
           "go_method": "EventsCreate",
           "ts_method": "eventsCreate"
+        },
+        {
+          "command_id": "events.get",
+          "cli_path": "events get",
+          "group": "events",
+          "method": "GET",
+          "path": "/events/{event_id}",
+          "operation_id": "getEventById",
+          "summary": "Get event by id",
+          "why": "Fetch one append-only event record by stable id.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ event }`.",
+          "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "not_found"
+          ],
+          "concepts": [
+            "events"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "path_params": [
+            "event_id"
+          ],
+          "adjacent_commands": [
+            "events.archive",
+            "events.create",
+            "events.list",
+            "events.restore",
+            "events.stream",
+            "events.trash",
+            "events.unarchive"
+          ],
+          "go_method": "EventsGet",
+          "ts_method": "eventsGet"
         },
         {
           "command_id": "events.list",
@@ -3756,6 +5204,7 @@
           "adjacent_commands": [
             "events.archive",
             "events.create",
+            "events.get",
             "events.restore",
             "events.stream",
             "events.trash",
@@ -3805,6 +5254,7 @@
           "adjacent_commands": [
             "events.archive",
             "events.create",
+            "events.get",
             "events.list",
             "events.stream",
             "events.trash",
@@ -3839,6 +5289,7 @@
           "adjacent_commands": [
             "events.archive",
             "events.create",
+            "events.get",
             "events.list",
             "events.restore",
             "events.trash",
@@ -3893,6 +5344,7 @@
           "adjacent_commands": [
             "events.archive",
             "events.create",
+            "events.get",
             "events.list",
             "events.restore",
             "events.stream",
@@ -3942,6 +5394,7 @@
           "adjacent_commands": [
             "events.archive",
             "events.create",
+            "events.get",
             "events.list",
             "events.restore",
             "events.stream",
@@ -4116,10 +5569,12 @@
     },
     {
       "name": "health",
-      "command_count": 2,
+      "command_count": 4,
       "command_ids": [
         "meta.health",
-        "meta.readyz"
+        "meta.livez",
+        "meta.readyz",
+        "ops.health"
       ],
       "commands": [
         {
@@ -4142,11 +5597,49 @@
           "stability": "stable",
           "surface": "utility",
           "adjacent_commands": [
+            "meta.commands.get",
+            "meta.commands.list",
+            "meta.concepts.get",
+            "meta.concepts.list",
+            "meta.handshake",
+            "meta.livez",
             "meta.readyz",
             "meta.version"
           ],
           "go_method": "MetaHealth",
           "ts_method": "metaHealth"
+        },
+        {
+          "command_id": "meta.livez",
+          "cli_path": "meta livez",
+          "group": "meta",
+          "method": "GET",
+          "path": "/livez",
+          "operation_id": "livenessCheck",
+          "summary": "Liveness check (process)",
+          "why": "Lightweight liveness probe independent of storage readiness.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ ok: true }`.",
+          "concepts": [
+            "health"
+          ],
+          "stability": "stable",
+          "surface": "utility",
+          "adjacent_commands": [
+            "meta.commands.get",
+            "meta.commands.list",
+            "meta.concepts.get",
+            "meta.concepts.list",
+            "meta.handshake",
+            "meta.health",
+            "meta.readyz",
+            "meta.version"
+          ],
+          "go_method": "MetaLivez",
+          "ts_method": "metaLivez"
         },
         {
           "command_id": "meta.readyz",
@@ -4172,20 +5665,59 @@
           "stability": "stable",
           "surface": "utility",
           "adjacent_commands": [
+            "meta.commands.get",
+            "meta.commands.list",
+            "meta.concepts.get",
+            "meta.concepts.list",
+            "meta.handshake",
             "meta.health",
+            "meta.livez",
             "meta.version"
           ],
           "go_method": "MetaReadyz",
           "ts_method": "metaReadyz"
+        },
+        {
+          "command_id": "ops.health",
+          "cli_path": "ops health",
+          "group": "ops",
+          "method": "GET",
+          "path": "/ops/health",
+          "operation_id": "getOpsHealth",
+          "summary": "Workspace ops health",
+          "why": "Operational readiness for projections, jobs, and operators.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns structured health JSON.",
+          "error_codes": [
+            "auth_required",
+            "invalid_token"
+          ],
+          "concepts": [
+            "health",
+            "ops"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "adjacent_commands": [
+            "ops.blob.usage.rebuild",
+            "ops.usage.summary"
+          ],
+          "go_method": "OpsHealth",
+          "ts_method": "opsHealth"
         }
       ]
     },
     {
       "name": "inbox",
-      "command_count": 2,
+      "command_count": 4,
       "command_ids": [
         "inbox.acknowledge",
-        "inbox.list"
+        "inbox.get",
+        "inbox.list",
+        "inbox.stream"
       ],
       "commands": [
         {
@@ -4244,10 +5776,47 @@
             "inbox_id"
           ],
           "adjacent_commands": [
-            "inbox.list"
+            "inbox.get",
+            "inbox.list",
+            "inbox.stream"
           ],
           "go_method": "InboxAcknowledge",
           "ts_method": "inboxAcknowledge"
+        },
+        {
+          "command_id": "inbox.get",
+          "cli_path": "inbox get",
+          "group": "inbox",
+          "method": "GET",
+          "path": "/inbox/{inbox_id}",
+          "operation_id": "getInboxItem",
+          "summary": "Get one inbox item",
+          "why": "Side-effect free read of one materialized inbox row.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ item, generated_at, projection_freshness }`.",
+          "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "not_found"
+          ],
+          "concepts": [
+            "inbox"
+          ],
+          "stability": "beta",
+          "surface": "projection",
+          "path_params": [
+            "inbox_id"
+          ],
+          "adjacent_commands": [
+            "inbox.acknowledge",
+            "inbox.list",
+            "inbox.stream"
+          ],
+          "go_method": "InboxGet",
+          "ts_method": "inboxGet"
         },
         {
           "command_id": "inbox.list",
@@ -4273,10 +5842,43 @@
           "stability": "beta",
           "surface": "projection",
           "adjacent_commands": [
-            "inbox.acknowledge"
+            "inbox.acknowledge",
+            "inbox.get",
+            "inbox.stream"
           ],
           "go_method": "InboxList",
           "ts_method": "inboxList"
+        },
+        {
+          "command_id": "inbox.stream",
+          "cli_path": "inbox stream",
+          "group": "inbox",
+          "method": "GET",
+          "path": "/inbox/stream",
+          "operation_id": "streamInboxItems",
+          "summary": "Stream inbox items (SSE)",
+          "why": "Server-sent events feed of inbox projection updates.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "sse"
+          },
+          "output_envelope": "SSE `inbox_item` events with JSON payloads.",
+          "error_codes": [
+            "auth_required",
+            "invalid_token"
+          ],
+          "concepts": [
+            "inbox"
+          ],
+          "stability": "beta",
+          "surface": "projection",
+          "adjacent_commands": [
+            "inbox.acknowledge",
+            "inbox.get",
+            "inbox.list"
+          ],
+          "go_method": "InboxStream",
+          "ts_method": "inboxStream"
         }
       ]
     },
@@ -4425,6 +6027,291 @@
           ],
           "go_method": "ThreadsList",
           "ts_method": "threadsList"
+        }
+      ]
+    },
+    {
+      "name": "maintenance",
+      "command_count": 2,
+      "command_ids": [
+        "derived.rebuild",
+        "ops.blob.usage.rebuild"
+      ],
+      "commands": [
+        {
+          "command_id": "derived.rebuild",
+          "cli_path": "derived rebuild",
+          "group": "derived",
+          "method": "POST",
+          "path": "/derived/rebuild",
+          "operation_id": "rebuildDerivedProjections",
+          "summary": "Rebuild derived projections",
+          "why": "Deterministic operator repair for inbox/thread projections.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ ok: true }`.",
+          "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token"
+          ],
+          "concepts": [
+            "projections",
+            "maintenance"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "go_method": "DerivedRebuild",
+          "ts_method": "derivedRebuild"
+        },
+        {
+          "command_id": "ops.blob.usage.rebuild",
+          "cli_path": "ops blob usage rebuild",
+          "group": "ops",
+          "method": "POST",
+          "path": "/ops/blob-usage/rebuild",
+          "operation_id": "rebuildBlobUsage",
+          "summary": "Rebuild blob usage accounting",
+          "why": "Repair path for derived blob accounting after storage events.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ ok: true }` or error.",
+          "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token"
+          ],
+          "concepts": [
+            "ops",
+            "maintenance"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "adjacent_commands": [
+            "ops.health",
+            "ops.usage.summary"
+          ],
+          "go_method": "OpsBlobUsageRebuild",
+          "ts_method": "opsBlobUsageRebuild"
+        }
+      ]
+    },
+    {
+      "name": "notifications",
+      "command_count": 3,
+      "command_ids": [
+        "agent.notifications.dismiss",
+        "agent.notifications.list",
+        "agent.notifications.read"
+      ],
+      "commands": [
+        {
+          "command_id": "agent.notifications.dismiss",
+          "cli_path": "agent notifications dismiss",
+          "group": "agent",
+          "method": "POST",
+          "path": "/agent-notifications/dismiss",
+          "operation_id": "dismissAgentNotification",
+          "summary": "Dismiss agent notification",
+          "why": "Dismiss a wake notification for the authenticated agent.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ event, notification }`.",
+          "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "not_found"
+          ],
+          "concepts": [
+            "agents",
+            "notifications",
+            "write"
+          ],
+          "stability": "beta",
+          "surface": "projection",
+          "adjacent_commands": [
+            "agent.notifications.list",
+            "agent.notifications.read"
+          ],
+          "go_method": "AgentNotificationsDismiss",
+          "ts_method": "agentNotificationsDismiss"
+        },
+        {
+          "command_id": "agent.notifications.list",
+          "cli_path": "agent notifications list",
+          "group": "agent",
+          "method": "GET",
+          "path": "/agent-notifications",
+          "operation_id": "listAgentNotifications",
+          "summary": "List agent wake notifications",
+          "why": "Derived read of notifications for the authenticated agent.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ items, generated_at }`.",
+          "error_codes": [
+            "auth_required",
+            "invalid_token"
+          ],
+          "concepts": [
+            "agents",
+            "notifications"
+          ],
+          "stability": "beta",
+          "surface": "projection",
+          "adjacent_commands": [
+            "agent.notifications.dismiss",
+            "agent.notifications.read"
+          ],
+          "go_method": "AgentNotificationsList",
+          "ts_method": "agentNotificationsList"
+        },
+        {
+          "command_id": "agent.notifications.read",
+          "cli_path": "agent notifications read",
+          "group": "agent",
+          "method": "POST",
+          "path": "/agent-notifications/read",
+          "operation_id": "markAgentNotificationRead",
+          "summary": "Mark agent notification read",
+          "why": "Record read state for a wake notification.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ event, notification }`.",
+          "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "not_found"
+          ],
+          "concepts": [
+            "agents",
+            "notifications",
+            "write"
+          ],
+          "stability": "beta",
+          "surface": "projection",
+          "adjacent_commands": [
+            "agent.notifications.dismiss",
+            "agent.notifications.list"
+          ],
+          "go_method": "AgentNotificationsRead",
+          "ts_method": "agentNotificationsRead"
+        }
+      ]
+    },
+    {
+      "name": "ops",
+      "command_count": 3,
+      "command_ids": [
+        "ops.blob.usage.rebuild",
+        "ops.health",
+        "ops.usage.summary"
+      ],
+      "commands": [
+        {
+          "command_id": "ops.blob.usage.rebuild",
+          "cli_path": "ops blob usage rebuild",
+          "group": "ops",
+          "method": "POST",
+          "path": "/ops/blob-usage/rebuild",
+          "operation_id": "rebuildBlobUsage",
+          "summary": "Rebuild blob usage accounting",
+          "why": "Repair path for derived blob accounting after storage events.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ ok: true }` or error.",
+          "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token"
+          ],
+          "concepts": [
+            "ops",
+            "maintenance"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "adjacent_commands": [
+            "ops.health",
+            "ops.usage.summary"
+          ],
+          "go_method": "OpsBlobUsageRebuild",
+          "ts_method": "opsBlobUsageRebuild"
+        },
+        {
+          "command_id": "ops.health",
+          "cli_path": "ops health",
+          "group": "ops",
+          "method": "GET",
+          "path": "/ops/health",
+          "operation_id": "getOpsHealth",
+          "summary": "Workspace ops health",
+          "why": "Operational readiness for projections, jobs, and operators.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns structured health JSON.",
+          "error_codes": [
+            "auth_required",
+            "invalid_token"
+          ],
+          "concepts": [
+            "health",
+            "ops"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "adjacent_commands": [
+            "ops.blob.usage.rebuild",
+            "ops.usage.summary"
+          ],
+          "go_method": "OpsHealth",
+          "ts_method": "opsHealth"
+        },
+        {
+          "command_id": "ops.usage.summary",
+          "cli_path": "ops usage summary",
+          "group": "ops",
+          "method": "GET",
+          "path": "/ops/usage-summary",
+          "operation_id": "getOpsUsageSummary",
+          "summary": "Workspace usage summary",
+          "why": "Operator-facing storage and count telemetry for the workspace.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns usage envelope JSON.",
+          "error_codes": [
+            "auth_required",
+            "invalid_token"
+          ],
+          "concepts": [
+            "ops",
+            "quotas"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "adjacent_commands": [
+            "ops.blob.usage.rebuild",
+            "ops.health"
+          ],
+          "go_method": "OpsUsageSummary",
+          "ts_method": "opsUsageSummary"
         }
       ]
     },
@@ -4591,6 +6478,257 @@
       ]
     },
     {
+      "name": "passkeys",
+      "command_count": 4,
+      "command_ids": [
+        "auth.passkey.login.options",
+        "auth.passkey.login.verify",
+        "auth.passkey.register.options",
+        "auth.passkey.register.verify"
+      ],
+      "commands": [
+        {
+          "command_id": "auth.passkey.login.options",
+          "cli_path": "auth passkey login options",
+          "group": "auth",
+          "method": "POST",
+          "path": "/auth/passkey/login/options",
+          "operation_id": "passkeyLoginOptions",
+          "summary": "Begin passkey login",
+          "why": "WebAuthn assertion challenge for returning principals.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ session_id, options }`.",
+          "error_codes": [
+            "invalid_request"
+          ],
+          "concepts": [
+            "auth",
+            "passkeys"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "adjacent_commands": [
+            "auth.agents.register",
+            "auth.audit.list",
+            "auth.bootstrap.status",
+            "auth.invites.create",
+            "auth.invites.list",
+            "auth.invites.revoke",
+            "auth.passkey.login.verify",
+            "auth.passkey.register.options",
+            "auth.passkey.register.verify",
+            "auth.principals.list",
+            "auth.principals.revoke",
+            "auth.token"
+          ],
+          "go_method": "AuthPasskeyLoginOptions",
+          "ts_method": "authPasskeyLoginOptions"
+        },
+        {
+          "command_id": "auth.passkey.login.verify",
+          "cli_path": "auth passkey login verify",
+          "group": "auth",
+          "method": "POST",
+          "path": "/auth/passkey/login/verify",
+          "operation_id": "passkeyLoginVerify",
+          "summary": "Complete passkey login",
+          "why": "Verify WebAuthn assertion and issue tokens.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ agent, tokens }`.",
+          "error_codes": [
+            "invalid_request",
+            "invalid_token"
+          ],
+          "concepts": [
+            "auth",
+            "passkeys"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "adjacent_commands": [
+            "auth.agents.register",
+            "auth.audit.list",
+            "auth.bootstrap.status",
+            "auth.invites.create",
+            "auth.invites.list",
+            "auth.invites.revoke",
+            "auth.passkey.login.options",
+            "auth.passkey.register.options",
+            "auth.passkey.register.verify",
+            "auth.principals.list",
+            "auth.principals.revoke",
+            "auth.token"
+          ],
+          "go_method": "AuthPasskeyLoginVerify",
+          "ts_method": "authPasskeyLoginVerify"
+        },
+        {
+          "command_id": "auth.passkey.register.options",
+          "cli_path": "auth passkey register options",
+          "group": "auth",
+          "method": "POST",
+          "path": "/auth/passkey/register/options",
+          "operation_id": "passkeyRegisterOptions",
+          "summary": "Begin passkey registration",
+          "why": "WebAuthn registration challenge for workspace agents.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ session_id, options }`.",
+          "error_codes": [
+            "invalid_request"
+          ],
+          "concepts": [
+            "auth",
+            "passkeys"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "adjacent_commands": [
+            "auth.agents.register",
+            "auth.audit.list",
+            "auth.bootstrap.status",
+            "auth.invites.create",
+            "auth.invites.list",
+            "auth.invites.revoke",
+            "auth.passkey.login.options",
+            "auth.passkey.login.verify",
+            "auth.passkey.register.verify",
+            "auth.principals.list",
+            "auth.principals.revoke",
+            "auth.token"
+          ],
+          "go_method": "AuthPasskeyRegisterOptions",
+          "ts_method": "authPasskeyRegisterOptions"
+        },
+        {
+          "command_id": "auth.passkey.register.verify",
+          "cli_path": "auth passkey register verify",
+          "group": "auth",
+          "method": "POST",
+          "path": "/auth/passkey/register/verify",
+          "operation_id": "passkeyRegisterVerify",
+          "summary": "Complete passkey registration",
+          "why": "Verify WebAuthn attestation and issue tokens.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ agent, tokens }`.",
+          "error_codes": [
+            "invalid_request",
+            "invalid_token"
+          ],
+          "concepts": [
+            "auth",
+            "passkeys"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "adjacent_commands": [
+            "auth.agents.register",
+            "auth.audit.list",
+            "auth.bootstrap.status",
+            "auth.invites.create",
+            "auth.invites.list",
+            "auth.invites.revoke",
+            "auth.passkey.login.options",
+            "auth.passkey.login.verify",
+            "auth.passkey.register.options",
+            "auth.principals.list",
+            "auth.principals.revoke",
+            "auth.token"
+          ],
+          "go_method": "AuthPasskeyRegisterVerify",
+          "ts_method": "authPasskeyRegisterVerify"
+        }
+      ]
+    },
+    {
+      "name": "projections",
+      "command_count": 1,
+      "command_ids": [
+        "derived.rebuild"
+      ],
+      "commands": [
+        {
+          "command_id": "derived.rebuild",
+          "cli_path": "derived rebuild",
+          "group": "derived",
+          "method": "POST",
+          "path": "/derived/rebuild",
+          "operation_id": "rebuildDerivedProjections",
+          "summary": "Rebuild derived projections",
+          "why": "Deterministic operator repair for inbox/thread projections.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ ok: true }`.",
+          "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token"
+          ],
+          "concepts": [
+            "projections",
+            "maintenance"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "go_method": "DerivedRebuild",
+          "ts_method": "derivedRebuild"
+        }
+      ]
+    },
+    {
+      "name": "quotas",
+      "command_count": 1,
+      "command_ids": [
+        "ops.usage.summary"
+      ],
+      "commands": [
+        {
+          "command_id": "ops.usage.summary",
+          "cli_path": "ops usage summary",
+          "group": "ops",
+          "method": "GET",
+          "path": "/ops/usage-summary",
+          "operation_id": "getOpsUsageSummary",
+          "summary": "Workspace usage summary",
+          "why": "Operator-facing storage and count telemetry for the workspace.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns usage envelope JSON.",
+          "error_codes": [
+            "auth_required",
+            "invalid_token"
+          ],
+          "concepts": [
+            "ops",
+            "quotas"
+          ],
+          "stability": "beta",
+          "surface": "utility",
+          "adjacent_commands": [
+            "ops.blob.usage.rebuild",
+            "ops.health"
+          ],
+          "go_method": "OpsUsageSummary",
+          "ts_method": "opsUsageSummary"
+        }
+      ]
+    },
+    {
       "name": "readiness",
       "command_count": 1,
       "command_ids": [
@@ -4621,7 +6759,13 @@
           "stability": "stable",
           "surface": "utility",
           "adjacent_commands": [
+            "meta.commands.get",
+            "meta.commands.list",
+            "meta.concepts.get",
+            "meta.concepts.list",
+            "meta.handshake",
             "meta.health",
+            "meta.livez",
             "meta.version"
           ],
           "go_method": "MetaReadyz",
@@ -5937,8 +8081,10 @@
     },
     {
       "name": "write",
-      "command_count": 40,
+      "command_count": 42,
       "command_ids": [
+        "agent.notifications.dismiss",
+        "agent.notifications.read",
         "artifacts.archive",
         "artifacts.create",
         "artifacts.purge",
@@ -5982,6 +8128,74 @@
       ],
       "commands": [
         {
+          "command_id": "agent.notifications.dismiss",
+          "cli_path": "agent notifications dismiss",
+          "group": "agent",
+          "method": "POST",
+          "path": "/agent-notifications/dismiss",
+          "operation_id": "dismissAgentNotification",
+          "summary": "Dismiss agent notification",
+          "why": "Dismiss a wake notification for the authenticated agent.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ event, notification }`.",
+          "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "not_found"
+          ],
+          "concepts": [
+            "agents",
+            "notifications",
+            "write"
+          ],
+          "stability": "beta",
+          "surface": "projection",
+          "adjacent_commands": [
+            "agent.notifications.list",
+            "agent.notifications.read"
+          ],
+          "go_method": "AgentNotificationsDismiss",
+          "ts_method": "agentNotificationsDismiss"
+        },
+        {
+          "command_id": "agent.notifications.read",
+          "cli_path": "agent notifications read",
+          "group": "agent",
+          "method": "POST",
+          "path": "/agent-notifications/read",
+          "operation_id": "markAgentNotificationRead",
+          "summary": "Mark agent notification read",
+          "why": "Record read state for a wake notification.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `{ event, notification }`.",
+          "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "not_found"
+          ],
+          "concepts": [
+            "agents",
+            "notifications",
+            "write"
+          ],
+          "stability": "beta",
+          "surface": "projection",
+          "adjacent_commands": [
+            "agent.notifications.dismiss",
+            "agent.notifications.list"
+          ],
+          "go_method": "AgentNotificationsRead",
+          "ts_method": "agentNotificationsRead"
+        },
+        {
           "command_id": "artifacts.archive",
           "cli_path": "artifacts archive",
           "group": "artifacts",
@@ -6020,6 +8234,7 @@
             "artifact_id"
           ],
           "adjacent_commands": [
+            "artifacts.content",
             "artifacts.create",
             "artifacts.get",
             "artifacts.list",
@@ -6081,6 +8296,7 @@
           },
           "adjacent_commands": [
             "artifacts.archive",
+            "artifacts.content",
             "artifacts.get",
             "artifacts.list",
             "artifacts.purge",
@@ -6131,6 +8347,7 @@
           ],
           "adjacent_commands": [
             "artifacts.archive",
+            "artifacts.content",
             "artifacts.create",
             "artifacts.get",
             "artifacts.list",
@@ -6181,6 +8398,7 @@
           ],
           "adjacent_commands": [
             "artifacts.archive",
+            "artifacts.content",
             "artifacts.create",
             "artifacts.get",
             "artifacts.list",
@@ -6236,6 +8454,7 @@
           ],
           "adjacent_commands": [
             "artifacts.archive",
+            "artifacts.content",
             "artifacts.create",
             "artifacts.get",
             "artifacts.list",
@@ -6286,6 +8505,7 @@
           ],
           "adjacent_commands": [
             "artifacts.archive",
+            "artifacts.content",
             "artifacts.create",
             "artifacts.get",
             "artifacts.list",
@@ -8011,6 +10231,7 @@
           ],
           "adjacent_commands": [
             "events.create",
+            "events.get",
             "events.list",
             "events.restore",
             "events.stream",
@@ -8124,6 +10345,7 @@
           },
           "adjacent_commands": [
             "events.archive",
+            "events.get",
             "events.list",
             "events.restore",
             "events.stream",
@@ -8174,6 +10396,7 @@
           "adjacent_commands": [
             "events.archive",
             "events.create",
+            "events.get",
             "events.list",
             "events.stream",
             "events.trash",
@@ -8228,6 +10451,7 @@
           "adjacent_commands": [
             "events.archive",
             "events.create",
+            "events.get",
             "events.list",
             "events.restore",
             "events.stream",
@@ -8277,6 +10501,7 @@
           "adjacent_commands": [
             "events.archive",
             "events.create",
+            "events.get",
             "events.list",
             "events.restore",
             "events.stream",
@@ -8341,7 +10566,9 @@
             "inbox_id"
           ],
           "adjacent_commands": [
-            "inbox.list"
+            "inbox.get",
+            "inbox.list",
+            "inbox.stream"
           ],
           "go_method": "InboxAcknowledge",
           "ts_method": "inboxAcknowledge"

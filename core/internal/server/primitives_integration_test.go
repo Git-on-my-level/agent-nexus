@@ -595,13 +595,13 @@ func TestDocumentsLifecycleRoundTrip(t *testing.T) {
 		t.Fatalf("expected thread-filtered document subject_ref, got %#v", threadDocs.Documents[0])
 	}
 
-	updateResp := requestJSONExpectStatus(t, http.MethodPatch, h.baseURL+"/docs/doc-1", `{
+	updateResp := requestJSONExpectStatus(t, http.MethodPost, h.baseURL+"/docs/doc-1/revisions", `{
 		"actor_id":"actor-1",
 		"document":{"title":"Constitution v2"},
 		"if_base_revision":"`+headRevisionID+`",
 		"content":"second text",
 		"content_type":"text"
-	}`, http.StatusOK)
+	}`, http.StatusCreated)
 	defer updateResp.Body.Close()
 
 	var updated map[string]map[string]any
@@ -643,7 +643,7 @@ func TestDocumentsLifecycleRoundTrip(t *testing.T) {
 		t.Fatal("revision_hash should differ between revisions")
 	}
 
-	staleResp := requestJSONExpectStatus(t, http.MethodPatch, h.baseURL+"/docs/doc-1", `{
+	staleResp := requestJSONExpectStatus(t, http.MethodPost, h.baseURL+"/docs/doc-1/revisions", `{
 		"actor_id":"actor-1",
 		"if_base_revision":"`+headRevisionID+`",
 		"content":"stale write",
@@ -1154,12 +1154,12 @@ func TestDocumentRevisionMerkleChainIntegrity(t *testing.T) {
 	}
 	rev1ID, _ := created["revision"]["revision_id"].(string)
 
-	updateResp1 := requestJSONExpectStatus(t, http.MethodPatch, h.baseURL+"/docs/merkle-doc", `{
+	updateResp1 := requestJSONExpectStatus(t, http.MethodPost, h.baseURL+"/docs/merkle-doc/revisions", `{
 		"actor_id":"actor-1",
 		"if_base_revision":"`+rev1ID+`",
 		"content":"revision two",
 		"content_type":"text"
-	}`, http.StatusOK)
+	}`, http.StatusCreated)
 	defer updateResp1.Body.Close()
 	var updated1 map[string]map[string]any
 	if err := json.NewDecoder(updateResp1.Body).Decode(&updated1); err != nil {
@@ -1167,12 +1167,12 @@ func TestDocumentRevisionMerkleChainIntegrity(t *testing.T) {
 	}
 	rev2ID, _ := updated1["revision"]["revision_id"].(string)
 
-	updateResp2 := requestJSONExpectStatus(t, http.MethodPatch, h.baseURL+"/docs/merkle-doc", `{
+	updateResp2 := requestJSONExpectStatus(t, http.MethodPost, h.baseURL+"/docs/merkle-doc/revisions", `{
 		"actor_id":"actor-1",
 		"if_base_revision":"`+rev2ID+`",
 		"content":"revision three",
 		"content_type":"text"
-	}`, http.StatusOK)
+	}`, http.StatusCreated)
 	defer updateResp2.Body.Close()
 
 	historyResp, err := http.Get(h.baseURL + "/docs/merkle-doc/history")
@@ -1284,7 +1284,7 @@ func TestDocumentsInvalidInputReturnsInvalidRequest(t *testing.T) {
 		t.Fatalf("expected revision_id in create response: %#v", created)
 	}
 
-	updateInvalidResp := requestJSONExpectStatus(t, http.MethodPatch, h.baseURL+"/docs/doc-invalid-update", `{
+	updateInvalidResp := requestJSONExpectStatus(t, http.MethodPost, h.baseURL+"/docs/doc-invalid-update/revisions", `{
 		"actor_id":"actor-1",
 		"if_base_revision":"`+baseRevision+`",
 		"document":{"id":"should-not-be-allowed"},
@@ -1294,7 +1294,7 @@ func TestDocumentsInvalidInputReturnsInvalidRequest(t *testing.T) {
 	defer updateInvalidResp.Body.Close()
 	assertErrorCode(t, updateInvalidResp, "invalid_request")
 
-	updateLegacyLifecycleResp := requestJSONExpectStatus(t, http.MethodPatch, h.baseURL+"/docs/doc-invalid-update", `{
+	updateLegacyLifecycleResp := requestJSONExpectStatus(t, http.MethodPost, h.baseURL+"/docs/doc-invalid-update/revisions", `{
 		"actor_id":"actor-1",
 		"if_base_revision":"`+baseRevision+`",
 		"document":{"state":"archived"},

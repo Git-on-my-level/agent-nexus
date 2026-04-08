@@ -1948,15 +1948,15 @@ func TestBoardCommands(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 				t.Fatalf("decode boards cards update body: %v", err)
 			}
-			if got := anyStringValue(payload["if_board_updated_at"]); got != updatedAt {
+			if got := anyStringValue(payload["if_updated_at"]); got != updatedAt {
 				t.Fatalf("expected card update concurrency token %q, got %#v", updatedAt, payload)
 			}
 			patch, _ := payload["patch"].(map[string]any)
 			if got := anyStringValue(patch["status"]); got != "done" {
 				t.Fatalf("expected status done, got %#v", payload)
 			}
-			_, _ = w.Write([]byte(`{"board":{"id":"` + boardID + `","updated_at":"` + nextUpdatedAt + `"},"card":{"id":"` + cardID + `","board_id":"` + boardID + `","thread_id":"` + cardThreadID + `","parent_thread":"` + cardThreadID + `","title":"Launch task","body":"","version":2,"column_key":"backlog","rank":"a","assignee":null,"priority":null,"status":"done","pinned_document_id":"doc_1","created_at":"` + updatedAt + `","created_by":"actor_1","updated_at":"` + nextUpdatedAt + `","updated_by":"actor_1","provenance":{"sources":["inferred"]}}}`))
-		case r.Method == http.MethodPost && r.URL.Path == "/boards/"+boardID+"/cards/"+cardID+"/move":
+			_, _ = w.Write([]byte(`{"card":{"id":"` + cardID + `","board_id":"` + boardID + `","thread_id":"` + cardThreadID + `","parent_thread":"` + cardThreadID + `","title":"Launch task","body":"","version":2,"column_key":"backlog","rank":"a","assignee":null,"priority":null,"status":"done","pinned_document_id":"doc_1","created_at":"` + updatedAt + `","created_by":"actor_1","updated_at":"` + nextUpdatedAt + `","updated_by":"actor_1","provenance":{"sources":["inferred"]}}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/cards/"+cardID+"/move":
 			var payload map[string]any
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 				t.Fatalf("decode boards cards move body: %v", err)
@@ -2019,19 +2019,19 @@ func TestBoardCommands(t *testing.T) {
 		t.Fatalf("expected boards.cards.get command_id, got %#v", getCardPayload)
 	}
 
-	updateCardPayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "boards", "cards", "update", "--card-id", cardID, "--if-board-updated-at", updatedAt, "--status", "done"}))
-	if got := anyStringValue(updateCardPayload["command_id"]); got != "boards.cards.update" {
-		t.Fatalf("expected boards.cards.update command_id, got %#v", updateCardPayload)
+	updateCardPayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "boards", "cards", "update", "--card-id", cardID, "--if-updated-at", updatedAt, "--status", "done"}))
+	if got := anyStringValue(updateCardPayload["command_id"]); got != "cards.patch" {
+		t.Fatalf("expected cards.patch command_id, got %#v", updateCardPayload)
 	}
 
 	movePayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "boards", "cards", "move", "--board-id", boardID, "--card-id", cardID, "--if-board-updated-at", updatedAt, "--column", "review", "--after-card-id", peerCardID}))
-	if got := anyStringValue(movePayload["command_id"]); got != "boards.cards.move" {
-		t.Fatalf("expected boards.cards.move command_id, got %#v", movePayload)
+	if got := anyStringValue(movePayload["command_id"]); got != "cards.move" {
+		t.Fatalf("expected cards.move command_id, got %#v", movePayload)
 	}
 
 	archivePayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "boards", "cards", "archive", "--card-id", cardID, "--if-board-updated-at", updatedAt}))
-	if got := anyStringValue(archivePayload["command_id"]); got != "boards.cards.archive" {
-		t.Fatalf("expected boards.cards.archive command_id, got %#v", archivePayload)
+	if got := anyStringValue(archivePayload["command_id"]); got != "cards.archive" {
+		t.Fatalf("expected cards.archive command_id, got %#v", archivePayload)
 	}
 }
 

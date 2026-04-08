@@ -1,11 +1,11 @@
 /**
- * Same-origin paths proxied to core even when missing from the generated
- * command catalog. Keep this list small; prefer registering operations in
- * contracts/oar-openapi.yaml when they are stable workspace APIs.
+ * Paths implemented by SvelteKit (not proxied to oar-core). Every other API
+ * path should be registered in contracts/oar-openapi.yaml so
+ * isProxyableCommand matches it.
  *
- * Several `/auth/*` routes are implemented in SvelteKit (cookie-backed workspace
- * session, dev fixture identities, passkey ceremony shims). Those must not be
- * proxied — oar-core does not serve them and will return 4xx.
+ * Workspace session, dev fixtures, and passkey ceremony shims must not hit
+ * oar-core directly from the browser in ways that collide with core /auth/*
+ * routes handled here.
  */
 
 export function isWebUiOwnedAuthPath(pathname) {
@@ -24,29 +24,13 @@ export function isWebUiOwnedAuthPath(pathname) {
   return false;
 }
 
-export function isDirectCoreAuthPath(pathname) {
-  if (isWebUiOwnedAuthPath(pathname)) {
-    return false;
-  }
-  return pathname.startsWith("/auth/");
-}
-
-/** GET/POST /actors — utility listing; not in generated catalog today. */
-export function isDirectCoreActorsPath(method, pathname) {
-  const upper = method.toUpperCase();
-  return pathname === "/actors" && (upper === "GET" || upper === "POST");
-}
-
 /**
  * @param {string} method
  * @param {string} pathname
  * @returns {boolean}
  */
 export function isDirectCoreProxyPath(method, pathname) {
-  const upper = method.toUpperCase();
-  return (
-    (upper === "GET" && pathname === "/meta/handshake") ||
-    isDirectCoreAuthPath(pathname) ||
-    isDirectCoreActorsPath(method, pathname)
-  );
+  void method;
+  void pathname;
+  return false;
 }

@@ -214,14 +214,14 @@ func TestDocumentThreadRetargetRefreshesBothDerivedProjections(t *testing.T) {
 		t.Fatalf("expected source projection document_count=1 after create, got %#v", projection)
 	}
 
-	updateResp := requestJSONExpectStatus(t, http.MethodPatch, h.baseURL+"/docs/projection-retarget-doc", `{
+	updateResp := requestJSONExpectStatus(t, http.MethodPost, h.baseURL+"/docs/projection-retarget-doc/revisions", `{
 		"actor_id":"actor-1",
 		"document":{"thread_id":"`+toThreadID+`","title":"Projection move doc"},
 		"if_base_revision":"`+baseRevisionID+`",
 		"content":"moved text",
 		"content_type":"text",
 		"refs":["thread:`+toThreadID+`"]
-	}`, 200)
+	}`, 201)
 	defer updateResp.Body.Close()
 
 	if projection := mustLoadDerivedTopicProjection(t, h.workspace.DB(), fromThreadID); projection.DocumentCount != 0 {

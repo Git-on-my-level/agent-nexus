@@ -103,7 +103,7 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 		t.Fatal("expected packet card id and backing thread id")
 	}
 
-	postJSONExpectStatus(t, h.baseURL+"/receipts", `{
+	postJSONExpectStatus(t, h.baseURL+"/packets/receipts", `{
 		"actor_id":"actor-1",
 		"artifact":{"id":"receipt-invalid","refs":["`+cardRef+`"],"summary":"receipt"},
 		"packet":{
@@ -117,7 +117,7 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 	}`, http.StatusBadRequest).Body.Close()
 
 	receiptID := "receipt-comprehensive"
-	receiptResp := postJSONExpectStatus(t, h.baseURL+"/receipts", `{
+	receiptResp := postJSONExpectStatus(t, h.baseURL+"/packets/receipts", `{
 		"actor_id":"actor-1",
 		"artifact":{"id":"`+receiptID+`","refs":["`+cardRef+`"],"summary":"receipt"},
 		"packet":{
@@ -132,7 +132,7 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 	defer receiptResp.Body.Close()
 
 	reviewID := "review-comprehensive"
-	postJSONExpectStatus(t, h.baseURL+"/reviews", `{
+	postJSONExpectStatus(t, h.baseURL+"/packets/reviews", `{
 		"actor_id":"actor-1",
 		"artifact":{"id":"`+reviewID+`","refs":["`+cardRef+`","artifact:`+receiptID+`"],"summary":"review"},
 		"packet":{
@@ -299,7 +299,7 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 		t.Fatalf("expected actor id validation error, got: %v", ctErr)
 	}
 
-	postJSONExpectStatus(t, h.baseURL+"/receipts", `{
+	postJSONExpectStatus(t, h.baseURL+"/packets/receipts", `{
 		"actor_id":"actor-1",
 		"artifact":{"id":"rc-mismatch-a","refs":["`+cardRef+`"]},
 		"packet":{

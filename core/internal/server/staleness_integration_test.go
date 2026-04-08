@@ -143,14 +143,14 @@ func TestStalenessClearsAfterActorStatementAndDocumentActivity(t *testing.T) {
 
 	postJSONExpectStatus(t, h.baseURL+"/derived/rebuild", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
 
-	patchJSONExpectStatus(t, h.baseURL+"/docs/stale-doc-1", `{
+	postJSONExpectStatus(t, h.baseURL+"/docs/stale-doc-1/revisions", `{
 		"actor_id":"actor-1",
 		"if_base_revision":"`+baseRevisionID+`",
 		"document":{"title":"Runbook updated"},
 		"refs":["thread:`+threadID+`"],
 		"content":"updated text",
 		"content_type":"text"
-	}`, http.StatusOK).Body.Close()
+	}`, http.StatusCreated).Body.Close()
 
 	if threadListedAsStale(t, h.baseURL, threadID) {
 		t.Fatalf("expected document update activity to clear stale thread %s", threadID)

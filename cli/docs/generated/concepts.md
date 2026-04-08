@@ -4,13 +4,34 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.3.0`
-- Concepts: `20`
+- Concepts: `30`
 
-## `artifacts`
+## `actors`
+
+- Commands: `2`
+- Command IDs:
+  - `actors.create`
+  - `actors.list`
+
+## `agents`
 
 - Commands: `8`
 - Command IDs:
+  - `agent.notifications.dismiss`
+  - `agent.notifications.list`
+  - `agent.notifications.read`
+  - `agents.me.get`
+  - `agents.me.keys.rotate`
+  - `agents.me.patch`
+  - `agents.me.revoke`
+  - `auth.agents.register`
+
+## `artifacts`
+
+- Commands: `9`
+- Command IDs:
   - `artifacts.archive`
+  - `artifacts.content`
   - `artifacts.create`
   - `artifacts.get`
   - `artifacts.list`
@@ -18,6 +39,36 @@ Generated from `contracts/oar-openapi.yaml`.
   - `artifacts.restore`
   - `artifacts.trash`
   - `artifacts.unarchive`
+
+## `audit`
+
+- Commands: `1`
+- Command IDs:
+  - `auth.audit.list`
+
+## `auth`
+
+- Commands: `19`
+- Command IDs:
+  - `actors.create`
+  - `actors.list`
+  - `agents.me.get`
+  - `agents.me.keys.rotate`
+  - `agents.me.patch`
+  - `agents.me.revoke`
+  - `auth.agents.register`
+  - `auth.audit.list`
+  - `auth.bootstrap.status`
+  - `auth.invites.create`
+  - `auth.invites.list`
+  - `auth.invites.revoke`
+  - `auth.passkey.login.options`
+  - `auth.passkey.login.verify`
+  - `auth.passkey.register.options`
+  - `auth.passkey.register.verify`
+  - `auth.principals.list`
+  - `auth.principals.revoke`
+  - `auth.token`
 
 ## `boards`
 
@@ -59,8 +110,13 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `compatibility`
 
-- Commands: `1`
+- Commands: `6`
 - Command IDs:
+  - `meta.commands.get`
+  - `meta.commands.list`
+  - `meta.concepts.get`
+  - `meta.concepts.list`
+  - `meta.handshake`
   - `meta.version`
 
 ## `concurrency`
@@ -89,10 +145,11 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `events`
 
-- Commands: `7`
+- Commands: `8`
 - Command IDs:
   - `events.archive`
   - `events.create`
+  - `events.get`
   - `events.list`
   - `events.restore`
   - `events.stream`
@@ -108,17 +165,21 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `health`
 
-- Commands: `2`
+- Commands: `4`
 - Command IDs:
   - `meta.health`
+  - `meta.livez`
   - `meta.readyz`
+  - `ops.health`
 
 ## `inbox`
 
-- Commands: `2`
+- Commands: `4`
 - Command IDs:
   - `inbox.acknowledge`
+  - `inbox.get`
   - `inbox.list`
+  - `inbox.stream`
 
 ## `inspection`
 
@@ -129,12 +190,56 @@ Generated from `contracts/oar-openapi.yaml`.
   - `threads.inspect`
   - `threads.list`
 
+## `maintenance`
+
+- Commands: `2`
+- Command IDs:
+  - `derived.rebuild`
+  - `ops.blob.usage.rebuild`
+
+## `notifications`
+
+- Commands: `3`
+- Command IDs:
+  - `agent.notifications.dismiss`
+  - `agent.notifications.list`
+  - `agent.notifications.read`
+
+## `ops`
+
+- Commands: `3`
+- Command IDs:
+  - `ops.blob.usage.rebuild`
+  - `ops.health`
+  - `ops.usage.summary`
+
 ## `packets`
 
 - Commands: `2`
 - Command IDs:
   - `packets.receipts.create`
   - `packets.reviews.create`
+
+## `passkeys`
+
+- Commands: `4`
+- Command IDs:
+  - `auth.passkey.login.options`
+  - `auth.passkey.login.verify`
+  - `auth.passkey.register.options`
+  - `auth.passkey.register.verify`
+
+## `projections`
+
+- Commands: `1`
+- Command IDs:
+  - `derived.rebuild`
+
+## `quotas`
+
+- Commands: `1`
+- Command IDs:
+  - `ops.usage.summary`
 
 ## `readiness`
 
@@ -199,8 +304,10 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `write`
 
-- Commands: `40`
+- Commands: `42`
 - Command IDs:
+  - `agent.notifications.dismiss`
+  - `agent.notifications.read`
   - `artifacts.archive`
   - `artifacts.create`
   - `artifacts.purge`

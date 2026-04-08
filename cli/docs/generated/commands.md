@@ -4,7 +4,115 @@ Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.3.0`
-- Commands: `72`
+- Commands: `108`
+
+## `actors.create`
+
+- CLI path: `actors create`
+- HTTP: `POST /actors`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `json-body`
+- Why: Legacy dev actor registration when dev_actor_mode is enabled.
+- Concepts: `actors`, `auth`
+- Error codes: `auth_required`, `invalid_request`, `dev_actor_mode_disabled`
+- Output: Returns `{ actor }`.
+
+## `actors.list`
+
+- CLI path: `actors list`
+- HTTP: `GET /actors`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Enumerate durable actor records for operator UI and dev fixtures.
+- Concepts: `actors`, `auth`
+- Error codes: `auth_required`, `invalid_token`
+- Output: Returns `{ actors, next_cursor? }`.
+
+## `agent.notifications.dismiss`
+
+- CLI path: `agent notifications dismiss`
+- HTTP: `POST /agent-notifications/dismiss`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `json-body`
+- Why: Dismiss a wake notification for the authenticated agent.
+- Concepts: `agents`, `notifications`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Output: Returns `{ event, notification }`.
+
+## `agent.notifications.list`
+
+- CLI path: `agent notifications list`
+- HTTP: `GET /agent-notifications`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `none`
+- Why: Derived read of notifications for the authenticated agent.
+- Concepts: `agents`, `notifications`
+- Error codes: `auth_required`, `invalid_token`
+- Output: Returns `{ items, generated_at }`.
+
+## `agent.notifications.read`
+
+- CLI path: `agent notifications read`
+- HTTP: `POST /agent-notifications/read`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `json-body`
+- Why: Record read state for a wake notification.
+- Concepts: `agents`, `notifications`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Output: Returns `{ event, notification }`.
+
+## `agents.me.get`
+
+- CLI path: `agents me`
+- HTTP: `GET /agents/me`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Resolve bearer principal to agent profile and keys.
+- Concepts: `auth`, `agents`
+- Error codes: `auth_required`, `invalid_token`
+- Output: Returns `{ agent, keys }`.
+
+## `agents.me.keys.rotate`
+
+- CLI path: `agents me keys rotate`
+- HTTP: `POST /agents/me/keys/rotate`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `json-body`
+- Why: Add a new Ed25519 key for assertions.
+- Concepts: `auth`, `agents`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Output: Returns `{ key }`.
+
+## `agents.me.patch`
+
+- CLI path: `agents me patch`
+- HTTP: `PATCH /agents/me`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `json-body`
+- Why: Rename or adjust profile fields for the authenticated agent.
+- Concepts: `auth`, `agents`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Output: Returns `{ agent }`.
+
+## `agents.me.revoke`
+
+- CLI path: `agents me revoke`
+- HTTP: `POST /agents/me/revoke`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `json-body`
+- Why: Self-revocation or admin-style revocation flow for the active principal.
+- Concepts: `auth`, `agents`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `conflict`
+- Output: Returns `{ ok: true }`.
 
 ## `artifacts.archive`
 
@@ -17,6 +125,18 @@ Generated from `contracts/oar-openapi.yaml`.
 - Concepts: `artifacts`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ artifact }`.
+
+## `artifacts.content`
+
+- CLI path: `artifacts content`
+- HTTP: `GET /artifacts/{artifact_id}/content`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Return raw artifact payload with varying content types.
+- Concepts: `artifacts`
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Output: Raw bytes or JSON/text depending on artifact.
 
 ## `artifacts.create`
 
@@ -101,6 +221,161 @@ Generated from `contracts/oar-openapi.yaml`.
 - Concepts: `artifacts`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ artifact }`.
+
+## `auth.agents.register`
+
+- CLI path: `auth agents register`
+- HTTP: `POST /auth/agents/register`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `json-body`
+- Why: Bootstrap or invite-gated agent registration with key material.
+- Concepts: `auth`, `agents`
+- Error codes: `invalid_request`, `invalid_token`, `auth_required`
+- Output: Returns `{ agent, tokens, ... }` per core auth handlers.
+
+## `auth.audit.list`
+
+- CLI path: `auth audit list`
+- HTTP: `GET /auth/audit`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Operator audit trail for auth-sensitive actions.
+- Concepts: `auth`, `audit`
+- Error codes: `auth_required`, `invalid_token`
+- Output: Returns audit list JSON.
+
+## `auth.bootstrap.status`
+
+- CLI path: `auth bootstrap status`
+- HTTP: `GET /auth/bootstrap/status`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Report whether first-principal bootstrap registration is still available.
+- Concepts: `auth`
+- Output: Returns `{ bootstrap_registration_available }`.
+
+## `auth.invites.create`
+
+- CLI path: `auth invites create`
+- HTTP: `POST /auth/invites`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `json-body`
+- Why: Issue a one-time invite for human or agent principals.
+- Concepts: `auth`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Output: Returns `{ invite, token }`.
+
+## `auth.invites.list`
+
+- CLI path: `auth invites list`
+- HTTP: `GET /auth/invites`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Operator listing of outstanding invites.
+- Concepts: `auth`
+- Error codes: `auth_required`, `invalid_token`
+- Output: Returns `{ invites }`.
+
+## `auth.invites.revoke`
+
+- CLI path: `auth invites revoke`
+- HTTP: `POST /auth/invites/{invite_id}/revoke`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `json-body`
+- Why: Invalidate an outstanding invite by id.
+- Concepts: `auth`
+- Error codes: `auth_required`, `invalid_request`, `not_found`, `invalid_token`
+- Output: Returns `{ invite }`.
+
+## `auth.passkey.login.options`
+
+- CLI path: `auth passkey login options`
+- HTTP: `POST /auth/passkey/login/options`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `json-body`
+- Why: WebAuthn assertion challenge for returning principals.
+- Concepts: `auth`, `passkeys`
+- Error codes: `invalid_request`
+- Output: Returns `{ session_id, options }`.
+
+## `auth.passkey.login.verify`
+
+- CLI path: `auth passkey login verify`
+- HTTP: `POST /auth/passkey/login/verify`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `json-body`
+- Why: Verify WebAuthn assertion and issue tokens.
+- Concepts: `auth`, `passkeys`
+- Error codes: `invalid_request`, `invalid_token`
+- Output: Returns `{ agent, tokens }`.
+
+## `auth.passkey.register.options`
+
+- CLI path: `auth passkey register options`
+- HTTP: `POST /auth/passkey/register/options`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `json-body`
+- Why: WebAuthn registration challenge for workspace agents.
+- Concepts: `auth`, `passkeys`
+- Error codes: `invalid_request`
+- Output: Returns `{ session_id, options }`.
+
+## `auth.passkey.register.verify`
+
+- CLI path: `auth passkey register verify`
+- HTTP: `POST /auth/passkey/register/verify`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `json-body`
+- Why: Verify WebAuthn attestation and issue tokens.
+- Concepts: `auth`, `passkeys`
+- Error codes: `invalid_request`, `invalid_token`
+- Output: Returns `{ agent, tokens }`.
+
+## `auth.principals.list`
+
+- CLI path: `auth principals list`
+- HTTP: `GET /auth/principals`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Operator visibility into registered principals for the workspace.
+- Concepts: `auth`
+- Error codes: `auth_required`, `invalid_token`
+- Output: Returns principal list JSON.
+
+## `auth.principals.revoke`
+
+- CLI path: `auth principals revoke`
+- HTTP: `POST /auth/principals/{principal_id}/revoke`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `json-body`
+- Why: Administrative revocation of a principal linkage.
+- Concepts: `auth`
+- Error codes: `auth_required`, `invalid_request`, `not_found`, `invalid_token`, `conflict`
+- Output: Returns result JSON.
+
+## `auth.token`
+
+- CLI path: `auth token`
+- HTTP: `POST /auth/token`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `json-body`
+- Why: Assertion or refresh-token exchange for bearer access.
+- Concepts: `auth`
+- Error codes: `invalid_request`, `invalid_token`
+- Output: Returns `{ tokens }` envelope.
 
 ## `boards.archive`
 
@@ -378,6 +653,18 @@ Generated from `contracts/oar-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ board, card }`.
 
+## `derived.rebuild`
+
+- CLI path: `derived rebuild`
+- HTTP: `POST /derived/rebuild`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `json-body`
+- Why: Deterministic operator repair for inbox/thread projections.
+- Concepts: `projections`, `maintenance`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Output: Returns `{ ok: true }`.
+
 ## `docs.archive`
 
 - CLI path: `docs archive`
@@ -534,6 +821,18 @@ Generated from `contracts/oar-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Output: Returns `{ event }`.
 
+## `events.get`
+
+- CLI path: `events get`
+- HTTP: `GET /events/{event_id}`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Fetch one append-only event record by stable id.
+- Concepts: `events`
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Output: Returns `{ event }`.
+
 ## `events.list`
 
 - CLI path: `events list`
@@ -606,6 +905,18 @@ Generated from `contracts/oar-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
 - Output: Returns `{ event }`.
 
+## `inbox.get`
+
+- CLI path: `inbox get`
+- HTTP: `GET /inbox/{inbox_id}`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `none`
+- Why: Side-effect free read of one materialized inbox row.
+- Concepts: `inbox`
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Output: Returns `{ item, generated_at, projection_freshness }`.
+
 ## `inbox.list`
 
 - CLI path: `inbox list`
@@ -618,6 +929,78 @@ Generated from `contracts/oar-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_token`
 - Output: Returns `{ items }`.
 
+## `inbox.stream`
+
+- CLI path: `inbox stream`
+- HTTP: `GET /inbox/stream`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `none`
+- Why: Server-sent events feed of inbox projection updates.
+- Concepts: `inbox`
+- Error codes: `auth_required`, `invalid_token`
+- Output: SSE `inbox_item` events with JSON payloads.
+
+## `meta.commands.get`
+
+- CLI path: `meta commands get`
+- HTTP: `GET /meta/commands/{command_id}`
+- Stability: `stable`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Resolve command metadata by stable command id.
+- Concepts: `compatibility`
+- Error codes: `meta_unavailable`, `not_found`
+- Output: Returns `{ command }`.
+
+## `meta.commands.list`
+
+- CLI path: `meta commands list`
+- HTTP: `GET /meta/commands`
+- Stability: `stable`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Expose embedded OAR command metadata for discovery and codegen parity.
+- Concepts: `compatibility`
+- Error codes: `meta_unavailable`
+- Output: Returns generated command registry JSON.
+
+## `meta.concepts.get`
+
+- CLI path: `meta concepts get`
+- HTTP: `GET /meta/concepts/{concept_name}`
+- Stability: `stable`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Expand one concept into related commands.
+- Concepts: `compatibility`
+- Error codes: `meta_unavailable`, `not_found`
+- Output: Returns `{ concept: {...} }`.
+
+## `meta.concepts.list`
+
+- CLI path: `meta concepts list`
+- HTTP: `GET /meta/concepts`
+- Stability: `stable`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Group command metadata by concept tags.
+- Concepts: `compatibility`
+- Error codes: `meta_unavailable`
+- Output: Returns `{ concepts: [...] }`.
+
+## `meta.handshake`
+
+- CLI path: `meta handshake`
+- HTTP: `GET /meta/handshake`
+- Stability: `stable`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Surface schema version, command registry digest, CLI gates, and instance metadata.
+- Concepts: `compatibility`
+- Error codes: `meta_unavailable`
+- Output: Returns `{ core_version, api_version, schema_version, command_registry_digest, ... }`.
+
 ## `meta.health`
 
 - CLI path: `meta health`
@@ -626,6 +1009,17 @@ Generated from `contracts/oar-openapi.yaml`.
 - Surface: `utility`
 - Input mode: `none`
 - Why: Probe whether the core process is alive.
+- Concepts: `health`
+- Output: Returns `{ ok: true }`.
+
+## `meta.livez`
+
+- CLI path: `meta livez`
+- HTTP: `GET /livez`
+- Stability: `stable`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Lightweight liveness probe independent of storage readiness.
 - Concepts: `health`
 - Output: Returns `{ ok: true }`.
 
@@ -651,6 +1045,42 @@ Generated from `contracts/oar-openapi.yaml`.
 - Why: Check compatibility between clients and core before writes.
 - Concepts: `compatibility`
 - Output: Returns `{ schema_version, command_registry_digest }`.
+
+## `ops.blob.usage.rebuild`
+
+- CLI path: `ops blob usage rebuild`
+- HTTP: `POST /ops/blob-usage/rebuild`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `json-body`
+- Why: Repair path for derived blob accounting after storage events.
+- Concepts: `ops`, `maintenance`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Output: Returns `{ ok: true }` or error.
+
+## `ops.health`
+
+- CLI path: `ops health`
+- HTTP: `GET /ops/health`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Operational readiness for projections, jobs, and operators.
+- Concepts: `health`, `ops`
+- Error codes: `auth_required`, `invalid_token`
+- Output: Returns structured health JSON.
+
+## `ops.usage.summary`
+
+- CLI path: `ops usage summary`
+- HTTP: `GET /ops/usage-summary`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Operator-facing storage and count telemetry for the workspace.
+- Concepts: `ops`, `quotas`
+- Error codes: `auth_required`, `invalid_token`
+- Output: Returns usage envelope JSON.
 
 ## `packets.receipts.create`
 

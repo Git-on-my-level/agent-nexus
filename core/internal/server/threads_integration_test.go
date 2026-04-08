@@ -621,13 +621,13 @@ func TestThreadTimelineIncludesDocumentLifecycleEventsAndExpansions(t *testing.T
 		t.Fatalf("expected document lifecycle ids, got document=%#v revision=%#v", createdDoc.Document, createdDoc.Revision)
 	}
 
-	updateDocResp := patchJSONExpectStatus(t, h.baseURL+"/docs/"+documentID, `{
+	updateDocResp := postJSONExpectStatus(t, h.baseURL+"/docs/"+documentID+"/revisions", `{
 		"actor_id":"actor-1",
 		"document":{"title":"Timeline Document v2"},
 		"if_base_revision":"`+createRevisionID+`",
 		"content":"draft v2",
 		"content_type":"text"
-	}`, http.StatusOK)
+	}`, http.StatusCreated)
 	defer updateDocResp.Body.Close()
 
 	var updatedDoc struct {

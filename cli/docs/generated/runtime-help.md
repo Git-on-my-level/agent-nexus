@@ -33,6 +33,10 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 - `reviews` (group): Create review packets (subject_ref + receipt_ref; subject_ref must be card:<card_id>)
 - `derived` (group): Run derived-view maintenance actions
 - `meta` (group): Inspect generated command/concept metadata
+- `auth invites list` (command): List invite tokens
+- `auth invites create` (command): Create invite token
+- `auth invites revoke` (command): Revoke invite
+- `auth bootstrap status` (command): Bootstrap registration availability
 - `threads list` (command): List backing threads
 - `threads timeline` (command): Get backing thread timeline
 - `threads context` (command): Get backing thread coordination context
@@ -83,6 +87,7 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 - `docs unarchive` (command): Unarchive document
 - `docs restore` (command): Restore document from trash
 - `docs purge` (command): Permanently delete trashed document
+- `events get` (command): Get event by id
 - `events create` (command): Create event
 - `events stream` (command): Stream events (SSE)
 - `events tail` (command): Stream events (SSE)
@@ -91,7 +96,15 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 - `events trash` (command): Move event to trash
 - `events restore` (command): Restore event from trash
 - `inbox list` (command): List inbox items
+- `inbox get` (command): Get one inbox item
 - `inbox acknowledge` (command): Acknowledge inbox item
+- `inbox stream` (command): Stream inbox items (SSE)
+- `inbox tail` (command): Stream inbox items (SSE)
+- `derived rebuild` (command): Rebuild derived projections
+- `meta commands` (command): List command registry metadata
+- `meta command` (command): Get one command metadata entry
+- `meta concepts` (command): List concept index
+- `meta concept` (command): Get commands grouped by concept
 - `receipts create` (command): Create receipt packet
 - `reviews create` (command): Create review packet
 - `events list` (local-helper): Compose backing-thread timeline reads with client-side thread/type/actor filters and preview summaries.
@@ -1307,6 +1320,7 @@ Generated Help: events
 Commands:
   events archive           Archive event
   events create            Create event
+  events get               Get event by id
   events list              List events
   events restore           Restore event from trash
   events stream            Stream events (SSE)
@@ -1337,7 +1351,9 @@ Generated Help: inbox
 
 Commands:
   inbox acknowledge        Acknowledge inbox item
+  inbox get                Get one inbox item
   inbox list               List inbox items
+  inbox stream             Stream inbox items (SSE)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1419,6 +1435,108 @@ Reference commands:
   meta skill      Export a bundled editor skill file.
   meta commands   Inspect generated command metadata.
   meta concepts   Inspect generated concepts metadata.
+```
+
+## `auth invites list`
+
+List invite tokens
+
+```text
+Generated Help: auth invites list
+
+- Command ID: `auth.invites.list`
+- CLI path: `auth invites list`
+- HTTP: `GET /auth/invites`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Operator listing of outstanding invites.
+- Output: Returns `{ invites }`.
+- Error codes: `auth_required`, `invalid_token`
+- Concepts: `auth`
+- Adjacent commands: `auth register`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites revoke`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json auth invites list ... ; oar auth invites list ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `auth invites create`
+
+Create invite token
+
+```text
+Generated Help: auth invites create
+
+- Command ID: `auth.invites.create`
+- CLI path: `auth invites create`
+- HTTP: `POST /auth/invites`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Issue a one-time invite for human or agent principals.
+- Output: Returns `{ invite, token }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Concepts: `auth`
+- Adjacent commands: `auth register`, `auth audit list`, `auth bootstrap status`, `auth invites list`, `auth invites revoke`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json auth invites create ... ; oar auth invites create ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `auth invites revoke`
+
+Revoke invite
+
+```text
+Generated Help: auth invites revoke
+
+- Command ID: `auth.invites.revoke`
+- CLI path: `auth invites revoke`
+- HTTP: `POST /auth/invites/{invite_id}/revoke`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Invalidate an outstanding invite by id.
+- Output: Returns `{ invite }`.
+- Error codes: `auth_required`, `invalid_request`, `not_found`, `invalid_token`
+- Concepts: `auth`
+- Adjacent commands: `auth register`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+
+Inputs:
+  Required:
+  - path `invite_id`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json auth invites revoke ... ; oar auth invites revoke ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `auth bootstrap status`
+
+Bootstrap registration availability
+
+```text
+Generated Help: auth bootstrap status
+
+- Command ID: `auth.bootstrap.status`
+- CLI path: `auth bootstrap status`
+- HTTP: `GET /auth/bootstrap/status`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Report whether first-principal bootstrap registration is still available.
+- Output: Returns `{ bootstrap_registration_available }`.
+- Concepts: `auth`
+- Adjacent commands: `auth register`, `auth audit list`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json auth bootstrap status ... ; oar auth bootstrap status ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `threads list`
@@ -2182,7 +2300,7 @@ Generated Help: artifacts list
 - Output: Returns `{ artifacts }`.
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `artifacts`
-- Adjacent commands: `artifacts archive`, `artifacts create`, `artifacts get`, `artifacts purge`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
+- Adjacent commands: `artifacts archive`, `artifacts content`, `artifacts create`, `artifacts get`, `artifacts purge`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
 
 
 Global flags:
@@ -2207,7 +2325,7 @@ Generated Help: artifacts get
 - Output: Returns `{ artifact }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `artifacts`
-- Adjacent commands: `artifacts archive`, `artifacts create`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
+- Adjacent commands: `artifacts archive`, `artifacts content`, `artifacts create`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
 
 Inputs:
   Required:
@@ -2235,7 +2353,7 @@ Generated Help: artifacts create
 - Output: Returns `{ artifact }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `conflict`
 - Concepts: `artifacts`, `write`
-- Adjacent commands: `artifacts archive`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
+- Adjacent commands: `artifacts archive`, `artifacts content`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
 
 Inputs:
   Required:
@@ -2267,7 +2385,7 @@ Generated Help: artifacts archive
 - Output: Returns `{ artifact }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `artifacts`, `write`
-- Adjacent commands: `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
+- Adjacent commands: `artifacts content`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
 
 Inputs:
   Required:
@@ -2297,7 +2415,7 @@ Generated Help: artifacts unarchive
 - Output: Returns `{ artifact }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `artifacts`, `write`
-- Adjacent commands: `artifacts archive`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts trash`
+- Adjacent commands: `artifacts archive`, `artifacts content`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts trash`
 
 Inputs:
   Required:
@@ -2327,7 +2445,7 @@ Generated Help: artifacts trash
 - Output: Returns `{ artifact }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
 - Concepts: `artifacts`, `write`
-- Adjacent commands: `artifacts archive`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts unarchive`
+- Adjacent commands: `artifacts archive`, `artifacts content`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts unarchive`
 
 Inputs:
   Required:
@@ -2358,7 +2476,7 @@ Generated Help: artifacts restore
 - Output: Returns `{ artifact }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `artifacts`, `write`
-- Adjacent commands: `artifacts archive`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts trash`, `artifacts unarchive`
+- Adjacent commands: `artifacts archive`, `artifacts content`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts trash`, `artifacts unarchive`
 
 Inputs:
   Required:
@@ -2388,7 +2506,7 @@ Generated Help: artifacts purge
 - Output: Returns `{ purged, artifact_id }`.
 - Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `artifacts`, `write`
-- Adjacent commands: `artifacts archive`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
+- Adjacent commands: `artifacts archive`, `artifacts content`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
 
 Inputs:
   Required:
@@ -2984,6 +3102,34 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
+## `events get`
+
+Get event by id
+
+```text
+Generated Help: events get
+
+- Command ID: `events.get`
+- CLI path: `events get`
+- HTTP: `GET /events/{event_id}`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Fetch one append-only event record by stable id.
+- Output: Returns `{ event }`.
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Concepts: `events`
+- Adjacent commands: `events archive`, `events create`, `events list`, `events restore`, `events stream`, `events trash`, `events unarchive`
+
+Inputs:
+  Required:
+  - path `event_id`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json events get ... ; oar events get ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
 ## `events create`
 
 Create event
@@ -3000,7 +3146,7 @@ Generated Help: events create
 - Output: Returns `{ event }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `events`, `write`
-- Adjacent commands: `events archive`, `events list`, `events restore`, `events stream`, `events trash`, `events unarchive`
+- Adjacent commands: `events archive`, `events get`, `events list`, `events restore`, `events stream`, `events trash`, `events unarchive`
 
 Inputs:
   Required:
@@ -3064,7 +3210,7 @@ Generated Help: events stream
 - Output: Each SSE message is `event: …` with JSON data `{ "event": <event> }` (see core/docs/http-api.md).
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `events`
-- Adjacent commands: `events archive`, `events create`, `events list`, `events restore`, `events trash`, `events unarchive`
+- Adjacent commands: `events archive`, `events create`, `events get`, `events list`, `events restore`, `events trash`, `events unarchive`
 
 
 Global flags:
@@ -3089,7 +3235,7 @@ Generated Help: events tail
 - Output: Each SSE message is `event: …` with JSON data `{ "event": <event> }` (see core/docs/http-api.md).
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `events`
-- Adjacent commands: `events archive`, `events create`, `events list`, `events restore`, `events trash`, `events unarchive`
+- Adjacent commands: `events archive`, `events create`, `events get`, `events list`, `events restore`, `events trash`, `events unarchive`
 
 
 Global flags:
@@ -3114,7 +3260,7 @@ Generated Help: events archive
 - Output: Returns `{ event }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `events`, `write`
-- Adjacent commands: `events create`, `events list`, `events restore`, `events stream`, `events trash`, `events unarchive`
+- Adjacent commands: `events create`, `events get`, `events list`, `events restore`, `events stream`, `events trash`, `events unarchive`
 
 Inputs:
   Required:
@@ -3144,7 +3290,7 @@ Generated Help: events unarchive
 - Output: Returns `{ event }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `events`, `write`
-- Adjacent commands: `events archive`, `events create`, `events list`, `events restore`, `events stream`, `events trash`
+- Adjacent commands: `events archive`, `events create`, `events get`, `events list`, `events restore`, `events stream`, `events trash`
 
 Inputs:
   Required:
@@ -3174,7 +3320,7 @@ Generated Help: events trash
 - Output: Returns `{ event }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
 - Concepts: `events`, `write`
-- Adjacent commands: `events archive`, `events create`, `events list`, `events restore`, `events stream`, `events unarchive`
+- Adjacent commands: `events archive`, `events create`, `events get`, `events list`, `events restore`, `events stream`, `events unarchive`
 
 Inputs:
   Required:
@@ -3205,7 +3351,7 @@ Generated Help: events restore
 - Output: Returns `{ event }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `events`, `write`
-- Adjacent commands: `events archive`, `events create`, `events list`, `events stream`, `events trash`, `events unarchive`
+- Adjacent commands: `events archive`, `events create`, `events get`, `events list`, `events stream`, `events trash`, `events unarchive`
 
 Inputs:
   Required:
@@ -3235,7 +3381,7 @@ Generated Help: inbox list
 - Output: Returns `{ items }`.
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `inbox`
-- Adjacent commands: `inbox acknowledge`
+- Adjacent commands: `inbox acknowledge`, `inbox get`, `inbox stream`
 
 
 View scoping:
@@ -3256,6 +3402,34 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
+## `inbox get`
+
+Get one inbox item
+
+```text
+Generated Help: inbox get
+
+- Command ID: `inbox.get`
+- CLI path: `inbox get`
+- HTTP: `GET /inbox/{inbox_id}`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Side-effect free read of one materialized inbox row.
+- Output: Returns `{ item, generated_at, projection_freshness }`.
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Concepts: `inbox`
+- Adjacent commands: `inbox acknowledge`, `inbox list`, `inbox stream`
+
+Inputs:
+  Required:
+  - path `inbox_id`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json inbox get ... ; oar inbox get ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
 ## `inbox acknowledge`
 
 Acknowledge inbox item
@@ -3272,7 +3446,7 @@ Generated Help: inbox acknowledge
 - Output: Returns `{ event }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
 - Concepts: `inbox`, `write`
-- Adjacent commands: `inbox list`
+- Adjacent commands: `inbox get`, `inbox list`, `inbox stream`
 
 Inputs:
   Required:
@@ -3287,6 +3461,186 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: oar --json inbox acknowledge ... ; oar inbox acknowledge ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `inbox stream`
+
+Stream inbox items (SSE)
+
+```text
+Generated Help: inbox stream
+
+- Command ID: `inbox.stream`
+- CLI path: `inbox stream`
+- HTTP: `GET /inbox/stream`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Server-sent events feed of inbox projection updates.
+- Output: SSE `inbox_item` events with JSON payloads.
+- Error codes: `auth_required`, `invalid_token`
+- Concepts: `inbox`
+- Adjacent commands: `inbox acknowledge`, `inbox get`, `inbox list`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json inbox stream ... ; oar inbox stream ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `inbox tail`
+
+Stream inbox items (SSE)
+
+```text
+Generated Help: inbox tail
+
+- Command ID: `inbox.stream`
+- CLI path: `inbox stream`
+- HTTP: `GET /inbox/stream`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Server-sent events feed of inbox projection updates.
+- Output: SSE `inbox_item` events with JSON payloads.
+- Error codes: `auth_required`, `invalid_token`
+- Concepts: `inbox`
+- Adjacent commands: `inbox acknowledge`, `inbox get`, `inbox list`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json inbox tail ... ; oar inbox tail ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `derived rebuild`
+
+Rebuild derived projections
+
+```text
+Generated Help: derived rebuild
+
+- Command ID: `derived.rebuild`
+- CLI path: `derived rebuild`
+- HTTP: `POST /derived/rebuild`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Deterministic operator repair for inbox/thread projections.
+- Output: Returns `{ ok: true }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Concepts: `projections`, `maintenance`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json derived rebuild ... ; oar derived rebuild ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `meta commands`
+
+List command registry metadata
+
+```text
+Generated Help: meta commands
+
+- Command ID: `meta.commands.list`
+- CLI path: `meta commands`
+- HTTP: `GET /meta/commands`
+- Stability: `stable`
+- Input mode: `none`
+- Why: Expose embedded OAR command metadata for discovery and codegen parity.
+- Output: Returns generated command registry JSON.
+- Error codes: `meta_unavailable`
+- Concepts: `compatibility`
+- Adjacent commands: `meta command`, `meta concept`, `meta concepts`, `meta handshake`, `meta health`, `meta livez`, `meta readyz`, `meta version`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json meta commands ... ; oar meta commands ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `meta command`
+
+Get one command metadata entry
+
+```text
+Generated Help: meta command
+
+- Command ID: `meta.commands.get`
+- CLI path: `meta command`
+- HTTP: `GET /meta/commands/{command_id}`
+- Stability: `stable`
+- Input mode: `none`
+- Why: Resolve command metadata by stable command id.
+- Output: Returns `{ command }`.
+- Error codes: `meta_unavailable`, `not_found`
+- Concepts: `compatibility`
+- Adjacent commands: `meta commands`, `meta concept`, `meta concepts`, `meta handshake`, `meta health`, `meta livez`, `meta readyz`, `meta version`
+
+Inputs:
+  Required:
+  - path `command_id`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json meta command ... ; oar meta command ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `meta concepts`
+
+List concept index
+
+```text
+Generated Help: meta concepts
+
+- Command ID: `meta.concepts.list`
+- CLI path: `meta concepts`
+- HTTP: `GET /meta/concepts`
+- Stability: `stable`
+- Input mode: `none`
+- Why: Group command metadata by concept tags.
+- Output: Returns `{ concepts: [...] }`.
+- Error codes: `meta_unavailable`
+- Concepts: `compatibility`
+- Adjacent commands: `meta command`, `meta commands`, `meta concept`, `meta handshake`, `meta health`, `meta livez`, `meta readyz`, `meta version`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json meta concepts ... ; oar meta concepts ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `meta concept`
+
+Get commands grouped by concept
+
+```text
+Generated Help: meta concept
+
+- Command ID: `meta.concepts.get`
+- CLI path: `meta concept`
+- HTTP: `GET /meta/concepts/{concept_name}`
+- Stability: `stable`
+- Input mode: `none`
+- Why: Expand one concept into related commands.
+- Output: Returns `{ concept: {...} }`.
+- Error codes: `meta_unavailable`, `not_found`
+- Concepts: `compatibility`
+- Adjacent commands: `meta command`, `meta commands`, `meta concepts`, `meta handshake`, `meta health`, `meta livez`, `meta readyz`, `meta version`
+
+Inputs:
+  Required:
+  - path `concept_name`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json meta concept ... ; oar meta concept ... --json
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 

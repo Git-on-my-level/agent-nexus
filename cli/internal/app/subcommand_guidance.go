@@ -158,7 +158,7 @@ var boardsSubcommandSpec = subcommandSpec{
 var boardsCardsSubcommandSpec = subcommandSpec{
 	command:  "boards cards",
 	valid:    []string{"list", "create", "get", "update", "move", "archive"},
-	examples: []string{"oar boards cards list --board-id <board-id>", "oar boards cards create --board-id <board-id> --title \"Buy groceries\" --column backlog", "oar boards cards update --card-id <card-id> --status done"},
+	examples: []string{"oar boards cards list --board-id <board-id>", "oar boards cards create --board-id <board-id> --title \"Buy groceries\" --column backlog", "oar boards cards update --card-id <card-id> --if-updated-at <card-updated-at> --status done"},
 	aliases: map[string]string{
 		"ls":     "list",
 		"add":    "create",

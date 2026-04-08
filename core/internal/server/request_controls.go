@@ -227,7 +227,7 @@ func requestBodyLimitForRequest(path string, method string, bucket routeAccessRe
 	}
 
 	switch path {
-	case "/artifacts", "/docs", "/receipts", "/reviews":
+	case "/artifacts", "/docs":
 		if method == http.MethodPost || method == http.MethodPatch {
 			return limits.Content
 		}

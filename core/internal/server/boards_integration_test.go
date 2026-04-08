@@ -389,9 +389,11 @@ func TestBoardCardWriteEdgeRejectsMixedAliases(t *testing.T) {
 		t.Fatalf("expected canonical create payload to omit body_markdown alias, got %#v", addCardPayload.Card)
 	}
 
-	patchResp := patchJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards/"+memberThreadID, `{
+	cardID := asString(addCardPayload.Card["id"])
+	cardUpdatedAt := asString(addCardPayload.Card["updated_at"])
+	patchResp := patchJSONExpectStatus(t, h.baseURL+"/cards/"+cardID, `{
 		"actor_id":"actor-1",
-		"if_board_updated_at":"`+asString(addCardPayload.Board["updated_at"])+`",
+		"if_updated_at":"`+cardUpdatedAt+`",
 		"patch":{
 			"document_ref":"document:doc-1",
 			"pinned_document_id":"doc-1"
@@ -477,6 +479,10 @@ func TestBoardLifecycleEventsAndConflictValidation(t *testing.T) {
 	if err := json.NewDecoder(addCardResp.Body).Decode(&addCardPayload); err != nil {
 		t.Fatalf("decode add card response: %v", err)
 	}
+	cardID := asString(addCardPayload.Card["id"])
+	if cardID == "" {
+		t.Fatal("expected card id on create response")
+	}
 	afterCardAdd := asString(addCardPayload.Board["updated_at"])
 	time.Sleep(2 * time.Millisecond)
 
@@ -505,30 +511,44 @@ func TestBoardLifecycleEventsAndConflictValidation(t *testing.T) {
 	}`, http.StatusBadRequest)
 	ambiguousThreadRefsResp.Body.Close()
 
-	updateCardResp := patchJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards/"+memberThreadID, `{
+	updateCardResp := patchJSONExpectStatus(t, h.baseURL+"/cards/"+cardID, `{
 		"actor_id":"actor-1",
-		"if_board_updated_at":"`+afterCardAdd+`",
+		"if_updated_at":"`+asString(addCardPayload.Card["updated_at"])+`",
 		"patch":{"document_ref":"document:`+pinnedDocumentID+`"}
 	}`, http.StatusOK)
 	defer updateCardResp.Body.Close()
 	var updateCardPayload struct {
-		Board map[string]any `json:"board"`
-		Card  map[string]any `json:"card"`
+		Card map[string]any `json:"card"`
 	}
 	if err := json.NewDecoder(updateCardResp.Body).Decode(&updateCardPayload); err != nil {
 		t.Fatalf("decode update card response: %v", err)
 	}
-	afterCardUpdate := asString(updateCardPayload.Board["updated_at"])
 
-	staleUpdateResp := patchJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards/"+memberThreadID, `{
+	staleUpdateResp := patchJSONExpectStatus(t, h.baseURL+"/cards/"+cardID, `{
 		"actor_id":"actor-1",
-		"if_board_updated_at":"`+afterCardAdd+`",
+		"if_updated_at":"`+asString(updateCardPayload.Card["updated_at"])+`",
 		"patch":{"pinned_document_id":"`+pinnedDocumentID+`"}
 	}`, http.StatusBadRequest)
 	defer staleUpdateResp.Body.Close()
 	assertErrorCode(t, staleUpdateResp, "invalid_request")
 
-	moveCardResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards/"+memberThreadID+"/move", `{
+	boardAfterUpdateResp, err := http.Get(h.baseURL + "/boards/" + boardID)
+	if err != nil {
+		t.Fatalf("GET /boards/{id}: %v", err)
+	}
+	defer boardAfterUpdateResp.Body.Close()
+	if boardAfterUpdateResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected board get status: %d", boardAfterUpdateResp.StatusCode)
+	}
+	var boardAfterUpdate struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(boardAfterUpdateResp.Body).Decode(&boardAfterUpdate); err != nil {
+		t.Fatalf("decode board response: %v", err)
+	}
+	afterCardUpdate := asString(boardAfterUpdate.Board["updated_at"])
+
+	moveCardResp := postJSONExpectStatus(t, h.baseURL+"/cards/"+cardID+"/move", `{
 		"actor_id":"actor-1",
 		"if_board_updated_at":"`+afterCardUpdate+`",
 		"column_key":"blocked"
@@ -546,34 +566,33 @@ func TestBoardLifecycleEventsAndConflictValidation(t *testing.T) {
 	}
 	afterMove := asString(moveCardPayload.Board["updated_at"])
 
-	staleMoveResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards/"+memberThreadID+"/move", `{
+	staleMoveResp := postJSONExpectStatus(t, h.baseURL+"/cards/"+cardID+"/move", `{
 		"actor_id":"actor-1",
 		"if_board_updated_at":"`+afterCardUpdate+`",
 		"column_key":"review"
 	}`, http.StatusConflict)
 	staleMoveResp.Body.Close()
 
-	deleteCardResp := requestJSONExpectStatus(t, http.MethodDelete, h.baseURL+"/boards/"+boardID+"/cards/"+memberThreadID, ``, http.StatusMethodNotAllowed)
+	deleteCardResp := requestJSONExpectStatus(t, http.MethodDelete, h.baseURL+"/boards/"+boardID+"/cards/"+cardID, ``, http.StatusMethodNotAllowed)
 	deleteCardResp.Body.Close()
 
-	removeCardResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards/"+memberThreadID+"/remove", `{
+	removeCardResp := postJSONExpectStatus(t, h.baseURL+"/cards/"+cardID+"/archive", `{
 		"actor_id":"actor-1",
 		"if_board_updated_at":"`+afterMove+`"
 	}`, http.StatusOK)
 	defer removeCardResp.Body.Close()
 	var removeCardPayload struct {
-		Board           map[string]any `json:"board"`
-		Card            map[string]any `json:"card"`
-		RemovedThreadID string         `json:"removed_thread_id"`
+		Board map[string]any `json:"board"`
+		Card  map[string]any `json:"card"`
 	}
 	if err := json.NewDecoder(removeCardResp.Body).Decode(&removeCardPayload); err != nil {
-		t.Fatalf("decode remove card response: %v", err)
+		t.Fatalf("decode archive card response: %v", err)
 	}
-	if removeCardPayload.RemovedThreadID != memberThreadID {
-		t.Fatalf("unexpected removed_thread_id: %#v", removeCardPayload)
+	if asString(removeCardPayload.Card["archived_at"]) == "" {
+		t.Fatalf("expected archived card, got %#v", removeCardPayload.Card)
 	}
 	if !cardRelatedRefsContainThread(removeCardPayload.Card, memberThreadID) {
-		t.Fatalf("expected removed card related_refs to include thread %q, got %#v", memberThreadID, removeCardPayload.Card)
+		t.Fatalf("expected archived card related_refs to include thread %q, got %#v", memberThreadID, removeCardPayload.Card)
 	}
 
 	timelineResp, err := http.Get(h.baseURL + "/threads/" + boardID + "/timeline")
@@ -757,15 +776,15 @@ func TestArchiveBoardCardGlobalRoute(t *testing.T) {
 		t.Fatalf("expected archived card to be absent from active board cards, got %#v", cardsPayload.Cards)
 	}
 
-	patchArchivedResp := patchJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards/"+memberThreadID, `{
+	patchArchivedResp := patchJSONExpectStatus(t, h.baseURL+"/cards/"+cardID, `{
 		"actor_id":"actor-1",
-		"if_board_updated_at":"`+asString(archivePayload.Board["updated_at"])+`",
+		"if_updated_at":"`+asString(archivePayload.Card["updated_at"])+`",
 		"patch":{"status":"done"}
 	}`, http.StatusBadRequest)
 	defer patchArchivedResp.Body.Close()
 	assertErrorCode(t, patchArchivedResp, "invalid_request")
 
-	moveArchivedResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards/"+memberThreadID+"/move", `{
+	moveArchivedResp := postJSONExpectStatus(t, h.baseURL+"/cards/"+cardID+"/move", `{
 		"actor_id":"actor-1",
 		"if_board_updated_at":"`+asString(archivePayload.Board["updated_at"])+`",
 		"column_key":"done"
@@ -1061,82 +1080,104 @@ func TestBoardCardPatchAllowsContractValidNoOpShapes(t *testing.T) {
 	if err := json.NewDecoder(addCardResp.Body).Decode(&addCardPayload); err != nil {
 		t.Fatalf("decode add card response: %v", err)
 	}
-	cardUpdatedAt := asString(addCardPayload.Board["updated_at"])
+	cardID := asString(addCardPayload.Card["id"])
+	if cardID == "" {
+		t.Fatal("expected card id")
+	}
+	cardToken := asString(addCardPayload.Card["updated_at"])
+	peekBoardUpdatedAt := func() string {
+		r, err := http.Get(h.baseURL + "/boards/" + boardID)
+		if err != nil {
+			t.Fatalf("GET board: %v", err)
+		}
+		defer r.Body.Close()
+		if r.StatusCode != http.StatusOK {
+			t.Fatalf("GET board status %d", r.StatusCode)
+		}
+		var payload struct {
+			Board map[string]any `json:"board"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode board: %v", err)
+		}
+		return asString(payload.Board["updated_at"])
+	}
+	boardUTAfterAdd := peekBoardUpdatedAt()
 
-	noopPatchResp := patchJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards/"+memberThreadID, `{
+	noopPatchResp := patchJSONExpectStatus(t, h.baseURL+"/cards/"+cardID, `{
 		"actor_id":"actor-1",
-		"if_board_updated_at":"`+cardUpdatedAt+`",
+		"if_updated_at":"`+cardToken+`",
 		"patch":{}
 	}`, http.StatusOK)
 	defer noopPatchResp.Body.Close()
 
 	var noopPatchPayload struct {
-		Board map[string]any `json:"board"`
-		Card  map[string]any `json:"card"`
+		Card map[string]any `json:"card"`
 	}
 	if err := json.NewDecoder(noopPatchResp.Body).Decode(&noopPatchPayload); err != nil {
 		t.Fatalf("decode noop patch response: %v", err)
 	}
-	if asString(noopPatchPayload.Board["updated_at"]) != cardUpdatedAt {
-		t.Fatalf("expected noop patch to keep board updated_at, got %#v want %#v", noopPatchPayload.Board["updated_at"], cardUpdatedAt)
+	if peekBoardUpdatedAt() != boardUTAfterAdd {
+		t.Fatalf("expected noop patch to keep board updated_at stable")
 	}
 	if got := strings.TrimSpace(asString(noopPatchPayload.Card["document_ref"])); got != "" {
 		t.Fatalf("expected noop patch to keep document_ref empty, got %#v", got)
 	}
+	cardToken = asString(noopPatchPayload.Card["updated_at"])
 
-	staleNoopPatchResp := patchJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards/"+memberThreadID, `{
+	staleNoopPatchResp := patchJSONExpectStatus(t, h.baseURL+"/cards/"+cardID, `{
 		"actor_id":"actor-1",
-		"if_board_updated_at":"`+boardUpdatedAt+`",
+		"if_updated_at":"`+boardUpdatedAt+`",
 		"patch":{}
 	}`, http.StatusConflict)
 	defer staleNoopPatchResp.Body.Close()
 	assertErrorCode(t, staleNoopPatchResp, "conflict")
 
-	futurePatchResp := patchJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards/"+memberThreadID, `{
+	futurePatchResp := patchJSONExpectStatus(t, h.baseURL+"/cards/"+cardID, `{
 		"actor_id":"actor-1",
-		"if_board_updated_at":"`+cardUpdatedAt+`",
+		"if_updated_at":"`+cardToken+`",
 		"patch":{"future_field":"ignored"}
 	}`, http.StatusOK)
 	defer futurePatchResp.Body.Close()
 
 	var futurePatchPayload struct {
-		Board map[string]any `json:"board"`
-		Card  map[string]any `json:"card"`
+		Card map[string]any `json:"card"`
 	}
 	if err := json.NewDecoder(futurePatchResp.Body).Decode(&futurePatchPayload); err != nil {
 		t.Fatalf("decode future patch response: %v", err)
 	}
-	if asString(futurePatchPayload.Board["updated_at"]) != cardUpdatedAt {
-		t.Fatalf("expected unknown-field patch to keep board updated_at, got %#v want %#v", futurePatchPayload.Board["updated_at"], cardUpdatedAt)
+	if peekBoardUpdatedAt() != boardUTAfterAdd {
+		t.Fatalf("expected unknown-field patch to keep board updated_at stable")
 	}
 	if got := strings.TrimSpace(asString(futurePatchPayload.Card["document_ref"])); got != "" {
 		t.Fatalf("expected unknown-field patch to keep document_ref empty, got %#v", got)
 	}
+	cardToken = asString(futurePatchPayload.Card["updated_at"])
 
-	sameValuePatchResp := patchJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards/"+memberThreadID, `{
+	sameValuePatchResp := patchJSONExpectStatus(t, h.baseURL+"/cards/"+cardID, `{
 		"actor_id":"actor-1",
-		"if_board_updated_at":"`+cardUpdatedAt+`",
+		"if_updated_at":"`+cardToken+`",
 		"patch":{"risk":"low"}
 	}`, http.StatusOK)
 	defer sameValuePatchResp.Body.Close()
 
 	var sameValuePatchPayload struct {
-		Board map[string]any `json:"board"`
-		Card  map[string]any `json:"card"`
+		Card map[string]any `json:"card"`
 	}
 	if err := json.NewDecoder(sameValuePatchResp.Body).Decode(&sameValuePatchPayload); err != nil {
 		t.Fatalf("decode same-value patch response: %v", err)
 	}
-	if asString(sameValuePatchPayload.Board["updated_at"]) != cardUpdatedAt {
-		t.Fatalf("expected same-value patch to keep board updated_at, got %#v want %#v", sameValuePatchPayload.Board["updated_at"], cardUpdatedAt)
+	if peekBoardUpdatedAt() != boardUTAfterAdd {
+		t.Fatalf("expected same-value patch to keep board updated_at stable")
 	}
 	if asString(sameValuePatchPayload.Card["column_key"]) != "ready" {
 		t.Fatalf("expected same-value patch to keep column_key ready, got %#v", sameValuePatchPayload.Card["column_key"])
 	}
+	cardToken = asString(sameValuePatchPayload.Card["updated_at"])
 
-	mismatchedAliasResp := patchJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards/"+memberThreadID, `{
+	mismatchedAliasResp := patchJSONExpectStatus(t, h.baseURL+"/cards/"+cardID, `{
 		"actor_id":"actor-1",
-		"if_board_updated_at":"`+cardUpdatedAt+`",
+		"if_updated_at":"`+cardToken+`",
 		"patch":{"parent_thread":"thread-parent-a"}
 	}`, http.StatusBadRequest)
 	defer mismatchedAliasResp.Body.Close()
@@ -1333,7 +1374,7 @@ func TestBoardCardMoveRejectsInvalidPlacementAnchors(t *testing.T) {
 	cardBID := asString(addBPayload.Card["id"])
 	afterAddB := asString(addBPayload.Board["updated_at"])
 
-	moveBase := h.baseURL + "/boards/" + boardID + "/cards/" + threadA + "/move"
+	moveBase := h.baseURL + "/cards/" + cardAID + "/move"
 	assertMoveInvalidRequest := func(t *testing.T, bodyJSON, wantMessage string) {
 		t.Helper()
 		resp := postJSONExpectStatus(t, moveBase, bodyJSON, http.StatusBadRequest)

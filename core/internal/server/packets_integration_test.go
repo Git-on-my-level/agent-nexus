@@ -69,7 +69,7 @@ func TestPacketConvenienceEndpointsAndTimeline(t *testing.T) {
 	cardRef := "card:" + cardID
 
 	receiptID := "receipt-1"
-	receiptFailureResp := postJSONExpectStatus(t, h.baseURL+"/receipts", `{
+	receiptFailureResp := postJSONExpectStatus(t, h.baseURL+"/packets/receipts", `{
 		"actor_id":"actor-1",
 		"artifact":{
 			"id":"`+receiptID+`",
@@ -87,7 +87,7 @@ func TestPacketConvenienceEndpointsAndTimeline(t *testing.T) {
 	}`, http.StatusBadRequest)
 	defer receiptFailureResp.Body.Close()
 
-	receiptSuccessResp := postJSONExpectStatus(t, h.baseURL+"/receipts", `{
+	receiptSuccessResp := postJSONExpectStatus(t, h.baseURL+"/packets/receipts", `{
 		"actor_id":"actor-1",
 		"artifact":{
 			"id":"`+receiptID+`",
@@ -117,7 +117,7 @@ func TestPacketConvenienceEndpointsAndTimeline(t *testing.T) {
 	assertRefsContain(t, receiptPayload.Artifact["refs"], "artifact:"+receiptID, cardRef)
 
 	reviewID := "review-1"
-	reviewResp := postJSONExpectStatus(t, h.baseURL+"/reviews", `{
+	reviewResp := postJSONExpectStatus(t, h.baseURL+"/packets/reviews", `{
 		"actor_id":"actor-1",
 		"artifact":{
 			"id":"`+reviewID+`",
@@ -227,7 +227,7 @@ func TestPacketValidationErrors(t *testing.T) {
 	_, cardID, _ := integrationSeedBoardAndCard(t, h, "actor-1", parentThreadID)
 	cardRef := "card:" + cardID
 
-	respMissingOutputs := postJSONExpectStatus(t, h.baseURL+"/receipts", `{
+	respMissingOutputs := postJSONExpectStatus(t, h.baseURL+"/packets/receipts", `{
 		"actor_id":"actor-1",
 		"artifact":{"id":"rc-missing-out","refs":["`+cardRef+`"]},
 		"packet":{
@@ -241,7 +241,7 @@ func TestPacketValidationErrors(t *testing.T) {
 	}`, http.StatusBadRequest)
 	assertErrorMessageContains(t, respMissingOutputs, "packet.outputs")
 
-	respBadTypedRef := postJSONExpectStatus(t, h.baseURL+"/receipts", `{
+	respBadTypedRef := postJSONExpectStatus(t, h.baseURL+"/packets/receipts", `{
 		"actor_id":"actor-1",
 		"artifact":{"id":"rc-bad-ref","refs":["`+cardRef+`"]},
 		"packet":{
@@ -255,7 +255,7 @@ func TestPacketValidationErrors(t *testing.T) {
 	}`, http.StatusBadRequest)
 	assertErrorMessageContains(t, respBadTypedRef, "packet.verification_evidence")
 
-	respIDMismatch := postJSONExpectStatus(t, h.baseURL+"/receipts", `{
+	respIDMismatch := postJSONExpectStatus(t, h.baseURL+"/packets/receipts", `{
 		"actor_id":"actor-1",
 		"artifact":{"id":"rc-one","refs":["`+cardRef+`"]},
 		"packet":{
@@ -308,9 +308,9 @@ func TestPacketCreateRequestKeyReplaysSingleWrite(t *testing.T) {
 		}
 	}`
 
-	firstReceiptResp := postJSONExpectStatus(t, h.baseURL+"/receipts", receiptBody, http.StatusCreated)
+	firstReceiptResp := postJSONExpectStatus(t, h.baseURL+"/packets/receipts", receiptBody, http.StatusCreated)
 	defer firstReceiptResp.Body.Close()
-	secondReceiptResp := postJSONExpectStatus(t, h.baseURL+"/receipts", receiptBody, http.StatusCreated)
+	secondReceiptResp := postJSONExpectStatus(t, h.baseURL+"/packets/receipts", receiptBody, http.StatusCreated)
 	defer secondReceiptResp.Body.Close()
 
 	var firstReceipt struct {
@@ -401,7 +401,7 @@ func TestPacketConvenienceEndpointsRejectUnsafeArtifactIDs(t *testing.T) {
 	_, cardID, _ := integrationSeedBoardAndCard(t, h, "actor-1", parentThreadID)
 	cardRef := "card:" + cardID
 
-	receiptInvalidIDResp := postJSONExpectStatus(t, h.baseURL+"/receipts", `{
+	receiptInvalidIDResp := postJSONExpectStatus(t, h.baseURL+"/packets/receipts", `{
 		"actor_id":"actor-1",
 		"artifact":{"id":"..","refs":["`+cardRef+`"]},
 		"packet":{
@@ -416,7 +416,7 @@ func TestPacketConvenienceEndpointsRejectUnsafeArtifactIDs(t *testing.T) {
 	assertErrorMessageContains(t, receiptInvalidIDResp, "artifact.id")
 
 	const receiptID = "receipt-valid-for-unsafe-id-tests"
-	postJSONExpectStatus(t, h.baseURL+"/receipts", `{
+	postJSONExpectStatus(t, h.baseURL+"/packets/receipts", `{
 		"actor_id":"actor-1",
 		"artifact":{"id":"`+receiptID+`","refs":["`+cardRef+`"]},
 		"packet":{
@@ -429,7 +429,7 @@ func TestPacketConvenienceEndpointsRejectUnsafeArtifactIDs(t *testing.T) {
 		}
 	}`, http.StatusCreated).Body.Close()
 
-	reviewInvalidIDResp := postJSONExpectStatus(t, h.baseURL+"/reviews", `{
+	reviewInvalidIDResp := postJSONExpectStatus(t, h.baseURL+"/packets/reviews", `{
 		"actor_id":"actor-1",
 		"artifact":{"id":"/tmp/review-bad","refs":["`+cardRef+`","artifact:`+receiptID+`"]},
 		"packet":{

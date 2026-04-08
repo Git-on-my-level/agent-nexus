@@ -1826,21 +1826,21 @@ func (a *App) runBoardCardsCommand(ctx context.Context, args []string, cfg confi
 		if err != nil {
 			return nil, "boards cards update", err
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "boards cards update", "boards.cards.update", pathParams, nil, body)
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "boards cards update", "cards.patch", pathParams, nil, body)
 		return result, "boards cards update", callErr
 	case "move":
 		boardID, identifier, body, err := a.parseBoardCardMoveInput(ctx, args[1:], cfg, "boards cards move")
 		if err != nil {
 			return nil, "boards cards move", err
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "boards cards move", "boards.cards.move", map[string]string{"board_id": boardID, "id": identifier}, nil, body)
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "boards cards move", "cards.move", map[string]string{"card_id": identifier, "board_id": boardID}, nil, body)
 		return result, "boards cards move", callErr
 	case "archive":
 		pathParams, body, err := a.parseBoardCardArchiveInput(ctx, args[1:], cfg, "boards cards archive")
 		if err != nil {
 			return nil, "boards cards archive", err
 		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "boards cards archive", "boards.cards.archive", pathParams, nil, body)
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "boards cards archive", "cards.archive", pathParams, nil, body)
 		return result, "boards cards archive", callErr
 	default:
 		return nil, "boards cards", boardsCardsSubcommandSpec.unknownError(args[0])
@@ -3394,7 +3394,7 @@ func (a *App) parseBoardCardUpdateInput(ctx context.Context, args []string, cfg 
 	fs := newSilentFlagSet(commandName)
 	var cardIDFlag trackedString
 	var titleFlag, bodyFlag trackedString
-	var actorIDFlag, ifBoardUpdatedAtFlag, fromFileFlag trackedString
+	var actorIDFlag, ifUpdatedAtFlag, fromFileFlag trackedString
 	var assigneeFlag, priorityFlag, statusFlag trackedString
 	var pinnedDocumentIDFlag trackedString
 	var clearPinnedDocumentFlag trackedBool
@@ -3402,7 +3402,7 @@ func (a *App) parseBoardCardUpdateInput(ctx context.Context, args []string, cfg 
 	fs.Var(&titleFlag, "title", "Card title")
 	fs.Var(&bodyFlag, "body", "Card body markdown")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
-	fs.Var(&ifBoardUpdatedAtFlag, "if-board-updated-at", "Board updated_at concurrency token")
+	fs.Var(&ifUpdatedAtFlag, "if-updated-at", "Card updated_at concurrency token")
 	fs.Var(&assigneeFlag, "assignee", "Assignee actor reference")
 	fs.Var(&priorityFlag, "priority", "Priority")
 	fs.Var(&statusFlag, "status", "Card status")
@@ -3425,13 +3425,13 @@ func (a *App) parseBoardCardUpdateInput(ctx context.Context, args []string, cfg 
 		return nil, nil, err
 	}
 
-	skipStdin := hasAnyBoardMutationFieldFlags(titleFlag, bodyFlag, actorIDFlag, ifBoardUpdatedAtFlag, assigneeFlag, priorityFlag, statusFlag, pinnedDocumentIDFlag, clearPinnedDocumentFlag)
+	skipStdin := hasAnyBoardMutationFieldFlags(titleFlag, bodyFlag, actorIDFlag, ifUpdatedAtFlag, assigneeFlag, priorityFlag, statusFlag, pinnedDocumentIDFlag, clearPinnedDocumentFlag)
 	payload, err := a.readBoardCardBodyInput(fromFileFlag.value, skipStdin)
 	if err != nil {
 		return nil, nil, err
 	}
 	if len(payload) > 0 {
-		if hasAnyBoardMutationFieldFlags(titleFlag, bodyFlag, actorIDFlag, ifBoardUpdatedAtFlag, assigneeFlag, priorityFlag, statusFlag, pinnedDocumentIDFlag, clearPinnedDocumentFlag) {
+		if hasAnyBoardMutationFieldFlags(titleFlag, bodyFlag, actorIDFlag, ifUpdatedAtFlag, assigneeFlag, priorityFlag, statusFlag, pinnedDocumentIDFlag, clearPinnedDocumentFlag) {
 			return nil, nil, errnorm.Usage("invalid_args", fmt.Sprintf("field flags cannot be combined with JSON body input for `oar %s`", commandName))
 		}
 		body, err := decodeJSONPayload(payload)
@@ -3474,8 +3474,10 @@ func (a *App) parseBoardCardUpdateInput(ctx context.Context, args []string, cfg 
 		patch["pinned_document_id"] = pinnedDocumentID
 	}
 	body := map[string]any{
-		"if_board_updated_at": strings.TrimSpace(ifBoardUpdatedAtFlag.value),
-		"patch":               patch,
+		"patch": patch,
+	}
+	if ifUpdated := strings.TrimSpace(ifUpdatedAtFlag.value); ifUpdated != "" {
+		body["if_updated_at"] = ifUpdated
 	}
 	actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
 	if err != nil {

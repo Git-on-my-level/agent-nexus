@@ -1,0 +1,17 @@
+# Intentional HTTP surfaces on oar-core (port 8000) that are NOT described in
+# contracts/oar-openapi.yaml. Prefer adding operations to OpenAPI instead.
+#
+# Each entry MUST document why it cannot live in the machine contract yet.
+#
+# Schema:
+#   version: 1
+#   endpoints:
+#     - method: GET                    # HTTP method
+#       path_pattern: /internal/foo    # OpenAPI-style path; use {param} for segments
+#       owner: core                    # owning component
+#       reason: >                      # why this is excluded from oar-openapi.yaml
+#         One-line explanation.
+#       expected_clients: none         # none | server-only | operator-cli
+#
+version: 1
+endpoints: []

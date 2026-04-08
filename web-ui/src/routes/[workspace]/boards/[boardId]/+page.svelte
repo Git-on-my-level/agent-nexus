@@ -92,22 +92,6 @@
   let enrichedInboxItems = $derived(
     (workspace?.inbox?.items ?? []).map((item) => enrichInboxItem(item)),
   );
-  let detailModalColumnPeers = $derived.by(() => {
-    if (!detailModalCard || !workspace?.cards?.items || !workspace?.board) {
-      return [];
-    }
-    const col = String(detailModalCard.membership?.column_key ?? "").trim();
-    const grouped = groupBoardWorkspaceCards(
-      workspace.cards,
-      workspace.board.column_schema ?? [],
-    );
-    const peers = grouped[col] ?? [];
-    return [...peers].sort((a, b) => {
-      const ra = Number.parseInt(String(a.membership?.rank ?? "0"), 10);
-      const rb = Number.parseInt(String(b.membership?.rank ?? "0"), 10);
-      return ra - rb;
-    });
-  });
   let resolvedCards = $derived(
     (workspace?.cards?.items ?? []).filter((card) => {
       const r = String(card?.membership?.resolution ?? "").trim();
@@ -1415,7 +1399,6 @@
 <CardDetailModal
   open={detailModalCard !== null}
   cardItem={detailModalCard}
-  columnPeers={detailModalColumnPeers}
   {boardId}
   board={workspace?.board ?? null}
   {workspaceSlug}

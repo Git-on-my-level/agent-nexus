@@ -2588,6 +2588,1092 @@ paths:
         '404':
           $ref: '#/components/responses/ErrorResponse'
 
+  /livez:
+    get:
+      operationId: livenessCheck
+      summary: Liveness check (process)
+      tags: [meta]
+      x-oar-surface: utility
+      x-oar-command-id: meta.livez
+      x-oar-cli-path: meta livez
+      x-oar-why: Lightweight liveness probe independent of storage readiness.
+      x-oar-input-mode: none
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ ok: true }`."
+      x-oar-error-codes: []
+      x-oar-concepts: [health]
+      x-oar-stability: stable
+      responses:
+        '200':
+          description: Process is live
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /meta/handshake:
+    get:
+      operationId: getMetaHandshake
+      summary: Compatibility handshake
+      tags: [meta]
+      x-oar-surface: utility
+      x-oar-command-id: meta.handshake
+      x-oar-cli-path: meta handshake
+      x-oar-why: Surface schema version, command registry digest, CLI gates, and instance metadata.
+      x-oar-input-mode: none
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ core_version, api_version, schema_version, command_registry_digest, ... }`."
+      x-oar-error-codes: [meta_unavailable]
+      x-oar-concepts: [compatibility]
+      x-oar-stability: stable
+      responses:
+        '200':
+          description: Handshake payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandshakeResponse'
+        '503':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /meta/commands:
+    get:
+      operationId: listMetaCommands
+      summary: List command registry metadata
+      tags: [meta]
+      x-oar-surface: utility
+      x-oar-command-id: meta.commands.list
+      x-oar-cli-path: meta commands list
+      x-oar-why: Expose embedded OAR command metadata for discovery and codegen parity.
+      x-oar-input-mode: none
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns generated command registry JSON."
+      x-oar-error-codes: [meta_unavailable]
+      x-oar-concepts: [compatibility]
+      x-oar-stability: stable
+      responses:
+        '200':
+          description: Command metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '503':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /meta/commands/{command_id}:
+    get:
+      operationId: getMetaCommandById
+      summary: Get one command metadata entry
+      tags: [meta]
+      x-oar-surface: utility
+      x-oar-command-id: meta.commands.get
+      x-oar-cli-path: meta commands get
+      x-oar-why: Resolve command metadata by stable command id.
+      x-oar-input-mode: none
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ command }`."
+      x-oar-error-codes: [meta_unavailable, not_found]
+      x-oar-concepts: [compatibility]
+      x-oar-stability: stable
+      parameters:
+        - name: command_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Command metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /meta/concepts:
+    get:
+      operationId: listMetaConcepts
+      summary: List concept index
+      tags: [meta]
+      x-oar-surface: utility
+      x-oar-command-id: meta.concepts.list
+      x-oar-cli-path: meta concepts list
+      x-oar-why: Group command metadata by concept tags.
+      x-oar-input-mode: none
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ concepts: [...] }`."
+      x-oar-error-codes: [meta_unavailable]
+      x-oar-concepts: [compatibility]
+      x-oar-stability: stable
+      responses:
+        '200':
+          description: Concept index
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '503':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /meta/concepts/{concept_name}:
+    get:
+      operationId: getMetaConceptByName
+      summary: Get commands grouped by concept
+      tags: [meta]
+      x-oar-surface: utility
+      x-oar-command-id: meta.concepts.get
+      x-oar-cli-path: meta concepts get
+      x-oar-why: Expand one concept into related commands.
+      x-oar-input-mode: none
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ concept: {...} }`."
+      x-oar-error-codes: [meta_unavailable, not_found]
+      x-oar-concepts: [compatibility]
+      x-oar-stability: stable
+      parameters:
+        - name: concept_name
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Concept detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /ops/health:
+    get:
+      operationId: getOpsHealth
+      summary: Workspace ops health
+      tags: [ops]
+      x-oar-surface: utility
+      x-oar-command-id: ops.health
+      x-oar-cli-path: ops health
+      x-oar-why: Operational readiness for projections, jobs, and operators.
+      x-oar-input-mode: none
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns structured health JSON."
+      x-oar-error-codes: [auth_required, invalid_token]
+      x-oar-concepts: [health, ops]
+      x-oar-stability: beta
+      responses:
+        '200':
+          description: Ops health
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /ops/usage-summary:
+    get:
+      operationId: getOpsUsageSummary
+      summary: Workspace usage summary
+      tags: [ops]
+      x-oar-surface: utility
+      x-oar-command-id: ops.usage.summary
+      x-oar-cli-path: ops usage summary
+      x-oar-why: Operator-facing storage and count telemetry for the workspace.
+      x-oar-input-mode: none
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns usage envelope JSON."
+      x-oar-error-codes: [auth_required, invalid_token]
+      x-oar-concepts: [ops, quotas]
+      x-oar-stability: beta
+      responses:
+        '200':
+          description: Usage summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /ops/blob-usage/rebuild:
+    post:
+      operationId: rebuildBlobUsage
+      summary: Rebuild blob usage accounting
+      tags: [ops]
+      x-oar-surface: utility
+      x-oar-command-id: ops.blob.usage.rebuild
+      x-oar-cli-path: ops blob usage rebuild
+      x-oar-why: Repair path for derived blob accounting after storage events.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ ok: true }` or error."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token]
+      x-oar-concepts: [ops, maintenance]
+      x-oar-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Rebuild accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /actors:
+    get:
+      operationId: listActors
+      summary: List actors
+      tags: [auth]
+      x-oar-surface: utility
+      x-oar-command-id: actors.list
+      x-oar-cli-path: actors list
+      x-oar-why: Enumerate durable actor records for operator UI and dev fixtures.
+      x-oar-input-mode: none
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ actors, next_cursor? }`."
+      x-oar-error-codes: [auth_required, invalid_token]
+      x-oar-concepts: [actors, auth]
+      x-oar-stability: beta
+      responses:
+        '200':
+          description: Actor list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+    post:
+      operationId: createActor
+      summary: Create actor (dev fixture)
+      tags: [auth]
+      x-oar-surface: utility
+      x-oar-command-id: actors.create
+      x-oar-cli-path: actors create
+      x-oar-why: Legacy dev actor registration when dev_actor_mode is enabled.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ actor }`."
+      x-oar-error-codes: [auth_required, invalid_request, dev_actor_mode_disabled]
+      x-oar-concepts: [actors, auth]
+      x-oar-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Actor created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/agents/register:
+    post:
+      operationId: registerAgent
+      summary: Register workspace agent principal
+      tags: [auth]
+      x-oar-surface: utility
+      x-oar-command-id: auth.agents.register
+      x-oar-cli-path: auth agents register
+      x-oar-why: Bootstrap or invite-gated agent registration with key material.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ agent, tokens, ... }` per core auth handlers."
+      x-oar-error-codes: [invalid_request, invalid_token, auth_required]
+      x-oar-concepts: [auth, agents]
+      x-oar-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Registration result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/bootstrap/status:
+    get:
+      operationId: getAuthBootstrapStatus
+      summary: Bootstrap registration availability
+      tags: [auth]
+      x-oar-surface: utility
+      x-oar-command-id: auth.bootstrap.status
+      x-oar-cli-path: auth bootstrap status
+      x-oar-why: Report whether first-principal bootstrap registration is still available.
+      x-oar-input-mode: none
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ bootstrap_registration_available }`."
+      x-oar-error-codes: []
+      x-oar-concepts: [auth]
+      x-oar-stability: beta
+      responses:
+        '200':
+          description: Bootstrap status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+
+  /auth/invites:
+    get:
+      operationId: listAuthInvites
+      summary: List invite tokens
+      tags: [auth]
+      x-oar-surface: utility
+      x-oar-command-id: auth.invites.list
+      x-oar-cli-path: auth invites list
+      x-oar-why: Operator listing of outstanding invites.
+      x-oar-input-mode: none
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ invites }`."
+      x-oar-error-codes: [auth_required, invalid_token]
+      x-oar-concepts: [auth]
+      x-oar-stability: beta
+      responses:
+        '200':
+          description: Invites
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+    post:
+      operationId: createAuthInvite
+      summary: Create invite token
+      tags: [auth]
+      x-oar-surface: utility
+      x-oar-command-id: auth.invites.create
+      x-oar-cli-path: auth invites create
+      x-oar-why: Issue a one-time invite for human or agent principals.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ invite, token }`."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token]
+      x-oar-concepts: [auth]
+      x-oar-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Invite created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/invites/{invite_id}/revoke:
+    post:
+      operationId: revokeAuthInvite
+      summary: Revoke invite
+      tags: [auth]
+      x-oar-surface: utility
+      x-oar-command-id: auth.invites.revoke
+      x-oar-cli-path: auth invites revoke
+      x-oar-why: Invalidate an outstanding invite by id.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ invite }`."
+      x-oar-error-codes: [auth_required, invalid_request, not_found, invalid_token]
+      x-oar-concepts: [auth]
+      x-oar-stability: beta
+      parameters:
+        - name: invite_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Invite revoked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/token:
+    post:
+      operationId: issueAuthToken
+      summary: Issue or refresh auth tokens
+      tags: [auth]
+      x-oar-surface: utility
+      x-oar-command-id: auth.token
+      x-oar-cli-path: auth token
+      x-oar-why: Assertion or refresh-token exchange for bearer access.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ tokens }` envelope."
+      x-oar-error-codes: [invalid_request, invalid_token]
+      x-oar-concepts: [auth]
+      x-oar-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Token bundle
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/passkey/register/options:
+    post:
+      operationId: passkeyRegisterOptions
+      summary: Begin passkey registration
+      tags: [auth]
+      x-oar-surface: utility
+      x-oar-command-id: auth.passkey.register.options
+      x-oar-cli-path: auth passkey register options
+      x-oar-why: WebAuthn registration challenge for workspace agents.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ session_id, options }`."
+      x-oar-error-codes: [invalid_request]
+      x-oar-concepts: [auth, passkeys]
+      x-oar-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Registration options
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/passkey/register/verify:
+    post:
+      operationId: passkeyRegisterVerify
+      summary: Complete passkey registration
+      tags: [auth]
+      x-oar-surface: utility
+      x-oar-command-id: auth.passkey.register.verify
+      x-oar-cli-path: auth passkey register verify
+      x-oar-why: Verify WebAuthn attestation and issue tokens.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ agent, tokens }`."
+      x-oar-error-codes: [invalid_request, invalid_token]
+      x-oar-concepts: [auth, passkeys]
+      x-oar-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Registration completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/passkey/login/options:
+    post:
+      operationId: passkeyLoginOptions
+      summary: Begin passkey login
+      tags: [auth]
+      x-oar-surface: utility
+      x-oar-command-id: auth.passkey.login.options
+      x-oar-cli-path: auth passkey login options
+      x-oar-why: WebAuthn assertion challenge for returning principals.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ session_id, options }`."
+      x-oar-error-codes: [invalid_request]
+      x-oar-concepts: [auth, passkeys]
+      x-oar-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Login options
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/passkey/login/verify:
+    post:
+      operationId: passkeyLoginVerify
+      summary: Complete passkey login
+      tags: [auth]
+      x-oar-surface: utility
+      x-oar-command-id: auth.passkey.login.verify
+      x-oar-cli-path: auth passkey login verify
+      x-oar-why: Verify WebAuthn assertion and issue tokens.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ agent, tokens }`."
+      x-oar-error-codes: [invalid_request, invalid_token]
+      x-oar-concepts: [auth, passkeys]
+      x-oar-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Login completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/principals:
+    get:
+      operationId: listAuthPrincipals
+      summary: List principals
+      tags: [auth]
+      x-oar-surface: utility
+      x-oar-command-id: auth.principals.list
+      x-oar-cli-path: auth principals list
+      x-oar-why: Operator visibility into registered principals for the workspace.
+      x-oar-input-mode: none
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns principal list JSON."
+      x-oar-error-codes: [auth_required, invalid_token]
+      x-oar-concepts: [auth]
+      x-oar-stability: beta
+      responses:
+        '200':
+          description: Principals
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/principals/{principal_id}/revoke:
+    post:
+      operationId: revokeAuthPrincipal
+      summary: Revoke principal by agent id
+      tags: [auth]
+      x-oar-surface: utility
+      x-oar-command-id: auth.principals.revoke
+      x-oar-cli-path: auth principals revoke
+      x-oar-why: Administrative revocation of a principal linkage.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns result JSON."
+      x-oar-error-codes: [auth_required, invalid_request, not_found, invalid_token, conflict]
+      x-oar-concepts: [auth]
+      x-oar-stability: beta
+      parameters:
+        - name: principal_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Revocation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/audit:
+    get:
+      operationId: listAuthAudit
+      summary: List auth audit entries
+      tags: [auth]
+      x-oar-surface: utility
+      x-oar-command-id: auth.audit.list
+      x-oar-cli-path: auth audit list
+      x-oar-why: Operator audit trail for auth-sensitive actions.
+      x-oar-input-mode: none
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns audit list JSON."
+      x-oar-error-codes: [auth_required, invalid_token]
+      x-oar-concepts: [auth, audit]
+      x-oar-stability: beta
+      responses:
+        '200':
+          description: Audit entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /agents/me:
+    get:
+      operationId: getCurrentAgent
+      summary: Get current authenticated agent
+      tags: [auth]
+      x-oar-surface: utility
+      x-oar-command-id: agents.me.get
+      x-oar-cli-path: agents me
+      x-oar-why: Resolve bearer principal to agent profile and keys.
+      x-oar-input-mode: none
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ agent, keys }`."
+      x-oar-error-codes: [auth_required, invalid_token]
+      x-oar-concepts: [auth, agents]
+      x-oar-stability: beta
+      responses:
+        '200':
+          description: Agent profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+    patch:
+      operationId: patchCurrentAgent
+      summary: Update current agent profile
+      tags: [auth]
+      x-oar-surface: utility
+      x-oar-command-id: agents.me.patch
+      x-oar-cli-path: agents me patch
+      x-oar-why: Rename or adjust profile fields for the authenticated agent.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ agent }`."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token]
+      x-oar-concepts: [auth, agents]
+      x-oar-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Updated agent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /agents/me/keys/rotate:
+    post:
+      operationId: rotateAgentKeys
+      summary: Rotate agent signing keys
+      tags: [auth]
+      x-oar-surface: utility
+      x-oar-command-id: agents.me.keys.rotate
+      x-oar-cli-path: agents me keys rotate
+      x-oar-why: Add a new Ed25519 key for assertions.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ key }`."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token]
+      x-oar-concepts: [auth, agents]
+      x-oar-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Key rotated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /agents/me/revoke:
+    post:
+      operationId: revokeCurrentAgent
+      summary: Revoke current agent credentials
+      tags: [auth]
+      x-oar-surface: utility
+      x-oar-command-id: agents.me.revoke
+      x-oar-cli-path: agents me revoke
+      x-oar-why: Self-revocation or admin-style revocation flow for the active principal.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ ok: true }`."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token, conflict]
+      x-oar-concepts: [auth, agents]
+      x-oar-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Revoked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /derived/rebuild:
+    post:
+      operationId: rebuildDerivedProjections
+      summary: Rebuild derived projections
+      tags: [derived]
+      x-oar-surface: utility
+      x-oar-command-id: derived.rebuild
+      x-oar-cli-path: derived rebuild
+      x-oar-why: Deterministic operator repair for inbox/thread projections.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ ok: true }`."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token]
+      x-oar-concepts: [projections, maintenance]
+      x-oar-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Rebuild started or completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /events/{event_id}:
+    get:
+      operationId: getEventById
+      summary: Get event by id
+      tags: [events]
+      x-oar-surface: canonical
+      x-oar-command-id: events.get
+      x-oar-cli-path: events get
+      x-oar-why: Fetch one append-only event record by stable id.
+      x-oar-input-mode: none
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ event }`."
+      x-oar-error-codes: [auth_required, invalid_token, not_found]
+      x-oar-concepts: [events]
+      x-oar-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/EventID'
+      responses:
+        '200':
+          description: Event
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /artifacts/{artifact_id}/content:
+    get:
+      operationId: getArtifactContent
+      summary: Download artifact bytes
+      tags: [artifacts]
+      x-oar-surface: canonical
+      x-oar-command-id: artifacts.content
+      x-oar-cli-path: artifacts content
+      x-oar-why: Return raw artifact payload with varying content types.
+      x-oar-input-mode: none
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Raw bytes or JSON/text depending on artifact."
+      x-oar-error-codes: [auth_required, invalid_token, not_found]
+      x-oar-concepts: [artifacts]
+      x-oar-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/ArtifactID'
+      responses:
+        '200':
+          description: Artifact payload
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+            text/plain:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /inbox/{inbox_id}:
+    get:
+      operationId: getInboxItem
+      summary: Get one inbox item
+      tags: [inbox]
+      x-oar-surface: projection
+      x-oar-command-id: inbox.get
+      x-oar-cli-path: inbox get
+      x-oar-why: Side-effect free read of one materialized inbox row.
+      x-oar-input-mode: none
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ item, generated_at, projection_freshness }`."
+      x-oar-error-codes: [auth_required, invalid_token, not_found]
+      x-oar-concepts: [inbox]
+      x-oar-stability: beta
+      parameters:
+        - $ref: '#/components/parameters/InboxID'
+      responses:
+        '200':
+          description: Inbox item
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /inbox/stream:
+    get:
+      operationId: streamInboxItems
+      summary: Stream inbox items (SSE)
+      tags: [inbox]
+      x-oar-surface: projection
+      x-oar-command-id: inbox.stream
+      x-oar-cli-path: inbox stream
+      x-oar-why: Server-sent events feed of inbox projection updates.
+      x-oar-input-mode: none
+      x-oar-streaming: { mode: sse }
+      x-oar-output-envelope: "SSE `inbox_item` events with JSON payloads."
+      x-oar-error-codes: [auth_required, invalid_token]
+      x-oar-concepts: [inbox]
+      x-oar-stability: beta
+      parameters:
+        - name: risk_horizon_days
+          in: query
+          required: false
+          schema: { type: integer }
+        - name: last_event_id
+          in: query
+          required: false
+          schema: { type: string }
+        - name: Last-Event-ID
+          in: header
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: Inbox SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /agent-notifications:
+    get:
+      operationId: listAgentNotifications
+      summary: List agent wake notifications
+      tags: [agents, notifications]
+      x-oar-surface: projection
+      x-oar-command-id: agent.notifications.list
+      x-oar-cli-path: agent notifications list
+      x-oar-why: Derived read of notifications for the authenticated agent.
+      x-oar-input-mode: none
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ items, generated_at }`."
+      x-oar-error-codes: [auth_required, invalid_token]
+      x-oar-concepts: [agents, notifications]
+      x-oar-stability: beta
+      responses:
+        '200':
+          description: Notifications
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /agent-notifications/read:
+    post:
+      operationId: markAgentNotificationRead
+      summary: Mark agent notification read
+      tags: [agents, notifications]
+      x-oar-surface: projection
+      x-oar-command-id: agent.notifications.read
+      x-oar-cli-path: agent notifications read
+      x-oar-why: Record read state for a wake notification.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ event, notification }`."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token, not_found]
+      x-oar-concepts: [agents, notifications, write]
+      x-oar-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /agent-notifications/dismiss:
+    post:
+      operationId: dismissAgentNotification
+      summary: Dismiss agent notification
+      tags: [agents, notifications]
+      x-oar-surface: projection
+      x-oar-command-id: agent.notifications.dismiss
+      x-oar-cli-path: agent notifications dismiss
+      x-oar-why: Dismiss a wake notification for the authenticated agent.
+      x-oar-input-mode: json-body
+      x-oar-streaming: { mode: none }
+      x-oar-output-envelope: "Returns `{ event, notification }`."
+      x-oar-error-codes: [auth_required, invalid_request, invalid_token, not_found]
+      x-oar-concepts: [agents, notifications, write]
+      x-oar-stability: beta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonObject'
+      responses:
+        '200':
+          description: Dismissed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
 components:
   responses:
     ErrorResponse:
@@ -2665,6 +3751,35 @@ components:
         schema_version: { type: string }
         command_registry_digest: { type: string }
       required: [schema_version, command_registry_digest]
+
+    JsonObject:
+      type: object
+      additionalProperties: true
+      description: >
+        Untyped JSON object for auth and meta envelopes; prefer tightening to
+        named schemas when shapes stabilize.
+
+    JsonValue:
+      description: Any JSON value (object, array, string, number, boolean, or null).
+      oneOf:
+        - type: object
+          additionalProperties: true
+        - type: array
+          items: {}
+        - type: string
+        - type: number
+        - type: boolean
+        - type: "null"
+
+    HandshakeResponse:
+      type: object
+      additionalProperties: true
+      description: >
+        Compatibility handshake from GET /meta/handshake; fields include
+        core_version, api_version, schema_version, command_registry_digest,
+        min_cli_version, recommended_cli_version, cli_download_url,
+        core_instance_id, dev_actor_mode, human_auth_mode, and optional
+        workspace_service_identity_id.
 
     TypedRef:
       type: string

@@ -54,7 +54,6 @@
 
   let {
     cardItem,
-    columnPeers,
     boardId,
     board,
     workspaceSlug,
@@ -162,15 +161,6 @@
   let editDefinitionOfDone = $state("");
   let moveColumnKey = $state("");
 
-  let peerIndex = $derived.by(() => {
-    const id = boardCardStableId(membership);
-    const idx = (columnPeers ?? []).findIndex(
-      (p) => boardCardStableId(p?.membership) === id,
-    );
-    return idx < 0 ? 0 : idx;
-  });
-  let canMoveUp = $derived(peerIndex > 0);
-
   let topicDisplayName = $derived.by(() => {
     if (!cardInspectNav) return "";
     if (
@@ -218,6 +208,15 @@
     editOpen = false;
     syncCardDraftsFromItem(cardItem);
   });
+
+  function currentMembershipColumnKey() {
+    return String(cardItem?.membership?.column_key ?? "").trim() || "backlog";
+  }
+
+  function handleColumnSelectChange() {
+    if (moveColumnKey === currentMembershipColumnKey()) return;
+    void onmovecard(cardItem, { column_key: moveColumnKey }, "Card moved.");
+  }
 
   $effect(() => {
     if (!cardKey) {
@@ -984,6 +983,7 @@
           Move to column
           <select
             bind:value={moveColumnKey}
+            onchange={handleColumnSelectChange}
             class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-1.5 text-[13px] text-[var(--ui-text)]"
           >
             {#each board?.column_schema ?? [] as column}
@@ -995,42 +995,6 @@
           </select>
         </label>
         <div class="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text)] transition-colors hover:bg-[var(--ui-border-subtle)]"
-            onclick={() =>
-              onmovecard(
-                cardItem,
-                { column_key: moveColumnKey },
-                "Card moved.",
-              )}
-          >
-            Move
-          </button>
-          <button
-            type="button"
-            disabled={!canMoveUp}
-            class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel-muted)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text)] transition-colors hover:bg-[var(--ui-border-subtle)] disabled:cursor-not-allowed disabled:opacity-50"
-            onclick={() => {
-              if (!canMoveUp) return;
-              const prev = columnPeers[peerIndex - 1];
-              const beforeId = boardCardStableId(prev?.membership);
-              onmovecard(
-                cardItem,
-                {
-                  column_key: String(membership?.column_key ?? "").trim(),
-                  before_card_id: beforeId,
-                },
-                "Card moved.",
-              );
-            }}
-          >
-            Move up
-          </button>
-          <span
-            class="mx-1 hidden h-5 border-l border-[var(--ui-border)] sm:inline-block"
-            aria-hidden="true"
-          ></span>
           {#if editOpen}
             <button
               type="button"

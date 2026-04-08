@@ -139,7 +139,7 @@ func formatCommandSummary(commandID string, body any) string {
 		return formatBoardCardsList(body)
 	case "boards.cards.get":
 		return formatBoardCardGetResult(body)
-	case "boards.cards.create", "boards.cards.update", "boards.cards.move", "boards.cards.archive":
+	case "boards.cards.create":
 		return formatBoardCardMutationResult(body)
 	case "boards.cards.add":
 		return formatBoardCardMutationResult(body)

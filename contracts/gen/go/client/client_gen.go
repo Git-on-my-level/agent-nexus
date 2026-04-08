@@ -33,6 +33,105 @@ type CommandSpec struct {
 
 var CommandRegistry = []CommandSpec{
 	{
+		CommandID: "actors.create",
+		CLIPath:   "actors create",
+		Group:     "actors",
+		Method:    "POST",
+		Path:      "/actors",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"actors", "auth"},
+		Adjacent:  []string{"actors.list"},
+	},
+	{
+		CommandID: "actors.list",
+		CLIPath:   "actors list",
+		Group:     "actors",
+		Method:    "GET",
+		Path:      "/actors",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"actors", "auth"},
+		Adjacent:  []string{"actors.create"},
+	},
+	{
+		CommandID: "agent.notifications.dismiss",
+		CLIPath:   "agent notifications dismiss",
+		Group:     "agent",
+		Method:    "POST",
+		Path:      "/agent-notifications/dismiss",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"agents", "notifications", "write"},
+		Adjacent:  []string{"agent.notifications.list", "agent.notifications.read"},
+	},
+	{
+		CommandID: "agent.notifications.list",
+		CLIPath:   "agent notifications list",
+		Group:     "agent",
+		Method:    "GET",
+		Path:      "/agent-notifications",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"agents", "notifications"},
+		Adjacent:  []string{"agent.notifications.dismiss", "agent.notifications.read"},
+	},
+	{
+		CommandID: "agent.notifications.read",
+		CLIPath:   "agent notifications read",
+		Group:     "agent",
+		Method:    "POST",
+		Path:      "/agent-notifications/read",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"agents", "notifications", "write"},
+		Adjacent:  []string{"agent.notifications.dismiss", "agent.notifications.list"},
+	},
+	{
+		CommandID: "agents.me.get",
+		CLIPath:   "agents me",
+		Group:     "agents",
+		Method:    "GET",
+		Path:      "/agents/me",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"auth", "agents"},
+		Adjacent:  []string{"agents.me.keys.rotate", "agents.me.patch", "agents.me.revoke"},
+	},
+	{
+		CommandID: "agents.me.keys.rotate",
+		CLIPath:   "agents me keys rotate",
+		Group:     "agents",
+		Method:    "POST",
+		Path:      "/agents/me/keys/rotate",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"auth", "agents"},
+		Adjacent:  []string{"agents.me.get", "agents.me.patch", "agents.me.revoke"},
+	},
+	{
+		CommandID: "agents.me.patch",
+		CLIPath:   "agents me patch",
+		Group:     "agents",
+		Method:    "PATCH",
+		Path:      "/agents/me",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"auth", "agents"},
+		Adjacent:  []string{"agents.me.get", "agents.me.keys.rotate", "agents.me.revoke"},
+	},
+	{
+		CommandID: "agents.me.revoke",
+		CLIPath:   "agents me revoke",
+		Group:     "agents",
+		Method:    "POST",
+		Path:      "/agents/me/revoke",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"auth", "agents"},
+		Adjacent:  []string{"agents.me.get", "agents.me.keys.rotate", "agents.me.patch"},
+	},
+	{
 		CommandID:  "artifacts.archive",
 		CLIPath:    "artifacts archive",
 		Group:      "artifacts",
@@ -42,7 +141,19 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"artifacts", "write"},
-		Adjacent:   []string{"artifacts.create", "artifacts.get", "artifacts.list", "artifacts.purge", "artifacts.restore", "artifacts.trash", "artifacts.unarchive"},
+		Adjacent:   []string{"artifacts.content", "artifacts.create", "artifacts.get", "artifacts.list", "artifacts.purge", "artifacts.restore", "artifacts.trash", "artifacts.unarchive"},
+	},
+	{
+		CommandID:  "artifacts.content",
+		CLIPath:    "artifacts content",
+		Group:      "artifacts",
+		Method:     "GET",
+		Path:       "/artifacts/{artifact_id}/content",
+		PathParams: []string{"artifact_id"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"artifacts"},
+		Adjacent:   []string{"artifacts.archive", "artifacts.create", "artifacts.get", "artifacts.list", "artifacts.purge", "artifacts.restore", "artifacts.trash", "artifacts.unarchive"},
 	},
 	{
 		CommandID: "artifacts.create",
@@ -53,7 +164,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"artifacts", "write"},
-		Adjacent:  []string{"artifacts.archive", "artifacts.get", "artifacts.list", "artifacts.purge", "artifacts.restore", "artifacts.trash", "artifacts.unarchive"},
+		Adjacent:  []string{"artifacts.archive", "artifacts.content", "artifacts.get", "artifacts.list", "artifacts.purge", "artifacts.restore", "artifacts.trash", "artifacts.unarchive"},
 	},
 	{
 		CommandID:  "artifacts.get",
@@ -65,7 +176,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"artifacts"},
-		Adjacent:   []string{"artifacts.archive", "artifacts.create", "artifacts.list", "artifacts.purge", "artifacts.restore", "artifacts.trash", "artifacts.unarchive"},
+		Adjacent:   []string{"artifacts.archive", "artifacts.content", "artifacts.create", "artifacts.list", "artifacts.purge", "artifacts.restore", "artifacts.trash", "artifacts.unarchive"},
 	},
 	{
 		CommandID: "artifacts.list",
@@ -76,7 +187,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"artifacts"},
-		Adjacent:  []string{"artifacts.archive", "artifacts.create", "artifacts.get", "artifacts.purge", "artifacts.restore", "artifacts.trash", "artifacts.unarchive"},
+		Adjacent:  []string{"artifacts.archive", "artifacts.content", "artifacts.create", "artifacts.get", "artifacts.purge", "artifacts.restore", "artifacts.trash", "artifacts.unarchive"},
 	},
 	{
 		CommandID:  "artifacts.purge",
@@ -88,7 +199,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"artifacts", "write"},
-		Adjacent:   []string{"artifacts.archive", "artifacts.create", "artifacts.get", "artifacts.list", "artifacts.restore", "artifacts.trash", "artifacts.unarchive"},
+		Adjacent:   []string{"artifacts.archive", "artifacts.content", "artifacts.create", "artifacts.get", "artifacts.list", "artifacts.restore", "artifacts.trash", "artifacts.unarchive"},
 	},
 	{
 		CommandID:  "artifacts.restore",
@@ -100,7 +211,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"artifacts", "write"},
-		Adjacent:   []string{"artifacts.archive", "artifacts.create", "artifacts.get", "artifacts.list", "artifacts.purge", "artifacts.trash", "artifacts.unarchive"},
+		Adjacent:   []string{"artifacts.archive", "artifacts.content", "artifacts.create", "artifacts.get", "artifacts.list", "artifacts.purge", "artifacts.trash", "artifacts.unarchive"},
 	},
 	{
 		CommandID:  "artifacts.trash",
@@ -112,7 +223,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"artifacts", "write"},
-		Adjacent:   []string{"artifacts.archive", "artifacts.create", "artifacts.get", "artifacts.list", "artifacts.purge", "artifacts.restore", "artifacts.unarchive"},
+		Adjacent:   []string{"artifacts.archive", "artifacts.content", "artifacts.create", "artifacts.get", "artifacts.list", "artifacts.purge", "artifacts.restore", "artifacts.unarchive"},
 	},
 	{
 		CommandID:  "artifacts.unarchive",
@@ -124,7 +235,152 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"artifacts", "write"},
-		Adjacent:   []string{"artifacts.archive", "artifacts.create", "artifacts.get", "artifacts.list", "artifacts.purge", "artifacts.restore", "artifacts.trash"},
+		Adjacent:   []string{"artifacts.archive", "artifacts.content", "artifacts.create", "artifacts.get", "artifacts.list", "artifacts.purge", "artifacts.restore", "artifacts.trash"},
+	},
+	{
+		CommandID: "auth.agents.register",
+		CLIPath:   "auth agents register",
+		Group:     "auth",
+		Method:    "POST",
+		Path:      "/auth/agents/register",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"auth", "agents"},
+		Adjacent:  []string{"auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke", "auth.token"},
+	},
+	{
+		CommandID: "auth.audit.list",
+		CLIPath:   "auth audit list",
+		Group:     "auth",
+		Method:    "GET",
+		Path:      "/auth/audit",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"auth", "audit"},
+		Adjacent:  []string{"auth.agents.register", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke", "auth.token"},
+	},
+	{
+		CommandID: "auth.bootstrap.status",
+		CLIPath:   "auth bootstrap status",
+		Group:     "auth",
+		Method:    "GET",
+		Path:      "/auth/bootstrap/status",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"auth"},
+		Adjacent:  []string{"auth.agents.register", "auth.audit.list", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke", "auth.token"},
+	},
+	{
+		CommandID: "auth.invites.create",
+		CLIPath:   "auth invites create",
+		Group:     "auth",
+		Method:    "POST",
+		Path:      "/auth/invites",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"auth"},
+		Adjacent:  []string{"auth.agents.register", "auth.audit.list", "auth.bootstrap.status", "auth.invites.list", "auth.invites.revoke", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke", "auth.token"},
+	},
+	{
+		CommandID: "auth.invites.list",
+		CLIPath:   "auth invites list",
+		Group:     "auth",
+		Method:    "GET",
+		Path:      "/auth/invites",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"auth"},
+		Adjacent:  []string{"auth.agents.register", "auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.revoke", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke", "auth.token"},
+	},
+	{
+		CommandID:  "auth.invites.revoke",
+		CLIPath:    "auth invites revoke",
+		Group:      "auth",
+		Method:     "POST",
+		Path:       "/auth/invites/{invite_id}/revoke",
+		PathParams: []string{"invite_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"auth"},
+		Adjacent:   []string{"auth.agents.register", "auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke", "auth.token"},
+	},
+	{
+		CommandID: "auth.passkey.login.options",
+		CLIPath:   "auth passkey login options",
+		Group:     "auth",
+		Method:    "POST",
+		Path:      "/auth/passkey/login/options",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"auth", "passkeys"},
+		Adjacent:  []string{"auth.agents.register", "auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke", "auth.token"},
+	},
+	{
+		CommandID: "auth.passkey.login.verify",
+		CLIPath:   "auth passkey login verify",
+		Group:     "auth",
+		Method:    "POST",
+		Path:      "/auth/passkey/login/verify",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"auth", "passkeys"},
+		Adjacent:  []string{"auth.agents.register", "auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.login.options", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke", "auth.token"},
+	},
+	{
+		CommandID: "auth.passkey.register.options",
+		CLIPath:   "auth passkey register options",
+		Group:     "auth",
+		Method:    "POST",
+		Path:      "/auth/passkey/register/options",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"auth", "passkeys"},
+		Adjacent:  []string{"auth.agents.register", "auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke", "auth.token"},
+	},
+	{
+		CommandID: "auth.passkey.register.verify",
+		CLIPath:   "auth passkey register verify",
+		Group:     "auth",
+		Method:    "POST",
+		Path:      "/auth/passkey/register/verify",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"auth", "passkeys"},
+		Adjacent:  []string{"auth.agents.register", "auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.principals.list", "auth.principals.revoke", "auth.token"},
+	},
+	{
+		CommandID: "auth.principals.list",
+		CLIPath:   "auth principals list",
+		Group:     "auth",
+		Method:    "GET",
+		Path:      "/auth/principals",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"auth"},
+		Adjacent:  []string{"auth.agents.register", "auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.revoke", "auth.token"},
+	},
+	{
+		CommandID:  "auth.principals.revoke",
+		CLIPath:    "auth principals revoke",
+		Group:      "auth",
+		Method:     "POST",
+		Path:       "/auth/principals/{principal_id}/revoke",
+		PathParams: []string{"principal_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"auth"},
+		Adjacent:   []string{"auth.agents.register", "auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.token"},
+	},
+	{
+		CommandID: "auth.token",
+		CLIPath:   "auth token",
+		Group:     "auth",
+		Method:    "POST",
+		Path:      "/auth/token",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"auth"},
+		Adjacent:  []string{"auth.agents.register", "auth.audit.list", "auth.bootstrap.status", "auth.invites.create", "auth.invites.list", "auth.invites.revoke", "auth.passkey.login.options", "auth.passkey.login.verify", "auth.passkey.register.options", "auth.passkey.register.verify", "auth.principals.list", "auth.principals.revoke"},
 	},
 	{
 		CommandID:  "boards.archive",
@@ -399,6 +655,16 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.timeline"},
 	},
 	{
+		CommandID: "derived.rebuild",
+		CLIPath:   "derived rebuild",
+		Group:     "derived",
+		Method:    "POST",
+		Path:      "/derived/rebuild",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"projections", "maintenance"},
+	},
+	{
 		CommandID:  "docs.archive",
 		CLIPath:    "docs archive",
 		Group:      "docs",
@@ -538,7 +804,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"events", "write"},
-		Adjacent:   []string{"events.create", "events.list", "events.restore", "events.stream", "events.trash", "events.unarchive"},
+		Adjacent:   []string{"events.create", "events.get", "events.list", "events.restore", "events.stream", "events.trash", "events.unarchive"},
 	},
 	{
 		CommandID: "events.create",
@@ -549,7 +815,19 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"events", "write"},
-		Adjacent:  []string{"events.archive", "events.list", "events.restore", "events.stream", "events.trash", "events.unarchive"},
+		Adjacent:  []string{"events.archive", "events.get", "events.list", "events.restore", "events.stream", "events.trash", "events.unarchive"},
+	},
+	{
+		CommandID:  "events.get",
+		CLIPath:    "events get",
+		Group:      "events",
+		Method:     "GET",
+		Path:       "/events/{event_id}",
+		PathParams: []string{"event_id"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"events"},
+		Adjacent:   []string{"events.archive", "events.create", "events.list", "events.restore", "events.stream", "events.trash", "events.unarchive"},
 	},
 	{
 		CommandID: "events.list",
@@ -560,7 +838,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"events"},
-		Adjacent:  []string{"events.archive", "events.create", "events.restore", "events.stream", "events.trash", "events.unarchive"},
+		Adjacent:  []string{"events.archive", "events.create", "events.get", "events.restore", "events.stream", "events.trash", "events.unarchive"},
 	},
 	{
 		CommandID:  "events.restore",
@@ -572,7 +850,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"events", "write"},
-		Adjacent:   []string{"events.archive", "events.create", "events.list", "events.stream", "events.trash", "events.unarchive"},
+		Adjacent:   []string{"events.archive", "events.create", "events.get", "events.list", "events.stream", "events.trash", "events.unarchive"},
 	},
 	{
 		CommandID: "events.stream",
@@ -583,7 +861,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"events"},
-		Adjacent:  []string{"events.archive", "events.create", "events.list", "events.restore", "events.trash", "events.unarchive"},
+		Adjacent:  []string{"events.archive", "events.create", "events.get", "events.list", "events.restore", "events.trash", "events.unarchive"},
 	},
 	{
 		CommandID:  "events.trash",
@@ -595,7 +873,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"events", "write"},
-		Adjacent:   []string{"events.archive", "events.create", "events.list", "events.restore", "events.stream", "events.unarchive"},
+		Adjacent:   []string{"events.archive", "events.create", "events.get", "events.list", "events.restore", "events.stream", "events.unarchive"},
 	},
 	{
 		CommandID:  "events.unarchive",
@@ -607,7 +885,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"events", "write"},
-		Adjacent:   []string{"events.archive", "events.create", "events.list", "events.restore", "events.stream", "events.trash"},
+		Adjacent:   []string{"events.archive", "events.create", "events.get", "events.list", "events.restore", "events.stream", "events.trash"},
 	},
 	{
 		CommandID:  "inbox.acknowledge",
@@ -619,7 +897,19 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"inbox", "write"},
-		Adjacent:   []string{"inbox.list"},
+		Adjacent:   []string{"inbox.get", "inbox.list", "inbox.stream"},
+	},
+	{
+		CommandID:  "inbox.get",
+		CLIPath:    "inbox get",
+		Group:      "inbox",
+		Method:     "GET",
+		Path:       "/inbox/{inbox_id}",
+		PathParams: []string{"inbox_id"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"inbox"},
+		Adjacent:   []string{"inbox.acknowledge", "inbox.list", "inbox.stream"},
 	},
 	{
 		CommandID: "inbox.list",
@@ -630,7 +920,75 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"inbox"},
-		Adjacent:  []string{"inbox.acknowledge"},
+		Adjacent:  []string{"inbox.acknowledge", "inbox.get", "inbox.stream"},
+	},
+	{
+		CommandID: "inbox.stream",
+		CLIPath:   "inbox stream",
+		Group:     "inbox",
+		Method:    "GET",
+		Path:      "/inbox/stream",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"inbox"},
+		Adjacent:  []string{"inbox.acknowledge", "inbox.get", "inbox.list"},
+	},
+	{
+		CommandID:  "meta.commands.get",
+		CLIPath:    "meta commands get",
+		Group:      "meta",
+		Method:     "GET",
+		Path:       "/meta/commands/{command_id}",
+		PathParams: []string{"command_id"},
+		InputMode:  "none",
+		Stability:  "stable",
+		Concepts:   []string{"compatibility"},
+		Adjacent:   []string{"meta.commands.list", "meta.concepts.get", "meta.concepts.list", "meta.handshake", "meta.health", "meta.livez", "meta.readyz", "meta.version"},
+	},
+	{
+		CommandID: "meta.commands.list",
+		CLIPath:   "meta commands list",
+		Group:     "meta",
+		Method:    "GET",
+		Path:      "/meta/commands",
+		InputMode: "none",
+		Stability: "stable",
+		Concepts:  []string{"compatibility"},
+		Adjacent:  []string{"meta.commands.get", "meta.concepts.get", "meta.concepts.list", "meta.handshake", "meta.health", "meta.livez", "meta.readyz", "meta.version"},
+	},
+	{
+		CommandID:  "meta.concepts.get",
+		CLIPath:    "meta concepts get",
+		Group:      "meta",
+		Method:     "GET",
+		Path:       "/meta/concepts/{concept_name}",
+		PathParams: []string{"concept_name"},
+		InputMode:  "none",
+		Stability:  "stable",
+		Concepts:   []string{"compatibility"},
+		Adjacent:   []string{"meta.commands.get", "meta.commands.list", "meta.concepts.list", "meta.handshake", "meta.health", "meta.livez", "meta.readyz", "meta.version"},
+	},
+	{
+		CommandID: "meta.concepts.list",
+		CLIPath:   "meta concepts list",
+		Group:     "meta",
+		Method:    "GET",
+		Path:      "/meta/concepts",
+		InputMode: "none",
+		Stability: "stable",
+		Concepts:  []string{"compatibility"},
+		Adjacent:  []string{"meta.commands.get", "meta.commands.list", "meta.concepts.get", "meta.handshake", "meta.health", "meta.livez", "meta.readyz", "meta.version"},
+	},
+	{
+		CommandID: "meta.handshake",
+		CLIPath:   "meta handshake",
+		Group:     "meta",
+		Method:    "GET",
+		Path:      "/meta/handshake",
+		InputMode: "none",
+		Stability: "stable",
+		Concepts:  []string{"compatibility"},
+		Adjacent:  []string{"meta.commands.get", "meta.commands.list", "meta.concepts.get", "meta.concepts.list", "meta.health", "meta.livez", "meta.readyz", "meta.version"},
 	},
 	{
 		CommandID: "meta.health",
@@ -641,7 +999,18 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "stable",
 		Concepts:  []string{"health"},
-		Adjacent:  []string{"meta.readyz", "meta.version"},
+		Adjacent:  []string{"meta.commands.get", "meta.commands.list", "meta.concepts.get", "meta.concepts.list", "meta.handshake", "meta.livez", "meta.readyz", "meta.version"},
+	},
+	{
+		CommandID: "meta.livez",
+		CLIPath:   "meta livez",
+		Group:     "meta",
+		Method:    "GET",
+		Path:      "/livez",
+		InputMode: "none",
+		Stability: "stable",
+		Concepts:  []string{"health"},
+		Adjacent:  []string{"meta.commands.get", "meta.commands.list", "meta.concepts.get", "meta.concepts.list", "meta.handshake", "meta.health", "meta.readyz", "meta.version"},
 	},
 	{
 		CommandID: "meta.readyz",
@@ -652,7 +1021,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "stable",
 		Concepts:  []string{"health", "readiness"},
-		Adjacent:  []string{"meta.health", "meta.version"},
+		Adjacent:  []string{"meta.commands.get", "meta.commands.list", "meta.concepts.get", "meta.concepts.list", "meta.handshake", "meta.health", "meta.livez", "meta.version"},
 	},
 	{
 		CommandID: "meta.version",
@@ -663,7 +1032,40 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "stable",
 		Concepts:  []string{"compatibility"},
-		Adjacent:  []string{"meta.health", "meta.readyz"},
+		Adjacent:  []string{"meta.commands.get", "meta.commands.list", "meta.concepts.get", "meta.concepts.list", "meta.handshake", "meta.health", "meta.livez", "meta.readyz"},
+	},
+	{
+		CommandID: "ops.blob.usage.rebuild",
+		CLIPath:   "ops blob usage rebuild",
+		Group:     "ops",
+		Method:    "POST",
+		Path:      "/ops/blob-usage/rebuild",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"ops", "maintenance"},
+		Adjacent:  []string{"ops.health", "ops.usage.summary"},
+	},
+	{
+		CommandID: "ops.health",
+		CLIPath:   "ops health",
+		Group:     "ops",
+		Method:    "GET",
+		Path:      "/ops/health",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"health", "ops"},
+		Adjacent:  []string{"ops.blob.usage.rebuild", "ops.usage.summary"},
+	},
+	{
+		CommandID: "ops.usage.summary",
+		CLIPath:   "ops usage summary",
+		Group:     "ops",
+		Method:    "GET",
+		Path:      "/ops/usage-summary",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"ops", "quotas"},
+		Adjacent:  []string{"ops.blob.usage.rebuild", "ops.health"},
 	},
 	{
 		CommandID: "packets.receipts.create",
@@ -992,8 +1394,48 @@ func renderPath(template string, pathParams map[string]string) (string, error) {
 	}
 }
 
+func (c *Client) ActorsCreate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "actors.create", nil, opts)
+}
+
+func (c *Client) ActorsList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "actors.list", nil, opts)
+}
+
+func (c *Client) AgentNotificationsDismiss(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "agent.notifications.dismiss", nil, opts)
+}
+
+func (c *Client) AgentNotificationsList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "agent.notifications.list", nil, opts)
+}
+
+func (c *Client) AgentNotificationsRead(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "agent.notifications.read", nil, opts)
+}
+
+func (c *Client) AgentsMeGet(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "agents.me.get", nil, opts)
+}
+
+func (c *Client) AgentsMeKeysRotate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "agents.me.keys.rotate", nil, opts)
+}
+
+func (c *Client) AgentsMePatch(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "agents.me.patch", nil, opts)
+}
+
+func (c *Client) AgentsMeRevoke(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "agents.me.revoke", nil, opts)
+}
+
 func (c *Client) ArtifactsArchive(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "artifacts.archive", pathParams, opts)
+}
+
+func (c *Client) ArtifactsContent(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "artifacts.content", pathParams, opts)
 }
 
 func (c *Client) ArtifactsCreate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
@@ -1022,6 +1464,58 @@ func (c *Client) ArtifactsTrash(ctx context.Context, pathParams map[string]strin
 
 func (c *Client) ArtifactsUnarchive(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "artifacts.unarchive", pathParams, opts)
+}
+
+func (c *Client) AuthAgentsRegister(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "auth.agents.register", nil, opts)
+}
+
+func (c *Client) AuthAuditList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "auth.audit.list", nil, opts)
+}
+
+func (c *Client) AuthBootstrapStatus(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "auth.bootstrap.status", nil, opts)
+}
+
+func (c *Client) AuthInvitesCreate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "auth.invites.create", nil, opts)
+}
+
+func (c *Client) AuthInvitesList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "auth.invites.list", nil, opts)
+}
+
+func (c *Client) AuthInvitesRevoke(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "auth.invites.revoke", pathParams, opts)
+}
+
+func (c *Client) AuthPasskeyLoginOptions(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "auth.passkey.login.options", nil, opts)
+}
+
+func (c *Client) AuthPasskeyLoginVerify(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "auth.passkey.login.verify", nil, opts)
+}
+
+func (c *Client) AuthPasskeyRegisterOptions(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "auth.passkey.register.options", nil, opts)
+}
+
+func (c *Client) AuthPasskeyRegisterVerify(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "auth.passkey.register.verify", nil, opts)
+}
+
+func (c *Client) AuthPrincipalsList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "auth.principals.list", nil, opts)
+}
+
+func (c *Client) AuthPrincipalsRevoke(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "auth.principals.revoke", pathParams, opts)
+}
+
+func (c *Client) AuthToken(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "auth.token", nil, opts)
 }
 
 func (c *Client) BoardsArchive(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
@@ -1116,6 +1610,10 @@ func (c *Client) CardsTrash(ctx context.Context, pathParams map[string]string, o
 	return c.Invoke(ctx, "cards.trash", pathParams, opts)
 }
 
+func (c *Client) DerivedRebuild(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "derived.rebuild", nil, opts)
+}
+
 func (c *Client) DocsArchive(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "docs.archive", pathParams, opts)
 }
@@ -1168,6 +1666,10 @@ func (c *Client) EventsCreate(ctx context.Context, opts RequestOptions) (*http.R
 	return c.Invoke(ctx, "events.create", nil, opts)
 }
 
+func (c *Client) EventsGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "events.get", pathParams, opts)
+}
+
 func (c *Client) EventsList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "events.list", nil, opts)
 }
@@ -1192,12 +1694,44 @@ func (c *Client) InboxAcknowledge(ctx context.Context, pathParams map[string]str
 	return c.Invoke(ctx, "inbox.acknowledge", pathParams, opts)
 }
 
+func (c *Client) InboxGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "inbox.get", pathParams, opts)
+}
+
 func (c *Client) InboxList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "inbox.list", nil, opts)
 }
 
+func (c *Client) InboxStream(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "inbox.stream", nil, opts)
+}
+
+func (c *Client) MetaCommandsGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "meta.commands.get", pathParams, opts)
+}
+
+func (c *Client) MetaCommandsList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "meta.commands.list", nil, opts)
+}
+
+func (c *Client) MetaConceptsGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "meta.concepts.get", pathParams, opts)
+}
+
+func (c *Client) MetaConceptsList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "meta.concepts.list", nil, opts)
+}
+
+func (c *Client) MetaHandshake(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "meta.handshake", nil, opts)
+}
+
 func (c *Client) MetaHealth(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "meta.health", nil, opts)
+}
+
+func (c *Client) MetaLivez(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "meta.livez", nil, opts)
 }
 
 func (c *Client) MetaReadyz(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
@@ -1206,6 +1740,18 @@ func (c *Client) MetaReadyz(ctx context.Context, opts RequestOptions) (*http.Res
 
 func (c *Client) MetaVersion(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "meta.version", nil, opts)
+}
+
+func (c *Client) OpsBlobUsageRebuild(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "ops.blob.usage.rebuild", nil, opts)
+}
+
+func (c *Client) OpsHealth(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "ops.health", nil, opts)
+}
+
+func (c *Client) OpsUsageSummary(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "ops.usage.summary", nil, opts)
 }
 
 func (c *Client) PacketsReceiptsCreate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
