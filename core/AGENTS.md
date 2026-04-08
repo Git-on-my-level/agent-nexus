@@ -35,6 +35,7 @@ It owns the canonical organizational record, validates and records state transit
 - Unknown fields and unknown open-enum values must round-trip safely unless the shared contract says otherwise.
 - Restricted state transitions must remain evidence-backed.
 - Derived views must stay rebuildable from canonical state.
+- Inbox list/get/stream payloads use `related_refs` as the typed-ref collection on each item. Core may still read a legacy `refs` field only when backfilling stored derived rows inside `applyInboxContractShape`; clients and UI code should not treat `refs` as an inbox alias.
 - Core-maintained collaboration state must remain correct without introducing misleading user-visible activity.
 
 ## Edit Routing

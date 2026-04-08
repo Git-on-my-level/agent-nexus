@@ -43,7 +43,7 @@ var conceptsGuidePrimitives = []conceptsPrimitive{
 	},
 	{
 		Name:        "events",
-		UseWhen:     "You need immutable facts, observations, decisions, or updates in an auditable sequence.",
+		UseWhen:     "You need immutable facts, observations, decisions, or updates in an auditable sequence. Decision lifecycle events (`decision_needed`, `intervention_needed`, `decision_made`) must include `thread:<thread_id>` in refs; optional `topic:` refs are cross-links only, not a substitute for the thread anchor.",
 		NotFor:      "Replacing the current durable state of a work object.",
 		Examples:    []string{"decision_needed", "decision_made", "message_posted", "exception_raised"},
 		RelatedRead: []string{"oar events list", "oar events explain", "oar threads timeline"},
@@ -128,6 +128,7 @@ func conceptsGuideData() map[string]any {
 func conceptsSelectionRules() []string {
 	return []string{
 		"Use events for immutable facts.",
+		"For decision lifecycle events, always include `thread:<thread_id>` in refs; do not rely on `topic:` alone or `topic:<thread_id>` as a thread substitute.",
 		"Use topics for durable work subjects and primary operator coordination (`topics workspace`).",
 		"Use cards for board-scoped planning and movement.",
 		"Use threads for read-only backing-thread diagnostics and timeline inspection — not as the default coordination surface.",

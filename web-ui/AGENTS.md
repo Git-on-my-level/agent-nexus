@@ -15,6 +15,8 @@ It gives operators fast, glanceable visibility into the shared workspace maintai
 - Optimize for operator usability: clear status, triage context, provenance visibility, and at-a-glance understanding of what needs attention.
 - Provide the main operator workflow surfaces for inbox triage, topic and backing-thread inspection, boards and cards, artifacts, documents, and review flows.
 - Handle forward-compatible data safely: unknown event types, artifact kinds, refs, and fields must remain visible rather than breaking the UI.
+- Inbox items from the API use `related_refs` only (see shared `inbox_item` schema). Do not read `item.refs` on inbox rows; legacy stored rows are normalized in core before they reach clients.
+- Decision lifecycle writes (`decision_needed`, `intervention_needed`, `decision_made`) are thread-grounded in core: event `refs` must include `thread:<thread_id>`. Prefer reflecting that in any client-side validation or examples even when the operator navigates by topic.
 - Gate writes safely through actor-aware and workspace-aware flows while preserving core contract semantics.
 
 ## High-Value Invariants

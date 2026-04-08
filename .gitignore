@@ -12,3 +12,4 @@ _ui_working_tree.patch
 .secrets/
 .oar-import/
 .desloppify/
+.superset/

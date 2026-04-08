@@ -65,6 +65,32 @@ func TestEventReferenceConventionsRejectMissingRequiredRefs(t *testing.T) {
 		}
 	}`, http.StatusBadRequest)
 	assertEventErrorMessageContains(t, decisionTopicOnlyResp, "thread:<id>")
+
+	decisionMadeTopicOnlyResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
+		"actor_id":"actor-1",
+		"event":{
+			"type":"decision_made",
+			"thread_id":"thread-1",
+			"refs":["topic:topic-1"],
+			"summary":"decided",
+			"payload":{"notes":""},
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusBadRequest)
+	assertEventErrorMessageContains(t, decisionMadeTopicOnlyResp, "thread:<id>")
+
+	interventionTopicOnlyResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
+		"actor_id":"actor-1",
+		"event":{
+			"type":"intervention_needed",
+			"thread_id":"thread-1",
+			"refs":["topic:topic-1"],
+			"summary":"human must act",
+			"payload":{},
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusBadRequest)
+	assertEventErrorMessageContains(t, interventionTopicOnlyResp, "thread:<id>")
 }
 
 func TestEventReferenceConventionsRejectMissingRequiredPayloadFields(t *testing.T) {

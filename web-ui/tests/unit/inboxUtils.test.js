@@ -216,6 +216,14 @@ describe("inbox typed-ref rendering targets", () => {
     expect(
       decisionGroundingRefForInboxItem({ id: "in-5", related_refs: [] }),
     ).toBe("");
+
+    expect(
+      decisionGroundingRefForInboxItem({
+        id: "in-legacy-shape",
+        refs: ["thread:thread-only-in-refs"],
+        related_refs: [],
+      }),
+    ).toBe("");
   });
 
   it("preserves explicit subject refs and prefers specific ids before thread fallback", () => {

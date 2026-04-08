@@ -16,7 +16,7 @@ test("inbox triage shows urgency summary and acknowledging removes an item", asy
       title: "Approve onboarding exception handling",
       recommended_action: "Record a decision on escalation path.",
       thread_id: "thread-onboarding",
-      refs: ["thread:thread-onboarding"],
+      related_refs: ["thread:thread-onboarding"],
       source_event_time: hoursAgo(30),
     },
     {
@@ -25,7 +25,7 @@ test("inbox triage shows urgency summary and acknowledging removes an item", asy
       title: "Missing legal signer",
       recommended_action: "Acknowledge and assign owner.",
       thread_id: "thread-onboarding",
-      refs: ["event:evt-1001"],
+      related_refs: ["event:evt-1001"],
       source_event_time: hoursAgo(1),
     },
     {
@@ -34,7 +34,7 @@ test("inbox triage shows urgency summary and acknowledging removes an item", asy
       title: "Work item risk",
       recommended_action: "Adjust due date.",
       thread_id: "thread-incident-42",
-      refs: ["thread:thread-incident-42"],
+      related_refs: ["thread:thread-incident-42"],
       source_event_time: hoursAgo(60),
     },
   ];
@@ -116,7 +116,7 @@ test("inbox urgency filters reduce visible cards", async ({ page }) => {
       title: "Approve onboarding exception handling",
       recommended_action: "Record a decision on escalation path.",
       thread_id: "thread-onboarding",
-      refs: ["thread:thread-onboarding"],
+      related_refs: ["thread:thread-onboarding"],
       source_event_time: hoursAgo(30),
     },
     {
@@ -125,7 +125,7 @@ test("inbox urgency filters reduce visible cards", async ({ page }) => {
       title: "Missing legal signer",
       recommended_action: "Acknowledge and assign owner.",
       thread_id: "thread-onboarding",
-      refs: ["event:evt-1001"],
+      related_refs: ["event:evt-1001"],
       source_event_time: hoursAgo(1),
     },
     {
@@ -134,7 +134,7 @@ test("inbox urgency filters reduce visible cards", async ({ page }) => {
       title: "Work item risk",
       recommended_action: "Adjust due date.",
       thread_id: "thread-incident-42",
-      refs: ["thread:thread-incident-42"],
+      related_refs: ["thread:thread-incident-42"],
       source_event_time: hoursAgo(60),
     },
   ];

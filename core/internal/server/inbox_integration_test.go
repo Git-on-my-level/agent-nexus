@@ -63,7 +63,7 @@ func TestInboxDerivationAndAcknowledgmentSuppression(t *testing.T) {
 	ackPath := h.baseURL + "/inbox/" + url.PathEscape(firstDecisionItemID) + "/acknowledge"
 	ackResp := postJSONExpectStatus(t, ackPath, `{
 		"actor_id":"actor-1",
-		"thread_id":"`+threadID+`"
+		"subject_ref":"thread:`+threadID+`"
 	}`, http.StatusCreated)
 	var acked struct {
 		Event map[string]any `json:"event"`
@@ -111,10 +111,9 @@ func TestInboxDerivationAndAcknowledgmentSuppression(t *testing.T) {
 
 	// Clear decision item so work-item risk assertions are isolated.
 	secondDecisionItemID := asString(secondDecisionItem["id"])
-	postJSONExpectStatus(t, h.baseURL+"/inbox/ack", `{
+	postJSONExpectStatus(t, h.baseURL+"/inbox/"+url.PathEscape(secondDecisionItemID)+"/acknowledge", `{
 		"actor_id":"actor-1",
-		"thread_id":"`+threadID+`",
-		"inbox_item_id":"`+secondDecisionItemID+`"
+		"subject_ref":"thread:`+threadID+`"
 	}`, http.StatusCreated).Body.Close()
 
 	createBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
@@ -169,10 +168,9 @@ func TestInboxDerivationAndAcknowledgmentSuppression(t *testing.T) {
 	}
 	riskItemID := asString(riskItem["id"])
 
-	postJSONExpectStatus(t, h.baseURL+"/inbox/ack", `{
+	postJSONExpectStatus(t, h.baseURL+"/inbox/"+url.PathEscape(riskItemID)+"/acknowledge", `{
 		"actor_id":"actor-1",
-		"thread_id":"`+threadID+`",
-		"inbox_item_id":"`+riskItemID+`"
+		"subject_ref":"thread:`+threadID+`"
 	}`, http.StatusCreated).Body.Close()
 
 	itemsAfterRiskAck := getInboxItems(t, h.baseURL)
@@ -260,10 +258,9 @@ func TestInboxAcknowledgmentResolvesTopicSubjectRefToBackingThread(t *testing.T)
 	}
 	inboxItemID := asString(decisionItem["id"])
 
-	ackResp := postJSONExpectStatus(t, h.baseURL+"/inbox/ack", `{
+	ackResp := postJSONExpectStatus(t, h.baseURL+"/inbox/"+url.PathEscape(inboxItemID)+"/acknowledge", `{
 		"actor_id":"actor-1",
-		"subject_ref":"topic:`+topicID+`",
-		"inbox_item_id":"`+inboxItemID+`"
+		"subject_ref":"topic:`+topicID+`"
 	}`, http.StatusCreated)
 	var acked struct {
 		Event map[string]any `json:"event"`
@@ -338,10 +335,9 @@ func TestInboxAcknowledgmentResolvesCardSubjectRefViaCardRelatedThread(t *testin
 	}
 	inboxItemID := asString(riskItem["id"])
 
-	ackResp := postJSONExpectStatus(t, h.baseURL+"/inbox/ack", `{
+	ackResp := postJSONExpectStatus(t, h.baseURL+"/inbox/"+url.PathEscape(inboxItemID)+"/acknowledge", `{
 		"actor_id":"actor-1",
-		"subject_ref":"card:`+cardID+`",
-		"inbox_item_id":"`+inboxItemID+`"
+		"subject_ref":"card:`+cardID+`"
 	}`, http.StatusCreated)
 	defer ackResp.Body.Close()
 
@@ -424,10 +420,9 @@ func TestLegacyRiskReviewAckStillSuppressesWorkItemRiskAfterRebuild(t *testing.T
 	canonicalRiskID := asString(riskItem["id"])
 	legacyRiskID := makeInboxItemID("risk_review", threadID, cardID, "")
 
-	postJSONExpectStatus(t, h.baseURL+"/inbox/ack", `{
+	postJSONExpectStatus(t, h.baseURL+"/inbox/"+url.PathEscape(legacyRiskID)+"/acknowledge", `{
 		"actor_id":"actor-1",
-		"thread_id":"`+threadID+`",
-		"inbox_item_id":"`+legacyRiskID+`"
+		"subject_ref":"thread:`+threadID+`"
 	}`, http.StatusCreated).Body.Close()
 
 	postJSONExpectStatus(t, h.baseURL+"/derived/rebuild", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
@@ -440,14 +435,14 @@ func TestLegacyRiskReviewAckStillSuppressesWorkItemRiskAfterRebuild(t *testing.T
 	}
 }
 
-func TestInboxAcknowledgmentAcceptsLegacyTopicPrefixedBackingThreadID(t *testing.T) {
+func TestInboxAcknowledgmentRejectsTopicSubjectRefWhenNoTopicRow(t *testing.T) {
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
 	threadID := integrationSeedThread(t, h, "actor-1", map[string]any{
-		"title":            "Legacy inbox ack thread",
+		"title":            "Thread-only inbox ack seed",
 		"type":             "incident",
 		"status":           "active",
 		"priority":         "p1",
@@ -481,29 +476,61 @@ func TestInboxAcknowledgmentAcceptsLegacyTopicPrefixedBackingThreadID(t *testing
 	}
 	inboxItemID := asString(decisionItem["id"])
 
-	ackResp := postJSONExpectStatus(t, h.baseURL+"/inbox/ack", `{
+	ackResp := postJSONExpectStatus(t, h.baseURL+"/inbox/"+url.PathEscape(inboxItemID)+"/acknowledge", `{
 		"actor_id":"actor-1",
-		"subject_ref":"topic:`+threadID+`",
-		"inbox_item_id":"`+inboxItemID+`"
-	}`, http.StatusCreated)
-	var acked struct {
-		Event map[string]any `json:"event"`
-	}
-	if err := json.NewDecoder(ackResp.Body).Decode(&acked); err != nil {
-		t.Fatalf("decode ack response: %v", err)
-	}
-	ackResp.Body.Close()
+		"subject_ref":"topic:`+threadID+`"
+	}`, http.StatusBadRequest)
+	defer ackResp.Body.Close()
+	assertErrorCode(t, ackResp, "invalid_request")
+}
 
-	if got := asString(acked.Event["thread_id"]); got != threadID {
-		t.Fatalf("expected ack event thread_id=%q, got %q", threadID, got)
-	}
+func TestInboxAcknowledgmentRejectsLegacyThreadIDBody(t *testing.T) {
+	t.Parallel()
 
-	itemsAfterAck := getInboxItems(t, h.baseURL)
-	if _, stillThere := findInboxItem(itemsAfterAck, func(item map[string]any) bool {
-		return asString(item["id"]) == inboxItemID
-	}); stillThere {
-		t.Fatalf("expected acknowledged decision item to be suppressed, got %#v", itemsAfterAck)
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	threadID := integrationSeedThread(t, h, "actor-1", map[string]any{
+		"title":            "Reject legacy ack body",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p1",
+		"tags":             []any{"ops"},
+		"cadence":          "daily",
+		"next_check_in_at": "2026-03-05T00:00:00Z",
+		"current_summary":  "summary",
+		"next_actions":     []any{"do x"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
+
+	postJSONExpectStatus(t, h.baseURL+"/events", `{
+		"actor_id":"actor-1",
+		"event":{
+			"type":"decision_needed",
+			"thread_id":"`+threadID+`",
+			"refs":["thread:`+threadID+`"],
+			"summary":"Need a decision",
+			"payload":{},
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated).Body.Close()
+
+	items := getInboxItems(t, h.baseURL)
+	decisionItem, ok := findInboxItem(items, func(item map[string]any) bool {
+		return asString(item["category"]) == "decision_needed" && asString(item["thread_id"]) == threadID
+	})
+	if !ok {
+		t.Fatalf("expected decision inbox item, got %#v", items)
 	}
+	inboxItemID := asString(decisionItem["id"])
+
+	resp := postJSONExpectStatus(t, h.baseURL+"/inbox/"+url.PathEscape(inboxItemID)+"/acknowledge", `{
+		"actor_id":"actor-1",
+		"thread_id":"`+threadID+`"
+	}`, http.StatusBadRequest)
+	defer resp.Body.Close()
+	assertErrorCode(t, resp, "invalid_request")
 }
 
 func TestInboxAcknowledgmentRejectsBoardSubjectRefWithoutBackingThread(t *testing.T) {
@@ -540,10 +567,9 @@ func TestInboxAcknowledgmentRejectsBoardSubjectRefWithoutBackingThread(t *testin
 		t.Fatalf("blank board thread_id: %v", err)
 	}
 
-	resp := postJSONExpectStatus(t, h.baseURL+"/inbox/ack", `{
+	resp := postJSONExpectStatus(t, h.baseURL+"/inbox/inbox:test/acknowledge", `{
 		"actor_id":"actor-1",
-		"subject_ref":"board:`+boardID+`",
-		"inbox_item_id":"inbox:test"
+		"subject_ref":"board:`+boardID+`"
 	}`, http.StatusBadRequest)
 	defer resp.Body.Close()
 	assertErrorCode(t, resp, "invalid_request")

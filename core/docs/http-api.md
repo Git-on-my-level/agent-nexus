@@ -335,7 +335,7 @@ Backing threads hold append-only timelines and anchor many packet subjects. They
 
 - `POST /events`
   - Body: `{ "actor_id": "...", "request_key"?: "...", "event": <event_fields_without_id_ts_actor_id> }`
-  - Decision lifecycle events (`decision_needed`, `intervention_needed`, `decision_made`) are thread-grounded writes: `event.refs` must include `thread:<thread_id>`. Clients may still include `topic:` refs when a topic exists, but `thread:` is the required durable anchor.
+  - Decision lifecycle events (`decision_needed`, `intervention_needed`, `decision_made`) are thread-grounded writes: `event.refs` must include `thread:<thread_id>` (matching `event.thread_id`). Operators work in topic space, but these events append to the backing thread; optional `topic:<topic_id>` refs are contextual only and must not replace the required `thread:` ref (including the legacy `topic:<thread_id>` bridge).
   - Response: `{ "event": <event> }`
 
 - `GET /events/stream`
@@ -389,8 +389,9 @@ Backing threads hold append-only timelines and anchor many packet subjects. They
   - Optional query: `risk_horizon_days`, `last_event_id`
   - Resume supported via `Last-Event-ID` header or `last_event_id` query.
 
-- `POST /inbox/ack`
-  - Body: `{ "actor_id": "...", "thread_id": "...", "inbox_item_id": "..." }`
+- `POST /inbox/{inbox_id}/acknowledge`
+  - Body: `{ "actor_id": "...", "subject_ref": "<typed ref>" }`
+  - `subject_ref` resolves to the backing thread: `thread:`, `topic:` (real topic id only), `card:`, or `board:`. A bare thread id must use `thread:`, not `topic:`.
   - Response: `{ "event": <event> }`
 
 - `GET /agent-notifications`

@@ -94,23 +94,29 @@ describe("event validation", () => {
     expect(error).toBe("");
   });
 
-  it("requires thread refs for decision events", () => {
-    expect(
-      validateEventCreatePayload(
-        validBaseEvent({
-          type: "decision_made",
-          thread_id: "thread-1",
-          refs: ["topic:topic-1"],
-        }),
-      ),
-    ).toContain('event.refs must include a "thread:<id>"');
+  it("requires thread refs for decision lifecycle events", () => {
+    for (const type of [
+      "decision_made",
+      "decision_needed",
+      "intervention_needed",
+    ]) {
+      expect(
+        validateEventCreatePayload(
+          validBaseEvent({
+            type,
+            thread_id: "thread-1",
+            refs: ["topic:topic-1"],
+          }),
+        ),
+      ).toContain('event.refs must include a "thread:<id>"');
+    }
 
     expect(
       validateEventCreatePayload(
         validBaseEvent({
           type: "decision_made",
           thread_id: "thread-1",
-          refs: ["thread:thread-1"],
+          refs: ["thread:thread-1", "topic:topic-1"],
         }),
       ),
     ).toBe("");

@@ -113,9 +113,7 @@ export function getInboxSubjectRef(item) {
 export function decisionGroundingRefForInboxItem(item) {
   const relatedRefs = Array.isArray(item?.related_refs)
     ? item.related_refs
-    : Array.isArray(item?.refs)
-      ? item.refs
-      : [];
+    : [];
 
   for (const ref of relatedRefs) {
     const normalized = normalizeTypedRef(ref);

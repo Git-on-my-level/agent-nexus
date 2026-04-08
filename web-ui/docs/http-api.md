@@ -130,8 +130,9 @@ Threads are backing infrastructure for timelines and packet subjects. The worksp
 - `GET /inbox`
   - Response: `{ "items": [<inbox_item>...], "generated_at": "..." }`
 
-- `POST /inbox/ack`
-  - Body: `{ "actor_id": "...", "thread_id": "...", "inbox_item_id": "..." }`
+- `POST /inbox/{inbox_id}/acknowledge`
+  - Body: `{ "actor_id": "...", "subject_ref": "<typed ref>" }`
+  - `subject_ref` must be one of `thread:`, `topic:` (existing topic row), `card:`, or `board:`; use `thread:` when the anchor is only a backing thread id.
   - Response: `{ "event": <event> }`
 
 - `POST /derived/rebuild`

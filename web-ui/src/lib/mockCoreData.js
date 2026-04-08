@@ -249,7 +249,7 @@ const inboxItems = [
       "CitrusFresh API is the alternative at $0.48/lemon if LocalGrove is unavailable.",
     thread_id: "thread-lemon-shortage",
     card_id: "card-emergency-restock",
-    refs: [
+    related_refs: [
       "thread:thread-lemon-shortage",
       "artifact:artifact-supplier-sla",
       "event:evt-supply-004",
@@ -264,7 +264,7 @@ const inboxItems = [
       "Acknowledge. SqueezeBot is already in half-batch mode. " +
       "Confirm restock order is approved to avoid a full production halt.",
     thread_id: "thread-lemon-shortage",
-    refs: ["thread:thread-lemon-shortage", "event:evt-supply-001"],
+    related_refs: ["thread:thread-lemon-shortage", "event:evt-supply-001"],
     source_event_time: new Date(now - 18 * 60 * 60 * 1000).toISOString(),
   },
   {
@@ -275,7 +275,7 @@ const inboxItems = [
       "Update summer menu thread with expected unblock date once lemon restock is confirmed.",
     thread_id: "thread-summer-menu",
     card_id: "thread-summer-menu",
-    refs: ["thread:thread-summer-menu", "thread:thread-lemon-shortage"],
+    related_refs: ["thread:thread-summer-menu", "thread:thread-lemon-shortage"],
     source_event_time: new Date(now - 3 * 24 * 60 * 60 * 1000).toISOString(),
   },
   {
@@ -288,7 +288,7 @@ const inboxItems = [
       "authorize SqueezeBot to begin the recalibration sequence.",
     thread_id: "thread-squeezebot-maintenance",
     card_id: "thread-squeezebot-maintenance",
-    refs: [
+    related_refs: [
       "thread:thread-squeezebot-maintenance",
       "artifact:artifact-maintenance-log",
     ],
@@ -1848,22 +1848,22 @@ function deriveMockInboxSubjectRef(item) {
 }
 
 function normalizeMockInboxItem(item) {
-  const subjectRef = deriveMockInboxSubjectRef(item);
-  const relatedRefs = Array.isArray(item?.related_refs)
-    ? item.related_refs
-    : Array.isArray(item?.refs)
-      ? item.refs
-      : [];
+  const rest = { ...item };
+  delete rest.refs;
+  const subjectRef = deriveMockInboxSubjectRef(rest);
+  const relatedRefs = Array.isArray(rest?.related_refs)
+    ? rest.related_refs
+    : [];
 
   return {
-    ...item,
-    category: normalizeMockInboxCategory(item?.category),
+    ...rest,
+    category: normalizeMockInboxCategory(rest?.category),
     subject_ref: subjectRef,
     related_refs:
       relatedRefs.length > 0
         ? relatedRefs
-        : item?.thread_id
-          ? [mockTopicRefFromThreadId(item.thread_id)]
+        : rest?.thread_id
+          ? [`thread:${rest.thread_id}`]
           : [],
     subject_kind: splitLegacyTypedRef(subjectRef).prefix,
     subject_id: splitLegacyTypedRef(subjectRef).id,
@@ -1876,27 +1876,15 @@ export function listMockInboxItems() {
     .map((item) => normalizeMockInboxItem(item));
 }
 
-export function ackMockInboxItem({ thread_id, subject_ref, inbox_item_id }) {
-  let correlation = String(thread_id ?? "").trim();
-  if (!correlation && subject_ref) {
-    const raw = String(subject_ref).trim();
-    const sep = raw.indexOf(":");
-    if (sep > 0 && sep < raw.length - 1) {
-      correlation = raw.slice(sep + 1).trim();
-    }
+export function ackMockInboxItem({ subject_ref, inbox_item_id }) {
+  const correlation = resolveMockSubjectBackingThreadId(subject_ref);
+  if (!correlation) {
+    return null;
   }
-  const subjectRaw = String(subject_ref ?? "").trim();
-  const topicRefMatch = /^topic:(.+)$/.exec(subjectRaw);
-  const backingThreadFromTopic = topicRefMatch
-    ? String(getMockTopic(topicRefMatch[1].trim())?.thread_id ?? "").trim()
-    : "";
   const item = inboxItems.find(
     (item) =>
       item.id === inbox_item_id &&
-      (!correlation ||
-        String(item.thread_id) === String(correlation) ||
-        (backingThreadFromTopic &&
-          String(item.thread_id) === backingThreadFromTopic)),
+      String(item.thread_id) === String(correlation),
   );
 
   if (!item) {
@@ -2428,12 +2416,7 @@ export function updateMockThread({
   return { thread: next };
 }
 
-function resolveMockSubjectBackingThreadId(subjectRef, explicitThreadId = "") {
-  const direct = String(explicitThreadId ?? "").trim();
-  if (direct) {
-    return direct;
-  }
-
+function resolveMockSubjectBackingThreadId(subjectRef) {
   const normalizedRef = String(subjectRef ?? "").trim();
   if (!normalizedRef) {
     return "";
@@ -2443,7 +2426,7 @@ function resolveMockSubjectBackingThreadId(subjectRef, explicitThreadId = "") {
   }
   if (normalizedRef.startsWith("topic:")) {
     const topicId = normalizedRef.slice("topic:".length).trim();
-    return String(getMockTopic(topicId)?.thread_id ?? "").trim() || topicId;
+    return String(getMockTopic(topicId)?.thread_id ?? "").trim();
   }
   if (normalizedRef.startsWith("document:")) {
     const documentId = normalizedRef.slice("document:".length).trim();
@@ -2455,7 +2438,22 @@ function resolveMockSubjectBackingThreadId(subjectRef, explicitThreadId = "") {
   }
   if (normalizedRef.startsWith("card:")) {
     const cardId = normalizedRef.slice("card:".length).trim();
-    return String(getMockCard(cardId)?.thread_id ?? "").trim();
+    const card = getMockCard(cardId);
+    const cardThreadId = String(card?.thread_id ?? "").trim();
+    let firstThreadId = "";
+    for (const ref of card?.related_refs ?? []) {
+      const { prefix, id } = splitTypedRef(String(ref ?? "").trim());
+      if (prefix !== "thread" || !id) {
+        continue;
+      }
+      if (!firstThreadId) {
+        firstThreadId = id;
+      }
+      if (id !== cardThreadId) {
+        return id;
+      }
+    }
+    return firstThreadId || cardThreadId;
   }
   return "";
 }
@@ -2798,7 +2796,6 @@ export function createMockReceipt({ actor_id, artifact = {}, packet = {} }) {
   const artifactId = String(artifact.id ?? issuedArtifactId).trim();
   const packetId = String(packet.receipt_id ?? artifactId).trim();
   const subjectRef = String(packet.subject_ref ?? "").trim();
-  const threadId = String(artifact.thread_id ?? "").trim();
 
   if (!artifactId) {
     return { error: "validation", message: "artifact.id is required." };
@@ -2826,14 +2823,11 @@ export function createMockReceipt({ actor_id, artifact = {}, packet = {} }) {
     };
   }
 
-  const backingThreadId = resolveMockSubjectBackingThreadId(
-    subjectRef,
-    threadId,
-  );
+  const backingThreadId = resolveMockSubjectBackingThreadId(subjectRef);
   if (!backingThreadId) {
     return {
       error: "validation",
-      message: "artifact.thread_id or a topic-scoped subject_ref is required.",
+      message: "packet.subject_ref must resolve to a backing thread.",
     };
   }
 
@@ -2943,7 +2937,6 @@ export function createMockReview({ actor_id, artifact = {}, packet = {} }) {
     ? receiptRef.slice("artifact:".length).trim()
     : String(packet.receipt_id ?? "").trim();
   const subjectRef = String(packet.subject_ref ?? "").trim();
-  const threadId = String(artifact.thread_id ?? "").trim();
 
   if (!artifactId) {
     return { error: "validation", message: "artifact.id is required." };
@@ -2971,14 +2964,11 @@ export function createMockReview({ actor_id, artifact = {}, packet = {} }) {
     };
   }
 
-  const backingThreadId = resolveMockSubjectBackingThreadId(
-    subjectRef,
-    threadId,
-  );
+  const backingThreadId = resolveMockSubjectBackingThreadId(subjectRef);
   if (!backingThreadId) {
     return {
       error: "validation",
-      message: "artifact.thread_id or a topic-scoped subject_ref is required.",
+      message: "packet.subject_ref must resolve to a backing thread.",
     };
   }
 

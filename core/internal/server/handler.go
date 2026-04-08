@@ -2108,14 +2108,6 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleInboxStream(w, r, opts)
 	})
 
-	registerRoute("/inbox/ack", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
-			return
-		}
-		handleAckInboxItem(w, r, opts, "")
-	})
-
 	registerRoute("/agent-notifications", exactRouteAccess(routeAccessWorkspaceBusiness, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")

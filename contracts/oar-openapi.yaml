@@ -2537,36 +2537,6 @@ paths:
         '404':
           $ref: '#/components/responses/ErrorResponse'
 
-  /inbox/ack:
-    post:
-      operationId: acknowledgeInboxItemLegacy
-      summary: Acknowledge inbox item (legacy body-only path)
-      description: >
-        Compatibility alias for clients that post the inbox item id in the JSON body
-        (`inbox_item_id`) instead of using `POST /inbox/{inbox_id}/acknowledge`. Prefer the
-        path-parameter form for new integrations.
-      deprecated: true
-      tags: [inbox]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AcknowledgeInboxItemRequest'
-      responses:
-        '201':
-          description: Acknowledgment event appended
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AcknowledgeInboxItemResponse'
-        '400':
-          $ref: '#/components/responses/ErrorResponse'
-        '401':
-          $ref: '#/components/responses/ErrorResponse'
-        '404':
-          $ref: '#/components/responses/ErrorResponse'
-
 components:
   responses:
     ErrorResponse:
@@ -3349,15 +3319,15 @@ components:
     AcknowledgeInboxItemRequest:
       type: object
       description: >
-        Acknowledges a derived inbox item. `subject_ref` is the typed subject anchor for the item
-        (same pattern as packet requests); it must match the inbox item's subject (for example
-        `thread:<id>` or `topic:<id>`).
+        Acknowledges a derived inbox item. `subject_ref` is resolved to the backing thread for
+        correlation. Supported prefixes: `thread:<thread_id>`, `topic:<topic_id>` (topic row must
+        exist), `card:<card_id>`, `board:<board_id>`. Do not pass a thread id with the `topic:` prefix.
       properties:
         actor_id: { type: string }
         subject_ref: { $ref: '#/components/schemas/TypedRef' }
         inbox_item_id:
           type: string
-          description: Required when using legacy POST /inbox/ack; must match path inbox_id when using POST /inbox/{inbox_id}/acknowledge.
+          description: Must match path inbox_id when both are provided.
         note: { type: string }
         refs:
           type: array

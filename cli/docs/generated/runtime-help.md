@@ -164,6 +164,7 @@ Use this command when you need to decide which primitive fits the use case befor
 
 Selection rules:
 - Use events for immutable facts.
+- For decision lifecycle events, always include `thread:<thread_id>` in refs; do not rely on `topic:` alone or `topic:<thread_id>` as a thread substitute.
 - Use topics for durable work subjects and primary operator coordination (`topics workspace`).
 - Use cards for board-scoped planning and movement.
 - Use threads for read-only backing-thread diagnostics and timeline inspection — not as the default coordination surface.
@@ -191,7 +192,7 @@ cards
 - Read next: oar cards list ; oar cards get ; oar cards move
 
 events
-- Use when: You need immutable facts, observations, decisions, or updates in an auditable sequence.
+- Use when: You need immutable facts, observations, decisions, or updates in an auditable sequence. Decision lifecycle events (`decision_needed`, `intervention_needed`, `decision_made`) must include `thread:<thread_id>` in refs; optional `topic:` refs are cross-links only, not a substitute for the thread anchor.
 - Not for: Replacing the current durable state of a work object.
 - Examples: decision_needed, decision_made, message_posted, exception_raised
 - Read next: oar events list ; oar events explain ; oar threads timeline
@@ -250,7 +251,7 @@ Operating posture
 
 Core model
 
-- `events`: immutable facts, observations, and updates. Use for append-only activity, audit trails, and streams.
+- `events`: immutable facts, observations, and updates. Use for append-only activity, audit trails, and streams. Decision lifecycle events (`decision_needed`, `intervention_needed`, `decision_made`) require `thread:<thread_id>` in refs; `topic:` refs are optional context when a topic exists.
 - `topics`: the primary durable work subjects. Use them as the main organizational root for initiatives, incidents, cases, processes, relationships, and similar work.
 - `cards`: the primary work items. Use them for tracked execution on boards.
 - `threads`: backing timelines and packet-routing infrastructure. Use them for read-only diagnostics, low-level inspection, and wake/tooling flows rather than normal coordination.

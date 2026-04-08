@@ -170,6 +170,9 @@ func inboxRelatedRefsAbsentOrEmpty(m map[string]any) bool {
 	return err != nil || len(list) == 0
 }
 
+// backfillInboxRelatedRefsFromStoredData merges stored inbox row fields into a contract-shaped
+// `related_refs` list. The `refs` key is legacy-only on persisted derived inbox rows (pre-
+// related_refs); HTTP/OpenAPI surfaces still expose only `related_refs` after applyInboxContractShape.
 func backfillInboxRelatedRefsFromStoredData(m map[string]any, h inboxContractHint) []any {
 	cat := strings.TrimSpace(h.Category)
 	tid := strings.TrimSpace(h.ThreadID)
@@ -473,7 +476,6 @@ func handleAckInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	var req struct {
 		ActorID     string `json:"actor_id"`
 		SubjectRef  string `json:"subject_ref"`
-		ThreadID    string `json:"thread_id"`
 		InboxItemID string `json:"inbox_item_id"`
 	}
 	if !decodeJSONBody(w, r, &req) {
@@ -486,20 +488,13 @@ func handleAckInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	}
 
 	subjectRef := strings.TrimSpace(req.SubjectRef)
-	legacyThreadID := strings.TrimSpace(req.ThreadID)
-	var correlationID string
-	switch {
-	case subjectRef != "":
-		resolved, err := resolveInboxAckBackingThreadID(r.Context(), opts.primitiveStore, subjectRef)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
-			return
-		}
-		correlationID = resolved
-	case legacyThreadID != "":
-		correlationID = legacyThreadID
-	default:
+	if subjectRef == "" {
 		writeError(w, http.StatusBadRequest, "invalid_request", "subject_ref is required")
+		return
+	}
+	correlationID, err := resolveInboxAckBackingThreadID(r.Context(), opts.primitiveStore, subjectRef)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
 
@@ -564,14 +559,10 @@ func resolveInboxAckBackingThreadID(ctx context.Context, store PrimitiveStore, s
 		topic, err := store.GetTopic(ctx, id)
 		if err != nil {
 			if errors.Is(err, primitives.ErrNotFound) {
-				// Tolerate legacy UI-shaped values that synthesized `topic:<thread_id>`
-				// when only a backing thread id was available.
-				if _, threadErr := store.GetThread(ctx, id); threadErr == nil {
-					return id, nil
-				} else if !errors.Is(threadErr, primitives.ErrNotFound) {
-					return "", threadErr
-				}
-				return "", fmt.Errorf("topic not found for subject_ref %q", subjectRef)
+				return "", fmt.Errorf(
+					"topic not found for subject_ref %q; topic: must be a real topic id (use thread:<thread_id> when the anchor is the backing thread only)",
+					subjectRef,
+				)
 			}
 			return "", err
 		}
@@ -610,7 +601,10 @@ func resolveInboxAckBackingThreadID(ctx context.Context, store PrimitiveStore, s
 		}
 		return tid, nil
 	default:
-		return "", fmt.Errorf("subject_ref prefix %q is not supported for inbox acknowledgment (use thread:, topic:, card:, or board:)", prefix)
+		return "", fmt.Errorf(
+			"subject_ref prefix %q is not supported for inbox acknowledgment (supported: thread:, topic:, card:, board:)",
+			prefix,
+		)
 	}
 }
 

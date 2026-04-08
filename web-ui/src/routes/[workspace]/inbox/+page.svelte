@@ -417,9 +417,7 @@
 
     const refs = Array.from(
       new Set([
-        ...((Array.isArray(item.related_refs)
-          ? item.related_refs
-          : item.refs) ?? []),
+        ...(Array.isArray(item.related_refs) ? item.related_refs : []),
         `inbox:${item.id}`,
         groundingRef,
       ]),
@@ -814,7 +812,7 @@
                     <span>{getInboxSubjectId(item)}</span>
                   </span>
                 {/if}
-                {#each item.related_refs ?? item.refs ?? [] as refValue}
+                {#each item.related_refs ?? [] as refValue}
                   <RefLink {refValue} threadId={inboxActionThreadId(item)} />
                 {/each}
               </div>

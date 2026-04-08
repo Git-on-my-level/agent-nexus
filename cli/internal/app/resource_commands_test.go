@@ -427,7 +427,7 @@ func TestInboxAliasStableAcrossListMembershipChanges(t *testing.T) {
 	}
 }
 
-func TestInboxAckAliasResolvesCanonicalAndThreadFromInboxList(t *testing.T) {
+func TestInboxAckAliasUsesSubjectRefFromInboxList(t *testing.T) {
 	t.Parallel()
 
 	const inboxID = "inbox:decision_needed:thread_42:none:event_42"
@@ -437,7 +437,7 @@ func TestInboxAckAliasResolvesCanonicalAndThreadFromInboxList(t *testing.T) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"items":[{"id":"` + inboxID + `","thread_id":"thread_42"}]}`))
+			_, _ = w.Write([]byte(`{"items":[{"id":"` + inboxID + `","subject_ref":"thread:thread_42"}]}`))
 			return
 		case r.Method == http.MethodPost && r.URL.Path == "/inbox/"+url.PathEscape(inboxID)+"/acknowledge":
 			body, _ := io.ReadAll(r.Body)
@@ -3878,14 +3878,14 @@ func TestInboxAckActorIDMeAliasFromProfile(t *testing.T) {
 		"--base-url", server.URL,
 		"--agent", "agent-a",
 		"inbox", "ack",
-		"--thread-id", "thread_1",
+		"--subject-ref", "thread:thread_1",
 		"--inbox-item-id", "inbox:1",
 		"--actor-id", "me",
 	})
 	assertEnvelopeOK(t, raw)
 }
 
-func TestInboxAckPositionalInboxItemIDResolvesThreadFromInboxList(t *testing.T) {
+func TestInboxAckPositionalInboxItemIDRequiresSubjectRefFromInboxList(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -3893,22 +3893,6 @@ func TestInboxAckPositionalInboxItemIDResolvesThreadFromInboxList(t *testing.T) 
 		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"items":[{"id":"inbox:decision_needed:thread_42:none:event_1","thread_id":"thread_42"}],"generated_at":"2026-03-05T00:00:00Z"}`))
-			return
-		case r.Method == http.MethodPost && r.URL.Path == "/inbox/"+url.PathEscape("inbox:decision_needed:thread_42:none:event_1")+"/acknowledge":
-			body, _ := io.ReadAll(r.Body)
-			var payload map[string]any
-			if err := json.Unmarshal(body, &payload); err != nil {
-				t.Fatalf("decode inbox ack body: %v body=%s", err, string(body))
-			}
-			if got := strings.TrimSpace(anyStringValue(payload["subject_ref"])); got != "thread:thread_42" {
-				t.Fatalf("expected resolved subject_ref thread:thread_42, got %q body=%s", got, string(body))
-			}
-			if _, exists := payload["inbox_item_id"]; exists {
-				t.Fatalf("expected inbox_item_id in path only, got body=%s", string(body))
-			}
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusCreated)
-			_, _ = w.Write([]byte(`{"event":{"id":"event_ack_positional"}}`))
 			return
 		default:
 			http.NotFound(w, r)
@@ -3924,7 +3908,14 @@ func TestInboxAckPositionalInboxItemIDResolvesThreadFromInboxList(t *testing.T) 
 		"inbox", "ack",
 		"inbox:decision_needed:thread_42:none:event_1",
 	})
-	assertEnvelopeOK(t, raw)
+	payload := assertEnvelopeError(t, raw)
+	errObj, _ := payload["error"].(map[string]any)
+	if got := anyStringValue(errObj["code"]); got != "invalid_request" {
+		t.Fatalf("expected invalid_request, got %#v", payload)
+	}
+	if got := anyStringValue(errObj["message"]); !strings.Contains(got, "subject_ref is required for inbox item") {
+		t.Fatalf("expected subject_ref guidance, got %#v", payload)
+	}
 }
 
 func TestInboxAckActorIDMeRequiresProfileActorID(t *testing.T) {
@@ -3937,7 +3928,7 @@ func TestInboxAckActorIDMeRequiresProfileActorID(t *testing.T) {
 		"--json",
 		"--agent", "agent-a",
 		"inbox", "ack",
-		"--thread-id", "thread_1",
+		"--subject-ref", "thread:thread_1",
 		"--inbox-item-id", "inbox:1",
 		"--actor-id", "me",
 	})

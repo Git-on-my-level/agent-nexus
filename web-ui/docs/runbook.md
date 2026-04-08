@@ -111,7 +111,7 @@ contract):
 - `POST /events`, `GET /events/{event_id}`
 - `POST /packets/receipts`, `POST /packets/reviews`
 - `POST /derived/rebuild` (optional)
-- `GET /inbox`, `POST /inbox/ack`
+- `GET /inbox`, `POST /inbox/{inbox_id}/acknowledge`
 
 ### Auth and actor storage
 

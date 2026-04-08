@@ -3852,9 +3852,9 @@ func (a *App) parseDerivedRebuildBodyInput(args []string, cfg config.Resolved) (
 
 func (a *App) parseAckBodyInput(ctx context.Context, args []string, cfg config.Resolved) (any, error) {
 	fs := newSilentFlagSet("inbox ack")
-	var fromFileFlag, threadIDFlag, inboxItemIDFlag, actorIDFlag trackedString
+	var fromFileFlag, subjectRefFlag, inboxItemIDFlag, actorIDFlag trackedString
 	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
-	fs.Var(&threadIDFlag, "thread-id", "Thread id")
+	fs.Var(&subjectRefFlag, "subject-ref", "Subject ref")
 	fs.Var(&inboxItemIDFlag, "inbox-item-id", "Inbox item id")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
 	if err := fs.Parse(args); err != nil {
@@ -3873,17 +3873,11 @@ func (a *App) parseAckBodyInput(ctx context.Context, args []string, cfg config.R
 		return decodeJSONPayload(payload)
 	}
 
-	threadID := strings.TrimSpace(threadIDFlag.value)
+	subjectRef := strings.TrimSpace(subjectRefFlag.value)
 	inboxItemID := strings.TrimSpace(inboxItemIDFlag.value)
 	if inboxItemID == "" && len(positionals) > 0 {
-		if threadID == "" && len(positionals) > 1 {
-			threadID = strings.TrimSpace(positionals[0])
-			inboxItemID = strings.TrimSpace(positionals[1])
-			positionals = positionals[2:]
-		} else {
-			inboxItemID = strings.TrimSpace(positionals[0])
-			positionals = positionals[1:]
-		}
+		inboxItemID = strings.TrimSpace(positionals[0])
+		positionals = positionals[1:]
 	}
 	if len(positionals) > 0 {
 		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `oar inbox ack`")
@@ -3892,23 +3886,16 @@ func (a *App) parseAckBodyInput(ctx context.Context, args []string, cfg config.R
 		return nil, err
 	}
 
-	shouldResolveInboxItem := threadID == "" || looksLikeInboxAlias(inboxItemID)
-	var subjectRef string
+	shouldResolveInboxItem := subjectRef == "" || looksLikeInboxAlias(inboxItemID)
 	if shouldResolveInboxItem {
 		resolvedInboxItemID, resolvedSubjectRef, err := a.resolveInboxItemIDAndThread(ctx, cfg, inboxItemID)
 		if err != nil {
 			return nil, err
 		}
 		inboxItemID = resolvedInboxItemID
-		if threadID == "" {
+		if subjectRef == "" {
 			subjectRef = resolvedSubjectRef
 		}
-	}
-	if threadID != "" {
-		if err := validateID(threadID, "thread id"); err != nil {
-			return nil, err
-		}
-		subjectRef = "thread:" + threadID
 	}
 	if err := validateTypedRefShape(subjectRef); err != nil {
 		return nil, err
@@ -3943,15 +3930,11 @@ func (a *App) resolveInboxItemIDAndThread(ctx context.Context, cfg config.Resolv
 		return "", "", err
 	}
 	subjectRef := strings.TrimSpace(anyString(match.Item["subject_ref"]))
-	threadID := strings.TrimSpace(match.ThreadID)
-	if subjectRef == "" && threadID == "" {
+	if subjectRef == "" {
 		return "", "", errnorm.Usage(
 			"invalid_request",
-			fmt.Sprintf("subject_ref or thread_id is required for inbox item %q (provide --thread-id or ensure list output includes subject_ref/thread_id)", match.ID),
+			fmt.Sprintf("subject_ref is required for inbox item %q (ensure inbox list output includes subject_ref)", match.ID),
 		)
-	}
-	if subjectRef == "" {
-		subjectRef = "thread:" + threadID
 	}
 	if err := validateTypedRefShape(subjectRef); err != nil {
 		return "", "", err

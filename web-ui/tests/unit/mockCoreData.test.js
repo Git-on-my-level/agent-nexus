@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 function assertTypedRef(refValue) {
   const value = String(refValue ?? "").trim();
@@ -7,12 +7,51 @@ function assertTypedRef(refValue) {
   expect(separator).toBeLessThan(value.length - 1);
 }
 
+async function loadMockCoreDataFresh() {
+  vi.resetModules();
+  return import("../../src/lib/mockCoreData.js");
+}
+
 describe("mockCoreData parity behaviors", () => {
   describe("inbox ack is non-destructive", () => {
     it("module exports ackMockInboxItem and listMockInboxItems functions", async () => {
       const mod = await import("../../src/lib/mockCoreData.js");
       expect(typeof mod.ackMockInboxItem).toBe("function");
       expect(typeof mod.listMockInboxItems).toBe("function");
+    });
+
+    it("listMockInboxItems does not surface legacy inbox refs alias", async () => {
+      const mod = await import("../../src/lib/mockCoreData.js");
+      for (const item of mod.listMockInboxItems()) {
+        expect(Array.isArray(item.related_refs)).toBe(true);
+        expect(item).not.toHaveProperty("refs");
+      }
+    });
+
+    it("acknowledges card-scoped inbox items via the card's primary related thread", async () => {
+      const mod = await loadMockCoreDataFresh();
+
+      expect(
+        mod
+          .listMockInboxItems()
+          .some(
+            (item) =>
+              item.id === "inbox-001" &&
+              item.subject_ref === "card:card-emergency-restock",
+          ),
+      ).toBe(true);
+
+      const result = mod.ackMockInboxItem({
+        actor_id: "actor-dev-human-operator",
+        subject_ref: "card:card-emergency-restock",
+        inbox_item_id: "inbox-001",
+      });
+
+      expect(result?.thread_id).toBe("thread-lemon-shortage");
+      expect(result?.acknowledged_at).toBeTruthy();
+      expect(
+        mod.listMockInboxItems().some((item) => item.id === "inbox-001"),
+      ).toBe(false);
     });
   });
 
@@ -71,7 +110,7 @@ describe("mockCoreData parity behaviors", () => {
       });
     });
 
-    it("keeps decision events topic-scoped for migrated contracts", async () => {
+    it("keeps decision lifecycle mock events thread-anchored with optional topic refs", async () => {
       const mod = await import("../../src/lib/mockCoreData.js");
       const seed = mod.getMockSeedData();
       const eventIds = new Set(["evt-price-003", "evt-price-008"]);
@@ -81,8 +120,36 @@ describe("mockCoreData parity behaviors", () => {
       );
       expect(migratedEvents).toHaveLength(2);
       migratedEvents.forEach((event) => {
+        expect(event.refs).toContain("thread:thread-pricing-glitch");
         expect(event.refs).toContain("topic:pricing-glitch");
       });
+    });
+
+    it("grounds card-scoped receipt creation on the card's related thread when card.thread_id is absent", async () => {
+      const mod = await loadMockCoreDataFresh();
+
+      const created = mod.createMockReceipt({
+        actor_id: "actor-dev-human-operator",
+        artifact: {
+          id: "artifact-receipt-card-thread-parity",
+          kind: "receipt",
+          summary: "Receipt for emergency restock parity test",
+          refs: ["card:card-emergency-restock"],
+        },
+        packet: {
+          receipt_id: "artifact-receipt-card-thread-parity",
+          subject_ref: "card:card-emergency-restock",
+          outputs: ["artifact:artifact-supplier-sla"],
+          verification_evidence: ["event:evt-supply-004"],
+          changes_summary:
+            "Verified card subject resolution follows primary related thread.",
+          known_gaps: [],
+        },
+      });
+
+      expect(created?.artifact?.thread_id).toBe("thread-lemon-shortage");
+      expect(created?.artifact?.refs).toContain("card:card-emergency-restock");
+      expect(created?.event?.thread_id).toBe("thread-lemon-shortage");
     });
   });
 

@@ -366,7 +366,15 @@ packets:
       evidence_refs: { type: "list<typed_ref>", required: true }
 
 reference_conventions:
-  description: Required refs per event and packet kind.
+  description: >
+    Required refs per event and packet kind.
+    Operators coordinate work in topic space, but decision lifecycle events
+    (`decision_needed`, `intervention_needed`, `decision_made`) are durably
+    anchored on the backing thread: each MUST include `thread:<thread_id>` in
+    `refs` matching `event.thread_id`. Optional `topic:` refs may appear when a
+    real topic exists; they are contextual cross-links and MUST NOT replace the
+    required `thread:` ref. Using `topic:<thread_id>` as a substitute for the
+    backing thread is forbidden.
 
   event_refs:
     _rule: "Thread-scoped events SHOULD set thread_ref on the event payload."
@@ -512,6 +520,10 @@ lifecycle_rules:
     - "Events and artifacts are append-only."
     - "Topics, documents, boards, and cards are mutable resources with explicit provenance."
     - "Document revisions are immutable append-only records."
+
+  decision_lifecycle_anchoring:
+    - "decision_needed, intervention_needed, and decision_made events append to the backing thread; refs must include thread:<thread_id> (see reference_conventions.event_refs)."
+    - "topic: refs on those events are optional operator context when a topic id exists, not a substitute for thread:."
 
   concurrency_tokens:
     - "topic.updated_at"

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -237,10 +238,9 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 	}
 	decisionItemID := asString(decisionItem["id"])
 
-	postJSONExpectStatus(t, h.baseURL+"/inbox/ack", `{
+	postJSONExpectStatus(t, h.baseURL+"/inbox/"+url.PathEscape(decisionItemID)+"/acknowledge", `{
 		"actor_id":"actor-1",
-		"thread_id":"`+threadID+`",
-		"inbox_item_id":"`+decisionItemID+`"
+		"subject_ref":"thread:`+threadID+`"
 	}`, http.StatusCreated).Body.Close()
 
 	inboxAfterAck := getInboxItems(t, h.baseURL)

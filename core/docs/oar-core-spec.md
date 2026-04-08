@@ -329,6 +329,8 @@ failure.
 
 oar-core MUST enforce the reference conventions defined in `oar-schema.yaml` → `reference_conventions`.
 
+**Topic vs thread for decisions:** Operators think in topics (work subjects, navigation, ownership). Decision lifecycle events (`decision_needed`, `intervention_needed`, `decision_made`) are nonetheless written on and grounded by the **backing thread** — `event.refs` MUST include `thread:<thread_id>` matching `event.thread_id`. A real `topic:<topic_id>` may appear alongside for cross-linking, but it is optional context, not the durable write anchor. Do not use `topic:<thread_id>` as a bridge for the required `thread:` ref.
+
 Key rules:
 - All ref strings MUST use typed prefixes (`artifact:`, `event:`, `thread:`, `topic:`, `document:`, `board:`, `card:`, `url:`, `inbox:`). Unknown prefixes are preserved, not rejected.
 - All thread-scoped events MUST set `thread_id`.

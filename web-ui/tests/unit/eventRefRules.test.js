@@ -118,17 +118,36 @@ describe("eventRefRules", () => {
       expect(result.valid).toBe(true);
     });
 
-    it("requires thread refs for decision events", () => {
-      const bad = validateEventRefRule("decision_made", ["topic:topic-1"], {});
-      expect(bad.valid).toBe(false);
-      expect(bad.error).toContain("thread:<id>");
-
-      const good = validateEventRefRule(
+    it("requires thread refs for decision lifecycle events", () => {
+      for (const eventType of [
         "decision_made",
-        ["thread:thread-1"],
+        "decision_needed",
+        "intervention_needed",
+      ]) {
+        const topicOnly = validateEventRefRule(
+          eventType,
+          ["topic:topic-1"],
+          {},
+        );
+        expect(topicOnly.valid).toBe(false);
+        expect(topicOnly.error).toContain("thread:<id>");
+      }
+
+      for (const eventType of [
+        "decision_made",
+        "decision_needed",
+        "intervention_needed",
+      ]) {
+        const good = validateEventRefRule(eventType, ["thread:thread-1"], {});
+        expect(good.valid).toBe(true);
+      }
+
+      const withTopicContext = validateEventRefRule(
+        "decision_made",
+        ["thread:thread-1", "topic:real-topic"],
         {},
       );
-      expect(good.valid).toBe(true);
+      expect(withTopicContext.valid).toBe(true);
     });
   });
 
