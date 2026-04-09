@@ -348,7 +348,7 @@
     border: none;
     outline: none;
     color: var(--ui-text);
-    font-size: 14px;
+    font-size: 13px;
     font-family: var(--ui-font-sans);
     line-height: 1.4;
   }

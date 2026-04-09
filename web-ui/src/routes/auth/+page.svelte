@@ -128,26 +128,26 @@
 </svelte:head>
 
 {#if !$controlSessionReady}
-  <main class="min-h-screen bg-[var(--ui-bg)] px-4 py-10 text-[var(--ui-text)]">
+  <main class="min-h-screen bg-[var(--ui-bg)] px-4 py-6 text-[var(--ui-text)]">
     <div
-      class="mx-auto flex max-w-xl items-center justify-center rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-4 py-10 text-[13px]"
+      class="mx-auto flex max-w-xl items-center justify-center rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-4 py-6 text-[13px]"
     >
       Loading...
     </div>
   </main>
 {:else if $controlAuthenticated && !$page.url.searchParams.get("invite")}
-  <main class="min-h-screen bg-[var(--ui-bg)] px-4 py-10 text-[var(--ui-text)]">
+  <main class="min-h-screen bg-[var(--ui-bg)] px-4 py-6 text-[var(--ui-text)]">
     <div
-      class="mx-auto flex max-w-xl items-center justify-center rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-4 py-10 text-[13px]"
+      class="mx-auto flex max-w-xl items-center justify-center rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-4 py-6 text-[13px]"
     >
       Redirecting to dashboard...
     </div>
   </main>
 {:else}
-  <main class="min-h-screen bg-[var(--ui-bg)] px-4 py-10 text-[var(--ui-text)]">
+  <main class="min-h-screen bg-[var(--ui-bg)] px-4 py-6 text-[var(--ui-text)]">
     <div class="mx-auto max-w-2xl">
-      <div class="mb-6 text-center">
-        <h1 class="text-2xl font-bold text-[var(--ui-text)]">
+      <div class="mb-5 text-center">
+        <h1 class="text-lg font-semibold text-[var(--ui-text)]">
           Organization Autorunner
         </h1>
         <p class="text-[var(--ui-text-muted)]">

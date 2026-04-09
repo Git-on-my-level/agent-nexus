@@ -660,7 +660,7 @@
           ></span
         >
         <button
-          class="cursor-pointer shrink-0 font-medium text-indigo-600 hover:text-indigo-500"
+          class="cursor-pointer shrink-0 font-medium text-indigo-400 hover:text-indigo-300"
           onclick={() => undoAcknowledge(pending.item.id)}
           type="button"
         >
@@ -811,11 +811,19 @@
                         ? `${getInboxSubjectKind(item)}:`
                         : "Subject:"}
                     </span>
-                    <span>{subjectId.length > 12 ? `${subjectId.slice(0, 8)}…` : subjectId}</span>
+                    <span
+                      >{subjectId.length > 12
+                        ? `${subjectId.slice(0, 8)}…`
+                        : subjectId}</span
+                    >
                   </span>
                 {/if}
                 {#each item.related_refs ?? [] as refValue}
-                  <RefLink {refValue} threadId={inboxActionThreadId(item)} humanize />
+                  <RefLink
+                    {refValue}
+                    threadId={inboxActionThreadId(item)}
+                    humanize
+                  />
                 {/each}
               </div>
 
@@ -1017,7 +1025,7 @@
                           class="border-t border-[var(--ui-border)] pt-2 mt-2"
                         >
                           <a
-                            class="inline-flex items-center gap-1 text-[12px] font-medium text-[var(--ui-accent)] hover:text-[var(--ui-accent-strong)] transition-colors"
+                            class="inline-flex items-center gap-1 text-[12px] font-medium text-indigo-400 hover:text-indigo-300 transition-colors"
                             href={inboxItemHref(item)}
                           >
                             View subject &rarr;

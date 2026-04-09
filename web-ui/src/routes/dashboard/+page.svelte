@@ -69,7 +69,7 @@
       case "provisioning":
         return "text-amber-400";
       case "ready":
-        return "text-green-400";
+        return "text-emerald-400";
       case "suspended":
         return "text-amber-400";
       case "degraded":
@@ -184,11 +184,11 @@
   <title>Dashboard - OAR Control</title>
 </svelte:head>
 
-<main class="min-h-screen bg-[var(--ui-bg)] px-4 py-10 text-[var(--ui-text)]">
+<main class="min-h-screen bg-[var(--ui-bg)] px-4 py-6 text-[var(--ui-text)]">
   <div class="mx-auto max-w-6xl">
-    <header class="mb-8 flex items-center justify-between">
+    <header class="mb-5 flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-[var(--ui-text)]">
+        <h1 class="text-lg font-semibold text-[var(--ui-text)]">
           Organizations &amp; Workspaces
         </h1>
         <p class="text-[var(--ui-text-muted)]">
@@ -293,7 +293,7 @@
         </div>
       </div>
     {:else}
-      <div class="space-y-8">
+      <div class="space-y-5">
         {#each organizations as org}
           <section
             class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)]"
@@ -453,7 +453,7 @@
 
                   {#if (billing.configuration?.missing_configuration ?? []).length > 0}
                     <div
-                      class="mt-3 rounded-md bg-amber-500/10 px-3 py-2 text-[12px] text-amber-300"
+                      class="mt-3 rounded-md bg-amber-500/10 px-3 py-2 text-[12px] text-amber-400"
                     >
                       Missing Stripe values:
                       {#each billing.configuration.missing_configuration as missing, index}

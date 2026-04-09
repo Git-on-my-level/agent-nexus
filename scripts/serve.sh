@@ -152,10 +152,21 @@ else
 	echo "Skipping core seed step (SEED_CORE=${SEED_CORE})."
 fi
 
+# Explicit `local` workspace for web-ui: `serve.sh` historically set only
+# OAR_CORE_BASE_URL, which triggers a synthetic default workspace when
+# OAR_WORKSPACES is unset. That breaks common dev cases:
+# - Shell / CI exports OAR_WORKSPACES without a `local` entry; the URL slug
+#   still defaults to /local/... → "not configured".
+# - A control-plane session merges in SaaS workspaces and clears synthetic
+#   static entries, removing `local` from the catalog.
+# Override with SERVE_UI_OAR_WORKSPACES='[...]' for custom multi-core dev.
+SERVE_UI_OAR_WORKSPACES="${SERVE_UI_OAR_WORKSPACES:-[{\"slug\":\"local\",\"label\":\"Local\",\"coreBaseUrl\":\"${CORE_BASE_URL}\"}]}"
+
 (
 	cd "${REPO_ROOT}/web-ui"
 	OAR_DEV_ACTOR_MODE="${OAR_DEV_ACTOR_MODE:-1}" \
 		OAR_CORE_BASE_URL="${CORE_BASE_URL}" \
+		OAR_WORKSPACES="${SERVE_UI_OAR_WORKSPACES}" \
 		PORT="${WEB_UI_PORT}" \
 		./scripts/dev
 ) &

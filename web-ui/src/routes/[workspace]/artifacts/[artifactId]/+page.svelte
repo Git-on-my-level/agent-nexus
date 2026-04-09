@@ -836,7 +836,7 @@
         {#if createdReview}
           <div class="mt-2 text-[12px] text-[var(--ui-text-muted)]">
             Review submitted: <a
-              class="font-medium text-indigo-400 hover:text-indigo-400"
+              class="font-medium text-indigo-400 hover:text-indigo-300"
               href={workspaceHref(`/artifacts/${createdReview.id}`)}
               >{createdReview.summary || createdReview.id}</a
             >

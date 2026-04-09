@@ -77,7 +77,7 @@
     <div class="flex flex-wrap gap-2">
       {#each selectedItems as item}
         <span
-          class="inline-flex items-center gap-2 rounded-full border border-[var(--ui-border)] bg-[var(--ui-panel)] px-2.5 py-1 text-[11px] text-[var(--ui-text)]"
+          class="inline-flex items-center gap-2 rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] px-2.5 py-1 text-[11px] text-[var(--ui-text)]"
         >
           <span>{item.title || item.id}</span>
           <button

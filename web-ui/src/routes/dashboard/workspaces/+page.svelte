@@ -66,12 +66,12 @@
   <title>Create Workspace - OAR Control</title>
 </svelte:head>
 
-<main class="min-h-screen bg-[var(--ui-bg)] px-4 py-10 text-[var(--ui-text)]">
+<main class="min-h-screen bg-[var(--ui-bg)] px-4 py-6 text-[var(--ui-text)]">
   <div class="mx-auto max-w-2xl">
     <header class="mb-6">
       <div class="flex items-center justify-between">
         <div>
-          <h1 class="text-2xl font-bold text-[var(--ui-text)]">
+          <h1 class="text-lg font-semibold text-[var(--ui-text)]">
             Create Workspace
           </h1>
           <p class="text-[var(--ui-text-muted)]">

@@ -555,7 +555,7 @@
                 role="region"
                 aria-label="Confirm permanent delete"
               >
-                <p class="font-medium text-red-300">
+                <p class="font-medium text-red-400">
                   {purgeConfirmLabel("artifacts")}
                 </p>
                 <div class="mt-2 flex flex-wrap justify-end gap-1.5">
@@ -661,7 +661,7 @@
                 role="region"
                 aria-label="Confirm permanent delete"
               >
-                <p class="font-medium text-red-300">
+                <p class="font-medium text-red-400">
                   {purgeConfirmLabel("documents")}
                 </p>
                 <div class="mt-2 flex flex-wrap justify-end gap-1.5">
@@ -841,7 +841,7 @@
                 role="region"
                 aria-label="Confirm permanent delete"
               >
-                <p class="font-medium text-red-300">
+                <p class="font-medium text-red-400">
                   {purgeConfirmLabel("boards")}
                 </p>
                 <div class="mt-2 flex flex-wrap justify-end gap-1.5">
@@ -994,7 +994,7 @@
                   role="region"
                   aria-label="Confirm permanent delete"
                 >
-                  <p class="font-medium text-red-300">
+                  <p class="font-medium text-red-400">
                     {purgeConfirmLabel("cards")}
                   </p>
                   <div class="mt-2 flex flex-wrap justify-end gap-1.5">

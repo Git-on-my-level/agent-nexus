@@ -498,7 +498,7 @@
         <div class="min-w-0 flex-1">
           <div class="flex flex-wrap items-center gap-2">
             <h2
-              class="truncate text-[15px] font-semibold text-[var(--ui-text)]"
+              class="truncate text-[13px] font-semibold text-[var(--ui-text)]"
             >
               {headerTitle}
             </h2>
@@ -1016,7 +1016,7 @@
           {/if}
           <button
             type="button"
-            class="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-[12px] font-medium text-red-300 transition-colors hover:bg-red-500/20"
+            class="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-[12px] font-medium text-red-400 transition-colors hover:bg-red-500/20"
             onclick={() => onremovecard(cardItem)}
           >
             Remove card
@@ -1056,7 +1056,7 @@
     border-radius: 0.375rem;
     border: 1px solid var(--ui-border);
     background: var(--ui-panel);
-    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+    box-shadow: var(--ui-shadow-elevated);
   }
 
   .cdm-scroll {

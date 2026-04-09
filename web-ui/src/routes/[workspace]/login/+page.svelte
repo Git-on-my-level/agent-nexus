@@ -194,23 +194,23 @@
 </script>
 
 {#if $authenticatedAgent}
-  <main class="min-h-screen bg-[var(--ui-bg)] px-4 py-10 text-[var(--ui-text)]">
+  <main class="min-h-screen bg-[var(--ui-bg)] px-4 py-6 text-[var(--ui-text)]">
     <div
-      class="mx-auto flex max-w-xl items-center justify-center rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-4 py-10 text-[13px]"
+      class="mx-auto flex max-w-xl items-center justify-center rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-4 py-6 text-[13px]"
     >
       Redirecting to the workspace...
     </div>
   </main>
 {:else if loadingBootstrapStatus}
-  <main class="min-h-screen bg-[var(--ui-bg)] px-4 py-10 text-[var(--ui-text)]">
+  <main class="min-h-screen bg-[var(--ui-bg)] px-4 py-6 text-[var(--ui-text)]">
     <div
-      class="mx-auto flex max-w-xl items-center justify-center rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-4 py-10 text-[13px]"
+      class="mx-auto flex max-w-xl items-center justify-center rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-4 py-6 text-[13px]"
     >
       Checking workspace status...
     </div>
   </main>
 {:else}
-  <main class="min-h-screen bg-[var(--ui-bg)] px-4 py-10 text-[var(--ui-text)]">
+  <main class="min-h-screen bg-[var(--ui-bg)] px-4 py-6 text-[var(--ui-text)]">
     <div class="mx-auto flex max-w-5xl flex-col gap-4 lg:flex-row">
       <section
         class="rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] lg:w-[22rem]"

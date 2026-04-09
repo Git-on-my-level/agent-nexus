@@ -401,7 +401,7 @@
 
   function statusColor(status) {
     if (status === "active") return "text-emerald-400 bg-emerald-500/10";
-    if (status === "paused") return "text-amber-300 bg-amber-500/10";
+    if (status === "paused") return "text-amber-400 bg-amber-500/10";
     if (status === "closed") return "text-slate-300 bg-slate-500/10";
     return "text-[var(--ui-text-muted)] bg-[var(--ui-border)]";
   }
@@ -1162,7 +1162,7 @@
                 boardColumnTitle(column.key, board.column_schema)}
             </h3>
             <span
-              class="min-w-[1.25rem] rounded-full bg-[var(--ui-border)] px-1.5 py-0.5 text-center text-[11px] text-[var(--ui-text-subtle)]"
+              class="min-w-[1.25rem] rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-center text-[11px] text-[var(--ui-text-subtle)]"
             >
               {cards.length}
             </span>
@@ -1370,10 +1370,10 @@
     <section
       class="mt-4 rounded-md border border-amber-500/20 bg-amber-500/10 px-4 py-3"
     >
-      <h2 class="text-[13px] font-medium text-amber-100">Warnings</h2>
+      <h2 class="text-[13px] font-medium text-amber-400">Warnings</h2>
       <div class="mt-2 space-y-1.5">
         {#each boardWarnings as warning}
-          <div class="text-[12px] text-amber-100">
+          <div class="text-[12px] text-amber-400">
             {warning.message || "Workspace warning"}
             {#if warning.topic_id || warning.thread_id}
               {@const warnNav = warningInspectNav(warning)}
@@ -1383,7 +1383,7 @@
                     ? `topic:${warnNav.segment}`
                     : `thread:${warnNav.segment}`}
                 <span
-                  class="ml-1 inline [&_a]:font-medium [&_a]:text-amber-200 [&_a]:underline [&_a]:transition-colors [&_a:hover]:text-amber-100"
+                  class="ml-1 inline [&_a]:font-medium [&_a]:text-amber-300 [&_a]:underline [&_a]:transition-colors [&_a:hover]:text-amber-200"
                 >
                   <RefLink refValue={warnRef} {boardId} humanize showRaw />
                 </span>

@@ -257,7 +257,7 @@
       <p class="mt-1 text-[12px] text-[var(--ui-text-muted)]">
         Scoped to backing thread
         <a
-          class="text-indigo-300 transition-colors hover:text-indigo-200"
+          class="text-indigo-400 transition-colors hover:text-indigo-300"
           href={workspaceHref(`/threads/${encodeURIComponent(scopedThreadId)}`)}
         >
           {scopedThreadId}
@@ -339,7 +339,7 @@
       own backing thread.
     </p>
     <a
-      class="text-[12px] font-medium text-indigo-300 transition-colors hover:text-indigo-200"
+      class="text-[12px] font-medium text-indigo-400 transition-colors hover:text-indigo-300"
       href={workspaceHref("/docs")}
     >
       Clear scope

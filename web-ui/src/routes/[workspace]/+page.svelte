@@ -197,7 +197,7 @@
 
   function boardStatusColor(status) {
     if (status === "active") return "text-emerald-400 bg-emerald-500/10";
-    if (status === "paused") return "text-amber-300 bg-amber-500/10";
+    if (status === "paused") return "text-amber-400 bg-amber-500/10";
     if (status === "closed") return "text-slate-300 bg-slate-500/10";
     return "text-[var(--ui-text-muted)] bg-[var(--ui-border)]";
   }

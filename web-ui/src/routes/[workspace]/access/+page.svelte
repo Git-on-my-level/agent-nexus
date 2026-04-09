@@ -600,7 +600,7 @@
               This one-time token will not be shown again. Copy it now.
             </p>
             <div
-              class="mt-2 flex items-center gap-2 rounded bg-black/20 px-2 py-1.5 font-mono text-[11px] text-[var(--ui-text)]"
+              class="mt-2 flex items-center gap-2 rounded bg-gray-50 px-2 py-1.5 font-mono text-[11px] text-[var(--ui-text)]"
             >
               <span class="flex-1 break-all">{createdToken}</span>
               {#if createdInviteKind === "agent" || createdInviteKind === "any"}
@@ -925,7 +925,8 @@
                         </button>
                         {#if wakePopoverTarget === principal.agent_id}
                           <div
-                            class="absolute left-12 top-full z-30 mt-1 w-72 rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] px-3 py-2 shadow-lg sm:left-24"
+                            class="absolute left-12 top-full z-30 mt-1 w-72 rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)] px-3 py-2 sm:left-24"
+                            style="box-shadow: var(--ui-shadow-elevated)"
                             role="tooltip"
                           >
                             <div class="flex items-start justify-between gap-2">
@@ -1113,7 +1114,7 @@
             {/if}
             {#if principalRevokeError}
               <p
-                class="mt-2 rounded bg-red-500/20 px-2 py-1 text-[11px] text-red-300"
+                class="mt-2 rounded bg-red-500/20 px-2 py-1 text-[11px] text-red-400"
               >
                 {principalRevokeError}
               </p>

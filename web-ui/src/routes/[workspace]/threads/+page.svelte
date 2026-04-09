@@ -419,7 +419,7 @@
         Diagnostic list of append-only backing threads (timelines). Not every
         thread is a topic; prefer
         <a
-          class="text-indigo-300 transition-colors hover:text-indigo-200"
+          class="text-indigo-400 transition-colors hover:text-indigo-300"
           href={workspaceHref("/topics")}>Topics</a
         >
         for triage and planning.
@@ -732,7 +732,7 @@
     </div>
     <div class="mt-3 flex justify-end">
       <button
-        class="cursor-pointer rounded-md bg-[var(--ui-panel)] px-4 py-2 text-[12px] font-medium text-[var(--ui-text)] hover:bg-[var(--ui-border)] disabled:opacity-50"
+        class="cursor-pointer rounded-md bg-indigo-600 px-4 py-2 text-[12px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
         disabled={creatingTopic}
         type="submit"
       >
@@ -1004,7 +1004,7 @@
             class="flex shrink-0 items-center border-l border-[var(--ui-border)] px-2"
           >
             <a
-              class="text-[11px] font-medium text-indigo-300 transition-colors hover:text-indigo-200"
+              class="text-[11px] font-medium text-indigo-400 transition-colors hover:text-indigo-300"
               href={workspaceHref(`/topics/${encodeURIComponent(topicSeg)}`)}
               >Topic</a
             >

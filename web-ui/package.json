@@ -7,7 +7,7 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "dev": "vite dev",
+    "dev": "bash scripts/dev",
     "build": "vite build && node scripts/check-client-bundle.mjs",
     "preview": "vite preview",
     "lint": "eslint . && node scripts/check-svelte5-runes.js && prettier --check \"src/**/*.{js,svelte,css}\" \"tests/**/*.js\" \"*.{json,js,cjs}\" \".github/workflows/*.yml\"",

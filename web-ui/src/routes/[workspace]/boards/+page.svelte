@@ -163,7 +163,7 @@
 
   function statusColor(status) {
     if (status === "active") return "text-emerald-400 bg-emerald-500/10";
-    if (status === "paused") return "text-amber-300 bg-amber-500/10";
+    if (status === "paused") return "text-amber-400 bg-amber-500/10";
     if (status === "closed") return "text-slate-300 bg-slate-500/10";
     return "text-[var(--ui-text-muted)] bg-[var(--ui-border)]";
   }
@@ -447,8 +447,9 @@
           ? 'border-t border-[var(--ui-border)]'
           : ''}"
       >
-        <div
-          class="min-w-0 flex-1 cursor-pointer px-4 py-3 transition-colors hover:bg-[var(--ui-border-subtle)]"
+        <button
+          type="button"
+          class="min-w-0 flex-1 cursor-pointer border-0 bg-transparent px-4 py-3 text-left transition-colors hover:bg-[var(--ui-border-subtle)]"
           onclick={() => navigateToBoard(board.id)}
         >
           <div class="flex items-start justify-between gap-3">
@@ -520,7 +521,7 @@
                         : "Backing thread"}:</span
                     >
                     <a
-                      class="text-indigo-300 transition-colors hover:text-indigo-200"
+                      class="text-indigo-400 transition-colors hover:text-indigo-300"
                       href={workspaceHref(
                         rowNav.kind === "topic"
                           ? `/topics/${encodeURIComponent(rowNav.segment)}`
@@ -573,7 +574,7 @@
               {/if}
             </div>
           </div>
-        </div>
+        </button>
         <div
           class="flex shrink-0 items-center gap-1 border-l border-[var(--ui-border)] px-2"
         >
