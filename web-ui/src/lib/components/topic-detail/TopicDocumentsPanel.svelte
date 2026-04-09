@@ -63,7 +63,7 @@
       >
         Docs
       </h2>
-      <p class="mt-0.5 text-[12px] text-[var(--ui-text-subtle)]">
+      <p class="mt-0.5 text-[12px] text-[var(--ui-text-muted)]">
         Topic-linked documents and current head revisions.
       </p>
     </div>
@@ -104,7 +104,7 @@
                     {DOC_STATUS_LABELS[doc.status] ?? doc.status}
                   </span>
                 {/if}
-                <span class="text-[11px] text-[var(--ui-text-subtle)]">
+                <span class="text-[11px] text-[var(--ui-text-muted)]">
                   v{doc.head_revision?.revision_number ??
                     doc.head_revision_number ??
                     "?"}
@@ -136,7 +136,7 @@
               </p>
             </div>
             <div
-              class="shrink-0 text-right text-[11px] text-[var(--ui-text-subtle)]"
+              class="shrink-0 text-right text-[11px] text-[var(--ui-text-muted)]"
             >
               <div>
                 Head revision {doc.head_revision?.revision_number ??

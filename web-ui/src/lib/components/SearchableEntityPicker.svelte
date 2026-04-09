@@ -138,7 +138,7 @@
     <div>
       <p class="text-[12px] font-medium text-[var(--ui-text-muted)]">{label}</p>
       {#if helperText}
-        <p class="mt-0.5 text-[11px] text-[var(--ui-text-subtle)]">
+        <p class="mt-0.5 text-[11px] text-[var(--ui-text-muted)]">
           {helperText}
         </p>
       {/if}
@@ -163,7 +163,7 @@
         <p class="text-[12px] font-medium text-[var(--ui-text)]">
           {selectedItem.title || selectedItem.id}
         </p>
-        <p class="mt-0.5 text-[11px] text-[var(--ui-text-subtle)]">
+        <p class="mt-0.5 text-[11px] text-[var(--ui-text-muted)]">
           {selectedItem.id}
           {#if selectedItem.subtitle}
             · {selectedItem.subtitle}
@@ -173,7 +173,7 @@
         <p class="text-[12px] font-medium text-[var(--ui-text)]">
           Manual ID selected
         </p>
-        <p class="mt-0.5 font-mono text-[11px] text-[var(--ui-text-subtle)]">
+        <p class="mt-0.5 font-mono text-[11px] text-[var(--ui-text-muted)]">
           {value}
         </p>
       {/if}
@@ -192,7 +192,7 @@
   </label>
 
   {#if searchLoading}
-    <div class="text-[11px] text-[var(--ui-text-subtle)]">Searching…</div>
+    <div class="text-[11px] text-[var(--ui-text-muted)]">Searching…</div>
   {/if}
 
   {#if searchError}
@@ -203,7 +203,7 @@
     class="max-h-48 overflow-y-auto rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]"
   >
     {#if filteredItems.length === 0}
-      <div class="px-3 py-3 text-[12px] text-[var(--ui-text-subtle)]">
+      <div class="px-3 py-3 text-[12px] text-[var(--ui-text-muted)]">
         {emptyText}
       </div>
     {:else}
@@ -220,7 +220,7 @@
             <p class="truncate text-[12px] font-medium text-[var(--ui-text)]">
               {item.title || item.id}
             </p>
-            <p class="mt-0.5 truncate text-[11px] text-[var(--ui-text-subtle)]">
+            <p class="mt-0.5 truncate text-[11px] text-[var(--ui-text-muted)]">
               {item.id}
               {#if item.subtitle}
                 · {item.subtitle}
@@ -262,7 +262,7 @@
           value={manualValue()}
         />
       </label>
-      <p class="text-[11px] text-[var(--ui-text-subtle)]">
+      <p class="text-[11px] text-[var(--ui-text-muted)]">
         Use this only for expert or debugging cases when the normal picker is
         not enough.
       </p>

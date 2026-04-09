@@ -199,11 +199,11 @@
         </span>
       {/if}
       <span
-        class="rounded px-2 py-0.5 capitalize {topicStatusBadgeClass(topic.status)}"
-        >{topic.status}</span
+        class="rounded px-2 py-0.5 capitalize {topicStatusBadgeClass(
+          topic.status,
+        )}">{topic.status}</span
       >
-      <span
-        class="rounded px-2 py-0.5 {priorityBadgeClasses(topic.priority)}"
+      <span class="rounded px-2 py-0.5 {priorityBadgeClasses(topic.priority)}"
         >{getPriorityLabel(topic.priority)}</span
       >
       {#if detailAsTopic && !topic.trashed_at && threadId}

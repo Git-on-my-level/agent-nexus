@@ -192,7 +192,7 @@
           {#if assigneeVisible.length > 0}
             {#each assigneeVisible as name}
               <span
-                class="max-w-[7rem] truncate rounded-md bg-[var(--ui-border)] px-1 py-0.5 text-[11px] text-[var(--ui-text-subtle)]"
+                class="max-w-[7rem] truncate rounded-md bg-[var(--ui-border)] px-1 py-0.5 text-[11px] text-[var(--ui-text-muted)]"
                 title={name}
               >
                 {name}

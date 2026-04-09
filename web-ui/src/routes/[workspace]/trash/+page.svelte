@@ -129,12 +129,12 @@
       active: "text-emerald-400",
       blocked: "text-amber-400",
       resolved: "text-sky-400",
-      archived: "text-gray-400",
+      archived: "text-slate-300",
       paused: "text-amber-400",
-      closed: "text-gray-400",
+      closed: "text-slate-300",
       proposed: "text-[var(--ui-text-muted)]",
     };
-    return styles[status] ?? "text-gray-400";
+    return styles[status] ?? "text-gray-500";
   }
 
   async function loadTrash() {
@@ -504,19 +504,19 @@
               class="mt-2 grid gap-x-4 gap-y-1 text-[11px] text-[var(--ui-text-muted)] sm:grid-cols-2 xl:grid-cols-3"
             >
               <div>
-                <span class="text-[var(--ui-text-subtle)]">Created</span>
+                <span class="text-[var(--ui-text-muted)]">Created</span>
                 {formatTimestamp(artifact.created_at) || "—"}
                 <span class="text-[var(--ui-text-subtle)]"> · </span>
                 {actorName(artifact.created_by)}
               </div>
               <div>
-                <span class="text-[var(--ui-text-subtle)]">Trashed</span>
+                <span class="text-[var(--ui-text-muted)]">Trashed</span>
                 {formatTimestamp(artifact.trashed_at) || "—"}
                 <span class="text-[var(--ui-text-subtle)]"> · </span>
                 {actorName(artifact.trashed_by)}
               </div>
               <div class="sm:col-span-2 xl:col-span-1">
-                <span class="text-[var(--ui-text-subtle)]">Reason</span>
+                <span class="text-[var(--ui-text-muted)]">Reason</span>
                 {trashReason(artifact)}
               </div>
             </div>
@@ -584,19 +584,19 @@
               class="mt-2 grid gap-x-4 gap-y-1 text-[11px] text-[var(--ui-text-muted)] sm:grid-cols-2 xl:grid-cols-3"
             >
               <div>
-                <span class="text-[var(--ui-text-subtle)]">Created</span>
+                <span class="text-[var(--ui-text-muted)]">Created</span>
                 {formatTimestamp(doc.created_at) || "—"}
                 <span class="text-[var(--ui-text-subtle)]"> · </span>
                 {actorName(doc.created_by)}
               </div>
               <div>
-                <span class="text-[var(--ui-text-subtle)]">Trashed</span>
+                <span class="text-[var(--ui-text-muted)]">Trashed</span>
                 {formatTimestamp(doc.trashed_at) || "—"}
                 <span class="text-[var(--ui-text-subtle)]"> · </span>
                 {actorName(doc.trashed_by)}
               </div>
               <div class="sm:col-span-2 xl:col-span-1">
-                <span class="text-[var(--ui-text-subtle)]">Reason</span>
+                <span class="text-[var(--ui-text-muted)]">Reason</span>
                 {trashReason(doc)}
               </div>
             </div>
@@ -670,7 +670,7 @@
               class="mt-2 grid gap-x-4 gap-y-1 text-[11px] text-[var(--ui-text-muted)] sm:grid-cols-2 xl:grid-cols-3"
             >
               <div>
-                <span class="text-[var(--ui-text-subtle)]">Created</span>
+                <span class="text-[var(--ui-text-muted)]">Created</span>
                 {formatTimestamp(threadCreatedAt(thread)) || "—"}
                 {#if thread.created_by}
                   <span class="text-[var(--ui-text-subtle)]"> · </span>
@@ -678,13 +678,13 @@
                 {/if}
               </div>
               <div>
-                <span class="text-[var(--ui-text-subtle)]">Trashed</span>
+                <span class="text-[var(--ui-text-muted)]">Trashed</span>
                 {formatTimestamp(thread.trashed_at) || "—"}
                 <span class="text-[var(--ui-text-subtle)]"> · </span>
                 {actorName(thread.trashed_by)}
               </div>
               <div class="sm:col-span-2 xl:col-span-1">
-                <span class="text-[var(--ui-text-subtle)]">Reason</span>
+                <span class="text-[var(--ui-text-muted)]">Reason</span>
                 {trashReason(thread)}
               </div>
             </div>
@@ -734,19 +734,19 @@
               class="mt-2 grid gap-x-4 gap-y-1 text-[11px] text-[var(--ui-text-muted)] sm:grid-cols-2 xl:grid-cols-3"
             >
               <div>
-                <span class="text-[var(--ui-text-subtle)]">Created</span>
+                <span class="text-[var(--ui-text-muted)]">Created</span>
                 {formatTimestamp(board.created_at) || "—"}
                 <span class="text-[var(--ui-text-subtle)]"> · </span>
                 {actorName(board.created_by)}
               </div>
               <div>
-                <span class="text-[var(--ui-text-subtle)]">Trashed</span>
+                <span class="text-[var(--ui-text-muted)]">Trashed</span>
                 {formatTimestamp(board.trashed_at) || "—"}
                 <span class="text-[var(--ui-text-subtle)]"> · </span>
                 {actorName(board.trashed_by)}
               </div>
               <div class="sm:col-span-2 xl:col-span-1">
-                <span class="text-[var(--ui-text-subtle)]">Reason</span>
+                <span class="text-[var(--ui-text-muted)]">Reason</span>
                 {trashReason(board)}
               </div>
             </div>
@@ -819,25 +819,25 @@
               class="mt-2 grid gap-x-4 gap-y-1 text-[11px] text-[var(--ui-text-muted)] sm:grid-cols-2 xl:grid-cols-3"
             >
               <div>
-                <span class="text-[var(--ui-text-subtle)]">Created</span>
+                <span class="text-[var(--ui-text-muted)]">Created</span>
                 {formatTimestamp(card.created_at) || "—"}
                 <span class="text-[var(--ui-text-subtle)]"> · </span>
                 {actorName(card.created_by)}
               </div>
               <div>
-                <span class="text-[var(--ui-text-subtle)]">Archived</span>
+                <span class="text-[var(--ui-text-muted)]">Archived</span>
                 {formatTimestamp(card.archived_at) || "—"}
                 <span class="text-[var(--ui-text-subtle)]"> · </span>
                 {actorName(card.archived_by)}
               </div>
               <div class="sm:col-span-2 xl:col-span-1">
-                <span class="text-[var(--ui-text-subtle)]">Trashed</span>
+                <span class="text-[var(--ui-text-muted)]">Trashed</span>
                 {formatTimestamp(card.trashed_at) || "—"}
                 <span class="text-[var(--ui-text-subtle)]"> · </span>
                 {actorName(card.trashed_by)}
               </div>
               <div class="sm:col-span-2 xl:col-span-1">
-                <span class="text-[var(--ui-text-subtle)]">Reason</span>
+                <span class="text-[var(--ui-text-muted)]">Reason</span>
                 {trashReason(card)}
               </div>
             </div>

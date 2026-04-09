@@ -575,7 +575,7 @@
     </div>
     {#if artifact.thread_id && artifactTopicHref}
       <div class="mt-1.5 text-[12px] text-[var(--ui-text-muted)]">
-        <span class="text-[var(--ui-text-subtle)]">Topic</span>
+        <span class="text-[var(--ui-text-muted)]">Topic</span>
         <a
           class="ml-1 text-indigo-400 transition-colors hover:text-indigo-300"
           href={workspaceHref(artifactTopicHref)}
@@ -599,7 +599,7 @@
       >
       <div class="px-4 pb-3 pt-1">
         <p
-          class="text-[11px] uppercase tracking-[0.12em] text-[var(--ui-text-subtle)]"
+          class="text-[11px] uppercase tracking-[0.12em] text-[var(--ui-text-muted)]"
         >
           Content hash
         </p>

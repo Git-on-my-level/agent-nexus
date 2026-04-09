@@ -335,13 +335,13 @@
     const styles = {
       active: "text-emerald-400",
       paused: "text-amber-400",
-      closed: "text-gray-400",
+      closed: "text-slate-300",
       blocked: "text-amber-400",
-      resolved: "text-gray-400",
+      resolved: "text-slate-300",
       proposed: "text-[var(--ui-text-muted)]",
-      archived: "text-gray-400",
+      archived: "text-slate-300",
     };
-    return styles[status] ?? "text-gray-400";
+    return styles[status] ?? "text-gray-500";
   }
 
   function isTopicArchived(topic) {
@@ -822,7 +822,8 @@
               <span class="font-medium capitalize {statusColor(topic.status)}"
                 >{topic.status}</span
               >
-              <span class="hidden rounded border border-[var(--ui-border)] px-1.5 py-0.5 text-[10px] text-[var(--ui-text-subtle)] sm:inline"
+              <span
+                class="hidden rounded border border-[var(--ui-border)] px-1.5 py-0.5 text-[10px] text-[var(--ui-text-muted)] sm:inline"
                 >{formatCadenceLabel(topic.cadence, {
                   includeExpression: false,
                 })}</span
@@ -841,7 +842,7 @@
                   >Stale</span
                 >
               {/if}
-              <span class="w-14 text-right text-[var(--ui-text-subtle)]"
+              <span class="w-14 text-right text-[var(--ui-text-muted)]"
                 >{formatTimestamp(topic.updated_at) || "—"}</span
               >
             </div>
@@ -980,9 +981,7 @@
               >
             {/if}
           </div>
-          <p
-            class="truncate font-mono text-[11px] text-[var(--ui-text-subtle)]"
-          >
+          <p class="truncate font-mono text-[11px] text-[var(--ui-text-muted)]">
             {thread.id}
           </p>
           {#if topicSeg}
@@ -991,11 +990,11 @@
               <span class="text-[var(--ui-text)]">{topicSeg}</span>
             </p>
           {:else}
-            <p class="truncate text-[11px] text-[var(--ui-text-subtle)]">
+            <p class="truncate text-[11px] text-[var(--ui-text-muted)]">
               No topic ref (non-topic or internal timeline)
             </p>
           {/if}
-          <p class="text-[11px] text-[var(--ui-text-subtle)]">
+          <p class="text-[11px] text-[var(--ui-text-muted)]">
             Updated {formatTimestamp(thread.updated_at) || "—"}
           </p>
         </a>

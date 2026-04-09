@@ -67,7 +67,7 @@
   <div>
     <p class="text-[12px] font-medium text-[var(--ui-text-muted)]">{label}</p>
     {#if helperText}
-      <p class="mt-0.5 text-[11px] text-[var(--ui-text-subtle)]">
+      <p class="mt-0.5 text-[11px] text-[var(--ui-text-muted)]">
         {helperText}
       </p>
     {/if}
@@ -82,7 +82,7 @@
           <span>{item.title || item.id}</span>
           <button
             aria-label={`Remove ${item.title || item.id}`}
-            class="text-[var(--ui-text-subtle)] transition-colors hover:text-[var(--ui-text)]"
+            class="text-[var(--ui-text-muted)] transition-colors hover:text-[var(--ui-text)]"
             onclick={() => removeValue(item.id)}
             type="button"
           >
@@ -108,7 +108,7 @@
     class="max-h-48 overflow-y-auto rounded-md border border-[var(--ui-border)] bg-[var(--ui-panel)]"
   >
     {#if filteredItems.length === 0}
-      <div class="px-3 py-3 text-[12px] text-[var(--ui-text-subtle)]">
+      <div class="px-3 py-3 text-[12px] text-[var(--ui-text-muted)]">
         {emptyText}
       </div>
     {:else}
@@ -125,7 +125,7 @@
             <p class="truncate text-[12px] font-medium text-[var(--ui-text)]">
               {item.title || item.id}
             </p>
-            <p class="mt-0.5 truncate text-[11px] text-[var(--ui-text-subtle)]">
+            <p class="mt-0.5 truncate text-[11px] text-[var(--ui-text-muted)]">
               {item.id}
               {#if item.subtitle}
                 · {item.subtitle}

@@ -532,12 +532,12 @@
           </div>
           {#if assigneeNames.length > 0}
             <div class="mt-2 flex flex-wrap items-center gap-1">
-              <span class="text-[11px] text-[var(--ui-text-subtle)]"
+              <span class="text-[11px] text-[var(--ui-text-muted)]"
                 >Assigned</span
               >
               {#each assigneeNames as name}
                 <span
-                  class="max-w-[10rem] truncate rounded-md bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] text-[var(--ui-text-subtle)]"
+                  class="max-w-[10rem] truncate rounded-md bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] text-[var(--ui-text-muted)]"
                   title={name}
                 >
                   {name}
@@ -546,7 +546,7 @@
             </div>
           {/if}
           <div class="mt-2 text-[12px] text-[var(--ui-text-muted)]">
-            <span class="text-[var(--ui-text-subtle)]">Board</span>
+            <span class="text-[var(--ui-text-muted)]">Board</span>
             {board?.title ?? boardId}
           </div>
         </div>
@@ -924,7 +924,7 @@
                 <p class="text-[11px] text-[var(--ui-text-muted)]">
                   Card updated {formatTimestamp(membership.updated_at)}
                   {#if membership?.updated_by}
-                    <span class="text-[var(--ui-text-subtle)]">
+                    <span class="text-[var(--ui-text-muted)]">
                       · {actorName(membership.updated_by)}
                     </span>
                   {/if}

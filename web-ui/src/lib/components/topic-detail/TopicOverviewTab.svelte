@@ -344,7 +344,7 @@
                 class="mt-1 block text-[11px] text-[var(--ui-text-muted)]"
                 >{describeCron(editDraft.cadenceCron)}</span
               >{/if}<span
-              class="mt-0.5 block text-[11px] text-[var(--ui-text-subtle)]"
+              class="mt-0.5 block text-[11px] text-[var(--ui-text-muted)]"
               >Five cron fields, server timezone.</span
             ></label
           >

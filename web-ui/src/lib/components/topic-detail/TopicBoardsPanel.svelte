@@ -55,7 +55,7 @@
       >
         Boards
       </h2>
-      <p class="mt-0.5 text-[12px] text-[var(--ui-text-subtle)]">
+      <p class="mt-0.5 text-[12px] text-[var(--ui-text-muted)]">
         Boards owned by or tracking this topic.
       </p>
     </div>
@@ -76,7 +76,7 @@
       {#if ownedBoards.length > 0}
         <div class="divide-y divide-[var(--ui-border-subtle)]">
           <div
-            class="text-[11px] font-semibold uppercase tracking-wide text-[var(--ui-text-subtle)] px-4 pt-2.5 pb-1"
+            class="text-[11px] font-semibold uppercase tracking-wide text-[var(--ui-text-muted)] px-4 pt-2.5 pb-1"
           >
             Owned by this topic
           </div>
@@ -101,7 +101,7 @@
                   </span>
                 {/if}
               </div>
-              <div class="shrink-0 text-[11px] text-[var(--ui-text-subtle)]">
+              <div class="shrink-0 text-[11px] text-[var(--ui-text-muted)]">
                 {board.card_count ?? 0} cards · {formatTimestamp(
                   board.updated_at,
                 ) || "—"}
@@ -114,7 +114,7 @@
       {#if boardMemberships.length > 0}
         <div class="divide-y divide-[var(--ui-border-subtle)]">
           <div
-            class="text-[11px] font-semibold uppercase tracking-wide text-[var(--ui-text-subtle)] px-4 pt-2.5 pb-1"
+            class="text-[11px] font-semibold uppercase tracking-wide text-[var(--ui-text-muted)] px-4 pt-2.5 pb-1"
           >
             Appears as card on
           </div>
@@ -165,7 +165,7 @@
                     {/if}
                   </a>
                   <span
-                    class="shrink-0 text-[11px] text-[var(--ui-text-subtle)]"
+                    class="shrink-0 text-[11px] text-[var(--ui-text-muted)]"
                   >
                     Card
                   </span>

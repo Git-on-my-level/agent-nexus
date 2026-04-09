@@ -65,10 +65,6 @@
     return workspacePath(workspaceSlug, pathname);
   }
 
-  function navigateToBoard(boardId) {
-    goto(workspaceHref(`/boards/${boardId}`));
-  }
-
   function toDocumentOption(document) {
     return {
       id: document.id,
@@ -447,12 +443,17 @@
           ? 'border-t border-[var(--ui-border)]'
           : ''}"
       >
-        <button
-          type="button"
-          class="min-w-0 flex-1 cursor-pointer border-0 bg-transparent px-4 py-3 text-left transition-colors hover:bg-[var(--ui-border-subtle)]"
-          onclick={() => navigateToBoard(board.id)}
+        <div
+          class="group relative min-w-0 flex-1 px-4 py-3 text-left transition-colors hover:bg-[var(--ui-border-subtle)]"
         >
-          <div class="flex items-start justify-between gap-3">
+          <a
+            aria-label={`Open board ${board.title || board.id}`}
+            class="absolute inset-0 z-0"
+            href={workspaceHref(`/boards/${board.id}`)}
+          ></a>
+          <div
+            class="pointer-events-none relative z-10 flex items-start justify-between gap-3"
+          >
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-center gap-2">
                 {#if board.status}
@@ -495,13 +496,11 @@
                 {/each}
               </div>
 
-              <a
-                class="mt-1 block truncate text-[13px] font-medium text-[var(--ui-text)] hover:text-indigo-300"
-                href={workspaceHref(`/boards/${board.id}`)}
-                onclick={(event) => event.stopPropagation()}
+              <span
+                class="mt-1 block truncate text-[13px] font-medium text-[var(--ui-text)] group-hover:text-indigo-300"
               >
                 {board.title || board.id}
-              </a>
+              </span>
 
               <div
                 class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[var(--ui-text-muted)]"
@@ -515,26 +514,25 @@
                 {/if}
                 {#if rowNav}
                   <span>
-                    <span class="text-[var(--ui-text-subtle)]"
+                    <span class="text-[var(--ui-text-muted)]"
                       >{rowNav.kind === "topic"
                         ? "Topic"
                         : "Backing thread"}:</span
                     >
                     <a
-                      class="text-indigo-400 transition-colors hover:text-indigo-300"
+                      class="pointer-events-auto relative z-20 text-indigo-400 transition-colors hover:text-indigo-300"
                       href={workspaceHref(
                         rowNav.kind === "topic"
                           ? `/topics/${encodeURIComponent(rowNav.segment)}`
                           : `/threads/${encodeURIComponent(rowNav.segment)}`,
                       )}
-                      onclick={(event) => event.stopPropagation()}
                     >
                       {rowNav.display}
                     </a>
                   </span>
                 {:else}
                   <span>
-                    <span class="text-[var(--ui-text-subtle)]">Context:</span>
+                    <span class="text-[var(--ui-text-muted)]">Context:</span>
                     <span class="text-[var(--ui-text-muted)]">—</span>
                   </span>
                 {/if}
@@ -561,7 +559,7 @@
                     <span
                       class={column.key === "blocked" && count > 0
                         ? "text-amber-400"
-                        : "text-[var(--ui-text-subtle)]"}
+                        : "text-[var(--ui-text-muted)]"}
                     >
                       <span class="font-medium uppercase">{column.title}</span>
                       {count}
@@ -574,7 +572,7 @@
               {/if}
             </div>
           </div>
-        </button>
+        </div>
         <div
           class="flex shrink-0 items-center gap-1 border-l border-[var(--ui-border)] px-2"
         >

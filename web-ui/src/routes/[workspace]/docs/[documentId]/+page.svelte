@@ -460,7 +460,7 @@
         <div class="min-w-0 flex-1">
           <h1 class="text-lg font-semibold text-[var(--ui-text)]">
             {document.title || ""}{#if !document.title}<span
-                class="font-mono text-[var(--ui-text-subtle)]"
+                class="font-mono text-[var(--ui-text-muted)]"
                 >{document.id}</span
               >{/if}
           </h1>
@@ -537,7 +537,7 @@
               </button>
             {:else}
               <span
-                class="inline-flex items-center gap-1 rounded-md border border-[var(--ui-border)] px-2.5 py-1.5 text-[12px] text-[var(--ui-text-subtle)]"
+                class="inline-flex items-center gap-1 rounded-md border border-[var(--ui-border)] px-2.5 py-1.5 text-[12px] text-[var(--ui-text-muted)]"
                 title="Content type '{headContentType}' can only be updated via the CLI or API"
               >
                 <svg
@@ -637,7 +637,7 @@
               type="button"
             >
               <svg
-                class="h-3 w-3 text-[var(--ui-text-subtle)] transition-transform {metadataExpanded
+                class="h-3 w-3 text-[var(--ui-text-muted)] transition-transform {metadataExpanded
                   ? 'rotate-90'
                   : ''}"
                 fill="none"
@@ -657,7 +657,7 @@
             </button>
             {#if !metadataExpanded}
               <p
-                class="mt-1 ml-5 truncate text-[11px] text-[var(--ui-text-subtle)]"
+                class="mt-1 ml-5 truncate text-[11px] text-[var(--ui-text-muted)]"
               >
                 Title: {editDraft.title || "—"} · Labels: {editDraft.labels ||
                   "none"}
@@ -728,7 +728,7 @@
               {saveError}
             </div>
           {/if}
-          <p class="mt-2 text-[11px] text-[var(--ui-text-subtle)]">
+          <p class="mt-2 text-[11px] text-[var(--ui-text-muted)]">
             Base revision: <span class="font-mono"
               >{headRevision?.revision_id ?? "—"}</span
             > — optimistic concurrency is enforced.
@@ -770,7 +770,7 @@
 
       <div class="mt-6 border-t border-[var(--ui-border)] pt-4">
         <p
-          class="mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--ui-text-subtle)]"
+          class="mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--ui-text-muted)]"
         >
           Technical details
         </p>
@@ -787,7 +787,7 @@
               {#if displayedRevision.content_hash}
                 <div>
                   <p
-                    class="text-[11px] uppercase tracking-[0.12em] text-[var(--ui-text-subtle)]"
+                    class="text-[11px] uppercase tracking-[0.12em] text-[var(--ui-text-muted)]"
                   >
                     Content hash
                   </p>
@@ -801,7 +801,7 @@
               {#if displayedRevision.revision_hash}
                 <div>
                   <p
-                    class="text-[11px] uppercase tracking-[0.12em] text-[var(--ui-text-subtle)]"
+                    class="text-[11px] uppercase tracking-[0.12em] text-[var(--ui-text-muted)]"
                   >
                     Revision hash
                   </p>
@@ -935,7 +935,7 @@
                       </p>
                       {#if rev.revision_hash}
                         <p
-                          class="mt-0.5 font-mono text-[10px] text-[var(--ui-text-subtle)]"
+                          class="mt-0.5 font-mono text-[10px] text-[var(--ui-text-muted)]"
                         >
                           {rev.revision_hash.slice(0, 12)}...
                         </p>

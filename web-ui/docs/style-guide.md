@@ -17,6 +17,30 @@ The UI targets a **dark-first, compact, information-dense** aesthetic inspired b
   refresh and deep links restore the same view. Keep transient drafts and pure
   presentation toggles out of the URL.
 
+## Accessibility — Contrast Requirements
+
+All text intended to be read must meet **WCAG 2 AA** contrast thresholds against the surface it sits on:
+
+| Threshold | Minimum ratio | Applies to |
+|-----------|---------------|------------|
+| Normal text (< 18px / < 14px bold) | **4.5 : 1** | Body, labels, timestamps, metadata, badges |
+| Large text (≥ 18px / ≥ 14px bold) | **3 : 1** | Page headings, section headings |
+
+Measured contrast ratios for each text token on the two primary surfaces:
+
+| Token | on `gray-100` (#181a21) | on `gray-50` (#0e1015) | Verdict |
+|-------|-------------------------|------------------------|---------|
+| `gray-400` (#6b7080) | 3.5 : 1 | 3.9 : 1 | Large text only; disabled/decorative |
+| `gray-500` (#8e939c) | 5.6 : 1 | 6.2 : 1 | **AA pass** — minimum for readable text |
+| `gray-600` (#9ca1ab) | 6.7 : 1 | 7.3 : 1 | AA pass |
+| `gray-700`+ | > 8 : 1 | > 9 : 1 | AA pass |
+
+**Rules:**
+
+1. **All readable text uses `gray-500` minimum.** Labels, timestamps, metadata, badge text, secondary copy, empty-state messages, placeholder-text-that-should-be-read — all must use `text-gray-500` / `text-[var(--ui-text-muted)]` or brighter.
+2. **`gray-400` is decorative/disabled only.** Use it for disabled controls, non-essential separators (e.g. `·` dot dividers), priority-dot fills, and text the operator is *not* expected to read. Never pair `text-gray-400` with `text-[11px]` — the combination is unreadable.
+3. **Test on `gray-100` (the worse case).** If text passes contrast on `gray-100`, it will also pass on the darker `gray-50`.
+
 ## Color System
 
 ### Dark Gray Palette (Tailwind Override)
@@ -29,8 +53,8 @@ The default Tailwind `gray` scale is overridden in `tailwind.config.cjs` to dark
 | `gray-100` | `#181a21` | Card/panel surfaces (replaces `bg-white`)  |
 | `gray-200` | `#262a33` | Borders, badge backgrounds, button fills   |
 | `gray-300` | `#353a45` | Strong borders, active button fills        |
-| `gray-400` | `#565b66` | Subtle/disabled text                       |
-| `gray-500` | `#7d828e` | Muted text (secondary labels)              |
+| `gray-400` | `#6b7080` | Disabled text, decorative separators (not readable text) |
+| `gray-500` | `#8e939c` | Muted text — minimum for readable content  |
 | `gray-600` | `#9ca1ab` | Secondary text                             |
 | `gray-700` | `#b4b9c2` | Body text                                  |
 | `gray-800` | `#d0d4db` | Strong text, button label text             |
@@ -38,6 +62,8 @@ The default Tailwind `gray` scale is overridden in `tailwind.config.cjs` to dark
 | `gray-950` | `#f0f2f5` | Brightest text (rare)                      |
 
 **Key consequence:** `bg-white` is never used. Use `bg-gray-100` for panel surfaces. `text-gray-900` produces near-white text suitable for headings.
+
+**Contrast consequence:** `text-gray-400` does not meet AA for normal-size text on any surface. Any text an operator should read — including "subtle" labels, timestamps, metadata lines, and uppercase section headers — must use `text-gray-500` or brighter.
 
 ### CSS Custom Properties
 
@@ -52,8 +78,8 @@ Global design tokens live in `src/app.css` under `:root`. These power the shell,
 | `--ui-border-subtle`  | `#1e2129`   | Very subtle border               |
 | `--ui-border-strong`  | `#353a45`   | Emphasized border                |
 | `--ui-text`           | `#e2e5eb`   | Primary text                     |
-| `--ui-text-muted`     | `#7d828e`   | Muted text                       |
-| `--ui-text-subtle`    | `#565b66`   | Subtle/disabled text             |
+| `--ui-text-muted`     | `#8e939c`   | Muted text (min for readable content) |
+| `--ui-text-subtle`    | `#6b7080`   | Disabled/decorative only         |
 | `--ui-accent`         | `#818cf8`   | Accent color (indigo)            |
 | `--ui-accent-strong`  | `#6366f1`   | Strong accent (brand mark, CTAs) |
 
@@ -134,7 +160,7 @@ Topic priority dots and text labels follow this mapping:
 | `p0`     | `bg-red-500`      | `text-red-400`    |
 | `p1`     | `bg-amber-400`    | `text-amber-400`  |
 | `p2`     | `bg-blue-400`     | `text-blue-400`   |
-| `p3`     | `bg-gray-300`     | `text-gray-400`   |
+| `p3`     | `bg-gray-400`     | `text-gray-500`   |
 
 ### Provenance Colors
 
@@ -149,9 +175,10 @@ Provenance indicators (rendered by `ProvenanceBadge`) use dots only — no badge
 ### Color Usage Rules
 
 1. **Semantic only.** Color communicates status, urgency, or category. Never use color for decoration or to make a surface "more interesting."
-2. **Zero = muted.** Counts and metrics at zero always render in muted or default text. Color appears only when there is a live signal.
+2. **Zero = muted.** Counts and metrics at zero always render in muted or default text (`text-gray-500` / `text-[var(--ui-text-muted)]`). Color appears only when there is a live signal. This applies to column count badges on board views, urgency tally cards, and category counts — all must be neutral gray when zero.
 3. **User-defined tags stay neutral.** Labels and tags entered by operators (board labels, topic tags, document tags) always use `bg-[var(--ui-border)] text-[var(--ui-text-muted)]` regardless of their string content — never infer semantic color from tag names.
 4. **Background tints are optional emphasis.** Use `color/5` or `color/10` background tints on urgency/status cards only when the count is non-zero and the tint adds meaningful emphasis. Do not tint containers that hold zero-count data.
+5. **Status badges ≠ user tags.** Status indicators (`Active`, `Paused`, `Closed`) use semantic color per the Status Colors table. User-defined tags use neutral gray. When they appear side-by-side (e.g. board list rows), place status first, then tags, with a small gap (`gap-1.5`) so the semantic distinction is clear.
 
 ## Typography
 
@@ -164,11 +191,14 @@ Provenance indicators (rendered by `ProvenanceBadge`) use dots only — no badge
 | Page heading     | `text-lg font-semibold text-gray-900`        |
 | Section heading  | `text-[13px] font-semibold text-gray-900`    |
 | Body text        | `text-[13px] text-gray-700` or `text-gray-800` |
-| Label (uppercase)| `text-[11px] font-medium text-gray-400 uppercase tracking-wide` |
+| Label (uppercase)| `text-[11px] font-medium text-gray-500 uppercase tracking-wide` |
 | Muted/secondary  | `text-[13px] text-gray-500`                  |
-| Timestamp/meta   | `text-[11px] text-gray-400`                  |
+| Timestamp/meta   | `text-[11px] text-gray-500`                  |
+| Disabled/decorative | `text-[13px] text-gray-400` (not at 11px) |
 
 Preferred font sizes: `text-lg`, `text-[13px]`, `text-[12px]`, `text-[11px]`. Avoid Tailwind's `text-sm` / `text-xs` / `text-base` — use explicit pixel sizes for consistency.
+
+**Contrast floor:** At `text-[11px]`, the minimum readable token is `gray-500` (5.4 : 1 on panels). Never combine small size with `gray-400` — the result fails WCAG AA and is genuinely hard to read on dark surfaces. The previous pattern of `text-[11px] text-gray-400` for labels and timestamps must be migrated to `text-gray-500`.
 
 ## Layout Patterns
 
@@ -201,6 +231,7 @@ Use a single bordered container with thin dividers, not individual cards per ite
 - Borders: `border border-gray-200`.
 - Focus: handled globally in `app.css` (indigo ring).
 - Labels: `text-[12px] font-medium text-gray-600`.
+- Placeholder text: `placeholder:text-[var(--ui-text-subtle)]` (gray-400 is acceptable for placeholders since they are replaced by user input).
 
 ```svelte
 <label class="text-[12px] font-medium text-gray-600">
@@ -277,6 +308,31 @@ Hover should **brighten** the element, not darken it. On a `bg-gray-100` surface
 
 Internal navigation links that sit inline: `text-indigo-400 hover:text-indigo-300`.
 
+### IDs, Hashes, and Ref Metadata
+
+Long identifiers (UUIDs, thread IDs, content hashes) are common in OAR data. Display rules:
+
+1. **Truncate in list contexts.** Show the first 8 characters followed by `…` for UUIDs and hashes. Use `title` attribute or copy-on-click for the full value.
+2. **Monospace for IDs.** Use `font-mono text-[11px]` for raw identifiers to distinguish them from prose.
+3. **Separate ref links.** When displaying multiple refs on one line, separate them with `·` in `text-[var(--ui-text-subtle)]` or use distinct labeled groups (`Thread`, `Topic`, `Card`). Never concatenate bare ref strings.
+4. **Readable metadata on list rows.** In artifact/thread/document list views, metadata lines should use structured labels (`Thread:`, `Topic:`, `Card:`) before each ref link. Avoid dumping raw refs as a run-on string.
+
+### Destructive Actions
+
+Destructive operations (delete, permanently delete, archive) follow escalating prominence:
+
+| Action type | Style | Safeguard |
+|-------------|-------|-----------|
+| Single-item delete | Ghost or secondary button, `text-red-400` | Inline confirmation or undo toast |
+| Single-item permanent delete | `bg-red-500/10 text-red-400 border border-red-500/20` | Inline confirmation |
+| Batch destructive (e.g. "Permanently delete all") | Same as single permanent delete, but **disabled by default** | Must require explicit confirmation dialog before execution |
+
+**Rule:** Batch destructive actions that affect multiple resources should never execute on a single click. The button itself is acceptable; the action must gate behind a confirmation modal that names the count and action.
+
+### Interactive Element Nesting
+
+Never nest focusable/clickable elements. A `<button>` inside an `<a>`, or an `<a>` inside a `<button>`, breaks screen reader announcements and causes unpredictable focus behavior. If a list row is clickable as a whole, use a single interactive wrapper and place child controls outside the click target, or use event delegation with `stopPropagation` on nested controls.
+
 ## Spacing Conventions
 
 - Page padding: handled by `.shell-main-scroll` in `app.css`.
@@ -348,6 +404,10 @@ When displaying counts that exclude certain items, label them explicitly. Exampl
 - **No `rounded-xl`** — use `rounded-md` consistently.
 - **No decorative shadows** — shadows are minimal (`--ui-shadow-*` tokens only).
 - **No hardcoded light-theme hex values** — use the gray scale or CSS custom properties.
+- **No `text-gray-400` for readable text** — gray-400 fails WCAG AA (3.5 : 1 on panels, below 4.5 threshold). Use `gray-500` minimum for anything operators should read. Reserve `gray-400` for disabled controls and decorative separators only.
+- **No `text-[11px] text-gray-400`** — this combination (small + low contrast) is the single most common accessibility violation in the codebase. Always use `text-gray-500` or brighter at 11px.
+- **No colored zero-count badges** — board column counts, urgency tallies, and category counts at zero must use muted gray, not their semantic color.
+- **No nested interactive elements** — `<a>` inside `<button>` or vice versa breaks accessibility. Use event delegation instead.
 
 ## Adding New Pages
 
@@ -355,5 +415,7 @@ When displaying counts that exclude certain items, label them explicitly. Exampl
 2. Use the typography scale above for headings, labels, body text.
 3. Use the button patterns above — accent for primary actions, secondary for everything else.
 4. Keep semantic colors to the opacity-based pattern.
-5. Test that text is readable against dark surfaces (gray-900 text on gray-100 bg).
+5. **Verify contrast:** all readable text must be `gray-500` or brighter on `gray-100` surfaces. Use the contrast table in the Accessibility section as reference.
 6. Maintain compact spacing — prefer `py-2.5` over `py-4`, prefer `text-[13px]` over `text-sm`.
+7. Truncate IDs and hashes in list views — show 8 characters max with `title` for the full value.
+8. Use `text-[var(--ui-text-muted)]` (not `text-[var(--ui-text-subtle)]`) for secondary metadata that operators need to read.

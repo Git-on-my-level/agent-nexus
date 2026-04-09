@@ -845,7 +845,7 @@
           >
             {getInboxCategoryLabel(group.category)}
           </h2>
-          <span class="text-[11px] text-[var(--ui-text-subtle)]"
+          <span class="text-[11px] text-[var(--ui-text-muted)]"
             >{group.items.length}</span
           >
         </div>
@@ -869,14 +869,14 @@
                     >{item.urgency_label}</span
                   >
                   {#if item.age_label}
-                    <span class="text-[var(--ui-text-subtle)]"
+                    <span class="text-[var(--ui-text-muted)]"
                       >{item.age_label}</span
                     >
                   {/if}
                 </div>
                 {#if item.has_source_event_time}
                   <span
-                    class="shrink-0 tabular-nums text-[var(--ui-text-subtle)]"
+                    class="shrink-0 tabular-nums text-[var(--ui-text-muted)]"
                     title={item.source_event_time}
                   >
                     {formatAbsoluteDateTime(item.source_event_time)}
@@ -903,7 +903,7 @@
               {#if item.recommended_action}
                 <div class="mt-2 rounded bg-[var(--ui-bg-soft)] px-3 py-2">
                   <p
-                    class="text-[11px] font-medium text-indigo-400/70 uppercase tracking-wide"
+                    class="text-[11px] font-medium text-indigo-400 uppercase tracking-wide"
                   >
                     Recommended
                   </p>
@@ -921,7 +921,7 @@
                     class="inline-flex items-center gap-1 rounded bg-[var(--ui-panel)] px-1.5 py-0.5 font-medium text-[var(--ui-text-muted)]"
                     title={getInboxSubjectRef(item)}
                   >
-                    <span class="text-[var(--ui-text-subtle)]">
+                    <span class="text-[var(--ui-text-muted)]">
                       {getInboxSubjectKind(item)
                         ? `${getInboxSubjectKind(item)}:`
                         : "Subject:"}

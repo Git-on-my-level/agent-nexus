@@ -364,7 +364,7 @@
             </p>
           </a>
           <div class="flex shrink-0 items-center gap-2">
-            <span class="text-[11px] text-[var(--ui-text-subtle)]">
+            <span class="text-[11px] text-[var(--ui-text-muted)]">
               {(artifact.refs ?? []).length} ref{(artifact.refs ?? [])
                 .length === 1
                 ? ""
@@ -465,7 +465,7 @@
               />
             {/each}
             {#if (artifact.refs ?? []).length > 3}
-              <span class="text-[11px] text-[var(--ui-text-subtle)]"
+              <span class="text-[11px] text-[var(--ui-text-muted)]"
                 >+{artifact.refs.length - 3} more</span
               >
             {/if}

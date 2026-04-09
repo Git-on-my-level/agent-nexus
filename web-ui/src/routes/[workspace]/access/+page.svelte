@@ -912,7 +912,7 @@
                           truncateId(principal.agent_id, 24)}
                       </span>
                       <span
-                        class="hidden shrink-0 text-[11px] text-[var(--ui-text-subtle)] sm:inline"
+                        class="hidden shrink-0 text-[11px] text-[var(--ui-text-muted)] sm:inline"
                       >
                         {principalLabel(principal)}
                       </span>
@@ -967,7 +967,7 @@
                                 {/if}
                               </div>
                               <button
-                                class="shrink-0 cursor-pointer text-[var(--ui-text-subtle)] hover:text-[var(--ui-text)]"
+                                class="shrink-0 cursor-pointer text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]"
                                 onclick={() => (wakePopoverTarget = null)}
                                 type="button"
                                 aria-label="Close"
@@ -992,7 +992,7 @@
                       {/if}
                     </div>
                     <p
-                      class="truncate font-mono text-[10px] text-[var(--ui-text-subtle)] sm:hidden"
+                      class="truncate font-mono text-[10px] text-[var(--ui-text-muted)] sm:hidden"
                     >
                       {truncateId(principal.agent_id, 28)}
                     </p>
@@ -1028,7 +1028,7 @@
                   {/if}
                 </div>
                 <div
-                  class="mt-0.5 hidden items-center gap-2 pl-[calc(theme(spacing.6)+0.625rem)] text-[10px] text-[var(--ui-text-subtle)] sm:flex"
+                  class="mt-0.5 hidden items-center gap-2 pl-[calc(theme(spacing.6)+0.625rem)] text-[10px] text-[var(--ui-text-muted)] sm:flex"
                 >
                   <span class="truncate font-mono">{principal.agent_id}</span>
                 </div>

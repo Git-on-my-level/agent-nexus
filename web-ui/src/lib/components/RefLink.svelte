@@ -31,7 +31,7 @@
   >
     <span>{resolved.primaryLabel}</span>
     {#if showRaw && resolved.secondaryLabel}
-      <span class="text-[11px] text-gray-400">{resolved.secondaryLabel}</span>
+      <span class="text-[11px] text-gray-500">{resolved.secondaryLabel}</span>
     {/if}
   </a>
 {:else}
@@ -40,7 +40,7 @@
   >
     <span>{resolved.primaryLabel}</span>
     {#if showRaw && resolved.secondaryLabel}
-      <span class="text-[11px] text-gray-400">{resolved.secondaryLabel}</span>
+      <span class="text-[11px] text-gray-500">{resolved.secondaryLabel}</span>
     {/if}
   </span>
 {/if}

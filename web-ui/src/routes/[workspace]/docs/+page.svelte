@@ -525,12 +525,12 @@
             ) || "—"} by {actorName(doc.updated_by)}
           </p>
           {#if doc.thread_id && !scopedThreadId}
-            <p class="mt-0.5 text-[11px] text-[var(--ui-text-subtle)]">
+            <p class="mt-0.5 text-[11px] text-[var(--ui-text-muted)]">
               Backing thread (timeline): {doc.thread_id}
             </p>
           {/if}
         </div>
-        <span class="shrink-0 text-[11px] text-[var(--ui-text-subtle)]">
+        <span class="shrink-0 text-[11px] text-[var(--ui-text-muted)]">
           {doc.head_revision_number} revision{doc.head_revision_number === 1
             ? ""
             : "s"}
@@ -624,7 +624,7 @@
             type="button"
           >
             <svg
-              class="h-3 w-3 text-[var(--ui-text-subtle)] transition-transform {collapsed
+              class="h-3 w-3 text-[var(--ui-text-muted)] transition-transform {collapsed
                 ? ''
                 : 'rotate-90'}"
               fill="none"

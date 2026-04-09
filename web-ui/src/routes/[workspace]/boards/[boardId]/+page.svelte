@@ -719,7 +719,7 @@
       class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[var(--ui-text-muted)]"
     >
       {#if backingThread && boardInspectNav}
-        <span class="text-[var(--ui-text-subtle)]"
+        <span class="text-[var(--ui-text-muted)]"
           >{boardInspectNav.kind === "topic" ? "Topic" : "Backing thread"}</span
         >
         <a
@@ -838,7 +838,7 @@
             <div class="mt-1 text-[var(--ui-text)]">
               {backingThread?.title || backingThreadId}
             </div>
-            <div class="mt-1 text-[11px] text-[var(--ui-text-subtle)]">
+            <div class="mt-1 text-[11px] text-[var(--ui-text-muted)]">
               {backingThreadId}
             </div>
           </div>
@@ -1131,14 +1131,14 @@
           >Backlog</span
         >
         <span
-          class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] text-[var(--ui-text-subtle)]"
+          class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] text-[var(--ui-text-muted)]"
           >{backlogCards.length}</span
         >
       </button>
       {#if backlogOpen}
         <div class="space-y-2 border-t border-[var(--ui-border)] px-3 py-2">
           {#if backlogCards.length === 0}
-            <p class="text-[11px] text-[var(--ui-text-subtle)]">No cards</p>
+            <p class="text-[11px] text-[var(--ui-text-muted)]">No cards</p>
           {:else}
             {#each backlogCards as cardItem}
               {@render renderCard(cardItem)}
@@ -1157,13 +1157,19 @@
         >
           <div class="flex items-center justify-between px-3 py-2.5">
             <h3
-              class="text-[11px] font-semibold uppercase tracking-wide {isBlocked && cards.length > 0 ? 'text-amber-400' : 'text-[var(--ui-text-muted)]'}"
+              class="text-[11px] font-semibold uppercase tracking-wide {isBlocked &&
+              cards.length > 0
+                ? 'text-amber-400'
+                : 'text-[var(--ui-text-muted)]'}"
             >
               {column.title ||
                 boardColumnTitle(column.key, board.column_schema)}
             </h3>
             <span
-              class="min-w-[1.25rem] rounded px-1.5 py-0.5 text-center text-[11px] {isBlocked && cards.length > 0 ? 'bg-amber-500/15 text-amber-400' : 'bg-[var(--ui-border)] text-[var(--ui-text-subtle)]'}"
+              class="min-w-[1.25rem] rounded px-1.5 py-0.5 text-center text-[11px] {isBlocked &&
+              cards.length > 0
+                ? 'bg-amber-500/15 text-amber-400'
+                : 'bg-[var(--ui-border)] text-[var(--ui-text-muted)]'}"
             >
               {cards.length}
             </span>
@@ -1174,7 +1180,7 @@
           >
             {#if cards.length === 0}
               <div
-                class="flex items-center justify-center rounded-md border border-dashed border-[var(--ui-border)] px-3 py-10 text-[11px] text-[var(--ui-text-subtle)]"
+                class="flex items-center justify-center rounded-md border border-dashed border-[var(--ui-border)] px-3 py-10 text-[11px] text-[var(--ui-text-muted)]"
               >
                 No cards
               </div>
@@ -1211,14 +1217,14 @@
           >Done</span
         >
         <span
-          class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] text-[var(--ui-text-subtle)]"
+          class="rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-[11px] text-[var(--ui-text-muted)]"
           >{doneCards.length}</span
         >
       </button>
       {#if doneOpen}
         <div class="space-y-2 border-t border-[var(--ui-border)] px-3 py-2">
           {#if doneCards.length === 0}
-            <p class="text-[11px] text-[var(--ui-text-subtle)]">No cards</p>
+            <p class="text-[11px] text-[var(--ui-text-muted)]">No cards</p>
           {:else}
             {#each doneCards as cardItem}
               {@render renderCard(cardItem)}
@@ -1237,14 +1243,14 @@
         <h2 class="text-[13px] font-medium text-[var(--ui-text)]">
           Workspace docs
         </h2>
-        <p class="mt-1 text-[11px] text-[var(--ui-text-subtle)]">
+        <p class="mt-1 text-[11px] text-[var(--ui-text-muted)]">
           Canonical doc lineages linked from this board's backing thread
           timeline and cards.
         </p>
       </div>
       <div class="px-4 py-3">
         {#if (workspace.documents?.items ?? []).length === 0}
-          <p class="text-[12px] text-[var(--ui-text-subtle)]">
+          <p class="text-[12px] text-[var(--ui-text-muted)]">
             No linked doc lineages yet.
           </p>
         {:else}
@@ -1257,7 +1263,7 @@
                 <div class="font-medium text-[var(--ui-text)]">
                   {document.title || document.id}
                 </div>
-                <div class="mt-1 text-[11px] text-[var(--ui-text-subtle)]">
+                <div class="mt-1 text-[11px] text-[var(--ui-text-muted)]">
                   Head v{document.head_revision_number ?? "—"} · Updated {formatTimestamp(
                     document.updated_at,
                   ) || "—"}
@@ -1282,13 +1288,13 @@
         <h2 class="text-[13px] font-medium text-[var(--ui-text)]">
           Resolved cards
         </h2>
-        <p class="mt-1 text-[11px] text-[var(--ui-text-subtle)]">
+        <p class="mt-1 text-[11px] text-[var(--ui-text-muted)]">
           First-class cards with explicit resolution state and evidence refs.
         </p>
       </div>
       <div class="px-4 py-3">
         {#if resolvedCards.length === 0}
-          <p class="text-[12px] text-[var(--ui-text-subtle)]">
+          <p class="text-[12px] text-[var(--ui-text-muted)]">
             No resolved cards in this board slice.
           </p>
         {:else}
@@ -1301,7 +1307,7 @@
                 <div class="text-[12px] font-medium text-[var(--ui-text)]">
                   {membership.title || membership.id}
                 </div>
-                <div class="mt-1 text-[11px] text-[var(--ui-text-subtle)]">
+                <div class="mt-1 text-[11px] text-[var(--ui-text-muted)]">
                   {cardResolutionLabel(membership.resolution)} · Due
                   {formatTimestamp(membership.due_at) || "—"}
                   {#if Array.isArray(membership.resolution_refs) && membership.resolution_refs.length > 0}
@@ -1327,14 +1333,14 @@
         <h2 class="text-[13px] font-medium text-[var(--ui-text)]">
           Review inbox
         </h2>
-        <p class="mt-1 text-[11px] text-[var(--ui-text-subtle)]">
+        <p class="mt-1 text-[11px] text-[var(--ui-text-muted)]">
           Derived risk and decision signals for resources tied to this board
           (backing threads).
         </p>
       </div>
       <div class="px-4 py-3">
         {#if enrichedInboxItems.length === 0}
-          <p class="text-[12px] text-[var(--ui-text-subtle)]">
+          <p class="text-[12px] text-[var(--ui-text-muted)]">
             No active derived inbox items.
           </p>
         {:else}
@@ -1348,8 +1354,14 @@
                 <div class="text-[12px] font-medium text-[var(--ui-text)]">
                   {item.title || item.summary || item.id}
                 </div>
-                <div class="mt-1 text-[11px] text-[var(--ui-text-subtle)]">
-                  <span class="{item.urgency_level === 'immediate' ? 'text-red-400' : item.urgency_level === 'high' ? 'text-amber-400' : ''}">{item.urgency_label}</span>
+                <div class="mt-1 text-[11px] text-[var(--ui-text-muted)]">
+                  <span
+                    class={item.urgency_level === "immediate"
+                      ? "text-red-400"
+                      : item.urgency_level === "high"
+                        ? "text-amber-400"
+                        : ""}>{item.urgency_label}</span
+                  >
                   {#if inboxResourceLine}
                     · {inboxResourceLine}
                   {/if}
