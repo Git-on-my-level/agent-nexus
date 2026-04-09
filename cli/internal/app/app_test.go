@@ -150,6 +150,49 @@ func TestRunMetaDocsIsConfigLenient(t *testing.T) {
 	}
 }
 
+func TestRunSubcommandTrailingHelpIsConfigLenientWithMultipleProfiles(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	profilesDir := filepath.Join(home, ".config", "oar", "profiles")
+	if err := os.MkdirAll(profilesDir, 0o700); err != nil {
+		t.Fatalf("mkdir profiles dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(profilesDir, "agent-a.json"), []byte(`{}`), 0o600); err != nil {
+		t.Fatalf("write profile a: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(profilesDir, "agent-b.json"), []byte(`{}`), 0o600); err != nil {
+		t.Fatalf("write profile b: %v", err)
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	cli := New()
+	cli.Stdout = stdout
+	cli.Stderr = stderr
+	cli.Stdin = strings.NewReader("")
+	cli.StdinIsTTY = func() bool { return true }
+	cli.UserHomeDir = func() (string, error) { return home, nil }
+	cli.ReadFile = os.ReadFile
+
+	exitCode := cli.Run([]string{"--json", "--base-url", "http://127.0.0.1:9", "inbox", "ack", "--help"})
+	if exitCode != 0 {
+		t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("decode stdout json: %v", err)
+	}
+	if payload["ok"] != true {
+		t.Fatalf("expected ok=true payload=%#v", payload)
+	}
+	data, _ := payload["data"].(map[string]any)
+	helpText, _ := data["help_text"].(string)
+	if !strings.Contains(helpText, "inbox ack") {
+		t.Fatalf("expected inbox ack help in output, got %q", helpText)
+	}
+}
+
 func TestRunMetaUtilityCommandsDispatchGeneratedEndpoints(t *testing.T) {
 	t.Parallel()
 

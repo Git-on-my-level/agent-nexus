@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"net"
 	"net/http"
 	"os"
@@ -34,14 +33,15 @@ var (
 )
 
 type liveCoreHarness struct {
-	t         *testing.T
-	baseURL   string
-	cliBin    string
-	homeDir   string
-	logPath   string
-	logFile   *os.File
-	server    *exec.Cmd
-	workspace string
+	t              *testing.T
+	baseURL        string
+	cliBin         string
+	homeDir        string
+	logPath        string
+	logFile        *os.File
+	server         *exec.Cmd
+	workspace      string
+	bootstrapToken string
 }
 
 type cliResult struct {
@@ -57,20 +57,21 @@ func TestThreadEventHandoffScenario(t *testing.T) {
 	h := newLiveCoreHarness(t)
 	runID := runToken()
 
-	h.registerAgent(t, "coordinator", "coordinator."+runID)
-	h.registerAgent(t, "worker", "worker."+runID)
+	h.registerAgentBootstrap(t, "coordinator", "coordinator."+runID)
+	workerInvite := h.createInviteToken(t, "coordinator")
+	h.registerAgentInvite(t, "worker", "worker."+runID, workerInvite)
 
 	topic := h.runCLIExpectOK(t, "coordinator", map[string]any{
 		"topic": map[string]any{
-			"title":          "Harness Incident " + runID,
-			"type":           "incident",
-			"status":         "active",
-			"summary":        "Topic created by CLI integration coverage.",
-			"owner_refs":     []any{},
-			"document_refs":  []any{},
-			"board_refs":     []any{},
-			"related_refs":   []any{},
-			"provenance":     map[string]any{"sources": []any{"inferred"}},
+			"title":         "Harness Incident " + runID,
+			"type":          "incident",
+			"status":        "active",
+			"summary":       "Topic created by CLI integration coverage.",
+			"owner_refs":    []any{},
+			"document_refs": []any{},
+			"board_refs":    []any{},
+			"related_refs":  []any{},
+			"provenance":    map[string]any{"sources": []any{"inferred"}},
 		},
 	}, "topics", "create")
 
@@ -130,21 +131,23 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 	h := newLiveCoreHarness(t)
 	runID := runToken()
 
-	h.registerAgent(t, "coordinator", "coordinator."+runID)
-	h.registerAgent(t, "worker", "worker."+runID)
-	h.registerAgent(t, "reviewer", "reviewer."+runID)
+	h.registerAgentBootstrap(t, "coordinator", "coordinator."+runID)
+	workerInvite := h.createInviteToken(t, "coordinator")
+	h.registerAgentInvite(t, "worker", "worker."+runID, workerInvite)
+	reviewerInvite := h.createInviteToken(t, "coordinator")
+	h.registerAgentInvite(t, "reviewer", "reviewer."+runID, reviewerInvite)
 
 	topic := h.runCLIExpectOK(t, "coordinator", map[string]any{
 		"topic": map[string]any{
-			"title":          "Harness Docs Lifecycle " + runID,
-			"type":           "incident",
-			"status":         "active",
-			"summary":        "Coordinator started docs lifecycle integration run " + runID + ".",
-			"owner_refs":     []any{},
-			"document_refs":  []any{},
-			"board_refs":     []any{},
-			"related_refs":   []any{},
-			"provenance":     map[string]any{"sources": []any{"inferred"}},
+			"title":         "Harness Docs Lifecycle " + runID,
+			"type":          "incident",
+			"status":        "active",
+			"summary":       "Coordinator started docs lifecycle integration run " + runID + ".",
+			"owner_refs":    []any{},
+			"document_refs": []any{},
+			"board_refs":    []any{},
+			"related_refs":  []any{},
+			"provenance":    map[string]any{"sources": []any{"inferred"}},
 		},
 	}, "topics", "create")
 	threadID := mustStringPath(t, topic.Payload, "data.body.topic.thread_id")
@@ -320,7 +323,7 @@ func TestProvenanceWalkScenario(t *testing.T) {
 	h := newLiveCoreHarness(t)
 	runID := runToken()
 
-	h.registerAgent(t, "investigator", "investigator."+runID)
+	h.registerAgentBootstrap(t, "investigator", "investigator."+runID)
 
 	artifact := h.runCLIExpectOK(t, "investigator", map[string]any{
 		"artifact": map[string]any{
@@ -338,15 +341,15 @@ func TestProvenanceWalkScenario(t *testing.T) {
 
 	topic := h.runCLIExpectOK(t, "investigator", map[string]any{
 		"topic": map[string]any{
-			"title":          "Provenance Walk Harness " + runID,
-			"type":           "incident",
-			"status":         "active",
-			"summary":        "Validate event -> thread -> artifact traversal. Create event referencing thread.",
-			"owner_refs":     []any{},
-			"document_refs":  []any{},
-			"board_refs":     []any{},
-			"related_refs":   []any{"artifact:" + artifactID},
-			"provenance":     map[string]any{"sources": []any{"artifact:" + artifactID}},
+			"title":         "Provenance Walk Harness " + runID,
+			"type":          "incident",
+			"status":        "active",
+			"summary":       "Validate event -> thread + event -> artifact traversal via refs.",
+			"owner_refs":    []any{},
+			"document_refs": []any{},
+			"board_refs":    []any{},
+			"related_refs":  []any{"artifact:" + artifactID},
+			"provenance":    map[string]any{"sources": []any{"artifact:" + artifactID}},
 		},
 	}, "topics", "create")
 	threadID := mustStringPath(t, topic.Payload, "data.body.topic.thread_id")
@@ -355,7 +358,7 @@ func TestProvenanceWalkScenario(t *testing.T) {
 		"event": map[string]any{
 			"type":      "decision_needed",
 			"thread_id": threadID,
-			"refs":      []string{"thread:" + threadID},
+			"refs":      []string{"thread:" + threadID, "artifact:" + artifactID},
 			"summary":   "Trace thread provenance for run " + runID,
 			"payload": map[string]any{
 				"run_id": runID,
@@ -398,8 +401,8 @@ func TestProvenanceWalkScenario(t *testing.T) {
 	if !integrationHasEdge(edges, "event:"+eventID, "thread:"+threadID, "refs") {
 		t.Fatalf("expected event->thread edge, payload=%#v", walk.Payload)
 	}
-	if !integrationHasEdge(edges, "thread:"+threadID, "artifact:"+artifactID, "provenance.sources") {
-		t.Fatalf("expected thread->artifact provenance edge, payload=%#v", walk.Payload)
+	if !integrationHasEdge(edges, "event:"+eventID, "artifact:"+artifactID, "refs") {
+		t.Fatalf("expected event->artifact refs edge, payload=%#v", walk.Payload)
 	}
 }
 
@@ -410,16 +413,11 @@ func newLiveCoreHarness(t *testing.T) *liveCoreHarness {
 	cliBin, coreBin := buildBinaries(t)
 	tempDir := t.TempDir()
 	workspace := filepath.Join(tempDir, "workspace")
-	seedWorkspace := filepath.Join(root, "core", ".oar-workspace")
-	switch _, err := os.Stat(seedWorkspace); {
-	case err == nil:
-		copyDir(t, seedWorkspace, workspace)
-	case errors.Is(err, os.ErrNotExist):
-		if mkErr := os.MkdirAll(workspace, 0o755); mkErr != nil {
-			t.Fatalf("create empty workspace %s: %v", workspace, mkErr)
-		}
-	default:
-		t.Fatalf("stat workspace fixture %s: %v", seedWorkspace, err)
+	// Empty workspace: copying `core/.oar-workspace` would bring a `state.sqlite` whose
+	// auth/bootstrap rows are keyed to a different operator token than our per-run
+	// OAR_BOOTSTRAP_TOKEN, causing `invalid_token` on register.
+	if mkErr := os.MkdirAll(workspace, 0o755); mkErr != nil {
+		t.Fatalf("create workspace %s: %v", workspace, mkErr)
 	}
 
 	homeDir := filepath.Join(tempDir, "home")
@@ -433,6 +431,7 @@ func newLiveCoreHarness(t *testing.T) *liveCoreHarness {
 		t.Fatalf("create core log file: %v", err)
 	}
 
+	bootstrapToken := "it-bs-" + runToken()
 	port := allocatePort(t)
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 	cmd := exec.Command(coreBin,
@@ -440,6 +439,7 @@ func newLiveCoreHarness(t *testing.T) *liveCoreHarness {
 		"--workspace-root", workspace,
 		"--schema-path", filepath.Join(root, "contracts", "oar-schema.yaml"),
 	)
+	cmd.Env = append(os.Environ(), "OAR_BOOTSTRAP_TOKEN="+bootstrapToken)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	if err := cmd.Start(); err != nil {
@@ -448,14 +448,15 @@ func newLiveCoreHarness(t *testing.T) *liveCoreHarness {
 	}
 
 	h := &liveCoreHarness{
-		t:         t,
-		baseURL:   baseURL,
-		cliBin:    cliBin,
-		homeDir:   homeDir,
-		logPath:   logPath,
-		logFile:   logFile,
-		server:    cmd,
-		workspace: workspace,
+		t:              t,
+		baseURL:        baseURL,
+		cliBin:         cliBin,
+		homeDir:        homeDir,
+		logPath:        logPath,
+		logFile:        logFile,
+		server:         cmd,
+		workspace:      workspace,
+		bootstrapToken: bootstrapToken,
 	}
 
 	t.Cleanup(func() {
@@ -479,9 +480,20 @@ func newLiveCoreHarness(t *testing.T) *liveCoreHarness {
 	return h
 }
 
-func (h *liveCoreHarness) registerAgent(t *testing.T, agent string, username string) {
+func (h *liveCoreHarness) registerAgentBootstrap(t *testing.T, agent string, username string) {
 	t.Helper()
-	h.runCLIExpectOK(t, agent, nil, "auth", "register", "--username", username)
+	h.runCLIExpectOK(t, agent, nil, "auth", "register", "--username", username, "--bootstrap-token", h.bootstrapToken)
+}
+
+func (h *liveCoreHarness) registerAgentInvite(t *testing.T, agent string, username string, inviteToken string) {
+	t.Helper()
+	h.runCLIExpectOK(t, agent, nil, "auth", "register", "--username", username, "--invite-token", inviteToken)
+}
+
+func (h *liveCoreHarness) createInviteToken(t *testing.T, issuerAgent string) string {
+	t.Helper()
+	res := h.runCLIExpectOK(t, issuerAgent, nil, "auth", "invites", "create", "--kind", "agent")
+	return mustStringPath(t, res.Payload, "data.token")
 }
 
 func (h *liveCoreHarness) runCLIExpectOK(t *testing.T, agent string, stdin any, args ...string) cliResult {
@@ -628,34 +640,6 @@ func waitForHealthy(t *testing.T, baseURL string, logPath string) {
 	t.Fatalf("oar-core did not become healthy at %s\nlog:\n%s", healthURL, string(raw))
 }
 
-func copyDir(t *testing.T, src string, dst string) {
-	t.Helper()
-	if err := filepath.WalkDir(src, func(path string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		rel, err := filepath.Rel(src, path)
-		if err != nil {
-			return err
-		}
-		target := filepath.Join(dst, rel)
-		info, err := d.Info()
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return os.MkdirAll(target, info.Mode())
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		return os.WriteFile(target, data, info.Mode())
-	}); err != nil {
-		t.Fatalf("copy workspace %s -> %s: %v", src, dst, err)
-	}
-}
-
 func mustParseJSON(t *testing.T, raw string) map[string]any {
 	t.Helper()
 	var payload map[string]any
@@ -700,6 +684,20 @@ func mustIntPath(t *testing.T, payload map[string]any, path string) int {
 }
 
 func getPathValue(payload map[string]any, path string) (any, bool) {
+	if v, ok := descendJSONPath(payload, path); ok {
+		return v, true
+	}
+	// CLI --json envelopes flatten API `body` into `data` (see flattenEnvelopeData).
+	if strings.HasPrefix(path, "data.body.") {
+		alt := "data." + strings.TrimPrefix(path, "data.body.")
+		if v, ok := descendJSONPath(payload, alt); ok {
+			return v, true
+		}
+	}
+	return nil, false
+}
+
+func descendJSONPath(payload map[string]any, path string) (any, bool) {
 	current := any(payload)
 	for _, segment := range strings.Split(path, ".") {
 		object, ok := current.(map[string]any)

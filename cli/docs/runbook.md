@@ -31,6 +31,10 @@ Global config precedence:
 3. profile file (`~/.config/oar/profiles/<agent>.json`)
 4. defaults
 
+**Default base URL:** when no `OAR_BASE_URL`, no `--base-url`, and the profile does not override it, the CLI uses `http://127.0.0.1:8000`. That makes local reads easy to try but is portable to **only** matching cores; automation should always pass `--base-url` / `OAR_BASE_URL` explicitly.
+
+**Multiple profiles:** with more than one `~/.config/oar/profiles/*.json` and no explicit `--agent` / `OAR_AGENT` / `oar auth default`, config resolution fails until you name a profile.
+
 Supported env vars:
 
 - `OAR_BASE_URL`
@@ -112,8 +116,8 @@ go test -tags=integration ./integration/...
 
 These tests:
 - build the real `oar` and `oar-core` binaries
-- copy the repo's workspace fixture directory into a temp directory
-- run multi-step thread/event, docs/conflict, and board workspace flows through the real CLI
+- use an empty temp workspace (fresh `state.sqlite` per run) with an ephemeral `OAR_BOOTSTRAP_TOKEN` so registration matches core auth state
+- run multi-step thread/event, docs/conflict, and provenance flows through the real CLI
 
 ## Pi Dogfood
 

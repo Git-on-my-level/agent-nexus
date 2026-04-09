@@ -145,6 +145,10 @@ jobs:
         working-directory: cli
         run: go test ./...
 
+      - name: Run CLI integration tests
+        working-directory: cli
+        run: go test -tags=integration ./integration/...
+
   web-ui-checks:
     runs-on: ubuntu-latest
     timeout-minutes: 15

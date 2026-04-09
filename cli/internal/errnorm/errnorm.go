@@ -169,6 +169,7 @@ var defaultMetadataByCode = map[string]Metadata{
 	"auth_registration_unavailable": {Recoverable: true, Hint: "Core auth may still be starting. Retry `oar auth register` in a few seconds, or run `oar api call --path /readyz` to confirm readiness."},
 	"auth_required":                 {Recoverable: true, Hint: "Run `oar --agent <agent> auth whoami` to refresh credentials, then retry."},
 	"cli_outdated":                  {Recoverable: true, Hint: "Upgrade the CLI to the minimum compatible version from `/meta/handshake`."},
+	"config_resolution_failed":      {Recoverable: true, Hint: "Set --base-url or OAR_BASE_URL, select a profile with --agent or OAR_AGENT (or `oar auth default <name>` when multiple profiles exist), then run `oar doctor` if connectivity is uncertain."},
 	"conflict":                      {Recoverable: true, Hint: "Reload current state and retry with a fresh `if_updated_at` value."},
 	"draft_exists":                  {Recoverable: true, Hint: "Use a different draft id or discard the existing draft first."},
 	"draft_not_found":               {Recoverable: true, Hint: "Run `oar draft list` to discover valid draft ids."},
