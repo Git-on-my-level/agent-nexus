@@ -440,7 +440,7 @@ describe("hooks proxy retry", () => {
     expect(csp).toContain(
       "script-src 'self' https://static.cloudflareinsights.com 'sha256-examplehash='",
     );
-    expect(csp).toContain("connect-src 'self' https://cloudflareinsights.com");
+    expect(csp).toContain("connect-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com https://cloudflareinsights.com");
     expect(csp).toContain(
       "manifest-src 'self' https://scalingforever.cloudflareaccess.com",
     );

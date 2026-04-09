@@ -522,7 +522,7 @@
 </svelte:head>
 
 {#if !canManageAccess}
-  <main class="space-y-4">
+  <div class="space-y-4">
     <div class="flex items-baseline justify-between gap-4">
       <div>
         <h1 class="text-lg font-semibold text-[var(--ui-text)]">Access</h1>
@@ -545,9 +545,9 @@
         </a>
       </p>
     </div>
-  </main>
+  </div>
 {:else}
-  <main class="space-y-6">
+  <div class="space-y-6">
     <div class="flex items-baseline justify-between gap-4">
       <div>
         <h1 class="text-lg font-semibold text-[var(--ui-text)]">Access</h1>
@@ -1230,5 +1230,5 @@
         {/if}
       {/if}
     </section>
-  </main>
+  </div>
 {/if}

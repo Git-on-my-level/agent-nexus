@@ -163,4 +163,30 @@ describe("RefLink model", () => {
       isLink: true,
     });
   });
+
+  it("truncates UUID values in humanized labels to 8 chars", () => {
+    const threadRef = resolveRefLink(
+      "thread:be0ef636-4ec0-4284-b65c-a868acf124be",
+      { humanize: true },
+    );
+    expect(threadRef).toMatchObject({
+      primaryLabel: "Thread be0ef636",
+      secondaryLabel: "thread:be0ef636-4ec0-4284-b65c-a868acf124be",
+    });
+
+    const topicRef = resolveRefLink(
+      "topic:a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      { humanize: true },
+    );
+    expect(topicRef).toMatchObject({
+      primaryLabel: "Topic a1b2c3d4",
+    });
+
+    const nonUuidRef = resolveRefLink("thread:thread-onboarding", {
+      humanize: true,
+    });
+    expect(nonUuidRef).toMatchObject({
+      primaryLabel: "Thread thread-onboarding",
+    });
+  });
 });

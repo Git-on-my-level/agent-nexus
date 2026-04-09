@@ -217,7 +217,7 @@ function buildCSPDirectives(env = privateEnv) {
       env.OAR_UI_CSP_FONT_SRC_EXTRA,
     ),
     "connect-src": mergeCSPDirectiveSources(
-      ["'self'"],
+      ["'self'", GOOGLE_FONTS_STYLE, GOOGLE_FONTS_FONT],
       env.OAR_UI_CSP_CONNECT_SRC_EXTRA,
     ),
     "manifest-src": mergeCSPDirectiveSources(

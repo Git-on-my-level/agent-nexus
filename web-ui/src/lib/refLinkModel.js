@@ -30,18 +30,26 @@ function shouldHumanizeByDefault(prefix) {
   return prefix === "document" || prefix === "document_revision";
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function compactValue(value) {
+  if (UUID_RE.test(value)) return value.slice(0, 8);
+  return value;
+}
+
 function humanizedLabelForPrefix(prefix, value) {
+  const short = compactValue(value);
   if (prefix === "artifact") return "Artifact";
   if (prefix === "card") return "Card";
-  if (prefix === "thread") return `Thread ${value}`.trim();
-  if (prefix === "topic") return `Topic ${value}`.trim();
+  if (prefix === "thread") return `Thread ${short}`.trim();
+  if (prefix === "topic") return `Topic ${short}`.trim();
   if (prefix === "event") return "Event";
-  if (prefix === "document") return `Document ${value}`.trim();
+  if (prefix === "document") return `Document ${short}`.trim();
   if (prefix === "document_revision")
-    return `Document revision ${value}`.trim();
+    return `Document revision ${short}`.trim();
   if (prefix === "url") return summarizeUrl(value);
   if (prefix === "inbox") return "Inbox item";
-  if (prefix === "board") return `Board ${value}`.trim();
+  if (prefix === "board") return `Board ${short}`.trim();
   return "";
 }
 

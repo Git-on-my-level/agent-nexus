@@ -742,6 +742,7 @@
                 <p class="shell-actor-label">Fixture persona</p>
                 <select
                   class="shell-dev-persona-select"
+                  aria-label="Switch fixture persona"
                   disabled={devPersonaBusy}
                   onchange={(event) => {
                     const value = String(
@@ -753,7 +754,7 @@
                     event.currentTarget.value = "";
                   }}
                 >
-                  <option value="">Switch authenticated session…</option>
+                  <option value="">Switch session…</option>
                   {#each devFixturePersonas as persona}
                     <option value={persona.persona_id}
                       >{persona.display_label}</option

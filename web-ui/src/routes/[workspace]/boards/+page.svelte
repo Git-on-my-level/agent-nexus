@@ -450,15 +450,6 @@
         <div
           class="min-w-0 flex-1 cursor-pointer px-4 py-3 transition-colors hover:bg-[var(--ui-border-subtle)]"
           onclick={() => navigateToBoard(board.id)}
-          onkeydown={(event) => {
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              navigateToBoard(board.id);
-            }
-          }}
-          role="button"
-          tabindex="0"
-          aria-label={board.title || board.id}
         >
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0 flex-1">
@@ -503,11 +494,13 @@
                 {/each}
               </div>
 
-              <p
-                class="mt-1 truncate text-[13px] font-medium text-[var(--ui-text)]"
+              <a
+                class="mt-1 block truncate text-[13px] font-medium text-[var(--ui-text)] hover:text-indigo-300"
+                href={workspaceHref(`/boards/${board.id}`)}
+                onclick={(event) => event.stopPropagation()}
               >
                 {board.title || board.id}
-              </p>
+              </a>
 
               <div
                 class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[var(--ui-text-muted)]"

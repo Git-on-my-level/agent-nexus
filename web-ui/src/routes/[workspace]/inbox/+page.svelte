@@ -801,19 +801,21 @@
 
               <div class="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
                 {#if getInboxSubjectRef(item)}
+                  {@const subjectId = getInboxSubjectId(item)}
                   <span
                     class="inline-flex items-center gap-1 rounded bg-[var(--ui-panel)] px-1.5 py-0.5 font-medium text-[var(--ui-text-muted)]"
+                    title={getInboxSubjectRef(item)}
                   >
                     <span class="text-[var(--ui-text-subtle)]">
                       {getInboxSubjectKind(item)
                         ? `${getInboxSubjectKind(item)}:`
                         : "Subject:"}
                     </span>
-                    <span>{getInboxSubjectId(item)}</span>
+                    <span>{subjectId.length > 12 ? `${subjectId.slice(0, 8)}…` : subjectId}</span>
                   </span>
                 {/if}
                 {#each item.related_refs ?? [] as refValue}
-                  <RefLink {refValue} threadId={inboxActionThreadId(item)} />
+                  <RefLink {refValue} threadId={inboxActionThreadId(item)} humanize />
                 {/each}
               </div>
 
@@ -1004,6 +1006,7 @@
                                   {refValue}
                                   threadId={subject?.thread_id ??
                                     inboxActionThreadId(item)}
+                                  humanize
                                 />
                               {/each}
                             </div>
