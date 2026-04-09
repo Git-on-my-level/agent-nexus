@@ -1,5 +1,5 @@
 <script>
-  import { goto } from "$app/navigation";
+  import { beforeNavigate, goto } from "$app/navigation";
   import { page } from "$app/stores";
   import { onMount } from "svelte";
 
@@ -29,11 +29,18 @@
   } from "$lib/inboxUtils";
   import { inboxTopicRouteSegment } from "$lib/topicRouteUtils";
 
+  /** Delay before inbox mutations hit core; allows Undo before the request runs. */
+  const PENDING_INBOX_ACTION_MS = 5000;
+
+  /** Plain object read by `beforeunload` (avoids stale $state reads on native events). */
+  let hasPendingInboxWork = $state(false);
+
   let loading = $state(false);
   let error = $state("");
   let items = $state([]);
   let ackInFlightById = $state({});
   let pendingAckById = $state({});
+  let pendingDecisionById = $state({});
   let decisionInFlightById = $state({});
   let decisionFormsById = $state({});
   let decisionFormErrorsById = $state({});
@@ -201,8 +208,44 @@
     applyFilters();
   }
 
-  onMount(async () => {
-    await loadInbox();
+  function inboxPathname(pathname) {
+    return /\/inbox\/?$/.test(String(pathname ?? ""));
+  }
+
+  function blockBeforeUnload(event) {
+    event.preventDefault();
+    event.returnValue = "";
+  }
+
+  $effect(() => {
+    hasPendingInboxWork =
+      Object.keys(pendingAckById).length > 0 ||
+      Object.keys(pendingDecisionById).length > 0 ||
+      Object.values(ackInFlightById).some(Boolean) ||
+      Object.values(decisionInFlightById).some(Boolean);
+
+    if (hasPendingInboxWork) {
+      window.addEventListener("beforeunload", blockBeforeUnload);
+    } else {
+      window.removeEventListener("beforeunload", blockBeforeUnload);
+    }
+  });
+
+  beforeNavigate((navigation) => {
+    if (!hasPendingInboxWork) return;
+    const from = navigation.from;
+    const to = navigation.to;
+    if (!from || !inboxPathname(from.url.pathname)) return;
+    if (to && inboxPathname(to.url.pathname)) return;
+    const ok = confirm(
+      "An inbox action is still sending or can still be undone. Leave this page?",
+    );
+    if (!ok) navigation.cancel();
+  });
+
+  onMount(() => {
+    void loadInbox();
+    return () => window.removeEventListener("beforeunload", blockBeforeUnload);
   });
 
   async function loadInbox() {
@@ -372,7 +415,7 @@
       } finally {
         ackInFlightById = { ...ackInFlightById, [item.id]: false };
       }
-    }, 5000);
+    }, PENDING_INBOX_ACTION_MS);
 
     pendingAckById = { ...pendingAckById, [item.id]: { item, timeoutId } };
   }
@@ -389,7 +432,29 @@
     items = [...items, pending.item];
   }
 
-  async function recordDecision(item) {
+  function undoPendingDecision(itemId) {
+    const pending = pendingDecisionById[itemId];
+    if (!pending) return;
+
+    clearTimeout(pending.timeoutId);
+    pendingDecisionById = Object.fromEntries(
+      Object.entries(pendingDecisionById).filter(([k]) => k !== itemId),
+    );
+
+    items = [...items, pending.item];
+    decisionFormsById = {
+      ...decisionFormsById,
+      [itemId]: {
+        ...getDecisionForm(itemId),
+        summary: pending.summary,
+        notes: pending.notes,
+        open: true,
+      },
+    };
+    loadSubjectContext(pending.item);
+  }
+
+  function recordDecision(item) {
     const draft = getDecisionForm(item.id);
     error = "";
     setDecisionFormError(item.id, "");
@@ -413,8 +478,8 @@
       return;
     }
 
-    decisionInFlightById = { ...decisionInFlightById, [item.id]: true };
-
+    const summary = draft.summary.trim();
+    const notes = draft.notes.trim();
     const refs = Array.from(
       new Set([
         ...(Array.isArray(item.related_refs) ? item.related_refs : []),
@@ -422,43 +487,67 @@
         groundingRef,
       ]),
     );
+    const recommendedAction = item.recommended_action ?? "";
 
-    try {
-      const response = await coreClient.createEvent({
-        event: {
-          type: "decision_made",
-          thread_id: actionThreadId,
-          refs,
-          summary: draft.summary.trim(),
-          payload: {
-            notes: draft.notes.trim(),
-            inbox_item_id: item.id,
-            recommended_action: item.recommended_action ?? "",
+    items = items.filter((candidate) => candidate.id !== item.id);
+    toggleDecisionForm(item, false);
+    updateDecisionField(item.id, "summary", "");
+    updateDecisionField(item.id, "notes", "");
+
+    const timeoutId = setTimeout(async () => {
+      pendingDecisionById = Object.fromEntries(
+        Object.entries(pendingDecisionById).filter(([k]) => k !== item.id),
+      );
+
+      decisionInFlightById = { ...decisionInFlightById, [item.id]: true };
+      try {
+        const response = await coreClient.createEvent({
+          event: {
+            type: "decision_made",
+            thread_id: actionThreadId,
+            refs,
+            summary,
+            payload: {
+              notes,
+              inbox_item_id: item.id,
+              recommended_action: recommendedAction,
+            },
+            provenance: {
+              sources: ["actor_statement:ui"],
+            },
           },
-          provenance: {
-            sources: ["actor_statement:ui"],
+        });
+
+        postedDecisionByInboxItem = {
+          ...postedDecisionByInboxItem,
+          [item.id]: response.event,
+        };
+      } catch (decisionError) {
+        const reason =
+          decisionError instanceof Error
+            ? decisionError.message
+            : String(decisionError);
+        error = `Failed to record decision: ${reason}`;
+        items = [...items, item];
+        decisionFormsById = {
+          ...decisionFormsById,
+          [item.id]: {
+            ...getDecisionForm(item.id),
+            summary,
+            notes,
+            open: true,
           },
-        },
-      });
+        };
+        loadSubjectContext(item);
+      } finally {
+        decisionInFlightById = { ...decisionInFlightById, [item.id]: false };
+      }
+    }, PENDING_INBOX_ACTION_MS);
 
-      postedDecisionByInboxItem = {
-        ...postedDecisionByInboxItem,
-        [item.id]: response.event,
-      };
-
-      toggleDecisionForm(item, false);
-      updateDecisionField(item.id, "summary", "");
-      updateDecisionField(item.id, "notes", "");
-      items = items.filter((candidate) => candidate.id !== item.id);
-    } catch (decisionError) {
-      const reason =
-        decisionError instanceof Error
-          ? decisionError.message
-          : String(decisionError);
-      error = `Failed to record decision: ${reason}`;
-    } finally {
-      decisionInFlightById = { ...decisionInFlightById, [item.id]: false };
-    }
+    pendingDecisionById = {
+      ...pendingDecisionById,
+      [item.id]: { item, summary, notes, timeoutId },
+    };
   }
 
   function urgencyDot(level) {
@@ -610,26 +699,34 @@
   <button
     class="cursor-pointer flex-1 rounded-md border bg-[var(--ui-bg-soft)] px-3 py-2 text-left transition-colors {urgencyCardClass(
       'immediate',
-    )}"
+    )} {urgencySummary.immediate > 0 ? 'bg-red-500/5' : ''}"
     onclick={() => setUrgencyFromCard("immediate")}
     type="button"
     data-testid="urgency-summary-immediate"
   >
     <p class="text-[11px] font-medium text-red-400">Immediate</p>
-    <p class="text-lg font-semibold text-[var(--ui-text)]">
+    <p
+      class="text-lg font-semibold {urgencySummary.immediate > 0
+        ? 'text-red-400'
+        : 'text-[var(--ui-text)]'}"
+    >
       {urgencySummary.immediate}
     </p>
   </button>
   <button
     class="cursor-pointer flex-1 rounded-md border bg-[var(--ui-bg-soft)] px-3 py-2 text-left transition-colors {urgencyCardClass(
       'high',
-    )}"
+    )} {urgencySummary.high > 0 ? 'bg-amber-500/5' : ''}"
     onclick={() => setUrgencyFromCard("high")}
     type="button"
     data-testid="urgency-summary-high"
   >
     <p class="text-[11px] font-medium text-amber-400">High</p>
-    <p class="text-lg font-semibold text-[var(--ui-text)]">
+    <p
+      class="text-lg font-semibold {urgencySummary.high > 0
+        ? 'text-amber-400'
+        : 'text-[var(--ui-text)]'}"
+    >
       {urgencySummary.high}
     </p>
   </button>
@@ -648,8 +745,8 @@
   </button>
 </div>
 
-{#if Object.keys(pendingAckById).length > 0}
-  <div class="mb-4 space-y-1.5">
+{#if Object.keys(pendingAckById).length > 0 || Object.keys(pendingDecisionById).length > 0}
+  <div class="mb-4 space-y-1.5" data-testid="inbox-pending-actions">
     {#each Object.values(pendingAckById) as pending}
       <div
         class="flex items-center justify-between gap-3 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-[12px] text-[var(--ui-text-muted)]"
@@ -662,6 +759,24 @@
         <button
           class="cursor-pointer shrink-0 font-medium text-indigo-400 hover:text-indigo-300"
           onclick={() => undoAcknowledge(pending.item.id)}
+          type="button"
+        >
+          Undo
+        </button>
+      </div>
+    {/each}
+    {#each Object.values(pendingDecisionById) as pending}
+      <div
+        class="flex items-center justify-between gap-3 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-[12px] text-[var(--ui-text-muted)]"
+      >
+        <span class="truncate"
+          >Decision pending: <span class="font-medium text-[var(--ui-text)]"
+            >{pending.item.title ?? pending.item.summary ?? "item"}</span
+          ></span
+        >
+        <button
+          class="cursor-pointer shrink-0 font-medium text-indigo-400 hover:text-indigo-300"
+          onclick={() => undoPendingDecision(pending.item.id)}
           type="button"
         >
           Undo
@@ -788,7 +903,7 @@
               {#if item.recommended_action}
                 <div class="mt-2 rounded bg-[var(--ui-bg-soft)] px-3 py-2">
                   <p
-                    class="text-[11px] font-medium text-[var(--ui-text-muted)] uppercase tracking-wide"
+                    class="text-[11px] font-medium text-indigo-400/70 uppercase tracking-wide"
                   >
                     Recommended
                   </p>

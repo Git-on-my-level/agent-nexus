@@ -822,7 +822,7 @@
               <span class="font-medium capitalize {statusColor(topic.status)}"
                 >{topic.status}</span
               >
-              <span class="hidden text-[var(--ui-text-muted)] sm:inline"
+              <span class="hidden rounded border border-[var(--ui-border)] px-1.5 py-0.5 text-[10px] text-[var(--ui-text-subtle)] sm:inline"
                 >{formatCadenceLabel(topic.cadence, {
                   includeExpression: false,
                 })}</span

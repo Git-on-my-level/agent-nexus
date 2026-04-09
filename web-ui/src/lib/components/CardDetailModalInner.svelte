@@ -44,6 +44,7 @@
   } from "$lib/timelineContext";
   import { workspacePath } from "$lib/workspacePaths";
 
+  import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import GuidedTypedRefsInput from "$lib/components/GuidedTypedRefsInput.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import MessagesTab from "$lib/components/timeline/MessagesTab.svelte";
@@ -85,6 +86,7 @@
   let thread = $derived(backing?.thread);
   let cdmDetailPane = $state("overview");
   let previousCardKey = $state("");
+  let removeCardConfirmOpen = $state(false);
 
   let linkedThreadId = $derived(
     String(membership?.thread_id ?? backing?.thread_id ?? "").trim(),
@@ -1017,7 +1019,9 @@
           <button
             type="button"
             class="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-[12px] font-medium text-red-400 transition-colors hover:bg-red-500/20"
-            onclick={() => onremovecard(cardItem)}
+            onclick={() => {
+              removeCardConfirmOpen = true;
+            }}
           >
             Remove card
           </button>
@@ -1026,6 +1030,21 @@
     </div>
   </div>
 </div>
+
+<ConfirmModal
+  open={removeCardConfirmOpen}
+  title="Remove card"
+  message="Remove this card from the board? The card will be moved to trash."
+  confirmLabel="Remove card"
+  variant="danger"
+  onconfirm={() => {
+    removeCardConfirmOpen = false;
+    onremovecard(cardItem);
+  }}
+  oncancel={() => {
+    removeCardConfirmOpen = false;
+  }}
+/>
 
 <style>
   .cdm-backdrop {

@@ -207,6 +207,35 @@
     if (status === "draft") return "text-amber-400 bg-amber-500/10";
     return "text-[var(--ui-text-muted)] bg-[var(--ui-border)]";
   }
+
+  function inboxCategoryCountColor(category, count) {
+    if (count === 0) return "text-[var(--ui-text)]";
+    if (category === "intervention_needed") return "text-red-400";
+    if (category === "decision_needed") return "text-indigo-400";
+    if (category === "work_item_risk") return "text-amber-400";
+    if (category === "stale_topic") return "text-orange-400";
+    if (category === "document_attention") return "text-sky-400";
+    return "text-[var(--ui-text)]";
+  }
+
+  function inboxCategoryLabelColor(category, count) {
+    if (count === 0) return "text-[var(--ui-text-muted)]";
+    if (category === "intervention_needed") return "text-red-400";
+    if (category === "decision_needed") return "text-indigo-400";
+    if (category === "work_item_risk") return "text-amber-400";
+    if (category === "stale_topic") return "text-orange-400";
+    if (category === "document_attention") return "text-sky-400";
+    return "text-[var(--ui-text-muted)]";
+  }
+
+  function inboxCategoryBadgeClass(category) {
+    if (category === "intervention_needed") return "text-red-400 bg-red-500/10";
+    if (category === "decision_needed") return "text-indigo-400 bg-indigo-500/10";
+    if (category === "work_item_risk") return "text-amber-400 bg-amber-500/10";
+    if (category === "stale_topic") return "text-orange-400 bg-orange-500/10";
+    if (category === "document_attention") return "text-sky-400 bg-sky-500/10";
+    return "text-[var(--ui-text-muted)] bg-[var(--ui-border)]";
+  }
 </script>
 
 <div class="space-y-6">
@@ -289,10 +318,10 @@
               class="flex-1 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-center transition-colors hover:bg-[var(--ui-border-subtle)]"
               href={inboxCategoryHref(summary.category)}
             >
-              <p class="text-[11px] font-medium text-[var(--ui-text-muted)]">
+              <p class="text-[11px] font-medium {inboxCategoryLabelColor(summary.category, summary.count)}">
                 {summary.label}
               </p>
-              <p class="text-lg font-semibold text-[var(--ui-text)]">
+              <p class="text-lg font-semibold {inboxCategoryCountColor(summary.category, summary.count)}">
                 {summary.count}
               </p>
             </a>
@@ -316,15 +345,15 @@
                 >
                   {item.title}
                 </p>
-                <p class="text-[11px] text-[var(--ui-text-muted)]">
-                  {getInboxCategoryLabel(item.category)}
-                </p>
                 {#if getInboxSubjectLabel(item)}
                   <p class="text-[11px] text-[var(--ui-text-subtle)]">
                     {getInboxSubjectLabel(item)}
                   </p>
                 {/if}
               </div>
+              <span class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium {inboxCategoryBadgeClass(item.category)}">
+                {getInboxCategoryLabel(item.category)}
+              </span>
             </a>
           {/each}
         </div>

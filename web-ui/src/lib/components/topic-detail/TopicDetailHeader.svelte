@@ -12,7 +12,16 @@
   import { formatTimestamp } from "$lib/formatDate";
   import { topicDetailStore } from "$lib/topicDetailStore";
   import { getPriorityLabel } from "$lib/topicFilters";
+  import { priorityBadgeClasses } from "$lib/cardDisplayUtils";
   import { workspacePath } from "$lib/workspacePaths";
+
+  function topicStatusBadgeClass(status) {
+    if (status === "active") return "bg-emerald-500/10 text-emerald-400";
+    if (status === "paused") return "bg-amber-500/10 text-amber-400";
+    if (status === "closed") return "bg-slate-500/10 text-slate-300";
+    if (status === "resolved") return "bg-slate-500/10 text-slate-300";
+    return "bg-[var(--ui-border)] text-[var(--ui-text-muted)]";
+  }
 
   let { threadId = "", detailAsTopic = true } = $props();
 
@@ -190,11 +199,11 @@
         </span>
       {/if}
       <span
-        class="rounded bg-[var(--ui-border)] px-2 py-0.5 capitalize text-[var(--ui-text-muted)]"
+        class="rounded px-2 py-0.5 capitalize {topicStatusBadgeClass(topic.status)}"
         >{topic.status}</span
       >
       <span
-        class="rounded bg-[var(--ui-border)] px-2 py-0.5 text-[var(--ui-text-muted)]"
+        class="rounded px-2 py-0.5 {priorityBadgeClasses(topic.priority)}"
         >{getPriorityLabel(topic.priority)}</span
       >
       {#if detailAsTopic && !topic.trashed_at && threadId}

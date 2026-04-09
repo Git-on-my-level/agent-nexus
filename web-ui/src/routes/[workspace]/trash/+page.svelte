@@ -36,7 +36,8 @@
   let activeTab = $state("artifacts");
   let loading = $state(true);
   let error = $state("");
-  let purgeConfirmId = $state("");
+  let purgeModal = $state({ open: false, type: "", id: "" });
+  let purgeModalBusy = $state(false);
   let busyItemId = $state("");
   let purgeAllOpen = $state(false);
   let purgeAllBusy = $state(false);
@@ -108,7 +109,7 @@
 
   async function switchTab(tabId) {
     if (!TRASH_TAB_IDS.includes(tabId)) return;
-    purgeConfirmId = "";
+    purgeModal = { open: false, type: "", id: "" };
     purgeAllOpen = false;
     await goto(withUpdatedSearchParams($page.url, { tab: tabId }), {
       replaceState: true,
@@ -250,7 +251,7 @@
         default:
           return;
       }
-      purgeConfirmId = "";
+      purgeModal = { open: false, type: "", id: "" };
       await loadTrash();
     } catch (e) {
       error = `Restore failed: ${e instanceof Error ? e.message : String(e)}`;
@@ -261,7 +262,8 @@
 
   async function confirmPurgeEntity(type, rawId) {
     const id = String(rawId ?? "").trim();
-    if (!id || busyItemId) return;
+    if (!id || purgeModalBusy) return;
+    purgeModalBusy = true;
     busyItemId = itemBusyKey(type, id);
     error = "";
     try {
@@ -285,17 +287,14 @@
         default:
           return;
       }
-      purgeConfirmId = "";
+      purgeModal = { open: false, type: "", id: "" };
       await loadTrash();
     } catch (e) {
       error = `Permanent delete failed: ${e instanceof Error ? e.message : String(e)}`;
     } finally {
+      purgeModalBusy = false;
       busyItemId = "";
     }
-  }
-
-  function cancelPurge() {
-    purgeConfirmId = "";
   }
 
   function entitySingular(tab) {
@@ -534,50 +533,22 @@
                 Restore
               </button>
               {#if isHumanPrincipal}
-                {#if purgeConfirmId !== itemBusyKey("artifacts", artifact.id)}
-                  <button
-                    class="cursor-pointer rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-[12px] font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
-                    disabled={Boolean(busyItemId)}
-                    onclick={() => {
-                      purgeConfirmId = itemBusyKey("artifacts", artifact.id);
-                    }}
-                    type="button"
-                  >
-                    Permanently delete
-                  </button>
-                {/if}
+                <button
+                  class="cursor-pointer rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-[12px] font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={Boolean(busyItemId)}
+                  onclick={() => {
+                    purgeModal = {
+                      open: true,
+                      type: "artifacts",
+                      id: artifact.id,
+                    };
+                  }}
+                  type="button"
+                >
+                  Permanently delete
+                </button>
               {/if}
             </div>
-
-            {#if isHumanPrincipal && purgeConfirmId === itemBusyKey("artifacts", artifact.id)}
-              <div
-                class="rounded-md border border-red-500/35 bg-red-500/5 p-2.5 text-[12px]"
-                role="region"
-                aria-label="Confirm permanent delete"
-              >
-                <p class="font-medium text-red-400">
-                  {purgeConfirmLabel("artifacts")}
-                </p>
-                <div class="mt-2 flex flex-wrap justify-end gap-1.5">
-                  <button
-                    class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]"
-                    onclick={cancelPurge}
-                    type="button"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    class="cursor-pointer rounded-md bg-red-600 px-2.5 py-1.5 text-[12px] font-medium text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
-                    disabled={busyItemId ===
-                      itemBusyKey("artifacts", artifact.id)}
-                    onclick={() => confirmPurgeEntity("artifacts", artifact.id)}
-                    type="button"
-                  >
-                    Confirm permanent delete
-                  </button>
-                </div>
-              </div>
-            {/if}
           </div>
         </div>
       </div>
@@ -641,48 +612,18 @@
                 Restore
               </button>
               {#if isHumanPrincipal}
-                {#if purgeConfirmId !== itemBusyKey("documents", doc.id)}
-                  <button
-                    class="cursor-pointer rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-[12px] font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
-                    disabled={Boolean(busyItemId)}
-                    onclick={() => {
-                      purgeConfirmId = itemBusyKey("documents", doc.id);
-                    }}
-                    type="button"
-                  >
-                    Permanently delete
-                  </button>
-                {/if}
+                <button
+                  class="cursor-pointer rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-[12px] font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={Boolean(busyItemId)}
+                  onclick={() => {
+                    purgeModal = { open: true, type: "documents", id: doc.id };
+                  }}
+                  type="button"
+                >
+                  Permanently delete
+                </button>
               {/if}
             </div>
-            {#if isHumanPrincipal && purgeConfirmId === itemBusyKey("documents", doc.id)}
-              <div
-                class="rounded-md border border-red-500/35 bg-red-500/5 p-2.5 text-[12px]"
-                role="region"
-                aria-label="Confirm permanent delete"
-              >
-                <p class="font-medium text-red-400">
-                  {purgeConfirmLabel("documents")}
-                </p>
-                <div class="mt-2 flex flex-wrap justify-end gap-1.5">
-                  <button
-                    class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]"
-                    onclick={cancelPurge}
-                    type="button"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    class="cursor-pointer rounded-md bg-red-600 px-2.5 py-1.5 text-[12px] font-medium text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
-                    disabled={busyItemId === itemBusyKey("documents", doc.id)}
-                    onclick={() => confirmPurgeEntity("documents", doc.id)}
-                    type="button"
-                  >
-                    Confirm permanent delete
-                  </button>
-                </div>
-              </div>
-            {/if}
           </div>
         </div>
       </div>
@@ -821,48 +762,18 @@
                 Restore
               </button>
               {#if isHumanPrincipal}
-                {#if purgeConfirmId !== itemBusyKey("boards", board.id)}
-                  <button
-                    class="cursor-pointer rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-[12px] font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
-                    disabled={Boolean(busyItemId)}
-                    onclick={() => {
-                      purgeConfirmId = itemBusyKey("boards", board.id);
-                    }}
-                    type="button"
-                  >
-                    Permanently delete
-                  </button>
-                {/if}
+                <button
+                  class="cursor-pointer rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-[12px] font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={Boolean(busyItemId)}
+                  onclick={() => {
+                    purgeModal = { open: true, type: "boards", id: board.id };
+                  }}
+                  type="button"
+                >
+                  Permanently delete
+                </button>
               {/if}
             </div>
-            {#if isHumanPrincipal && purgeConfirmId === itemBusyKey("boards", board.id)}
-              <div
-                class="rounded-md border border-red-500/35 bg-red-500/5 p-2.5 text-[12px]"
-                role="region"
-                aria-label="Confirm permanent delete"
-              >
-                <p class="font-medium text-red-400">
-                  {purgeConfirmLabel("boards")}
-                </p>
-                <div class="mt-2 flex flex-wrap justify-end gap-1.5">
-                  <button
-                    class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]"
-                    onclick={cancelPurge}
-                    type="button"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    class="cursor-pointer rounded-md bg-red-600 px-2.5 py-1.5 text-[12px] font-medium text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
-                    disabled={busyItemId === itemBusyKey("boards", board.id)}
-                    onclick={() => confirmPurgeEntity("boards", board.id)}
-                    type="button"
-                  >
-                    Confirm permanent delete
-                  </button>
-                </div>
-              </div>
-            {/if}
           </div>
         </div>
       </div>
@@ -973,49 +884,18 @@
                   Restore
                 </button>
                 {#if isHumanPrincipal}
-                  {#if purgeConfirmId !== itemBusyKey("cards", card.id)}
-                    <button
-                      class="cursor-pointer rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-[12px] font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
-                      disabled={Boolean(busyItemId)}
-                      onclick={() => {
-                        purgeConfirmId = itemBusyKey("cards", card.id);
-                      }}
-                      type="button"
-                    >
-                      Permanently delete
-                    </button>
-                  {/if}
+                  <button
+                    class="cursor-pointer rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-[12px] font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={Boolean(busyItemId)}
+                    onclick={() => {
+                      purgeModal = { open: true, type: "cards", id: card.id };
+                    }}
+                    type="button"
+                  >
+                    Permanently delete
+                  </button>
                 {/if}
               </div>
-
-              {#if isHumanPrincipal && purgeConfirmId === itemBusyKey("cards", card.id)}
-                <div
-                  class="rounded-md border border-red-500/35 bg-red-500/5 p-2.5 text-[12px]"
-                  role="region"
-                  aria-label="Confirm permanent delete"
-                >
-                  <p class="font-medium text-red-400">
-                    {purgeConfirmLabel("cards")}
-                  </p>
-                  <div class="mt-2 flex flex-wrap justify-end gap-1.5">
-                    <button
-                      class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]"
-                      onclick={cancelPurge}
-                      type="button"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      class="cursor-pointer rounded-md bg-red-600 px-2.5 py-1.5 text-[12px] font-medium text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
-                      disabled={busyItemId === itemBusyKey("cards", card.id)}
-                      onclick={() => confirmPurgeEntity("cards", card.id)}
-                      type="button"
-                    >
-                      Confirm permanent delete
-                    </button>
-                  </div>
-                </div>
-              {/if}
             </div>
           {/if}
         </div>
@@ -1023,6 +903,19 @@
     {/each}
   </div>
 {/if}
+
+<ConfirmModal
+  open={purgeModal.open}
+  title="Permanently delete"
+  message={purgeConfirmLabel(purgeModal.type)}
+  confirmLabel="Permanently delete"
+  variant="danger"
+  busy={purgeModalBusy}
+  onconfirm={() => void confirmPurgeEntity(purgeModal.type, purgeModal.id)}
+  oncancel={() => {
+    purgeModal = { open: false, type: "", id: "" };
+  }}
+/>
 
 <ConfirmModal
   open={purgeAllOpen}

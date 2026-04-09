@@ -74,6 +74,85 @@ Semantic colors use Tailwind defaults (not overridden). For dark backgrounds, us
 
 **Never use** `-50` shade backgrounds (e.g. `bg-red-50`) or `-600`/`-700` shade text for semantic colors. Those are calibrated for light themes and produce poor contrast on dark surfaces.
 
+### Urgency Colors
+
+Urgency escalation follows a fixed hue ladder. Apply these consistently across inbox triage surfaces:
+
+| Level       | Text            | Background (subtle tint) |
+|-------------|-----------------|--------------------------|
+| Immediate   | `text-red-400`  | `bg-red-500/5`           |
+| High        | `text-amber-400`| `bg-amber-500/5`         |
+| Normal      | `text-[var(--ui-text)]` | — (no tint)      |
+
+**Rule:** Color both the label *and* the count/number when the count is non-zero. Zero counts stay muted (`text-[var(--ui-text)]`). This prevents visual noise when a queue is empty while still surfacing urgency when it isn't.
+
+### Inbox Category Colors
+
+Inbox categories use a fixed color assignment. Use these whenever a category label or count is rendered as a signal (summary cards, badges, section headers):
+
+| Category              | Text              | Badge background     |
+|-----------------------|-------------------|----------------------|
+| `intervention_needed` | `text-red-400`    | `bg-red-500/10`      |
+| `decision_needed`     | `text-indigo-400` | `bg-indigo-500/10`   |
+| `work_item_risk`      | `text-amber-400`  | `bg-amber-500/10`    |
+| `stale_topic`         | `text-orange-400` | `bg-orange-500/10`   |
+| `document_attention`  | `text-sky-400`    | `bg-sky-500/10`      |
+
+**Rule:** Color the count only when it is non-zero. Zero counts and category labels for empty queues stay muted. Never apply category color decoratively — only when it carries a live signal.
+
+### Artifact Kind Colors
+
+Artifact kind badges use a fixed color assignment from `src/lib/artifactKinds.js`:
+
+| Kind       | Classes                                   |
+|------------|-------------------------------------------|
+| `receipt`  | `text-emerald-400 bg-emerald-500/10`      |
+| `review`   | `text-amber-400 bg-amber-500/10`          |
+| `doc`      | `text-fuchsia-400 bg-fuchsia-500/10`      |
+| `log`      | `text-teal-400 bg-teal-500/10`            |
+| `evidence` | `text-[var(--ui-text-muted)] bg-[var(--ui-border)]` |
+
+### Status Colors
+
+Topic, board, and document status badges follow this mapping:
+
+| Status    | Text                | Background          |
+|-----------|---------------------|---------------------|
+| `active`  | `text-emerald-400`  | `bg-emerald-500/10` |
+| `paused`  | `text-amber-400`    | `bg-amber-500/10`   |
+| `closed`  | `text-slate-300`    | `bg-slate-500/10`   |
+| `draft`   | `text-amber-400`    | `bg-amber-500/10`   |
+| Archived  | `text-amber-400`    | `bg-amber-500/15`   |
+| Stale     | `text-red-400`      | `bg-red-500/10`     |
+
+### Priority Colors
+
+Topic priority dots and text labels follow this mapping:
+
+| Priority | Dot class         | Text class        |
+|----------|-------------------|-------------------|
+| `p0`     | `bg-red-500`      | `text-red-400`    |
+| `p1`     | `bg-amber-400`    | `text-amber-400`  |
+| `p2`     | `bg-blue-400`     | `text-blue-400`   |
+| `p3`     | `bg-gray-300`     | `text-gray-400`   |
+
+### Provenance Colors
+
+Provenance indicators (rendered by `ProvenanceBadge`) use dots only — no badge background:
+
+| State            | Dot class          |
+|------------------|--------------------|
+| Evidence-backed  | `bg-emerald-400`   |
+| Inferred         | `bg-amber-400`     |
+| Unknown          | `bg-slate-400`     |
+
+### Color Usage Rules
+
+1. **Semantic only.** Color communicates status, urgency, or category. Never use color for decoration or to make a surface "more interesting."
+2. **Zero = muted.** Counts and metrics at zero always render in muted or default text. Color appears only when there is a live signal.
+3. **User-defined tags stay neutral.** Labels and tags entered by operators (board labels, topic tags, document tags) always use `bg-[var(--ui-border)] text-[var(--ui-text-muted)]` regardless of their string content — never infer semantic color from tag names.
+4. **Background tints are optional emphasis.** Use `color/5` or `color/10` background tints on urgency/status cards only when the count is non-zero and the tint adds meaningful emphasis. Do not tint containers that hold zero-count data.
+
 ## Typography
 
 - **Font:** Inter (loaded via Google Fonts in `app.html`).

@@ -1151,18 +1151,19 @@
     <div class="flex gap-3 overflow-x-auto pb-4">
       {#each activeColumns as column}
         {@const cards = cardsByColumn[column.key] ?? []}
+        {@const isBlocked = column.key === "blocked"}
         <div
           class="flex min-w-[260px] flex-1 flex-col rounded-md bg-[var(--ui-panel-muted)]"
         >
           <div class="flex items-center justify-between px-3 py-2.5">
             <h3
-              class="text-[11px] font-semibold uppercase tracking-wide text-[var(--ui-text-muted)]"
+              class="text-[11px] font-semibold uppercase tracking-wide {isBlocked && cards.length > 0 ? 'text-amber-400' : 'text-[var(--ui-text-muted)]'}"
             >
               {column.title ||
                 boardColumnTitle(column.key, board.column_schema)}
             </h3>
             <span
-              class="min-w-[1.25rem] rounded bg-[var(--ui-border)] px-1.5 py-0.5 text-center text-[11px] text-[var(--ui-text-subtle)]"
+              class="min-w-[1.25rem] rounded px-1.5 py-0.5 text-center text-[11px] {isBlocked && cards.length > 0 ? 'bg-amber-500/15 text-amber-400' : 'bg-[var(--ui-border)] text-[var(--ui-text-subtle)]'}"
             >
               {cards.length}
             </span>
@@ -1348,7 +1349,7 @@
                   {item.title || item.summary || item.id}
                 </div>
                 <div class="mt-1 text-[11px] text-[var(--ui-text-subtle)]">
-                  {item.urgency_label}
+                  <span class="{item.urgency_level === 'immediate' ? 'text-red-400' : item.urgency_level === 'high' ? 'text-amber-400' : ''}">{item.urgency_label}</span>
                   {#if inboxResourceLine}
                     · {inboxResourceLine}
                   {/if}

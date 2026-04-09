@@ -2,6 +2,7 @@
   import { page } from "$app/stores";
 
   import { authenticatedAgent } from "$lib/authSession";
+  import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import { coreClient } from "$lib/coreClient";
   import { formatAbsoluteDateTime, formatTimestamp } from "$lib/formatDate";
   import { buildRegistrationMessage } from "$lib/inviteRegistrationMessage";
@@ -43,6 +44,7 @@
   let tokenDismissed = $state(false);
 
   let revokingInviteId = $state("");
+  let revokeInviteConfirm = $state({ open: false, id: "" });
   let revokeError = $state("");
   let showResolvedInvites = $state(false);
 
@@ -829,7 +831,9 @@
                   <button
                     class="shrink-0 cursor-pointer rounded px-2 py-1 text-[11px] font-medium text-red-400 hover:bg-red-400/10 disabled:opacity-50"
                     disabled={revokingInviteId === invite.id}
-                    onclick={() => handleRevokeInvite(invite.id)}
+                    onclick={() => {
+                      revokeInviteConfirm = { open: true, id: invite.id };
+                    }}
                     type="button"
                   >
                     {revokingInviteId === invite.id ? "Revoking..." : "Revoke"}
@@ -1233,3 +1237,19 @@
     </section>
   </div>
 {/if}
+
+<ConfirmModal
+  open={revokeInviteConfirm.open}
+  title="Revoke invite"
+  message="This invite will be revoked and can no longer be used to join the workspace."
+  confirmLabel="Revoke"
+  variant="danger"
+  busy={revokingInviteId === revokeInviteConfirm.id}
+  onconfirm={() => {
+    void handleRevokeInvite(revokeInviteConfirm.id);
+    revokeInviteConfirm = { open: false, id: "" };
+  }}
+  oncancel={() => {
+    revokeInviteConfirm = { open: false, id: "" };
+  }}
+/>
