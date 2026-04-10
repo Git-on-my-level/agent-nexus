@@ -161,6 +161,26 @@ Useful `make serve` toggles:
 - `FORCE_SEED=1`: seed even when marker data is already present
 - `OAR_ENABLE_DEV_ACTOR_MODE=1`: enable development actor mode for legacy actor picker/creator UI (default: `false` / auth-first)
 
+## Local HTTP Recording
+
+To capture a real CLI session against local `oar-core` for later seed/fixture
+curation, run the local recording proxy:
+
+```bash
+./scripts/oar-http-record \
+  --listen 127.0.0.1:8010 \
+  --upstream http://127.0.0.1:8000 \
+  --output /tmp/oar-record.jsonl
+```
+
+Then point the CLI at the proxy instead of core directly:
+
+```bash
+OAR_BASE_URL=http://127.0.0.1:8010 oar --agent support-lead topics list
+```
+
+See `tools/oar-http-record/README.md` for details.
+
 ## Adapter Integrations
 
 The vendored bridge package at `adapters/agent-bridge/` provides the per-agent
