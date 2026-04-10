@@ -95,6 +95,38 @@ describe("workspaceCatalog", () => {
     expect(catalog.workspaces).toHaveLength(1);
     expect(catalog.defaultWorkspace.slug).toBe("local");
   });
+
+  it("should throw a helpful error when OAR_WORKSPACES is not valid JSON", () => {
+    const env = {
+      OAR_WORKSPACES:
+        '[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000",}]',
+    };
+    expect(() => loadWorkspaceCatalog(env)).toThrow(/Example:.*"slug":"local"/);
+    expect(() => loadWorkspaceCatalog(env)).toThrow(
+      /fall back to OAR_CORE_BASE_URL/,
+    );
+  });
+
+  it("should auto-repair missing } before ] after coreBaseUrl (common typo)", () => {
+    const env = {
+      OAR_WORKSPACES:
+        '[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"]',
+    };
+    const catalog = loadWorkspaceCatalog(env);
+    expect(catalog.workspaces).toHaveLength(1);
+    expect(catalog.defaultWorkspace.slug).toBe("local");
+    expect(catalog.workspaces[0].coreBaseUrl).toBe("http://127.0.0.1:8000");
+  });
+
+  it("should auto-repair swapped ]} after coreBaseUrl (common typo)", () => {
+    const env = {
+      OAR_WORKSPACES:
+        '[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"]}',
+    };
+    const catalog = loadWorkspaceCatalog(env);
+    expect(catalog.workspaces).toHaveLength(1);
+    expect(catalog.defaultWorkspace.slug).toBe("local");
+  });
 });
 
 describe("toPublicWorkspaceCatalog", () => {

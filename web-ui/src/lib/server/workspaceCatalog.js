@@ -7,6 +7,50 @@ import {
 import { normalizeBaseUrl } from "$lib/config";
 import { resolveWorkspaceEnv } from "$lib/compat/workspaceCompat";
 
+/** Shown in parse errors; keep in sync with web-ui README / runbook examples. */
+const OAR_WORKSPACES_JSON_EXAMPLE =
+  '[{"slug":"local","label":"Local","coreBaseUrl":"http://127.0.0.1:8000"}]';
+
+/** `..."http://..." ]` instead of `..."http://..."} ]` — common .env / copy-paste mistake. */
+function hintOarWorkspacesBracketTypo(trimmed) {
+  if (!/"http[s]?:\/\/[^"]+"\s*\]/.test(trimmed)) {
+    return "";
+  }
+  return ' Hint: close the workspace object with "}" before the final "]" (e.g. ..."8000"}] not ..."8000"]).';
+}
+
+function formatOarWorkspacesJsonError(trimmed, error) {
+  const reason = error instanceof Error ? error.message : String(error);
+  const posMatch = reason.match(/position (\d+)/);
+  const pos = posMatch ? Number(posMatch[1]) : NaN;
+  let context = "";
+  if (Number.isFinite(pos) && pos >= 0 && trimmed.length > 0) {
+    const windowStart = Math.max(0, pos - 24);
+    const windowEnd = Math.min(trimmed.length, pos + 24);
+    const slice = trimmed.slice(windowStart, windowEnd);
+    const caretOffset = Math.min(pos - windowStart, slice.length);
+    const caret = `${" ".repeat(caretOffset)}^`;
+    context = ` Context around failure: ${JSON.stringify(slice)} ${caret}`;
+  }
+  const typoHint = /Expected ',' or '}'/.test(reason)
+    ? hintOarWorkspacesBracketTypo(trimmed)
+    : "";
+  return `OAR_WORKSPACES must be valid JSON. ${reason}.${context}${typoHint} Unset OAR_WORKSPACES (and OAR_PROJECTS) to fall back to OAR_CORE_BASE_URL, or fix the value. Example: ${OAR_WORKSPACES_JSON_EXAMPLE}`;
+}
+
+/**
+ * Fixes two copy/paste typos seen in OAR_WORKSPACES without changing valid JSON.
+ * Only applied after JSON.parse fails.
+ */
+function repairCommonOarWorkspacesJsonTypos(trimmed) {
+  let s = trimmed;
+  // `"...url"]}` → `"...url"}]`
+  const afterSwap = s.replace(/("http[s]?:\/\/[^"]+")\s*\]\s*\}\s*$/, "$1}]");
+  if (afterSwap !== s) return afterSwap;
+  // `"...url"]` at end → `"...url"}]`
+  return s.replace(/("http[s]?:\/\/[^"]+")\s*\]\s*$/, "$1}]");
+}
+
 function normalizeWorkspaceEntry(entry, index) {
   if (!entry || typeof entry !== "object") {
     throw new Error(`OAR_WORKSPACES entry ${index + 1} must be an object.`);
@@ -37,9 +81,17 @@ function parseWorkspaceEntries(rawValue) {
   let parsed;
   try {
     parsed = JSON.parse(trimmed);
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    throw new Error(`OAR_WORKSPACES must be valid JSON. ${reason}`);
+  } catch (firstError) {
+    const repaired = repairCommonOarWorkspacesJsonTypos(trimmed);
+    if (repaired !== trimmed) {
+      try {
+        parsed = JSON.parse(repaired);
+      } catch {
+        throw new Error(formatOarWorkspacesJsonError(trimmed, firstError));
+      }
+    } else {
+      throw new Error(formatOarWorkspacesJsonError(trimmed, firstError));
+    }
   }
 
   const entries = Array.isArray(parsed)
