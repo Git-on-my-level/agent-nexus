@@ -12,7 +12,7 @@ import {
   sleep,
   waitForCore,
 } from "../../scripts/seed-core-lib.mjs";
-import { DEV_FIXTURE_PERSONAS, getDevSeedData } from "../src/lib/devSeedData.js";
+import { getDevSeedScenarioConfig } from "./dev-seed-scenarios.mjs";
 
 const coreBaseUrl = normalizeBaseUrl(
   process.env.OAR_CORE_BASE_URL ?? "http://127.0.0.1:8000",
@@ -20,6 +20,9 @@ const coreBaseUrl = normalizeBaseUrl(
 const forceSeed = process.env.OAR_FORCE_SEED === "1";
 const skipIfPresent = process.env.OAR_SEED_SKIP_IF_PRESENT !== "0";
 const waitTimeoutMs = Number(process.env.OAR_CORE_WAIT_TIMEOUT_MS ?? 20000);
+const scenarioName = String(
+  process.env.OAR_DEV_SEED_SCENARIO ?? "default",
+).trim();
 
 if (!coreBaseUrl) {
   failWithPrefix(
@@ -28,8 +31,20 @@ if (!coreBaseUrl) {
   );
 }
 
-const seed = getDevSeedData();
-const defaultActorId = seed.actors[0]?.id ?? "actor-ops-ai";
+const scenarioConfig = getDevSeedScenarioConfig(scenarioName);
+if (!scenarioConfig) {
+  const requested = scenarioName || "default";
+  failWithPrefix(
+    "seed-core-from-mock failed",
+    `unknown dev seed scenario: ${requested}`,
+  );
+}
+
+const seed = scenarioConfig.getSeedData();
+const seedPersonas = Array.isArray(scenarioConfig.personas)
+  ? scenarioConfig.personas
+  : [];
+const defaultActorId = seed.actors[0]?.id ?? scenarioConfig.defaultActorId;
 
 function normalizeSeedCardResolution(raw) {
   const s = String(raw ?? "").trim();
@@ -60,6 +75,8 @@ async function main() {
   await waitForCore(coreBaseUrl, waitTimeoutMs, {
     probes: ["/version", "/readyz"],
   });
+
+  console.log(`Using dev seed scenario: ${scenarioName || "default"}`);
 
   let domainSeeded = true;
   if (skipIfPresent && !forceSeed) {
@@ -106,9 +123,9 @@ async function detectSeededState() {
   const boardCount = (boardsBody?.boards ?? []).length;
 
   return (
-    actorIds.has("actor-ops-ai") &&
-    threadTitles.has("Emergency: Lemon Supply Disruption") &&
-    boardCount > 0
+    actorIds.has(scenarioConfig.detectActorId) &&
+    threadTitles.has(scenarioConfig.detectTopicTitle) &&
+    (!scenarioConfig.requireBoards || boardCount > 0)
   );
 }
 
@@ -225,6 +242,11 @@ async function seedDocuments() {
       : {};
 
   for (const sourceDocument of sourceDocuments) {
+    if (sourceDocument?.document && typeof sourceDocument.document === "object") {
+      await seedInlineDocument(sourceDocument);
+      continue;
+    }
+
     const documentId = String(sourceDocument.id ?? "").trim();
     if (!documentId) {
       console.warn("Skipping document with no id in mock seed data.");
@@ -338,6 +360,58 @@ async function seedDocuments() {
       );
     }
   }
+}
+
+/**
+ * Keep the legacy revision-based seed shape, but also accept the simpler
+ * inline doc shape used by Pi scenarios so `make serve` can switch scenarios
+ * without maintaining a second seeding script.
+ */
+async function seedInlineDocument(sourceDocument) {
+  const document = { ...(sourceDocument.document ?? {}) };
+  const documentId = String(document.id ?? "").trim();
+  if (!documentId) {
+    console.warn("Skipping inline document with no id in mock seed data.");
+    return;
+  }
+
+  const actorId = pickActorId(sourceDocument.actor_id ?? document.owner);
+
+  try {
+    const createResponse = await requestRetryOnServerError(
+      "POST",
+      "/docs",
+      {
+        actor_id: actorId,
+        document: sanitizeInlineDocumentWrite(document),
+        refs: mapRefs(sourceDocument.refs),
+        content: sourceDocument.content,
+        content_type: normalizeDocumentContentType(sourceDocument.content_type),
+      },
+      [201, 409],
+    );
+    const newDocumentId = String(createResponse?.document?.id ?? "").trim();
+    if (newDocumentId) {
+      documentIdMap.set(documentId, newDocumentId);
+      return;
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (isAlreadyExistsConflict(msg)) {
+      documentIdMap.set(documentId, documentId);
+      return;
+    }
+    throw err;
+  }
+
+  documentIdMap.set(documentId, documentId);
+}
+
+function sanitizeInlineDocumentWrite(document) {
+  const next = { ...(document ?? {}) };
+  delete next.status;
+  delete next.state;
+  return next;
 }
 
 async function trashSeedArtifactIfNeeded(sourceArtifact) {
@@ -944,7 +1018,7 @@ async function seedDevFixtureIdentities() {
     return;
   }
 
-  const personas = [...DEV_FIXTURE_PERSONAS].sort(
+  const personas = [...seedPersonas].sort(
     (a, b) => (a.default === true ? 0 : 1) - (b.default === true ? 0 : 1),
   );
   const bundle = [];

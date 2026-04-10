@@ -142,10 +142,10 @@ func (s *Service) Config() config.Resolved {
 }
 
 func (s *Service) Register(ctx context.Context, username string) (RegisterResult, error) {
-	return s.RegisterWithToken(ctx, username, "", "")
+	return s.RegisterWithToken(ctx, username, "", "", "")
 }
 
-func (s *Service) RegisterWithToken(ctx context.Context, username, bootstrapToken, inviteToken string) (RegisterResult, error) {
+func (s *Service) RegisterWithToken(ctx context.Context, username, bootstrapToken, inviteToken, existingActorID string) (RegisterResult, error) {
 	username = strings.TrimSpace(username)
 	if username == "" {
 		return RegisterResult{}, errnorm.Usage("invalid_request", "username is required")
@@ -170,6 +170,9 @@ func (s *Service) RegisterWithToken(ctx context.Context, username, bootstrapToke
 	}
 	if inviteToken != "" {
 		reqBody["invite_token"] = inviteToken
+	}
+	if strings.TrimSpace(existingActorID) != "" {
+		reqBody["existing_actor_id"] = strings.TrimSpace(existingActorID)
 	}
 
 	body, err := json.Marshal(reqBody)

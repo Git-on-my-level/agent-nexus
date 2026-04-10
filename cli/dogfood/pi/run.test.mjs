@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { analyzePiEventLog, validateAgentOutputs } from "./run.mjs";
+import { analyzePiEventLog, cardTemplate, validateAgentOutputs } from "./run.mjs";
 
 test("analyzePiEventLog captures nested runtime errors and ignores clean records", () => {
   const content = [
@@ -53,4 +53,18 @@ test("validateAgentOutputs reports runtime errors from Pi event logs", () => {
 
   const failures = validateAgentOutputs({ eventsPath, resultPath });
   assert.deepEqual(failures, ["pi runtime errors: quota exceeded"]);
+});
+
+test("cardTemplate anchors role cards to the role primary thread instead of the shared main thread", () => {
+  const role = { name: "sales-kid" };
+  const targets = {
+    mainThread: { id: "thread-main" },
+    primaryThread: { id: "thread-sales" },
+    topic: { id: "topic-sales" },
+    artifacts: [{ id: "artifact-one" }, { id: "artifact-two" }],
+  };
+
+  const template = cardTemplate(role, targets);
+  assert.match(template, /"thread:thread-sales"/);
+  assert.doesNotMatch(template, /"thread:thread-main"/);
 });

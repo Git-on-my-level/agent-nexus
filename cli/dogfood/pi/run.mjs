@@ -114,73 +114,108 @@ export const scenarioConfigs = {
       sales: "Front Stand Sales, Smiles, and Sidewalk Pitches",
       backoffice: "Kitchen Prep, Lemon Squeezing, and Supply Stash",
     },
+    boardTitle: "Saturday Lemonade Stand Mission Board",
     documentId: "kid-boss-lemonade-plan",
+    documentIds: {
+      mainPlan: "kid-boss-lemonade-plan",
+      salesNotes: "kid-sales-pitch-notebook",
+      prepLog: "kid-prep-notebook",
+    },
     documentTemplateContent:
       "# Kid Boss Lemonade Plan\n\nMood:\n- replace with the cheerful vibe for the stand today\n\nSales game plan:\n- replace with the best sales ideas and sign tweaks\n\nKitchen and supply plan:\n- replace with the batch schedule and supply checks\n\nBoss notes:\n- replace with friendly bossy reminders and one helpful suggestion for each teammate\n\nEnd-of-day goal:\n- replace with the team's win condition for the day\n",
+    documentTemplateContents: {
+      mainPlan:
+        "# Kid Boss Lemonade Plan\n\nMood:\n- replace with the cheerful vibe for the stand today\n\nMain plot:\n- replace with the big shared story for the afternoon rush, the rival stand rumor, and how the team stays playful\n\nSales game plan:\n- replace with the best sales ideas and sign tweaks\n\nKitchen and supply plan:\n- replace with the batch schedule, the ice plan, and cup backup plan\n\nBoss notes:\n- replace with friendly bossy reminders and one helpful suggestion for each teammate\n\nEnd-of-day goal:\n- replace with the team's win condition for the day\n",
+      salesNotes:
+        "# Ruby Pitch Notebook\n\nBest hook right now:\n- replace with the line that actually makes neighbors stop\n\nFunny sign experiments:\n- replace with the best joke and the rejected joke\n\nCustomer reactions:\n- replace with the patterns you are seeing from kids, parents, and the soccer crowd\n\nMessage to the team:\n- replace with one specific ask for Theo and one for Milo\n",
+      prepLog:
+        "# Theo Prep Log\n\nPitcher timing:\n- replace with the current batch plan and backup timing\n\nSupply watch:\n- replace with cup, ice, lemon, and sugar status\n\nKitchen drama:\n- replace with the one thing that could go chaotic if nobody pays attention\n\nMessage to the team:\n- replace with one specific ask for Ruby and one for Milo\n",
+    },
     artifactIds: {
       scoreboard: "artifact-sales-scoreboard",
       signSlogans: "artifact-sign-slogans",
       prepChecklist: "artifact-prep-checklist",
       supplyList: "artifact-supply-stash",
       weatherNote: "artifact-weather-note",
+      rivalRumor: "artifact-rival-stand-rumor",
+      secretMenu: "artifact-secret-menu-sketch",
+      neighborhoodFlyer: "artifact-neighborhood-flyer",
     },
     cardTitles: {
-      signRefresh: "Refresh the chalkboard sign with clearer prices and a sillier joke",
-      nextBatch: "Mix the next lemonade batch and chill the pitcher before the park rush",
-      supplyCheck: "Check lemon, sugar, cup, and ice stash before the lunch rush",
+      signRefresh: "Refresh the chalkboard sign with giant prices and one excellent joke",
+      rushPrep: "Get pitcher two icy cold before the soccer crowd stampede",
+      secretMenu: "Decide whether the surprise mint special is genius or a terrible idea",
     },
     roles: [
       {
+        name: "boss-kid",
+        actorId: "actor-boss-kid",
+        authUsername: "milo",
+        focus: "Be the bossy but helpful kid running the stand: kick off the mission board, keep the plot moving, and make sure the team actually talks to each other instead of tossing notes into the void.",
+        primaryThreadKey: "main",
+        relatedThreadKeys: ["sales", "backoffice"],
+        artifactIds: ["scoreboard", "prepChecklist", "supplyList", "rivalRumor", "secretMenu"],
+        cardTitles: ["signRefresh", "rushPrep", "secretMenu"],
+        primaryDocumentKey: "mainPlan",
+        privateContext: [
+          "You are Milo, the boss kid. You are a little bossy, but it should feel funny and useful, not mean.",
+          "Your personal plot thread: prove that being organized is cool by creating the mission board early, getting the team to reply to each other in messages, and steering the stand through the afternoon rush without sounding like a tiny consultant.",
+          "The big flexible plot: there might be a rival cookie table popping up nearby, the soccer crowd is coming later, and someone keeps floating a surprise mint special. Keep the team coordinated around those moving pieces without needing perfect timing.",
+          "Create the shared board early, post a kickoff message, add at most one coordination card, and keep nudging the others to reply in-thread instead of only publishing formal updates.",
+          "Update your plan doc once after the first round of messages, then refine it again before the final actor_statement if the plan changed.",
+          "Before you publish the final actor_statement, wait until the other two roles have posted at least one message each, created or updated their own task cards, and updated their role documents.",
+        ],
+        deliverable: "Create the shared mission board, post a kickoff message on the main thread, add at most one coordination card, reply to at least one teammate message, update `kid-boss-lemonade-plan` during the run and refine it again if the plan changes, and then publish the final actor_statement with the day's plan and one helpful suggestion for each kid.",
+        eventSummary: "Boss kid plan: today's lemonade stand game plan and helpful reminders",
+        eventThreadKeys: ["main", "sales", "backoffice"],
+        eventIncludeDocument: true,
+        requireDocsUpdate: true,
+      },
+      {
         name: "sales-kid",
-        focus: "Work the front stand like an enthusiastic neighborhood kid: greet people, notice what makes them smile, and suggest playful sign or pricing tweaks.",
+        actorId: "actor-sales-kid",
+        authUsername: "ruby",
+        focus: "Work the front stand like an enthusiastic neighborhood kid: greet people, notice what makes them smile, keep the chat lively in thread messages, and turn the sign into something people can actually read.",
         primaryThreadKey: "sales",
         relatedThreadKeys: ["main"],
-        artifactIds: ["scoreboard", "signSlogans", "weatherNote"],
-        cardTitles: ["signRefresh"],
+        artifactIds: ["scoreboard", "signSlogans", "weatherNote", "neighborhoodFlyer", "secretMenu"],
+        cardTitles: ["signRefresh", "secretMenu"],
+        primaryDocumentKey: "salesNotes",
         privateContext: [
-          "You are the sales kid. Be playful, upbeat, and a little dramatic about making the stand look exciting.",
-          "You are not writing a corporate launch memo. You are helping a kids' lemonade stand have a good day.",
-          "Good suggestions are things like better sign jokes, combo ideas, customer observations, and what made neighbors stop.",
+          "You are Ruby, the sales kid. Be playful, upbeat, and a little dramatic about making the stand look exciting.",
+          "Your personal plot thread: figure out the best sign joke, test whether the surprise mint special helps or hurts, and collect enough real reactions to boss the sign into shape.",
+          "Talk to the other kids in message_posted events, not just formal actor_statement notes. Ask Theo about timing and ask Milo to pick a final sign direction.",
+          "Create or update one task card on the shared board that is clearly tied to the sales thread rather than the shared main thread.",
+          "Update your notebook doc after you learn something useful, then refine it again near the end if the pitch or mint plan changed.",
+          "You are helping a kids' lemonade stand have a good day, not writing a launch memo.",
         ],
-        deliverable: "Publish one actor_statement on the main thread with your best sales ideas, what customers seem to like, and one or two playful improvements for the sign or pitch.",
+        deliverable: "Post at least one main-thread message and one reply, create or update one sales task card on the shared board, update `kid-sales-pitch-notebook` during the run and refine it again if the pitch changes, and publish one actor_statement on the main thread with your best sales ideas, what customers seem to like, and one or two playful improvements for the sign or pitch.",
         eventSummary: "Sales kid update: sidewalk pitch ideas and what customers are liking",
         eventThreadKeys: ["main", "sales"],
-        eventIncludeDocument: false,
-        requireDocsUpdate: false,
+        eventIncludeDocument: true,
+        requireDocsUpdate: true,
       },
       {
         name: "backoffice-kid",
-        focus: "Handle kitchen prep and supplies like the organized kid behind the scenes: batches, lemons, sugar, cups, ice, and not getting caught empty-handed.",
+        actorId: "actor-backoffice-kid",
+        authUsername: "theo",
+        focus: "Handle kitchen prep and supplies like the organized kid behind the scenes: batches, lemons, sugar, cups, ice, and constant dramatic warnings about what happens if anyone ignores the cooler.",
         primaryThreadKey: "backoffice",
         relatedThreadKeys: ["main"],
-        artifactIds: ["prepChecklist", "supplyList", "weatherNote"],
-        cardTitles: ["nextBatch", "supplyCheck"],
+        artifactIds: ["prepChecklist", "supplyList", "weatherNote", "rivalRumor", "secretMenu"],
+        cardTitles: ["rushPrep", "secretMenu"],
+        primaryDocumentKey: "prepLog",
         privateContext: [
-          "You are the backoffice kid. Be practical, a tiny bit proud of your organized system, and still playful.",
-          "Your job is to keep the pitcher cold, the lemons squeezed, and the supply stash from becoming a disaster.",
+          "You are Theo, the backoffice kid. Be practical, a tiny bit proud of your organized system, and still playful.",
+          "Your personal plot thread: protect the ice, time the second batch correctly, and decide whether the surprise mint special is possible without causing sticky kitchen chaos.",
+          "Talk to Ruby and Milo in thread messages. Ask Ruby when she expects the rush, and tell Milo what the real supply cliff is before cups or ice become a disaster.",
+          "Create or update one task card on the shared board that is clearly tied to the prep thread rather than the shared main thread.",
+          "Update your prep log after you decide the batch timing, then refine it again near the end if the supply or mint plan changed.",
           "Helpful output sounds like batch timing, restock warnings, prep shortcuts, and what the boss kid should stop forgetting.",
         ],
-        deliverable: "Publish one actor_statement on the main thread with the prep plan, supply risks, and the most important behind-the-stand tasks for the next few hours.",
+        deliverable: "Post at least one main-thread message and one reply, create or update one prep task card on the shared board, update `kid-prep-notebook` during the run and refine it again if the prep plan changes, and publish one actor_statement on the main thread with the prep plan, supply risks, and the most important behind-the-stand tasks for the next few hours.",
         eventSummary: "Backoffice kid update: prep timing, supply stash, and kitchen needs",
         eventThreadKeys: ["main", "backoffice"],
-        eventIncludeDocument: false,
-        requireDocsUpdate: false,
-      },
-      {
-        name: "boss-kid",
-        focus: "Be the bossy but helpful kid running the stand: gather the sales and backoffice updates, make the final plan, and keep the team playful instead of overly serious.",
-        primaryThreadKey: "main",
-        relatedThreadKeys: ["sales", "backoffice"],
-        artifactIds: ["scoreboard", "prepChecklist", "supplyList"],
-        cardTitles: ["signRefresh", "nextBatch", "supplyCheck"],
-        privateContext: [
-          "You are the boss kid. You are a little bossy, but in an endearing way, and you do offer useful suggestions.",
-          "Wait until the sales kid and backoffice kid have both posted before writing the final plan.",
-          "A good final answer sounds like a cheerful stand plan for the day, not a serious operations review.",
-        ],
-        deliverable: "Update the `kid-boss-lemonade-plan` document, then publish the final actor_statement on the main thread with the day's plan, team reminders, and one helpful suggestion for each kid.",
-        eventSummary: "Boss kid plan: today's lemonade stand game plan and helpful reminders",
-        eventThreadKeys: ["main", "sales", "backoffice"],
         eventIncludeDocument: true,
         requireDocsUpdate: true,
       },
@@ -202,6 +237,7 @@ function parseArgs(argv) {
     maxSeconds: 900,
     agentCount: 4,
     agentPrefix: "pi-dogfood-agent",
+    agentStartStaggerSeconds: 20,
   };
 
   for (let idx = 0; idx < argv.length; idx += 1) {
@@ -246,6 +282,9 @@ function parseArgs(argv) {
       case "--agent-prefix":
         options.agentPrefix = argv[++idx] ?? "";
         break;
+      case "--agent-start-stagger-seconds":
+        options.agentStartStaggerSeconds = Number(argv[++idx] ?? "0");
+        break;
       default:
         throw new Error(`unknown argument: ${arg}`);
     }
@@ -265,6 +304,9 @@ function parseArgs(argv) {
   }
   if (!options.agentPrefix.trim()) {
     throw new Error("--agent-prefix is required");
+  }
+  if (!Number.isFinite(options.agentStartStaggerSeconds) || options.agentStartStaggerSeconds < 0) {
+    throw new Error("--agent-start-stagger-seconds must be zero or a positive number");
   }
   return options;
 }
@@ -293,7 +335,19 @@ function renderScenario(content, baseUrl) {
   return content.replace(/`http:\/\/127\.0\.0\.1:8000`/g, `\`${baseUrl}\``);
 }
 
-function commandGuide(baseUrl, defaultUsername, documentId) {
+function commandGuide(baseUrl, defaultUsername, { profileReady = false } = {}) {
+  const authLines = profileReady
+    ? [
+        "- Show auth subcommands: `oar auth`",
+        "- Verify the pre-registered default profile: `oar auth whoami`",
+        "- List local profiles if needed: `oar auth list`",
+        "- Inspect linked principals when debugging Access or `@handle` behavior: `oar auth principals list --json`",
+      ]
+    : [
+        "- Show auth subcommands: `oar auth`",
+        `- Register default profile: \`oar auth register --username ${defaultUsername}\``,
+        "- Verify current profile: `oar auth whoami`",
+      ];
   return `# OAR Command Guide
 
 Use these exact command shapes. Prefer them over guessing.
@@ -302,9 +356,7 @@ Base URL:
 - ${baseUrl}
 
 Auth:
-- Show auth subcommands: \`oar auth\`
-- Register default profile: \`oar auth register --username ${defaultUsername}\`
-- Verify current profile: \`oar auth whoami\`
+${authLines.join("\n")}
 
 Read workflow state:
 - List threads: \`oar threads list\`
@@ -315,27 +367,37 @@ Read workflow state:
 - Full related recommendation content in one command: \`oar threads recommendations --thread-id <thread-id> --include-related-event-content --verbose\`
 - Cross-thread aggregate context (optional): \`oar threads context --status active --type initiative --full-id\`
 - Minimal backing thread record (optional): \`oar threads get --thread-id <thread-id>\` (same contract read as \`threads.inspect\`)
+- List recent thread events: \`oar events list --thread-id <thread-id> --max-events 10 --full-id\`
+- List recent thread messages only: \`oar events list --thread-id <thread-id> --type message_posted --max-events 10 --full-id\`
+- Explain how visible thread messages should be authored: \`oar events explain message_posted\`
 - List inbox items: \`oar inbox list\`
 - List artifacts: \`oar artifacts list --thread-id <thread-id>\`
 - Read artifact metadata: \`oar artifacts get --artifact-id <artifact-id>\`
 - Read artifact content: \`oar artifacts content --artifact-id <artifact-id>\`
+- List boards: \`oar boards list\`
+- Read one board workspace: \`oar boards workspace --board-id <board-id>\`
 - List cards: \`oar cards list\`
 - Read one card: \`oar cards get --card-id <card-id>\`
-- Read a seeded scenario document: \`oar docs get --document-id ${documentId}\`
-- Stage a document revision update: \`oar docs propose-update --document-id ${documentId} --from-file doc-update-template.json\`
+- Read a seeded scenario document: \`oar docs get --document-id <document-id>\`
+- Stage a document revision update: \`oar docs propose-update --document-id <document-id> --from-file doc-update-template.json\`
 - Apply a staged document update: \`oar docs apply --proposal-id <proposal-id>\`
-- Update a document immediately (no proposal): \`oar docs update --document-id ${documentId} --from-file doc-update-template.json\`
+- Update a document immediately (no proposal): \`oar docs update --document-id <document-id> --from-file doc-update-template.json\`
 
 Write workflow state:
 - Topics are the primary mutable coordination resource; \`oar threads patch\`, \`oar threads apply\`, and other thread mutation commands are not supported.
+- Create a visible thread message: \`oar events create --from-file message-template.json\`
+- Reply to a message thread item: \`oar events create --from-file reply-template.json\`
 - Update a topic in one step: \`oar topics patch --topic-id <topic-id> --from-file topic-patch.json\`
+- Create a shared board from stdin: \`cat board-template.json | oar boards create --json\`
+- Create a new card on a board from stdin: \`cat card-template.json | oar cards create --json\`
 - For card-level changes, use \`oar cards patch --card-id <card-id> --from-file card-patch.json\` (see \`oar help cards patch\`).
 - Validate an event before sending it: \`oar events validate --from-file event-template.json\`
 - Dry-run an event create without sending it: \`oar events create --from-file event-template.json --dry-run\`
 - Edit \`event-template.json\` in place, then create the event: \`oar events create --from-file event-template.json\`
 
-Working event type for this scenario:
-- \`actor_statement\`
+Working event types for this scenario:
+- \`message_posted\` for visible messages and replies
+- \`actor_statement\` for your higher-signal role summary
 `;
 }
 
@@ -397,7 +459,16 @@ export async function resolveSharedTargets(baseUrl, config) {
   const inboxResponse = await apiJSON(baseUrl, "/inbox");
   const inboxItems = Array.isArray(inboxResponse?.items) ? inboxResponse.items : [];
 
-  const documentResponse = await apiJSON(baseUrl, `/docs/${encodeURIComponent(config.documentId)}`);
+  const documentIds = Object.entries(config.documentIds ?? {}).length > 0
+    ? config.documentIds
+    : { primary: config.documentId };
+  const documents = {};
+  for (const [key, documentId] of Object.entries(documentIds)) {
+    documents[key] = {
+      id: documentId,
+      response: await apiJSON(baseUrl, `/docs/${encodeURIComponent(documentId)}`),
+    };
+  }
 
   const topicsResponse = await apiJSON(baseUrl, "/topics");
   const topics = Array.isArray(topicsResponse?.topics) ? topicsResponse.topics : [];
@@ -419,10 +490,7 @@ export async function resolveSharedTargets(baseUrl, config) {
     artifacts,
     cards: resolvedCards,
     inboxItems,
-    document: {
-      id: config.documentId,
-      response: documentResponse,
-    },
+    documents,
   };
 }
 
@@ -433,8 +501,16 @@ function roleTargets(config, shared, role) {
   const roleCards = role.cardTitles.map((key) => shared.cards[key]).filter(Boolean);
   const relevantThreadIds = new Set([primaryThread?.id, ...relatedThreads.map((thread) => thread.id)]);
   const relevantInboxItems = shared.inboxItems.filter((item) => relevantThreadIds.has(valueFrom(item, "thread_id", "threadId")));
+  const documentsByKey = shared.documents ?? {};
+  const primaryDocumentKey = role.primaryDocumentKey ?? "primary";
+  const primaryDocument = documentsByKey[primaryDocumentKey] ?? null;
+  const roleDocuments = Object.entries(documentsByKey)
+    .filter(([key]) => key === primaryDocumentKey || (role.documentKeys ?? []).includes(key))
+    .map(([, document]) => document)
+    .filter(Boolean);
   return {
     mainThread: shared.threads.main,
+    mainTopic: shared.topics?.main ?? null,
     primaryThread,
     relatedThreads,
     threadsByKey: shared.threads,
@@ -442,7 +518,9 @@ function roleTargets(config, shared, role) {
     artifacts: roleArtifacts,
     cards: roleCards,
     inboxItems: relevantInboxItems,
-    document: shared.document,
+    primaryDocument,
+    roleDocuments,
+    documentsByKey,
   };
 }
 
@@ -455,7 +533,9 @@ function eventTemplate(role, targets) {
     }
   }
   if (role.eventIncludeDocument) {
-    refs.push(`document:${targets.document.id}`);
+    if (targets.primaryDocument?.id) {
+      refs.push(`document:${targets.primaryDocument.id}`);
+    }
   }
   for (const artifact of targets.artifacts) {
     refs.push(`artifact:${artifact.id}`);
@@ -489,22 +569,132 @@ function eventTemplate(role, targets) {
 `;
 }
 
-function docUpdateTemplate(targets, config) {
-  const headRevision = valueFrom(targets.document.response?.revision, "revision_id");
+function messageTemplate(role, targets) {
+  return `{
+  "event": {
+    "type": "message_posted",
+    "thread_id": "${targets.mainThread.id}",
+    "thread_ref": "thread:${targets.mainThread.id}",
+    "refs": [
+      "thread:${targets.mainThread.id}"
+    ],
+    "summary": "Message: replace with a short kid-style subject line",
+    "payload": {
+      "text": "Replace this with the actual message you want your teammates to read."
+    },
+    "provenance": {
+      "sources": [
+        "inferred"
+      ]
+    }
+  }
+}
+`;
+}
+
+function replyTemplate(role, targets) {
+  return `{
+  "event": {
+    "type": "message_posted",
+    "thread_id": "${targets.mainThread.id}",
+    "thread_ref": "thread:${targets.mainThread.id}",
+    "refs": [
+      "thread:${targets.mainThread.id}",
+      "event:REPLY_TO_EVENT_ID"
+    ],
+    "summary": "Message reply: replace with a short reply subject",
+    "payload": {
+      "text": "Replace this with a direct reply to one teammate message. Keep the event:REPLY_TO_EVENT_ID ref updated."
+    },
+    "provenance": {
+      "sources": [
+        "inferred"
+      ]
+    }
+  }
+}
+`;
+}
+
+function boardTemplate(config, role, targets) {
+  const documentRefs = targets.primaryDocument?.id
+    ? [`document:${targets.primaryDocument.id}`]
+    : [];
+  const pinnedRefs = targets.artifacts.map((artifact) => `artifact:${artifact.id}`);
+  const primaryTopicRef = targets.mainTopic?.id
+    ? `topic:${targets.mainTopic.id}`
+    : "";
+  return `{
+  "board": {
+    "title": ${JSON.stringify(config.boardTitle ?? "Scenario Mission Board")},
+    "status": "active",
+    "document_refs": ${JSON.stringify(documentRefs, null, 4)},
+    "pinned_refs": ${JSON.stringify(pinnedRefs, null, 4)},
+    ${primaryTopicRef ? `"primary_topic_ref": ${JSON.stringify(primaryTopicRef)},` : ""}
+    "provenance": {
+      "sources": [
+        "inferred"
+      ],
+      "notes": "Created during the Pi dogfood scenario to track the stand plan."
+    }
+  }
+}
+`;
+}
+
+export function cardTemplate(role, targets) {
+  // Board cards are effectively one-active-card-per-parent-thread on a board.
+  // Keep each role's default card anchored to that role's primary thread instead
+  // of attaching every card to the shared main thread.
+  const parentThread = targets.primaryThread ?? targets.mainThread;
+  const relatedRefs = [
+    `thread:${parentThread.id}`,
+    ...(targets.topic?.id ? [`topic:${targets.topic.id}`] : []),
+    ...targets.artifacts.slice(0, 2).map((artifact) => `artifact:${artifact.id}`),
+  ];
+  return `{
+  "board_id": "REPLACE_WITH_BOARD_ID",
+  "card": {
+    "title": "Replace with a concrete stand task",
+    "summary": "Replace with the actual task this kid is taking on.",
+    "column_key": "ready",
+    "risk": "medium",
+    "assignee_refs": [],
+    "related_refs": ${JSON.stringify(relatedRefs, null, 4)},
+    "resolution_refs": [],
+    ${targets.topic?.id ? `"topic_ref": ${JSON.stringify(`topic:${targets.topic.id}`)},` : ""}
+    "provenance": {
+      "sources": [
+        "inferred"
+      ],
+      "notes": "Created during the Pi dogfood scenario."
+    }
+  }
+}
+`;
+}
+
+function docUpdateTemplate(targets, config, role) {
+  const primaryDocument = targets.primaryDocument;
+  const primaryDocumentKey = role.primaryDocumentKey ?? "primary";
+  const templateContent =
+    config.documentTemplateContents?.[primaryDocumentKey] ??
+    config.documentTemplateContent;
+  const headRevision = valueFrom(primaryDocument?.response?.revision, "revision_id");
   const artifactRefs = targets.artifacts
     .map((artifact) => artifact?.id)
     .filter(Boolean)
     .map((artifactId) => `artifact:${artifactId}`);
   const refs = [...new Set([
     `thread:${targets.mainThread.id}`,
-    `document:${targets.document.id}`,
+    ...(primaryDocument?.id ? [`document:${primaryDocument.id}`] : []),
     ...artifactRefs,
   ])];
   return `{
   "if_base_revision": "${headRevision}",
   "refs": ${JSON.stringify(refs, null, 4)},
   "content_type": "text",
-  "content": ${JSON.stringify(config.documentTemplateContent)}
+  "content": ${JSON.stringify(templateContent)}
 }
 `;
 }
@@ -516,6 +706,7 @@ function targetsGuide(role, targets) {
     "Use these resolved IDs directly. Do not spend turns rediscovering them.",
     "",
     "Prefer topic workspace, cards, and boards for coordination; thread commands below are diagnostic (backing-thread tooling).",
+    "Use `message_posted` events for in-thread chat and replies; do not rely on actor_statement alone if the scenario asks for live coordination.",
     "",
     `Shared goal thread: ${targets.mainThread.id}`,
     `Shared goal title: ${targets.mainThread.title}`,
@@ -561,6 +752,15 @@ function targetsGuide(role, targets) {
     }
   }
 
+  if (targets.roleDocuments.length > 0) {
+    lines.push("", "Documents in scope:");
+    for (const document of targets.roleDocuments) {
+      lines.push(`- ${document.id}`);
+      lines.push(`  read: oar docs get --document-id ${document.id}`);
+      lines.push(`  content: oar docs content --document-id ${document.id}`);
+    }
+  }
+
   if (targets.inboxItems.length > 0) {
     lines.push("", "Relevant inbox items:");
     for (const item of targets.inboxItems) {
@@ -569,15 +769,29 @@ function targetsGuide(role, targets) {
   }
 
   lines.push("", `Your deliverable: ${role.deliverable}`);
+  lines.push(
+    "Message coordination checklist:",
+    `- kickoff messages live on the main thread ${targets.mainThread.id}`,
+    `- list current visible messages with: oar events list --thread-id ${targets.mainThread.id} --type message_posted --max-events 10 --full-id`,
+    "- reply by adding `event:<message_event_id>` to `reply-template.json` refs before creating it",
+  );
   if (role.requireDocsUpdate) {
     lines.push(
-      `Document to update: ${targets.document.id}`,
-      `Read it first: oar docs get --document-id ${targets.document.id}`,
-      `Stage it: oar docs propose-update --document-id ${targets.document.id} --from-file doc-update-template.json`,
+      `Primary document to update: ${targets.primaryDocument?.id ?? ""}`,
+      `Read it first: oar docs get --document-id ${targets.primaryDocument?.id ?? ""}`,
+      `Stage it: oar docs propose-update --document-id ${targets.primaryDocument?.id ?? ""} --from-file doc-update-template.json`,
       `Then apply it: oar docs apply --proposal-id <proposal-id>`,
-      `Or write immediately: oar docs update --document-id ${targets.document.id} --from-file doc-update-template.json`,
+      `Or write immediately: oar docs update --document-id ${targets.primaryDocument?.id ?? ""} --from-file doc-update-template.json`,
     );
   }
+  lines.push(
+    "",
+    "Board/task checklist:",
+    "- the boss kid should create the shared board early from `board-template.json`",
+    "- create or update one role-specific task card from `card-template.json` after the board exists",
+    "- keep your card tied to your primary role thread instead of forcing every card onto the shared main thread",
+    "- if you want multiple cards on one board, they need different parent-thread context; do not mindlessly clone the same thread refs",
+  );
 
   return `${lines.join("\n")}\n`;
 }
@@ -588,6 +802,8 @@ function privateContextGuide(role) {
     "",
     `Role: ${role.name}`,
     `Focus: ${role.focus}`,
+    role.authUsername ? `Preferred @handle: @${role.authUsername}` : "",
+    role.actorId ? `Seeded actor id: ${role.actorId}` : "",
     "",
     "Private context and constraints:",
     ...role.privateContext.map((line) => `- ${line}`),
@@ -619,6 +835,119 @@ function buildOarBinary(runDir, providedPath) {
 
 function buildCoreBinary(runDir, providedPath) {
   return buildGoBinary(runDir, providedPath, "core", "./cmd/oar-core", "oar-core");
+}
+
+function agentHomeDir(runDir, agentId) {
+  return path.join(runDir, `home-${agentId}`);
+}
+
+function oarProcessEnv({ homeDir, oarBin, baseUrl }) {
+  return {
+    ...process.env,
+    HOME: homeDir,
+    XDG_CONFIG_HOME: path.join(homeDir, ".config"),
+    PATH: `${path.dirname(oarBin)}${path.delimiter}${process.env.PATH ?? ""}`,
+    OAR_BASE_URL: baseUrl,
+  };
+}
+
+function runOarJSON({ cwd, oarBin, baseUrl, homeDir, agentId, args }) {
+  const result = spawnSync(
+    oarBin,
+    ["--json", "--base-url", baseUrl, "--agent", agentId, ...args],
+    {
+      cwd,
+      env: oarProcessEnv({ homeDir, oarBin, baseUrl }),
+      encoding: "utf8",
+    },
+  );
+  if (result.error) {
+    const detail = result.error instanceof Error ? result.error.message : String(result.error);
+    throw new Error(`oar ${args.join(" ")} failed for ${agentId}: ${detail}`);
+  }
+  if (result.status !== 0) {
+    const stderr = String(result.stderr ?? "").trim();
+    const stdout = String(result.stdout ?? "").trim();
+    throw new Error(
+      `oar ${args.join(" ")} failed for ${agentId}: ${stderr || stdout || `exit ${result.status}`}`,
+    );
+  }
+
+  let payload;
+  try {
+    payload = JSON.parse(String(result.stdout ?? ""));
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`failed to parse oar JSON output for ${agentId}: ${detail}`);
+  }
+
+  if (!payload?.ok) {
+    const errorMessage =
+      payload?.error?.message ??
+      payload?.error?.code ??
+      "oar command returned ok=false";
+    throw new Error(`oar ${args.join(" ")} failed for ${agentId}: ${errorMessage}`);
+  }
+  return payload;
+}
+
+function prepareAgentProfiles({ oarBin, baseUrl, bootstrapToken, agents }) {
+  if (!bootstrapToken) {
+    return false;
+  }
+  if (agents.length === 0) {
+    return true;
+  }
+
+  for (const agent of agents) {
+    ensureDir(agent.homeDir);
+    ensureDir(agent.workspaceDir);
+  }
+
+  const [issuer, ...invitees] = agents;
+  runOarJSON({
+    cwd: issuer.workspaceDir,
+    oarBin,
+    baseUrl,
+    homeDir: issuer.homeDir,
+    agentId: issuer.agentId,
+    args: [
+      "auth", "register",
+      "--username", issuer.agentUsername,
+      "--bootstrap-token", bootstrapToken,
+      ...(issuer.actorId ? ["--existing-actor-id", issuer.actorId] : []),
+    ],
+  });
+
+  for (const invitee of invitees) {
+    const invitePayload = runOarJSON({
+      cwd: issuer.workspaceDir,
+      oarBin,
+      baseUrl,
+      homeDir: issuer.homeDir,
+      agentId: issuer.agentId,
+      args: ["auth", "invites", "create", "--kind", "agent"],
+    });
+    const inviteToken = String(invitePayload?.data?.token ?? "").trim();
+    if (!inviteToken) {
+      throw new Error(`invite creation returned no token for ${invitee.agentId}`);
+    }
+    runOarJSON({
+      cwd: invitee.workspaceDir,
+      oarBin,
+      baseUrl,
+      homeDir: invitee.homeDir,
+      agentId: invitee.agentId,
+      args: [
+        "auth", "register",
+        "--username", invitee.agentUsername,
+        "--invite-token", inviteToken,
+        ...(invitee.actorId ? ["--existing-actor-id", invitee.actorId] : []),
+      ],
+    });
+  }
+
+  return true;
 }
 
 function piExecutable() {
@@ -666,6 +995,10 @@ async function waitForCore(baseUrl, timeoutMs) {
   throw new Error(`core did not become healthy: ${lastError}`);
 }
 
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function seedCore(baseUrl, scenario) {
   const seedScript = path.join(packageRoot, "seed", "seed-core.mjs");
   const result = spawnSync("node", [seedScript], {
@@ -688,6 +1021,7 @@ async function startManagedCore(runDir, coreBin, requestedBaseUrl, scenario) {
     await waitForCore(requestedBaseUrl, 20000);
     return {
       baseUrl: requestedBaseUrl,
+      bootstrapToken: String(process.env.OAR_BOOTSTRAP_TOKEN ?? "").trim(),
       stop: async () => {},
       managed: false,
       workspaceDir: "",
@@ -701,7 +1035,9 @@ async function startManagedCore(runDir, coreBin, requestedBaseUrl, scenario) {
   const host = "127.0.0.1";
   const port = await findFreePort();
   const baseUrl = `http://${host}:${port}`;
+  const bootstrapToken = `pi-bs-${runToken()}`;
   ensureDir(workspaceDir);
+  writeFile(path.join(workspaceDir, ".oar-dev-insecure-auth"), "");
   const logStream = fs.createWriteStream(logPath, { flags: "a" });
 
   const child = spawn(coreBin, [
@@ -718,7 +1054,10 @@ async function startManagedCore(runDir, coreBin, requestedBaseUrl, scenario) {
     env: {
       ...process.env,
       OAR_ENABLE_DEV_ACTOR_MODE: "1",
+      OAR_ALLOW_PASSKEY_DEV_BYPASS: "1",
       OAR_ALLOW_UNAUTHENTICATED_WRITES: "1",
+      OAR_DEV_REGISTER_LINKED_ACTORS: "1",
+      OAR_BOOTSTRAP_TOKEN: bootstrapToken,
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -765,6 +1104,7 @@ async function startManagedCore(runDir, coreBin, requestedBaseUrl, scenario) {
 
   return {
     baseUrl,
+    bootstrapToken,
     stop,
     managed: true,
     workspaceDir,
@@ -870,6 +1210,8 @@ async function runPiAgent({
   agentId,
   agentCount,
   agentUsername,
+  homeDir,
+  profileReady,
   scenarioMarkdown,
   scenarioConfig,
   role,
@@ -879,6 +1221,12 @@ async function runPiAgent({
   const eventsPath = agentEventsPath(runDir, agentCount, agentId);
   const resultPath = agentResultPath(workspaceDir);
   ensureDir(workspaceDir);
+  const authSetupLine = profileReady
+    ? `- The temp workspace already has a local auth profile for username \`${agentUsername}\`. Verify it with \`oar auth whoami\`.`
+    : `- Register with username \`${agentUsername}\` if no local profile exists. Start with \`oar auth whoami\` to inspect the current state.`;
+  const authPromptLine = profileReady
+    ? `A local auth profile for username ${agentUsername} is already registered; verify it with \`oar auth whoami\` instead of creating a new registration.`
+    : `Use \`oar auth whoami\` to inspect auth state first. If no profile exists, register with username ${agentUsername} using the command guidance in COMMANDS.md.`;
 
   const agentsContent = `# Pi Dogfood Run
 
@@ -891,7 +1239,7 @@ Rules:
 - Keep notes and artifacts inside the current working directory.
 - This scenario lane is fixed to \`--provider zai --model glm-5\`. Do not change provider/model when validating the scenario.
 - If you need to debug another provider or model, do it outside this scenario runner and label it separately from scenario results.
-- Register with username \`${agentUsername}\`.
+${authSetupLine}
 - Before finishing, write \`result.md\` containing:
   - summary
   - oar commands attempted
@@ -910,24 +1258,35 @@ Environment:
 - Command guide: ./COMMANDS.md
 - Scenario targets: ./TARGETS.md
 - Role context: ./ROLE_CONTEXT.md
+- Message template: ./message-template.json
+- Reply template: ./reply-template.json
 - Event template: ./event-template.json
+- Board template: ./board-template.json
+- Card template: ./card-template.json
 - Document update template (if present): ./doc-update-template.json
 - Result template: ./result-template.md
 `;
   writeFile(path.join(workspaceDir, "AGENTS.md"), agentsContent);
   writeFile(path.join(workspaceDir, "SCENARIO.md"), scenarioMarkdown);
-  writeFile(path.join(workspaceDir, "COMMANDS.md"), commandGuide(coreBaseUrl, agentUsername, targets.document.id));
+  writeFile(
+    path.join(workspaceDir, "COMMANDS.md"),
+    commandGuide(coreBaseUrl, agentUsername, { profileReady }),
+  );
   writeFile(path.join(workspaceDir, "TARGETS.md"), targetsGuide(role, targets));
   writeFile(path.join(workspaceDir, "ROLE_CONTEXT.md"), privateContextGuide(role));
+  writeFile(path.join(workspaceDir, "message-template.json"), messageTemplate(role, targets));
+  writeFile(path.join(workspaceDir, "reply-template.json"), replyTemplate(role, targets));
   writeFile(path.join(workspaceDir, "event-template.json"), eventTemplate(role, targets));
+  writeFile(path.join(workspaceDir, "board-template.json"), boardTemplate(scenarioConfig, role, targets));
+  writeFile(path.join(workspaceDir, "card-template.json"), cardTemplate(role, targets));
   if (role.requireDocsUpdate) {
-    writeFile(path.join(workspaceDir, "doc-update-template.json"), docUpdateTemplate(targets, scenarioConfig));
+    writeFile(path.join(workspaceDir, "doc-update-template.json"), docUpdateTemplate(targets, scenarioConfig, role));
   }
   writeFile(path.join(workspaceDir, "result-template.md"), resultTemplate());
 
   const prompt = role.requireDocsUpdate
-    ? "Read SCENARIO.md, COMMANDS.md, TARGETS.md, and ROLE_CONTEXT.md. Execute your role with the real oar CLI. Update doc-update-template.json in place, stage the seeded document update with `oar docs propose-update`, inspect the diff, apply it with `oar docs apply`, then post your final event. Use `oar events validate --from-file event-template.json` or `oar events create --from-file event-template.json --dry-run` if you want a local event check before the real create. Edit event-template.json in place, create the event from that file, write result.md, and then give a short final summary."
-    : "Read SCENARIO.md, COMMANDS.md, TARGETS.md, and ROLE_CONTEXT.md. Execute your role with the real oar CLI. Use `oar events validate --from-file event-template.json` or `oar events create --from-file event-template.json --dry-run` if you want a local event check before the real create. Edit event-template.json in place, create the event from that file, write result.md, and then give a short final summary.";
+    ? `Read SCENARIO.md, COMMANDS.md, TARGETS.md, and ROLE_CONTEXT.md. Execute your role with the real oar CLI. Use message-template.json for a kickoff message on the main thread, use reply-template.json for at least one reply to another kid's message, and use message_posted rather than actor_statement for those conversational updates. If you are the boss kid, create the shared board early from board-template.json, add at most one coordination card from card-template.json, and make the board visible to the others. Keep any board card tied to its intended role thread instead of attaching everything to the shared main thread. Update doc-update-template.json in place, stage the document update with \`oar docs propose-update\`, inspect the diff, apply it with \`oar docs apply\`, then post your final actor_statement from event-template.json. Use \`oar events list --thread-id ${targets.mainThread.id} --type message_posted --max-events 10 --full-id\` to find reply targets. Write result.md and then give a short final summary.`
+    : `Read SCENARIO.md, COMMANDS.md, TARGETS.md, and ROLE_CONTEXT.md. Execute your role with the real oar CLI. Use message-template.json for a kickoff message on the main thread, use reply-template.json for at least one reply to another kid's message, and create or inspect board work when the scenario asks for it. Create or update one role-specific task card from card-template.json after the board exists, and keep that card tied to your primary role thread rather than the shared main thread. Use \`oar events list --thread-id ${targets.mainThread.id} --type message_posted --max-events 10 --full-id\` to find reply targets. After the conversational work is done, edit event-template.json in place, create the final actor_statement from that file, write result.md, and then give a short final summary.`;
 
   const piArgs = [
     "--print",
@@ -947,20 +1306,16 @@ Environment:
     "--no-prompt-templates",
     "--no-themes",
     "--append-system-prompt",
-    `Use oar on PATH for OAR interactions. Do not use curl. Work only inside the current directory. Register with username ${agentUsername}.`,
+    `Use oar on PATH for OAR interactions. Do not use curl. Work only inside the current directory. ${authPromptLine}`,
     "@SCENARIO.md",
     prompt,
   ];
 
   const eventStream = fs.createWriteStream(eventsPath, { flags: "a" });
-  const homeDir = path.join(runDir, `home-${agentId}`);
   ensureDir(homeDir);
   const env = {
-    ...process.env,
-    HOME: homeDir,
-    PATH: `${path.dirname(oarBin)}${path.delimiter}${process.env.PATH ?? ""}`,
+    ...oarProcessEnv({ homeDir, oarBin, baseUrl: coreBaseUrl }),
     PI_CODING_AGENT_DIR: path.join(piHomeDir, agentId),
-    OAR_BASE_URL: coreBaseUrl,
   };
   ensureDir(env.PI_CODING_AGENT_DIR);
 
@@ -1055,6 +1410,7 @@ async function main() {
   console.log(`base url: ${core.baseUrl}`);
   console.log(`agents: ${options.agentCount}`);
   console.log(`max seconds: ${options.maxSeconds}`);
+  console.log(`agent start stagger seconds: ${options.agentCount > 1 ? options.agentStartStaggerSeconds : 0}`);
   if (options.agentCount > 1 && options.maxSeconds < 600) {
     console.warn(`warning: --max-seconds ${options.maxSeconds} is below the recommended 600s floor for multi-agent scenario validation`);
   }
@@ -1063,40 +1419,72 @@ async function main() {
   try {
     const pendingAgents = roles.map((role, agentIndex) => {
       const agentId = `agent-${String(agentIndex + 1).padStart(2, "0")}`;
-      const agentUsername = `${options.agentPrefix}-${role.name}`;
+      const agentUsername = String(
+        role.authUsername ?? `${options.agentPrefix}-${role.name}`,
+      ).trim();
       const workspaceDir = agentWorkspaceDir(runDir, options.agentCount, agentId);
       const eventsPath = agentEventsPath(runDir, options.agentCount, agentId);
       const resultPath = agentResultPath(workspaceDir);
+      const homeDir = agentHomeDir(runDir, agentId);
       return {
         role,
         agentId,
+        actorId: String(role.actorId ?? "").trim(),
         agentUsername,
         workspaceDir,
         eventsPath,
         resultPath,
-        promise: runPiAgent({
-        runDir,
-        piHomeDir,
-        oarBin,
-        coreBaseUrl: core.baseUrl,
-        provider: options.provider,
-        model: options.model,
-        apiKey,
-        maxSeconds: options.maxSeconds,
-        agentId,
-        agentCount: options.agentCount,
-        agentUsername,
-        scenarioMarkdown: renderedScenario,
-        scenarioConfig: config,
-        role,
-        targets: roleTargets(config, sharedTargets, role),
-        }),
+        homeDir,
+        profileReady: false,
       };
     });
 
-    const settled = await Promise.allSettled(pendingAgents.map((agent) => agent.promise));
+    const profileReady = prepareAgentProfiles({
+      oarBin,
+      baseUrl: core.baseUrl,
+      bootstrapToken: core.bootstrapToken,
+      agents: pendingAgents,
+    });
+
+    const agentPlans = pendingAgents.map((agent) => {
+      return {
+        ...agent,
+        profileReady,
+        promise: (async () => {
+          const staggerMs =
+            options.agentCount > 1
+              ? Math.round(options.agentStartStaggerSeconds * 1000 * pendingAgents.indexOf(agent))
+              : 0;
+          if (staggerMs > 0) {
+            // Stagger starts to reduce provider-side 429 bursts on multi-agent dogfood runs.
+            await delay(staggerMs);
+          }
+          return runPiAgent({
+            runDir,
+            piHomeDir,
+            oarBin,
+            coreBaseUrl: core.baseUrl,
+            provider: options.provider,
+            model: options.model,
+            apiKey,
+            maxSeconds: options.maxSeconds,
+            agentId: agent.agentId,
+            agentCount: options.agentCount,
+            agentUsername: agent.agentUsername,
+            homeDir: agent.homeDir,
+            profileReady,
+            scenarioMarkdown: renderedScenario,
+            scenarioConfig: config,
+            role: agent.role,
+            targets: roleTargets(config, sharedTargets, agent.role),
+          });
+        })(),
+      };
+    });
+
+    const settled = await Promise.allSettled(agentPlans.map((agent) => agent.promise));
     agentRuns = settled.map((result, index) => {
-      const pending = pendingAgents[index];
+      const pending = agentPlans[index];
       if (result.status === "fulfilled") {
         return { status: "ok", role: pending.role.name, ...result.value };
       }

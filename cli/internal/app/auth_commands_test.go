@@ -191,6 +191,41 @@ func TestAuthTextOutputIncludesWakeRoutingNextSteps(t *testing.T) {
 	}
 }
 
+func TestAuthRegisterSupportsExistingActorLinking(t *testing.T) {
+	t.Parallel()
+
+	core := newFakeAuthCore(t)
+	server := httptest.NewServer(http.HandlerFunc(core.handle))
+	defer server.Close()
+
+	home := t.TempDir()
+	env := map[string]string{}
+
+	registerOut := runCLIForTest(t, home, env, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"--agent", "agent-linked",
+		"auth", "register",
+		"--username", "linked.agent",
+		"--existing-actor-id", "actor-boss-kid",
+	})
+	payload := assertEnvelopeOK(t, registerOut)
+	data, _ := payload["data"].(map[string]any)
+	if data == nil {
+		t.Fatalf("unexpected auth register payload: %#v", payload)
+	}
+	profileMap, _ := data["profile"].(map[string]any)
+	if got := strings.TrimSpace(anyStr(profileMap["actor_id"])); got != "actor-boss-kid" {
+		t.Fatalf("expected linked actor id in profile, got %#v", payload)
+	}
+
+	core.mu.Lock()
+	defer core.mu.Unlock()
+	if got := strings.TrimSpace(anyStr(core.lastRegisterRequest["existing_actor_id"])); got != "actor-boss-kid" {
+		t.Fatalf("expected existing_actor_id in register request, got %#v", core.lastRegisterRequest)
+	}
+}
+
 func TestAuthWhoAmIHintUsesServerResolvedUsername(t *testing.T) {
 	t.Parallel()
 
@@ -650,6 +685,7 @@ type fakeAuthCore struct {
 	agentID              string
 	actorID              string
 	username             string
+	lastRegisterRequest  map[string]any
 	keyID                string
 	publicKeyB64         string
 	accessToken          string
@@ -693,8 +729,12 @@ func (f *fakeAuthCore) handle(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPost && r.URL.Path == "/auth/agents/register":
 		var req map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&req)
+		f.lastRegisterRequest = req
 		f.agentID = "agent-123"
-		f.actorID = "agent-123"
+		f.actorID = strings.TrimSpace(anyStr(req["existing_actor_id"]))
+		if f.actorID == "" {
+			f.actorID = "agent-123"
+		}
 		f.username = strings.ToLower(strings.TrimSpace(anyStr(req["username"])))
 		f.keyID = "key-1"
 		f.publicKeyB64 = strings.TrimSpace(anyStr(req["public_key"]))

@@ -19,6 +19,7 @@ CORE_WORKSPACE_ROOT ?= $(CURDIR)/$(CORE_DIR)/.oar-workspace
 RESET_DEV_WORKSPACE ?= 1
 SEED_CORE ?= 1
 FORCE_SEED ?= 0
+DEV_SEED_SCENARIO ?= default
 
 .DEFAULT_GOAL := help
 
@@ -158,6 +159,7 @@ serve: ## Start core, seed mock dataset into core, then start web-ui
 	WEB_UI_PORT="$(WEB_UI_PORT)" \
 	RESET_DEV_WORKSPACE="$(RESET_DEV_WORKSPACE)" \
 	SEED_CORE="$(SEED_CORE)" \
+	DEV_SEED_SCENARIO="$(DEV_SEED_SCENARIO)" \
 	FORCE_SEED="$(FORCE_SEED)" \
 	./scripts/serve.sh
 

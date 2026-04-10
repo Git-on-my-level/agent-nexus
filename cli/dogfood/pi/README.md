@@ -45,13 +45,15 @@ pnpm --dir cli/dogfood/pi run kids-lemonade-stand -- \
   --api-key-file ../../.secrets/zai_api_key \
   --provider zai \
   --model glm-5 \
-  --agent-count 3
+  --agent-count 3 \
+  --agent-start-stagger-seconds 35
 ```
 
 Timeout guidance:
 - The runner defaults to `--max-seconds 900`.
 - For multi-agent scenario validation, do not lower `--max-seconds` below `600` unless you are intentionally stress-testing timeout behavior.
 - A lower override can terminate agents after they have already done most of the workflow, which makes the run look worse than the actual CLI ergonomics.
+- The runner defaults to `--agent-start-stagger-seconds 20` for multi-agent runs to reduce provider-side cold-start rate-limit bursts. Set it to `0` only if you intentionally want simultaneous starts.
 
 Artifacts are written under `cli/.tmp/pi-dogfood/<run-id>/`:
 
@@ -71,6 +73,8 @@ The runner also:
 - builds temporary `oar` and `oar-core` binaries
 - starts a managed `oar-core` on a random local port
 - starts that managed core with `OAR_ENABLE_DEV_ACTOR_MODE=1` and `OAR_ALLOW_UNAUTHENTICATED_WRITES=1` so the seed phase can bootstrap actors, reads, and threads before agents authenticate
+- starts managed-core runs with an ephemeral `OAR_BOOTSTRAP_TOKEN`, pre-registers the first temp agent profile with that token, then mints invite tokens for the remaining temp agent profiles before Pi starts
+- links scenario temp principals to the seeded scenario actors when the CLI/core path supports `--existing-actor-id`, so Access and actor-aware UI reads line up with the scenario cast
 - seeds the core from CLI-owned scenario data under `cli/dogfood/pi/seed/`
 - points Pi at that isolated core via `OAR_BASE_URL`
 
@@ -91,3 +95,4 @@ Scenario command-shape guidance:
 - use `oar docs update ...` only when you want to write the new revision immediately without staging a proposal
 - use `oar events validate --from-file <path>` when you want a local payload check before `oar events create`
 - use `oar events create --from-file <path> --dry-run` when you want the exact create request preview without sending it
+- use `message_posted` for visible thread chat and replies, then use `actor_statement` for the higher-signal role summary

@@ -460,9 +460,11 @@ func (a *App) runAuthRegister(ctx context.Context, service *authcli.Service, arg
 	var usernameFlag trackedString
 	var bootstrapTokenFlag trackedString
 	var inviteTokenFlag trackedString
+	var existingActorIDFlag trackedString
 	fs.Var(&usernameFlag, "username", "Agent username")
 	fs.Var(&bootstrapTokenFlag, "bootstrap-token", "Bootstrap token for first principal registration")
 	fs.Var(&inviteTokenFlag, "invite-token", "Invite token for subsequent principal registration")
+	fs.Var(&existingActorIDFlag, "existing-actor-id", "Link the new principal to an existing seeded actor id (dev/local cores only)")
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_auth_flags", err.Error())
 	}
@@ -478,10 +480,11 @@ func (a *App) runAuthRegister(ctx context.Context, service *authcli.Service, arg
 	}
 	bootstrapToken := strings.TrimSpace(bootstrapTokenFlag.value)
 	inviteToken := strings.TrimSpace(inviteTokenFlag.value)
+	existingActorID := strings.TrimSpace(existingActorIDFlag.value)
 	if bootstrapToken != "" && inviteToken != "" {
 		return nil, errnorm.Usage("invalid_request", "cannot specify both --bootstrap-token and --invite-token")
 	}
-	registered, err := service.RegisterWithToken(ctx, username, bootstrapToken, inviteToken)
+	registered, err := service.RegisterWithToken(ctx, username, bootstrapToken, inviteToken, existingActorID)
 	if err != nil {
 		return nil, err
 	}
