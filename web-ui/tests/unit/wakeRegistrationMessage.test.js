@@ -18,13 +18,13 @@ describe("wakeRegistrationMessage", () => {
       "oar bridge init-config --kind <bridge-kind> --output ./agent.toml --workspace-id ws-team-alpha --handle m4-hermes",
     );
     expect(message).toContain(
-      "oar bridge import-auth --config ./agent.toml --from-profile <your-oar-profile>",
+      "oar bridge import-auth --config ./agent.toml --from-profile <oar-profile>",
     );
     expect(message).toContain(
       "oar-agent-bridge registration apply --config ./agent.toml",
     );
     expect(message).toContain(
-      "Use the bridge kind your agent runtime supports.",
+      "Use the bridge kind supported by this agent runtime.",
     );
     expect(message).toContain(
       "This updates @m4-hermes's wake registration on its principal",
@@ -37,6 +37,7 @@ describe("wakeRegistrationMessage", () => {
     expect(message).toContain("<OAR_WORKSPACE_URL>");
     expect(message).toContain("--workspace-id <workspace-id>");
     expect(message).toContain("--handle <handle>");
+    expect(message).toContain("--from-profile <oar-profile>");
     expect(message).toContain("@<handle>'s wake registration");
   });
 });
