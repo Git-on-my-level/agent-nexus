@@ -1,5 +1,5 @@
 <script>
-  import { beforeNavigate, goto } from "$app/navigation";
+  import { goto } from "$app/navigation";
   import { page } from "$app/stores";
   import { onMount } from "svelte";
 
@@ -31,9 +31,6 @@
 
   /** Delay before inbox mutations hit core; allows Undo before the request runs. */
   const PENDING_INBOX_ACTION_MS = 5000;
-
-  /** Plain object read by `beforeunload` (avoids stale $state reads on native events). */
-  let hasPendingInboxWork = $state(false);
 
   let loading = $state(false);
   let error = $state("");
@@ -208,44 +205,8 @@
     applyFilters();
   }
 
-  function inboxPathname(pathname) {
-    return /\/inbox\/?$/.test(String(pathname ?? ""));
-  }
-
-  function blockBeforeUnload(event) {
-    event.preventDefault();
-    event.returnValue = "";
-  }
-
-  $effect(() => {
-    hasPendingInboxWork =
-      Object.keys(pendingAckById).length > 0 ||
-      Object.keys(pendingDecisionById).length > 0 ||
-      Object.values(ackInFlightById).some(Boolean) ||
-      Object.values(decisionInFlightById).some(Boolean);
-
-    if (hasPendingInboxWork) {
-      window.addEventListener("beforeunload", blockBeforeUnload);
-    } else {
-      window.removeEventListener("beforeunload", blockBeforeUnload);
-    }
-  });
-
-  beforeNavigate((navigation) => {
-    if (!hasPendingInboxWork) return;
-    const from = navigation.from;
-    const to = navigation.to;
-    if (!from || !inboxPathname(from.url.pathname)) return;
-    if (to && inboxPathname(to.url.pathname)) return;
-    const ok = confirm(
-      "An inbox action is still sending or can still be undone. Leave this page?",
-    );
-    if (!ok) navigation.cancel();
-  });
-
   onMount(() => {
     void loadInbox();
-    return () => window.removeEventListener("beforeunload", blockBeforeUnload);
   });
 
   async function loadInbox() {
