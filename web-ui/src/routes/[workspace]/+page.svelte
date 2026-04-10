@@ -242,9 +242,11 @@
   }
 </script>
 
-<div class="space-y-6">
-  <div class="flex items-baseline justify-between gap-4">
-    <div>
+<div class="space-y-6 min-w-0 max-w-full">
+  <div
+    class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2 min-w-0"
+  >
+    <div class="min-w-0">
       <h1 class="text-lg font-semibold text-[var(--ui-text)]">Dashboard</h1>
       <p class="mt-0.5 text-[13px] text-[var(--ui-text-muted)]">
         {#if refreshedAt}
@@ -254,7 +256,7 @@
         {/if}
       </p>
     </div>
-    <div class="flex items-center gap-2">
+    <div class="flex shrink-0 flex-wrap items-center gap-2">
       <button
         class="cursor-pointer rounded-md border border-[var(--ui-border)] px-2.5 py-1.5 text-[13px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)]"
         onclick={loadDashboard}
@@ -271,8 +273,8 @@
     </div>
   </div>
 
-  <div class="grid gap-5 lg:grid-cols-[1fr_1.5fr]">
-    <section>
+  <div class="grid gap-5 xl:grid-cols-[1fr_1.5fr] min-w-0">
+    <section class="min-w-0">
       <div class="flex items-center justify-between gap-2 mb-2">
         <h2 class="text-[13px] font-semibold text-[var(--ui-text)]">Inbox</h2>
         <a
@@ -316,14 +318,16 @@
           Nothing needs attention right now.
         </p>
       {:else}
-        <div class="flex gap-2 mb-3">
+        <div
+          class="mb-3 grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(7.75rem,1fr))]"
+        >
           {#each inboxSummary as summary}
             <a
-              class="flex-1 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-center transition-colors hover:bg-[var(--ui-border-subtle)]"
+              class="min-w-0 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-2 text-center transition-colors hover:bg-[var(--ui-border-subtle)]"
               href={inboxCategoryHref(summary.category)}
             >
               <p
-                class="text-[11px] font-medium {inboxCategoryLabelColor(
+                class="text-[11px] font-medium leading-snug text-balance hyphens-manual {inboxCategoryLabelColor(
                   summary.category,
                   summary.count,
                 )}"
@@ -378,7 +382,7 @@
       {/if}
     </section>
 
-    <section>
+    <section class="min-w-0">
       <div class="flex items-center justify-between gap-2 mb-2">
         <h2 class="text-[13px] font-semibold text-[var(--ui-text)]">
           Topic health
@@ -424,9 +428,11 @@
           No topics yet. They'll appear here as work begins.
         </p>
       {:else}
-        <div class="flex gap-2 mb-3">
+        <div
+          class="mb-3 grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(7rem,1fr))]"
+        >
           <a
-            class="flex-1 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-center transition-colors hover:bg-[var(--ui-border-subtle)]"
+            class="min-w-0 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-2 text-center transition-colors hover:bg-[var(--ui-border-subtle)]"
             href={topicsQueryHref([["open", "1"]])}
           >
             <p class="text-[11px] font-medium text-[var(--ui-text-muted)]">
@@ -437,7 +443,7 @@
             </p>
           </a>
           <a
-            class="flex-1 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-center transition-colors hover:bg-[var(--ui-border-subtle)]"
+            class="min-w-0 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-2 text-center transition-colors hover:bg-[var(--ui-border-subtle)]"
             href={topicsQueryHref([["stale", "true"]])}
           >
             <p
@@ -456,11 +462,12 @@
             </p>
           </a>
           <a
-            class="flex-1 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-center transition-colors hover:bg-[var(--ui-border-subtle)]"
+            class="min-w-0 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-2 text-center transition-colors hover:bg-[var(--ui-border-subtle)]"
             href={topicsQueryHref([["high_priority", "1"]])}
           >
             <p
-              class="text-[11px] font-medium {topicHealth.highPriorityCount > 0
+              class="text-[11px] font-medium leading-snug text-balance hyphens-manual {topicHealth.highPriorityCount >
+              0
                 ? 'text-red-400'
                 : 'text-[var(--ui-text-muted)]'}"
             >
@@ -475,7 +482,7 @@
             </p>
           </a>
           <a
-            class="flex-1 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-center transition-colors hover:bg-[var(--ui-border-subtle)]"
+            class="min-w-0 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-2 text-center transition-colors hover:bg-[var(--ui-border-subtle)]"
             href={workspaceHref("/topics")}
           >
             <p class="text-[11px] font-medium text-[var(--ui-text-muted)]">
@@ -519,8 +526,8 @@
     </section>
   </div>
 
-  <div class="grid gap-5 lg:grid-cols-2">
-    <section>
+  <div class="grid gap-5 xl:grid-cols-2 min-w-0">
+    <section class="min-w-0">
       <div class="flex items-center justify-between gap-2 mb-2">
         <h2 class="text-[13px] font-semibold text-[var(--ui-text)]">
           Active boards
@@ -602,7 +609,7 @@
       {/if}
     </section>
 
-    <section>
+    <section class="min-w-0">
       <div class="flex items-center justify-between gap-2 mb-2">
         <h2 class="text-[13px] font-semibold text-[var(--ui-text)]">
           Recent Docs

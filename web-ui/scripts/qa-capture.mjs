@@ -137,7 +137,7 @@ Options:
   --viewport <WxH>      Viewport size                 (default: 1440x900)
   --out <dir>           Output directory              (default: .qa-captures)
   --routes <list>       Comma-separated route names   (default: all)
-                        Available: inbox,topics,threads,boards,docs,artifacts,trash,access
+                        Available: home,inbox,topics,threads,boards,docs,artifacts,trash,access
   --full-page           Capture full scrollable page  (default)
   --no-full-page        Capture viewport only
   --wait <ms>           Extra settle time after load  (default: 800)
@@ -159,6 +159,7 @@ Examples:
 
 function getDefaultRoutes() {
   return [
+    { name: "home", path: "/", description: "Workspace dashboard" },
     { name: "inbox", path: "/inbox", description: "Inbox triage view" },
     { name: "topics", path: "/topics", description: "Topic list" },
     { name: "threads", path: "/threads", description: "Thread list" },
