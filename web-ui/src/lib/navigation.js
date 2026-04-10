@@ -104,6 +104,11 @@ const SHELL_CONTENT_RULES = [
     mode: "wide",
     maxWidth: "84rem",
   },
+  {
+    match: /^\/more$/,
+    mode: "standard",
+    maxWidth: "42rem",
+  },
 ];
 
 const DEFAULT_SHELL_CONTENT = {

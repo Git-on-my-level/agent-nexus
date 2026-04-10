@@ -410,12 +410,12 @@
       {listSurface === "topics" ? "Topics" : "Threads"}
     </h1>
     {#if listSurface === "topics"}
-      <p class="mt-1 text-[12px] text-[var(--ui-text-muted)]">
+      <p class="mt-1 hidden text-[12px] text-[var(--ui-text-muted)] sm:block">
         Primary organizational surface. Each topic has a backing thread for
         events and provenance.
       </p>
     {:else}
-      <p class="mt-1 text-[12px] text-[var(--ui-text-muted)]">
+      <p class="mt-1 hidden text-[12px] text-[var(--ui-text-muted)] sm:block">
         Diagnostic list of append-only backing threads (timelines). Not every
         thread is a topic; prefer
         <a
@@ -439,7 +439,7 @@
         Show archived
       </label>
       <span
-        class="inline-flex items-center gap-1 rounded border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2 py-1 text-[11px] text-[var(--ui-text-muted)]"
+        class="hidden items-center gap-1 rounded border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2 py-1 text-[11px] text-[var(--ui-text-muted)] sm:inline-flex"
       >
         <svg
           class="h-3 w-3"
@@ -848,7 +848,7 @@
             </div>
           </a>
           <div
-            class="flex shrink-0 items-center gap-1 border-l border-[var(--ui-border)] px-2"
+            class="hidden shrink-0 items-center gap-1 border-l border-[var(--ui-border)] px-2 sm:flex"
           >
             {#if isTopicArchived(topic)}
               <button

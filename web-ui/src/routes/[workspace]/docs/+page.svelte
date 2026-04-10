@@ -249,7 +249,7 @@
 <div class="flex items-center justify-between mb-4">
   <div>
     <h1 class="text-lg font-semibold text-[var(--ui-text)]">Docs</h1>
-    <p class="mt-1 text-[12px] text-[var(--ui-text-muted)]">
+    <p class="mt-1 hidden text-[12px] text-[var(--ui-text-muted)] sm:block">
       Canonical document lineages with a mutable head revision and auditable
       history.
     </p>
@@ -538,7 +538,7 @@
       </div>
     </a>
     <div
-      class="flex shrink-0 items-center gap-1 border-l border-[var(--ui-border)] px-2"
+      class="hidden shrink-0 items-center gap-1 border-l border-[var(--ui-border)] px-2 sm:flex"
       role="presentation"
       onclick={(e) => e.stopPropagation()}
     >

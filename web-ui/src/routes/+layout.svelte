@@ -70,7 +70,6 @@
   let loadingActors = $state(false);
   let creatingActor = $state(false);
   let newActorName = $state("");
-  let mobileNavOpen = $state(false);
   let hydratedWorkspaceSlug = $state("");
   let workspacePickerOpen = $state(false);
   let commandPaletteOpen = $state(false);
@@ -154,11 +153,6 @@
     const workspaceLabel = activeWorkspace?.label;
     const parts = [section, workspaceLabel, "OAR"].filter(Boolean);
     return parts.join(" · ");
-  });
-
-  $effect(() => {
-    $page.url.pathname;
-    mobileNavOpen = false;
   });
 
   $effect(() => {
@@ -360,7 +354,6 @@
       return;
     }
     clearSelectedActor(localStorage, activeWorkspaceSlug);
-    closeMobileNav();
   }
 
   function buildActorId(displayName) {
@@ -420,20 +413,11 @@
     }
 
     const destination = `${workspacePath(nextWorkspaceSlug, currentAppPath)}${$page.url.search}${$page.url.hash}`;
-    closeMobileNav();
     await goto(destination);
   }
 
   function iconPath(iconType) {
     return navIconPathByType[iconType] || navIconPathByType.inbox;
-  }
-
-  function closeMobileNav() {
-    mobileNavOpen = false;
-  }
-
-  function toggleMobileNav() {
-    mobileNavOpen = !mobileNavOpen;
   }
 
   function workspaceInitials(label) {
@@ -469,7 +453,6 @@
     handleModEnterFormSubmit(event, { commandPaletteOpen });
     if (event.key === "Escape") {
       if (workspacePickerOpen) closeWorkspacePicker();
-      if (mobileNavOpen) closeMobileNav();
     }
   }
 
@@ -821,26 +804,6 @@
 
       <div class="shell-main">
         <header class="shell-mobile-header">
-          <button
-            aria-label="Open navigation menu"
-            class="shell-mobile-menu"
-            onclick={toggleMobileNav}
-            type="button"
-          >
-            <svg
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              stroke-width="2"
-              aria-hidden="true"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M4 7h16M4 12h16M4 17h16"
-              />
-            </svg>
-          </button>
           <p>OAR</p>
           <button
             class="shell-mobile-identity"
@@ -852,148 +815,6 @@
           </button>
         </header>
 
-        {#if mobileNavOpen}
-          <div
-            class="shell-mobile-drawer"
-            aria-label="Navigation menu"
-            aria-modal="true"
-            role="dialog"
-          >
-            <button
-              aria-label="Close navigation menu"
-              class="shell-mobile-backdrop"
-              onclick={closeMobileNav}
-              type="button"
-            ></button>
-            <aside class="shell-mobile-panel">
-              <div class="shell-mobile-panel-top">
-                <p>Navigate</p>
-                <button
-                  aria-label="Close navigation menu"
-                  onclick={closeMobileNav}
-                  type="button"
-                >
-                  <svg
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    aria-hidden="true"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </button>
-              </div>
-              <nav class="shell-mobile-nav" aria-label="Primary mobile">
-                {#if hasMultipleWorkspaces}
-                  <div class="mobile-workspace-list">
-                    {#each data.workspaces ?? [] as workspace}
-                      {@const isCurrent =
-                        workspace.slug === activeWorkspaceSlug}
-                      <button
-                        class="workspace-switcher-option"
-                        class:workspace-switcher-option--active={isCurrent}
-                        onclick={() => {
-                          pickWorkspace(workspace.slug);
-                          closeMobileNav();
-                        }}
-                        type="button"
-                      >
-                        <span
-                          class="workspace-switcher-option-icon"
-                          aria-hidden="true"
-                        >
-                          {workspaceInitials(workspace.label)}
-                        </span>
-                        <span class="workspace-switcher-option-label">
-                          <span>{workspace.label}</span>
-                        </span>
-                        {#if isCurrent}
-                          <svg
-                            class="workspace-switcher-check"
-                            viewBox="0 0 20 20"
-                            fill="currentColor"
-                            aria-hidden="true"
-                          >
-                            <path
-                              fill-rule="evenodd"
-                              d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"
-                              clip-rule="evenodd"
-                            />
-                          </svg>
-                        {/if}
-                      </button>
-                    {/each}
-                  </div>
-                {/if}
-                <div class="mobile-workspace-divider"></div>
-                {#each navigationItems as item}
-                  {@const active = isActive(item.href)}
-                  <a
-                    class={`shell-nav-link ${active ? "shell-nav-link--active" : ""}`}
-                    href={workspaceHref(item.href)}
-                    onclick={closeMobileNav}
-                    aria-label={item.label}
-                  >
-                    <svg
-                      class="shell-nav-icon"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      stroke-width="1.75"
-                      aria-hidden="true"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        d={iconPath(item.icon)}
-                      />
-                    </svg>
-                    <span>{item.label}</span>
-                  </a>
-                {/each}
-                <div class="shell-mobile-nav-divider" role="presentation"></div>
-                {#each settingsNavItems as item}
-                  {@const active = isActive(item.href)}
-                  <a
-                    class={`shell-nav-link ${active ? "shell-nav-link--active" : ""}`}
-                    href={workspaceHref(item.href)}
-                    onclick={closeMobileNav}
-                    aria-label={item.label}
-                  >
-                    <svg
-                      class="shell-nav-icon"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      stroke-width="1.75"
-                      aria-hidden="true"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        d={iconPath(item.icon)}
-                      />
-                    </svg>
-                    <span>{item.label}</span>
-                  </a>
-                {/each}
-              </nav>
-              <button
-                class="shell-mobile-switch"
-                onclick={switchIdentity}
-                type="button"
-              >
-                Switch identity
-              </button>
-            </aside>
-          </div>
-        {/if}
-
         <main class="shell-main-scroll">
           <div
             class={`shell-content shell-content--${shellContentConfig.mode}`}
@@ -1004,6 +825,48 @@
         </main>
       </div>
     </div>
+
+    <nav class="shell-bottom-nav" aria-label="Primary navigation">
+      {#each navigationItems as item}
+        {@const active = isActive(item.href)}
+        <a
+          class="shell-bottom-nav-item {active
+            ? 'shell-bottom-nav-item--active'
+            : ''}"
+          href={workspaceHref(item.href)}
+          aria-current={active ? "page" : undefined}
+        >
+          <svg
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            stroke-width="1.75"
+            aria-hidden="true"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d={iconPath(item.icon)}
+            />
+          </svg>
+          <span>{item.label}</span>
+        </a>
+      {/each}
+      <a
+        class="shell-bottom-nav-item {currentAppPath.startsWith('/more')
+          ? 'shell-bottom-nav-item--active'
+          : ''}"
+        href={workspaceHref("/more")}
+        aria-current={currentAppPath.startsWith("/more") ? "page" : undefined}
+      >
+        <svg fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="5" cy="12" r="1.5" />
+          <circle cx="12" cy="12" r="1.5" />
+          <circle cx="19" cy="12" r="1.5" />
+        </svg>
+        <span>More</span>
+      </a>
+    </nav>
   {/if}
 
   {#if activeWorkspaceSlug}

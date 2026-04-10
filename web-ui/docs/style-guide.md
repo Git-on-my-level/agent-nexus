@@ -333,6 +333,51 @@ Destructive operations (delete, permanently delete, archive) follow escalating p
 
 Never nest focusable/clickable elements. A `<button>` inside an `<a>`, or an `<a>` inside a `<button>`, breaks screen reader announcements and causes unpredictable focus behavior. If a list row is clickable as a whole, use a single interactive wrapper and place child controls outside the click target, or use event delegation with `stopPropagation` on nested controls.
 
+## Mobile Patterns
+
+The UI uses a **mobile-first responsive shell**. Breakpoints:
+
+| Breakpoint | Value | Notes |
+|---|---|---|
+| Mobile | `< 640px` | Bottom nav only, no sidebar |
+| Tablet | `640px–1023px` | Bottom nav only, no sidebar |
+| Desktop | `≥ 1024px` | Sidebar visible, bottom nav hidden |
+
+### Bottom Navigation Bar (mobile/tablet)
+
+On screens narrower than 1024px a fixed bottom tab bar (`.shell-bottom-nav`) replaces the sidebar for primary navigation. It shows the five primary destinations (Home, Inbox, Topics, Boards, Docs) plus a **More** tab (icon + short label on each).
+
+- `z-index: 20` — below overlays that use higher z-index (for example modals and the command palette), above normal page content.
+- Respects `env(safe-area-inset-bottom)` for notched devices.
+- `.shell-main-scroll` bottom padding is `5rem` on mobile/tablet to clear the bar; it resets to `2.5rem` at the 1024px breakpoint.
+
+**Do not add a second bottom bar** or position fixed elements at `bottom: 0` without accounting for this bar. Reserve `z-index: 20+` for shell chrome only.
+
+### Mobile Header
+
+The sticky top bar (`.shell-mobile-header`) is minimal: **OAR** wordmark and an identity control (initials + **Switch** or **Sign out**). Secondary destinations (Artifacts, Trash, Access), multi-workspace switching when applicable, and full identity copy live on the **`/more`** page, linked from the bottom tab bar.
+
+### Page Header Toolbars on Mobile
+
+List pages have a `flex flex-wrap items-start justify-between gap-4` header row. On mobile:
+
+- **Hide keyboard-only hints** — the ⌘K shortcut indicator must use `hidden sm:inline-flex`.
+- **Hide descriptive subtitles** — the one-liner description below the page heading should use `hidden sm:block` so it doesn't consume 2–3 lines on a 390px screen.
+- The action buttons (`Filters`, `New topic`, `Create board`, etc.) wrap naturally and remain visible.
+
+```svelte
+<!-- Page heading + description (hide description on mobile) -->
+<h1 class="text-lg font-semibold text-gray-900">Topics</h1>
+<p class="mt-1 hidden text-[12px] text-gray-500 sm:block">
+  Primary organizational surface...
+</p>
+
+<!-- ⌘K shortcut — keyboard-only, hide on mobile -->
+<span class="hidden items-center gap-1 rounded border border-gray-200 ... sm:inline-flex">
+  <kbd>⌘K</kbd>
+</span>
+```
+
 ## Spacing Conventions
 
 - Page padding: handled by `.shell-main-scroll` in `app.css`.
@@ -341,6 +386,7 @@ Never nest focusable/clickable elements. A `<button>` inside an `<a>`, or an `<a
 - Inside cards: `px-4 py-3` (content), `px-4 py-2.5` (headers/footers).
 - Form field gaps: `gap-2` or `gap-3`.
 - Border radius: `rounded-md` for everything. Avoid `rounded-xl` or `rounded-lg`.
+- **Bottom clearance on mobile:** reserve `pb-5` (or `5rem`) at the end of scrollable page content — the bottom nav occupies this space.
 
 ## Data Relationships & Navigation
 
@@ -396,6 +442,9 @@ When displaying counts that exclude certain items, label them explicitly. Exampl
 
 ## Anti-Patterns
 
+- **No keyboard-only UI on mobile** — `⌘K` shortcut indicators, keyboard hints, and similar controls must use `hidden sm:inline-flex` so they don't waste space on touch devices.
+- **No page description on mobile without `hidden sm:block`** — the subtitle copy below a list-page heading (`text-[12px] text-gray-500`) should be hidden on mobile; it crowds the action toolbar.
+- **No fixed bottom elements without bottom-nav clearance** — if you add `position: fixed; bottom: 0` at z-index < 20, it will be hidden under the bottom nav. Always account for `5rem` bottom clearance on mobile.
 - **No `bg-white`** — always `bg-gray-100` for surfaces.
 - **No `text-white` on gray buttons** — gray-900 is the "bright" text; `text-white` is only for accent-colored buttons (`bg-indigo-*`).
 - **No `-50` semantic backgrounds** — use `*-500/10` opacity pattern instead.
