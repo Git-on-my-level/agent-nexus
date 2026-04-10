@@ -223,9 +223,11 @@ export const scenarioConfigs = {
   },
 };
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const options = {
     scenario: "pilot-rescue",
+    chapter: "chapter-1",
+    continueRun: "",
     provider: "zai",
     model: "glm-5",
     baseUrl: "",
@@ -248,6 +250,12 @@ function parseArgs(argv) {
     switch (arg) {
       case "--scenario":
         options.scenario = argv[++idx] ?? "";
+        break;
+      case "--chapter":
+        options.chapter = argv[++idx] ?? "";
+        break;
+      case "--continue-run":
+        options.continueRun = argv[++idx] ?? "";
         break;
       case "--provider":
         options.provider = argv[++idx] ?? "";
@@ -296,6 +304,15 @@ function parseArgs(argv) {
   if (!scenarioConfigs[options.scenario]) {
     throw new Error(`unknown scenario: ${options.scenario}`);
   }
+  if (!options.chapter.trim()) {
+    throw new Error("--chapter is required");
+  }
+  if (options.continueRun && options.baseUrl) {
+    throw new Error("--continue-run cannot be combined with --base-url");
+  }
+  if (options.chapter !== "chapter-1" && !options.continueRun) {
+    throw new Error(`chapter ${options.chapter} requires --continue-run so the scenario can continue existing state`);
+  }
   if (!Number.isFinite(options.maxSeconds) || options.maxSeconds <= 0) {
     throw new Error("--max-seconds must be a positive number");
   }
@@ -331,8 +348,115 @@ function writeFile(filePath, content) {
   fs.writeFileSync(filePath, content);
 }
 
+function resolveExistingPath(candidates) {
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+    if (fs.existsSync(candidate)) {
+      return path.resolve(candidate);
+    }
+  }
+  return "";
+}
+
 function renderScenario(content, baseUrl) {
   return content.replace(/`http:\/\/127\.0\.0\.1:8000`/g, `\`${baseUrl}\``);
+}
+
+function scenarioFilePath(scenario) {
+  return path.join(packageRoot, "scenarios", `${scenario}.md`);
+}
+
+function scenarioChapterFilePath(scenario, chapter) {
+  return path.join(packageRoot, "scenarios", scenario, `${chapter}.md`);
+}
+
+export function loadScenarioContent(scenario, chapter, baseUrl) {
+  const basePath = scenarioFilePath(scenario);
+  if (!fs.existsSync(basePath)) {
+    throw new Error(`scenario file not found: ${basePath}`);
+  }
+  const baseMarkdown = renderScenario(fs.readFileSync(basePath, "utf8"), baseUrl);
+  if (chapter === "chapter-1") {
+    return {
+      basePath,
+      chapterPath: "",
+      combinedMarkdown: baseMarkdown,
+      chapterMarkdown: "",
+    };
+  }
+
+  const chapterPath = scenarioChapterFilePath(scenario, chapter);
+  if (!fs.existsSync(chapterPath)) {
+    throw new Error(`chapter file not found: ${chapterPath}`);
+  }
+  const chapterMarkdown = renderScenario(fs.readFileSync(chapterPath, "utf8"), baseUrl);
+  return {
+    basePath,
+    chapterPath,
+    combinedMarkdown: `${baseMarkdown}\n\n---\n\n${chapterMarkdown}`,
+    chapterMarkdown,
+  };
+}
+
+function resolveContinueRunPath(continueRun, reportDir) {
+  const trimmed = String(continueRun ?? "").trim();
+  if (!trimmed) {
+    return "";
+  }
+  const candidates = [
+    path.isAbsolute(trimmed) ? trimmed : "",
+    path.resolve(reportDir, trimmed),
+    path.resolve(repoRoot, trimmed),
+    path.resolve(packageRoot, trimmed),
+  ];
+  const resolved = resolveExistingPath(candidates);
+  if (!resolved) {
+    throw new Error(`continue run path not found: ${trimmed}`);
+  }
+  return resolved;
+}
+
+function loadPreviousRun(continueRun, reportDir, expectedScenario) {
+  const resolved = resolveContinueRunPath(continueRun, reportDir);
+  const stats = fs.statSync(resolved);
+  const runDir = stats.isDirectory() ? resolved : path.dirname(resolved);
+  const metadataPath = stats.isDirectory()
+    ? path.join(resolved, "run-metadata.json")
+    : resolved;
+  if (!fs.existsSync(metadataPath)) {
+    throw new Error(`run metadata not found at ${metadataPath}`);
+  }
+  const metadata = JSON.parse(fs.readFileSync(metadataPath, "utf8"));
+  if (expectedScenario && metadata?.scenario !== expectedScenario) {
+    throw new Error(`continue run scenario mismatch: expected ${expectedScenario}, got ${metadata?.scenario ?? "unknown"}`);
+  }
+  if (!metadata?.managed_core || !metadata?.core_workspace_dir) {
+    throw new Error("continue run requires a previous managed-core Pi run with a persisted core workspace");
+  }
+  return {
+    runDir,
+    metadataPath,
+    metadata,
+    scenarioStatePath: path.join(runDir, "scenario-state.json"),
+  };
+}
+
+function copyDirectory(sourceDir, targetDir) {
+  fs.cpSync(sourceDir, targetDir, { recursive: true, force: true });
+}
+
+function hydrateContinuationHomes({ previousRunDir, runDir, agents }) {
+  for (const agent of agents) {
+    const sourceHome = agentHomeDir(previousRunDir, agent.agentId);
+    if (!fs.existsSync(sourceHome)) {
+      throw new Error(`missing prior agent home for ${agent.agentId}: ${sourceHome}`);
+    }
+    const targetHome = agentHomeDir(runDir, agent.agentId);
+    copyDirectory(sourceHome, targetHome);
+  }
+  return true;
 }
 
 function commandGuide(baseUrl, defaultUsername, { profileReady = false } = {}) {
@@ -432,6 +556,18 @@ async function apiJSON(baseUrl, apiPath) {
   return response.json();
 }
 
+async function listEvents(baseUrl, { threadID = "", eventTypes = [] } = {}) {
+  const params = new URLSearchParams();
+  if (threadID) {
+    params.set("thread_id", threadID);
+  }
+  for (const eventType of eventTypes) {
+    params.append("type", eventType);
+  }
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return apiJSON(baseUrl, `/events${suffix}`);
+}
+
 export async function resolveSharedTargets(baseUrl, config) {
   const threadsResponse = await apiJSON(baseUrl, "/threads");
   const threads = Array.isArray(threadsResponse?.threads) ? threadsResponse.threads : [];
@@ -492,6 +628,122 @@ export async function resolveSharedTargets(baseUrl, config) {
     inboxItems,
     documents,
   };
+}
+
+async function collectScenarioState(baseUrl, config) {
+  const sharedTargets = await resolveSharedTargets(baseUrl, config);
+  const boardsResponse = await apiJSON(baseUrl, "/boards");
+  const boardItems = Array.isArray(boardsResponse?.boards) ? boardsResponse.boards : [];
+  const cardsResponse = await apiJSON(baseUrl, "/cards");
+  const cards = Array.isArray(cardsResponse?.cards) ? cardsResponse.cards : [];
+  const mainEventsResponse = await listEvents(baseUrl, {
+    threadID: sharedTargets.threads.main?.id ?? "",
+    eventTypes: ["message_posted"],
+  });
+  const mainMessages = Array.isArray(mainEventsResponse?.events) ? mainEventsResponse.events : [];
+
+  const documents = {};
+  for (const [key, documentEntry] of Object.entries(sharedTargets.documents ?? {})) {
+    documents[key] = {
+      id: documentEntry?.id ?? "",
+      title: valueFrom(documentEntry?.response?.document, "title"),
+      headRevisionID: valueFrom(documentEntry?.response?.revision, "revision_id"),
+      headRevisionNumber: valueFrom(documentEntry?.response?.document, "head_revision_number"),
+    };
+  }
+
+  return {
+    generated_at: new Date().toISOString(),
+    threads: Object.fromEntries(
+      Object.entries(sharedTargets.threads ?? {}).map(([key, thread]) => [key, {
+        id: thread?.id ?? "",
+        title: valueFrom(thread, "title", "summary"),
+      }]),
+    ),
+    topics: Object.fromEntries(
+      Object.entries(sharedTargets.topics ?? {}).map(([key, topic]) => [key, {
+        id: valueFrom(topic, "id"),
+        title: valueFrom(topic, "title", "summary"),
+      }]),
+    ),
+    boards: boardItems.map((item) => ({
+      id: valueFrom(item?.board, "id"),
+      title: valueFrom(item?.board, "title"),
+      status: valueFrom(item?.board, "status"),
+      cardCount: item?.summary?.card_count ?? 0,
+      updatedAt: valueFrom(item?.board, "updated_at"),
+    })),
+    cards: cards.map((card) => ({
+      id: valueFrom(card, "id"),
+      title: valueFrom(card, "title", "summary"),
+      boardID: valueFrom(card, "board_id"),
+      columnKey: valueFrom(card, "column_key"),
+      updatedAt: valueFrom(card, "updated_at"),
+      assigneeRefs: Array.isArray(card?.assignee_refs) ? card.assignee_refs : [],
+      relatedRefs: Array.isArray(card?.related_refs) ? card.related_refs : [],
+      parentThreadID: valueFrom(card, "parent_thread_id"),
+      threadID: valueFrom(card, "thread_id"),
+    })),
+    documents,
+    recentMainMessages: mainMessages.slice(-12).map((event) => ({
+      id: valueFrom(event, "id"),
+      actorID: valueFrom(event, "actor_id"),
+      summary: valueFrom(event, "summary"),
+      text: valueFrom(event?.payload, "text"),
+      refs: Array.isArray(event?.refs) ? event.refs : [],
+    })),
+  };
+}
+
+function chapterStateMarkdown(chapterState, previousRun) {
+  const lines = [
+    "# Chapter State",
+    "",
+    `Continuing from run: ${previousRun?.metadata?.run_id ?? "unknown"}`,
+    `Scenario: ${previousRun?.metadata?.scenario ?? "unknown"}`,
+    `State captured at: ${chapterState.generated_at}`,
+    "",
+    "Hard rule: continue the existing workspace state. Do not recreate documents, boards, cards, or identities that already exist.",
+    "",
+    "Threads:",
+  ];
+
+  for (const [key, thread] of Object.entries(chapterState.threads ?? {})) {
+    lines.push(`- ${key}: ${thread.id} :: ${thread.title}`);
+  }
+
+  lines.push("", "Boards:");
+  if ((chapterState.boards ?? []).length === 0) {
+    lines.push("- none yet");
+  } else {
+    for (const board of chapterState.boards) {
+      lines.push(`- ${board.id} :: ${board.title} :: status=${board.status} :: cards=${board.cardCount}`);
+    }
+  }
+
+  lines.push("", "Cards:");
+  if ((chapterState.cards ?? []).length === 0) {
+    lines.push("- none yet");
+  } else {
+    for (const card of chapterState.cards) {
+      lines.push(`- ${card.id} :: ${card.title} :: board=${card.boardID} :: column=${card.columnKey} :: parent_thread=${card.parentThreadID || "none"}`);
+    }
+  }
+
+  lines.push("", "Documents:");
+  for (const [key, documentState] of Object.entries(chapterState.documents ?? {})) {
+    lines.push(`- ${key}: ${documentState.id} :: ${documentState.title} :: head revision ${documentState.headRevisionNumber} (${documentState.headRevisionID})`);
+  }
+
+  lines.push("", "Recent main-thread messages:");
+  for (const message of chapterState.recentMainMessages ?? []) {
+    lines.push(`- ${message.id} :: ${message.actorID} :: ${message.summary}`);
+    if (message.text) {
+      lines.push(`  ${message.text}`);
+    }
+  }
+
+  return `${lines.join("\n")}\n`;
 }
 
 function roleTargets(config, shared, role) {
@@ -569,14 +821,14 @@ function eventTemplate(role, targets) {
 `;
 }
 
-function messageTemplate(role, targets) {
+function messageTemplateForThread(thread) {
   return `{
   "event": {
     "type": "message_posted",
-    "thread_id": "${targets.mainThread.id}",
-    "thread_ref": "thread:${targets.mainThread.id}",
+    "thread_id": "${thread.id}",
+    "thread_ref": "thread:${thread.id}",
     "refs": [
-      "thread:${targets.mainThread.id}"
+      "thread:${thread.id}"
     ],
     "summary": "Message: replace with a short kid-style subject line",
     "payload": {
@@ -592,14 +844,18 @@ function messageTemplate(role, targets) {
 `;
 }
 
-function replyTemplate(role, targets) {
+function messageTemplate(role, targets) {
+  return messageTemplateForThread(targets.mainThread);
+}
+
+function replyTemplateForThread(thread) {
   return `{
   "event": {
     "type": "message_posted",
-    "thread_id": "${targets.mainThread.id}",
-    "thread_ref": "thread:${targets.mainThread.id}",
+    "thread_id": "${thread.id}",
+    "thread_ref": "thread:${thread.id}",
     "refs": [
-      "thread:${targets.mainThread.id}",
+      "thread:${thread.id}",
       "event:REPLY_TO_EVENT_ID"
     ],
     "summary": "Message reply: replace with a short reply subject",
@@ -614,6 +870,10 @@ function replyTemplate(role, targets) {
   }
 }
 `;
+}
+
+function replyTemplate(role, targets) {
+  return replyTemplateForThread(targets.mainThread);
 }
 
 function boardTemplate(config, role, targets) {
@@ -642,7 +902,7 @@ function boardTemplate(config, role, targets) {
 `;
 }
 
-export function cardTemplate(role, targets) {
+export function cardTemplate(role, targets, { boardID = "" } = {}) {
   // Board cards are effectively one-active-card-per-parent-thread on a board.
   // Keep each role's default card anchored to that role's primary thread instead
   // of attaching every card to the shared main thread.
@@ -653,7 +913,7 @@ export function cardTemplate(role, targets) {
     ...targets.artifacts.slice(0, 2).map((artifact) => `artifact:${artifact.id}`),
   ];
   return `{
-  "board_id": "REPLACE_WITH_BOARD_ID",
+  "board_id": ${JSON.stringify(boardID || "REPLACE_WITH_BOARD_ID")},
   "card": {
     "title": "Replace with a concrete stand task",
     "summary": "Replace with the actual task this kid is taking on.",
@@ -668,6 +928,57 @@ export function cardTemplate(role, targets) {
         "inferred"
       ],
       "notes": "Created during the Pi dogfood scenario."
+    }
+  }
+}
+`;
+}
+
+export function roleCardState(role, targets, chapterState) {
+  const cards = Array.isArray(chapterState?.cards) ? chapterState.cards : [];
+  if (cards.length === 0) {
+    return null;
+  }
+  const preferredParentThreadID = targets.primaryThread?.id ?? targets.mainThread?.id ?? "";
+  if (!preferredParentThreadID) {
+    return null;
+  }
+
+  const directMatch = cards.find((card) => card?.parentThreadID === preferredParentThreadID);
+  if (directMatch) {
+    return directMatch;
+  }
+
+  const actorRef = role.actorId ? `actor:${role.actorId}` : "";
+  if (actorRef) {
+    const assigneeMatch = cards.find((card) => Array.isArray(card?.assigneeRefs) && card.assigneeRefs.includes(actorRef));
+    if (assigneeMatch) {
+      return assigneeMatch;
+    }
+  }
+
+  return null;
+}
+
+export function cardPatchTemplate(role, targets, cardState) {
+  const relatedRefs = [
+    `thread:${targets.primaryThread?.id ?? targets.mainThread.id}`,
+    ...(targets.topic?.id ? [`topic:${targets.topic.id}`] : []),
+    ...targets.artifacts.slice(0, 2).map((artifact) => `artifact:${artifact.id}`),
+  ];
+  const assigneeRefs = role.actorId ? [`actor:${role.actorId}`] : [];
+  return `{
+  "if_updated_at": ${JSON.stringify(cardState?.updatedAt ?? "")},
+  "patch": {
+    "summary": "Replace with the updated task status, next move, or blocker for this kid.",
+    "assignee_refs": ${JSON.stringify(assigneeRefs, null, 4)},
+    "related_refs": ${JSON.stringify(relatedRefs, null, 4)},
+    ${targets.topic?.id ? `"topic_ref": ${JSON.stringify(`topic:${targets.topic.id}`)},` : ""}
+    "provenance": {
+      "sources": [
+        "inferred"
+      ],
+      "notes": "Updated during a continued Pi dogfood scenario chapter."
     }
   }
 }
@@ -1016,7 +1327,7 @@ async function seedCore(baseUrl, scenario) {
   }
 }
 
-async function startManagedCore(runDir, coreBin, requestedBaseUrl, scenario) {
+async function startManagedCore(runDir, coreBin, requestedBaseUrl, scenario, continuation = null) {
   if (requestedBaseUrl) {
     await waitForCore(requestedBaseUrl, 20000);
     return {
@@ -1029,13 +1340,15 @@ async function startManagedCore(runDir, coreBin, requestedBaseUrl, scenario) {
     };
   }
 
-  const workspaceDir = path.join(runDir, "core-workspace");
+  const workspaceDir = continuation?.metadata?.core_workspace_dir
+    ? path.resolve(continuation.metadata.core_workspace_dir)
+    : path.join(runDir, "core-workspace");
   const logPath = path.join(runDir, "core.log");
   const schemaPath = path.join(repoRoot, "contracts", "oar-schema.yaml");
   const host = "127.0.0.1";
   const port = await findFreePort();
   const baseUrl = `http://${host}:${port}`;
-  const bootstrapToken = `pi-bs-${runToken()}`;
+  const bootstrapToken = continuation ? "" : `pi-bs-${runToken()}`;
   ensureDir(workspaceDir);
   writeFile(path.join(workspaceDir, ".oar-dev-insecure-auth"), "");
   const logStream = fs.createWriteStream(logPath, { flags: "a" });
@@ -1057,7 +1370,7 @@ async function startManagedCore(runDir, coreBin, requestedBaseUrl, scenario) {
       OAR_ALLOW_PASSKEY_DEV_BYPASS: "1",
       OAR_ALLOW_UNAUTHENTICATED_WRITES: "1",
       OAR_DEV_REGISTER_LINKED_ACTORS: "1",
-      OAR_BOOTSTRAP_TOKEN: bootstrapToken,
+      ...(bootstrapToken ? { OAR_BOOTSTRAP_TOKEN: bootstrapToken } : {}),
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -1100,7 +1413,9 @@ async function startManagedCore(runDir, coreBin, requestedBaseUrl, scenario) {
       });
     }),
   ]);
-  await seedCore(baseUrl, scenario);
+  if (!continuation) {
+    await seedCore(baseUrl, scenario);
+  }
 
   return {
     baseUrl,
@@ -1213,6 +1528,10 @@ async function runPiAgent({
   homeDir,
   profileReady,
   scenarioMarkdown,
+  chapterID,
+  chapterMarkdown = "",
+  chapterState = null,
+  chapterStateGuide = "",
   scenarioConfig,
   role,
   targets,
@@ -1227,6 +1546,19 @@ async function runPiAgent({
   const authPromptLine = profileReady
     ? `A local auth profile for username ${agentUsername} is already registered; verify it with \`oar auth whoami\` instead of creating a new registration.`
     : `Use \`oar auth whoami\` to inspect auth state first. If no profile exists, register with username ${agentUsername} using the command guidance in COMMANDS.md.`;
+  const continuationFiles = [];
+  if (chapterMarkdown) {
+    continuationFiles.push("- Chapter brief: ./CHAPTER.md");
+  }
+  if (chapterStateGuide) {
+    continuationFiles.push("- Chapter state: ./CHAPTER_STATE.md");
+  }
+  const knownBoardID = chapterState?.boards?.[0]?.id ?? "";
+  const existingRoleCard = roleCardState(role, targets, chapterState);
+  const primaryThreadHasOwnTemplates =
+    targets.primaryThread?.id &&
+    targets.mainThread?.id &&
+    targets.primaryThread.id !== targets.mainThread.id;
 
   const agentsContent = `# Pi Dogfood Run
 
@@ -1255,19 +1587,29 @@ Environment:
 - OAR base URL: ${coreBaseUrl}
 - Working directory: ${workspaceDir}
 - Scenario brief: ./SCENARIO.md
+- Chapter id: ${chapterID}
 - Command guide: ./COMMANDS.md
 - Scenario targets: ./TARGETS.md
 - Role context: ./ROLE_CONTEXT.md
-- Message template: ./message-template.json
-- Reply template: ./reply-template.json
+- Message template for the main thread: ./message-template.json
+- Reply template for the main thread: ./reply-template.json
 - Event template: ./event-template.json
 - Board template: ./board-template.json
 - Card template: ./card-template.json
+${existingRoleCard ? `- Existing role card: ${existingRoleCard.id} (update template: ./card-patch-template.json)\n` : ""}
+${primaryThreadHasOwnTemplates ? "- Primary-thread message template: ./primary-thread-message-template.json\n- Primary-thread reply template: ./primary-thread-reply-template.json" : ""}
+${continuationFiles.join("\n")}
 - Document update template (if present): ./doc-update-template.json
 - Result template: ./result-template.md
 `;
   writeFile(path.join(workspaceDir, "AGENTS.md"), agentsContent);
   writeFile(path.join(workspaceDir, "SCENARIO.md"), scenarioMarkdown);
+  if (chapterMarkdown) {
+    writeFile(path.join(workspaceDir, "CHAPTER.md"), chapterMarkdown);
+  }
+  if (chapterStateGuide) {
+    writeFile(path.join(workspaceDir, "CHAPTER_STATE.md"), chapterStateGuide);
+  }
   writeFile(
     path.join(workspaceDir, "COMMANDS.md"),
     commandGuide(coreBaseUrl, agentUsername, { profileReady }),
@@ -1276,17 +1618,33 @@ Environment:
   writeFile(path.join(workspaceDir, "ROLE_CONTEXT.md"), privateContextGuide(role));
   writeFile(path.join(workspaceDir, "message-template.json"), messageTemplate(role, targets));
   writeFile(path.join(workspaceDir, "reply-template.json"), replyTemplate(role, targets));
+  if (primaryThreadHasOwnTemplates) {
+    writeFile(
+      path.join(workspaceDir, "primary-thread-message-template.json"),
+      messageTemplateForThread(targets.primaryThread),
+    );
+    writeFile(
+      path.join(workspaceDir, "primary-thread-reply-template.json"),
+      replyTemplateForThread(targets.primaryThread),
+    );
+  }
   writeFile(path.join(workspaceDir, "event-template.json"), eventTemplate(role, targets));
   writeFile(path.join(workspaceDir, "board-template.json"), boardTemplate(scenarioConfig, role, targets));
-  writeFile(path.join(workspaceDir, "card-template.json"), cardTemplate(role, targets));
+  writeFile(path.join(workspaceDir, "card-template.json"), cardTemplate(role, targets, { boardID: knownBoardID }));
+  if (existingRoleCard) {
+    writeFile(path.join(workspaceDir, "card-patch-template.json"), cardPatchTemplate(role, targets, existingRoleCard));
+  }
   if (role.requireDocsUpdate) {
     writeFile(path.join(workspaceDir, "doc-update-template.json"), docUpdateTemplate(targets, scenarioConfig, role));
   }
   writeFile(path.join(workspaceDir, "result-template.md"), resultTemplate());
 
+  const continuationPrompt = chapterStateGuide
+    ? `Read CHAPTER.md and CHAPTER_STATE.md first. Continue the existing scenario state from ${chapterID}. Do not recreate the board, docs, cards, or identities that already exist unless the chapter explicitly tells you to do so. Prefer adding new messages, new replies, card moves or updates, and new document revisions over creating duplicate resources.`
+    : "";
   const prompt = role.requireDocsUpdate
-    ? `Read SCENARIO.md, COMMANDS.md, TARGETS.md, and ROLE_CONTEXT.md. Execute your role with the real oar CLI. Use message-template.json for a kickoff message on the main thread, use reply-template.json for at least one reply to another kid's message, and use message_posted rather than actor_statement for those conversational updates. If you are the boss kid, create the shared board early from board-template.json, add at most one coordination card from card-template.json, and make the board visible to the others. Keep any board card tied to its intended role thread instead of attaching everything to the shared main thread. Update doc-update-template.json in place, stage the document update with \`oar docs propose-update\`, inspect the diff, apply it with \`oar docs apply\`, then post your final actor_statement from event-template.json. Use \`oar events list --thread-id ${targets.mainThread.id} --type message_posted --max-events 10 --full-id\` to find reply targets. Write result.md and then give a short final summary.`
-    : `Read SCENARIO.md, COMMANDS.md, TARGETS.md, and ROLE_CONTEXT.md. Execute your role with the real oar CLI. Use message-template.json for a kickoff message on the main thread, use reply-template.json for at least one reply to another kid's message, and create or inspect board work when the scenario asks for it. Create or update one role-specific task card from card-template.json after the board exists, and keep that card tied to your primary role thread rather than the shared main thread. Use \`oar events list --thread-id ${targets.mainThread.id} --type message_posted --max-events 10 --full-id\` to find reply targets. After the conversational work is done, edit event-template.json in place, create the final actor_statement from that file, write result.md, and then give a short final summary.`;
+    ? `Read SCENARIO.md, COMMANDS.md, TARGETS.md, and ROLE_CONTEXT.md. ${continuationPrompt} Execute your role with the real oar CLI. Use message-template.json for a kickoff message on the main thread, use reply-template.json for at least one reply to another kid's message, and use message_posted rather than actor_statement for those conversational updates.${primaryThreadHasOwnTemplates ? " Also use primary-thread-message-template.json for at least one role-thread update when the chapter asks for richer thread activity." : ""} If you are the boss kid, create the shared board early from board-template.json only if it does not already exist, add at most one coordination card from card-template.json if you do not already own one, and make the board visible to the others. ${existingRoleCard ? `If your role card ${existingRoleCard.id} already exists, update it with card-patch-template.json via \`oar cards patch --card-id ${existingRoleCard.id} --from-file card-patch-template.json\` instead of creating a duplicate.` : "If you need a new card, keep it tied to its intended role thread instead of attaching everything to the shared main thread."} Update doc-update-template.json in place, stage the document update with \`oar docs propose-update\`, inspect the diff, apply it with \`oar docs apply\`, then post your final actor_statement from event-template.json. Use \`oar events list --thread-id ${targets.mainThread.id} --type message_posted --max-events 10 --full-id\` to find reply targets. Write result.md and then give a short final summary.`
+    : `Read SCENARIO.md, COMMANDS.md, TARGETS.md, and ROLE_CONTEXT.md. ${continuationPrompt} Execute your role with the real oar CLI. Use message-template.json for a kickoff message on the main thread, use reply-template.json for at least one reply to another kid's message, and create or inspect board work when the scenario asks for it.${primaryThreadHasOwnTemplates ? " Also use primary-thread-message-template.json for at least one role-thread update when the chapter asks for richer thread activity." : ""} ${existingRoleCard ? `Your role card ${existingRoleCard.id} already exists, so update it with card-patch-template.json via \`oar cards patch --card-id ${existingRoleCard.id} --from-file card-patch-template.json\` instead of creating a duplicate.` : "Create one role-specific task card from card-template.json after the board exists, and keep that card tied to your primary role thread rather than the shared main thread."} Use \`oar events list --thread-id ${targets.mainThread.id} --type message_posted --max-events 10 --full-id\` to find reply targets. After the conversational work is done, edit event-template.json in place, create the final actor_statement from that file, write result.md, and then give a short final summary.`;
 
   const piArgs = [
     "--print",
@@ -1388,25 +1746,31 @@ async function main() {
   }
 
   const apiKey = resolveApiKey(options);
-  const scenarioPath = path.join(packageRoot, "scenarios", `${options.scenario}.md`);
-  if (!fs.existsSync(scenarioPath)) {
-    throw new Error(`scenario file not found: ${scenarioPath}`);
-  }
+  const previousRun = options.continueRun
+    ? loadPreviousRun(options.continueRun, path.resolve(options.reportDir), options.scenario)
+    : null;
 
-  const runId = `${options.scenario}-${runToken()}`;
+  const runId = `${options.scenario}-${options.chapter}-${runToken()}`;
   const runDir = path.join(path.resolve(options.reportDir), runId);
   const piHomeDir = path.join(runDir, "pi-home");
   ensureDir(piHomeDir);
 
   const oarBin = buildOarBinary(runDir, options.oarBin);
   const coreBin = buildCoreBinary(runDir, options.coreBin);
-  const core = await startManagedCore(runDir, coreBin, options.baseUrl, options.scenario);
-  const scenarioContent = fs.readFileSync(scenarioPath, "utf8");
-  const renderedScenario = renderScenario(scenarioContent, core.baseUrl);
+  const core = await startManagedCore(runDir, coreBin, options.baseUrl, options.scenario, previousRun);
+  const scenarioContent = loadScenarioContent(options.scenario, options.chapter, core.baseUrl);
+  const renderedScenario = scenarioContent.combinedMarkdown;
   const sharedTargets = await resolveSharedTargets(core.baseUrl, config);
+  const currentChapterState = options.chapter === "chapter-1" && !previousRun
+    ? null
+    : await collectScenarioState(core.baseUrl, config);
+  const currentChapterStateGuide = currentChapterState
+    ? chapterStateMarkdown(currentChapterState, previousRun)
+    : "";
   const roles = config.roles.slice(0, options.agentCount);
 
   console.log(`pi dogfood run: ${runId}`);
+  console.log(`chapter: ${options.chapter}`);
   console.log(`base url: ${core.baseUrl}`);
   console.log(`agents: ${options.agentCount}`);
   console.log(`max seconds: ${options.maxSeconds}`);
@@ -1416,6 +1780,7 @@ async function main() {
   }
 
   let agentRuns = [];
+  let finalChapterState = currentChapterState;
   try {
     const pendingAgents = roles.map((role, agentIndex) => {
       const agentId = `agent-${String(agentIndex + 1).padStart(2, "0")}`;
@@ -1439,12 +1804,18 @@ async function main() {
       };
     });
 
-    const profileReady = prepareAgentProfiles({
-      oarBin,
-      baseUrl: core.baseUrl,
-      bootstrapToken: core.bootstrapToken,
-      agents: pendingAgents,
-    });
+    const profileReady = previousRun
+      ? hydrateContinuationHomes({
+          previousRunDir: previousRun.runDir,
+          runDir,
+          agents: pendingAgents,
+        })
+      : prepareAgentProfiles({
+          oarBin,
+          baseUrl: core.baseUrl,
+          bootstrapToken: core.bootstrapToken,
+          agents: pendingAgents,
+        });
 
     const agentPlans = pendingAgents.map((agent) => {
       return {
@@ -1474,6 +1845,10 @@ async function main() {
             homeDir: agent.homeDir,
             profileReady,
             scenarioMarkdown: renderedScenario,
+            chapterID: options.chapter,
+            chapterMarkdown: scenarioContent.chapterMarkdown,
+            chapterState: currentChapterState,
+            chapterStateGuide: currentChapterStateGuide,
             scenarioConfig: config,
             role: agent.role,
             targets: roleTargets(config, sharedTargets, agent.role),
@@ -1504,6 +1879,7 @@ async function main() {
     if (failedAgents.length > 0) {
       throw new Error(`pi dogfood failed for ${failedAgents.map((agent) => `${agent.agentId}: ${agent.error}`).join(", ")}`);
     }
+    finalChapterState = await collectScenarioState(core.baseUrl, config);
   } finally {
     await core.stop();
   }
@@ -1511,6 +1887,9 @@ async function main() {
   const metadata = {
     run_id: runId,
     scenario: options.scenario,
+    chapter: options.chapter,
+    continued_from_run_id: previousRun?.metadata?.run_id ?? "",
+    continued_from_run_dir: previousRun?.runDir ?? "",
     provider: options.provider,
     model: options.model,
     base_url: core.baseUrl,
@@ -1522,8 +1901,12 @@ async function main() {
     agents: agentRuns,
     oar_bin: oarBin,
     core_bin: coreBin,
+    scenario_state_path: finalChapterState ? path.join(runDir, "scenario-state.json") : "",
   };
   writeFile(path.join(runDir, "run-metadata.json"), `${JSON.stringify(metadata, null, 2)}\n`);
+  if (finalChapterState) {
+    writeFile(path.join(runDir, "scenario-state.json"), `${JSON.stringify(finalChapterState, null, 2)}\n`);
+  }
 
   for (const agent of agentRuns) {
     if (agent.status !== "ok") {
@@ -1534,6 +1917,9 @@ async function main() {
     console.log(`result (${agent.agentId}): ${agent.resultPath}`);
   }
   console.log(`metadata: ${path.join(runDir, "run-metadata.json")}`);
+  if (finalChapterState) {
+    console.log(`scenario state: ${path.join(runDir, "scenario-state.json")}`);
+  }
 }
 
 const isEntrypoint = process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url;

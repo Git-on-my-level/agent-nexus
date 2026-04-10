@@ -4,7 +4,15 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { analyzePiEventLog, cardTemplate, validateAgentOutputs } from "./run.mjs";
+import {
+  analyzePiEventLog,
+  cardPatchTemplate,
+  cardTemplate,
+  loadScenarioContent,
+  parseArgs,
+  roleCardState,
+  validateAgentOutputs,
+} from "./run.mjs";
 
 test("analyzePiEventLog captures nested runtime errors and ignores clean records", () => {
   const content = [
@@ -65,6 +73,69 @@ test("cardTemplate anchors role cards to the role primary thread instead of the 
   };
 
   const template = cardTemplate(role, targets);
+  assert.match(template, /"thread:thread-sales"/);
+  assert.doesNotMatch(template, /"thread:thread-main"/);
+});
+
+test("parseArgs requires continue-run for later chapters", () => {
+  assert.throws(
+    () => parseArgs([
+      "--scenario", "kids-lemonade-stand",
+      "--chapter", "chapter-2",
+      "--api-key", "test-key",
+      "--agent-count", "3",
+    ]),
+    /requires --continue-run/,
+  );
+});
+
+test("loadScenarioContent appends chapter markdown after the base scenario", () => {
+  const loaded = loadScenarioContent("kids-lemonade-stand", "chapter-2", "http://127.0.0.1:43210");
+  assert.match(loaded.combinedMarkdown, /# Kids Lemonade Stand/);
+  assert.match(loaded.combinedMarkdown, /# Chapter 2:/);
+  assert.match(loaded.chapterMarkdown, /continue from the existing stand state/i);
+  assert.match(loaded.combinedMarkdown, /`http:\/\/127\.0\.0\.1:43210`/);
+});
+
+test("roleCardState prefers the existing card tied to the role thread", () => {
+  const role = { name: "sales-kid", actorId: "actor-sales-kid" };
+  const targets = {
+    mainThread: { id: "thread-main" },
+    primaryThread: { id: "thread-sales" },
+    topic: { id: "topic-sales" },
+    artifacts: [{ id: "artifact-one" }],
+  };
+  const chapterState = {
+    cards: [
+      {
+        id: "card-main",
+        parentThreadID: "thread-main",
+        assigneeRefs: [],
+      },
+      {
+        id: "card-sales",
+        parentThreadID: "thread-sales",
+        assigneeRefs: ["actor:actor-sales-kid"],
+      },
+    ],
+  };
+
+  const card = roleCardState(role, targets, chapterState);
+  assert.equal(card?.id, "card-sales");
+});
+
+test("cardPatchTemplate reuses the existing card with a concurrency token", () => {
+  const role = { name: "sales-kid", actorId: "actor-sales-kid" };
+  const targets = {
+    mainThread: { id: "thread-main" },
+    primaryThread: { id: "thread-sales" },
+    topic: { id: "topic-sales" },
+    artifacts: [{ id: "artifact-one" }, { id: "artifact-two" }],
+  };
+
+  const template = cardPatchTemplate(role, targets, { id: "card-sales", updatedAt: "2026-04-11T00:00:00Z" });
+  assert.match(template, /"if_updated_at": "2026-04-11T00:00:00Z"/);
+  assert.match(template, /"actor:actor-sales-kid"/);
   assert.match(template, /"thread:thread-sales"/);
   assert.doesNotMatch(template, /"thread:thread-main"/);
 });
