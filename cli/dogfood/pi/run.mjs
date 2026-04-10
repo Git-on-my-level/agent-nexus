@@ -9,7 +9,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = here;
 const repoRoot = path.resolve(packageRoot, "../../..");
 
-const scenarioConfigs = {
+export const scenarioConfigs = {
   "pilot-rescue": {
     roleLimit: 4,
     threadTitles: {
@@ -18,6 +18,8 @@ const scenarioConfigs = {
       delivery: "Delivery Plan: Pilot Fix + Rollout Sequencing",
     },
     documentId: "northwave-pilot-rescue-brief",
+    documentTemplateContent:
+      "# NorthWave Pilot Rescue Brief\n\nStatus: replace with recommended status\n\nFriday scope:\n- replace with scoped fixes\n\nDeferred follow-up:\n- replace with follow-up work\n\nLaunch recommendation:\n- replace with go/no-go call and rationale\n\nCustomer closure plan:\n- replace with exact deliverables to NorthWave and BriskPay\n",
     artifactIds: {
       feedbackMatrix: "artifact-feedback-matrix",
       feedbackQuotes: "artifact-feedback-quotes",
@@ -100,6 +102,85 @@ const scenarioConfigs = {
         deliverable: "Update the `northwave-pilot-rescue-brief` document, then publish the final actor_statement on the main thread referencing that document and making a clear go/no-go recommendation.",
         eventSummary: "Product decision: final NorthWave pilot rescue recommendation",
         eventThreadKeys: ["main", "feedback", "delivery"],
+        eventIncludeDocument: true,
+        requireDocsUpdate: true,
+      },
+    ],
+  },
+  "kids-lemonade-stand": {
+    roleLimit: 3,
+    threadTitles: {
+      main: "Neighborhood Lemonade Stand Master Plan",
+      sales: "Front Stand Sales, Smiles, and Sidewalk Pitches",
+      backoffice: "Kitchen Prep, Lemon Squeezing, and Supply Stash",
+    },
+    documentId: "kid-boss-lemonade-plan",
+    documentTemplateContent:
+      "# Kid Boss Lemonade Plan\n\nMood:\n- replace with the cheerful vibe for the stand today\n\nSales game plan:\n- replace with the best sales ideas and sign tweaks\n\nKitchen and supply plan:\n- replace with the batch schedule and supply checks\n\nBoss notes:\n- replace with friendly bossy reminders and one helpful suggestion for each teammate\n\nEnd-of-day goal:\n- replace with the team's win condition for the day\n",
+    artifactIds: {
+      scoreboard: "artifact-sales-scoreboard",
+      signSlogans: "artifact-sign-slogans",
+      prepChecklist: "artifact-prep-checklist",
+      supplyList: "artifact-supply-stash",
+      weatherNote: "artifact-weather-note",
+    },
+    cardTitles: {
+      signRefresh: "Refresh the chalkboard sign with clearer prices and a sillier joke",
+      nextBatch: "Mix the next lemonade batch and chill the pitcher before the park rush",
+      supplyCheck: "Check lemon, sugar, cup, and ice stash before the lunch rush",
+    },
+    roles: [
+      {
+        name: "sales-kid",
+        focus: "Work the front stand like an enthusiastic neighborhood kid: greet people, notice what makes them smile, and suggest playful sign or pricing tweaks.",
+        primaryThreadKey: "sales",
+        relatedThreadKeys: ["main"],
+        artifactIds: ["scoreboard", "signSlogans", "weatherNote"],
+        cardTitles: ["signRefresh"],
+        privateContext: [
+          "You are the sales kid. Be playful, upbeat, and a little dramatic about making the stand look exciting.",
+          "You are not writing a corporate launch memo. You are helping a kids' lemonade stand have a good day.",
+          "Good suggestions are things like better sign jokes, combo ideas, customer observations, and what made neighbors stop.",
+        ],
+        deliverable: "Publish one actor_statement on the main thread with your best sales ideas, what customers seem to like, and one or two playful improvements for the sign or pitch.",
+        eventSummary: "Sales kid update: sidewalk pitch ideas and what customers are liking",
+        eventThreadKeys: ["main", "sales"],
+        eventIncludeDocument: false,
+        requireDocsUpdate: false,
+      },
+      {
+        name: "backoffice-kid",
+        focus: "Handle kitchen prep and supplies like the organized kid behind the scenes: batches, lemons, sugar, cups, ice, and not getting caught empty-handed.",
+        primaryThreadKey: "backoffice",
+        relatedThreadKeys: ["main"],
+        artifactIds: ["prepChecklist", "supplyList", "weatherNote"],
+        cardTitles: ["nextBatch", "supplyCheck"],
+        privateContext: [
+          "You are the backoffice kid. Be practical, a tiny bit proud of your organized system, and still playful.",
+          "Your job is to keep the pitcher cold, the lemons squeezed, and the supply stash from becoming a disaster.",
+          "Helpful output sounds like batch timing, restock warnings, prep shortcuts, and what the boss kid should stop forgetting.",
+        ],
+        deliverable: "Publish one actor_statement on the main thread with the prep plan, supply risks, and the most important behind-the-stand tasks for the next few hours.",
+        eventSummary: "Backoffice kid update: prep timing, supply stash, and kitchen needs",
+        eventThreadKeys: ["main", "backoffice"],
+        eventIncludeDocument: false,
+        requireDocsUpdate: false,
+      },
+      {
+        name: "boss-kid",
+        focus: "Be the bossy but helpful kid running the stand: gather the sales and backoffice updates, make the final plan, and keep the team playful instead of overly serious.",
+        primaryThreadKey: "main",
+        relatedThreadKeys: ["sales", "backoffice"],
+        artifactIds: ["scoreboard", "prepChecklist", "supplyList"],
+        cardTitles: ["signRefresh", "nextBatch", "supplyCheck"],
+        privateContext: [
+          "You are the boss kid. You are a little bossy, but in an endearing way, and you do offer useful suggestions.",
+          "Wait until the sales kid and backoffice kid have both posted before writing the final plan.",
+          "A good final answer sounds like a cheerful stand plan for the day, not a serious operations review.",
+        ],
+        deliverable: "Update the `kid-boss-lemonade-plan` document, then publish the final actor_statement on the main thread with the day's plan, team reminders, and one helpful suggestion for each kid.",
+        eventSummary: "Boss kid plan: today's lemonade stand game plan and helpful reminders",
+        eventThreadKeys: ["main", "sales", "backoffice"],
         eventIncludeDocument: true,
         requireDocsUpdate: true,
       },
@@ -212,7 +293,7 @@ function renderScenario(content, baseUrl) {
   return content.replace(/`http:\/\/127\.0\.0\.1:8000`/g, `\`${baseUrl}\``);
 }
 
-function commandGuide(baseUrl, defaultUsername) {
+function commandGuide(baseUrl, defaultUsername, documentId) {
   return `# OAR Command Guide
 
 Use these exact command shapes. Prefer them over guessing.
@@ -240,10 +321,10 @@ Read workflow state:
 - Read artifact content: \`oar artifacts content --artifact-id <artifact-id>\`
 - List cards: \`oar cards list\`
 - Read one card: \`oar cards get --card-id <card-id>\`
-- Read a seeded brief document: \`oar docs get --document-id northwave-pilot-rescue-brief\`
-- Stage a document revision update: \`oar docs propose-update --document-id northwave-pilot-rescue-brief --from-file doc-update-template.json\`
+- Read a seeded scenario document: \`oar docs get --document-id ${documentId}\`
+- Stage a document revision update: \`oar docs propose-update --document-id ${documentId} --from-file doc-update-template.json\`
 - Apply a staged document update: \`oar docs apply --proposal-id <proposal-id>\`
-- Update a document immediately (no proposal): \`oar docs update --document-id northwave-pilot-rescue-brief --from-file doc-update-template.json\`
+- Update a document immediately (no proposal): \`oar docs update --document-id ${documentId} --from-file doc-update-template.json\`
 
 Write workflow state:
 - Topics are the primary mutable coordination resource; \`oar threads patch\`, \`oar threads apply\`, and other thread mutation commands are not supported.
@@ -289,16 +370,18 @@ async function apiJSON(baseUrl, apiPath) {
   return response.json();
 }
 
-async function resolveSharedTargets(baseUrl, config) {
+export async function resolveSharedTargets(baseUrl, config) {
   const threadsResponse = await apiJSON(baseUrl, "/threads");
   const threads = Array.isArray(threadsResponse?.threads) ? threadsResponse.threads : [];
   const byTitle = Object.fromEntries(threads.map((thread) => [valueFrom(thread, "title", "summary"), thread]));
 
-  const mainThread = byTitle[config.threadTitles.main];
-  const feedbackThread = byTitle[config.threadTitles.feedback];
-  const deliveryThread = byTitle[config.threadTitles.delivery];
-  if (!mainThread?.id || !feedbackThread?.id || !deliveryThread?.id) {
-    throw new Error("failed to resolve scenario threads");
+  const resolvedThreads = {};
+  for (const [key, title] of Object.entries(config.threadTitles)) {
+    const thread = byTitle[title];
+    if (!thread?.id) {
+      throw new Error(`failed to resolve scenario thread ${key}: ${title}`);
+    }
+    resolvedThreads[key] = thread;
   }
 
   const artifacts = {};
@@ -320,24 +403,21 @@ async function resolveSharedTargets(baseUrl, config) {
   const topics = Array.isArray(topicsResponse?.topics) ? topicsResponse.topics : [];
   const topicsByTitle = Object.fromEntries(topics.map((topic) => [valueFrom(topic, "title", "summary"), topic]));
 
+  const resolvedTopics = {};
+  for (const [key, title] of Object.entries(config.threadTitles)) {
+    resolvedTopics[key] = topicsByTitle[title] ?? null;
+  }
+
+  const resolvedCards = { all: allCards };
+  for (const [key, title] of Object.entries(config.cardTitles ?? {})) {
+    resolvedCards[key] = cardsByTitle[title] ?? null;
+  }
+
   return {
-    threads: {
-      main: mainThread,
-      feedback: feedbackThread,
-      delivery: deliveryThread,
-    },
-    topics: {
-      main: topicsByTitle[config.threadTitles.main] ?? null,
-      feedback: topicsByTitle[config.threadTitles.feedback] ?? null,
-      delivery: topicsByTitle[config.threadTitles.delivery] ?? null,
-    },
+    threads: resolvedThreads,
+    topics: resolvedTopics,
     artifacts,
-    cards: {
-      digestFix: cardsByTitle[config.cardTitles.digestFix] ?? null,
-      dedupeFix: cardsByTitle[config.cardTitles.dedupeFix] ?? null,
-      closurePack: cardsByTitle[config.cardTitles.closurePack] ?? null,
-      all: allCards,
-    },
+    cards: resolvedCards,
     inboxItems,
     document: {
       id: config.documentId,
@@ -357,6 +437,7 @@ function roleTargets(config, shared, role) {
     mainThread: shared.threads.main,
     primaryThread,
     relatedThreads,
+    threadsByKey: shared.threads,
     topic: shared.topics?.[role.primaryThreadKey] ?? null,
     artifacts: roleArtifacts,
     cards: roleCards,
@@ -366,14 +447,9 @@ function roleTargets(config, shared, role) {
 }
 
 function eventTemplate(role, targets) {
-  const threadKeyToThread = {
-    main: targets.mainThread,
-    feedback: [targets.primaryThread, ...targets.relatedThreads].find((thread) => thread.title.includes("Customer Escalation")),
-    delivery: [targets.primaryThread, ...targets.relatedThreads].find((thread) => thread.title.includes("Delivery Plan")),
-  };
   const refs = [];
   for (const threadKey of role.eventThreadKeys ?? []) {
-    const thread = threadKeyToThread[threadKey];
+    const thread = targets.threadsByKey?.[threadKey];
     if (thread?.id) {
       refs.push(`thread:${thread.id}`);
     }
@@ -413,18 +489,22 @@ function eventTemplate(role, targets) {
 `;
 }
 
-function docUpdateTemplate(targets) {
+function docUpdateTemplate(targets, config) {
   const headRevision = valueFrom(targets.document.response?.revision, "revision_id");
+  const artifactRefs = targets.artifacts
+    .map((artifact) => artifact?.id)
+    .filter(Boolean)
+    .map((artifactId) => `artifact:${artifactId}`);
+  const refs = [...new Set([
+    `thread:${targets.mainThread.id}`,
+    `document:${targets.document.id}`,
+    ...artifactRefs,
+  ])];
   return `{
   "if_base_revision": "${headRevision}",
-  "refs": [
-    "thread:${targets.mainThread.id}",
-    "document:${targets.document.id}",
-    "artifact:artifact-feedback-matrix",
-    "artifact:artifact-launch-checklist"
-  ],
+  "refs": ${JSON.stringify(refs, null, 4)},
   "content_type": "text",
-  "content": "# NorthWave Pilot Rescue Brief\n\nStatus: replace with recommended status\n\nFriday scope:\n- replace with scoped fixes\n\nDeferred follow-up:\n- replace with follow-up work\n\nLaunch recommendation:\n- replace with go/no-go call and rationale\n\nCustomer closure plan:\n- replace with exact deliverables to NorthWave and BriskPay\n"
+  "content": ${JSON.stringify(config.documentTemplateContent)}
 }
 `;
 }
@@ -586,7 +666,7 @@ async function waitForCore(baseUrl, timeoutMs) {
   throw new Error(`core did not become healthy: ${lastError}`);
 }
 
-async function seedCore(baseUrl) {
+async function seedCore(baseUrl, scenario) {
   const seedScript = path.join(packageRoot, "seed", "seed-core.mjs");
   const result = spawnSync("node", [seedScript], {
     cwd: repoRoot,
@@ -595,6 +675,7 @@ async function seedCore(baseUrl) {
       ...process.env,
       OAR_CORE_BASE_URL: baseUrl,
       OAR_FORCE_SEED: "1",
+      OAR_PI_SCENARIO: scenario,
     },
   });
   if (result.status !== 0) {
@@ -602,7 +683,7 @@ async function seedCore(baseUrl) {
   }
 }
 
-async function startManagedCore(runDir, coreBin, requestedBaseUrl) {
+async function startManagedCore(runDir, coreBin, requestedBaseUrl, scenario) {
   if (requestedBaseUrl) {
     await waitForCore(requestedBaseUrl, 20000);
     return {
@@ -680,7 +761,7 @@ async function startManagedCore(runDir, coreBin, requestedBaseUrl) {
       });
     }),
   ]);
-  await seedCore(baseUrl);
+  await seedCore(baseUrl, scenario);
 
   return {
     baseUrl,
@@ -790,6 +871,7 @@ async function runPiAgent({
   agentCount,
   agentUsername,
   scenarioMarkdown,
+  scenarioConfig,
   role,
   targets,
 }) {
@@ -834,17 +916,17 @@ Environment:
 `;
   writeFile(path.join(workspaceDir, "AGENTS.md"), agentsContent);
   writeFile(path.join(workspaceDir, "SCENARIO.md"), scenarioMarkdown);
-  writeFile(path.join(workspaceDir, "COMMANDS.md"), commandGuide(coreBaseUrl, agentUsername));
+  writeFile(path.join(workspaceDir, "COMMANDS.md"), commandGuide(coreBaseUrl, agentUsername, targets.document.id));
   writeFile(path.join(workspaceDir, "TARGETS.md"), targetsGuide(role, targets));
   writeFile(path.join(workspaceDir, "ROLE_CONTEXT.md"), privateContextGuide(role));
   writeFile(path.join(workspaceDir, "event-template.json"), eventTemplate(role, targets));
   if (role.requireDocsUpdate) {
-    writeFile(path.join(workspaceDir, "doc-update-template.json"), docUpdateTemplate(targets));
+    writeFile(path.join(workspaceDir, "doc-update-template.json"), docUpdateTemplate(targets, scenarioConfig));
   }
   writeFile(path.join(workspaceDir, "result-template.md"), resultTemplate());
 
   const prompt = role.requireDocsUpdate
-    ? "Read SCENARIO.md, COMMANDS.md, TARGETS.md, and ROLE_CONTEXT.md. Execute your role with the real oar CLI. Update doc-update-template.json in place, stage the rescue-brief update with `oar docs propose-update`, inspect the diff, apply it with `oar docs apply`, then post your final event. Use `oar events validate --from-file event-template.json` or `oar events create --from-file event-template.json --dry-run` if you want a local event check before the real create. Edit event-template.json in place, create the event from that file, write result.md, and then give a short final summary."
+    ? "Read SCENARIO.md, COMMANDS.md, TARGETS.md, and ROLE_CONTEXT.md. Execute your role with the real oar CLI. Update doc-update-template.json in place, stage the seeded document update with `oar docs propose-update`, inspect the diff, apply it with `oar docs apply`, then post your final event. Use `oar events validate --from-file event-template.json` or `oar events create --from-file event-template.json --dry-run` if you want a local event check before the real create. Edit event-template.json in place, create the event from that file, write result.md, and then give a short final summary."
     : "Read SCENARIO.md, COMMANDS.md, TARGETS.md, and ROLE_CONTEXT.md. Execute your role with the real oar CLI. Use `oar events validate --from-file event-template.json` or `oar events create --from-file event-template.json --dry-run` if you want a local event check before the real create. Edit event-template.json in place, create the event from that file, write result.md, and then give a short final summary.";
 
   const piArgs = [
@@ -963,7 +1045,7 @@ async function main() {
 
   const oarBin = buildOarBinary(runDir, options.oarBin);
   const coreBin = buildCoreBinary(runDir, options.coreBin);
-  const core = await startManagedCore(runDir, coreBin, options.baseUrl);
+  const core = await startManagedCore(runDir, coreBin, options.baseUrl, options.scenario);
   const scenarioContent = fs.readFileSync(scenarioPath, "utf8");
   const renderedScenario = renderScenario(scenarioContent, core.baseUrl);
   const sharedTargets = await resolveSharedTargets(core.baseUrl, config);
@@ -1005,6 +1087,7 @@ async function main() {
         agentCount: options.agentCount,
         agentUsername,
         scenarioMarkdown: renderedScenario,
+        scenarioConfig: config,
         role,
         targets: roleTargets(config, sharedTargets, role),
         }),

@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "run": "node ./run.mjs",
-    "pilot-rescue": "node ./run.mjs --scenario pilot-rescue"
+    "pilot-rescue": "node ./run.mjs --scenario pilot-rescue",
+    "kids-lemonade-stand": "node ./run.mjs --scenario kids-lemonade-stand"
   },
   "dependencies": {
     "@mariozechner/pi-coding-agent": "0.56.2"

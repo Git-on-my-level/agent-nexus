@@ -6,7 +6,7 @@ import {
   requestJson,
   waitForCore,
 } from "../../../../scripts/seed-core-lib.mjs";
-import { getPilotRescueSeedData } from "./pilot-rescue-data.mjs";
+import { getScenarioSeedConfig } from "./scenario-seeds.mjs";
 
 const coreBaseUrl = normalizeBaseUrl(
   process.env.OAR_CORE_BASE_URL ?? "http://127.0.0.1:8000",
@@ -14,6 +14,9 @@ const coreBaseUrl = normalizeBaseUrl(
 const forceSeed = process.env.OAR_FORCE_SEED === "1";
 const skipIfPresent = process.env.OAR_SEED_SKIP_IF_PRESENT !== "0";
 const waitTimeoutMs = Number(process.env.OAR_CORE_WAIT_TIMEOUT_MS ?? 20000);
+const scenarioName = String(
+  process.env.OAR_PI_SCENARIO ?? "pilot-rescue",
+).trim();
 
 if (!coreBaseUrl) {
   failWithPrefix(
@@ -22,8 +25,14 @@ if (!coreBaseUrl) {
   );
 }
 
-const seed = getPilotRescueSeedData();
-const defaultActorId = seed.actors[0]?.id ?? "actor-product-lead";
+const scenarioConfig = getScenarioSeedConfig(scenarioName);
+if (!scenarioConfig) {
+  failWithPrefix("cli pi seed failed", `unknown scenario: ${scenarioName}`);
+}
+
+const seed = scenarioConfig.getSeedData();
+const defaultActorId =
+  seed.actors[0]?.id ?? scenarioConfig.defaultActorId;
 const topicIdMap = new Map();
 const threadIdMap = new Map();
 
@@ -67,8 +76,8 @@ async function detectSeededState() {
   );
 
   return (
-    actorIds.has("actor-product-lead") &&
-    topicTitles.has("Pilot Rescue Sprint: NorthWave Launch Readiness")
+    actorIds.has(scenarioConfig.detectActorId) &&
+    topicTitles.has(scenarioConfig.detectTopicTitle)
   );
 }
 

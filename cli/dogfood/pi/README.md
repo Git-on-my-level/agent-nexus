@@ -38,6 +38,16 @@ pnpm --dir cli/dogfood/pi run pilot-rescue -- \
   --agent-count 4
 ```
 
+Alternate playful three-agent run:
+
+```bash
+pnpm --dir cli/dogfood/pi run kids-lemonade-stand -- \
+  --api-key-file ../../.secrets/zai_api_key \
+  --provider zai \
+  --model glm-5 \
+  --agent-count 3
+```
+
 Timeout guidance:
 - The runner defaults to `--max-seconds 900`.
 - For multi-agent scenario validation, do not lower `--max-seconds` below `600` unless you are intentionally stress-testing timeout behavior.
