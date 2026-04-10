@@ -179,6 +179,19 @@ Then point the CLI at the proxy instead of core directly:
 OAR_BASE_URL=http://127.0.0.1:8010 oar --agent support-lead topics list
 ```
 
+Compile a successful recording into a replay artifact and seed a fresh core:
+
+```bash
+./scripts/oar-http-compile \
+  --input /tmp/oar-record.jsonl \
+  --output /tmp/oar-seed.json
+
+./scripts/oar-http-replay \
+  --input /tmp/oar-seed.json \
+  --base-url http://127.0.0.1:8000 \
+  --bindings-output /tmp/oar-seed-bindings.json
+```
+
 See `tools/oar-http-record/README.md` for details.
 
 ## Adapter Integrations

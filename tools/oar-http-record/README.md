@@ -11,6 +11,7 @@ single interleaved JSONL log.
 - bounded request/response body capture
 - default probe filtering for `/readyz` and `/version`
 - default exclusion of SSE endpoints `/events/stream` and `/inbox/stream`
+- companion compiler and replay commands for seed experimentation
 
 SSE is intentionally excluded in v1 because the recorder defines global order at
 response completion, and long-lived streams do not have a useful completion
@@ -34,6 +35,35 @@ OAR_BASE_URL=http://127.0.0.1:8010 oar --agent support-lead topics list
 If you want an explicit human-analysis label separate from the normal
 `X-OAR-Agent` header, send `X-OAR-Record-Agent`. The proxy strips that header
 before forwarding upstream.
+
+## Compile And Replay
+
+Compile a successful mutation recording into a replay artifact:
+
+```bash
+./scripts/oar-http-compile \
+  --input /tmp/oar-record.jsonl \
+  --output /tmp/oar-seed.json
+```
+
+Replay that artifact against a fresh core:
+
+```bash
+./scripts/oar-http-replay \
+  --input /tmp/oar-seed.json \
+  --base-url http://127.0.0.1:8000 \
+  --bindings-output /tmp/oar-seed-bindings.json
+```
+
+The compiler is intentionally scoped to the current seed-style mutation flows:
+
+- successful `POST`/`PUT`/`PATCH`/`DELETE` exchanges only
+- JSON request bodies required for placeholder-aware compilation
+- `/auth/*` exchanges skipped
+- response-derived placeholders inferred for topic/thread, document/revision,
+  board, and board-card IDs
+- replay retries transient `5xx` responses with short backoff to mirror the
+  current seed scripts' startup-contention handling
 
 ## Flags
 
