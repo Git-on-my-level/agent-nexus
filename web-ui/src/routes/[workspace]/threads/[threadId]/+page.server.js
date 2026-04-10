@@ -1,19 +1,19 @@
 import { redirect } from "@sveltejs/kit";
 
-import { resolveTopicRouteSegmentForLegacyThreadUrl } from "$lib/server/threadTopicRouteRedirect";
+import { resolveLegacyThreadCanonicalAppPath } from "$lib/server/threadTopicRouteRedirect";
 import { workspacePath } from "$lib/workspacePaths";
 
 export async function load(event) {
-  const segment = await resolveTopicRouteSegmentForLegacyThreadUrl({
+  const canonical = await resolveLegacyThreadCanonicalAppPath({
     fetchFn: event.fetch,
     workspaceSlug: event.params.workspace,
     legacyThreadId: event.params.threadId,
   });
-  throw redirect(
-    307,
-    workspacePath(
-      event.params.workspace,
-      `/topics/${encodeURIComponent(segment)}${event.url.search}`,
-    ),
-  );
+  if (canonical) {
+    throw redirect(
+      307,
+      workspacePath(event.params.workspace, `${canonical}${event.url.search}`),
+    );
+  }
+  return {};
 }

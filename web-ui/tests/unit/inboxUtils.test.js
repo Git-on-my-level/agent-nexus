@@ -54,6 +54,7 @@ describe("inbox grouping", () => {
     expect(grouped.map((group) => group.category)).toEqual([
       "decision_needed",
       "intervention_needed",
+      "exception",
       "work_item_risk",
       "stale_topic",
       "document_attention",
@@ -66,11 +67,12 @@ describe("inbox grouping", () => {
     expect(grouped[1].items.map((item) => item.id)).toEqual([
       "new-intervention",
     ]);
-    expect(grouped[2].items.map((item) => item.id)).toEqual(["old-risk"]);
-    expect(grouped[3].items.map((item) => item.id)).toEqual([
+    expect(grouped[2].items.map((item) => item.id)).toEqual([
       "fresh-exception",
     ]);
+    expect(grouped[3].items.map((item) => item.id)).toEqual(["old-risk"]);
     expect(grouped[4].items).toEqual([]);
+    expect(grouped[5].items).toEqual([]);
   });
 });
 

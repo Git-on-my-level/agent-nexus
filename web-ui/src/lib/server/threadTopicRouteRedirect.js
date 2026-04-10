@@ -3,16 +3,17 @@ import { topicRouteSegmentFromBackingThread } from "$lib/topicRouteUtils";
 import { WORKSPACE_HEADER } from "$lib/workspacePaths";
 
 /**
- * Resolves the `/topics/:id` segment for legacy `/threads/:threadId` URLs.
- * Uses `threads.inspect` when available; falls back to the raw param.
+ * When `/threads/:id` refers to a backing thread with `topic_ref: topic:…`,
+ * returns the canonical app path `/topics/:topicId` (no workspace prefix).
+ * Otherwise returns null so the thread detail route can render (backing-only threads).
  */
-export async function resolveTopicRouteSegmentForLegacyThreadUrl({
+export async function resolveLegacyThreadCanonicalAppPath({
   fetchFn,
   workspaceSlug,
   legacyThreadId,
 }) {
   const raw = String(legacyThreadId ?? "").trim();
-  if (!raw) return raw;
+  if (!raw) return null;
 
   const slug = String(workspaceSlug ?? "").trim();
   const client = createOarCoreClient({
@@ -24,10 +25,12 @@ export async function resolveTopicRouteSegmentForLegacyThreadUrl({
   try {
     const res = await client.getThread(raw);
     const segment = topicRouteSegmentFromBackingThread(res?.thread ?? null);
-    if (segment) return segment;
+    if (segment) {
+      return `/topics/${encodeURIComponent(segment)}`;
+    }
   } catch {
-    // Thread missing or proxy error — preserve legacy segment.
+    // Thread missing or proxy error — keep serving the legacy thread URL.
   }
 
-  return raw;
+  return null;
 }

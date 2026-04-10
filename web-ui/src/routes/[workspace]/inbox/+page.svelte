@@ -1,7 +1,7 @@
 <script>
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
-  import { onMount } from "svelte";
+  import { onDestroy, onMount } from "svelte";
 
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
@@ -46,6 +46,23 @@
   let categoryFilter = $state("all");
   let filtersOpen = $state(false);
   let workspaceSlug = $derived($page.params.workspace);
+
+  function cancelPendingInboxTimers() {
+    for (const pending of Object.values(pendingAckById)) {
+      if (pending?.timeoutId != null) {
+        clearTimeout(pending.timeoutId);
+      }
+    }
+    for (const pending of Object.values(pendingDecisionById)) {
+      if (pending?.timeoutId != null) {
+        clearTimeout(pending.timeoutId);
+      }
+    }
+  }
+
+  onDestroy(() => {
+    cancelPendingInboxTimers();
+  });
 
   let subjectContextCache = $state({});
   let subjectContextLoading = $state({});
@@ -353,6 +370,13 @@
   function acknowledgeItem(item) {
     error = "";
 
+    const subjectRef = getInboxSubjectRef(item);
+    if (!subjectRef) {
+      error =
+        "Cannot acknowledge: no subject reference for this inbox item (core requires subject_ref).";
+      return;
+    }
+
     items = items.filter((candidate) => candidate.id !== item.id);
 
     const timeoutId = setTimeout(async () => {
@@ -362,11 +386,7 @@
 
       ackInFlightById = { ...ackInFlightById, [item.id]: true };
       try {
-        const ackPayload = { inbox_item_id: item.id };
-        const subjectRef = getInboxSubjectRef(item);
-        if (subjectRef) {
-          ackPayload.subject_ref = subjectRef;
-        }
+        const ackPayload = { inbox_item_id: item.id, subject_ref: subjectRef };
         await coreClient.ackInboxItem(ackPayload);
       } catch (ackError) {
         const reason =
@@ -533,6 +553,7 @@
   function categoryBadgeClass(category) {
     if (category === "decision_needed") return "text-indigo-400";
     if (category === "intervention_needed") return "text-cyan-400";
+    if (category === "exception") return "text-red-400";
     if (category === "work_item_risk") return "text-amber-400";
     if (category === "stale_topic") return "text-orange-400";
     if (category === "document_attention") return "text-sky-400";
@@ -721,6 +742,9 @@
           class="cursor-pointer shrink-0 font-medium text-indigo-400 hover:text-indigo-300"
           onclick={() => undoAcknowledge(pending.item.id)}
           type="button"
+          aria-label="Undo acknowledge for {pending.item.title ??
+            pending.item.summary ??
+            'inbox item'}"
         >
           Undo
         </button>
@@ -739,6 +763,9 @@
           class="cursor-pointer shrink-0 font-medium text-indigo-400 hover:text-indigo-300"
           onclick={() => undoPendingDecision(pending.item.id)}
           type="button"
+          aria-label="Undo pending decision for {pending.item.title ??
+            pending.item.summary ??
+            'inbox item'}"
         >
           Undo
         </button>
@@ -1016,7 +1043,8 @@
                             class="shrink-0 rounded-md border border-[var(--ui-border)] px-1.5 py-0.5 text-[11px] font-medium capitalize {subject?.status ===
                             'active'
                               ? 'text-emerald-400'
-                              : subject?.status === 'blocked'
+                              : subject?.status === 'blocked' ||
+                                  subject?.status === 'paused'
                                 ? 'text-amber-400'
                                 : subject?.status === 'archived'
                                   ? 'text-[var(--ui-text-muted)]'

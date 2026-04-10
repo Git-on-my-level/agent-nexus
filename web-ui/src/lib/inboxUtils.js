@@ -3,6 +3,7 @@ import { parseTimestampMs } from "./dateUtils.js";
 export const INBOX_CATEGORY_ORDER = [
   "decision_needed",
   "intervention_needed",
+  "exception",
   "work_item_risk",
   "stale_topic",
   "document_attention",
@@ -11,6 +12,7 @@ export const INBOX_CATEGORY_ORDER = [
 export const INBOX_CATEGORY_LABELS = {
   decision_needed: "Needs Decision",
   intervention_needed: "Needs Intervention",
+  exception: "Exception",
   work_item_risk: "Work item risk",
   stale_topic: "Stale Topic",
   document_attention: "Document Attention",
@@ -19,6 +21,7 @@ export const INBOX_CATEGORY_LABELS = {
 export const INBOX_CATEGORY_DESCRIPTIONS = {
   decision_needed: "Decision event pending",
   intervention_needed: "Human action required",
+  exception: "Operational or system exception",
   work_item_risk: "Work item risk needs review",
   stale_topic: "Topic appears stale",
   document_attention: "Document needs attention",
@@ -39,6 +42,7 @@ export const INBOX_URGENCY_LABELS = {
 const INBOX_CATEGORY_URGENCY_BASE = {
   decision_needed: 76,
   intervention_needed: 74,
+  exception: 90,
   work_item_risk: 66,
   stale_topic: 90,
   document_attention: 58,
@@ -46,7 +50,6 @@ const INBOX_CATEGORY_URGENCY_BASE = {
 
 const INBOX_CATEGORY_ALIASES = {
   risk_review: "work_item_risk",
-  exception: "stale_topic",
 };
 
 const INBOX_SUBJECT_LABELS = {
@@ -54,7 +57,7 @@ const INBOX_SUBJECT_LABELS = {
   card: "Card",
   board: "Board",
   document: "Document",
-  thread: "Topic",
+  thread: "Thread",
 };
 
 export function normalizeInboxCategory(category) {

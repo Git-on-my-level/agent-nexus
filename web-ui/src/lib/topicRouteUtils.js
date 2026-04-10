@@ -57,13 +57,14 @@ export function topicDetailPathFromSubject({
 
 /**
  * Path segment for `/topics/:segment` from a backing-thread inspect payload.
- * Prefers `thread.topic_ref` when it is a `topic:` ref; otherwise uses `thread.id`.
+ * Returns a topic id only when `thread.topic_ref` is a `topic:` ref; backing-only
+ * threads have no topic segment (empty string).
  */
 export function topicRouteSegmentFromBackingThread(thread) {
   if (!thread || typeof thread !== "object") return "";
   const { prefix, id } = splitTypedRef(String(thread.topic_ref ?? "").trim());
   if (prefix === "topic" && id) return id;
-  return String(thread.id ?? "").trim();
+  return "";
 }
 
 /**

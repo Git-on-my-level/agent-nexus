@@ -37,12 +37,12 @@ describe("topicRouteUtils", () => {
       ).toBe("topic-b");
     });
 
-    it("falls back to thread id when topic_ref absent", () => {
+    it("returns empty when topic_ref absent (backing-only thread)", () => {
       expect(
         topicRouteSegmentFromBackingThread({
           id: "thread-a",
         }),
-      ).toBe("thread-a");
+      ).toBe("");
     });
   });
 

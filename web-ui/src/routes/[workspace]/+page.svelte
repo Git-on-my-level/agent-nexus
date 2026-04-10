@@ -212,6 +212,7 @@
     if (count === 0) return "text-[var(--ui-text)]";
     if (category === "intervention_needed") return "text-red-400";
     if (category === "decision_needed") return "text-indigo-400";
+    if (category === "exception") return "text-red-400";
     if (category === "work_item_risk") return "text-amber-400";
     if (category === "stale_topic") return "text-orange-400";
     if (category === "document_attention") return "text-sky-400";
@@ -222,6 +223,7 @@
     if (count === 0) return "text-[var(--ui-text-muted)]";
     if (category === "intervention_needed") return "text-red-400";
     if (category === "decision_needed") return "text-indigo-400";
+    if (category === "exception") return "text-red-400";
     if (category === "work_item_risk") return "text-amber-400";
     if (category === "stale_topic") return "text-orange-400";
     if (category === "document_attention") return "text-sky-400";
@@ -232,6 +234,7 @@
     if (category === "intervention_needed") return "text-red-400 bg-red-500/10";
     if (category === "decision_needed")
       return "text-indigo-400 bg-indigo-500/10";
+    if (category === "exception") return "text-red-400 bg-red-500/10";
     if (category === "work_item_risk") return "text-amber-400 bg-amber-500/10";
     if (category === "stale_topic") return "text-orange-400 bg-orange-500/10";
     if (category === "document_attention") return "text-sky-400 bg-sky-500/10";
