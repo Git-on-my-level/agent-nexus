@@ -104,6 +104,11 @@ const SHELL_CONTENT_RULES = [
     mode: "wide",
     maxWidth: "84rem",
   },
+  {
+    match: /^\/more$/,
+    mode: "standard",
+    maxWidth: "42rem",
+  },
 ];
 
 const DEFAULT_SHELL_CONTENT = {
@@ -128,6 +133,17 @@ export function isKnownSection(pathname) {
   return (
     navigationItems.some((item) => normalizedPathname === item.href) ||
     settingsNavItems.some((item) => normalizedPathname === item.href)
+  );
+}
+
+/** When true, the mobile bottom "More" tab should read as active (hub + settings destinations). */
+export function isMoreHubActivePath(pathname) {
+  const p = normalizePathname(pathname);
+  if (p === "/more" || p.startsWith("/more/")) {
+    return true;
+  }
+  return settingsNavItems.some(
+    (item) => p === item.href || p.startsWith(`${item.href}/`),
   );
 }
 

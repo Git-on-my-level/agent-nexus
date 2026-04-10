@@ -564,7 +564,7 @@
 <div class="flex items-center justify-between mb-4">
   <div>
     <h1 class="text-lg font-semibold text-[var(--ui-text)]">Inbox</h1>
-    <p class="text-[13px] text-[var(--ui-text-muted)]">
+    <p class="hidden text-[13px] text-[var(--ui-text-muted)] sm:block">
       Sorted by urgency. Oldest items bubble up.
     </p>
   </div>

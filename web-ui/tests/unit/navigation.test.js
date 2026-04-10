@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   getShellContentConfig,
   isKnownSection,
+  isMoreHubActivePath,
   navigationItems,
   settingsNavItems,
 } from "../../src/lib/navigation.js";
@@ -41,5 +42,16 @@ describe("navigation model", () => {
     const config = getShellContentConfig("/access");
     expect(config.mode).toBe("wide");
     expect(config.maxWidth).toBe("84rem");
+  });
+
+  it("marks mobile More tab active for hub and settings routes", () => {
+    expect(isMoreHubActivePath("/more")).toBe(true);
+    expect(isMoreHubActivePath("/more/")).toBe(true);
+    expect(isMoreHubActivePath("/artifacts")).toBe(true);
+    expect(isMoreHubActivePath("/artifacts/abc")).toBe(true);
+    expect(isMoreHubActivePath("/trash")).toBe(true);
+    expect(isMoreHubActivePath("/access")).toBe(true);
+    expect(isMoreHubActivePath("/inbox")).toBe(false);
+    expect(isMoreHubActivePath("/")).toBe(false);
   });
 });
