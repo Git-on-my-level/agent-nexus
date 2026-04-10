@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+import { buildMockTopicWorkspaceFromThreadWorkspace } from "../../src/lib/devSeedData.js";
+
 test("mocked core smoke flow: inbox -> threads -> thread detail -> post message + unknown event rendering", async ({
   page,
 }) => {
@@ -64,7 +66,7 @@ test("mocked core smoke flow: inbox -> threads -> thread detail -> post message 
     });
   });
 
-  await page.route(/\/threads(\?.*)?$/, async (route) => {
+  await page.route(/\/topics(\?.*)?$/, async (route) => {
     const request = route.request();
     if (request.method() === "GET" && request.resourceType() === "document") {
       await route.continue();
@@ -76,7 +78,7 @@ test("mocked core smoke flow: inbox -> threads -> thread detail -> post message 
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
-          threads: [
+          topics: [
             {
               id: "thread-onboarding",
               title: "Customer Onboarding Workflow",
@@ -84,6 +86,7 @@ test("mocked core smoke flow: inbox -> threads -> thread detail -> post message 
               priority: "p1",
               cadence: "weekly",
               tags: ["ops", "customer"],
+              summary: "Onboarding policy review pending.",
               current_summary: "Onboarding policy review pending.",
               updated_at: "2026-03-03T11:00:00.000Z",
               stale: false,
@@ -120,7 +123,7 @@ test("mocked core smoke flow: inbox -> threads -> thread detail -> post message 
           key_artifacts: [],
           current_summary: "Thread detail summary.",
           next_actions: ["Collect legal signoff"],
-          open_commitments: [],
+          open_cards: [],
           next_check_in_at: "2026-03-05T00:00:00.000Z",
           updated_at: "2026-03-04T00:00:00.000Z",
           updated_by: actorId,
@@ -130,46 +133,60 @@ test("mocked core smoke flow: inbox -> threads -> thread detail -> post message 
     });
   });
 
-  await page.route(/\/threads\/thread-onboarding\/timeline$/, async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ events: timeline }),
-    });
-  });
+  function headlessOnboardingThreadWorkspace() {
+    return {
+      thread_id: "thread-onboarding",
+      thread: {
+        id: "thread-onboarding",
+        type: "process",
+        title: "Customer Onboarding Workflow",
+        status: "active",
+        priority: "p1",
+        cadence: "weekly",
+        tags: ["ops", "customer"],
+        key_artifacts: [],
+        current_summary: "Thread detail summary.",
+        next_actions: ["Collect legal signoff"],
+        open_cards: [],
+        next_check_in_at: "2026-03-05T00:00:00.000Z",
+        updated_at: "2026-03-04T00:00:00.000Z",
+        updated_by: actorId,
+        provenance: { sources: ["actor_statement:event-1"] },
+      },
+      context: {
+        recent_events: timeline,
+        key_artifacts: [],
+        open_cards: [],
+        documents: [],
+      },
+    };
+  }
 
   await page.route(
-    /\/threads\/thread-onboarding\/workspace(\?.*)?$/,
+    /\/(threads|topics)\/thread-onboarding\/timeline$/,
     async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({
-          thread_id: "thread-onboarding",
-          thread: {
-            id: "thread-onboarding",
-            type: "process",
-            title: "Customer Onboarding Workflow",
-            status: "active",
-            priority: "p1",
-            cadence: "weekly",
-            tags: ["ops", "customer"],
-            key_artifacts: [],
-            current_summary: "Thread detail summary.",
-            next_actions: ["Collect legal signoff"],
-            open_commitments: [],
-            next_check_in_at: "2026-03-05T00:00:00.000Z",
-            updated_at: "2026-03-04T00:00:00.000Z",
-            updated_by: actorId,
-            provenance: { sources: ["actor_statement:event-1"] },
-          },
-          context: {
-            recent_events: timeline,
-            key_artifacts: [],
-            open_commitments: [],
-            documents: [],
-          },
-        }),
+        body: JSON.stringify({ events: timeline }),
+      });
+    },
+  );
+
+  await page.route(
+    /\/(threads|topics)\/thread-onboarding\/workspace(\?.*)?$/,
+    async (route) => {
+      const threadWs = headlessOnboardingThreadWorkspace();
+      const payload = route.request().url().includes("/topics/")
+        ? buildMockTopicWorkspaceFromThreadWorkspace(
+            threadWs,
+            "thread-onboarding",
+          )
+        : threadWs;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(payload),
       });
     },
   );
@@ -231,8 +248,8 @@ test("mocked core smoke flow: inbox -> threads -> thread detail -> post message 
     page.getByText("Approve onboarding exception handling", { exact: true }),
   ).toBeVisible();
 
-  await page.getByRole("link", { name: "Threads", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Threads" })).toBeVisible();
+  await page.getByRole("link", { name: "Topics", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Topics" })).toBeVisible();
   const threadLink = page.getByRole("link", {
     name: /Customer Onboarding Workflow/,
   });
@@ -252,6 +269,8 @@ test("mocked core smoke flow: inbox -> threads -> thread detail -> post message 
   await page.getByRole("button", { name: "Post" }).click();
 
   await expect.poll(() => postedCount).toBe(1);
+  expect(timeline[0]?.thread_ref).toBe("thread:thread-onboarding");
+  expect(timeline[0]?.thread_id).toBe("thread-onboarding");
   await expect(
     page.getByText("Message: Posted from headless smoke flow", { exact: true }),
   ).toBeVisible();

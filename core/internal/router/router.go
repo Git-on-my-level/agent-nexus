@@ -322,6 +322,17 @@ func (s *Service) routeMention(ctx context.Context, handle string, event map[str
 	if err != nil {
 		return false, err
 	}
+	subjectRef, resolvedSubject := ResolvedSubjectFromThread(thread, threadID)
+	baseURL := strings.TrimRight(s.cfg.BaseURL, "/")
+	topicWorkspaceURL := ""
+	cliTopicWorkspace := ""
+	if sr := strings.TrimSpace(subjectRef); strings.HasPrefix(sr, "topic:") {
+		topicID := strings.TrimSpace(strings.TrimPrefix(sr, "topic:"))
+		if topicID != "" {
+			topicWorkspaceURL = fmt.Sprintf("%s/topics/%s/workspace", baseURL, topicID)
+			cliTopicWorkspace = fmt.Sprintf("oar topics workspace --topic-id %s --json", topicID)
+		}
+	}
 	wakeupID := WakeupArtifactID(s.cfg.WorkspaceID, threadID, eventID, registration.ActorID)
 	sessionKey := fmt.Sprintf("oar:%s:%s:%s", s.cfg.WorkspaceID, threadID, handle)
 	packet := WakePacket{
@@ -332,25 +343,31 @@ func (s *Service) routeMention(ctx context.Context, handle string, event map[str
 		WorkspaceName:        s.cfg.WorkspaceName,
 		ThreadID:             threadID,
 		ThreadTitle:          firstNonEmpty(anyString(thread["title"]), threadID),
+		SubjectRef:           subjectRef,
+		ResolvedSubject:      resolvedSubject,
 		TriggerEventID:       eventID,
 		TriggerCreatedAt:     anyString(event["ts"]),
 		TriggerAuthorActorID: anyString(event["actor_id"]),
 		TriggerText:          text,
 		CurrentSummary:       anyString(thread["current_summary"]),
 		SessionKey:           sessionKey,
-		OARBaseURL:           strings.TrimRight(s.cfg.BaseURL, "/"),
-		ThreadContextURL:     fmt.Sprintf("%s/threads/%s/context", strings.TrimRight(s.cfg.BaseURL, "/"), threadID),
-		ThreadWorkspaceURL:   fmt.Sprintf("%s/threads/%s/workspace", strings.TrimRight(s.cfg.BaseURL, "/"), threadID),
-		TriggerEventURL:      fmt.Sprintf("%s/events/%s", strings.TrimRight(s.cfg.BaseURL, "/"), eventID),
+		OARBaseURL:           baseURL,
+		ThreadContextURL:     fmt.Sprintf("%s/threads/%s/context", baseURL, threadID),
+		ThreadWorkspaceURL:   fmt.Sprintf("%s/threads/%s/workspace", baseURL, threadID),
+		TopicWorkspaceURL:    topicWorkspaceURL,
+		TriggerEventURL:      fmt.Sprintf("%s/events/%s", baseURL, eventID),
 		CLIThreadInspect:     fmt.Sprintf("oar threads inspect --thread-id %s --json", threadID),
 		CLIThreadWorkspace:   fmt.Sprintf("oar threads workspace --thread-id %s --include-related-event-content --json", threadID),
+		CLITopicWorkspace:    cliTopicWorkspace,
+		Version:              WakePacketVersion,
 	}
 
+	wakeRefs := append(WakeArtifactRefs(threadID, eventID, subjectRef), fmt.Sprintf("artifact:%s", wakeupID))
 	artifact := map[string]any{
 		"id":              wakeupID,
 		"kind":            WakeArtifactKind,
 		"summary":         fmt.Sprintf("Wake packet for @%s", handle),
-		"refs":            []string{fmt.Sprintf("thread:%s", threadID), fmt.Sprintf("event:%s", eventID)},
+		"refs":            WakeArtifactRefs(threadID, eventID, subjectRef),
 		"target_handle":   handle,
 		"target_actor_id": registration.ActorID,
 		"workspace_id":    s.cfg.WorkspaceID,
@@ -365,24 +382,13 @@ func (s *Service) routeMention(ctx context.Context, handle string, event map[str
 		"type":      WakeRequestEvent,
 		"thread_id": threadID,
 		"summary":   fmt.Sprintf("Wake requested for @%s", handle),
-		"refs": []string{
-			fmt.Sprintf("thread:%s", threadID),
-			fmt.Sprintf("event:%s", eventID),
-			fmt.Sprintf("artifact:%s", wakeupID),
-		},
-		"payload": map[string]any{
-			"wakeup_id":          wakeupID,
-			"wake_artifact_id":   wakeupID,
-			"target_handle":      handle,
-			"target_actor_id":    registration.ActorID,
-			"workspace_id":       s.cfg.WorkspaceID,
-			"workspace_name":     s.cfg.WorkspaceName,
-			"thread_id":          threadID,
-			"trigger_event_id":   eventID,
-			"trigger_created_at": anyString(event["ts"]),
-			"trigger_text":       text,
-			"session_key":        sessionKey,
-		},
+		"refs":      wakeRefs,
+		"payload": BuildWakeRequestPayload(
+			wakeupID, handle, registration.ActorID,
+			s.cfg.WorkspaceID, s.cfg.WorkspaceName, threadID,
+			eventID, anyString(event["ts"]), text, sessionKey,
+			subjectRef, resolvedSubject,
+		),
 		"provenance": map[string]any{
 			"sources": []string{fmt.Sprintf("actor_statement:%s", eventID)},
 		},

@@ -12,9 +12,9 @@ export const navigationItems = [
     hint: "Needs attention",
   },
   {
-    label: "Threads",
-    href: "/threads",
-    icon: "threads",
+    label: "Topics",
+    href: "/topics",
+    icon: "topics",
     hint: "Ongoing work",
   },
   {
@@ -37,13 +37,13 @@ export const settingsNavItems = [
     label: "Artifacts",
     href: "/artifacts",
     icon: "artifacts",
-    hint: "Work orders, receipts, reviews",
+    hint: "Receipts, reviews, and evidence",
   },
   {
     label: "Trash",
     href: "/trash",
     icon: "trash",
-    hint: "Tombstoned artifacts",
+    hint: "Trashed and restorable items",
   },
   {
     label: "Access",
@@ -63,6 +63,11 @@ const SHELL_CONTENT_RULES = [
     match: /^\/access$/,
     mode: "wide",
     maxWidth: "84rem",
+  },
+  {
+    match: /^\/topics\/[^/]+/,
+    mode: "fluid",
+    maxWidth: "112rem",
   },
   {
     match: /^\/threads\/[^/]+/,
@@ -85,7 +90,7 @@ const SHELL_CONTENT_RULES = [
     maxWidth: "88rem",
   },
   {
-    match: /^\/(threads|artifacts|docs|boards)$/,
+    match: /^\/(threads|topics|artifacts|docs|boards)$/,
     mode: "wide",
     maxWidth: "88rem",
   },

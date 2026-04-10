@@ -14,18 +14,18 @@ func TestEventReferenceConventionsRejectMissingRequiredRefs(t *testing.T) {
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
-	workOrderResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
+	reviewMissingRefsResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-1",
 		"event":{
-			"type":"work_order_created",
+			"type":"review_completed",
 			"thread_id":"thread-1",
-			"refs":["thread:thread-1"],
-			"summary":"work order created",
-			"payload":{},
+			"refs":["artifact:review-1","artifact:receipt-1"],
+			"summary":"review completed",
+			"payload":{"subject_ref":"card:card-1"},
 			"provenance":{"sources":["inferred"]}
 		}
 	}`, http.StatusBadRequest)
-	assertEventErrorMessageContains(t, workOrderResp, "event.refs must include")
+	assertEventErrorMessageContains(t, reviewMissingRefsResp, "event.refs must include")
 
 	receiptResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-1",
@@ -34,24 +34,63 @@ func TestEventReferenceConventionsRejectMissingRequiredRefs(t *testing.T) {
 			"thread_id":"thread-1",
 			"refs":["artifact:receipt-1"],
 			"summary":"receipt added",
+			"payload":{"subject_ref":"card:card-1"},
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusBadRequest)
+	assertEventErrorMessageContains(t, receiptResp, "event.refs must include")
+
+	decisionNeededResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
+		"actor_id":"actor-1",
+		"event":{
+			"type":"decision_needed",
+			"thread_id":"thread-1",
+			"refs":[],
+			"summary":"status changed",
+			"payload":{"decision":"approve"},
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusBadRequest)
+	assertEventErrorMessageContains(t, decisionNeededResp, "event.refs must include")
+
+	decisionTopicOnlyResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
+		"actor_id":"actor-1",
+		"event":{
+			"type":"decision_needed",
+			"thread_id":"thread-1",
+			"refs":["topic:thread-1"],
+			"summary":"status changed",
+			"payload":{"decision":"approve"},
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusBadRequest)
+	assertEventErrorMessageContains(t, decisionTopicOnlyResp, "thread:<id>")
+
+	decisionMadeTopicOnlyResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
+		"actor_id":"actor-1",
+		"event":{
+			"type":"decision_made",
+			"thread_id":"thread-1",
+			"refs":["topic:topic-1"],
+			"summary":"decided",
+			"payload":{"notes":""},
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusBadRequest)
+	assertEventErrorMessageContains(t, decisionMadeTopicOnlyResp, "thread:<id>")
+
+	interventionTopicOnlyResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
+		"actor_id":"actor-1",
+		"event":{
+			"type":"intervention_needed",
+			"thread_id":"thread-1",
+			"refs":["topic:topic-1"],
+			"summary":"human must act",
 			"payload":{},
 			"provenance":{"sources":["inferred"]}
 		}
 	}`, http.StatusBadRequest)
-	assertEventErrorMessageContains(t, receiptResp, "at least 2 refs with prefix \"artifact\"")
-
-	commitmentStatusResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
-		"actor_id":"actor-1",
-		"event":{
-			"type":"commitment_status_changed",
-			"thread_id":"thread-1",
-			"refs":["snapshot:commitment-1"],
-			"summary":"status changed",
-			"payload":{"to_status":"done"},
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusBadRequest)
-	assertEventErrorMessageContains(t, commitmentStatusResp, "payload.to_status=\"done\"")
+	assertEventErrorMessageContains(t, interventionTopicOnlyResp, "thread:<id>")
 }
 
 func TestEventReferenceConventionsRejectMissingRequiredPayloadFields(t *testing.T) {
@@ -80,7 +119,7 @@ func TestEventReferenceConventionsRejectMissingRequiredPayloadFields(t *testing.
 			"thread_id":"thread-1",
 			"refs":["thread:thread-1"],
 			"summary":"thread became stale",
-			"payload":{"subtype":"stale_thread"},
+			"payload":{"subtype":"stale_topic"},
 			"provenance":{"sources":["inferred"]}
 		}
 	}`, http.StatusCreated)

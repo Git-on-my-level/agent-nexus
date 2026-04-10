@@ -148,7 +148,7 @@ Filesystem backend:
 S3 backend:
 - Backup includes SQLite + metadata referencing bucket/prefix
 - Restore configures target workspace to use same bucket/prefix
-- Not a second independent object snapshot
+- Not a second independent full copy of the object store
 - Operator owns bucket/prefix lifecycle separately
 
 See [`packed-host-backup-restore.md`](packed-host-backup-restore.md) for backup/restore procedures.

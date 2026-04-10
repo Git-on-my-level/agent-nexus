@@ -16,6 +16,26 @@ import (
 
 const sseWriteTimeout = 5 * time.Second
 
+func handleListEvents(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+		return
+	}
+
+	threadID := strings.TrimSpace(r.URL.Query().Get("thread_id"))
+	eventTypes := parseEventTypeFilters(r)
+	events, err := listEventsForStream(r, opts, threadID, eventTypes)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list events")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"events": events})
+}
+
 func handleEventsStream(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")

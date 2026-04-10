@@ -36,12 +36,12 @@ func (s *boardLifecycleFailureStore) AppendEvent(ctx context.Context, actorID st
 	return stored, err
 }
 
-func (s *boardLifecycleFailureStore) PutDerivedThreadProjection(ctx context.Context, projection primitives.DerivedThreadProjection) error {
+func (s *boardLifecycleFailureStore) PutDerivedTopicProjection(ctx context.Context, projection primitives.DerivedTopicProjection) error {
 	if s.failProjectionAfterEmit && s.boardEventAppended && !s.projectionFailed {
 		s.projectionFailed = true
 		return errors.New("derived projection refresh failed")
 	}
-	return s.PrimitiveStore.PutDerivedThreadProjection(ctx, projection)
+	return s.PrimitiveStore.PutDerivedTopicProjection(ctx, projection)
 }
 
 func newPrimitivesTestServerWithStore(t *testing.T, workspace *storage.Workspace, primitiveStore PrimitiveStore) primitivesTestHarness {
@@ -76,7 +76,7 @@ func newPrimitivesTestServerWithStore(t *testing.T, workspace *storage.Workspace
 		server.Close()
 	})
 
-	return primitivesTestHarness{workspace: workspace, baseURL: server.URL, maintainer: maintainer}
+	return primitivesTestHarness{workspace: workspace, baseURL: server.URL, maintainer: maintainer, primitiveStore: primitiveStore}
 }
 
 func TestBoardCreateSucceedsWhenLifecycleEventAppendFails(t *testing.T) {
@@ -101,7 +101,7 @@ func TestBoardCreateSucceedsWhenLifecycleEventAppendFails(t *testing.T) {
 		"actor_id":"actor-1",
 		"board":{
 			"title":"Ops Board",
-			"primary_thread_id":"`+primaryThreadID+`"
+			"refs":["thread:`+primaryThreadID+`"]
 		}
 	}`, http.StatusCreated)
 	defer createBoardResp.Body.Close()
@@ -149,7 +149,7 @@ func TestBoardAddCardSucceedsWhenLifecycleProjectionRefreshFails(t *testing.T) {
 		"actor_id":"actor-1",
 		"board":{
 			"title":"Ops Board",
-			"primary_thread_id":"`+primaryThreadID+`"
+			"refs":["thread:`+primaryThreadID+`"]
 		}
 	}`, http.StatusCreated)
 	defer createBoardResp.Body.Close()
@@ -167,7 +167,8 @@ func TestBoardAddCardSucceedsWhenLifecycleProjectionRefreshFails(t *testing.T) {
 	addCardResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
 		"actor_id":"actor-1",
 		"if_board_updated_at":"`+boardUpdatedAt+`",
-		"thread_id":"`+memberThreadID+`",
+		"title":"Reliability card",
+		"related_refs":["thread:`+memberThreadID+`"],
 		"column_key":"ready"
 	}`, http.StatusCreated)
 	defer addCardResp.Body.Close()
@@ -179,7 +180,7 @@ func TestBoardAddCardSucceedsWhenLifecycleProjectionRefreshFails(t *testing.T) {
 	if err := json.NewDecoder(addCardResp.Body).Decode(&addCardPayload); err != nil {
 		t.Fatalf("decode add board card response: %v", err)
 	}
-	if asString(addCardPayload.Card["thread_id"]) != memberThreadID {
+	if !cardRelatedRefsContainThread(addCardPayload.Card, memberThreadID) {
 		t.Fatalf("expected created board card payload, got %#v", addCardPayload)
 	}
 
@@ -197,7 +198,7 @@ func TestBoardAddCardSucceedsWhenLifecycleProjectionRefreshFails(t *testing.T) {
 	if err := json.NewDecoder(listCardsResp.Body).Decode(&listCardsPayload); err != nil {
 		t.Fatalf("decode board cards response: %v", err)
 	}
-	if len(listCardsPayload.Cards) != 1 || asString(listCardsPayload.Cards[0]["thread_id"]) != memberThreadID {
+	if len(listCardsPayload.Cards) != 1 || !cardRelatedRefsContainThread(listCardsPayload.Cards[0], memberThreadID) {
 		t.Fatalf("expected persisted board card after non-fatal projection refresh error, got %#v", listCardsPayload.Cards)
 	}
 }

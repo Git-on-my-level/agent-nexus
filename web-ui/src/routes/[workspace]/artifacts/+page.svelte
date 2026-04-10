@@ -157,7 +157,7 @@
     trashBusyId = id;
     error = "";
     try {
-      await coreClient.tombstoneArtifact(id, {});
+      await coreClient.trashArtifact(id, {});
       confirmModal = { open: false, action: "", entityId: "" };
       const parsed = parseArtifactListSearchParams($page.url.searchParams);
       await loadArtifactsFromState(parsed);
@@ -240,7 +240,7 @@
         </select>
       </label>
       <label class="text-[12px] font-medium text-[var(--ui-text-muted)]">
-        Thread ID
+        Topic ID
         <input
           bind:value={filters.thread_id}
           class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
@@ -364,7 +364,7 @@
             </p>
           </a>
           <div class="flex shrink-0 items-center gap-2">
-            <span class="text-[11px] text-[var(--ui-text-subtle)]">
+            <span class="text-[11px] text-[var(--ui-text-muted)]">
               {(artifact.refs ?? []).length} ref{(artifact.refs ?? [])
                 .length === 1
                 ? ""
@@ -449,7 +449,7 @@
               <RefLink
                 humanize
                 labelHints={{
-                  [`thread:${artifact.thread_id}`]: "Related thread",
+                  [`thread:${artifact.thread_id}`]: "Thread (timeline)",
                 }}
                 refValue={`thread:${artifact.thread_id}`}
                 showRaw
@@ -465,7 +465,7 @@
               />
             {/each}
             {#if (artifact.refs ?? []).length > 3}
-              <span class="text-[11px] text-[var(--ui-text-subtle)]"
+              <span class="text-[11px] text-[var(--ui-text-muted)]"
                 >+{artifact.refs.length - 3} more</span
               >
             {/if}
@@ -480,7 +480,7 @@
   open={confirmModal.open}
   title={confirmModal.action === "trash" ? "Move to trash" : "Archive artifact"}
   message={confirmModal.action === "trash"
-    ? "This artifact will be tombstoned. You can restore it from trash later."
+    ? "This artifact will be moved to trash. You can restore it later."
     : "This artifact will be hidden from default views. You can unarchive it later."}
   confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
   variant={confirmModal.action === "trash" ? "danger" : "warning"}

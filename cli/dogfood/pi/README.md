@@ -51,7 +51,7 @@ Artifacts are written under `cli/.tmp/pi-dogfood/<run-id>/`:
 - `core.log`: managed core stdout/stderr
 - `AGENTS.md`: local run instructions injected into the Pi workspace
 - `SCENARIO.md`: scenario brief copied into the run workspace
-- `TARGETS.md`: resolved thread/artifact/commitment ids for the scenario
+- `TARGETS.md`: resolved thread/artifact/card ids for the scenario
 
 The runner exits non-zero if any agent process fails, if Pi reports a runtime/provider error in the JSON event stream, or if a required `result.md` artifact is missing.
 
@@ -71,11 +71,12 @@ Constraints enforced by the run workspace:
 - in team mode, each agent gets its own profile/home/workspace but shares the same managed core
 
 Scenario command-shape guidance:
-- default to `oar threads workspace --thread-id <thread-id>` for the main coordination read
-- use `oar threads workspace --thread-id <thread-id> --include-related-event-content --include-artifact-content --verbose` when you want the richest one-command thread review
+- default to `oar topics workspace --topic-id <topic-id>` for the main operator coordination read
+- use `oar threads workspace --thread-id <thread-id>` for backing-thread diagnostic review when you do not have a topic id or need the thread-scoped projection
+- use `oar threads workspace --thread-id <thread-id> --include-related-event-content --include-artifact-content --verbose` when you want the richest one-command backing-thread diagnostic bundle
 - use `oar threads recommendations --thread-id <thread-id>` for recommendation/decision review
 - add `--include-related-event-content --verbose` when you need full related-thread recommendation content in one command
-- use `oar commitments get --commitment-id <commitment-id>` when a commitment listed in workspace/inbox needs full owner/due-date details
+- use `oar cards get --card-id <card-id>` when a card listed in workspace needs full detail
 - document proposals are a two-step flow: `oar docs propose-update ...` then `oar docs apply --proposal-id <proposal-id>`
 - use `oar docs update ...` only when you want to write the new revision immediately without staging a proposal
 - use `oar events validate --from-file <path>` when you want a local payload check before `oar events create`

@@ -39,25 +39,11 @@ func TestWorkspaceListQueriesUseIndexedPlans(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create thread: %v", err)
 	}
-	threadID, _ := threadResult.Snapshot["id"].(string)
-
-	if _, err := store.CreateCommitment(ctx, "actor-1", map[string]any{
-		"id":                 "commitment-plan-1",
-		"thread_id":          threadID,
-		"title":              "Indexed commitment",
-		"owner":              "actor-1",
-		"due_at":             "2026-03-18T00:00:00Z",
-		"status":             "open",
-		"definition_of_done": []string{"done"},
-		"links":              []string{"url:https://example.com"},
-		"provenance":         map[string]any{"sources": []string{"inferred"}},
-	}); err != nil {
-		t.Fatalf("create commitment: %v", err)
-	}
+	threadID, _ := threadResult.Thread["id"].(string)
 
 	if _, err := store.CreateArtifact(ctx, "actor-1", map[string]any{
 		"id":   "artifact-plan-1",
-		"kind": "work_order",
+		"kind": "receipt",
 		"refs": []string{"thread:" + threadID},
 	}, "artifact content", "text/plain"); err != nil {
 		t.Fatalf("create artifact: %v", err)
@@ -67,34 +53,52 @@ func TestWorkspaceListQueriesUseIndexedPlans(t *testing.T) {
 		"id":        "doc-plan-1",
 		"thread_id": threadID,
 		"title":     "Plan doc",
-		"status":    "active",
 	}, "doc content", "text", []string{"thread:" + threadID}); err != nil {
 		t.Fatalf("create document: %v", err)
 	}
 
 	threadQuery, threadArgs := buildListThreadsQuery(ThreadListFilter{Status: "active"})
 	threadPlan := explainQueryPlan(t, workspace.DB(), threadQuery, threadArgs...)
-	assertPlanUsesIndex(t, "threads", threadPlan, "idx_snapshots_kind_status_updated_at")
+	assertPlanUsesIndex(t, "threads", threadPlan, "idx_threads_status_updated_at")
 
-	commitmentQuery, commitmentArgs := buildListCommitmentsQuery(CommitmentListFilter{
-		ThreadID:  threadID,
-		Status:    "open",
-		DueAfter:  "2026-03-01T00:00:00Z",
-		DueBefore: "2026-03-31T00:00:00Z",
-	})
-	commitmentPlan := explainQueryPlan(t, workspace.DB(), commitmentQuery, commitmentArgs...)
-	assertPlanUsesIndex(t, "commitments", commitmentPlan, "idx_snapshots_commitments_thread_status_due_updated_at")
+	cardsQuery := `SELECT id FROM cards WHERE parent_thread_id = ? AND archived_at IS NULL`
+	cardsPlan := explainQueryPlan(t, workspace.DB(), cardsQuery, threadID)
+	assertPlanUsesIndex(t, "cards", cardsPlan, "idx_cards_parent_thread_id")
 
 	artifactQuery, artifactArgs := buildListArtifactsQuery(ArtifactListFilter{
 		ThreadID: threadID,
-		Kind:     "work_order",
+		Kind:     "receipt",
 	})
 	artifactPlan := explainQueryPlan(t, workspace.DB(), artifactQuery, artifactArgs...)
-	assertPlanUsesIndex(t, "artifacts", artifactPlan, "idx_artifacts_thread_kind_tombstoned_created_at")
+	assertPlanUsesIndex(t, "artifacts", artifactPlan, "idx_artifacts_thread_kind_trashed_created_at")
 
 	documentQuery, documentArgs := buildListDocumentsQuery(DocumentListFilter{ThreadID: threadID})
 	documentPlan := explainQueryPlan(t, workspace.DB(), documentQuery, documentArgs...)
-	assertPlanUsesIndex(t, "documents", documentPlan, "idx_documents_thread_tombstoned_updated_at")
+	assertPlanUsesIndex(t, "documents", documentPlan, "idx_documents_thread_trashed_updated_at")
+}
+
+func TestBuildListThreadsQueryAddsWhereBeforeOptionalAndFilters(t *testing.T) {
+	t.Parallel()
+
+	stale := true
+	query, args := buildListThreadsQuery(ThreadListFilter{
+		IncludeArchived: true,
+		IncludeTrashed:  true,
+		Tag:             "ops",
+		Cadences:        []string{"daily"},
+		Query:           "plan",
+		Stale:           &stale,
+	})
+
+	if !strings.Contains(query, "FROM threads LEFT JOIN derived_topic_views ON derived_topic_views.thread_id = threads.id WHERE EXISTS") {
+		t.Fatalf("expected optional filters to start a WHERE clause, got query:\n%s", query)
+	}
+	if strings.Contains(query, "FROM threads LEFT JOIN derived_topic_views ON derived_topic_views.thread_id = threads.id AND") {
+		t.Fatalf("query appended AND without WHERE:\n%s", query)
+	}
+	if len(args) != 5 {
+		t.Fatalf("expected 5 query args, got %d (%#v)", len(args), args)
+	}
 }
 
 func explainQueryPlan(t *testing.T, db *sql.DB, query string, args ...any) string {

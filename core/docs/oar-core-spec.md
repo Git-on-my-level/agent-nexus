@@ -1,4 +1,4 @@
-# oar-core — Spec (v0.2.2)
+# oar-core — Spec (v0.3.0)
 
 ## 0. Purpose
 
@@ -7,8 +7,8 @@ oar-core is the canonical state and evidence system for Organization Autorunner 
 OAR is a manager and executive operating system, not a generic work-management tool. The product foundation and architecture decisions are documented in [docs/architecture/foundation.md](../../docs/architecture/foundation.md). oar-core implements the canonical runtime truth (SQLite plus a blob backend seam) and owns the institutional memory — the durable truth, the evidence trail, the coordination artifacts. It has no opinion on how actors are instantiated, orchestrated, or upgraded. An actor authenticates with an ID, reads state, does work, writes back. Whether that actor is a human, a Claude agent, an open-source agent framework, or something that doesn't exist yet is outside oar-core's scope.
 
 oar-core:
-- Maintains durable organizational state (events, snapshots, artifacts, documents, boards).
-- Stores and validates structured coordination artifacts (work orders, receipts, reviews).
+- Maintains durable organizational state (events, topics, artifacts, documents, boards, cards).
+- Stores and validates structured coordination artifacts (receipts and reviews).
 - Enforces evidence-first grounding rules on restricted state transitions.
 - Computes derived views (inbox, staleness) from canonical data.
 - Exposes a programmatic API and contract surface that CLI/generated clients can use.
@@ -24,7 +24,7 @@ oar-core does **not**:
 ## 1. Design constraints
 
 ### 1.1 Canonical vs derived
-- oar-core MUST separate **canonical truth** (events, snapshots, artifacts) from **derived views** (inbox items, staleness flags).
+- oar-core MUST separate **canonical truth** (events, topics, cards, boards, documents, artifacts) from **derived views** (inbox items, staleness flags).
 - Derived views MUST be regenerable from canonical data.
 - Canonical data MUST be replayable and auditable.
 
@@ -32,7 +32,7 @@ oar-core does **not**:
 - Any state change that closes a loop (marking "done", asserting "shipped", claiming "metric improved") MUST be grounded in a receipt artifact or an explicit decision event.
 
 ### 1.3 Small, stable primitives
-- oar-core centers on three canonical primitives. Everything else is a typed convention over those primitives.
+- oar-core centers on append-only **events**, mutable **resource** records (topics, cards, boards, documents), and **artifacts** (immutable content, including packet kinds). Backing **threads** tie timelines and many packet subjects together. Everything else is a typed convention over those building blocks.
 
 ### 1.4 Actor-agnostic
 - oar-core treats all actors as opaque IDs. It does not distinguish between humans and agents at the API or storage level. Identity metadata (display name, tags) lives in a lightweight actor registry.
@@ -46,7 +46,7 @@ oar-core does **not**:
 ## 2. Storage model
 
 ### 2.1 SQLite + blob backend seam
-- **SQLite** stores events (rows), snapshots (rows), artifact metadata (rows), documents (rows), document_revisions (rows), actor registry (rows), and derived views (rows).
+- **SQLite** stores events (rows), topics (rows), cards (rows), artifact metadata (rows), documents (rows), document_revisions (rows), actor registry (rows), and derived views (rows).
 - **Blob storage** stores artifact content. The default backend is the local filesystem; optional deployments can switch to an S3-compatible object store without changing canonical artifact/document identity, which remains content-addressed by `content_hash` and `content_type` rather than a backend-specific path.
 - Hosted deployments MUST treat blob storage as a replaceable backend seam rather than a client-visible contract.
 - Clients and agents SHOULD prefer the API, CLI, and generated clients over direct filesystem access.
@@ -54,12 +54,12 @@ oar-core does **not**:
 ### 2.2 Schema authority
 - `oar-schema.yaml` is the authoritative field/type definition shared between oar-core and oar-ui.
 - oar-core MUST enforce schema constraints on writes where specified (restricted transitions, required fields, packet validation, typed ref format).
-- **Strict enums** (e.g., `thread_status`, `commitment_status`): oar-core MUST reject unknown values.
+- **Strict enums** (e.g., `topic_status`, `card_resolution`): oar-core MUST reject unknown values.
 - **Open enums** (e.g., `event_type`, `artifact_kind`): oar-core MUST accept and store unknown values.
 - Unknown fields on any object MUST be preserved and round-tripped.
 
-### 2.3 Snapshot update semantics
-- Snapshot updates use **patch/merge** semantics: only specified fields are updated; unspecified fields (including unknown fields) are preserved unchanged.
+### 2.3 Mutable resource update semantics
+- Topic and card updates use **patch/merge** semantics: only specified fields are updated; unspecified fields (including unknown fields) are preserved unchanged.
 - **List-valued fields** (e.g., `tags`, `key_artifacts`, `links`) are **replaced wholesale** when present in a patch. Absence means no change.
 - This prevents older clients from accidentally erasing fields they don't know about.
 
@@ -78,18 +78,19 @@ A durable record that something happened or that an actor claims something happe
 
 **Fields:** per `oar-schema.yaml` → `primitives.event`
 
-**v0 event types:** `message_posted`, `work_order_created`, `receipt_added`, `review_completed`, `decision_needed`, `intervention_needed`, `decision_made`, `snapshot_updated`, `commitment_created`, `commitment_status_changed`, `exception_raised`, `inbox_item_acknowledged`
+**v0 event types:** `topic_created`, `topic_updated`, `topic_status_changed`, `topic_archived`, `topic_restored`, `topic_trashed`, `message_posted`, `receipt_added`, `review_completed`, `decision_needed`, `intervention_needed`, `decision_made`, `document_created`, `document_revised`, `document_revision_created`, `document_trashed`, `board_created`, `board_updated`, `board_card_added`, `board_card_moved`, `board_card_archived`, `board_card_trashed`, `card_created`, `card_updated`, `card_moved`, `card_archived`, `card_trashed`, `card_resolved`, `exception_raised`, `inbox_item_acknowledged`, `agent_notification_read`, `agent_notification_dismissed`
 
-### 3.2 Snapshot (mutable current state)
-The current best-known state of a durable object (thread, commitment).
+### 3.2 Mutable resources (topic/card/board/document)
+Topics, cards, boards, and documents are mutable current-state records.
 
 **Behavior:**
-- Snapshots are mutable via patch/merge (see §2.3).
-- Every mutation MUST emit a `snapshot_updated` event referencing the snapshot ID via `snapshot:<id>`. The event payload SHOULD include `changed_fields` (list of field names that changed).
+- Mutable resources are updated via patch/merge (see §2.3).
+- Resource-specific mutations MUST emit the corresponding event type and reference the resource ID using its typed prefix.
+- Topic and card updates SHOULD include `changed_fields` when the implementation can report them.
 
-**Fields:** per `oar-schema.yaml` → `primitives.snapshot`
+**Fields:** per `oar-schema.yaml` → the relevant resource schema under `resources.*`
 
-Snapshots SHOULD be small and reference larger content via artifacts.
+Mutable resources SHOULD be small and reference larger content via artifacts.
 
 ### 3.3 Artifact (immutable content)
 An immutable blob representing a specific version of content at a point in time.
@@ -97,7 +98,7 @@ An immutable blob representing a specific version of content at a point in time.
 **Behavior:**
 - Artifacts MUST be immutable. New versions are new artifacts.
 - Artifact metadata lives in SQLite. Content lives behind the blob backend and is resolved canonically by `content_hash`.
-- Artifact content is **generally opaque** to oar-core — it stores and retrieves but does not interpret. **Exception:** packet kinds (`work_order`, `receipt`, `review`) are schema-validated structured content. oar-core MUST validate their required fields, constraints, and ID consistency on write (see §5).
+- Artifact content is **generally opaque** to oar-core — it stores and retrieves but does not interpret. **Exception:** packet kinds (`receipt`, `review`) are schema-validated structured content. oar-core MUST validate their required fields, constraints, and ID consistency on write (see §5).
 - All values in `refs` MUST use typed reference strings.
 
 **Fields:** per `oar-schema.yaml` → `primitives.artifact`
@@ -108,84 +109,80 @@ An immutable blob representing a specific version of content at a point in time.
 
 These are schema conventions over the primitives, not new primitive types.
 
-### 4.1 Thread (snapshot)
+### 4.1 Topic
 The unit of ongoing context — a project, incident, relationship, process, or initiative.
 
-**Fields:** per `oar-schema.yaml` → `snapshots.thread`
+**Fields:** per `oar-schema.yaml` → `resources.topic`
 
-**Core-maintained fields:**
-- `open_commitments`: oar-core MUST automatically update this field when commitments are created, change status, or are deleted. Clients MUST NOT write this field directly; oar-core MUST reject direct writes to it.
+Topics MAY point at a backing thread through `thread_id`, but the topic is the canonical subject record.
 
-### 4.2 Commitment (snapshot)
-A trackable obligation: "we owe X by Y."
+### 4.2 Card
+A first-class board work item anchored to a board and optionally linked to a topic, backing thread, or document lineage.
 
-**Fields:** per `oar-schema.yaml` → `snapshots.commitment`
+**Fields:** per `oar-schema.yaml` → `resources.card`
 
 **Restricted transitions:**
-- `status → done` requires a typed reference to a receipt artifact (`artifact:<id>`) or a decision event (`event:<id>`).
-- `status → canceled` requires a typed reference to a decision event (`event:<id>`).
+- `resolution → done` requires a typed reference to a receipt artifact (`artifact:<id>`) or a decision event (`event:<id>`).
+- `resolution → canceled` requires a typed reference to a decision event (`event:<id>`).
 - oar-core MUST reject these transitions if the required reference is missing.
-
-When a commitment is created or its status changes, oar-core MUST update the parent thread's `open_commitments` field accordingly.
 
 ---
 
 ## 5. Artifact packet conventions (v0)
 
-Work orders, receipts, and reviews are stored as artifacts with structured content. They are the primary coordination surface — any actor can create or consume them.
+Receipts and reviews are stored as artifacts with structured content. They anchor evidence to a first-class card subject.
 
 ### 5.1 Packet validation rules
-- Packet content ID fields (`work_order_id`, `receipt_id`, `review_id`) MUST equal the enclosing artifact's `id`. oar-core MUST reject mismatches.
+- Packet content ID fields (`receipt_id`, `review_id`) MUST equal the enclosing artifact's `id`. oar-core MUST reject mismatches.
 - All required fields per the packet schema MUST be present. oar-core MUST reject packets missing required fields.
-- All packet artifacts MUST include `thread:<thread_id>` in `artifact.refs` (see reference conventions in `oar-schema.yaml`).
-- All typed ref fields in packets (e.g., `context_refs`, `outputs`, `verification_evidence`, `evidence_refs`) MUST use typed reference strings.
+- Receipt and review packets MUST use `subject_ref` of the form `card:<card_id>`; oar-core resolves that to the card’s backing thread for event placement.
+- All packet artifacts MUST include `subject_ref` in `packet` and a matching `artifact:<packet_id>` ref; additional typed refs MUST satisfy the packet-kind conventions in `oar-schema.yaml` (including the `card:<card_id>` ref and receipt linkage on reviews).
+- All typed ref fields in packets (e.g., `outputs`, `verification_evidence`, `evidence_refs`) MUST use typed reference strings.
 
-### 5.2 Work order
-A coordination artifact: "here's what needs doing and how to verify it's done." Any actor may create a work order. Any actor may pick one up.
-
-**Fields:** per `oar-schema.yaml` → `packets.work_order`
-
-Work orders MUST be self-contained: an actor picking up a work order should be able to start working without additional context beyond what is referenced.
-
-Creating a work order MUST emit a `work_order_created` event. Per reference conventions, the event `refs` MUST include `artifact:<work_order_artifact_id>`.
-
-### 5.3 Receipt
+### 5.2 Receipt
 Structured evidence that work was done.
 
 **Fields:** per `oar-schema.yaml` → `packets.receipt`
 
 **Validation:** Receipts that are primarily prose with no evidence links MUST be rejected. The `outputs` and `verification_evidence` fields MUST each contain at least one typed reference.
 
-Creating a receipt MUST emit a `receipt_added` event. Per reference conventions, the event `refs` MUST include `artifact:<receipt_artifact_id>` and `artifact:<work_order_artifact_id>`.
+Creating a receipt MUST emit a `receipt_added` event. Per reference conventions, the event `refs` MUST include `artifact:<receipt_artifact_id>` and `card:<card_id>` (matching `subject_ref`).
 
-### 5.4 Review
-A lightweight assessment of a receipt against its work order.
+### 5.3 Review
+A lightweight assessment of a receipt.
 
 **Fields:** per `oar-schema.yaml` → `packets.review`
 
-Creating a review MUST emit a `review_completed` event. Per reference conventions, the event `refs` MUST include `artifact:<review_artifact_id>`, `artifact:<receipt_artifact_id>`, and `artifact:<work_order_artifact_id>`. If the outcome is `revise`, the reviewer SHOULD create a follow-up work order.
+Creating a review MUST emit a `review_completed` event. Per reference conventions, the event `refs` MUST include `artifact:<review_artifact_id>`, `artifact:<receipt_artifact_id>`, and `card:<card_id>` (matching `subject_ref`).
 
-### 5.5 Documents (first-class lifecycle)
+### 5.4 Documents (first-class lifecycle)
 
 Documents are a first-class canonical domain with their own API and storage. A document is a long-lived lineage, not just stored text: it has a mutable head pointer for the current version and an ordered immutable revision chain for institutional memory. Documents are distinct from the generic artifact model: artifacts are immutable blobs linked only by refs, while documents provide a canonical lineage interface over those immutable revision artifacts.
 
+**Canonical document vocabulary:** The durable contract for documents is the
+schema shape in `oar-schema.yaml`: `subject_ref`, `head_revision_ref`, `state`,
+and `refs` plus standard lifecycle/provenance fields. Canonical `document.state`
+is the sole document lifecycle field and uses `active`, `archived`, or
+`trashed`. It is derived from lifecycle detail fields: `trashed_at` present ->
+`trashed`, `archived_at` present -> `archived`, otherwise `active`.
+
 **Storage model:**
-- `documents` table: document metadata, head_revision_id, tombstone fields.
+- `documents` table: document metadata, head_revision_id, trash lifecycle fields (`trashed_at`, `trashed_by`, `trash_reason`), archive lifecycle fields (`archived_at`, `archived_by`).
 - `document_revisions` table: revision_id, document_id, revision_number, prev_revision_id, artifact_id, revision_hash.
 - Each revision's content is stored in an `artifacts` row with `kind: "doc"`. Content uses content-addressable storage (SHA-256 digest).
 - Revisions form a Merkle chain: `revision_hash` incorporates content_hash, prev_revision_hash, document_id, revision_number, created_at, created_by.
 
-**API surface:** `GET /docs`, `POST /docs`, `GET /docs/{document_id}`, `PATCH /docs/{document_id}`, `GET /docs/{document_id}/history`, `GET /docs/{document_id}/revisions/{revision_id}`, `POST /docs/{document_id}/tombstone`.
+**API surface:** `GET /docs`, `POST /docs`, `GET /docs/{document_id}`, `PATCH /docs/{document_id}`, `GET /docs/{document_id}/revisions`, `GET /docs/{document_id}/revisions/{revision_id}`, `POST /docs/{document_id}/trash`, `POST /docs/{document_id}/archive`, `POST /docs/{document_id}/unarchive`, `POST /docs/{document_id}/restore`, `POST /docs/{document_id}/purge`.
 
 **Relationship to artifacts:** Document revisions use artifacts internally for content storage. The docs API is the canonical interface for document lineages; clients should not treat documents as `GET /artifacts?kind=doc`. Documents complement canonical threads/events/artifacts rather than replacing them.
 
-### 5.6 Boards (canonical organizing layers)
+### 5.5 Boards (canonical organizing layers)
 
-Boards are first-class canonical coordination resources. A board is not just UI sugar over threads: it is a durable organizational map over work with canonical board metadata plus canonical card membership over threads, and optional canonical links to document lineages.
+Boards are first-class canonical coordination resources. A board is a durable organizational map over work with canonical board metadata, canonical card membership, and optional links to topics and document lineages, all expressed through typed refs.
 
 **Canonical storage:**
-- `boards` table: durable board metadata, owners, primary thread, optional primary document, and optimistic concurrency token.
-- `board_cards` table: explicit canonical board membership over threads, including column placement, ordering token, and optional pinned document lineage.
+- `boards` table: durable board metadata, owners, primary topic ref, backing thread, and optimistic concurrency token.
+- `board_cards` table: explicit canonical board membership, including column placement, ordering token, and optional linked document ref.
 
 **Projection boundary:** `boards.workspace` may hydrate canonical backing resources and derived summaries for operator convenience, but the payload must keep those layers explicit: canonical membership/backing refs stay distinct from derived summary/freshness. Derived board scans remain rebuildable from canonical state.
 
@@ -208,7 +205,7 @@ Workspace-local Ed25519 agent auth remains unchanged in both modes.
 
 **Fields:** per `oar-schema.yaml` → `actor.registry_fields`
 
-- Actor IDs are referenced by `actor_id` on events, `updated_by` on snapshots, and `created_by` on artifacts.
+- Actor IDs are referenced by `actor_id` on events, `updated_by` on mutable resources, and `created_by` on artifacts.
 - oar-core SHOULD reject writes with an unregistered `actor_id` (to prevent typos and orphaned references).
 
 ---
@@ -222,32 +219,35 @@ aligned to that target. All write operations require an `actor_id` or an
 authenticated principal that resolves to one.
 
 ### 7.1 Read / query
-- Get thread by ID
-- List threads (filters: status, priority, tags, staleness)
-- Get thread timeline (events + referenced snapshots/artifacts, ordered by time)
-- Get snapshot by ID
-- List commitments (filters: thread, owner, status, due date range)
+- Get topic by ID
+- List topics (filters: type, status, archive/trash state, search)
+- Get topic timeline (events + referenced artifacts/cards/documents/threads, ordered by time)
+- Get topic workspace
+- Get card by ID
+- Get card timeline (events + referenced artifacts/cards/documents/threads for the card’s backing thread)
+- List cards (filters: board, topic, resolution, column)
 - Get artifact by ID (metadata + content hash)
-- List artifacts (filters: kind, thread, time range)
+- List artifacts (filters: kind, topic/thread/time range)
 - List documents, get document head, get document history, get document revision
 - Get inbox items (grouped by category, sorted by time/due date)
 - Get workspace usage summary for control-plane consumption
 
 ### 7.2 Write / mutate
 - Register actor
-- Create thread → emits `snapshot_updated` event with `snapshot:<thread_id>` in refs
-- Update thread snapshot fields (patch/merge) → emits `snapshot_updated` event (rejects writes to core-maintained fields)
-- Create commitment → emits `commitment_created` event with `snapshot:<commitment_id>` in refs, updates parent thread `open_commitments`
-- Update commitment (patch/merge) → emits `commitment_status_changed` or `snapshot_updated` event (enforces restricted transitions with typed refs), updates parent thread `open_commitments` if status changed
+- Create topic → emits `topic_created` event with `topic:<topic_id>` in refs
+- Update topic fields (patch/merge) → emits `topic_updated` or `topic_status_changed` event as applicable
+- Create card → emits `card_created` event with `card:<card_id>` and `board:<board_id>` in refs
+- Update card (patch/merge) → emits `card_updated` event
+- Move card → emits `card_moved` event
+- Resolve card → emits `card_resolved` event
 - Create artifact (metadata + content) → returns artifact ID; validates packet content for packet kinds; validates typed ref format
-- Create document, update document (new immutable revision), tombstone document
+- Create document, update document (new immutable revision), trash document
 - Append event (for messages, decisions, exceptions, acknowledgments) → validates required refs per reference conventions
 
 ### 7.3 Convenience operations
-- Create work order (validates packet + refs, creates artifact + emits `work_order_created` with required typed refs)
 - Submit receipt (validates evidence + packet + refs, creates artifact + emits `receipt_added` with required typed refs)
 - Submit review (validates packet + refs, creates artifact + emits `review_completed` with required typed refs)
-- Record decision (`decision_needed` or `decision_made` event + optional artifact)
+- Record decision (`decision_needed` or `decision_made` event + optional artifact, grounded by `thread:<thread_id>` in refs)
 - Acknowledge inbox item (emits `inbox_item_acknowledged` event with `inbox:<inbox_item_id>` in refs)
 
 ### 7.4 Derived views
@@ -278,8 +278,8 @@ The `inferred` label indicates the system generated or updated a value without d
 
 ### 8.2 Restricted updates
 The following MUST NOT be updated without a typed reference to a receipt artifact or decision event:
-- `commitment.status → done` (requires `artifact:<receipt_id>` OR `event:<decision_event_id>`)
-- `commitment.status → canceled` (requires `event:<decision_event_id>`)
+- `card.resolution → done` (requires `artifact:<receipt_id>` OR `event:<decision_event_id>`)
+- `card.resolution → canceled` (requires `event:<decision_event_id>`)
 - Any "metric improved" claim
 - Any "shipped/sent/deployed" assertion
 
@@ -287,8 +287,14 @@ oar-core MUST enforce these restrictions at the API level — reject the write i
 
 ### 8.3 Interpretive fields
 The following MAY be updated without receipts:
-- `thread.current_summary`
-- `thread.next_actions`
+- `topic.summary`
+- `topic.status` in general, except the terminal `resolved` transition called
+  out below
+
+### 8.4 Evidence-backed topic resolution
+- `topic.status -> resolved` is the evidence-backed terminal case for topic
+  status and MUST be treated as a restricted transition even though other topic
+  status changes remain interpretive by default.
 
 These fields SHOULD include provenance indicating who updated them and on what basis.
 
@@ -296,18 +302,17 @@ These fields SHOULD include provenance indicating who updated them and on what b
 
 ## 9. Staleness
 
-Threads define cadence; staleness is evaluated against cadence.
+Topics define work freshness; staleness is evaluated against topic activity and linked evidence.
 
-- `reactive`: no scheduled check-ins — thread wakes on inbound events only.
-- `cron` (5-field expression): thread is stale when `now > next_check_in_at` AND no receipt or decision event has occurred since the previous expected cron run.
-- Legacy `daily | weekly | monthly | custom` values remain accepted for compatibility and retain their historical window behavior.
+- `reactive`: no scheduled check-ins - the topic wakes on inbound events only.
+- `cron` (5-field expression): the topic is stale when `now > next_check_in_at` and no receipt or decision event has occurred since the previous expected cron run.
 
 When staleness is detected by background maintenance or a deterministic derived
 rebuild, oar-core MUST:
-- Emit an `exception_raised` event with subtype `stale_thread`.
-- Surface the thread as an inbox item with category `exception`.
+- Emit an `exception_raised` event with subtype `stale_topic`.
+- Surface the topic as an inbox item with category `stale_topic`.
 
-Read handlers MUST NOT mint stale-thread exceptions as a side effect of GET
+Read handlers MUST NOT mint stale-topic exceptions as a side effect of GET
 requests.
 
 Staleness computation SHOULD run on a regular interval (implementation-defined)
@@ -324,13 +329,15 @@ failure.
 
 oar-core MUST enforce the reference conventions defined in `oar-schema.yaml` → `reference_conventions`.
 
+**Topic vs thread for decisions:** Operators think in topics (work subjects, navigation, ownership). Decision lifecycle events (`decision_needed`, `intervention_needed`, `decision_made`) are nonetheless written on and grounded by the **backing thread** — `event.refs` MUST include `thread:<thread_id>` matching `event.thread_id`. A real `topic:<topic_id>` may appear alongside for cross-linking, but it is optional context, not the durable write anchor. Do not use `topic:<thread_id>` as a bridge for the required `thread:` ref.
+
 Key rules:
-- All ref strings MUST use typed prefixes (`artifact:`, `snapshot:`, `event:`, `thread:`, `url:`, `inbox:`). Unknown prefixes are preserved, not rejected.
+- All ref strings MUST use typed prefixes (`artifact:`, `event:`, `thread:`, `topic:`, `document:`, `board:`, `card:`, `url:`, `inbox:`). Unknown prefixes are preserved, not rejected.
 - All thread-scoped events MUST set `thread_id`.
 - Each event type has required and optional refs (see schema for full list).
-- All packet artifacts MUST include `thread:<thread_id>` in `artifact.refs`.
-- `snapshot_updated` events SHOULD include `changed_fields` in their payload.
-- `commitment_status_changed` to `done` MUST include either `artifact:<receipt_id>` or `event:<decision_event_id>` in refs (matching the restricted transition rule).
+- All packet artifacts MUST include `subject_ref` plus the required packet-kind refs in `artifact.refs`; the subject can be a topic, thread, card, board, or document as allowed by the packet schema and core resolver.
+- `topic_updated`, `topic_status_changed`, `card_updated`, `card_moved`, and `card_resolved` events SHOULD include `changed_fields` or equivalent change details in their payload when applicable.
+- `card.resolution -> done` MUST include either `artifact:<receipt_id>` or `event:<decision_event_id>` in refs (matching the restricted transition rule).
 
 oar-core SHOULD validate required refs on event creation and reject events missing them.
 
@@ -339,7 +346,7 @@ oar-core SHOULD validate required refs on event creation and reject events missi
 ## 11. Compatibility and evolution
 
 - Schemas evolve additively. Fields are added, not removed or renamed.
-- Unknown fields on any object MUST be preserved and round-tripped (enforced by patch/merge semantics on snapshots).
+- Unknown fields on any object MUST be preserved and round-tripped (enforced by patch/merge semantics on mutable resources).
 - Unknown event types and artifact kinds MUST be stored and retrievable (enforced by open enum policy).
 - Unknown ref prefixes MUST be preserved and round-tripped.
 - oar-core MUST expose a version endpoint (`/version` or equivalent) returning the `oar-schema.yaml` version so clients can adapt.

@@ -2,7 +2,9 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -10,6 +12,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"organization-autorunner-core/internal/primitives"
+	"organization-autorunner-core/internal/schedule"
 )
 
 func TestThreadsCreatePatchListAndTimeline(t *testing.T) {
@@ -18,62 +23,42 @@ func TestThreadsCreatePatchListAndTimeline(t *testing.T) {
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
-	createResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
-		"actor_id":"actor-1",
-		"thread":{
-			"title":"Incident thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p1",
-			"tags":["ops","backend"],
-			"cadence":"daily",
-			"next_check_in_at":"2020-01-01T00:00:00Z",
-			"current_summary":"Investigating issue",
-			"next_actions":["triage"],
-			"key_artifacts":["artifact:seed"],
-			"provenance":{"sources":["inferred"]},
-			"custom_unknown":"preserve_me"
+	threadID := integrationSeedThread(t, h, "actor-1", map[string]any{
+		"title":            "Incident thread",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p1",
+		"tags":             []any{"ops", "backend"},
+		"cadence":          "daily",
+		"next_check_in_at": "2020-01-01T00:00:00Z",
+		"current_summary":  "Investigating issue",
+		"next_actions":     []any{"triage"},
+		"key_artifacts":    []any{"artifact:seed"},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+		"custom_unknown":   "preserve_me",
+	})
+
+	createdThread, err := h.primitiveStore.GetThread(context.Background(), threadID)
+	if err != nil {
+		t.Fatalf("load thread after seed: %v", err)
+	}
+	if raw, exists := createdThread["open_cards"]; exists && raw != nil {
+		openCards, ok := raw.([]any)
+		if !ok || len(openCards) != 0 {
+			t.Fatalf("expected open_cards absent, null, or [], got %#v", raw)
 		}
-	}`, http.StatusCreated)
-	defer createResp.Body.Close()
-
-	var created struct {
-		Thread map[string]any `json:"thread"`
-	}
-	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
-		t.Fatalf("decode create thread response: %v", err)
-	}
-	threadID, _ := created.Thread["id"].(string)
-	if threadID == "" {
-		t.Fatal("expected created thread id")
 	}
 
-	openCommitments, ok := created.Thread["open_commitments"].([]any)
-	if !ok || len(openCommitments) != 0 {
-		t.Fatalf("expected open_commitments=[], got %#v", created.Thread["open_commitments"])
+	patchedThread := integrationPatchThread(t, h, "actor-1", threadID, map[string]any{
+		"title": "Incident thread (updated)",
+		"tags":  []any{"backend"},
+	}, nil)
+	if patchedThread["title"] != "Incident thread (updated)" {
+		t.Fatalf("unexpected patched title: %#v", patchedThread["title"])
 	}
-
-	patchResp := patchJSONExpectStatus(t, h.baseURL+"/threads/"+threadID, `{
-		"actor_id":"actor-1",
-		"patch":{
-			"title":"Incident thread (updated)",
-			"tags":["backend"]
-		}
-	}`, http.StatusOK)
-	defer patchResp.Body.Close()
-
-	var patched struct {
-		Thread map[string]any `json:"thread"`
-	}
-	if err := json.NewDecoder(patchResp.Body).Decode(&patched); err != nil {
-		t.Fatalf("decode patch thread response: %v", err)
-	}
-	if patched.Thread["title"] != "Incident thread (updated)" {
-		t.Fatalf("unexpected patched title: %#v", patched.Thread["title"])
-	}
-	tags, ok := patched.Thread["tags"].([]any)
+	tags, ok := patchedThread["tags"].([]any)
 	if !ok || len(tags) != 1 || tags[0] != "backend" {
-		t.Fatalf("unexpected patched tags: %#v", patched.Thread["tags"])
+		t.Fatalf("unexpected patched tags: %#v", patchedThread["tags"])
 	}
 
 	getResp, err := http.Get(h.baseURL + "/threads/" + threadID)
@@ -159,8 +144,8 @@ func TestThreadsCreatePatchListAndTimeline(t *testing.T) {
 
 	for _, event := range timeline.Events {
 		refs, ok := event["refs"].([]any)
-		if !ok || !containsAny(refs, "snapshot:"+threadID) {
-			t.Fatalf("timeline event missing snapshot ref: %#v", event)
+		if !ok || !containsAny(refs, "thread:"+threadID) {
+			t.Fatalf("timeline event missing thread ref: %#v", event)
 		}
 		assertActorStatementProvenance(t, event)
 	}
@@ -181,145 +166,6 @@ func TestThreadsCreatePatchListAndTimeline(t *testing.T) {
 	if len(gotFields) != len(wantFields) || gotFields[0] != wantFields[0] || gotFields[1] != wantFields[1] {
 		t.Fatalf("unexpected changed_fields: got %#v want %#v", gotFields, wantFields)
 	}
-
-	rejectResp := patchJSONExpectStatus(t, h.baseURL+"/threads/"+threadID, `{
-		"actor_id":"actor-1",
-		"patch":{"open_commitments":["c-1"]}
-	}`, http.StatusBadRequest)
-	defer rejectResp.Body.Close()
-}
-
-func TestThreadsCreateWithRequestKeyReturnsConflictForExplicitDuplicateID(t *testing.T) {
-	t.Parallel()
-
-	h := newPrimitivesTestServer(t)
-	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
-
-	postJSONExpectStatus(t, h.baseURL+"/threads", `{
-		"actor_id":"actor-1",
-		"thread":{
-			"id":"thread-explicit",
-			"title":"Existing thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p2",
-			"tags":["ops"],
-			"cadence":"daily",
-			"next_check_in_at":"2026-03-05T00:00:00Z",
-			"current_summary":"summary",
-			"next_actions":["review"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated).Body.Close()
-
-	conflictResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
-		"actor_id":"actor-1",
-		"request_key":"duplicate-explicit-id",
-		"thread":{
-			"id":"thread-explicit",
-			"title":"Conflicting duplicate thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p2",
-			"tags":["ops"],
-			"cadence":"daily",
-			"next_check_in_at":"2026-03-05T00:00:00Z",
-			"current_summary":"summary",
-			"next_actions":["review"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusConflict)
-	defer conflictResp.Body.Close()
-
-	var conflictBody struct {
-		Error struct {
-			Code string `json:"code"`
-		} `json:"error"`
-	}
-	if err := json.NewDecoder(conflictResp.Body).Decode(&conflictBody); err != nil {
-		t.Fatalf("decode conflict response: %v", err)
-	}
-	if conflictBody.Error.Code != "conflict" {
-		t.Fatalf("expected conflict code, got %#v", conflictBody.Error.Code)
-	}
-
-	getResp, err := http.Get(h.baseURL + "/threads/thread-explicit")
-	if err != nil {
-		t.Fatalf("GET /threads/{id}: %v", err)
-	}
-	defer getResp.Body.Close()
-	if getResp.StatusCode != http.StatusOK {
-		t.Fatalf("unexpected get thread status: got %d", getResp.StatusCode)
-	}
-
-	var loaded struct {
-		Thread map[string]any `json:"thread"`
-	}
-	if err := json.NewDecoder(getResp.Body).Decode(&loaded); err != nil {
-		t.Fatalf("decode get thread response: %v", err)
-	}
-	if loaded.Thread["title"] != "Existing thread" {
-		t.Fatalf("expected original thread to remain unchanged, got %#v", loaded.Thread["title"])
-	}
-}
-
-func TestCreateThreadConflictWithRequestKeyReturnsConflict(t *testing.T) {
-	t.Parallel()
-
-	h := newPrimitivesTestServer(t)
-	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
-
-	postJSONExpectStatus(t, h.baseURL+"/threads", `{
-		"actor_id":"actor-1",
-		"thread":{
-			"id":"thread-existing",
-			"title":"Existing thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p1",
-			"tags":["ops"],
-			"cadence":"daily",
-			"next_check_in_at":"2026-03-05T00:00:00Z",
-			"current_summary":"initial",
-			"next_actions":["step-1"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated).Body.Close()
-
-	conflictResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
-		"actor_id":"actor-1",
-		"request_key":"dup-explicit-thread",
-		"thread":{
-			"id":"thread-existing",
-			"title":"Existing thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p1",
-			"tags":["ops"],
-			"cadence":"daily",
-			"next_check_in_at":"2026-03-05T00:00:00Z",
-			"current_summary":"initial",
-			"next_actions":["step-1"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusConflict)
-	defer conflictResp.Body.Close()
-
-	var conflictBody struct {
-		Error struct {
-			Code string `json:"code"`
-		} `json:"error"`
-	}
-	if err := json.NewDecoder(conflictResp.Body).Decode(&conflictBody); err != nil {
-		t.Fatalf("decode conflict response: %v", err)
-	}
-	if conflictBody.Error.Code != "conflict" {
-		t.Fatalf("unexpected conflict code: %#v", conflictBody.Error.Code)
-	}
 }
 
 func TestPatchThreadIfUpdatedAtOptimisticLocking(t *testing.T) {
@@ -328,51 +174,31 @@ func TestPatchThreadIfUpdatedAtOptimisticLocking(t *testing.T) {
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
-	createResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
-		"actor_id":"actor-1",
-		"thread":{
-			"title":"Locking thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p1",
-			"tags":["ops"],
-			"cadence":"daily",
-			"next_check_in_at":"2026-03-05T00:00:00Z",
-			"current_summary":"initial",
-			"next_actions":["step-1"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated)
-	defer createResp.Body.Close()
-
-	var created struct {
-		Thread map[string]any `json:"thread"`
+	threadID := integrationSeedThread(t, h, "actor-1", map[string]any{
+		"title":            "Locking thread",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p1",
+		"tags":             []any{"ops"},
+		"cadence":          "daily",
+		"next_check_in_at": "2026-03-05T00:00:00Z",
+		"current_summary":  "initial",
+		"next_actions":     []any{"step-1"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
+	createdThread, err := h.primitiveStore.GetThread(context.Background(), threadID)
+	if err != nil {
+		t.Fatalf("load thread: %v", err)
 	}
-	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
-		t.Fatalf("decode create thread response: %v", err)
-	}
-	threadID, _ := created.Thread["id"].(string)
-	initialUpdatedAt, _ := created.Thread["updated_at"].(string)
-	if threadID == "" || initialUpdatedAt == "" {
-		t.Fatalf("expected thread id and updated_at, got id=%q updated_at=%q", threadID, initialUpdatedAt)
+	initialUpdatedAt, _ := createdThread["updated_at"].(string)
+	if initialUpdatedAt == "" {
+		t.Fatalf("expected updated_at on created thread")
 	}
 
-	matchedResp := patchJSONExpectStatus(t, h.baseURL+"/threads/"+threadID, `{
-		"actor_id":"actor-1",
-		"if_updated_at":"`+initialUpdatedAt+`",
-		"patch":{"title":"Locking thread matched"}
-	}`, http.StatusOK)
-	defer matchedResp.Body.Close()
-
-	var matched struct {
-		Thread map[string]any `json:"thread"`
-	}
-	if err := json.NewDecoder(matchedResp.Body).Decode(&matched); err != nil {
-		t.Fatalf("decode matched patch response: %v", err)
-	}
-	if matched.Thread["title"] != "Locking thread matched" {
-		t.Fatalf("unexpected matched patch title: %#v", matched.Thread["title"])
+	matched := integrationPatchThread(t, h, "actor-1", threadID, map[string]any{"title": "Locking thread matched"}, &initialUpdatedAt)
+	if matched["title"] != "Locking thread matched" {
+		t.Fatalf("unexpected matched patch title: %#v", matched["title"])
 	}
 
 	timelineBeforeResp, err := http.Get(h.baseURL + "/threads/" + threadID + "/timeline")
@@ -390,23 +216,9 @@ func TestPatchThreadIfUpdatedAtOptimisticLocking(t *testing.T) {
 		t.Fatalf("decode timeline before conflict: %v", err)
 	}
 
-	conflictResp := patchJSONExpectStatus(t, h.baseURL+"/threads/"+threadID, `{
-		"actor_id":"actor-1",
-		"if_updated_at":"`+initialUpdatedAt+`",
-		"patch":{"title":"Locking thread stale"}
-	}`, http.StatusConflict)
-	defer conflictResp.Body.Close()
-
-	var conflictBody struct {
-		Error struct {
-			Code string `json:"code"`
-		} `json:"error"`
-	}
-	if err := json.NewDecoder(conflictResp.Body).Decode(&conflictBody); err != nil {
-		t.Fatalf("decode conflict response: %v", err)
-	}
-	if conflictBody.Error.Code != "conflict" {
-		t.Fatalf("unexpected conflict code: %#v", conflictBody.Error.Code)
+	_, err = h.primitiveStore.PatchThread(context.Background(), "actor-1", threadID, map[string]any{"title": "Locking thread stale"}, &initialUpdatedAt)
+	if !errors.Is(err, primitives.ErrConflict) {
+		t.Fatalf("expected ErrConflict on stale if_updated_at, got %v", err)
 	}
 
 	timelineAfterResp, err := http.Get(h.baseURL + "/threads/" + threadID + "/timeline")
@@ -445,11 +257,7 @@ func TestPatchThreadIfUpdatedAtOptimisticLocking(t *testing.T) {
 		t.Fatalf("thread changed despite conflict: %#v", loaded.Thread["title"])
 	}
 
-	noLockResp := patchJSONExpectStatus(t, h.baseURL+"/threads/"+threadID, `{
-		"actor_id":"actor-1",
-		"patch":{"current_summary":"no lock still works"}
-	}`, http.StatusOK)
-	defer noLockResp.Body.Close()
+	integrationPatchThread(t, h, "actor-1", threadID, map[string]any{"current_summary": "no lock still works"}, nil)
 }
 
 func TestPatchThreadProvenanceRoundTrip(t *testing.T) {
@@ -458,57 +266,31 @@ func TestPatchThreadProvenanceRoundTrip(t *testing.T) {
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
-	createResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
-		"actor_id":"actor-1",
-		"thread":{
-			"title":"Provenance roundtrip thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p1",
-			"tags":["ops"],
-			"cadence":"daily",
-			"next_check_in_at":"2026-03-05T00:00:00Z",
-			"current_summary":"initial",
-			"next_actions":["step-1"],
-			"key_artifacts":[],
-			"provenance":{"sources":["actor_statement:event-create"],"notes":"created"},
-			"custom_unknown":"persist_me"
-		}
-	}`, http.StatusCreated)
-	defer createResp.Body.Close()
+	threadID := integrationSeedThread(t, h, "actor-1", map[string]any{
+		"title":            "Provenance roundtrip thread",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p1",
+		"tags":             []any{"ops"},
+		"cadence":          "daily",
+		"next_check_in_at": "2026-03-05T00:00:00Z",
+		"current_summary":  "initial",
+		"next_actions":     []any{"step-1"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"actor_statement:event-create"}, "notes": "created"},
+		"custom_unknown":   "persist_me",
+	})
 
-	var created struct {
-		Thread map[string]any `json:"thread"`
-	}
-	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
-		t.Fatalf("decode create thread response: %v", err)
-	}
-	threadID, _ := created.Thread["id"].(string)
-	if threadID == "" {
-		t.Fatal("expected thread id")
-	}
-
-	patchResp := patchJSONExpectStatus(t, h.baseURL+"/threads/"+threadID, `{
-		"actor_id":"actor-1",
-		"patch":{
-			"title":"Provenance roundtrip thread updated",
-			"provenance":{
-				"sources":["actor_statement:event-patch"],
-				"notes":"patched"
-			}
-		}
-	}`, http.StatusOK)
-	defer patchResp.Body.Close()
-
-	var patched struct {
-		Thread map[string]any `json:"thread"`
-	}
-	if err := json.NewDecoder(patchResp.Body).Decode(&patched); err != nil {
-		t.Fatalf("decode patch thread response: %v", err)
-	}
-	provenance, ok := patched.Thread["provenance"].(map[string]any)
+	patchedThread := integrationPatchThread(t, h, "actor-1", threadID, map[string]any{
+		"title": "Provenance roundtrip thread updated",
+		"provenance": map[string]any{
+			"sources": []any{"actor_statement:event-patch"},
+			"notes":   "patched",
+		},
+	}, nil)
+	provenance, ok := patchedThread["provenance"].(map[string]any)
 	if !ok {
-		t.Fatalf("expected patched thread provenance object, got %#v", patched.Thread["provenance"])
+		t.Fatalf("expected patched thread provenance object, got %#v", patchedThread["provenance"])
 	}
 	notes, _ := provenance["notes"].(string)
 	if notes != "patched" {
@@ -542,21 +324,10 @@ func TestPatchThreadProvenanceRoundTrip(t *testing.T) {
 		t.Fatalf("expected custom unknown field preserved, got %#v", loaded.Thread["custom_unknown"])
 	}
 
-	patchWithoutProvenanceResp := patchJSONExpectStatus(t, h.baseURL+"/threads/"+threadID, `{
-		"actor_id":"actor-1",
-		"patch":{"current_summary":"no provenance update"}
-	}`, http.StatusOK)
-	defer patchWithoutProvenanceResp.Body.Close()
-
-	var patchedWithoutProvenance struct {
-		Thread map[string]any `json:"thread"`
-	}
-	if err := json.NewDecoder(patchWithoutProvenanceResp.Body).Decode(&patchedWithoutProvenance); err != nil {
-		t.Fatalf("decode patch thread without provenance response: %v", err)
-	}
-	latestProvenance, ok := patchedWithoutProvenance.Thread["provenance"].(map[string]any)
+	patchedWithoutProvenance := integrationPatchThread(t, h, "actor-1", threadID, map[string]any{"current_summary": "no provenance update"}, nil)
+	latestProvenance, ok := patchedWithoutProvenance["provenance"].(map[string]any)
 	if !ok {
-		t.Fatalf("expected provenance object after patch without provenance, got %#v", patchedWithoutProvenance.Thread["provenance"])
+		t.Fatalf("expected provenance object after patch without provenance, got %#v", patchedWithoutProvenance["provenance"])
 	}
 	latestNotes, _ := latestProvenance["notes"].(string)
 	if latestNotes != "patched" {
@@ -572,42 +343,23 @@ func TestListThreadsCadenceAndMultiTagFilters(t *testing.T) {
 
 	createThread := func(title string, cadence string, tags []string) string {
 		t.Helper()
-
-		payload := map[string]any{
-			"actor_id": "actor-1",
-			"thread": map[string]any{
-				"title":            title,
-				"type":             "incident",
-				"status":           "active",
-				"priority":         "p1",
-				"tags":             tags,
-				"cadence":          cadence,
-				"next_check_in_at": "2026-03-05T00:00:00Z",
-				"current_summary":  "summary",
-				"next_actions":     []string{"step-1"},
-				"key_artifacts":    []string{},
-				"provenance":       map[string]any{"sources": []string{"inferred"}},
-			},
+		tagAny := make([]any, len(tags))
+		for i, tag := range tags {
+			tagAny[i] = tag
 		}
-		body, err := json.Marshal(payload)
-		if err != nil {
-			t.Fatalf("marshal thread create payload: %v", err)
-		}
-
-		resp := postJSONExpectStatus(t, h.baseURL+"/threads", string(body), http.StatusCreated)
-		defer resp.Body.Close()
-
-		var created struct {
-			Thread map[string]any `json:"thread"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
-			t.Fatalf("decode thread create response: %v", err)
-		}
-		threadID, _ := created.Thread["id"].(string)
-		if threadID == "" {
-			t.Fatalf("expected thread id for %s", title)
-		}
-		return threadID
+		return integrationSeedThread(t, h, "actor-1", map[string]any{
+			"title":            title,
+			"type":             "incident",
+			"status":           "active",
+			"priority":         "p1",
+			"tags":             tagAny,
+			"cadence":          cadence,
+			"next_check_in_at": "2026-03-05T00:00:00Z",
+			"current_summary":  "summary",
+			"next_actions":     []any{"step-1"},
+			"key_artifacts":    []any{},
+			"provenance":       map[string]any{"sources": []any{"inferred"}},
+		})
 	}
 
 	threadDailyOpsBackend := createThread("daily ops backend", "daily", []string{"ops", "backend"})
@@ -667,6 +419,12 @@ func TestListThreadsCadenceAndMultiTagFilters(t *testing.T) {
 	)
 
 	assertIDs(
+		listIDs(h.baseURL+"/threads?include_archived=true&include_trashed=true&tag=backend"),
+		[]string{threadCronDailyOps, threadDailyOpsBackend, threadReactiveOpsBackend, threadWeeklyBackend},
+		"tag filter with include_archived/include_trashed",
+	)
+
+	assertIDs(
 		listIDs(h.baseURL+"/threads?tag=ops&tag=backend"),
 		[]string{threadCronDailyOps, threadDailyOpsBackend, threadReactiveOpsBackend},
 		"multi tag AND filter",
@@ -715,50 +473,22 @@ func TestThreadCadenceValidationSupportsCronAndRejectsInvalidValue(t *testing.T)
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
-	validCronResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
-		"actor_id":"actor-1",
-		"thread":{
-			"title":"cron-valid-thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p1",
-			"tags":["ops"],
-			"cadence":"0 9 * * *",
-			"next_check_in_at":"2026-03-05T00:00:00Z",
-			"current_summary":"summary",
-			"next_actions":["step-1"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated)
-	validCronResp.Body.Close()
+	integrationSeedThread(t, h, "actor-1", map[string]any{
+		"title":            "cron-valid-thread",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p1",
+		"tags":             []any{"ops"},
+		"cadence":          "0 9 * * *",
+		"next_check_in_at": "2026-03-05T00:00:00Z",
+		"current_summary":  "summary",
+		"next_actions":     []any{"step-1"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
 
-	invalidResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
-		"actor_id":"actor-1",
-		"thread":{
-			"title":"invalid-cadence-thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p1",
-			"tags":["ops"],
-			"cadence":"every-day",
-			"next_check_in_at":"2026-03-05T00:00:00Z",
-			"current_summary":"summary",
-			"next_actions":["step-1"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusBadRequest)
-	defer invalidResp.Body.Close()
-
-	var payload map[string]any
-	if err := json.NewDecoder(invalidResp.Body).Decode(&payload); err != nil {
-		t.Fatalf("decode invalid thread response: %v", err)
-	}
-	errObj, _ := payload["error"].(map[string]any)
-	message, _ := errObj["message"].(string)
-	if message == "" || !strings.Contains(message, "thread.cadence") {
-		t.Fatalf("expected cadence validation error message, got %#v", payload)
+	if err := schedule.ValidateCadence("every-day"); err == nil {
+		t.Fatal("expected invalid cadence to be rejected")
 	}
 }
 
@@ -768,60 +498,19 @@ func TestThreadTimelineIncludesReferencedObjectsAndOmitsMissingRefs(t *testing.T
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
-	createThreadResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
-		"actor_id":"actor-1",
-		"thread":{
-			"title":"Timeline expansion thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p1",
-			"tags":["ops","timeline"],
-			"cadence":"daily",
-			"next_check_in_at":"2026-03-05T00:00:00Z",
-			"current_summary":"summary",
-			"next_actions":["triage"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated)
-	defer createThreadResp.Body.Close()
-
-	var createdThread struct {
-		Thread map[string]any `json:"thread"`
-	}
-	if err := json.NewDecoder(createThreadResp.Body).Decode(&createdThread); err != nil {
-		t.Fatalf("decode create thread response: %v", err)
-	}
-	threadID, _ := createdThread.Thread["id"].(string)
-	if threadID == "" {
-		t.Fatal("expected created thread id")
-	}
-
-	createCommitmentResp := postJSONExpectStatus(t, h.baseURL+"/commitments", `{
-		"actor_id":"actor-1",
-		"commitment":{
-			"thread_id":"`+threadID+`",
-			"title":"Timeline commitment",
-			"owner":"actor-1",
-			"due_at":"2026-03-08T00:00:00Z",
-			"status":"open",
-			"definition_of_done":["done"],
-			"links":["url:https://example.com/work"],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated)
-	defer createCommitmentResp.Body.Close()
-
-	var createdCommitment struct {
-		Commitment map[string]any `json:"commitment"`
-	}
-	if err := json.NewDecoder(createCommitmentResp.Body).Decode(&createdCommitment); err != nil {
-		t.Fatalf("decode create commitment response: %v", err)
-	}
-	commitmentID, _ := createdCommitment.Commitment["id"].(string)
-	if commitmentID == "" {
-		t.Fatal("expected created commitment id")
-	}
+	threadID := integrationSeedThread(t, h, "actor-1", map[string]any{
+		"title":            "Timeline expansion thread",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p1",
+		"tags":             []any{"ops", "timeline"},
+		"cadence":          "daily",
+		"next_check_in_at": "2026-03-05T00:00:00Z",
+		"current_summary":  "summary",
+		"next_actions":     []any{"triage"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
 
 	const artifactID = "timeline-artifact-1"
 	createArtifactResp := postJSONExpectStatus(t, h.baseURL+"/artifacts", `{
@@ -844,9 +533,7 @@ func TestThreadTimelineIncludesReferencedObjectsAndOmitsMissingRefs(t *testing.T
 			"thread_id":"`+threadID+`",
 			"refs":[
 				"thread:`+threadID+`",
-				"snapshot:`+commitmentID+`",
 				"artifact:`+artifactID+`",
-				"snapshot:missing-snapshot-id",
 				"artifact:missing-artifact-id"
 			],
 			"summary":"timeline ref expansion event",
@@ -867,7 +554,6 @@ func TestThreadTimelineIncludesReferencedObjectsAndOmitsMissingRefs(t *testing.T
 
 	var timeline struct {
 		Events    []map[string]any          `json:"events"`
-		Snapshots map[string]map[string]any `json:"snapshots"`
 		Artifacts map[string]map[string]any `json:"artifacts"`
 	}
 	if err := json.NewDecoder(timelineResp.Body).Decode(&timeline); err != nil {
@@ -876,19 +562,8 @@ func TestThreadTimelineIncludesReferencedObjectsAndOmitsMissingRefs(t *testing.T
 	if len(timeline.Events) == 0 {
 		t.Fatal("expected timeline events")
 	}
-	if len(timeline.Snapshots) == 0 {
-		t.Fatal("expected referenced snapshots in timeline response")
-	}
 	if len(timeline.Artifacts) == 0 {
 		t.Fatal("expected referenced artifacts in timeline response")
-	}
-
-	if snapshot, ok := timeline.Snapshots[commitmentID]; !ok {
-		t.Fatalf("expected commitment snapshot %q in timeline response, got keys=%#v", commitmentID, mapKeysMapAny(timeline.Snapshots))
-	} else {
-		if snapshot["id"] != commitmentID {
-			t.Fatalf("unexpected commitment snapshot payload: %#v", snapshot)
-		}
 	}
 
 	if artifact, ok := timeline.Artifacts[artifactID]; !ok {
@@ -899,9 +574,6 @@ func TestThreadTimelineIncludesReferencedObjectsAndOmitsMissingRefs(t *testing.T
 		}
 	}
 
-	if _, exists := timeline.Snapshots["missing-snapshot-id"]; exists {
-		t.Fatalf("did not expect missing snapshot to be expanded: %#v", timeline.Snapshots["missing-snapshot-id"])
-	}
 	if _, exists := timeline.Artifacts["missing-artifact-id"]; exists {
 		t.Fatalf("did not expect missing artifact to be expanded: %#v", timeline.Artifacts["missing-artifact-id"])
 	}
@@ -913,34 +585,19 @@ func TestThreadTimelineIncludesDocumentLifecycleEventsAndExpansions(t *testing.T
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
-	createThreadResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
-		"actor_id":"actor-1",
-		"thread":{
-			"title":"Document lifecycle thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p1",
-			"tags":["docs"],
-			"cadence":"daily",
-			"next_check_in_at":"2030-01-01T00:00:00Z",
-			"current_summary":"Track document lifecycle",
-			"next_actions":["Verify timeline output"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated)
-	defer createThreadResp.Body.Close()
-
-	var threadPayload struct {
-		Thread map[string]any `json:"thread"`
-	}
-	if err := json.NewDecoder(createThreadResp.Body).Decode(&threadPayload); err != nil {
-		t.Fatalf("decode create thread response: %v", err)
-	}
-	threadID := asString(threadPayload.Thread["id"])
-	if threadID == "" {
-		t.Fatal("expected created thread id")
-	}
+	threadID := integrationSeedThread(t, h, "actor-1", map[string]any{
+		"title":            "Document lifecycle thread",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p1",
+		"tags":             []any{"docs"},
+		"cadence":          "daily",
+		"next_check_in_at": "2030-01-01T00:00:00Z",
+		"current_summary":  "Track document lifecycle",
+		"next_actions":     []any{"Verify timeline output"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
 
 	createDocResp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
 		"actor_id":"actor-1",
@@ -964,13 +621,13 @@ func TestThreadTimelineIncludesDocumentLifecycleEventsAndExpansions(t *testing.T
 		t.Fatalf("expected document lifecycle ids, got document=%#v revision=%#v", createdDoc.Document, createdDoc.Revision)
 	}
 
-	updateDocResp := patchJSONExpectStatus(t, h.baseURL+"/docs/"+documentID, `{
+	updateDocResp := postJSONExpectStatus(t, h.baseURL+"/docs/"+documentID+"/revisions", `{
 		"actor_id":"actor-1",
 		"document":{"title":"Timeline Document v2"},
 		"if_base_revision":"`+createRevisionID+`",
 		"content":"draft v2",
 		"content_type":"text"
-	}`, http.StatusOK)
+	}`, http.StatusCreated)
 	defer updateDocResp.Body.Close()
 
 	var updatedDoc struct {
@@ -986,11 +643,11 @@ func TestThreadTimelineIncludesDocumentLifecycleEventsAndExpansions(t *testing.T
 		t.Fatalf("expected updated revision ids, got %#v", updatedDoc.Revision)
 	}
 
-	tombstoneResp := postJSONExpectStatus(t, h.baseURL+"/docs/"+documentID+"/tombstone", `{
+	trashResp := postJSONExpectStatus(t, h.baseURL+"/docs/"+documentID+"/trash", `{
 		"actor_id":"actor-1",
 		"reason":"superseded by final document"
 	}`, http.StatusOK)
-	defer tombstoneResp.Body.Close()
+	defer trashResp.Body.Close()
 
 	timelineResp, err := http.Get(h.baseURL + "/threads/" + threadID + "/timeline")
 	if err != nil {
@@ -1003,7 +660,6 @@ func TestThreadTimelineIncludesDocumentLifecycleEventsAndExpansions(t *testing.T
 
 	var timeline struct {
 		Events            []map[string]any          `json:"events"`
-		Snapshots         map[string]map[string]any `json:"snapshots"`
 		Artifacts         map[string]map[string]any `json:"artifacts"`
 		Documents         map[string]map[string]any `json:"documents"`
 		DocumentRevisions map[string]map[string]any `json:"document_revisions"`
@@ -1012,29 +668,29 @@ func TestThreadTimelineIncludesDocumentLifecycleEventsAndExpansions(t *testing.T
 		t.Fatalf("decode timeline response: %v", err)
 	}
 
-	var createdEvent, updatedEvent, tombstonedEvent map[string]any
+	var createdEvent, updatedEvent, trashedEvent map[string]any
 	for _, event := range timeline.Events {
 		switch asString(event["type"]) {
 		case "document_created":
 			createdEvent = event
 		case "document_updated":
 			updatedEvent = event
-		case "document_tombstoned":
-			tombstonedEvent = event
+		case "document_trashed":
+			trashedEvent = event
 		}
 	}
-	if createdEvent == nil || updatedEvent == nil || tombstonedEvent == nil {
+	if createdEvent == nil || updatedEvent == nil || trashedEvent == nil {
 		t.Fatalf("expected document lifecycle events in timeline, got %#v", timeline.Events)
 	}
 
 	assertDocLifecycleEventRefs(t, createdEvent, threadID, documentID, createRevisionID, createArtifactID)
 	assertDocLifecycleEventRefs(t, updatedEvent, threadID, documentID, updateRevisionID, updateArtifactID)
-	assertDocLifecycleEventRefs(t, tombstonedEvent, threadID, documentID, updateRevisionID, updateArtifactID)
+	assertDocLifecycleEventRefs(t, trashedEvent, threadID, documentID, updateRevisionID, updateArtifactID)
 
 	if doc, ok := timeline.Documents[documentID]; !ok {
 		t.Fatalf("expected document %q in timeline documents, got keys=%#v", documentID, mapKeysMapAny(timeline.Documents))
-	} else if doc["tombstoned_at"] == nil {
-		t.Fatalf("expected tombstoned document metadata in timeline documents, got %#v", doc)
+	} else if doc["trashed_at"] == nil {
+		t.Fatalf("expected trashed document metadata in timeline documents, got %#v", doc)
 	}
 
 	if revision, ok := timeline.DocumentRevisions[createRevisionID]; !ok {
@@ -1049,40 +705,25 @@ func TestThreadTimelineIncludesDocumentLifecycleEventsAndExpansions(t *testing.T
 	}
 }
 
-func TestThreadContextBundlesRecentEventsArtifactsAndOpenCommitments(t *testing.T) {
+func TestThreadContextBundlesRecentEventsArtifactsAndOpenCards(t *testing.T) {
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
-	createThreadResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
-		"actor_id":"actor-1",
-		"thread":{
-			"title":"Context bundle thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p1",
-			"tags":["ops","context"],
-			"cadence":"daily",
-			"next_check_in_at":"2026-03-05T00:00:00Z",
-			"current_summary":"summary",
-			"next_actions":["triage"],
-			"key_artifacts":["artifact:ctx-artifact-1"],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated)
-	defer createThreadResp.Body.Close()
-
-	var createdThread struct {
-		Thread map[string]any `json:"thread"`
-	}
-	if err := json.NewDecoder(createThreadResp.Body).Decode(&createdThread); err != nil {
-		t.Fatalf("decode create thread response: %v", err)
-	}
-	threadID, _ := createdThread.Thread["id"].(string)
-	if threadID == "" {
-		t.Fatal("expected created thread id")
-	}
+	threadID := integrationSeedThread(t, h, "actor-1", map[string]any{
+		"title":            "Context bundle thread",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p1",
+		"tags":             []any{"ops", "context"},
+		"cadence":          "daily",
+		"next_check_in_at": "2026-03-05T00:00:00Z",
+		"current_summary":  "summary",
+		"next_actions":     []any{"triage"},
+		"key_artifacts":    []any{"artifact:ctx-artifact-1"},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
 
 	contentBody := strings.Repeat("A", 620)
 	createArtifactResp := postJSONExpectStatus(t, h.baseURL+"/artifacts", `{
@@ -1100,38 +741,11 @@ func TestThreadContextBundlesRecentEventsArtifactsAndOpenCommitments(t *testing.
 
 	createDocumentResp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
 		"actor_id":"actor-1",
-		"document":{"id":"ctx-doc-1","title":"Context runbook","status":"active","labels":["ops"]},
-		"refs":["thread:`+threadID+`"],
+		"document":{"id":"ctx-doc-1","thread_id":"`+threadID+`","title":"Context runbook","labels":["ops"]},
 		"content":"# Context runbook",
 		"content_type":"text"
 	}`, http.StatusCreated)
 	defer createDocumentResp.Body.Close()
-
-	createCommitmentResp := postJSONExpectStatus(t, h.baseURL+"/commitments", `{
-		"actor_id":"actor-1",
-		"commitment":{
-			"thread_id":"`+threadID+`",
-			"title":"Context commitment",
-			"owner":"actor-1",
-			"due_at":"2026-03-08T00:00:00Z",
-			"status":"open",
-			"definition_of_done":["done"],
-			"links":["url:https://example.com/work"],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated)
-	defer createCommitmentResp.Body.Close()
-
-	var createdCommitment struct {
-		Commitment map[string]any `json:"commitment"`
-	}
-	if err := json.NewDecoder(createCommitmentResp.Body).Decode(&createdCommitment); err != nil {
-		t.Fatalf("decode create commitment response: %v", err)
-	}
-	commitmentID, _ := createdCommitment.Commitment["id"].(string)
-	if commitmentID == "" {
-		t.Fatal("expected created commitment id")
-	}
 
 	postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-1",
@@ -1167,11 +781,11 @@ func TestThreadContextBundlesRecentEventsArtifactsAndOpenCommitments(t *testing.
 	}
 
 	var payload struct {
-		Thread          map[string]any   `json:"thread"`
-		RecentEvents    []map[string]any `json:"recent_events"`
-		KeyArtifacts    []map[string]any `json:"key_artifacts"`
-		OpenCommitments []map[string]any `json:"open_commitments"`
-		Documents       []map[string]any `json:"documents"`
+		Thread       map[string]any   `json:"thread"`
+		RecentEvents []map[string]any `json:"recent_events"`
+		KeyArtifacts []map[string]any `json:"key_artifacts"`
+		OpenCards    []map[string]any `json:"open_cards"`
+		Documents    []map[string]any `json:"documents"`
 	}
 	if err := json.NewDecoder(contextResp.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode context response: %v", err)
@@ -1202,8 +816,8 @@ func TestThreadContextBundlesRecentEventsArtifactsAndOpenCommitments(t *testing.
 		t.Fatalf("expected preview length 500, got %d", len(preview))
 	}
 
-	if len(payload.OpenCommitments) != 1 || asString(payload.OpenCommitments[0]["id"]) != commitmentID {
-		t.Fatalf("unexpected open commitments payload: %#v", payload.OpenCommitments)
+	if len(payload.OpenCards) != 0 {
+		t.Fatalf("expected empty open_cards in context payload, got %#v", payload.OpenCards)
 	}
 	if len(payload.Documents) != 1 {
 		t.Fatalf("expected 1 thread document, got %#v", payload.Documents)
@@ -1266,6 +880,22 @@ func TestThreadContextRejectsInvalidQueryParams(t *testing.T) {
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+	integrationSeedThread(t, h, "actor-1", map[string]any{
+		"id":               "thread-1",
+		"title":            "Invalid query params thread",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p1",
+		"tags":             []any{"ops"},
+		"cadence":          "daily",
+		"next_check_in_at": "2026-03-05T00:00:00Z",
+		"current_summary":  "summary",
+		"next_actions":     []any{"triage"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
+
 	resp, err := http.Get(h.baseURL + "/threads/thread-1/context?max_events=abc")
 	if err != nil {
 		t.Fatalf("GET /threads/{id}/context with invalid max_events: %v", err)
@@ -1291,61 +921,33 @@ func TestThreadWorkspaceBundlesCanonicalAndDerivedSections(t *testing.T) {
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
-	createThread := func(payload string) map[string]any {
-		t.Helper()
-		resp := postJSONExpectStatus(t, h.baseURL+"/threads", payload, http.StatusCreated)
-		defer resp.Body.Close()
+	rootThreadID := integrationSeedThread(t, h, "actor-1", map[string]any{
+		"title":            "Workspace root",
+		"type":             "initiative",
+		"status":           "active",
+		"priority":         "p1",
+		"tags":             []any{"ops", "workspace"},
+		"cadence":          "daily",
+		"next_check_in_at": "2026-03-05T00:00:00Z",
+		"current_summary":  "summary",
+		"next_actions":     []any{"triage"},
+		"key_artifacts":    []any{"artifact:workspace-artifact-1"},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
 
-		var created struct {
-			Thread map[string]any `json:"thread"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
-			t.Fatalf("decode create thread response: %v", err)
-		}
-		return created.Thread
-	}
-
-	rootThread := createThread(`{
-		"actor_id":"actor-1",
-		"thread":{
-			"title":"Workspace root",
-			"type":"initiative",
-			"status":"active",
-			"priority":"p1",
-			"tags":["ops","workspace"],
-			"cadence":"daily",
-			"next_check_in_at":"2026-03-05T00:00:00Z",
-			"current_summary":"summary",
-			"next_actions":["triage"],
-			"key_artifacts":["artifact:workspace-artifact-1"],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`)
-	rootThreadID := asString(rootThread["id"])
-	if rootThreadID == "" {
-		t.Fatal("expected root thread id")
-	}
-
-	relatedThread := createThread(`{
-		"actor_id":"actor-1",
-		"thread":{
-			"title":"Workspace related",
-			"type":"case",
-			"status":"active",
-			"priority":"p2",
-			"tags":["ops","related"],
-			"cadence":"weekly",
-			"next_check_in_at":"2026-03-06T00:00:00Z",
-			"current_summary":"related summary",
-			"next_actions":["follow-up"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`)
-	relatedThreadID := asString(relatedThread["id"])
-	if relatedThreadID == "" {
-		t.Fatal("expected related thread id")
-	}
+	relatedThreadID := integrationSeedThread(t, h, "actor-1", map[string]any{
+		"title":            "Workspace related",
+		"type":             "case",
+		"status":           "active",
+		"priority":         "p2",
+		"tags":             []any{"ops", "related"},
+		"cadence":          "weekly",
+		"next_check_in_at": "2026-03-06T00:00:00Z",
+		"current_summary":  "related summary",
+		"next_actions":     []any{"follow-up"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
 
 	postJSONExpectStatus(t, h.baseURL+"/artifacts", `{
 		"actor_id":"actor-1",
@@ -1361,26 +963,11 @@ func TestThreadWorkspaceBundlesCanonicalAndDerivedSections(t *testing.T) {
 
 	postJSONExpectStatus(t, h.baseURL+"/docs", `{
 		"actor_id":"actor-1",
-		"document":{"id":"workspace-doc-1","thread_id":"`+rootThreadID+`","title":"Workspace runbook","status":"active","labels":["ops"]},
+		"document":{"id":"workspace-doc-1","thread_id":"`+rootThreadID+`","title":"Workspace runbook","labels":["ops"]},
 		"refs":["thread:`+rootThreadID+`"],
 		"content":"# Workspace runbook",
 		"content_type":"text"
 	}`, http.StatusCreated).Body.Close()
-
-	createCommitmentResp := postJSONExpectStatus(t, h.baseURL+"/commitments", `{
-		"actor_id":"actor-1",
-		"commitment":{
-			"thread_id":"`+rootThreadID+`",
-			"title":"Coordinate related work",
-			"owner":"actor-1",
-			"due_at":"2026-03-08T00:00:00Z",
-			"status":"open",
-			"definition_of_done":["done"],
-			"links":["thread:`+relatedThreadID+`"],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated)
-	createCommitmentResp.Body.Close()
 
 	postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-1",
@@ -1418,6 +1005,8 @@ func TestThreadWorkspaceBundlesCanonicalAndDerivedSections(t *testing.T) {
 		}
 	}`, http.StatusCreated).Body.Close()
 
+	postJSONExpectStatus(t, h.baseURL+"/derived/rebuild", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
+
 	resp, err := http.Get(h.baseURL + "/threads/" + rootThreadID + "/workspace?include_artifact_content=true&include_related_event_content=true")
 	if err != nil {
 		t.Fatalf("GET /threads/{id}/workspace: %v", err)
@@ -1431,10 +1020,10 @@ func TestThreadWorkspaceBundlesCanonicalAndDerivedSections(t *testing.T) {
 		ThreadID string         `json:"thread_id"`
 		Thread   map[string]any `json:"thread"`
 		Context  struct {
-			RecentEvents    []map[string]any `json:"recent_events"`
-			KeyArtifacts    []map[string]any `json:"key_artifacts"`
-			OpenCommitments []map[string]any `json:"open_commitments"`
-			Documents       []map[string]any `json:"documents"`
+			RecentEvents []map[string]any `json:"recent_events"`
+			KeyArtifacts []map[string]any `json:"key_artifacts"`
+			OpenCards    []map[string]any `json:"open_cards"`
+			Documents    []map[string]any `json:"documents"`
 		} `json:"context"`
 		Collaboration struct {
 			Recommendations  []map[string]any `json:"recommendations"`
@@ -1471,8 +1060,8 @@ func TestThreadWorkspaceBundlesCanonicalAndDerivedSections(t *testing.T) {
 	if len(payload.Context.KeyArtifacts) != 1 || asString(payload.Context.KeyArtifacts[0]["ref"]) != "artifact:workspace-artifact-1" {
 		t.Fatalf("expected key artifact in workspace context, got %#v", payload.Context.KeyArtifacts)
 	}
-	if len(payload.Context.OpenCommitments) != 1 {
-		t.Fatalf("expected one open commitment in workspace context, got %#v", payload.Context.OpenCommitments)
+	if len(payload.Context.OpenCards) != 0 {
+		t.Fatalf("expected empty open_cards in workspace context, got %#v", payload.Context.OpenCards)
 	}
 	if len(payload.Context.Documents) != 1 || asString(payload.Context.Documents[0]["id"]) != "workspace-doc-1" {
 		t.Fatalf("expected workspace document in context, got %#v", payload.Context.Documents)
@@ -1480,8 +1069,8 @@ func TestThreadWorkspaceBundlesCanonicalAndDerivedSections(t *testing.T) {
 	if len(payload.Collaboration.Recommendations) != 1 || len(payload.Collaboration.DecisionRequests) != 1 {
 		t.Fatalf("expected collaboration summary to include recommendation and decision request, got %#v", payload.Collaboration)
 	}
-	if payload.Inbox.Count != 2 || payload.PendingDecisions.Count != 1 {
-		t.Fatalf("expected inbox count=2 and pending decisions count=1, got inbox=%#v pending=%#v", payload.Inbox, payload.PendingDecisions)
+	if payload.Inbox.Count != 1 || payload.PendingDecisions.Count != 1 {
+		t.Fatalf("expected inbox count=1 and pending decisions count=1, got inbox=%#v pending=%#v", payload.Inbox, payload.PendingDecisions)
 	}
 	if payload.RelatedThreads.Count != 1 || payload.RelatedRecommendations.Count != 1 {
 		t.Fatalf("expected related thread review sections, got related_threads=%#v related_recommendations=%#v", payload.RelatedThreads, payload.RelatedRecommendations)

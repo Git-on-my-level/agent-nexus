@@ -13,6 +13,7 @@
   import RefLink from "$lib/components/RefLink.svelte";
   import { buildReviewPayload } from "$lib/reviewUtils";
   import { toTimelineView } from "$lib/timelineUtils";
+  import { topicDetailPathFromRef } from "$lib/topicRouteUtils";
   import { parseRef } from "$lib/typedRefs";
   import {
     lookupActorDisplayName,
@@ -20,11 +21,7 @@
     principalRegistry,
   } from "$lib/actorSession";
 
-  const KNOWN_PACKET_ARTIFACT_KINDS = new Set([
-    "work_order",
-    "receipt",
-    "review",
-  ]);
+  const KNOWN_PACKET_ARTIFACT_KINDS = new Set(["receipt", "review"]);
 
   let artifactId = $derived($page.params.artifactId);
   let workspaceSlug = $derived($page.params.workspace);
@@ -69,14 +66,27 @@
       ? artifactContent
       : null,
   );
-  let workOrderPacket = $derived(
-    artifact?.kind === "work_order" &&
-      artifactContentType.includes("application/json") &&
-      artifactContent &&
-      typeof artifactContent === "object" &&
-      !Array.isArray(artifactContent)
-      ? artifactContent
-      : null,
+  let artifactTopicRef = $derived.by(() => {
+    const candidates = [
+      String(receiptPacket?.subject_ref ?? "").trim(),
+      ...((artifact?.refs ?? []).map((ref) => String(ref ?? "").trim()) ?? []),
+    ];
+    return (
+      candidates.find((refValue) => {
+        const parsed = parseRef(refValue);
+        return (
+          (parsed.prefix === "topic" || parsed.prefix === "thread") &&
+          String(parsed.value ?? "").trim()
+        );
+      }) ?? ""
+    );
+  });
+  let artifactTopicHref = $derived(
+    artifactTopicRef ? topicDetailPathFromRef(artifactTopicRef) : "",
+  );
+  let artifactTopicLabel = $derived(
+    String(parseRef(artifactTopicRef).value ?? "").trim() ||
+      String(artifact?.thread_id ?? "").trim(),
   );
   let reviewPacket = $derived(
     artifact?.kind === "review" &&
@@ -105,6 +115,14 @@
   let artifactRefHints = $derived(buildArtifactRefHints());
   let reviewEvidenceSuggestions = $derived(
     buildRefSuggestions([
+      String(receiptPacket?.subject_ref ?? "")
+        .trim()
+        .startsWith("card:")
+        ? {
+            value: String(receiptPacket.subject_ref).trim(),
+            label: `Card · ${String(receiptPacket.subject_ref).trim()}`,
+          }
+        : null,
       receiptPacket?.receipt_id
         ? {
             value: `artifact:${receiptPacket.receipt_id}`,
@@ -116,12 +134,6 @@
               label: `Receipt · ${artifact.id}`,
             }
           : null,
-      receiptPacket?.work_order_id
-        ? {
-            value: `artifact:${receiptPacket.work_order_id}`,
-            label: `Work order · ${receiptPacket.work_order_id}`,
-          }
-        : null,
       ...(receiptPacket?.verification_evidence ?? []).map((refValue) => ({
         value: refValue,
         label: `Receipt evidence · ${refValue}`,
@@ -145,7 +157,7 @@
     reviewDraft?.outcome === "accept"
       ? "Accept records that this receipt is sufficient and closes review without follow-up."
       : reviewDraft?.outcome === "revise"
-        ? "Revise records that more work is required. You can open a follow-up work order after."
+        ? "Revise records that more work is required on the card before another receipt."
         : reviewDraft?.outcome === "escalate"
           ? "Escalate marks this as requiring higher-level intervention."
           : "",
@@ -199,21 +211,15 @@
     hints[`artifact:${artifact.id}`] =
       `This ${kindLabel(artifact.kind).toLowerCase()}`;
     if (artifact.thread_id)
-      hints[`thread:${artifact.thread_id}`] = "Related thread";
-    if (workOrderPacket?.work_order_id)
-      hints[`artifact:${workOrderPacket.work_order_id}`] = "Work order";
+      hints[`thread:${artifact.thread_id}`] = "Thread (timeline)";
     if (receiptPacket?.receipt_id)
       hints[`artifact:${receiptPacket.receipt_id}`] = "Receipt";
     else if (artifact.kind === "receipt")
       hints[`artifact:${artifact.id}`] = "Receipt";
-    if (receiptPacket?.work_order_id)
-      hints[`artifact:${receiptPacket.work_order_id}`] = "Work order";
     if (reviewPacket?.review_id)
       hints[`artifact:${reviewPacket.review_id}`] = "Review";
     if (reviewPacket?.receipt_id)
       hints[`artifact:${reviewPacket.receipt_id}`] = "Reviewed receipt";
-    if (reviewPacket?.work_order_id)
-      hints[`artifact:${reviewPacket.work_order_id}`] = "Related work order";
     timelineView.slice(0, 30).forEach((event) => {
       hints[`event:${event.id}`] =
         `${event.typeLabel}: ${truncateLabel(event.summary, 52)}`;
@@ -248,10 +254,17 @@
     reviseFollowupLink = "";
     submittingReview = true;
     const reviewId = generateReviewId();
+    const subjectRef =
+      String(receiptPacket?.subject_ref ?? "").trim() ||
+      (() => {
+        const first = (artifact.refs ?? []).find((r) =>
+          /^(topic|thread|card):/.test(String(r)),
+        );
+        return first ? String(first).trim() : "";
+      })();
     const payload = buildReviewPayload(reviewDraft, {
-      threadId: artifact.thread_id,
+      subjectRef,
       receiptId: artifact.id,
-      workOrderId: receiptPacket.work_order_id,
       reviewId,
     });
     if (!payload.valid) {
@@ -270,13 +283,9 @@
       reviewFieldErrors = {};
       reviewDraft = blankReviewDraft();
       if (payload.packet.outcome === "revise") {
-        const params = new URLSearchParams();
-        params.set("compose", "work-order");
-        params.append("context_ref", `artifact:${artifact.id}`);
-        params.append("context_ref", `artifact:${receiptPacket.work_order_id}`);
-        reviseFollowupLink = workspaceHref(
-          `/threads/${encodeURIComponent(artifact.thread_id)}?${params.toString()}#work-order-composer`,
-        );
+        reviseFollowupLink = artifactTopicHref
+          ? workspaceHref(artifactTopicHref)
+          : "";
       }
       await loadThreadTimeline(artifact.thread_id);
     } catch (e) {
@@ -352,7 +361,7 @@
   }
 
   async function handleArchiveArtifact() {
-    if (!artifact?.id || lifecycleBusy || artifact.tombstoned_at) return;
+    if (!artifact?.id || lifecycleBusy || artifact.trashed_at) return;
     lifecycleBusy = true;
     try {
       await coreClient.archiveArtifact(artifact.id, {});
@@ -364,7 +373,7 @@
 
   async function handleUnarchiveArtifact() {
     confirmModal = { open: false, action: "" };
-    if (!artifact?.id || lifecycleBusy || artifact.tombstoned_at) return;
+    if (!artifact?.id || lifecycleBusy || artifact.trashed_at) return;
     lifecycleBusy = true;
     try {
       await coreClient.unarchiveArtifact(artifact.id, {});
@@ -378,14 +387,14 @@
     const action = confirmModal.action;
     confirmModal = { open: false, action: "" };
     if (action === "archive") handleArchiveArtifact();
-    else if (action === "trash") handleTombstoneArtifact();
+    else if (action === "trash") handleTrashArtifact();
   }
 
-  async function handleTombstoneArtifact() {
+  async function handleTrashArtifact() {
     if (!artifact?.id || lifecycleBusy) return;
     lifecycleBusy = true;
     try {
-      await coreClient.tombstoneArtifact(artifact.id, {});
+      await coreClient.trashArtifact(artifact.id, {});
       await goto(workspaceHref("/artifacts"));
     } finally {
       lifecycleBusy = false;
@@ -445,24 +454,24 @@
     {loadError}
   </div>
 {:else if artifact}
-  {#if artifact?.tombstoned_at}
+  {#if artifact?.trashed_at}
     <div
-      class="tombstone-banner mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[13px] text-red-400"
+      class="trash-banner mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[13px] text-red-400"
     >
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2 font-semibold">
           <span>⚠</span>
-          <span>This artifact has been tombstoned</span>
+          <span>This artifact is in trash</span>
         </div>
-        {#if artifact.tombstone_reason}
-          <p class="mt-2">Reason: {artifact.tombstone_reason}</p>
+        {#if artifact.trash_reason}
+          <p class="mt-2">Reason: {artifact.trash_reason}</p>
         {/if}
         <p class="mt-1 text-[11px] text-red-400/80">
-          Tombstoned {#if artifact.tombstoned_by}by {actorName(
-              artifact.tombstoned_by,
+          Trashed {#if artifact.trashed_by}by {actorName(
+              artifact.trashed_by,
             )}{/if}
-          {#if artifact.tombstoned_at}
-            {formatTimestamp(artifact.tombstoned_at)}
+          {#if artifact.trashed_at}
+            {formatTimestamp(artifact.trashed_at)}
           {/if}
         </p>
       </div>
@@ -506,7 +515,7 @@
           {kindDescription(artifact.kind)}
         </p>
       </div>
-      {#if !artifact.tombstoned_at}
+      {#if !artifact.trashed_at}
         <div class="flex shrink-0 items-center gap-1.5">
           {#if !artifact.archived_at}
             <button
@@ -564,16 +573,14 @@
         >by {actorName(artifact.created_by)}</span
       >
     </div>
-    {#if artifact.thread_id}
+    {#if artifact.thread_id && artifactTopicHref}
       <div class="mt-1.5 text-[12px] text-[var(--ui-text-muted)]">
-        <span class="text-[var(--ui-text-subtle)]">Thread</span>
+        <span class="text-[var(--ui-text-muted)]">Topic</span>
         <a
           class="ml-1 text-indigo-400 transition-colors hover:text-indigo-300"
-          href={workspaceHref(
-            `/threads/${encodeURIComponent(artifact.thread_id)}`,
-          )}
+          href={workspaceHref(artifactTopicHref)}
         >
-          {artifact.thread_id}
+          {artifactTopicLabel}
         </a>
       </div>
     {/if}
@@ -592,7 +599,7 @@
       >
       <div class="px-4 pb-3 pt-1">
         <p
-          class="text-[11px] uppercase tracking-[0.12em] text-[var(--ui-text-subtle)]"
+          class="text-[11px] uppercase tracking-[0.12em] text-[var(--ui-text-muted)]"
         >
           Content hash
         </p>
@@ -645,82 +652,6 @@
     </div>
   {/if}
 
-  {#if workOrderPacket}
-    <div
-      class="mt-4 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)]"
-    >
-      <div class="border-b border-[var(--ui-border)] px-4 py-2.5">
-        <h2 class="text-[13px] font-medium text-[var(--ui-text)]">
-          Work Order
-        </h2>
-      </div>
-      <div class="px-4 py-3 text-[13px] text-[var(--ui-text)]">
-        <p class="font-medium">{workOrderPacket.objective || "No objective"}</p>
-        {#if (workOrderPacket.constraints ?? []).length > 0}
-          <div class="mt-3">
-            <p class="text-[11px] font-medium text-[var(--ui-text-muted)]">
-              Constraints
-            </p>
-            <ul class="mt-1 space-y-0.5">
-              {#each workOrderPacket.constraints as c}
-                <li class="flex items-start gap-2">
-                  <span class="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-gray-300"
-                  ></span>{c}
-                </li>
-              {/each}
-            </ul>
-          </div>
-        {/if}
-        {#if (workOrderPacket.context_refs ?? []).length > 0}
-          <div class="mt-3">
-            <p class="text-[11px] font-medium text-[var(--ui-text-muted)]">
-              Context
-            </p>
-            <div class="mt-1 flex flex-wrap gap-1.5 text-[11px]">
-              {#each workOrderPacket.context_refs as r}<RefLink
-                  humanize
-                  labelHints={artifactRefHints}
-                  refValue={r}
-                  showRaw
-                  threadId={workOrderPacket.thread_id}
-                />{/each}
-            </div>
-          </div>
-        {/if}
-        {#if (workOrderPacket.acceptance_criteria ?? []).length > 0}
-          <div class="mt-3">
-            <p class="text-[11px] font-medium text-[var(--ui-text-muted)]">
-              Acceptance criteria
-            </p>
-            <ul class="mt-1 space-y-0.5">
-              {#each workOrderPacket.acceptance_criteria as c}
-                <li class="flex items-start gap-2">
-                  <span class="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-gray-300"
-                  ></span>{c}
-                </li>
-              {/each}
-            </ul>
-          </div>
-        {/if}
-        {#if (workOrderPacket.definition_of_done ?? []).length > 0}
-          <div class="mt-3">
-            <p class="text-[11px] font-medium text-[var(--ui-text-muted)]">
-              Definition of done
-            </p>
-            <ul class="mt-1 space-y-0.5">
-              {#each workOrderPacket.definition_of_done as d}
-                <li class="flex items-start gap-2">
-                  <span class="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-gray-300"
-                  ></span>{d}
-                </li>
-              {/each}
-            </ul>
-          </div>
-        {/if}
-      </div>
-    </div>
-  {/if}
-
   {#if receiptPacket}
     <div
       class="mt-4 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)]"
@@ -733,20 +664,13 @@
           class="flex flex-wrap gap-3 text-[12px] text-[var(--ui-text-muted)]"
         >
           <span class="flex items-center gap-1"
-            >Work order: <RefLink
-              humanize
-              labelHints={artifactRefHints}
-              refValue={`artifact:${receiptPacket.work_order_id}`}
-              showRaw
-            /></span
-          >
-          <span class="flex items-center gap-1"
-            >Thread: <RefLink
-              humanize
-              labelHints={artifactRefHints}
-              refValue={`thread:${receiptPacket.thread_id}`}
-              showRaw
-            /></span
+            >Subject: {#if String(receiptPacket.subject_ref ?? "").trim()}<RefLink
+                humanize
+                labelHints={artifactRefHints}
+                refValue={String(receiptPacket.subject_ref).trim()}
+                showRaw
+              />{:else}<span class="text-[var(--ui-text-muted)]">—</span
+              >{/if}</span
           >
         </div>
         {#if (receiptPacket.outputs ?? []).length > 0}
@@ -760,7 +684,7 @@
                   labelHints={artifactRefHints}
                   refValue={r}
                   showRaw
-                  threadId={receiptPacket.thread_id}
+                  threadId={artifact?.thread_id ?? ""}
                 />{/each}
             </div>
           </div>
@@ -776,7 +700,7 @@
                   labelHints={artifactRefHints}
                   refValue={r}
                   showRaw
-                  threadId={receiptPacket.thread_id}
+                  threadId={artifact?.thread_id ?? ""}
                 />{/each}
             </div>
           </div>
@@ -836,8 +760,9 @@
           >
             Outcome is revise.
             <a class="font-medium underline" href={reviseFollowupLink}
-              >Create follow-up work order</a
+              >Open topic</a
             >
+            to continue on the card.
           </div>
         {/if}
         {#if reviewDraft}
@@ -892,10 +817,10 @@
                 advancedToggleLabel="Use advanced raw review evidence input"
                 bind:value={reviewDraft.evidenceRefsInput}
                 fieldError={firstFieldError(reviewFieldErrors, "evidence_refs")}
-                helperText="Optional supporting refs."
+                helperText="At least one typed ref required."
                 hideAdvancedToggleLabel="Hide advanced raw review evidence input"
                 suggestions={reviewEvidenceSuggestions}
-                textareaAriaLabel="Review evidence refs (typed refs, comma/newline separated; optional)"
+                textareaAriaLabel="Review evidence refs (typed refs, comma/newline separated)"
               />
             </div>
             <div class="flex justify-end">
@@ -911,7 +836,7 @@
         {#if createdReview}
           <div class="mt-2 text-[12px] text-[var(--ui-text-muted)]">
             Review submitted: <a
-              class="font-medium text-indigo-400 hover:text-indigo-400"
+              class="font-medium text-indigo-400 hover:text-indigo-300"
               href={workspaceHref(`/artifacts/${createdReview.id}`)}
               >{createdReview.summary || createdReview.id}</a
             >
@@ -922,7 +847,7 @@
       {#if threadTimeline.length > 0 || timelineLoading}
         <div class="border-t border-[var(--ui-border)] px-4 py-3">
           <h3 class="text-[13px] font-medium text-[var(--ui-text)]">
-            Thread Timeline
+            Topic Timeline
           </h3>
           {#if timelineLoading}
             <div class="mt-2 text-[12px] text-[var(--ui-text-muted)]">
@@ -980,15 +905,17 @@
               threadId={artifact.thread_id}
             /></span
           >
-          <span class="text-[12px] text-[var(--ui-text-muted)]"
-            >Work order: <RefLink
-              humanize
-              labelHints={artifactRefHints}
-              refValue={`artifact:${reviewPacket.work_order_id}`}
-              showRaw
-              threadId={artifact.thread_id}
-            /></span
-          >
+          {#if String(reviewPacket.subject_ref ?? "").trim()}
+            <span class="text-[12px] text-[var(--ui-text-muted)]"
+              >Subject: <RefLink
+                humanize
+                labelHints={artifactRefHints}
+                refValue={String(reviewPacket.subject_ref ?? "").trim()}
+                showRaw
+                threadId={artifact.thread_id}
+              /></span
+            >
+          {/if}
         </div>
         {#if reviewPacket.notes}
           <MarkdownRenderer
@@ -1076,7 +1003,7 @@
   open={confirmModal.open}
   title={confirmModal.action === "trash" ? "Move to trash" : "Archive artifact"}
   message={confirmModal.action === "trash"
-    ? "This artifact will be tombstoned. You can restore it from trash later."
+    ? "This artifact will be moved to trash. You can restore it later."
     : "This artifact will be hidden from default views. You can unarchive it later."}
   confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
   variant={confirmModal.action === "trash" ? "danger" : "warning"}

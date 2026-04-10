@@ -12,10 +12,6 @@ describe("typed refs", () => {
       prefix: "artifact",
       value: "art-123",
     });
-    expect(parseRef("snapshot:snap-1")).toEqual({
-      prefix: "snapshot",
-      value: "snap-1",
-    });
     expect(parseRef("event:evt-7")).toEqual({
       prefix: "event",
       value: "evt-7",
@@ -23,6 +19,14 @@ describe("typed refs", () => {
     expect(parseRef("thread:thread-9")).toEqual({
       prefix: "thread",
       value: "thread-9",
+    });
+    expect(parseRef("topic:topic-9")).toEqual({
+      prefix: "topic",
+      value: "topic-9",
+    });
+    expect(parseRef("card:card-9")).toEqual({
+      prefix: "card",
+      value: "card-9",
     });
     expect(parseRef("url:https://example.com/path?a=b")).toEqual({
       prefix: "url",
@@ -52,5 +56,8 @@ describe("typed refs", () => {
   it("treats document prefixes as known refs", () => {
     expect(isKnownRefPrefix("document")).toBe(true);
     expect(isKnownRefPrefix("document_revision")).toBe(true);
+    expect(isKnownRefPrefix("topic")).toBe(true);
+    expect(isKnownRefPrefix("card")).toBe(true);
+    expect(isKnownRefPrefix("snapshot")).toBe(false);
   });
 });

@@ -22,9 +22,9 @@
             "review": 0
           },
           "document_count": 1,
-          "has_primary_document": true,
+          "has_document_refs": true,
           "latest_activity_at": "2026-03-07T00:03:00Z",
-          "open_commitment_count": 2
+          "unresolved_card_count": 2
         }
       }
     ]

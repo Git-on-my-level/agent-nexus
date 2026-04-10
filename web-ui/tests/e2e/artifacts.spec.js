@@ -40,8 +40,8 @@ test("artifact filters are URL-backed and survive refresh", async ({
   let artifactRequestCount = 0;
   const artifacts = [
     {
-      id: "artifact-work-order-1",
-      kind: "work_order",
+      id: "artifact-review-onboarding-1",
+      kind: "review",
       thread_id: "thread-onboarding",
       summary: "Prepare onboarding plan",
       refs: ["thread:thread-onboarding"],

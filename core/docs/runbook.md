@@ -43,6 +43,7 @@ For packed-host SaaS operations, see:
 | Embedded router poll interval | n/a | `OAR_SIDECAR_ROUTER_POLL_INTERVAL` | `1s` |
 | Embedded router principal cache TTL | n/a | `OAR_SIDECAR_ROUTER_PRINCIPAL_CACHE_TTL` | `60s` |
 | Enable dev actor mode | n/a | `OAR_ENABLE_DEV_ACTOR_MODE` | `false` |
+| Allow local passkey dev bypass | n/a | `OAR_ALLOW_PASSKEY_DEV_BYPASS` | `false` |
 | Allow unauthenticated writes | n/a | `OAR_ALLOW_UNAUTHENTICATED_WRITES` | `false` |
 | Bootstrap token for first principal registration | n/a | `OAR_BOOTSTRAP_TOKEN` | unset |
 | WebAuthn RP ID | n/a | `OAR_WEBAUTHN_RPID` | derived from browser origin host |
@@ -90,7 +91,7 @@ When `OAR_BLOB_BACKEND=s3`, configure:
 
 The workspace root contains:
 
-- `state.sqlite`: canonical structured data (events, snapshots, artifacts metadata, actors, derived views)
+- `state.sqlite`: canonical structured data (events, topics, cards, artifacts metadata, documents, actors, derived views)
 - `artifacts/content/`: artifact bytes when `OAR_BLOB_BACKEND=filesystem` or `object`
 - `logs/`, `tmp/`: operational directories
 
@@ -241,10 +242,13 @@ request from the browser origin forwarded by the UI proxy. Set
 `OAR_WEBAUTHN_ALLOWED_ORIGINS` is set, it takes precedence over the single
 origin and the browser origin must be one of the configured values.
 
-`./scripts/dev` defaults `OAR_ENABLE_DEV_ACTOR_MODE=1` and
-`OAR_ALLOW_UNAUTHENTICATED_WRITES=1` so local actor-selection, reads, and seed
-workflows keep working. Production-like runs should leave both unset unless an
-explicitly open local workflow is required.
+`./scripts/dev` defaults `OAR_ENABLE_DEV_ACTOR_MODE=1`,
+`OAR_ALLOW_PASSKEY_DEV_BYPASS=1`, and `OAR_ALLOW_UNAUTHENTICATED_WRITES=1` so
+local actor-selection, passkey seed flows, and dev writes keep working. The
+passkey bypass additionally requires the workspace marker
+`.oar-dev-insecure-auth`, which `./scripts/dev` creates inside the workspace
+root. Production-like runs should leave these unset unless an explicitly open
+local workflow is required.
 
 `OAR_HUMAN_AUTH_MODE=control_plane` enables the SaaS-v-next split. In that
 mode, workspace-local passkey human auth is disabled, workspace-local Ed25519
@@ -298,14 +302,14 @@ readiness checks before the instance is treated as ready.
 
 `/ops/health` is for authenticated or loopback-only operator diagnostics. When
 the readiness check passes, it also includes projection maintenance status and
-the embedded sidecar snapshot:
+the embedded sidecar status block:
 
 - `mode`: `background` when the async maintainer loop is running, `manual` when
   writes only queue dirty projections and operators are expected to trigger
   rebuilds explicitly.
 - `pending_dirty_count`: thread projections queued for refresh.
 - `oldest_dirty_at` / `oldest_dirty_lag_seconds`: lag indicator for the oldest queued projection refresh.
-- `last_successful_stale_scan_at`: last successful stale-thread scan, whether it
+- `last_successful_stale_scan_at`: last successful stale-topic scan, whether it
   came from the background loop or an explicit rebuild.
 - `last_error`: last maintenance failure, if one has occurred since the most recent successful pass.
 
@@ -313,7 +317,7 @@ the embedded sidecar snapshot:
 It reports blob bytes, blob object count, canonical artifact/document/revision counts,
 and the configured quota limits. Those blob totals now come from the workspace DB's
 blob usage ledger rather than a live filesystem walk or object-store listing. Use it
-when you need an explicit storage/usage snapshot without scraping filesystem layout.
+when you need an explicit storage/usage summary without scraping filesystem layout.
 
 `POST /ops/blob-usage/rebuild` is the explicit blob-ledger repair tool. Use it after
 operator blob cleanup, backend drift, or older-workspace migration issues when the
@@ -368,7 +372,9 @@ concurrency token:
 
 Board lifecycle and card events are emitted on the primary thread timeline with
 `board:<board_id>` refs, so timeline/debug work should inspect both the board
-workspace and the primary thread timeline.
+workspace and the primary thread timeline. Topic and packet writes should be
+treated as the canonical coordination path; threads remain the read-only
+backing timeline for evidence inspection.
 
 ## Persistence check (restart behavior)
 
@@ -394,7 +400,7 @@ The hosted-v1 scripts under `scripts/hosted/` are backend-aware:
 
 ## Packet Convenience Atomicity
 
-`POST /work_orders`, `POST /receipts`, and `POST /reviews` persist packet artifact data and the emitted event atomically.
+`POST /receipts` and `POST /reviews` persist packet artifact data and the emitted event atomically.
 
 - Core writes artifact metadata/content and the corresponding event in a single transactional operation.
 - On failure, core does not commit a partial convenience write (no artifact/event split state from a failed request).
@@ -408,8 +414,8 @@ on core-specific runtime behavior inside that operator model.
 
 ### Auth model
 
-In production, `OAR_ENABLE_DEV_ACTOR_MODE` and
-`OAR_ALLOW_UNAUTHENTICATED_WRITES` must both be `false` (the defaults).
+In production, `OAR_ENABLE_DEV_ACTOR_MODE`, `OAR_ALLOW_PASSKEY_DEV_BYPASS`,
+and `OAR_ALLOW_UNAUTHENTICATED_WRITES` must all be `false` (the defaults).
 Workspace reads and writes require a valid Bearer token, and `POST /actors`
 must remain disabled. Two principal types are supported:
 
@@ -448,7 +454,7 @@ http {
       proxy_pass http://127.0.0.1:8000;
     }
 
-    location ~ ^/(threads|commitments|boards|docs|artifacts|events|work_orders|receipts|reviews|inbox/ack|derived/rebuild) {
+    location ~ ^/(topics|boards|docs|artifacts|events|receipts|reviews|inbox/ack|derived/rebuild) {
       limit_req zone=oar_write burst=100 nodelay;
       proxy_pass http://127.0.0.1:8000;
     }
@@ -509,6 +515,7 @@ docker run -d --restart unless-stopped \
   -v oar-workspace:/var/lib/oar/workspace \
   -e OAR_LISTEN_ADDR=0.0.0.0:8000 \
   -e OAR_ENABLE_DEV_ACTOR_MODE=false \
+  -e OAR_ALLOW_PASSKEY_DEV_BYPASS=false \
   -e OAR_ALLOW_UNAUTHENTICATED_WRITES=false \
   -e OAR_WEBAUTHN_RPID=oar.example.com \
   -e OAR_WEBAUTHN_ALLOWED_ORIGINS=https://oar.example.com,https://oar.tailnet.ts.net \
@@ -563,8 +570,9 @@ For the full repo smoke path, run the root script:
 ```
 
 That flow brings up `oar-core`, the real CLI, and `oar-ui`; it now includes a
-board-aware path that creates a board, mutates cards through CLI commands, and
-verifies the board workspace through both core and the UI proxy.
+topic-and-board path that creates topics, docs, boards, cards, and packets
+through CLI commands, then verifies the board workspace through both core and
+the UI proxy.
 
 ## Compatibility troubleshooting
 

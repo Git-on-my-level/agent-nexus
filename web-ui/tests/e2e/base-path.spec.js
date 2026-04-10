@@ -38,16 +38,16 @@ test("preserves a configured mount prefix in redirects and generated links", asy
     page.locator(`a[href="${appPath("/local/inbox")}"]`).first(),
   ).toBeVisible();
   await expect(
-    page.locator(`a[href="${appPath("/local/threads")}"]`).first(),
+    page.locator(`a[href="${appPath("/local/topics")}"]`).first(),
   ).toBeVisible();
   await expect(
     page.locator(`a[href="${appPath("/local/artifacts")}"]`).first(),
   ).toBeVisible();
 
   await page
-    .locator(`a[href="${appPath("/local/threads")}"]`)
+    .locator(`a[href="${appPath("/local/topics")}"]`)
     .first()
     .click();
-  await expect(page).toHaveURL(new RegExp(`${APP_BASE_PATH}/local/threads/?$`));
-  await expect(page.getByRole("heading", { name: "Threads" })).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`${APP_BASE_PATH}/local/topics/?$`));
+  await expect(page.getByRole("heading", { name: "Topics" })).toBeVisible();
 });

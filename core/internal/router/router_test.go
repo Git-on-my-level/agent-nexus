@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"organization-autorunner-core/internal/auth"
@@ -140,6 +141,110 @@ func TestRouteMentionQueuesNotificationForOfflineRegisteredAgent(t *testing.T) {
 	}
 	if appendEventCalls != 1 {
 		t.Fatalf("expected one wake event appended, got %d", appendEventCalls)
+	}
+}
+
+func TestRouteMentionWakePacketIncludesSubjectFromThread(t *testing.T) {
+	state, err := NewStateStore("")
+	if err != nil {
+		t.Fatalf("NewStateStore: %v", err)
+	}
+
+	var capturedContent map[string]any
+	var lastEvent map[string]any
+	service := NewService(
+		Config{
+			BaseURL:     "http://core.test",
+			WorkspaceID: "ws-main",
+		},
+		Dependencies{
+			GetThread: func(context.Context, string) (map[string]any, error) {
+				return map[string]any{
+					"id":              "thread-subj",
+					"title":           "Topic thread",
+					"current_summary": "Summary",
+					"subject_ref":     "topic:top-9",
+				}, nil
+			},
+			CreateArtifact: func(_ context.Context, _ string, _ map[string]any, content any, _ string) error {
+				m, ok := content.(map[string]any)
+				if !ok {
+					t.Fatalf("artifact content type %T", content)
+				}
+				capturedContent = m
+				return nil
+			},
+			AppendEvent: func(_ context.Context, _ string, event map[string]any) error {
+				lastEvent = event
+				return nil
+			},
+		},
+		state,
+	)
+	service.cache.byHandle["m4-hermes"] = auth.AuthPrincipalSummary{
+		ActorID:       "actor-m4-hermes",
+		Username:      "m4-hermes",
+		PrincipalKind: "agent",
+		Registration: &auth.AgentRegistration{
+			Handle:  "m4-hermes",
+			ActorID: "actor-m4-hermes",
+			Status:  "pending",
+			WorkspaceBindings: []auth.AgentRegistrationWorkspaceBinding{
+				{WorkspaceID: "ws-main", Enabled: true},
+			},
+		},
+	}
+
+	ok, err := service.routeMention(
+		context.Background(),
+		"m4-hermes",
+		map[string]any{
+			"id":        "event-message-subj",
+			"thread_id": "thread-subj",
+			"actor_id":  "actor-human",
+			"ts":        "2026-03-30T11:00:00Z",
+		},
+		"@m4-hermes with subject",
+	)
+	if err != nil {
+		t.Fatalf("routeMention: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected route ok")
+	}
+	if capturedContent["version"] != WakePacketVersion {
+		t.Fatalf("packet version: got %#v", capturedContent["version"])
+	}
+	if capturedContent["subject_ref"] != "topic:top-9" {
+		t.Fatalf("subject_ref: got %#v", capturedContent["subject_ref"])
+	}
+	rs, _ := capturedContent["resolved_subject"].(map[string]any)
+	if rs == nil || rs["kind"] != "topic" {
+		t.Fatalf("resolved_subject: %#v", capturedContent["resolved_subject"])
+	}
+	refs, _ := capturedContent["reply_refs"].([]string)
+	if len(refs) < 2 || refs[0] != "thread:thread-subj" || refs[1] != "topic:top-9" {
+		t.Fatalf("reply_refs: %#v", refs)
+	}
+	payload, _ := lastEvent["payload"].(map[string]any)
+	if payload["subject_ref"] != "topic:top-9" {
+		t.Fatalf("wake request payload subject_ref: %#v", payload["subject_ref"])
+	}
+	evRefs, _ := lastEvent["refs"].([]string)
+	if len(evRefs) < 3 || evRefs[0] != "thread:thread-subj" || evRefs[1] != "topic:top-9" {
+		t.Fatalf("wake request refs: %#v", evRefs)
+	}
+	cf, _ := capturedContent["context_fetch"].(map[string]any)
+	if cf == nil || cf["preferred"] != "topics.workspace" {
+		t.Fatalf("context_fetch.preferred: %#v", capturedContent["context_fetch"])
+	}
+	cli, _ := cf["cli"].([]string)
+	if len(cli) < 1 || !strings.Contains(cli[0], "topics workspace --topic-id top-9") {
+		t.Fatalf("context_fetch.cli: %#v", cli)
+	}
+	api, _ := cf["api"].(map[string]any)
+	if api == nil || api["topic_workspace"] != "http://core.test/topics/top-9/workspace" {
+		t.Fatalf("context_fetch.api.topic_workspace: %#v", api)
 	}
 }
 

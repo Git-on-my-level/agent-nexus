@@ -106,9 +106,6 @@ func validatePreflightRequiredRefPatterns(eventType string, refs []string, patte
 		if actualByPrefix[prefix] >= requiredCount {
 			continue
 		}
-		if eventType == "review_completed" && prefix == "artifact" && requiredCount == 3 {
-			return invalidReviewCompletedRefsError()
-		}
 		if requiredCount == 1 {
 			return errnorm.Usage("invalid_request", fmt.Sprintf("event.refs must include a %q typed ref for event.type=%q", prefix+":<id>", eventType))
 		}

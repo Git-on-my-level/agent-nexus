@@ -11,7 +11,7 @@ Read this after the root [AGENTS.md](../AGENTS.md). Keep this file focused on du
 It owns the canonical organizational record, validates and records state transitions for all actors, and exposes a stable programmatic interface to that record. Derived collaboration views exist to help clients operate, but they remain projections of canonical truth rather than independent sources of truth.
 
 ## Core Responsibilities
-- Preserve durable organizational truth across canonical primitives such as events, snapshots, artifacts, documents, and actor identity records.
+- Preserve durable organizational truth across canonical primitives such as events, topics, cards, boards, documents, artifacts, backing threads, and actor identity records.
 - Enforce contract-safe and evidence-safe writes, including typed references, schema validation, and restricted transitions that require supporting evidence.
 - Remain actor-agnostic: humans, agents, and future clients are all just actors operating through the same external contract.
 - Separate canonical state from derived views and keep derived data reproducible from canonical records.
@@ -31,10 +31,11 @@ It owns the canonical organizational record, validates and records state transit
 
 ## High-Value Invariants
 - Events are append-only. Corrections are new records, not edits in place.
-- Snapshot updates use patch semantics: omitted fields are preserved, and list-valued fields are replaced only when explicitly present.
+- Topic, card, board, and document updates use patch semantics: omitted fields are preserved, and list-valued fields are replaced only when explicitly present.
 - Unknown fields and unknown open-enum values must round-trip safely unless the shared contract says otherwise.
 - Restricted state transitions must remain evidence-backed.
 - Derived views must stay rebuildable from canonical state.
+- Inbox list/get/stream payloads use `related_refs` as the typed-ref collection on each item. Core may still read a legacy `refs` field only when backfilling stored derived rows inside `applyInboxContractShape`; clients and UI code should not treat `refs` as an inbox alias.
 - Core-maintained collaboration state must remain correct without introducing misleading user-visible activity.
 
 ## Edit Routing

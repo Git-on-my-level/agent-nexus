@@ -13,10 +13,14 @@ WORKSPACE_ROOT="$TMP_DIR/workspace"
 SERVER_LOG="$TMP_DIR/server.log"
 
 ACTOR_ID="smoke-actor"
-WORK_ORDER_ID="wo-smoke"
-RECEIPT_ID="receipt-smoke"
-REVIEW_ID="review-smoke"
-DUE_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+MAIN_TOPIC_ID="topic-smoke-main"
+CARD_A_TOPIC_ID="topic-smoke-card-a"
+CARD_B_TOPIC_ID="topic-smoke-card-b"
+PRIMARY_DOC_ID="doc-smoke-primary"
+CARD_DOC_ID="doc-smoke-card"
+BOARD_ID="board-smoke"
+RECEIPT_ID="artifact-smoke-receipt"
+REVIEW_ID="artifact-smoke-review"
 
 cleanup() {
   if [[ -n "${SERVER_PID:-}" ]] && kill -0 "$SERVER_PID" 2>/dev/null; then
@@ -30,10 +34,7 @@ trap cleanup EXIT
 post_json() {
   local path="$1"
   local body="$2"
-  curl -fsS \
-    -H "Content-Type: application/json" \
-    -d "$body" \
-    "${BASE_URL}${path}"
+  curl -fsS -H "Content-Type: application/json" -d "$body" "${BASE_URL}${path}"
 }
 
 get_json() {
@@ -41,15 +42,36 @@ get_json() {
   curl -fsS "${BASE_URL}${path}"
 }
 
-count_matches() {
-  local text="$1"
-  local pattern="$2"
-  local count
-  count="$(printf '%s' "$text" | rg -o "$pattern" | wc -l | tr -d ' ' || true)"
-  if [[ -z "$count" ]]; then
-    count="0"
-  fi
-  printf '%s' "$count"
+json_get() {
+  local file="$1"
+  local path="$2"
+  node -e '
+const fs = require("fs");
+const file = process.argv[1];
+const path = process.argv[2].split(".");
+const input = fs.readFileSync(file, "utf8").trim();
+if (!input) process.exit(2);
+const json = JSON.parse(input);
+let cur = json;
+for (const key of path) {
+  if (key === "") continue;
+  if (cur === null || cur === undefined) {
+    cur = undefined;
+    break;
+  }
+  if (/^\d+$/.test(key)) {
+    cur = cur[Number(key)];
+  } else {
+    cur = cur[key];
+  }
+}
+if (cur === undefined || cur === null) process.exit(3);
+if (typeof cur === "object") {
+  process.stdout.write(JSON.stringify(cur));
+} else {
+  process.stdout.write(String(cur));
+}
+' "$file" "$path"
 }
 
 extract_first_field() {
@@ -61,7 +83,19 @@ extract_first_field() {
     | sed -E "s/\"${field}\":\"([^\"]+)\"/\\1/"
 }
 
+wait_for_ready() {
+  for _ in $(seq 1 80); do
+    if curl -fsS "${BASE_URL}/readyz" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.1
+  done
+  return 1
+}
+
 echo "starting oar-core on ${BASE_URL}"
+OAR_ENABLE_DEV_ACTOR_MODE=1 \
+OAR_ALLOW_UNAUTHENTICATED_WRITES=1 \
 go run ./cmd/oar-core \
   --listen-addr "$LISTEN_ADDR" \
   --workspace-root "$WORKSPACE_ROOT" \
@@ -69,14 +103,7 @@ go run ./cmd/oar-core \
   >"$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 
-for _ in $(seq 1 80); do
-  if curl -fsS "${BASE_URL}/readyz" >/dev/null 2>&1; then
-    break
-  fi
-  sleep 0.1
-done
-
-if ! curl -fsS "${BASE_URL}/readyz" >/dev/null 2>&1; then
+if ! wait_for_ready; then
   echo "server did not become healthy; log follows:" >&2
   cat "$SERVER_LOG" >&2
   exit 1
@@ -98,92 +125,177 @@ post_json "/actors" "$(cat <<JSON
 JSON
 )" >/dev/null
 
-echo "creating thread"
-THREAD_RESP="$(post_json "/threads" "$(cat <<JSON
+echo "creating topics"
+MAIN_TOPIC_RESP="$(post_json "/topics" "$(cat <<JSON
 {
   "actor_id": "${ACTOR_ID}",
-  "thread": {
-    "title": "Smoke thread",
-    "type": "incident",
+  "topic": {
+    "id": "${MAIN_TOPIC_ID}",
+    "type": "initiative",
     "status": "active",
-    "priority": "p1",
-    "tags": ["smoke", "ops"],
-    "cadence": "daily",
-    "next_check_in_at": "2030-01-01T00:00:00Z",
-    "current_summary": "Smoke workflow in progress",
-    "next_actions": ["verify workflow"],
-    "key_artifacts": [],
-    "provenance": {"sources": ["inferred"]}
+    "title": "Smoke coordination topic",
+    "summary": "Smoke workflow in progress",
+    "owner_refs": ["actor:${ACTOR_ID}"],
+    "board_refs": [],
+    "document_refs": [],
+    "related_refs": ["topic:${MAIN_TOPIC_ID}"],
+    "provenance": {"sources": ["actor_statement:smoke"]}
   }
 }
 JSON
 )")"
-THREAD_ID="$(extract_first_field "$THREAD_RESP" "id")"
-if [[ -z "$THREAD_ID" ]]; then
-  echo "failed to parse thread id from response: $THREAD_RESP" >&2
-  exit 1
-fi
+MAIN_TOPIC_THREAD_ID="$(extract_first_field "$MAIN_TOPIC_RESP" "thread_id")"
 
-echo "creating commitment"
-COMMITMENT_RESP="$(post_json "/commitments" "$(cat <<JSON
+CARD_A_TOPIC_RESP="$(post_json "/topics" "$(cat <<JSON
 {
   "actor_id": "${ACTOR_ID}",
-  "commitment": {
-    "thread_id": "${THREAD_ID}",
-    "title": "Smoke commitment",
-    "owner": "${ACTOR_ID}",
-    "due_at": "${DUE_AT}",
-    "status": "open",
-    "definition_of_done": ["review submitted"],
-    "links": ["url:https://example.com/smoke-commitment"],
-    "provenance": {"sources": ["inferred"]}
+  "topic": {
+    "id": "${CARD_A_TOPIC_ID}",
+    "type": "initiative",
+    "status": "active",
+    "title": "Smoke work item A",
+    "summary": "Card A topic",
+    "owner_refs": ["actor:${ACTOR_ID}"],
+    "board_refs": [],
+    "document_refs": [],
+    "related_refs": ["topic:${CARD_A_TOPIC_ID}"],
+    "provenance": {"sources": ["actor_statement:smoke"]}
   }
 }
 JSON
 )")"
-COMMITMENT_ID="$(extract_first_field "$COMMITMENT_RESP" "id")"
-if [[ -z "$COMMITMENT_ID" ]]; then
-  echo "failed to parse commitment id from response: $COMMITMENT_RESP" >&2
+CARD_A_THREAD_ID="$(extract_first_field "$CARD_A_TOPIC_RESP" "thread_id")"
+
+CARD_B_TOPIC_RESP="$(post_json "/topics" "$(cat <<JSON
+{
+  "actor_id": "${ACTOR_ID}",
+  "topic": {
+    "id": "${CARD_B_TOPIC_ID}",
+    "type": "initiative",
+    "status": "active",
+    "title": "Smoke work item B",
+    "summary": "Card B topic",
+    "owner_refs": ["actor:${ACTOR_ID}"],
+    "board_refs": [],
+    "document_refs": [],
+    "related_refs": ["topic:${CARD_B_TOPIC_ID}"],
+    "provenance": {"sources": ["actor_statement:smoke"]}
+  }
+}
+JSON
+)")"
+CARD_B_THREAD_ID="$(extract_first_field "$CARD_B_TOPIC_RESP" "thread_id")"
+
+if [[ -z "$MAIN_TOPIC_THREAD_ID" || -z "$CARD_A_THREAD_ID" || -z "$CARD_B_THREAD_ID" ]]; then
+  echo "failed to extract backing thread ids from topic creation responses" >&2
+  echo "$MAIN_TOPIC_RESP" >&2
+  echo "$CARD_A_TOPIC_RESP" >&2
+  echo "$CARD_B_TOPIC_RESP" >&2
   exit 1
 fi
 
-echo "creating work order"
-post_json "/work_orders" "$(cat <<JSON
+echo "creating documents"
+post_json "/docs" "$(cat <<JSON
 {
   "actor_id": "${ACTOR_ID}",
-  "artifact": {
-    "id": "${WORK_ORDER_ID}",
-    "refs": ["thread:${THREAD_ID}"],
-    "summary": "Smoke work order"
+  "document": {
+    "id": "${PRIMARY_DOC_ID}",
+    "title": "Smoke Board Primary Doc",
+    "labels": ["smoke", "board"]
   },
-  "packet": {
-    "work_order_id": "${WORK_ORDER_ID}",
-    "thread_id": "${THREAD_ID}",
-    "objective": "Exercise end-to-end smoke flow",
-    "constraints": ["headless only"],
-    "context_refs": ["url:https://example.com/smoke-context"],
-    "acceptance_criteria": ["workflow finishes"],
-    "definition_of_done": ["receipt and review created"]
-  }
+  "refs": ["topic:${MAIN_TOPIC_ID}", "thread:${MAIN_TOPIC_THREAD_ID}"],
+  "content": "Primary board document",
+  "content_type": "text"
 }
 JSON
 )" >/dev/null
 
-echo "submitting receipt"
-post_json "/receipts" "$(cat <<JSON
+post_json "/docs" "$(cat <<JSON
+{
+  "actor_id": "${ACTOR_ID}",
+  "document": {
+    "id": "${CARD_DOC_ID}",
+    "title": "Smoke Board Card Doc",
+    "labels": ["smoke", "board"]
+  },
+  "refs": ["topic:${CARD_A_TOPIC_ID}", "thread:${CARD_A_THREAD_ID}"],
+  "content": "Pinned card document",
+  "content_type": "text"
+}
+JSON
+)" >/dev/null
+
+echo "creating board"
+BOARD_RESP="$(post_json "/boards" "$(cat <<JSON
+{
+  "actor_id": "${ACTOR_ID}",
+  "board": {
+    "id": "${BOARD_ID}",
+    "title": "Smoke Board",
+    "status": "active",
+    "labels": ["smoke", "board"],
+    "owners": ["${ACTOR_ID}"],
+    "primary_topic_ref": "topic:${MAIN_TOPIC_ID}",
+    "thread_id": "${BOARD_ID}",
+    "document_refs": ["document:${PRIMARY_DOC_ID}"],
+    "card_refs": [],
+    "pinned_refs": ["document:${PRIMARY_DOC_ID}"],
+    "provenance": {"sources": ["actor_statement:smoke"]}
+  }
+}
+JSON
+)")"
+BOARD_UPDATED_AT="$(extract_first_field "$BOARD_RESP" "updated_at")"
+if [[ -z "$BOARD_UPDATED_AT" ]]; then
+  echo "failed to parse board updated_at from response: $BOARD_RESP" >&2
+  exit 1
+fi
+
+echo "adding cards"
+CARD_A_RESP="$(post_json "/boards/${BOARD_ID}/cards" "$(cat <<JSON
+{
+  "actor_id": "${ACTOR_ID}",
+  "if_board_updated_at": "${BOARD_UPDATED_AT}",
+  "card_id": "card-smoke-a",
+  "thread_id": "${CARD_A_THREAD_ID}",
+  "column_key": "backlog",
+  "title": "Smoke work item A",
+  "body": "Smoke work item A",
+  "pinned_document_id": "${CARD_DOC_ID}"
+}
+JSON
+)")"
+BOARD_UPDATED_AT="$(extract_first_field "$CARD_A_RESP" "updated_at")"
+
+post_json "/boards/${BOARD_ID}/cards" "$(cat <<JSON
+{
+  "actor_id": "${ACTOR_ID}",
+  "if_board_updated_at": "${BOARD_UPDATED_AT}",
+  "card_id": "card-smoke-b",
+  "thread_id": "${CARD_B_THREAD_ID}",
+  "column_key": "backlog",
+  "title": "Smoke work item B",
+  "body": "Smoke work item B",
+  "after_thread_id": "${CARD_A_THREAD_ID}"
+}
+JSON
+)" >/dev/null
+
+echo "creating packets"
+post_json "/packets/receipts" "$(cat <<JSON
 {
   "actor_id": "${ACTOR_ID}",
   "artifact": {
     "id": "${RECEIPT_ID}",
-    "refs": ["thread:${THREAD_ID}", "artifact:${WORK_ORDER_ID}"],
-    "summary": "Smoke receipt"
+    "refs": ["card:card-smoke-a"],
+    "summary": "Smoke receipt",
+    "provenance": {"sources": ["actor_statement:smoke"]}
   },
   "packet": {
     "receipt_id": "${RECEIPT_ID}",
-    "work_order_id": "${WORK_ORDER_ID}",
-    "thread_id": "${THREAD_ID}",
-    "outputs": ["artifact:smoke-output"],
-    "verification_evidence": ["url:https://example.com/smoke-evidence"],
+    "subject_ref": "card:card-smoke-a",
+    "outputs": ["document:${PRIMARY_DOC_ID}"],
+    "verification_evidence": ["document:${PRIMARY_DOC_ID}"],
     "changes_summary": "Smoke flow completed",
     "known_gaps": []
   }
@@ -191,19 +303,19 @@ post_json "/receipts" "$(cat <<JSON
 JSON
 )" >/dev/null
 
-echo "submitting review"
-post_json "/reviews" "$(cat <<JSON
+post_json "/packets/reviews" "$(cat <<JSON
 {
   "actor_id": "${ACTOR_ID}",
   "artifact": {
     "id": "${REVIEW_ID}",
-    "refs": ["thread:${THREAD_ID}", "artifact:${RECEIPT_ID}", "artifact:${WORK_ORDER_ID}"],
-    "summary": "Smoke review"
+    "refs": ["card:card-smoke-a", "artifact:${RECEIPT_ID}"],
+    "summary": "Smoke review",
+    "provenance": {"sources": ["actor_statement:smoke"]}
   },
   "packet": {
     "review_id": "${REVIEW_ID}",
-    "work_order_id": "${WORK_ORDER_ID}",
-    "receipt_id": "${RECEIPT_ID}",
+    "subject_ref": "card:card-smoke-a",
+    "receipt_ref": "artifact:${RECEIPT_ID}",
     "outcome": "accept",
     "notes": "Smoke review accepted",
     "evidence_refs": ["artifact:${RECEIPT_ID}"]
@@ -212,47 +324,22 @@ post_json "/reviews" "$(cat <<JSON
 JSON
 )" >/dev/null
 
-TIMELINE_JSON="$(get_json "/threads/${THREAD_ID}/timeline")"
-INBOX_BEFORE_ACK="$(get_json "/inbox")"
+TOPICS_JSON="$(get_json "/topics")"
+BOARD_WORKSPACE_JSON="$(get_json "/boards/${BOARD_ID}/workspace")"
+CARD_LIST_JSON="$(get_json "/cards")"
 
-INBOX_ITEM_ID="$(printf '%s' "$INBOX_BEFORE_ACK" \
-  | rg -o '"id":"inbox:[^"]+"' \
-  | head -n 1 \
-  | sed -E 's/"id":"([^"]+)"/\1/' || true)"
-
-if [[ -n "$INBOX_ITEM_ID" ]]; then
-  echo "acknowledging inbox item ${INBOX_ITEM_ID}"
-  post_json "/inbox/ack" "$(cat <<JSON
-{
-  "actor_id": "${ACTOR_ID}",
-  "thread_id": "${THREAD_ID}",
-  "inbox_item_id": "${INBOX_ITEM_ID}"
-}
-JSON
-)" >/dev/null
-fi
-
-INBOX_AFTER_ACK="$(get_json "/inbox")"
-
-TIMELINE_EVENT_COUNT="$(count_matches "$TIMELINE_JSON" '"type":"')"
-INBOX_BEFORE_COUNT="$(count_matches "$INBOX_BEFORE_ACK" '"category":"')"
-INBOX_AFTER_COUNT="$(count_matches "$INBOX_AFTER_ACK" '"category":"')"
-CATEGORY_SUMMARY="$(printf '%s' "$INBOX_BEFORE_ACK" \
-  | rg -o '"category":"[^"]+"' \
-  | sed -E 's/"category":"([^"]+)"/\1/' \
-  | sort -u \
-  | paste -sd ',' - || true)"
-if [[ -z "$CATEGORY_SUMMARY" ]]; then
-  CATEGORY_SUMMARY="none"
+TOPIC_COUNT="$(extract_first_field "$TOPICS_JSON" "topics" || true)"
+CARD_COUNT="$(extract_first_field "$CARD_LIST_JSON" "cards" || true)"
+BOARD_CARD_COUNT="$(extract_first_field "$BOARD_WORKSPACE_JSON" "count" || true)"
+if [[ -z "$BOARD_CARD_COUNT" ]]; then
+  BOARD_CARD_COUNT="$(printf '%s' "$BOARD_WORKSPACE_JSON" | rg -o '"card_count":[0-9]+' | head -n 1 | sed -E 's/.*://')"
 fi
 
 echo "smoke summary:"
-echo "  thread_id: ${THREAD_ID}"
-echo "  commitment_id: ${COMMITMENT_ID}"
-echo "  work_order_id: ${WORK_ORDER_ID}"
+echo "  main_topic_id: ${MAIN_TOPIC_ID}"
+echo "  board_id: ${BOARD_ID}"
 echo "  receipt_id: ${RECEIPT_ID}"
 echo "  review_id: ${REVIEW_ID}"
-echo "  timeline_events: ${TIMELINE_EVENT_COUNT}"
-echo "  inbox_items_before_ack: ${INBOX_BEFORE_COUNT}"
-echo "  inbox_items_after_ack: ${INBOX_AFTER_COUNT}"
-echo "  inbox_categories_before_ack: ${CATEGORY_SUMMARY}"
+echo "  board_card_count: ${BOARD_CARD_COUNT:-0}"
+echo "  topics_response_size: ${TOPIC_COUNT:-0}"
+echo "  cards_response_size: ${CARD_COUNT:-0}"

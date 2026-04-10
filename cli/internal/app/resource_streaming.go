@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	contractsclient "organization-autorunner-contracts-go-client/client"
+
 	"organization-autorunner-cli/internal/config"
 	"organization-autorunner-cli/internal/errnorm"
 	"organization-autorunner-cli/internal/httpclient"
@@ -160,7 +162,14 @@ func (a *App) writeStreamEvent(commandName string, commandID string, event strea
 func streamPathForCommand(commandID string, query []queryParam, cursor string) string {
 	spec, ok := commandSpecByID(commandID)
 	if !ok {
-		return "/"
+		switch strings.TrimSpace(commandID) {
+		case "events.stream":
+			spec = contractsclient.CommandSpec{Path: "/events/stream"}
+		case "inbox.stream":
+			spec = contractsclient.CommandSpec{Path: "/inbox/stream"}
+		default:
+			return "/"
+		}
 	}
 	u := url.URL{Path: spec.Path}
 	q := url.Values{}

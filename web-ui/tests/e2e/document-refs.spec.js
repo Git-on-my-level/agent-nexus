@@ -1,12 +1,14 @@
 import { expect, test } from "@playwright/test";
 
-test("document typed refs navigate from overview chips, timeline refs, and work-order context", async ({
+import { buildMockTopicWorkspaceFromThreadWorkspace } from "../../src/lib/devSeedData.js";
+
+test("document typed refs navigate from overview chips, timeline refs, and receipt outputs", async ({
   page,
 }) => {
   const actorId = "actor-document-refs-e2e";
   const documentId = "product-constitution";
   const threadId = "thread-onboarding";
-  const workOrderId = "artifact-work-order-doc-refs";
+  const receiptId = "artifact-receipt-doc-refs";
 
   const documentRecord = {
     id: documentId,
@@ -20,7 +22,7 @@ test("document typed refs navigate from overview chips, timeline refs, and work-
     created_by: actorId,
     updated_at: "2026-03-08T14:30:00Z",
     updated_by: actorId,
-    tombstoned_at: null,
+    trashed_at: null,
   };
 
   const previousRevision = {
@@ -53,30 +55,28 @@ test("document typed refs navigate from overview chips, timeline refs, and work-
       "# Product Constitution v3\n\nRatified constitution with the final escalation policy.",
   };
 
-  const workOrderArtifact = {
-    id: workOrderId,
-    kind: "work_order",
+  const receiptArtifact = {
+    id: receiptId,
+    kind: "receipt",
     thread_id: threadId,
     summary: "Review constitution refs",
-    refs: [`thread:${threadId}`],
+    refs: [`thread:${threadId}`, "card:card-doc-refs"],
     content_type: "application/json",
     created_at: "2026-03-09T09:00:00Z",
     created_by: actorId,
     provenance: { sources: ["actor_statement:ui"] },
   };
 
-  const workOrderPacket = {
-    work_order_id: workOrderId,
-    thread_id: threadId,
-    objective: "Review constitution refs",
-    constraints: ["Keep schema stable"],
-    context_refs: [
-      `thread:${threadId}`,
+  const receiptPacket = {
+    receipt_id: receiptId,
+    subject_ref: "card:card-doc-refs",
+    outputs: [
       `document:${documentId}`,
       `document_revision:${previousRevision.revision_id}`,
     ],
-    acceptance_criteria: ["Document refs open the docs UI"],
-    definition_of_done: ["Verified links in the browser"],
+    verification_evidence: [`thread:${threadId}`],
+    changes_summary: "Constitution refs verified for onboarding.",
+    known_gaps: [],
   };
 
   await page.addInitScript((selectedActorId) => {
@@ -115,7 +115,7 @@ test("document typed refs navigate from overview chips, timeline refs, and work-
           key_artifacts: [`document:${documentId}`],
           current_summary: "Thread detail summary.",
           next_actions: ["Collect legal signoff"],
-          open_commitments: [],
+          open_cards: [],
           next_check_in_at: "2026-03-12T00:00:00.000Z",
           updated_at: "2026-03-11T00:00:00.000Z",
           updated_by: actorId,
@@ -126,106 +126,105 @@ test("document typed refs navigate from overview chips, timeline refs, and work-
   });
 
   await page.route(
-    /\/threads\/thread-onboarding\/workspace(\?.*)?$/,
+    /\/(threads|topics)\/thread-onboarding\/workspace(\?.*)?$/,
+    async (route) => {
+      const threadWs = {
+        thread_id: threadId,
+        thread: {
+          id: threadId,
+          type: "process",
+          title: "Customer Onboarding Workflow",
+          status: "active",
+          priority: "p1",
+          cadence: "weekly",
+          tags: ["ops", "customer"],
+          key_artifacts: [`document:${documentId}`],
+          current_summary: "Thread detail summary.",
+          next_actions: ["Collect legal signoff"],
+          open_cards: [],
+          next_check_in_at: "2026-03-12T00:00:00.000Z",
+          updated_at: "2026-03-11T00:00:00.000Z",
+          updated_by: actorId,
+          provenance: { sources: ["actor_statement:event-doc-1"] },
+        },
+        context: {
+          recent_events: [
+            {
+              id: "evt-doc-1",
+              ts: "2026-03-11T09:00:00.000Z",
+              type: "message_posted",
+              actor_id: actorId,
+              thread_id: threadId,
+              refs: [
+                `document:${documentId}`,
+                `document_revision:${previousRevision.revision_id}`,
+              ],
+              summary: "Document refs linked for review.",
+              payload: { text: "Please review the constitution updates." },
+              provenance: { sources: ["actor_statement:event-doc-1"] },
+            },
+          ],
+          key_artifacts: [],
+          open_cards: [],
+          documents: [
+            {
+              ...documentRecord,
+              head_revision: {
+                revision_id: headRevision.revision_id,
+                revision_number: headRevision.revision_number,
+                artifact_id: headRevision.artifact_id,
+                content_type: headRevision.content_type,
+                created_at: headRevision.created_at,
+                created_by: headRevision.created_by,
+              },
+            },
+          ],
+        },
+      };
+      const payload = route.request().url().includes("/topics/")
+        ? buildMockTopicWorkspaceFromThreadWorkspace(threadWs, threadId)
+        : threadWs;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(payload),
+      });
+    },
+  );
+
+  await page.route(
+    /\/(threads|topics)\/thread-onboarding\/timeline$/,
     async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
-          thread_id: threadId,
-          thread: {
-            id: threadId,
-            type: "process",
-            title: "Customer Onboarding Workflow",
-            status: "active",
-            priority: "p1",
-            cadence: "weekly",
-            tags: ["ops", "customer"],
-            key_artifacts: [`document:${documentId}`],
-            current_summary: "Thread detail summary.",
-            next_actions: ["Collect legal signoff"],
-            open_commitments: [],
-            next_check_in_at: "2026-03-12T00:00:00.000Z",
-            updated_at: "2026-03-11T00:00:00.000Z",
-            updated_by: actorId,
-            provenance: { sources: ["actor_statement:event-doc-1"] },
-          },
-          context: {
-            recent_events: [
-              {
-                id: "evt-doc-1",
-                ts: "2026-03-11T09:00:00.000Z",
-                type: "message_posted",
-                actor_id: actorId,
-                thread_id: threadId,
-                refs: [
-                  `document:${documentId}`,
-                  `document_revision:${previousRevision.revision_id}`,
-                ],
-                summary: "Document refs linked for review.",
-                payload: { text: "Please review the constitution updates." },
-                provenance: { sources: ["actor_statement:event-doc-1"] },
-              },
-            ],
-            key_artifacts: [],
-            open_commitments: [],
-            documents: [
-              {
-                ...documentRecord,
-                head_revision: {
-                  revision_id: headRevision.revision_id,
-                  revision_number: headRevision.revision_number,
-                  artifact_id: headRevision.artifact_id,
-                  content_type: headRevision.content_type,
-                  created_at: headRevision.created_at,
-                  created_by: headRevision.created_by,
-                },
-              },
-            ],
-          },
+          events: [
+            {
+              id: "evt-doc-1",
+              ts: "2026-03-11T09:00:00.000Z",
+              type: "message_posted",
+              actor_id: actorId,
+              thread_id: threadId,
+              refs: [
+                `document:${documentId}`,
+                `document_revision:${previousRevision.revision_id}`,
+              ],
+              summary: "Document refs linked for review.",
+              payload: { text: "Please review the constitution updates." },
+              provenance: { sources: ["actor_statement:event-doc-1"] },
+            },
+          ],
         }),
       });
     },
   );
-
-  await page.route(/\/threads\/thread-onboarding\/timeline$/, async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        events: [
-          {
-            id: "evt-doc-1",
-            ts: "2026-03-11T09:00:00.000Z",
-            type: "message_posted",
-            actor_id: actorId,
-            thread_id: threadId,
-            refs: [
-              `document:${documentId}`,
-              `document_revision:${previousRevision.revision_id}`,
-            ],
-            summary: "Document refs linked for review.",
-            payload: { text: "Please review the constitution updates." },
-            provenance: { sources: ["actor_statement:event-doc-1"] },
-          },
-        ],
-      }),
-    });
-  });
 
   await page.route(/\/events\/stream(\?.*)?$/, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "text/event-stream",
       body: ": keepalive\n\n",
-    });
-  });
-
-  await page.route(/\/commitments(\?.*)?$/, async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ commitments: [] }),
     });
   });
 
@@ -238,11 +237,11 @@ test("document typed refs navigate from overview chips, timeline refs, and work-
       return;
     }
 
-    if (url.searchParams.get("kind") === "work_order") {
+    if (url.searchParams.get("kind") === "receipt") {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ artifacts: [workOrderArtifact] }),
+        body: JSON.stringify({ artifacts: [receiptArtifact] }),
       });
       return;
     }
@@ -254,30 +253,27 @@ test("document typed refs navigate from overview chips, timeline refs, and work-
     });
   });
 
-  await page.route(
-    /\/artifacts\/artifact-work-order-doc-refs$/,
-    async (route) => {
-      const request = route.request();
-      if (request.method() === "GET" && request.resourceType() === "document") {
-        await route.continue();
-        return;
-      }
+  await page.route(/\/artifacts\/artifact-receipt-doc-refs$/, async (route) => {
+    const request = route.request();
+    if (request.method() === "GET" && request.resourceType() === "document") {
+      await route.continue();
+      return;
+    }
 
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ artifact: workOrderArtifact }),
-      });
-    },
-  );
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ artifact: receiptArtifact }),
+    });
+  });
 
   await page.route(
-    /\/artifacts\/artifact-work-order-doc-refs\/content$/,
+    /\/artifacts\/artifact-receipt-doc-refs\/content$/,
     async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify(workOrderPacket),
+        body: JSON.stringify(receiptPacket),
       });
     },
   );
@@ -373,11 +369,11 @@ test("document typed refs navigate from overview chips, timeline refs, and work-
     }),
   ).toBeVisible();
 
-  await page.goto(`/artifacts/${workOrderId}`);
+  await page.goto(`/artifacts/${receiptId}`);
   await expect(
     page.getByRole("heading", { name: "Review constitution refs" }),
   ).toBeVisible();
-  await expect(page.getByText("Context", { exact: true })).toBeVisible();
+  await expect(page.getByText("Outputs", { exact: true })).toBeVisible();
   await page
     .locator("a")
     .filter({ hasText: "Document product-constitution" })

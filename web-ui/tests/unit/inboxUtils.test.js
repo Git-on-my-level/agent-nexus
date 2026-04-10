@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  decisionGroundingRefForInboxItem,
   deriveInboxUrgency,
   enrichInboxItem,
+  formatInboxItemBoardPanelResourceLine,
+  getInboxSubjectRef,
   getInboxUrgencyLabel,
   groupInboxItems,
   summarizeInboxUrgency,
@@ -22,7 +25,7 @@ describe("inbox grouping", () => {
         },
         {
           id: "old-risk",
-          category: "commitment_risk",
+          category: "work_item_risk",
           title: "Aging risk",
           source_event_time: "2026-03-03T10:00:00.000Z",
         },
@@ -52,7 +55,9 @@ describe("inbox grouping", () => {
       "decision_needed",
       "intervention_needed",
       "exception",
-      "commitment_risk",
+      "work_item_risk",
+      "stale_topic",
+      "document_attention",
     ]);
 
     expect(grouped[0].items.map((item) => item.id)).toEqual([
@@ -66,6 +71,8 @@ describe("inbox grouping", () => {
       "fresh-exception",
     ]);
     expect(grouped[3].items.map((item) => item.id)).toEqual(["old-risk"]);
+    expect(grouped[4].items).toEqual([]);
+    expect(grouped[5].items).toEqual([]);
   });
 });
 
@@ -88,7 +95,7 @@ describe("inbox urgency derivation", () => {
     );
     const normal = deriveInboxUrgency(
       {
-        category: "commitment_risk",
+        category: "work_item_risk",
         source_event_time: "2026-03-07T11:30:00.000Z",
       },
       { now },
@@ -128,7 +135,7 @@ describe("inbox urgency derivation", () => {
       },
       {
         id: "3",
-        category: "commitment_risk",
+        category: "work_item_risk",
       },
     ];
 
@@ -152,6 +159,163 @@ describe("inbox urgency derivation", () => {
 });
 
 describe("inbox typed-ref rendering targets", () => {
+  it("derives thread grounding ref for decision flows from inbox data", () => {
+    expect(
+      decisionGroundingRefForInboxItem({
+        id: "in-1",
+        thread_id: "thread-pricing-glitch",
+        related_refs: [
+          "thread:thread-pricing-glitch",
+          "artifact:artifact-pricing-evidence",
+        ],
+      }),
+    ).toBe("thread:thread-pricing-glitch");
+
+    expect(
+      decisionGroundingRefForInboxItem({
+        id: "in-1b",
+        subject_ref: "artifact:artifact-pricing-evidence",
+        thread_id: "thread-pricing-glitch",
+        related_refs: ["artifact:artifact-pricing-evidence"],
+      }),
+    ).toBe("thread:thread-pricing-glitch");
+
+    expect(
+      decisionGroundingRefForInboxItem({
+        id: "in-1c",
+        subject_ref: "artifact:artifact-pricing-evidence",
+        related_refs: [
+          "thread:thread-pricing-glitch",
+          "artifact:artifact-pricing-evidence",
+        ],
+      }),
+    ).toBe("thread:thread-pricing-glitch");
+
+    expect(
+      decisionGroundingRefForInboxItem({
+        id: "in-2",
+        related_refs: ["topic:real-topic-id", "thread:thr-1"],
+      }),
+    ).toBe("thread:thr-1");
+
+    expect(
+      decisionGroundingRefForInboxItem({
+        id: "in-3",
+        subject_ref: "thread:thr-77",
+        related_refs: [],
+      }),
+    ).toBe("thread:thr-77");
+
+    expect(
+      decisionGroundingRefForInboxItem({
+        id: "in-4",
+        subject_ref: "artifact:artifact-1",
+        thread_id: "thr-x",
+        related_refs: [],
+      }),
+    ).toBe("thread:thr-x");
+
+    expect(
+      decisionGroundingRefForInboxItem({ id: "in-5", related_refs: [] }),
+    ).toBe("");
+
+    expect(
+      decisionGroundingRefForInboxItem({
+        id: "in-legacy-shape",
+        refs: ["thread:thread-only-in-refs"],
+        related_refs: [],
+      }),
+    ).toBe("");
+  });
+
+  it("preserves explicit subject refs and prefers specific ids before thread fallback", () => {
+    expect(
+      getInboxSubjectRef({
+        subject_ref: "topic:topic-123",
+        topic_id: "topic-999",
+        thread_id: "thread-999",
+      }),
+    ).toBe("topic:topic-123");
+
+    expect(
+      getInboxSubjectRef({
+        topic_id: "topic-123",
+        thread_id: "thread-123",
+      }),
+    ).toBe("topic:topic-123");
+
+    expect(
+      getInboxSubjectRef({
+        card_id: "card-123",
+        thread_id: "thread-123",
+      }),
+    ).toBe("card:card-123");
+
+    expect(
+      getInboxSubjectRef({
+        thread_id: "thread-123",
+      }),
+    ).toBe("thread:thread-123");
+  });
+
+  it("formats board panel resource line from subject_ref, not misleading topic_id", () => {
+    const cardAnchored = enrichInboxItem({
+      id: "1",
+      category: "work_item_risk",
+      subject_ref: "card:card-1",
+      title: "Risk",
+      topic_id: "topic-extra",
+      thread_id: "thread-extra",
+    });
+    expect(formatInboxItemBoardPanelResourceLine(cardAnchored)).toBe(
+      "Card card-1",
+    );
+
+    const topicAnchored = enrichInboxItem({
+      id: "2",
+      category: "stale_topic",
+      subject_ref: "topic:topic-1",
+      title: "Stale",
+      thread_id: "thread-1",
+    });
+    expect(formatInboxItemBoardPanelResourceLine(topicAnchored)).toBe(
+      "Topic topic-1",
+    );
+
+    const threadAnchored = enrichInboxItem({
+      id: "3",
+      category: "decision_needed",
+      subject_ref: "thread:thread-1",
+      title: "Decide",
+      topic_id: "topic-1",
+    });
+    expect(formatInboxItemBoardPanelResourceLine(threadAnchored)).toBe(
+      "Thread thread-1",
+    );
+
+    expect(
+      formatInboxItemBoardPanelResourceLine(
+        enrichInboxItem({
+          id: "4",
+          category: "document_attention",
+          subject_ref: "document:doc-1",
+          title: "Doc",
+        }),
+      ),
+    ).toBe("Document doc-1");
+
+    expect(
+      formatInboxItemBoardPanelResourceLine(
+        enrichInboxItem({
+          id: "5",
+          thread_id: "thread-only",
+          category: "stale_topic",
+          title: "Legacy",
+        }),
+      ),
+    ).toBe("Thread thread-only");
+  });
+
   it("resolves thread/event/url refs used by inbox cards", () => {
     expect(resolveRefLink("thread:thread-onboarding")).toMatchObject({
       href: "/threads/thread-onboarding",

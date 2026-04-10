@@ -1,0 +1,26 @@
+# Local dev: deterministic wake replies (no Hermes / ZeroClaw).
+# 1) Register auth: oar-agent-bridge auth register --config examples/deterministic.toml --invite-token … --apply-registration
+# 2) Run: make -C adapters/agent-bridge bridge-run CONFIG=examples/deterministic.toml
+
+[oar]
+base_url = "http://127.0.0.1:8000"
+workspace_id = "ws_main"
+workspace_name = "Main"
+verify_ssl = true
+
+[auth]
+state_path = ".state/deterministic-auth.json"
+
+[agent]
+handle = "zara"
+driver_kind = "custom"
+adapter_kind = "deterministic_ack"
+state_dir = ".state/deterministic"
+workspace_bindings = ["ws_main"]
+resume_policy = "resume_or_create"
+status = "pending"
+checkin_interval_seconds = 60
+checkin_ttl_seconds = 300
+
+[adapter]
+kind = "deterministic_ack"

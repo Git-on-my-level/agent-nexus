@@ -1,152 +1,170 @@
 {
   "openapi_version": "3.1.0",
-  "contract_version": "0.2.3",
+  "contract_version": "0.3.0",
   "generated_by": "core/cmd/contract-gen",
   "event_type_open_enum": true,
-  "rule_count": 20,
+  "rule_count": 26,
   "rules": {
     "agent_notification_dismissed": {
-      "thread_id": "required",
       "refs_must_include": [
         "artifact:\u003cwakeup_id\u003e"
       ]
     },
     "agent_notification_read": {
-      "thread_id": "required",
       "refs_must_include": [
         "artifact:\u003cwakeup_id\u003e"
       ]
     },
     "board_card_added": {
-      "thread_id": "required",
       "refs_must_include": [
         "board:\u003cboard_id\u003e",
-        "thread:\u003ccard_thread_id\u003e"
+        "card:\u003ccard_id\u003e"
+      ]
+    },
+    "board_card_archived": {
+      "refs_must_include": [
+        "board:\u003cboard_id\u003e",
+        "card:\u003ccard_id\u003e"
       ]
     },
     "board_card_moved": {
-      "thread_id": "required",
       "refs_must_include": [
         "board:\u003cboard_id\u003e",
-        "thread:\u003ccard_thread_id\u003e"
-      ]
-    },
-    "board_card_removed": {
-      "thread_id": "required",
-      "refs_must_include": [
-        "board:\u003cboard_id\u003e",
-        "thread:\u003ccard_thread_id\u003e"
-      ]
-    },
-    "board_card_updated": {
-      "thread_id": "required",
-      "refs_must_include": [
-        "board:\u003cboard_id\u003e",
-        "thread:\u003ccard_thread_id\u003e"
+        "card:\u003ccard_id\u003e"
+      ],
+      "payload_must_include": [
+        "column_key"
       ]
     },
     "board_created": {
-      "thread_id": "required",
       "refs_must_include": [
         "board:\u003cboard_id\u003e"
       ]
     },
     "board_updated": {
-      "thread_id": "required",
       "refs_must_include": [
         "board:\u003cboard_id\u003e"
       ]
     },
-    "commitment_created": {
-      "thread_id": "required",
+    "card_archived": {
       "refs_must_include": [
-        "snapshot:\u003ccommitment_id\u003e"
+        "card:\u003ccard_id\u003e",
+        "board:\u003cboard_id\u003e"
       ]
     },
-    "commitment_status_changed": {
-      "thread_id": "required",
+    "card_created": {
       "refs_must_include": [
-        "snapshot:\u003ccommitment_id\u003e"
+        "card:\u003ccard_id\u003e",
+        "board:\u003cboard_id\u003e"
+      ]
+    },
+    "card_moved": {
+      "refs_must_include": [
+        "card:\u003ccard_id\u003e",
+        "board:\u003cboard_id\u003e"
       ],
-      "refs_conditional": "If status → done: MUST include artifact:\u003creceipt_artifact_id\u003e OR event:\u003cdecision_event_id\u003e. If status → canceled: MUST include event:\u003cdecision_event_id\u003e.",
-      "conditional_refs": [
-        {
-          "when": {
-            "payload_field": "to_status",
-            "equals": "done"
-          },
-          "must_have": [
-            {
-              "prefix": "artifact"
-            },
-            {
-              "prefix": "event"
-            }
-          ],
-          "condition": "or"
-        },
-        {
-          "when": {
-            "payload_field": "to_status",
-            "equals": "canceled"
-          },
-          "must_have": [
-            {
-              "prefix": "event"
-            }
-          ]
-        }
+      "payload_must_include": [
+        "column_key"
+      ]
+    },
+    "card_resolved": {
+      "refs_must_include": [
+        "card:\u003ccard_id\u003e",
+        "board:\u003cboard_id\u003e"
+      ],
+      "payload_must_include": [
+        "resolution"
+      ]
+    },
+    "card_updated": {
+      "refs_must_include": [
+        "card:\u003ccard_id\u003e",
+        "board:\u003cboard_id\u003e"
       ]
     },
     "decision_made": {
-      "thread_id": "required"
+      "refs_must_include": [
+        "thread:\u003cthread_id\u003e"
+      ]
     },
     "decision_needed": {
-      "thread_id": "required"
+      "refs_must_include": [
+        "thread:\u003cthread_id\u003e"
+      ]
+    },
+    "document_created": {
+      "refs_must_include": [
+        "document:\u003cdocument_id\u003e",
+        "document_revision:\u003crevision_id\u003e",
+        "artifact:\u003cartifact_id\u003e"
+      ]
+    },
+    "document_revised": {
+      "refs_must_include": [
+        "document:\u003cdocument_id\u003e",
+        "document_revision:\u003crevision_id\u003e",
+        "artifact:\u003cartifact_id\u003e"
+      ]
+    },
+    "document_trashed": {
+      "refs_must_include": [
+        "document:\u003cdocument_id\u003e"
+      ]
     },
     "exception_raised": {
-      "thread_id": "required",
       "payload_must_include": [
-        "subtype (e.g. stale_thread)"
+        "subtype"
       ]
     },
     "inbox_item_acknowledged": {
-      "thread_id": "required",
       "refs_must_include": [
         "inbox:\u003cinbox_item_id\u003e"
       ]
     },
     "intervention_needed": {
-      "thread_id": "required"
+      "refs_must_include": [
+        "thread:\u003cthread_id\u003e"
+      ]
     },
     "message_posted": {
-      "thread_id": "required"
+      "thread_id": "required as thread_ref when the message belongs to a backing thread"
     },
     "receipt_added": {
-      "thread_id": "required",
       "refs_must_include": [
         "artifact:\u003creceipt_artifact_id\u003e",
-        "artifact:\u003cwork_order_artifact_id\u003e"
+        "card:\u003ccard_id\u003e"
+      ],
+      "payload_must_include": [
+        "subject_ref"
       ]
     },
     "review_completed": {
-      "thread_id": "required",
       "refs_must_include": [
         "artifact:\u003creview_artifact_id\u003e",
         "artifact:\u003creceipt_artifact_id\u003e",
-        "artifact:\u003cwork_order_artifact_id\u003e"
+        "card:\u003ccard_id\u003e"
+      ],
+      "payload_must_include": [
+        "subject_ref"
       ]
     },
-    "snapshot_updated": {
-      "thread_id": "required if snapshot is thread-scoped",
+    "topic_created": {
       "refs_must_include": [
-        "snapshot:\u003csnapshot_id\u003e"
+        "topic:\u003ctopic_id\u003e"
       ]
     },
-    "work_order_created": {
-      "thread_id": "required",
+    "topic_status_changed": {
       "refs_must_include": [
-        "artifact:\u003cwork_order_artifact_id\u003e"
+        "topic:\u003ctopic_id\u003e"
+      ],
+      "payload_must_include": [
+        "from_status",
+        "to_status"
+      ]
+    },
+    "topic_updated": {
+      "refs_must_include": [
+        "topic:\u003ctopic_id\u003e"
       ]
     }
   }

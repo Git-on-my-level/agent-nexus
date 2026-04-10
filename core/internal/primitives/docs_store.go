@@ -21,18 +21,19 @@ type documentRow struct {
 	ThreadID        sql.NullString
 	Title           sql.NullString
 	Slug            sql.NullString
-	Status          sql.NullString
 	LabelsJSON      string
 	SupersedesJSON  string
+	RefsJSON        string
+	ProvenanceJSON  string
 	HeadRevisionID  string
 	HeadRevisionNum int
 	CreatedAt       string
 	CreatedBy       string
 	UpdatedAt       string
 	UpdatedBy       string
-	TombstonedAt    sql.NullString
-	TombstonedBy    sql.NullString
-	TombstoneReason sql.NullString
+	TrashedAt       sql.NullString
+	TrashedBy       sql.NullString
+	TrashReason     sql.NullString
 	ArchivedAt      sql.NullString
 	ArchivedBy      sql.NullString
 	HeadArtifactID  sql.NullString
@@ -41,10 +42,16 @@ type documentRow struct {
 	HeadCreatedBy   sql.NullString
 }
 
+func documentResourceRefEdgeTargets(threadID string, refs []string) []refEdgeTarget {
+	targets := appendRefEdgeTarget(nil, refEdgeTypeDocumentThread, "thread", strings.TrimSpace(threadID))
+	return append(targets, typedRefEdgeTargets(refEdgeTypeRef, refs)...)
+}
+
 func buildListDocumentsQuery(filter DocumentListFilter) (string, []any) {
-	query := `SELECT d.id, d.thread_id, d.title, d.slug, d.status, d.labels_json, d.supersedes_json,
+	query := `SELECT d.id, d.thread_id, d.title, d.slug, d.labels_json, d.supersedes_json,
+		d.refs_json, d.provenance_json,
 		d.head_revision_id, d.head_revision_number, d.created_at, d.created_by, d.updated_at, d.updated_by,
-		d.tombstoned_at, d.tombstoned_by, d.tombstone_reason,
+		d.trashed_at, d.trashed_by, d.trash_reason,
 		d.archived_at, d.archived_by,
 		dr.artifact_id, a.content_type, dr.created_at, dr.created_by
 		FROM documents d
@@ -56,13 +63,13 @@ func buildListDocumentsQuery(filter DocumentListFilter) (string, []any) {
 		conditions = append(conditions, "d.thread_id = ?")
 		args = append(args, threadID)
 	}
-	if filter.TombstonedOnly {
-		conditions = append(conditions, "d.tombstoned_at IS NOT NULL")
-	} else if !filter.IncludeTombstoned {
-		conditions = append(conditions, "d.tombstoned_at IS NULL")
+	if filter.TrashedOnly {
+		conditions = append(conditions, "d.trashed_at IS NOT NULL")
+	} else if !filter.IncludeTrashed {
+		conditions = append(conditions, "d.trashed_at IS NULL")
 	}
 	if filter.ArchivedOnly {
-		conditions = append(conditions, "d.archived_at IS NOT NULL AND d.tombstoned_at IS NULL")
+		conditions = append(conditions, "d.archived_at IS NOT NULL AND d.trashed_at IS NULL")
 	} else if !filter.IncludeArchived {
 		conditions = append(conditions, "d.archived_at IS NULL")
 	}
@@ -113,18 +120,19 @@ func (s *Store) ListDocuments(ctx context.Context, filter DocumentListFilter) ([
 			&row.ThreadID,
 			&row.Title,
 			&row.Slug,
-			&row.Status,
 			&row.LabelsJSON,
 			&row.SupersedesJSON,
+			&row.RefsJSON,
+			&row.ProvenanceJSON,
 			&row.HeadRevisionID,
 			&row.HeadRevisionNum,
 			&row.CreatedAt,
 			&row.CreatedBy,
 			&row.UpdatedAt,
 			&row.UpdatedBy,
-			&row.TombstonedAt,
-			&row.TombstonedBy,
-			&row.TombstoneReason,
+			&row.TrashedAt,
+			&row.TrashedBy,
+			&row.TrashReason,
 			&row.ArchivedAt,
 			&row.ArchivedBy,
 			&row.HeadArtifactID,
@@ -191,15 +199,12 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 	if err != nil {
 		return nil, nil, err
 	}
+	threadID = normalizeDocumentBackingThreadID(documentID, threadID)
 	title, err := optionalStringField(document, "title")
 	if err != nil {
 		return nil, nil, err
 	}
 	slug, err := optionalStringField(document, "slug")
-	if err != nil {
-		return nil, nil, err
-	}
-	status, err := optionalStringField(document, "status")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -210,6 +215,12 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 	supersedes, err := optionalStringListField(document, "supersedes")
 	if err != nil {
 		return nil, nil, invalidDocumentRequestError(err)
+	}
+	if _, exists := document["status"]; exists {
+		return nil, nil, invalidDocumentRequest("document.status is not writable; canonical lifecycle uses document.state and lifecycle endpoints")
+	}
+	if _, exists := document["state"]; exists {
+		return nil, nil, invalidDocumentRequest("document.state is not writable on create; new documents start active")
 	}
 
 	encodedContent, err := encodeContent(content)
@@ -236,7 +247,30 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 	}
 	revisionRefs = uniqueStrings(revisionRefs)
 	sortStringsStable(revisionRefs)
-	threadID = documentLifecycleThreadID(threadID, revisionRefs)
+
+	var docResourceRefs []string
+	if _, has := document["refs"]; has {
+		dr, err := optionalStringListField(document, "refs")
+		if err != nil {
+			return nil, nil, invalidDocumentRequestError(err)
+		}
+		docResourceRefs = uniqueStrings(dr)
+		sortStringsStable(docResourceRefs)
+	} else {
+		docResourceRefs = append([]string(nil), revisionRefs...)
+	}
+	docRefsJSON, err := json.Marshal(docResourceRefs)
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal document resource refs: %w", err)
+	}
+	docProvJSON := inferredProvenanceJSON()
+	if _, has := document["provenance"]; has {
+		_, pj, perr := marshalProvenance(document["provenance"], "marshal document")
+		if perr != nil {
+			return nil, nil, invalidDocumentRequestError(perr)
+		}
+		docProvJSON = pj
+	}
 
 	artifactMetadata := map[string]any{
 		"id":               artifactID,
@@ -284,6 +318,10 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 	if err != nil {
 		return nil, nil, fmt.Errorf("begin document create transaction: %w", err)
 	}
+	if threadID, err = ensureDocumentBackingThreadTx(ctx, tx, actorID, documentID, threadID, title, now); err != nil {
+		_ = tx.Rollback()
+		return nil, nil, err
+	}
 
 	if _, err := tx.ExecContext(
 		ctx,
@@ -305,21 +343,27 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		}
 		return nil, nil, fmt.Errorf("insert document artifact: %w", err)
 	}
+	if err := replaceRefEdges(ctx, tx, "artifact", artifactID, typedRefEdgeTargets(refEdgeTypeRef, revisionRefs)); err != nil {
+		_ = tx.Rollback()
+		return nil, nil, err
+	}
 
 	if _, err := tx.ExecContext(
 		ctx,
 		`INSERT INTO documents(
-			id, thread_id, title, slug, status, labels_json, supersedes_json,
+			id, thread_id, title, slug, labels_json, supersedes_json,
+			refs_json, provenance_json,
 			head_revision_id, head_revision_number,
 			created_at, created_by, updated_at, updated_by
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		documentID,
 		nullableString(threadID),
 		nullableString(title),
 		nullableString(slug),
-		nullableString(status),
 		string(labelsJSON),
 		string(supersedesJSON),
+		string(docRefsJSON),
+		docProvJSON,
 		revisionID,
 		revisionNumber,
 		now,
@@ -332,6 +376,10 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 			return nil, nil, ErrConflict
 		}
 		return nil, nil, fmt.Errorf("insert document: %w", err)
+	}
+	if err := replaceRefEdges(ctx, tx, "document", documentID, documentResourceRefEdgeTargets(threadID, docResourceRefs)); err != nil {
+		_ = tx.Rollback()
+		return nil, nil, err
 	}
 
 	if _, err := tx.ExecContext(
@@ -355,10 +403,14 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		}
 		return nil, nil, fmt.Errorf("insert document revision: %w", err)
 	}
+	if err := replaceRefEdges(ctx, tx, "document_revision", revisionID, typedRefEdgeTargets(refEdgeTypeRef, revisionRefs)); err != nil {
+		_ = tx.Rollback()
+		return nil, nil, err
+	}
 
 	lifecycleEvent, err := prepareEventForInsert(actorID, buildDocumentLifecycleEvent(
 		"document_created",
-		documentLifecycleThreadID(threadID, revisionRefs),
+		threadID,
 		documentID,
 		revisionID,
 		artifactID,
@@ -395,9 +447,10 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		ThreadID:        nullableString(threadID),
 		Title:           nullableString(title),
 		Slug:            nullableString(slug),
-		Status:          nullableString(status),
 		LabelsJSON:      string(labelsJSON),
 		SupersedesJSON:  string(supersedesJSON),
+		RefsJSON:        string(docRefsJSON),
+		ProvenanceJSON:  docProvJSON,
 		HeadRevisionID:  revisionID,
 		HeadRevisionNum: revisionNumber,
 		CreatedAt:       now,
@@ -406,7 +459,7 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		UpdatedBy:       actorID,
 	}.toMap()
 
-	revisionMap := map[string]any{
+	revisionMap := applyDocumentRevisionAliases(map[string]any{
 		"document_id":      documentID,
 		"revision_id":      revisionID,
 		"artifact_id":      artifactID,
@@ -420,7 +473,7 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		"content_hash":     contentHash,
 		"revision_hash":    revisionHash,
 		"artifact":         artifactMetadata,
-	}
+	})
 	setDocumentContentValue(revisionMap, encodedContent, contentType)
 	return docMap, revisionMap, nil
 }
@@ -440,7 +493,7 @@ func (s *Store) GetDocument(ctx context.Context, documentID string) (map[string]
 	return doc.toMap(), revision, nil
 }
 
-func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID string, documentPatch map[string]any, ifBaseRevision string, content any, contentType string, refs []string) (map[string]any, map[string]any, error) {
+func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID string, documentPatch map[string]any, ifBaseRevision string, content any, contentType string, refs []string, revisionProvenance map[string]any) (map[string]any, map[string]any, error) {
 	if s == nil || s.db == nil {
 		return nil, nil, fmt.Errorf("primitives store database is not initialized")
 	}
@@ -478,9 +531,13 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 	nextThreadID := nullStringValue(doc.ThreadID)
 	nextTitle := nullStringValue(doc.Title)
 	nextSlug := nullStringValue(doc.Slug)
-	nextStatus := nullStringValue(doc.Status)
 	nextLabels := decodeJSONListOrEmpty(doc.LabelsJSON)
 	nextSupersedes := decodeJSONListOrEmpty(doc.SupersedesJSON)
+	nextDocRefs := decodeJSONListOrEmpty(doc.RefsJSON)
+	nextDocProvJSON := strings.TrimSpace(doc.ProvenanceJSON)
+	if nextDocProvJSON == "" {
+		nextDocProvJSON = inferredProvenanceJSON()
+	}
 
 	if documentPatch != nil {
 		if _, exists := documentPatch["id"]; exists {
@@ -491,6 +548,9 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		}
 		if value, exists := documentPatch["thread_id"]; exists {
 			parsed := strings.TrimSpace(anyStringValue(value))
+			if parsed == "" {
+				return nil, nil, invalidDocumentRequest("document.thread_id must be non-empty when provided")
+			}
 			nextThreadID = parsed
 		}
 		if value, exists := documentPatch["title"]; exists {
@@ -499,8 +559,11 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		if value, exists := documentPatch["slug"]; exists {
 			nextSlug = strings.TrimSpace(anyStringValue(value))
 		}
-		if value, exists := documentPatch["status"]; exists {
-			nextStatus = strings.TrimSpace(anyStringValue(value))
+		if _, exists := documentPatch["status"]; exists {
+			return nil, nil, invalidDocumentRequest("document.status is not writable; canonical lifecycle uses document.state and lifecycle endpoints")
+		}
+		if _, exists := documentPatch["state"]; exists {
+			return nil, nil, invalidDocumentRequest("document.state is not writable in revision updates; use archive/trash/restore lifecycle endpoints")
 		}
 		if value, exists := documentPatch["labels"]; exists {
 			parsed, parseErr := normalizeStringSlice(value)
@@ -516,6 +579,26 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 			}
 			nextSupersedes = parsed
 		}
+		if value, exists := documentPatch["refs"]; exists {
+			parsed, parseErr := normalizeStringSlice(value)
+			if parseErr != nil {
+				return nil, nil, invalidDocumentRequest("document.refs must be a list of strings")
+			}
+			nextDocRefs = uniqueStrings(parsed)
+			sortStringsStable(nextDocRefs)
+		}
+		if _, exists := documentPatch["provenance"]; exists {
+			_, pj, perr := marshalProvenance(documentPatch["provenance"], "marshal document")
+			if perr != nil {
+				return nil, nil, invalidDocumentRequestError(perr)
+			}
+			nextDocProvJSON = pj
+		}
+	}
+
+	docResourceRefsJSON, err := json.Marshal(nextDocRefs)
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal document resource refs: %w", err)
 	}
 
 	encodedContent, err := encodeContent(content)
@@ -540,10 +623,9 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 	if nextThreadID != "" {
 		revisionRefs = append(revisionRefs, "thread:"+nextThreadID)
 	}
-	revisionRefs = append(revisionRefs, "artifact:"+doc.HeadRevisionID)
 	revisionRefs = uniqueStrings(revisionRefs)
 	sortStringsStable(revisionRefs)
-	nextThreadID = documentLifecycleThreadID(nextThreadID, revisionRefs)
+	nextThreadID = normalizeDocumentBackingThreadID(documentID, nextThreadID)
 
 	artifactMetadata := map[string]any{
 		"id":               artifactID,
@@ -560,6 +642,9 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 	}
 	if nextTitle != "" {
 		artifactMetadata["summary"] = nextTitle
+	}
+	if revisionProvenance != nil {
+		artifactMetadata["provenance"] = cloneProvenance(revisionProvenance)
 	}
 
 	stagedContent, err := s.blob.Write(ctx, contentHash, encodedContent)
@@ -600,6 +685,10 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 	if err != nil {
 		return nil, nil, fmt.Errorf("begin document update transaction: %w", err)
 	}
+	if nextThreadID, err = ensureDocumentBackingThreadTx(ctx, tx, actorID, documentID, nextThreadID, nextTitle, now); err != nil {
+		_ = tx.Rollback()
+		return nil, nil, err
+	}
 
 	if _, err := tx.ExecContext(
 		ctx,
@@ -620,6 +709,10 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 			return nil, nil, ErrConflict
 		}
 		return nil, nil, fmt.Errorf("insert document artifact: %w", err)
+	}
+	if err := replaceRefEdges(ctx, tx, "artifact", artifactID, typedRefEdgeTargets(refEdgeTypeRef, revisionRefs)); err != nil {
+		_ = tx.Rollback()
+		return nil, nil, err
 	}
 
 	if _, err := tx.ExecContext(
@@ -644,10 +737,14 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		}
 		return nil, nil, fmt.Errorf("insert document revision: %w", err)
 	}
+	if err := replaceRefEdges(ctx, tx, "document_revision", revisionID, typedRefEdgeTargets(refEdgeTypeRef, revisionRefs)); err != nil {
+		_ = tx.Rollback()
+		return nil, nil, err
+	}
 
 	lifecycleEvent, err := prepareEventForInsert(actorID, buildDocumentLifecycleEvent(
 		"document_updated",
-		documentLifecycleThreadID(nextThreadID, revisionRefs),
+		nextThreadID,
 		documentID,
 		revisionID,
 		artifactID,
@@ -672,9 +769,10 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 			thread_id = ?,
 			title = ?,
 			slug = ?,
-			status = ?,
 			labels_json = ?,
 			supersedes_json = ?,
+			refs_json = ?,
+			provenance_json = ?,
 			head_revision_id = ?,
 			head_revision_number = ?,
 			updated_at = ?,
@@ -683,9 +781,10 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		nullableString(nextThreadID),
 		nullableString(nextTitle),
 		nullableString(nextSlug),
-		nullableString(nextStatus),
 		string(labelsJSON),
 		string(supersedesJSON),
+		string(docResourceRefsJSON),
+		nextDocProvJSON,
 		revisionID,
 		nextRevisionNumber,
 		now,
@@ -705,6 +804,16 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 	if affected == 0 {
 		_ = tx.Rollback()
 		return nil, nil, ErrConflict
+	}
+	if err := replaceRefEdges(ctx, tx, "document", documentID, documentResourceRefEdgeTargets(nextThreadID, nextDocRefs)); err != nil {
+		_ = tx.Rollback()
+		return nil, nil, err
+	}
+	if nullStringValue(doc.ThreadID) != nextThreadID {
+		if err := clearDocumentBackingThreadSubjectTx(ctx, tx, actorID, nullStringValue(doc.ThreadID), documentID, now); err != nil {
+			_ = tx.Rollback()
+			return nil, nil, err
+		}
 	}
 
 	if err := s.applyBlobLedgerWritePlanTx(ctx, tx, blobPlan); err != nil {
@@ -727,9 +836,10 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		ThreadID:        nullableString(nextThreadID),
 		Title:           nullableString(nextTitle),
 		Slug:            nullableString(nextSlug),
-		Status:          nullableString(nextStatus),
 		LabelsJSON:      string(labelsJSON),
 		SupersedesJSON:  string(supersedesJSON),
+		RefsJSON:        string(docResourceRefsJSON),
+		ProvenanceJSON:  nextDocProvJSON,
 		HeadRevisionID:  revisionID,
 		HeadRevisionNum: nextRevisionNumber,
 		CreatedAt:       doc.CreatedAt,
@@ -738,7 +848,7 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		UpdatedBy:       actorID,
 	}.toMap()
 
-	revisionMap := map[string]any{
+	revisionMap := applyDocumentRevisionAliases(map[string]any{
 		"document_id":      documentID,
 		"revision_id":      revisionID,
 		"artifact_id":      artifactID,
@@ -752,8 +862,11 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		"content_hash":     contentHash,
 		"revision_hash":    revisionHash,
 		"artifact":         artifactMetadata,
-	}
+	})
 	setDocumentContentValue(revisionMap, encodedContent, contentType)
+	if revisionProvenance != nil {
+		revisionMap["provenance"] = cloneProvenance(revisionProvenance)
+	}
 	return docMap, revisionMap, nil
 }
 
@@ -826,7 +939,7 @@ func (s *Store) GetDocumentRevisionByID(ctx context.Context, revisionID string) 
 	return s.loadDocumentRevision(ctx, documentID, revisionID, false)
 }
 
-func (s *Store) TombstoneDocument(ctx context.Context, actorID string, documentID string, reason string) (map[string]any, map[string]any, error) {
+func (s *Store) TrashDocument(ctx context.Context, actorID string, documentID string, reason string) (map[string]any, map[string]any, error) {
 	if s == nil || s.db == nil {
 		return nil, nil, fmt.Errorf("primitives store database is not initialized")
 	}
@@ -843,7 +956,7 @@ func (s *Store) TombstoneDocument(ctx context.Context, actorID string, documentI
 	if err != nil {
 		return nil, nil, err
 	}
-	if doc.TombstonedAt.Valid && strings.TrimSpace(doc.TombstonedAt.String) != "" {
+	if doc.TrashedAt.Valid && strings.TrimSpace(doc.TrashedAt.String) != "" {
 		revision, err := s.loadDocumentRevision(ctx, documentID, doc.HeadRevisionID, true)
 		if err != nil {
 			return nil, nil, err
@@ -859,20 +972,20 @@ func (s *Store) TombstoneDocument(ctx context.Context, actorID string, documentI
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, nil, fmt.Errorf("begin document tombstone transaction: %w", err)
+		return nil, nil, fmt.Errorf("begin document trash transaction: %w", err)
 	}
 	_, err = tx.ExecContext(ctx,
-		`UPDATE documents SET tombstoned_at = ?, tombstoned_by = ?, tombstone_reason = ?, archived_at = NULL, archived_by = NULL WHERE id = ?`,
+		`UPDATE documents SET trashed_at = ?, trashed_by = ?, trash_reason = ?, archived_at = NULL, archived_by = NULL WHERE id = ?`,
 		now, actorID, strings.TrimSpace(reason), documentID,
 	)
 	if err != nil {
 		_ = tx.Rollback()
-		return nil, nil, fmt.Errorf("tombstone document: %w", err)
+		return nil, nil, fmt.Errorf("trash document: %w", err)
 	}
 
 	lifecycleEvent, err := prepareEventForInsert(actorID, buildDocumentLifecycleEvent(
-		"document_tombstoned",
-		documentLifecycleThreadID(nullStringValue(doc.ThreadID), revisionRefsFromRevision(revision)),
+		"document_trashed",
+		nullStringValue(doc.ThreadID),
 		documentID,
 		doc.HeadRevisionID,
 		anyStringValue(revision["artifact_id"]),
@@ -892,12 +1005,12 @@ func (s *Store) TombstoneDocument(ctx context.Context, actorID string, documentI
 	}
 	if err := tx.Commit(); err != nil {
 		_ = tx.Rollback()
-		return nil, nil, fmt.Errorf("commit document tombstone transaction: %w", err)
+		return nil, nil, fmt.Errorf("commit document trash transaction: %w", err)
 	}
 
-	doc.TombstonedAt = nullableString(now)
-	doc.TombstonedBy = nullableString(actorID)
-	doc.TombstoneReason = nullableString(reason)
+	doc.TrashedAt = nullableString(now)
+	doc.TrashedBy = nullableString(actorID)
+	doc.TrashReason = nullableString(reason)
 	doc.ArchivedAt = sql.NullString{}
 	doc.ArchivedBy = sql.NullString{}
 
@@ -921,8 +1034,8 @@ func (s *Store) ArchiveDocument(ctx context.Context, actorID, documentID string)
 	if err != nil {
 		return nil, nil, err
 	}
-	if doc.TombstonedAt.Valid && strings.TrimSpace(doc.TombstonedAt.String) != "" {
-		return nil, nil, ErrAlreadyTombstoned
+	if doc.TrashedAt.Valid && strings.TrimSpace(doc.TrashedAt.String) != "" {
+		return nil, nil, ErrAlreadyTrashed
 	}
 	if doc.ArchivedAt.Valid && strings.TrimSpace(doc.ArchivedAt.String) != "" {
 		revision, err := s.loadDocumentRevision(ctx, documentID, doc.HeadRevisionID, true)
@@ -1007,8 +1120,8 @@ func (s *Store) RestoreDocument(ctx context.Context, actorID, documentID string,
 	if err != nil {
 		return nil, nil, err
 	}
-	if !doc.TombstonedAt.Valid || strings.TrimSpace(doc.TombstonedAt.String) == "" {
-		return nil, nil, ErrNotTombstoned
+	if !doc.TrashedAt.Valid || strings.TrimSpace(doc.TrashedAt.String) == "" {
+		return nil, nil, ErrNotTrashed
 	}
 
 	revision, err := s.loadDocumentRevision(ctx, documentID, doc.HeadRevisionID, true)
@@ -1021,7 +1134,7 @@ func (s *Store) RestoreDocument(ctx context.Context, actorID, documentID string,
 		return nil, nil, fmt.Errorf("begin document restore transaction: %w", err)
 	}
 	_, err = tx.ExecContext(ctx,
-		`UPDATE documents SET tombstoned_at = NULL, tombstoned_by = NULL, tombstone_reason = NULL WHERE id = ?`,
+		`UPDATE documents SET trashed_at = NULL, trashed_by = NULL, trash_reason = NULL WHERE id = ?`,
 		documentID,
 	)
 	if err != nil {
@@ -1031,7 +1144,7 @@ func (s *Store) RestoreDocument(ctx context.Context, actorID, documentID string,
 
 	lifecycleEvent, err := prepareEventForInsert(actorID, buildDocumentLifecycleEvent(
 		"document_restored",
-		documentLifecycleThreadID(nullStringValue(doc.ThreadID), revisionRefsFromRevision(revision)),
+		nullStringValue(doc.ThreadID),
 		documentID,
 		doc.HeadRevisionID,
 		anyStringValue(revision["artifact_id"]),
@@ -1054,9 +1167,9 @@ func (s *Store) RestoreDocument(ctx context.Context, actorID, documentID string,
 		return nil, nil, fmt.Errorf("commit document restore transaction: %w", err)
 	}
 
-	doc.TombstonedAt = sql.NullString{}
-	doc.TombstonedBy = sql.NullString{}
-	doc.TombstoneReason = sql.NullString{}
+	doc.TrashedAt = sql.NullString{}
+	doc.TrashedBy = sql.NullString{}
+	doc.TrashReason = sql.NullString{}
 	return doc.toMap(), revision, nil
 }
 
@@ -1080,7 +1193,7 @@ func (s *Store) PurgeDocument(ctx context.Context, documentID string) error {
 
 	var one int
 	err = tx.QueryRowContext(ctx,
-		`SELECT 1 FROM documents WHERE id = ? AND tombstoned_at IS NOT NULL`,
+		`SELECT 1 FROM documents WHERE id = ? AND trashed_at IS NOT NULL`,
 		documentID,
 	).Scan(&one)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -1092,10 +1205,10 @@ func (s *Store) PurgeDocument(ctx context.Context, documentID string) error {
 		if err2 != nil {
 			return fmt.Errorf("check document existence: %w", err2)
 		}
-		return ErrNotTombstoned
+		return ErrNotTrashed
 	}
 	if err != nil {
-		return fmt.Errorf("select tombstoned document: %w", err)
+		return fmt.Errorf("select trashed document: %w", err)
 	}
 
 	if _, err := tx.ExecContext(ctx, `DELETE FROM document_revisions WHERE document_id = ?`, documentID); err != nil {
@@ -1119,9 +1232,10 @@ func (s *Store) loadDocumentRow(ctx context.Context, documentID string) (documen
 	var row documentRow
 	err := s.db.QueryRowContext(
 		ctx,
-		`SELECT id, thread_id, title, slug, status, labels_json, supersedes_json,
+		`SELECT id, thread_id, title, slug, labels_json, supersedes_json,
+			 refs_json, provenance_json,
 			 head_revision_id, head_revision_number, created_at, created_by, updated_at, updated_by,
-			 tombstoned_at, tombstoned_by, tombstone_reason,
+			 trashed_at, trashed_by, trash_reason,
 			 archived_at, archived_by
 		 FROM documents WHERE id = ?`,
 		documentID,
@@ -1130,18 +1244,19 @@ func (s *Store) loadDocumentRow(ctx context.Context, documentID string) (documen
 		&row.ThreadID,
 		&row.Title,
 		&row.Slug,
-		&row.Status,
 		&row.LabelsJSON,
 		&row.SupersedesJSON,
+		&row.RefsJSON,
+		&row.ProvenanceJSON,
 		&row.HeadRevisionID,
 		&row.HeadRevisionNum,
 		&row.CreatedAt,
 		&row.CreatedBy,
 		&row.UpdatedAt,
 		&row.UpdatedBy,
-		&row.TombstonedAt,
-		&row.TombstonedBy,
-		&row.TombstoneReason,
+		&row.TrashedAt,
+		&row.TrashedBy,
+		&row.TrashReason,
 		&row.ArchivedAt,
 		&row.ArchivedBy,
 	)
@@ -1219,8 +1334,10 @@ func (s *Store) loadDocumentRevision(ctx context.Context, documentID string, rev
 
 	revision := map[string]any{
 		"document_id":     outDocumentID,
+		"document_ref":    "document:" + outDocumentID,
 		"revision_id":     outRevisionID,
 		"artifact_id":     artifactID,
+		"artifact_ref":    "artifact:" + artifactID,
 		"revision_number": revisionNumber,
 		"refs":            refs,
 		"created_at":      createdAt,
@@ -1234,9 +1351,16 @@ func (s *Store) loadDocumentRevision(ctx context.Context, documentID string, rev
 	}
 	if prevRevisionID.Valid && strings.TrimSpace(prevRevisionID.String) != "" {
 		revision["prev_revision_id"] = prevRevisionID.String
+		revision["prev_revision_ref"] = "document_revision:" + strings.TrimSpace(prevRevisionID.String)
 	}
 	if threadID.Valid && strings.TrimSpace(threadID.String) != "" {
 		revision["thread_id"] = threadID.String
+	}
+	if summary := strings.TrimSpace(anyStringValue(artifact["summary"])); summary != "" {
+		revision["summary"] = summary
+	}
+	if raw, ok := artifact["provenance"]; ok {
+		revision["provenance"] = cloneProvenance(raw)
 	}
 
 	if includeContent {
@@ -1257,16 +1381,22 @@ func (s *Store) loadDocumentRevision(ctx context.Context, documentID string, rev
 }
 
 func (r documentRow) toMap() map[string]any {
+	state := canonicalDocumentState(r.ArchivedAt, r.TrashedAt)
 	out := map[string]any{
 		"id":                   r.ID,
+		"state":                state,
 		"labels":               decodeJSONListOrEmpty(r.LabelsJSON),
 		"supersedes":           decodeJSONListOrEmpty(r.SupersedesJSON),
 		"head_revision_id":     r.HeadRevisionID,
+		"head_revision_ref":    "document_revision:" + r.HeadRevisionID,
 		"head_revision_number": r.HeadRevisionNum,
 		"created_at":           r.CreatedAt,
 		"created_by":           r.CreatedBy,
 		"updated_at":           r.UpdatedAt,
 		"updated_by":           r.UpdatedBy,
+	}
+	if subjectRef := canonicalDocumentSubjectRef(nullStringValue(r.ThreadID)); subjectRef != "" {
+		out["subject_ref"] = subjectRef
 	}
 	headRevision := map[string]any{
 		"revision_id":     r.HeadRevisionID,
@@ -1294,17 +1424,25 @@ func (r documentRow) toMap() map[string]any {
 	if r.Slug.Valid && strings.TrimSpace(r.Slug.String) != "" {
 		out["slug"] = r.Slug.String
 	}
-	if r.Status.Valid && strings.TrimSpace(r.Status.String) != "" {
-		out["status"] = r.Status.String
+	out["refs"] = decodeJSONListOrEmpty(r.RefsJSON)
+	provenance := map[string]any{}
+	if strings.TrimSpace(r.ProvenanceJSON) != "" {
+		if err := json.Unmarshal([]byte(r.ProvenanceJSON), &provenance); err != nil {
+			provenance = map[string]any{}
+		}
 	}
-	if r.TombstonedAt.Valid && strings.TrimSpace(r.TombstonedAt.String) != "" {
-		out["tombstoned_at"] = r.TombstonedAt.String
+	if len(provenance) == 0 {
+		provenance = map[string]any{"sources": []string{"inferred"}}
 	}
-	if r.TombstonedBy.Valid && strings.TrimSpace(r.TombstonedBy.String) != "" {
-		out["tombstoned_by"] = r.TombstonedBy.String
+	out["provenance"] = provenance
+	if r.TrashedAt.Valid && strings.TrimSpace(r.TrashedAt.String) != "" {
+		out["trashed_at"] = r.TrashedAt.String
 	}
-	if r.TombstoneReason.Valid && strings.TrimSpace(r.TombstoneReason.String) != "" {
-		out["tombstone_reason"] = r.TombstoneReason.String
+	if r.TrashedBy.Valid && strings.TrimSpace(r.TrashedBy.String) != "" {
+		out["trashed_by"] = r.TrashedBy.String
+	}
+	if r.TrashReason.Valid && strings.TrimSpace(r.TrashReason.String) != "" {
+		out["trash_reason"] = r.TrashReason.String
 	}
 	if r.ArchivedAt.Valid && strings.TrimSpace(r.ArchivedAt.String) != "" {
 		out["archived_at"] = r.ArchivedAt.String
@@ -1313,6 +1451,47 @@ func (r documentRow) toMap() map[string]any {
 		out["archived_by"] = r.ArchivedBy.String
 	}
 	return out
+}
+
+func canonicalDocumentState(archivedAt, trashedAt sql.NullString) string {
+	if trashedAt.Valid && strings.TrimSpace(trashedAt.String) != "" {
+		return "trashed"
+	}
+	if archivedAt.Valid && strings.TrimSpace(archivedAt.String) != "" {
+		return "archived"
+	}
+	return "active"
+}
+
+func canonicalDocumentSubjectRef(threadID string) string {
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		return ""
+	}
+	return "thread:" + threadID
+}
+
+func applyDocumentRevisionAliases(revision map[string]any) map[string]any {
+	if revision == nil {
+		return nil
+	}
+	if documentID := strings.TrimSpace(anyStringValue(revision["document_id"])); documentID != "" {
+		revision["document_ref"] = "document:" + documentID
+	}
+	if artifactID := strings.TrimSpace(anyStringValue(revision["artifact_id"])); artifactID != "" {
+		revision["artifact_ref"] = "artifact:" + artifactID
+	}
+	if prevRevisionID := strings.TrimSpace(anyStringValue(revision["prev_revision_id"])); prevRevisionID != "" {
+		revision["prev_revision_ref"] = "document_revision:" + prevRevisionID
+	}
+	if summary := strings.TrimSpace(anyStringValue(revision["summary"])); summary != "" {
+		revision["summary"] = summary
+	} else if artifact, _ := revision["artifact"].(map[string]any); artifact != nil {
+		if summary := strings.TrimSpace(anyStringValue(artifact["summary"])); summary != "" {
+			revision["summary"] = summary
+		}
+	}
+	return revision
 }
 
 func buildDocumentLifecycleEvent(eventType, threadID, documentID, revisionID, artifactID string, revisionNumber int, title string, extraPayload map[string]any) map[string]any {
@@ -1345,10 +1524,10 @@ func buildDocumentLifecycleEvent(eventType, threadID, documentID, revisionID, ar
 	}
 
 	summary := map[string]string{
-		"document_created":    "Document created",
-		"document_updated":    "Document updated",
-		"document_tombstoned": "Document tombstoned",
-		"document_restored":   "Document restored",
+		"document_created":  "Document created",
+		"document_updated":  "Document updated",
+		"document_trashed":  "Document trashed",
+		"document_restored": "Document restored",
 	}[eventType]
 	if summary == "" {
 		summary = "Document lifecycle event"
@@ -1367,23 +1546,213 @@ func buildDocumentLifecycleEvent(eventType, threadID, documentID, revisionID, ar
 	return event
 }
 
-func documentLifecycleThreadID(primaryThreadID string, refs []string) string {
-	primaryThreadID = strings.TrimSpace(primaryThreadID)
-	if primaryThreadID != "" {
-		return primaryThreadID
+func normalizeDocumentBackingThreadID(documentID, threadID string) string {
+	threadID = strings.TrimSpace(threadID)
+	if threadID != "" {
+		return threadID
+	}
+	return strings.TrimSpace(documentID)
+}
+
+func ensureDocumentBackingThreadTx(ctx context.Context, tx *sql.Tx, actorID, documentID, threadID, title, updatedAt string) (string, error) {
+	threadID = normalizeDocumentBackingThreadID(documentID, threadID)
+	if threadID == "" {
+		return "", invalidDocumentRequest("document.thread_id is required")
 	}
 
-	for _, ref := range refs {
-		if !strings.HasPrefix(ref, "thread:") {
-			continue
+	subjectRef := "document:" + strings.TrimSpace(documentID)
+	row, err := getThreadRowFromQueryRower(ctx, tx, threadID, "threads")
+	if errors.Is(err, ErrNotFound) {
+		body := buildDocumentBackingThreadBody(documentID, threadID, title)
+		bodyJSON, marshalErr := json.Marshal(body)
+		if marshalErr != nil {
+			return "", fmt.Errorf("marshal document backing thread: %w", marshalErr)
 		}
-		threadID := strings.TrimSpace(strings.TrimPrefix(ref, "thread:"))
-		if threadID != "" {
-			return threadID
+		filterColumns := threadFilterColumnsForKind("thread", body)
+		if _, execErr := tx.ExecContext(
+			ctx,
+			`INSERT INTO threads(id, kind, thread_id, updated_at, updated_by, body_json, provenance_json, filter_status, filter_priority, filter_owner, filter_due_at, filter_cadence, filter_cadence_preset, filter_tags_json)
+			 VALUES (?, 'thread', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			threadID,
+			threadID,
+			updatedAt,
+			actorID,
+			string(bodyJSON),
+			inferredProvenanceJSON(),
+			nullableString(filterColumns.Status),
+			nullableString(filterColumns.Priority),
+			nil,
+			nil,
+			nullableString(filterColumns.Cadence),
+			nullableString(filterColumns.CadencePreset),
+			filterColumns.TagsJSON,
+		); execErr != nil {
+			if isUniqueViolation(execErr) {
+				return "", ErrConflict
+			}
+			return "", fmt.Errorf("insert document backing thread: %w", execErr)
 		}
+		if err := replaceRefEdges(ctx, tx, "thread", threadID, typedRefEdgeTargets(refEdgeTypeRef, []string{subjectRef})); err != nil {
+			return "", err
+		}
+		return threadID, nil
+	}
+	if err != nil {
+		return "", err
 	}
 
-	return ""
+	threadBody, err := row.ToThreadMap()
+	if err != nil {
+		return "", err
+	}
+	existingSubjectRef := threadSubjectRef(threadBody)
+	if existingSubjectRef != "" && existingSubjectRef != subjectRef {
+		return "", invalidDocumentRequest(fmt.Sprintf("document.thread_id %q is already bound to %q", threadID, existingSubjectRef))
+	}
+
+	provenance := cloneProvenance(threadBody["provenance"])
+	if len(provenance) == 0 {
+		provenance = map[string]any{"sources": []string{"inferred"}}
+	}
+	existingBody := cloneMap(threadBody)
+	threadBody = buildDocumentBackingThreadBody(documentID, threadID, title)
+	for _, key := range []string{"current_summary", "key_artifacts", "tags", "cadence", "next_check_in_at", "status", "priority"} {
+		if value, exists := existingBody[key]; exists && value != nil {
+			threadBody[key] = value
+		}
+	}
+	threadBody["provenance"] = provenance
+
+	bodyJSON, err := json.Marshal(threadBody)
+	if err != nil {
+		return "", fmt.Errorf("marshal document backing thread update: %w", err)
+	}
+	provenanceJSON, err := json.Marshal(provenance)
+	if err != nil {
+		return "", fmt.Errorf("marshal document backing thread provenance: %w", err)
+	}
+	filterColumns := threadFilterColumnsForKind("thread", threadBody)
+	if _, err := tx.ExecContext(
+		ctx,
+		`UPDATE threads
+		    SET thread_id = ?, updated_at = ?, updated_by = ?, body_json = ?, provenance_json = ?,
+		        filter_status = ?, filter_priority = ?, filter_owner = ?, filter_due_at = ?, filter_cadence = ?, filter_cadence_preset = ?, filter_tags_json = ?
+		  WHERE id = ?`,
+		threadID,
+		updatedAt,
+		actorID,
+		string(bodyJSON),
+		string(provenanceJSON),
+		nullableString(filterColumns.Status),
+		nullableString(filterColumns.Priority),
+		nil,
+		nil,
+		nullableString(filterColumns.Cadence),
+		nullableString(filterColumns.CadencePreset),
+		filterColumns.TagsJSON,
+		threadID,
+	); err != nil {
+		return "", fmt.Errorf("update document backing thread: %w", err)
+	}
+	if err := replaceRefEdges(ctx, tx, "thread", threadID, typedRefEdgeTargets(refEdgeTypeRef, []string{subjectRef})); err != nil {
+		return "", err
+	}
+	return threadID, nil
+}
+
+func clearDocumentBackingThreadSubjectTx(ctx context.Context, tx *sql.Tx, actorID, threadID, documentID, updatedAt string) error {
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		return nil
+	}
+	row, err := getThreadRowFromQueryRower(ctx, tx, threadID, "threads")
+	if errors.Is(err, ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	threadBody, err := row.ToThreadMap()
+	if err != nil {
+		return err
+	}
+	if threadSubjectRef(threadBody) != "document:"+strings.TrimSpace(documentID) {
+		return nil
+	}
+
+	delete(threadBody, "id")
+	delete(threadBody, "updated_at")
+	delete(threadBody, "updated_by")
+	provenance := cloneProvenance(threadBody["provenance"])
+	delete(threadBody, "provenance")
+	delete(threadBody, "subject_ref")
+	if len(provenance) == 0 {
+		provenance = map[string]any{"sources": []string{"inferred"}}
+	}
+
+	bodyJSON, err := json.Marshal(threadBody)
+	if err != nil {
+		return fmt.Errorf("marshal cleared document backing thread: %w", err)
+	}
+	provenanceJSON, err := json.Marshal(provenance)
+	if err != nil {
+		return fmt.Errorf("marshal cleared document backing thread provenance: %w", err)
+	}
+	filterColumns := threadFilterColumnsForKind("thread", threadBody)
+	if _, err := tx.ExecContext(
+		ctx,
+		`UPDATE threads
+		    SET updated_at = ?, updated_by = ?, body_json = ?, provenance_json = ?,
+		        filter_status = ?, filter_priority = ?, filter_owner = ?, filter_due_at = ?, filter_cadence = ?, filter_cadence_preset = ?, filter_tags_json = ?
+		  WHERE id = ?`,
+		updatedAt,
+		actorID,
+		string(bodyJSON),
+		string(provenanceJSON),
+		nullableString(filterColumns.Status),
+		nullableString(filterColumns.Priority),
+		nil,
+		nil,
+		nullableString(filterColumns.Cadence),
+		nullableString(filterColumns.CadencePreset),
+		filterColumns.TagsJSON,
+		threadID,
+	); err != nil {
+		return fmt.Errorf("clear document backing thread subject: %w", err)
+	}
+	return replaceRefEdges(ctx, tx, "thread", threadID, nil)
+}
+
+func buildDocumentBackingThreadBody(documentID, threadID, title string) map[string]any {
+	return map[string]any{
+		"id":          strings.TrimSpace(threadID),
+		"subject_ref": "document:" + strings.TrimSpace(documentID),
+		"title":       documentBackingThreadTitle(documentID, title),
+		"status":      "active",
+		"priority":    "p2",
+		"tags":        []string{},
+		"provenance":  map[string]any{"sources": []string{"inferred"}},
+	}
+}
+
+func documentBackingThreadTitle(documentID, title string) string {
+	title = strings.TrimSpace(title)
+	if title != "" {
+		return title
+	}
+	documentID = strings.TrimSpace(documentID)
+	if documentID != "" {
+		return "Document " + documentID
+	}
+	return "Document"
+}
+
+func threadSubjectRef(threadBody map[string]any) string {
+	if threadBody == nil {
+		return ""
+	}
+	return strings.TrimSpace(anyStringValue(threadBody["subject_ref"]))
 }
 
 func revisionRefsFromRevision(revision map[string]any) []string {

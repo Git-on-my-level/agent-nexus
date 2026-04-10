@@ -36,18 +36,17 @@ describe("review typed-ref validation", () => {
 
 describe("review draft/payload builder", () => {
   const baseOptions = {
-    threadId: "thread-1",
+    subjectRef: "card:card-1",
     receiptId: "artifact-receipt-1",
-    workOrderId: "artifact-work-order-1",
     reviewId: "artifact-review-1",
   };
 
-  it("builds valid payload and keeps evidence_refs optional", () => {
+  it("builds valid payload with evidence_refs", () => {
     const result = buildReviewPayload(
       {
         outcome: "accept",
         notes: "Looks good.",
-        evidenceRefsInput: "",
+        evidenceRefsInput: "artifact:artifact-evidence-1",
       },
       baseOptions,
     );
@@ -56,16 +55,15 @@ describe("review draft/payload builder", () => {
     expect(result.errors).toEqual([]);
     expect(result.packet).toEqual({
       review_id: "artifact-review-1",
-      work_order_id: "artifact-work-order-1",
-      receipt_id: "artifact-receipt-1",
+      subject_ref: "card:card-1",
+      receipt_ref: "artifact:artifact-receipt-1",
       outcome: "accept",
       notes: "Looks good.",
-      evidence_refs: [],
+      evidence_refs: ["artifact:artifact-evidence-1"],
     });
     expect(result.artifact.refs).toEqual([
-      "thread:thread-1",
+      "card:card-1",
       "artifact:artifact-receipt-1",
-      "artifact:artifact-work-order-1",
     ]);
   });
 
@@ -77,19 +75,16 @@ describe("review draft/payload builder", () => {
         evidenceRefsInput: "bad-ref",
       },
       {
-        threadId: "",
+        subjectRef: "",
         receiptId: "",
-        workOrderId: "",
         reviewId: "",
       },
     );
 
     expect(result.valid).toBe(false);
     expect(result.errors).toEqual([
-      "thread_id is required.",
-      "receipt_id is required.",
-      "work_order_id is required.",
-      "review_id is required.",
+      "subject_ref is required.",
+      "receipt_ref or receipt_id is required.",
       "outcome must be one of: accept, revise, escalate.",
       "notes is required.",
       "Invalid typed refs in evidence_refs: bad-ref",

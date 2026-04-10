@@ -25,6 +25,41 @@ type App struct {
 	StdinIsTTY  func() bool
 }
 
+func isAPICallHelpOnly(remaining []string) bool {
+	if len(remaining) < 3 || remaining[0] != "api" || remaining[1] != "call" {
+		return false
+	}
+	for _, tok := range remaining[2:] {
+		if !isHelpToken(tok) {
+			return false
+		}
+	}
+	return true
+}
+
+// isTrailingHelpOnlyInvocation is true when the user only wants subcommand help:
+// a command prefix with no non-help flags, followed by one or more help tokens
+// (for example: inbox ack --help). This avoids requiring a resolvable agent profile
+// on hosts with multiple local profiles.
+func isTrailingHelpOnlyInvocation(remaining []string) bool {
+	if len(remaining) == 0 {
+		return false
+	}
+	end := len(remaining)
+	for end > 0 && isHelpToken(remaining[end-1]) {
+		end--
+	}
+	if end == len(remaining) {
+		return false
+	}
+	for _, tok := range remaining[:end] {
+		if strings.HasPrefix(tok, "-") && !isHelpToken(tok) {
+			return false
+		}
+	}
+	return end > 0
+}
+
 func New() *App {
 	app := &App{
 		Stdin:       os.Stdin,
@@ -74,7 +109,9 @@ func (a *App) Run(args []string) int {
 	}
 	configLenient := cmdPeek == "version" || cmdPeek == "help" || cmdPeek == "--help" || cmdPeek == "-h" || cmdPeek == "meta" || cmdPeek == "update" || cmdPeek == "bridge" || cmdPeek == "concepts" || cmdPeek == "primitives" ||
 		(cmdPeek == "import" && isConfigLenientImportCommand(remaining[1:])) ||
-		(cmdPeek == "auth" && (subPeek == "list" || subPeek == "ls" || subPeek == "profiles" || subPeek == "default"))
+		(cmdPeek == "auth" && (subPeek == "list" || subPeek == "ls" || subPeek == "profiles" || subPeek == "default")) ||
+		isAPICallHelpOnly(remaining) ||
+		isTrailingHelpOnlyInvocation(remaining)
 
 	resolved, err := config.Resolve(overrides, config.Environment{
 		Getenv:      a.Getenv,
@@ -85,7 +122,12 @@ func (a *App) Run(args []string) int {
 		if configLenient {
 			resolved = config.Defaults(overrides)
 		} else {
-			return a.renderError(resolveMachineCommandIdentity("root"), jsonMode, errnorm.Wrap(errnorm.KindLocal, "config_resolution_failed", "failed to resolve cli config", err))
+			details := map[string]any{"cause": err.Error()}
+			if strings.Contains(err.Error(), "multiple local profiles") {
+				details["reason"] = "ambiguous_agent_profile"
+			}
+			wrapped := errnorm.WithDetails(errnorm.Wrap(errnorm.KindLocal, "config_resolution_failed", "failed to resolve cli config", err), details)
+			return a.renderError(resolveMachineCommandIdentity("root"), jsonMode, wrapped)
 		}
 	}
 

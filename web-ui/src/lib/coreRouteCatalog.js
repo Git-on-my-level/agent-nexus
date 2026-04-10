@@ -93,22 +93,9 @@ export function getCatalogEntries() {
   return getCatalogByPath();
 }
 
-export const proxyOnlyCommands = [
-  "agents.me.get",
-  "agents.me.keys.rotate",
-  "agents.me.patch",
-  "agents.me.revoke",
-  "auth.agents.register",
-  "auth.token",
-  "events.stream",
-  "inbox.stream",
-  "meta.commands.get",
-  "meta.commands.list",
-  "meta.concepts.get",
-  "meta.concepts.list",
-  "derived.rebuild",
-];
+export const proxyOnlyCommands = [];
 
-export const mockSupportedCommands = commandRegistry
+/** Every command_id in the generated contract registry (minus {@link proxyOnlyCommands}). */
+export const catalogCommandIds = commandRegistry
   .map((c) => c.command_id)
   .filter((id) => !proxyOnlyCommands.includes(id));

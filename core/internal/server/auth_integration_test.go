@@ -35,14 +35,16 @@ import (
 const testBootstrapToken = "bootstrap-token-for-tests"
 
 type authIntegrationOptions struct {
-	bootstrapToken             string
-	enableDevActorMode         bool
-	allowUnauthenticatedWrites bool
-	webAuthnConfig             WebAuthnConfig
-	humanAuthMode              string
-	controlPlaneVerifier       *controlplaneauth.WorkspaceHumanVerifier
-	workspaceServiceIdentity   *controlplaneauth.WorkspaceServiceIdentity
-	workspaceID                string
+	bootstrapToken              string
+	enableDevActorMode          bool
+	allowPasskeyDevBypass       bool
+	allowDevRegisterLinkedActor bool
+	allowUnauthenticatedWrites  bool
+	webAuthnConfig              WebAuthnConfig
+	humanAuthMode               string
+	controlPlaneVerifier        *controlplaneauth.WorkspaceHumanVerifier
+	workspaceServiceIdentity    *controlplaneauth.WorkspaceServiceIdentity
+	workspaceID                 string
 }
 
 type authIntegrationEnv struct {
@@ -51,6 +53,7 @@ type authIntegrationEnv struct {
 	authStore           *auth.Store
 	passkeySessionStore *auth.PasskeySessionStore
 	server              *httptest.Server
+	primitiveStore      PrimitiveStore
 }
 
 type controlPlaneAuthFixture struct {
@@ -82,6 +85,9 @@ func newAuthIntegrationEnv(t *testing.T, options authIntegrationOptions) authInt
 	if strings.TrimSpace(options.bootstrapToken) != "" {
 		authOptions = append(authOptions, auth.WithBootstrapToken(options.bootstrapToken))
 	}
+	if options.allowDevRegisterLinkedActor {
+		authOptions = append(authOptions, auth.WithAllowDevRegisterLinkedActor(true))
+	}
 	authStore := auth.NewStore(workspace.DB(), authOptions...)
 	passkeySessionStore := auth.NewPasskeySessionStore(auth.DefaultPasskeySessionTTL)
 
@@ -112,6 +118,7 @@ func newAuthIntegrationEnv(t *testing.T, options authIntegrationOptions) authInt
 		WithWorkspaceServiceIdentity(options.workspaceServiceIdentity),
 		WithWorkspaceID(workspaceID),
 		WithEnableDevActorMode(options.enableDevActorMode),
+		WithAllowPasskeyDevBypass(options.allowPasskeyDevBypass),
 		WithAllowUnauthenticatedWrites(options.allowUnauthenticatedWrites),
 	)
 	server := httptest.NewServer(handler)
@@ -128,7 +135,39 @@ func newAuthIntegrationEnv(t *testing.T, options authIntegrationOptions) authInt
 		authStore:           authStore,
 		passkeySessionStore: passkeySessionStore,
 		server:              server,
+		primitiveStore:      primitiveStore,
 	}
+}
+
+func authTestMinimalTopic(title string) map[string]any {
+	return map[string]any{
+		"type":          "initiative",
+		"status":        "active",
+		"title":         title,
+		"summary":       "auth integration topic",
+		"owner_refs":    []any{},
+		"document_refs": []any{},
+		"board_refs":    []any{},
+		"related_refs":  []any{},
+		"provenance":    map[string]any{"sources": []any{"inferred"}},
+	}
+}
+
+func authTestThreadUpdatedBy(t *testing.T, serverURL, accessToken string, topic map[string]any) string {
+	t.Helper()
+	threadID := topicPrimaryThreadID(topic)
+	if threadID == "" {
+		t.Fatalf("topic missing primary thread: %#v", topic)
+	}
+	resp := getJSONExpectStatusWithAuth(t, serverURL+"/threads/"+threadID, accessToken, http.StatusOK)
+	defer resp.Body.Close()
+	var payload struct {
+		Thread map[string]any `json:"thread"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+	return asString(payload.Thread["updated_by"])
 }
 
 func TestAgentAuthLifecycleAndActorCompatibility(t *testing.T) {
@@ -239,47 +278,23 @@ func TestAgentAuthLifecycleAndActorCompatibility(t *testing.T) {
 		t.Fatalf("seed human actor: %v", err)
 	}
 
-	threadResp := postJSONExpectStatusWithAuth(t, serverURL+"/threads", map[string]any{
-		"thread": map[string]any{
-			"title":            "Auth-backed thread",
-			"type":             "incident",
-			"status":           "active",
-			"priority":         "p1",
-			"tags":             []string{"auth"},
-			"cadence":          "daily",
-			"next_check_in_at": "2030-01-01T00:00:00Z",
-			"current_summary":  "summary",
-			"next_actions":     []string{"action"},
-			"key_artifacts":    []string{},
-			"provenance":       map[string]any{"sources": []string{"inferred"}},
-		},
+	topicResp := postJSONExpectStatusWithAuth(t, serverURL+"/topics", map[string]any{
+		"topic": authTestMinimalTopic("Auth-backed thread"),
 	}, refreshPayload.Tokens.AccessToken, http.StatusCreated)
-	defer threadResp.Body.Close()
-	var threadPayload struct {
-		Thread map[string]any `json:"thread"`
+	defer topicResp.Body.Close()
+	var createdTopic struct {
+		Topic map[string]any `json:"topic"`
 	}
-	if err := json.NewDecoder(threadResp.Body).Decode(&threadPayload); err != nil {
-		t.Fatalf("decode thread response: %v", err)
+	if err := json.NewDecoder(topicResp.Body).Decode(&createdTopic); err != nil {
+		t.Fatalf("decode topic response: %v", err)
 	}
-	if asString(threadPayload.Thread["updated_by"]) != registerPayload.Agent.ActorID {
-		t.Fatalf("expected thread updated_by to use authenticated actor mapping, got %#v", threadPayload.Thread["updated_by"])
+	if got := authTestThreadUpdatedBy(t, serverURL, refreshPayload.Tokens.AccessToken, createdTopic.Topic); got != registerPayload.Agent.ActorID {
+		t.Fatalf("expected backing thread updated_by to use authenticated actor mapping, got %q", got)
 	}
 
-	mismatchResp := postJSONExpectStatusWithAuth(t, serverURL+"/threads", map[string]any{
+	mismatchResp := postJSONExpectStatusWithAuth(t, serverURL+"/topics", map[string]any{
 		"actor_id": "human-actor",
-		"thread": map[string]any{
-			"title":            "Mismatch thread",
-			"type":             "incident",
-			"status":           "active",
-			"priority":         "p1",
-			"tags":             []string{"auth"},
-			"cadence":          "daily",
-			"next_check_in_at": "2030-01-01T00:00:00Z",
-			"current_summary":  "summary",
-			"next_actions":     []string{"action"},
-			"key_artifacts":    []string{},
-			"provenance":       map[string]any{"sources": []string{"inferred"}},
-		},
+		"topic":    authTestMinimalTopic("Mismatch thread"),
 	}, refreshPayload.Tokens.AccessToken, http.StatusForbidden)
 	defer mismatchResp.Body.Close()
 	assertErrorCode(t, mismatchResp, "key_mismatch")
@@ -457,59 +472,39 @@ func TestControlPlaneHumanWorkspaceTokenAcceptedAndShadowPrincipalStable(t *test
 	assertErrorCode(t, passkeyResp, "auth_unavailable")
 
 	firstToken := mintControlPlaneGrant(t, fixture, "acct_123", "casey@example.com", "Casey Human", "launch_1", "", "org_123")
-	firstThreadResp := postJSONExpectStatusWithAuth(t, serverURL+"/threads", map[string]any{
-		"thread": map[string]any{
-			"title":            "Control-plane auth thread",
-			"type":             "incident",
-			"status":           "active",
-			"priority":         "p1",
-			"tags":             []string{"control-plane"},
-			"cadence":          "daily",
-			"next_check_in_at": "2030-01-01T00:00:00Z",
-			"current_summary":  "created by control-plane human token",
-			"next_actions":     []string{"verify shadow principal"},
-			"key_artifacts":    []string{},
-			"provenance":       map[string]any{"sources": []string{"inferred"}},
-		},
+	firstTopic := authTestMinimalTopic("Control-plane auth thread")
+	firstTopic["summary"] = "created by control-plane human token"
+	firstTopicResp := postJSONExpectStatusWithAuth(t, serverURL+"/topics", map[string]any{
+		"topic": firstTopic,
 	}, firstToken, http.StatusCreated)
-	defer firstThreadResp.Body.Close()
+	defer firstTopicResp.Body.Close()
 
-	var firstThreadPayload struct {
-		Thread map[string]any `json:"thread"`
+	var firstTopicPayload struct {
+		Topic map[string]any `json:"topic"`
 	}
-	if err := json.NewDecoder(firstThreadResp.Body).Decode(&firstThreadPayload); err != nil {
-		t.Fatalf("decode first control-plane thread response: %v", err)
+	if err := json.NewDecoder(firstTopicResp.Body).Decode(&firstTopicPayload); err != nil {
+		t.Fatalf("decode first control-plane topic response: %v", err)
 	}
-	firstActorID := asString(firstThreadPayload.Thread["updated_by"])
+	firstActorID := authTestThreadUpdatedBy(t, serverURL, firstToken, firstTopicPayload.Topic)
 	if firstActorID == "" {
-		t.Fatalf("expected updated_by in control-plane thread payload: %#v", firstThreadPayload.Thread)
+		t.Fatal("expected updated_by on backing thread")
 	}
 
 	secondToken := mintControlPlaneGrant(t, fixture, "acct_123", "casey@example.com", "Casey Renamed", "launch_2", "", "org_123")
-	secondThreadResp := postJSONExpectStatusWithAuth(t, serverURL+"/threads", map[string]any{
-		"thread": map[string]any{
-			"title":            "Control-plane auth thread 2",
-			"type":             "incident",
-			"status":           "active",
-			"priority":         "p2",
-			"tags":             []string{"control-plane"},
-			"cadence":          "weekly",
-			"next_check_in_at": "2030-01-02T00:00:00Z",
-			"current_summary":  "second request same shadow principal",
-			"next_actions":     []string{"confirm stable mapping"},
-			"key_artifacts":    []string{},
-			"provenance":       map[string]any{"sources": []string{"inferred"}},
-		},
+	secondTopic := authTestMinimalTopic("Control-plane auth thread 2")
+	secondTopic["summary"] = "second request same shadow principal"
+	secondTopicResp := postJSONExpectStatusWithAuth(t, serverURL+"/topics", map[string]any{
+		"topic": secondTopic,
 	}, secondToken, http.StatusCreated)
-	defer secondThreadResp.Body.Close()
+	defer secondTopicResp.Body.Close()
 
-	var secondThreadPayload struct {
-		Thread map[string]any `json:"thread"`
+	var secondTopicPayload struct {
+		Topic map[string]any `json:"topic"`
 	}
-	if err := json.NewDecoder(secondThreadResp.Body).Decode(&secondThreadPayload); err != nil {
-		t.Fatalf("decode second control-plane thread response: %v", err)
+	if err := json.NewDecoder(secondTopicResp.Body).Decode(&secondTopicPayload); err != nil {
+		t.Fatalf("decode second control-plane topic response: %v", err)
 	}
-	if got := asString(secondThreadPayload.Thread["updated_by"]); got != firstActorID {
+	if got := authTestThreadUpdatedBy(t, serverURL, secondToken, secondTopicPayload.Topic); got != firstActorID {
 		t.Fatalf("expected stable shadow principal actor_id %q, got %q", firstActorID, got)
 	}
 
@@ -638,31 +633,21 @@ func TestWorkspaceLocalAgentAuthStillSucceedsWhenControlPlaneHumanAuthEnabled(t 
 		t.Fatalf("decode register response: %v", err)
 	}
 
-	threadResp := postJSONExpectStatusWithAuth(t, serverURL+"/threads", map[string]any{
-		"thread": map[string]any{
-			"title":            "Agent thread while control-plane human auth enabled",
-			"type":             "incident",
-			"status":           "active",
-			"priority":         "p1",
-			"tags":             []string{"agent"},
-			"cadence":          "daily",
-			"next_check_in_at": "2030-01-03T00:00:00Z",
-			"current_summary":  "agent auth still works",
-			"next_actions":     []string{"ship"},
-			"key_artifacts":    []string{},
-			"provenance":       map[string]any{"sources": []string{"inferred"}},
-		},
+	agentTopic := authTestMinimalTopic("Agent thread while control-plane human auth enabled")
+	agentTopic["summary"] = "agent auth still works"
+	topicResp := postJSONExpectStatusWithAuth(t, serverURL+"/topics", map[string]any{
+		"topic": agentTopic,
 	}, registerPayload.Tokens.AccessToken, http.StatusCreated)
-	defer threadResp.Body.Close()
+	defer topicResp.Body.Close()
 
-	var threadPayload struct {
-		Thread map[string]any `json:"thread"`
+	var topicPayload struct {
+		Topic map[string]any `json:"topic"`
 	}
-	if err := json.NewDecoder(threadResp.Body).Decode(&threadPayload); err != nil {
-		t.Fatalf("decode thread payload: %v", err)
+	if err := json.NewDecoder(topicResp.Body).Decode(&topicPayload); err != nil {
+		t.Fatalf("decode topic payload: %v", err)
 	}
-	if got := asString(threadPayload.Thread["updated_by"]); got != registerPayload.Agent.ActorID {
-		t.Fatalf("expected updated_by=%q for workspace-local agent, got %#v", registerPayload.Agent.ActorID, threadPayload.Thread["updated_by"])
+	if got := authTestThreadUpdatedBy(t, serverURL, registerPayload.Tokens.AccessToken, topicPayload.Topic); got != registerPayload.Agent.ActorID {
+		t.Fatalf("expected updated_by=%q for workspace-local agent, got %q", registerPayload.Agent.ActorID, got)
 	}
 }
 
@@ -672,7 +657,7 @@ func TestBootstrapAndInviteGatedRegistrationFlow(t *testing.T) {
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{bootstrapToken: testBootstrapToken})
 	serverURL := env.server.URL
 
-	if available := getBootstrapStatus(t, serverURL); !available {
+	if status := getBootstrapStatus(t, serverURL); !status.Available {
 		t.Fatal("expected bootstrap registration to be available before first principal")
 	}
 
@@ -706,7 +691,7 @@ func TestBootstrapAndInviteGatedRegistrationFlow(t *testing.T) {
 		t.Fatalf("decode bootstrap register response: %v", err)
 	}
 
-	if available := getBootstrapStatus(t, serverURL); available {
+	if status := getBootstrapStatus(t, serverURL); status.Available {
 		t.Fatal("expected bootstrap registration to be unavailable after first principal")
 	}
 
@@ -1381,7 +1366,7 @@ func TestFirstPasskeyRegistrationWithBootstrapToken(t *testing.T) {
 	if !strings.HasPrefix(verifyPayload.Agent.Username, "passkey.testuser1.") {
 		t.Fatalf("unexpected passkey username: %q", verifyPayload.Agent.Username)
 	}
-	if available := getBootstrapStatus(t, serverURL); available {
+	if status := getBootstrapStatus(t, serverURL); status.Available {
 		t.Fatal("expected bootstrap registration to be unavailable after first passkey principal")
 	}
 }
@@ -1407,21 +1392,9 @@ func TestWriteAuthToggleRejectsUnauthenticatedWritesWhenDisabled(t *testing.T) {
 	defer listActorsResp.Body.Close()
 	assertErrorCode(t, listActorsResp, "auth_required")
 
-	noAuthResp := postJSONExpectStatusWithAuth(t, serverURL+"/threads", map[string]any{
+	noAuthResp := postJSONExpectStatusWithAuth(t, serverURL+"/topics", map[string]any{
 		"actor_id": "human-actor",
-		"thread": map[string]any{
-			"title":            "Strict auth thread",
-			"type":             "incident",
-			"status":           "active",
-			"priority":         "p1",
-			"tags":             []string{"auth"},
-			"cadence":          "daily",
-			"next_check_in_at": "2030-01-01T00:00:00Z",
-			"current_summary":  "summary",
-			"next_actions":     []string{"action"},
-			"key_artifacts":    []string{},
-			"provenance":       map[string]any{"sources": []string{"inferred"}},
-		},
+		"topic":    authTestMinimalTopic("Strict auth topic"),
 	}, "", http.StatusUnauthorized)
 	defer noAuthResp.Body.Close()
 	assertErrorCode(t, noAuthResp, "auth_required")
@@ -1446,31 +1419,19 @@ func TestWriteAuthToggleRejectsUnauthenticatedWritesWhenDisabled(t *testing.T) {
 		t.Fatalf("decode register response: %v", err)
 	}
 
-	authenticatedResp := postJSONExpectStatusWithAuth(t, serverURL+"/threads", map[string]any{
-		"thread": map[string]any{
-			"title":            "Authorized thread",
-			"type":             "incident",
-			"status":           "active",
-			"priority":         "p1",
-			"tags":             []string{"auth"},
-			"cadence":          "daily",
-			"next_check_in_at": "2030-01-01T00:00:00Z",
-			"current_summary":  "summary",
-			"next_actions":     []string{"action"},
-			"key_artifacts":    []string{},
-			"provenance":       map[string]any{"sources": []string{"inferred"}},
-		},
+	authenticatedResp := postJSONExpectStatusWithAuth(t, serverURL+"/topics", map[string]any{
+		"topic": authTestMinimalTopic("Authorized topic"),
 	}, registerPayload.Tokens.AccessToken, http.StatusCreated)
 	defer authenticatedResp.Body.Close()
 
-	var threadPayload struct {
-		Thread map[string]any `json:"thread"`
+	var authedTopicPayload struct {
+		Topic map[string]any `json:"topic"`
 	}
-	if err := json.NewDecoder(authenticatedResp.Body).Decode(&threadPayload); err != nil {
-		t.Fatalf("decode thread response: %v", err)
+	if err := json.NewDecoder(authenticatedResp.Body).Decode(&authedTopicPayload); err != nil {
+		t.Fatalf("decode topic response: %v", err)
 	}
-	if asString(threadPayload.Thread["updated_by"]) != registerPayload.Agent.ActorID {
-		t.Fatalf("expected updated_by to match authenticated actor, got %#v", threadPayload.Thread["updated_by"])
+	if got := authTestThreadUpdatedBy(t, serverURL, registerPayload.Tokens.AccessToken, authedTopicPayload.Topic); got != registerPayload.Agent.ActorID {
+		t.Fatalf("expected updated_by to match authenticated actor, got %q", got)
 	}
 }
 
@@ -1623,23 +1584,11 @@ func TestExplicitDevModeKeepsLegacyActorFlowAndAnonymousWorkspaceAccess(t *testi
 		t.Fatal("expected dev actor list to include at least one actor")
 	}
 
-	createThreadResp := postJSONExpectStatusWithAuth(t, serverURL+"/threads", map[string]any{
+	createTopicResp := postJSONExpectStatusWithAuth(t, serverURL+"/topics", map[string]any{
 		"actor_id": "dev-actor",
-		"thread": map[string]any{
-			"title":            "Dev mode thread",
-			"type":             "incident",
-			"status":           "active",
-			"priority":         "p1",
-			"tags":             []string{"dev"},
-			"cadence":          "daily",
-			"next_check_in_at": "2030-01-01T00:00:00Z",
-			"current_summary":  "summary",
-			"next_actions":     []string{"action"},
-			"key_artifacts":    []string{},
-			"provenance":       map[string]any{"sources": []string{"inferred"}},
-		},
+		"topic":    authTestMinimalTopic("Dev mode topic"),
 	}, "", http.StatusCreated)
-	createThreadResp.Body.Close()
+	createTopicResp.Body.Close()
 
 	listThreadsResp := getJSONExpectStatusWithAuth(t, serverURL+"/threads", "", http.StatusOK)
 	defer listThreadsResp.Body.Close()
@@ -1763,18 +1712,28 @@ func TestConcurrentFreshAuthRegistrationsSucceed(t *testing.T) {
 	}
 }
 
-func getBootstrapStatus(t *testing.T, serverURL string) bool {
+func getBootstrapStatus(t *testing.T, serverURL string) struct {
+	Available              bool
+	DevPasskeyBypassActive bool
+} {
 	t.Helper()
 	resp := getJSONExpectStatusWithAuth(t, serverURL+"/auth/bootstrap/status", "", http.StatusOK)
 	defer resp.Body.Close()
 
 	var payload struct {
-		Available bool `json:"bootstrap_registration_available"`
+		Available              bool `json:"bootstrap_registration_available"`
+		DevPasskeyBypassActive bool `json:"dev_passkey_bypass_available"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode bootstrap status response: %v", err)
 	}
-	return payload.Available
+	return struct {
+		Available              bool
+		DevPasskeyBypassActive bool
+	}{
+		Available:              payload.Available,
+		DevPasskeyBypassActive: payload.DevPasskeyBypassActive,
+	}
 }
 
 func createInviteToken(t *testing.T, serverURL string, accessToken string, payload map[string]any) string {
@@ -2067,6 +2026,10 @@ func patchJSONExpectStatusWithAuth(t *testing.T, url string, payload any, access
 	if err != nil {
 		t.Fatalf("marshal request body: %v", err)
 	}
+	headers := map[string]string{}
+	if strings.TrimSpace(accessToken) != "" {
+		headers["Authorization"] = "Bearer " + accessToken
+	}
 	request, err := http.NewRequest(http.MethodPatch, url, bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("new PATCH request: %v", err)
@@ -2238,6 +2201,199 @@ func mustDecodeJSONObject(t *testing.T, raw string) map[string]any {
 		t.Fatalf("decode JSON object: %v", err)
 	}
 	return payload
+}
+
+func TestPasskeyDevBypassDisabledWithoutDedicatedFlag(t *testing.T) {
+	t.Parallel()
+
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{
+		bootstrapToken:        testBootstrapToken,
+		enableDevActorMode:    true,
+		allowPasskeyDevBypass: false,
+	})
+	serverURL := env.server.URL
+
+	status := getBootstrapStatus(t, serverURL)
+	if status.DevPasskeyBypassActive {
+		t.Fatal("expected bootstrap status to report passkey dev bypass unavailable")
+	}
+
+	resp := postJSONExpectStatusWithHeaders(t, serverURL+"/auth/passkey/dev/register", map[string]any{
+		"display_name":    "Dev Human",
+		"bootstrap_token": testBootstrapToken,
+	}, nil, http.StatusForbidden)
+	defer resp.Body.Close()
+	assertErrorCode(t, resp, "dev_passkey_bypass_disabled")
+}
+
+func TestPasskeyDevBypassCanRunWithoutDevActorMode(t *testing.T) {
+	t.Parallel()
+
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{
+		bootstrapToken:        testBootstrapToken,
+		enableDevActorMode:    false,
+		allowPasskeyDevBypass: true,
+	})
+	serverURL := env.server.URL
+
+	status := getBootstrapStatus(t, serverURL)
+	if !status.DevPasskeyBypassActive {
+		t.Fatal("expected bootstrap status to report passkey dev bypass available")
+	}
+
+	regResp := postJSONExpectStatusWithHeaders(t, serverURL+"/auth/passkey/dev/register", map[string]any{
+		"display_name":    "Dev Operator",
+		"bootstrap_token": testBootstrapToken,
+	}, nil, http.StatusCreated)
+	defer regResp.Body.Close()
+	var regPayload struct {
+		Agent struct {
+			AgentID       string  `json:"agent_id"`
+			Username      string  `json:"username"`
+			PrincipalKind *string `json:"principal_kind"`
+			AuthMethod    *string `json:"auth_method"`
+		} `json:"agent"`
+		Tokens struct {
+			AccessToken string `json:"access_token"`
+		} `json:"tokens"`
+	}
+	if err := json.NewDecoder(regResp.Body).Decode(&regPayload); err != nil {
+		t.Fatalf("decode dev register: %v", err)
+	}
+	if regPayload.Agent.AgentID == "" || regPayload.Tokens.AccessToken == "" {
+		t.Fatalf("unexpected payload %#v", regPayload)
+	}
+	if regPayload.Agent.PrincipalKind == nil || *regPayload.Agent.PrincipalKind != "human" {
+		t.Fatalf("expected human principal, got %#v", regPayload.Agent)
+	}
+	if regPayload.Agent.AuthMethod == nil || *regPayload.Agent.AuthMethod != auth.AuthMethodPasskey {
+		t.Fatalf("expected passkey auth_method, got %#v", regPayload.Agent)
+	}
+
+	loginResp := postJSONExpectStatusWithHeaders(t, serverURL+"/auth/passkey/dev/login", map[string]any{}, nil, http.StatusOK)
+	defer loginResp.Body.Close()
+	var loginPayload struct {
+		Agent struct {
+			AgentID string `json:"agent_id"`
+		} `json:"agent"`
+		Tokens struct {
+			AccessToken string `json:"access_token"`
+		} `json:"tokens"`
+	}
+	if err := json.NewDecoder(loginResp.Body).Decode(&loginPayload); err != nil {
+		t.Fatalf("decode dev login: %v", err)
+	}
+	if loginPayload.Agent.AgentID != regPayload.Agent.AgentID {
+		t.Fatalf("expected same agent, got %q vs %q", loginPayload.Agent.AgentID, regPayload.Agent.AgentID)
+	}
+	if loginPayload.Tokens.AccessToken == "" {
+		t.Fatal("expected access token on dev login")
+	}
+}
+
+func TestPasskeyDevRegisterLinkedSeedActorAndSoleLogin(t *testing.T) {
+	t.Parallel()
+
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{
+		bootstrapToken:              testBootstrapToken,
+		enableDevActorMode:          false,
+		allowPasskeyDevBypass:       true,
+		allowDevRegisterLinkedActor: true,
+	})
+	serverURL := env.server.URL
+
+	ctx := context.Background()
+	_, err := env.workspace.DB().ExecContext(ctx, `
+		INSERT INTO actors(id, display_name, tags_json, created_at, metadata_json)
+		VALUES (?, ?, ?, ?, ?)`,
+		"actor-dev-human-operator",
+		"Jordan (Human operator)",
+		`["human","operator"]`,
+		"2026-01-01T07:55:00.000Z",
+		`{}`,
+	)
+	if err != nil {
+		t.Fatalf("seed fixture actor: %v", err)
+	}
+
+	regResp := postJSONExpectStatusWithHeaders(t, serverURL+"/auth/passkey/dev/register", map[string]any{
+		"display_name":      "Jordan (Human operator)",
+		"bootstrap_token":   testBootstrapToken,
+		"existing_actor_id": "actor-dev-human-operator",
+	}, nil, http.StatusCreated)
+	defer regResp.Body.Close()
+
+	loginResp := postJSONExpectStatusWithHeaders(t, serverURL+"/auth/passkey/dev/login", map[string]any{}, nil, http.StatusOK)
+	defer loginResp.Body.Close()
+	var loginPayload struct {
+		Agent struct {
+			ActorID string `json:"actor_id"`
+		} `json:"agent"`
+	}
+	if err := json.NewDecoder(loginResp.Body).Decode(&loginPayload); err != nil {
+		t.Fatalf("decode dev login: %v", err)
+	}
+	if loginPayload.Agent.ActorID != "actor-dev-human-operator" {
+		t.Fatalf("expected linked actor id, got %q", loginPayload.Agent.ActorID)
+	}
+}
+
+func TestPasskeyDevLoginRequiresDisambiguation(t *testing.T) {
+	t.Parallel()
+
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{
+		bootstrapToken:        testBootstrapToken,
+		enableDevActorMode:    false,
+		allowPasskeyDevBypass: true,
+	})
+	serverURL := env.server.URL
+
+	reg1Resp := postJSONExpectStatusWithHeaders(t, serverURL+"/auth/passkey/dev/register", map[string]any{
+		"display_name":    "Operator One",
+		"bootstrap_token": testBootstrapToken,
+	}, nil, http.StatusCreated)
+	defer reg1Resp.Body.Close()
+	var reg1 struct {
+		Agent struct {
+			Username string `json:"username"`
+		} `json:"agent"`
+		Tokens struct {
+			AccessToken string `json:"access_token"`
+		} `json:"tokens"`
+	}
+	if err := json.NewDecoder(reg1Resp.Body).Decode(&reg1); err != nil {
+		t.Fatalf("decode first dev register: %v", err)
+	}
+
+	_, inviteToken := createInvite(t, serverURL, reg1.Tokens.AccessToken, map[string]any{
+		"kind": "human",
+	})
+
+	reg2Resp := postJSONExpectStatusWithHeaders(t, serverURL+"/auth/passkey/dev/register", map[string]any{
+		"display_name": "Operator Two",
+		"invite_token": inviteToken,
+	}, nil, http.StatusCreated)
+	defer reg2Resp.Body.Close()
+
+	ambResp := postJSONExpectStatusWithHeaders(t, serverURL+"/auth/passkey/dev/login", map[string]any{}, nil, http.StatusBadRequest)
+	defer ambResp.Body.Close()
+	assertErrorCode(t, ambResp, "invalid_request")
+
+	okResp := postJSONExpectStatusWithHeaders(t, serverURL+"/auth/passkey/dev/login", map[string]any{
+		"username": reg1.Agent.Username,
+	}, nil, http.StatusOK)
+	defer okResp.Body.Close()
+	var okPayload struct {
+		Agent struct {
+			Username string `json:"username"`
+		} `json:"agent"`
+	}
+	if err := json.NewDecoder(okResp.Body).Decode(&okPayload); err != nil {
+		t.Fatalf("decode disambiguated dev login: %v", err)
+	}
+	if okPayload.Agent.Username != reg1.Agent.Username {
+		t.Fatalf("expected username %q, got %q", reg1.Agent.Username, okPayload.Agent.Username)
+	}
 }
 
 const samplePasskeyCredentialJSON = `{

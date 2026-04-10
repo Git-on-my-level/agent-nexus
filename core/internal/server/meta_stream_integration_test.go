@@ -231,7 +231,7 @@ func TestEventsStreamResumesFromLastEventID(t *testing.T) {
 func TestEventsStreamSurvivesServerWriteTimeout(t *testing.T) {
 	t.Parallel()
 
-	server := newMetaStreamTestServer(t, func(server *httptest.Server) {
+	server, _ := newMetaStreamTestServer(t, func(server *httptest.Server) {
 		server.Config.WriteTimeout = 150 * time.Millisecond
 		server.Config.IdleTimeout = time.Second
 	}, WithStreamPollInterval(20*time.Millisecond))
@@ -257,34 +257,19 @@ func TestEventsStreamEmitsDocumentLifecycleEventsForThread(t *testing.T) {
 	h := newMetaStreamTestHarness(t, WithStreamPollInterval(20*time.Millisecond))
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-05T10:00:00Z"}}`, http.StatusCreated).Body.Close()
 
-	threadResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
-		"actor_id":"actor-1",
-		"thread":{
-			"title":"Document stream thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p1",
-			"tags":["docs"],
-			"cadence":"daily",
-			"next_check_in_at":"2030-01-01T00:00:00Z",
-			"current_summary":"summary",
-			"next_actions":["action"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated)
-	defer threadResp.Body.Close()
-
-	var threadPayload struct {
-		Thread map[string]any `json:"thread"`
-	}
-	if err := json.NewDecoder(threadResp.Body).Decode(&threadPayload); err != nil {
-		t.Fatalf("decode thread response: %v", err)
-	}
-	threadID := asString(threadPayload.Thread["id"])
-	if threadID == "" {
-		t.Fatal("expected created thread id")
-	}
+	threadID := integrationSeedThreadWithStore(t, h.primitiveStore, nil, "actor-1", map[string]any{
+		"title":            "Document stream thread",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p1",
+		"tags":             []any{"docs"},
+		"cadence":          "daily",
+		"next_check_in_at": "2030-01-01T00:00:00Z",
+		"current_summary":  "summary",
+		"next_actions":     []any{"action"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
 
 	timelineResp, err := http.Get(h.baseURL + "/threads/" + threadID + "/timeline")
 	if err != nil {
@@ -328,13 +313,13 @@ func TestEventsStreamEmitsDocumentLifecycleEventsForThread(t *testing.T) {
 	createRevisionID := asString(createdDoc.Revision["revision_id"])
 	createArtifactID := asString(createdDoc.Revision["artifact_id"])
 
-	updateDocResp := requestJSONExpectStatus(t, http.MethodPatch, h.baseURL+"/docs/"+documentID, fmt.Sprintf(`{
+	updateDocResp := requestJSONExpectStatus(t, http.MethodPost, h.baseURL+"/docs/"+documentID+"/revisions", fmt.Sprintf(`{
 		"actor_id":"actor-1",
 		"document":{"title":"Stream Document v2"},
 		"if_base_revision":"%s",
 		"content":"draft v2",
 		"content_type":"text"
-	}`, createRevisionID), http.StatusOK)
+	}`, createRevisionID), http.StatusCreated)
 	defer updateDocResp.Body.Close()
 
 	var updatedDoc struct {
@@ -346,18 +331,18 @@ func TestEventsStreamEmitsDocumentLifecycleEventsForThread(t *testing.T) {
 	updateRevisionID := asString(updatedDoc.Revision["revision_id"])
 	updateArtifactID := asString(updatedDoc.Revision["artifact_id"])
 
-	tombstoneResp := postJSONExpectStatus(t, h.baseURL+"/docs/"+documentID+"/tombstone", `{
+	trashResp := postJSONExpectStatus(t, h.baseURL+"/docs/"+documentID+"/trash", `{
 		"actor_id":"actor-1",
 		"reason":"stream verification"
 	}`, http.StatusOK)
-	defer tombstoneResp.Body.Close()
+	defer trashResp.Body.Close()
 
 	first := awaitSSEEvent(t, reader, 2*time.Second)
 	second := awaitSSEEvent(t, reader, 2*time.Second)
 	third := awaitSSEEvent(t, reader, 2*time.Second)
 
 	events := []sseEvent{first, second, third}
-	expectedTypes := []string{"document_created", "document_updated", "document_tombstoned"}
+	expectedTypes := []string{"document_created", "document_updated", "document_trashed"}
 	for index, expectedType := range expectedTypes {
 		eventPayload, _ := events[index].Data["event"].(map[string]any)
 		if asString(eventPayload["type"]) != expectedType {
@@ -376,50 +361,46 @@ func TestInboxStreamSuppressesDuplicateItems(t *testing.T) {
 	h := newMetaStreamTestHarness(t, WithStreamPollInterval(20*time.Millisecond))
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-05T10:00:00Z"}}`, http.StatusCreated).Body.Close()
 
-	threadResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
+	threadID := integrationSeedThreadWithStore(t, h.primitiveStore, nil, "actor-1", map[string]any{
+		"title":            "Inbox stream thread",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p1",
+		"tags":             []any{"ops"},
+		"cadence":          "daily",
+		"next_check_in_at": "2030-01-01T00:00:00Z",
+		"current_summary":  "summary",
+		"next_actions":     []any{"action"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
+
+	createBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
 		"actor_id":"actor-1",
-		"thread":{
-			"title":"Inbox stream thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p1",
-			"tags":["ops"],
-			"cadence":"daily",
-			"next_check_in_at":"2030-01-01T00:00:00Z",
-			"current_summary":"summary",
-			"next_actions":["action"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
+		"board":{
+			"title":"Inbox stream board",
+			"refs":["thread:`+threadID+`"]
 		}
 	}`, http.StatusCreated)
-	defer threadResp.Body.Close()
-
-	var threadPayload struct {
-		Thread map[string]any `json:"thread"`
+	defer createBoardResp.Body.Close()
+	var boardPayload struct {
+		Board map[string]any `json:"board"`
 	}
-	if err := json.NewDecoder(threadResp.Body).Decode(&threadPayload); err != nil {
-		t.Fatalf("decode thread response: %v", err)
+	if err := json.NewDecoder(createBoardResp.Body).Decode(&boardPayload); err != nil {
+		t.Fatalf("decode board response: %v", err)
 	}
-	threadID := asString(threadPayload.Thread["id"])
-	if threadID == "" {
-		t.Fatal("expected created thread id")
-	}
+	boardID := asString(boardPayload.Board["id"])
+	boardUpdatedAt := asString(boardPayload.Board["updated_at"])
 
 	dueSoon := time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339)
-	commitmentResp := postJSONExpectStatus(t, h.baseURL+"/commitments", `{
+	postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
 		"actor_id":"actor-1",
-		"commitment":{
-			"thread_id":"`+threadID+`",
-			"title":"At risk commitment",
-			"owner":"actor-1",
-			"due_at":"`+dueSoon+`",
-			"status":"open",
-			"definition_of_done":["done"],
-			"links":["url:https://example.com/task"],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated)
-	defer commitmentResp.Body.Close()
+		"if_board_updated_at":"`+boardUpdatedAt+`",
+		"title":"At risk work item",
+		"related_refs":["thread:`+threadID+`"],
+		"column_key":"ready",
+		"due_at":"`+dueSoon+`"
+	}`, http.StatusCreated).Body.Close()
 
 	resp := openSSEStream(t, h.baseURL+"/inbox/stream", "")
 	reader, stop := startSSEReader(resp.Body)
@@ -438,17 +419,18 @@ func TestInboxStreamSuppressesDuplicateItems(t *testing.T) {
 }
 
 type metaStreamTestHarness struct {
-	baseURL string
+	baseURL        string
+	primitiveStore PrimitiveStore
 }
 
 func newMetaStreamTestHarness(t *testing.T, options ...HandlerOption) metaStreamTestHarness {
 	t.Helper()
 
-	server := newMetaStreamTestServer(t, nil, options...)
-	return metaStreamTestHarness{baseURL: server.URL}
+	server, store := newMetaStreamTestServer(t, nil, options...)
+	return metaStreamTestHarness{baseURL: server.URL, primitiveStore: store}
 }
 
-func newMetaStreamTestServer(t *testing.T, configure func(*httptest.Server), options ...HandlerOption) *httptest.Server {
+func newMetaStreamTestServer(t *testing.T, configure func(*httptest.Server), options ...HandlerOption) (*httptest.Server, PrimitiveStore) {
 	t.Helper()
 
 	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
@@ -468,12 +450,14 @@ func newMetaStreamTestServer(t *testing.T, configure func(*httptest.Server), opt
 		_ = workspace.Close()
 		t.Fatalf("ensure system actor: %v", err)
 	}
+	authStore := auth.NewStore(workspace.DB())
+	primitiveStore := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
 
 	baseOptions := []HandlerOption{
 		WithHealthCheck(workspace.Ping),
 		WithActorRegistry(registry),
-		WithAuthStore(auth.NewStore(workspace.DB())),
-		WithPrimitiveStore(primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)),
+		WithAuthStore(authStore),
+		WithPrimitiveStore(primitiveStore),
 		WithSchemaContract(contract),
 		WithAllowUnauthenticatedWrites(true),
 		WithEnableDevActorMode(true),
@@ -490,7 +474,7 @@ func newMetaStreamTestServer(t *testing.T, configure func(*httptest.Server), opt
 		_ = workspace.Close()
 	})
 
-	return server
+	return server, primitiveStore
 }
 
 func appendEventForTest(t *testing.T, baseURL string, actorID string, threadID string, summary string) string {
@@ -501,7 +485,7 @@ func appendEventForTest(t *testing.T, baseURL string, actorID string, threadID s
 		"event":{
 			"type":"my_custom_event",
 			"thread_id":"%s",
-			"refs":["thread:%s"],
+			"refs":["topic:%s"],
 			"summary":%q,
 			"payload":{},
 			"provenance":{"sources":["inferred"]}

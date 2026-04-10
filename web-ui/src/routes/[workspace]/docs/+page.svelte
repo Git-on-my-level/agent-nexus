@@ -2,11 +2,9 @@
   import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
-  import SearchableEntityPicker from "$lib/components/SearchableEntityPicker.svelte";
   import { coreClient } from "$lib/coreClient";
   import { filterTopLevelDocuments } from "$lib/documentVisibility";
   import { formatTimestamp } from "$lib/formatDate";
-  import { searchThreads as searchThreadRecords } from "$lib/searchHelpers";
   import { workspacePath } from "$lib/workspacePaths";
   import {
     lookupActorDisplayName,
@@ -76,7 +74,6 @@
     title: "",
     status: "draft",
     labels: "",
-    thread_id: "",
     content: "",
   });
 
@@ -84,23 +81,14 @@
     return workspacePath(workspaceSlug, pathname);
   }
 
-  function toThreadOption(thread) {
-    return {
-      id: thread.id,
-      title: thread.title || thread.id,
-      subtitle: [thread.status, thread.priority].filter(Boolean).join(" · "),
-      keywords: [thread.type, ...(thread.tags ?? [])],
-    };
-  }
-
-  async function searchThreadOptions(query) {
-    const threads = await searchThreadRecords(query);
-    return threads.map(toThreadOption);
-  }
-
   $effect(() => {
     showArchived;
     const threadId = scopedThreadId;
+    if (threadId && createOpen) {
+      createOpen = false;
+      createError = "";
+      resetDraft();
+    }
     if (workspaceSlug) {
       void loadDocuments(threadId);
     }
@@ -129,12 +117,14 @@
       title: "",
       status: "draft",
       labels: "",
-      thread_id: scopedThreadId,
       content: "",
     };
   }
 
   function toggleCreate() {
+    if (scopedThreadId) {
+      return;
+    }
     createOpen = !createOpen;
     if (!createOpen) {
       createError = "";
@@ -167,7 +157,6 @@
         labels,
       };
       if (draft.id.trim()) docPayload.id = draft.id.trim();
-      if (draft.thread_id.trim()) docPayload.thread_id = draft.thread_id.trim();
 
       const result = await coreClient.createDocument({
         document: docPayload,
@@ -238,7 +227,7 @@
     trashBusyId = id;
     error = "";
     try {
-      await coreClient.tombstoneDocument(id, {});
+      await coreClient.trashDocument(id, {});
       confirmModal = { open: false, action: "", entityId: "" };
       await loadDocuments(scopedThreadId);
     } catch (e) {
@@ -266,9 +255,9 @@
     </p>
     {#if scopedThreadId}
       <p class="mt-1 text-[12px] text-[var(--ui-text-muted)]">
-        Scoped to thread
+        Scoped to backing thread
         <a
-          class="text-indigo-300 transition-colors hover:text-indigo-200"
+          class="text-indigo-400 transition-colors hover:text-indigo-300"
           href={workspaceHref(`/threads/${encodeURIComponent(scopedThreadId)}`)}
         >
           {scopedThreadId}
@@ -310,9 +299,13 @@
       </svg>
     </button>
     <button
-      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text)] transition-colors hover:bg-[var(--ui-border)]"
+      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text)] transition-colors hover:bg-[var(--ui-border)] disabled:cursor-not-allowed disabled:opacity-50"
+      disabled={Boolean(scopedThreadId)}
       onclick={toggleCreate}
       type="button"
+      title={scopedThreadId
+        ? "Clear the backing-thread scope to create a new document lineage."
+        : "Create a new document lineage"}
     >
       {#if !createOpen}
         <svg
@@ -339,10 +332,14 @@
     class="mb-4 flex items-center justify-between rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2"
   >
     <p class="text-[12px] text-[var(--ui-text-muted)]">
-      Showing only documents linked to this thread.
+      Showing only documents on this backing thread timeline.
+    </p>
+    <p class="text-[12px] text-[var(--ui-text-muted)]">
+      Create from the unscoped docs view. New document lineages always get their
+      own backing thread.
     </p>
     <a
-      class="text-[12px] font-medium text-indigo-300 transition-colors hover:text-indigo-200"
+      class="text-[12px] font-medium text-indigo-400 transition-colors hover:text-indigo-300"
       href={workspaceHref("/docs")}
     >
       Clear scope
@@ -351,8 +348,12 @@
 {/if}
 
 {#if createOpen}
-  <div
+  <form
     class="mb-4 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-4"
+    onsubmit={(e) => {
+      e.preventDefault();
+      void handleCreate();
+    }}
   >
     <h2 class="mb-3 text-[13px] font-semibold text-[var(--ui-text)]">
       New doc lineage
@@ -406,16 +407,6 @@
           type="text"
         />
       </label>
-      <SearchableEntityPicker
-        bind:value={draft.thread_id}
-        advancedLabel="Use a manual thread ID"
-        helperText="Optional: link the doc lineage to its primary thread."
-        label="Thread linkage"
-        manualLabel="Thread ID"
-        manualPlaceholder="thread-..."
-        placeholder="Search threads by title, ID, or tags"
-        searchFn={searchThreadOptions}
-      />
       <label class="sm:col-span-2">
         <span class="text-[12px] font-medium text-[var(--ui-text-muted)]"
           >Head content (Markdown) <span class="text-red-400">*</span></span
@@ -441,8 +432,7 @@
       <button
         class="cursor-pointer rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
         disabled={creating}
-        onclick={handleCreate}
-        type="button"
+        type="submit"
       >
         {creating ? "Creating…" : "Create doc"}
       </button>
@@ -454,7 +444,7 @@
         Cancel
       </button>
     </div>
-  </div>
+  </form>
 {/if}
 
 {#if loading}
@@ -535,12 +525,12 @@
             ) || "—"} by {actorName(doc.updated_by)}
           </p>
           {#if doc.thread_id && !scopedThreadId}
-            <p class="mt-0.5 text-[11px] text-[var(--ui-text-subtle)]">
-              Linked thread: {doc.thread_id}
+            <p class="mt-0.5 text-[11px] text-[var(--ui-text-muted)]">
+              Backing thread (timeline): {doc.thread_id}
             </p>
           {/if}
         </div>
-        <span class="shrink-0 text-[11px] text-[var(--ui-text-subtle)]">
+        <span class="shrink-0 text-[11px] text-[var(--ui-text-muted)]">
           {doc.head_revision_number} revision{doc.head_revision_number === 1
             ? ""
             : "s"}
@@ -634,7 +624,7 @@
             type="button"
           >
             <svg
-              class="h-3 w-3 text-[var(--ui-text-subtle)] transition-transform {collapsed
+              class="h-3 w-3 text-[var(--ui-text-muted)] transition-transform {collapsed
                 ? ''
                 : 'rotate-90'}"
               fill="none"
@@ -679,7 +669,7 @@
   open={confirmModal.open}
   title={confirmModal.action === "trash" ? "Move to trash" : "Archive document"}
   message={confirmModal.action === "trash"
-    ? "This document will be tombstoned. You can restore it from trash later."
+    ? "This document will be moved to trash. You can restore it later."
     : "This document will be hidden from default views. You can unarchive it later."}
   confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
   variant={confirmModal.action === "trash" ? "danger" : "warning"}

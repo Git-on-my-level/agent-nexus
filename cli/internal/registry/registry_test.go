@@ -51,15 +51,23 @@ func TestEmbeddedEventRefRules(t *testing.T) {
 		t.Fatal("expected event_type enum policy to be open in generated metadata")
 	}
 
-	commitmentStatusChanged, ok := rules.RuleForEventType("commitment_status_changed")
+	cardMoved, ok := rules.RuleForEventType("card_moved")
 	if !ok {
-		t.Fatal("expected commitment_status_changed rule to be loaded")
+		t.Fatal("expected card_moved rule to be loaded")
 	}
-	if commitmentStatusChanged.ThreadID != "required" {
-		t.Fatalf("unexpected thread_id for commitment_status_changed: %q", commitmentStatusChanged.ThreadID)
+	if len(cardMoved.RefsMustInclude) != 2 {
+		t.Fatalf("expected 2 required refs for card_moved, got %d", len(cardMoved.RefsMustInclude))
 	}
-	if len(commitmentStatusChanged.ConditionalRefs) != 2 {
-		t.Fatalf("expected 2 conditional refs for commitment_status_changed, got %d", len(commitmentStatusChanged.ConditionalRefs))
+	if len(cardMoved.PayloadMustInclude) != 1 || cardMoved.PayloadMustInclude[0] != "column_key" {
+		t.Fatalf("unexpected payload rules for card_moved: %#v", cardMoved)
+	}
+
+	topicCreated, ok := rules.RuleForEventType("topic_created")
+	if !ok {
+		t.Fatal("expected topic_created rule to be loaded")
+	}
+	if len(topicCreated.RefsMustInclude) != 1 || topicCreated.RefsMustInclude[0] != "topic:<topic_id>" {
+		t.Fatalf("unexpected refs for topic_created: %#v", topicCreated)
 	}
 
 	_, ok = rules.RuleForEventType("unknown_event_type")

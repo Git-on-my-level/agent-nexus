@@ -100,18 +100,18 @@ func TestPostThreadsRejectsUnknownActorID(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	resp := postJSON(t, server.URL+"/threads", `{"actor_id":"missing-actor","thread":{"title":"thread"}}`, http.StatusBadRequest)
+	resp := postJSON(t, server.URL+"/threads", `{"actor_id":"missing-actor","thread":{"title":"thread"}}`, http.StatusMethodNotAllowed)
 	defer resp.Body.Close()
 
 	var payload map[string]map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode error payload: %v", err)
 	}
-	if payload["error"]["code"] != "unknown_actor_id" {
+	if payload["error"]["code"] != "method_not_allowed" {
 		t.Fatalf("unexpected error code: got %q", payload["error"]["code"])
 	}
 
-	assertTableCount(t, workspace.DB(), "snapshots", 0)
+	assertTableCount(t, workspace.DB(), "threads", 0)
 }
 
 func postJSON(t *testing.T, url string, body string, expectedStatus int) *http.Response {

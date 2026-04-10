@@ -30,17 +30,27 @@ function shouldHumanizeByDefault(prefix) {
   return prefix === "document" || prefix === "document_revision";
 }
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function compactValue(value) {
+  if (UUID_RE.test(value)) return value.slice(0, 8);
+  return value;
+}
+
 function humanizedLabelForPrefix(prefix, value) {
+  const short = compactValue(value);
   if (prefix === "artifact") return "Artifact";
-  if (prefix === "thread") return "Thread";
-  if (prefix === "snapshot") return "Snapshot";
+  if (prefix === "card") return "Card";
+  if (prefix === "thread") return `Thread ${short}`.trim();
+  if (prefix === "topic") return `Topic ${short}`.trim();
   if (prefix === "event") return "Event";
-  if (prefix === "document") return `Document ${value}`.trim();
+  if (prefix === "document") return `Document ${short}`.trim();
   if (prefix === "document_revision")
-    return `Document revision ${value}`.trim();
+    return `Document revision ${short}`.trim();
   if (prefix === "url") return summarizeUrl(value);
   if (prefix === "inbox") return "Inbox item";
-  if (prefix === "board") return `Board ${value}`.trim();
+  if (prefix === "board") return `Board ${short}`.trim();
   return "";
 }
 
@@ -81,10 +91,15 @@ const LINK_RESOLVERS = {
     buildInternalHref(workspaceSlug, `/artifacts/${asPathSegment(value)}`),
   thread: ({ workspaceSlug, value }) =>
     buildInternalHref(workspaceSlug, `/threads/${asPathSegment(value)}`),
-  snapshot: ({ workspaceSlug, snapshotIsThread, value }) =>
-    snapshotIsThread
-      ? buildInternalHref(workspaceSlug, `/threads/${asPathSegment(value)}`)
-      : buildInternalHref(workspaceSlug, `/snapshots/${asPathSegment(value)}`),
+  topic: ({ workspaceSlug, value }) =>
+    buildInternalHref(workspaceSlug, `/topics/${asPathSegment(value)}`),
+  card: ({ workspaceSlug, boardId, value }) =>
+    boardId
+      ? buildInternalHref(
+          workspaceSlug,
+          `/boards/${asPathSegment(boardId)}?card=${asPathSegment(value)}`,
+        )
+      : "",
   event: ({ workspaceSlug, threadId, value }) =>
     threadId
       ? buildInternalHref(
@@ -122,8 +137,8 @@ export function resolveRefLink(refValue, options = {}) {
   const prefix = parsed.prefix;
   const value = parsed.value;
   const workspaceSlug = options.workspaceSlug;
+  const boardId = options.boardId;
   const threadId = options.threadId;
-  const snapshotIsThread = Boolean(options.snapshotIsThread);
 
   if (!prefix) {
     return {
@@ -142,8 +157,14 @@ export function resolveRefLink(refValue, options = {}) {
   const linkResolver = LINK_RESOLVERS[prefix];
   if (linkResolver) {
     return createResolvedLink(raw, prefix, value, labels, {
-      href: linkResolver({ workspaceSlug, snapshotIsThread, threadId, value }),
+      href: linkResolver({
+        workspaceSlug,
+        threadId,
+        boardId,
+        value,
+      }),
       isExternal: prefix === "url",
+      boardId,
     });
   }
 

@@ -9,7 +9,6 @@ AUTO_SELECT_PORTS="${AUTO_SELECT_PORTS:-1}"
 CORE_HOST="127.0.0.1"
 UI_HOST="127.0.0.1"
 UI_WORKSPACE_SLUG="${UI_WORKSPACE_SLUG:-${UI_PROJECT_SLUG:-local}}"
-SMOKE_TIMEOUT_SECONDS="${SMOKE_TIMEOUT_SECONDS:-25}"
 BOOTSTRAP_TOKEN="${BOOTSTRAP_TOKEN:-smoke-bootstrap-token}"
 
 mkdir -p "$ARTIFACT_DIR"
@@ -17,8 +16,6 @@ TMP_DIR="$(mktemp -d "$ARTIFACT_DIR/run.XXXXXX")"
 
 CORE_LOG="$TMP_DIR/core.log"
 UI_LOG="$TMP_DIR/web-ui.log"
-EVENTS_TAIL_OUT="$TMP_DIR/events-tail.jsonl"
-INBOX_TAIL_OUT="$TMP_DIR/inbox-tail.jsonl"
 
 HOME_DIR="$TMP_DIR/home"
 mkdir -p "$HOME_DIR"
@@ -160,24 +157,6 @@ assert_contains() {
   exit 1
 }
 
-wait_for_pid() {
-  local pid="$1"
-  local timeout_seconds="$2"
-  local started
-  started="$(date +%s)"
-
-  while kill -0 "$pid" >/dev/null 2>&1; do
-    local now
-    now="$(date +%s)"
-    if (( now - started >= timeout_seconds )); then
-      return 1
-    fi
-    sleep 0.2
-  done
-
-  wait "$pid"
-}
-
 run_cli_json() {
   local outfile="$1"
   shift
@@ -185,8 +164,8 @@ run_cli_json() {
 }
 
 board_create_attempt() {
-  printf '{"board":{"id":"%s","title":"Smoke Board","status":"active","labels":["smoke","board"],"primary_thread_id":"%s","primary_document_id":"%s","pinned_refs":["thread:%s","artifact:%s"]}}\n' \
-    "$BOARD_ID" "$THREAD_ID" "$PRIMARY_DOC_ID" "$THREAD_ID" "$WORK_ORDER_ID" \
+  printf '{"board":{"id":"%s","title":"Smoke Board","status":"active","labels":["smoke","board"],"owners":["%s"],"primary_topic_ref":"topic:%s","thread_id":"%s","document_refs":["document:%s"],"pinned_refs":["document:%s"],"provenance":{"sources":["actor_statement:smoke"]}}}\n' \
+    "$BOARD_ID" "$USERNAME" "$MAIN_TOPIC_ID" "$BOARD_ID" "$PRIMARY_DOC_ID" "$PRIMARY_DOC_ID" \
     | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" boards create >"$TMP_DIR/board-create.json"
 }
 
@@ -248,7 +227,7 @@ EXPECTED_VERSION="$("${ROOT_DIR}/scripts/read-version.sh")"
 ) &
 CORE_PID=$!
 
-if ! wait_for_url "$CORE_BASE_URL/readyz" 160 0.15; then
+if ! wait_for_url "$CORE_BASE_URL/readyz" 320 0.15; then
   echo "core did not become healthy" >&2
   cat "$CORE_LOG" >&2 || true
   exit 1
@@ -257,7 +236,9 @@ fi
 # Start web-ui against core and verify startup handshake route.
 (
   cd "$ROOT_DIR"
-  OAR_CORE_BASE_URL="$CORE_BASE_URL" pnpm -C web-ui exec vite dev --host "$UI_HOST" --port "$UI_PORT" >"$UI_LOG" 2>&1
+  OAR_WORKSPACES="[{\"slug\":\"${UI_WORKSPACE_SLUG}\",\"label\":\"${UI_WORKSPACE_SLUG}\",\"coreBaseUrl\":\"${CORE_BASE_URL}\"}]" \
+  OAR_DEFAULT_WORKSPACE="$UI_WORKSPACE_SLUG" \
+  pnpm -C web-ui exec vite dev --host "$UI_HOST" --port "$UI_PORT" >"$UI_LOG" 2>&1
 ) &
 UI_PID=$!
 
@@ -332,7 +313,7 @@ fs.writeFileSync(file, JSON.stringify(profile, null, 2) + "\n");
 ' "$PROFILE_PATH"
 
 run_cli_json "$TMP_DIR/token-status-before.json" auth token-status
-run_cli_json "$TMP_DIR/threads-list-before.json" threads list
+run_cli_json "$TMP_DIR/topics-list-before.json" topics list
 run_cli_json "$TMP_DIR/token-status-after.json" auth token-status
 
 NEEDS_REFRESH_BEFORE="$(json_get "$TMP_DIR/token-status-before.json" 'data.needs_refresh' || true)"
@@ -346,72 +327,76 @@ if [[ "$NEEDS_REFRESH_AFTER" != "false" ]]; then
   exit 1
 fi
 
-# Typed command flow: thread -> commitment -> packets.
-printf '{"thread":{"title":"Smoke thread","type":"incident","status":"active","priority":"p1","tags":["smoke","cli"],"cadence":"daily","current_summary":"smoke in progress","next_actions":["verify"],"key_artifacts":[],"provenance":{"sources":["actor_statement:smoke"]}}}\n' \
-  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" threads create >"$TMP_DIR/thread-create.json"
-THREAD_ID="$(json_get "$TMP_DIR/thread-create.json" 'data.thread.id' || true)"
-if [[ -z "$THREAD_ID" ]]; then
-  THREAD_ID="$(json_get "$TMP_DIR/thread-create.json" 'data.body.thread.id' || true)"
+# Typed command flow: topic -> board -> cards -> packets.
+printf '{"topic":{"id":"topic-smoke-main","type":"initiative","status":"active","title":"Smoke coordination topic","summary":"Smoke workflow in progress","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":["topic:topic-smoke-main"],"provenance":{"sources":["actor_statement:smoke"]}}}\n' \
+  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" topics create >"$TMP_DIR/topic-create.json"
+MAIN_TOPIC_ID="$(json_get "$TMP_DIR/topic-create.json" 'data.topic.id' || true)"
+if [[ -z "$MAIN_TOPIC_ID" ]]; then
+  MAIN_TOPIC_ID="$(json_get "$TMP_DIR/topic-create.json" 'data.body.topic.id' || true)"
 fi
-if [[ -z "$THREAD_ID" ]]; then
-  echo "failed to parse thread id" >&2
-  cat "$TMP_DIR/thread-create.json" >&2 || true
+MAIN_TOPIC_THREAD_ID="$(json_get "$TMP_DIR/topic-create.json" 'data.topic.thread_id' || true)"
+if [[ -z "$MAIN_TOPIC_THREAD_ID" ]]; then
+  MAIN_TOPIC_THREAD_ID="$(json_get "$TMP_DIR/topic-create.json" 'data.body.topic.thread_id' || true)"
+fi
+if [[ -z "$MAIN_TOPIC_ID" || -z "$MAIN_TOPIC_THREAD_ID" ]]; then
+  echo "failed to parse main topic id or backing thread id" >&2
+  cat "$TMP_DIR/topic-create.json" >&2 || true
   exit 1
 fi
 
-printf '{"patch":{"current_summary":"smoke updated"}}\n' \
-  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" threads update --thread-id "$THREAD_ID" >"$TMP_DIR/thread-update.json"
+printf '{"patch":{"summary":"smoke updated"}}\n' \
+  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" topics patch --topic-id "$MAIN_TOPIC_ID" >"$TMP_DIR/topic-update.json"
 
-NOW_RFC3339="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-printf '{"commitment":{"thread_id":"%s","title":"Smoke commitment","owner":"%s","due_at":"%s","status":"open","definition_of_done":["smoke complete"],"links":["url:https://example.com/smoke"],"provenance":{"sources":["actor_statement:smoke"]}}}\n' "$THREAD_ID" "$AGENT_NAME" "$NOW_RFC3339" \
-  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" commitments create >"$TMP_DIR/commitment-create.json"
-
-WORK_ORDER_ID="artifact-work-order-smoke"
 RECEIPT_ID="artifact-receipt-smoke"
 REVIEW_ID="artifact-review-smoke"
-
-printf '{"artifact":{"id":"%s","refs":["thread:%s"],"summary":"Smoke work order"},"packet":{"work_order_id":"%s","thread_id":"%s","objective":"Exercise e2e smoke","constraints":["headless"],"context_refs":["thread:%s"],"acceptance_criteria":["all checks pass"],"definition_of_done":["receipt and review"]}}\n' "$WORK_ORDER_ID" "$THREAD_ID" "$WORK_ORDER_ID" "$THREAD_ID" "$THREAD_ID" \
-  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" work-orders create >"$TMP_DIR/work-order-create.json"
-
-printf '{"artifact":{"id":"%s","refs":["thread:%s","artifact:%s"],"summary":"Smoke receipt"},"packet":{"receipt_id":"%s","work_order_id":"%s","thread_id":"%s","outputs":["artifact:%s"],"verification_evidence":["url:https://example.com/evidence"],"changes_summary":"smoke complete","known_gaps":[]}}\n' "$RECEIPT_ID" "$THREAD_ID" "$WORK_ORDER_ID" "$RECEIPT_ID" "$WORK_ORDER_ID" "$THREAD_ID" "$WORK_ORDER_ID" \
-  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" receipts create >"$TMP_DIR/receipt-create.json"
-
-printf '{"artifact":{"id":"%s","refs":["thread:%s","artifact:%s","artifact:%s"],"summary":"Smoke review"},"packet":{"review_id":"%s","work_order_id":"%s","receipt_id":"%s","outcome":"accept","notes":"accepted","evidence_refs":["artifact:%s"]}}\n' "$REVIEW_ID" "$THREAD_ID" "$WORK_ORDER_ID" "$RECEIPT_ID" "$REVIEW_ID" "$WORK_ORDER_ID" "$RECEIPT_ID" "$RECEIPT_ID" \
-  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" reviews create >"$TMP_DIR/review-create.json"
+THREAD_ID="$MAIN_TOPIC_THREAD_ID"
 
 # Board smoke: create a board, add/reorder/move/archive cards, and verify the
 # canonical workspace through both core and the UI proxy.
-printf '{"thread":{"title":"Smoke board card A","type":"process","status":"active","priority":"p2","tags":["smoke","board"],"cadence":"weekly","current_summary":"board card A","next_actions":["verify board ordering"],"key_artifacts":[],"provenance":{"sources":["actor_statement:smoke"]}}}\n' \
-  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" threads create >"$TMP_DIR/board-thread-a-create.json"
-BOARD_THREAD_A_ID="$(json_get "$TMP_DIR/board-thread-a-create.json" 'data.thread.id' || true)"
+printf '{"topic":{"id":"topic-smoke-board-a","type":"initiative","status":"active","title":"Smoke board card A","summary":"board card A","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":["topic:topic-smoke-board-a"],"provenance":{"sources":["actor_statement:smoke"]}}}\n' \
+  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" topics create >"$TMP_DIR/board-topic-a-create.json"
+BOARD_TOPIC_A_ID="$(json_get "$TMP_DIR/board-topic-a-create.json" 'data.topic.id' || true)"
+if [[ -z "$BOARD_TOPIC_A_ID" ]]; then
+  BOARD_TOPIC_A_ID="$(json_get "$TMP_DIR/board-topic-a-create.json" 'data.body.topic.id' || true)"
+fi
+BOARD_THREAD_A_ID="$(json_get "$TMP_DIR/board-topic-a-create.json" 'data.topic.thread_id' || true)"
 if [[ -z "$BOARD_THREAD_A_ID" ]]; then
-  BOARD_THREAD_A_ID="$(json_get "$TMP_DIR/board-thread-a-create.json" 'data.body.thread.id' || true)"
+  BOARD_THREAD_A_ID="$(json_get "$TMP_DIR/board-topic-a-create.json" 'data.body.topic.thread_id' || true)"
 fi
 if [[ -z "$BOARD_THREAD_A_ID" ]]; then
-  echo "failed to parse board thread A id" >&2
-  cat "$TMP_DIR/board-thread-a-create.json" >&2 || true
+  echo "failed to parse board topic A id or backing thread id" >&2
+  cat "$TMP_DIR/board-topic-a-create.json" >&2 || true
+  exit 1
+fi
+if [[ -z "$BOARD_TOPIC_A_ID" ]]; then
+  echo "failed to parse board topic A id" >&2
+  cat "$TMP_DIR/board-topic-a-create.json" >&2 || true
   exit 1
 fi
 
-printf '{"thread":{"title":"Smoke board card B","type":"process","status":"active","priority":"p2","tags":["smoke","board"],"cadence":"weekly","current_summary":"board card B","next_actions":["verify board movement"],"key_artifacts":[],"provenance":{"sources":["actor_statement:smoke"]}}}\n' \
-  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" threads create >"$TMP_DIR/board-thread-b-create.json"
-BOARD_THREAD_B_ID="$(json_get "$TMP_DIR/board-thread-b-create.json" 'data.thread.id' || true)"
+printf '{"topic":{"id":"topic-smoke-board-b","type":"initiative","status":"active","title":"Smoke board card B","summary":"board card B","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":["topic:topic-smoke-board-b"],"provenance":{"sources":["actor_statement:smoke"]}}}\n' \
+  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" topics create >"$TMP_DIR/board-topic-b-create.json"
+BOARD_TOPIC_B_ID="$(json_get "$TMP_DIR/board-topic-b-create.json" 'data.topic.id' || true)"
+if [[ -z "$BOARD_TOPIC_B_ID" ]]; then
+  BOARD_TOPIC_B_ID="$(json_get "$TMP_DIR/board-topic-b-create.json" 'data.body.topic.id' || true)"
+fi
+BOARD_THREAD_B_ID="$(json_get "$TMP_DIR/board-topic-b-create.json" 'data.topic.thread_id' || true)"
 if [[ -z "$BOARD_THREAD_B_ID" ]]; then
-  BOARD_THREAD_B_ID="$(json_get "$TMP_DIR/board-thread-b-create.json" 'data.body.thread.id' || true)"
+  BOARD_THREAD_B_ID="$(json_get "$TMP_DIR/board-topic-b-create.json" 'data.body.topic.thread_id' || true)"
 fi
 if [[ -z "$BOARD_THREAD_B_ID" ]]; then
-  echo "failed to parse board thread B id" >&2
-  cat "$TMP_DIR/board-thread-b-create.json" >&2 || true
+  echo "failed to parse board topic B id or backing thread id" >&2
+  cat "$TMP_DIR/board-topic-b-create.json" >&2 || true
   exit 1
 fi
 
 PRIMARY_DOC_ID="doc-smoke-board-primary"
 CARD_DOC_ID="doc-smoke-board-card"
 
-printf '{"document":{"id":"%s","title":"Smoke Board Primary Doc","status":"active","labels":["smoke","board"],"thread_id":"%s"},"refs":["thread:%s"],"content":"Primary board document","content_type":"text"}\n' "$PRIMARY_DOC_ID" "$THREAD_ID" "$THREAD_ID" \
+printf '{"document":{"id":"%s","title":"Smoke Board Primary Doc","labels":["smoke","board"]},"refs":["topic:%s","thread:%s"],"content":"Primary board document","content_type":"text"}\n' "$PRIMARY_DOC_ID" "$MAIN_TOPIC_ID" "$THREAD_ID" \
   | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" docs create >"$TMP_DIR/board-primary-doc-create.json"
 
-printf '{"document":{"id":"%s","title":"Smoke Board Card Doc","status":"active","labels":["smoke","board"],"thread_id":"%s"},"refs":["thread:%s"],"content":"Pinned card document","content_type":"text"}\n' "$CARD_DOC_ID" "$BOARD_THREAD_A_ID" "$BOARD_THREAD_A_ID" \
+printf '{"document":{"id":"%s","title":"Smoke Board Card Doc","labels":["smoke","board"]},"refs":["topic:%s","thread:%s"],"content":"Pinned card document","content_type":"text"}\n' "$CARD_DOC_ID" "$BOARD_TOPIC_A_ID" "$BOARD_THREAD_A_ID" \
   | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" docs create >"$TMP_DIR/board-card-doc-create.json"
 
 BOARD_ID="board-smoke"
@@ -441,7 +426,9 @@ fi
 
 run_cli_json "$TMP_DIR/board-get.json" boards get --board-id "$BOARD_ID"
 
-run_cli_json "$TMP_DIR/board-card-a-add.json" boards cards add --board-id "$BOARD_ID" --thread-id "$BOARD_THREAD_A_ID" --column backlog --pinned-document-id "$CARD_DOC_ID"
+printf '{"card":{"title":"Smoke board card A","summary":"smoke card A","column_key":"backlog","topic_ref":"topic:%s","document_ref":"document:%s","assignee_refs":[],"risk":"low","resolution_refs":[],"related_refs":["topic:%s"],"provenance":{"sources":["actor_statement:smoke"]}}}\n' \
+  "$BOARD_TOPIC_A_ID" "$CARD_DOC_ID" "$BOARD_TOPIC_A_ID" \
+  | run_cli_json "$TMP_DIR/board-card-a-add.json" boards cards create --board-id "$BOARD_ID"
 BOARD_CARD_A_ID="$(json_get "$TMP_DIR/board-card-a-add.json" 'data.card.id' || true)"
 if [[ -z "$BOARD_CARD_A_ID" ]]; then
   BOARD_CARD_A_ID="$(json_get "$TMP_DIR/board-card-a-add.json" 'data.body.card.id' || true)"
@@ -455,8 +442,27 @@ BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-card-a-add.json" 'data.board.update
 if [[ -z "$BOARD_UPDATED_AT" ]]; then
   BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-card-a-add.json" 'data.body.board.updated_at' || true)"
 fi
+if [[ -z "$BOARD_UPDATED_AT" ]]; then
+  run_cli_json "$TMP_DIR/board-refresh-after-card-a.json" boards get --board-id "$BOARD_ID"
+  BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-refresh-after-card-a.json" 'data.board.updated_at' || true)"
+  if [[ -z "$BOARD_UPDATED_AT" ]]; then
+    BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-refresh-after-card-a.json" 'data.body.board.updated_at' || true)"
+  fi
+fi
+if [[ -z "$BOARD_UPDATED_AT" ]]; then
+  echo "failed to parse board updated_at after card A create" >&2
+  exit 1
+fi
 
-run_cli_json "$TMP_DIR/board-card-b-add.json" boards cards add --board-id "$BOARD_ID" --thread-id "$BOARD_THREAD_B_ID" --column backlog --after "$BOARD_THREAD_A_ID"
+printf '{"artifact":{"id":"%s","refs":["card:%s"],"summary":"Smoke receipt"},"packet":{"receipt_id":"%s","subject_ref":"card:%s","outputs":["card:%s"],"verification_evidence":["artifact:%s"],"changes_summary":"smoke complete","known_gaps":[]}}\n' "$RECEIPT_ID" "$BOARD_CARD_A_ID" "$RECEIPT_ID" "$BOARD_CARD_A_ID" "$BOARD_CARD_A_ID" "$RECEIPT_ID" \
+  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" receipts create >"$TMP_DIR/receipt-create.json"
+
+printf '{"artifact":{"id":"%s","refs":["card:%s","artifact:%s"],"summary":"Smoke review"},"packet":{"review_id":"%s","subject_ref":"card:%s","receipt_ref":"artifact:%s","outcome":"accept","notes":"accepted","evidence_refs":["artifact:%s"]}}\n' "$REVIEW_ID" "$BOARD_CARD_A_ID" "$RECEIPT_ID" "$REVIEW_ID" "$BOARD_CARD_A_ID" "$RECEIPT_ID" "$RECEIPT_ID" \
+  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" reviews create >"$TMP_DIR/review-create.json"
+
+printf '{"card":{"title":"Smoke board card B","summary":"smoke card B","column_key":"backlog","after_card_id":"%s","topic_ref":"topic:%s","assignee_refs":[],"risk":"low","resolution_refs":[],"related_refs":["topic:%s"],"provenance":{"sources":["actor_statement:smoke"]}}}\n' \
+  "$BOARD_CARD_A_ID" "$BOARD_TOPIC_B_ID" "$BOARD_TOPIC_B_ID" \
+  | run_cli_json "$TMP_DIR/board-card-b-add.json" boards cards create --board-id "$BOARD_ID"
 BOARD_CARD_B_ID="$(json_get "$TMP_DIR/board-card-b-add.json" 'data.card.id' || true)"
 if [[ -z "$BOARD_CARD_B_ID" ]]; then
   BOARD_CARD_B_ID="$(json_get "$TMP_DIR/board-card-b-add.json" 'data.body.card.id' || true)"
@@ -470,90 +476,115 @@ BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-card-b-add.json" 'data.board.update
 if [[ -z "$BOARD_UPDATED_AT" ]]; then
   BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-card-b-add.json" 'data.body.board.updated_at' || true)"
 fi
-
-run_cli_json "$TMP_DIR/board-card-b-reorder.json" boards cards move --board-id "$BOARD_ID" --thread-id "$BOARD_THREAD_B_ID" --column backlog --if-board-updated-at "$BOARD_UPDATED_AT" --before "$BOARD_THREAD_A_ID"
-BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-card-b-reorder.json" 'data.board.updated_at' || true)"
 if [[ -z "$BOARD_UPDATED_AT" ]]; then
-  BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-card-b-reorder.json" 'data.body.board.updated_at' || true)"
+  run_cli_json "$TMP_DIR/board-refresh-after-card-b.json" boards get --board-id "$BOARD_ID"
+  BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-refresh-after-card-b.json" 'data.board.updated_at' || true)"
+  if [[ -z "$BOARD_UPDATED_AT" ]]; then
+    BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-refresh-after-card-b.json" 'data.body.board.updated_at' || true)"
+  fi
+fi
+if [[ -z "$BOARD_UPDATED_AT" ]]; then
+  echo "failed to parse board updated_at after card B create" >&2
+  exit 1
 fi
 
-run_cli_json "$TMP_DIR/board-card-a-update.json" boards cards update --card-id "$BOARD_CARD_A_ID" --if-board-updated-at "$BOARD_UPDATED_AT" --pinned-document-id "$PRIMARY_DOC_ID"
-BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-card-a-update.json" 'data.board.updated_at' || true)"
-if [[ -z "$BOARD_UPDATED_AT" ]]; then
-  BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-card-a-update.json" 'data.body.board.updated_at' || true)"
-fi
-
-run_cli_json "$TMP_DIR/board-card-b-move.json" boards cards move --board-id "$BOARD_ID" --card-id "$BOARD_CARD_B_ID" --column review --if-board-updated-at "$BOARD_UPDATED_AT"
+printf '{"column_key":"review","if_board_updated_at":"%s"}\n' "$BOARD_UPDATED_AT" \
+  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" cards move --card-id "$BOARD_CARD_B_ID" >"$TMP_DIR/board-card-b-move.json"
 BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-card-b-move.json" 'data.board.updated_at' || true)"
 if [[ -z "$BOARD_UPDATED_AT" ]]; then
   BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-card-b-move.json" 'data.body.board.updated_at' || true)"
 fi
 
-run_cli_json "$TMP_DIR/board-card-a-archive.json" boards cards archive --card-id "$BOARD_CARD_A_ID" --if-board-updated-at "$BOARD_UPDATED_AT"
-assert_contains "$TMP_DIR/board-card-a-archive.json" "\"archived_at\""
-BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-card-a-archive.json" 'data.board.updated_at' || true)"
-if [[ -z "$BOARD_UPDATED_AT" ]]; then
-  BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-card-a-archive.json" 'data.body.board.updated_at' || true)"
+ACCESS_TOKEN="$(node -e 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(String(p.access_token||""));' "$PROFILE_PATH")"
+if [[ -z "$ACCESS_TOKEN" ]]; then
+  echo "missing access token in profile: $PROFILE_PATH" >&2
+  exit 1
 fi
 
 run_cli_json "$TMP_DIR/board-workspace.json" boards workspace --board-id "$BOARD_ID"
 assert_contains "$TMP_DIR/board-workspace.json" "\"board_id\"[[:space:]]*:[[:space:]]*\"$BOARD_ID\""
-assert_contains "$TMP_DIR/board-workspace.json" "\"thread_id\"[[:space:]]*:[[:space:]]*\"$BOARD_THREAD_B_ID\""
+# Card B is anchored on topic B; backing thread ids are per-card (not the topic's thread_id).
+assert_contains "$TMP_DIR/board-workspace.json" '"topic:topic-smoke-board-b"'
 assert_contains "$TMP_DIR/board-workspace.json" "\"column_key\"[[:space:]]*:[[:space:]]*\"review\""
 
-ACCESS_TOKEN="$(node -e 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(String(p.access_token||""));' "$PROFILE_PATH")"
 curl -fsS -H "x-oar-workspace-slug: ${UI_WORKSPACE_SLUG}" -H "Authorization: Bearer $ACCESS_TOKEN" "$UI_BASE_URL/boards/${BOARD_ID}/workspace" >"$TMP_DIR/ui-board-workspace.json"
 assert_contains "$TMP_DIR/ui-board-workspace.json" "\"board_id\"[[:space:]]*:[[:space:]]*\"$BOARD_ID\""
 
-# Event stream smoke: tail one event and then emit an event.
-HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" events tail --thread-id "$THREAD_ID" --max-events 1 --reconnect=false >"$EVENTS_TAIL_OUT" 2>&1 &
-EVENTS_TAIL_PID=$!
-sleep 0.8
+# Refresh board concurrency token (cards.move may not echo `board` in the CLI envelope).
+run_cli_json "$TMP_DIR/board-before-terminal.json" boards get --board-id "$BOARD_ID"
+BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-before-terminal.json" 'data.board.updated_at' || true)"
+if [[ -z "$BOARD_UPDATED_AT" ]]; then
+  BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-before-terminal.json" 'data.body.board.updated_at' || true)"
+fi
+if [[ -z "$BOARD_UPDATED_AT" ]]; then
+  echo "failed to parse board updated_at before terminal card move" >&2
+  cat "$TMP_DIR/board-before-terminal.json" >&2 || true
+  exit 1
+fi
+
+run_cli_json "$TMP_DIR/card-a-backing-thread.json" cards get --card-id "$BOARD_CARD_A_ID"
+CARD_A_THREAD_ID="$(json_get "$TMP_DIR/card-a-backing-thread.json" 'data.card.thread_id' || true)"
+if [[ -z "$CARD_A_THREAD_ID" ]]; then
+  CARD_A_THREAD_ID="$(json_get "$TMP_DIR/card-a-backing-thread.json" 'data.body.card.thread_id' || true)"
+fi
+if [[ -z "$CARD_A_THREAD_ID" ]]; then
+  echo "failed to parse backing thread id for card A" >&2
+  cat "$TMP_DIR/card-a-backing-thread.json" >&2 || true
+  exit 1
+fi
+
+printf '{"event":{"type":"message_posted","thread_id":"%s","summary":"smoke cancel rationale","refs":["thread:%s","card:%s"],"payload":{"body":"scope withdrawn"},"provenance":{"sources":["actor_statement:smoke"]}}}\n' \
+  "$CARD_A_THREAD_ID" "$CARD_A_THREAD_ID" "$BOARD_CARD_A_ID" \
+  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" events create >"$TMP_DIR/cancel-rationale-event.json"
+CANCEL_EVENT_ID="$(json_get "$TMP_DIR/cancel-rationale-event.json" 'data.event.id' || true)"
+if [[ -z "$CANCEL_EVENT_ID" ]]; then
+  CANCEL_EVENT_ID="$(json_get "$TMP_DIR/cancel-rationale-event.json" 'data.body.event.id' || true)"
+fi
+if [[ -z "$CANCEL_EVENT_ID" ]]; then
+  echo "failed to parse event id for cancel rationale" >&2
+  cat "$TMP_DIR/cancel-rationale-event.json" >&2 || true
+  exit 1
+fi
+
+# Spec §3.5 / §3.6: terminal resolution is explicit (canceled + resolution_refs), distinct from board flow alone.
+printf '{"column_key":"done","resolution":"canceled","resolution_refs":["event:%s"],"if_board_updated_at":"%s"}\n' "$CANCEL_EVENT_ID" "$BOARD_UPDATED_AT" \
+  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" cards move --card-id "$BOARD_CARD_A_ID" >"$TMP_DIR/board-card-a-cancel.json"
+
+run_cli_json "$TMP_DIR/board-after-terminal.json" boards get --board-id "$BOARD_ID"
+BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-after-terminal.json" 'data.board.updated_at' || true)"
+if [[ -z "$BOARD_UPDATED_AT" ]]; then
+  BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-after-terminal.json" 'data.body.board.updated_at' || true)"
+fi
+if [[ -z "$BOARD_UPDATED_AT" ]]; then
+  echo "failed to parse board updated_at after canceled resolution move" >&2
+  cat "$TMP_DIR/board-after-terminal.json" >&2 || true
+  exit 1
+fi
+
+run_cli_json "$TMP_DIR/card-a-after-cancel.json" cards get --card-id "$BOARD_CARD_A_ID"
+assert_contains "$TMP_DIR/card-a-after-cancel.json" '"resolution"[[:space:]]*:[[:space:]]*"canceled"'
+node -e 'const fs=require("fs"); const data=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); const card=data?.data?.card ?? data?.data?.body?.card; const refs=Array.isArray(card?.resolution_refs) ? card.resolution_refs : []; const expected=`event:${process.argv[2]}`; if (!refs.includes(expected)) process.exit(1);' "$TMP_DIR/card-a-after-cancel.json" "$CANCEL_EVENT_ID" || {
+  echo "missing expected resolution ref event:${CANCEL_EVENT_ID}" >&2
+  cat "$TMP_DIR/card-a-after-cancel.json" >&2 || true
+  exit 1
+}
+
+# Trash lane (operational lifecycle, spec §3.6) — topics support trash; default topic list hides trashed rows.
+printf '{"topic":{"id":"topic-smoke-trash","type":"other","status":"active","title":"Smoke trashed topic","summary":"Disposed after smoke","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":["topic:topic-smoke-trash"],"provenance":{"sources":["actor_statement:smoke"]}}}\n' \
+  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" topics create >"$TMP_DIR/trash-topic-create.json"
+printf '{"reason":"e2e-smoke trash lane assertion"}\n' \
+  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" topics trash --topic-id topic-smoke-trash >"$TMP_DIR/topic-trash.json"
+curl -fsS -H "Authorization: Bearer $ACCESS_TOKEN" "${CORE_BASE_URL}/topics?trashed_only=true" >"$TMP_DIR/topics-trashed-only.json"
+assert_contains "$TMP_DIR/topics-trashed-only.json" 'topic-smoke-trash'
+
+# Card trash lane (archive / archived_only inventory).
+printf '{"if_board_updated_at":"%s"}\n' "$BOARD_UPDATED_AT" \
+  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" cards archive --card-id "$BOARD_CARD_B_ID" >"$TMP_DIR/board-card-b-archive.json"
+curl -fsS -H "Authorization: Bearer $ACCESS_TOKEN" "${CORE_BASE_URL}/cards?archived_only=true" >"$TMP_DIR/cards-archived-only.json"
+assert_contains "$TMP_DIR/cards-archived-only.json" "\"${BOARD_CARD_B_ID}\""
+
 printf '{"event":{"type":"message_posted","thread_id":"%s","summary":"smoke stream event","refs":["thread:%s"],"payload":{"body":"hello"},"provenance":{"sources":["actor_statement:smoke"]}}}\n' "$THREAD_ID" "$THREAD_ID" \
   | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" events create >"$TMP_DIR/event-create.json"
-
-if ! wait_for_pid "$EVENTS_TAIL_PID" "$SMOKE_TIMEOUT_SECONDS"; then
-  kill "$EVENTS_TAIL_PID" >/dev/null 2>&1 || true
-  wait "$EVENTS_TAIL_PID" >/dev/null 2>&1 || true
-  echo "events tail did not complete in time" >&2
-  exit 1
-fi
-assert_contains "$EVENTS_TAIL_OUT" '"command"[[:space:]]*:[[:space:]]*"events stream"'
-
-# Ensure inbox has at least one item before stream tail.
-for _ in $(seq 1 40); do
-  run_cli_json "$TMP_DIR/inbox-list.json" inbox list
-  INBOX_COUNT="$(node -e 'const fs=require("fs"); const j=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); const items=j?.data?.items||j?.data?.body?.items||[]; process.stdout.write(String(items.length));' "$TMP_DIR/inbox-list.json")"
-  if [[ "$INBOX_COUNT" -gt 0 ]]; then
-    break
-  fi
-  sleep 0.3
-done
-if [[ "${INBOX_COUNT:-0}" -le 0 ]]; then
-  echo "expected inbox items for stream smoke, found none" >&2
-  cat "$TMP_DIR/inbox-list.json" >&2 || true
-  exit 1
-fi
-
-LAST_INBOX_EVENT_ID="$(node -e '
-const fs=require("fs");
-const j=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
-const items=j?.data?.items||j?.data?.body?.items||[];
-const item=items[0];
-if (!item || !item.id) process.exit(1);
-const base=String(item.id);
-process.stdout.write(base+"@bootstrap");
-' "$TMP_DIR/inbox-list.json" 2>/dev/null || true)"
-
-HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" inbox tail --max-events 1 --reconnect=false >"$INBOX_TAIL_OUT" 2>&1 &
-INBOX_TAIL_PID=$!
-if ! wait_for_pid "$INBOX_TAIL_PID" "$SMOKE_TIMEOUT_SECONDS"; then
-  kill "$INBOX_TAIL_PID" >/dev/null 2>&1 || true
-  wait "$INBOX_TAIL_PID" >/dev/null 2>&1 || true
-  echo "inbox tail did not complete in time" >&2
-  exit 1
-fi
-assert_contains "$INBOX_TAIL_OUT" '"command"[[:space:]]*:[[:space:]]*"inbox stream"'
 
 # Basic UI compatibility check after typed flow.
 curl -fsS -H "x-oar-workspace-slug: ${UI_WORKSPACE_SLUG}" "$UI_BASE_URL/meta/handshake" >"$TMP_DIR/ui-handshake.json"

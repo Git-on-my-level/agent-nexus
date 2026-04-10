@@ -1,44 +1,39 @@
-# oar-schema.yaml  —  v0.2.3
+# oar-schema.yaml
 #
 # Shared contract for OAR (Organization Autorunner).
-# OAR is a shared workspace where agents and humans self-organize.
-# It owns institutional state and evidence. It has no opinion on how
-# agents are instantiated, orchestrated, or upgraded.
-#
-# Rules:
-#   - Additive evolution only.
-#   - Unknown fields MUST be preserved and round-tripped.
-#   - Unknown event types and artifact kinds MUST be stored and retrievable.
-#   - Enums are either STRICT (rejects unknown values) or OPEN (stores unknown
-#     values gracefully). See enum_policy on each enum.
-#   - Snapshot updates use patch/merge semantics: specified fields are updated,
-#     unspecified fields (including unknown fields) are preserved. List-valued
-#     fields are replaced wholesale when present; absence means no change.
+# The canonical workspace model exposes topics, documents, boards, and cards as
+# first-class resources. Threads remain backing infrastructure for evidence,
+# sequencing, and timeline inspection.
 
-version: "0.2.3"
+version: "0.3.0"
 
-# ---------------------------------------------------------------------------
-# Enums
-# ---------------------------------------------------------------------------
 enums:
-
-  # --- Strict enums (unknown values rejected) ---
-
-  thread_type:
+  topic_type:
     enum_policy: strict
-    values: [case, process, relationship, initiative, incident, other]
+    values: [case, process, relationship, initiative, objective, decision, incident, risk, request, note, other]
+
+  topic_status:
+    enum_policy: strict
+    values: [proposed, active, paused, blocked, resolved, closed, archived]
 
   thread_status:
     enum_policy: strict
-    values: [active, paused, closed]
+    values: [active, archived]
 
   priority:
     enum_policy: strict
     values: [p0, p1, p2, p3]
 
-  commitment_status:
+  work_item_risk:
     enum_policy: strict
-    values: [open, blocked, done, canceled]
+    values: [low, medium, high, critical]
+
+  card_resolution:
+    enum_policy: strict
+    description: >
+      Terminal resolution for a card. Null/absent while the card is active; only
+      `done` or `canceled` when resolved.
+    values: [done, canceled]
 
   review_outcome:
     enum_policy: strict
@@ -46,7 +41,7 @@ enums:
 
   inbox_category:
     enum_policy: strict
-    values: [decision_needed, intervention_needed, exception, commitment_risk]
+    values: [decision_needed, intervention_needed, stale_topic, work_item_risk, document_attention]
 
   agent_notification_status:
     enum_policy: strict
@@ -60,618 +55,509 @@ enums:
     enum_policy: strict
     values: [backlog, ready, in_progress, blocked, review, done]
 
-  # --- Open enums (unknown values stored and round-tripped) ---
-
   event_type:
     enum_policy: open
     description: >
-      Initial known values. The system MUST accept and store unknown types.
-      UI MUST render unknown types gracefully.
+      Initial known values. The system MUST accept and store unknown values.
     values:
+      - topic_created
+      - topic_updated
+      - topic_status_changed
+      - topic_archived
+      - topic_restored
+      - topic_trashed
       - message_posted
-      - work_order_created
-      - work_order_claimed
       - receipt_added
       - review_completed
       - decision_needed
       - intervention_needed
       - decision_made
-      - snapshot_updated
-      - commitment_created
-      - commitment_status_changed
-      - exception_raised
-      - inbox_item_acknowledged
       - document_created
-      - document_updated
-      - document_tombstoned
+      - document_revised
+      - document_revision_created
+      - document_trashed
       - board_created
       - board_updated
       - board_card_added
-      - board_card_updated
       - board_card_moved
-      - board_card_removed
+      - board_card_archived
+      - board_card_trashed
+      - card_created
+      - card_updated
+      - card_moved
+      - card_archived
+      - card_trashed
+      - card_resolved
+      - exception_raised
+      - inbox_item_acknowledged
       - agent_notification_read
       - agent_notification_dismissed
 
   artifact_kind:
     enum_policy: open
-    description: >
-      Initial known values. The system MUST accept and store unknown kinds.
-      UI MUST render unknown kinds gracefully.
-    values:
-      - work_order
-      - receipt
-      - review
-      - doc
-      - evidence
-      - log
+    values: [receipt, review, doc, evidence, log]
 
   provenance_source:
     enum_policy: open
-    description: "Discrete label. Never a numeric confidence score."
+    description: Discrete evidence label. Never a numeric confidence score.
     examples:
       - "receipt:<artifact_id>"
       - "decision:<event_id>"
       - "actor_statement:<event_id>"
       - "inferred"
 
-# ---------------------------------------------------------------------------
-# Typed reference strings
-# ---------------------------------------------------------------------------
 ref_format:
   description: >
-    All strings in `refs` fields (on events, artifacts, and packets) MUST use
-    typed prefixes so consumers can unambiguously parse reference targets.
+    All strings in `refs`, `*_ref`, and `*_refs` fields MUST use typed prefixes
+    so consumers can parse the target deterministically.
   prefixes:
-    "artifact:<id>":  "References an artifact by ID"
-    "snapshot:<id>":  "References a snapshot by ID"
-    "event:<id>":     "References an event by ID"
-    "thread:<id>":    "References a thread (snapshot) by ID — convenience alias for snapshot:<id> where type=thread"
-    "inbox:<id>":     "References a derived inbox item by ID"
-    "document:<id>":  "References a canonical document lineage by ID"
-    "document_revision:<id>": "References a document revision by revision ID"
-    "board:<id>":     "References a board by ID"
-    "url:<url>":      "References an external URL"
+    "artifact:<id>": "References an artifact by ID"
+    "event:<id>": "References an event by ID"
+    "thread:<id>": "References a backing thread by ID"
+    "topic:<id>": "References a topic by ID"
+    "document:<id>": "References a document lineage by ID"
+    "document_revision:<id>": "References a document revision by ID"
+    "board:<id>": "References a board by ID"
+    "card:<id>": "References a card by ID"
+    "inbox:<id>": "References a derived inbox item by ID"
+    "url:<url>": "References an external URL"
   rules:
-    - "All ref strings MUST begin with a typed prefix followed by a colon and the value."
-    - "Consumers MUST parse the prefix to determine ref type; MUST NOT guess from the value alone."
-    - "Unknown prefixes MUST be preserved and round-tripped (not rejected)."
+    - "All refs MUST start with a typed prefix followed by a colon and value."
+    - "Consumers MUST parse the prefix; they MUST NOT infer ref kind from raw ids."
+    - "Reverse lookups MUST be derived from typed refs and ref_edge records."
+    - "Unknown prefixes MUST be preserved and round-tripped."
 
-# ---------------------------------------------------------------------------
-# Provenance shape
-# ---------------------------------------------------------------------------
 provenance:
   description: >
-    Standardized provenance object. Used on snapshots, events, and restricted
-    fields. UI relies on this shape to render "evidence-backed vs inferred"
-    consistently.
+    Standardized provenance object used on mutable domain resources, events, and
+    restricted fields so evidence-backed changes remain explainable.
   fields:
     sources:
       type: "list<string>"
       required: true
-      description: "Provenance source labels (see provenance_source enum)"
+      description: Provenance source labels (see provenance_source enum)
     notes:
       type: string
       required: false
-      description: "Free-text explanation"
+      description: Free-text explanation
     by_field:
       type: "map<string, list<string>>"
       required: false
       description: >
-        Per-field provenance for restricted fields. Key is field name
-        (e.g. "status"), value is list of provenance source labels.
-        Required when a restricted field is updated.
+        Per-field provenance for restricted fields. Key is the field name and
+        value is the list of provenance source labels supporting that field.
 
-# ---------------------------------------------------------------------------
-# Actor identity (separate registry, not an enum)
-# ---------------------------------------------------------------------------
 actor:
   description: >
-    Actors are opaque IDs. OAR does not distinguish between humans and agents
-    at the schema level. Identity metadata lives in a lightweight registry.
+    Actors are opaque IDs. OAR does not encode human versus agent distinctions
+    in the durable schema.
   registry_fields:
-    id:            { type: string, required: true, description: "Globally unique actor ID" }
-    display_name:  { type: string, required: true }
-    tags:          { type: "list<string>", required: false, description: "e.g. human, agent, ceo, engineer — evolves freely" }
-    created_at:    { type: datetime, required: true }
+    id: { type: string, required: true }
+    display_name: { type: string, required: true }
+    tags: { type: "list<string>", required: false }
+    created_at: { type: datetime, required: true }
 
-# ---------------------------------------------------------------------------
-# Canonical primitives
-# ---------------------------------------------------------------------------
 primitives:
-
   event:
-    description: "Append-only. Never edited or deleted. Corrections are new events."
+    description: Append-only. Never edited or deleted. Corrections are new events.
     fields:
-      id:          { type: string, required: true }
-      ts:          { type: datetime, required: true }
-      type:        { type: string, required: true, ref: enums.event_type }
-      actor_id:    { type: string, required: true, description: "References actor registry" }
-      thread_id:   { type: string, required: false }
-      refs:        { type: "list<typed_ref>", required: true, description: "Typed references (see ref_format)" }
-      summary:     { type: string, required: true, description: "One-line human-readable description" }
-      payload:     { type: object, required: false, description: "Small structured data. Large content → artifacts." }
-      provenance:  { type: object, required: true, ref: provenance }
+      id: { type: string, required: true }
+      ts: { type: datetime, required: true }
+      type: { type: string, required: true, ref: enums.event_type }
+      actor_id: { type: string, required: true }
+      thread_ref: { type: typed_ref, required: false, description: "Backing thread when the event is thread-scoped." }
+      refs: { type: "list<typed_ref>", required: true }
+      summary: { type: string, required: true }
+      payload: { type: object, required: false }
+      provenance: { type: object, required: true, ref: provenance }
 
-  snapshot:
+  thread:
     description: >
-      Mutable current-best-known state. Every edit MUST emit a snapshot_updated event.
-      Updates use patch/merge semantics: specified fields are updated, unspecified
-      fields are preserved (including unknown fields). List-valued fields are
-      replaced wholesale when present in a patch; absence means no change.
+      Backing workspace infrastructure record. Threads support event ordering,
+      low-level inspection, and timeline reconstruction. They are not the
+      primary planning surface.
     fields:
-      id:          { type: string, required: true }
-      type:        { type: string, required: true }
-      updated_at:  { type: datetime, required: true }
-      updated_by:  { type: string, required: true, description: "Actor ID" }
-      provenance:  { type: object, required: true, ref: provenance }
+      id: { type: string, required: true }
+      topic_ref: { type: typed_ref, required: false }
+      title: { type: string, required: true }
+      status: { type: string, required: true, ref: enums.thread_status }
+      priority: { type: string, required: true, ref: enums.priority }
+      tags: { type: "list<string>", required: true }
+      latest_event_at: { type: datetime, required: false }
+      created_at: { type: datetime, required: true }
+      created_by: { type: string, required: true }
+      updated_at: { type: datetime, required: true }
+      updated_by: { type: string, required: true }
+      provenance: { type: object, required: true, ref: provenance }
+      archived_at: { type: datetime, required: false }
+      archived_by: { type: string, required: false }
+      trashed_at: { type: datetime, required: false }
+      trashed_by: { type: string, required: false }
+      trash_reason: { type: string, required: false }
 
   artifact:
     description: >
-      Immutable blob. New versions are new artifacts with refs to predecessors.
-      Artifact content is generally opaque to oar-core, EXCEPT for packet kinds
-      (work_order, receipt, review) which are schema-validated structured content.
-      Content is stored using content-addressable storage keyed by SHA-256 digest.
+      Immutable blob. New versions are new artifacts linked through refs. Packet
+      artifacts use structured validation; all other kinds remain opaque content.
     fields:
-      id:            { type: string, required: true }
-      created_at:    { type: datetime, required: true }
-      created_by:    { type: string, required: true, description: "Actor ID" }
-      kind:          { type: string, required: true, ref: enums.artifact_kind }
-      content_type:  { type: string, required: true, description: "text | binary | structured" }
-      content_hash:  { type: string, required: true, description: "SHA-256 hex digest of artifact content" }
-      refs:          { type: "list<typed_ref>", required: true, description: "Typed references (see ref_format)" }
-      summary:       { type: string, required: false }
-      tombstoned_at: { type: datetime, required: false, description: "When this artifact was tombstoned" }
-      tombstoned_by: { type: string, required: false, description: "Actor ID who tombstoned this artifact" }
-      tombstone_reason: { type: string, required: false, description: "Human-readable reason for tombstoning" }
+      id: { type: string, required: true }
+      created_at: { type: datetime, required: true }
+      created_by: { type: string, required: true }
+      kind: { type: string, required: true, ref: enums.artifact_kind }
+      content_type: { type: string, required: true }
+      content_hash: { type: string, required: true }
+      refs: { type: "list<typed_ref>", required: true }
+      summary: { type: string, required: false }
+      trashed_at: { type: datetime, required: false }
+      trashed_by: { type: string, required: false }
+      trash_reason: { type: string, required: false }
 
-# ---------------------------------------------------------------------------
-# Typed conventions (v0: threads and commitments only)
-# ---------------------------------------------------------------------------
-snapshots:
-
-  thread:
-    extends: primitives.snapshot
+  ref_edge:
+    description: >
+      Normalized directional lookup edge derived from typed refs. Used for fast
+      reverse traversal and cross-resource navigation.
     fields:
-      title:             { type: string, required: true }
-      type:              { type: string, required: true, ref: enums.thread_type }
-      status:            { type: string, required: true, ref: enums.thread_status }
-      priority:          { type: string, required: true, ref: enums.priority }
-      tags:              { type: "list<string>", required: true }
-      cadence:
-        type: string
-        required: true
-        description: >
-          Schedule string. MUST be either literal "reactive" or a 5-field cron
-          expression. During migration, legacy values "daily", "weekly",
-          "monthly", and "custom" MAY appear and MUST be interpreted as preset
-          schedule labels for backward compatibility.
-      next_check_in_at:  { type: datetime, required: false }
-      current_summary:   { type: string, required: true, grounding: interpretive }
-      next_actions:      { type: "list<string>", required: true, grounding: interpretive }
-      open_commitments:
-        type: "list<string>"
-        required: true
-        description: >
-          Commitment IDs. Core-maintained: oar-core updates this field automatically
-          when commitments are created, change status, or are deleted.
-          Clients MUST NOT write this field directly.
-      key_artifacts:     { type: "list<typed_ref>", required: true, description: "Typed artifact references" }
-      provenance:        { type: object, required: true, ref: provenance }
+      source_ref: { type: typed_ref, required: true }
+      target_ref: { type: typed_ref, required: true }
+      relation: { type: string, required: true }
+      discovered_at: { type: datetime, required: true }
+      source_event_ref: { type: typed_ref, required: false }
+      source_artifact_ref: { type: typed_ref, required: false }
 
-  commitment:
-    extends: primitives.snapshot
+resources:
+  topic:
+    description: >
+      First-class durable work subject. Topics are the canonical place to track
+      status, intent, and linked evidence for organizational work.
     fields:
-      thread_id:          { type: string, required: true }
-      title:              { type: string, required: true }
-      owner:              { type: string, required: true, description: "Actor ID" }
-      due_at:             { type: datetime, required: true }
-      status:             { type: string, required: true, ref: enums.commitment_status }
-      definition_of_done: { type: "list<string>", required: true }
-      links:              { type: "list<typed_ref>", required: true, description: "Typed references to artifacts and/or external URLs" }
-      provenance:         { type: object, required: true, ref: provenance }
-    restricted_transitions:
-      - field: status
-        to: done
-        requires: "ref to receipt artifact OR decision event"
-      - field: status
-        to: canceled
-        requires: "ref to decision event"
-
-# ---------------------------------------------------------------------------
-# Document resources (v1 canonical lineages)
-# ---------------------------------------------------------------------------
-documents:
+      id: { type: string, required: true }
+      type: { type: string, required: true, ref: enums.topic_type }
+      status: { type: string, required: true, ref: enums.topic_status }
+      title: { type: string, required: true }
+      summary: { type: string, required: true }
+      owner_refs: { type: "list<typed_ref>", required: true }
+      thread_id: { type: string, required: false, description: "Backing thread id for topic timeline and events." }
+      document_refs: { type: "list<typed_ref>", required: true }
+      board_refs: { type: "list<typed_ref>", required: true }
+      related_refs: { type: "list<typed_ref>", required: true }
+      created_at: { type: datetime, required: true }
+      created_by: { type: string, required: true }
+      updated_at: { type: datetime, required: true }
+      updated_by: { type: string, required: true }
+      provenance: { type: object, required: true, ref: provenance }
 
   document:
     description: >
-      Canonical long-lived document lineage. A document is not just stored text:
-      it keeps a mutable head pointer for the current working version and an
-      immutable ordered revision history for auditability. Documents complement
-      the underlying canonical threads/events/artifacts model rather than
-      replacing it.
+      Canonical mutable document lineage anchored to a typed subject ref. The
+      contract surface is `subject_ref`, `head_revision_ref`, `state`, and
+      `refs` plus standard lifecycle/provenance fields. `state` is the sole
+      document lifecycle field and uses the values `active`, `archived`, or
+      `trashed`.
+    fields:
+      id: { type: string, required: true }
+      title: { type: string, required: true }
+      subject_ref: { type: typed_ref, required: true }
+      head_revision_ref: { type: typed_ref, required: true }
+      state:
+        type: string
+        required: true
+        description: >
+          Canonical document lifecycle state. Values are `active`, `archived`,
+          or `trashed`. Derived from lifecycle detail fields: `trashed_at`
+          present -> `trashed`, `archived_at` present -> `archived`, otherwise
+          `active`.
+      refs: { type: "list<typed_ref>", required: true }
+      created_at: { type: datetime, required: true }
+      created_by: { type: string, required: true }
+      updated_at: { type: datetime, required: true }
+      updated_by: { type: string, required: true }
+      provenance: { type: object, required: true, ref: provenance }
 
   document_revision:
     description: >
-      Immutable revision in a document lineage. Revisions are append-only and
-      linked in order, while the document record points at the current head.
-
-# ---------------------------------------------------------------------------
-# Board resources (v1 mutable coordination resources)
-# ---------------------------------------------------------------------------
-boards:
-
-  board_column:
-    description: >
-      Fixed board column object. V1 always uses the canonical ordered keys
-      backlog, ready, in_progress, blocked, review, done. `title` and
-      `wip_limit` are the only customizable fields in v1.
+      Immutable append-only revision in a document lineage. Revision lineage is
+      expressed canonically through typed refs (`document_ref`,
+      `prev_revision_ref`, `artifact_ref`) even when runtime/storage layers also
+      expose convenience fields such as revision numbers.
     fields:
-      key:       { type: string, required: true, ref: enums.board_column_key }
-      title:     { type: string, required: true }
-      wip_limit: { type: integer, required: false, description: "Optional WIP limit; null/absence means no limit." }
+      revision_id: { type: string, required: true }
+      document_ref: { type: typed_ref, required: true }
+      prev_revision_ref: { type: typed_ref, required: false }
+      artifact_ref: { type: typed_ref, required: true }
+      revision_number: { type: integer, required: true }
+      summary: { type: string, required: false }
+      created_at: { type: datetime, required: true }
+      created_by: { type: string, required: true }
 
   board:
     description: >
-      Canonical organizational map over work. Boards are durable coordination
-      objects, not disposable UI sugar: they record explicit board metadata and
-      explicit card membership over canonical threads and optional documents.
-      Unlike docs, boards do not use immutable revision chains in v1.
-      `updated_at` is the optimistic concurrency token for both board metadata
-      and card-surface mutations. Boards complement the underlying
-      threads/events/artifacts model rather than replacing it.
+      Durable coordination surface over topics and cards. Boards own layout,
+      column policy, and operator-facing grouping, while linked resources are
+      represented through typed refs.
     fields:
-      id:                 { type: string, required: true }
-      title:              { type: string, required: true }
-      status:             { type: string, required: true, ref: enums.board_status }
-      labels:             { type: "list<string>", required: true }
-      owners:             { type: "list<string>", required: true, description: "Actor IDs" }
-      primary_thread_id:  { type: string, required: true }
-      primary_document_id: { type: string, required: false }
-      column_schema:
-        type: "list<object>"
-        required: true
-        description: "Ordered list of board_column objects. Must contain the six canonical keys in canonical order."
-      pinned_refs:        { type: "list<typed_ref>", required: true, description: "Board-level refs, including board:<id> targets when needed." }
-      created_at:         { type: datetime, required: true }
-      created_by:         { type: string, required: true, description: "Actor ID" }
-      updated_at:         { type: datetime, required: true }
-      updated_by:         { type: string, required: true, description: "Actor ID" }
+      id: { type: string, required: true }
+      title: { type: string, required: true }
+      status: { type: string, required: true, ref: enums.board_status }
+      primary_topic_ref: { type: typed_ref, required: false }
+      thread_id: { type: string, required: false, description: "Backing thread id for board timeline and events." }
+      document_refs: { type: "list<typed_ref>", required: true }
+      card_refs: { type: "list<typed_ref>", required: true }
+      pinned_refs: { type: "list<typed_ref>", required: true }
+      created_at: { type: datetime, required: true }
+      created_by: { type: string, required: true }
+      updated_at: { type: datetime, required: true }
+      updated_by: { type: string, required: true }
+      provenance: { type: object, required: true, ref: provenance }
 
-  board_card:
+  card:
     description: >
-      Canonical explicit board membership. Membership uniqueness is
-      (board_id, thread_id). The board primary thread is never itself a card.
-      Card membership is durable organizational truth; any summary or freshness
-      data attached in workspace projections is derived separately.
+      First-class board work item. Cards can point at a topic, a backing thread,
+      and supporting documents, but card identity is not derived from those refs.
+      On create, the server allocates a backing thread id; clients MUST NOT send
+      thread_id on board-card writes.
     fields:
-      board_id:           { type: string, required: true }
-      thread_id:          { type: string, required: true }
-      column_key:         { type: string, required: true, ref: enums.board_column_key }
-      rank:               { type: string, required: true, description: "Opaque, server-owned ordering token." }
-      pinned_document_id: { type: string, required: false }
-      created_at:         { type: datetime, required: true }
-      created_by:         { type: string, required: true, description: "Actor ID" }
-      updated_at:         { type: datetime, required: true }
-      updated_by:         { type: string, required: true, description: "Actor ID" }
+      id: { type: string, required: true }
+      board_ref: { type: typed_ref, required: true }
+      topic_ref: { type: typed_ref, required: false }
+      thread_id: { type: string, required: true, description: "Backing thread id for the card; server-assigned when persisted." }
+      document_ref: { type: typed_ref, required: false }
+      title: { type: string, required: true }
+      summary: { type: string, required: true }
+      column_key: { type: string, required: true, ref: enums.board_column_key }
+      rank: { type: string, required: true }
+      assignee_refs: { type: "list<typed_ref>", required: true }
+      due_at: { type: datetime, required: false, description: "Optional due instant for the work item." }
+      definition_of_done: { type: "list<string>", required: false, description: "Acceptance lines for completing the card." }
+      risk: { type: string, required: true, ref: enums.work_item_risk }
+      resolution: { type: string, required: false, ref: enums.card_resolution, description: "Null while active; `done` or `canceled` when terminal." }
+      resolution_refs: { type: "list<typed_ref>", required: true }
+      related_refs: { type: "list<typed_ref>", required: true }
+      created_at: { type: datetime, required: true }
+      created_by: { type: string, required: true }
+      updated_at: { type: datetime, required: true }
+      updated_by: { type: string, required: true }
+      provenance: { type: object, required: true, ref: provenance }
 
-# ---------------------------------------------------------------------------
-# Artifact packet conventions (v0: work orders, receipts, reviews)
-# ---------------------------------------------------------------------------
 packets:
-
   _id_rule: >
-    Packet content ID fields (work_order_id, receipt_id, review_id) MUST equal
-    the enclosing artifact's id. oar-core MUST reject mismatches on write.
-
-  _validation_rule: >
-    Packet kinds (work_order, receipt, review) are schema-validated structured
-    content. oar-core MUST validate required fields and constraints on write.
-
-  work_order:
-    stored_as: artifact
-    kind: work_order
-    description: >
-      Coordination artifact: "here's what needs doing and how to verify it's done."
-      Any actor (human or agent) may create or pick up a work order.
-    fields:
-      work_order_id:       { type: string, required: true, description: "MUST equal enclosing artifact.id" }
-      thread_id:           { type: string, required: true }
-      objective:           { type: string, required: true }
-      constraints:         { type: "list<string>", required: true }
-      context_refs:        { type: "list<typed_ref>", required: true, description: "Typed references to artifacts, external URLs" }
-      acceptance_criteria: { type: "list<string>", required: true }
-      definition_of_done:  { type: "list<string>", required: true }
+    Packet content ID fields MUST equal the enclosing artifact id. OAR core
+    MUST reject mismatches on write.
 
   receipt:
     stored_as: artifact
     kind: receipt
-    validation: >
-      Receipts that are primarily prose with no evidence MUST be rejected.
-      outputs and verification_evidence MUST each contain at least one reference.
     fields:
-      receipt_id:            { type: string, required: true, description: "MUST equal enclosing artifact.id" }
-      work_order_id:         { type: string, required: true }
-      thread_id:             { type: string, required: true }
-      outputs:               { type: "list<typed_ref>", required: true, min_items: 1, description: "Typed references to deliverables" }
-      verification_evidence: { type: "list<typed_ref>", required: true, min_items: 1, description: "Typed references to test outputs, logs, metrics, etc." }
-      changes_summary:       { type: string, required: true }
-      known_gaps:            { type: "list<string>", required: true }
+      receipt_id: { type: string, required: true }
+      subject_ref: { type: typed_ref, required: true, description: "MUST be card:<card_id>." }
+      outputs: { type: "list<typed_ref>", required: true }
+      verification_evidence: { type: "list<typed_ref>", required: true }
+      changes_summary: { type: string, required: true }
+      known_gaps: { type: "list<string>", required: true }
 
   review:
     stored_as: artifact
     kind: review
-    description: "Lightweight v0 review: outcome + notes + evidence. No per-criterion rubric."
     fields:
-      review_id:       { type: string, required: true, description: "MUST equal enclosing artifact.id" }
-      work_order_id:   { type: string, required: true }
-      receipt_id:      { type: string, required: true }
-      outcome:         { type: string, required: true, ref: enums.review_outcome }
-      notes:           { type: string, required: true }
-      evidence_refs:   { type: "list<typed_ref>", required: true }
+      review_id: { type: string, required: true }
+      subject_ref: { type: typed_ref, required: true, description: "MUST be card:<card_id>." }
+      receipt_ref: { type: typed_ref, required: true }
+      outcome: { type: string, required: true, ref: enums.review_outcome }
+      notes: { type: string, required: true }
+      evidence_refs: { type: "list<typed_ref>", required: true }
 
-# ---------------------------------------------------------------------------
-# Reference conventions
-# ---------------------------------------------------------------------------
 reference_conventions:
   description: >
-    Required refs per event type and artifact kind. All ref values use typed
-    ref strings (see ref_format). These conventions ensure core and UI agree
-    on linking semantics so navigation is deterministic.
+    Required refs per event and packet kind.
+    Operators coordinate work in topic space, but decision lifecycle events
+    (`decision_needed`, `intervention_needed`, `decision_made`) are durably
+    anchored on the backing thread: each MUST include `thread:<thread_id>` in
+    `refs` matching `event.thread_id`. Optional `topic:` refs may appear when a
+    real topic exists; they are contextual cross-links and MUST NOT replace the
+    required `thread:` ref. Using `topic:<thread_id>` as a substitute for the
+    backing thread is forbidden.
 
   event_refs:
-    _rule: "All thread-scoped events MUST set thread_id."
-    _board_rule: "Board lifecycle events MUST use thread_id = the board primary_thread_id."
+    _rule: "Thread-scoped events SHOULD set thread_ref on the event payload."
 
-    work_order_created:
-      thread_id: required
-      refs_must_include: ["artifact:<work_order_artifact_id>"]
+    topic_created:
+      refs_must_include: ["topic:<topic_id>"]
 
-    receipt_added:
-      thread_id: required
-      refs_must_include: ["artifact:<receipt_artifact_id>", "artifact:<work_order_artifact_id>"]
+    topic_updated:
+      refs_must_include: ["topic:<topic_id>"]
 
-    review_completed:
-      thread_id: required
-      refs_must_include: ["artifact:<review_artifact_id>", "artifact:<receipt_artifact_id>", "artifact:<work_order_artifact_id>"]
-
-    commitment_created:
-      thread_id: required
-      refs_must_include: ["snapshot:<commitment_id>"]
-
-    commitment_status_changed:
-      thread_id: required
-      refs_must_include: ["snapshot:<commitment_id>"]
-      refs_conditional: >
-        If status → done: MUST include artifact:<receipt_artifact_id> OR event:<decision_event_id>.
-        If status → canceled: MUST include event:<decision_event_id>.
-      conditional_refs:
-        - when:
-            payload_field: to_status
-            equals: done
-          must_have:
-            - prefix: artifact
-            - prefix: event
-          condition: or
-        - when:
-            payload_field: to_status
-            equals: canceled
-          must_have:
-            - prefix: event
-
-    decision_needed:
-      thread_id: required
-      refs_optional: ["artifact:<related_id>", "snapshot:<commitment_id>"]
-
-    intervention_needed:
-      thread_id: required
-      refs_optional: ["artifact:<related_id>", "snapshot:<commitment_id>"]
-
-    decision_made:
-      thread_id: required
-      refs_optional: ["artifact:<decision_artifact_id>", "snapshot:<commitment_id>"]
-
-    snapshot_updated:
-      thread_id: "required if snapshot is thread-scoped"
-      refs_must_include: ["snapshot:<snapshot_id>"]
-      payload_should_include: ["changed_fields: list of field names that changed"]
-
-    exception_raised:
-      thread_id: required
-      payload_must_include: ["subtype (e.g. stale_thread)"]
+    topic_status_changed:
+      refs_must_include: ["topic:<topic_id>"]
+      payload_must_include: ["from_status", "to_status"]
 
     message_posted:
-      thread_id: required
-      refs_optional: ["event:<parent_event_id> (for replies)", "artifact:<mentioned_artifact_id>"]
+      thread_id: "required as thread_ref when the message belongs to a backing thread"
+
+    receipt_added:
+      refs_must_include: ["artifact:<receipt_artifact_id>", "card:<card_id>"]
+      payload_must_include: ["subject_ref"]
+
+    review_completed:
+      refs_must_include: ["artifact:<review_artifact_id>", "artifact:<receipt_artifact_id>", "card:<card_id>"]
+      payload_must_include: ["subject_ref"]
+
+    document_created:
+      refs_must_include: ["document:<document_id>", "document_revision:<revision_id>", "artifact:<artifact_id>"]
+
+    document_revised:
+      refs_must_include: ["document:<document_id>", "document_revision:<revision_id>", "artifact:<artifact_id>"]
+
+    document_trashed:
+      refs_must_include: ["document:<document_id>"]
+
+    board_created:
+      refs_must_include: ["board:<board_id>"]
+
+    board_updated:
+      refs_must_include: ["board:<board_id>"]
+
+    board_card_added:
+      refs_must_include: ["board:<board_id>", "card:<card_id>"]
+
+    board_card_moved:
+      refs_must_include: ["board:<board_id>", "card:<card_id>"]
+      payload_must_include: ["column_key"]
+
+    board_card_archived:
+      refs_must_include: ["board:<board_id>", "card:<card_id>"]
+
+    card_created:
+      refs_must_include: ["card:<card_id>", "board:<board_id>"]
+
+    card_updated:
+      refs_must_include: ["card:<card_id>", "board:<board_id>"]
+
+    card_moved:
+      refs_must_include: ["card:<card_id>", "board:<board_id>"]
+      payload_must_include: ["column_key"]
+
+    card_archived:
+      refs_must_include: ["card:<card_id>", "board:<board_id>"]
+
+    card_resolved:
+      refs_must_include: ["card:<card_id>", "board:<board_id>"]
+      payload_must_include: ["resolution"]
+
+    decision_needed:
+      refs_must_include: ["thread:<thread_id>"]
+
+    intervention_needed:
+      refs_must_include: ["thread:<thread_id>"]
+
+    decision_made:
+      refs_must_include: ["thread:<thread_id>"]
+
+    exception_raised:
+      payload_must_include: ["subtype"]
 
     inbox_item_acknowledged:
-      thread_id: required
       refs_must_include: ["inbox:<inbox_item_id>"]
 
     agent_notification_read:
-      thread_id: required
       refs_must_include: ["artifact:<wakeup_id>"]
-      refs_optional: ["event:<wake_request_event_id>"]
 
     agent_notification_dismissed:
-      thread_id: required
       refs_must_include: ["artifact:<wakeup_id>"]
-      refs_optional: ["event:<wake_request_event_id>"]
-
-    board_created:
-      thread_id: required
-      refs_must_include: ["board:<board_id>"]
-      refs_optional: ["document:<primary_document_id>"]
-
-    board_updated:
-      thread_id: required
-      refs_must_include: ["board:<board_id>"]
-      refs_optional: ["document:<primary_document_id>"]
-
-    board_card_added:
-      thread_id: required
-      refs_must_include: ["board:<board_id>", "thread:<card_thread_id>"]
-      refs_optional: ["document:<pinned_document_id>"]
-
-    board_card_updated:
-      thread_id: required
-      refs_must_include: ["board:<board_id>", "thread:<card_thread_id>"]
-      refs_optional: ["document:<pinned_document_id>"]
-
-    board_card_moved:
-      thread_id: required
-      refs_must_include: ["board:<board_id>", "thread:<card_thread_id>"]
-
-    board_card_removed:
-      thread_id: required
-      refs_must_include: ["board:<board_id>", "thread:<card_thread_id>"]
 
   artifact_refs:
-    _rule: "All packet artifacts MUST include thread:<thread_id> in artifact.refs."
-    work_order: { refs_must_include: ["thread:<thread_id>"] }
-    receipt:    { refs_must_include: ["thread:<thread_id>", "artifact:<work_order_artifact_id>"] }
-    review:     { refs_must_include: ["thread:<thread_id>", "artifact:<receipt_artifact_id>", "artifact:<work_order_artifact_id>"] }
+    _rule: "Packet artifacts MUST include subject_ref and supporting refs in artifact.refs."
+    receipt: { refs_must_include: ["artifact:<artifact_id>", "card:<card_id>"] }
+    review: { refs_must_include: ["artifact:<artifact_id>", "artifact:<receipt_artifact_id>", "card:<card_id>"] }
 
-# ---------------------------------------------------------------------------
-# Derived views (v0: simple inbox)
-# ---------------------------------------------------------------------------
 derived:
-
   board_summary:
-    description: >
-      Board-level derived summary used by boards.list and boards.workspace so
-      clients can render useful overviews without fan-out joins.
     fields:
-      card_count:             { type: integer, required: true }
-      cards_by_column:        { type: object, required: true, description: "Object keyed by canonical board_column_key values with integer counts." }
-      open_commitment_count:  { type: integer, required: true }
-      document_count:         { type: integer, required: true }
-      latest_activity_at:     { type: datetime, required: false }
-      has_primary_document:   { type: boolean, required: true }
+      card_count: { type: integer, required: true }
+      cards_by_column: { type: object, required: true }
+      unresolved_card_count: { type: integer, required: true }
+      resolved_card_count: { type: integer, required: true }
+      document_count: { type: integer, required: true }
+      latest_activity_at: { type: datetime, required: false }
 
   board_card_summary:
-    description: >
-      Per-card derived scan summary for boards.workspace. Derived from existing
-      thread projections and inbox state; not canonical storage.
     fields:
-      open_commitment_count:  { type: integer, required: true }
-      decision_request_count: { type: integer, required: true }
-      decision_count:         { type: integer, required: true }
-      recommendation_count:   { type: integer, required: true }
-      document_count:         { type: integer, required: true }
-      inbox_count:            { type: integer, required: true }
-      latest_activity_at:     { type: datetime, required: false }
-      stale:                  { type: boolean, required: true }
+      related_topic_count: { type: integer, required: true }
+      document_count: { type: integer, required: true }
+      inbox_count: { type: integer, required: true }
+      latest_activity_at: { type: datetime, required: false }
+      stale: { type: boolean, required: true }
 
   projection_freshness:
-    description: >
-      Derived freshness metadata for projection-backed scan surfaces. This data
-      reports whether a materialized summary is current, pending, missing, or
-      errored; it is not itself canonical organizational truth.
-
-  board_workspace_card:
-    description: >
-      Workspace projection envelope for one board card. The canonical
-      `membership` sub-object holds durable board membership, the canonical
-      `backing` sub-object resolves the referenced thread/document resources,
-      and the `derived` sub-object carries scan summaries plus freshness state.
-      Consumers MUST treat `derived.*` as projection output, not canonical fact.
-
-  thread_board_membership:
-    description: >
-      Lightweight reverse membership join surfaced by threads.workspace. A
-      thread may have zero, one, or many board memberships.
-    fields:
-      board_id:           { type: string, required: true }
-      board_title:        { type: string, required: true }
-      board_status:       { type: string, required: true, ref: enums.board_status }
-      thread_id:          { type: string, required: true }
-      column_key:         { type: string, required: true, ref: enums.board_column_key }
-      pinned_document_id: { type: string, required: false }
+    description: Derived freshness metadata for projection-backed scan surfaces.
 
   inbox_item:
     description: >
-      Derived from events, commitments, and thread states. Regenerable.
-      v0: grouped by category, sorted by time/due date. No ranking engine.
+      Regenerable operator work queue item derived from events, resource state,
+      and typed refs.
     fields:
-      id:
-        type: string
-        required: true
-        description: >
-          Deterministic ID: MUST be stable across inbox rebuilds given the same
-          canonical inputs. Generated as: "inbox:" + category + ":" + thread_id
-          + ":" + commitment_id (or "none") + ":" + source_event_id (or "none").
-      category:           { type: string, required: true, ref: enums.inbox_category }
-      source_event_id:    { type: string, required: false }
-      thread_id:          { type: string, required: true }
-      commitment_id:      { type: string, required: false }
-      title:              { type: string, required: true }
+      id: { type: string, required: true }
+      category: { type: string, required: true, ref: enums.inbox_category }
+      thread_id: { type: string, required: false, description: "Backing thread id for the inbox item and decision actions." }
+      subject_ref: { type: typed_ref, required: true }
+      source_event_ref: { type: typed_ref, required: false }
+      title: { type: string, required: true }
       recommended_action: { type: string, required: true }
-
-  inbox_derivation_rules:
-    semantics: >
-      `decision_needed` means a human must choose among multiple viable paths.
-      `intervention_needed` means the path is already clear, but an agent cannot
-      execute the next step and a human must act.
-    acknowledgment: >
-      When an inbox_item_acknowledged event exists referencing an inbox item
-      (via inbox:<inbox_item_id>), that item is suppressed from the inbox
-      UNLESS a new triggering event (receipt, exception, commitment change)
-      has occurred after the acknowledgment timestamp. Deterministic IDs
-      ensure ack events survive inbox rebuilds.
+      related_refs: { type: "list<typed_ref>", required: true }
 
   agent_notification:
-    description: >
-      Derived per-target-agent wake notification state. Source wake intent is the
-      canonical agent_wakeup_requested event. Read and dismissed status are
-      derived from follow-up notification events and can be regenerated.
     fields:
-      wakeup_id:        { type: string, required: true }
-      status:           { type: string, required: true, ref: enums.agent_notification_status }
-      target_handle:    { type: string, required: true }
-      target_actor_id:  { type: string, required: true }
-      thread_id:        { type: string, required: true }
-      thread_title:     { type: string, required: false }
-      trigger_event_id: { type: string, required: true }
-      trigger_text:     { type: string, required: false }
-      created_at:       { type: string, required: true }
-      read_at:          { type: string, required: false }
-      dismissed_at:     { type: string, required: false }
+      wakeup_id: { type: string, required: true }
+      status: { type: string, required: true, ref: enums.agent_notification_status }
+      target_handle: { type: string, required: true }
+      target_actor_id: { type: string, required: true }
+      thread_ref: { type: typed_ref, required: false }
+      trigger_event_ref: { type: typed_ref, required: true }
+      created_at: { type: datetime, required: true }
+      read_at: { type: datetime, required: false }
+      dismissed_at: { type: datetime, required: false }
 
-# ---------------------------------------------------------------------------
-# Grounding rules
-# ---------------------------------------------------------------------------
+lifecycle_rules:
+  mutation_model:
+    - "Events and artifacts are append-only."
+    - "Topics, documents, boards, and cards are mutable resources with explicit provenance."
+    - "Document revisions are immutable append-only records."
+
+  decision_lifecycle_anchoring:
+    - "decision_needed, intervention_needed, and decision_made events append to the backing thread; refs must include thread:<thread_id> (see reference_conventions.event_refs)."
+    - "topic: refs on those events are optional operator context when a topic id exists, not a substitute for thread:."
+
+  concurrency_tokens:
+    - "topic.updated_at"
+    - "document.updated_at"
+    - "board.updated_at"
+    - "card.updated_at"
+
+  ref_lookup_rules:
+    - "Reverse navigation MUST be reconstructible from typed refs and ref_edge rows."
+    - "Cards resolve related evidence through resolution_refs and related_refs."
+
 grounding_rules:
-
   restricted_fields:
-    description: "MUST NOT be updated without referencing a receipt or decision event."
+    description: >
+      Evidence-backed mutations require explicit provenance and refs. For topic
+      status, the restricted case is the terminal `resolved` transition; other
+      topic status changes remain interpretive by default unless the contract
+      later states otherwise.
     fields:
-      - "commitment.status -> done"
-      - "commitment.status -> canceled"
-      - "any 'metric improved' claim"
-      - "any 'shipped/sent/deployed' assertion"
+      - "card.resolution -> done"
+      - "card.resolution -> canceled"
+      - "topic.status -> resolved"
+      - "any shipped/sent/deployed assertion"
 
   interpretive_fields:
-    description: "MAY be updated without receipts."
+    description: May change without receipts when clearly marked as interpretive.
     fields:
-      - "thread.current_summary"
-      - "thread.next_actions"
+      - "topic.summary"
+      - "card.summary"
 
-# ---------------------------------------------------------------------------
-# Staleness rules
-# ---------------------------------------------------------------------------
 staleness:
   rule: >
-    A thread is stale when now > next_check_in_at AND no receipt or decision
-    event has occurred since the last check-in window.
+    A topic is stale when no linked thread, document, or card activity has been
+    observed inside its expected operating window.
   on_stale:
-    - "Emit exception_raised event with subtype stale_thread"
-    - "Surface as inbox item"
-  cadence_semantics:
-    reactive: "No scheduled check-ins. Wakes on inbound events only."
-    cron:     "5-field cron schedule interpreted in server timezone. Staleness window is computed from the previous expected run."
-    legacy:
-      daily:   "Compatibility alias for a canonical daily cron schedule."
-      weekly:  "Compatibility alias for a canonical weekly cron schedule."
-      monthly: "Compatibility alias for a canonical monthly cron schedule."
-      custom:  "Compatibility alias for a non-preset cron schedule."
+    - "Emit exception_raised with subtype stale_topic"
+    - "Surface a derived inbox item in category stale_topic"

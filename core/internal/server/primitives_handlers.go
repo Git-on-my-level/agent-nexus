@@ -124,7 +124,7 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to append event")
 		return
 	}
-	enqueueThreadProjectionsBestEffort(r.Context(), opts, []string{anyString(stored["thread_id"])}, time.Now().UTC())
+	enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{anyString(stored["thread_id"])}, time.Now().UTC())
 
 	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "events.create", actorID, req.RequestKey, req, http.StatusCreated, map[string]any{"event": stored})
 	if writeIdempotencyError(w, err) {
@@ -180,8 +180,8 @@ func handleArchiveEvent(w http.ResponseWriter, r *http.Request, opts handlerOpti
 			writeError(w, http.StatusNotFound, "not_found", "event not found")
 			return
 		}
-		if errors.Is(err, primitives.ErrAlreadyTombstoned) {
-			writeError(w, http.StatusConflict, "already_tombstoned", "event is tombstoned")
+		if errors.Is(err, primitives.ErrAlreadyTrashed) {
+			writeError(w, http.StatusConflict, "already_trashed", "event is trashed")
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to archive event")
@@ -226,7 +226,7 @@ func handleUnarchiveEvent(w http.ResponseWriter, r *http.Request, opts handlerOp
 	writeJSON(w, http.StatusOK, map[string]any{"event": event})
 }
 
-func handleTombstoneEvent(w http.ResponseWriter, r *http.Request, opts handlerOptions, eventID string) {
+func handleTrashEvent(w http.ResponseWriter, r *http.Request, opts handlerOptions, eventID string) {
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
@@ -245,13 +245,13 @@ func handleTombstoneEvent(w http.ResponseWriter, r *http.Request, opts handlerOp
 		return
 	}
 
-	event, err := opts.primitiveStore.TombstoneEvent(r.Context(), actorID, eventID, req.Reason)
+	event, err := opts.primitiveStore.TrashEvent(r.Context(), actorID, eventID, req.Reason)
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "event not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to tombstone event")
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to trash event")
 		return
 	}
 
@@ -283,8 +283,8 @@ func handleRestoreEvent(w http.ResponseWriter, r *http.Request, opts handlerOpti
 			writeError(w, http.StatusNotFound, "not_found", "event not found")
 			return
 		}
-		if errors.Is(err, primitives.ErrNotTombstoned) {
-			writeError(w, http.StatusConflict, "not_tombstoned", "event is not currently tombstoned")
+		if errors.Is(err, primitives.ErrNotTrashed) {
+			writeError(w, http.StatusConflict, "not_trashed", "event is not currently trashed")
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to restore event")
@@ -434,8 +434,8 @@ func handleRestoreArtifact(w http.ResponseWriter, r *http.Request, opts handlerO
 			writeError(w, http.StatusNotFound, "not_found", "artifact not found")
 			return
 		}
-		if errors.Is(err, primitives.ErrNotTombstoned) {
-			writeError(w, http.StatusConflict, "not_tombstoned", "artifact is not currently tombstoned")
+		if errors.Is(err, primitives.ErrNotTrashed) {
+			writeError(w, http.StatusConflict, "not_trashed", "artifact is not currently trashed")
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to restore artifact")
@@ -503,26 +503,26 @@ func handlePurgeArtifact(w http.ResponseWriter, r *http.Request, opts handlerOpt
 			return
 		}
 		if !actorRegistryActorHasHumanTag(r.Context(), opts.actorRegistry, registeredID) {
-			writeError(w, http.StatusForbidden, "human_only", "only human-tagged actors may purge without authenticated passkey credentials")
+			writeError(w, http.StatusForbidden, "human_only", "only human-tagged actors may permanently delete without authenticated passkey credentials")
 			return
 		}
 	}
 
-	err := opts.primitiveStore.PurgeTombstonedArtifact(r.Context(), artifactID)
+	err := opts.primitiveStore.PurgeTrashedArtifact(r.Context(), artifactID)
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "artifact not found")
 			return
 		}
-		if errors.Is(err, primitives.ErrNotTombstoned) {
-			writeError(w, http.StatusConflict, "not_tombstoned", "artifact is not currently tombstoned")
+		if errors.Is(err, primitives.ErrNotTrashed) {
+			writeError(w, http.StatusConflict, "not_trashed", "artifact is not currently trashed")
 			return
 		}
 		if errors.Is(err, primitives.ErrArtifactInUse) {
 			writeError(w, http.StatusConflict, "artifact_in_use", "artifact is referenced by document revisions")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to purge artifact")
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to permanently delete artifact")
 		return
 	}
 
@@ -602,8 +602,8 @@ func handleListArtifacts(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		threadID = strings.TrimSpace(query.Get("thread"))
 	}
 
-	includeTombstoned := strings.TrimSpace(query.Get("include_tombstoned")) == "true"
-	tombstonedOnly := strings.TrimSpace(query.Get("tombstoned_only")) == "true"
+	includeTrashed := strings.TrimSpace(query.Get("include_trashed")) == "true"
+	trashedOnly := strings.TrimSpace(query.Get("trashed_only")) == "true"
 	includeArchived := strings.TrimSpace(query.Get("include_archived")) == "true"
 	archivedOnly := strings.TrimSpace(query.Get("archived_only")) == "true"
 
@@ -615,16 +615,16 @@ func handleListArtifacts(w http.ResponseWriter, r *http.Request, opts handlerOpt
 	}
 
 	artifacts, err := opts.primitiveStore.ListArtifacts(r.Context(), primitives.ArtifactListFilter{
-		Q:                 strings.TrimSpace(query.Get("q")),
-		Limit:             limitPtr,
-		Kind:              strings.TrimSpace(query.Get("kind")),
-		ThreadID:          threadID,
-		CreatedBefore:     strings.TrimSpace(query.Get("created_before")),
-		CreatedAfter:      strings.TrimSpace(query.Get("created_after")),
-		IncludeTombstoned: includeTombstoned,
-		TombstonedOnly:    tombstonedOnly,
-		IncludeArchived:   includeArchived,
-		ArchivedOnly:      archivedOnly,
+		Q:               strings.TrimSpace(query.Get("q")),
+		Limit:           limitPtr,
+		Kind:            strings.TrimSpace(query.Get("kind")),
+		ThreadID:        threadID,
+		CreatedBefore:   strings.TrimSpace(query.Get("created_before")),
+		CreatedAfter:    strings.TrimSpace(query.Get("created_after")),
+		IncludeTrashed:  includeTrashed,
+		TrashedOnly:     trashedOnly,
+		IncludeArchived: includeArchived,
+		ArchivedOnly:    archivedOnly,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list artifacts")
@@ -632,25 +632,6 @@ func handleListArtifacts(w http.ResponseWriter, r *http.Request, opts handlerOpt
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"artifacts": artifacts})
-}
-
-func handleGetSnapshot(w http.ResponseWriter, r *http.Request, opts handlerOptions, snapshotID string) {
-	if opts.primitiveStore == nil {
-		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
-		return
-	}
-
-	snapshot, err := opts.primitiveStore.GetSnapshot(r.Context(), snapshotID)
-	if err != nil {
-		if errors.Is(err, primitives.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", "snapshot not found")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load snapshot")
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{"snapshot": snapshot})
 }
 
 func requireRegisteredActorID(w http.ResponseWriter, r *http.Request, actorRegistry ActorRegistry, actorID string) (string, bool) {
@@ -699,7 +680,7 @@ func extractStringSlice(raw any) ([]string, error) {
 	}
 }
 
-func handleTombstoneArtifact(w http.ResponseWriter, r *http.Request, opts handlerOptions, artifactID string) {
+func handleTrashArtifact(w http.ResponseWriter, r *http.Request, opts handlerOptions, artifactID string) {
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
@@ -718,13 +699,13 @@ func handleTombstoneArtifact(w http.ResponseWriter, r *http.Request, opts handle
 		return
 	}
 
-	artifact, err := opts.primitiveStore.TombstoneArtifact(r.Context(), actorID, artifactID, req.Reason)
+	artifact, err := opts.primitiveStore.TrashArtifact(r.Context(), actorID, artifactID, req.Reason)
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "artifact not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to tombstone artifact")
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to trash artifact")
 		return
 	}
 
@@ -755,8 +736,8 @@ func handleArchiveArtifact(w http.ResponseWriter, r *http.Request, opts handlerO
 			writeError(w, http.StatusNotFound, "not_found", "artifact not found")
 			return
 		}
-		if errors.Is(err, primitives.ErrAlreadyTombstoned) {
-			writeError(w, http.StatusConflict, "already_tombstoned", "artifact is tombstoned")
+		if errors.Is(err, primitives.ErrAlreadyTrashed) {
+			writeError(w, http.StatusConflict, "already_trashed", "artifact is trashed")
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to archive artifact")

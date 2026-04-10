@@ -21,9 +21,9 @@
         "review": 0
       },
       "document_count": 1,
-      "has_primary_document": true,
+      "has_document_refs": true,
       "latest_activity_at": "2026-03-07T00:03:00Z",
-      "open_commitment_count": 1
+      "unresolved_card_count": 1
     },
     "cards": {
       "count": 1,
@@ -47,7 +47,7 @@
             "document_count": 1,
             "inbox_count": 1,
             "latest_activity_at": "2026-03-07T00:03:00Z",
-            "open_commitment_count": 1,
+            "related_topic_count": 1,
             "recommendation_count": 1,
             "stale": false
           },
@@ -55,15 +55,6 @@
             "id": "thread_123",
             "title": "Machine-facing consistency"
           }
-        }
-      ]
-    },
-    "commitments": {
-      "count": 1,
-      "items": [
-        {
-          "id": "commitment_ctx_1",
-          "status": "open"
         }
       ]
     },
@@ -88,19 +79,10 @@
         }
       ]
     },
-    "primary_document": {
-      "id": "doc_ctx_1",
-      "status": "active",
-      "title": "Runbook"
-    },
-    "primary_thread": {
-      "id": "thread_123",
-      "title": "Machine-facing consistency"
-    },
     "section_kinds": {
       "board": "canonical",
       "cards": "canonical",
-      "commitments": "derived",
+      "topics": "derived",
       "documents": "derived",
       "inbox": "derived",
       "warnings": "derived"

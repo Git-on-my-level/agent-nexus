@@ -104,8 +104,8 @@ var actorsSubcommandSpec = subcommandSpec{
 
 var metaSubcommandSpec = subcommandSpec{
 	command:  "meta",
-	valid:    []string{"health", "livez", "readyz", "version", "handshake", "ops", "commands", "command", "concepts", "concept", "docs", "doc", "skill"},
-	examples: []string{"oar meta health", "oar meta readyz", "oar meta ops health", "oar meta commands", "oar meta command --command-id threads.list", "oar meta docs", "oar meta doc agent-guide", "oar meta skill cursor --write-dir ~/.cursor/skills/oar-cli-onboard"},
+	valid:    []string{"health", "readyz", "version", "handshake", "ops", "commands", "command", "concepts", "concept", "docs", "doc", "skill"},
+	examples: []string{"oar meta health", "oar meta readyz", "oar meta commands", "oar meta command --command-id threads.list", "oar meta docs", "oar meta doc agent-guide", "oar meta skill cursor --write-dir ~/.cursor/skills/oar-cli-onboard"},
 }
 
 var metaOpsSubcommandSpec = subcommandSpec{
@@ -128,28 +128,16 @@ var provenanceSubcommandSpec = subcommandSpec{
 
 var threadsSubcommandSpec = subcommandSpec{
 	command:  "threads",
-	valid:    []string{"list", "get", "create", "patch", "propose-patch", "apply", "timeline", "context", "inspect", "workspace", "review", "recommendations", "archive", "unarchive", "tombstone", "restore", "purge"},
-	examples: []string{"oar threads list --status active", "oar threads review --thread-id <thread-id>", "oar threads workspace --status active --type initiative --full-id"},
+	valid:    []string{"list", "get", "timeline", "context", "inspect", "workspace", "review", "recommendations"},
+	examples: []string{"oar topics workspace --topic-id <topic-id>", "oar threads list --status active", "oar threads workspace --status active --type initiative --full-id"},
 	aliases: map[string]string{
-		"ls":     "list",
-		"update": "patch",
-	},
-}
-
-var commitmentsSubcommandSpec = subcommandSpec{
-	command:  "commitments",
-	valid:    []string{"list", "get", "create", "patch", "propose-patch", "apply"},
-	examples: []string{"oar commitments list --status open", "oar commitments get --commitment-id <commitment-id>"},
-	aliases: map[string]string{
-		"ls":      "list",
-		"show":    "get",
-		"inspect": "get",
+		"ls": "list",
 	},
 }
 
 var artifactsSubcommandSpec = subcommandSpec{
 	command:  "artifacts",
-	valid:    []string{"list", "get", "create", "content", "inspect", "archive", "unarchive", "tombstone", "restore", "purge"},
+	valid:    []string{"list", "get", "create", "content", "inspect", "archive", "unarchive", "trash", "restore", "purge"},
 	examples: []string{"oar artifacts list --kind packet", "oar artifacts inspect --artifact-id <artifact-id>"},
 	aliases: map[string]string{
 		"ls":   "list",
@@ -159,7 +147,7 @@ var artifactsSubcommandSpec = subcommandSpec{
 
 var boardsSubcommandSpec = subcommandSpec{
 	command:  "boards",
-	valid:    []string{"list", "create", "get", "update", "workspace", "archive", "unarchive", "tombstone", "restore", "purge", "cards"},
+	valid:    []string{"list", "create", "get", "update", "workspace", "archive", "unarchive", "trash", "restore", "purge", "cards"},
 	examples: []string{"oar boards list --status active", "oar boards workspace --board-id <board-id>", "oar boards cards create --board-id <board-id> --title \"Buy groceries\" --column backlog"},
 	aliases: map[string]string{
 		"ls":   "list",
@@ -170,7 +158,7 @@ var boardsSubcommandSpec = subcommandSpec{
 var boardsCardsSubcommandSpec = subcommandSpec{
 	command:  "boards cards",
 	valid:    []string{"list", "create", "get", "update", "move", "archive"},
-	examples: []string{"oar boards cards list --board-id <board-id>", "oar boards cards create --board-id <board-id> --title \"Buy groceries\" --column backlog", "oar boards cards update --card-id <card-id> --status done"},
+	examples: []string{"oar boards cards list --board-id <board-id>", "oar boards cards create --board-id <board-id> --title \"Buy groceries\" --column backlog", "oar boards cards update --card-id <card-id> --if-updated-at <card-updated-at> --status done"},
 	aliases: map[string]string{
 		"ls":     "list",
 		"add":    "create",
@@ -181,7 +169,7 @@ var boardsCardsSubcommandSpec = subcommandSpec{
 
 var docsSubcommandSpec = subcommandSpec{
 	command:  "docs",
-	valid:    []string{"list", "create", "get", "content", "update", "propose-update", "apply", "validate-update", "history", "revision", "tombstone", "archive", "unarchive", "restore", "purge"},
+	valid:    []string{"list", "create", "get", "content", "history", "revision", "trash", "archive", "unarchive", "restore", "purge"},
 	examples: []string{"oar docs list --thread-id <thread-id>", "oar docs content --document-id <document-id>", "oar docs apply --proposal-id <proposal-id>"},
 	aliases: map[string]string{
 		"ls":   "list",
@@ -198,7 +186,7 @@ var docsRevisionSubcommandSpec = subcommandSpec{
 
 var eventsSubcommandSpec = subcommandSpec{
 	command:  "events",
-	valid:    []string{"list", "get", "create", "validate", "stream", "tail", "explain", "archive", "unarchive", "tombstone", "restore"},
+	valid:    []string{"list", "get", "create", "validate", "stream", "tail", "explain", "archive", "unarchive", "trash", "restore"},
 	examples: []string{"oar events list --thread-id <thread-id> --type actor_statement --mine --full-id", "oar events tail --max-events 20"},
 	aliases: map[string]string{
 		"watch": "stream",
@@ -208,10 +196,11 @@ var eventsSubcommandSpec = subcommandSpec{
 
 var inboxSubcommandSpec = subcommandSpec{
 	command:  "inbox",
-	valid:    []string{"list", "get", "ack", "stream", "tail"},
-	examples: []string{"oar inbox get --id <id-or-alias>", "oar inbox ack --inbox-item-id <id-or-alias>"},
+	valid:    []string{"list", "get", "acknowledge", "ack", "stream", "tail"},
+	examples: []string{"oar inbox get --id <id-or-alias>", "oar inbox acknowledge --inbox-item-id <id-or-alias>"},
 	aliases: map[string]string{
 		"ls":    "list",
+		"ack":   "acknowledge",
 		"watch": "stream",
 	},
 }

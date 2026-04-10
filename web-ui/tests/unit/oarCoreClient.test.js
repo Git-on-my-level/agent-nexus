@@ -86,7 +86,7 @@ describe("oarCoreClient error messaging", () => {
         if (String(url).endsWith("/meta/handshake")) {
           return new Response(
             JSON.stringify({
-              schema_version: "0.2.3",
+              schema_version: "0.3.0",
               command_registry_digest: expectedDigest,
               core_version: "test",
               api_version: "0.2",
@@ -106,7 +106,7 @@ describe("oarCoreClient error messaging", () => {
     });
 
     await expect(verifyCoreSchemaVersion(client)).resolves.toMatchObject({
-      schema_version: "0.2.3",
+      schema_version: "0.3.0",
     });
   });
 
@@ -140,7 +140,7 @@ describe("oarCoreClient error messaging", () => {
         if (String(url).endsWith("/version")) {
           return new Response(
             JSON.stringify({
-              schema_version: "0.2.3",
+              schema_version: "0.3.0",
               command_registry_digest: expectedDigest,
             }),
             {
@@ -158,7 +158,7 @@ describe("oarCoreClient error messaging", () => {
     });
 
     await expect(verifyCoreSchemaVersion(client)).resolves.toMatchObject({
-      schema_version: "0.2.3",
+      schema_version: "0.3.0",
     });
   });
 
@@ -187,7 +187,7 @@ describe("oarCoreClient error messaging", () => {
         if (String(url).endsWith("/meta/handshake")) {
           return new Response(
             JSON.stringify({
-              schema_version: "0.2.3",
+              schema_version: "0.3.0",
               command_registry_digest: "stale-core-digest",
               core_version: "test",
               api_version: "0.2",
@@ -257,6 +257,119 @@ describe("oarCoreClient error messaging", () => {
             type: "message_posted",
           },
         },
+      },
+    ]);
+  });
+
+  it("forwards receipt create bodies without mutating packet", async () => {
+    const seenBodies = [];
+    const client = createOarCoreClient({
+      baseUrl: "http://core.test",
+      actorIdProvider: () => "actor-1",
+      fetchFn: async (url, init) => {
+        seenBodies.push(init?.body ?? "");
+        return new Response(
+          JSON.stringify({
+            artifact: { id: "artifact-receipt-x" },
+            packet_kind: "receipt",
+            packet: {},
+          }),
+          {
+            status: 201,
+            headers: { "content-type": "application/json" },
+          },
+        );
+      },
+    });
+
+    await client.createReceipt({
+      request_key: "rk-1",
+      artifact: { kind: "receipt" },
+      packet: {
+        thread_id: "thr-9",
+        subject_ref: "card:c-1",
+        outputs: ["artifact:o1"],
+        verification_evidence: ["event:e1"],
+        changes_summary: "done",
+        known_gaps: [],
+      },
+    });
+
+    expect(seenBodies.length).toBe(1);
+    const body = JSON.parse(seenBodies[0]);
+    expect(body.packet.subject_ref).toBe("card:c-1");
+    expect(body.packet.thread_id).toBe("thr-9");
+  });
+
+  it("posts inbox acknowledgements to the contract acknowledge path", async () => {
+    const seenRequests = [];
+    const client = createOarCoreClient({
+      baseUrl: "http://core.test",
+      actorIdProvider: () => "actor-1",
+      fetchFn: async (url, init) => {
+        seenRequests.push({
+          url: String(url),
+          method: init?.method ?? "GET",
+          body: init?.body ?? "",
+        });
+        return new Response(JSON.stringify({ event: { id: "evt-ack" } }), {
+          status: 201,
+          headers: { "content-type": "application/json" },
+        });
+      },
+    });
+
+    await client.ackInboxItem({
+      inbox_item_id: "inbox:decision_needed:thread-1:none:evt-1",
+      subject_ref: "thread:thread-1",
+    });
+
+    expect(seenRequests).toEqual([
+      {
+        url: "http://core.test/inbox/inbox%3Adecision_needed%3Athread-1%3Anone%3Aevt-1/acknowledge",
+        method: "POST",
+        body: expect.any(String),
+      },
+    ]);
+    expect(JSON.parse(seenRequests[0].body)).toEqual({
+      actor_id: "actor-1",
+      subject_ref: "thread:thread-1",
+    });
+  });
+
+  it("routes card archive, restore, and purge through generated command paths", async () => {
+    const seen = [];
+    const client = createOarCoreClient({
+      baseUrl: "http://core.test",
+      actorIdProvider: () => "actor-1",
+      fetchFn: async (url, init) => {
+        seen.push({
+          url: String(url),
+          method: String(init?.method ?? "GET"),
+        });
+        return new Response(JSON.stringify({ card: { id: "c1" } }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      },
+    });
+
+    await client.archiveCard("card-1", {});
+    await client.restoreCard("card-1", {});
+    await client.purgeCard("card-1", {});
+
+    expect(seen).toEqual([
+      {
+        url: "http://core.test/cards/card-1/archive",
+        method: "POST",
+      },
+      {
+        url: "http://core.test/cards/card-1/restore",
+        method: "POST",
+      },
+      {
+        url: "http://core.test/cards/card-1/purge",
+        method: "POST",
       },
     ]);
   });

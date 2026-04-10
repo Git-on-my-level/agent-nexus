@@ -40,10 +40,11 @@ func handleRegisterAgent(w http.ResponseWriter, r *http.Request, opts handlerOpt
 	}
 
 	var req struct {
-		Username       string `json:"username"`
-		PublicKey      string `json:"public_key"`
-		BootstrapToken string `json:"bootstrap_token"`
-		InviteToken    string `json:"invite_token"`
+		Username        string `json:"username"`
+		PublicKey       string `json:"public_key"`
+		BootstrapToken  string `json:"bootstrap_token"`
+		InviteToken     string `json:"invite_token"`
+		ExistingActorID string `json:"existing_actor_id"`
 	}
 	if !decodeJSONBody(w, r, &req) {
 		return
@@ -55,8 +56,9 @@ func handleRegisterAgent(w http.ResponseWriter, r *http.Request, opts handlerOpt
 	}
 
 	agent, key, tokens, err := opts.authStore.RegisterAgent(r.Context(), auth.RegisterAgentInput{
-		Username:  req.Username,
-		PublicKey: req.PublicKey,
+		Username:        req.Username,
+		PublicKey:       req.PublicKey,
+		ExistingActorID: req.ExistingActorID,
 	}, claim)
 	if err != nil {
 		switch {

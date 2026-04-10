@@ -24,8 +24,8 @@ if (!coreBaseUrl) {
 
 const seed = getPilotRescueSeedData();
 const defaultActorId = seed.actors[0]?.id ?? "actor-product-lead";
+const topicIdMap = new Map();
 const threadIdMap = new Map();
-const snapshotIdMap = new Map();
 
 main().catch((error) => {
   const reason = error instanceof Error ? error.message : String(error);
@@ -44,8 +44,7 @@ async function main() {
   }
 
   await seedActors();
-  await seedThreads();
-  await seedCommitments();
+  await seedTopics();
   await seedArtifacts();
   await seedDocuments();
   const eventStats = await seedEvents();
@@ -57,19 +56,19 @@ async function main() {
 }
 
 async function detectSeededState() {
-  const [actorsBody, threadsBody] = await Promise.all([
+  const [actorsBody, topicsBody] = await Promise.all([
     request("GET", "/actors"),
-    request("GET", "/threads"),
+    request("GET", "/topics"),
   ]);
 
   const actorIds = new Set((actorsBody?.actors ?? []).map((actor) => actor?.id));
-  const threadTitles = new Set(
-    (threadsBody?.threads ?? []).map((thread) => String(thread?.title ?? "")),
+  const topicTitles = new Set(
+    (topicsBody?.topics ?? []).map((topic) => String(topic?.title ?? "")),
   );
 
   return (
     actorIds.has("actor-product-lead") &&
-    threadTitles.has("Pilot Rescue Sprint: NorthWave Launch Readiness")
+    topicTitles.has("Pilot Rescue Sprint: NorthWave Launch Readiness")
   );
 }
 
@@ -79,57 +78,63 @@ async function seedActors() {
   }
 }
 
-async function seedThreads() {
-  for (const sourceThread of seed.threads) {
-    const actorId = pickActorId(sourceThread.updated_by);
-    const response = await request("POST", "/threads", {
-      actor_id: actorId,
-      thread: {
-        type: sourceThread.type,
-        title: sourceThread.title,
-        status: sourceThread.status,
-        priority: sourceThread.priority,
-        tags: sourceThread.tags,
-        key_artifacts: normalizeArtifactRefs(sourceThread.key_artifacts),
-        cadence: sourceThread.cadence,
-        current_summary: sourceThread.current_summary,
-        next_actions: sourceThread.next_actions,
-        next_check_in_at: sourceThread.next_check_in_at,
-        provenance: sourceThread.provenance,
-      },
-    });
-
-    const newId = String(response?.thread?.id ?? "").trim();
-    if (!newId) {
-      throw new Error(`Thread create returned no id for ${sourceThread.title}`);
-    }
-    threadIdMap.set(sourceThread.id, newId);
-    snapshotIdMap.set(sourceThread.id, newId);
+function normalizeTopicTypeFromPilotThread(type) {
+  const t = String(type ?? "").trim();
+  switch (t) {
+    case "initiative":
+      return "initiative";
+    case "case":
+      return "incident";
+    case "process":
+      return "other";
+    default:
+      return "other";
   }
 }
 
-async function seedCommitments() {
-  for (const sourceCommitment of seed.commitments) {
-    const actorId = pickActorId(sourceCommitment.updated_by);
-    const response = await request("POST", "/commitments", {
+async function seedTopics() {
+  const sourceThreads = Array.isArray(seed.threads) ? seed.threads : [];
+
+  for (const sourceThread of sourceThreads) {
+    const actorId = pickActorId(sourceThread.updated_by);
+    const topicPayload = {
+      id: sourceThread.id,
+      type: normalizeTopicTypeFromPilotThread(sourceThread.type),
+      title: sourceThread.title,
+      status: sourceThread.status,
+      summary: String(
+        sourceThread.current_summary ?? sourceThread.title ?? "",
+      ).trim(),
+      owner_refs: sourceThread.updated_by
+        ? [`actor:${pickActorId(sourceThread.updated_by)}`]
+        : [`actor:${defaultActorId}`],
+      board_refs: [],
+      document_refs: [],
+      related_refs: normalizeArtifactRefs(sourceThread.key_artifacts ?? []),
+      provenance: sourceThread.provenance,
+    };
+
+    const response = await request("POST", "/topics", {
       actor_id: actorId,
-      commitment: {
-        thread_id: mustMapThreadId(sourceCommitment.thread_id),
-        title: sourceCommitment.title,
-        owner: sourceCommitment.owner,
-        due_at: sourceCommitment.due_at,
-        status: sourceCommitment.status,
-        definition_of_done: sourceCommitment.definition_of_done,
-        links: mapRefs(sourceCommitment.links),
-        provenance: sourceCommitment.provenance,
-      },
+      topic: topicPayload,
     });
 
-    const newId = String(response?.commitment?.id ?? "").trim();
-    if (!newId) {
-      throw new Error(`Commitment create returned no id for ${sourceCommitment.title}`);
+    const created = response?.topic;
+    const newTopicId = String(created?.id ?? "").trim();
+    const backingThreadId = String(created?.thread_id ?? "").trim();
+    if (!newTopicId || !backingThreadId) {
+      throw new Error(
+        `Topic create returned incomplete data for ${sourceThread.title}`,
+      );
     }
-    snapshotIdMap.set(sourceCommitment.id, newId);
+
+    const sourceTopicId = String(sourceThread.id ?? "").trim();
+    topicIdMap.set(sourceTopicId, newTopicId);
+    const topicAlias = topicRefAliasFromThreadLikeId(sourceTopicId);
+    if (topicAlias && topicAlias !== sourceTopicId) {
+      topicIdMap.set(topicAlias, newTopicId);
+    }
+    threadIdMap.set(sourceTopicId, backingThreadId);
   }
 }
 
@@ -167,12 +172,19 @@ async function seedDocuments() {
   for (const sourceDocument of seed.documents ?? []) {
     await request("POST", "/docs", {
       actor_id: pickActorId(sourceDocument.actor_id),
-      document: sourceDocument.document,
+      document: sanitizeDocumentWrite(sourceDocument.document),
       refs: mapRefs(sourceDocument.refs),
       content: sourceDocument.content,
       content_type: sourceDocument.content_type,
     }, [201, 409]);
   }
+}
+
+function sanitizeDocumentWrite(document) {
+  const next = { ...(document ?? {}) };
+  delete next.status;
+  delete next.state;
+  return next;
 }
 
 async function seedEvents() {
@@ -243,13 +255,18 @@ function mapRef(ref) {
   if (prefix === "thread") {
     return `${prefix}:${mapThreadId(value)}`;
   }
-  if (prefix === "snapshot") {
-    return `${prefix}:${snapshotIdMap.get(value) ?? value}`;
-  }
-  if (prefix === "commitment") {
-    return `${prefix}:${snapshotIdMap.get(value) ?? value}`;
+  if (prefix === "topic") {
+    return `${prefix}:${topicIdMap.get(value) ?? value}`;
   }
   return text;
+}
+
+function topicRefAliasFromThreadLikeId(topicId) {
+  const raw = String(topicId ?? "").trim();
+  if (!raw) {
+    return "";
+  }
+  return raw.startsWith("thread-") ? raw.slice("thread-".length) : raw;
 }
 
 function mapRefs(values) {
@@ -284,10 +301,16 @@ function normalizeEventPayload(type, payload) {
 
 function normalizeEventRefs(type, refs, mappedThreadId) {
   const nextRefs = Array.isArray(refs) ? [...refs] : [];
-  if (type === "snapshot_updated") {
-    const hasSnapshotRef = nextRefs.some((ref) => ref.startsWith("snapshot:"));
-    if (!hasSnapshotRef && mappedThreadId) {
-      nextRefs.push(`snapshot:${mappedThreadId}`);
+  if (
+    type === "thread_updated" ||
+    type === "thread_created" ||
+    type === "decision_needed" ||
+    type === "intervention_needed" ||
+    type === "decision_made"
+  ) {
+    const hasThreadRef = nextRefs.some((ref) => ref.startsWith("thread:"));
+    if (!hasThreadRef && mappedThreadId) {
+      nextRefs.push(`thread:${mappedThreadId}`);
     }
   }
   return nextRefs;

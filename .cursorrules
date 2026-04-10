@@ -12,7 +12,7 @@ Focused · Serious · Reliable
 
 OAR is an operating system for organizational work, not a project tracker. Every surface should communicate that real, durable, evidence-backed decisions happen here. The brand is sober and precise. It earns trust through information density and clarity, not warmth or delight.
 
-Voice and tone: direct, unambiguous, operator-grade. Avoid consumer-app softness, marketing language, or playful microcopy. Labels should be domain-accurate (use the schema vocabulary: thread, commitment, receipt, work order, artifact, event, snapshot, inbox, provenance, actor).
+Voice and tone: direct, unambiguous, operator-grade. Avoid consumer-app softness, marketing language, or playful microcopy. Labels should be domain-accurate (use the schema vocabulary: thread, topic, card, board, receipt, review, artifact, event, inbox, provenance, actor).
 
 ### Aesthetic Direction
 
@@ -48,7 +48,7 @@ Voice and tone: direct, unambiguous, operator-grade. Avoid consumer-app softness
 | Panel / card surface | `#181a21` / `bg-gray-100` / `var(--ui-panel)` |
 | Standard border | `#262a33` / `border-gray-200` / `var(--ui-border)` |
 | Primary text | `#e2e5eb` / `text-gray-900` / `var(--ui-text)` |
-| Muted text | `#7d828e` / `text-gray-500` / `var(--ui-text-muted)` |
+| Muted text | `#8e939c` / `text-gray-500` / `var(--ui-text-muted)` |
 | Accent (links, focus) | `#818cf8` / `var(--ui-accent)` |
 | Accent strong (CTAs) | `#6366f1` / `var(--ui-accent-strong)` |
 | Base font size | `13px` |

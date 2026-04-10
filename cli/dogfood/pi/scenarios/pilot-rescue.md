@@ -15,7 +15,7 @@ The scenario intentionally mixes:
 
 What makes this run successful:
 1. Each role uses the real `oar` CLI against the seeded workspace.
-2. Each role inspects different threads, artifacts, commitments, or inbox signals.
+2. Each role inspects different threads, artifacts, cards, or inbox signals.
 3. Each role publishes a role-specific `actor_statement` event with grounded evidence.
 4. The final product role updates the seeded rescue brief and publishes the final launch recommendation.
 5. Every role writes `result.md` documenting friction and concrete CLI improvements.

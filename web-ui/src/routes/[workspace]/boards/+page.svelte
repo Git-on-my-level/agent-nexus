@@ -9,7 +9,8 @@
   import { formatTimestamp } from "$lib/formatDate";
   import {
     searchDocuments as searchDocumentRecords,
-    searchThreads as searchThreadRecords,
+    searchTopics as searchTopicRecords,
+    topicSearchResultToPickerOption,
   } from "$lib/searchHelpers";
   import { workspacePath } from "$lib/workspacePaths";
   import {
@@ -26,6 +27,7 @@
     isFreshnessCurrent,
     parseDelimitedValues,
   } from "$lib/boardUtils";
+  import { boardRowInspectNav } from "$lib/topicRouteUtils";
 
   let boards = $state([]);
   let loading = $state(false);
@@ -40,8 +42,8 @@
 
   let createTitle = $state("");
   let createStatus = $state("active");
-  let createPrimaryThreadId = $state("");
-  let createPrimaryDocumentId = $state("");
+  let createBackingThreadId = $state("");
+  let createBoardDocumentId = $state("");
   let createLabels = $state("");
   let createOwnerIds = $state([]);
   let createPinnedRefs = $state("");
@@ -63,26 +65,13 @@
     return workspacePath(workspaceSlug, pathname);
   }
 
-  function navigateToBoard(boardId) {
-    goto(workspaceHref(`/boards/${boardId}`));
-  }
-
-  function toThreadOption(thread) {
-    return {
-      id: thread.id,
-      title: thread.title || thread.id,
-      subtitle: [thread.status, thread.priority].filter(Boolean).join(" · "),
-      keywords: [thread.type, ...(thread.tags ?? [])],
-    };
-  }
-
   function toDocumentOption(document) {
     return {
       id: document.id,
       title: document.title || document.id,
       subtitle: [
-        document.status,
-        document.thread_id && `Thread ${document.thread_id}`,
+        document.state,
+        document.thread_id && `Timeline ${document.thread_id}`,
       ]
         .filter(Boolean)
         .join(" · "),
@@ -91,8 +80,8 @@
   }
 
   async function searchThreadOptions(query) {
-    const threads = await searchThreadRecords(query);
-    return threads.map(toThreadOption);
+    const threads = await searchTopicRecords(query);
+    return threads.map(topicSearchResultToPickerOption);
   }
 
   async function searchDocumentOptions(query) {
@@ -103,8 +92,8 @@
   function resetCreateForm() {
     createTitle = "";
     createStatus = "active";
-    createPrimaryThreadId = "";
-    createPrimaryDocumentId = "";
+    createBackingThreadId = "";
+    createBoardDocumentId = "";
     createLabels = "";
     createOwnerIds = [];
     createPinnedRefs = "";
@@ -130,17 +119,18 @@
     createError = "";
 
     const title = createTitle.trim();
-    const primaryThreadId = createPrimaryThreadId.trim();
+    const backingThreadId = createBackingThreadId.trim();
 
-    if (!title || !primaryThreadId) {
-      createError = "Title and primary thread are required.";
+    if (!title || !backingThreadId) {
+      createError =
+        "Title and board timeline ID (backing thread) are required.";
       return;
     }
 
     const board = {
       title,
       status: createStatus,
-      primary_thread_id: primaryThreadId,
+      thread_id: backingThreadId,
     };
     const labels = parseDelimitedValues(createLabels);
     const owners = [...createOwnerIds];
@@ -148,8 +138,8 @@
 
     if (labels.length > 0) board.labels = labels;
     if (owners.length > 0) board.owners = owners;
-    if (createPrimaryDocumentId.trim()) {
-      board.primary_document_id = createPrimaryDocumentId.trim();
+    if (createBoardDocumentId.trim()) {
+      board.document_refs = [`document:${createBoardDocumentId.trim()}`];
     }
     if (pinnedRefs.length > 0) board.pinned_refs = pinnedRefs;
 
@@ -169,7 +159,7 @@
 
   function statusColor(status) {
     if (status === "active") return "text-emerald-400 bg-emerald-500/10";
-    if (status === "paused") return "text-amber-300 bg-amber-500/10";
+    if (status === "paused") return "text-amber-400 bg-amber-500/10";
     if (status === "closed") return "text-slate-300 bg-slate-500/10";
     return "text-[var(--ui-text-muted)] bg-[var(--ui-border)]";
   }
@@ -222,7 +212,7 @@
     trashBusyId = id;
     error = "";
     try {
-      await coreClient.tombstoneBoard(id, {});
+      await coreClient.trashBoard(id, {});
       confirmModal = { open: false, action: "", entityId: "" };
       await loadBoards();
     } catch (e) {
@@ -323,24 +313,24 @@
         </label>
 
         <SearchableEntityPicker
-          bind:value={createPrimaryThreadId}
-          advancedLabel="Use a manual primary thread ID"
-          helperText="Pick the canonical thread this board organizes around."
-          label="Primary thread"
-          manualLabel="Primary thread ID"
+          bind:value={createBackingThreadId}
+          advancedLabel="Use a manual thread ID"
+          helperText="Pick a topic or enter this board's backing thread ID (append-only event timeline for the board)."
+          label="Board timeline"
+          manualLabel="Thread ID"
           manualPlaceholder="thread-q2-initiative"
-          placeholder="Search threads by title, ID, or tags"
+          placeholder="Search topics by title, ID, or tags"
           searchFn={searchThreadOptions}
         />
 
         <SearchableEntityPicker
-          bind:value={createPrimaryDocumentId}
-          advancedLabel="Use a manual primary document ID"
-          helperText="Optional: pin the canonical doc lineage this board should foreground."
-          label="Primary document"
-          manualLabel="Primary document ID"
+          bind:value={createBoardDocumentId}
+          advancedLabel="Use a manual document ID"
+          helperText="Optional: add a document ref to the board (included in refs)."
+          label="Board document"
+          manualLabel="Document ID"
           manualPlaceholder="product-constitution"
-          placeholder="Search documents by title, ID, or thread"
+          placeholder="Search documents by title, ID, or timeline ID"
           searchFn={searchDocumentOptions}
         />
       </div>
@@ -447,25 +437,23 @@
       {@const summary = item.summary}
       {@const counts = boardSummaryCounts(summary)}
       {@const projectionFreshness = item.projection_freshness ?? null}
+      {@const rowNav = boardRowInspectNav(board)}
       <div
         class="flex items-stretch {i > 0
           ? 'border-t border-[var(--ui-border)]'
           : ''}"
       >
         <div
-          class="min-w-0 flex-1 cursor-pointer px-4 py-3 transition-colors hover:bg-[var(--ui-border-subtle)]"
-          onclick={() => navigateToBoard(board.id)}
-          onkeydown={(event) => {
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              navigateToBoard(board.id);
-            }
-          }}
-          role="button"
-          tabindex="0"
-          aria-label={board.title || board.id}
+          class="group relative min-w-0 flex-1 px-4 py-3 text-left transition-colors hover:bg-[var(--ui-border-subtle)]"
         >
-          <div class="flex items-start justify-between gap-3">
+          <a
+            aria-label={`Open board ${board.title || board.id}`}
+            class="absolute inset-0 z-0"
+            href={workspaceHref(`/boards/${board.id}`)}
+          ></a>
+          <div
+            class="pointer-events-none relative z-10 flex items-start justify-between gap-3"
+          >
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-center gap-2">
                 {#if board.status}
@@ -492,7 +480,7 @@
                     {freshnessStatusLabel(projectionFreshness.status)}
                   </span>
                 {/if}
-                {#if summary?.has_primary_document}
+                {#if summary?.has_document_ref}
                   <span
                     class="rounded bg-indigo-500/10 px-1.5 py-0.5 text-[10px] text-indigo-300"
                   >
@@ -508,11 +496,11 @@
                 {/each}
               </div>
 
-              <p
-                class="mt-1 truncate text-[13px] font-medium text-[var(--ui-text)]"
+              <span
+                class="mt-1 block truncate text-[13px] font-medium text-[var(--ui-text)] group-hover:text-indigo-300"
               >
                 {board.title || board.id}
-              </p>
+              </span>
 
               <div
                 class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[var(--ui-text-muted)]"
@@ -524,18 +512,30 @@
                       .join(", ")}
                   </span>
                 {/if}
-                <span>
-                  <span class="text-[var(--ui-text-subtle)]">Thread:</span>
-                  <a
-                    class="text-indigo-300 transition-colors hover:text-indigo-200"
-                    href={workspaceHref(
-                      `/threads/${encodeURIComponent(board.primary_thread_id)}`,
-                    )}
-                    onclick={(event) => event.stopPropagation()}
-                  >
-                    {board.primary_thread_id}
-                  </a>
-                </span>
+                {#if rowNav}
+                  <span>
+                    <span class="text-[var(--ui-text-muted)]"
+                      >{rowNav.kind === "topic"
+                        ? "Topic"
+                        : "Backing thread"}:</span
+                    >
+                    <a
+                      class="pointer-events-auto relative z-20 text-indigo-400 transition-colors hover:text-indigo-300"
+                      href={workspaceHref(
+                        rowNav.kind === "topic"
+                          ? `/topics/${encodeURIComponent(rowNav.segment)}`
+                          : `/threads/${encodeURIComponent(rowNav.segment)}`,
+                      )}
+                    >
+                      {rowNav.display}
+                    </a>
+                  </span>
+                {:else}
+                  <span>
+                    <span class="text-[var(--ui-text-muted)]">Context:</span>
+                    <span class="text-[var(--ui-text-muted)]">—</span>
+                  </span>
+                {/if}
                 <span>
                   Visual scan updated {formatTimestamp(board.updated_at) || "—"}
                 </span>
@@ -559,7 +559,7 @@
                     <span
                       class={column.key === "blocked" && count > 0
                         ? "text-amber-400"
-                        : "text-[var(--ui-text-subtle)]"}
+                        : "text-[var(--ui-text-muted)]"}
                     >
                       <span class="font-medium uppercase">{column.title}</span>
                       {count}
@@ -653,7 +653,7 @@
   open={confirmModal.open}
   title={confirmModal.action === "trash" ? "Move to trash" : "Archive board"}
   message={confirmModal.action === "trash"
-    ? "This board will be tombstoned. You can restore it from trash later."
+    ? "This board will be moved to trash. You can restore it later."
     : "This board will be hidden from default views. You can unarchive it later."}
   confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
   variant={confirmModal.action === "trash" ? "danger" : "warning"}

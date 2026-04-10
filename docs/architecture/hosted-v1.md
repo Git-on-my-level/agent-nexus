@@ -41,10 +41,10 @@ quota envelopes, that belongs in `saas-v-next.md`, not here.
   calls.
 - Projection APIs are convenience reads for operators and tools. They are not
   the durable automation substrate.
-- Stale-thread exceptions come from background maintenance or deterministic
+- Stale-topic exceptions come from background maintenance or deterministic
   derived rebuilds, not from GET requests.
 - Blob storage stays behind a backend seam. Filesystem storage is only the
-  first backend, not a hosted-v1 architectural commitment.
+  first backend, not a hosted-v1 long-term architectural guarantee.
 
 ## Operations
 

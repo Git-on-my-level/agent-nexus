@@ -32,12 +32,14 @@ func (a *App) invokeArtifactContent(ctx context.Context, cfg config.Resolved, co
 	headers["Accept"] = "application/octet-stream, text/plain, application/json"
 	callCtx, cancel := httpclient.WithTimeout(ctx, authCfg.Timeout)
 	defer cancel()
-	resp, body, invokeErr := client.Generated().Invoke(callCtx, "artifacts.content.get", pathParams, contractsclient.RequestOptions{Headers: headers})
-	if resp != nil && resp.StatusCode >= http.StatusBadRequest {
-		return nil, errnorm.FromHTTPFailure(resp.StatusCode, body)
-	}
+	path := "/artifacts/" + url.PathEscape(strings.TrimSpace(pathParams["artifact_id"])) + "/content"
+	resp, invokeErr := client.RawCall(callCtx, httpclient.RawRequest{Method: http.MethodGet, Path: path, Headers: headers})
 	if invokeErr != nil {
 		return nil, errnorm.Wrap(errnorm.KindNetwork, "request_failed", "artifact content request failed", invokeErr)
+	}
+	body := resp.Body
+	if resp.StatusCode >= http.StatusBadRequest {
+		return nil, errnorm.FromHTTPFailure(resp.StatusCode, body)
 	}
 
 	if !authCfg.JSON {
@@ -51,17 +53,59 @@ func (a *App) invokeArtifactContent(ctx context.Context, cfg config.Resolved, co
 
 	data := map[string]any{
 		"status_code": resp.StatusCode,
-		"headers":     normalizedHeaders(resp.Header),
+		"headers":     normalizedHeaders(resp.Headers),
 		"body_base64": base64.StdEncoding.EncodeToString(body),
 	}
 	if utf8Body := strings.TrimSpace(string(body)); utf8Body != "" {
 		data["body_text"] = utf8Body
 	}
 	if authCfg.Headers || authCfg.Verbose {
-		text := formatArtifactContentText(resp.StatusCode, normalizedHeaders(resp.Header), body, authCfg.Verbose, authCfg.Headers)
+		text := formatArtifactContentText(resp.StatusCode, normalizedHeaders(resp.Headers), body, authCfg.Verbose, authCfg.Headers)
 		return &commandResult{Text: text, Data: data}, nil
 	}
 	text := fmt.Sprintf("%s status: %d\nbytes: %d", commandName, resp.StatusCode, len(body))
+	return &commandResult{Text: text, Data: data}, nil
+}
+
+func (a *App) invokeRawJSON(ctx context.Context, cfg config.Resolved, commandName string, method string, path string, body any) (*commandResult, error) {
+	authCfg, err := a.cfgWithResolvedAuthToken(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	client, err := httpclient.New(authCfg)
+	if err != nil {
+		return nil, errnorm.Wrap(errnorm.KindLocal, "http_client_init_failed", "failed to initialize HTTP client", err)
+	}
+	var requestBody []byte
+	if body != nil {
+		requestBody, err = json.Marshal(body)
+		if err != nil {
+			return nil, errnorm.Wrap(errnorm.KindLocal, "request_body_encode_failed", "failed to encode request body", err)
+		}
+	}
+	callCtx, cancel := httpclient.WithTimeout(ctx, authCfg.Timeout)
+	defer cancel()
+	resp, invokeErr := client.RawCall(callCtx, httpclient.RawRequest{
+		Method:  method,
+		Path:    path,
+		Headers: generatedHeaders(authCfg),
+		Body:    requestBody,
+	})
+	if invokeErr != nil {
+		return nil, errnorm.Wrap(errnorm.KindNetwork, "request_failed", fmt.Sprintf("%s request failed", commandName), invokeErr)
+	}
+	responseBody := resp.Body
+	if resp.StatusCode >= http.StatusBadRequest {
+		return nil, errnorm.FromHTTPFailure(resp.StatusCode, responseBody)
+	}
+	headersSorted := normalizedHeaders(resp.Headers)
+	parsedBody := parseResponseBody(responseBody)
+	data := map[string]any{
+		"status_code": resp.StatusCode,
+		"headers":     headersSorted,
+		"body":        parsedBody,
+	}
+	text := formatTypedCommandText(resolveMachineCommandIdentity(commandName).CommandID, resp.StatusCode, headersSorted, parsedBody, authCfg.Verbose, authCfg.Headers)
 	return &commandResult{Text: text, Data: data}, nil
 }
 

@@ -31,6 +31,10 @@ Global config precedence:
 3. profile file (`~/.config/oar/profiles/<agent>.json`)
 4. defaults
 
+**Default base URL:** when no `OAR_BASE_URL`, no `--base-url`, and the profile does not override it, the CLI uses `http://127.0.0.1:8000`. That makes local reads easy to try but is portable to **only** matching cores; automation should always pass `--base-url` / `OAR_BASE_URL` explicitly.
+
+**Multiple profiles:** with more than one `~/.config/oar/profiles/*.json` and no explicit `--agent` / `OAR_AGENT` / `oar auth default`, config resolution fails until you name a profile.
+
 Supported env vars:
 
 - `OAR_BASE_URL`
@@ -112,8 +116,8 @@ go test -tags=integration ./integration/...
 
 These tests:
 - build the real `oar` and `oar-core` binaries
-- copy the repo's workspace snapshot into a temp directory
-- run multi-step thread/event, docs/conflict, and board workspace flows through the real CLI
+- use an empty temp workspace (fresh `state.sqlite` per run) with an ephemeral `OAR_BOOTSTRAP_TOKEN` so registration matches core auth state
+- run multi-step thread/event, docs/conflict, and provenance flows through the real CLI
 
 ## Pi Dogfood
 
@@ -140,34 +144,41 @@ The runner:
 ## Typed Command Smoke
 
 ```bash
-printf '{"thread":{"title":"Incident #42"}}\n' | oar --agent agent-a threads create
-oar --agent agent-a threads list --status active
+printf '{"topic":{"title":"Incident #42","type":"incident","status":"active","summary":"Investigate #42","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":[],"provenance":{"sources":["actor_statement:example"]}}}\n' | oar --agent agent-a topics create
+oar --agent agent-a topics list --status active
 
 oar --agent agent-a events stream --max-events 1
 oar --agent agent-a inbox stream --max-events 1
 oar --agent agent-a events stream --follow
+# Diagnostic/local helper over backing-thread timelines; prefer topics/cards/boards for primary coordination reads.
 oar --agent agent-a events list --thread-id thread_123 --thread-id thread_456 --type actor_statement --mine --full-id --max-events 20
 oar --json --agent agent-a provenance walk --from event:event_123 --depth 2
+oar --agent agent-a topics get --topic-id topic_123
+oar --agent agent-a topics workspace --topic-id topic_123 --full-id
+# Backing-thread reads (tooling/diagnostics; prefer topics workspace for operator triage)
 oar --agent agent-a threads inspect --thread-id thread_123 --max-events 50 --full-id
 oar --agent agent-a threads context --status active --tag pilot-rescue --type initiative --full-id
 oar --agent agent-a threads recommendations --thread-id thread_123 --full-id --full-summary
 oar --agent agent-a docs content --document-id product-constitution
-oar --agent agent-a commitments inspect --commitment-id commitment_123
 oar --agent agent-a artifacts inspect --artifact-id artifact_123
 oar --agent agent-a boards list --status active
 oar --agent agent-a boards workspace --board-id board_product_launch
-oar --agent agent-a boards cards add --board-id board_product_launch --thread-id thread_456 --column backlog
-oar --agent agent-a boards cards move --board-id board_product_launch --thread-id thread_456 --column review --if-board-updated-at 2026-03-08T00:00:00Z
+# Board cards: use card id and card-relative placement (not thread-id on writes). Pass `related_refs` / `thread:` via `--from-file` or stdin JSON when the card must associate with a collaboration thread (see OpenAPI / core).
+oar --agent agent-a boards cards create board_product_launch --title "Rescue digest" --column backlog --if-board-updated-at 2026-03-08T00:00:00Z
+oar --agent agent-a boards cards move board_product_launch card_789 --column review --before-card-id card_012 --if-board-updated-at 2026-03-08T00:00:05Z
+# Packet APIs are subject-based: `packet.subject_ref` must be `card:<card-id>`.
+oar --agent agent-a receipts create --from-file receipt.json
+oar --agent agent-a reviews create --from-file review.json
 ```
 
 Board activity uses `board:<board-id>` typed refs on emitted events. When
-debugging board flows, inspect both `boards workspace` and the primary thread
-timeline or thread workspace for the same board.
+debugging board flows, inspect `boards workspace` and, when needed, the
+read-only backing-thread timeline or `threads workspace` diagnostic projection.
 
 Draft/commit flow:
 
 ```bash
-cat payload.json | oar --agent agent-a draft create --command threads.create
+printf '%s\n' '{"topic":{"title":"Drafted incident","type":"incident","status":"active","summary":"Staged via draft","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":[],"provenance":{"sources":["actor_statement:example"]}}}' | oar --agent agent-a draft create --command topics.create
 oar --agent agent-a draft list
 oar --agent agent-a draft commit <draft-id>
 oar --agent agent-a draft discard <draft-id>
@@ -198,7 +209,8 @@ Generated board help lands in:
 
 Machine-facing notes for the targeted automation commands:
 
-- `events list`, `events get`, `events stream`, `inbox stream`, `threads inspect`, `threads context`, and `threads recommendations` include a stable `command_id` alongside `command`.
+- `events list`, `events get`, `events stream`, `inbox stream`, `topics workspace`, `threads inspect`, `threads context`, and `threads recommendations` include a stable `command_id` alongside `command`.
+- User-facing paths with registered contract ids report those ids in JSON envelopes even when the CLI composes lower-level reads underneath (`events list` currently composes backing-thread timelines); purely local helpers keep stable local ids.
 - `events tail` and `inbox tail` resolve to canonical machine command identity (`events stream` / `inbox stream`) in JSON success/error envelopes.
 - Stream frames expose a normalized payload contract:
   - `id`, `type`

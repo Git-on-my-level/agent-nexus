@@ -262,7 +262,7 @@ oar-agent-bridge registration status --config ./agent.toml
 
 The doctor path also probes the downstream adapter configuration before the bridge is treated as online for immediate delivery.
 
-7. Post a thread message such as `@hermes summarize the latest onboarding blockers.` The expected durable trace is:
+7. Post a message on the topic or card's backing thread such as `@hermes summarize the latest onboarding blockers.` The expected durable trace is:
 
 - existing `message_posted`
 - new `agent_wakeup_requested`
@@ -320,7 +320,7 @@ workspace_id + thread_id + trigger_event_id + target_actor_id
 
 ### Reply event
 
-Bridge writeback uses normal OAR `message_posted` with refs back to the thread, trigger event, and wake artifact.
+Bridge writeback uses normal OAR `message_posted` with refs back to the backing thread, resolved subject when available, trigger event, and wake artifact.
 
 ## Session identity
 

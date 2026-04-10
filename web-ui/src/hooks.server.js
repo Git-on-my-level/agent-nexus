@@ -14,6 +14,7 @@ import {
 } from "$lib/server/authSession";
 import { buildProxyRequestInit } from "$lib/server/coreProxy";
 import { resolveProxyTarget } from "$lib/server/proxyWorkspaceTarget";
+import { isDirectCoreProxyPath } from "$lib/server/directCoreProxyPaths";
 
 function isDocumentNavigationRequest(request) {
   const method = request.method.toUpperCase();
@@ -216,7 +217,7 @@ function buildCSPDirectives(env = privateEnv) {
       env.OAR_UI_CSP_FONT_SRC_EXTRA,
     ),
     "connect-src": mergeCSPDirectiveSources(
-      ["'self'"],
+      ["'self'", GOOGLE_FONTS_STYLE, GOOGLE_FONTS_FONT],
       env.OAR_UI_CSP_CONNECT_SRC_EXTRA,
     ),
     "manifest-src": mergeCSPDirectiveSources(
@@ -241,7 +242,8 @@ export async function handle({ event, resolve }) {
   const method = event.request.method;
   const documentNavigation = isDocumentNavigationRequest(event.request);
   const proxyableRequest =
-    isProxyableCommand(method, pathname) &&
+    (isProxyableCommand(method, pathname) ||
+      isDirectCoreProxyPath(method, pathname)) &&
     !documentNavigation &&
     !shouldBypassProxy(pathname, method);
 
@@ -269,6 +271,23 @@ export async function handle({ event, resolve }) {
       response.headers.set("X-OAR-UI-Version", CURRENT_VERSION);
       return response;
     }
+
+    return new Response(
+      JSON.stringify({
+        error: {
+          code: "core_not_configured",
+          message:
+            "Workspace is configured but coreBaseUrl is missing. Set OAR_CORE_BASE_URL or add coreBaseUrl to OAR_WORKSPACES for this workspace.",
+        },
+      }),
+      {
+        status: 503,
+        headers: {
+          "content-type": "application/json",
+          "X-OAR-UI-Version": CURRENT_VERSION,
+        },
+      },
+    );
   }
 
   const response = await resolve(event);

@@ -18,15 +18,6 @@ function compareEventsOldestFirst(a, b) {
   return String(a.id ?? "").localeCompare(String(b.id ?? ""));
 }
 
-function compareEventsNewestFirst(a, b) {
-  const tb = parseEventTimeMs(b);
-  const ta = parseEventTimeMs(a);
-  if (tb !== ta) {
-    return tb - ta;
-  }
-  return String(b.id ?? "").localeCompare(String(a.id ?? ""));
-}
-
 function collectEventRefIds(event) {
   const refs = Array.isArray(event?.refs) ? event.refs : [];
   const ids = [];
@@ -104,6 +95,27 @@ function decorateMessageEvent(event, options = {}) {
   };
 }
 
+function wouldCreateMessageParentCycle(childId, parentId, nodesById) {
+  const child = String(childId ?? "").trim();
+  let cur = String(parentId ?? "").trim();
+  if (!child || !cur || child === cur) {
+    return true;
+  }
+  const seen = new Set();
+  while (cur) {
+    if (cur === child) {
+      return true;
+    }
+    if (seen.has(cur)) {
+      return true;
+    }
+    seen.add(cur);
+    const n = nodesById.get(cur);
+    cur = n?.parentEventId ? String(n.parentEventId).trim() : "";
+  }
+  return false;
+}
+
 export function toMessageThreadView(events = [], options = {}) {
   const rawMessages = Array.isArray(events)
     ? events.filter((event) => String(event?.type ?? "") === "message_posted")
@@ -127,7 +139,14 @@ export function toMessageThreadView(events = [], options = {}) {
     const parentNode = message.parentEventId
       ? nodesById.get(message.parentEventId)
       : null;
-    if (parentNode) {
+    if (
+      parentNode &&
+      !wouldCreateMessageParentCycle(
+        message.id,
+        message.parentEventId,
+        nodesById,
+      )
+    ) {
       parentNode.children.push(node);
       continue;
     }
@@ -144,16 +163,24 @@ export function toMessageThreadView(events = [], options = {}) {
   for (const root of roots) {
     sortChildren(root);
   }
-  roots.sort(compareEventsNewestFirst);
+  roots.sort(compareEventsOldestFirst);
 
   return roots;
 }
 
 export function flattenMessageThreadView(threads = []) {
   const out = [];
+  const seenIds = new Set();
 
   function visit(nodes) {
     for (const node of nodes) {
+      const id = String(node?.id ?? "").trim();
+      if (id) {
+        if (seenIds.has(id)) {
+          continue;
+        }
+        seenIds.add(id);
+      }
       out.push(node);
       if (Array.isArray(node.children) && node.children.length > 0) {
         visit(node.children);

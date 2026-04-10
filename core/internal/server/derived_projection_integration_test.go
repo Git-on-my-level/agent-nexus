@@ -14,39 +14,24 @@ import (
 	"organization-autorunner-core/internal/schema"
 )
 
-func TestRefreshDerivedThreadProjectionBasicFlow(t *testing.T) {
+func TestRefreshDerivedTopicProjectionBasicFlow(t *testing.T) {
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, 201)
 
-	createResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
-		"actor_id":"actor-1",
-		"thread":{
-			"title":"Projection thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p1",
-			"tags":["ops"],
-			"cadence":"reactive",
-			"current_summary":"summary",
-			"next_actions":["do x"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, 201)
-	defer createResp.Body.Close()
-
-	var created struct {
-		Thread map[string]any `json:"thread"`
-	}
-	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
-		t.Fatalf("decode thread response: %v", err)
-	}
-	threadID := anyString(created.Thread["id"])
-	if threadID == "" {
-		t.Fatal("expected thread id")
-	}
+	threadID := integrationSeedThread(t, h, "actor-1", map[string]any{
+		"title":           "Projection thread",
+		"type":            "incident",
+		"status":          "active",
+		"priority":        "p1",
+		"tags":            []any{"ops"},
+		"cadence":         "reactive",
+		"current_summary": "summary",
+		"next_actions":    []any{"do x"},
+		"key_artifacts":   []any{},
+		"provenance":      map[string]any{"sources": []any{"inferred"}},
+	})
 
 	contract, err := schema.Load(filepath.Join("..", "..", "..", "contracts", "oar-schema.yaml"))
 	if err != nil {
@@ -58,8 +43,8 @@ func TestRefreshDerivedThreadProjectionBasicFlow(t *testing.T) {
 		contract:         contract,
 		inboxRiskHorizon: defaultInboxRiskHorizon,
 	}
-	if err := refreshDerivedThreadProjection(context.Background(), opts, threadID, time.Now().UTC(), "actor-1"); err != nil {
-		t.Fatalf("refreshDerivedThreadProjection: %v", err)
+	if err := refreshDerivedTopicProjection(context.Background(), opts, threadID, time.Now().UTC(), "actor-1"); err != nil {
+		t.Fatalf("refreshDerivedTopicProjection: %v", err)
 	}
 
 	postJSONExpectStatus(t, h.baseURL+"/events", `{
@@ -74,23 +59,34 @@ func TestRefreshDerivedThreadProjectionBasicFlow(t *testing.T) {
 		}
 	}`, 201).Body.Close()
 
-	postJSONExpectStatus(t, h.baseURL+"/commitments", `{
+	boardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
 		"actor_id":"actor-1",
-		"commitment":{
-			"thread_id":"`+threadID+`",
-			"title":"Projection commitment",
-			"owner":"actor-1",
-			"due_at":"`+time.Now().UTC().Add(24*time.Hour).Format(time.RFC3339)+`",
-			"status":"open",
-			"definition_of_done":["done"],
-			"links":["url:https://example.com/task"],
-			"provenance":{"sources":["inferred"]}
+		"board":{
+			"title":"Projection board",
+			"refs":["thread:`+threadID+`"]
 		}
+	}`, 201)
+	defer boardResp.Body.Close()
+	var createdBoard struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(boardResp.Body).Decode(&createdBoard); err != nil {
+		t.Fatalf("decode board response: %v", err)
+	}
+	boardID := anyString(createdBoard.Board["id"])
+	boardUpdatedAt := anyString(createdBoard.Board["updated_at"])
+	postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+boardUpdatedAt+`",
+		"title":"Projection work item",
+		"related_refs":["thread:`+threadID+`"],
+		"column_key":"ready",
+		"due_at":"`+time.Now().UTC().Add(24*time.Hour).Format(time.RFC3339)+`"
 	}`, 201).Body.Close()
 
 	postJSONExpectStatus(t, h.baseURL+"/docs", `{
 		"actor_id":"actor-1",
-		"document":{"id":"proj-doc-1","thread_id":"`+threadID+`","title":"Projection doc","status":"active","labels":["ops"]},
+		"document":{"id":"proj-doc-1","thread_id":"`+threadID+`","title":"Projection doc","labels":["ops"]},
 		"refs":["thread:`+threadID+`"],
 		"content":"initial text",
 		"content_type":"text"
@@ -98,11 +94,11 @@ func TestRefreshDerivedThreadProjectionBasicFlow(t *testing.T) {
 
 	items := getInboxItems(t, h.baseURL)
 	if len(items) != 2 {
-		t.Fatalf("expected decision + commitment inbox items, got %#v", items)
+		t.Fatalf("expected decision + work item inbox items, got %#v", items)
 	}
 
-	projection := mustLoadDerivedThreadProjection(t, h.workspace.DB(), threadID)
-	if projection.InboxCount != 2 || projection.DecisionRequestCount != 1 || projection.OpenCommitmentCount != 1 || projection.DocumentCount != 1 {
+	projection := mustLoadDerivedTopicProjection(t, h.workspace.DB(), threadID)
+	if projection.InboxCount != 2 || projection.DecisionRequestCount != 1 || workspaceIntValue(projection.Data["open_work_item_count"]) != 1 || projection.DocumentCount != 1 {
 		t.Fatalf("unexpected derived thread projection: %#v", projection)
 	}
 	if inboxRowCount := countDerivedInboxItemsForThread(t, h.workspace.DB(), threadID); inboxRowCount != 2 {
@@ -110,41 +106,26 @@ func TestRefreshDerivedThreadProjectionBasicFlow(t *testing.T) {
 	}
 }
 
-func TestEnsureDerivedThreadProjectionRefreshesExpiredTimeSensitiveState(t *testing.T) {
+func TestEnsureDerivedTopicProjectionRefreshesExpiredTimeSensitiveState(t *testing.T) {
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, 201)
 
 	baseNow := time.Now().UTC()
-	createResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
-		"actor_id":"actor-1",
-		"thread":{
-			"title":"Expiring projection thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p1",
-			"tags":["ops"],
-			"cadence":"daily",
-			"next_check_in_at":"`+baseNow.Add(30*time.Second).Format(time.RFC3339)+`",
-			"current_summary":"summary",
-			"next_actions":["check"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, 201)
-	defer createResp.Body.Close()
-
-	var created struct {
-		Thread map[string]any `json:"thread"`
-	}
-	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
-		t.Fatalf("decode thread response: %v", err)
-	}
-	threadID := anyString(created.Thread["id"])
-	if threadID == "" {
-		t.Fatal("expected thread id")
-	}
+	threadID := integrationSeedThread(t, h, "actor-1", map[string]any{
+		"title":            "Expiring projection thread",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p1",
+		"tags":             []any{"ops"},
+		"cadence":          "daily",
+		"next_check_in_at": baseNow.Add(30 * time.Second).Format(time.RFC3339),
+		"current_summary":  "summary",
+		"next_actions":     []any{"check"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
 
 	contract, err := schema.Load(filepath.Join("..", "..", "..", "contracts", "oar-schema.yaml"))
 	if err != nil {
@@ -156,11 +137,11 @@ func TestEnsureDerivedThreadProjectionRefreshesExpiredTimeSensitiveState(t *test
 		contract:         contract,
 		inboxRiskHorizon: defaultInboxRiskHorizon,
 	}
-	if err := refreshDerivedThreadProjection(context.Background(), opts, threadID, baseNow, "actor-1"); err != nil {
-		t.Fatalf("refreshDerivedThreadProjection: %v", err)
+	if err := refreshDerivedTopicProjection(context.Background(), opts, threadID, baseNow, "actor-1"); err != nil {
+		t.Fatalf("refreshDerivedTopicProjection: %v", err)
 	}
 
-	initialProjection := mustLoadDerivedThreadProjection(t, h.workspace.DB(), threadID)
+	initialProjection := mustLoadDerivedTopicProjection(t, h.workspace.DB(), threadID)
 	if initialProjection.Stale {
 		t.Fatalf("expected fresh projection to start non-stale, got %#v", initialProjection)
 	}
@@ -175,9 +156,9 @@ func TestEnsureDerivedThreadProjectionRefreshesExpiredTimeSensitiveState(t *test
 	if err := maintainer.RunFullRebuild(context.Background(), baseNow.Add(2*time.Minute), "actor-1"); err != nil {
 		t.Fatalf("RunFullRebuild: %v", err)
 	}
-	refreshedState, err := loadThreadProjectionState(context.Background(), opts, threadID)
+	refreshedState, err := loadTopicProjectionState(context.Background(), opts, threadID)
 	if err != nil {
-		t.Fatalf("loadThreadProjectionState: %v", err)
+		t.Fatalf("loadTopicProjectionState: %v", err)
 	}
 	if !refreshedState.Projection.Stale {
 		t.Fatalf("expected expired projection to refresh stale=true after next_check_in_at, got %#v", refreshedState.Projection)
@@ -191,34 +172,18 @@ func TestDocumentThreadRetargetRefreshesBothDerivedProjections(t *testing.T) {
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, 201)
 
 	createThread := func(title string) string {
-		resp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
-			"actor_id":"actor-1",
-			"thread":{
-				"title":"`+title+`",
-				"type":"incident",
-				"status":"active",
-				"priority":"p1",
-				"tags":["ops"],
-				"cadence":"reactive",
-				"current_summary":"summary",
-				"next_actions":["check"],
-				"key_artifacts":[],
-				"provenance":{"sources":["inferred"]}
-			}
-		}`, 201)
-		defer resp.Body.Close()
-
-		var payload struct {
-			Thread map[string]any `json:"thread"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-			t.Fatalf("decode thread response: %v", err)
-		}
-		threadID := anyString(payload.Thread["id"])
-		if threadID == "" {
-			t.Fatal("expected thread id")
-		}
-		return threadID
+		return integrationSeedThread(t, h, "actor-1", map[string]any{
+			"title":           title,
+			"type":            "incident",
+			"status":          "active",
+			"priority":        "p1",
+			"tags":            []any{"ops"},
+			"cadence":         "reactive",
+			"current_summary": "summary",
+			"next_actions":    []any{"check"},
+			"key_artifacts":   []any{},
+			"provenance":      map[string]any{"sources": []any{"inferred"}},
+		})
 	}
 
 	fromThreadID := createThread("Projection source")
@@ -226,7 +191,7 @@ func TestDocumentThreadRetargetRefreshesBothDerivedProjections(t *testing.T) {
 
 	createDocResp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
 		"actor_id":"actor-1",
-		"document":{"id":"projection-retarget-doc","thread_id":"`+fromThreadID+`","title":"Projection move doc","status":"active"},
+		"document":{"id":"projection-retarget-doc","thread_id":"`+fromThreadID+`","title":"Projection move doc"},
 		"refs":["thread:`+fromThreadID+`"],
 		"content":"initial text",
 		"content_type":"text"
@@ -245,24 +210,24 @@ func TestDocumentThreadRetargetRefreshesBothDerivedProjections(t *testing.T) {
 		t.Fatal("expected base revision id")
 	}
 
-	if projection := mustLoadDerivedThreadProjection(t, h.workspace.DB(), fromThreadID); projection.DocumentCount != 1 {
+	if projection := mustLoadDerivedTopicProjection(t, h.workspace.DB(), fromThreadID); projection.DocumentCount != 1 {
 		t.Fatalf("expected source projection document_count=1 after create, got %#v", projection)
 	}
 
-	updateResp := requestJSONExpectStatus(t, http.MethodPatch, h.baseURL+"/docs/projection-retarget-doc", `{
+	updateResp := requestJSONExpectStatus(t, http.MethodPost, h.baseURL+"/docs/projection-retarget-doc/revisions", `{
 		"actor_id":"actor-1",
 		"document":{"thread_id":"`+toThreadID+`","title":"Projection move doc"},
 		"if_base_revision":"`+baseRevisionID+`",
 		"content":"moved text",
 		"content_type":"text",
 		"refs":["thread:`+toThreadID+`"]
-	}`, 200)
+	}`, 201)
 	defer updateResp.Body.Close()
 
-	if projection := mustLoadDerivedThreadProjection(t, h.workspace.DB(), fromThreadID); projection.DocumentCount != 0 {
+	if projection := mustLoadDerivedTopicProjection(t, h.workspace.DB(), fromThreadID); projection.DocumentCount != 0 {
 		t.Fatalf("expected source projection document_count=0 after move, got %#v", projection)
 	}
-	if projection := mustLoadDerivedThreadProjection(t, h.workspace.DB(), toThreadID); projection.DocumentCount != 1 {
+	if projection := mustLoadDerivedTopicProjection(t, h.workspace.DB(), toThreadID); projection.DocumentCount != 1 {
 		t.Fatalf("expected target projection document_count=1 after move, got %#v", projection)
 	}
 }
@@ -276,11 +241,11 @@ func countDerivedInboxItemsForThread(t *testing.T, db *sql.DB, threadID string) 
 	return count
 }
 
-func mustLoadDerivedThreadProjection(t *testing.T, db *sql.DB, threadID string) primitives.DerivedThreadProjection {
+func mustLoadDerivedTopicProjection(t *testing.T, db *sql.DB, threadID string) primitives.DerivedTopicProjection {
 	t.Helper()
 
 	store := primitives.NewStore(db, nil, "")
-	projection, err := store.GetDerivedThreadProjection(context.Background(), threadID)
+	projection, err := store.GetDerivedTopicProjection(context.Background(), threadID)
 	if err != nil {
 		t.Fatalf("get derived thread projection: %v", err)
 	}

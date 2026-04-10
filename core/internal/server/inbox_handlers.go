@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"sort"
 	"strconv"
@@ -12,6 +13,235 @@ import (
 	"organization-autorunner-core/internal/primitives"
 	"organization-autorunner-core/internal/schema"
 )
+
+// subjectRefPrefixesPreferred orders typed refs when choosing an inbox subject anchor
+// from event refs. Earlier prefixes win.
+var subjectRefPrefixesPreferred = []string{
+	"topic", "card", "board", "document", "receipt", "artifact", "thread",
+}
+
+func pickSubjectRefFromEventRefs(refs []string, threadID string) string {
+	threadID = strings.TrimSpace(threadID)
+	for _, wantPrefix := range subjectRefPrefixesPreferred {
+		for _, raw := range refs {
+			raw = strings.TrimSpace(raw)
+			prefix, id, err := schema.SplitTypedRef(raw)
+			if err != nil || strings.TrimSpace(id) == "" {
+				continue
+			}
+			if prefix == wantPrefix {
+				return raw
+			}
+		}
+	}
+	for _, raw := range refs {
+		raw = strings.TrimSpace(raw)
+		prefix, id, err := schema.SplitTypedRef(raw)
+		if err != nil || strings.TrimSpace(id) == "" {
+			continue
+		}
+		switch prefix {
+		case "inbox", "event":
+			continue
+		default:
+			return raw
+		}
+	}
+	if threadID != "" {
+		return "thread:" + threadID
+	}
+	return ""
+}
+
+func mergeUniqueSortedRefs(refs ...string) []string {
+	seen := make(map[string]struct{}, len(refs))
+	out := make([]string, 0, len(refs))
+	for _, r := range refs {
+		r = strings.TrimSpace(r)
+		if r == "" {
+			continue
+		}
+		if _, ok := seen[r]; ok {
+			continue
+		}
+		seen[r] = struct{}{}
+		out = append(out, r)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func eventBackedInboxRelatedRefs(eventRefs []string, threadID string) []string {
+	threadID = strings.TrimSpace(threadID)
+	var merged []string
+	for _, r := range eventRefs {
+		merged = append(merged, strings.TrimSpace(r))
+	}
+	if threadID != "" {
+		merged = append(merged, "thread:"+threadID)
+	}
+	return mergeUniqueSortedRefs(merged...)
+}
+
+func workItemRiskInboxRelatedRefs(card map[string]any, threadID string) []string {
+	threadID = strings.TrimSpace(threadID)
+	var merged []string
+	if rr, err := extractStringSlice(card["related_refs"]); err == nil {
+		for _, r := range rr {
+			merged = append(merged, strings.TrimSpace(r))
+		}
+	}
+	if rfs, err := extractStringSlice(card["refs"]); err == nil {
+		for _, r := range rfs {
+			merged = append(merged, strings.TrimSpace(r))
+		}
+	}
+	if bid := strings.TrimSpace(anyString(card["board_id"])); bid != "" {
+		merged = append(merged, "board:"+bid)
+	}
+	if threadID != "" {
+		merged = append(merged, "thread:"+threadID)
+	}
+	if doc := pinnedDocumentIDFromCard(card); doc != "" {
+		merged = append(merged, "document:"+strings.TrimSpace(doc))
+	}
+	return mergeUniqueSortedRefs(merged...)
+}
+
+func typedRefStringsToAnyList(refs []string) []any {
+	out := make([]any, len(refs))
+	for i, r := range refs {
+		out[i] = r
+	}
+	return out
+}
+
+func isEventSourcedInboxCategory(category string) bool {
+	switch strings.TrimSpace(category) {
+	case "decision_needed", "intervention_needed", "stale_topic":
+		return true
+	default:
+		return false
+	}
+}
+
+type inboxContractHint struct {
+	ThreadID      string
+	Category      string
+	SourceEventID string
+	SourceCardID  string
+}
+
+func inboxContractHintFromDerived(item primitives.DerivedInboxItem) inboxContractHint {
+	d := item.Data
+	if d == nil {
+		d = map[string]any{}
+	}
+	cid := strings.TrimSpace(item.SourceCardID)
+	if cid == "" {
+		cid = strings.TrimSpace(anyString(d["card_id"]))
+	}
+	eid := strings.TrimSpace(item.SourceEventID)
+	if eid == "" {
+		eid = strings.TrimSpace(anyString(d["source_event_id"]))
+	}
+	tid := strings.TrimSpace(item.ThreadID)
+	if tid == "" {
+		tid = strings.TrimSpace(anyString(d["thread_id"]))
+	}
+	cat := strings.TrimSpace(item.Category)
+	if cat == "" {
+		cat = strings.TrimSpace(anyString(d["category"]))
+	}
+	return inboxContractHint{
+		ThreadID:      tid,
+		Category:      cat,
+		SourceEventID: eid,
+		SourceCardID:  cid,
+	}
+}
+
+func inboxRelatedRefsAbsentOrEmpty(m map[string]any) bool {
+	raw, ok := m["related_refs"]
+	if !ok || raw == nil {
+		return true
+	}
+	list, err := extractStringSlice(raw)
+	return err != nil || len(list) == 0
+}
+
+// backfillInboxRelatedRefsFromStoredData merges stored inbox row fields into a contract-shaped
+// `related_refs` list. The `refs` key is legacy-only on persisted derived inbox rows (pre-
+// related_refs); HTTP/OpenAPI surfaces still expose only `related_refs` after applyInboxContractShape.
+func backfillInboxRelatedRefsFromStoredData(m map[string]any, h inboxContractHint) []any {
+	cat := strings.TrimSpace(h.Category)
+	tid := strings.TrimSpace(h.ThreadID)
+	var merged []string
+	if rr, err := extractStringSlice(m["related_refs"]); err == nil {
+		for _, r := range rr {
+			merged = append(merged, strings.TrimSpace(r))
+		}
+	}
+	if rfs, err := extractStringSlice(m["refs"]); err == nil {
+		for _, r := range rfs {
+			merged = append(merged, strings.TrimSpace(r))
+		}
+	}
+	if cat == "work_item_risk" {
+		if bid := strings.TrimSpace(anyString(m["board_id"])); bid != "" {
+			merged = append(merged, "board:"+bid)
+		}
+	}
+	if tid != "" {
+		merged = append(merged, "thread:"+tid)
+	}
+	if cat == "work_item_risk" {
+		if docRef := strings.TrimSpace(anyString(m["document_ref"])); docRef != "" {
+			if _, docID, err := schema.SplitTypedRef(docRef); err == nil && docID != "" {
+				merged = append(merged, "document:"+docID)
+			}
+		}
+	}
+	return typedRefStringsToAnyList(mergeUniqueSortedRefs(merged...))
+}
+
+// applyInboxContractShape ensures OpenAPI-required InboxItem fields (subject_ref, related_refs)
+// and optional source_event_ref are present for list/get/stream payloads. Callers may rely on
+// this for legacy derived rows that predate contract-first shaping.
+func applyInboxContractShape(m map[string]any, h inboxContractHint) {
+	if m == nil {
+		return
+	}
+	cat := strings.TrimSpace(h.Category)
+	tid := strings.TrimSpace(h.ThreadID)
+
+	if strings.TrimSpace(anyString(m["subject_ref"])) == "" {
+		if cat == "work_item_risk" {
+			if cid := strings.TrimSpace(h.SourceCardID); cid != "" {
+				m["subject_ref"] = "card:" + cid
+			}
+		}
+		if strings.TrimSpace(anyString(m["subject_ref"])) == "" && tid != "" {
+			m["subject_ref"] = "thread:" + tid
+		}
+	}
+
+	if inboxRelatedRefsAbsentOrEmpty(m) {
+		backfilled := backfillInboxRelatedRefsFromStoredData(m, h)
+		if len(backfilled) == 0 && tid != "" {
+			backfilled = []any{"thread:" + tid}
+		}
+		m["related_refs"] = backfilled
+	}
+
+	if isEventSourcedInboxCategory(cat) {
+		if eid := strings.TrimSpace(h.SourceEventID); eid != "" {
+			if strings.TrimSpace(anyString(m["source_event_ref"])) == "" {
+				m["source_event_ref"] = "event:" + eid
+			}
+		}
+	}
+}
 
 const defaultInboxRiskHorizon = 7 * 24 * time.Hour
 
@@ -38,6 +268,7 @@ func payloadFromDerivedInboxItem(item primitives.DerivedInboxItem) map[string]an
 			m["trigger_at"] = trigger
 		}
 	}
+	applyInboxContractShape(m, inboxContractHintFromDerived(item))
 	return m
 }
 
@@ -46,16 +277,21 @@ func payloadFromLocalDerivedInboxItem(item derivedInboxItem) map[string]any {
 	if m == nil {
 		m = map[string]any{}
 	}
-	if item.TriggerAt.IsZero() {
-		return m
+	if !item.TriggerAt.IsZero() {
+		trigger := item.TriggerAt.Format(time.RFC3339Nano)
+		if _, ok := m["source_event_time"]; !ok {
+			m["source_event_time"] = trigger
+		}
+		if _, ok := m["trigger_at"]; !ok {
+			m["trigger_at"] = trigger
+		}
 	}
-	trigger := item.TriggerAt.Format(time.RFC3339Nano)
-	if _, ok := m["source_event_time"]; !ok {
-		m["source_event_time"] = trigger
-	}
-	if _, ok := m["trigger_at"]; !ok {
-		m["trigger_at"] = trigger
-	}
+	applyInboxContractShape(m, inboxContractHint{
+		ThreadID:      strings.TrimSpace(anyString(m["thread_id"])),
+		Category:      strings.TrimSpace(item.Category),
+		SourceEventID: strings.TrimSpace(anyString(m["source_event_id"])),
+		SourceCardID:  strings.TrimSpace(anyString(m["card_id"])),
+	})
 	return m
 }
 
@@ -98,7 +334,7 @@ func handleGetInbox(w http.ResponseWriter, r *http.Request, opts handlerOptions)
 	for _, thread := range threads {
 		threadIDs = append(threadIDs, anyString(thread["id"]))
 	}
-	states, err := loadThreadProjectionStates(r.Context(), opts, threadIDs)
+	states, err := loadTopicProjectionStates(r.Context(), opts, threadIDs)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load inbox projection status")
 		return
@@ -118,7 +354,7 @@ func handleGetInbox(w http.ResponseWriter, r *http.Request, opts handlerOptions)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"items":                payloadItems,
 		"generated_at":         now.Format(time.RFC3339Nano),
-		"projection_freshness": aggregateThreadProjectionFreshness(states, threadIDs),
+		"projection_freshness": aggregateTopicProjectionFreshness(states, threadIDs),
 	})
 }
 
@@ -169,7 +405,7 @@ func handleGetInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	for _, thread := range threads {
 		threadIDs = append(threadIDs, anyString(thread["id"]))
 	}
-	states, err := loadThreadProjectionStates(r.Context(), opts, threadIDs)
+	states, err := loadTopicProjectionStates(r.Context(), opts, threadIDs)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load inbox projection status")
 		return
@@ -227,7 +463,7 @@ func handleRebuildDerived(w http.ResponseWriter, r *http.Request, opts handlerOp
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
-func handleAckInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
+func handleAckInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOptions, pathInboxItemID string) {
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
@@ -239,7 +475,7 @@ func handleAckInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOpti
 
 	var req struct {
 		ActorID     string `json:"actor_id"`
-		ThreadID    string `json:"thread_id"`
+		SubjectRef  string `json:"subject_ref"`
 		InboxItemID string `json:"inbox_item_id"`
 	}
 	if !decodeJSONBody(w, r, &req) {
@@ -251,21 +487,36 @@ func handleAckInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		return
 	}
 
-	req.ThreadID = strings.TrimSpace(req.ThreadID)
-	if req.ThreadID == "" {
-		writeError(w, http.StatusBadRequest, "invalid_request", "thread_id is required")
+	subjectRef := strings.TrimSpace(req.SubjectRef)
+	if subjectRef == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "subject_ref is required")
+		return
+	}
+	correlationID, err := resolveInboxAckBackingThreadID(r.Context(), opts.primitiveStore, subjectRef)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
 
-	req.InboxItemID = strings.TrimSpace(req.InboxItemID)
-	if req.InboxItemID == "" {
-		writeError(w, http.StatusBadRequest, "invalid_request", "inbox_item_id is required")
+	pathInboxItemID = strings.TrimSpace(pathInboxItemID)
+	bodyItemID := strings.TrimSpace(req.InboxItemID)
+	effectiveItemID := bodyItemID
+	if pathInboxItemID != "" {
+		if bodyItemID != "" && bodyItemID != pathInboxItemID {
+			writeError(w, http.StatusBadRequest, "invalid_request", "inbox_item_id must match path inbox_id")
+			return
+		}
+		effectiveItemID = pathInboxItemID
+	}
+	if effectiveItemID == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "inbox_item_id is required (body or path)")
 		return
 	}
+	req.InboxItemID = effectiveItemID
 
 	event := map[string]any{
 		"type":      "inbox_item_acknowledged",
-		"thread_id": req.ThreadID,
+		"thread_id": correlationID,
 		"refs":      []string{"inbox:" + req.InboxItemID},
 		"summary":   "inbox item acknowledged",
 		"payload": map[string]any{
@@ -284,9 +535,77 @@ func handleAckInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to acknowledge inbox item")
 		return
 	}
-	enqueueThreadProjectionsBestEffort(r.Context(), opts, []string{req.ThreadID}, time.Now().UTC())
+	enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{correlationID}, time.Now().UTC())
 
 	writeJSON(w, http.StatusCreated, map[string]any{"event": stored})
+}
+
+func resolveInboxAckBackingThreadID(ctx context.Context, store PrimitiveStore, subjectRef string) (string, error) {
+	if store == nil {
+		return "", fmt.Errorf("store is not configured")
+	}
+	prefix, id, err := schema.SplitTypedRef(subjectRef)
+	if err != nil {
+		return "", err
+	}
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return "", fmt.Errorf("subject_ref id is required")
+	}
+	switch prefix {
+	case "thread":
+		return id, nil
+	case "topic":
+		topic, err := store.GetTopic(ctx, id)
+		if err != nil {
+			if errors.Is(err, primitives.ErrNotFound) {
+				return "", fmt.Errorf(
+					"topic not found for subject_ref %q; topic: must be a real topic id (use thread:<thread_id> when the anchor is the backing thread only)",
+					subjectRef,
+				)
+			}
+			return "", err
+		}
+		tid := strings.TrimSpace(anyString(topic["thread_id"]))
+		if tid == "" {
+			return "", fmt.Errorf("topic %q has no backing thread_id", id)
+		}
+		return tid, nil
+	case "card":
+		cards, err := store.ListCards(ctx, primitives.CardListFilter{})
+		if err != nil {
+			return "", err
+		}
+		for _, card := range cards {
+			if strings.TrimSpace(anyString(card["id"])) != id {
+				continue
+			}
+			tid := strings.TrimSpace(primaryRelatedThreadID(card))
+			if tid == "" {
+				return "", fmt.Errorf("card %q has no backing thread_id", id)
+			}
+			return tid, nil
+		}
+		return "", fmt.Errorf("card not found for subject_ref %q", subjectRef)
+	case "board":
+		board, err := store.GetBoard(ctx, id)
+		if err != nil {
+			if errors.Is(err, primitives.ErrNotFound) {
+				return "", fmt.Errorf("board not found for subject_ref %q", subjectRef)
+			}
+			return "", err
+		}
+		tid := strings.TrimSpace(anyString(board["thread_id"]))
+		if tid == "" {
+			return "", fmt.Errorf("board %q has no backing thread_id", id)
+		}
+		return tid, nil
+	default:
+		return "", fmt.Errorf(
+			"subject_ref prefix %q is not supported for inbox acknowledgment (supported: thread:, topic:, card:, board:)",
+			prefix,
+		)
+	}
 }
 
 func deriveInboxItems(ctx context.Context, opts handlerOptions, now time.Time, riskHorizon time.Duration) ([]derivedInboxItem, error) {
@@ -335,7 +654,7 @@ func deriveInboxItemsNoStaleEmission(ctx context.Context, opts handlerOptions, n
 			if !ok {
 				continue
 			}
-			if eventType == "exception_raised" && isStaleThreadException(event) {
+			if eventType == "exception_raised" && isStaleTopicException(event) {
 				threadID, _ := event["thread_id"].(string)
 				if activityAt, exists := latestActivity[threadID]; exists && activityAt.After(item.TriggerAt) {
 					continue
@@ -351,13 +670,13 @@ func deriveInboxItemsNoStaleEmission(ctx context.Context, opts handlerOptions, n
 		}
 	}
 
-	commitments, err := opts.primitiveStore.ListCommitments(ctx, primitives.CommitmentListFilter{})
+	cards, err := opts.primitiveStore.ListCards(ctx, primitives.CardListFilter{})
 	if err != nil {
 		return nil, err
 	}
 
-	for _, commitment := range commitments {
-		item, ok := deriveCommitmentRiskInboxItem(commitment, now, riskHorizon)
+	for _, card := range cards {
+		item, ok := deriveWorkItemRiskInboxItem(card, now, riskHorizon)
 		if !ok {
 			continue
 		}
@@ -374,10 +693,10 @@ func deriveInboxItemsNoStaleEmission(ctx context.Context, opts handlerOptions, n
 	return items, nil
 }
 
-func isStaleThreadException(event map[string]any) bool {
+func isStaleTopicException(event map[string]any) bool {
 	payload, _ := event["payload"].(map[string]any)
 	subtype, _ := payload["subtype"].(string)
-	return subtype == "stale_thread"
+	return subtype == "stale_topic"
 }
 
 func decidedInboxItemIDs(events []map[string]any) map[string]struct{} {
@@ -425,12 +744,38 @@ func latestInboxAcknowledgments(events []map[string]any) map[string]time.Time {
 			if err != nil || prefix != "inbox" {
 				continue
 			}
-			if current, exists := ackedAt[value]; !exists || ts.After(current) {
-				ackedAt[value] = ts
+			for _, candidate := range inboxAckSuppressionIDs(value) {
+				if current, exists := ackedAt[candidate]; !exists || ts.After(current) {
+					ackedAt[candidate] = ts
+				}
 			}
 		}
 	}
 	return ackedAt
+}
+
+func inboxAckSuppressionIDs(inboxItemID string) []string {
+	inboxItemID = strings.TrimSpace(inboxItemID)
+	if inboxItemID == "" {
+		return nil
+	}
+	ids := []string{inboxItemID}
+	parts := strings.SplitN(inboxItemID, ":", 6)
+	if len(parts) != 5 || parts[0] != "inbox" {
+		return ids
+	}
+	category := strings.TrimSpace(parts[1])
+	threadID := strings.TrimSpace(parts[2])
+	subjectID := strings.TrimSpace(parts[3])
+	sourceEventID := strings.TrimSpace(parts[4])
+	switch category {
+	case "risk_review":
+		ids = append(ids, makeInboxItemID("work_item_risk", threadID, subjectID, sourceEventID))
+	case "work_item_risk":
+		// Preserve suppression across rebuilds in either direction while the rename settles.
+		ids = append(ids, makeInboxItemID("risk_review", threadID, subjectID, sourceEventID))
+	}
+	return ids
 }
 
 func deriveEventBackedInboxItem(event map[string]any) (derivedInboxItem, bool) {
@@ -455,9 +800,15 @@ func deriveEventBackedInboxItem(event map[string]any) (derivedInboxItem, bool) {
 		recommendedAction = "take_action"
 		titleFallback = "Intervention needed"
 	case "exception_raised":
-		category = "exception"
-		recommendedAction = "investigate_exception"
-		titleFallback = "Exception raised"
+		if isStaleTopicException(event) {
+			category = "stale_topic"
+			recommendedAction = "review_topic_cadence"
+			titleFallback = "Topic appears stale"
+		} else {
+			category = "intervention_needed"
+			recommendedAction = "investigate_exception"
+			titleFallback = "Exception raised"
+		}
 	default:
 		return derivedInboxItem{}, false
 	}
@@ -468,14 +819,23 @@ func deriveEventBackedInboxItem(event map[string]any) (derivedInboxItem, bool) {
 		title = titleFallback
 	}
 
+	rawRefs, _ := extractStringSlice(event["refs"])
+	subjectRef := pickSubjectRefFromEventRefs(rawRefs, threadID)
+	related := eventBackedInboxRelatedRefs(rawRefs, threadID)
+
 	id := makeInboxItemID(category, threadID, "", sourceEventID)
 	data := map[string]any{
 		"id":                 id,
 		"category":           category,
 		"thread_id":          threadID,
 		"source_event_id":    sourceEventID,
+		"subject_ref":        subjectRef,
+		"related_refs":       typedRefStringsToAnyList(related),
 		"title":              title,
 		"recommended_action": recommendedAction,
+	}
+	if strings.TrimSpace(sourceEventID) != "" {
+		data["source_event_ref"] = "event:" + strings.TrimSpace(sourceEventID)
 	}
 
 	return derivedInboxItem{
@@ -486,62 +846,115 @@ func deriveEventBackedInboxItem(event map[string]any) (derivedInboxItem, bool) {
 	}, true
 }
 
-func deriveCommitmentRiskInboxItem(commitment map[string]any, now time.Time, riskHorizon time.Duration) (derivedInboxItem, bool) {
-	status, _ := commitment["status"].(string)
-	if status != "open" && status != "blocked" {
+func deriveWorkItemRiskInboxItem(card map[string]any, now time.Time, riskHorizon time.Duration) (derivedInboxItem, bool) {
+	threadID := strings.TrimSpace(primaryRelatedThreadID(card))
+	cardID := strings.TrimSpace(anyString(card["id"]))
+	if threadID == "" || cardID == "" {
 		return derivedInboxItem{}, false
 	}
 
-	dueAtText, _ := commitment["due_at"].(string)
-	dueAt, err := time.Parse(time.RFC3339, strings.TrimSpace(dueAtText))
-	if err != nil {
-		return derivedInboxItem{}, false
-	}
-	if dueAt.After(now.Add(riskHorizon)) {
+	if !boardCardCountsAsOpenWorkItem(card) {
 		return derivedInboxItem{}, false
 	}
 
-	threadID, _ := commitment["thread_id"].(string)
-	commitmentID, _ := commitment["id"].(string)
-	if strings.TrimSpace(threadID) == "" || strings.TrimSpace(commitmentID) == "" {
+	riskState, dueAt, hasDueAt := boardCardRiskState(card, now, riskHorizon)
+	if riskState == "" {
 		return derivedInboxItem{}, false
 	}
 
-	triggerAt, ok := parseTimestamp(commitment["updated_at"])
+	triggerAt, ok := parseTimestamp(card["updated_at"])
 	if !ok {
 		triggerAt = now
 	}
 
-	title, _ := commitment["title"].(string)
+	title, _ := card["title"].(string)
 	title = strings.TrimSpace(title)
 	if title == "" {
-		title = "Commitment risk"
+		title = "Work item risk"
 	}
 
-	recommendedAction := "follow_up_commitment"
-	if dueAt.Before(now) {
-		recommendedAction = "resolve_overdue_commitment"
+	recommendedAction := "follow_up_work_item"
+	switch riskState {
+	case "overdue":
+		recommendedAction = "resolve_overdue_work_item"
+	case "blocked":
+		recommendedAction = "unblock_work_item"
 	}
 
-	id := makeInboxItemID("commitment_risk", threadID, commitmentID, "")
+	subjectRef := "card:" + cardID
+	related := workItemRiskInboxRelatedRefs(card, threadID)
+
+	id := makeInboxItemID("work_item_risk", threadID, cardID, "")
 	data := map[string]any{
 		"id":                 id,
-		"category":           "commitment_risk",
+		"category":           "work_item_risk",
 		"thread_id":          threadID,
-		"commitment_id":      commitmentID,
+		"card_id":            cardID,
+		"board_id":           nullableStringValue(anyString(card["board_id"])),
+		"subject_ref":        subjectRef,
+		"related_refs":       typedRefStringsToAnyList(related),
 		"title":              title,
+		"risk_state":         riskState,
 		"recommended_action": recommendedAction,
-		"due_at":             dueAt.Format(time.RFC3339),
+	}
+	if hasDueAt {
+		data["due_at"] = dueAt.Format(time.RFC3339)
+	}
+	if pid := pinnedDocumentIDFromCard(card); pid != "" {
+		data["pinned_document_id"] = pid
 	}
 
 	return derivedInboxItem{
 		Data:      data,
-		Category:  "commitment_risk",
+		Category:  "work_item_risk",
 		ID:        id,
 		TriggerAt: triggerAt,
 		DueAt:     dueAt,
-		HasDueAt:  true,
+		HasDueAt:  hasDueAt,
 	}, true
+}
+
+func boardCardCountsAsOpenWorkItem(card map[string]any) bool {
+	if res := strings.TrimSpace(anyString(card["resolution"])); res != "" {
+		return false
+	}
+	if strings.TrimSpace(anyString(card["column_key"])) == "done" {
+		return false
+	}
+	switch strings.TrimSpace(anyString(card["status"])) {
+	case "done", "cancelled":
+		return false
+	default:
+		return true
+	}
+}
+
+func boardCardRiskState(card map[string]any, now time.Time, riskHorizon time.Duration) (string, time.Time, bool) {
+	if !boardCardCountsAsOpenWorkItem(card) {
+		return "", time.Time{}, false
+	}
+
+	if strings.TrimSpace(anyString(card["column_key"])) == "blocked" {
+		if dueAt, ok := parseOptionalRFC3339(anyString(card["due_at"])); ok && !dueAt.After(now.Add(riskHorizon)) {
+			if dueAt.Before(now) {
+				return "overdue", dueAt, true
+			}
+			return "blocked", dueAt, true
+		}
+		return "blocked", time.Time{}, false
+	}
+
+	dueAt, ok := parseOptionalRFC3339(anyString(card["due_at"]))
+	if !ok {
+		return "", time.Time{}, false
+	}
+	if dueAt.After(now.Add(riskHorizon)) {
+		return "", time.Time{}, true
+	}
+	if dueAt.Before(now) {
+		return "overdue", dueAt, true
+	}
+	return "due_soon", dueAt, true
 }
 
 func isSuppressedByAck(item derivedInboxItem, ackedAt map[string]time.Time) bool {
@@ -552,14 +965,14 @@ func isSuppressedByAck(item derivedInboxItem, ackedAt map[string]time.Time) bool
 	return !item.TriggerAt.After(acked)
 }
 
-func makeInboxItemID(category string, threadID string, commitmentID string, sourceEventID string) string {
-	if strings.TrimSpace(commitmentID) == "" {
-		commitmentID = "none"
+func makeInboxItemID(category string, threadID string, subjectID string, sourceEventID string) string {
+	if strings.TrimSpace(subjectID) == "" {
+		subjectID = "none"
 	}
 	if strings.TrimSpace(sourceEventID) == "" {
 		sourceEventID = "none"
 	}
-	return "inbox:" + category + ":" + threadID + ":" + commitmentID + ":" + sourceEventID
+	return "inbox:" + category + ":" + threadID + ":" + subjectID + ":" + sourceEventID
 }
 
 func parseTimestamp(raw any) (time.Time, bool) {
@@ -576,12 +989,29 @@ func parseTimestamp(raw any) (time.Time, bool) {
 	return time.Time{}, false
 }
 
+func parseOptionalRFC3339(raw string) (time.Time, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return time.Time{}, false
+	}
+	parsed, err := time.Parse(time.RFC3339, raw)
+	if err == nil {
+		return parsed, true
+	}
+	parsed, err = time.Parse(time.RFC3339Nano, raw)
+	if err == nil {
+		return parsed, true
+	}
+	return time.Time{}, false
+}
+
 func sortInboxItems(items []derivedInboxItem) {
 	categoryOrder := map[string]int{
 		"decision_needed":     0,
 		"intervention_needed": 1,
-		"exception":           2,
-		"commitment_risk":     3,
+		"stale_topic":         2,
+		"work_item_risk":      3,
+		"document_attention":  4,
 	}
 
 	sort.Slice(items, func(i int, j int) bool {
@@ -600,7 +1030,7 @@ func sortInboxItems(items []derivedInboxItem) {
 			return leftOrder < rightOrder
 		}
 
-		if left.Category == "commitment_risk" && right.Category == "commitment_risk" {
+		if left.Category == "work_item_risk" && right.Category == "work_item_risk" {
 			if left.HasDueAt && right.HasDueAt && !left.DueAt.Equal(right.DueAt) {
 				return left.DueAt.Before(right.DueAt)
 			}

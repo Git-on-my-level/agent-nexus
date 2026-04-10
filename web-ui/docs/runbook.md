@@ -63,8 +63,11 @@ Single-core fallback:
 
 - If `OAR_WORKSPACES` is unset, `OAR_CORE_BASE_URL` still creates one default
   `local` workspace for dev/integration use.
-- If neither variable is set, the default `local` workspace uses same-origin mock
-  routes.
+- If neither `OAR_WORKSPACES` nor `OAR_CORE_BASE_URL` resolves a `coreBaseUrl`
+  for the workspace, **catalog-backed API paths** return **503** (`core_not_configured`)
+  instead of being served locally. Run a real core (for example `make serve` /
+  `./scripts/e2e-smoke`) or set `OAR_WORKSPACES` / `OAR_CORE_BASE_URL` per
+  **Local integration** below.
 
 ### SaaS packed-host workspace routing
 
@@ -95,24 +98,23 @@ contract):
 - `GET /auth/invites`, `POST /auth/invites`,
   `POST /auth/invites/{invite_id}/revoke`
 - `GET /auth/audit`
-- `POST /threads`, `GET /threads`, `GET /threads/{thread_id}`,
-  `PATCH /threads/{thread_id}`, `GET /threads/{thread_id}/timeline`,
-  `GET /threads/{thread_id}/workspace`
-- `POST /commitments`, `GET /commitments`, `GET /commitments/{commitment_id}`,
-  `PATCH /commitments/{commitment_id}`
+- `POST /topics`, `GET /topics`, `GET /topics/{topic_id}`,
+  `PATCH /topics/{topic_id}`, `GET /topics/{topic_id}/timeline`,
+  `GET /topics/{topic_id}/workspace`
 - `POST /boards`, `GET /boards`, `GET /boards/{board_id}`,
   `PATCH /boards/{board_id}`, `GET /boards/{board_id}/workspace`
 - `POST /boards/{board_id}/cards`, `GET /boards/{board_id}/cards`,
   `PATCH /boards/{board_id}/cards/{thread_id}`,
   `POST /boards/{board_id}/cards/{thread_id}/move`,
   `POST /boards/{board_id}/cards/{thread_id}/remove`
+- `POST /docs`, `GET /docs`, `GET /docs/{document_id}`,
+  `PATCH /docs/{document_id}`, `GET /docs/{document_id}/history`
 - `POST /artifacts`, `GET /artifacts`, `GET /artifacts/{artifact_id}`,
   `GET /artifacts/{artifact_id}/content`
 - `POST /events`, `GET /events/{event_id}`
-- `POST /work_orders`, `POST /receipts`, `POST /reviews`
-- `GET /snapshots/{snapshot_id}`
+- `POST /packets/receipts`, `POST /packets/reviews`
 - `POST /derived/rebuild` (optional)
-- `GET /inbox`, `POST /inbox/ack`
+- `GET /inbox`, `POST /inbox/{inbox_id}/acknowledge`
 
 ### Auth and actor storage
 
@@ -138,7 +140,8 @@ Identity is workspace-scoped.
 - Actor-selection mode (dev only):
   - Selected actor is stored in `localStorage` per workspace.
   - Only available when `dev_actor_mode=true`.
-  - Same-origin mock write routes trust the submitted `actor_id` in this mode.
+  - Writes still go to **oar-core** via the proxy; core may honor the dev-selected
+    `actor_id` only when dev/unauthenticated-write flags allow it.
   - This is a local-development convenience only; it is not an auth boundary.
 
 Switching from `/dtrinity/...` to `/scalingforever/...` preserves each workspace's
@@ -189,13 +192,18 @@ OAR_DEFAULT_WORKSPACE=local \
 ./scripts/e2e-with-core
 ```
 
-Representative seeded local data, including boards/cards/docs from mock mode,
-can be pushed into a live core with:
+Representative **dev fixture** data (boards/cards/docs/events) can be pushed
+into a live core with:
 
 ```bash
 OAR_CORE_BASE_URL=http://127.0.0.1:8000 \
 node ./scripts/seed-core-from-mock.mjs
 ```
+
+With **`make serve`** (or matching env), the seed also writes **`web-ui/.dev/local-identities.json`**
+(gitignored) when `OAR_DEV_SEED_IDENTITIES=1`, core has `OAR_BOOTSTRAP_TOKEN`, and
+`OAR_DEV_REGISTER_LINKED_ACTORS=1` on oar-core. The sidebar **Fixture persona**
+control then switches cookie-backed sessions among seeded principals.
 
 Primary board UI entry points:
 

@@ -407,7 +407,7 @@ func TestUpdateDocumentRejectsRevisionQuotaExceeded(t *testing.T) {
 
 	_, _, err = store.UpdateDocument(context.Background(), "actor-1", document["id"].(string), map[string]any{
 		"title": "Doc revisions updated",
-	}, revision["revision_id"].(string), "2222", "text", nil)
+	}, revision["revision_id"].(string), "2222", "text", nil, nil)
 	if err == nil {
 		t.Fatal("expected revision quota error")
 	}
@@ -580,7 +580,7 @@ func TestWorkspaceUsageSummaryTracksCreateAndUpdateFlows(t *testing.T) {
 
 	if _, _, err := store.UpdateDocument(context.Background(), "actor-2", document["id"].(string), map[string]any{
 		"title": "Summary doc updated",
-	}, revision["revision_id"].(string), "charlie", "text", nil); err != nil {
+	}, revision["revision_id"].(string), "charlie", "text", nil, nil); err != nil {
 		t.Fatalf("update document: %v", err)
 	}
 
@@ -719,7 +719,7 @@ func TestUpdateDocumentWriteFailureDoesNotLeakStagedContent(t *testing.T) {
 
 	_, _, err = store.UpdateDocument(updateCtx, "actor-2", "doc-locked", map[string]any{
 		"title": "Updated while locked",
-	}, revision["revision_id"].(string), "updated text", "text", nil)
+	}, revision["revision_id"].(string), "updated text", "text", nil, nil)
 	if err == nil {
 		t.Fatal("expected locked document update to fail")
 	}
@@ -729,7 +729,7 @@ func TestUpdateDocumentWriteFailureDoesNotLeakStagedContent(t *testing.T) {
 	}
 }
 
-func TestPatchSnapshotPreservesUnknownFieldsAndEmitsChangedFields(t *testing.T) {
+func TestPatchThreadPreservesUnknownFieldsAndEmitsChangedFields(t *testing.T) {
 	t.Parallel()
 
 	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
@@ -747,14 +747,14 @@ func TestPatchSnapshotPreservesUnknownFieldsAndEmitsChangedFields(t *testing.T) 
 	}
 	initialBodyJSON, err := json.Marshal(initialBody)
 	if err != nil {
-		t.Fatalf("marshal initial snapshot body: %v", err)
+		t.Fatalf("marshal initial thread body: %v", err)
 	}
 
 	_, err = workspace.DB().ExecContext(
 		context.Background(),
-		`INSERT INTO snapshots(id, kind, thread_id, updated_at, updated_by, body_json, provenance_json)
+		`INSERT INTO threads(id, kind, thread_id, updated_at, updated_by, body_json, provenance_json)
 		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		"snapshot-1",
+		"thread-patch-row-1",
 		"thread",
 		"thread-1",
 		"2026-03-04T00:00:00Z",
@@ -763,38 +763,38 @@ func TestPatchSnapshotPreservesUnknownFieldsAndEmitsChangedFields(t *testing.T) 
 		`{"sources":["inferred"]}`,
 	)
 	if err != nil {
-		t.Fatalf("insert initial snapshot: %v", err)
+		t.Fatalf("insert initial thread row: %v", err)
 	}
 
-	patchResult, err := store.PatchSnapshot(context.Background(), "actor-1", "snapshot-1", map[string]any{
+	patchResult, err := store.PatchThread(context.Background(), "actor-1", "thread-patch-row-1", map[string]any{
 		"title": "updated title",
 		"tags":  []any{"gamma"},
 	}, nil)
 	if err != nil {
-		t.Fatalf("patch snapshot: %v", err)
+		t.Fatalf("patch thread: %v", err)
 	}
 
-	if patchResult.Snapshot["title"] != "updated title" {
-		t.Fatalf("title not patched: %#v", patchResult.Snapshot["title"])
+	if patchResult.Thread["title"] != "updated title" {
+		t.Fatalf("title not patched: %#v", patchResult.Thread["title"])
 	}
 
-	unknown, ok := patchResult.Snapshot["unknown_field"].(map[string]any)
+	unknown, ok := patchResult.Thread["unknown_field"].(map[string]any)
 	if !ok || unknown["foo"] != "bar" {
-		t.Fatalf("unknown field not preserved: %#v", patchResult.Snapshot["unknown_field"])
+		t.Fatalf("unknown field not preserved: %#v", patchResult.Thread["unknown_field"])
 	}
 
-	tags, ok := patchResult.Snapshot["tags"].([]any)
+	tags, ok := patchResult.Thread["tags"].([]any)
 	if !ok || len(tags) != 1 || tags[0] != "gamma" {
-		t.Fatalf("tags were not replaced wholesale: %#v", patchResult.Snapshot["tags"])
+		t.Fatalf("tags were not replaced wholesale: %#v", patchResult.Thread["tags"])
 	}
 
-	if patchResult.Event["type"] != "snapshot_updated" {
+	if patchResult.Event["type"] != "thread_updated" {
 		t.Fatalf("unexpected event type: %#v", patchResult.Event["type"])
 	}
 	assertActorStatementProvenance(t, patchResult.Event)
 
 	eventRefs, ok := patchResult.Event["refs"].([]string)
-	if !ok || len(eventRefs) != 1 || eventRefs[0] != "snapshot:snapshot-1" {
+	if !ok || len(eventRefs) != 1 || eventRefs[0] != "thread:thread-patch-row-1" {
 		t.Fatalf("unexpected event refs: %#v", patchResult.Event["refs"])
 	}
 
@@ -819,25 +819,25 @@ func TestPatchSnapshotPreservesUnknownFieldsAndEmitsChangedFields(t *testing.T) 
 	if err := workspace.DB().QueryRowContext(
 		context.Background(),
 		`SELECT COUNT(*) FROM events WHERE type = ? AND thread_id = ?`,
-		"snapshot_updated",
+		"thread_updated",
 		"thread-1",
 	).Scan(&eventCount); err != nil {
-		t.Fatalf("count snapshot_updated events: %v", err)
+		t.Fatalf("count thread_updated events: %v", err)
 	}
 	if eventCount != 1 {
-		t.Fatalf("expected exactly one snapshot_updated event, got %d", eventCount)
+		t.Fatalf("expected exactly one thread_updated event, got %d", eventCount)
 	}
 
-	secondPatch, err := store.PatchSnapshot(context.Background(), "actor-2", "snapshot-1", map[string]any{
+	secondPatch, err := store.PatchThread(context.Background(), "actor-2", "thread-patch-row-1", map[string]any{
 		"title": "final title",
 	}, nil)
 	if err != nil {
-		t.Fatalf("patch snapshot second time: %v", err)
+		t.Fatalf("patch thread second time: %v", err)
 	}
 
-	secondTags, ok := secondPatch.Snapshot["tags"].([]any)
+	secondTags, ok := secondPatch.Thread["tags"].([]any)
 	if !ok || len(secondTags) != 1 || secondTags[0] != "gamma" {
-		t.Fatalf("tags should remain unchanged when absent from patch: %#v", secondPatch.Snapshot["tags"])
+		t.Fatalf("tags should remain unchanged when absent from patch: %#v", secondPatch.Thread["tags"])
 	}
 
 	secondPayload, ok := secondPatch.Event["payload"].(map[string]any)
@@ -851,7 +851,55 @@ func TestPatchSnapshotPreservesUnknownFieldsAndEmitsChangedFields(t *testing.T) 
 	}
 }
 
-func TestPatchSnapshotOptimisticLockingIfUpdatedAt(t *testing.T) {
+func TestGetThreadCanonicalizesLegacyTopicRefToSubjectRef(t *testing.T) {
+	t.Parallel()
+
+	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	store := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+
+	initialBodyJSON, err := json.Marshal(map[string]any{
+		"title":     "legacy backing thread",
+		"topic_ref": "topic:topic-legacy-1",
+	})
+	if err != nil {
+		t.Fatalf("marshal initial thread body: %v", err)
+	}
+
+	_, err = workspace.DB().ExecContext(
+		context.Background(),
+		`INSERT INTO threads(id, kind, thread_id, updated_at, updated_by, body_json, provenance_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		"thread-legacy-1",
+		"thread",
+		"thread-legacy-1",
+		"2026-03-04T00:00:00Z",
+		"actor-0",
+		string(initialBodyJSON),
+		`{"sources":["inferred"]}`,
+	)
+	if err != nil {
+		t.Fatalf("insert legacy thread row: %v", err)
+	}
+
+	thread, err := store.GetThread(context.Background(), "thread-legacy-1")
+	if err != nil {
+		t.Fatalf("get thread: %v", err)
+	}
+
+	if got, _ := thread["subject_ref"].(string); got != "topic:topic-legacy-1" {
+		t.Fatalf("expected canonical subject_ref, got %#v", thread)
+	}
+	if _, exists := thread["topic_ref"]; exists {
+		t.Fatalf("expected legacy topic_ref to be hidden from thread reads, got %#v", thread)
+	}
+}
+
+func TestPatchThreadOptimisticLockingIfUpdatedAt(t *testing.T) {
 	t.Parallel()
 
 	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
@@ -867,15 +915,15 @@ func TestPatchSnapshotOptimisticLockingIfUpdatedAt(t *testing.T) {
 		"tags":  []string{"alpha"},
 	})
 	if err != nil {
-		t.Fatalf("marshal initial snapshot body: %v", err)
+		t.Fatalf("marshal initial thread body: %v", err)
 	}
 
 	const initialUpdatedAt = "2026-03-04T00:00:00Z"
 	_, err = workspace.DB().ExecContext(
 		context.Background(),
-		`INSERT INTO snapshots(id, kind, thread_id, updated_at, updated_by, body_json, provenance_json)
+		`INSERT INTO threads(id, kind, thread_id, updated_at, updated_by, body_json, provenance_json)
 		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		"snapshot-lock-1",
+		"thread-opt-lock-1",
 		"thread",
 		"thread-lock-1",
 		initialUpdatedAt,
@@ -884,22 +932,22 @@ func TestPatchSnapshotOptimisticLockingIfUpdatedAt(t *testing.T) {
 		`{"sources":["inferred"]}`,
 	)
 	if err != nil {
-		t.Fatalf("insert initial snapshot: %v", err)
+		t.Fatalf("insert initial thread row: %v", err)
 	}
 
 	match := initialUpdatedAt
-	matchedPatch, err := store.PatchSnapshot(
+	matchedPatch, err := store.PatchThread(
 		context.Background(),
 		"actor-1",
-		"snapshot-lock-1",
+		"thread-opt-lock-1",
 		map[string]any{"title": "matched update"},
 		&match,
 	)
 	if err != nil {
-		t.Fatalf("patch snapshot with matching if_updated_at: %v", err)
+		t.Fatalf("patch thread with matching if_updated_at: %v", err)
 	}
-	if matchedPatch.Snapshot["title"] != "matched update" {
-		t.Fatalf("expected matched update title, got %#v", matchedPatch.Snapshot["title"])
+	if matchedPatch.Thread["title"] != "matched update" {
+		t.Fatalf("expected matched update title, got %#v", matchedPatch.Thread["title"])
 	}
 	assertActorStatementProvenance(t, matchedPatch.Event)
 
@@ -909,10 +957,10 @@ func TestPatchSnapshotOptimisticLockingIfUpdatedAt(t *testing.T) {
 	}
 
 	stale := initialUpdatedAt
-	_, err = store.PatchSnapshot(
+	_, err = store.PatchThread(
 		context.Background(),
 		"actor-2",
-		"snapshot-lock-1",
+		"thread-opt-lock-1",
 		map[string]any{"title": "stale update"},
 		&stale,
 	)
@@ -920,12 +968,12 @@ func TestPatchSnapshotOptimisticLockingIfUpdatedAt(t *testing.T) {
 		t.Fatalf("expected ErrConflict for stale if_updated_at, got %v", err)
 	}
 
-	loadedAfterConflict, err := store.GetSnapshot(context.Background(), "snapshot-lock-1")
+	loadedAfterConflict, err := store.GetThread(context.Background(), "thread-opt-lock-1")
 	if err != nil {
-		t.Fatalf("get snapshot after conflict patch: %v", err)
+		t.Fatalf("get thread after conflict patch: %v", err)
 	}
 	if loadedAfterConflict["title"] != "matched update" {
-		t.Fatalf("snapshot changed despite conflict: %#v", loadedAfterConflict["title"])
+		t.Fatalf("thread changed despite conflict: %#v", loadedAfterConflict["title"])
 	}
 
 	var eventsAfterConflict int
@@ -936,14 +984,14 @@ func TestPatchSnapshotOptimisticLockingIfUpdatedAt(t *testing.T) {
 		t.Fatalf("events changed on conflict: before=%d after=%d", eventsBeforeConflict, eventsAfterConflict)
 	}
 
-	if _, err := store.PatchSnapshot(
+	if _, err := store.PatchThread(
 		context.Background(),
 		"actor-3",
-		"snapshot-lock-1",
+		"thread-opt-lock-1",
 		map[string]any{"title": "no lock update"},
 		nil,
 	); err != nil {
-		t.Fatalf("patch snapshot without if_updated_at: %v", err)
+		t.Fatalf("patch thread without if_updated_at: %v", err)
 	}
 }
 
@@ -978,7 +1026,7 @@ func TestCreateThreadStoresProvenanceOnlyInProvenanceJSON(t *testing.T) {
 		t.Fatalf("create thread: %v", err)
 	}
 
-	threadID, _ := threadResult.Snapshot["id"].(string)
+	threadID, _ := threadResult.Thread["id"].(string)
 	if threadID == "" {
 		t.Fatal("expected thread id")
 	}
@@ -987,10 +1035,10 @@ func TestCreateThreadStoresProvenanceOnlyInProvenanceJSON(t *testing.T) {
 	var provenanceJSON string
 	if err := workspace.DB().QueryRowContext(
 		context.Background(),
-		`SELECT body_json, provenance_json FROM snapshots WHERE id = ?`,
+		`SELECT body_json, provenance_json FROM threads WHERE id = ?`,
 		threadID,
 	).Scan(&bodyJSON, &provenanceJSON); err != nil {
-		t.Fatalf("query stored thread snapshot row: %v", err)
+		t.Fatalf("query stored thread row: %v", err)
 	}
 
 	body := map[string]any{}
@@ -1044,7 +1092,7 @@ func TestPatchThreadProvenanceRoundTripAndPreserveWhenOmitted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create thread: %v", err)
 	}
-	threadID, _ := threadResult.Snapshot["id"].(string)
+	threadID, _ := threadResult.Thread["id"].(string)
 
 	updatedProvenance := map[string]any{
 		"sources": []string{"actor_statement:event-updated"},
@@ -1058,18 +1106,18 @@ func TestPatchThreadProvenanceRoundTripAndPreserveWhenOmitted(t *testing.T) {
 		t.Fatalf("patch thread with provenance: %v", err)
 	}
 
-	if !reflect.DeepEqual(patchWithProvenance.Snapshot["provenance"], updatedProvenance) {
-		t.Fatalf("patch thread response provenance mismatch: got %#v want %#v", patchWithProvenance.Snapshot["provenance"], updatedProvenance)
+	if !reflect.DeepEqual(patchWithProvenance.Thread["provenance"], updatedProvenance) {
+		t.Fatalf("patch thread response provenance mismatch: got %#v want %#v", patchWithProvenance.Thread["provenance"], updatedProvenance)
 	}
 
 	var bodyJSON string
 	var provenanceJSON string
 	if err := workspace.DB().QueryRowContext(
 		context.Background(),
-		`SELECT body_json, provenance_json FROM snapshots WHERE id = ?`,
+		`SELECT body_json, provenance_json FROM threads WHERE id = ?`,
 		threadID,
 	).Scan(&bodyJSON, &provenanceJSON); err != nil {
-		t.Fatalf("query snapshot after provenance patch: %v", err)
+		t.Fatalf("query thread after provenance patch: %v", err)
 	}
 	body := map[string]any{}
 	if err := json.Unmarshal([]byte(bodyJSON), &body); err != nil {
@@ -1098,9 +1146,9 @@ func TestPatchThreadProvenanceRoundTripAndPreserveWhenOmitted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("patch thread without provenance: %v", err)
 	}
-	finalProvenance, ok := patchWithoutProvenance.Snapshot["provenance"].(map[string]any)
+	finalProvenance, ok := patchWithoutProvenance.Thread["provenance"].(map[string]any)
 	if !ok {
-		t.Fatalf("expected final provenance object, got %#v", patchWithoutProvenance.Snapshot["provenance"])
+		t.Fatalf("expected final provenance object, got %#v", patchWithoutProvenance.Thread["provenance"])
 	}
 	finalNotes, _ := finalProvenance["notes"].(string)
 	if finalNotes != "updated by patch" {
@@ -1109,293 +1157,6 @@ func TestPatchThreadProvenanceRoundTripAndPreserveWhenOmitted(t *testing.T) {
 	finalSources := toSortedStrings(finalProvenance["sources"])
 	if !reflect.DeepEqual(finalSources, []string{"actor_statement:event-updated"}) {
 		t.Fatalf("provenance sources changed unexpectedly when omitted: %#v", finalProvenance["sources"])
-	}
-}
-
-func TestCommitmentOpenCommitmentsMaintenance(t *testing.T) {
-	t.Parallel()
-
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
-	if err != nil {
-		t.Fatalf("initialize workspace: %v", err)
-	}
-	defer workspace.Close()
-
-	store := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
-
-	threadResult, err := store.CreateThread(context.Background(), "actor-1", map[string]any{
-		"title":           "Thread A",
-		"type":            "incident",
-		"status":          "active",
-		"priority":        "p1",
-		"tags":            []string{},
-		"cadence":         "reactive",
-		"current_summary": "summary",
-		"next_actions":    []string{},
-		"key_artifacts":   []string{},
-		"provenance":      map[string]any{"sources": []string{"inferred"}},
-	})
-	if err != nil {
-		t.Fatalf("create thread: %v", err)
-	}
-	threadID, _ := threadResult.Snapshot["id"].(string)
-	if threadID == "" {
-		t.Fatal("expected thread id")
-	}
-	assertActorStatementProvenance(t, threadResult.Event)
-
-	firstCommitment, err := store.CreateCommitment(context.Background(), "actor-1", map[string]any{
-		"thread_id":          threadID,
-		"title":              "Commitment 1",
-		"owner":              "actor-1",
-		"due_at":             "2026-03-10T00:00:00Z",
-		"status":             "open",
-		"definition_of_done": []string{"done condition"},
-		"links":              []string{"url:https://example.com/1"},
-		"provenance":         map[string]any{"sources": []string{"inferred"}},
-	})
-	if err != nil {
-		t.Fatalf("create first commitment: %v", err)
-	}
-	firstCommitmentID, _ := firstCommitment.Snapshot["id"].(string)
-	assertActorStatementProvenance(t, firstCommitment.Event)
-
-	secondCommitment, err := store.CreateCommitment(context.Background(), "actor-1", map[string]any{
-		"thread_id":          threadID,
-		"title":              "Commitment 2",
-		"owner":              "actor-1",
-		"due_at":             "2026-03-11T00:00:00Z",
-		"status":             "blocked",
-		"definition_of_done": []string{"done condition"},
-		"links":              []string{"url:https://example.com/2"},
-		"provenance":         map[string]any{"sources": []string{"inferred"}},
-	})
-	if err != nil {
-		t.Fatalf("create second commitment: %v", err)
-	}
-	secondCommitmentID, _ := secondCommitment.Snapshot["id"].(string)
-	assertActorStatementProvenance(t, secondCommitment.Event)
-
-	threadAfterCreate, err := store.GetThread(context.Background(), threadID)
-	if err != nil {
-		t.Fatalf("get thread after commitments create: %v", err)
-	}
-	openAfterCreate := toSortedStrings(threadAfterCreate["open_commitments"])
-	expectedOpenAfterCreate := toSortedStrings([]string{firstCommitmentID, secondCommitmentID})
-	if !reflect.DeepEqual(openAfterCreate, expectedOpenAfterCreate) {
-		t.Fatalf("unexpected open commitments after create: %#v", threadAfterCreate["open_commitments"])
-	}
-
-	patchDone, err := store.PatchCommitment(
-		context.Background(),
-		"actor-1",
-		firstCommitmentID,
-		map[string]any{"status": "done"},
-		[]string{"artifact:receipt-1"},
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("patch commitment to done: %v", err)
-	}
-	provenance, ok := patchDone.Snapshot["provenance"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected commitment provenance object, got %#v", patchDone.Snapshot["provenance"])
-	}
-	byField, ok := provenance["by_field"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected provenance.by_field object, got %#v", provenance["by_field"])
-	}
-	statusSources := toSortedStrings(byField["status"])
-	if !reflect.DeepEqual(statusSources, []string{"receipt:receipt-1"}) {
-		t.Fatalf("unexpected provenance.by_field.status: %#v", byField["status"])
-	}
-	assertActorStatementProvenance(t, patchDone.Event)
-
-	threadAfterDone, err := store.GetThread(context.Background(), threadID)
-	if err != nil {
-		t.Fatalf("get thread after done patch: %v", err)
-	}
-	openAfterDone := toSortedStrings(threadAfterDone["open_commitments"])
-	if !reflect.DeepEqual(openAfterDone, []string{secondCommitmentID}) {
-		t.Fatalf("unexpected open commitments after done patch: %#v", threadAfterDone["open_commitments"])
-	}
-
-	if _, err := store.PatchCommitment(
-		context.Background(),
-		"actor-1",
-		secondCommitmentID,
-		map[string]any{"status": "canceled"},
-		[]string{"event:decision-1"},
-		nil,
-	); err != nil {
-		t.Fatalf("patch commitment to canceled: %v", err)
-	}
-
-	threadAfterCanceled, err := store.GetThread(context.Background(), threadID)
-	if err != nil {
-		t.Fatalf("get thread after canceled patch: %v", err)
-	}
-	openAfterCanceled := toSortedStrings(threadAfterCanceled["open_commitments"])
-	if len(openAfterCanceled) != 0 {
-		t.Fatalf("expected no open commitments after canceled patch, got %#v", threadAfterCanceled["open_commitments"])
-	}
-}
-
-func TestPatchCommitmentOptimisticLockingIfUpdatedAt(t *testing.T) {
-	t.Parallel()
-
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
-	if err != nil {
-		t.Fatalf("initialize workspace: %v", err)
-	}
-	defer workspace.Close()
-
-	store := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
-
-	threadResult, err := store.CreateThread(context.Background(), "actor-1", map[string]any{
-		"title":           "Thread for lock test",
-		"type":            "incident",
-		"status":          "active",
-		"priority":        "p1",
-		"tags":            []string{},
-		"cadence":         "reactive",
-		"current_summary": "summary",
-		"next_actions":    []string{},
-		"key_artifacts":   []string{},
-		"provenance":      map[string]any{"sources": []string{"inferred"}},
-	})
-	if err != nil {
-		t.Fatalf("create thread: %v", err)
-	}
-	threadID, _ := threadResult.Snapshot["id"].(string)
-
-	commitmentResult, err := store.CreateCommitment(context.Background(), "actor-1", map[string]any{
-		"thread_id":          threadID,
-		"title":              "Original commitment",
-		"owner":              "actor-1",
-		"due_at":             "2026-03-10T00:00:00Z",
-		"status":             "open",
-		"definition_of_done": []string{"done condition"},
-		"links":              []string{"url:https://example.com/1"},
-		"provenance":         map[string]any{"sources": []string{"inferred"}},
-	})
-	if err != nil {
-		t.Fatalf("create commitment: %v", err)
-	}
-	commitmentID, _ := commitmentResult.Snapshot["id"].(string)
-	initialUpdatedAt, _ := commitmentResult.Snapshot["updated_at"].(string)
-
-	match := initialUpdatedAt
-	patchMatched, err := store.PatchCommitment(
-		context.Background(),
-		"actor-2",
-		commitmentID,
-		map[string]any{"title": "Matched commitment update"},
-		nil,
-		&match,
-	)
-	if err != nil {
-		t.Fatalf("patch commitment with matching if_updated_at: %v", err)
-	}
-	if patchMatched.Snapshot["title"] != "Matched commitment update" {
-		t.Fatalf("unexpected commitment title after matched update: %#v", patchMatched.Snapshot["title"])
-	}
-	assertActorStatementProvenance(t, patchMatched.Event)
-
-	var eventsBeforeConflict int
-	if err := workspace.DB().QueryRowContext(context.Background(), `SELECT COUNT(*) FROM events`).Scan(&eventsBeforeConflict); err != nil {
-		t.Fatalf("count events before commitment conflict: %v", err)
-	}
-
-	stale := initialUpdatedAt
-	_, err = store.PatchCommitment(
-		context.Background(),
-		"actor-3",
-		commitmentID,
-		map[string]any{"title": "Stale commitment update"},
-		nil,
-		&stale,
-	)
-	if !errors.Is(err, primitives.ErrConflict) {
-		t.Fatalf("expected ErrConflict for stale commitment if_updated_at, got %v", err)
-	}
-
-	loadedAfterConflict, err := store.GetCommitment(context.Background(), commitmentID)
-	if err != nil {
-		t.Fatalf("get commitment after conflict patch: %v", err)
-	}
-	if loadedAfterConflict["title"] != "Matched commitment update" {
-		t.Fatalf("commitment changed despite conflict: %#v", loadedAfterConflict["title"])
-	}
-
-	var eventsAfterConflict int
-	if err := workspace.DB().QueryRowContext(context.Background(), `SELECT COUNT(*) FROM events`).Scan(&eventsAfterConflict); err != nil {
-		t.Fatalf("count events after commitment conflict: %v", err)
-	}
-	if eventsAfterConflict != eventsBeforeConflict {
-		t.Fatalf("events changed on commitment conflict: before=%d after=%d", eventsBeforeConflict, eventsAfterConflict)
-	}
-
-	if _, err := store.PatchCommitment(
-		context.Background(),
-		"actor-4",
-		commitmentID,
-		map[string]any{"title": "No-lock commitment update"},
-		nil,
-		nil,
-	); err != nil {
-		t.Fatalf("patch commitment without if_updated_at: %v", err)
-	}
-}
-
-func TestPatchCommitmentRestrictedTransitionRequiresEvidence(t *testing.T) {
-	t.Parallel()
-
-	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
-	if err != nil {
-		t.Fatalf("initialize workspace: %v", err)
-	}
-	defer workspace.Close()
-
-	store := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
-
-	threadResult, err := store.CreateThread(context.Background(), "actor-1", map[string]any{
-		"title":           "Thread A",
-		"type":            "incident",
-		"status":          "active",
-		"priority":        "p1",
-		"tags":            []string{},
-		"cadence":         "reactive",
-		"current_summary": "summary",
-		"next_actions":    []string{},
-		"key_artifacts":   []string{},
-		"provenance":      map[string]any{"sources": []string{"inferred"}},
-	})
-	if err != nil {
-		t.Fatalf("create thread: %v", err)
-	}
-	threadID, _ := threadResult.Snapshot["id"].(string)
-
-	commitmentResult, err := store.CreateCommitment(context.Background(), "actor-1", map[string]any{
-		"thread_id":          threadID,
-		"title":              "Commitment 1",
-		"owner":              "actor-1",
-		"due_at":             "2026-03-10T00:00:00Z",
-		"status":             "open",
-		"definition_of_done": []string{"done condition"},
-		"links":              []string{"url:https://example.com/1"},
-		"provenance":         map[string]any{"sources": []string{"inferred"}},
-	})
-	if err != nil {
-		t.Fatalf("create commitment: %v", err)
-	}
-	commitmentID, _ := commitmentResult.Snapshot["id"].(string)
-
-	_, err = store.PatchCommitment(context.Background(), "actor-1", commitmentID, map[string]any{
-		"status": "done",
-	}, nil, nil)
-	if !errors.Is(err, primitives.ErrInvalidCommitmentTransition) {
-		t.Fatalf("expected ErrInvalidCommitmentTransition, got %v", err)
 	}
 }
 

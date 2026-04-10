@@ -3,21 +3,54 @@
 Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
-- Contract version: `0.2.3`
-- Groups: `15`
+- Contract version: `0.3.0`
+- Groups: `17`
+
+## `topics`
+
+- Commands: `10`
+- Command IDs:
+  - `topics.archive` (`topics archive`)
+  - `topics.create` (`topics create`)
+  - `topics.get` (`topics get`)
+  - `topics.list` (`topics list`)
+  - `topics.patch` (`topics patch`)
+  - `topics.restore` (`topics restore`)
+  - `topics.timeline` (`topics timeline`)
+  - `topics.trash` (`topics trash`)
+  - `topics.unarchive` (`topics unarchive`)
+  - `topics.workspace` (`topics workspace`)
+
+## `threads`
+
+- Commands: `5`
+- Command IDs:
+  - `threads.context` (`threads context`)
+  - `threads.inspect` (`threads inspect`)
+  - `threads.list` (`threads list`)
+  - `threads.timeline` (`threads timeline`)
+  - `threads.workspace` (`threads workspace`)
 
 ## `actors`
 
 - Commands: `2`
 - Command IDs:
+  - `actors.create` (`actors create`)
   - `actors.list` (`actors list`)
-  - `actors.register` (`actors register`)
+
+## `agent`
+
+- Commands: `3`
+- Command IDs:
+  - `agent.notifications.dismiss` (`agent notifications dismiss`)
+  - `agent.notifications.list` (`agent notifications list`)
+  - `agent.notifications.read` (`agent notifications read`)
 
 ## `agents`
 
 - Commands: `4`
 - Command IDs:
-  - `agents.me.get` (`agents me get`)
+  - `agents.me.get` (`agents me`)
   - `agents.me.keys.rotate` (`agents me keys rotate`)
   - `agents.me.patch` (`agents me patch`)
   - `agents.me.revoke` (`agents me revoke`)
@@ -27,25 +60,27 @@ Generated from `contracts/oar-openapi.yaml`.
 - Commands: `9`
 - Command IDs:
   - `artifacts.archive` (`artifacts archive`)
-  - `artifacts.content.get` (`artifacts content get`)
+  - `artifacts.content` (`artifacts content`)
   - `artifacts.create` (`artifacts create`)
   - `artifacts.get` (`artifacts get`)
   - `artifacts.list` (`artifacts list`)
   - `artifacts.purge` (`artifacts purge`)
   - `artifacts.restore` (`artifacts restore`)
-  - `artifacts.tombstone` (`artifacts tombstone`)
+  - `artifacts.trash` (`artifacts trash`)
   - `artifacts.unarchive` (`artifacts unarchive`)
 
 ## `auth`
 
-- Commands: `13`
+- Commands: `15`
 - Command IDs:
-  - `auth.agents.register` (`auth register`)
+  - `auth.agents.register` (`auth agents register`)
   - `auth.audit.list` (`auth audit list`)
   - `auth.bootstrap.status` (`auth bootstrap status`)
   - `auth.invites.create` (`auth invites create`)
   - `auth.invites.list` (`auth invites list`)
   - `auth.invites.revoke` (`auth invites revoke`)
+  - `auth.passkey.dev.login` (`auth passkey dev login`)
+  - `auth.passkey.dev.register` (`auth passkey dev register`)
   - `auth.passkey.login.options` (`auth passkey login options`)
   - `auth.passkey.login.verify` (`auth passkey login verify`)
   - `auth.passkey.register.options` (`auth passkey register options`)
@@ -56,33 +91,36 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `boards`
 
-- Commands: `16`
+- Commands: `13`
 - Command IDs:
   - `boards.archive` (`boards archive`)
-  - `boards.cards.archive` (`boards cards archive`)
   - `boards.cards.create` (`boards cards create`)
   - `boards.cards.get` (`boards cards get`)
   - `boards.cards.list` (`boards cards list`)
-  - `boards.cards.move` (`boards cards move`)
-  - `boards.cards.update` (`boards cards update`)
   - `boards.create` (`boards create`)
   - `boards.get` (`boards get`)
   - `boards.list` (`boards list`)
+  - `boards.patch` (`boards patch`)
   - `boards.purge` (`boards purge`)
   - `boards.restore` (`boards restore`)
-  - `boards.tombstone` (`boards tombstone`)
+  - `boards.trash` (`boards trash`)
   - `boards.unarchive` (`boards unarchive`)
-  - `boards.update` (`boards update`)
   - `boards.workspace` (`boards workspace`)
 
-## `commitments`
+## `cards`
 
-- Commands: `4`
+- Commands: `10`
 - Command IDs:
-  - `commitments.create` (`commitments create`)
-  - `commitments.get` (`commitments get`)
-  - `commitments.list` (`commitments list`)
-  - `commitments.patch` (`commitments patch`)
+  - `cards.archive` (`cards archive`)
+  - `cards.create` (`cards create`)
+  - `cards.get` (`cards get`)
+  - `cards.list` (`cards list`)
+  - `cards.move` (`cards move`)
+  - `cards.patch` (`cards patch`)
+  - `cards.purge` (`cards purge`)
+  - `cards.restore` (`cards restore`)
+  - `cards.timeline` (`cards timeline`)
+  - `cards.trash` (`cards trash`)
 
 ## `derived`
 
@@ -97,39 +135,40 @@ Generated from `contracts/oar-openapi.yaml`.
   - `docs.archive` (`docs archive`)
   - `docs.create` (`docs create`)
   - `docs.get` (`docs get`)
-  - `docs.history` (`docs history`)
   - `docs.list` (`docs list`)
   - `docs.purge` (`docs purge`)
   - `docs.restore` (`docs restore`)
-  - `docs.revision.get` (`docs revision get`)
-  - `docs.tombstone` (`docs tombstone`)
+  - `docs.revisions.create` (`docs revisions create`)
+  - `docs.revisions.get` (`docs revisions get`)
+  - `docs.revisions.list` (`docs revisions list`)
+  - `docs.trash` (`docs trash`)
   - `docs.unarchive` (`docs unarchive`)
-  - `docs.update` (`docs update`)
 
 ## `events`
 
-- Commands: `7`
+- Commands: `8`
 - Command IDs:
   - `events.archive` (`events archive`)
   - `events.create` (`events create`)
   - `events.get` (`events get`)
+  - `events.list` (`events list`)
   - `events.restore` (`events restore`)
   - `events.stream` (`events stream`)
-  - `events.tombstone` (`events tombstone`)
+  - `events.trash` (`events trash`)
   - `events.unarchive` (`events unarchive`)
 
 ## `inbox`
 
 - Commands: `4`
 - Command IDs:
-  - `inbox.ack` (`inbox ack`)
+  - `inbox.acknowledge` (`inbox acknowledge`)
   - `inbox.get` (`inbox get`)
   - `inbox.list` (`inbox list`)
   - `inbox.stream` (`inbox stream`)
 
 ## `meta`
 
-- Commands: `10`
+- Commands: `9`
 - Command IDs:
   - `meta.commands.get` (`meta commands get`)
   - `meta.commands.list` (`meta commands list`)
@@ -138,46 +177,27 @@ Generated from `contracts/oar-openapi.yaml`.
   - `meta.handshake` (`meta handshake`)
   - `meta.health` (`meta health`)
   - `meta.livez` (`meta livez`)
-  - `meta.ops.health` (`meta ops health`)
   - `meta.readyz` (`meta readyz`)
   - `meta.version` (`meta version`)
 
-## `notifications`
+## `ops`
 
 - Commands: `3`
 - Command IDs:
-  - `notifications.dismiss` (`notifications dismiss`)
-  - `notifications.list` (`notifications list`)
-  - `notifications.read` (`notifications read`)
+  - `ops.blob.usage.rebuild` (`ops blob usage rebuild`)
+  - `ops.health` (`ops health`)
+  - `ops.usage.summary` (`ops usage summary`)
 
 ## `packets`
 
-- Commands: `3`
+- Commands: `2`
 - Command IDs:
   - `packets.receipts.create` (`packets receipts create`)
   - `packets.reviews.create` (`packets reviews create`)
-  - `packets.work-orders.create` (`packets work-orders create`)
 
-## `snapshots`
+## `ref-edges`
 
 - Commands: `1`
 - Command IDs:
-  - `snapshots.get` (`snapshots get`)
-
-## `threads`
-
-- Commands: `12`
-- Command IDs:
-  - `threads.archive` (`threads archive`)
-  - `threads.context` (`threads context`)
-  - `threads.create` (`threads create`)
-  - `threads.get` (`threads get`)
-  - `threads.list` (`threads list`)
-  - `threads.patch` (`threads patch`)
-  - `threads.purge` (`threads purge`)
-  - `threads.restore` (`threads restore`)
-  - `threads.timeline` (`threads timeline`)
-  - `threads.tombstone` (`threads tombstone`)
-  - `threads.unarchive` (`threads unarchive`)
-  - `threads.workspace` (`threads workspace`)
+  - `ref_edges.list` (`ref-edges list`)
 

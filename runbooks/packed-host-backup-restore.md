@@ -63,7 +63,7 @@ Backups include:
 - Metadata referencing bucket/prefix (not object copies)
 - Backup manifest
 
-The S3 backup is a reference, not an independent object snapshot. Restore configures the target workspace to read from the same bucket/prefix.
+The S3 backup is a reference, not a standalone duplicate of every object in the bucket. Restore configures the target workspace to read from the same bucket/prefix.
 
 ```bash
 ./scripts/hosted/backup-workspace.sh \

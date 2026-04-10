@@ -5,27 +5,27 @@
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
   import {
-    THREAD_SCHEDULE_PRESETS,
-    THREAD_SCHEDULE_PRESET_LABELS,
-    THREAD_PRIORITIES,
-    THREAD_PRIORITY_LABELS,
-    THREAD_STATUSES,
-    applyThreadListClientFilters,
+    TOPIC_SCHEDULE_PRESETS,
+    TOPIC_SCHEDULE_PRESET_LABELS,
+    TOPIC_PRIORITIES,
+    TOPIC_PRIORITY_LABELS,
+    TOPIC_STATUSES,
+    applyTopicListClientFilters,
     buildThreadFilterQueryParamsFromThreadListState,
-    buildThreadListSearchString,
-    cadenceToRequestValue,
+    buildTopicListApiQueryParams,
+    buildTopicListSearchString,
     computeStaleness,
     formatCadenceLabel,
     getPriorityLabel,
-    parseThreadListSearchParams,
+    parseTopicListSearchParams,
     parseTagFilterInput,
     validateCadenceSelection,
-  } from "$lib/threadFilters";
+  } from "$lib/topicFilters";
   import { workspacePath } from "$lib/workspacePaths";
-  import { describeCron } from "$lib/threadPatch";
+  import { describeCron } from "$lib/topicPatch";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
 
-  /** Virtual filter: non-closed threads (matches dashboard "Open"); distinct from status=active|paused. */
+  /** Virtual filter: non-closed topics (matches dashboard "Open"); distinct from status=active|paused. */
   const STATUS_OPEN_NOT_CLOSED = "__open__";
   /** Virtual filter: P0 and P1 (matches dashboard "High priority"); distinct from single priority. */
   const PRIORITY_HIGH_TIER = "__high_tier__";
@@ -43,9 +43,9 @@
   let filters = $state({ ...defaultFilters });
   let loading = $state(false);
   let error = $state("");
-  let threads = $state([]);
+  let topics = $state([]);
   let createOpen = $state(false);
-  let creatingThread = $state(false);
+  let creatingTopic = $state(false);
   let createError = $state("");
   let filtersOpen = $state(false);
   let showArchived = $state(false);
@@ -54,7 +54,19 @@
   let trashBusyId = $state("");
   let workspaceSlug = $derived($page.params.workspace);
 
-  let threadDraft = $state({
+  /** `/topics` imports this module; `/threads` uses it directly. Data source and copy differ. */
+  let listSurface = $derived.by(() => {
+    const path = String($page.url.pathname ?? "").replace(/\/+$/, "");
+    return path.endsWith("/topics") ? "topics" : "threads";
+  });
+
+  let backingThreads = $state([]);
+
+  let filteredBackingThreads = $derived(
+    applyTopicListClientFilters(backingThreads, filters),
+  );
+
+  let topicDraft = $state({
     title: "",
     summary: "",
     status: "active",
@@ -68,46 +80,84 @@
     return workspacePath(workspaceSlug, pathname);
   }
 
-  $effect(() => {
-    showArchived;
-    const parsed = parseThreadListSearchParams($page.url.searchParams);
-    filters = { ...defaultFilters, ...parsed };
-    if ([...$page.url.searchParams.keys()].length > 0) {
-      filtersOpen = true;
-    }
-    void loadThreadsFromState(parsed);
-  });
+  /** @param {string} ref */
+  function topicSegmentFromTypedRef(ref) {
+    const s = String(ref ?? "").trim();
+    if (!s.startsWith("topic:")) return "";
+    return s.slice("topic:".length).trim();
+  }
 
-  async function loadThreadsFromState(state) {
+  async function loadBackingThreads() {
     loading = true;
     error = "";
-
     try {
-      const query = buildThreadFilterQueryParamsFromThreadListState(state);
-      if (showArchived) {
-        query.include_archived = "true";
-      }
+      const query = buildThreadFilterQueryParamsFromThreadListState(filters);
       const response = await coreClient.listThreads(query);
-      let list = response.threads ?? [];
-      list = applyThreadListClientFilters(list, state);
-      threads = list;
+      backingThreads = response.threads ?? [];
     } catch (loadError) {
       const reason =
         loadError instanceof Error ? loadError.message : String(loadError);
       error = `Failed to load threads: ${reason}`;
-      threads = [];
+      backingThreads = [];
     } finally {
       loading = false;
     }
   }
 
-  async function loadThreads() {
-    await loadThreadsFromState(filters);
+  $effect(() => {
+    workspaceSlug;
+    listSurface;
+    if (listSurface === "threads") {
+      const parsed = parseTopicListSearchParams($page.url.searchParams);
+      filters = { ...defaultFilters, ...parsed };
+      if ([...$page.url.searchParams.keys()].length > 0) {
+        filtersOpen = true;
+      }
+      void loadBackingThreads();
+      return;
+    }
+
+    showArchived;
+    const parsed = parseTopicListSearchParams($page.url.searchParams);
+    filters = { ...defaultFilters, ...parsed };
+    if ([...$page.url.searchParams.keys()].length > 0) {
+      filtersOpen = true;
+    }
+    void loadTopicsFromState(parsed);
+  });
+
+  async function loadTopicsFromState(state) {
+    loading = true;
+    error = "";
+
+    try {
+      const query = buildTopicListApiQueryParams(state, {
+        includeArchived: showArchived,
+      });
+      const response = await coreClient.listTopics(query);
+      let list = response.topics ?? [];
+      list = applyTopicListClientFilters(list, state);
+      topics = list;
+    } catch (loadError) {
+      const reason =
+        loadError instanceof Error ? loadError.message : String(loadError);
+      error = `Failed to load topics: ${reason}`;
+      topics = [];
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function loadTopics() {
+    await loadTopicsFromState(filters);
   }
 
   async function applyFilters() {
-    const qs = buildThreadListSearchString(filters);
-    const path = workspaceHref("/threads");
+    const qs = buildTopicListSearchString(filters);
+    const path =
+      listSurface === "topics"
+        ? workspaceHref("/topics")
+        : workspaceHref("/threads");
     await goto(`${path}${qs ? `?${qs}` : ""}`, {
       replaceState: true,
       noScroll: true,
@@ -116,15 +166,19 @@
   }
 
   async function resetFilters() {
-    await goto(workspaceHref("/threads"), {
+    const path =
+      listSurface === "topics"
+        ? workspaceHref("/topics")
+        : workspaceHref("/threads");
+    await goto(path, {
       replaceState: true,
       noScroll: true,
       keepFocus: true,
     });
   }
 
-  function resetThreadDraft() {
-    threadDraft = {
+  function resetTopicDraft() {
+    topicDraft = {
       title: "",
       summary: "",
       status: "active",
@@ -135,58 +189,68 @@
     };
   }
 
-  async function createThread() {
-    if (!threadDraft.title.trim()) {
-      createError = "Thread title is required.";
+  /** Map list UI status to canonical topic.status for POST /topics. */
+  function threadStatusToTopicStatus(status) {
+    switch (String(status ?? "").trim()) {
+      case "paused":
+        return "blocked";
+      case "closed":
+        return "resolved";
+      default:
+        return "active";
+    }
+  }
+
+  function buildCreateTopicPayloadFromDraft() {
+    const summary = topicDraft.summary.trim() || "No summary provided.";
+    return {
+      topic: {
+        type: "other",
+        status: threadStatusToTopicStatus(topicDraft.status),
+        title: topicDraft.title.trim(),
+        summary,
+        owner_refs: [],
+        document_refs: [],
+        board_refs: [],
+        related_refs: [],
+        provenance: {
+          sources: ["actor_statement:ui"],
+        },
+      },
+    };
+  }
+
+  async function createTopic() {
+    if (!topicDraft.title.trim()) {
+      createError = "Topic title is required.";
       return;
     }
     const cadenceError = validateCadenceSelection({
-      preset: threadDraft.cadencePreset,
-      customCron: threadDraft.cadenceCron,
+      preset: topicDraft.cadencePreset,
+      customCron: topicDraft.cadenceCron,
     });
     if (cadenceError) {
       createError = cadenceError;
       return;
     }
 
-    creatingThread = true;
+    creatingTopic = true;
     createError = "";
 
     try {
-      const cadence = cadenceToRequestValue({
-        preset: threadDraft.cadencePreset,
-        customCron: threadDraft.cadenceCron,
-      });
-      await coreClient.createThread({
-        thread: {
-          title: threadDraft.title.trim(),
-          type: "case",
-          status: threadDraft.status,
-          priority: threadDraft.priority,
-          tags: parseTagFilterInput(threadDraft.tagsInput),
-          cadence,
-          current_summary: threadDraft.summary.trim() || "No summary provided.",
-          next_actions: [
-            threadDraft.summary.trim() || "Review and define next steps.",
-          ],
-          key_artifacts: [],
-          provenance: {
-            sources: ["actor_statement:ui"],
-          },
-        },
-      });
+      await coreClient.createTopic(buildCreateTopicPayloadFromDraft());
 
       createOpen = false;
-      resetThreadDraft();
-      await loadThreads();
+      resetTopicDraft();
+      await loadTopics();
     } catch (submitError) {
       const reason =
         submitError instanceof Error
           ? submitError.message
           : String(submitError);
-      createError = `Failed to create thread: ${reason}`;
+      createError = `Failed to create topic: ${reason}`;
     } finally {
-      creatingThread = false;
+      creatingTopic = false;
     }
   }
 
@@ -238,11 +302,11 @@
     if (filters.highPriorityTier) {
       parts.push("High (P0 & P1)");
     } else if (filters.priority) {
-      parts.push(THREAD_PRIORITY_LABELS[filters.priority] ?? filters.priority);
+      parts.push(TOPIC_PRIORITY_LABELS[filters.priority] ?? filters.priority);
     }
     if (filters.cadence) {
       parts.push(
-        THREAD_SCHEDULE_PRESET_LABELS[filters.cadence] ?? filters.cadence,
+        TOPIC_SCHEDULE_PRESET_LABELS[filters.cadence] ?? filters.cadence,
       );
     }
     if (filters.staleness === "stale") {
@@ -271,24 +335,28 @@
     const styles = {
       active: "text-emerald-400",
       paused: "text-amber-400",
-      closed: "text-gray-400",
+      closed: "text-slate-300",
+      blocked: "text-amber-400",
+      resolved: "text-slate-300",
+      proposed: "text-[var(--ui-text-muted)]",
+      archived: "text-slate-300",
     };
-    return styles[status] ?? "text-gray-400";
+    return styles[status] ?? "text-gray-500";
   }
 
-  function isThreadArchived(thread) {
-    const at = thread?.archived_at;
+  function isTopicArchived(topic) {
+    const at = topic?.archived_at;
     return typeof at === "string" ? at.trim() !== "" : Boolean(at);
   }
 
-  async function archiveThread(threadId) {
-    const id = String(threadId ?? "").trim();
+  async function archiveTopicRow(topicId) {
+    const id = String(topicId ?? "").trim();
     if (!id || archiveBusyId) return;
     archiveBusyId = id;
     error = "";
     try {
-      await coreClient.archiveThread(id, {});
-      await loadThreads();
+      await coreClient.archiveTopic(id, {});
+      await loadTopics();
     } catch (e) {
       error = `Archive failed: ${e instanceof Error ? e.message : String(e)}`;
     } finally {
@@ -296,14 +364,14 @@
     }
   }
 
-  async function unarchiveThread(threadId) {
-    const id = String(threadId ?? "").trim();
+  async function unarchiveTopicRow(topicId) {
+    const id = String(topicId ?? "").trim();
     if (!id || archiveBusyId) return;
     archiveBusyId = id;
     error = "";
     try {
-      await coreClient.unarchiveThread(id, {});
-      await loadThreads();
+      await coreClient.unarchiveTopic(id, {});
+      await loadTopics();
     } catch (e) {
       error = `Unarchive failed: ${e instanceof Error ? e.message : String(e)}`;
     } finally {
@@ -311,15 +379,15 @@
     }
   }
 
-  async function trashThread(threadId) {
-    const id = String(threadId ?? "").trim();
+  async function trashTopicRow(topicId) {
+    const id = String(topicId ?? "").trim();
     if (!id || trashBusyId) return;
     trashBusyId = id;
     error = "";
     try {
-      await coreClient.tombstoneThread(id, {});
+      await coreClient.trashTopic(id, {});
       confirmModal = { open: false, action: "", entityId: "" };
-      await loadThreads();
+      await loadTopics();
     } catch (e) {
       error = `Trash failed: ${e instanceof Error ? e.message : String(e)}`;
     } finally {
@@ -331,68 +399,68 @@
     const id = confirmModal.entityId;
     const action = confirmModal.action;
     confirmModal = { open: false, action: "", entityId: "" };
-    if (action === "archive") void archiveThread(id);
-    else if (action === "trash") void trashThread(id);
+    if (action === "archive") void archiveTopicRow(id);
+    else if (action === "trash") void trashTopicRow(id);
   }
 </script>
 
-<div class="flex items-center justify-between mb-4">
-  <h1 class="text-lg font-semibold text-[var(--ui-text)]">Threads</h1>
+<div class="mb-4 flex flex-wrap items-start justify-between gap-4">
+  <div class="min-w-0 flex-1">
+    <h1 class="text-lg font-semibold text-[var(--ui-text)]">
+      {listSurface === "topics" ? "Topics" : "Threads"}
+    </h1>
+    {#if listSurface === "topics"}
+      <p class="mt-1 text-[12px] text-[var(--ui-text-muted)]">
+        Primary organizational surface. Each topic has a backing thread for
+        events and provenance.
+      </p>
+    {:else}
+      <p class="mt-1 text-[12px] text-[var(--ui-text-muted)]">
+        Diagnostic list of append-only backing threads (timelines). Not every
+        thread is a topic; prefer
+        <a
+          class="text-indigo-400 transition-colors hover:text-indigo-300"
+          href={workspaceHref("/topics")}>Topics</a
+        >
+        for triage and planning.
+      </p>
+    {/if}
+  </div>
   <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-1.5">
-    <label
-      class="inline-flex cursor-pointer items-center gap-1.5 text-[12px] text-[var(--ui-text-muted)]"
-    >
-      <input
-        bind:checked={showArchived}
-        class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--ui-border)] bg-[var(--ui-bg)] text-[var(--ui-accent-strong)] focus:ring-2 focus:ring-[var(--ui-accent)] focus:ring-offset-0"
-        type="checkbox"
-      />
-      Show archived
-    </label>
-    <span
-      class="inline-flex items-center gap-1 rounded border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2 py-1 text-[11px] text-[var(--ui-text-muted)]"
-    >
-      <svg
-        class="h-3 w-3"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-        stroke-width="2"
+    {#if listSurface === "topics"}
+      <label
+        class="inline-flex cursor-pointer items-center gap-1.5 text-[12px] text-[var(--ui-text-muted)]"
       >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+        <input
+          bind:checked={showArchived}
+          class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--ui-border)] bg-[var(--ui-bg)] text-[var(--ui-accent-strong)] focus:ring-2 focus:ring-[var(--ui-accent)] focus:ring-offset-0"
+          type="checkbox"
         />
-      </svg>
-      <kbd class="font-mono text-[10px]">⌘K</kbd>
-    </span>
-    <button
-      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)]"
-      onclick={() => (filtersOpen = !filtersOpen)}
-      type="button"
-    >
-      <svg
-        class="h-3.5 w-3.5"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-        stroke-width="2"
+        Show archived
+      </label>
+      <span
+        class="inline-flex items-center gap-1 rounded border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2 py-1 text-[11px] text-[var(--ui-text-muted)]"
       >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
-        />
-      </svg>
-      Filters
-    </button>
-    <button
-      class="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text)] transition-colors hover:bg-[var(--ui-border)]"
-      onclick={() => (createOpen = !createOpen)}
-      type="button"
-    >
-      {#if !createOpen}
+        <svg
+          class="h-3 w-3"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+          />
+        </svg>
+        <kbd class="font-mono text-[10px]">⌘K</kbd>
+      </span>
+      <button
+        class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)]"
+        onclick={() => (filtersOpen = !filtersOpen)}
+        type="button"
+      >
         <svg
           class="h-3.5 w-3.5"
           fill="none"
@@ -403,19 +471,66 @@
           <path
             stroke-linecap="round"
             stroke-linejoin="round"
-            d="M12 4v16m8-8H4"
+            d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
           />
         </svg>
-      {/if}
-      {createOpen ? "Cancel" : "New thread"}
-    </button>
+        Filters
+      </button>
+      <button
+        class="cursor-pointer inline-flex items-center gap-1.5 rounded-md bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text)] transition-colors hover:bg-[var(--ui-border)]"
+        onclick={() => (createOpen = !createOpen)}
+        type="button"
+      >
+        {#if !createOpen}
+          <svg
+            class="h-3.5 w-3.5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M12 4v16m8-8H4"
+            />
+          </svg>
+        {/if}
+        {createOpen ? "Cancel" : "New topic"}
+      </button>
+    {:else}
+      <button
+        class="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)]"
+        onclick={() => (filtersOpen = !filtersOpen)}
+        type="button"
+      >
+        <svg
+          class="h-3.5 w-3.5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+          />
+        </svg>
+        Filters
+      </button>
+      <a
+        class="rounded-md bg-[var(--ui-panel)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text)] transition-colors hover:bg-[var(--ui-border)]"
+        href={workspaceHref("/topics")}>Open topics</a
+      >
+    {/if}
   </div>
 </div>
 
-{#if hasActiveFilters}
+{#if (listSurface === "topics" || listSurface === "threads") && hasActiveFilters}
   <div
     class="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-[var(--ui-text-muted)]"
-    data-testid="threads-active-filters-summary"
+    data-testid="topics-active-filters-summary"
   >
     <span class="font-medium text-[var(--ui-text)]">Active filters</span>
     <span class="text-[var(--ui-text-subtle)]">·</span>
@@ -437,7 +552,7 @@
   </div>
 {/if}
 
-{#if filtersOpen}
+{#if (listSurface === "topics" || listSurface === "threads") && filtersOpen}
   <div
     class="mb-4 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-3"
   >
@@ -451,7 +566,7 @@
         >
           <option value="">All</option>
           <option value={STATUS_OPEN_NOT_CLOSED}>Open (not closed)</option>
-          {#each THREAD_STATUSES as status}<option value={status}
+          {#each TOPIC_STATUSES as status}<option value={status}
               >{status[0].toUpperCase() + status.slice(1)}</option
             >{/each}
         </select>
@@ -466,8 +581,8 @@
         >
           <option value="">All</option>
           <option value={PRIORITY_HIGH_TIER}>High (P0 &amp; P1)</option>
-          {#each THREAD_PRIORITIES as priority}<option value={priority}
-              >{THREAD_PRIORITY_LABELS[priority]}</option
+          {#each TOPIC_PRIORITIES as priority}<option value={priority}
+              >{TOPIC_PRIORITY_LABELS[priority]}</option
             >{/each}
         </select>
       </label>
@@ -478,8 +593,8 @@
           class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-1.5 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
         >
           <option value="">All</option>
-          {#each THREAD_SCHEDULE_PRESETS as cadence}<option value={cadence}
-              >{THREAD_SCHEDULE_PRESET_LABELS[cadence]}</option
+          {#each TOPIC_SCHEDULE_PRESETS as cadence}<option value={cadence}
+              >{TOPIC_SCHEDULE_PRESET_LABELS[cadence]}</option
             >{/each}
         </select>
       </label>
@@ -519,12 +634,12 @@
   </div>
 {/if}
 
-{#if createOpen}
+{#if listSurface === "topics" && createOpen}
   <form
     class="mb-4 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-4"
     onsubmit={(event) => {
       event.preventDefault();
-      createThread();
+      createTopic();
     }}
   >
     {#if createError}
@@ -538,9 +653,9 @@
       <label class="text-[12px] sm:col-span-2">
         <span class="font-medium text-[var(--ui-text-muted)]">Title</span>
         <input
-          bind:value={threadDraft.title}
+          bind:value={topicDraft.title}
           class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
-          placeholder="Thread title..."
+          placeholder="Topic title..."
           required
           type="text"
         />
@@ -548,10 +663,10 @@
       <label class="text-[12px]">
         <span class="font-medium text-[var(--ui-text-muted)]">Status</span>
         <select
-          bind:value={threadDraft.status}
+          bind:value={topicDraft.status}
           class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-2 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
         >
-          {#each THREAD_STATUSES as status}<option value={status}
+          {#each TOPIC_STATUSES as status}<option value={status}
               >{status[0].toUpperCase() + status.slice(1)}</option
             >{/each}
         </select>
@@ -559,39 +674,39 @@
       <label class="text-[12px]">
         <span class="font-medium text-[var(--ui-text-muted)]">Priority</span>
         <select
-          bind:value={threadDraft.priority}
+          bind:value={topicDraft.priority}
           class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-2 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
         >
-          {#each THREAD_PRIORITIES as priority}<option value={priority}
-              >{THREAD_PRIORITY_LABELS[priority]}</option
+          {#each TOPIC_PRIORITIES as priority}<option value={priority}
+              >{TOPIC_PRIORITY_LABELS[priority]}</option
             >{/each}
         </select>
       </label>
       <label class="text-[12px]">
         <span class="font-medium text-[var(--ui-text-muted)]">Schedule</span>
         <select
-          bind:value={threadDraft.cadencePreset}
+          bind:value={topicDraft.cadencePreset}
           class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2.5 py-2 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
         >
-          {#each THREAD_SCHEDULE_PRESETS as cadence}<option value={cadence}
-              >{THREAD_SCHEDULE_PRESET_LABELS[cadence]}</option
+          {#each TOPIC_SCHEDULE_PRESETS as cadence}<option value={cadence}
+              >{TOPIC_SCHEDULE_PRESET_LABELS[cadence]}</option
             >{/each}
         </select>
       </label>
-      {#if threadDraft.cadencePreset === "custom"}
+      {#if topicDraft.cadencePreset === "custom"}
         <label class="text-[12px]">
           <span class="font-medium text-[var(--ui-text-muted)]"
             >Cron expression</span
           >
           <input
-            bind:value={threadDraft.cadenceCron}
+            bind:value={topicDraft.cadenceCron}
             class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
             placeholder="0 9 * * *"
             type="text"
           />
-          {#if describeCron(threadDraft.cadenceCron)}
+          {#if describeCron(topicDraft.cadenceCron)}
             <span class="mt-1 block text-[11px] text-[var(--ui-text-muted)]">
-              {describeCron(threadDraft.cadenceCron)}
+              {describeCron(topicDraft.cadenceCron)}
             </span>
           {/if}
         </label>
@@ -599,7 +714,7 @@
       <label class="text-[12px]">
         <span class="font-medium text-[var(--ui-text-muted)]">Tags</span>
         <input
-          bind:value={threadDraft.tagsInput}
+          bind:value={topicDraft.tagsInput}
           class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
           placeholder="ops, customer"
           type="text"
@@ -608,7 +723,7 @@
       <label class="text-[12px] sm:col-span-2">
         <span class="font-medium text-[var(--ui-text-muted)]">Summary</span>
         <textarea
-          bind:value={threadDraft.summary}
+          bind:value={topicDraft.summary}
           class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-[13px] transition-colors focus:bg-[var(--ui-panel)]"
           placeholder="Brief description..."
           rows="2"
@@ -617,17 +732,190 @@
     </div>
     <div class="mt-3 flex justify-end">
       <button
-        class="cursor-pointer rounded-md bg-[var(--ui-panel)] px-4 py-2 text-[12px] font-medium text-[var(--ui-text)] hover:bg-[var(--ui-border)] disabled:opacity-50"
-        disabled={creatingThread}
+        class="cursor-pointer rounded-md bg-indigo-600 px-4 py-2 text-[12px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+        disabled={creatingTopic}
         type="submit"
       >
-        {creatingThread ? "Creating..." : "Create thread"}
+        {creatingTopic ? "Creating..." : "Create topic"}
       </button>
     </div>
   </form>
 {/if}
 
-{#if loading}
+{#if listSurface === "topics"}
+  {#if loading}
+    <div
+      class="mt-12 flex items-center justify-center gap-2 text-[13px] text-[var(--ui-text-muted)]"
+    >
+      <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+        <circle
+          class="opacity-25"
+          cx="12"
+          cy="12"
+          r="10"
+          stroke="currentColor"
+          stroke-width="4"
+        ></circle>
+        <path
+          class="opacity-75"
+          fill="currentColor"
+          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+        ></path>
+      </svg>
+      Loading topics...
+    </div>
+  {:else if topics.length === 0}
+    <div class="mt-8 text-center">
+      <p class="text-[13px] text-[var(--ui-text-muted)]">
+        No topics match the current filters.
+      </p>
+      {#if hasActiveFilters}
+        <button
+          class="mt-3 cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--ui-text-muted)] hover:bg-[var(--ui-border-subtle)]"
+          onclick={resetFilters}
+          type="button"
+        >
+          Clear filters
+        </button>
+      {/if}
+    </div>
+  {:else}
+    <div
+      class="space-y-px overflow-hidden rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)]"
+    >
+      {#each topics as topic, i}
+        {@const staleness = computeStaleness(topic)}
+        <div
+          class="flex items-stretch {i > 0
+            ? 'border-t border-[var(--ui-border)]'
+            : ''}"
+        >
+          <a
+            class="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--ui-border-subtle)]"
+            href={workspaceHref(`/topics/${encodeURIComponent(topic.id)}`)}
+          >
+            <span
+              class="flex h-2 w-2 shrink-0 rounded-full {priorityDot(
+                topic.priority,
+              )}"
+              title={getPriorityLabel(topic.priority)}
+            ></span>
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-center gap-2">
+                <p
+                  class="truncate text-[13px] font-medium text-[var(--ui-text)]"
+                >
+                  {topic.title}
+                </p>
+                {#if isTopicArchived(topic)}
+                  <span
+                    class="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-medium text-amber-400"
+                    >Archived</span
+                  >
+                {/if}
+              </div>
+              <p class="truncate text-[12px] text-[var(--ui-text-muted)]">
+                {topic.current_summary ?? topic.summary ?? ""}
+              </p>
+            </div>
+            <div class="flex shrink-0 items-center gap-1.5 text-[11px]">
+              <span class="font-medium capitalize {statusColor(topic.status)}"
+                >{topic.status}</span
+              >
+              <span
+                class="hidden rounded border border-[var(--ui-border)] px-1.5 py-0.5 text-[10px] text-[var(--ui-text-muted)] sm:inline"
+                >{formatCadenceLabel(topic.cadence, {
+                  includeExpression: false,
+                })}</span
+              >
+              {#if (topic.tags ?? []).length > 0}
+                <span
+                  class="hidden rounded bg-[var(--ui-panel)] px-1.5 py-0.5 text-[var(--ui-text-muted)] sm:inline"
+                  >{topic.tags[0]}{topic.tags.length > 1
+                    ? ` +${topic.tags.length - 1}`
+                    : ""}</span
+                >
+              {/if}
+              {#if staleness.stale}
+                <span
+                  class="rounded bg-red-500/10 px-1.5 py-0.5 font-medium text-red-400"
+                  >Stale</span
+                >
+              {/if}
+              <span class="w-14 text-right text-[var(--ui-text-muted)]"
+                >{formatTimestamp(topic.updated_at) || "—"}</span
+              >
+            </div>
+          </a>
+          <div
+            class="flex shrink-0 items-center gap-1 border-l border-[var(--ui-border)] px-2"
+          >
+            {#if isTopicArchived(topic)}
+              <button
+                class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2 py-1 text-[11px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={Boolean(archiveBusyId) || Boolean(trashBusyId)}
+                onclick={() => void unarchiveTopicRow(topic.id)}
+                type="button"
+              >
+                Unarchive
+              </button>
+            {:else}
+              <button
+                class="cursor-pointer rounded-md p-1 text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border)] hover:text-[var(--ui-accent)] disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={Boolean(archiveBusyId) || Boolean(trashBusyId)}
+                onclick={() =>
+                  void (confirmModal = {
+                    open: true,
+                    action: "archive",
+                    entityId: topic.id,
+                  })}
+                title="Archive"
+                type="button"
+              >
+                <svg
+                  class="h-3.5 w-3.5"
+                  fill="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m8.25 3v6.75m0 0l-3-3m3 3l3-3M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"
+                  />
+                </svg>
+              </button>
+            {/if}
+            <button
+              class="cursor-pointer rounded-md p-1 text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border)] hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={Boolean(trashBusyId) || Boolean(archiveBusyId)}
+              onclick={() =>
+                (confirmModal = {
+                  open: true,
+                  action: "trash",
+                  entityId: topic.id,
+                })}
+              title="Move to trash"
+              type="button"
+            >
+              <svg
+                class="h-3.5 w-3.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
+                />
+              </svg>
+            </button>
+          </div>
+        </div>
+      {/each}
+    </div>
+  {/if}
+{:else if loading}
   <div
     class="mt-12 flex items-center justify-center gap-2 text-[13px] text-[var(--ui-text-muted)]"
   >
@@ -648,7 +936,11 @@
     </svg>
     Loading threads...
   </div>
-{:else if threads.length === 0}
+{:else if backingThreads.length === 0}
+  <div class="mt-8 text-center">
+    <p class="text-[13px] text-[var(--ui-text-muted)]">No threads returned.</p>
+  </div>
+{:else if filteredBackingThreads.length === 0}
   <div class="mt-8 text-center">
     <p class="text-[13px] text-[var(--ui-text-muted)]">
       No threads match the current filters.
@@ -665,149 +957,76 @@
   </div>
 {:else}
   <div
-    class="space-y-px rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] overflow-hidden"
+    class="space-y-px overflow-hidden rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)]"
   >
-    {#each threads as thread, i}
-      {@const staleness = computeStaleness(thread)}
+    {#each filteredBackingThreads as thread, i}
+      {@const topicSeg = topicSegmentFromTypedRef(thread.topic_ref)}
       <div
         class="flex items-stretch {i > 0
           ? 'border-t border-[var(--ui-border)]'
           : ''}"
       >
         <a
-          class="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--ui-border-subtle)]"
-          href={workspaceHref(`/threads/${thread.id}`)}
+          class="flex min-w-0 flex-1 flex-col gap-0.5 px-3 py-2.5 transition-colors hover:bg-[var(--ui-border-subtle)]"
+          href={workspaceHref(`/threads/${encodeURIComponent(thread.id)}`)}
         >
-          <span
-            class="flex h-2 w-2 shrink-0 rounded-full {priorityDot(
-              thread.priority,
-            )}"
-            title={getPriorityLabel(thread.priority)}
-          ></span>
-          <div class="min-w-0 flex-1">
-            <div class="flex flex-wrap items-center gap-2">
-              <p class="truncate text-[13px] font-medium text-[var(--ui-text)]">
-                {thread.title}
-              </p>
-              {#if isThreadArchived(thread)}
-                <span
-                  class="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-medium text-amber-400"
-                  >Archived</span
-                >
-              {/if}
-            </div>
-            <p class="truncate text-[12px] text-[var(--ui-text-muted)]">
-              {thread.current_summary}
+          <div class="flex flex-wrap items-center gap-2">
+            <p class="truncate text-[13px] font-medium text-[var(--ui-text)]">
+              {thread.title || thread.id}
             </p>
-          </div>
-          <div class="flex shrink-0 items-center gap-1.5 text-[11px]">
-            <span class="font-medium capitalize {statusColor(thread.status)}"
-              >{thread.status}</span
-            >
-            <span class="hidden text-[var(--ui-text-muted)] sm:inline"
-              >{formatCadenceLabel(thread.cadence, {
-                includeExpression: false,
-              })}</span
-            >
-            {#if (thread.tags ?? []).length > 0}
+            {#if thread.status === "archived"}
               <span
-                class="hidden rounded bg-[var(--ui-panel)] px-1.5 py-0.5 text-[var(--ui-text-muted)] sm:inline"
-                >{thread.tags[0]}{thread.tags.length > 1
-                  ? ` +${thread.tags.length - 1}`
-                  : ""}</span
+                class="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-medium text-amber-400"
+                >Archived</span
               >
             {/if}
-            {#if staleness.stale}
-              <span
-                class="rounded bg-red-500/10 px-1.5 py-0.5 font-medium text-red-400"
-                >Stale</span
-              >
-            {/if}
-            <span class="w-14 text-right text-[var(--ui-text-subtle)]"
-              >{formatTimestamp(thread.updated_at) || "—"}</span
-            >
           </div>
-        </a>
-        <div
-          class="flex shrink-0 items-center gap-1 border-l border-[var(--ui-border)] px-2"
-        >
-          {#if isThreadArchived(thread)}
-            <button
-              class="cursor-pointer rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-2 py-1 text-[11px] font-medium text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border-subtle)] disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={Boolean(archiveBusyId) || Boolean(trashBusyId)}
-              onclick={() => void unarchiveThread(thread.id)}
-              type="button"
-            >
-              Unarchive
-            </button>
+          <p class="truncate font-mono text-[11px] text-[var(--ui-text-muted)]">
+            {thread.id}
+          </p>
+          {#if topicSeg}
+            <p class="truncate text-[11px] text-[var(--ui-text-muted)]">
+              Linked topic:
+              <span class="text-[var(--ui-text)]">{topicSeg}</span>
+            </p>
           {:else}
-            <button
-              class="cursor-pointer rounded-md p-1 text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border)] hover:text-[var(--ui-accent)] disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={Boolean(archiveBusyId) || Boolean(trashBusyId)}
-              onclick={() =>
-                void (confirmModal = {
-                  open: true,
-                  action: "archive",
-                  entityId: thread.id,
-                })}
-              title="Archive"
-              type="button"
-            >
-              <svg
-                class="h-3.5 w-3.5"
-                fill="currentColor"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-              >
-                <path
-                  d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m8.25 3v6.75m0 0l-3-3m3 3l3-3M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"
-                />
-              </svg>
-            </button>
+            <p class="truncate text-[11px] text-[var(--ui-text-muted)]">
+              No topic ref (non-topic or internal timeline)
+            </p>
           {/if}
-          <button
-            class="cursor-pointer rounded-md p-1 text-[var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-border)] hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={Boolean(trashBusyId) || Boolean(archiveBusyId)}
-            onclick={() =>
-              (confirmModal = {
-                open: true,
-                action: "trash",
-                entityId: thread.id,
-              })}
-            title="Move to trash"
-            type="button"
+          <p class="text-[11px] text-[var(--ui-text-muted)]">
+            Updated {formatTimestamp(thread.updated_at) || "—"}
+          </p>
+        </a>
+        {#if topicSeg}
+          <div
+            class="flex shrink-0 items-center border-l border-[var(--ui-border)] px-2"
           >
-            <svg
-              class="h-3.5 w-3.5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              stroke-width="2"
+            <a
+              class="text-[11px] font-medium text-indigo-400 transition-colors hover:text-indigo-300"
+              href={workspaceHref(`/topics/${encodeURIComponent(topicSeg)}`)}
+              >Topic</a
             >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
-              />
-            </svg>
-          </button>
-        </div>
+          </div>
+        {/if}
       </div>
     {/each}
   </div>
 {/if}
 
-<ConfirmModal
-  open={confirmModal.open}
-  title={confirmModal.action === "trash" ? "Move to trash" : "Archive thread"}
-  message={confirmModal.action === "trash"
-    ? "This thread will be tombstoned. You can restore it from trash later."
-    : "This thread will be hidden from default views. You can unarchive it later."}
-  confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
-  variant={confirmModal.action === "trash" ? "danger" : "warning"}
-  busy={confirmModal.action === "trash"
-    ? Boolean(trashBusyId)
-    : Boolean(archiveBusyId)}
-  onconfirm={handleConfirm}
-  oncancel={() => (confirmModal = { open: false, action: "", entityId: "" })}
-/>
+{#if listSurface === "topics"}
+  <ConfirmModal
+    open={confirmModal.open}
+    title={confirmModal.action === "trash" ? "Move to trash" : "Archive topic"}
+    message={confirmModal.action === "trash"
+      ? "This topic will be moved to trash. You can restore it later."
+      : "This topic will be hidden from default views. You can unarchive it later."}
+    confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
+    variant={confirmModal.action === "trash" ? "danger" : "warning"}
+    busy={confirmModal.action === "trash"
+      ? Boolean(trashBusyId)
+      : Boolean(archiveBusyId)}
+    onconfirm={handleConfirm}
+    oncancel={() => (confirmModal = { open: false, action: "", entityId: "" })}
+  />
+{/if}

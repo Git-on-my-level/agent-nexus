@@ -29,19 +29,14 @@ func TestApplyCommandShapeCompatibilityAliasExactMatches(t *testing.T) {
 			want: []string{"reviews", "create", "--from-file", "payload.json"},
 		},
 		{
-			name: "packets work-orders create",
-			args: []string{"packets", "work-orders", "create", "--from-file", "payload.json"},
-			want: []string{"work-orders", "create", "--from-file", "payload.json"},
-		},
-		{
 			name: "artifacts content get",
 			args: []string{"artifacts", "content", "get", "--artifact-id", "artifact_123"},
 			want: []string{"artifacts", "content", "--artifact-id", "artifact_123"},
 		},
 		{
-			name: "threads update",
-			args: []string{"threads", "update", "--thread-id", "thread_123"},
-			want: []string{"threads", "patch", "--thread-id", "thread_123"},
+			name: "topics update",
+			args: []string{"topics", "update", "--topic-id", "topic_123"},
+			want: []string{"topics", "patch", "--topic-id", "topic_123"},
 		},
 	}
 
@@ -76,7 +71,7 @@ func TestCommandShapeCompatibilityAliasesResolveToCanonicalHandlers(t *testing.T
 			args:        []string{"packets", "receipts", "create"},
 			stdin:       `{"receipt":{"thread_id":"thread_1"}}`,
 			wantMethod:  http.MethodPost,
-			wantPath:    "/receipts",
+			wantPath:    "/packets/receipts",
 			wantCommand: "receipts create",
 		},
 		{
@@ -84,16 +79,8 @@ func TestCommandShapeCompatibilityAliasesResolveToCanonicalHandlers(t *testing.T
 			args:        []string{"packets", "reviews", "create"},
 			stdin:       `{"review":{"thread_id":"thread_1"}}`,
 			wantMethod:  http.MethodPost,
-			wantPath:    "/reviews",
+			wantPath:    "/packets/reviews",
 			wantCommand: "reviews create",
-		},
-		{
-			name:        "packets work-orders create",
-			args:        []string{"packets", "work-orders", "create"},
-			stdin:       `{"work_order":{"thread_id":"thread_1"}}`,
-			wantMethod:  http.MethodPost,
-			wantPath:    "/work_orders",
-			wantCommand: "work-orders create",
 		},
 		{
 			name:        "artifacts content get",
@@ -110,12 +97,12 @@ func TestCommandShapeCompatibilityAliasesResolveToCanonicalHandlers(t *testing.T
 			wantCommand: "artifacts content",
 		},
 		{
-			name:        "threads update",
-			args:        []string{"threads", "update", "--thread-id", "thread_1"},
+			name:        "topics update",
+			args:        []string{"topics", "update", "--topic-id", "topic_1"},
 			stdin:       `{"patch":{"status":"resolved"}}`,
 			wantMethod:  http.MethodPatch,
-			wantPath:    "/threads/thread_1",
-			wantCommand: "threads patch",
+			wantPath:    "/topics/topic_1",
+			wantCommand: "topics patch",
 		},
 	}
 

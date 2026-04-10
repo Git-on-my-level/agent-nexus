@@ -25,7 +25,7 @@ SaaS v-next is not:
 
 - shared row-level multitenancy inside `core`
 - a design where the control plane becomes the system of record for workspace
-  threads, commitments, documents, boards, or artifacts
+  topics, cards, documents, boards, artifacts, or backing threads
 - a design where agents authenticate once globally and then roam across
   workspaces
 
@@ -52,8 +52,8 @@ not the right place for workspace-local durable truth.
 
 Each workspace keeps the existing OAR isolation boundary:
 
-- one workspace core remains the system of record for its own threads,
-  commitments, documents, boards, events, artifacts, and projections
+- one workspace core remains the system of record for its own topics, cards,
+  documents, boards, events, artifacts, backing threads, and projections
 - workspace storage remains isolated per workspace
 - workspace-local auth continues to gate canonical and projection APIs inside
   that workspace

@@ -7,6 +7,19 @@ const authSessionState = {
 
 const envState = vi.hoisted(() => ({}));
 
+const coreRouteCatalogMocks = vi.hoisted(() => ({
+  isProxyableCommand: vi.fn(() => true),
+}));
+
+const proxyWorkspaceTargetMocks = vi.hoisted(() => ({
+  resolveProxyTarget: vi.fn(() =>
+    Promise.resolve({
+      coreBaseUrl: "https://core.example.test",
+      workspace: { slug: "ops" },
+    }),
+  ),
+}));
+
 const authSessionMocks = vi.hoisted(() => ({
   clearWorkspaceAuthSession: vi.fn(),
   getWorkspaceAuthSession: vi.fn(() => authSessionState.currentSession),
@@ -31,7 +44,7 @@ vi.mock("$env/dynamic/private", () => ({
 }));
 
 vi.mock("$lib/coreRouteCatalog", () => ({
-  isProxyableCommand: vi.fn(() => true),
+  isProxyableCommand: coreRouteCatalogMocks.isProxyableCommand,
 }));
 
 vi.mock("$lib/compat/workspaceCompat", () => ({
@@ -58,10 +71,7 @@ vi.mock("$lib/server/workspaceCatalog", () => ({
 }));
 
 vi.mock("$lib/server/proxyWorkspaceTarget", () => ({
-  resolveProxyTarget: vi.fn(() => ({
-    coreBaseUrl: "https://core.example.test",
-    workspace: { slug: "ops" },
-  })),
+  resolveProxyTarget: proxyWorkspaceTargetMocks.resolveProxyTarget,
 }));
 
 import { handle } from "../../src/hooks.server.js";
@@ -83,6 +93,13 @@ describe("hooks proxy retry", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     authSessionState.currentSession = { accessToken: "expired-token" };
+    proxyWorkspaceTargetMocks.resolveProxyTarget.mockImplementation(() =>
+      Promise.resolve({
+        coreBaseUrl: "https://core.example.test",
+        workspace: { slug: "ops" },
+      }),
+    );
+    coreRouteCatalogMocks.isProxyableCommand.mockReturnValue(true);
     authSessionMocks.isRetryableWorkspaceRefreshFailure.mockImplementation(
       (error, options) =>
         error?.status === 401 &&
@@ -322,6 +339,75 @@ describe("hooks proxy retry", () => {
     );
   });
 
+  it("returns 503 when proxyable but workspace has no coreBaseUrl", async () => {
+    proxyWorkspaceTargetMocks.resolveProxyTarget.mockResolvedValueOnce({
+      workspace: { slug: "ops" },
+      coreBaseUrl: "",
+    });
+
+    const response = await handle({
+      event: {
+        url: new URL("https://oar.example.test/threads"),
+        request: new Request("https://oar.example.test/threads", {
+          method: "GET",
+          headers: {
+            accept: "application/json",
+          },
+        }),
+      },
+      resolve: vi.fn(),
+    });
+
+    expect(response.status).toBe(503);
+    const payload = JSON.parse(await response.text());
+    expect(payload.error.code).toBe("core_not_configured");
+    expect(payload.error.message).toMatch(/coreBaseUrl/);
+  });
+
+  it("proxies GET /events/stream to core (SSE)", async () => {
+    const sseBody = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(": ok\n\n"));
+        controller.close();
+      },
+    });
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(sseBody, {
+        status: 200,
+        headers: {
+          "content-type": "text/event-stream",
+        },
+      }),
+    );
+    globalThis.fetch = fetchMock;
+
+    const response = await handle({
+      event: {
+        url: new URL(
+          "https://oar.example.test/events/stream?thread_id=thread-1",
+        ),
+        request: new Request(
+          "https://oar.example.test/events/stream?thread_id=thread-1",
+          {
+            method: "GET",
+            headers: {
+              accept: "text/event-stream",
+            },
+          },
+        ),
+      },
+      resolve: vi.fn(),
+    });
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://core.example.test/events/stream?thread_id=thread-1",
+      expect.objectContaining({
+        method: "GET",
+      }),
+    );
+  });
+
   it("adds configured CSP sources to document navigation responses", async () => {
     envState.OAR_UI_CSP_SCRIPT_SRC_EXTRA =
       "https://static.cloudflareinsights.com 'sha256-examplehash='";
@@ -354,7 +440,9 @@ describe("hooks proxy retry", () => {
     expect(csp).toContain(
       "script-src 'self' https://static.cloudflareinsights.com 'sha256-examplehash='",
     );
-    expect(csp).toContain("connect-src 'self' https://cloudflareinsights.com");
+    expect(csp).toContain(
+      "connect-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com https://cloudflareinsights.com",
+    );
     expect(csp).toContain(
       "manifest-src 'self' https://scalingforever.cloudflareaccess.com",
     );

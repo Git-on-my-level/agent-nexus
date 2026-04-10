@@ -1,8 +1,9 @@
 export const KNOWN_REF_PREFIXES = new Set([
   "artifact",
-  "snapshot",
+  "card",
   "event",
   "thread",
+  "topic",
   "url",
   "inbox",
   "document",

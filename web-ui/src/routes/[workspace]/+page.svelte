@@ -6,15 +6,21 @@
   import { filterTopLevelDocuments } from "$lib/documentVisibility";
   import {
     buildInboxCategorySummary,
-    buildThreadHealthSummary,
+    buildTopicHealthSummary,
     inboxSummarySentence,
-    selectRecentlyUpdatedThreads,
-    threadHealthSentence,
+    selectRecentlyUpdatedTopics,
+    topicHealthSentence,
   } from "$lib/dashboardSummary";
   import { formatTimestamp } from "$lib/formatDate";
-  import { getInboxCategoryLabel, sortInboxItems } from "$lib/inboxUtils";
+  import {
+    getInboxCategoryLabel,
+    getInboxSubjectLabel,
+    getInboxSubjectRef,
+    splitTypedRef,
+    sortInboxItems,
+  } from "$lib/inboxUtils";
   import { workspacePath } from "$lib/workspacePaths";
-  import { getPriorityLabel } from "$lib/threadFilters";
+  import { getPriorityLabel } from "$lib/topicFilters";
   import { BOARD_STATUS_LABELS } from "$lib/boardUtils";
 
   const emptySectionState = {
@@ -28,7 +34,7 @@
   let loading = $state(true);
   let refreshedAt = $state("");
   let inboxState = $state({ ...emptySectionState });
-  let threadsState = $state({ ...emptySectionState });
+  let topicsState = $state({ ...emptySectionState });
   let boardsState = $state({ ...emptySectionState });
   let docsState = $state({ ...emptySectionState });
   let workspaceSlug = $derived($page.params.workspace);
@@ -36,9 +42,9 @@
   let inboxSummary = $derived(buildInboxCategorySummary(inboxState.items));
   let topInboxItems = $derived(sortInboxItems(inboxState.items).slice(0, 5));
 
-  let threadHealth = $derived(buildThreadHealthSummary(threadsState.items));
-  let recentThreads = $derived(
-    selectRecentlyUpdatedThreads(threadsState.items, 5),
+  let topicHealth = $derived(buildTopicHealthSummary(topicsState.items));
+  let recentTopics = $derived(
+    selectRecentlyUpdatedTopics(topicsState.items, 5),
   );
 
   let recentBoards = $derived(
@@ -79,23 +85,27 @@
     const [inboxResult, threadResult, boardsResult, docsResult] =
       await Promise.allSettled([
         coreClient.listInboxItems({ view: "items" }),
-        coreClient.listThreads({}),
+        coreClient.listTopics({}),
         coreClient.listBoards({}),
         coreClient.listDocuments({}),
       ]);
 
     inboxState = toSectionState(inboxResult, "items", "Failed to load inbox");
-    threadsState = toSectionState(
+    topicsState = toSectionState(
       threadResult,
-      "threads",
-      "Failed to load threads",
+      "topics",
+      "Failed to load topics",
     );
     boardsState = toSectionState(
       boardsResult,
       "boards",
       "Failed to load boards",
     );
-    docsState = toSectionState(docsResult, "documents", "Failed to load docs");
+    docsState = toSectionState(
+      docsResult,
+      "documents",
+      "Failed to load documents",
+    );
 
     refreshedAt = new Date().toISOString();
     loading = false;
@@ -127,8 +137,29 @@
   }
 
   function inboxItemTarget(item) {
-    if (item?.thread_id) {
-      return workspacePath(workspaceSlug, `/threads/${item.thread_id}`);
+    const subjectRef = getInboxSubjectRef(item);
+    const { prefix, id } = splitTypedRef(subjectRef);
+
+    if (prefix === "topic") {
+      return workspacePath(workspaceSlug, `/topics/${id}`);
+    }
+    if (prefix === "thread") {
+      return workspacePath(workspaceSlug, `/threads/${id}`);
+    }
+    if (prefix === "board") {
+      return workspacePath(workspaceSlug, `/boards/${id}`);
+    }
+    if (prefix === "document") {
+      return workspacePath(workspaceSlug, `/docs/${id}`);
+    }
+    if (prefix === "card") {
+      const boardRef = (item?.related_refs ?? []).find(
+        (ref) => splitTypedRef(ref).prefix === "board",
+      );
+      const { id: boardId } = splitTypedRef(boardRef);
+      if (!boardId) return workspacePath(workspaceSlug, "/inbox");
+      const base = workspacePath(workspaceSlug, `/boards/${boardId}`);
+      return id ? `${base}?card=${encodeURIComponent(id)}` : base;
     }
     return workspacePath(workspaceSlug, "/inbox");
   }
@@ -147,10 +178,10 @@
     return qs ? `${base}?${qs}` : base;
   }
 
-  function threadsQueryHref(queryPairs) {
+  function topicsQueryHref(queryPairs) {
     const params = new URLSearchParams(queryPairs);
     const qs = params.toString();
-    const base = workspaceHref("/threads");
+    const base = workspaceHref("/topics");
     return qs ? `${base}?${qs}` : base;
   }
 
@@ -159,14 +190,14 @@
       p0: "text-red-400",
       p1: "text-amber-400",
       p2: "text-blue-400",
-      p3: "text-gray-400",
+      p3: "text-gray-500",
     };
-    return styles[priority] ?? "text-gray-400";
+    return styles[priority] ?? "text-gray-500";
   }
 
   function boardStatusColor(status) {
     if (status === "active") return "text-emerald-400 bg-emerald-500/10";
-    if (status === "paused") return "text-amber-300 bg-amber-500/10";
+    if (status === "paused") return "text-amber-400 bg-amber-500/10";
     if (status === "closed") return "text-slate-300 bg-slate-500/10";
     return "text-[var(--ui-text-muted)] bg-[var(--ui-border)]";
   }
@@ -174,6 +205,39 @@
   function docStatusColor(status) {
     if (status === "active") return "text-emerald-400 bg-emerald-500/10";
     if (status === "draft") return "text-amber-400 bg-amber-500/10";
+    return "text-[var(--ui-text-muted)] bg-[var(--ui-border)]";
+  }
+
+  function inboxCategoryCountColor(category, count) {
+    if (count === 0) return "text-[var(--ui-text)]";
+    if (category === "intervention_needed") return "text-red-400";
+    if (category === "decision_needed") return "text-indigo-400";
+    if (category === "exception") return "text-red-400";
+    if (category === "work_item_risk") return "text-amber-400";
+    if (category === "stale_topic") return "text-orange-400";
+    if (category === "document_attention") return "text-sky-400";
+    return "text-[var(--ui-text)]";
+  }
+
+  function inboxCategoryLabelColor(category, count) {
+    if (count === 0) return "text-[var(--ui-text-muted)]";
+    if (category === "intervention_needed") return "text-red-400";
+    if (category === "decision_needed") return "text-indigo-400";
+    if (category === "exception") return "text-red-400";
+    if (category === "work_item_risk") return "text-amber-400";
+    if (category === "stale_topic") return "text-orange-400";
+    if (category === "document_attention") return "text-sky-400";
+    return "text-[var(--ui-text-muted)]";
+  }
+
+  function inboxCategoryBadgeClass(category) {
+    if (category === "intervention_needed") return "text-red-400 bg-red-500/10";
+    if (category === "decision_needed")
+      return "text-indigo-400 bg-indigo-500/10";
+    if (category === "exception") return "text-red-400 bg-red-500/10";
+    if (category === "work_item_risk") return "text-amber-400 bg-amber-500/10";
+    if (category === "stale_topic") return "text-orange-400 bg-orange-500/10";
+    if (category === "document_attention") return "text-sky-400 bg-sky-500/10";
     return "text-[var(--ui-text-muted)] bg-[var(--ui-border)]";
   }
 </script>
@@ -258,10 +322,20 @@
               class="flex-1 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-center transition-colors hover:bg-[var(--ui-border-subtle)]"
               href={inboxCategoryHref(summary.category)}
             >
-              <p class="text-[11px] font-medium text-[var(--ui-text-muted)]">
+              <p
+                class="text-[11px] font-medium {inboxCategoryLabelColor(
+                  summary.category,
+                  summary.count,
+                )}"
+              >
                 {summary.label}
               </p>
-              <p class="text-lg font-semibold text-[var(--ui-text)]">
+              <p
+                class="text-lg font-semibold {inboxCategoryCountColor(
+                  summary.category,
+                  summary.count,
+                )}"
+              >
                 {summary.count}
               </p>
             </a>
@@ -285,10 +359,19 @@
                 >
                   {item.title}
                 </p>
-                <p class="text-[11px] text-[var(--ui-text-muted)]">
-                  {getInboxCategoryLabel(item.category)}
-                </p>
+                {#if getInboxSubjectLabel(item)}
+                  <p class="text-[11px] text-[var(--ui-text-muted)]">
+                    {getInboxSubjectLabel(item)}
+                  </p>
+                {/if}
               </div>
+              <span
+                class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium {inboxCategoryBadgeClass(
+                  item.category,
+                )}"
+              >
+                {getInboxCategoryLabel(item.category)}
+              </span>
             </a>
           {/each}
         </div>
@@ -298,20 +381,20 @@
     <section>
       <div class="flex items-center justify-between gap-2 mb-2">
         <h2 class="text-[13px] font-semibold text-[var(--ui-text)]">
-          Thread health
+          Topic health
         </h2>
         <a
           class="text-[12px] font-medium text-[var(--ui-text-muted)] hover:text-[var(--ui-text)] transition-colors"
-          href={workspaceHref("/threads")}>View all</a
+          href={workspaceHref("/topics")}>View all</a
         >
       </div>
-      {#if threadsState.status === "ready"}
+      {#if topicsState.status === "ready"}
         <p class="text-[13px] text-gray-500 mt-1 mb-2">
-          {threadHealthSentence(threadHealth)}
+          {topicHealthSentence(topicHealth)}
         </p>
       {/if}
 
-      {#if loading && threadsState.status === "idle"}
+      {#if loading && topicsState.status === "idle"}
         <div
           class="flex items-center gap-2 py-6 text-[13px] text-[var(--ui-text-muted)]"
         >
@@ -332,74 +415,74 @@
           </svg>
           Loading...
         </div>
-      {:else if threadsState.status === "error"}
+      {:else if topicsState.status === "error"}
         <p class="rounded-md bg-red-500/10 px-3 py-2 text-[13px] text-red-400">
-          {threadsState.error}
+          {topicsState.error}
         </p>
-      {:else if threadsState.items.length === 0}
+      {:else if topicsState.items.length === 0}
         <p class="text-[13px] text-[var(--ui-text-muted)] py-3">
-          No threads yet. They'll appear here as work begins.
+          No topics yet. They'll appear here as work begins.
         </p>
       {:else}
         <div class="flex gap-2 mb-3">
           <a
             class="flex-1 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-center transition-colors hover:bg-[var(--ui-border-subtle)]"
-            href={threadsQueryHref([["open", "1"]])}
+            href={topicsQueryHref([["open", "1"]])}
           >
             <p class="text-[11px] font-medium text-[var(--ui-text-muted)]">
               Open
             </p>
             <p class="text-lg font-semibold text-[var(--ui-text)]">
-              {threadHealth.openCount}
+              {topicHealth.openCount}
             </p>
           </a>
           <a
             class="flex-1 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-center transition-colors hover:bg-[var(--ui-border-subtle)]"
-            href={threadsQueryHref([["stale", "true"]])}
+            href={topicsQueryHref([["stale", "true"]])}
           >
             <p
-              class="text-[11px] font-medium {threadHealth.staleCount > 0
+              class="text-[11px] font-medium {topicHealth.staleCount > 0
                 ? 'text-amber-400'
                 : 'text-[var(--ui-text-muted)]'}"
             >
               Stale
             </p>
             <p
-              class="text-lg font-semibold {threadHealth.staleCount > 0
+              class="text-lg font-semibold {topicHealth.staleCount > 0
                 ? 'text-amber-400'
                 : 'text-[var(--ui-text)]'}"
             >
-              {threadHealth.staleCount}
+              {topicHealth.staleCount}
             </p>
           </a>
           <a
             class="flex-1 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-center transition-colors hover:bg-[var(--ui-border-subtle)]"
-            href={threadsQueryHref([["high_priority", "1"]])}
+            href={topicsQueryHref([["high_priority", "1"]])}
           >
             <p
-              class="text-[11px] font-medium {threadHealth.highPriorityCount > 0
+              class="text-[11px] font-medium {topicHealth.highPriorityCount > 0
                 ? 'text-red-400'
                 : 'text-[var(--ui-text-muted)]'}"
             >
               High priority
             </p>
             <p
-              class="text-lg font-semibold {threadHealth.highPriorityCount > 0
+              class="text-lg font-semibold {topicHealth.highPriorityCount > 0
                 ? 'text-red-400'
                 : 'text-[var(--ui-text)]'}"
             >
-              {threadHealth.highPriorityCount}
+              {topicHealth.highPriorityCount}
             </p>
           </a>
           <a
             class="flex-1 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] px-3 py-2 text-center transition-colors hover:bg-[var(--ui-border-subtle)]"
-            href={workspaceHref("/threads")}
+            href={workspaceHref("/topics")}
           >
             <p class="text-[11px] font-medium text-[var(--ui-text-muted)]">
               Total
             </p>
             <p class="text-lg font-semibold text-[var(--ui-text)]">
-              {threadHealth.totalCount}
+              {topicHealth.totalCount}
             </p>
           </a>
         </div>
@@ -407,27 +490,27 @@
         <div
           class="space-y-px rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] overflow-hidden"
         >
-          {#each recentThreads as thread, i}
+          {#each recentTopics as topic, i}
             <a
               class="flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--ui-border-subtle)] {i >
               0
                 ? 'border-t border-[var(--ui-border)]'
                 : ''}"
-              href={workspaceHref(`/threads/${thread.id}`)}
+              href={workspaceHref(`/topics/${topic.id}`)}
             >
               <div class="min-w-0 flex-1">
                 <p
                   class="truncate text-[13px] font-medium text-[var(--ui-text)]"
                 >
-                  {thread.title}
+                  {topic.title}
                 </p>
                 <p class="text-[11px] text-[var(--ui-text-muted)]">
-                  Updated {formatTimestamp(thread.updated_at)}
+                  Updated {formatTimestamp(topic.updated_at)}
                 </p>
               </div>
               <span
-                class="text-[11px] font-medium {priorityBadge(thread.priority)}"
-                >{getPriorityLabel(thread.priority)}</span
+                class="text-[11px] font-medium {priorityBadge(topic.priority)}"
+                >{getPriorityLabel(topic.priority)}</span
               >
             </a>
           {/each}
@@ -522,7 +605,7 @@
     <section>
       <div class="flex items-center justify-between gap-2 mb-2">
         <h2 class="text-[13px] font-semibold text-[var(--ui-text)]">
-          Recent docs
+          Recent Docs
         </h2>
         <a
           class="text-[12px] font-medium text-[var(--ui-text-muted)] hover:text-[var(--ui-text)] transition-colors"
@@ -556,7 +639,9 @@
           {docsState.error}
         </p>
       {:else if recentDocs.length === 0}
-        <p class="text-[13px] text-[var(--ui-text-muted)] py-3">No docs yet.</p>
+        <p class="text-[13px] text-[var(--ui-text-muted)] py-3">
+          No documents yet.
+        </p>
       {:else}
         <div
           class="space-y-px rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] overflow-hidden"

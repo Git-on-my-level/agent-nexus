@@ -26,13 +26,9 @@ func (a *App) runCommand(ctx context.Context, args []string, cfg config.Resolved
 	if rewritten, ok := applyCommandShapeCompatibilityAlias(args); ok {
 		args = rewritten
 	}
-	if len(args) >= 2 && isHelpToken(args[1]) {
-		if text, ok := helpTopicText(args[0]); ok {
-			return "help", &commandResult{Text: text, Data: map[string]any{"help_text": text}}, nil
-		}
-	}
-	if len(args) >= 3 && isHelpToken(args[2]) {
-		if text, ok := helpTopicText(args[0] + " " + args[1]); ok {
+	if len(args) >= 2 && isHelpToken(args[len(args)-1]) {
+		topic := strings.Join(args[:len(args)-1], " ")
+		if text, ok := helpTopicText(topic); ok {
 			return "help", &commandResult{Text: text, Data: map[string]any{"help_text": text}}, nil
 		}
 	}
@@ -87,7 +83,7 @@ func (a *App) runCommand(ctx context.Context, args []string, cfg config.Resolved
 			topic = strings.TrimSpace(args[0] + " " + args[1])
 		}
 		return "primitives", nil, errnorm.Usage("unknown_command", fmt.Sprintf("unknown command %q", topic))
-	case "actors", "threads", "commitments", "artifacts", "boards", "docs", "events", "inbox", "work-orders", "receipts", "reviews", "derived":
+	case "actors", "threads", "topics", "ref-edges", "cards", "artifacts", "boards", "docs", "events", "inbox", "receipts", "reviews", "derived":
 		result, name, err := a.runTypedResource(ctx, args[0], args[1:], cfg)
 		return name, result, err
 	case "api":
@@ -224,7 +220,11 @@ func (a *App) runDoctor(ctx context.Context, cfg config.Resolved) (*commandResul
 		if _, ok := payload["min_cli_version"]; !ok {
 			return false, "handshake response missing min_cli_version", nil
 		}
-		return true, "handshake metadata available", nil
+		base := strings.TrimSuffix(strings.TrimSpace(cfg.BaseURL), "/")
+		if base == "" {
+			base = "(base-url)"
+		}
+		return true, fmt.Sprintf("handshake metadata available (GET %s/meta/handshake; not under /v1/...)", base), nil
 	})
 
 	summary := map[string]any{
@@ -247,6 +247,26 @@ func (a *App) runDoctor(ctx context.Context, cfg config.Resolved) (*commandResul
 		return result, errnorm.WithDetails(errnorm.Local("doctor_failed", "doctor found failing checks"), summary)
 	}
 	return result, nil
+}
+
+func apiCallUsageText() string {
+	return strings.TrimSpace(`Local Help: api call
+
+Perform an arbitrary HTTP request against the configured core base URL.
+
+Usage:
+  oar api call [--method <method>] [--path <path>] [<method> <path>] [--from-file <file>] [--header key:value] [--raw]
+
+Flags:
+  --method <method>     HTTP method (default GET).
+  --path <path>         Request path or absolute URL.
+  --from-file <path>    Request body from file (stdin otherwise when needed).
+  --header key:value    Repeatable request header.
+  --raw                 Write raw response body to stdout (not with --json).
+
+Examples:
+  oar api call --method GET --path /readyz
+  oar api call POST /events --from-file body.json`)
 }
 
 func (a *App) runAPICall(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {

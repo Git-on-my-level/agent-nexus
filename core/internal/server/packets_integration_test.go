@@ -2,11 +2,49 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
 )
+
+func integrationSeedBoardAndCard(t *testing.T, h primitivesTestHarness, actorID, parentThreadID string) (boardID, cardID, cardBackingThreadID string) {
+	t.Helper()
+	createBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", fmt.Sprintf(`{
+		"actor_id":%q,
+		"board":{"title":"Packet test board","refs":["thread:%s"]}
+	}`, actorID, parentThreadID), http.StatusCreated)
+	defer createBoardResp.Body.Close()
+	var boardPayload struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(createBoardResp.Body).Decode(&boardPayload); err != nil {
+		t.Fatalf("decode board: %v", err)
+	}
+	boardID = asString(boardPayload.Board["id"])
+	boardUpdatedAt := asString(boardPayload.Board["updated_at"])
+	cardResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", fmt.Sprintf(`{
+		"actor_id":%q,
+		"if_board_updated_at":%q,
+		"title":"Packet card",
+		"related_refs":["thread:%s"],
+		"column_key":"backlog"
+	}`, actorID, boardUpdatedAt, parentThreadID), http.StatusCreated)
+	defer cardResp.Body.Close()
+	var cardPayload struct {
+		Card map[string]any `json:"card"`
+	}
+	if err := json.NewDecoder(cardResp.Body).Decode(&cardPayload); err != nil {
+		t.Fatalf("decode card: %v", err)
+	}
+	cardID = asString(cardPayload.Card["id"])
+	cardBackingThreadID = asString(cardPayload.Card["thread_id"])
+	if boardID == "" || cardID == "" || cardBackingThreadID == "" {
+		t.Fatalf("expected board, card, and card backing thread ids, got board=%q card=%q thread=%q", boardID, cardID, cardBackingThreadID)
+	}
+	return boardID, cardID, cardBackingThreadID
+}
 
 func TestPacketConvenienceEndpointsAndTimeline(t *testing.T) {
 	t.Parallel()
@@ -14,91 +52,33 @@ func TestPacketConvenienceEndpointsAndTimeline(t *testing.T) {
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
-	threadResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
-		"actor_id":"actor-1",
-		"thread":{
-			"title":"Packet flow thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p1",
-			"tags":["ops"],
-			"cadence":"daily",
-			"next_check_in_at":"2026-03-05T00:00:00Z",
-			"current_summary":"summary",
-			"next_actions":["do x"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated)
-	defer threadResp.Body.Close()
-
-	var createdThread struct {
-		Thread map[string]any `json:"thread"`
-	}
-	if err := json.NewDecoder(threadResp.Body).Decode(&createdThread); err != nil {
-		t.Fatalf("decode create thread response: %v", err)
-	}
-	threadID, _ := createdThread.Thread["id"].(string)
-	if threadID == "" {
-		t.Fatal("expected created thread id")
-	}
-
-	workOrderID := "work-order-1"
-	workOrderResp := postJSONExpectStatus(t, h.baseURL+"/work_orders", `{
-		"actor_id":"actor-1",
-		"artifact":{
-			"id":"`+workOrderID+`",
-			"refs":["thread:`+threadID+`"],
-			"summary":"work order artifact"
-		},
-		"packet":{
-			"work_order_id":"`+workOrderID+`",
-			"thread_id":"`+threadID+`",
-			"objective":"Investigate and fix",
-			"constraints":["no downtime"],
-			"context_refs":["url:https://example.com/context"],
-			"acceptance_criteria":["incident resolved"],
-			"definition_of_done":["receipt published"]
-		}
-	}`, http.StatusCreated)
-	defer workOrderResp.Body.Close()
-
-	var workOrderPayload struct {
-		Artifact map[string]any `json:"artifact"`
-		Event    map[string]any `json:"event"`
-	}
-	if err := json.NewDecoder(workOrderResp.Body).Decode(&workOrderPayload); err != nil {
-		t.Fatalf("decode work order response: %v", err)
-	}
-	if workOrderPayload.Artifact["kind"] != "work_order" {
-		t.Fatalf("unexpected work order kind: %#v", workOrderPayload.Artifact["kind"])
-	}
-	if workOrderPayload.Event["type"] != "work_order_created" {
-		t.Fatalf("unexpected work order event type: %#v", workOrderPayload.Event["type"])
-	}
-	assertActorStatementProvenance(t, workOrderPayload.Event)
-
-	if resp, err := http.Get(h.baseURL + "/artifacts/" + workOrderID); err != nil {
-		t.Fatalf("GET /artifacts/{work_order_id}: %v", err)
-	} else {
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("unexpected GET /artifacts/{work_order_id} status: %d", resp.StatusCode)
-		}
-	}
+	parentThreadID := integrationSeedThread(t, h, "actor-1", map[string]any{
+		"title":            "Packet flow thread",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p1",
+		"tags":             []any{"ops"},
+		"cadence":          "daily",
+		"next_check_in_at": "2026-03-05T00:00:00Z",
+		"current_summary":  "summary",
+		"next_actions":     []any{"do x"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
+	_, cardID, cardBackingThreadID := integrationSeedBoardAndCard(t, h, "actor-1", parentThreadID)
+	cardRef := "card:" + cardID
 
 	receiptID := "receipt-1"
-	receiptFailureResp := postJSONExpectStatus(t, h.baseURL+"/receipts", `{
+	receiptFailureResp := postJSONExpectStatus(t, h.baseURL+"/packets/receipts", `{
 		"actor_id":"actor-1",
 		"artifact":{
 			"id":"`+receiptID+`",
-			"refs":["thread:`+threadID+`","artifact:`+workOrderID+`"],
+			"refs":["`+cardRef+`"],
 			"summary":"receipt artifact"
 		},
 		"packet":{
 			"receipt_id":"`+receiptID+`",
-			"work_order_id":"`+workOrderID+`",
-			"thread_id":"`+threadID+`",
+			"subject_ref":"`+cardRef+`",
 			"outputs":[],
 			"verification_evidence":["url:https://example.com/evidence"],
 			"changes_summary":"changed things",
@@ -107,17 +87,16 @@ func TestPacketConvenienceEndpointsAndTimeline(t *testing.T) {
 	}`, http.StatusBadRequest)
 	defer receiptFailureResp.Body.Close()
 
-	receiptSuccessResp := postJSONExpectStatus(t, h.baseURL+"/receipts", `{
+	receiptSuccessResp := postJSONExpectStatus(t, h.baseURL+"/packets/receipts", `{
 		"actor_id":"actor-1",
 		"artifact":{
 			"id":"`+receiptID+`",
-			"refs":["thread:`+threadID+`","artifact:`+workOrderID+`"],
+			"refs":["`+cardRef+`"],
 			"summary":"receipt artifact"
 		},
 		"packet":{
 			"receipt_id":"`+receiptID+`",
-			"work_order_id":"`+workOrderID+`",
-			"thread_id":"`+threadID+`",
+			"subject_ref":"`+cardRef+`",
 			"outputs":["artifact:output-1"],
 			"verification_evidence":["url:https://example.com/evidence"],
 			"changes_summary":"changed things",
@@ -125,18 +104,29 @@ func TestPacketConvenienceEndpointsAndTimeline(t *testing.T) {
 		}
 	}`, http.StatusCreated)
 	defer receiptSuccessResp.Body.Close()
+	var receiptPayload struct {
+		Artifact map[string]any `json:"artifact"`
+		Event    map[string]any `json:"event"`
+	}
+	if err := json.NewDecoder(receiptSuccessResp.Body).Decode(&receiptPayload); err != nil {
+		t.Fatalf("decode receipt response: %v", err)
+	}
+	if receiptPayload.Artifact["kind"] != "receipt" {
+		t.Fatalf("unexpected receipt kind: %#v", receiptPayload.Artifact["kind"])
+	}
+	assertRefsContain(t, receiptPayload.Artifact["refs"], "artifact:"+receiptID, cardRef)
 
 	reviewID := "review-1"
-	reviewResp := postJSONExpectStatus(t, h.baseURL+"/reviews", `{
+	reviewResp := postJSONExpectStatus(t, h.baseURL+"/packets/reviews", `{
 		"actor_id":"actor-1",
 		"artifact":{
 			"id":"`+reviewID+`",
-			"refs":["thread:`+threadID+`","artifact:`+receiptID+`","artifact:`+workOrderID+`"],
+			"refs":["`+cardRef+`","artifact:`+receiptID+`"],
 			"summary":"review artifact"
 		},
 		"packet":{
 			"review_id":"`+reviewID+`",
-			"work_order_id":"`+workOrderID+`",
+			"subject_ref":"`+cardRef+`",
 			"receipt_id":"`+receiptID+`",
 			"outcome":"accept",
 			"notes":"looks good",
@@ -144,6 +134,14 @@ func TestPacketConvenienceEndpointsAndTimeline(t *testing.T) {
 		}
 	}`, http.StatusCreated)
 	defer reviewResp.Body.Close()
+	var reviewPayload struct {
+		Artifact map[string]any `json:"artifact"`
+		Event    map[string]any `json:"event"`
+	}
+	if err := json.NewDecoder(reviewResp.Body).Decode(&reviewPayload); err != nil {
+		t.Fatalf("decode review response: %v", err)
+	}
+	assertRefsContain(t, reviewPayload.Artifact["refs"], "artifact:"+reviewID, "artifact:"+receiptID, cardRef)
 
 	if resp, err := http.Get(h.baseURL + "/artifacts/" + reviewID); err != nil {
 		t.Fatalf("GET /artifacts/{review_id}: %v", err)
@@ -154,7 +152,7 @@ func TestPacketConvenienceEndpointsAndTimeline(t *testing.T) {
 		}
 	}
 
-	timelineResp, err := http.Get(h.baseURL + "/threads/" + threadID + "/timeline")
+	timelineResp, err := http.Get(h.baseURL + "/threads/" + cardBackingThreadID + "/timeline")
 	if err != nil {
 		t.Fatalf("GET /threads/{id}/timeline: %v", err)
 	}
@@ -170,26 +168,41 @@ func TestPacketConvenienceEndpointsAndTimeline(t *testing.T) {
 		t.Fatalf("decode timeline response: %v", err)
 	}
 
-	workOrderEvent := findEventByType(timeline.Events, "work_order_created")
-	if workOrderEvent == nil {
-		t.Fatal("expected work_order_created event in timeline")
-	}
-	assertRefsContain(t, workOrderEvent["refs"], "artifact:"+workOrderID, "thread:"+threadID)
-	assertActorStatementProvenance(t, workOrderEvent)
-
 	receiptEvent := findEventByType(timeline.Events, "receipt_added")
 	if receiptEvent == nil {
 		t.Fatal("expected receipt_added event in timeline")
 	}
-	assertRefsContain(t, receiptEvent["refs"], "artifact:"+receiptID, "artifact:"+workOrderID)
+	assertRefsContain(t, receiptEvent["refs"], "artifact:"+receiptID, cardRef)
 	assertActorStatementProvenance(t, receiptEvent)
 
 	reviewEvent := findEventByType(timeline.Events, "review_completed")
 	if reviewEvent == nil {
 		t.Fatal("expected review_completed event in timeline")
 	}
-	assertRefsContain(t, reviewEvent["refs"], "artifact:"+reviewID, "artifact:"+receiptID, "artifact:"+workOrderID)
+	assertRefsContain(t, reviewEvent["refs"], "artifact:"+reviewID, "artifact:"+receiptID, cardRef)
 	assertActorStatementProvenance(t, reviewEvent)
+
+	cardTimelineResp, err := http.Get(h.baseURL + "/cards/" + cardID + "/timeline")
+	if err != nil {
+		t.Fatalf("GET /cards/{id}/timeline: %v", err)
+	}
+	defer cardTimelineResp.Body.Close()
+	if cardTimelineResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected card timeline status: %d", cardTimelineResp.StatusCode)
+	}
+	var cardTimeline struct {
+		Card   map[string]any   `json:"card"`
+		Events []map[string]any `json:"events"`
+	}
+	if err := json.NewDecoder(cardTimelineResp.Body).Decode(&cardTimeline); err != nil {
+		t.Fatalf("decode card timeline: %v", err)
+	}
+	if asString(cardTimeline.Card["id"]) != cardID {
+		t.Fatalf("expected card id in timeline, got %#v", cardTimeline.Card["id"])
+	}
+	if findEventByType(cardTimeline.Events, "receipt_added") == nil {
+		t.Fatal("expected receipt_added on card timeline")
+	}
 }
 
 func TestPacketValidationErrors(t *testing.T) {
@@ -198,74 +211,60 @@ func TestPacketValidationErrors(t *testing.T) {
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
-	threadResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
-		"actor_id":"actor-1",
-		"thread":{
-			"title":"Packet validation thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p1",
-			"tags":["ops"],
-			"cadence":"daily",
-			"next_check_in_at":"2026-03-05T00:00:00Z",
-			"current_summary":"summary",
-			"next_actions":["do x"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated)
-	defer threadResp.Body.Close()
-	var threadPayload struct {
-		Thread map[string]any `json:"thread"`
-	}
-	if err := json.NewDecoder(threadResp.Body).Decode(&threadPayload); err != nil {
-		t.Fatalf("decode thread response: %v", err)
-	}
-	threadID, _ := threadPayload.Thread["id"].(string)
-	if threadID == "" {
-		t.Fatal("expected thread id")
-	}
+	parentThreadID := integrationSeedThread(t, h, "actor-1", map[string]any{
+		"title":            "Packet validation thread",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p1",
+		"tags":             []any{"ops"},
+		"cadence":          "daily",
+		"next_check_in_at": "2026-03-05T00:00:00Z",
+		"current_summary":  "summary",
+		"next_actions":     []any{"do x"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
+	_, cardID, _ := integrationSeedBoardAndCard(t, h, "actor-1", parentThreadID)
+	cardRef := "card:" + cardID
 
-	respMissingField := postJSONExpectStatus(t, h.baseURL+"/work_orders", `{
+	respMissingOutputs := postJSONExpectStatus(t, h.baseURL+"/packets/receipts", `{
 		"actor_id":"actor-1",
-		"artifact":{"id":"wo-missing","refs":["thread:`+threadID+`"]},
+		"artifact":{"id":"rc-missing-out","refs":["`+cardRef+`"]},
 		"packet":{
-			"work_order_id":"wo-missing",
-			"thread_id":"`+threadID+`",
-			"constraints":["none"],
-			"context_refs":["url:https://example.com/context"],
-			"acceptance_criteria":["done"],
-			"definition_of_done":["published"]
+			"receipt_id":"rc-missing-out",
+			"subject_ref":"`+cardRef+`",
+			"outputs":[],
+			"verification_evidence":["url:https://example.com/evidence"],
+			"changes_summary":"x",
+			"known_gaps":[]
 		}
 	}`, http.StatusBadRequest)
-	assertErrorMessageContains(t, respMissingField, "packet.objective is required")
+	assertErrorMessageContains(t, respMissingOutputs, "packet.outputs")
 
-	respBadTypedRef := postJSONExpectStatus(t, h.baseURL+"/work_orders", `{
+	respBadTypedRef := postJSONExpectStatus(t, h.baseURL+"/packets/receipts", `{
 		"actor_id":"actor-1",
-		"artifact":{"id":"wo-bad-ref","refs":["thread:`+threadID+`"]},
+		"artifact":{"id":"rc-bad-ref","refs":["`+cardRef+`"]},
 		"packet":{
-			"work_order_id":"wo-bad-ref",
-			"thread_id":"`+threadID+`",
-			"objective":"obj",
-			"constraints":["none"],
-			"context_refs":["invalidref"],
-			"acceptance_criteria":["done"],
-			"definition_of_done":["published"]
+			"receipt_id":"rc-bad-ref",
+			"subject_ref":"`+cardRef+`",
+			"outputs":["artifact:out-1"],
+			"verification_evidence":["not-a-typed-ref"],
+			"changes_summary":"x",
+			"known_gaps":[]
 		}
 	}`, http.StatusBadRequest)
-	assertErrorMessageContains(t, respBadTypedRef, "packet.context_refs")
+	assertErrorMessageContains(t, respBadTypedRef, "packet.verification_evidence")
 
-	respIDMismatch := postJSONExpectStatus(t, h.baseURL+"/work_orders", `{
+	respIDMismatch := postJSONExpectStatus(t, h.baseURL+"/packets/receipts", `{
 		"actor_id":"actor-1",
-		"artifact":{"id":"wo-one","refs":["thread:`+threadID+`"]},
+		"artifact":{"id":"rc-one","refs":["`+cardRef+`"]},
 		"packet":{
-			"work_order_id":"wo-two",
-			"thread_id":"`+threadID+`",
-			"objective":"obj",
-			"constraints":["none"],
-			"context_refs":["url:https://example.com/context"],
-			"acceptance_criteria":["done"],
-			"definition_of_done":["published"]
+			"receipt_id":"rc-two",
+			"subject_ref":"`+cardRef+`",
+			"outputs":["artifact:out-1"],
+			"verification_evidence":["url:https://example.com/evidence"],
+			"changes_summary":"x",
+			"known_gaps":[]
 		}
 	}`, http.StatusBadRequest)
 	assertErrorMessageContains(t, respIDMismatch, "must equal artifact.id")
@@ -277,92 +276,31 @@ func TestPacketCreateRequestKeyReplaysSingleWrite(t *testing.T) {
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
-	threadResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
-		"actor_id":"actor-1",
-		"thread":{
-			"title":"Packet replay thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p1",
-			"tags":["ops"],
-			"cadence":"daily",
-			"next_check_in_at":"2026-03-05T00:00:00Z",
-			"current_summary":"summary",
-			"next_actions":["do x"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated)
-	defer threadResp.Body.Close()
-
-	var createdThread struct {
-		Thread map[string]any `json:"thread"`
-	}
-	if err := json.NewDecoder(threadResp.Body).Decode(&createdThread); err != nil {
-		t.Fatalf("decode thread response: %v", err)
-	}
-	threadID, _ := createdThread.Thread["id"].(string)
-	if threadID == "" {
-		t.Fatal("expected thread id")
-	}
-
-	workOrderBody := `{
-		"actor_id":"actor-1",
-		"request_key":"replay-work-order",
-		"artifact":{
-			"refs":["thread:` + threadID + `"],
-			"summary":"work order artifact"
-		},
-		"packet":{
-			"thread_id":"` + threadID + `",
-			"objective":"Investigate and fix",
-			"constraints":["no downtime"],
-			"context_refs":["url:https://example.com/context"],
-			"acceptance_criteria":["incident resolved"],
-			"definition_of_done":["receipt published"]
-		}
-	}`
-
-	firstWorkOrderResp := postJSONExpectStatus(t, h.baseURL+"/work_orders", workOrderBody, http.StatusCreated)
-	defer firstWorkOrderResp.Body.Close()
-	secondWorkOrderResp := postJSONExpectStatus(t, h.baseURL+"/work_orders", workOrderBody, http.StatusCreated)
-	defer secondWorkOrderResp.Body.Close()
-
-	var firstWorkOrder struct {
-		Artifact map[string]any `json:"artifact"`
-		Event    map[string]any `json:"event"`
-	}
-	if err := json.NewDecoder(firstWorkOrderResp.Body).Decode(&firstWorkOrder); err != nil {
-		t.Fatalf("decode first work order response: %v", err)
-	}
-	var secondWorkOrder struct {
-		Artifact map[string]any `json:"artifact"`
-		Event    map[string]any `json:"event"`
-	}
-	if err := json.NewDecoder(secondWorkOrderResp.Body).Decode(&secondWorkOrder); err != nil {
-		t.Fatalf("decode second work order response: %v", err)
-	}
-	workOrderID, _ := firstWorkOrder.Artifact["id"].(string)
-	if workOrderID == "" {
-		t.Fatal("expected server-issued work order id")
-	}
-	if secondWorkOrder.Artifact["id"] != workOrderID {
-		t.Fatalf("expected replayed work order id %q, got %#v", workOrderID, secondWorkOrder.Artifact["id"])
-	}
-	if secondWorkOrder.Event["id"] != firstWorkOrder.Event["id"] {
-		t.Fatalf("expected replayed work order event id %#v, got %#v", firstWorkOrder.Event["id"], secondWorkOrder.Event["id"])
-	}
+	parentThreadID := integrationSeedThread(t, h, "actor-1", map[string]any{
+		"title":            "Packet replay thread",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p1",
+		"tags":             []any{"ops"},
+		"cadence":          "daily",
+		"next_check_in_at": "2026-03-05T00:00:00Z",
+		"current_summary":  "summary",
+		"next_actions":     []any{"do x"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
+	_, cardID, cardBackingThreadID := integrationSeedBoardAndCard(t, h, "actor-1", parentThreadID)
+	cardRef := "card:" + cardID
 
 	receiptBody := `{
 		"actor_id":"actor-1",
 		"request_key":"replay-receipt",
 		"artifact":{
-			"refs":["thread:` + threadID + `","artifact:` + workOrderID + `"],
+			"refs":["` + cardRef + `"],
 			"summary":"receipt artifact"
 		},
 		"packet":{
-			"work_order_id":"` + workOrderID + `",
-			"thread_id":"` + threadID + `",
+			"subject_ref":"` + cardRef + `",
 			"outputs":["artifact:output-1"],
 			"verification_evidence":["url:https://example.com/evidence"],
 			"changes_summary":"changed things",
@@ -370,9 +308,9 @@ func TestPacketCreateRequestKeyReplaysSingleWrite(t *testing.T) {
 		}
 	}`
 
-	firstReceiptResp := postJSONExpectStatus(t, h.baseURL+"/receipts", receiptBody, http.StatusCreated)
+	firstReceiptResp := postJSONExpectStatus(t, h.baseURL+"/packets/receipts", receiptBody, http.StatusCreated)
 	defer firstReceiptResp.Body.Close()
-	secondReceiptResp := postJSONExpectStatus(t, h.baseURL+"/receipts", receiptBody, http.StatusCreated)
+	secondReceiptResp := postJSONExpectStatus(t, h.baseURL+"/packets/receipts", receiptBody, http.StatusCreated)
 	defer secondReceiptResp.Body.Close()
 
 	var firstReceipt struct {
@@ -400,22 +338,7 @@ func TestPacketCreateRequestKeyReplaysSingleWrite(t *testing.T) {
 		t.Fatalf("expected replayed receipt event id %#v, got %#v", firstReceipt.Event["id"], secondReceipt.Event["id"])
 	}
 
-	workOrdersResp, err := http.Get(h.baseURL + "/artifacts?thread_id=" + threadID + "&kind=work_order")
-	if err != nil {
-		t.Fatalf("GET /artifacts work_orders: %v", err)
-	}
-	defer workOrdersResp.Body.Close()
-	var workOrdersListed struct {
-		Artifacts []map[string]any `json:"artifacts"`
-	}
-	if err := json.NewDecoder(workOrdersResp.Body).Decode(&workOrdersListed); err != nil {
-		t.Fatalf("decode listed work orders: %v", err)
-	}
-	if len(workOrdersListed.Artifacts) != 1 {
-		t.Fatalf("expected one work order after replay, got %d", len(workOrdersListed.Artifacts))
-	}
-
-	receiptsResp, err := http.Get(h.baseURL + "/artifacts?thread_id=" + threadID + "&kind=receipt")
+	receiptsResp, err := http.Get(h.baseURL + "/artifacts?thread_id=" + cardBackingThreadID + "&kind=receipt")
 	if err != nil {
 		t.Fatalf("GET /artifacts receipts: %v", err)
 	}
@@ -430,22 +353,19 @@ func TestPacketCreateRequestKeyReplaysSingleWrite(t *testing.T) {
 		t.Fatalf("expected one receipt after replay, got %d", len(receiptsListed.Artifacts))
 	}
 
-	timelineResp, err := http.Get(h.baseURL + "/threads/" + threadID + "/timeline")
+	timelineReplayResp, err := http.Get(h.baseURL + "/threads/" + cardBackingThreadID + "/timeline")
 	if err != nil {
 		t.Fatalf("GET /threads/{id}/timeline: %v", err)
 	}
-	defer timelineResp.Body.Close()
-	var timeline struct {
+	defer timelineReplayResp.Body.Close()
+	var timelineReplay struct {
 		Events []map[string]any `json:"events"`
 	}
-	if err := json.NewDecoder(timelineResp.Body).Decode(&timeline); err != nil {
+	if err := json.NewDecoder(timelineReplayResp.Body).Decode(&timelineReplay); err != nil {
 		t.Fatalf("decode timeline: %v", err)
 	}
-	if countEventsByType(timeline.Events, "work_order_created") != 1 {
-		t.Fatalf("expected one work_order_created event, got %d", countEventsByType(timeline.Events, "work_order_created"))
-	}
-	if countEventsByType(timeline.Events, "receipt_added") != 1 {
-		t.Fatalf("expected one receipt_added event, got %d", countEventsByType(timeline.Events, "receipt_added"))
+	if countEventsByType(timelineReplay.Events, "receipt_added") != 1 {
+		t.Fatalf("expected one receipt_added event, got %d", countEventsByType(timelineReplay.Events, "receipt_added"))
 	}
 }
 
@@ -465,71 +385,28 @@ func TestPacketConvenienceEndpointsRejectUnsafeArtifactIDs(t *testing.T) {
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
-	threadResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
-		"actor_id":"actor-1",
-		"thread":{
-			"title":"Packet ID safety thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p1",
-			"tags":["ops"],
-			"cadence":"daily",
-			"next_check_in_at":"2026-03-05T00:00:00Z",
-			"current_summary":"summary",
-			"next_actions":["do x"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated)
-	defer threadResp.Body.Close()
-	var threadPayload struct {
-		Thread map[string]any `json:"thread"`
-	}
-	if err := json.NewDecoder(threadResp.Body).Decode(&threadPayload); err != nil {
-		t.Fatalf("decode thread response: %v", err)
-	}
-	threadID, _ := threadPayload.Thread["id"].(string)
-	if threadID == "" {
-		t.Fatal("expected thread id")
-	}
+	parentThreadID := integrationSeedThread(t, h, "actor-1", map[string]any{
+		"title":            "Packet ID safety thread",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p1",
+		"tags":             []any{"ops"},
+		"cadence":          "daily",
+		"next_check_in_at": "2026-03-05T00:00:00Z",
+		"current_summary":  "summary",
+		"next_actions":     []any{"do x"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
+	_, cardID, _ := integrationSeedBoardAndCard(t, h, "actor-1", parentThreadID)
+	cardRef := "card:" + cardID
 
-	workOrderInvalidIDResp := postJSONExpectStatus(t, h.baseURL+"/work_orders", `{
+	receiptInvalidIDResp := postJSONExpectStatus(t, h.baseURL+"/packets/receipts", `{
 		"actor_id":"actor-1",
-		"artifact":{"id":"../../wo-bad","refs":["thread:`+threadID+`"]},
-		"packet":{
-			"work_order_id":"../../wo-bad",
-			"thread_id":"`+threadID+`",
-			"objective":"obj",
-			"constraints":["none"],
-			"context_refs":["url:https://example.com/context"],
-			"acceptance_criteria":["done"],
-			"definition_of_done":["published"]
-		}
-	}`, http.StatusBadRequest)
-	assertErrorMessageContains(t, workOrderInvalidIDResp, "artifact.id")
-
-	const workOrderID = "wo-valid-for-unsafe-id-tests"
-	postJSONExpectStatus(t, h.baseURL+"/work_orders", `{
-		"actor_id":"actor-1",
-		"artifact":{"id":"`+workOrderID+`","refs":["thread:`+threadID+`"]},
-		"packet":{
-			"work_order_id":"`+workOrderID+`",
-			"thread_id":"`+threadID+`",
-			"objective":"obj",
-			"constraints":["none"],
-			"context_refs":["url:https://example.com/context"],
-			"acceptance_criteria":["done"],
-			"definition_of_done":["published"]
-		}
-	}`, http.StatusCreated).Body.Close()
-
-	receiptInvalidIDResp := postJSONExpectStatus(t, h.baseURL+"/receipts", `{
-		"actor_id":"actor-1",
-		"artifact":{"id":"..","refs":["thread:`+threadID+`","artifact:`+workOrderID+`"]},
+		"artifact":{"id":"..","refs":["`+cardRef+`"]},
 		"packet":{
 			"receipt_id":"..",
-			"work_order_id":"`+workOrderID+`",
-			"thread_id":"`+threadID+`",
+			"subject_ref":"`+cardRef+`",
 			"outputs":["artifact:output-1"],
 			"verification_evidence":["url:https://example.com/evidence"],
 			"changes_summary":"summary",
@@ -539,13 +416,12 @@ func TestPacketConvenienceEndpointsRejectUnsafeArtifactIDs(t *testing.T) {
 	assertErrorMessageContains(t, receiptInvalidIDResp, "artifact.id")
 
 	const receiptID = "receipt-valid-for-unsafe-id-tests"
-	postJSONExpectStatus(t, h.baseURL+"/receipts", `{
+	postJSONExpectStatus(t, h.baseURL+"/packets/receipts", `{
 		"actor_id":"actor-1",
-		"artifact":{"id":"`+receiptID+`","refs":["thread:`+threadID+`","artifact:`+workOrderID+`"]},
+		"artifact":{"id":"`+receiptID+`","refs":["`+cardRef+`"]},
 		"packet":{
 			"receipt_id":"`+receiptID+`",
-			"work_order_id":"`+workOrderID+`",
-			"thread_id":"`+threadID+`",
+			"subject_ref":"`+cardRef+`",
 			"outputs":["artifact:output-1"],
 			"verification_evidence":["url:https://example.com/evidence"],
 			"changes_summary":"summary",
@@ -553,12 +429,12 @@ func TestPacketConvenienceEndpointsRejectUnsafeArtifactIDs(t *testing.T) {
 		}
 	}`, http.StatusCreated).Body.Close()
 
-	reviewInvalidIDResp := postJSONExpectStatus(t, h.baseURL+"/reviews", `{
+	reviewInvalidIDResp := postJSONExpectStatus(t, h.baseURL+"/packets/reviews", `{
 		"actor_id":"actor-1",
-		"artifact":{"id":"/tmp/review-bad","refs":["thread:`+threadID+`","artifact:`+receiptID+`","artifact:`+workOrderID+`"]},
+		"artifact":{"id":"/tmp/review-bad","refs":["`+cardRef+`","artifact:`+receiptID+`"]},
 		"packet":{
 			"review_id":"/tmp/review-bad",
-			"work_order_id":"`+workOrderID+`",
+			"subject_ref":"`+cardRef+`",
 			"receipt_id":"`+receiptID+`",
 			"outcome":"accept",
 			"notes":"ok",

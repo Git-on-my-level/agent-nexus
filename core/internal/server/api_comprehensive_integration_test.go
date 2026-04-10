@@ -1,8 +1,11 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 )
@@ -13,41 +16,21 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
-	threadResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
-		"actor_id":"actor-1",
-		"thread":{
-			"title":"Comprehensive thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p1",
-			"tags":["ops","backend"],
-			"cadence":"daily",
-			"next_check_in_at":"2030-01-01T00:00:00Z",
-			"current_summary":"Investigating issue",
-			"next_actions":["triage"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]},
-			"custom_unknown":"preserve_me"
-		}
-	}`, http.StatusCreated)
-	defer threadResp.Body.Close()
-
-	var createdThread struct {
-		Thread map[string]any `json:"thread"`
-	}
-	if err := json.NewDecoder(threadResp.Body).Decode(&createdThread); err != nil {
-		t.Fatalf("decode create thread response: %v", err)
-	}
-	threadID, _ := createdThread.Thread["id"].(string)
-	if threadID == "" {
-		t.Fatal("expected thread id")
-	}
-
-	patchResp := patchJSONExpectStatus(t, h.baseURL+"/threads/"+threadID, `{
-		"actor_id":"actor-1",
-		"patch":{"tags":["backend"]}
-	}`, http.StatusOK)
-	defer patchResp.Body.Close()
+	threadID := integrationSeedThread(t, h, "actor-1", map[string]any{
+		"title":            "Comprehensive thread",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p1",
+		"tags":             []any{"ops", "backend"},
+		"cadence":          "daily",
+		"next_check_in_at": "2030-01-01T00:00:00Z",
+		"current_summary":  "Investigating issue",
+		"next_actions":     []any{"triage"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+		"custom_unknown":   "preserve_me",
+	})
+	integrationPatchThread(t, h, "actor-1", threadID, map[string]any{"tags": []any{"backend"}}, nil)
 
 	getThreadResp, err := http.Get(h.baseURL + "/threads/" + threadID)
 	if err != nil {
@@ -66,124 +49,66 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 	if loadedThread.Thread["custom_unknown"] != "preserve_me" {
 		t.Fatalf("expected unknown field preserved, got %#v", loadedThread.Thread["custom_unknown"])
 	}
-	tags := sortedStringList(loadedThread.Thread["tags"])
+	tagsRaw, _ := loadedThread.Thread["tags"].([]any)
+	tags := anyListToSortedStrings(tagsRaw)
 	if len(tags) != 1 || tags[0] != "backend" {
 		t.Fatalf("expected list replacement for tags, got %#v", loadedThread.Thread["tags"])
 	}
 
-	staleThreadResp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
+	integrationSeedThread(t, h, "actor-1", map[string]any{
+		"title":            "Stale thread",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p2",
+		"tags":             []any{"ops"},
+		"cadence":          "daily",
+		"next_check_in_at": "2020-01-01T00:00:00Z",
+		"current_summary":  "Needs update",
+		"next_actions":     []any{"follow up"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
+
+	createBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
 		"actor_id":"actor-1",
-		"thread":{
-			"title":"Stale thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p2",
-			"tags":["ops"],
-			"cadence":"daily",
-			"next_check_in_at":"2020-01-01T00:00:00Z",
-			"current_summary":"Needs update",
-			"next_actions":["follow up"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
+		"board":{"title":"Comprehensive packet board","refs":["thread:`+threadID+`"]}
 	}`, http.StatusCreated)
-	defer staleThreadResp.Body.Close()
-
-	dueSoon := time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339)
-
-	commitment1Resp := postJSONExpectStatus(t, h.baseURL+"/commitments", `{
+	defer createBoardResp.Body.Close()
+	var createdPacketBoard struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(createBoardResp.Body).Decode(&createdPacketBoard); err != nil {
+		t.Fatalf("decode packet board: %v", err)
+	}
+	packetBoardID := asString(createdPacketBoard.Board["id"])
+	packetBoardUpdatedAt := asString(createdPacketBoard.Board["updated_at"])
+	packetCardResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+packetBoardID+"/cards", `{
 		"actor_id":"actor-1",
-		"commitment":{
-			"thread_id":"`+threadID+`",
-			"title":"Commitment one",
-			"owner":"actor-1",
-			"due_at":"`+dueSoon+`",
-			"status":"open",
-			"definition_of_done":["done"],
-			"links":["url:https://example.com/c1"],
-			"provenance":{"sources":["inferred"]}
-		}
+		"if_board_updated_at":"`+packetBoardUpdatedAt+`",
+		"title":"Comprehensive packet card",
+		"related_refs":["thread:`+threadID+`"],
+		"column_key":"ready"
 	}`, http.StatusCreated)
-	defer commitment1Resp.Body.Close()
-	var commitment1Payload struct {
-		Commitment map[string]any `json:"commitment"`
+	defer packetCardResp.Body.Close()
+	var packetCardPayload struct {
+		Card map[string]any `json:"card"`
 	}
-	if err := json.NewDecoder(commitment1Resp.Body).Decode(&commitment1Payload); err != nil {
-		t.Fatalf("decode commitment1 response: %v", err)
+	if err := json.NewDecoder(packetCardResp.Body).Decode(&packetCardPayload); err != nil {
+		t.Fatalf("decode packet card: %v", err)
 	}
-	commitment1ID := asString(commitment1Payload.Commitment["id"])
+	packetCardID := asString(packetCardPayload.Card["id"])
+	packetCardBackingThreadID := asString(packetCardPayload.Card["thread_id"])
+	cardRef := "card:" + packetCardID
+	if packetCardID == "" || packetCardBackingThreadID == "" {
+		t.Fatal("expected packet card id and backing thread id")
+	}
 
-	commitment2Resp := postJSONExpectStatus(t, h.baseURL+"/commitments", `{
+	postJSONExpectStatus(t, h.baseURL+"/packets/receipts", `{
 		"actor_id":"actor-1",
-		"commitment":{
-			"thread_id":"`+threadID+`",
-			"title":"Commitment two",
-			"owner":"actor-1",
-			"due_at":"`+dueSoon+`",
-			"status":"open",
-			"definition_of_done":["done"],
-			"links":["url:https://example.com/c2"],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated)
-	defer commitment2Resp.Body.Close()
-	var commitment2Payload struct {
-		Commitment map[string]any `json:"commitment"`
-	}
-	if err := json.NewDecoder(commitment2Resp.Body).Decode(&commitment2Payload); err != nil {
-		t.Fatalf("decode commitment2 response: %v", err)
-	}
-	commitment2ID := asString(commitment2Payload.Commitment["id"])
-
-	threadAfterCommitmentsResp, err := http.Get(h.baseURL + "/threads/" + threadID)
-	if err != nil {
-		t.Fatalf("GET /threads/{id} after commitments: %v", err)
-	}
-	defer threadAfterCommitmentsResp.Body.Close()
-	if threadAfterCommitmentsResp.StatusCode != http.StatusOK {
-		t.Fatalf("unexpected get thread status: got %d", threadAfterCommitmentsResp.StatusCode)
-	}
-	var threadAfterCommitments struct {
-		Thread map[string]any `json:"thread"`
-	}
-	if err := json.NewDecoder(threadAfterCommitmentsResp.Body).Decode(&threadAfterCommitments); err != nil {
-		t.Fatalf("decode thread after commitments response: %v", err)
-	}
-	openCommitments := sortedStringList(threadAfterCommitments.Thread["open_commitments"])
-	if len(openCommitments) < 2 || !containsString(openCommitments, commitment1ID) || !containsString(openCommitments, commitment2ID) {
-		t.Fatalf("expected thread.open_commitments to include both commitments, got %#v", threadAfterCommitments.Thread["open_commitments"])
-	}
-
-	workOrderID := "wo-comprehensive"
-	workOrderResp := postJSONExpectStatus(t, h.baseURL+"/work_orders", `{
-		"actor_id":"actor-1",
-		"artifact":{"id":"`+workOrderID+`","refs":["thread:`+threadID+`"],"summary":"work order"},
-		"packet":{
-			"work_order_id":"`+workOrderID+`",
-			"thread_id":"`+threadID+`",
-			"objective":"fix",
-			"constraints":["none"],
-			"context_refs":["url:https://example.com/context"],
-			"acceptance_criteria":["fixed"],
-			"definition_of_done":["receipt"]
-		}
-	}`, http.StatusCreated)
-	defer workOrderResp.Body.Close()
-	var workOrderPayload struct {
-		Event map[string]any `json:"event"`
-	}
-	if err := json.NewDecoder(workOrderResp.Body).Decode(&workOrderPayload); err != nil {
-		t.Fatalf("decode work order response: %v", err)
-	}
-	assertRefsContain(t, workOrderPayload.Event["refs"], "artifact:"+workOrderID)
-
-	postJSONExpectStatus(t, h.baseURL+"/receipts", `{
-		"actor_id":"actor-1",
-		"artifact":{"id":"receipt-invalid","refs":["thread:`+threadID+`","artifact:`+workOrderID+`"],"summary":"receipt"},
+		"artifact":{"id":"receipt-invalid","refs":["`+cardRef+`"],"summary":"receipt"},
 		"packet":{
 			"receipt_id":"receipt-invalid",
-			"work_order_id":"`+workOrderID+`",
-			"thread_id":"`+threadID+`",
+			"subject_ref":"`+cardRef+`",
 			"outputs":[],
 			"verification_evidence":["url:https://example.com/evidence"],
 			"changes_summary":"summary",
@@ -192,13 +117,12 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 	}`, http.StatusBadRequest).Body.Close()
 
 	receiptID := "receipt-comprehensive"
-	receiptResp := postJSONExpectStatus(t, h.baseURL+"/receipts", `{
+	receiptResp := postJSONExpectStatus(t, h.baseURL+"/packets/receipts", `{
 		"actor_id":"actor-1",
-		"artifact":{"id":"`+receiptID+`","refs":["thread:`+threadID+`","artifact:`+workOrderID+`"],"summary":"receipt"},
+		"artifact":{"id":"`+receiptID+`","refs":["`+cardRef+`"],"summary":"receipt"},
 		"packet":{
 			"receipt_id":"`+receiptID+`",
-			"work_order_id":"`+workOrderID+`",
-			"thread_id":"`+threadID+`",
+			"subject_ref":"`+cardRef+`",
 			"outputs":["artifact:output-1"],
 			"verification_evidence":["url:https://example.com/evidence"],
 			"changes_summary":"summary",
@@ -208,12 +132,12 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 	defer receiptResp.Body.Close()
 
 	reviewID := "review-comprehensive"
-	postJSONExpectStatus(t, h.baseURL+"/reviews", `{
+	postJSONExpectStatus(t, h.baseURL+"/packets/reviews", `{
 		"actor_id":"actor-1",
-		"artifact":{"id":"`+reviewID+`","refs":["thread:`+threadID+`","artifact:`+receiptID+`","artifact:`+workOrderID+`"],"summary":"review"},
+		"artifact":{"id":"`+reviewID+`","refs":["`+cardRef+`","artifact:`+receiptID+`"],"summary":"review"},
 		"packet":{
 			"review_id":"`+reviewID+`",
-			"work_order_id":"`+workOrderID+`",
+			"subject_ref":"`+cardRef+`",
 			"receipt_id":"`+receiptID+`",
 			"outcome":"accept",
 			"notes":"ok",
@@ -221,54 +145,30 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 		}
 	}`, http.StatusCreated).Body.Close()
 
-	timelineResp, err := http.Get(h.baseURL + "/threads/" + threadID + "/timeline")
+	packetTimelineResp, err := http.Get(h.baseURL + "/threads/" + packetCardBackingThreadID + "/timeline")
 	if err != nil {
 		t.Fatalf("GET timeline: %v", err)
 	}
-	defer timelineResp.Body.Close()
-	if timelineResp.StatusCode != http.StatusOK {
-		t.Fatalf("unexpected timeline status: %d", timelineResp.StatusCode)
+	defer packetTimelineResp.Body.Close()
+	if packetTimelineResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected timeline status: %d", packetTimelineResp.StatusCode)
 	}
-	var timeline struct {
+	var packetTimeline struct {
 		Events []map[string]any `json:"events"`
 	}
-	if err := json.NewDecoder(timelineResp.Body).Decode(&timeline); err != nil {
+	if err := json.NewDecoder(packetTimelineResp.Body).Decode(&packetTimeline); err != nil {
 		t.Fatalf("decode timeline: %v", err)
 	}
-	receiptAdded := findEventByType(timeline.Events, "receipt_added")
+	receiptAdded := findEventByType(packetTimeline.Events, "receipt_added")
 	if receiptAdded == nil {
 		t.Fatal("expected receipt_added event")
 	}
-	assertRefsContain(t, receiptAdded["refs"], "artifact:"+receiptID, "artifact:"+workOrderID)
-	reviewCompleted := findEventByType(timeline.Events, "review_completed")
+	assertRefsContain(t, receiptAdded["refs"], "artifact:"+receiptID, cardRef)
+	reviewCompleted := findEventByType(packetTimeline.Events, "review_completed")
 	if reviewCompleted == nil {
 		t.Fatal("expected review_completed event")
 	}
-	assertRefsContain(t, reviewCompleted["refs"], "artifact:"+reviewID, "artifact:"+receiptID, "artifact:"+workOrderID)
-
-	patchJSONExpectStatus(t, h.baseURL+"/commitments/"+commitment1ID, `{
-		"actor_id":"actor-1",
-		"patch":{"status":"done"}
-	}`, http.StatusBadRequest).Body.Close()
-
-	doneResp := patchJSONExpectStatus(t, h.baseURL+"/commitments/"+commitment1ID, `{
-		"actor_id":"actor-1",
-		"patch":{"status":"done"},
-		"refs":["artifact:`+receiptID+`"]
-	}`, http.StatusOK)
-	defer doneResp.Body.Close()
-	var donePayload struct {
-		Commitment map[string]any `json:"commitment"`
-	}
-	if err := json.NewDecoder(doneResp.Body).Decode(&donePayload); err != nil {
-		t.Fatalf("decode done response: %v", err)
-	}
-	provenance, _ := donePayload.Commitment["provenance"].(map[string]any)
-	byField, _ := provenance["by_field"].(map[string]any)
-	statusSources := sortedStringList(byField["status"])
-	if len(statusSources) != 1 || statusSources[0] != "receipt:"+receiptID {
-		t.Fatalf("unexpected status provenance: %#v", byField["status"])
-	}
+	assertRefsContain(t, reviewCompleted["refs"], "artifact:"+reviewID, "artifact:"+receiptID, cardRef)
 
 	postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-1",
@@ -282,6 +182,43 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 		}
 	}`, http.StatusCreated).Body.Close()
 
+	inboxBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
+		"actor_id":"actor-1",
+		"board":{
+			"title":"Comprehensive inbox board",
+			"refs":["thread:`+threadID+`"]
+		}
+	}`, http.StatusCreated)
+	defer inboxBoardResp.Body.Close()
+	var createdBoard struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(inboxBoardResp.Body).Decode(&createdBoard); err != nil {
+		t.Fatalf("decode board response: %v", err)
+	}
+	boardID := asString(createdBoard.Board["id"])
+	boardUpdatedAt := asString(createdBoard.Board["updated_at"])
+	cardCreateResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+boardUpdatedAt+`",
+		"title":"Comprehensive work item",
+		"related_refs":["thread:`+threadID+`"],
+		"column_key":"ready",
+		"due_at":"`+time.Now().UTC().Add(24*time.Hour).Format(time.RFC3339)+`",
+		"definition_of_done":["receipt","sign-off"]
+	}`, http.StatusCreated)
+	var comprehensiveCard struct {
+		Card map[string]any `json:"card"`
+	}
+	if err := json.NewDecoder(cardCreateResp.Body).Decode(&comprehensiveCard); err != nil {
+		t.Fatalf("decode card create: %v", err)
+	}
+	cardCreateResp.Body.Close()
+	dod, ok := comprehensiveCard.Card["definition_of_done"].([]any)
+	if !ok || len(dod) != 2 {
+		t.Fatalf("expected definition_of_done on card payload, got %#v", comprehensiveCard.Card["definition_of_done"])
+	}
+
 	postJSONExpectStatus(t, h.baseURL+"/derived/rebuild", `{"actor_id":"actor-1"}`, http.StatusOK).Body.Close()
 
 	inboxItems := getInboxItems(t, h.baseURL)
@@ -289,8 +226,8 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 	for _, item := range inboxItems {
 		categories[asString(item["category"])] = true
 	}
-	if !categories["commitment_risk"] || !categories["exception"] || !categories["decision_needed"] {
-		t.Fatalf("expected inbox categories commitment_risk/exception/decision_needed, got %#v", categories)
+	if !categories["work_item_risk"] || !categories["stale_topic"] || !categories["decision_needed"] {
+		t.Fatalf("expected inbox categories work_item_risk/stale_topic/decision_needed, got %#v", categories)
 	}
 
 	decisionItem, ok := findInboxItem(inboxItems, func(item map[string]any) bool {
@@ -301,10 +238,9 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 	}
 	decisionItemID := asString(decisionItem["id"])
 
-	postJSONExpectStatus(t, h.baseURL+"/inbox/ack", `{
+	postJSONExpectStatus(t, h.baseURL+"/inbox/"+url.PathEscape(decisionItemID)+"/acknowledge", `{
 		"actor_id":"actor-1",
-		"thread_id":"`+threadID+`",
-		"inbox_item_id":"`+decisionItemID+`"
+		"subject_ref":"thread:`+threadID+`"
 	}`, http.StatusCreated).Body.Close()
 
 	inboxAfterAck := getInboxItems(t, h.baseURL)
@@ -341,34 +277,38 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 		t.Fatalf("expected retriggered decision item, got %#v", inboxAfterRetrigger)
 	}
 
-	postJSONExpectStatus(t, h.baseURL+"/threads", `{
-		"actor_id":"actor-1",
-		"thread":{
-			"title":"Invalid strict enum",
-			"type":"incident",
-			"status":"not_a_real_status",
-			"priority":"p1",
-			"tags":[],
-			"cadence":"daily",
-			"next_check_in_at":"2030-01-01T00:00:00Z",
-			"current_summary":"summary",
-			"next_actions":[],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusBadRequest).Body.Close()
+	// PrimitiveStore accepts opaque thread bodies; strict enum checks live at HTTP ingress.
+	// Keep a lightweight invariant check that the store still rejects missing actor context.
+	_, ctErr := h.primitiveStore.CreateThread(context.Background(), "", map[string]any{
+		"title":            "Invalid actor",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p1",
+		"tags":             []any{},
+		"cadence":          "daily",
+		"next_check_in_at": "2030-01-01T00:00:00Z",
+		"current_summary":  "summary",
+		"next_actions":     []any{},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
+	if ctErr == nil {
+		t.Fatal("expected CreateThread to reject empty actor id")
+	}
+	if !strings.Contains(ctErr.Error(), "actor") {
+		t.Fatalf("expected actor id validation error, got: %v", ctErr)
+	}
 
-	postJSONExpectStatus(t, h.baseURL+"/work_orders", `{
+	postJSONExpectStatus(t, h.baseURL+"/packets/receipts", `{
 		"actor_id":"actor-1",
-		"artifact":{"id":"wo-mismatch-a","refs":["thread:`+threadID+`"]},
+		"artifact":{"id":"rc-mismatch-a","refs":["`+cardRef+`"]},
 		"packet":{
-			"work_order_id":"wo-mismatch-b",
-			"thread_id":"`+threadID+`",
-			"objective":"x",
-			"constraints":["none"],
-			"context_refs":["url:https://example.com/context"],
-			"acceptance_criteria":["done"],
-			"definition_of_done":["receipt"]
+			"receipt_id":"rc-mismatch-b",
+			"subject_ref":"`+cardRef+`",
+			"outputs":["artifact:output-1"],
+			"verification_evidence":["url:https://example.com/evidence"],
+			"changes_summary":"x",
+			"known_gaps":[]
 		}
 	}`, http.StatusBadRequest).Body.Close()
 
@@ -384,17 +324,4 @@ func TestComprehensiveHTTPAPIFlow(t *testing.T) {
 		}
 	}`, http.StatusBadRequest).Body.Close()
 
-	patchJSONExpectStatus(t, h.baseURL+"/threads/"+threadID, `{
-		"actor_id":"actor-1",
-		"patch":{"open_commitments":["x"]}
-	}`, http.StatusBadRequest).Body.Close()
-}
-
-func containsString(values []string, want string) bool {
-	for _, value := range values {
-		if value == want {
-			return true
-		}
-	}
-	return false
 }

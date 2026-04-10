@@ -103,7 +103,7 @@ jobs:
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Verify generated contracts
-        run: ./scripts/contract-check
+        run: ./scripts/contract-check --committed
 
   core-checks:
     runs-on: ubuntu-latest
@@ -144,6 +144,10 @@ jobs:
       - name: Run CLI check
         working-directory: cli
         run: go test ./...
+
+      - name: Run CLI integration tests
+        working-directory: cli
+        run: go test -tags=integration ./integration/...
 
   web-ui-checks:
     runs-on: ubuntu-latest

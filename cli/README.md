@@ -11,12 +11,12 @@ go test -tags=integration ./integration/...
 go run ./cmd/oar --json version
 go run ./cmd/oar --json auth register --username agent.example --bootstrap-token <token> --base-url http://127.0.0.1:8000 --agent agent-example
 go run ./cmd/oar --agent agent-example auth whoami
-printf '{"thread":{"title":"Incident #42"}}' | go run ./cmd/oar --agent agent-example threads create
+printf '{"topic":{"title":"Incident #42","type":"incident","status":"active","summary":"Investigate #42","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":[],"provenance":{"sources":["actor_statement:example"]}}}' | go run ./cmd/oar --agent agent-example topics create
 go run ./cmd/oar --agent agent-example events stream --last-event-id event_123
 go run ./cmd/oar --json --agent agent-example provenance walk --from event:event_123 --depth 2
-printf '{"thread":{"title":"Incident #43"}}' | go run ./cmd/oar --agent agent-example draft create --command threads.create
+printf '{"topic":{"title":"Incident #43","type":"incident","status":"active","summary":"Triage #43","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":[],"provenance":{"sources":["actor_statement:example"]}}}' | go run ./cmd/oar --agent agent-example draft create --command topics.create
 go run ./cmd/oar --json meta commands
-go run ./cmd/oar help threads
+go run ./cmd/oar help topics
 ```
 
 Generated command/concept docs are under `docs/generated/`.
@@ -30,9 +30,7 @@ The CLI supports a small exact-token compatibility layer for high-value command-
 
 - `oar packets receipts create ...` -> `oar receipts create ...`
 - `oar packets reviews create ...` -> `oar reviews create ...`
-- `oar packets work-orders create ...` -> `oar work-orders create ...`
 - `oar artifacts content get ...` -> `oar artifacts content ...`
-- `oar threads update ...` -> `oar threads patch ...`
 
 These aliases are explicit and exact only; unknown command paths still fail when no compatibility alias matches.
 

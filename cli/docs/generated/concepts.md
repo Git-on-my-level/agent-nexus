@@ -3,30 +3,42 @@
 Generated from `contracts/oar-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
-- Contract version: `0.2.3`
-- Concepts: `47`
+- Contract version: `0.3.0`
+- Concepts: `30`
 
-## `append-only`
+## `actors`
 
-- Commands: `1`
+- Commands: `2`
 - Command IDs:
-  - `events.create`
+  - `actors.create`
+  - `actors.list`
+
+## `agents`
+
+- Commands: `8`
+- Command IDs:
+  - `agent.notifications.dismiss`
+  - `agent.notifications.list`
+  - `agent.notifications.read`
+  - `agents.me.get`
+  - `agents.me.keys.rotate`
+  - `agents.me.patch`
+  - `agents.me.revoke`
+  - `auth.agents.register`
 
 ## `artifacts`
 
-- Commands: `11`
+- Commands: `9`
 - Command IDs:
   - `artifacts.archive`
-  - `artifacts.content.get`
+  - `artifacts.content`
   - `artifacts.create`
   - `artifacts.get`
   - `artifacts.list`
   - `artifacts.purge`
   - `artifacts.restore`
-  - `artifacts.tombstone`
+  - `artifacts.trash`
   - `artifacts.unarchive`
-  - `threads.context`
-  - `threads.workspace`
 
 ## `audit`
 
@@ -36,8 +48,10 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `auth`
 
-- Commands: `17`
+- Commands: `21`
 - Command IDs:
+  - `actors.create`
+  - `actors.list`
   - `agents.me.get`
   - `agents.me.keys.rotate`
   - `agents.me.patch`
@@ -48,6 +62,8 @@ Generated from `contracts/oar-openapi.yaml`.
   - `auth.invites.create`
   - `auth.invites.list`
   - `auth.invites.revoke`
+  - `auth.passkey.dev.login`
+  - `auth.passkey.dev.register`
   - `auth.passkey.login.options`
   - `auth.passkey.login.verify`
   - `auth.passkey.register.options`
@@ -58,137 +74,96 @@ Generated from `contracts/oar-openapi.yaml`.
 
 ## `boards`
 
-- Commands: `17`
+- Commands: `15`
 - Command IDs:
   - `boards.archive`
-  - `boards.cards.archive`
   - `boards.cards.create`
   - `boards.cards.get`
   - `boards.cards.list`
-  - `boards.cards.move`
-  - `boards.cards.update`
   - `boards.create`
   - `boards.get`
   - `boards.list`
+  - `boards.patch`
   - `boards.purge`
   - `boards.restore`
-  - `boards.tombstone`
+  - `boards.trash`
   - `boards.unarchive`
-  - `boards.update`
   - `boards.workspace`
-  - `threads.workspace`
+  - `cards.create`
+  - `cards.move`
 
-## `commitments`
+## `cards`
 
-- Commands: `7`
+- Commands: `13`
 - Command IDs:
-  - `boards.workspace`
-  - `commitments.create`
-  - `commitments.get`
-  - `commitments.list`
-  - `commitments.patch`
-  - `threads.context`
-  - `threads.workspace`
+  - `boards.cards.create`
+  - `boards.cards.get`
+  - `boards.cards.list`
+  - `cards.archive`
+  - `cards.create`
+  - `cards.get`
+  - `cards.list`
+  - `cards.move`
+  - `cards.patch`
+  - `cards.purge`
+  - `cards.restore`
+  - `cards.timeline`
+  - `cards.trash`
 
 ## `compatibility`
 
-- Commands: `2`
+- Commands: `6`
 - Command IDs:
+  - `meta.commands.get`
+  - `meta.commands.list`
+  - `meta.concepts.get`
+  - `meta.concepts.list`
   - `meta.handshake`
   - `meta.version`
 
-## `concepts`
-
-- Commands: `2`
-- Command IDs:
-  - `meta.concepts.get`
-  - `meta.concepts.list`
-
 ## `concurrency`
 
-- Commands: `7`
+- Commands: `3`
 - Command IDs:
-  - `boards.cards.archive`
-  - `boards.cards.create`
-  - `boards.cards.move`
-  - `boards.cards.update`
-  - `boards.create`
-  - `boards.update`
-  - `docs.update`
-
-## `content`
-
-- Commands: `1`
-- Command IDs:
-  - `artifacts.content.get`
-
-## `derived-views`
-
-- Commands: `5`
-- Command IDs:
-  - `derived.rebuild`
-  - `inbox.get`
-  - `inbox.list`
-  - `inbox.stream`
-  - `notifications.list`
+  - `boards.patch`
+  - `cards.patch`
+  - `topics.patch`
 
 ## `docs`
 
-- Commands: `14`
+- Commands: `11`
 - Command IDs:
-  - `boards.workspace`
   - `docs.archive`
   - `docs.create`
   - `docs.get`
-  - `docs.history`
   - `docs.list`
   - `docs.purge`
   - `docs.restore`
-  - `docs.revision.get`
-  - `docs.tombstone`
+  - `docs.revisions.create`
+  - `docs.revisions.get`
+  - `docs.revisions.list`
+  - `docs.trash`
   - `docs.unarchive`
-  - `docs.update`
-  - `threads.context`
-  - `threads.workspace`
 
 ## `events`
 
-- Commands: `14`
+- Commands: `8`
 - Command IDs:
   - `events.archive`
   - `events.create`
   - `events.get`
+  - `events.list`
   - `events.restore`
   - `events.stream`
-  - `events.tombstone`
+  - `events.trash`
   - `events.unarchive`
-  - `inbox.ack`
-  - `notifications.dismiss`
-  - `notifications.list`
-  - `notifications.read`
-  - `threads.context`
-  - `threads.timeline`
-  - `threads.workspace`
 
 ## `evidence`
 
-- Commands: `1`
+- Commands: `2`
 - Command IDs:
-  - `artifacts.create`
-
-## `filtering`
-
-- Commands: `3`
-- Command IDs:
-  - `artifacts.list`
-  - `commitments.list`
-  - `threads.list`
-
-## `handshake`
-
-- Commands: `1`
-- Command IDs:
-  - `meta.handshake`
+  - `packets.receipts.create`
+  - `packets.reviews.create`
 
 ## `health`
 
@@ -196,270 +171,185 @@ Generated from `contracts/oar-openapi.yaml`.
 - Command IDs:
   - `meta.health`
   - `meta.livez`
-  - `meta.ops.health`
   - `meta.readyz`
-
-## `history`
-
-- Commands: `3`
-- Command IDs:
-  - `boards.cards.archive`
-  - `boards.cards.get`
-  - `boards.cards.update`
-
-## `identity`
-
-- Commands: `7`
-- Command IDs:
-  - `actors.list`
-  - `actors.register`
-  - `agents.me.get`
-  - `agents.me.patch`
-  - `auth.agents.register`
-  - `auth.principals.list`
-  - `auth.principals.revoke`
+  - `ops.health`
 
 ## `inbox`
 
-- Commands: `6`
+- Commands: `4`
 - Command IDs:
-  - `boards.workspace`
-  - `inbox.ack`
+  - `inbox.acknowledge`
   - `inbox.get`
   - `inbox.list`
   - `inbox.stream`
-  - `threads.workspace`
 
-## `introspection`
+## `inspection`
 
-- Commands: `2`
+- Commands: `4`
 - Command IDs:
-  - `meta.commands.get`
-  - `meta.commands.list`
-
-## `key-management`
-
-- Commands: `1`
-- Command IDs:
-  - `agents.me.keys.rotate`
-
-## `lifecycle`
-
-- Commands: `24`
-- Command IDs:
-  - `artifacts.archive`
-  - `artifacts.purge`
-  - `artifacts.restore`
-  - `artifacts.tombstone`
-  - `artifacts.unarchive`
-  - `boards.archive`
-  - `boards.purge`
-  - `boards.restore`
-  - `boards.tombstone`
-  - `boards.unarchive`
-  - `docs.archive`
-  - `docs.purge`
-  - `docs.restore`
-  - `docs.tombstone`
-  - `docs.unarchive`
-  - `events.archive`
-  - `events.restore`
-  - `events.tombstone`
-  - `events.unarchive`
-  - `threads.archive`
-  - `threads.purge`
-  - `threads.restore`
-  - `threads.tombstone`
-  - `threads.unarchive`
-
-## `lineage`
-
-- Commands: `1`
-- Command IDs:
-  - `docs.history`
-
-## `liveness`
-
-- Commands: `2`
-- Command IDs:
-  - `meta.health`
-  - `meta.livez`
+  - `ref_edges.list`
+  - `threads.context`
+  - `threads.inspect`
+  - `threads.list`
 
 ## `maintenance`
 
-- Commands: `1`
+- Commands: `2`
 - Command IDs:
   - `derived.rebuild`
+  - `ops.blob.usage.rebuild`
 
-## `meta`
-
-- Commands: `4`
-- Command IDs:
-  - `meta.commands.get`
-  - `meta.commands.list`
-  - `meta.concepts.get`
-  - `meta.concepts.list`
-
-## `onboarding`
-
-- Commands: `4`
-- Command IDs:
-  - `auth.bootstrap.status`
-  - `auth.invites.create`
-  - `auth.invites.list`
-  - `auth.invites.revoke`
-
-## `operations`
-
-- Commands: `1`
-- Command IDs:
-  - `meta.ops.health`
-
-## `ordering`
+## `notifications`
 
 - Commands: `3`
 - Command IDs:
-  - `boards.cards.create`
-  - `boards.cards.list`
-  - `boards.cards.move`
+  - `agent.notifications.dismiss`
+  - `agent.notifications.list`
+  - `agent.notifications.read`
+
+## `ops`
+
+- Commands: `3`
+- Command IDs:
+  - `ops.blob.usage.rebuild`
+  - `ops.health`
+  - `ops.usage.summary`
 
 ## `packets`
 
-- Commands: `3`
+- Commands: `2`
 - Command IDs:
   - `packets.receipts.create`
   - `packets.reviews.create`
-  - `packets.work-orders.create`
 
-## `passkey`
+## `passkeys`
 
-- Commands: `4`
+- Commands: `6`
 - Command IDs:
+  - `auth.passkey.dev.login`
+  - `auth.passkey.dev.register`
   - `auth.passkey.login.options`
   - `auth.passkey.login.verify`
   - `auth.passkey.register.options`
   - `auth.passkey.register.verify`
 
-## `patch`
+## `projections`
 
-- Commands: `2`
+- Commands: `1`
 - Command IDs:
-  - `commitments.patch`
-  - `threads.patch`
+  - `derived.rebuild`
 
-## `planning`
+## `quotas`
 
-- Commands: `11`
+- Commands: `1`
 - Command IDs:
-  - `boards.cards.archive`
-  - `boards.cards.create`
-  - `boards.cards.get`
-  - `boards.cards.list`
-  - `boards.cards.move`
-  - `boards.cards.update`
-  - `boards.create`
-  - `boards.get`
-  - `boards.list`
-  - `boards.update`
-  - `boards.workspace`
-
-## `provenance`
-
-- Commands: `2`
-- Command IDs:
-  - `commitments.patch`
-  - `threads.timeline`
+  - `ops.usage.summary`
 
 ## `readiness`
 
-- Commands: `2`
+- Commands: `1`
 - Command IDs:
-  - `meta.ops.health`
   - `meta.readyz`
 
-## `receipts`
+## `refs`
 
 - Commands: `1`
 - Command IDs:
-  - `packets.receipts.create`
-
-## `reviews`
-
-- Commands: `1`
-- Command IDs:
-  - `packets.reviews.create`
+  - `ref_edges.list`
 
 ## `revisions`
 
-- Commands: `6`
+- Commands: `3`
 - Command IDs:
-  - `docs.create`
-  - `docs.get`
-  - `docs.history`
-  - `docs.list`
-  - `docs.revision.get`
-  - `docs.update`
-
-## `revocation`
-
-- Commands: `2`
-- Command IDs:
-  - `agents.me.revoke`
-  - `auth.principals.revoke`
-
-## `schema`
-
-- Commands: `1`
-- Command IDs:
-  - `meta.version`
-
-## `snapshots`
-
-- Commands: `2`
-- Command IDs:
-  - `snapshots.get`
-  - `threads.create`
-
-## `streaming`
-
-- Commands: `2`
-- Command IDs:
-  - `events.stream`
-  - `inbox.stream`
-
-## `summaries`
-
-- Commands: `1`
-- Command IDs:
-  - `boards.list`
+  - `docs.revisions.create`
+  - `docs.revisions.get`
+  - `docs.revisions.list`
 
 ## `threads`
 
-- Commands: `13`
+- Commands: `5`
 - Command IDs:
-  - `boards.workspace`
-  - `threads.archive`
   - `threads.context`
-  - `threads.create`
-  - `threads.get`
+  - `threads.inspect`
   - `threads.list`
-  - `threads.patch`
-  - `threads.purge`
-  - `threads.restore`
   - `threads.timeline`
-  - `threads.tombstone`
-  - `threads.unarchive`
   - `threads.workspace`
 
-## `token-lifecycle`
+## `timeline`
 
-- Commands: `1`
+- Commands: `3`
 - Command IDs:
-  - `auth.token`
+  - `cards.timeline`
+  - `threads.timeline`
+  - `topics.timeline`
 
-## `work-orders`
+## `topics`
 
-- Commands: `1`
+- Commands: `10`
 - Command IDs:
-  - `packets.work-orders.create`
+  - `topics.archive`
+  - `topics.create`
+  - `topics.get`
+  - `topics.list`
+  - `topics.patch`
+  - `topics.restore`
+  - `topics.timeline`
+  - `topics.trash`
+  - `topics.unarchive`
+  - `topics.workspace`
+
+## `workspace`
+
+- Commands: `3`
+- Command IDs:
+  - `boards.workspace`
+  - `threads.workspace`
+  - `topics.workspace`
+
+## `write`
+
+- Commands: `42`
+- Command IDs:
+  - `agent.notifications.dismiss`
+  - `agent.notifications.read`
+  - `artifacts.archive`
+  - `artifacts.create`
+  - `artifacts.purge`
+  - `artifacts.restore`
+  - `artifacts.trash`
+  - `artifacts.unarchive`
+  - `boards.archive`
+  - `boards.cards.create`
+  - `boards.create`
+  - `boards.patch`
+  - `boards.purge`
+  - `boards.restore`
+  - `boards.trash`
+  - `boards.unarchive`
+  - `cards.archive`
+  - `cards.create`
+  - `cards.move`
+  - `cards.patch`
+  - `cards.purge`
+  - `cards.restore`
+  - `cards.trash`
+  - `docs.archive`
+  - `docs.create`
+  - `docs.purge`
+  - `docs.restore`
+  - `docs.revisions.create`
+  - `docs.trash`
+  - `docs.unarchive`
+  - `events.archive`
+  - `events.create`
+  - `events.restore`
+  - `events.trash`
+  - `events.unarchive`
+  - `inbox.acknowledge`
+  - `topics.archive`
+  - `topics.create`
+  - `topics.patch`
+  - `topics.restore`
+  - `topics.trash`
+  - `topics.unarchive`
 

@@ -15,9 +15,9 @@ The schema of objects is defined by `/contracts/oar-schema.yaml`.
 
 Each endpoint is classified with an `x-oar-surface` extension indicating its role:
 
-- **`canonical`**: CRUD/list/get endpoints over canonical resources (threads, commitments, artifacts, documents, boards, board cards, events, snapshots, packets). These are the durable substrate.
+- **`canonical`**: CRUD/list/get endpoints over canonical resources (topics, cards, boards, documents, artifacts, events, packets, plus read-only thread compatibility endpoints). These are the durable substrate.
 
-- **`projection`**: Operator convenience surfaces that aggregate multiple canonical resources into workspace-friendly bundles. Examples: `threads.context`, `threads.workspace`, `boards.workspace`, `inbox.list/get/stream/ack`. The web UI intentionally uses projection endpoints for workspace/inbox/operator reads.
+- **`projection`**: Operator convenience surfaces that aggregate multiple canonical resources into workspace-friendly bundles. Examples: `topics.workspace` (primary coordination), `threads.context`, `threads.workspace` (backing-thread diagnostics), `boards.workspace`, `inbox.list/get/stream/ack`. The web UI intentionally uses projection endpoints for workspace/inbox/operator reads.
 
 - **`utility`**: Infrastructure endpoints for health, version, meta discovery, auth bootstrap, and maintenance. Examples: `/health`, `/version`, `/meta/*`, `/auth/*`, `/actors`, `/derived/rebuild`.
 
@@ -37,53 +37,58 @@ Each endpoint is classified with an `x-oar-surface` extension indicating its rol
 - `GET /actors`
   - Response: `{ "actors": [<actor>...] }`
 
-### Threads (thread snapshots)
+### Topics (canonical subject state)
 
-- `POST /threads`
-  - Body: `{ "actor_id": "...", "thread": <thread_snapshot_fields_without_id> }`
-  - `thread.cadence`:
-    - MUST be either literal `reactive` or a 5-field cron expression.
-    - Legacy values `daily`, `weekly`, `monthly`, `custom` MAY be accepted for backward compatibility.
-  - Response: `{ "thread": <thread_snapshot> }`
+- `POST /topics`
+  - Body: `{ "actor_id": "...", "topic": <topic_fields_without_id> }`
+  - Response: `{ "topic": <topic> }`
+
+- `GET /topics`
+  - Query (optional): `type`, `status`, `q`, `limit`, `cursor`
+  - Response: `{ "topics": [<topic>...] }`
+
+- `GET /topics/{topic_id}`
+  - Response: `{ "topic": <topic> }`
+
+- `PATCH /topics/{topic_id}`
+  - Body: `{ "actor_id": "...", "patch": { <fields...> }, "if_updated_at"?: "..." }`
+  - Notes:
+    - Patch/merge semantics apply; list-valued fields replace wholesale.
+  - Response: `{ "topic": <topic> }`
+
+### Cards (canonical board work items)
+
+- `GET /cards`
+  - Response: `{ "cards": [<card>...] }`
+
+- `GET /cards/{card_id}`
+  - Response: `{ "card": <card> }`
+
+- `PATCH /cards/{card_id}`
+  - Body: `{ "actor_id": "...", "patch": { <fields...> }, "if_updated_at"?: "..." }`
+  - Response: `{ "card": <card> }`
+
+- Board-scoped card lifecycle (create, patch, move, remove) is exposed under `POST|PATCH /boards/{board_id}/cards` and related paths; see `/contracts/oar-openapi.yaml`.
+
+### Threads (read-only backing inspection)
+
+Threads are backing infrastructure for timelines and packet subjects. The workspace contract exposes **GET-only** thread routes for inspection and projections; prefer **topics** and **cards** for operator mutations.
 
 - `GET /threads`
   - Query (optional): `status`, `priority`, `tag`, `cadence`, `stale` (boolean)
-  - `cadence` filter semantics:
-    - Preset-based values: `reactive`, `daily`, `weekly`, `monthly`, `custom`.
-    - If a thread stores cron cadence directly, canonical daily/weekly/monthly cron expressions are matched to those presets; non-preset cron values are matched as `custom`.
-  - Response: `{ "threads": [<thread_snapshot>...] }`
+  - Response: `{ "threads": [<thread>...] }` (each `thread` matches the schema’s thread resource shape)
 
 - `GET /threads/{thread_id}`
-  - Response: `{ "thread": <thread_snapshot> }`
+  - Response: `{ "thread": <thread> }`
 
-- `PATCH /threads/{thread_id}`
-  - Body: `{ "actor_id": "...", "patch": { <fields...> } , "if_updated_at"?: "..." }`
-  - Semantics: patch/merge; list-valued fields replace wholesale when present.
-  - `patch.cadence` follows the same `reactive` or 5-field cron rule as create.
-  - Response: `{ "thread": <thread_snapshot> }`
+- `GET /threads/{thread_id}/timeline` (projection)
+  - Response: thread timeline envelope including `events` and related expansions per OpenAPI (`ThreadTimelineResponse`).
 
-- `GET /threads/{thread_id}/timeline`
-  - Response: `{ "events": [<event>...] }`
+- `GET /threads/{thread_id}/context` (projection)
+  - Response: compact coordination bundle for triage per OpenAPI.
 
-### Commitments (commitment snapshots)
-
-- `POST /commitments`
-  - Body: `{ "actor_id": "...", "commitment": <commitment_snapshot_fields_without_id> }`
-  - Response: `{ "commitment": <commitment_snapshot> }`
-
-- `GET /commitments`
-  - Query (optional): `thread_id`, `owner`, `status`, `due_before`, `due_after`
-  - Response: `{ "commitments": [<commitment_snapshot>...] }`
-
-- `GET /commitments/{commitment_id}`
-  - Response: `{ "commitment": <commitment_snapshot> }`
-
-- `PATCH /commitments/{commitment_id}`
-  - Body: `{ "actor_id": "...", "patch": { <fields...> }, "refs"?: ["typed:ref"...], "if_updated_at"?: "..." }`
-  - Notes:
-    - Restricted transitions (e.g. `status -> done`) require `refs` per schema.
-    - `refs` are used to populate provenance for restricted fields.
-  - Response: `{ "commitment": <commitment_snapshot> }`
+- `GET /threads/{thread_id}/workspace` (projection)
+  - Response: related topics, cards, documents, board memberships, inbox section, and freshness metadata per OpenAPI.
 
 ### Artifacts
 
@@ -112,15 +117,11 @@ Each endpoint is classified with an `x-oar-surface` extension indicating its rol
 
 ### Packet convenience endpoints
 
-- `POST /work_orders`
-  - Body: `{ "actor_id": "...", "artifact": <artifact_metadata>, "packet": <work_order_packet> }`
-  - Response: `{ "artifact": <artifact_metadata>, "event": <event> }`
-
-- `POST /receipts`
+- `POST /packets/receipts`
   - Body: `{ "actor_id": "...", "artifact": <artifact_metadata>, "packet": <receipt_packet> }`
   - Response: `{ "artifact": <artifact_metadata>, "event": <event> }`
 
-- `POST /reviews`
+- `POST /packets/reviews`
   - Body: `{ "actor_id": "...", "artifact": <artifact_metadata>, "packet": <review_packet> }`
   - Response: `{ "artifact": <artifact_metadata>, "event": <event> }`
 
@@ -129,8 +130,9 @@ Each endpoint is classified with an `x-oar-surface` extension indicating its rol
 - `GET /inbox`
   - Response: `{ "items": [<inbox_item>...], "generated_at": "..." }`
 
-- `POST /inbox/ack`
-  - Body: `{ "actor_id": "...", "thread_id": "...", "inbox_item_id": "..." }`
+- `POST /inbox/{inbox_id}/acknowledge`
+  - Body: `{ "actor_id": "...", "subject_ref": "<typed ref>" }`
+  - `subject_ref` must be one of `thread:`, `topic:` (existing topic row), `card:`, or `board:`; use `thread:` when the anchor is only a backing thread id.
   - Response: `{ "event": <event> }`
 
 - `POST /derived/rebuild`

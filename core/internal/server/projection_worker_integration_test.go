@@ -62,7 +62,7 @@ func newManualProjectionTestServer(t *testing.T) manualProjectionHarness {
 	})
 
 	return manualProjectionHarness{
-		primitivesTestHarness: primitivesTestHarness{workspace: workspace, baseURL: server.URL, maintainer: maintainer},
+		primitivesTestHarness: primitivesTestHarness{workspace: workspace, baseURL: server.URL, maintainer: maintainer, primitiveStore: primitiveStore},
 		store:                 primitiveStore,
 		maintainer:            maintainer,
 	}
@@ -88,7 +88,7 @@ func TestThreadWorkspaceReadDoesNotMutateDerivedState(t *testing.T) {
 	}`, http.StatusCreated).Body.Close()
 
 	eventsBefore := countTableRows(t, h.workspace.DB(), "events")
-	projectionsBefore := countTableRows(t, h.workspace.DB(), "derived_thread_views")
+	projectionsBefore := countTableRows(t, h.workspace.DB(), "derived_topic_views")
 	inboxBefore := countTableRows(t, h.workspace.DB(), "derived_inbox_items")
 
 	resp, err := http.Get(h.baseURL + "/threads/" + threadID + "/workspace")
@@ -119,7 +119,7 @@ func TestThreadWorkspaceReadDoesNotMutateDerivedState(t *testing.T) {
 	if eventsAfter := countTableRows(t, h.workspace.DB(), "events"); eventsAfter != eventsBefore {
 		t.Fatalf("expected workspace read not to append events, got before=%d after=%d", eventsBefore, eventsAfter)
 	}
-	if projectionsAfter := countTableRows(t, h.workspace.DB(), "derived_thread_views"); projectionsAfter != projectionsBefore {
+	if projectionsAfter := countTableRows(t, h.workspace.DB(), "derived_topic_views"); projectionsAfter != projectionsBefore {
 		t.Fatalf("expected workspace read not to update derived thread views, got before=%d after=%d", projectionsBefore, projectionsAfter)
 	}
 	if inboxAfter := countTableRows(t, h.workspace.DB(), "derived_inbox_items"); inboxAfter != inboxBefore {
@@ -133,34 +133,19 @@ func TestInboxReadDoesNotEmitStaleThreadExceptions(t *testing.T) {
 	h := newManualProjectionTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
 
-	resp := postJSONExpectStatus(t, h.baseURL+"/threads", `{
-		"actor_id":"actor-1",
-		"thread":{
-			"title":"Pending stale thread",
-			"type":"incident",
-			"status":"active",
-			"priority":"p1",
-			"tags":["ops"],
-			"cadence":"daily",
-			"next_check_in_at":"2020-01-01T00:00:00Z",
-			"current_summary":"summary",
-			"next_actions":["check"],
-			"key_artifacts":[],
-			"provenance":{"sources":["inferred"]}
-		}
-	}`, http.StatusCreated)
-	defer resp.Body.Close()
-
-	var created struct {
-		Thread map[string]any `json:"thread"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
-		t.Fatalf("decode thread response: %v", err)
-	}
-	threadID := asString(created.Thread["id"])
-	if threadID == "" {
-		t.Fatal("expected thread id")
-	}
+	threadID := integrationSeedThread(t, h.primitivesTestHarness, "actor-1", map[string]any{
+		"title":            "Pending stale thread",
+		"type":             "incident",
+		"status":           "active",
+		"priority":         "p1",
+		"tags":             []any{"ops"},
+		"cadence":          "daily",
+		"next_check_in_at": "2020-01-01T00:00:00Z",
+		"current_summary":  "summary",
+		"next_actions":     []any{"check"},
+		"key_artifacts":    []any{},
+		"provenance":       map[string]any{"sources": []any{"inferred"}},
+	})
 
 	before := countStaleThreadExceptions(t, h.baseURL, threadID)
 	inboxResp, err := http.Get(h.baseURL + "/inbox")
@@ -196,9 +181,9 @@ func TestProjectionMaintainerStepClearsPendingStatus(t *testing.T) {
 		}
 	}`, http.StatusCreated).Body.Close()
 
-	statuses, err := h.store.GetThreadProjectionRefreshStatuses(context.Background(), []string{threadID})
+	statuses, err := h.store.GetTopicProjectionRefreshStatuses(context.Background(), []string{threadID})
 	if err != nil {
-		t.Fatalf("GetThreadProjectionRefreshStatuses: %v", err)
+		t.Fatalf("GetTopicProjectionRefreshStatuses: %v", err)
 	}
 	if !statuses[threadID].IsDirty() {
 		t.Fatalf("expected thread %s to be marked dirty before worker runs, got %#v", threadID, statuses[threadID])
@@ -208,9 +193,9 @@ func TestProjectionMaintainerStepClearsPendingStatus(t *testing.T) {
 		t.Fatalf("Step: %v", err)
 	}
 
-	state, err := loadThreadProjectionState(context.Background(), handlerOptions{primitiveStore: h.store}, threadID)
+	state, err := loadTopicProjectionState(context.Background(), handlerOptions{primitiveStore: h.store}, threadID)
 	if err != nil {
-		t.Fatalf("loadThreadProjectionState: %v", err)
+		t.Fatalf("loadTopicProjectionState: %v", err)
 	}
 	if state.Status != "current" {
 		t.Fatalf("expected current projection status after worker run, got %#v", state.Freshness)
@@ -219,9 +204,9 @@ func TestProjectionMaintainerStepClearsPendingStatus(t *testing.T) {
 		t.Fatalf("expected materialized inbox_count=1 after worker run, got %#v", state.Projection)
 	}
 
-	statuses, err = h.store.GetThreadProjectionRefreshStatuses(context.Background(), []string{threadID})
+	statuses, err = h.store.GetTopicProjectionRefreshStatuses(context.Background(), []string{threadID})
 	if err != nil {
-		t.Fatalf("GetThreadProjectionRefreshStatuses after worker: %v", err)
+		t.Fatalf("GetTopicProjectionRefreshStatuses after worker: %v", err)
 	}
 	if statuses[threadID].IsDirty() || statuses[threadID].InProgress() || statuses[threadID].LastErrorMessage != "" {
 		t.Fatalf("expected clean refresh status after worker run, got %#v", statuses[threadID])

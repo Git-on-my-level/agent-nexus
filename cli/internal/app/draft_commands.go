@@ -34,6 +34,14 @@ type persistedDraft struct {
 	Meta       map[string]interface{} `json:"meta,omitempty"`
 }
 
+type draftCommandFallbackSpec struct {
+	pathParams []string
+}
+
+var draftCommandFallbackSpecs = map[string]draftCommandFallbackSpec{
+	"derived.rebuild": {},
+}
+
 func (a *App) runDraft(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
 	if len(args) == 0 || isHelpToken(args[0]) {
 		return &commandResult{Text: draftUsageText()}, "draft", nil
@@ -70,7 +78,7 @@ func (a *App) runDraftCreate(args []string, cfg config.Resolved) (*commandResult
 	var commandFlag trackedString
 	var fromFileFlag trackedString
 	var draftIDFlag trackedString
-	fs.Var(&commandFlag, "command", "Command ID or CLI path (for example, threads.create)")
+	fs.Var(&commandFlag, "command", "Command ID or CLI path (for example, topics.create)")
 	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
 	fs.Var(&draftIDFlag, "draft-id", "Optional deterministic draft id")
 	if err := fs.Parse(filteredArgs); err != nil {
@@ -427,6 +435,9 @@ func resolveDraftCommandID(raw string) (string, error) {
 	if strings.Contains(raw, ".") {
 		spec, ok := commandSpecByID(raw)
 		if !ok {
+			if _, fallback := draftCommandFallbackSpecs[raw]; fallback {
+				return raw, nil
+			}
 			return "", errnorm.Usage("invalid_request", fmt.Sprintf("unknown command id %q", raw))
 		}
 		return spec.CommandID, nil
@@ -437,11 +448,14 @@ func resolveDraftCommandID(raw string) (string, error) {
 			return strings.TrimSpace(spec.CommandID), nil
 		}
 	}
+	if _, ok := draftCommandFallbackSpecs[registryPath]; ok {
+		return registryPath, nil
+	}
 	return "", errnorm.Usage("invalid_request", fmt.Sprintf("unknown command %q", raw))
 }
 
 func validateDraftBody(commandID string, body map[string]any) []string {
-	spec, ok := commandSpecByID(commandID)
+	spec, ok := draftCommandSpecByID(commandID)
 	if !ok {
 		return []string{fmt.Sprintf("unknown command id %q", commandID)}
 	}
@@ -453,18 +467,17 @@ func validateDraftBody(commandID string, body map[string]any) []string {
 		return []string{fmt.Sprintf("command %q does not accept a request body", commandID)}
 	}
 	validators := map[string]func(map[string]any) []string{
-		"threads.create":             validateDraftThreadCreate,
-		"threads.patch":              validateDraftThreadPatch,
-		"commitments.create":         validateDraftCommitmentCreate,
-		"commitments.patch":          validateDraftCommitmentPatch,
-		"docs.update":                validateDraftDocsUpdate,
-		"events.create":              validateDraftEventCreate,
-		"artifacts.create":           validateDraftArtifactCreate,
-		"inbox.ack":                  validateDraftInboxAck,
-		"packets.work-orders.create": validateDraftWorkOrderCreate,
-		"packets.receipts.create":    validateDraftReceiptCreate,
-		"packets.reviews.create":     validateDraftReviewCreate,
-		"derived.rebuild":            validateDraftDerivedRebuild,
+		"topics.create":           validateDraftTopicCreate,
+		"topics.patch":            validateDraftTopicPatch,
+		"cards.patch":             validateDraftCardPatch,
+		"cards.move":              validateDraftCardMove,
+		"docs.revisions.create":   validateDraftDocsUpdate,
+		"events.create":           validateDraftEventCreate,
+		"artifacts.create":        validateDraftArtifactCreate,
+		"inbox.acknowledge":       validateDraftInboxAck,
+		"packets.receipts.create": validateDraftReceiptCreate,
+		"packets.reviews.create":  validateDraftReviewCreate,
+		"derived.rebuild":         validateDraftDerivedRebuild,
 	}
 	validate, exists := validators[commandID]
 	if !exists {
@@ -474,7 +487,7 @@ func validateDraftBody(commandID string, body map[string]any) []string {
 }
 
 func validateDraftCreateCommand(commandID string) error {
-	spec, ok := commandSpecByID(commandID)
+	spec, ok := draftCommandSpecByID(commandID)
 	if !ok {
 		return errnorm.Usage("invalid_request", fmt.Sprintf("unknown command id %q", commandID))
 	}
@@ -491,61 +504,28 @@ func validateDraftCreateCommand(commandID string) error {
 	)
 }
 
+func draftCommandSpecByID(commandID string) (contractsclient.CommandSpec, bool) {
+	spec, ok := commandSpecByID(commandID)
+	if ok {
+		return spec, true
+	}
+	fallback, ok := draftCommandFallbackSpecs[strings.TrimSpace(commandID)]
+	if !ok {
+		return contractsclient.CommandSpec{}, false
+	}
+	return contractsclient.CommandSpec{
+		CommandID:  strings.TrimSpace(commandID),
+		Method:     "POST",
+		InputMode:  "json-body",
+		PathParams: append([]string(nil), fallback.pathParams...),
+	}, true
+}
+
 func validateDraftDocsUpdate(body map[string]any) []string {
 	out := make([]string, 0)
-	if err := validateDocsUpdateBody(body, "docs update"); err != nil {
+	if err := validateDocsUpdateBody(body, "docs revisions create"); err != nil {
 		out = append(out, err.Error())
 	}
-	return out
-}
-
-func validateDraftThreadCreate(body map[string]any) []string {
-	out := make([]string, 0)
-	validateOptionalNonEmptyString(body, "actor_id", "actor_id", &out)
-	thread, ok := requiredObjectField(body, "thread", "thread", &out)
-	if !ok {
-		return out
-	}
-	if _, exists := thread["open_commitments"]; exists {
-		out = append(out, "thread.open_commitments is core-maintained and cannot be set")
-	}
-	requiredFields := []string{
-		"title",
-		"type",
-		"status",
-		"priority",
-		"tags",
-		"cadence",
-		"current_summary",
-		"next_actions",
-		"key_artifacts",
-		"provenance",
-	}
-	for _, field := range requiredFields {
-		if _, exists := thread[field]; !exists {
-			out = append(out, fmt.Sprintf("thread.%s is required", field))
-		}
-	}
-	validateThreadFields(thread, true, "thread", &out)
-	return out
-}
-
-func validateDraftThreadPatch(body map[string]any) []string {
-	out := make([]string, 0)
-	validateOptionalNonEmptyString(body, "actor_id", "actor_id", &out)
-	validateOptionalRFC3339(body, "if_updated_at", "if_updated_at", &out)
-	patch, ok := requiredObjectField(body, "patch", "patch", &out)
-	if !ok {
-		return out
-	}
-	if len(patch) == 0 {
-		out = append(out, "patch is required")
-		return out
-	}
-	if _, exists := patch["open_commitments"]; exists {
-		out = append(out, "thread.open_commitments is core-maintained and cannot be patched")
-	}
-	validateThreadFields(patch, false, "patch", &out)
 	return out
 }
 
@@ -562,9 +542,8 @@ func validateThreadFields(thread map[string]any, createMode bool, path string, o
 		"next_check_in_at": true,
 	}
 	stringListFields := map[string]bool{
-		"tags":             true,
-		"next_actions":     true,
-		"open_commitments": true,
+		"tags":         true,
+		"next_actions": true,
 	}
 	typedRefListFields := map[string]bool{
 		"key_artifacts": true,
@@ -616,33 +595,34 @@ func validateThreadFields(thread map[string]any, createMode bool, path string, o
 	}
 }
 
-func validateDraftCommitmentCreate(body map[string]any) []string {
+func validateDraftTopicCreate(body map[string]any) []string {
 	out := make([]string, 0)
 	validateOptionalNonEmptyString(body, "actor_id", "actor_id", &out)
-	commitment, ok := requiredObjectField(body, "commitment", "commitment", &out)
+	topic, ok := requiredObjectField(body, "topic", "topic", &out)
 	if !ok {
 		return out
 	}
 	requiredFields := []string{
-		"thread_id",
-		"title",
-		"owner",
-		"due_at",
+		"type",
 		"status",
-		"definition_of_done",
-		"links",
+		"title",
+		"summary",
+		"owner_refs",
+		"document_refs",
+		"board_refs",
+		"related_refs",
 		"provenance",
 	}
 	for _, field := range requiredFields {
-		if _, exists := commitment[field]; !exists {
-			out = append(out, fmt.Sprintf("commitment.%s is required", field))
+		if _, exists := topic[field]; !exists {
+			out = append(out, fmt.Sprintf("topic.%s is required", field))
 		}
 	}
-	validateCommitmentFields(commitment, true, "commitment", &out)
+	validateTopicFields(topic, true, "topic", &out)
 	return out
 }
 
-func validateDraftCommitmentPatch(body map[string]any) []string {
+func validateDraftTopicPatch(body map[string]any) []string {
 	out := make([]string, 0)
 	validateOptionalNonEmptyString(body, "actor_id", "actor_id", &out)
 	validateOptionalRFC3339(body, "if_updated_at", "if_updated_at", &out)
@@ -654,51 +634,48 @@ func validateDraftCommitmentPatch(body map[string]any) []string {
 		out = append(out, "patch is required")
 		return out
 	}
-	if _, exists := patch["thread_id"]; exists {
-		out = append(out, "commitment.thread_id cannot be patched")
-	}
-	validateCommitmentFields(patch, false, "patch", &out)
-	if refs, exists := body["refs"]; exists {
-		values, ok := asStringList(refs)
-		if !ok {
-			out = append(out, "refs must be a list of strings")
-		} else {
-			validateTypedRefs(values, "refs", &out)
-		}
-	}
+	validateTopicFields(patch, false, "patch", &out)
 	return out
 }
 
-func validateCommitmentFields(commitment map[string]any, createMode bool, path string, out *[]string) {
+func validateTopicFields(topic map[string]any, createMode bool, path string, out *[]string) {
 	stringFields := map[string]bool{
-		"thread_id": true,
-		"title":     true,
-		"owner":     true,
-		"status":    true,
+		"type":    true,
+		"status":  true,
+		"title":   true,
+		"summary": true,
 	}
-	for field, raw := range commitment {
+	for field, raw := range topic {
 		full := path + "." + field
 		switch field {
-		case "due_at":
+		case "type", "status", "title", "summary":
 			text, ok := raw.(string)
 			if !ok {
-				*out = append(*out, full+" must be an RFC3339 datetime string")
+				*out = append(*out, full+" must be a string")
 				continue
 			}
-			if _, err := time.Parse(time.RFC3339, text); err != nil {
-				*out = append(*out, full+" must be an RFC3339 datetime string")
+			if createMode && strings.TrimSpace(text) == "" {
+				*out = append(*out, full+" must be non-empty")
 			}
-		case "definition_of_done":
-			if _, ok := asStringList(raw); !ok {
-				*out = append(*out, full+" must be a list of strings")
-			}
-		case "links":
+		case "owner_refs", "document_refs", "board_refs", "related_refs":
 			values, ok := asStringList(raw)
 			if !ok {
 				*out = append(*out, full+" must be a list of strings")
 				continue
 			}
 			validateTypedRefs(values, full, out)
+		case "thread_id":
+			if raw == nil {
+				continue
+			}
+			text, ok := raw.(string)
+			if !ok {
+				*out = append(*out, full+" must be a string")
+				continue
+			}
+			if strings.TrimSpace(text) == "" {
+				*out = append(*out, full+" must be non-empty")
+			}
 		case "provenance":
 			provenance, ok := raw.(map[string]any)
 			if !ok {
@@ -710,6 +687,96 @@ func validateCommitmentFields(commitment map[string]any, createMode bool, path s
 			if !stringFields[field] {
 				continue
 			}
+		}
+	}
+}
+
+func validateDraftCardPatch(body map[string]any) []string {
+	out := make([]string, 0)
+	validateOptionalNonEmptyString(body, "actor_id", "actor_id", &out)
+	validateOptionalRFC3339(body, "if_updated_at", "if_updated_at", &out)
+	patch, ok := requiredObjectField(body, "patch", "patch", &out)
+	if !ok {
+		return out
+	}
+	if len(patch) == 0 {
+		out = append(out, "patch is required")
+		return out
+	}
+	validateCardFields(patch, false, "patch", &out)
+	return out
+}
+
+func validateDraftCardMove(body map[string]any) []string {
+	out := make([]string, 0)
+	validateOptionalNonEmptyString(body, "actor_id", "actor_id", &out)
+	move := effectiveCardMoveMutationMap(body)
+	if move == nil {
+		out = append(out, "column_key is required (flat body or nested move object)")
+		return out
+	}
+	useNestedPath := nestedMutationMap(body, "move") != nil && strings.TrimSpace(anyString(body["column_key"])) == ""
+	path := "move"
+	if !useNestedPath {
+		path = ""
+	}
+	colPath := "column_key"
+	if useNestedPath {
+		colPath = "move.column_key"
+	}
+	requiredStringField(move, "column_key", colPath, true, &out)
+	ifBoardPath := "if_board_updated_at"
+	if useNestedPath {
+		ifBoardPath = "move.if_board_updated_at"
+	}
+	validateRequiredRFC3339(move, "if_board_updated_at", ifBoardPath, &out)
+	validateCardFields(move, false, path, &out)
+	return out
+}
+
+func validateCardFields(card map[string]any, createMode bool, path string, out *[]string) {
+	for field, raw := range card {
+		full := field
+		if path != "" {
+			full = path + "." + field
+		}
+		switch field {
+		case "title", "summary", "risk", "resolution":
+			text, ok := raw.(string)
+			if !ok {
+				*out = append(*out, full+" must be a string")
+				continue
+			}
+			if createMode && strings.TrimSpace(text) == "" {
+				*out = append(*out, full+" must be non-empty")
+			}
+		case "assignee_refs", "resolution_refs", "related_refs":
+			values, ok := asStringList(raw)
+			if !ok {
+				*out = append(*out, full+" must be a list of strings")
+				continue
+			}
+			validateTypedRefs(values, full, out)
+		case "topic_ref", "thread_ref", "document_ref", "before_card_id", "after_card_id":
+			if raw == nil {
+				continue
+			}
+			text, ok := raw.(string)
+			if !ok {
+				*out = append(*out, full+" must be a string")
+				continue
+			}
+			if strings.TrimSpace(text) == "" {
+				*out = append(*out, full+" must be non-empty")
+			}
+		case "provenance":
+			provenance, ok := raw.(map[string]any)
+			if !ok {
+				*out = append(*out, full+" must be an object")
+				continue
+			}
+			validateProvenance(provenance, full, out)
+		case "column_key":
 			text, ok := raw.(string)
 			if !ok {
 				*out = append(*out, full+" must be a string")
@@ -805,13 +872,9 @@ func validateDraftArtifactCreate(body map[string]any) []string {
 func validateDraftInboxAck(body map[string]any) []string {
 	out := make([]string, 0)
 	validateOptionalNonEmptyString(body, "actor_id", "actor_id", &out)
-	requiredStringField(body, "thread_id", "thread_id", true, &out)
+	requiredStringField(body, "subject_ref", "subject_ref", true, &out)
 	requiredStringField(body, "inbox_item_id", "inbox_item_id", true, &out)
 	return out
-}
-
-func validateDraftWorkOrderCreate(body map[string]any) []string {
-	return validateDraftPacketCreate(body, "work_order")
 }
 
 func validateDraftReceiptCreate(body map[string]any) []string {
@@ -852,19 +915,9 @@ func validateDraftPacketCreate(body map[string]any, packetKind string) []string 
 
 func validatePacketForKind(kind string, artifact map[string]any, packet map[string]any, path string, out *[]string) {
 	rules := map[string]map[string]string{
-		"work_order": {
-			"work_order_id":       "string",
-			"thread_id":           "string",
-			"objective":           "string",
-			"constraints":         "list<string>",
-			"context_refs":        "list<typed_ref>",
-			"acceptance_criteria": "list<string>",
-			"definition_of_done":  "list<string>",
-		},
 		"receipt": {
 			"receipt_id":            "string",
-			"work_order_id":         "string",
-			"thread_id":             "string",
+			"subject_ref":           "string",
 			"outputs":               "list<typed_ref+>",
 			"verification_evidence": "list<typed_ref+>",
 			"changes_summary":       "string",
@@ -872,8 +925,8 @@ func validatePacketForKind(kind string, artifact map[string]any, packet map[stri
 		},
 		"review": {
 			"review_id":     "string",
-			"work_order_id": "string",
-			"receipt_id":    "string",
+			"subject_ref":   "string",
+			"receipt_ref":   "string",
 			"outcome":       "string",
 			"notes":         "string",
 			"evidence_refs": "list<typed_ref>",
@@ -887,12 +940,10 @@ func validatePacketForKind(kind string, artifact map[string]any, packet map[stri
 
 	fieldOrder := []string{}
 	switch kind {
-	case "work_order":
-		fieldOrder = []string{"work_order_id", "thread_id", "objective", "constraints", "context_refs", "acceptance_criteria", "definition_of_done"}
 	case "receipt":
-		fieldOrder = []string{"receipt_id", "work_order_id", "thread_id", "outputs", "verification_evidence", "changes_summary", "known_gaps"}
+		fieldOrder = []string{"receipt_id", "subject_ref", "outputs", "verification_evidence", "changes_summary", "known_gaps"}
 	case "review":
-		fieldOrder = []string{"review_id", "work_order_id", "receipt_id", "outcome", "notes", "evidence_refs"}
+		fieldOrder = []string{"review_id", "subject_ref", "receipt_ref", "outcome", "notes", "evidence_refs"}
 	}
 	for _, name := range fieldOrder {
 		kindSpec := fields[name]
@@ -936,9 +987,8 @@ func validatePacketForKind(kind string, artifact map[string]any, packet map[stri
 	}
 
 	idField := map[string]string{
-		"work_order": "work_order_id",
-		"receipt":    "receipt_id",
-		"review":     "review_id",
+		"receipt": "receipt_id",
+		"review":  "review_id",
 	}[kind]
 	packetID, _ := packet[idField].(string)
 	packetID = strings.TrimSpace(packetID)
@@ -955,28 +1005,16 @@ func validatePacketForKind(kind string, artifact map[string]any, packet map[stri
 	if !refsOK {
 		return
 	}
-	threadID, _ := packet["thread_id"].(string)
-	threadID = strings.TrimSpace(threadID)
-	if threadID != "" && !containsRef(artifactRefs, "thread:"+threadID) {
-		*out = append(*out, fmt.Sprintf("artifact.refs must include %q", "thread:"+threadID))
+	subjectRef, _ := packet["subject_ref"].(string)
+	subjectRef = strings.TrimSpace(subjectRef)
+	if subjectRef != "" && !containsRef(artifactRefs, subjectRef) {
+		*out = append(*out, fmt.Sprintf("artifact.refs must include %q", subjectRef))
 	}
-	switch kind {
-	case "receipt":
-		workOrderID, _ := packet["work_order_id"].(string)
-		workOrderID = strings.TrimSpace(workOrderID)
-		if workOrderID != "" && !containsRef(artifactRefs, "artifact:"+workOrderID) {
-			*out = append(*out, fmt.Sprintf("artifact.refs must include %q", "artifact:"+workOrderID))
-		}
-	case "review":
-		workOrderID, _ := packet["work_order_id"].(string)
-		workOrderID = strings.TrimSpace(workOrderID)
-		if workOrderID != "" && !containsRef(artifactRefs, "artifact:"+workOrderID) {
-			*out = append(*out, fmt.Sprintf("artifact.refs must include %q", "artifact:"+workOrderID))
-		}
-		receiptID, _ := packet["receipt_id"].(string)
-		receiptID = strings.TrimSpace(receiptID)
-		if receiptID != "" && !containsRef(artifactRefs, "artifact:"+receiptID) {
-			*out = append(*out, fmt.Sprintf("artifact.refs must include %q", "artifact:"+receiptID))
+	if kind == "review" {
+		receiptRef, _ := packet["receipt_ref"].(string)
+		receiptRef = strings.TrimSpace(receiptRef)
+		if receiptRef != "" && !containsRef(artifactRefs, receiptRef) {
+			*out = append(*out, fmt.Sprintf("artifact.refs must include %q", receiptRef))
 		}
 	}
 }
@@ -1062,6 +1100,26 @@ func validateOptionalRFC3339(body map[string]any, key string, path string, out *
 	text, ok := raw.(string)
 	if !ok {
 		*out = append(*out, path+" must be an RFC3339 datetime string")
+		return
+	}
+	if _, err := time.Parse(time.RFC3339, text); err != nil {
+		*out = append(*out, path+" must be an RFC3339 datetime string")
+	}
+}
+
+func validateRequiredRFC3339(body map[string]any, key string, path string, out *[]string) {
+	raw, exists := body[key]
+	if !exists || raw == nil {
+		*out = append(*out, path+" is required")
+		return
+	}
+	text, ok := raw.(string)
+	if !ok {
+		*out = append(*out, path+" must be an RFC3339 datetime string")
+		return
+	}
+	if strings.TrimSpace(text) == "" {
+		*out = append(*out, path+" must be non-empty")
 		return
 	}
 	if _, err := time.Parse(time.RFC3339, text); err != nil {
@@ -1164,7 +1222,7 @@ func containsRef(refs []string, expected string) bool {
 
 func isPacketKind(kind string) bool {
 	switch strings.TrimSpace(kind) {
-	case "work_order", "receipt", "review":
+	case "receipt", "review":
 		return true
 	default:
 		return false
@@ -1220,7 +1278,7 @@ Use `+"`oar draft`"+` when you want a local checkpoint before sending a write to
 Choose the right path:
 
 - Use direct commands when the mutation is small and you are ready to apply it now.
-- Prefer command-specific proposal flows when they exist, such as `+"`threads propose-patch`"+` or `+"`docs propose-update`"+`, because they add domain-aware diff/review helpers.
+- Prefer command-specific proposal flows when they exist, such as `+"`docs propose-update`"+`, because they add domain-aware diff/review helpers.
 - Use `+"`draft`"+` for lower-level commands, generic JSON bodies, or cases where you want to stage the exact request before commit.
 
 Standard workflow
@@ -1244,7 +1302,7 @@ Heuristics
 - Re-read current state before committing older drafts if the target may have changed.
 
 Examples:
-  cat payload.json | oar draft create --command threads.create
+  cat payload.json | oar draft create --command topics.create
   oar draft list
   oar draft commit draft-20260305T103000-a1b2c3d4e5f6
 `) + "\n"
@@ -1265,7 +1323,7 @@ Flags:
 
 Examples:
   cat payload.json | oar draft create --command events.create
-  oar draft create --command threads.create --from-file thread.json
+  oar draft create --command topics.create --from-file topic.json
 `))
 
 	commandValue := draftCreateHelpCommandValue(args)

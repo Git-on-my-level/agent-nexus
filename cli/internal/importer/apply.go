@@ -111,11 +111,19 @@ func applyOrder(obj PlanObject) int {
 func entityRef(kind string, response map[string]any) string {
 	switch kind {
 	case "thread":
+		// Import execute uses `topics create`; API envelope is `{ topic }`. Keep `thread` for tests and older mocks.
+		topic := asMap(response["topic"])
+		if topic != nil {
+			id := firstNonEmpty(anyString(topic["id"]), anyString(topic["topic_id"]))
+			if id != "" {
+				return "topic:" + id
+			}
+		}
 		thread := asMap(response["thread"])
 		if thread == nil {
 			return ""
 		}
-		id := firstNonEmpty(anyString(thread["id"]), anyString(thread["thread_id"]), anyString(thread["snapshot_id"]))
+		id := firstNonEmpty(anyString(thread["id"]), anyString(thread["thread_id"]))
 		if id == "" {
 			return ""
 		}
@@ -161,7 +169,7 @@ func writeDriverScript(path string, objects []PlanObject, previewDir string) err
 		payloadPath := filepath.Join(previewDir, obj.Kind, obj.Key+".json")
 		switch obj.Kind {
 		case "thread":
-			lines = append(lines, fmt.Sprintf("oar --json threads create --from-file %s", shellQuote(payloadPath)))
+			lines = append(lines, fmt.Sprintf("oar --json topics create --from-file %s", shellQuote(payloadPath)))
 		case "artifact":
 			lines = append(lines, fmt.Sprintf("oar --json artifacts create --from-file %s", shellQuote(payloadPath)))
 		case "doc":

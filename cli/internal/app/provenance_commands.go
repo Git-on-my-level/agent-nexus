@@ -65,7 +65,7 @@ var provenanceResolverByPrefix = map[string]provenanceResolverSpec{
 	},
 	"thread": {
 		resourceType: "thread",
-		commandID:    "threads.get",
+		commandID:    "threads.inspect",
 		pathParam:    "thread_id",
 		bodyField:    "thread",
 	},
@@ -75,11 +75,11 @@ var provenanceResolverByPrefix = map[string]provenanceResolverSpec{
 		pathParam:    "artifact_id",
 		bodyField:    "artifact",
 	},
-	"snapshot": {
-		resourceType: "snapshot",
-		commandID:    "snapshots.get",
-		pathParam:    "snapshot_id",
-		bodyField:    "snapshot",
+	"topic": {
+		resourceType: "topic",
+		commandID:    "topics.get",
+		pathParam:    "topic_id",
+		bodyField:    "topic",
 	},
 }
 
@@ -102,7 +102,7 @@ func (a *App) runProvenanceWalk(ctx context.Context, args []string, cfg config.R
 	var fromFlag trackedString
 	var depthFlag trackedInt
 	var includeEventChain trackedBool
-	fs.Var(&fromFlag, "from", "Start typed ref (event:<id>|thread:<id>|artifact:<id>|snapshot:<id>)")
+	fs.Var(&fromFlag, "from", "Start typed ref (event:<id>|thread:<id>|artifact:<id>|topic:<id>)")
 	fs.Var(&depthFlag, "depth", "Traversal depth (0 means root only)")
 	fs.Var(&includeEventChain, "include-event-chain", "Include event.thread_id as provenance edges")
 	if err := fs.Parse(args); err != nil {
@@ -398,10 +398,6 @@ func (a *App) resolveProvenanceNode(ctx context.Context, cfg config.Resolved, re
 			if typedID := strings.TrimSpace(anyString(payload["thread_id"])); typedID != "" {
 				payload["id"] = typedID
 			}
-		case "snapshot":
-			if typedID := strings.TrimSpace(anyString(payload["snapshot_id"])); typedID != "" {
-				payload["id"] = typedID
-			}
 		}
 	}
 	resourceID = firstNonEmpty(anyString(payload["id"]), resourceID)
@@ -513,6 +509,19 @@ func extractProvenanceRefs(resourceType string, payload map[string]any, includeE
 		}
 	}
 
+	if resourceType == "topic" {
+		for _, field := range []string{"owner_refs", "document_refs", "board_refs", "related_refs"} {
+			if refs, ok := asStringList(payload[field]); ok {
+				for _, ref := range refs {
+					appendRef(ref, field)
+				}
+			}
+		}
+		if tid := strings.TrimSpace(anyString(payload["thread_id"])); tid != "" {
+			appendRef("thread:"+tid, "topic.thread_id")
+		}
+	}
+
 	sort.Slice(out, func(i int, j int) bool {
 		if out[i].Relation != out[j].Relation {
 			return out[i].Relation < out[j].Relation
@@ -598,7 +607,7 @@ Use ` + "`oar provenance walk`" + ` when you need to answer questions like:
 
 - Why does this object exist?
 - What evidence or earlier object led to it?
-- What thread, artifact, event, or snapshot is this derived from?
+- What thread, artifact, event, or topic is this derived from?
 
 Mental model
 
@@ -614,18 +623,18 @@ Typed ref roots:
   event:<id>
   thread:<id>
   artifact:<id>
-  snapshot:<id>
+  topic:<id>
 
 Heuristics
 
 - Start from ` + "`event:<id>`" + ` when explaining one update or mutation.
-- Start from ` + "`thread:<id>`" + ` when explaining a work item's evidence and history.
+- Start from ` + "`thread:<id>`" + ` when explaining backing-thread evidence and history.
 - Start from ` + "`artifact:<id>`" + ` when tracing a file or attachment back to its source.
-- Start from ` + "`snapshot:<id>`" + ` when investigating derived or captured state.
+- Start from ` + "`topic:<id>`" + ` when explaining operator-facing topic state and linked refs.
 - Prefer shallow depths like 1-3 before broader traversals.
 
 Examples:
   oar --json provenance walk --from event:event_123 --depth 2
-  oar --json provenance walk --from snapshot:snapshot_123 --depth 1
+  oar --json provenance walk --from topic:topic_123 --depth 1
   oar provenance walk --from event:event_123 --depth 3 --include-event-chain`)
 }

@@ -58,16 +58,6 @@ function parseJsonBody(body, commandId) {
   }
 }
 
-function renderPath(pathTemplate, pathParams = {}) {
-  return String(pathTemplate).replace(/\{([^{}]+)\}/g, (_match, name) => {
-    const value = pathParams[name];
-    if (value === undefined || value === null || value === "") {
-      throw new Error(`missing path param ${name}`);
-    }
-    return encodeURIComponent(String(value));
-  });
-}
-
 function firstStructuredPayloadIndex(value) {
   const objectIndex = value.indexOf("{");
   const arrayIndex = value.indexOf("[");
@@ -399,39 +389,46 @@ export function createOarCoreClient(options = {}) {
     }
   }
 
-  async function invokeRaw(commandId, pathParams = {}, options = {}) {
-    const command = commandInfo(commandId);
-    const resolvedPath = renderPath(command.path, pathParams);
-    const queryString = buildQueryString(options.query);
-    const requestPath = queryString
-      ? `${resolvedPath}?${queryString}`
-      : resolvedPath;
+  async function invokeDirectRaw(
+    path,
+    {
+      method = "GET",
+      query = {},
+      headers = {},
+      accept = "*/*",
+      signal,
+      body,
+    } = {},
+  ) {
+    const queryString = buildQueryString(query);
+    const requestPath = queryString ? `${path}?${queryString}` : path;
     const url = toAbsoluteUrl(resolvedBaseUrl, requestPath);
 
     let response;
     try {
       response = await fetchFn(url, {
-        method: command.method,
+        method,
         headers: {
-          accept: options.accept ?? "*/*",
-          ...(options.headers ?? {}),
+          accept,
+          ...headers,
         },
-        signal: options.signal,
+        ...(body !== undefined ? { body } : {}),
+        signal,
       });
     } catch (error) {
       throw normalizeRequestError(error, {
         target,
-        commandId,
-        method: command.method,
-        path: command.path,
+        commandId: `direct:${method} ${path}`,
+        method,
+        path,
       });
     }
 
     if (!response.ok) {
       throw buildRawRequestError(await parseRawErrorResponse(response), {
         target,
-        method: command.method,
-        path: command.path,
+        method,
+        path,
       });
     }
 
@@ -466,8 +463,8 @@ export function createOarCoreClient(options = {}) {
       invokeJSON("meta.handshake", () => generated.metaHandshake()),
 
     createActor: (payload) =>
-      invokeJSON("actors.register", () =>
-        generated.actorsRegister({ body: payload }),
+      invokeJSON("actors.create", () =>
+        generated.actorsCreate({ body: payload }),
       ),
     listActors: (filters) =>
       invokeJSON("actors.list", () => generated.actorsList({ query: filters })),
@@ -491,6 +488,14 @@ export function createOarCoreClient(options = {}) {
       invokeJSON("auth.passkey.login.verify", () =>
         generated.authPasskeyLoginVerify({ body: payload }),
       ),
+    passkeyDevRegister: (payload) =>
+      invokeJSON("auth.passkey.dev.register", () =>
+        generated.authPasskeyDevRegister({ body: payload }),
+      ),
+    passkeyDevLogin: (payload) =>
+      invokeJSON("auth.passkey.dev.login", () =>
+        generated.authPasskeyDevLogin({ body: payload }),
+      ),
     bootstrapStatus: () =>
       invokeJSON("auth.bootstrap.status", () =>
         generated.authBootstrapStatus(),
@@ -503,16 +508,19 @@ export function createOarCoreClient(options = {}) {
       ),
     revokeInvite: (inviteId) =>
       invokeJSON("auth.invites.revoke", () =>
-        generated.authInvitesRevoke({ invite_id: String(inviteId) }),
+        generated.authInvitesRevoke(
+          { invite_id: String(inviteId) },
+          { body: {} },
+        ),
       ),
     listPrincipals: (filters) =>
       invokeJSON("auth.principals.list", () =>
         generated.authPrincipalsList({ query: filters }),
       ),
-    revokePrincipal: (agentId, payload = {}) =>
+    revokePrincipal: (principalId, payload = {}) =>
       invokeJSON("auth.principals.revoke", () =>
         generated.authPrincipalsRevoke(
-          { agent_id: String(agentId) },
+          { principal_id: String(principalId) },
           { body: payload },
         ),
       ),
@@ -521,59 +529,13 @@ export function createOarCoreClient(options = {}) {
         generated.authAuditList({ query: filters }),
       ),
 
-    createThread: (payload) =>
-      invokeJSON("threads.create", () =>
-        generated.threadsCreate({ body: withActorId(payload) }),
-      ),
     listThreads: (filters) =>
       invokeJSON("threads.list", () =>
         generated.threadsList({ query: filters }),
       ),
-    archiveThread: (threadId, payload) =>
-      invokeJSON("threads.archive", () =>
-        generated.threadsArchive(
-          { thread_id: String(threadId) },
-          { body: withActorId(payload) },
-        ),
-      ),
-    unarchiveThread: (threadId, payload) =>
-      invokeJSON("threads.unarchive", () =>
-        generated.threadsUnarchive(
-          { thread_id: String(threadId) },
-          { body: withActorId(payload) },
-        ),
-      ),
-    tombstoneThread: (threadId, payload) =>
-      invokeJSON("threads.tombstone", () =>
-        generated.threadsTombstone(
-          { thread_id: String(threadId) },
-          { body: withActorId(payload) },
-        ),
-      ),
-    restoreThread: (threadId, payload) =>
-      invokeJSON("threads.restore", () =>
-        generated.threadsRestore(
-          { thread_id: String(threadId) },
-          { body: withActorId(payload) },
-        ),
-      ),
-    purgeThread: (threadId, payload) =>
-      invokeJSON("threads.purge", () =>
-        generated.threadsPurge(
-          { thread_id: String(threadId) },
-          { body: payload || {} },
-        ),
-      ),
     getThread: (threadId) =>
-      invokeJSON("threads.get", () =>
-        generated.threadsGet({ thread_id: String(threadId) }),
-      ),
-    updateThread: (threadId, payload) =>
-      invokeJSON("threads.patch", () =>
-        generated.threadsPatch(
-          { thread_id: String(threadId) },
-          { body: withActorId(payload) },
-        ),
+      invokeJSON("threads.inspect", () =>
+        generated.threadsInspect({ thread_id: String(threadId) }),
       ),
     getThreadWorkspace: (threadId, filters) =>
       invokeJSON("threads.workspace", () =>
@@ -582,47 +544,112 @@ export function createOarCoreClient(options = {}) {
           { query: filters },
         ),
       ),
-    listThreadTimeline: (threadId) =>
+    listThreadTimeline: (threadId, opts) =>
       invokeJSON("threads.timeline", () =>
-        generated.threadsTimeline({ thread_id: String(threadId) }),
+        generated.threadsTimeline(
+          { thread_id: String(threadId) },
+          opts && typeof opts === "object" ? opts : {},
+        ),
+      ),
+    getTopicWorkspace: (topicId, filters) =>
+      invokeJSON("topics.workspace", () =>
+        generated.topicsWorkspace(
+          { topic_id: String(topicId) },
+          { query: filters },
+        ),
+      ),
+    listTopicTimeline: (topicId, opts) =>
+      invokeJSON("topics.timeline", () =>
+        generated.topicsTimeline(
+          { topic_id: String(topicId) },
+          opts && typeof opts === "object" ? opts : {},
+        ),
       ),
     streamThreadEvents: async ({ threadId, lastEventId, signal, onEvent }) => {
-      const response = await invokeRaw(
-        "events.stream",
-        {},
-        {
-          query: {
-            thread_id: String(threadId),
-            last_event_id: lastEventId,
-          },
-          accept: "text/event-stream",
-          signal,
+      const response = await invokeDirectRaw("/events/stream", {
+        query: {
+          thread_id: String(threadId),
+          last_event_id: lastEventId,
         },
-      );
+        accept: "text/event-stream",
+        signal,
+      });
       await consumeSSEStream(response, { onEvent, signal });
     },
-    getSnapshot: (snapshotId) =>
-      invokeJSON("snapshots.get", () =>
-        generated.snapshotsGet({ snapshot_id: String(snapshotId) }),
+    listTopics: (filters) =>
+      invokeJSON("topics.list", () => generated.topicsList({ query: filters })),
+    createTopic: (payload) =>
+      invokeJSON("topics.create", () =>
+        generated.topicsCreate({ body: withActorId(payload) }),
       ),
-
-    createCommitment: (payload) =>
-      invokeJSON("commitments.create", () =>
-        generated.commitmentsCreate({ body: withActorId(payload) }),
+    getTopic: (topicId) =>
+      invokeJSON("topics.get", () =>
+        generated.topicsGet({ topic_id: String(topicId) }),
       ),
-    listCommitments: (filters) =>
-      invokeJSON("commitments.list", () =>
-        generated.commitmentsList({ query: filters }),
-      ),
-    getCommitment: (commitmentId) =>
-      invokeJSON("commitments.get", () =>
-        generated.commitmentsGet({ commitment_id: String(commitmentId) }),
-      ),
-    updateCommitment: (commitmentId, payload) =>
-      invokeJSON("commitments.patch", () =>
-        generated.commitmentsPatch(
-          { commitment_id: String(commitmentId) },
+    updateTopic: (topicId, payload) =>
+      invokeJSON("topics.patch", () =>
+        generated.topicsPatch(
+          { topic_id: String(topicId) },
           { body: withActorId(payload) },
+        ),
+      ),
+    archiveTopic: (topicId, payload) =>
+      invokeJSON("topics.archive", () =>
+        generated.topicsArchive(
+          { topic_id: String(topicId) },
+          { body: withActorId(payload ?? {}) },
+        ),
+      ),
+    unarchiveTopic: (topicId, payload) =>
+      invokeJSON("topics.unarchive", () =>
+        generated.topicsUnarchive(
+          { topic_id: String(topicId) },
+          { body: withActorId(payload ?? {}) },
+        ),
+      ),
+    trashTopic: (topicId, payload) =>
+      invokeJSON("topics.trash", () =>
+        generated.topicsTrash(
+          { topic_id: String(topicId) },
+          { body: withActorId(payload ?? {}) },
+        ),
+      ),
+    restoreTopic: (topicId, payload) =>
+      invokeJSON("topics.restore", () =>
+        generated.topicsRestore(
+          { topic_id: String(topicId) },
+          { body: withActorId(payload ?? {}) },
+        ),
+      ),
+    listCards: (filters) =>
+      invokeJSON("cards.list", () => generated.cardsList({ query: filters })),
+    getCard: (cardId) =>
+      invokeJSON("cards.get", () =>
+        generated.cardsGet({ card_id: String(cardId) }),
+      ),
+    archiveCard: (cardId, payload) =>
+      invokeJSON("cards.archive", () =>
+        generated.cardsArchive(
+          { card_id: String(cardId) },
+          { body: withActorId(payload ?? {}) },
+        ),
+      ),
+    restoreCard: (cardId, payload) =>
+      invokeJSON("cards.restore", () =>
+        generated.cardsRestore(
+          { card_id: String(cardId) },
+          { body: withActorId(payload ?? {}) },
+        ),
+      ),
+    listCardTimeline: (cardId, opts) =>
+      invokeJSON("cards.timeline", () =>
+        generated.cardsTimeline({ card_id: String(cardId) }, opts ?? {}),
+      ),
+    purgeCard: (cardId, payload) =>
+      invokeJSON("cards.purge", () =>
+        generated.cardsPurge(
+          { card_id: String(cardId) },
+          { body: withActorId(payload ?? {}) },
         ),
       ),
 
@@ -652,9 +679,9 @@ export function createOarCoreClient(options = {}) {
           { body: withActorId(payload) },
         ),
       ),
-    tombstoneArtifact: (artifactId, payload) =>
-      invokeJSON("artifacts.tombstone", () =>
-        generated.artifactsTombstone(
+    trashArtifact: (artifactId, payload) =>
+      invokeJSON("artifacts.trash", () =>
+        generated.artifactsTrash(
           { artifact_id: String(artifactId) },
           { body: withActorId(payload) },
         ),
@@ -674,9 +701,10 @@ export function createOarCoreClient(options = {}) {
         ),
       ),
     getArtifactContent: async (artifactId) => {
-      const response = await invokeRaw("artifacts.content.get", {
-        artifact_id: String(artifactId),
-      });
+      const response = await invokeDirectRaw(
+        `/artifacts/${encodeURIComponent(String(artifactId))}/content`,
+        { method: "GET" },
+      );
 
       const contentType = response.headers.get("content-type") ?? "";
 
@@ -702,26 +730,26 @@ export function createOarCoreClient(options = {}) {
         generated.docsGet({ document_id: String(documentId) }),
       ),
     getDocumentHistory: (documentId) =>
-      invokeJSON("docs.history", () =>
-        generated.docsHistory({ document_id: String(documentId) }),
+      invokeJSON("docs.revisions.list", () =>
+        generated.docsRevisionsList({ document_id: String(documentId) }),
       ),
     getDocumentRevision: (documentId, revisionId) =>
-      invokeJSON("docs.revision.get", () =>
-        generated.docsRevisionGet({
+      invokeJSON("docs.revisions.get", () =>
+        generated.docsRevisionsGet({
           document_id: String(documentId),
           revision_id: String(revisionId),
         }),
       ),
     updateDocument: (documentId, payload) =>
-      invokeJSON("docs.update", () =>
-        generated.docsUpdate(
+      invokeJSON("docs.revisions.create", () =>
+        generated.docsRevisionsCreate(
           { document_id: String(documentId) },
           { body: withActorId(payload) },
         ),
       ),
-    tombstoneDocument: (documentId, payload) =>
-      invokeJSON("docs.tombstone", () =>
-        generated.docsTombstone(
+    trashDocument: (documentId, payload) =>
+      invokeJSON("docs.trash", () =>
+        generated.docsTrash(
           { document_id: String(documentId) },
           { body: withActorId(payload) },
         ),
@@ -759,6 +787,8 @@ export function createOarCoreClient(options = {}) {
       invokeJSON("events.create", () =>
         generated.eventsCreate({ body: withActorId(payload) }),
       ),
+    listEvents: (filters) =>
+      invokeJSON("events.list", () => generated.eventsList({ query: filters })),
     getEvent: (eventId) =>
       invokeJSON("events.get", () =>
         generated.eventsGet({ event_id: String(eventId) }),
@@ -777,9 +807,9 @@ export function createOarCoreClient(options = {}) {
           { body: withActorId(payload) },
         ),
       ),
-    tombstoneEvent: (eventId, payload) =>
-      invokeJSON("events.tombstone", () =>
-        generated.eventsTombstone(
+    trashEvent: (eventId, payload) =>
+      invokeJSON("events.trash", () =>
+        generated.eventsTrash(
           { event_id: String(eventId) },
           { body: withActorId(payload) },
         ),
@@ -792,25 +822,40 @@ export function createOarCoreClient(options = {}) {
         ),
       ),
 
-    createWorkOrder: (payload) =>
-      invokeJSON("packets.work-orders.create", () =>
-        generated.packetsWorkOrdersCreate({ body: withActorId(payload) }),
-      ),
-    createReceipt: (payload) =>
-      invokeJSON("packets.receipts.create", () =>
-        generated.packetsReceiptsCreate({ body: withActorId(payload) }),
-      ),
-    createReview: (payload) =>
-      invokeJSON("packets.reviews.create", () =>
-        generated.packetsReviewsCreate({ body: withActorId(payload) }),
-      ),
+    createReceipt: (payload) => {
+      const body = withActorId({ ...payload });
+      return invokeJSON("packets.receipts.create", () =>
+        generated.packetsReceiptsCreate({ body }),
+      );
+    },
+    createReview: (payload) => {
+      const body = withActorId({ ...payload });
+      return invokeJSON("packets.reviews.create", () =>
+        generated.packetsReviewsCreate({ body }),
+      );
+    },
 
     listInboxItems: (filters) =>
       invokeJSON("inbox.list", () => generated.inboxList({ query: filters })),
-    ackInboxItem: (payload) =>
-      invokeJSON("inbox.ack", () =>
-        generated.inboxAck({ body: withActorId(payload) }),
-      ),
+    ackInboxItem: (payload) => {
+      const inboxItemId =
+        payload?.inbox_item_id ?? payload?.inbox_id ?? payload?.inboxId;
+      if (!inboxItemId) {
+        throw new Error(
+          "ackInboxItem requires inbox_item_id (or inbox_id) in the payload.",
+        );
+      }
+      const body = { ...(payload ?? {}) };
+      delete body.inbox_item_id;
+      delete body.inbox_id;
+      delete body.inboxId;
+      return invokeJSON("inbox.acknowledge", () =>
+        generated.inboxAcknowledge(
+          { inbox_id: String(inboxItemId) },
+          { body: withActorId(body) },
+        ),
+      );
+    },
 
     createBoard: (payload) =>
       invokeJSON("boards.create", () =>
@@ -823,8 +868,8 @@ export function createOarCoreClient(options = {}) {
         generated.boardsGet({ board_id: String(boardId) }),
       ),
     updateBoard: (boardId, payload) =>
-      invokeJSON("boards.update", () =>
-        generated.boardsUpdate(
+      invokeJSON("boards.patch", () =>
+        generated.boardsPatch(
           { board_id: String(boardId) },
           { body: withActorId(payload) },
         ),
@@ -847,9 +892,9 @@ export function createOarCoreClient(options = {}) {
           { body: withActorId(payload) },
         ),
       ),
-    tombstoneBoard: (boardId, payload) =>
-      invokeJSON("boards.tombstone", () =>
-        generated.boardsTombstone(
+    trashBoard: (boardId, payload) =>
+      invokeJSON("boards.trash", () =>
+        generated.boardsTrash(
           { board_id: String(boardId) },
           { body: withActorId(payload) },
         ),
@@ -880,23 +925,23 @@ export function createOarCoreClient(options = {}) {
       invokeJSON("boards.cards.list", () =>
         generated.boardsCardsList({ board_id: String(boardId) }),
       ),
-    moveBoardCard: (boardId, cardId, payload) =>
-      invokeJSON("boards.cards.move", () =>
-        generated.boardsCardsMove(
-          { board_id: String(boardId), id: String(cardId) },
-          { body: withActorId(payload) },
-        ),
-      ),
-    removeBoardCard: (boardId, cardId, payload) =>
-      invokeJSON("boards.cards.archive", () =>
-        generated.boardsCardsArchive(
+    moveBoardCard: (_boardId, cardId, payload) =>
+      invokeJSON("cards.move", () =>
+        generated.cardsMove(
           { card_id: String(cardId) },
           { body: withActorId(payload) },
         ),
       ),
-    updateBoardCard: (boardId, cardId, payload) =>
-      invokeJSON("boards.cards.update", () =>
-        generated.boardsCardsUpdate(
+    removeBoardCard: (boardId, cardId, payload) =>
+      invokeJSON("cards.archive", () =>
+        generated.cardsArchive(
+          { card_id: String(cardId) },
+          { body: withActorId(payload ?? {}) },
+        ),
+      ),
+    updateBoardCard: (_boardId, cardId, payload) =>
+      invokeJSON("cards.patch", () =>
+        generated.cardsPatch(
           { card_id: String(cardId) },
           { body: withActorId(payload) },
         ),

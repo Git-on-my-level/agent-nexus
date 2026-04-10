@@ -8,7 +8,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"organization-autorunner-core/internal/primitives"
@@ -21,98 +20,8 @@ const (
 	threadContextContentPreviewChars = 500
 )
 
-func handleCreateThread(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
-	if opts.primitiveStore == nil {
-		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
-		return
-	}
-	if opts.contract == nil {
-		writeError(w, http.StatusServiceUnavailable, "schema_unavailable", "schema contract is not configured")
-		return
-	}
-
-	var req struct {
-		ActorID    string         `json:"actor_id"`
-		RequestKey string         `json:"request_key"`
-		Thread     map[string]any `json:"thread"`
-	}
-	if !decodeJSONBody(w, r, &req) {
-		return
-	}
-
-	if req.Thread == nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", "thread is required")
-		return
-	}
-	if _, has := req.Thread["open_commitments"]; has {
-		writeError(w, http.StatusBadRequest, "invalid_request", "thread.open_commitments is core-maintained and cannot be set")
-		return
-	}
-
-	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
-	if !ok {
-		return
-	}
-	derivedThreadID := false
-	if strings.TrimSpace(req.RequestKey) != "" && firstNonEmptyString(req.Thread["id"]) == "" {
-		req.Thread["id"] = deriveRequestScopedID("threads.create", actorID, req.RequestKey, "thread")
-		derivedThreadID = true
-	}
-	replayStatus, replayPayload, replayed, err := readIdempotencyReplay(r.Context(), opts.primitiveStore, "threads.create", actorID, req.RequestKey, req)
-	if writeIdempotencyError(w, err) {
-		return
-	}
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load idempotency replay")
-		return
-	}
-	if replayed {
-		writeJSON(w, replayStatus, replayPayload)
-		return
-	}
-	if err := validateThreadCreate(opts.contract, req.Thread); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
-		return
-	}
-
-	result, err := opts.primitiveStore.CreateThread(r.Context(), actorID, req.Thread)
-	if err != nil {
-		if errors.Is(err, primitives.ErrConflict) && strings.TrimSpace(req.RequestKey) != "" && derivedThreadID {
-			threadID := firstNonEmptyString(req.Thread["id"])
-			thread, loadErr := opts.primitiveStore.GetThread(r.Context(), threadID)
-			if loadErr == nil {
-				response := map[string]any{"thread": thread}
-				status, payload, replayErr := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "threads.create", actorID, req.RequestKey, req, http.StatusCreated, response)
-				if writeIdempotencyError(w, replayErr) {
-					return
-				}
-				if replayErr != nil {
-					writeError(w, http.StatusInternalServerError, "internal_error", "failed to persist idempotency replay")
-					return
-				}
-				writeJSON(w, status, payload)
-				return
-			}
-		}
-		if errors.Is(err, primitives.ErrConflict) {
-			writeError(w, http.StatusConflict, "conflict", "thread already exists")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to create thread")
-		return
-	}
-	enqueueThreadProjectionsBestEffort(r.Context(), opts, []string{anyString(result.Snapshot["id"])}, time.Now().UTC())
-
-	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "threads.create", actorID, req.RequestKey, req, http.StatusCreated, map[string]any{"thread": result.Snapshot})
-	if writeIdempotencyError(w, err) {
-		return
-	}
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to persist idempotency replay")
-		return
-	}
-	writeJSON(w, status, payload)
-}
+// Backing threads are read-only on the public HTTP API (list, get, timeline, context, workspace).
+// Archive, trash, restore, and purge use topic/board/card/document lifecycle routes instead.
 
 func handleGetThread(w http.ResponseWriter, r *http.Request, opts handlerOptions, threadID string) {
 	if opts.primitiveStore == nil {
@@ -131,70 +40,6 @@ func handleGetThread(w http.ResponseWriter, r *http.Request, opts handlerOptions
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"thread": thread})
-}
-
-func handlePatchThread(w http.ResponseWriter, r *http.Request, opts handlerOptions, threadID string) {
-	if opts.primitiveStore == nil {
-		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
-		return
-	}
-	if opts.contract == nil {
-		writeError(w, http.StatusServiceUnavailable, "schema_unavailable", "schema contract is not configured")
-		return
-	}
-
-	var req struct {
-		ActorID     string         `json:"actor_id"`
-		Patch       map[string]any `json:"patch"`
-		IfUpdatedAt *string        `json:"if_updated_at"`
-	}
-	if !decodeJSONBody(w, r, &req) {
-		return
-	}
-
-	if req.Patch == nil || len(req.Patch) == 0 {
-		writeError(w, http.StatusBadRequest, "invalid_request", "patch is required")
-		return
-	}
-	if req.IfUpdatedAt != nil {
-		ifUpdatedAt := strings.TrimSpace(*req.IfUpdatedAt)
-		if _, err := time.Parse(time.RFC3339, ifUpdatedAt); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "if_updated_at must be an RFC3339 datetime string")
-			return
-		}
-		req.IfUpdatedAt = &ifUpdatedAt
-	}
-	if _, has := req.Patch["open_commitments"]; has {
-		writeError(w, http.StatusBadRequest, "invalid_request", "thread.open_commitments is core-maintained and cannot be patched")
-		return
-	}
-
-	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
-	if !ok {
-		return
-	}
-
-	if err := validateThreadPatch(opts.contract, req.Patch); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
-		return
-	}
-
-	result, err := opts.primitiveStore.PatchThread(r.Context(), actorID, threadID, req.Patch, req.IfUpdatedAt)
-	if err != nil {
-		if errors.Is(err, primitives.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", "thread not found")
-			return
-		}
-		if errors.Is(err, primitives.ErrConflict) {
-			writeError(w, http.StatusConflict, "conflict", "thread has been updated; refresh and retry")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to patch thread")
-		return
-	}
-	enqueueThreadProjectionsBestEffort(r.Context(), opts, []string{threadID}, time.Now().UTC())
-
-	writeJSON(w, http.StatusOK, map[string]any{"thread": result.Snapshot})
 }
 
 func handleListThreads(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
@@ -229,18 +74,18 @@ func handleListThreads(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	}
 
 	threads, nextCursor, err := opts.primitiveStore.ListThreads(r.Context(), primitives.ThreadListFilter{
-		Status:            strings.TrimSpace(query.Get("status")),
-		Priority:          strings.TrimSpace(query.Get("priority")),
-		Tags:              tagsFilter,
-		Cadences:          cadenceFilter,
-		Stale:             staleFilter,
-		Query:             strings.TrimSpace(query.Get("q")),
-		Limit:             limitFilter,
-		Cursor:            strings.TrimSpace(query.Get("cursor")),
-		IncludeArchived:   strings.TrimSpace(query.Get("include_archived")) == "true",
-		ArchivedOnly:      strings.TrimSpace(query.Get("archived_only")) == "true",
-		IncludeTombstoned: strings.TrimSpace(query.Get("include_tombstoned")) == "true",
-		TombstonedOnly:    strings.TrimSpace(query.Get("tombstoned_only")) == "true",
+		Status:          strings.TrimSpace(query.Get("status")),
+		Priority:        strings.TrimSpace(query.Get("priority")),
+		Tags:            tagsFilter,
+		Cadences:        cadenceFilter,
+		Stale:           staleFilter,
+		Query:           strings.TrimSpace(query.Get("q")),
+		Limit:           limitFilter,
+		Cursor:          strings.TrimSpace(query.Get("cursor")),
+		IncludeArchived: strings.TrimSpace(query.Get("include_archived")) == "true",
+		ArchivedOnly:    strings.TrimSpace(query.Get("archived_only")) == "true",
+		IncludeTrashed:  strings.TrimSpace(query.Get("include_trashed")) == "true",
+		TrashedOnly:     strings.TrimSpace(query.Get("trashed_only")) == "true",
 	})
 	if err != nil {
 		if errors.Is(err, primitives.ErrInvalidCursor) {
@@ -255,7 +100,7 @@ func handleListThreads(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	for _, thread := range threads {
 		threadIDs = append(threadIDs, anyString(thread["id"]))
 	}
-	states, err := loadThreadProjectionStates(r.Context(), opts, threadIDs)
+	states, err := loadTopicProjectionStates(r.Context(), opts, threadIDs)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load thread projection status")
 		return
@@ -280,162 +125,6 @@ func handleListThreads(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		response["next_cursor"] = nextCursor
 	}
 	writeJSON(w, http.StatusOK, response)
-}
-
-func writeThreadLifecycleStoreError(w http.ResponseWriter, err error) bool {
-	switch {
-	case errors.Is(err, primitives.ErrNotFound):
-		writeError(w, http.StatusNotFound, "not_found", "thread not found")
-		return true
-	case errors.Is(err, primitives.ErrNotTombstoned):
-		writeError(w, http.StatusConflict, "not_tombstoned", "thread is not currently tombstoned")
-		return true
-	case errors.Is(err, primitives.ErrNotArchived):
-		writeError(w, http.StatusConflict, "not_archived", "thread is not archived")
-		return true
-	case errors.Is(err, primitives.ErrAlreadyTombstoned):
-		writeError(w, http.StatusConflict, "already_tombstoned", "thread is tombstoned")
-		return true
-	default:
-		msg := err.Error()
-		if strings.Contains(msg, "actor_id is required") || strings.Contains(msg, "thread_id is required") {
-			writeError(w, http.StatusBadRequest, "invalid_request", msg)
-			return true
-		}
-		return false
-	}
-}
-
-func handleArchiveThread(w http.ResponseWriter, r *http.Request, opts handlerOptions, threadID string) {
-	if opts.primitiveStore == nil {
-		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
-		return
-	}
-	var req struct {
-		ActorID string `json:"actor_id"`
-	}
-	if !decodeJSONBody(w, r, &req) {
-		return
-	}
-	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
-	if !ok {
-		return
-	}
-	thread, err := opts.primitiveStore.ArchiveThread(r.Context(), actorID, threadID)
-	if err != nil {
-		if writeThreadLifecycleStoreError(w, err) {
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to archive thread")
-		return
-	}
-	enqueueThreadProjectionsBestEffort(r.Context(), opts, []string{threadID}, time.Now().UTC())
-	writeJSON(w, http.StatusOK, map[string]any{"thread": thread})
-}
-
-func handleUnarchiveThread(w http.ResponseWriter, r *http.Request, opts handlerOptions, threadID string) {
-	if opts.primitiveStore == nil {
-		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
-		return
-	}
-	var req struct {
-		ActorID string `json:"actor_id"`
-	}
-	if !decodeJSONBody(w, r, &req) {
-		return
-	}
-	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
-	if !ok {
-		return
-	}
-	thread, err := opts.primitiveStore.UnarchiveThread(r.Context(), actorID, threadID)
-	if err != nil {
-		if writeThreadLifecycleStoreError(w, err) {
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to unarchive thread")
-		return
-	}
-	enqueueThreadProjectionsBestEffort(r.Context(), opts, []string{threadID}, time.Now().UTC())
-	writeJSON(w, http.StatusOK, map[string]any{"thread": thread})
-}
-
-func handleTombstoneThread(w http.ResponseWriter, r *http.Request, opts handlerOptions, threadID string) {
-	if opts.primitiveStore == nil {
-		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
-		return
-	}
-	var req struct {
-		ActorID string `json:"actor_id"`
-		Reason  string `json:"reason"`
-	}
-	if !decodeJSONBody(w, r, &req) {
-		return
-	}
-	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
-	if !ok {
-		return
-	}
-	thread, err := opts.primitiveStore.TombstoneThread(r.Context(), actorID, threadID, req.Reason)
-	if err != nil {
-		if writeThreadLifecycleStoreError(w, err) {
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to tombstone thread")
-		return
-	}
-	enqueueThreadProjectionsBestEffort(r.Context(), opts, []string{threadID}, time.Now().UTC())
-	writeJSON(w, http.StatusOK, map[string]any{"thread": thread})
-}
-
-func handleRestoreThread(w http.ResponseWriter, r *http.Request, opts handlerOptions, threadID string) {
-	if opts.primitiveStore == nil {
-		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
-		return
-	}
-	var req struct {
-		ActorID string `json:"actor_id"`
-	}
-	if !decodeJSONBody(w, r, &req) {
-		return
-	}
-	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
-	if !ok {
-		return
-	}
-	thread, err := opts.primitiveStore.RestoreThread(r.Context(), actorID, threadID)
-	if err != nil {
-		if writeThreadLifecycleStoreError(w, err) {
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to restore thread")
-		return
-	}
-	enqueueThreadProjectionsBestEffort(r.Context(), opts, []string{threadID}, time.Now().UTC())
-	writeJSON(w, http.StatusOK, map[string]any{"thread": thread})
-}
-
-func handlePurgeThread(w http.ResponseWriter, r *http.Request, opts handlerOptions, threadID string) {
-	if opts.primitiveStore == nil {
-		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
-		return
-	}
-	principal, ok := requireAuthenticatedPrincipal(w, r, opts)
-	if !ok {
-		return
-	}
-	if !isHumanPrincipal(principal) {
-		writeError(w, http.StatusForbidden, "human_only", "only human principals may permanently delete threads")
-		return
-	}
-	if err := opts.primitiveStore.PurgeThread(r.Context(), threadID); err != nil {
-		if writeThreadLifecycleStoreError(w, err) {
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to purge thread")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"purged": true, "thread_id": threadID})
 }
 
 func normalizedQueryValues(raw []string) []string {
@@ -498,77 +187,58 @@ func containsStringValue(values []string, expected string) bool {
 	return false
 }
 
-func handleThreadTimeline(w http.ResponseWriter, r *http.Request, opts handlerOptions, threadID string) {
-	if opts.primitiveStore == nil {
-		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
-		return
+type threadTimelineExpansion struct {
+	Events            []map[string]any
+	Artifacts         map[string]map[string]any
+	Documents         map[string]map[string]any
+	DocumentRevisions map[string]map[string]any
+}
+
+func expandThreadTimeline(ctx context.Context, opts handlerOptions, threadID string) (threadTimelineExpansion, error) {
+	var out threadTimelineExpansion
+	if _, err := opts.primitiveStore.GetThread(ctx, threadID); err != nil {
+		return out, err
 	}
 
-	if _, err := opts.primitiveStore.GetThread(r.Context(), threadID); err != nil {
-		if errors.Is(err, primitives.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", "thread not found")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load thread")
-		return
-	}
-
-	events, err := opts.primitiveStore.ListEventsByThread(r.Context(), threadID)
+	events, err := opts.primitiveStore.ListEventsByThread(ctx, threadID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load thread timeline")
-		return
+		return out, err
 	}
 
-	snapshotIDs, artifactIDs, documentIDs, documentRevisionIDs := collectTimelineReferencedObjectIDs(events)
-
-	snapshots := make(map[string]map[string]any, len(snapshotIDs))
-	for _, snapshotID := range snapshotIDs {
-		snapshot, err := opts.primitiveStore.GetSnapshot(r.Context(), snapshotID)
-		if err != nil {
-			if errors.Is(err, primitives.ErrNotFound) {
-				continue
-			}
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to load referenced snapshots")
-			return
-		}
-		snapshots[snapshotID] = snapshot
-	}
+	artifactIDs, documentIDs, documentRevisionIDs := collectTimelineReferencedObjectIDs(events)
 
 	artifacts := make(map[string]map[string]any, len(artifactIDs))
 	for _, artifactID := range artifactIDs {
-		artifact, err := opts.primitiveStore.GetArtifact(r.Context(), artifactID)
+		artifact, err := opts.primitiveStore.GetArtifact(ctx, artifactID)
 		if err != nil {
 			if errors.Is(err, primitives.ErrNotFound) {
 				continue
 			}
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to load referenced artifacts")
-			return
+			return out, err
 		}
 		artifacts[artifactID] = artifact
 	}
 
 	documents := make(map[string]map[string]any, len(documentIDs))
 	for _, documentID := range documentIDs {
-		document, _, err := opts.primitiveStore.GetDocument(r.Context(), documentID)
+		document, _, err := opts.primitiveStore.GetDocument(ctx, documentID)
 		if err != nil {
 			if errors.Is(err, primitives.ErrNotFound) {
 				continue
 			}
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to load referenced documents")
-			return
+			return out, err
 		}
 		documents[documentID] = document
 	}
 
 	documentRevisions := make(map[string]map[string]any, len(documentRevisionIDs))
 	for _, revisionID := range documentRevisionIDs {
-		revision, err := opts.primitiveStore.GetDocumentRevisionByID(r.Context(), revisionID)
+		revision, err := opts.primitiveStore.GetDocumentRevisionByID(ctx, revisionID)
 		if err != nil {
 			if errors.Is(err, primitives.ErrNotFound) {
 				continue
 			}
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to load referenced document revisions")
-			return
+			return out, err
 		}
 		documentRevisions[revisionID] = revision
 
@@ -580,23 +250,44 @@ func handleThreadTimeline(w http.ResponseWriter, r *http.Request, opts handlerOp
 		if _, exists := documents[documentID]; exists {
 			continue
 		}
-		document, _, err := opts.primitiveStore.GetDocument(r.Context(), documentID)
+		document, _, err := opts.primitiveStore.GetDocument(ctx, documentID)
 		if err != nil {
 			if errors.Is(err, primitives.ErrNotFound) {
 				continue
 			}
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to load referenced documents")
-			return
+			return out, err
 		}
 		documents[documentID] = document
 	}
 
+	out.Events = events
+	out.Artifacts = artifacts
+	out.Documents = documents
+	out.DocumentRevisions = documentRevisions
+	return out, nil
+}
+
+func handleThreadTimeline(w http.ResponseWriter, r *http.Request, opts handlerOptions, threadID string) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+
+	exp, err := expandThreadTimeline(r.Context(), opts, threadID)
+	if err != nil {
+		if errors.Is(err, primitives.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "thread not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load thread timeline")
+		return
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
-		"events":             events,
-		"snapshots":          snapshots,
-		"artifacts":          artifacts,
-		"documents":          documents,
-		"document_revisions": documentRevisions,
+		"events":             exp.Events,
+		"artifacts":          exp.Artifacts,
+		"documents":          exp.Documents,
+		"document_revisions": exp.DocumentRevisions,
 	})
 }
 
@@ -626,15 +317,76 @@ func handleThreadContext(w http.ResponseWriter, r *http.Request, opts handlerOpt
 
 func buildThreadContextArtifacts(ctx context.Context, opts handlerOptions, thread map[string]any, includeArtifactContent bool) ([]map[string]any, error) {
 	rawRefs, exists := thread["key_artifacts"]
-	if !exists || rawRefs == nil {
-		return []map[string]any{}, nil
-	}
-	refs, err := extractStringSlice(rawRefs)
-	if err != nil {
-		return nil, fmt.Errorf("thread.key_artifacts: %w", err)
+	refs := []string{}
+	if exists && rawRefs != nil {
+		parsed, err := extractStringSlice(rawRefs)
+		if err != nil {
+			return nil, fmt.Errorf("thread.key_artifacts: %w", err)
+		}
+		refs = parsed
 	}
 	if len(refs) == 0 {
-		return []map[string]any{}, nil
+		threadID := strings.TrimSpace(anyString(thread["id"]))
+		subjectRef := strings.TrimSpace(anyString(thread["subject_ref"]))
+		candidates := make([][2]string, 0, 2)
+		if threadID != "" {
+			candidates = append(candidates, [2]string{"thread", threadID})
+		}
+		if subjectRef != "" {
+			if prefix, id, err := schema.SplitTypedRef(subjectRef); err == nil && strings.TrimSpace(id) != "" {
+				candidates = append(candidates, [2]string{prefix, id})
+			}
+		}
+		if len(candidates) == 0 {
+			return []map[string]any{}, nil
+		}
+		seenArtifactIDs := map[string]struct{}{}
+		out := make([]map[string]any, 0)
+		for _, candidate := range candidates {
+			edges, err := opts.primitiveStore.ListRefEdgesByTarget(ctx, candidate[0]+":"+candidate[1], "ref")
+			if err != nil {
+				return nil, err
+			}
+			for _, edge := range edges {
+				if edge.SourceRef == "" || !strings.HasPrefix(edge.SourceRef, "artifact:") {
+					continue
+				}
+				artifactID := strings.TrimSpace(strings.TrimPrefix(edge.SourceRef, "artifact:"))
+				if artifactID == "" {
+					continue
+				}
+				if _, exists := seenArtifactIDs[artifactID]; exists {
+					continue
+				}
+				artifact, err := opts.primitiveStore.GetArtifact(ctx, artifactID)
+				if err != nil {
+					if errors.Is(err, primitives.ErrNotFound) {
+						continue
+					}
+					return nil, err
+				}
+				if strings.TrimSpace(anyString(artifact["document_id"])) != "" || strings.TrimSpace(anyString(artifact["revision_id"])) != "" {
+					continue
+				}
+				seenArtifactIDs[artifactID] = struct{}{}
+				item := map[string]any{
+					"ref":      "artifact:" + artifactID,
+					"artifact": artifact,
+				}
+				if includeArtifactContent {
+					content, _, err := opts.primitiveStore.GetArtifactContent(ctx, artifactID)
+					if err != nil {
+						if !errors.Is(err, primitives.ErrNotFound) {
+							return nil, err
+						}
+					} else if preview := artifactContentPreview(content); preview != "" {
+						item["content_preview"] = preview
+					}
+				}
+				out = append(out, item)
+			}
+		}
+		return out, nil
 	}
 
 	artifacts := make([]map[string]any, 0, len(refs))
@@ -673,49 +425,6 @@ func buildThreadContextArtifacts(ctx context.Context, opts handlerOptions, threa
 	return artifacts, nil
 }
 
-func buildThreadContextOpenCommitments(ctx context.Context, opts handlerOptions, threadID string, thread map[string]any) ([]map[string]any, error) {
-	rawOpenCommitments, exists := thread["open_commitments"]
-	if !exists || rawOpenCommitments == nil {
-		return []map[string]any{}, nil
-	}
-	openCommitmentIDs, err := extractStringSlice(rawOpenCommitments)
-	if err != nil {
-		return nil, fmt.Errorf("thread.open_commitments: %w", err)
-	}
-	if len(openCommitmentIDs) == 0 {
-		return []map[string]any{}, nil
-	}
-
-	commitments, err := opts.primitiveStore.ListCommitments(ctx, primitives.CommitmentListFilter{ThreadID: threadID})
-	if err != nil {
-		return nil, err
-	}
-
-	commitmentsByID := make(map[string]map[string]any, len(commitments))
-	for _, commitment := range commitments {
-		commitmentID, _ := commitment["id"].(string)
-		commitmentID = strings.TrimSpace(commitmentID)
-		if commitmentID == "" {
-			continue
-		}
-		commitmentsByID[commitmentID] = commitment
-	}
-
-	ordered := make([]map[string]any, 0, len(openCommitmentIDs))
-	for _, commitmentID := range openCommitmentIDs {
-		commitmentID = strings.TrimSpace(commitmentID)
-		if commitmentID == "" {
-			continue
-		}
-		commitment, ok := commitmentsByID[commitmentID]
-		if !ok {
-			continue
-		}
-		ordered = append(ordered, commitment)
-	}
-	return ordered, nil
-}
-
 func buildThreadContextDocuments(ctx context.Context, opts handlerOptions, threadID string) ([]map[string]any, error) {
 	if strings.TrimSpace(threadID) == "" {
 		return []map[string]any{}, nil
@@ -745,8 +454,7 @@ func artifactContentPreview(content []byte) string {
 	return string(runes[:threadContextContentPreviewChars])
 }
 
-func collectTimelineReferencedObjectIDs(events []map[string]any) ([]string, []string, []string, []string) {
-	snapshotSet := make(map[string]struct{})
+func collectTimelineReferencedObjectIDs(events []map[string]any) ([]string, []string, []string) {
 	artifactSet := make(map[string]struct{})
 	documentSet := make(map[string]struct{})
 	documentRevisionSet := make(map[string]struct{})
@@ -762,8 +470,6 @@ func collectTimelineReferencedObjectIDs(events []map[string]any) ([]string, []st
 				continue
 			}
 			switch prefix {
-			case "snapshot":
-				snapshotSet[id] = struct{}{}
 			case "artifact":
 				artifactSet[id] = struct{}{}
 			case "document":
@@ -774,11 +480,10 @@ func collectTimelineReferencedObjectIDs(events []map[string]any) ([]string, []st
 		}
 	}
 
-	snapshotIDs := mapKeysSorted(snapshotSet)
 	artifactIDs := mapKeysSorted(artifactSet)
 	documentIDs := mapKeysSorted(documentSet)
 	documentRevisionIDs := mapKeysSorted(documentRevisionSet)
-	return snapshotIDs, artifactIDs, documentIDs, documentRevisionIDs
+	return artifactIDs, documentIDs, documentRevisionIDs
 }
 
 func mapKeysSorted(values map[string]struct{}) []string {
@@ -793,112 +498,18 @@ func mapKeysSorted(values map[string]struct{}) []string {
 	return out
 }
 
-func validateThreadCreate(contract *schema.Contract, thread map[string]any) error {
-	threadSchema, ok := contract.Snapshots["thread"]
-	if !ok {
-		return fmt.Errorf("thread schema is not loaded")
-	}
-
-	required := make([]string, 0)
-	for name, field := range threadSchema.Fields {
-		if field.Required && name != "open_commitments" {
-			required = append(required, name)
-		}
-	}
-	sort.Strings(required)
-	for _, name := range required {
-		value, exists := thread[name]
-		if !exists {
-			return fmt.Errorf("thread.%s is required", name)
-		}
-		if err := validateThreadField(contract, name, value, true); err != nil {
-			return err
-		}
-	}
-
-	for name, value := range thread {
-		if err := validateThreadField(contract, name, value, true); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func validateThreadPatch(contract *schema.Contract, patch map[string]any) error {
-	for name, value := range patch {
-		if err := validateThreadField(contract, name, value, false); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func validateThreadField(contract *schema.Contract, fieldName string, value any, createMode bool) error {
-	threadSchema, ok := contract.Snapshots["thread"]
-	if !ok {
-		return fmt.Errorf("thread schema is not loaded")
-	}
-	field, known := threadSchema.Fields[fieldName]
-	if !known {
-		// Unknown fields are allowed and preserved by patch/merge semantics.
+func mapsByIDToSortedSlice(byID map[string]map[string]any) []map[string]any {
+	if len(byID) == 0 {
 		return nil
 	}
-
-	switch field.Type {
-	case "string":
-		text, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("thread.%s must be a string", fieldName)
-		}
-		if createMode && field.Required && strings.TrimSpace(text) == "" {
-			return fmt.Errorf("thread.%s must be non-empty", fieldName)
-		}
-		if fieldName == "cadence" {
-			if err := schedule.ValidateCadence(text); err != nil {
-				return fmt.Errorf("thread.%s: %w", fieldName, err)
-			}
-		}
-		if strings.HasPrefix(field.Ref, "enums.") {
-			enumName := strings.TrimPrefix(field.Ref, "enums.")
-			if err := schema.ValidateEnum(contract, enumName, text); err != nil {
-				return fmt.Errorf("thread.%s: %w", fieldName, err)
-			}
-		}
-	case "datetime":
-		if value == nil {
-			return nil
-		}
-		text, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("thread.%s must be an RFC3339 datetime string", fieldName)
-		}
-		if _, err := time.Parse(time.RFC3339, text); err != nil {
-			return fmt.Errorf("thread.%s must be an RFC3339 datetime string", fieldName)
-		}
-	case "list<string>":
-		if _, err := extractStringSlice(value); err != nil {
-			return fmt.Errorf("thread.%s must be a list of strings", fieldName)
-		}
-	case "list<typed_ref>":
-		refs, err := extractStringSlice(value)
-		if err != nil {
-			return fmt.Errorf("thread.%s must be a list of strings", fieldName)
-		}
-		if err := schema.ValidateTypedRefs(contract, refs); err != nil {
-			return fmt.Errorf("thread.%s: %w", fieldName, err)
-		}
-	case "object":
-		obj, ok := value.(map[string]any)
-		if !ok {
-			return fmt.Errorf("thread.%s must be an object", fieldName)
-		}
-		if field.Ref == "provenance" {
-			if err := schema.ValidateProvenance(contract, obj); err != nil {
-				return fmt.Errorf("thread.%s: %w", fieldName, err)
-			}
-		}
+	keys := make([]string, 0, len(byID))
+	for k := range byID {
+		keys = append(keys, k)
 	}
-
-	return nil
+	sort.Strings(keys)
+	out := make([]map[string]any, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, byID[k])
+	}
+	return out
 }

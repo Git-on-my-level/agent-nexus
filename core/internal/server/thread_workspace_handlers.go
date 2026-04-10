@@ -106,22 +106,17 @@ func buildThreadContextPayload(ctx context.Context, opts handlerOptions, threadI
 		return nil, err
 	}
 
-	openCommitments, err := buildThreadContextOpenCommitments(ctx, opts, threadID, thread)
-	if err != nil {
-		return nil, err
-	}
-
 	documents, err := buildThreadContextDocuments(ctx, opts, threadID)
 	if err != nil {
 		return nil, err
 	}
 
 	return map[string]any{
-		"thread":           thread,
-		"recent_events":    recentEvents,
-		"key_artifacts":    keyArtifacts,
-		"open_commitments": openCommitments,
-		"documents":        documents,
+		"thread":        thread,
+		"recent_events": recentEvents,
+		"key_artifacts": keyArtifacts,
+		"open_cards":    []map[string]any{},
+		"documents":     documents,
 	}, nil
 }
 
@@ -135,7 +130,7 @@ func buildThreadWorkspacePayload(ctx context.Context, opts handlerOptions, threa
 	collaboration := buildThreadWorkspaceCollaborationSummary(contextBody)
 
 	now := time.Now().UTC()
-	projectionState, err := loadThreadProjectionState(ctx, opts, threadID)
+	projectionState, err := loadTopicProjectionState(ctx, opts, threadID)
 	if err != nil {
 		return nil, err
 	}
@@ -173,12 +168,12 @@ func buildThreadWorkspacePayload(ctx context.Context, opts handlerOptions, threa
 			"decision_requests":      decisionRequests,
 			"decisions":              decisions,
 			"key_artifacts":          contextBody["key_artifacts"],
-			"open_commitments":       contextBody["open_commitments"],
+			"open_cards":             contextBody["open_cards"],
 			"recommendation_count":   len(recommendations),
 			"decision_request_count": len(decisionRequests),
 			"decision_count":         len(decisions),
 			"artifact_count":         workspaceSliceLen(contextBody["key_artifacts"]),
-			"open_commitment_count":  workspaceSliceLen(contextBody["open_commitments"]),
+			"open_card_count":        workspaceSliceLen(contextBody["open_cards"]),
 		},
 		"board_memberships":           boardMembershipSectionResponse(boardMemberships),
 		"inbox":                       inboxSection,
@@ -188,7 +183,7 @@ func buildThreadWorkspacePayload(ctx context.Context, opts handlerOptions, threa
 		"related_decision_requests":   relatedThreadReview["related_decision_requests"],
 		"related_decisions":           relatedThreadReview["related_decisions"],
 		"total_review_items":          totalReviewItems,
-		"follow_up":                   buildThreadWorkspaceFollowUpHints(threadID, recommendations, decisionRequests, decisions),
+		"follow_up":                   buildThreadWorkspaceFollowUpHints(thread, threadID, recommendations, decisionRequests, decisions),
 		"workspace_summary":           cloneWorkspaceMap(projectionState.Projection.Data),
 		"projection_freshness":        cloneWorkspaceMap(projectionState.Freshness),
 		"workspace_summary_freshness": cloneWorkspaceMap(projectionState.Freshness),
@@ -225,7 +220,7 @@ func buildThreadWorkspacePayload(ctx context.Context, opts handlerOptions, threa
 	return workspaceBody, nil
 }
 
-func buildThreadWorkspaceInboxSection(ctx context.Context, opts handlerOptions, threadID string, now time.Time, projectionState threadProjectionState) (map[string]any, []map[string]any, error) {
+func buildThreadWorkspaceInboxSection(ctx context.Context, opts handlerOptions, threadID string, now time.Time, projectionState topicProjectionState) (map[string]any, []map[string]any, error) {
 	items, err := opts.primitiveStore.ListDerivedInboxItems(ctx, primitives.DerivedInboxListFilter{
 		ThreadID: threadID,
 	})
@@ -262,7 +257,7 @@ func buildThreadWorkspaceCollaborationSummary(contextBody map[string]any) map[st
 		"decision_request_count": len(decisionRequests),
 		"decision_count":         len(decisions),
 		"artifact_count":         workspaceSliceLen(contextBody["key_artifacts"]),
-		"open_commitment_count":  workspaceSliceLen(contextBody["open_commitments"]),
+		"open_card_count":        workspaceSliceLen(contextBody["open_cards"]),
 	}
 }
 
@@ -367,7 +362,21 @@ func buildEmptyRelatedThreadReview() map[string]any {
 	}
 }
 
-func buildThreadWorkspaceFollowUpHints(threadID string, sections ...[]map[string]any) map[string]any {
+func topicIDFromThreadWorkspaceRefs(thread map[string]any) string {
+	if thread == nil {
+		return ""
+	}
+	ref := strings.TrimSpace(anyString(thread["subject_ref"]))
+	if strings.HasPrefix(ref, "topic:") {
+		id := strings.TrimSpace(strings.TrimPrefix(ref, "topic:"))
+		if id != "" {
+			return id
+		}
+	}
+	return ""
+}
+
+func buildThreadWorkspaceFollowUpHints(thread map[string]any, threadID string, sections ...[]map[string]any) map[string]any {
 	eventIDs := make([]string, 0, 8)
 	seen := make(map[string]struct{})
 
@@ -398,8 +407,11 @@ func buildThreadWorkspaceFollowUpHints(threadID string, sections ...[]map[string
 		"events_get_examples":       examples,
 		"workspace_refresh_command": "",
 	}
-	if strings.TrimSpace(threadID) != "" {
-		hints["workspace_refresh_command"] = "oar threads workspace --thread-id " + threadID + " --include-artifact-content --full-id --json"
+	tid := strings.TrimSpace(threadID)
+	if topicID := topicIDFromThreadWorkspaceRefs(thread); topicID != "" {
+		hints["workspace_refresh_command"] = "oar topics workspace --topic-id " + topicID + " --include-artifact-content --full-id --json"
+	} else if tid != "" {
+		hints["workspace_refresh_command"] = "oar threads workspace --thread-id " + tid + " --include-artifact-content --full-id --json"
 	}
 	return hints
 }

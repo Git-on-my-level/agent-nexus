@@ -8,13 +8,14 @@ type machineCommandIdentity struct {
 }
 
 var machineCommandIdentityByPath = map[string]machineCommandIdentity{
-	"events list":     {Command: "events list", CommandID: "threads.timeline"},
+	"events list":     {Command: "events list", CommandID: "events.list"},
 	"events get":      {Command: "events get", CommandID: "events.get"},
 	"events stream":   {Command: "events stream", CommandID: "events.stream"},
 	"events tail":     {Command: "events stream", CommandID: "events.stream"},
 	"inbox stream":    {Command: "inbox stream", CommandID: "inbox.stream"},
 	"inbox tail":      {Command: "inbox stream", CommandID: "inbox.stream"},
 	"threads context": {Command: "threads context", CommandID: "threads.context"},
+	"threads get":     {Command: "threads get", CommandID: "threads.inspect"},
 	"threads inspect": {Command: "threads inspect", CommandID: "threads.inspect"},
 	"threads workspace": {
 		Command:   "threads workspace",
@@ -24,33 +25,25 @@ var machineCommandIdentityByPath = map[string]machineCommandIdentity{
 		Command:   "threads review",
 		CommandID: "threads.review",
 	},
-	"threads propose-patch": {
-		Command:   "threads propose-patch",
-		CommandID: "threads.patch.propose",
-	},
-	"threads apply": {
-		Command:   "threads apply",
-		CommandID: "threads.patch.apply",
-	},
 	"threads recommendations": {
 		Command:   "threads recommendations",
 		CommandID: "threads.recommendations",
 	},
-	"commitments propose-patch": {
-		Command:   "commitments propose-patch",
-		CommandID: "commitments.patch.propose",
-	},
-	"commitments apply": {
-		Command:   "commitments apply",
-		CommandID: "commitments.patch.apply",
-	},
 	"docs propose-update": {
 		Command:   "docs propose-update",
-		CommandID: "docs.update.propose",
+		CommandID: "docs.revisions.create.propose",
 	},
 	"docs apply": {
 		Command:   "docs apply",
-		CommandID: "docs.update.apply",
+		CommandID: "docs.revisions.create.apply",
+	},
+	"docs history": {
+		Command:   "docs history",
+		CommandID: "docs.revisions.list",
+	},
+	"docs revision get": {
+		Command:   "docs revision get",
+		CommandID: "docs.revisions.get",
 	},
 }
 

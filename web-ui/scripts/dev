@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Default core URL for local UI dev when unset (matches seed-core-from-mock.mjs).
+# Without this, `[workspace]/+layout.js` schema verification hits the proxy with an
+# empty workspace coreBaseUrl and returns HTTP 500 on /local.
+if [[ -z "${OAR_CORE_BASE_URL:-}" ]]; then
+	export OAR_CORE_BASE_URL="http://127.0.0.1:8000"
+fi
+
 pnpm install
 exec pnpm exec vite dev --host 0.0.0.0 --port "${PORT:-5173}"

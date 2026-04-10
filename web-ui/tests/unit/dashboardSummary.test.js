@@ -3,9 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   buildArtifactKindSummary,
   buildInboxCategorySummary,
-  buildThreadHealthSummary,
+  buildTopicHealthSummary,
   selectRecentArtifacts,
-  selectRecentlyUpdatedThreads,
+  selectRecentlyUpdatedTopics,
 } from "../../src/lib/dashboardSummary.js";
 
 describe("dashboard summaries", () => {
@@ -25,13 +25,19 @@ describe("dashboard summaries", () => {
         count: 0,
       },
       { category: "exception", label: "Exception", count: 1 },
-      { category: "commitment_risk", label: "At Risk", count: 0 },
+      { category: "work_item_risk", label: "Work item risk", count: 0 },
+      { category: "stale_topic", label: "Stale Topic", count: 0 },
+      {
+        category: "document_attention",
+        label: "Document Attention",
+        count: 0,
+      },
       { category: "unknown", label: "unknown", count: 1 },
     ]);
   });
 
-  it("computes thread health over open threads", () => {
-    const summary = buildThreadHealthSummary([
+  it("computes topic health over open topics", () => {
+    const summary = buildTopicHealthSummary([
       {
         id: "thread-a",
         status: "active",
@@ -60,8 +66,8 @@ describe("dashboard summaries", () => {
     });
   });
 
-  it("sorts recent threads and artifacts by descending timestamp", () => {
-    const recentThreads = selectRecentlyUpdatedThreads([
+  it("sorts recent topics and artifacts by descending timestamp", () => {
+    const recentTopics = selectRecentlyUpdatedTopics([
       { id: "thread-1", updated_at: "2025-01-01T00:00:00.000Z" },
       { id: "thread-2", updated_at: "2026-01-01T00:00:00.000Z" },
       { id: "thread-3", updated_at: "2024-01-01T00:00:00.000Z" },
@@ -88,7 +94,7 @@ describe("dashboard summaries", () => {
       },
     ]);
 
-    expect(recentThreads.map((thread) => thread.id)).toEqual([
+    expect(recentTopics.map((topic) => topic.id)).toEqual([
       "thread-2",
       "thread-1",
       "thread-3",
@@ -152,19 +158,19 @@ describe("dashboard summaries", () => {
     expect(result[0].versionCount).toBe(2);
   });
 
-  it("excludes tombstoned artifacts", () => {
+  it("excludes trashed artifacts", () => {
     const artifacts = [
       {
         id: "doc-live",
         kind: "doc",
         created_at: "2026-01-01T00:00:00.000Z",
-        tombstoned_at: null,
+        trashed_at: null,
       },
       {
         id: "doc-dead",
         kind: "doc",
         created_at: "2026-02-01T00:00:00.000Z",
-        tombstoned_at: "2026-02-02T00:00:00.000Z",
+        trashed_at: "2026-02-02T00:00:00.000Z",
       },
     ];
 
@@ -175,8 +181,8 @@ describe("dashboard summaries", () => {
   it("does not suppress a ref to a different kind", () => {
     const artifacts = [
       {
-        id: "work-order-1",
-        kind: "work_order",
+        id: "evidence-1",
+        kind: "evidence",
         thread_id: "thread-1",
         summary: "Fix the thing",
         refs: ["thread:thread-1"],
@@ -187,13 +193,13 @@ describe("dashboard summaries", () => {
         kind: "receipt",
         thread_id: "thread-1",
         summary: "Receipt for fixing the thing",
-        refs: ["thread:thread-1", "artifact:work-order-1"],
+        refs: ["thread:thread-1", "artifact:evidence-1"],
         created_at: "2026-01-01T00:00:00.000Z",
       },
     ];
 
     const result = selectRecentArtifacts(artifacts);
-    expect(result.map((a) => a.id)).toEqual(["receipt-1", "work-order-1"]);
+    expect(result.map((a) => a.id)).toEqual(["receipt-1", "evidence-1"]);
     expect(result[0].isUpdate).toBe(false);
     expect(result[1].isUpdate).toBe(false);
   });
@@ -202,15 +208,14 @@ describe("dashboard summaries", () => {
     const summary = buildArtifactKindSummary([
       { kind: "review" },
       { kind: "review" },
-      { kind: "work_order" },
+      { kind: "receipt" },
       { kind: "receipt" },
       { kind: "doc" },
     ]);
 
     expect(summary).toEqual({
       review: 2,
-      receipt: 1,
-      work_order: 1,
+      receipt: 2,
       other: 1,
     });
   });

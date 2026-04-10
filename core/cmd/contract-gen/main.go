@@ -85,7 +85,7 @@ type oarSchemaDocument struct {
 	Enums                map[string]oarEnumDef             `yaml:"enums"`
 	Provenance           oarFieldContainer                 `yaml:"provenance"`
 	Primitives           map[string]oarMaybeFieldContainer `yaml:"primitives"`
-	Snapshots            map[string]oarMaybeFieldContainer `yaml:"snapshots"`
+	Threads              map[string]oarMaybeFieldContainer `yaml:"-"`
 	Packets              map[string]oarMaybeFieldContainer `yaml:"packets"`
 	ReferenceConventions oarReferenceConventions           `yaml:"reference_conventions"`
 }
@@ -176,6 +176,27 @@ func (c *oarMaybeFieldContainer) UnmarshalYAML(value *yaml.Node) error {
 		return err
 	}
 	c.Fields = decoded.Fields
+	return nil
+}
+
+func (d *oarSchemaDocument) UnmarshalYAML(value *yaml.Node) error {
+	type alias oarSchemaDocument
+	var decoded struct {
+		alias              `yaml:",inline"`
+		LegacyThreadFields map[string]oarMaybeFieldContainer `yaml:"snapshots"`
+	}
+	if err := value.Decode(&decoded); err != nil {
+		return err
+	}
+	*d = oarSchemaDocument(decoded.alias)
+	d.Threads = make(map[string]oarMaybeFieldContainer, 1)
+	if source, ok := d.Primitives["thread"]; ok {
+		d.Threads["thread"] = source
+		return nil
+	}
+	if source, ok := decoded.LegacyThreadFields["thread"]; ok {
+		d.Threads["thread"] = source
+	}
 	return nil
 }
 
@@ -680,32 +701,17 @@ func applyOARSchemaOverlays(acc map[string]bodyFieldState, schemaDoc oarSchemaDo
 			})
 		}
 	case "threads.create":
-		if source, ok := schemaDoc.Snapshots["thread"]; ok {
+		if source, ok := schemaDoc.Threads["thread"]; ok {
 			expandContainerFromOAR(acc, schemaDoc, "thread", source, oarExpansionOptions{
-				exclude: map[string]struct{}{"open_commitments": {}},
+				exclude: map[string]struct{}{"open_cards": {}},
 			})
 		}
 	case "threads.patch":
-		if source, ok := schemaDoc.Snapshots["thread"]; ok {
+		if source, ok := schemaDoc.Threads["thread"]; ok {
 			expandContainerFromOAR(acc, schemaDoc, "patch", source, oarExpansionOptions{
-				exclude:          map[string]struct{}{"open_commitments": {}},
+				exclude:          map[string]struct{}{"open_cards": {}},
 				forceOptionalAll: true,
 			})
-		}
-	case "commitments.create":
-		if source, ok := schemaDoc.Snapshots["commitment"]; ok {
-			expandContainerFromOAR(acc, schemaDoc, "commitment", source, oarExpansionOptions{})
-		}
-	case "commitments.patch":
-		if source, ok := schemaDoc.Snapshots["commitment"]; ok {
-			expandContainerFromOAR(acc, schemaDoc, "patch", source, oarExpansionOptions{
-				exclude:          map[string]struct{}{"thread_id": {}},
-				forceOptionalAll: true,
-			})
-		}
-	case "packets.work-orders.create":
-		if source, ok := schemaDoc.Packets["work_order"]; ok {
-			expandContainerFromOAR(acc, schemaDoc, "packet", source, oarExpansionOptions{})
 		}
 	case "packets.receipts.create":
 		if source, ok := schemaDoc.Packets["receipt"]; ok {
@@ -1187,7 +1193,7 @@ Required for every command operation:
 - `+"`x-oar-error-codes`"+`: stable semantic error code list
 - `+"`x-oar-concepts`"+`: related concept tags
 - `+"`x-oar-stability`"+`: one of `+"`experimental|beta|stable`"+`
-- `+"`x-oar-surface`"+`: one of `+"`canonical|projection|utility`"+`
+- `+"`x-oar-surface`"+`: one of `+"`canonical|projection|diagnostic|utility`"+`
 - `+"`x-oar-agent-notes`"+`: idempotency/retry caveats
 
 Recommended:
@@ -1198,8 +1204,9 @@ Recommended:
 
 Surface classification:
 
-- `+"`canonical`"+`: CRUD/list/get endpoints over canonical resources (threads, commitments, artifacts, documents, boards, events)
+- `+"`canonical`"+`: CRUD/list/get endpoints over canonical durable resources (topics, cards, artifacts, documents, boards, events)
 - `+"`projection`"+`: operator convenience surfaces that aggregate multiple canonical resources (workspace/context endpoints, inbox)
+- `+"`diagnostic`"+`: read-only tooling and inspection surfaces over backing infrastructure (for example backing-thread list/get paths)
 - `+"`utility`"+`: meta/handshake, auth bootstrap, rebuild/repair, and similar non-domain endpoints
 `) + "\n"
 	return os.WriteFile(path, []byte(content), 0o644)
@@ -1707,8 +1714,28 @@ func deriveGroups(commands []command) []groupMeta {
 			CommandIDs:   commandIDs,
 		})
 	}
-	sort.Slice(groups, func(i, j int) bool { return groups[i].Name < groups[j].Name })
+	sort.Slice(groups, func(i, j int) bool {
+		pi, ni := commandGroupSortKey(groups[i].Name)
+		pj, nj := commandGroupSortKey(groups[j].Name)
+		if pi != pj {
+			return pi < pj
+		}
+		return ni < nj
+	})
 	return groups
+}
+
+// commandGroupSortKey orders CLI help groups: primary operator surface (topics) before
+// diagnostic threads tooling; everything else lexicographically.
+func commandGroupSortKey(name string) (prio int, sortName string) {
+	switch strings.TrimSpace(name) {
+	case "topics":
+		return 0, name
+	case "threads":
+		return 1, name
+	default:
+		return 10, name
+	}
 }
 
 func deriveConcepts(commands []command) []conceptMeta {

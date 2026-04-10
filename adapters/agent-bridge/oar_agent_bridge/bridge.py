@@ -150,13 +150,13 @@ class AgentBridge:
             if notification_status != "read":
                 self._mark_notification_read(wakeup_id)
             return
-        claimed = self._claim_wakeup(wakeup_id, thread_id, target_actor_id, request_event_id)
-        if not claimed:
-            return
         packet_content = self.client.get_artifact_content(wakeup_id)
         if not isinstance(packet_content, dict):
             raise RuntimeError(f"Wake artifact {wakeup_id} did not return structured content")
         packet = WakePacket.from_content(packet_content)
+        claimed = self._claim_wakeup(packet, target_actor_id, request_event_id)
+        if not claimed:
+            return
         prompt_text = build_wake_prompt(packet)
         session_map = self.state.session_map()
         existing_session_id = session_map.get(packet.session_key)
@@ -171,7 +171,7 @@ class AgentBridge:
                     "type": WAKE_COMPLETED_EVENT,
                     "thread_id": packet.thread_id,
                     "summary": f"Wakeup {packet.wakeup_id} completed for @{self.handle}",
-                    "refs": [f"thread:{packet.thread_id}", f"event:{packet.trigger_event_id}", f"artifact:{packet.wakeup_id}"],
+                    "refs": self._packet_event_refs(packet, packet.trigger_event_id),
                     "payload": {
                         "wakeup_id": packet.wakeup_id,
                         "target_handle": self.handle,
@@ -188,7 +188,7 @@ class AgentBridge:
                     "type": WAKE_FAILED_EVENT,
                     "thread_id": thread_id,
                     "summary": f"Wakeup {wakeup_id} failed for @{self.handle}",
-                    "refs": [f"thread:{thread_id}", f"event:{packet.trigger_event_id if 'packet' in locals() else str(notification.get('trigger_event_id', ''))}", f"artifact:{wakeup_id}"],
+                    "refs": self._packet_event_refs(packet, packet.trigger_event_id),
                     "payload": {
                         "wakeup_id": wakeup_id,
                         "target_handle": self.handle,
@@ -201,6 +201,22 @@ class AgentBridge:
             raise
         self.state.mark_wakeup_handled(packet.wakeup_id)
         self._mark_notification_read(packet.wakeup_id)
+
+    def _packet_subject_refs(self, packet: WakePacket) -> list[str]:
+        return packet.subject_context_refs()
+
+    def _packet_event_refs(self, packet: WakePacket | None, event_id: str, *, fallback_thread_id: str | None = None, fallback_wakeup_id: str | None = None) -> list[str]:
+        if packet is not None:
+            refs = self._packet_subject_refs(packet)
+            return [*refs, f"event:{event_id}", f"artifact:{packet.wakeup_id}"]
+        refs = []
+        if fallback_thread_id:
+            refs.append(f"thread:{fallback_thread_id}")
+        if event_id.strip():
+            refs.append(f"event:{event_id}")
+        if fallback_wakeup_id:
+            refs.append(f"artifact:{fallback_wakeup_id}")
+        return refs
 
     def _mark_notification_read(self, wakeup_id: str) -> None:
         for attempt in range(1, NOTIFICATION_READ_RETRY_ATTEMPTS + 1):
@@ -225,14 +241,17 @@ class AgentBridge:
                 )
                 time.sleep(BRIDGE_RECONNECT_DELAY_SECONDS)
 
-    def _claim_wakeup(self, wakeup_id: str, thread_id: str, target_actor_id: str, request_event_id: str) -> bool:
+    def _claim_wakeup(self, packet: WakePacket, target_actor_id: str, request_event_id: str) -> bool:
+        wakeup_id = packet.wakeup_id
+        thread_id = packet.thread_id
         try:
+            claim_refs = [*self._packet_subject_refs(packet), f"event:{request_event_id}", f"artifact:{wakeup_id}"]
             response = self.client.create_event(
                 event={
                     "type": WAKE_CLAIMED_EVENT,
                     "thread_id": thread_id,
                     "summary": f"Wakeup {wakeup_id} claimed by @{self.handle}",
-                    "refs": [f"thread:{thread_id}", f"event:{request_event_id}", f"artifact:{wakeup_id}"],
+                    "refs": claim_refs,
                     "payload": {
                         "wakeup_id": wakeup_id,
                         "target_handle": self.handle,
@@ -260,7 +279,7 @@ class AgentBridge:
                 "type": MESSAGE_POSTED_EVENT,
                 "thread_id": packet.thread_id,
                 "summary": compact_text(response_text, 140) or f"@{self.handle} replied",
-                "refs": [f"thread:{packet.thread_id}", f"event:{packet.trigger_event_id}", f"artifact:{packet.wakeup_id}"],
+                "refs": self._packet_event_refs(packet, packet.trigger_event_id),
                 "payload": {
                     "text": response_text,
                     "agent_handle": self.handle,

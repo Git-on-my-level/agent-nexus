@@ -135,7 +135,7 @@ http {
       proxy_pass http://127.0.0.1:8001;
     }
 
-    location ~ ^/(threads|commitments|boards|docs|artifacts|events|work_orders|receipts|reviews|inbox/ack|derived/rebuild) {
+    location ~ ^/(threads|topics|cards|boards|docs|artifacts|events|receipts|reviews|inbox/ack|derived/rebuild) {
       limit_req zone=oar_write burst=100 nodelay;
       proxy_pass http://127.0.0.1:8001;
     }

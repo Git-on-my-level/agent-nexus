@@ -1,7 +1,7 @@
 import { parseListInput, validateTypedRefs } from "./typedRefs.js";
 
 export function validateReceiptDraft(draft, options = {}) {
-  const threadId = String(options.threadId ?? "").trim();
+  const subjectRef = String(options.subjectRef ?? "").trim();
   const errors = [];
   const fieldErrors = {};
 
@@ -11,18 +11,15 @@ export function validateReceiptDraft(draft, options = {}) {
     fieldErrors[field].push(message);
   }
 
-  const workOrderId = String(draft?.workOrderId ?? "").trim();
   const outputs = parseListInput(draft?.outputsInput);
   const verificationEvidence = parseListInput(draft?.verificationEvidenceInput);
   const changesSummary = String(draft?.changesSummary ?? "").trim();
   const knownGaps = parseListInput(draft?.knownGapsInput);
 
-  if (!threadId) {
-    addError("thread_id", "thread_id is required.");
-  }
-
-  if (!workOrderId) {
-    addError("work_order_id", "work_order_id is required.");
+  if (!subjectRef) {
+    addError("subject_ref", "subject_ref is required.");
+  } else if (!subjectRef.startsWith("card:")) {
+    addError("subject_ref", "subject_ref must be a card ref (card:...).");
   }
 
   if (!changesSummary) {
@@ -61,8 +58,7 @@ export function validateReceiptDraft(draft, options = {}) {
     errors,
     fieldErrors,
     normalized: {
-      thread_id: threadId,
-      work_order_id: workOrderId,
+      subject_ref: subjectRef,
       outputs,
       verification_evidence: verificationEvidence,
       changes_summary: changesSummary,
@@ -84,13 +80,14 @@ export function buildReceiptPayload(draft, options = {}) {
   const receiptId = String(options.receiptId ?? "").trim();
   const packet = {
     ...(receiptId ? { receipt_id: receiptId } : {}),
-    thread_id: validation.normalized.thread_id,
-    work_order_id: validation.normalized.work_order_id,
+    subject_ref: validation.normalized.subject_ref,
     outputs: validation.normalized.outputs,
     verification_evidence: validation.normalized.verification_evidence,
     changes_summary: validation.normalized.changes_summary,
     known_gaps: validation.normalized.known_gaps,
   };
+
+  const summarySlice = validation.normalized.changes_summary.slice(0, 120);
 
   return {
     valid: true,
@@ -101,12 +98,8 @@ export function buildReceiptPayload(draft, options = {}) {
     artifact: {
       ...(receiptId ? { id: receiptId } : {}),
       kind: "receipt",
-      thread_id: validation.normalized.thread_id,
-      summary: `Receipt for ${validation.normalized.work_order_id}`,
-      refs: [
-        `thread:${validation.normalized.thread_id}`,
-        `artifact:${validation.normalized.work_order_id}`,
-      ],
+      summary: summarySlice,
+      refs: [validation.normalized.subject_ref],
     },
   };
 }

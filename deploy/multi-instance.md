@@ -272,7 +272,7 @@ Each instance has a fully independent workspace:
 
 ```
 ~/.oar/workspaces/team-alpha/
-├── state.sqlite       # events, snapshots, artifacts metadata, actors
+├── state.sqlite       # events, topics, threads, artifacts metadata, actors
 ├── artifacts/content/  # artifact bytes
 ├── logs/
 └── tmp/

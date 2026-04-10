@@ -3,10 +3,9 @@
   import { page } from "$app/stores";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
-  import SearchableEntityPicker from "$lib/components/SearchableEntityPicker.svelte";
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
-  import { searchThreads as searchThreadRecords } from "$lib/searchHelpers";
+  import { topicDetailPathFromSubject } from "$lib/topicRouteUtils";
   import { workspacePath } from "$lib/workspacePaths";
   import {
     lookupActorDisplayName,
@@ -37,9 +36,7 @@
   let editDraft = $state({
     content: "",
     title: "",
-    status: "",
     labels: "",
-    thread_id: "",
   });
   let saving = $state(false);
   let saveError = $state("");
@@ -47,6 +44,14 @@
   let metadataExpanded = $state(false);
   let confirmModal = $state({ open: false, action: "" });
   let docLifecycleBusy = $state(false);
+  let documentTopicHref = $derived(
+    document
+      ? topicDetailPathFromSubject({
+          subjectRef: document.subject_ref,
+          threadId: document.thread_id,
+        })
+      : "",
+  );
 
   let displayedContent = $derived(
     selectedRevision?.content ?? headRevision?.content ?? "",
@@ -66,20 +71,6 @@
 
   function workspaceHref(pathname = "/") {
     return workspacePath(workspaceSlug, pathname);
-  }
-
-  function toThreadOption(thread) {
-    return {
-      id: thread.id,
-      title: thread.title || thread.id,
-      subtitle: [thread.status, thread.priority].filter(Boolean).join(" · "),
-      keywords: [thread.type, ...(thread.tags ?? [])],
-    };
-  }
-
-  async function searchThreadOptions(query) {
-    const threads = await searchThreadRecords(query);
-    return threads.map(toThreadOption);
   }
 
   async function setRequestedRevision(revisionId = "") {
@@ -252,9 +243,7 @@
     editDraft = {
       content: headRevision?.content ?? "",
       title: document?.title ?? "",
-      status: document?.status ?? "",
       labels: (document?.labels ?? []).join(", "),
-      thread_id: document?.thread_id ?? "",
     };
     saveError = "";
     editOpen = true;
@@ -293,20 +282,11 @@
       ) {
         docPatch.title = editDraft.title.trim();
       }
-      if (editDraft.status && editDraft.status !== document?.status) {
-        docPatch.status = editDraft.status;
-      }
       const labelsChanged =
         JSON.stringify(labels) !== JSON.stringify(document?.labels ?? []);
       if (labelsChanged) {
         docPatch.labels = labels;
       }
-      const nextThreadId = editDraft.thread_id.trim();
-      const currentThreadId = String(document?.thread_id ?? "").trim();
-      if (nextThreadId !== currentThreadId) {
-        docPatch.thread_id = nextThreadId || null;
-      }
-
       const result = await coreClient.updateDocument(documentId, {
         content: editDraft.content.trim(),
         content_type: headContentType || "text",
@@ -319,6 +299,10 @@
       selectedRevision = null;
       revisions = [];
       editOpen = false;
+      // Drop ?revision= so we show the new head instead of re-resolving the prior URL.
+      if (requestedRevisionId) {
+        await setRequestedRevision("");
+      }
     } catch (e) {
       saveError = `Failed to save revision: ${e instanceof Error ? e.message : String(e)}`;
     } finally {
@@ -327,7 +311,7 @@
   }
 
   async function handleArchiveDocument() {
-    if (!documentId || docLifecycleBusy || document?.tombstoned_at) return;
+    if (!documentId || docLifecycleBusy || document?.trashed_at) return;
     docLifecycleBusy = true;
     try {
       await coreClient.archiveDocument(documentId, {});
@@ -339,7 +323,7 @@
 
   async function handleUnarchiveDocument() {
     confirmModal = { open: false, action: "" };
-    if (!documentId || docLifecycleBusy || document?.tombstoned_at) return;
+    if (!documentId || docLifecycleBusy || document?.trashed_at) return;
     docLifecycleBusy = true;
     try {
       await coreClient.unarchiveDocument(documentId, {});
@@ -353,14 +337,14 @@
     const action = confirmModal.action;
     confirmModal = { open: false, action: "" };
     if (action === "archive") handleArchiveDocument();
-    else if (action === "trash") handleTombstoneDocument();
+    else if (action === "trash") handleTrashDocument();
   }
 
-  async function handleTombstoneDocument() {
+  async function handleTrashDocument() {
     if (!documentId || docLifecycleBusy) return;
     docLifecycleBusy = true;
     try {
-      await coreClient.tombstoneDocument(documentId, {});
+      await coreClient.trashDocument(documentId, {});
       await goto(workspacePath(workspaceSlug, "/docs"));
     } finally {
       docLifecycleBusy = false;
@@ -420,24 +404,24 @@
     {loadError}
   </div>
 {:else if document}
-  {#if document.tombstoned_at}
+  {#if document.trashed_at}
     <div
       class="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[13px] text-red-400"
     >
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2 font-semibold">
           <span>⚠</span>
-          <span>This document has been tombstoned</span>
+          <span>This document is in trash</span>
         </div>
-        {#if document.tombstone_reason}
-          <p class="mt-2">Reason: {document.tombstone_reason}</p>
+        {#if document.trash_reason}
+          <p class="mt-2">Reason: {document.trash_reason}</p>
         {/if}
         <p class="mt-1 text-[11px] text-red-400/80">
-          Tombstoned {#if document.tombstoned_by}by {actorName(
-              document.tombstoned_by,
+          Trashed {#if document.trashed_by}by {actorName(
+              document.trashed_by,
             )}{/if}
-          {#if document.tombstoned_at}
-            at {formatTimestamp(document.tombstoned_at)}
+          {#if document.trashed_at}
+            at {formatTimestamp(document.trashed_at)}
           {/if}
         </p>
       </div>
@@ -476,19 +460,24 @@
         <div class="min-w-0 flex-1">
           <h1 class="text-lg font-semibold text-[var(--ui-text)]">
             {document.title || ""}{#if !document.title}<span
-                class="font-mono text-[var(--ui-text-subtle)]"
+                class="font-mono text-[var(--ui-text-muted)]"
                 >{document.id}</span
               >{/if}
           </h1>
           <div class="mt-1 flex flex-wrap items-center gap-1.5 text-[12px]">
-            {#if document.status}
+            {#if document.state}
               <span
-                class="rounded px-1.5 py-0.5 font-medium {document.status ===
+                class="rounded px-1.5 py-0.5 font-medium {document.state ===
                 'active'
                   ? 'text-emerald-400 bg-emerald-500/10'
-                  : 'text-amber-400 bg-amber-500/10'}"
-                >{{ draft: "Draft", active: "Active" }[document.status] ??
-                  document.status}</span
+                  : document.state === 'trashed'
+                    ? 'text-red-400 bg-red-500/10'
+                    : 'text-amber-400 bg-amber-500/10'}"
+                >{{
+                  active: "Active",
+                  archived: "Archived",
+                  trashed: "Trashed",
+                }[document.state] ?? document.state}</span
               >
             {/if}
             {#each document.labels ?? [] as label}
@@ -510,19 +499,20 @@
               >by {actorName(displayedRevision?.created_by)}</span
             >
           </div>
-          {#if document.thread_id}
+          {#if document.thread_id && documentTopicHref}
             <p class="mt-0.5 text-[12px] text-[var(--ui-text-muted)]">
-              Linked thread:
+              Thread (timeline):
               <a
                 class="text-indigo-400 transition-colors hover:text-indigo-300"
-                href={workspaceHref(
-                  `/threads/${encodeURIComponent(document.thread_id)}`,
-                )}>{document.thread_id}</a
+                href={workspaceHref(documentTopicHref)}
+                >{String(document.subject_ref ?? "")
+                  .replace(/^topic:/, "")
+                  .trim() || document.thread_id}</a
               >
             </p>
           {/if}
         </div>
-        {#if !document.tombstoned_at}
+        {#if !document.trashed_at}
           <div class="flex shrink-0 items-center gap-1.5">
             {#if isTextEditable}
               <button
@@ -547,7 +537,7 @@
               </button>
             {:else}
               <span
-                class="inline-flex items-center gap-1 rounded-md border border-[var(--ui-border)] px-2.5 py-1.5 text-[12px] text-[var(--ui-text-subtle)]"
+                class="inline-flex items-center gap-1 rounded-md border border-[var(--ui-border)] px-2.5 py-1.5 text-[12px] text-[var(--ui-text-muted)]"
                 title="Content type '{headContentType}' can only be updated via the CLI or API"
               >
                 <svg
@@ -633,8 +623,12 @@
       </div>
 
       {#if editOpen}
-        <div
+        <form
           class="mt-3 rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg-soft)] p-4"
+          onsubmit={(e) => {
+            e.preventDefault();
+            void handleSave();
+          }}
         >
           <div class="mb-3">
             <button
@@ -643,7 +637,7 @@
               type="button"
             >
               <svg
-                class="h-3 w-3 text-[var(--ui-text-subtle)] transition-transform {metadataExpanded
+                class="h-3 w-3 text-[var(--ui-text-muted)] transition-transform {metadataExpanded
                   ? 'rotate-90'
                   : ''}"
                 fill="none"
@@ -663,10 +657,10 @@
             </button>
             {#if !metadataExpanded}
               <p
-                class="mt-1 ml-5 truncate text-[11px] text-[var(--ui-text-subtle)]"
+                class="mt-1 ml-5 truncate text-[11px] text-[var(--ui-text-muted)]"
               >
-                Title: {editDraft.title || "—"} · Status: {editDraft.status ||
-                  "—"} · Labels: {editDraft.labels || "none"}
+                Title: {editDraft.title || "—"} · Labels: {editDraft.labels ||
+                  "none"}
               </p>
             {/if}
             {#if metadataExpanded}
@@ -685,19 +679,6 @@
                 <label>
                   <span
                     class="text-[12px] font-medium text-[var(--ui-text-muted)]"
-                    >Status</span
-                  >
-                  <select
-                    bind:value={editDraft.status}
-                    class="mt-1 w-full rounded-md border border-[var(--ui-border)] bg-[var(--ui-bg)] px-2.5 py-1.5 text-[13px] text-[var(--ui-text)]"
-                  >
-                    <option value="draft">draft</option>
-                    <option value="active">active</option>
-                  </select>
-                </label>
-                <label>
-                  <span
-                    class="text-[12px] font-medium text-[var(--ui-text-muted)]"
                     >Labels (comma-separated)</span
                   >
                   <input
@@ -707,16 +688,6 @@
                     type="text"
                   />
                 </label>
-                <SearchableEntityPicker
-                  bind:value={editDraft.thread_id}
-                  advancedLabel="Use a manual thread ID"
-                  helperText="Update the canonical thread linkage for this doc lineage."
-                  label="Thread linkage"
-                  manualLabel="Thread ID"
-                  manualPlaceholder="thread-..."
-                  placeholder="Search threads by title, ID, or tags"
-                  searchFn={searchThreadOptions}
-                />
               </div>
             {/if}
           </div>
@@ -736,8 +707,7 @@
             <button
               class="cursor-pointer rounded-md bg-indigo-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
               disabled={saving}
-              onclick={handleSave}
-              type="button"
+              type="submit"
             >
               {saving ? "Saving…" : "Save revision"}
             </button>
@@ -758,12 +728,12 @@
               {saveError}
             </div>
           {/if}
-          <p class="mt-2 text-[11px] text-[var(--ui-text-subtle)]">
+          <p class="mt-2 text-[11px] text-[var(--ui-text-muted)]">
             Base revision: <span class="font-mono"
               >{headRevision?.revision_id ?? "—"}</span
             > — optimistic concurrency is enforced.
           </p>
-        </div>
+        </form>
       {/if}
 
       {#if isViewingOldRevision}
@@ -800,7 +770,7 @@
 
       <div class="mt-6 border-t border-[var(--ui-border)] pt-4">
         <p
-          class="mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--ui-text-subtle)]"
+          class="mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--ui-text-muted)]"
         >
           Technical details
         </p>
@@ -817,7 +787,7 @@
               {#if displayedRevision.content_hash}
                 <div>
                   <p
-                    class="text-[11px] uppercase tracking-[0.12em] text-[var(--ui-text-subtle)]"
+                    class="text-[11px] uppercase tracking-[0.12em] text-[var(--ui-text-muted)]"
                   >
                     Content hash
                   </p>
@@ -831,7 +801,7 @@
               {#if displayedRevision.revision_hash}
                 <div>
                   <p
-                    class="text-[11px] uppercase tracking-[0.12em] text-[var(--ui-text-subtle)]"
+                    class="text-[11px] uppercase tracking-[0.12em] text-[var(--ui-text-muted)]"
                   >
                     Revision hash
                   </p>
@@ -965,7 +935,7 @@
                       </p>
                       {#if rev.revision_hash}
                         <p
-                          class="mt-0.5 font-mono text-[10px] text-[var(--ui-text-subtle)]"
+                          class="mt-0.5 font-mono text-[10px] text-[var(--ui-text-muted)]"
                         >
                           {rev.revision_hash.slice(0, 12)}...
                         </p>
@@ -990,7 +960,7 @@
   open={confirmModal.open}
   title={confirmModal.action === "trash" ? "Move to trash" : "Archive document"}
   message={confirmModal.action === "trash"
-    ? "This document will be tombstoned. You can restore it from trash later."
+    ? "This document will be moved to trash. You can restore it later."
     : "This document will be hidden from default views. You can unarchive it later."}
   confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
   variant={confirmModal.action === "trash" ? "danger" : "warning"}

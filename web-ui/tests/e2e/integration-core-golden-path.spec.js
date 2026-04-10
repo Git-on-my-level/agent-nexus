@@ -66,13 +66,17 @@ function hasTimelineEventForArtifact(events, type, artifactId) {
   });
 }
 
-async function openThreadDetailFromNav(page, threadTitle, threadId) {
-  await page.getByRole("link", { name: "Threads", exact: true }).click();
+function primaryThreadIdFromTopic(topic) {
+  return String(topic?.thread_id ?? "").trim();
+}
+
+async function openThreadDetailFromNav(page, threadTitle) {
+  await page.getByRole("link", { name: "Topics", exact: true }).click();
   const threadLink = page.getByRole("link", { name: threadTitle, exact: true });
   await expect(threadLink).toBeVisible();
   await threadLink.click();
   await expect(
-    page.getByRole("heading", { name: `Thread Detail: ${threadId}` }),
+    page.getByRole("heading", { name: threadTitle, exact: true }),
   ).toBeVisible();
 }
 
@@ -95,16 +99,13 @@ test("golden path integration runs against a real oar-core", async ({
   const runSuffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const actorDisplayName = `Integration E2E ${runSuffix}`;
   const threadTitle = `Golden Path ${runSuffix}`;
-  const commitmentTitle = `Commitment ${runSuffix}`;
-  const workOrderObjective = `Work objective ${runSuffix}`;
   const receiptSummary = `Receipt summary ${runSuffix}`;
   const reviewNotes = `Review notes ${runSuffix}`;
   const messageText = `Message ${runSuffix}`;
 
   let actorId = "";
   let threadId = "";
-  let commitmentId = "";
-  let workOrderId = "";
+  let topicId = "";
   let receiptId = "";
   let reviewId = "";
 
@@ -175,133 +176,93 @@ test("golden path integration runs against a real oar-core", async ({
     page.getByRole("heading", { name: "Organization Autorunner UI" }),
   ).toBeVisible({ timeout: 30000 });
 
-  await page.getByRole("link", { name: "Threads", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Threads" })).toBeVisible();
+  await page.getByRole("link", { name: "Topics", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Topics" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Create thread" }).click();
+  await page.getByRole("button", { name: "New topic" }).click();
   await page.getByLabel("Title").fill(threadTitle);
   await page.getByLabel("Summary").fill("Created by integration golden path.");
 
-  const createThreadResponsePromise = page.waitForResponse((response) => {
+  const createTopicResponsePromise = page.waitForResponse((response) => {
     return (
       response.request().method() === "POST" &&
-      response.url().includes("/threads")
+      response.url().includes("/topics") &&
+      !response.url().match(/\/topics\/[^/]+/)
     );
   });
 
-  await page.getByRole("button", { name: "Submit thread" }).click();
-  const createThreadResponse = await createThreadResponsePromise;
-  const createThreadBody = await createThreadResponse.json();
-  threadId = String(createThreadBody?.thread?.id ?? "");
+  await page.getByRole("button", { name: "Create topic" }).click();
+  const createTopicResponse = await createTopicResponsePromise;
+  const createTopicBody = await createTopicResponse.json();
+  const createdTopic = createTopicBody?.topic ?? {};
+  threadId = primaryThreadIdFromTopic(createdTopic);
+  topicId = String(createdTopic.id ?? "").trim();
   expect(threadId).toBeTruthy();
+  expect(topicId).toBeTruthy();
 
-  await openThreadDetailFromNav(page, threadTitle, threadId);
-
-  const commitmentsSection = page
-    .locator("section")
-    .filter({ has: page.getByRole("heading", { name: "Commitments" }) });
-
-  await commitmentsSection.getByLabel("Commitment title").fill(commitmentTitle);
-  await commitmentsSection
-    .getByLabel("Due at (ISO timestamp)")
-    .fill("2030-01-01T00:00:00.000Z");
-  await commitmentsSection
-    .getByLabel("Definition of done (comma/newline separated)")
-    .fill("Delivered");
-  await commitmentsSection
-    .getByLabel("Links (typed refs, comma/newline separated)")
-    .fill(`thread:${threadId}`);
-
-  const createCommitmentResponsePromise = page.waitForResponse((response) => {
-    return (
-      response.request().method() === "POST" &&
-      response.url().includes("/commitments")
-    );
+  const boardBody = await postCoreJson(request, coreBaseUrl, "/boards", {
+    actor_id: actorId,
+    board: {
+      title: `Golden board ${runSuffix}`,
+      status: "active",
+      primary_topic_ref: `topic:${topicId}`,
+      document_refs: [],
+      pinned_refs: [`topic:${topicId}`],
+      provenance: { sources: ["actor_statement:integration-e2e"] },
+    },
   });
+  const boardId = String(boardBody?.board?.id ?? "").trim();
+  expect(boardId).toBeTruthy();
 
-  await commitmentsSection
-    .getByRole("button", { name: "Create commitment" })
-    .click();
-
-  const createCommitmentResponse = await createCommitmentResponsePromise;
-  const createCommitmentBody = await createCommitmentResponse.json();
-  commitmentId = String(createCommitmentBody?.commitment?.id ?? "");
-  expect(commitmentId).toBeTruthy();
-
-  await expect(
-    page.getByText("Commitment created.", { exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: commitmentTitle }),
-  ).toBeVisible();
-
-  await page.getByLabel("Work order objective").fill(workOrderObjective);
-  await page
-    .getByLabel("Constraints (comma/newline separated)")
-    .fill("No downtime");
-  await page.getByLabel("Add context ref").fill(`snapshot:${commitmentId}`);
-  await page.getByRole("button", { name: "Add ref to context" }).click();
-  await page
-    .getByLabel("Acceptance criteria (comma/newline separated)")
-    .fill("Integration flow passes");
-  await page
-    .getByLabel("Work order definition of done (comma/newline separated)")
-    .fill("Receipt and review submitted");
-
-  const createWorkOrderResponsePromise = page.waitForResponse((response) => {
-    return (
-      response.request().method() === "POST" &&
-      response.url().includes("/work_orders")
-    );
-  });
-
-  await page.getByRole("button", { name: "Create work order" }).click();
-
-  const createWorkOrderResponse = await createWorkOrderResponsePromise;
-  const createWorkOrderBody = await createWorkOrderResponse.json();
-  workOrderId = String(createWorkOrderBody?.artifact?.id ?? "");
-  expect(workOrderId).toMatch(/^artifact-work-order-/);
-
-  // Verify persistence through UI proxied artifact list route (same-origin -> hooks proxy -> core).
-  const workOrderArtifactsBody = await getUiJson(
+  const cardLocalId = `card-golden-${runSuffix.replace(/[^a-z0-9]+/gi, "-").slice(0, 24)}`;
+  const cardBody = await postCoreJson(
     request,
-    `/artifacts?kind=work_order&thread_id=${encodeURIComponent(threadId)}`,
+    coreBaseUrl,
+    `/boards/${encodeURIComponent(boardId)}/cards`,
+    {
+      actor_id: actorId,
+      card: {
+        id: cardLocalId,
+        title: "Golden path card",
+        summary: "Integration anchor",
+        column_key: "backlog",
+        assignee_refs: [],
+        risk: "low",
+        resolution_refs: [],
+        related_refs: [],
+        provenance: { sources: ["actor_statement:integration-e2e"] },
+      },
+    },
   );
-  expect(hasArtifactId(workOrderArtifactsBody?.artifacts, workOrderId)).toBe(
-    true,
+  const resolvedCardId = String(cardBody?.card?.id ?? cardLocalId).trim();
+
+  receiptId = `artifact-receipt-${runSuffix.replace(/[^a-z0-9]+/gi, "-").slice(0, 24)}`;
+  const receiptBody = await postCoreJson(
+    request,
+    coreBaseUrl,
+    "/packets/receipts",
+    {
+      actor_id: actorId,
+      artifact: {
+        id: receiptId,
+        kind: "receipt",
+        summary: receiptSummary.slice(0, 120),
+        refs: [`card:${resolvedCardId}`],
+      },
+      packet: {
+        receipt_id: receiptId,
+        subject_ref: `card:${resolvedCardId}`,
+        outputs: [`thread:${threadId}`],
+        verification_evidence: [`thread:${threadId}`],
+        changes_summary: receiptSummary,
+        known_gaps: [],
+      },
+    },
   );
-
-  await expect(
-    page.getByText("Work order created.", { exact: true }),
-  ).toBeVisible();
-
-  await page.getByLabel("Work order id").selectOption(workOrderId);
-  await page
-    .getByLabel("Add receipt output ref")
-    .fill(`artifact:${workOrderId}`);
-  await page.getByRole("button", { name: "Add output ref" }).click();
-  await page
-    .getByLabel("Add receipt evidence ref")
-    .fill(`artifact:${workOrderId}`);
-  await page.getByRole("button", { name: "Add evidence ref" }).click();
-  await page.getByLabel("Receipt changes summary").fill(receiptSummary);
-  await page
-    .getByLabel("Receipt known gaps (comma/newline separated)")
-    .fill("none");
-
-  const createReceiptResponsePromise = page.waitForResponse((response) => {
-    return (
-      response.request().method() === "POST" &&
-      response.url().includes("/receipts")
-    );
-  });
-
-  await page.getByRole("button", { name: "Submit receipt" }).click();
-
-  const createReceiptResponse = await createReceiptResponsePromise;
-  const createReceiptBody = await createReceiptResponse.json();
-  receiptId = String(createReceiptBody?.artifact?.id ?? "");
+  receiptId = String(receiptBody?.artifact?.id ?? receiptId).trim();
   expect(receiptId).toMatch(/^artifact-receipt-/);
+
+  await openThreadDetailFromNav(page, threadTitle);
 
   const receiptArtifactsBody = await getUiJson(
     request,
@@ -321,10 +282,7 @@ test("golden path integration runs against a real oar-core", async ({
     ),
   ).toBe(true);
 
-  await expect(
-    page.getByText("Receipt submitted.", { exact: true }),
-  ).toBeVisible();
-  await page.getByRole("link", { name: receiptId, exact: true }).click();
+  await page.goto(`/artifacts/${receiptId}`);
 
   await expect(
     page.getByRole("heading", { name: receiptSummary }),
@@ -340,7 +298,7 @@ test("golden path integration runs against a real oar-core", async ({
   const createReviewResponsePromise = page.waitForResponse((response) => {
     return (
       response.request().method() === "POST" &&
-      response.url().includes("/reviews")
+      response.url().includes("/packets/reviews")
     );
   });
 
@@ -373,7 +331,7 @@ test("golden path integration runs against a real oar-core", async ({
     page.getByText("Review submitted.", { exact: true }),
   ).toBeVisible();
 
-  await openThreadDetailFromNav(page, threadTitle, threadId);
+  await openThreadDetailFromNav(page, threadTitle);
 
   await page.getByRole("tab", { name: "Messages" }).click();
   await page.getByLabel("Message").fill(messageText);
@@ -389,7 +347,12 @@ test("golden path integration runs against a real oar-core", async ({
   });
 
   await page.getByRole("button", { name: "Post message" }).click();
-  await postMessageResponsePromise;
+  const postMessageResponse = await postMessageResponsePromise;
+  const postMessagePayload = JSON.parse(
+    postMessageResponse.request().postData() ?? "{}",
+  );
+  expect(postMessagePayload?.event?.thread_id).toBe(threadId);
+  expect(postMessagePayload?.event?.thread_ref).toBe(`thread:${threadId}`);
 
   await expect(
     page.locator("article", { hasText: messageText }).first(),
@@ -400,7 +363,7 @@ test("golden path integration runs against a real oar-core", async ({
     event: {
       type: "decision_needed",
       thread_id: threadId,
-      refs: [`thread:${threadId}`, `snapshot:${threadId}`],
+      refs: [`thread:${threadId}`],
       summary: `Decision needed ${runSuffix}`,
       payload: {
         source: "integration-e2e",
@@ -426,7 +389,7 @@ test("golden path integration runs against a real oar-core", async ({
     .poll(async () => ackButtons.count())
     .toBeLessThan(ackCountBefore);
 
-  await openThreadDetailFromNav(page, threadTitle, threadId);
+  await openThreadDetailFromNav(page, threadTitle);
 
   const decisionEntry = page
     .locator("article", {
@@ -434,36 +397,13 @@ test("golden path integration runs against a real oar-core", async ({
     })
     .first();
   await expect(decisionEntry).toBeVisible();
-  const snapshotRef = decisionEntry.getByRole("link", {
-    name: `snapshot:${threadId}`,
+  const threadRef = decisionEntry.getByRole("link", {
+    name: `thread:${threadId}`,
   });
-  await expect(snapshotRef).toBeVisible();
-  await snapshotRef.click();
+  await expect(threadRef).toBeVisible();
+  await threadRef.click();
   await expect(
-    page.getByRole("heading", { name: `Snapshot Detail: ${threadId}` }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Raw Snapshot JSON" }),
-  ).toBeVisible();
-  const snapshotJsonPanel = page.locator("pre").first();
-  await expect(snapshotJsonPanel).toContainText(`"id": "${threadId}"`);
-  await expect(snapshotJsonPanel).toContainText(`"title": "${threadTitle}"`);
-  await page.goBack();
-
-  const workOrderEntry = page
-    .locator("article", {
-      hasText: `type: work_order_created`,
-    })
-    .filter({ hasText: `artifact:${workOrderId}` })
-    .first();
-  await expect(workOrderEntry).toBeVisible();
-  const workOrderRef = workOrderEntry.getByRole("link", {
-    name: `artifact:${workOrderId}`,
-  });
-  await expect(workOrderRef).toBeVisible();
-  await workOrderRef.click();
-  await expect(
-    page.getByRole("heading", { name: `Artifact Detail: ${workOrderId}` }),
+    page.getByRole("heading", { name: threadTitle, exact: true }),
   ).toBeVisible();
   await page.goBack();
 
@@ -480,7 +420,7 @@ test("golden path integration runs against a real oar-core", async ({
   await expect(receiptRef).toBeVisible();
   await receiptRef.click();
   await expect(
-    page.getByRole("heading", { name: `Artifact Detail: ${receiptId}` }),
+    page.getByRole("heading", { name: receiptSummary }),
   ).toBeVisible();
   await page.goBack();
 
@@ -497,7 +437,9 @@ test("golden path integration runs against a real oar-core", async ({
   await expect(reviewRef).toBeVisible();
   await reviewRef.click();
   await expect(
-    page.getByRole("heading", { name: `Artifact Detail: ${reviewId}` }),
+    page.getByRole("heading", {
+      name: `Review (accept) for ${receiptId}`,
+    }),
   ).toBeVisible();
   await page.goBack();
 

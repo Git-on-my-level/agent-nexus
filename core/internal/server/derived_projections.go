@@ -13,7 +13,7 @@ import (
 
 const derivedProjectionMaxAge = time.Minute
 
-func refreshDerivedThreadProjection(ctx context.Context, opts handlerOptions, threadID string, now time.Time, actorID string) error {
+func refreshDerivedTopicProjection(ctx context.Context, opts handlerOptions, threadID string, now time.Time, actorID string) error {
 	if opts.primitiveStore == nil {
 		return nil
 	}
@@ -37,15 +37,19 @@ func refreshDerivedThreadProjection(ctx context.Context, opts handlerOptions, th
 
 	latestActivity := latestThreadActivityFromEvents(events)
 	latestStaleException := latestStaleExceptionByThread(events)
+	horizon := resolvedInboxRiskHorizon(opts)
+	workItems, workItemSummary, latestWorkItemActivity, err := summarizeThreadWorkItems(ctx, opts, threadID, now, horizon)
+	if err != nil {
+		return err
+	}
 	activityAt := latestActivity[threadID]
+	if latestWorkItemActivity.After(activityAt) {
+		activityAt = latestWorkItemActivity
+	}
 	lastStale := latestStaleException[threadID]
 	stale := isThreadStaleAt(now, thread, activityAt)
 
-	horizon := opts.inboxRiskHorizon
-	if horizon <= 0 {
-		horizon = defaultInboxRiskHorizon
-	}
-	inboxItems, err := deriveThreadInboxItems(ctx, opts, threadID, events, now, horizon)
+	inboxItems, err := deriveThreadInboxItems(opts, events, workItems, activityAt, now)
 	if err != nil {
 		return err
 	}
@@ -62,7 +66,6 @@ func refreshDerivedThreadProjection(ctx context.Context, opts handlerOptions, th
 	collaboration := buildThreadWorkspaceCollaborationSummary(map[string]any{"recent_events": recentEvents})
 
 	rawKeyArtifacts, _ := extractStringSlice(thread["key_artifacts"])
-	rawOpenCommitments, _ := extractStringSlice(thread["open_commitments"])
 	pendingDecisions := 0
 	for _, item := range inboxItems {
 		if item.Category == "decision_needed" {
@@ -74,39 +77,46 @@ func refreshDerivedThreadProjection(ctx context.Context, opts handlerOptions, th
 	projectionItems := make([]primitives.DerivedInboxItem, 0, len(inboxItems))
 	for _, item := range inboxItems {
 		projectionItems = append(projectionItems, primitives.DerivedInboxItem{
-			ID:                 item.ID,
-			ThreadID:           threadID,
-			Category:           item.Category,
-			TriggerAt:          item.TriggerAt.Format(time.RFC3339Nano),
-			DueAt:              formatOptionalTime(item.DueAt),
-			HasDueAt:           item.HasDueAt,
-			SourceEventID:      strings.TrimSpace(anyString(item.Data["source_event_id"])),
-			SourceCommitmentID: strings.TrimSpace(anyString(item.Data["commitment_id"])),
-			GeneratedAt:        generatedAt,
-			Data:               cloneWorkspaceMap(item.Data),
+			ID:            item.ID,
+			ThreadID:      threadID,
+			Category:      item.Category,
+			TriggerAt:     item.TriggerAt.Format(time.RFC3339Nano),
+			DueAt:         formatOptionalTime(item.DueAt),
+			HasDueAt:      item.HasDueAt,
+			SourceEventID: strings.TrimSpace(anyString(item.Data["source_event_id"])),
+			SourceCardID:  strings.TrimSpace(anyString(item.Data["card_id"])),
+			GeneratedAt:   generatedAt,
+			Data:          cloneWorkspaceMap(item.Data),
 		})
 	}
 
 	summary := map[string]any{
-		"thread_id":                 threadID,
-		"stale":                     stale,
-		"inbox_count":               len(projectionItems),
-		"pending_decision_count":    pendingDecisions,
-		"recommendation_count":      workspaceIntValue(collaboration["recommendation_count"]),
-		"decision_request_count":    workspaceIntValue(collaboration["decision_request_count"]),
-		"decision_count":            workspaceIntValue(collaboration["decision_count"]),
-		"artifact_count":            len(rawKeyArtifacts),
-		"open_commitment_count":     len(rawOpenCommitments),
-		"document_count":            len(documents),
-		"last_activity_at":          formatOptionalTime(activityAt),
-		"latest_stale_exception_at": formatOptionalTime(lastStale),
-		"generated_at":              generatedAt,
+		"thread_id":                  threadID,
+		"stale":                      stale,
+		"inbox_count":                len(projectionItems),
+		"pending_decision_count":     pendingDecisions,
+		"recommendation_count":       workspaceIntValue(collaboration["recommendation_count"]),
+		"decision_request_count":     workspaceIntValue(collaboration["decision_request_count"]),
+		"decision_count":             workspaceIntValue(collaboration["decision_count"]),
+		"artifact_count":             len(rawKeyArtifacts),
+		"open_work_item_count":       workItemSummary.OpenCount,
+		"at_risk_work_item_count":    workItemSummary.AtRiskCount,
+		"due_soon_work_item_count":   workItemSummary.DueSoonCount,
+		"overdue_work_item_count":    workItemSummary.OverdueCount,
+		"blocked_work_item_count":    workItemSummary.BlockedCount,
+		"stale_work_item_count":      workItemSummary.StaleCount,
+		"document_count":             len(documents),
+		"last_activity_at":           formatOptionalTime(activityAt),
+		"last_work_item_activity_at": formatOptionalTime(latestWorkItemActivity),
+		"latest_stale_exception_at":  formatOptionalTime(lastStale),
+		"generated_at":               generatedAt,
 	}
+	summary["open_card_count"] = workItemSummary.OpenCount
 
 	if err := opts.primitiveStore.ReplaceDerivedInboxItems(ctx, threadID, projectionItems); err != nil {
 		return err
 	}
-	return opts.primitiveStore.PutDerivedThreadProjection(ctx, primitives.DerivedThreadProjection{
+	return opts.primitiveStore.PutDerivedTopicProjection(ctx, primitives.DerivedTopicProjection{
 		ThreadID:               threadID,
 		Stale:                  stale,
 		LastActivityAt:         formatOptionalTime(activityAt),
@@ -117,17 +127,16 @@ func refreshDerivedThreadProjection(ctx context.Context, opts handlerOptions, th
 		DecisionRequestCount:   workspaceIntValue(collaboration["decision_request_count"]),
 		DecisionCount:          workspaceIntValue(collaboration["decision_count"]),
 		ArtifactCount:          len(rawKeyArtifacts),
-		OpenCommitmentCount:    len(rawOpenCommitments),
+		OpenCardCount:          workItemSummary.OpenCount,
 		DocumentCount:          len(documents),
 		GeneratedAt:            generatedAt,
 		Data:                   summary,
 	})
 }
 
-func deriveThreadInboxItems(ctx context.Context, opts handlerOptions, threadID string, events []map[string]any, now time.Time, riskHorizon time.Duration) ([]derivedInboxItem, error) {
+func deriveThreadInboxItems(opts handlerOptions, events []map[string]any, workItems []map[string]any, activityAt time.Time, now time.Time) ([]derivedInboxItem, error) {
 	ackedAt := latestInboxAcknowledgments(events)
 	decidedIDs := decidedInboxItemIDs(events)
-	latestActivity := latestThreadActivityFromEvents(events)
 	items := make([]derivedInboxItem, 0)
 
 	for _, event := range events {
@@ -138,8 +147,8 @@ func deriveThreadInboxItems(ctx context.Context, opts handlerOptions, threadID s
 			if !ok {
 				continue
 			}
-			if eventType == "exception_raised" && isStaleThreadException(event) {
-				if activityAt, exists := latestActivity[threadID]; exists && activityAt.After(item.TriggerAt) {
+			if eventType == "exception_raised" && isStaleTopicException(event) {
+				if !activityAt.IsZero() && activityAt.After(item.TriggerAt) {
 					continue
 				}
 			}
@@ -153,12 +162,8 @@ func deriveThreadInboxItems(ctx context.Context, opts handlerOptions, threadID s
 		}
 	}
 
-	commitments, err := opts.primitiveStore.ListCommitments(ctx, primitives.CommitmentListFilter{ThreadID: threadID})
-	if err != nil {
-		return nil, err
-	}
-	for _, commitment := range commitments {
-		item, ok := deriveCommitmentRiskInboxItem(commitment, now, riskHorizon)
+	for _, workItem := range workItems {
+		item, ok := deriveWorkItemRiskInboxItem(workItem, now, resolvedInboxRiskHorizon(opts))
 		if !ok || isSuppressedByAck(item, ackedAt) {
 			continue
 		}
@@ -172,19 +177,19 @@ func deriveThreadInboxItems(ctx context.Context, opts handlerOptions, threadID s
 	return items, nil
 }
 
-func loadDerivedThreadProjection(ctx context.Context, opts handlerOptions, threadID string) (primitives.DerivedThreadProjection, error) {
-	projection, err := opts.primitiveStore.GetDerivedThreadProjection(ctx, threadID)
+func loadDerivedTopicProjection(ctx context.Context, opts handlerOptions, threadID string) (primitives.DerivedTopicProjection, error) {
+	projection, err := opts.primitiveStore.GetDerivedTopicProjection(ctx, threadID)
 	if err == nil {
 		return projection, nil
 	}
 	if !errors.Is(err, primitives.ErrNotFound) {
-		return primitives.DerivedThreadProjection{}, err
+		return primitives.DerivedTopicProjection{}, err
 	}
-	return defaultDerivedThreadProjection(threadID), nil
+	return defaultDerivedTopicProjection(threadID), nil
 }
 
-func listDerivedThreadProjections(ctx context.Context, opts handlerOptions, threadIDs []string) (map[string]primitives.DerivedThreadProjection, error) {
-	projections, err := opts.primitiveStore.ListDerivedThreadProjections(ctx, threadIDs)
+func listDerivedTopicProjections(ctx context.Context, opts handlerOptions, threadIDs []string) (map[string]primitives.DerivedTopicProjection, error) {
+	projections, err := opts.primitiveStore.ListDerivedTopicProjections(ctx, threadIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +199,7 @@ func listDerivedThreadProjections(ctx context.Context, opts handlerOptions, thre
 			continue
 		}
 		if _, ok := projections[threadID]; !ok {
-			projections[threadID] = defaultDerivedThreadProjection(threadID)
+			projections[threadID] = defaultDerivedTopicProjection(threadID)
 		}
 	}
 	return projections, nil
@@ -213,35 +218,124 @@ func rebuildDerivedProjections(ctx context.Context, opts handlerOptions, now tim
 		if threadID == "" {
 			continue
 		}
-		if err := refreshDerivedThreadProjection(ctx, opts, threadID, now, actorID); err != nil {
+		if err := refreshDerivedTopicProjection(ctx, opts, threadID, now, actorID); err != nil {
 			return fmt.Errorf("refresh derived projection for thread %s: %w", threadID, err)
 		}
 	}
 	return nil
 }
 
-func defaultDerivedThreadProjection(threadID string) primitives.DerivedThreadProjection {
+func defaultDerivedTopicProjection(threadID string) primitives.DerivedTopicProjection {
 	threadID = strings.TrimSpace(threadID)
 	generatedAt := time.Now().UTC().Format(time.RFC3339Nano)
-	return primitives.DerivedThreadProjection{
+	return primitives.DerivedTopicProjection{
 		ThreadID:    threadID,
 		GeneratedAt: generatedAt,
 		Data: map[string]any{
-			"thread_id":                 threadID,
-			"stale":                     false,
-			"inbox_count":               0,
-			"pending_decision_count":    0,
-			"recommendation_count":      0,
-			"decision_request_count":    0,
-			"decision_count":            0,
-			"artifact_count":            0,
-			"open_commitment_count":     0,
-			"document_count":            0,
-			"last_activity_at":          "",
-			"latest_stale_exception_at": "",
-			"generated_at":              generatedAt,
+			"thread_id":                  threadID,
+			"stale":                      false,
+			"inbox_count":                0,
+			"pending_decision_count":     0,
+			"recommendation_count":       0,
+			"decision_request_count":     0,
+			"decision_count":             0,
+			"artifact_count":             0,
+			"open_work_item_count":       0,
+			"at_risk_work_item_count":    0,
+			"due_soon_work_item_count":   0,
+			"overdue_work_item_count":    0,
+			"blocked_work_item_count":    0,
+			"stale_work_item_count":      0,
+			"document_count":             0,
+			"last_activity_at":           "",
+			"last_work_item_activity_at": "",
+			"latest_stale_exception_at":  "",
+			"generated_at":               generatedAt,
+			"open_card_count":            0,
 		},
 	}
+}
+
+type threadWorkItemSummary struct {
+	OpenCount    int
+	AtRiskCount  int
+	DueSoonCount int
+	OverdueCount int
+	BlockedCount int
+	StaleCount   int
+}
+
+func summarizeThreadWorkItems(ctx context.Context, opts handlerOptions, threadID string, now time.Time, riskHorizon time.Duration) ([]map[string]any, threadWorkItemSummary, time.Time, error) {
+	if opts.primitiveStore == nil {
+		return nil, threadWorkItemSummary{}, time.Time{}, nil
+	}
+
+	memberships, err := opts.primitiveStore.ListBoardMembershipsByThread(ctx, threadID)
+	if err != nil {
+		return nil, threadWorkItemSummary{}, time.Time{}, err
+	}
+
+	workItems := make([]map[string]any, 0, len(memberships))
+	summary := threadWorkItemSummary{}
+	latestActivity := time.Time{}
+	windowStart, hasWindow := threadFreshnessWindowStart(ctx, opts, threadID, now)
+	for _, membership := range memberships {
+		card := cloneWorkspaceMap(membership.Card)
+		if card == nil {
+			continue
+		}
+		workItems = append(workItems, card)
+		if updatedAt, ok := parseTimestamp(card["updated_at"]); ok && updatedAt.After(latestActivity) {
+			latestActivity = updatedAt
+		}
+		if !boardCardCountsAsOpenWorkItem(card) {
+			continue
+		}
+		summary.OpenCount++
+		riskState, _, _ := boardCardRiskState(card, now, riskHorizon)
+		switch riskState {
+		case "overdue":
+			summary.AtRiskCount++
+			summary.OverdueCount++
+		case "due_soon":
+			summary.AtRiskCount++
+			summary.DueSoonCount++
+		case "blocked":
+			summary.AtRiskCount++
+			summary.BlockedCount++
+		}
+		if hasWindow {
+			if updatedAt, ok := parseTimestamp(card["updated_at"]); !ok || updatedAt.Before(windowStart) {
+				summary.StaleCount++
+			}
+		}
+	}
+	return workItems, summary, latestActivity, nil
+}
+
+func resolvedInboxRiskHorizon(opts handlerOptions) time.Duration {
+	horizon := opts.inboxRiskHorizon
+	if horizon <= 0 {
+		horizon = defaultInboxRiskHorizon
+	}
+	return horizon
+}
+
+func threadFreshnessWindowStart(ctx context.Context, opts handlerOptions, threadID string, now time.Time) (time.Time, bool) {
+	if opts.primitiveStore == nil {
+		return time.Time{}, false
+	}
+	thread, err := opts.primitiveStore.GetThread(ctx, threadID)
+	if err != nil {
+		return time.Time{}, false
+	}
+	cadence, _ := thread["cadence"].(string)
+	nextCheckInText, _ := thread["next_check_in_at"].(string)
+	nextCheckInAt, err := time.Parse(time.RFC3339, strings.TrimSpace(nextCheckInText))
+	if err != nil {
+		return time.Time{}, false
+	}
+	return cadenceWindowStart(cadence, now, nextCheckInAt)
 }
 func formatOptionalTime(value time.Time) string {
 	if value.IsZero() {
@@ -250,7 +344,7 @@ func formatOptionalTime(value time.Time) string {
 	return value.UTC().Format(time.RFC3339Nano)
 }
 
-func derivedThreadProjectionExpired(projection primitives.DerivedThreadProjection, now time.Time) bool {
+func derivedTopicProjectionExpired(projection primitives.DerivedTopicProjection, now time.Time) bool {
 	generatedAt, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(projection.GeneratedAt))
 	if err != nil {
 		return true
@@ -258,36 +352,36 @@ func derivedThreadProjectionExpired(projection primitives.DerivedThreadProjectio
 	return now.Sub(generatedAt) >= derivedProjectionMaxAge
 }
 
-type threadProjectionState struct {
-	Projection primitives.DerivedThreadProjection
-	Refresh    primitives.ThreadProjectionRefreshStatus
+type topicProjectionState struct {
+	Projection primitives.DerivedTopicProjection
+	Refresh    primitives.TopicProjectionRefreshStatus
 	Freshness  map[string]any
 	Status     string
 }
 
-func loadThreadProjectionState(ctx context.Context, opts handlerOptions, threadID string) (threadProjectionState, error) {
-	states, err := loadThreadProjectionStates(ctx, opts, []string{threadID})
+func loadTopicProjectionState(ctx context.Context, opts handlerOptions, threadID string) (topicProjectionState, error) {
+	states, err := loadTopicProjectionStates(ctx, opts, []string{threadID})
 	if err != nil {
-		return threadProjectionState{}, err
+		return topicProjectionState{}, err
 	}
 	return states[strings.TrimSpace(threadID)], nil
 }
 
-func loadThreadProjectionStates(ctx context.Context, opts handlerOptions, threadIDs []string) (map[string]threadProjectionState, error) {
+func loadTopicProjectionStates(ctx context.Context, opts handlerOptions, threadIDs []string) (map[string]topicProjectionState, error) {
 	threadIDs = uniqueServerStrings(threadIDs)
-	out := make(map[string]threadProjectionState, len(threadIDs))
+	out := make(map[string]topicProjectionState, len(threadIDs))
 	if opts.primitiveStore == nil || len(threadIDs) == 0 {
 		for _, threadID := range threadIDs {
-			out[threadID] = buildThreadProjectionState(threadID, primitives.DerivedThreadProjection{}, false, primitives.ThreadProjectionRefreshStatus{}, false)
+			out[threadID] = buildTopicProjectionState(threadID, primitives.DerivedTopicProjection{}, false, primitives.TopicProjectionRefreshStatus{}, false)
 		}
 		return out, nil
 	}
 
-	projections, err := opts.primitiveStore.ListDerivedThreadProjections(ctx, threadIDs)
+	projections, err := opts.primitiveStore.ListDerivedTopicProjections(ctx, threadIDs)
 	if err != nil {
 		return nil, err
 	}
-	refreshStatuses, err := opts.primitiveStore.GetThreadProjectionRefreshStatuses(ctx, threadIDs)
+	refreshStatuses, err := opts.primitiveStore.GetTopicProjectionRefreshStatuses(ctx, threadIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -295,15 +389,15 @@ func loadThreadProjectionStates(ctx context.Context, opts handlerOptions, thread
 	for _, threadID := range threadIDs {
 		projection, hasProjection := projections[threadID]
 		refresh, hasRefresh := refreshStatuses[threadID]
-		out[threadID] = buildThreadProjectionState(threadID, projection, hasProjection, refresh, hasRefresh)
+		out[threadID] = buildTopicProjectionState(threadID, projection, hasProjection, refresh, hasRefresh)
 	}
 	return out, nil
 }
 
-func buildThreadProjectionState(threadID string, projection primitives.DerivedThreadProjection, hasProjection bool, refresh primitives.ThreadProjectionRefreshStatus, hasRefresh bool) threadProjectionState {
+func buildTopicProjectionState(threadID string, projection primitives.DerivedTopicProjection, hasProjection bool, refresh primitives.TopicProjectionRefreshStatus, hasRefresh bool) topicProjectionState {
 	threadID = strings.TrimSpace(threadID)
 	if !hasProjection {
-		projection = primitives.DerivedThreadProjection{
+		projection = primitives.DerivedTopicProjection{
 			ThreadID: threadID,
 			Data:     map[string]any{"thread_id": threadID},
 		}
@@ -348,7 +442,7 @@ func buildThreadProjectionState(threadID string, projection primitives.DerivedTh
 		freshness["in_progress_generation"] = nil
 	}
 
-	return threadProjectionState{
+	return topicProjectionState{
 		Projection: projection,
 		Refresh:    refresh,
 		Freshness:  freshness,
@@ -356,7 +450,7 @@ func buildThreadProjectionState(threadID string, projection primitives.DerivedTh
 	}
 }
 
-func aggregateThreadProjectionFreshness(states map[string]threadProjectionState, threadIDs []string) map[string]any {
+func aggregateTopicProjectionFreshness(states map[string]topicProjectionState, threadIDs []string) map[string]any {
 	threadIDs = uniqueServerStrings(threadIDs)
 	if len(threadIDs) == 0 {
 		return map[string]any{
@@ -399,7 +493,7 @@ func projectionFreshnessRank(status string) int {
 	}
 }
 
-func markThreadProjectionsDirty(ctx context.Context, opts handlerOptions, queuedAt time.Time, threadIDs ...string) error {
+func markTopicProjectionsDirty(ctx context.Context, opts handlerOptions, queuedAt time.Time, threadIDs ...string) error {
 	if opts.primitiveStore == nil {
 		return nil
 	}
@@ -408,7 +502,7 @@ func markThreadProjectionsDirty(ctx context.Context, opts handlerOptions, queued
 	if len(threadIDs) == 0 {
 		return nil
 	}
-	if err := opts.primitiveStore.MarkThreadProjectionsDirty(ctx, threadIDs, queuedAt); err != nil {
+	if err := opts.primitiveStore.MarkTopicProjectionsDirty(ctx, threadIDs, queuedAt); err != nil {
 		return err
 	}
 	if opts.projectionMaintainer != nil {
@@ -417,8 +511,8 @@ func markThreadProjectionsDirty(ctx context.Context, opts handlerOptions, queued
 	return nil
 }
 
-func enqueueThreadProjectionsBestEffort(ctx context.Context, opts handlerOptions, threadIDs []string, queuedAt time.Time) {
-	_ = markThreadProjectionsDirty(ctx, opts, queuedAt, threadIDs...)
+func enqueueTopicProjectionsBestEffort(ctx context.Context, opts handlerOptions, threadIDs []string, queuedAt time.Time) {
+	_ = markTopicProjectionsDirty(ctx, opts, queuedAt, threadIDs...)
 }
 
 func uniqueServerStrings(values []string) []string {

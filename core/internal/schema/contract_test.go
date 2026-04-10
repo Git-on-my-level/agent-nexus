@@ -11,7 +11,7 @@ func TestLoadExtractsCoreSchemaRules(t *testing.T) {
 
 	contract := loadContract(t)
 
-	if contract.Version != "0.2.3" {
+	if contract.Version != "0.3.0" {
 		t.Fatalf("unexpected schema version: got %q", contract.Version)
 	}
 
@@ -60,15 +60,21 @@ func TestLoadExtractsCoreSchemaRules(t *testing.T) {
 	if !ok {
 		t.Fatal("receipt.outputs field was not loaded")
 	}
-	if outputs.MinItems == nil || *outputs.MinItems != 1 {
-		t.Fatalf("expected receipt.outputs min_items=1, got %#v", outputs.MinItems)
+	if !outputs.Required {
+		t.Fatal("expected receipt.outputs to be required")
+	}
+	if outputs.Type != "list<typed_ref>" {
+		t.Fatalf("unexpected receipt.outputs type: got %q", outputs.Type)
 	}
 	verification, ok := receipt.Fields["verification_evidence"]
 	if !ok {
 		t.Fatal("receipt.verification_evidence field was not loaded")
 	}
-	if verification.MinItems == nil || *verification.MinItems != 1 {
-		t.Fatalf("expected receipt.verification_evidence min_items=1, got %#v", verification.MinItems)
+	if !verification.Required {
+		t.Fatal("expected receipt.verification_evidence to be required")
+	}
+	if verification.Type != "list<typed_ref>" {
+		t.Fatalf("unexpected receipt.verification_evidence type: got %q", verification.Type)
 	}
 	artifactRefRule := contract.ArtifactRefRules["receipt"]
 	if len(artifactRefRule) != 2 {
@@ -81,24 +87,24 @@ func TestLoadExtractsCoreSchemaRules(t *testing.T) {
 	if len(receiptEventRule.RefsMustInclude) != 2 {
 		t.Fatalf("expected receipt_added refs_must_include length=2, got %#v", receiptEventRule.RefsMustInclude)
 	}
-	boardCardMovedRule, ok := contract.EventRefRules["board_card_moved"]
+	boardUpdatedRule, ok := contract.EventRefRules["board_updated"]
 	if !ok {
-		t.Fatal("board_card_moved event ref rule was not loaded")
+		t.Fatal("board_updated event ref rule was not loaded")
 	}
-	if len(boardCardMovedRule.RefsMustInclude) != 2 {
-		t.Fatalf("expected board_card_moved refs_must_include length=2, got %#v", boardCardMovedRule.RefsMustInclude)
+	if len(boardUpdatedRule.RefsMustInclude) != 1 {
+		t.Fatalf("expected board_updated refs_must_include length=1, got %#v", boardUpdatedRule.RefsMustInclude)
 	}
 
-	threadSnapshot, ok := contract.Snapshots["thread"]
+	threadSchema, ok := contract.Threads["thread"]
 	if !ok {
-		t.Fatal("thread snapshot schema was not loaded")
+		t.Fatal("thread primitive schema was not loaded")
 	}
-	openCommitments, ok := threadSnapshot.Fields["open_commitments"]
+	topicRef, ok := threadSchema.Fields["topic_ref"]
 	if !ok {
-		t.Fatal("thread.open_commitments field was not loaded")
+		t.Fatal("thread.topic_ref field was not loaded")
 	}
-	if !openCommitments.Required {
-		t.Fatal("expected thread.open_commitments to be required")
+	if topicRef.Required {
+		t.Fatal("expected thread.topic_ref to be optional")
 	}
 }
 

@@ -1,4 +1,4 @@
-export const EXPECTED_SCHEMA_VERSION = "0.2.3";
+export const EXPECTED_SCHEMA_VERSION = "0.3.0";
 
 export function normalizeBaseUrl(value) {
   if (!value) {

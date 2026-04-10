@@ -20,116 +20,107 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 - `auth token-status` (manual): Inspect whether the local profile still has refreshable token material.
 - `bridge` (manual): CLI-managed bridge bootstrap helpers for installing, templating, and checking `oar-agent-bridge`.
 - `import` (manual): Prescriptive import guide for building low-duplication, discoverable OAR graphs from external material.
-- `actors` (group): List and register actor identities
 - `auth` (group): Register, inspect, and manage auth state
-- `threads` (group): Manage thread resources
-- `commitments` (group): Manage commitment resources
+- `topics` (group): Manage durable work subjects
+- `cards` (group): Manage board-scoped cards
+- `threads` (group): Read-only backing-thread inspection (tooling and diagnostics)
 - `artifacts` (group): Manage artifact resources and content
 - `boards` (group): Manage board resources and ordered cards
 - `docs` (group): Manage long-lived docs and revisions
 - `events` (group): Manage events and event streams
 - `inbox` (group): List/get/ack/stream inbox items
-- `work-orders` (group): Create work-order packets
-- `receipts` (group): Create receipt packets
-- `reviews` (group): Create review packets
+- `receipts` (group): Create receipt packets (subject_ref must be card:<card_id>)
+- `reviews` (group): Create review packets (subject_ref + receipt_ref; subject_ref must be card:<card_id>)
 - `derived` (group): Run derived-view maintenance actions
 - `meta` (group): Inspect generated command/concept metadata
-- `actors list` (command): List actors
-- `actors register` (command): Register actor identity metadata
-- `auth register` (command): Register agent principal and initial key
-- `auth invites list` (command): List onboarding invites
-- `auth invites create` (command): Create onboarding invite
-- `auth invites revoke` (command): Revoke onboarding invite
-- `auth bootstrap status` (command): Read bootstrap onboarding availability
-- `threads list` (command): List thread snapshots
-- `threads get` (command): Get thread snapshot by id
-- `threads create` (command): Create thread snapshot
-- `threads patch` (command): Patch thread snapshot
-- `threads timeline` (command): Get thread timeline events and referenced entities
-- `threads context` (command): Get bundled thread context for agent callers
-- `threads archive` (command): Archive a thread
-- `threads unarchive` (command): Unarchive a thread
-- `threads tombstone` (command): Tombstone a thread (soft-delete)
-- `threads restore` (command): Restore a tombstoned thread
-- `threads purge` (command): Permanently delete a tombstoned thread (human-only)
-- `commitments list` (command): List commitments
-- `commitments get` (command): Get commitment by id
-- `commitments create` (command): Create commitment snapshot
-- `commitments patch` (command): Patch commitment snapshot
-- `artifacts list` (command): List artifact metadata
-- `artifacts get` (command): Get artifact metadata by id
+- `auth invites list` (command): List invite tokens
+- `auth invites create` (command): Create invite token
+- `auth invites revoke` (command): Revoke invite
+- `auth bootstrap status` (command): Bootstrap registration availability
+- `threads list` (command): List backing threads
+- `threads get` (command): Inspect backing thread
+- `threads timeline` (command): Get backing thread timeline
+- `threads context` (command): Get backing thread coordination context
+- `topics list` (command): List topics
+- `topics get` (command): Get topic
+- `topics create` (command): Create topic
+- `topics patch` (command): Patch topic
+- `topics timeline` (command): Get topic timeline
+- `topics workspace` (command): Get topic workspace (primary operator coordination read)
+- `topics archive` (command): Archive topic
+- `topics unarchive` (command): Unarchive topic
+- `topics trash` (command): Move topic to trash
+- `topics restore` (command): Restore topic from trash
+- `cards list` (command): List cards
+- `cards get` (command): Get card
+- `cards create` (command): Create card (global path)
+- `cards patch` (command): Patch card
+- `cards move` (command): Move card
+- `cards archive` (command): Archive card
+- `cards trash` (command): Move card to trash
+- `cards purge` (command): Permanently delete archived or trashed card
+- `cards restore` (command): Restore archived or trashed card
+- `cards timeline` (command): Get card timeline
+- `artifacts list` (command): List artifacts
+- `artifacts get` (command): Get artifact metadata
 - `artifacts create` (command): Create artifact
-- `artifacts content` (command): Get artifact raw content
-- `artifacts archive` (command): Archive an artifact
-- `artifacts unarchive` (command): Unarchive an artifact
-- `artifacts tombstone` (command): Tombstone an artifact (soft-delete)
-- `artifacts restore` (command): Restore a tombstoned artifact
-- `artifacts purge` (command): Permanently delete a tombstoned artifact (human-only)
-- `boards list` (command): List boards with derived summary data
+- `artifacts archive` (command): Archive artifact
+- `artifacts unarchive` (command): Unarchive artifact
+- `artifacts trash` (command): Move artifact to trash
+- `artifacts restore` (command): Restore artifact from trash
+- `artifacts purge` (command): Permanently delete trashed artifact
+- `boards list` (command): List boards
 - `boards create` (command): Create board
-- `boards get` (command): Get board metadata
-- `boards update` (command): Update board metadata
-- `boards archive` (command): Archive a board
-- `boards unarchive` (command): Unarchive a board
-- `boards tombstone` (command): Tombstone a board (soft-delete)
-- `boards restore` (command): Restore a tombstoned board
-- `boards purge` (command): Permanently delete a tombstoned board (human-only)
+- `boards get` (command): Get board
+- `boards archive` (command): Archive board
+- `boards unarchive` (command): Unarchive board
+- `boards trash` (command): Move board to trash
+- `boards restore` (command): Restore board from trash
+- `boards purge` (command): Permanently delete trashed board
 - `boards cards` (group): Nested generated help topic.
-- `boards cards create` (command): Create a versioned board card artifact
-- `boards cards get` (command): Get board card by board-scoped identifier
-- `boards cards update` (command): Update a versioned board card artifact
-- `boards cards move` (command): Move board card across columns or ranks
-- `boards cards archive` (command): Archive a board card artifact
-- `docs list` (command): List documents and their current head metadata
-- `docs create` (command): Create document with initial immutable revision
-- `docs get` (command): Get document and authoritative head revision
-- `docs update` (command): Create a new immutable revision for an existing document
-- `docs history` (command): List ordered immutable revisions for a document
-- `docs revision` (group): Nested generated help topic.
-- `docs tombstone` (command): Tombstone a document (soft-delete)
-- `docs archive` (command): Archive a document
-- `docs unarchive` (command): Unarchive a document
-- `docs restore` (command): Restore a tombstoned document
-- `docs purge` (command): Permanently delete a tombstoned document (human-only)
-- `docs revision get` (command): Get one immutable document revision
+- `boards cards create` (command): Create card on board
+- `boards cards get` (command): Get board-scoped card
+- `docs list` (command): List documents
+- `docs create` (command): Create document
+- `docs get` (command): Get document
+- `docs trash` (command): Move document to trash
+- `docs archive` (command): Archive document
+- `docs unarchive` (command): Unarchive document
+- `docs restore` (command): Restore document from trash
+- `docs purge` (command): Permanently delete trashed document
 - `events get` (command): Get event by id
-- `events create` (command): Append event
-- `events stream` (command): Stream events via Server-Sent Events (SSE)
-- `events tail` (command): Stream events via Server-Sent Events (SSE)
-- `events archive` (command): Archive an event
-- `events unarchive` (command): Unarchive an event
-- `events tombstone` (command): Tombstone an event (soft-delete)
-- `events restore` (command): Restore a tombstoned event
-- `inbox list` (command): List derived inbox items
-- `inbox get` (command): Get derived inbox item detail
-- `inbox ack` (command): Acknowledge an inbox item
-- `inbox stream` (command): Stream derived inbox items via SSE
-- `inbox tail` (command): Stream derived inbox items via SSE
-- `derived rebuild` (command): Rebuild derived views
-- `meta commands` (command): List generated command metadata
-- `meta command` (command): Get generated metadata for a command id
-- `meta concepts` (command): List generated concept metadata
-- `meta concept` (command): Get generated metadata for one concept
-- `work-orders create` (command): Create work-order packet artifact
-- `receipts create` (command): Create receipt packet artifact
-- `reviews create` (command): Create review packet artifact
-- `events list` (local-helper): Compose `threads timeline` responses with client-side thread/type/actor filters and preview summaries.
+- `events create` (command): Create event
+- `events stream` (command): Stream events (SSE)
+- `events tail` (command): Stream events (SSE)
+- `events archive` (command): Archive event
+- `events unarchive` (command): Unarchive event
+- `events trash` (command): Move event to trash
+- `events restore` (command): Restore event from trash
+- `inbox list` (command): List inbox items
+- `inbox get` (command): Get one inbox item
+- `inbox acknowledge` (command): Acknowledge inbox item
+- `inbox ack` (command): Acknowledge inbox item
+- `inbox stream` (command): Stream inbox items (SSE)
+- `inbox tail` (command): Stream inbox items (SSE)
+- `derived rebuild` (command): Rebuild derived projections
+- `meta commands` (command): List command registry metadata
+- `meta command` (command): Get one command metadata entry
+- `meta concepts` (command): List concept index
+- `meta concept` (command): Get commands grouped by concept
+- `receipts create` (command): Create receipt packet
+- `reviews create` (command): Create review packet
+- `events list` (local-helper): Compose backing-thread timeline reads with client-side thread/type/actor filters and preview summaries.
 - `events validate` (local-helper): Validate an `events create` payload locally from stdin or `--from-file` without sending it.
-- `events explain` (local-helper): Explain known event-type conventions, required refs, and validation hints, including which type surfaces as a visible thread message.
+- `events explain` (local-helper): Explain known event-type conventions, required refs, and validation hints, including when `message_posted` targets a backing-thread message stream.
 - `artifacts inspect` (local-helper): Fetch artifact metadata and resolved content in one command for operator inspection.
-- `threads inspect` (local-helper): Canonical thread coordination read path: compose one view from `threads context` and related `inbox list` items.
-- `threads workspace` (local-helper): Single holistic thread coordination read: combine context, inbox, recommendation review, and related-thread signals in one command.
-- `threads review` (local-helper): Opinionated deep-read helper: run the holistic workspace view with related-event hydration and full summaries enabled by default.
-- `threads recommendations` (local-helper): Review one thread's recommendation/decision inputs plus related-thread signals with provenance and follow-up hints.
-- `threads propose-patch` (local-helper): Stage a thread patch proposal locally and show the diff before applying it.
-- `threads apply` (local-helper): Apply a previously staged thread patch proposal.
-- `commitments propose-patch` (local-helper): Stage a commitment patch proposal locally and show the diff before applying it.
-- `commitments apply` (local-helper): Apply a previously staged commitment update proposal.
-- `boards workspace` (local-helper): Canonical board read path: load one board's full state including primary thread, primary document, and all cards grouped by column.
+- `threads inspect` (local-helper): Diagnostic backing-thread bundle: compose one view from read-only thread data and related `inbox list` items.
+- `threads workspace` (local-helper): Read-only backing-thread workspace projection: context, inbox, recommendation review, and related-thread signals in one command.
+- `threads recommendations` (local-helper): Compose a diagnostic recommendation-oriented review of one backing thread with related follow-up context.
+- `boards workspace` (local-helper): Canonical board read path: load one board's workspace: optional primary topic, cards by column, linked documents, inbox items, and summary.
 - `boards cards list` (local-helper): List all cards on a board in canonical column order without hydrating thread details.
 - `docs propose-update` (local-helper): Stage a document update proposal locally and show the content diff before applying it.
 - `docs content` (local-helper): Show the current document content together with authoritative head revision metadata.
-- `docs validate-update` (local-helper): Validate a `docs update` payload locally from stdin or file without sending the mutation.
+- `docs validate-update` (local-helper): Validate a `docs.revisions.create` payload locally from stdin or file without sending the mutation.
 - `docs apply` (local-helper): Apply a previously staged document update proposal.
 - `meta skill` (local-helper): Render a bundled editor-specific skill file from the canonical OAR agent guide.
 - `bridge install` (local-helper): Install `oar-agent-bridge` into a dedicated Python 3.11+ virtualenv and expose a PATH wrapper.
@@ -145,7 +136,7 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 - `import scan` (local-helper): Scan a folder or zip archive into a normalized inventory with text cache, repo-root hints, and cluster hints.
 - `import dedupe` (local-helper): Create exact and probable duplicate reports from a scan inventory with conservative skip recommendations.
 - `import plan` (local-helper): Build a conservative import plan that prefers collector threads, hub docs, dedupe-first writes, and low orphan rates.
-- `import apply` (local-helper): Write payload previews for a plan and optionally execute thread/artifact/doc creates in dependency order.
+- `import apply` (local-helper): Write payload previews for a plan and optionally execute topic/artifact/doc creates in dependency order.
 
 
 ## `onboarding`
@@ -153,24 +144,28 @@ This reference is bundled with the CLI. Print the full document with `oar meta d
 Offline quick-start mental model and first command flow.
 
 ```text
-Onboarding: first steps
+Onboarding: first steps (agents / automation)
 
-Use onboarding to get a working session quickly. For the fuller operating model, read `oar meta doc agent-guide`.
+This CLI is for agent principals. For the full operating model, read `oar meta doc agent-guide`.
 
 1. Point the CLI at the core API with `--base-url` or `OAR_BASE_URL`.
-2. Register or select a reusable agent/profile with `--agent`.
-3. Confirm connectivity and identity with `oar doctor` and `oar auth whoami`.
-4. Run a cheap read command before any mutation.
-5. Use `oar meta skill cursor` if you want a bundled Cursor skill file generated from the shipped guide.
-6. Read `oar meta doc wake-routing` if this agent should be wakeable via thread-message `@handle` mentions.
+2. Choose a profile name and pass it with `--agent` (or `OAR_AGENT`).
+3. Run `oar doctor`, then `oar auth bootstrap status` to see whether first-principal bootstrap is still open on this workspace.
+4. Register the agent profile:
+   - If bootstrap is available: `oar auth register --username <username> --bootstrap-token <token>` (token comes from workspace operators / deployment).
+   - If bootstrap is closed: obtain a one-time invite (`auth invites create --kind agent` from an already-authorized principal on that workspace), then `oar auth register --username <username> --invite-token <token>`.
+5. Confirm with `oar auth whoami`, run a cheap read (`topics list`), then mutate deliberately.
+6. Use `oar meta skill cursor` to export a bundled Cursor skill from the shipped guide if desired.
+7. Read `oar meta doc wake-routing` if this agent should be wakeable via thread-message `@handle` mentions.
 
 First commands to run
 
   oar --base-url http://127.0.0.1:8000 --agent <agent> doctor
   oar --base-url http://127.0.0.1:8000 --agent <agent> auth bootstrap status
-  oar --base-url http://127.0.0.1:8000 --agent <agent> auth register --username <username> --bootstrap-token <token>
+  oar --base-url http://127.0.0.1:8000 --agent <agent> auth register --username <username> --bootstrap-token <token>   # only when bootstrap is open
+  oar --base-url http://127.0.0.1:8000 --agent <new-agent> auth register --username <username> --invite-token <token>   # when bootstrap is closed
   oar --agent <agent> auth whoami
-  oar --agent <agent> threads list
+  oar --agent <agent> topics list
   oar --agent <agent> inbox stream --max-events 1
 
 Next step
@@ -186,24 +181,39 @@ Quick guide to the core OAR primitives and when to use each.
 ```text
 OAR concepts guide
 
-Use this command when you need to decide which primitive fits the task before you start issuing writes.
+Use this command when you need to decide which primitive fits the use case before you start issuing writes.
 
 Selection rules:
 - Use events for immutable facts.
-- Use threads for durable work state and coordination.
+- For decision lifecycle events, always include `thread:<thread_id>` in refs; do not rely on `topic:` alone or `topic:<thread_id>` as a thread substitute.
+- Use topics for durable work subjects and primary operator coordination (`topics workspace`).
+- Use cards for board-scoped planning and movement.
+- Use threads for read-only backing-thread diagnostics and timeline inspection — not as the default coordination surface.
 - Use docs for narrative knowledge that should be revised over time.
 - Use boards for cross-object workflow views, not source-of-truth content.
 - Use inbox for current attention signals from the active CLI identity's perspective.
 - Use draft when you want a local review checkpoint before a write.
 
-threads
-- Use when: You need a durable work object with ownership, status, cadence, summary, and follow-up over time.
-- Not for: Append-only facts or long-form narrative documents.
+topics
+- Use when: You need the durable work subject itself with ownership, summary, related refs, and provenance — including the primary operator coordination read.
+- Not for: Board-scoped card placement or low-level backing-thread-only diagnostics.
 - Examples: initiatives, incidents, cases, deliverables
-- Read next: oar threads list ; oar threads get ; oar threads review
+- Read next: oar topics list ; oar topics get ; oar topics workspace
+
+threads
+- Use when: You need read-only backing-thread diagnostics: timelines, raw thread records, or thread-scoped projection bundles for troubleshooting.
+- Not for: Primary operator triage when a topic exists — use topics workspace instead.
+- Examples: backing thread timeline, diagnostic workspace projection, compatibility inspection
+- Read next: oar threads list ; oar threads inspect ; oar threads workspace
+
+cards
+- Use when: You need board-scoped planning items with column, rank, assignee, and move/update operations.
+- Not for: The durable subject record or append-only event history.
+- Examples: board cards, tracked cards, workflow cards
+- Read next: oar cards list ; oar cards get ; oar cards move
 
 events
-- Use when: You need immutable facts, observations, decisions, or updates in an auditable sequence.
+- Use when: You need immutable facts, observations, decisions, or updates in an auditable sequence. Decision lifecycle events (`decision_needed`, `intervention_needed`, `decision_made`) must include `thread:<thread_id>` in refs; optional `topic:` refs are cross-links only, not a substitute for the thread anchor.
 - Not for: Replacing the current durable state of a work object.
 - Examples: decision_needed, decision_made, message_posted, exception_raised
 - Read next: oar events list ; oar events explain ; oar threads timeline
@@ -223,7 +233,7 @@ boards
 inbox
 - Use when: You need the derived queue of what currently needs attention from the active actor's perspective.
 - Not for: Durable automation contracts or historical truth.
-- Examples: pending decisions, exceptions, commitment risk
+- Examples: pending decisions, exceptions, stalled work
 - Read next: oar inbox list ; oar inbox get ; oar inbox ack
 
 draft
@@ -235,8 +245,9 @@ draft
 Inbox categories:
 - `decision_needed`: A human must choose among multiple viable paths.
 - `intervention_needed`: The next step is clear, but a human must act because the agent cannot execute it.
-- `exception`: Investigate an exception, risk, or broken expectation on the thread.
-- `commitment_risk`: A commitment is at risk or overdue and needs follow-up.
+- `work_item_risk`: A card or work item is at risk or overdue and needs follow-up.
+- `stale_topic`: A topic appears stale; review cadence or recent activity.
+- `document_attention`: A document needs human review or follow-up.
 
 For the fuller operating model, read `oar meta doc agent-guide`.
 ```
@@ -261,8 +272,10 @@ Operating posture
 
 Core model
 
-- `events`: immutable facts, observations, and updates. Use for append-only activity, audit trails, and streams.
-- `threads`: durable work objects and coordination state. Use for initiatives, incidents, cases, processes, relationships, and similar work units.
+- `events`: immutable facts, observations, and updates. Use for append-only activity, audit trails, and streams. Decision lifecycle events (`decision_needed`, `intervention_needed`, `decision_made`) require `thread:<thread_id>` in refs; `topic:` refs are optional context when a topic exists.
+- `topics`: the primary durable work subjects. Use them as the main organizational root for initiatives, incidents, cases, processes, relationships, and similar work.
+- `cards`: the primary work items. Use them for tracked execution on boards.
+- `threads`: backing timelines and packet-routing infrastructure. Use them for read-only diagnostics, low-level inspection, and wake/tooling flows rather than normal coordination.
 - `inbox`: work intake and notifications. Use to see what needs attention and ack handled items.
 - `draft`: staged or reviewable mutations. Use when a write should be inspected before commit.
 - `docs`: long-lived narrative knowledge. Use for plans, notes, decisions, summaries, and shared context.
@@ -272,9 +285,11 @@ Core model
 
 Heuristic:
 - Use `events` for facts.
-- Use `threads` for ongoing work and ownership.
+- Use `topics` for ongoing work, ownership, and operator coordination.
+- Use `cards` for concrete tracked execution and delivery state.
 - Use `docs` for narrative or reference material.
 - Use `boards` for portfolio or workflow visibility.
+- Use `threads` only when you need backing-timeline diagnostics or tooling-specific inspection.
 - Use `draft` when you want a checkpoint before applying change.
 
 If a new primitive or abstraction is added, place it in the same model: what durable role it plays, what it organizes, and whether it is mainly for facts, work, knowledge, or views.
@@ -284,7 +299,7 @@ Higher-level concepts
 
 - `docs` are the long-lived narrative layer. Use them when information should be read as a document, revised over time, or referenced by many work items.
 - `boards` are coordination views. Use them to group, prioritize, and review work across multiple objects rather than to store source-of-truth content themselves.
-- `threads` often back execution; `docs` explain; `boards` organize. Keep those roles distinct.
+- `threads` back topics, cards, boards, and documents; `docs` explain; `boards` organize. Keep those roles distinct.
 
 
 Standard workflow
@@ -295,7 +310,7 @@ Standard workflow
 4. Make the smallest valid mutation.
 5. Verify via read commands, timeline, stream, or resulting state.
 
-For interrupt-driven work, a common loop is: `inbox` -> inspect related `thread` or `doc` -> apply change directly or via `draft` -> verify -> ack inbox item.
+For interrupt-driven work, a common loop is: `inbox` -> inspect the related `topic`, `card`, or `doc` -> apply change directly or via `draft` -> verify -> ack inbox item. Reach for `threads ...` only when you need backing-thread diagnostics.
 
 
 Configuration
@@ -762,7 +777,7 @@ Use `oar draft` when you want a local checkpoint before sending a write to core.
 Choose the right path:
 
 - Use direct commands when the mutation is small and you are ready to apply it now.
-- Prefer command-specific proposal flows when they exist, such as `threads propose-patch` or `docs propose-update`, because they add domain-aware diff/review helpers.
+- Prefer command-specific proposal flows when they exist, such as `docs propose-update`, because they add domain-aware diff/review helpers.
 - Use `draft` for lower-level commands, generic JSON bodies, or cases where you want to stage the exact request before commit.
 
 Standard workflow
@@ -786,7 +801,7 @@ Heuristics
 - Re-read current state before committing older drafts if the target may have changed.
 
 Examples:
-  cat payload.json | oar draft create --command threads.create
+  cat payload.json | oar draft create --command topics.create
   oar draft list
   oar draft commit draft-20260305T103000-a1b2c3d4e5f6
 ```
@@ -802,7 +817,7 @@ Use `oar provenance walk` when you need to answer questions like:
 
 - Why does this object exist?
 - What evidence or earlier object led to it?
-- What thread, artifact, event, or snapshot is this derived from?
+- What thread, artifact, event, or topic is this derived from?
 
 Mental model
 
@@ -818,19 +833,19 @@ Typed ref roots:
   event:<id>
   thread:<id>
   artifact:<id>
-  snapshot:<id>
+  topic:<id>
 
 Heuristics
 
 - Start from `event:<id>` when explaining one update or mutation.
-- Start from `thread:<id>` when explaining a work item's evidence and history.
+- Start from `thread:<id>` when explaining backing-thread evidence and history.
 - Start from `artifact:<id>` when tracing a file or attachment back to its source.
-- Start from `snapshot:<id>` when investigating derived or captured state.
+- Start from `topic:<id>` when explaining operator-facing topic state and linked refs.
 - Prefer shallow depths like 1-3 before broader traversals.
 
 Examples:
   oar --json provenance walk --from event:event_123 --depth 2
-  oar --json provenance walk --from snapshot:snapshot_123 --depth 1
+  oar --json provenance walk --from topic:topic_123 --depth 1
   oar provenance walk --from event:event_123 --depth 3 --include-event-chain
 ```
 
@@ -1048,11 +1063,11 @@ Prescriptive import guide for building low-duplication, discoverable OAR graphs 
 ```text
 Import guide
 
-Use `oar import` to turn external material into a clean OAR graph. The goal is not to dump files into the system. The goal is to create discoverable threads, docs, and artifacts with low duplication, low orphan rates, and clear provenance.
+Use `oar import` to turn external material into a clean OAR graph. The goal is not to dump files into the system. The goal is to create discoverable topics, docs, and artifacts with low duplication, low orphan rates, and clear provenance.
 
 Object model
 
-- `threads` hold ongoing work, collector structures, and discoverable entry points.
+- `topics` hold ongoing work, collector structures, and discoverable entry points.
 - `docs` hold narrative knowledge, summaries, and hub content.
 - `artifacts` hold raw or attached evidence.
 - Import should create a graph that people and agents can navigate, not just a pile of uploaded files.
@@ -1062,7 +1077,7 @@ Read in this order
 1. `oar help import` — doctrine, quality bars, and the recommended loop.
 2. `oar help import scan` — inventory and text-cache generation.
 3. `oar help import plan` — classification, collector threads, hub docs, and review bundles.
-4. If you will execute writes: `oar help threads create`, `oar help artifacts create`, and `oar help docs create`.
+4. If you will execute writes: `oar help topics create`, `oar help artifacts create`, and `oar help docs create`.
 5. Optional graph/provenance reference: `oar help provenance`.
 
 Operating stance
@@ -1100,49 +1115,86 @@ Output conventions
 - `apply` writes payload previews plus `apply-results.json` and `apply-commands.sh`.
 ```
 
-## `actors`
-
-List and register actor identities
-
-```text
-Generated Help: actors
-
-Commands:
-  actors list              List actors
-  actors register          Register actor identity metadata
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: oar --json actors ... ; oar actors ... --json
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-
-Tip: `oar help <command path>` for full command-level generated details.
-```
-
 ## `auth`
 
 Register, inspect, and manage auth state
 
 ```text
-Generated Help: auth
+Auth lifecycle and registration surface
+
+Use this group to register a profile, inspect the active identity, and manage local auth state.
+
+Core commands:
+  auth register       Create or register a profile.
+  auth whoami         Inspect the active profile.
+  auth list           List local profiles.
+  auth default        Select the default profile.
+  auth update-username  Rename the current principal locally.
+  auth rotate         Rotate the active agent key.
+  auth revoke         Revoke the current profile.
+  auth token-status   Inspect whether the profile still has refreshable token material.
+
+	Related commands:
+  auth invites        Manage invite tokens and invite-backed registration.
+  auth bootstrap      Inspect bootstrap status before first registration.
+  auth principals     Inspect or revoke principals.
+  auth audit          Inspect audit records for auth activity.
+```
+
+## `topics`
+
+Manage durable work subjects
+
+```text
+Generated Help: topics
 
 Commands:
-  auth register            Register agent principal and initial key
+  topics archive           Archive topic
+  topics create            Create topic
+  topics get               Get topic
+  topics list              List topics
+  topics patch             Patch topic
+  topics restore           Restore topic from trash
+  topics timeline          Get topic timeline
+  topics trash             Move topic to trash
+  topics unarchive         Unarchive topic
+  topics workspace         Get topic workspace (primary operator coordination read)
 
-Local auth lifecycle helpers:
-  auth whoami             Validate the active profile against the server and show resolved identity.
-  auth list               List local CLI profiles and which one is active.
-  auth default            Persist the default CLI profile used when no explicit agent is selected.
-  auth update-username    Update the current principal username and sync the local profile.
-  auth rotate             Rotate the active agent key and refresh stored credentials.
-  auth revoke             Revoke the active agent and mark the local profile revoked. Use explicit human-lockout flags only for break-glass recovery.
-  auth principals revoke  Revoke another principal by id, with explicit human-lockout flags and a required reason for the break-glass path.
-  auth token-status       Inspect whether the local profile still has refreshable token material.
-  Tip: use `oar auth bootstrap status` before first registration, `oar auth register --username <username> --bootstrap-token <token>` for the first principal, and `oar auth invites create --kind human|agent` before later registrations.
+Primary operator coordination:
+  topics workspace        Load the topic workspace (cards, docs, backing threads, inbox).
+  topics list / topics get   Discover and resolve topic ids.
+  Tip: start with `oar topics workspace --topic-id <topic-id>` for triage; use `oar topics list` to find ids. Add `--full-id` for copy/paste ids.
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json auth ... ; oar auth ... --json
+  Examples: oar --json topics ... ; oar topics ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+
+Tip: `oar help <command path>` for full command-level generated details.
+```
+
+## `cards`
+
+Manage board-scoped cards
+
+```text
+Generated Help: cards
+
+Commands:
+  cards archive            Archive card
+  cards create             Create card (global path)
+  cards get                Get card
+  cards list               List cards
+  cards move               Move card
+  cards patch              Patch card
+  cards purge              Permanently delete archived or trashed card
+  cards restore            Restore archived or trashed card
+  cards timeline           Get card timeline
+  cards trash              Move card to trash
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json cards ... ; oar cards ... --json
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `oar help <command path>` for full command-level generated details.
@@ -1150,65 +1202,28 @@ Tip: `oar help <command path>` for full command-level generated details.
 
 ## `threads`
 
-Manage thread resources
+Read-only backing-thread inspection (tooling and diagnostics)
 
 ```text
 Generated Help: threads
 
 Commands:
-  threads archive          Archive a thread
-  threads context          Get bundled thread context for agent callers
-  threads create           Create thread snapshot
-  threads get              Get thread snapshot by id
-  threads list             List thread snapshots
-  threads patch            Patch thread snapshot
-  threads purge            Permanently delete a tombstoned thread (human-only)
-  threads restore          Restore a tombstoned thread
-  threads timeline         Get thread timeline events and referenced entities
-  threads tombstone        Tombstone a thread (soft-delete)
-  threads unarchive        Unarchive a thread
-  threads workspace        Get thread workspace projection
+  threads context          Get backing thread coordination context
+  threads inspect          Inspect backing thread
+  threads list             List backing threads
+  threads timeline         Get backing thread timeline
+  threads workspace        Get backing thread workspace projection (diagnostic)
 
-Canonical coordination read path:
-  threads review              Deep-read one thread workspace with review hydration enabled by default.
-  threads workspace           Compose one holistic thread workspace from context + inbox + related-thread review.
-  threads inspect             Compose one thread coordination view from context + inbox in one command.
-  threads recommendations     Focus recommendation/decision review with actor+timestamp provenance.
-  Mutation flow:
-  threads patch               Send the thread patch to core immediately.
-  threads propose-patch       Stage a thread patch proposal and inspect the diff before applying.
-  threads apply               Apply a staged thread patch proposal.
-  Tip: start with `oar threads review` when you want one deep review read, use `oar threads workspace` for the canonical coordination view, use `--status/--tag/--type initiative` to discover one thread, use `oar threads context` for cross-thread aggregates, and `oar threads get` for raw snapshot-only reads. Add `--full-id` for copy/paste ids.
+Read-only backing-thread diagnostics (tooling):
+  threads recommendations   Recommendation-focused review for one backing thread.
+  threads workspace       Diagnostic workspace projection (context + inbox + related-thread review).
+  threads inspect          Smaller diagnostic bundle (context + inbox).
+  threads timeline         Backing thread timeline and expansions.
+  Tip: prefer `oar topics workspace` for normal operator coordination. Use `oar threads workspace` when you need the backing-thread projection or related-thread review; use `--status/--tag/--type initiative` to discover one thread. For a minimal `{thread}` read, use `oar threads get` (contract: `threads.inspect`). Add `--full-id` for copy/paste ids.
 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: oar --json threads ... ; oar threads ... --json
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-
-Tip: `oar help <command path>` for full command-level generated details.
-```
-
-## `commitments`
-
-Manage commitment resources
-
-```text
-Generated Help: commitments
-
-Commands:
-  commitments create       Create commitment snapshot
-  commitments get          Get commitment by id
-  commitments list         List commitments
-  commitments patch        Patch commitment snapshot
-
-Mutation flow:
-  commitments patch          Send the commitment patch to core immediately.
-  commitments propose-patch  Stage a commitment patch proposal and inspect the diff before applying.
-  commitments apply          Apply a staged commitment update proposal.
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: oar --json commitments ... ; oar commitments ... --json
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `oar help <command path>` for full command-level generated details.
@@ -1222,14 +1237,14 @@ Manage artifact resources and content
 Generated Help: artifacts
 
 Commands:
-  artifacts archive        Archive an artifact
+  artifacts archive        Archive artifact
   artifacts create         Create artifact
-  artifacts get            Get artifact metadata by id
-  artifacts list           List artifact metadata
-  artifacts purge          Permanently delete a tombstoned artifact (human-only)
-  artifacts restore        Restore a tombstoned artifact
-  artifacts tombstone      Tombstone an artifact (soft-delete)
-  artifacts unarchive      Unarchive an artifact
+  artifacts get            Get artifact metadata
+  artifacts list           List artifacts
+  artifacts purge          Permanently delete trashed artifact
+  artifacts restore        Restore artifact from trash
+  artifacts trash          Move artifact to trash
+  artifacts unarchive      Unarchive artifact
 
 Local inspection helper:
   artifacts inspect        Fetch artifact metadata and content in one call.
@@ -1250,16 +1265,15 @@ Manage board resources and ordered cards
 Generated Help: boards
 
 Commands:
-  boards archive           Archive a board
+  boards archive           Archive board
   boards create            Create board
-  boards get               Get board metadata
-  boards list              List boards with derived summary data
-  boards purge             Permanently delete a tombstoned board (human-only)
-  boards restore           Restore a tombstoned board
-  boards tombstone         Tombstone a board (soft-delete)
-  boards unarchive         Unarchive a board
-  boards update            Update board metadata
-  boards workspace         Get board workspace projection
+  boards get               Get board
+  boards list              List boards
+  boards purge             Permanently delete trashed board
+  boards restore           Restore board from trash
+  boards trash             Move board to trash
+  boards unarchive         Unarchive board
+  boards workspace         Get board workspace view
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1277,25 +1291,22 @@ Manage long-lived docs and revisions
 Generated Help: docs
 
 Commands:
-  docs archive             Archive a document
-  docs create              Create document with initial immutable revision
-  docs get                 Get document and authoritative head revision
-  docs history             List ordered immutable revisions for a document
-  docs list                List documents and their current head metadata
-  docs purge               Permanently delete a tombstoned document (human-only)
-  docs restore             Restore a tombstoned document
-  docs tombstone           Tombstone a document (soft-delete)
-  docs unarchive           Unarchive a document
-  docs update              Create a new immutable revision for an existing document
+  docs archive             Archive document
+  docs create              Create document
+  docs get                 Get document
+  docs list                List documents
+  docs purge               Permanently delete trashed document
+  docs restore             Restore document from trash
+  docs trash               Move document to trash
+  docs unarchive           Unarchive document
 
 Local inspection helpers:
   docs content             Show current document content with revision metadata.
   Mutation flow:
-  docs update              Send the document update to core immediately.
   docs propose-update      Stage an update proposal and inspect its diff before applying it.
   docs apply               Apply a staged document update proposal.
-  docs validate-update     Validate a docs.update payload from stdin/--from-file.
-  Tip: add `--content-file <path>` to avoid hand-escaping multiline content.
+  docs validate-update     Validate a docs.revisions.create payload from stdin/--from-file.
+  Tip: add `--content-file <path>` to avoid hand-escaping multiline content. The proposal flow stages `docs.revisions.create`.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1313,13 +1324,14 @@ Manage events and event streams
 Generated Help: events
 
 Commands:
-  events archive           Archive an event
-  events create            Append event
+  events archive           Archive event
+  events create            Create event
   events get               Get event by id
-  events restore           Restore a tombstoned event
-  events stream            Stream events via Server-Sent Events (SSE)
-  events tombstone         Tombstone an event (soft-delete)
-  events unarchive         Unarchive an event
+  events list              List events
+  events restore           Restore event from trash
+  events stream            Stream events (SSE)
+  events trash             Move event to trash
+  events unarchive         Unarchive event
 
 Local inspection helpers:
   events list              List timeline events with thread/type/actor filters, id mode, and preview summaries.
@@ -1344,10 +1356,10 @@ List/get/ack/stream inbox items
 Generated Help: inbox
 
 Commands:
-  inbox ack                Acknowledge an inbox item
-  inbox get                Get derived inbox item detail
-  inbox list               List derived inbox items
-  inbox stream             Stream derived inbox items via SSE
+  inbox acknowledge        Acknowledge inbox item
+  inbox get                Get one inbox item
+  inbox list               List inbox items
+  inbox stream             Stream inbox items (SSE)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1357,33 +1369,15 @@ Global flags:
 Tip: `oar help <command path>` for full command-level generated details.
 ```
 
-## `work-orders`
-
-Create work-order packets
-
-```text
-Generated Help: work-orders
-
-Commands:
-  work-orders create       Create work-order packet artifact
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: oar --json work-orders ... ; oar work-orders ... --json
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-
-Tip: `oar help <command path>` for full command-level generated details.
-```
-
 ## `receipts`
 
-Create receipt packets
+Create receipt packets (subject_ref must be card:<card_id>)
 
 ```text
 Generated Help: receipts
 
 Commands:
-  receipts create          Create receipt packet artifact
+  receipts create          Create receipt packet
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1395,13 +1389,13 @@ Tip: `oar help <command path>` for full command-level generated details.
 
 ## `reviews`
 
-Create review packets
+Create review packets (subject_ref + receipt_ref; subject_ref must be card:<card_id>)
 
 ```text
 Generated Help: reviews
 
 Commands:
-  reviews create           Create review packet artifact
+  reviews create           Create review packet
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1416,17 +1410,15 @@ Tip: `oar help <command path>` for full command-level generated details.
 Run derived-view maintenance actions
 
 ```text
-Generated Help: derived
+Derived maintenance surface
 
-Commands:
-  derived rebuild          Rebuild derived views
+Use this group to refresh or inspect derived views that are computed from canonical state.
 
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: oar --json derived ... ; oar derived ... --json
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+Core commands:
+  derived rebuild     Rebuild derived state from the canonical records.
+  derived status      Inspect the current derived maintenance state.
 
-Tip: `oar help <command path>` for full command-level generated details.
+Tip: derived commands are operational helpers, not the source of truth.
 ```
 
 ## `meta`
@@ -1434,128 +1426,26 @@ Tip: `oar help <command path>` for full command-level generated details.
 Inspect generated command/concept metadata
 
 ```text
-Generated Help: meta
+Metadata and shipped reference surface
 
-Commands:
-  meta command             Get generated metadata for a command id
-  meta commands            List generated command metadata
-  meta concept             Get generated metadata for one concept
-  meta concepts            List generated concept metadata
+Use this group to inspect CLI/runtime metadata and to print the bundled runtime reference docs.
 
-Shipped reference docs:
-  meta docs               Print the bundled Markdown runtime reference.
-  meta doc                Print one bundled Markdown topic, for example `oar meta doc agent-guide`.
-  meta skill              Render a bundled editor-specific skill file, for example `oar meta skill cursor`.
-  Tip: use `oar help meta` for the short runtime surface, `oar meta docs` for the full shipped reference, and `oar meta skill cursor --write-dir ~/.cursor/skills/oar-cli-onboard` to export a Cursor skill.
+Core commands:
+  meta health     Inspect overall CLI/runtime health.
+  meta readyz     Check readiness.
+  meta version    Print version information.
 
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: oar --json meta ... ; oar meta ... --json
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-
-Tip: `oar help <command path>` for full command-level generated details.
-```
-
-## `actors list`
-
-List actors
-
-```text
-Generated Help: actors list
-
-- Command ID: `actors.list`
-- CLI path: `actors list`
-- HTTP: `GET /actors`
-- Stability: `stable`
-- Input mode: `none`
-- Why: Resolve available actor identities for routing writes.
-- Output: Returns `{ actors, next_cursor? }` ordered by created time ascending. Pagination is optional and backward-compatible.
-- Error codes: `actor_registry_unavailable`
-- Concepts: `identity`
-- Agent notes: Safe and idempotent. Optional pagination with `q` for search, `limit` for page size, and `cursor` for continuation.
-- Adjacent commands: `actors register`
-- Examples:
-  - List actors: `oar actors list --json`
-  - Search actors by name: `oar actors list --q "bot" --json`
-  - Paginated actor list: `oar actors list --limit 50 --json`
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: oar --json actors list ... ; oar actors list ... --json
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `actors register`
-
-Register actor identity metadata
-
-```text
-Generated Help: actors register
-
-- Command ID: `actors.register`
-- CLI path: `actors register`
-- HTTP: `POST /actors`
-- Stability: `stable`
-- Input mode: `json-body`
-- Why: Bootstrap an authenticated caller identity before mutating thread state.
-- Output: Returns `{ actor }` with canonicalized stored values.
-- Error codes: `invalid_json`, `invalid_request`, `actor_exists`
-- Concepts: `identity`
-- Agent notes: Not idempotent by default; repeated creates with same id return conflict.
-- Adjacent commands: `actors list`
-- Examples:
-  - Register actor: `oar actors register --id bot-1 --display-name "Bot 1" --created-at 2026-03-04T10:00:00Z --json`
-
-Inputs:
-  Required:
-  - body `actor` (object)
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: oar --json actors register ... ; oar actors register ... --json
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `auth register`
-
-Register agent principal and initial key
-
-```text
-Generated Help: auth register
-
-- Command ID: `auth.agents.register`
-- CLI path: `auth register`
-- HTTP: `POST /auth/agents/register`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Register an agent principal with a bootstrap token for the first principal or an invite token for later principals.
-- Output: Returns `{ agent, key, tokens }`.
-- Error codes: `invalid_json`, `invalid_request`, `invalid_token`, `username_taken`
-- Concepts: `auth`, `identity`
-- Agent notes: Bootstrap is accepted only for the first successful principal registration. Later registrations require an invite token.
-- Adjacent commands: `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
-- Examples:
-  - Bootstrap first agent: `oar auth register --username agent.one --bootstrap-token <token> --json`
-  - Register invited agent: `oar auth register --username agent.two --invite-token <token> --json`
-
-Inputs:
-  Required:
-  - body `public_key` (string)
-  - body `username` (string)
-  Optional:
-  - body `bootstrap_token` (string)
-  - body `invite_token` (string)
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: oar --json auth register ... ; oar auth register ... --json
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+Reference commands:
+  meta docs       Print the bundled runtime help reference.
+  meta doc        Print one bundled runtime help topic.
+  meta skill      Export a bundled editor skill file.
+  meta commands   Inspect generated command metadata.
+  meta concepts   Inspect generated concepts metadata.
 ```
 
 ## `auth invites list`
 
-List onboarding invites
+List invite tokens
 
 ```text
 Generated Help: auth invites list
@@ -1565,14 +1455,11 @@ Generated Help: auth invites list
 - HTTP: `GET /auth/invites`
 - Stability: `beta`
 - Input mode: `none`
-- Why: Inspect current invite state without exposing token secrets.
-- Output: Returns `{ invites }` ordered by create time descending.
-- Error codes: `auth_required`, `invalid_token`, `agent_revoked`
-- Concepts: `auth`, `onboarding`
-- Agent notes: Requires Bearer access token. Returned invites contain metadata only, never raw tokens.
-- Adjacent commands: `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites revoke`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth register`, `auth token`
-- Examples:
-  - List invites: `oar auth invites list --json`
+- Why: Operator listing of outstanding invites.
+- Output: Returns `{ invites }`.
+- Error codes: `auth_required`, `invalid_token`
+- Concepts: `auth`
+- Adjacent commands: `auth register`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 
 Global flags:
@@ -1583,7 +1470,7 @@ Global flags:
 
 ## `auth invites create`
 
-Create onboarding invite
+Create invite token
 
 ```text
 Generated Help: auth invites create
@@ -1593,21 +1480,12 @@ Generated Help: auth invites create
 - HTTP: `POST /auth/invites`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Mint a single-use invite token for a future human or agent registration.
-- Output: Returns `{ invite, token }`. The raw token is returned only once at creation time.
-- Error codes: `auth_required`, `invalid_json`, `invalid_request`, `invalid_token`, `agent_revoked`
-- Concepts: `auth`, `onboarding`
-- Agent notes: Requires Bearer access token. `kind` may be `human`, `agent`, or `any`.
-- Adjacent commands: `auth audit list`, `auth bootstrap status`, `auth invites list`, `auth invites revoke`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth register`, `auth token`
-- Examples:
-  - Create agent invite: `oar auth invites create --kind agent --json`
+- Why: Issue a one-time invite for human or agent principals.
+- Output: Returns `{ invite, token }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Concepts: `auth`
+- Adjacent commands: `auth register`, `auth audit list`, `auth bootstrap status`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
-Inputs:
-  Required:
-  - body `kind` (string)
-  Optional:
-  - body `expires_at` (datetime)
-  Enum values: kind: agent, any, human
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1617,7 +1495,7 @@ Global flags:
 
 ## `auth invites revoke`
 
-Revoke onboarding invite
+Revoke invite
 
 ```text
 Generated Help: auth invites revoke
@@ -1626,15 +1504,12 @@ Generated Help: auth invites revoke
 - CLI path: `auth invites revoke`
 - HTTP: `POST /auth/invites/{invite_id}/revoke`
 - Stability: `beta`
-- Input mode: `none`
-- Why: Invalidate an invite token before it is consumed.
-- Output: Returns `{ invite }` with updated revoke metadata.
-- Error codes: `auth_required`, `invalid_token`, `agent_revoked`, `not_found`
-- Concepts: `auth`, `onboarding`
-- Agent notes: Requires Bearer access token.
-- Adjacent commands: `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth register`, `auth token`
-- Examples:
-  - Revoke invite: `oar auth invites revoke --invite-id invite_123 --json`
+- Input mode: `json-body`
+- Why: Invalidate an outstanding invite by id.
+- Output: Returns `{ invite }`.
+- Error codes: `auth_required`, `invalid_request`, `not_found`, `invalid_token`
+- Concepts: `auth`
+- Adjacent commands: `auth register`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 Inputs:
   Required:
@@ -1648,7 +1523,7 @@ Global flags:
 
 ## `auth bootstrap status`
 
-Read bootstrap onboarding availability
+Bootstrap registration availability
 
 ```text
 Generated Help: auth bootstrap status
@@ -1658,13 +1533,10 @@ Generated Help: auth bootstrap status
 - HTTP: `GET /auth/bootstrap/status`
 - Stability: `beta`
 - Input mode: `none`
-- Why: Check whether first-principal bootstrap registration is still available for this workspace.
-- Output: Returns `{ bootstrap_registration_available }` without exposing token material.
-- Concepts: `auth`, `onboarding`
-- Agent notes: This endpoint is intentionally non-enumerating beyond the single bootstrap availability boolean.
-- Adjacent commands: `auth audit list`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth register`, `auth token`
-- Examples:
-  - Read bootstrap status: `oar auth bootstrap status --json`
+- Why: Report whether first-principal bootstrap registration is still available.
+- Output: Returns `{ bootstrap_registration_available, dev_passkey_bypass_available? }`, where the dev bypass field reflects the effective local-only passkey bypass capability.
+- Concepts: `auth`
+- Adjacent commands: `auth register`, `auth audit list`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 
 Global flags:
@@ -1675,7 +1547,7 @@ Global flags:
 
 ## `threads list`
 
-List thread snapshots
+List backing threads
 
 ```text
 Generated Help: threads list
@@ -1683,18 +1555,13 @@ Generated Help: threads list
 - Command ID: `threads.list`
 - CLI path: `threads list`
 - HTTP: `GET /threads`
-- Stability: `stable`
+- Stability: `beta`
 - Input mode: `none`
-- Why: Retrieve current thread state for triage and scheduling decisions.
-- Output: Returns `{ threads, next_cursor? }`; query filters are additive. Pagination is optional and backward-compatible.
-- Error codes: `invalid_request`
-- Concepts: `threads`, `filtering`
-- Agent notes: Safe and idempotent. Optional pagination with `q` for search, `limit` for page size, and `cursor` for continuation.
-- Adjacent commands: `threads archive`, `threads context`, `threads create`, `threads get`, `threads patch`, `threads purge`, `threads restore`, `threads timeline`, `threads tombstone`, `threads unarchive`, `threads workspace`
-- Examples:
-  - List active p1 threads: `oar threads list --status active --priority p1 --json`
-  - Search threads by title: `oar threads list --q "launch" --json`
-  - Paginated thread list: `oar threads list --limit 20 --json`
+- Why: Inspect backing infrastructure threads without making them the primary planning noun.
+- Output: Returns `{ threads }`.
+- Error codes: `auth_required`, `invalid_token`
+- Concepts: `threads`, `inspection`
+- Adjacent commands: `threads context`, `threads inspect`, `threads timeline`, `threads workspace`
 
 
 Global flags:
@@ -1705,24 +1572,21 @@ Global flags:
 
 ## `threads get`
 
-Get thread snapshot by id
+Inspect backing thread
 
 ```text
 Generated Help: threads get
 
-- Command ID: `threads.get`
-- CLI path: `threads get`
+- Command ID: `threads.inspect`
+- CLI path: `threads inspect`
 - HTTP: `GET /threads/{thread_id}`
-- Stability: `stable`
+- Stability: `beta`
 - Input mode: `none`
-- Why: Resolve a raw authoritative thread snapshot for low-level reads before patching or composing packets.
+- Why: Resolve one backing thread for low-level inspection and diagnostics.
 - Output: Returns `{ thread }`.
-- Error codes: `not_found`
-- Concepts: `threads`
-- Agent notes: Safe and idempotent. Prefer `oar threads inspect` for operator coordination reads.
-- Adjacent commands: `threads archive`, `threads context`, `threads create`, `threads list`, `threads patch`, `threads purge`, `threads restore`, `threads timeline`, `threads tombstone`, `threads unarchive`, `threads workspace`
-- Examples:
-  - Read thread: `oar threads get --thread-id thread_123 --json`
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Concepts: `threads`, `inspection`
+- Adjacent commands: `threads context`, `threads list`, `threads timeline`, `threads workspace`
 
 Inputs:
   Required:
@@ -1734,104 +1598,9 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
-## `threads create`
-
-Create thread snapshot
-
-```text
-Generated Help: threads create
-
-- Command ID: `threads.create`
-- CLI path: `threads create`
-- HTTP: `POST /threads`
-- Stability: `stable`
-- Input mode: `json-body`
-- Why: Open a new thread for tracking ongoing organizational work.
-- Output: Returns `{ thread }` including generated id and audit fields.
-- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`
-- Concepts: `threads`, `snapshots`
-- Agent notes: Replay-safe when `request_key` is reused with the same body; otherwise core issues a new canonical thread id.
-- Adjacent commands: `threads archive`, `threads context`, `threads get`, `threads list`, `threads patch`, `threads purge`, `threads restore`, `threads timeline`, `threads tombstone`, `threads unarchive`, `threads workspace`
-- Examples:
-  - Create thread: `oar threads create --from-file thread.json --json`
-
-Inputs:
-  Required:
-  - body `thread.cadence` (string)
-  - body `thread.current_summary` (string)
-  - body `thread.key_artifacts` (list<typed_ref>)
-  - body `thread.next_actions` (list<string>)
-  - body `thread.priority` (string)
-  - body `thread.provenance.sources` (list<string>)
-  - body `thread.status` (string)
-  - body `thread.tags` (list<string>)
-  - body `thread.title` (string)
-  - body `thread.type` (string)
-  Optional:
-  - body `actor_id` (string)
-  - body `request_key` (string)
-  - body `thread.next_check_in_at` (datetime)
-  - body `thread.provenance.by_field` (map<string, list<string>>)
-  - body `thread.provenance.notes` (string)
-  Enum values: thread.priority (strict): p0, p1, p2, p3; thread.status (strict): active, closed, paused; thread.type (strict): case, incident, initiative, other, process, relationship
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: oar --json threads create ... ; oar threads create ... --json
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `threads patch`
-
-Patch thread snapshot
-
-```text
-Generated Help: threads patch
-
-- Command ID: `threads.patch`
-- CLI path: `threads patch`
-- HTTP: `PATCH /threads/{thread_id}`
-- Stability: `stable`
-- Input mode: `json-body`
-- Why: Update mutable thread fields while preserving unknown data and auditability.
-- Output: Returns `{ thread }` after patch merge and emitted event side effect.
-- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`, `not_found`
-- Concepts: `threads`, `patch`
-- Agent notes: Use `if_updated_at` for optimistic concurrency.
-- Adjacent commands: `threads archive`, `threads context`, `threads create`, `threads get`, `threads list`, `threads purge`, `threads restore`, `threads timeline`, `threads tombstone`, `threads unarchive`, `threads workspace`
-- Examples:
-  - Patch thread: `oar threads patch --thread-id thread_123 --from-file patch.json --json`
-
-Inputs:
-  Required:
-  - path `thread_id`
-  Optional:
-  - body `actor_id` (string)
-  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
-  - body `patch.cadence` (string)
-  - body `patch.current_summary` (string)
-  - body `patch.key_artifacts` (list<typed_ref>)
-  - body `patch.next_actions` (list<string>)
-  - body `patch.next_check_in_at` (datetime)
-  - body `patch.priority` (string)
-  - body `patch.provenance.by_field` (map<string, list<string>>)
-  - body `patch.provenance.notes` (string)
-  - body `patch.provenance.sources` (list<string>)
-  - body `patch.status` (string)
-  - body `patch.tags` (list<string>)
-  - body `patch.title` (string)
-  - body `patch.type` (string)
-  Enum values: patch.priority (strict): p0, p1, p2, p3; patch.status (strict): active, closed, paused; patch.type (strict): case, incident, initiative, other, process, relationship
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: oar --json threads patch ... ; oar threads patch ... --json
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
 ## `threads timeline`
 
-Get thread timeline events and referenced entities
+Get backing thread timeline
 
 ```text
 Generated Help: threads timeline
@@ -1839,16 +1608,13 @@ Generated Help: threads timeline
 - Command ID: `threads.timeline`
 - CLI path: `threads timeline`
 - HTTP: `GET /threads/{thread_id}/timeline`
-- Stability: `stable`
+- Stability: `beta`
 - Input mode: `none`
-- Why: Retrieve narrative event history plus referenced snapshots/artifacts in one call.
-- Output: Returns `{ events, snapshots, artifacts }` where snapshot/artifact maps are sparse.
-- Error codes: `not_found`
-- Concepts: `threads`, `events`, `provenance`
-- Agent notes: Events stay time ordered; missing refs are omitted from expansion maps.
-- Adjacent commands: `threads archive`, `threads context`, `threads create`, `threads get`, `threads list`, `threads patch`, `threads purge`, `threads restore`, `threads tombstone`, `threads unarchive`, `threads workspace`
-- Examples:
-  - Timeline: `oar threads timeline --thread-id thread_123 --json`
+- Why: Retrieve event history plus typed-ref expansions for one backing thread.
+- Output: Returns `{ thread, events, artifacts, topics, cards, documents }`.
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Concepts: `threads`, `timeline`
+- Adjacent commands: `threads context`, `threads inspect`, `threads list`, `threads workspace`
 
 Inputs:
   Required:
@@ -1857,10 +1623,10 @@ Inputs:
 Local CLI flags:
   --include-archived        Include archived events in the timeline.
   --archived-only           Show only archived events.
-  --include-tombstoned      Include tombstoned events in the timeline.
-  --tombstoned-only         Show only tombstoned events in the timeline.
+  --include-trashed      Include trashed events in the timeline.
+  --trashed-only         Show only trashed events in the timeline.
 
-Note: by default, archived and tombstoned events are excluded from the timeline output.
+Note: by default, archived and trashed events are excluded from the timeline output.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1870,7 +1636,7 @@ Global flags:
 
 ## `threads context`
 
-Get bundled thread context for agent callers
+Get backing thread coordination context
 
 ```text
 Generated Help: threads context
@@ -1880,15 +1646,11 @@ Generated Help: threads context
 - HTTP: `GET /threads/{thread_id}/context`
 - Stability: `beta`
 - Input mode: `none`
-- Why: Load one thread's state, recent events, key artifacts, open commitments, and linked documents in a single round-trip; CLI `oar threads context` can aggregate across threads by composing multiple calls.
-- Output: Returns `{ thread, recent_events, key_artifacts, open_commitments, documents }`.
-- Error codes: `invalid_request`, `not_found`
-- Concepts: `threads`, `events`, `artifacts`, `commitments`, `docs`
-- Agent notes: Derived thread context projection; do not build durable automation directly on projection payload shapes. Prefer canonical events and threads for durable substrate. Use include_artifact_content for prompt-ready previews; default mode keeps payloads lighter. Prefer `oar threads inspect` as the first single-thread coordination read.
-- Adjacent commands: `threads archive`, `threads create`, `threads get`, `threads list`, `threads patch`, `threads purge`, `threads restore`, `threads timeline`, `threads tombstone`, `threads unarchive`, `threads workspace`
-- Examples:
-  - Context with defaults: `oar threads context --thread-id thread_123 --json`
-  - Context with artifact previews: `oar threads context --thread-id thread_123 --include-artifact-content --max-events 50 --json`
+- Why: Load a compact coordination bundle (thread, recent events, key artifacts, cards, documents) for inspection and triage.
+- Output: Returns `{ thread, recent_events, key_artifacts, open_cards, documents }` plus forward-compatible fields.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Concepts: `threads`, `inspection`
+- Adjacent commands: `threads inspect`, `threads list`, `threads timeline`, `threads workspace`
 
 Inputs:
   Required:
@@ -1900,327 +1662,665 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
-## `threads archive`
+## `topics list`
 
-Archive a thread
+List topics
 
 ```text
-Generated Help: threads archive
+Generated Help: topics list
 
-- Command ID: `threads.archive`
-- CLI path: `threads archive`
-- HTTP: `POST /threads/{thread_id}/archive`
+- Command ID: `topics.list`
+- CLI path: `topics list`
+- HTTP: `GET /topics`
 - Stability: `beta`
-- Input mode: `json-body`
-- Why: Hide a thread from default list views while preserving it for search and direct access.
-- Output: Returns `{ thread }` with archive metadata set.
-- Error codes: `invalid_json`, `invalid_request`, `not_found`
-- Concepts: `threads`, `lifecycle`
-- Agent notes: Idempotent; repeated archive calls on the same thread are safe. Returns 409 if thread is tombstoned.
-- Adjacent commands: `threads context`, `threads create`, `threads get`, `threads list`, `threads patch`, `threads purge`, `threads restore`, `threads timeline`, `threads tombstone`, `threads unarchive`, `threads workspace`
-- Examples:
-  - Archive thread: `oar threads archive --thread-id thread_123 --json`
-
-Inputs:
-  Required:
-  - path `thread_id`
-  - body `actor_id` (string)
-  Optional:
-  - body `reason` (string)
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: oar --json threads archive ... ; oar threads archive ... --json
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `threads unarchive`
-
-Unarchive a thread
-
-```text
-Generated Help: threads unarchive
-
-- Command ID: `threads.unarchive`
-- CLI path: `threads unarchive`
-- HTTP: `POST /threads/{thread_id}/unarchive`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Return an archived thread to the default list views.
-- Output: Returns `{ thread }` with archive metadata cleared.
-- Error codes: `invalid_json`, `invalid_request`, `not_found`, `not_archived`
-- Concepts: `threads`, `lifecycle`
-- Agent notes: Returns 409 if the thread is not currently archived.
-- Adjacent commands: `threads archive`, `threads context`, `threads create`, `threads get`, `threads list`, `threads patch`, `threads purge`, `threads restore`, `threads timeline`, `threads tombstone`, `threads workspace`
-- Examples:
-  - Unarchive thread: `oar threads unarchive --thread-id thread_123 --json`
-
-Inputs:
-  Required:
-  - path `thread_id`
-  - body `actor_id` (string)
-  Optional:
-  - body `reason` (string)
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: oar --json threads unarchive ... ; oar threads unarchive ... --json
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `threads tombstone`
-
-Tombstone a thread (soft-delete)
-
-```text
-Generated Help: threads tombstone
-
-- Command ID: `threads.tombstone`
-- CLI path: `threads tombstone`
-- HTTP: `POST /threads/{thread_id}/tombstone`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Mark a thread as inactive while preserving provenance; tombstoned threads are excluded from list by default.
-- Output: Returns `{ thread }` with updated tombstone metadata.
-- Error codes: `invalid_json`, `invalid_request`, `not_found`
-- Concepts: `threads`, `lifecycle`
-- Agent notes: Idempotent; repeated tombstone calls are safe.
-- Adjacent commands: `threads archive`, `threads context`, `threads create`, `threads get`, `threads list`, `threads patch`, `threads purge`, `threads restore`, `threads timeline`, `threads unarchive`, `threads workspace`
-- Examples:
-  - Tombstone thread: `oar threads tombstone --thread-id thread_123 --reason "merged into parent" --json`
-
-Inputs:
-  Required:
-  - path `thread_id`
-  - body `actor_id` (string)
-  Optional:
-  - body `reason` (string)
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: oar --json threads tombstone ... ; oar threads tombstone ... --json
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `threads restore`
-
-Restore a tombstoned thread
-
-```text
-Generated Help: threads restore
-
-- Command ID: `threads.restore`
-- CLI path: `threads restore`
-- HTTP: `POST /threads/{thread_id}/restore`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Reverse a tombstone on a thread, making it active and visible in default list queries again.
-- Output: Returns `{ thread }` with tombstone metadata cleared.
-- Error codes: `invalid_json`, `invalid_request`, `not_found`, `not_tombstoned`
-- Concepts: `threads`, `lifecycle`
-- Agent notes: Returns 409 if the thread is not currently tombstoned.
-- Adjacent commands: `threads archive`, `threads context`, `threads create`, `threads get`, `threads list`, `threads patch`, `threads purge`, `threads timeline`, `threads tombstone`, `threads unarchive`, `threads workspace`
-- Examples:
-  - Restore thread: `oar threads restore --thread-id thread_123 --json`
-
-Inputs:
-  Required:
-  - path `thread_id`
-  - body `actor_id` (string)
-  Optional:
-  - body `reason` (string)
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: oar --json threads restore ... ; oar threads restore ... --json
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `threads purge`
-
-Permanently delete a tombstoned thread (human-only)
-
-```text
-Generated Help: threads purge
-
-- Command ID: `threads.purge`
-- CLI path: `threads purge`
-- HTTP: `POST /threads/{thread_id}/purge`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Permanently remove a tombstoned thread and reclaim storage. Human-only to prevent accidental data loss by automated agents.
-- Output: Returns `{ purged: true, thread_id }` on success.
-- Error codes: `invalid_json`, `not_found`, `not_tombstoned`, `human_only`
-- Concepts: `threads`, `lifecycle`
-- Agent notes: 403 if the caller is not a human principal. 409 if the thread is not tombstoned.
-- Adjacent commands: `threads archive`, `threads context`, `threads create`, `threads get`, `threads list`, `threads patch`, `threads restore`, `threads timeline`, `threads tombstone`, `threads unarchive`, `threads workspace`
-- Examples:
-  - Purge thread: `oar threads purge --thread-id thread_123 --json`
-
-Inputs:
-  Required:
-  - path `thread_id`
-  Optional:
-  - body `actor_id` (string)
-  - body `reason` (string)
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: oar --json threads purge ... ; oar threads purge ... --json
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `commitments list`
-
-List commitments
-
-```text
-Generated Help: commitments list
-
-- Command ID: `commitments.list`
-- CLI path: `commitments list`
-- HTTP: `GET /commitments`
-- Stability: `stable`
 - Input mode: `none`
-- Why: Monitor open/blocked work and due windows.
-- Output: Returns `{ commitments }`.
-- Error codes: `invalid_request`
-- Concepts: `commitments`, `filtering`
-- Agent notes: Safe and idempotent.
-- Adjacent commands: `commitments create`, `commitments get`, `commitments patch`
-- Examples:
-  - List open commitments for a thread: `oar commitments list --thread-id thread_123 --status open --json`
+- Why: Scan the durable topic inventory.
+- Output: Returns `{ topics }`.
+- Error codes: `auth_required`, `invalid_token`
+- Concepts: `topics`
+- Adjacent commands: `topics archive`, `topics create`, `topics get`, `topics patch`, `topics restore`, `topics timeline`, `topics trash`, `topics unarchive`, `topics workspace`
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json commitments list ... ; oar commitments list ... --json
+  Examples: oar --json topics list ... ; oar topics list ... --json
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
-## `commitments get`
+## `topics get`
 
-Get commitment by id
+Get topic
 
 ```text
-Generated Help: commitments get
+Generated Help: topics get
 
-- Command ID: `commitments.get`
-- CLI path: `commitments get`
-- HTTP: `GET /commitments/{commitment_id}`
-- Stability: `stable`
+- Command ID: `topics.get`
+- CLI path: `topics get`
+- HTTP: `GET /topics/{topic_id}`
+- Stability: `beta`
 - Input mode: `none`
-- Why: Read commitment status/details before status transitions.
-- Output: Returns `{ commitment }`.
-- Error codes: `not_found`
-- Concepts: `commitments`
-- Agent notes: Safe and idempotent.
-- Adjacent commands: `commitments create`, `commitments list`, `commitments patch`
-- Examples:
-  - Get commitment: `oar commitments get --commitment-id commitment_123 --json`
+- Why: Resolve one topic and its canonical durable fields.
+- Output: Returns `{ topic }`.
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Concepts: `topics`
+- Adjacent commands: `topics archive`, `topics create`, `topics list`, `topics patch`, `topics restore`, `topics timeline`, `topics trash`, `topics unarchive`, `topics workspace`
 
 Inputs:
   Required:
-  - path `commitment_id`
+  - path `topic_id`
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json commitments get ... ; oar commitments get ... --json
+  Examples: oar --json topics get ... ; oar topics get ... --json
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
-## `commitments create`
+## `topics create`
 
-Create commitment snapshot
+Create topic
 
 ```text
-Generated Help: commitments create
+Generated Help: topics create
 
-- Command ID: `commitments.create`
-- CLI path: `commitments create`
-- HTTP: `POST /commitments`
-- Stability: `stable`
+- Command ID: `topics.create`
+- CLI path: `topics create`
+- HTTP: `POST /topics`
+- Stability: `beta`
 - Input mode: `json-body`
-- Why: Track accountable work items tied to a thread.
-- Output: Returns `{ commitment }` with generated id.
-- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`
-- Concepts: `commitments`
-- Agent notes: Replay-safe when `request_key` is reused with the same body; otherwise each create issues a new commitment id.
-- Adjacent commands: `commitments get`, `commitments list`, `commitments patch`
-- Examples:
-  - Create commitment: `oar commitments create --from-file commitment.json --json`
+- Why: Create a first-class durable topic before attaching cards, docs, or packets.
+- Output: Returns `{ topic }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Concepts: `topics`, `write`
+- Agent notes: Replay-safe when the same request key and body are reused.
+- Adjacent commands: `topics archive`, `topics get`, `topics list`, `topics patch`, `topics restore`, `topics timeline`, `topics trash`, `topics unarchive`, `topics workspace`
 
 Inputs:
   Required:
-  - body `commitment.definition_of_done` (list<string>)
-  - body `commitment.due_at` (datetime)
-  - body `commitment.links` (list<typed_ref>)
-  - body `commitment.owner` (string)
-  - body `commitment.provenance.sources` (list<string>)
-  - body `commitment.status` (string)
-  - body `commitment.thread_id` (string)
-  - body `commitment.title` (string)
+  - body `topic.board_refs` (list<any>)
+  - body `topic.document_refs` (list<any>)
+  - body `topic.owner_refs` (list<any>)
+  - body `topic.provenance.sources` (list<string>)
+  - body `topic.related_refs` (list<any>)
+  - body `topic.status` (string)
+  - body `topic.summary` (string)
+  - body `topic.title` (string)
+  - body `topic.type` (string)
   Optional:
-  - body `actor_id` (string)
-  - body `commitment.provenance.by_field` (map<string, list<string>>)
-  - body `commitment.provenance.notes` (string)
-  - body `request_key` (string)
-  Enum values: commitment.status (strict): blocked, canceled, done, open
+  - body `topic.provenance.by_field` (object)
+  - body `topic.provenance.notes` (string)
+  Enum values: topic.status: active, archived, blocked, closed, paused, proposed, resolved; topic.type: case, decision, incident, initiative, note, objective, other, process, relationship, request, risk
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json commitments create ... ; oar commitments create ... --json
+  Examples: oar --json topics create ... ; oar topics create ... --json
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
-## `commitments patch`
+## `topics patch`
 
-Patch commitment snapshot
+Patch topic
 
 ```text
-Generated Help: commitments patch
+Generated Help: topics patch
 
-- Command ID: `commitments.patch`
-- CLI path: `commitments patch`
-- HTTP: `PATCH /commitments/{commitment_id}`
-- Stability: `stable`
+- Command ID: `topics.patch`
+- CLI path: `topics patch`
+- HTTP: `PATCH /topics/{topic_id}`
+- Stability: `beta`
 - Input mode: `json-body`
-- Why: Update ownership, due date, or status with evidence-aware transition rules.
-- Output: Returns `{ commitment }` and emits a status-change event when applicable.
-- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`, `not_found`
-- Concepts: `commitments`, `patch`, `provenance`
-- Agent notes: Provide `refs` for restricted transitions and use `if_updated_at` to avoid lost updates.
-- Adjacent commands: `commitments create`, `commitments get`, `commitments list`
-- Examples:
-  - Mark commitment done: `oar commitments patch --commitment-id commitment_123 --from-file commitment-patch.json --json`
+- Why: Update topic state with provenance and optimistic concurrency.
+- Output: Returns `{ topic }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `topics`, `write`, `concurrency`
+- Adjacent commands: `topics archive`, `topics create`, `topics get`, `topics list`, `topics restore`, `topics timeline`, `topics trash`, `topics unarchive`, `topics workspace`
 
 Inputs:
   Required:
-  - path `commitment_id`
+  - path `topic_id`
   Optional:
-  - body `actor_id` (string)
   - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
-  - body `patch.definition_of_done` (list<string>)
-  - body `patch.due_at` (datetime)
-  - body `patch.links` (list<typed_ref>)
-  - body `patch.owner` (string)
-  - body `patch.provenance.by_field` (map<string, list<string>>)
+  - body `patch.board_refs` (list<any>)
+  - body `patch.document_refs` (list<any>)
+  - body `patch.owner_refs` (list<any>)
+  - body `patch.provenance.by_field` (object)
   - body `patch.provenance.notes` (string)
   - body `patch.provenance.sources` (list<string>)
+  - body `patch.related_refs` (list<any>)
   - body `patch.status` (string)
+  - body `patch.summary` (string)
   - body `patch.title` (string)
-  - body `refs` (list<string>)
-  Enum values: patch.status (strict): blocked, canceled, done, open
+  - body `patch.type` (string)
+  Enum values: patch.status: active, archived, blocked, closed, paused, proposed, resolved; patch.type: case, decision, incident, initiative, note, objective, other, process, relationship, request, risk
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json commitments patch ... ; oar commitments patch ... --json
+  Examples: oar --json topics patch ... ; oar topics patch ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `topics timeline`
+
+Get topic timeline
+
+```text
+Generated Help: topics timeline
+
+- Command ID: `topics.timeline`
+- CLI path: `topics timeline`
+- HTTP: `GET /topics/{topic_id}/timeline`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Load chronological evidence and related resources for one topic.
+- Output: Returns `{ topic, events, artifacts, cards, documents, threads }`.
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Concepts: `topics`, `timeline`
+- Adjacent commands: `topics archive`, `topics create`, `topics get`, `topics list`, `topics patch`, `topics restore`, `topics trash`, `topics unarchive`, `topics workspace`
+
+Inputs:
+  Required:
+  - path `topic_id`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json topics timeline ... ; oar topics timeline ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `topics workspace`
+
+Get topic workspace (primary operator coordination read)
+
+```text
+Generated Help: topics workspace
+
+- Command ID: `topics.workspace`
+- CLI path: `topics workspace`
+- HTTP: `GET /topics/{topic_id}/workspace`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Primary operator coordination read — load the topic workspace composed from linked cards, docs, backing threads, and inbox items. Prefer this over thread workspace for triage and planning.
+- Output: Returns `{ topic, cards, boards, documents, threads, inbox, projection_freshness, generated_at }`.
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Concepts: `topics`, `workspace`
+- Adjacent commands: `topics archive`, `topics create`, `topics get`, `topics list`, `topics patch`, `topics restore`, `topics timeline`, `topics trash`, `topics unarchive`
+
+Inputs:
+  Required:
+  - path `topic_id`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json topics workspace ... ; oar topics workspace ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `topics archive`
+
+Archive topic
+
+```text
+Generated Help: topics archive
+
+- Command ID: `topics.archive`
+- CLI path: `topics archive`
+- HTTP: `POST /topics/{topic_id}/archive`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Soft-archive a topic (orthogonal to business status; clears default list visibility).
+- Output: Returns `{ topic }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `topics`, `write`
+- Adjacent commands: `topics create`, `topics get`, `topics list`, `topics patch`, `topics restore`, `topics timeline`, `topics trash`, `topics unarchive`, `topics workspace`
+
+Inputs:
+  Required:
+  - path `topic_id`
+  Optional:
+  - body `actor_id` (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json topics archive ... ; oar topics archive ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `topics unarchive`
+
+Unarchive topic
+
+```text
+Generated Help: topics unarchive
+
+- Command ID: `topics.unarchive`
+- CLI path: `topics unarchive`
+- HTTP: `POST /topics/{topic_id}/unarchive`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Clear archived_at on a topic (restore default list visibility).
+- Output: Returns `{ topic }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `topics`, `write`
+- Adjacent commands: `topics archive`, `topics create`, `topics get`, `topics list`, `topics patch`, `topics restore`, `topics timeline`, `topics trash`, `topics workspace`
+
+Inputs:
+  Required:
+  - path `topic_id`
+  Optional:
+  - body `actor_id` (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json topics unarchive ... ; oar topics unarchive ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `topics trash`
+
+Move topic to trash
+
+```text
+Generated Help: topics trash
+
+- Command ID: `topics.trash`
+- CLI path: `topics trash`
+- HTTP: `POST /topics/{topic_id}/trash`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Move topic to trash with an explicit operator reason.
+- Output: Returns `{ topic }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `topics`, `write`
+- Adjacent commands: `topics archive`, `topics create`, `topics get`, `topics list`, `topics patch`, `topics restore`, `topics timeline`, `topics unarchive`, `topics workspace`
+
+Inputs:
+  Required:
+  - path `topic_id`
+  - body `reason` (string)
+  Optional:
+  - body `actor_id` (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json topics trash ... ; oar topics trash ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `topics restore`
+
+Restore topic from trash
+
+```text
+Generated Help: topics restore
+
+- Command ID: `topics.restore`
+- CLI path: `topics restore`
+- HTTP: `POST /topics/{topic_id}/restore`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Clear trash lifecycle fields on a topic after an explicit restore action.
+- Output: Returns `{ topic }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `topics`, `write`
+- Adjacent commands: `topics archive`, `topics create`, `topics get`, `topics list`, `topics patch`, `topics timeline`, `topics trash`, `topics unarchive`, `topics workspace`
+
+Inputs:
+  Required:
+  - path `topic_id`
+  Optional:
+  - body `actor_id` (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json topics restore ... ; oar topics restore ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `cards list`
+
+List cards
+
+```text
+Generated Help: cards list
+
+- Command ID: `cards.list`
+- CLI path: `cards list`
+- HTTP: `GET /cards`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Scan first-class card resources across boards.
+- Output: Returns `{ cards }`.
+- Error codes: `auth_required`, `invalid_token`
+- Concepts: `cards`
+- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards timeline`, `cards trash`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json cards list ... ; oar cards list ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `cards get`
+
+Get card
+
+```text
+Generated Help: cards get
+
+- Command ID: `cards.get`
+- CLI path: `cards get`
+- HTTP: `GET /cards/{card_id}`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Resolve one first-class card by id.
+- Output: Returns `{ card }`.
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Concepts: `cards`
+- Adjacent commands: `cards archive`, `cards create`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards timeline`, `cards trash`
+
+Inputs:
+  Required:
+  - path `card_id`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json cards get ... ; oar cards get ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `cards create`
+
+Create card (global path)
+
+```text
+Generated Help: cards create
+
+- Command ID: `cards.create`
+- CLI path: `cards create`
+- HTTP: `POST /cards`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Create a card with the same body as POST /boards/{board_id}/cards, but supply board_id or board_ref here instead of a path segment. Interoperable with board-scoped create.
+- Output: Returns `{ board, card }` (same as board-scoped create).
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `cards`, `boards`, `write`
+- Adjacent commands: `cards archive`, `cards get`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards timeline`, `cards trash`
+
+Inputs:
+  Required:
+  - body `card.assignee_refs` (list<any>)
+  - body `card.column_key` (string)
+  - body `card.provenance.sources` (list<string>)
+  - body `card.related_refs` (list<any>)
+  - body `card.resolution_refs` (list<any>)
+  - body `card.risk` (string)
+  - body `card.summary` (string)
+  - body `card.title` (string)
+  Optional:
+  - body `board_id` (string)
+  - body `board_ref` (any)
+  - body `card.after_card_id` (string)
+  - body `card.before_card_id` (string)
+  - body `card.definition_of_done` (list<string>)
+  - body `card.document_ref` (string)
+  - body `card.due_at` (datetime)
+  - body `card.id` (string)
+  - body `card.provenance.by_field` (object)
+  - body `card.provenance.notes` (string)
+  - body `card.resolution` (string)
+  - body `card.topic_ref` (string)
+  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `oar boards get --board-id <board-id>`, `oar boards workspace --board-id <board-id>`, or the latest board mutation response.
+  Enum values: card.column_key: backlog, blocked, done, in_progress, ready, review; card.resolution: canceled, done; card.risk: critical, high, low, medium
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json cards create ... ; oar cards create ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `cards patch`
+
+Patch card
+
+```text
+Generated Help: cards patch
+
+- Command ID: `cards.patch`
+- CLI path: `cards patch`
+- HTTP: `PATCH /cards/{card_id}`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Update card fields, including resolution and resolution refs.
+- Output: Returns `{ card }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `cards`, `write`, `concurrency`
+- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards list`, `cards move`, `cards purge`, `cards restore`, `cards timeline`, `cards trash`
+
+Inputs:
+  Required:
+  - path `card_id`
+  Optional:
+  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
+  - body `patch.assignee_refs` (list<any>)
+  - body `patch.definition_of_done` (list<string>)
+  - body `patch.document_ref` (string)
+  - body `patch.due_at` (datetime)
+  - body `patch.provenance.by_field` (object)
+  - body `patch.provenance.notes` (string)
+  - body `patch.provenance.sources` (list<string>)
+  - body `patch.related_refs` (list<any>)
+  - body `patch.resolution` (string)
+  - body `patch.resolution_refs` (list<any>)
+  - body `patch.risk` (string)
+  - body `patch.summary` (string)
+  - body `patch.title` (string)
+  - body `patch.topic_ref` (string)
+  Enum values: patch.resolution: canceled, done; patch.risk: critical, high, low, medium
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json cards patch ... ; oar cards patch ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `cards move`
+
+Move card
+
+```text
+Generated Help: cards move
+
+- Command ID: `cards.move`
+- CLI path: `cards move`
+- HTTP: `POST /cards/{card_id}/move`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Reposition a card within a board column using the card's first-class identity.
+- Output: Returns `{ card }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `cards`, `boards`, `write`
+- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards list`, `cards patch`, `cards purge`, `cards restore`, `cards timeline`, `cards trash`
+
+Inputs:
+  Required:
+  - path `card_id`
+  - body `column_key` (string)
+  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `oar boards get --board-id <board-id>`, `oar boards workspace --board-id <board-id>`, or the latest board mutation response.
+  Optional:
+  - body `actor_id` (string)
+  - body `after_card_id` (string)
+  - body `before_card_id` (string)
+  - body `move.after_card_id` (string)
+  - body `move.before_card_id` (string)
+  - body `move.column_key` (string)
+  - body `move.if_board_updated_at` (datetime)
+  - body `move.resolution` (string)
+  - body `move.resolution_refs` (list<any>)
+  - body `resolution` (string)
+  - body `resolution_refs` (list<any>)
+  Enum values: column_key: backlog, blocked, done, in_progress, ready, review; move.column_key: backlog, blocked, done, in_progress, ready, review; move.resolution: canceled, done; resolution: canceled, done
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json cards move ... ; oar cards move ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `cards archive`
+
+Archive card
+
+```text
+Generated Help: cards archive
+
+- Command ID: `cards.archive`
+- CLI path: `cards archive`
+- HTTP: `POST /cards/{card_id}/archive`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Soft-delete a first-class card by setting archived_at (board concurrency via if_board_updated_at).
+- Output: Returns `{ board, card }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `already_trashed`
+- Concepts: `cards`, `write`
+- Adjacent commands: `cards create`, `cards get`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards timeline`, `cards trash`
+
+Inputs:
+  Required:
+  - path `card_id`
+  Optional:
+  - body `actor_id` (string)
+  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `oar boards get --board-id <board-id>`, `oar boards workspace --board-id <board-id>`, or the latest board mutation response.
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json cards archive ... ; oar cards archive ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `cards trash`
+
+Move card to trash
+
+```text
+Generated Help: cards trash
+
+- Command ID: `cards.trash`
+- CLI path: `cards trash`
+- HTTP: `POST /cards/{card_id}/trash`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Move a card to trash with an explicit operator reason while keeping archive lifecycle distinct.
+- Output: Returns `{ board, card }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `cards`, `write`
+- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards timeline`
+
+Inputs:
+  Required:
+  - path `card_id`
+  - body `reason` (string)
+  Optional:
+  - body `actor_id` (string)
+  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `oar boards get --board-id <board-id>`, `oar boards workspace --board-id <board-id>`, or the latest board mutation response.
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json cards trash ... ; oar cards trash ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `cards purge`
+
+Permanently delete archived or trashed card
+
+```text
+Generated Help: cards purge
+
+- Command ID: `cards.purge`
+- CLI path: `cards purge`
+- HTTP: `POST /cards/{card_id}/purge`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Permanently delete an archived or trashed card (human-gated).
+- Output: Returns `{ purged, card_id }`.
+- Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `cards`, `write`
+- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards list`, `cards move`, `cards patch`, `cards restore`, `cards timeline`, `cards trash`
+
+Inputs:
+  Required:
+  - path `card_id`
+  Optional:
+  - body `actor_id` (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json cards purge ... ; oar cards purge ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `cards restore`
+
+Restore archived or trashed card
+
+```text
+Generated Help: cards restore
+
+- Command ID: `cards.restore`
+- CLI path: `cards restore`
+- HTTP: `POST /cards/{card_id}/restore`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Clear archive or trash lifecycle fields on a card so it reappears on boards.
+- Output: Returns `{ board, card }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `cards`, `write`
+- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards timeline`, `cards trash`
+
+Inputs:
+  Required:
+  - path `card_id`
+  Optional:
+  - body `actor_id` (string)
+  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `oar boards get --board-id <board-id>`, `oar boards workspace --board-id <board-id>`, or the latest board mutation response.
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json cards restore ... ; oar cards restore ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `cards timeline`
+
+Get card timeline
+
+```text
+Generated Help: cards timeline
+
+- Command ID: `cards.timeline`
+- CLI path: `cards timeline`
+- HTTP: `GET /cards/{card_id}/timeline`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Load chronological evidence and related resources for one card.
+- Output: Returns `{ card, events, artifacts, cards, documents, threads }`.
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Concepts: `cards`, `timeline`
+- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards trash`
+
+Inputs:
+  Required:
+  - path `card_id`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json cards timeline ... ; oar cards timeline ... --json
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `artifacts list`
 
-List artifact metadata
+List artifacts
 
 ```text
 Generated Help: artifacts list
@@ -2228,16 +2328,13 @@ Generated Help: artifacts list
 - Command ID: `artifacts.list`
 - CLI path: `artifacts list`
 - HTTP: `GET /artifacts`
-- Stability: `stable`
+- Stability: `beta`
 - Input mode: `none`
-- Why: Discover evidence and packets attached to threads.
-- Output: Returns `{ artifacts }` metadata only.
-- Error codes: `invalid_request`
-- Concepts: `artifacts`, `filtering`
-- Agent notes: Safe and idempotent.
-- Adjacent commands: `artifacts archive`, `artifacts content get`, `artifacts create`, `artifacts get`, `artifacts purge`, `artifacts restore`, `artifacts tombstone`, `artifacts unarchive`
-- Examples:
-  - List work orders for a thread: `oar artifacts list --kind work_order --thread-id thread_123 --json`
+- Why: Search and filter immutable artifacts across the workspace.
+- Output: Returns `{ artifacts }`.
+- Error codes: `auth_required`, `invalid_token`
+- Concepts: `artifacts`
+- Adjacent commands: `artifacts archive`, `artifacts content`, `artifacts create`, `artifacts get`, `artifacts purge`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
 
 
 Global flags:
@@ -2248,7 +2345,7 @@ Global flags:
 
 ## `artifacts get`
 
-Get artifact metadata by id
+Get artifact metadata
 
 ```text
 Generated Help: artifacts get
@@ -2256,16 +2353,13 @@ Generated Help: artifacts get
 - Command ID: `artifacts.get`
 - CLI path: `artifacts get`
 - HTTP: `GET /artifacts/{artifact_id}`
-- Stability: `stable`
+- Stability: `beta`
 - Input mode: `none`
-- Why: Resolve artifact refs before downloading or rendering content.
-- Output: Returns `{ artifact }` metadata.
-- Error codes: `not_found`
+- Why: Resolve immutable artifact metadata referenced from timelines and packets.
+- Output: Returns `{ artifact }`.
+- Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `artifacts`
-- Agent notes: Safe and idempotent.
-- Adjacent commands: `artifacts archive`, `artifacts content get`, `artifacts create`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts tombstone`, `artifacts unarchive`
-- Examples:
-  - Get artifact: `oar artifacts get --artifact-id artifact_123 --json`
+- Adjacent commands: `artifacts archive`, `artifacts content`, `artifacts create`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
 
 Inputs:
   Required:
@@ -2287,24 +2381,21 @@ Generated Help: artifacts create
 - Command ID: `artifacts.create`
 - CLI path: `artifacts create`
 - HTTP: `POST /artifacts`
-- Stability: `stable`
-- Input mode: `file-and-body`
-- Why: Persist immutable evidence blobs and metadata for references and review.
-- Output: Returns `{ artifact }` metadata after content write.
-- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`
-- Concepts: `artifacts`, `evidence`
-- Agent notes: Treat as non-idempotent unless caller controls artifact id collisions.
-- Adjacent commands: `artifacts archive`, `artifacts content get`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts tombstone`, `artifacts unarchive`
-- Examples:
-  - Create structured artifact: `oar artifacts create --from-file artifact-create.json --json`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Store content-addressed artifact metadata and payload (bytes, text, or structured packet JSON).
+- Output: Returns `{ artifact }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `conflict`
+- Concepts: `artifacts`, `write`
+- Adjacent commands: `artifacts archive`, `artifacts content`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
 
 Inputs:
   Required:
   - body `artifact` (object)
-  - body `content` (object|string)
   - body `content_type` (string)
   Optional:
   - body `actor_id` (string)
+  - body `content` (any)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2312,40 +2403,9 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
-## `artifacts content`
-
-Get artifact raw content
-
-```text
-Generated Help: artifacts content
-
-- Command ID: `artifacts.content.get`
-- CLI path: `artifacts content get`
-- HTTP: `GET /artifacts/{artifact_id}/content`
-- Stability: `stable`
-- Input mode: `none`
-- Why: Fetch opaque artifact bytes for downstream processors.
-- Output: Raw bytes; content type mirrors stored artifact media.
-- Error codes: `not_found`
-- Concepts: `artifacts`, `content`
-- Agent notes: Stream to file for large payloads.
-- Adjacent commands: `artifacts archive`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts tombstone`, `artifacts unarchive`
-- Examples:
-  - Download content: `oar artifacts content get --artifact-id artifact_123 > artifact.bin`
-
-Inputs:
-  Required:
-  - path `artifact_id`
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: oar --json artifacts content ... ; oar artifacts content ... --json
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
 ## `artifacts archive`
 
-Archive an artifact
+Archive artifact
 
 ```text
 Generated Help: artifacts archive
@@ -2355,21 +2415,17 @@ Generated Help: artifacts archive
 - HTTP: `POST /artifacts/{artifact_id}/archive`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Hide an artifact from default list views while preserving it for search and direct access.
-- Output: Returns `{ artifact }` with archive metadata set.
-- Error codes: `invalid_json`, `invalid_request`, `not_found`
-- Concepts: `artifacts`, `lifecycle`
-- Agent notes: Idempotent; repeated archive calls on the same artifact are safe. Returns 409 if artifact is tombstoned.
-- Adjacent commands: `artifacts content get`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts tombstone`, `artifacts unarchive`
-- Examples:
-  - Archive artifact: `oar artifacts archive --artifact-id artifact_123 --json`
+- Why: Set archived_at on artifact metadata (orthogonal to trash lifecycle).
+- Output: Returns `{ artifact }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `artifacts`, `write`
+- Adjacent commands: `artifacts content`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
 
 Inputs:
   Required:
   - path `artifact_id`
-  - body `actor_id` (string)
   Optional:
-  - body `reason` (string)
+  - body `actor_id` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2379,7 +2435,7 @@ Global flags:
 
 ## `artifacts unarchive`
 
-Unarchive an artifact
+Unarchive artifact
 
 ```text
 Generated Help: artifacts unarchive
@@ -2389,21 +2445,17 @@ Generated Help: artifacts unarchive
 - HTTP: `POST /artifacts/{artifact_id}/unarchive`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Return an archived artifact to the default list views.
-- Output: Returns `{ artifact }` with archive metadata cleared.
-- Error codes: `invalid_json`, `invalid_request`, `not_found`, `not_archived`
-- Concepts: `artifacts`, `lifecycle`
-- Agent notes: Returns 409 if the artifact is not currently archived.
-- Adjacent commands: `artifacts archive`, `artifacts content get`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts tombstone`
-- Examples:
-  - Unarchive artifact: `oar artifacts unarchive --artifact-id artifact_123 --json`
+- Why: Clear archived_at on artifact metadata.
+- Output: Returns `{ artifact }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `artifacts`, `write`
+- Adjacent commands: `artifacts archive`, `artifacts content`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts trash`
 
 Inputs:
   Required:
   - path `artifact_id`
-  - body `actor_id` (string)
   Optional:
-  - body `reason` (string)
+  - body `actor_id` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2411,43 +2463,40 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
-## `artifacts tombstone`
+## `artifacts trash`
 
-Tombstone an artifact (soft-delete)
+Move artifact to trash
 
 ```text
-Generated Help: artifacts tombstone
+Generated Help: artifacts trash
 
-- Command ID: `artifacts.tombstone`
-- CLI path: `artifacts tombstone`
-- HTTP: `POST /artifacts/{artifact_id}/tombstone`
+- Command ID: `artifacts.trash`
+- CLI path: `artifacts trash`
+- HTTP: `POST /artifacts/{artifact_id}/trash`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Mark an artifact as inactive while preserving provenance; tombstoned artifacts are excluded from list by default.
-- Output: Returns `{ artifact }` with updated tombstone metadata.
-- Error codes: `invalid_json`, `invalid_request`, `not_found`
-- Concepts: `artifacts`, `lifecycle`
-- Agent notes: Idempotent; repeated tombstone calls on the same artifact are safe.
-- Adjacent commands: `artifacts archive`, `artifacts content get`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts unarchive`
-- Examples:
-  - Tombstone artifact: `oar artifacts tombstone --artifact-id artifact_123 --reason "superseded by newer version" --json`
+- Why: Move artifact metadata to trash with an explicit operator reason.
+- Output: Returns `{ artifact }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Concepts: `artifacts`, `write`
+- Adjacent commands: `artifacts archive`, `artifacts content`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts unarchive`
 
 Inputs:
   Required:
   - path `artifact_id`
-  - body `actor_id` (string)
-  Optional:
   - body `reason` (string)
+  Optional:
+  - body `actor_id` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json artifacts tombstone ... ; oar artifacts tombstone ... --json
+  Examples: oar --json artifacts trash ... ; oar artifacts trash ... --json
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `artifacts restore`
 
-Restore a tombstoned artifact
+Restore artifact from trash
 
 ```text
 Generated Help: artifacts restore
@@ -2457,21 +2506,17 @@ Generated Help: artifacts restore
 - HTTP: `POST /artifacts/{artifact_id}/restore`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Reverse a tombstone on an artifact, making it active and visible in default list queries again.
-- Output: Returns `{ artifact }` with tombstone metadata cleared.
-- Error codes: `invalid_json`, `invalid_request`, `not_found`, `not_tombstoned`
-- Concepts: `artifacts`, `lifecycle`
-- Agent notes: Returns 409 if the artifact is not currently tombstoned.
-- Adjacent commands: `artifacts archive`, `artifacts content get`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts tombstone`, `artifacts unarchive`
-- Examples:
-  - Restore artifact: `oar artifacts restore --artifact-id artifact_123 --json`
+- Why: Clear trash lifecycle fields on an artifact after an explicit restore action.
+- Output: Returns `{ artifact }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `artifacts`, `write`
+- Adjacent commands: `artifacts archive`, `artifacts content`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts trash`, `artifacts unarchive`
 
 Inputs:
   Required:
   - path `artifact_id`
-  - body `actor_id` (string)
   Optional:
-  - body `reason` (string)
+  - body `actor_id` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2481,7 +2526,7 @@ Global flags:
 
 ## `artifacts purge`
 
-Permanently delete a tombstoned artifact (human-only)
+Permanently delete trashed artifact
 
 ```text
 Generated Help: artifacts purge
@@ -2491,21 +2536,17 @@ Generated Help: artifacts purge
 - HTTP: `POST /artifacts/{artifact_id}/purge`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Permanently remove a tombstoned artifact and reclaim storage. Human-only to prevent accidental data loss by automated agents.
-- Output: Returns `{ purged: true, artifact_id }` on success.
-- Error codes: `invalid_json`, `not_found`, `not_tombstoned`, `artifact_in_use`, `human_only`
-- Concepts: `artifacts`, `lifecycle`
-- Agent notes: 403 if the caller is not a human principal. 409 if the artifact is not tombstoned or is still referenced by document revisions.
-- Adjacent commands: `artifacts archive`, `artifacts content get`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts restore`, `artifacts tombstone`, `artifacts unarchive`
-- Examples:
-  - Purge artifact: `oar artifacts purge --artifact-id artifact_123 --json`
+- Why: Permanently delete a trashed artifact (human-gated).
+- Output: Returns `{ purged, artifact_id }`.
+- Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `artifacts`, `write`
+- Adjacent commands: `artifacts archive`, `artifacts content`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
 
 Inputs:
   Required:
   - path `artifact_id`
   Optional:
   - body `actor_id` (string)
-  - body `reason` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2515,7 +2556,7 @@ Global flags:
 
 ## `boards list`
 
-List boards with derived summary data
+List boards
 
 ```text
 Generated Help: boards list
@@ -2525,17 +2566,11 @@ Generated Help: boards list
 - HTTP: `GET /boards`
 - Stability: `beta`
 - Input mode: `none`
-- Why: Discover durable coordination boards with enough summary data for list pages and CLI triage without per-board fan-out.
-- Output: Returns `{ boards, next_cursor? }`, where each item includes canonical board metadata plus a derived summary. Pagination is optional and backward-compatible.
-- Error codes: `invalid_request`
-- Concepts: `boards`, `planning`, `summaries`
-- Agent notes: Safe and idempotent. Use repeatable `label` and `owner` filters to narrow the list server-side. Optional pagination with `q` for search, `limit` for page size, and `cursor` for continuation.
-- Adjacent commands: `boards archive`, `boards cards archive`, `boards cards create`, `boards cards get`, `boards cards list`, `boards cards move`, `boards cards update`, `boards create`, `boards get`, `boards purge`, `boards restore`, `boards tombstone`, `boards unarchive`, `boards update`, `boards workspace`
-- Examples:
-  - List boards: `oar boards list --json`
-  - List active boards for an owner: `oar boards list --status active --owner actor_ceo --json`
-  - Search boards by label: `oar boards list --q "launch" --json`
-  - Paginated board list: `oar boards list --limit 30 --json`
+- Why: Scan durable coordination boards and lightweight summaries.
+- Output: Returns `{ boards, summaries }`.
+- Error codes: `auth_required`, `invalid_token`
+- Concepts: `boards`
+- Adjacent commands: `boards archive`, `boards cards create`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
 
 
 Global flags:
@@ -2556,29 +2591,23 @@ Generated Help: boards create
 - HTTP: `POST /boards`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Create a first-class coordination board with a canonical primary thread and optional primary document.
-- Output: Returns `{ board }` with server-owned identity and concurrency metadata.
-- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`
-- Concepts: `boards`, `planning`, `concurrency`
-- Agent notes: Replay-safe when `request_key` is reused with the same body. The primary thread is required and is never created as a card implicitly.
-- Adjacent commands: `boards archive`, `boards cards archive`, `boards cards create`, `boards cards get`, `boards cards list`, `boards cards move`, `boards cards update`, `boards get`, `boards list`, `boards purge`, `boards restore`, `boards tombstone`, `boards unarchive`, `boards update`, `boards workspace`
-- Examples:
-  - Create board: `oar boards create --from-file board-create.json --json`
+- Why: Create a durable board over topics and cards.
+- Output: Returns `{ board }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Concepts: `boards`, `write`
+- Adjacent commands: `boards archive`, `boards cards create`, `boards cards get`, `boards cards list`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
 
 Inputs:
   Required:
-  - body `board.primary_thread_id` (string)
+  - body `board.document_refs` (list<any>)
+  - body `board.pinned_refs` (list<any>)
+  - body `board.provenance.sources` (list<string>)
+  - body `board.status` (string)
   - body `board.title` (string)
   Optional:
-  - body `actor_id` (string)
-  - body `board.column_schema` (list<any>)
-  - body `board.id` (string)
-  - body `board.labels` (list<string>)
-  - body `board.owners` (list<string>)
-  - body `board.pinned_refs` (list<string>)
-  - body `board.primary_document_id` (string)
-  - body `board.status` (string)
-  - body `request_key` (string)
+  - body `board.primary_topic_ref` (string)
+  - body `board.provenance.by_field` (object)
+  - body `board.provenance.notes` (string)
   Enum values: board.status: active, closed, paused
 
 Global flags:
@@ -2589,7 +2618,7 @@ Global flags:
 
 ## `boards get`
 
-Get board metadata
+Get board
 
 ```text
 Generated Help: boards get
@@ -2599,14 +2628,11 @@ Generated Help: boards get
 - HTTP: `GET /boards/{board_id}`
 - Stability: `beta`
 - Input mode: `none`
-- Why: Resolve one board's canonical metadata and concurrency token without hydrating the full workspace projection.
-- Output: Returns `{ board }`.
-- Error codes: `invalid_request`, `not_found`
-- Concepts: `boards`, `planning`
-- Agent notes: Safe and idempotent.
-- Adjacent commands: `boards archive`, `boards cards archive`, `boards cards create`, `boards cards get`, `boards cards list`, `boards cards move`, `boards cards update`, `boards create`, `boards list`, `boards purge`, `boards restore`, `boards tombstone`, `boards unarchive`, `boards update`, `boards workspace`
-- Examples:
-  - Get board: `oar boards get --board-id board_product_launch --json`
+- Why: Resolve canonical board state and summary.
+- Output: Returns `{ board, summary }`.
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Concepts: `boards`
+- Adjacent commands: `boards archive`, `boards cards create`, `boards cards get`, `boards cards list`, `boards create`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
 
 Inputs:
   Required:
@@ -2618,51 +2644,9 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
-## `boards update`
-
-Update board metadata
-
-```text
-Generated Help: boards update
-
-- Command ID: `boards.update`
-- CLI path: `boards update`
-- HTTP: `PATCH /boards/{board_id}`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Patch mutable board metadata with optimistic concurrency while preserving server-owned identity and timestamps.
-- Output: Returns `{ board }` after the metadata patch is applied.
-- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`, `not_found`
-- Concepts: `boards`, `planning`, `concurrency`
-- Agent notes: Set `if_updated_at` from `boards.get` or `boards.workspace` to avoid lost updates.
-- Adjacent commands: `boards archive`, `boards cards archive`, `boards cards create`, `boards cards get`, `boards cards list`, `boards cards move`, `boards cards update`, `boards create`, `boards get`, `boards list`, `boards purge`, `boards restore`, `boards tombstone`, `boards unarchive`, `boards workspace`
-- Examples:
-  - Update board metadata: `oar boards update --board-id board_product_launch --from-file board-update.json --json`
-
-Inputs:
-  Required:
-  - path `board_id`
-  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
-  Optional:
-  - body `actor_id` (string)
-  - body `patch.column_schema` (list<any>)
-  - body `patch.labels` (list<string>)
-  - body `patch.owners` (list<string>)
-  - body `patch.pinned_refs` (list<string>)
-  - body `patch.primary_document_id` (any|string)
-  - body `patch.status` (string)
-  - body `patch.title` (string)
-  Enum values: patch.status: active, closed, paused
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: oar --json boards update ... ; oar boards update ... --json
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
 ## `boards archive`
 
-Archive a board
+Archive board
 
 ```text
 Generated Help: boards archive
@@ -2672,21 +2656,17 @@ Generated Help: boards archive
 - HTTP: `POST /boards/{board_id}/archive`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Hide a board from default list views while preserving it for search and direct access.
-- Output: Returns `{ board }` with archive metadata set.
-- Error codes: `invalid_json`, `invalid_request`, `not_found`
-- Concepts: `boards`, `lifecycle`
-- Agent notes: Idempotent; repeated archive calls on the same board are safe. Returns 409 if board is tombstoned.
-- Adjacent commands: `boards cards archive`, `boards cards create`, `boards cards get`, `boards cards list`, `boards cards move`, `boards cards update`, `boards create`, `boards get`, `boards list`, `boards purge`, `boards restore`, `boards tombstone`, `boards unarchive`, `boards update`, `boards workspace`
-- Examples:
-  - Archive board: `oar boards archive --board-id board_product_launch --json`
+- Why: Soft-archive a board (orthogonal to business status; clears default list visibility).
+- Output: Returns `{ board }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `boards`, `write`
+- Adjacent commands: `boards cards create`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
 
 Inputs:
   Required:
   - path `board_id`
-  - body `actor_id` (string)
   Optional:
-  - body `reason` (string)
+  - body `actor_id` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2696,7 +2676,7 @@ Global flags:
 
 ## `boards unarchive`
 
-Unarchive a board
+Unarchive board
 
 ```text
 Generated Help: boards unarchive
@@ -2706,21 +2686,17 @@ Generated Help: boards unarchive
 - HTTP: `POST /boards/{board_id}/unarchive`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Return an archived board to the default list views.
-- Output: Returns `{ board }` with archive metadata cleared.
-- Error codes: `invalid_json`, `invalid_request`, `not_found`, `not_archived`
-- Concepts: `boards`, `lifecycle`
-- Agent notes: Returns 409 if the board is not currently archived.
-- Adjacent commands: `boards archive`, `boards cards archive`, `boards cards create`, `boards cards get`, `boards cards list`, `boards cards move`, `boards cards update`, `boards create`, `boards get`, `boards list`, `boards purge`, `boards restore`, `boards tombstone`, `boards update`, `boards workspace`
-- Examples:
-  - Unarchive board: `oar boards unarchive --board-id board_product_launch --json`
+- Why: Clear archived_at on a board (restore default list visibility).
+- Output: Returns `{ board }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `boards`, `write`
+- Adjacent commands: `boards archive`, `boards cards create`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards workspace`
 
 Inputs:
   Required:
   - path `board_id`
-  - body `actor_id` (string)
   Optional:
-  - body `reason` (string)
+  - body `actor_id` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2728,43 +2704,40 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
-## `boards tombstone`
+## `boards trash`
 
-Tombstone a board (soft-delete)
+Move board to trash
 
 ```text
-Generated Help: boards tombstone
+Generated Help: boards trash
 
-- Command ID: `boards.tombstone`
-- CLI path: `boards tombstone`
-- HTTP: `POST /boards/{board_id}/tombstone`
+- Command ID: `boards.trash`
+- CLI path: `boards trash`
+- HTTP: `POST /boards/{board_id}/trash`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Mark a board as inactive while preserving provenance; tombstoned boards are excluded from list by default.
-- Output: Returns `{ board }` with updated tombstone metadata.
-- Error codes: `invalid_json`, `invalid_request`, `not_found`
-- Concepts: `boards`, `lifecycle`
-- Agent notes: Idempotent; repeated tombstone calls are safe.
-- Adjacent commands: `boards archive`, `boards cards archive`, `boards cards create`, `boards cards get`, `boards cards list`, `boards cards move`, `boards cards update`, `boards create`, `boards get`, `boards list`, `boards purge`, `boards restore`, `boards unarchive`, `boards update`, `boards workspace`
-- Examples:
-  - Tombstone board: `oar boards tombstone --board-id board_product_launch --reason "initiative closed" --json`
+- Why: Move board to trash with an explicit operator reason.
+- Output: Returns `{ board }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `boards`, `write`
+- Adjacent commands: `boards archive`, `boards cards create`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards unarchive`, `boards workspace`
 
 Inputs:
   Required:
   - path `board_id`
-  - body `actor_id` (string)
-  Optional:
   - body `reason` (string)
+  Optional:
+  - body `actor_id` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json boards tombstone ... ; oar boards tombstone ... --json
+  Examples: oar --json boards trash ... ; oar boards trash ... --json
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `boards restore`
 
-Restore a tombstoned board
+Restore board from trash
 
 ```text
 Generated Help: boards restore
@@ -2774,21 +2747,17 @@ Generated Help: boards restore
 - HTTP: `POST /boards/{board_id}/restore`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Reverse a tombstone on a board, making it active and visible in default list queries again.
-- Output: Returns `{ board }` with tombstone metadata cleared.
-- Error codes: `invalid_json`, `invalid_request`, `not_found`, `not_tombstoned`
-- Concepts: `boards`, `lifecycle`
-- Agent notes: Returns 409 if the board is not currently tombstoned.
-- Adjacent commands: `boards archive`, `boards cards archive`, `boards cards create`, `boards cards get`, `boards cards list`, `boards cards move`, `boards cards update`, `boards create`, `boards get`, `boards list`, `boards purge`, `boards tombstone`, `boards unarchive`, `boards update`, `boards workspace`
-- Examples:
-  - Restore board: `oar boards restore --board-id board_product_launch --json`
+- Why: Clear trash lifecycle fields on a board after an explicit restore action.
+- Output: Returns `{ board }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `boards`, `write`
+- Adjacent commands: `boards archive`, `boards cards create`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards trash`, `boards unarchive`, `boards workspace`
 
 Inputs:
   Required:
   - path `board_id`
-  - body `actor_id` (string)
   Optional:
-  - body `reason` (string)
+  - body `actor_id` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2798,7 +2767,7 @@ Global flags:
 
 ## `boards purge`
 
-Permanently delete a tombstoned board (human-only)
+Permanently delete trashed board
 
 ```text
 Generated Help: boards purge
@@ -2808,21 +2777,17 @@ Generated Help: boards purge
 - HTTP: `POST /boards/{board_id}/purge`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Permanently remove a tombstoned board and reclaim storage. Human-only to prevent accidental data loss by automated agents.
-- Output: Returns `{ purged: true, board_id }` on success.
-- Error codes: `invalid_json`, `not_found`, `not_tombstoned`, `human_only`
-- Concepts: `boards`, `lifecycle`
-- Agent notes: 403 if the caller is not a human principal. 409 if the board is not tombstoned.
-- Adjacent commands: `boards archive`, `boards cards archive`, `boards cards create`, `boards cards get`, `boards cards list`, `boards cards move`, `boards cards update`, `boards create`, `boards get`, `boards list`, `boards restore`, `boards tombstone`, `boards unarchive`, `boards update`, `boards workspace`
-- Examples:
-  - Purge board: `oar boards purge --board-id board_product_launch --json`
+- Why: Permanently delete a trashed board (human-gated).
+- Output: Returns `{ purged, board_id }`.
+- Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `boards`, `write`
+- Adjacent commands: `boards archive`, `boards cards create`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
 
 Inputs:
   Required:
   - path `board_id`
   Optional:
   - body `actor_id` (string)
-  - body `reason` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2838,12 +2803,9 @@ Nested generated help topic.
 Generated Help: boards cards
 
 Commands:
-  boards cards archive     Archive a board card artifact
-  boards cards create      Create a versioned board card artifact
-  boards cards get         Get board card by board-scoped identifier
-  boards cards list        List ordered board cards
-  boards cards move        Move board card across columns or ranks
-  boards cards update      Update a versioned board card artifact
+  boards cards create      Create card on board
+  boards cards get         Get board-scoped card
+  boards cards list        List board cards
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2855,7 +2817,7 @@ Tip: `oar help <command path>` for full command-level generated details.
 
 ## `boards cards create`
 
-Create a versioned board card artifact
+Create card on board
 
 ```text
 Generated Help: boards cards create
@@ -2865,37 +2827,38 @@ Generated Help: boards cards create
 - HTTP: `POST /boards/{board_id}/cards`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Create a first-class board card artifact, optionally linked to a parent thread, with canonical placement and server-owned rank.
-- Output: Returns `{ board, card }` after card creation and board concurrency-token advancement.
-- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`, `not_found`
-- Concepts: `boards`, `planning`, `ordering`, `concurrency`
-- Agent notes: Replay-safe when `request_key` is reused with the same body. Cards may be standalone tasks or wrap an existing thread via `parent_thread`.
-- Adjacent commands: `boards archive`, `boards cards archive`, `boards cards get`, `boards cards list`, `boards cards move`, `boards cards update`, `boards create`, `boards get`, `boards list`, `boards purge`, `boards restore`, `boards tombstone`, `boards unarchive`, `boards update`, `boards workspace`
-- Examples:
-  - Create standalone board card: `oar boards cards create --board-id board_product_launch --title "Buy groceries" --column backlog --json`
+- Why: Create a first-class card and attach it to a board.
+- Output: Returns `{ card }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `boards`, `cards`, `write`
+- Adjacent commands: `boards archive`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
 
 Inputs:
   Required:
   - path `board_id`
+  - body `card.assignee_refs` (list<any>)
+  - body `card.column_key` (string)
+  - body `card.provenance.sources` (list<string>)
+  - body `card.related_refs` (list<any>)
+  - body `card.resolution_refs` (list<any>)
+  - body `card.risk` (string)
+  - body `card.summary` (string)
+  - body `card.title` (string)
   Optional:
-  - body `actor_id` (string)
-  - body `after_card_id` (string)
-  - body `after_thread_id` (string)
-  - body `assignee` (any|string)
-  - body `before_card_id` (string)
-  - body `before_thread_id` (string)
-  - body `body` (string)
-  - body `card_id` (string)
-  - body `column_key` (string)
+  - body `board_id` (string)
+  - body `board_ref` (any)
+  - body `card.after_card_id` (string)
+  - body `card.before_card_id` (string)
+  - body `card.definition_of_done` (list<string>)
+  - body `card.document_ref` (string)
+  - body `card.due_at` (datetime)
+  - body `card.id` (string)
+  - body `card.provenance.by_field` (object)
+  - body `card.provenance.notes` (string)
+  - body `card.resolution` (string)
+  - body `card.topic_ref` (string)
   - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `oar boards get --board-id <board-id>`, `oar boards workspace --board-id <board-id>`, or the latest board mutation response.
-  - body `parent_thread` (any|string)
-  - body `pinned_document_id` (any|string)
-  - body `priority` (any|string)
-  - body `request_key` (string)
-  - body `status` (string)
-  - body `thread_id` (string)
-  - body `title` (string)
-  Enum values: column_key: backlog, blocked, done, in_progress, ready, review; status: cancelled, done, in_progress, todo
+  Enum values: card.column_key: backlog, blocked, done, in_progress, ready, review; card.resolution: canceled, done; card.risk: critical, high, low, medium
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2905,29 +2868,26 @@ Global flags:
 
 ## `boards cards get`
 
-Get board card by board-scoped identifier
+Get board-scoped card
 
 ```text
 Generated Help: boards cards get
 
 - Command ID: `boards.cards.get`
 - CLI path: `boards cards get`
-- HTTP: `GET /boards/{board_id}/cards/{id}`
+- HTTP: `GET /boards/{board_id}/cards/{card_id}`
 - Stability: `beta`
 - Input mode: `none`
-- Why: Read the current board card artifact plus version history.
-- Output: Returns `{ card }` with embedded version history.
-- Error codes: `invalid_request`, `not_found`
-- Concepts: `boards`, `planning`, `history`
-- Agent notes: The identifier accepts `card_id` and legacy thread-backed cards can still be resolved through their parent thread id.
-- Adjacent commands: `boards archive`, `boards cards archive`, `boards cards create`, `boards cards list`, `boards cards move`, `boards cards update`, `boards create`, `boards get`, `boards list`, `boards purge`, `boards restore`, `boards tombstone`, `boards unarchive`, `boards update`, `boards workspace`
-- Examples:
-  - Get board card: `oar boards cards get --board-id board_product_launch --card-id card_123 --json`
+- Why: Resolve a card through its board membership context.
+- Output: Returns `{ card }`.
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Concepts: `boards`, `cards`
+- Adjacent commands: `boards archive`, `boards cards create`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
 
 Inputs:
   Required:
   - path `board_id`
-  - path `id`
+  - path `card_id`
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2935,127 +2895,9 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
-## `boards cards update`
-
-Update a versioned board card artifact
-
-```text
-Generated Help: boards cards update
-
-- Command ID: `boards.cards.update`
-- CLI path: `boards cards update`
-- HTTP: `PATCH /cards/{card_id}`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Patch mutable board-card fields and record a new card version automatically.
-- Output: Returns `{ board, card }` after the card update and version increment are persisted.
-- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`, `not_found`
-- Concepts: `boards`, `planning`, `history`, `concurrency`
-- Agent notes: Set `if_board_updated_at` from the current board read before patching card metadata.
-- Adjacent commands: `boards archive`, `boards cards archive`, `boards cards create`, `boards cards get`, `boards cards list`, `boards cards move`, `boards create`, `boards get`, `boards list`, `boards purge`, `boards restore`, `boards tombstone`, `boards unarchive`, `boards update`, `boards workspace`
-- Examples:
-  - Mark card done: `oar boards cards update --card-id card_123 --status done --if-board-updated-at 2026-03-08T00:00:00Z --json`
-
-Inputs:
-  Required:
-  - path `card_id`
-  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `oar boards get --board-id <board-id>`, `oar boards workspace --board-id <board-id>`, or the latest board mutation response.
-  Optional:
-  - body `actor_id` (string)
-  - body `patch.assignee` (any|string)
-  - body `patch.body` (string)
-  - body `patch.parent_thread` (any|string)
-  - body `patch.pinned_document_id` (any|string)
-  - body `patch.priority` (any|string)
-  - body `patch.status` (string)
-  - body `patch.thread_id` (any|string)
-  - body `patch.title` (string)
-  Enum values: patch.status: cancelled, done, in_progress, todo
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: oar --json boards cards update ... ; oar boards cards update ... --json
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `boards cards move`
-
-Move board card across columns or ranks
-
-```text
-Generated Help: boards cards move
-
-- Command ID: `boards.cards.move`
-- CLI path: `boards cards move`
-- HTTP: `POST /boards/{board_id}/cards/{id}/move`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Request relative placement for a card while keeping rank tokens opaque and server-owned.
-- Output: Returns `{ board, card }` after the move is applied.
-- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`, `not_found`
-- Concepts: `boards`, `planning`, `ordering`, `concurrency`
-- Agent notes: Card-id and thread-id placement anchors cannot be combined. At most one of `before_card_id` and `after_card_id`; at most one of `before_thread_id` and `after_thread_id`; `before_card_id` and `before_thread_id` are mutually exclusive; `after_card_id` and `after_thread_id` are mutually exclusive; before-side and after-side anchors (across card and thread fields) are mutually exclusive. If no placement anchor is provided, the card moves to the end of the target column.
-- Adjacent commands: `boards archive`, `boards cards archive`, `boards cards create`, `boards cards get`, `boards cards list`, `boards cards update`, `boards create`, `boards get`, `boards list`, `boards purge`, `boards restore`, `boards tombstone`, `boards unarchive`, `boards update`, `boards workspace`
-- Examples:
-  - Move card into review: `oar boards cards move --board-id board_product_launch --card-id card_123 --column review --json`
-
-Inputs:
-  Required:
-  - path `board_id`
-  - path `id`
-  - body `column_key` (string)
-  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `oar boards get --board-id <board-id>`, `oar boards workspace --board-id <board-id>`, or the latest board mutation response.
-  Optional:
-  - body `actor_id` (string)
-  - body `after_card_id` (string)
-  - body `after_thread_id` (string)
-  - body `before_card_id` (string)
-  - body `before_thread_id` (string)
-  Enum values: column_key: backlog, blocked, done, in_progress, ready, review
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: oar --json boards cards move ... ; oar boards cards move ... --json
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `boards cards archive`
-
-Archive a board card artifact
-
-```text
-Generated Help: boards cards archive
-
-- Command ID: `boards.cards.archive`
-- CLI path: `boards cards archive`
-- HTTP: `POST /cards/{card_id}/archive`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Archive a board card artifact while preserving its version history and board provenance.
-- Output: Returns `{ board, card }` after the card is archived.
-- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`, `not_found`
-- Concepts: `boards`, `planning`, `history`, `concurrency`
-- Agent notes: Archive is the v2 replacement for legacy remove semantics. Historical thread-backed cards remain resolvable through old events.
-- Adjacent commands: `boards archive`, `boards cards create`, `boards cards get`, `boards cards list`, `boards cards move`, `boards cards update`, `boards create`, `boards get`, `boards list`, `boards purge`, `boards restore`, `boards tombstone`, `boards unarchive`, `boards update`, `boards workspace`
-- Examples:
-  - Archive card: `oar boards cards archive --card-id card_123 --json`
-
-Inputs:
-  Required:
-  - path `card_id`
-  Optional:
-  - body `actor_id` (string)
-  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `oar boards get --board-id <board-id>`, `oar boards workspace --board-id <board-id>`, or the latest board mutation response.
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: oar --json boards cards archive ... ; oar boards cards archive ... --json
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
 ## `docs list`
 
-List documents and their current head metadata
+List documents
 
 ```text
 Generated Help: docs list
@@ -3065,16 +2907,11 @@ Generated Help: docs list
 - HTTP: `GET /docs`
 - Stability: `beta`
 - Input mode: `none`
-- Why: Discover available documents without resolving each head individually, optionally scoped to a single thread.
-- Output: Returns `{ documents, next_cursor? }` ordered by `updated_at` descending. Pagination is optional and backward-compatible.
-- Error codes: `invalid_request`
-- Concepts: `docs`, `revisions`
-- Agent notes: Safe and idempotent. Use `thread_id` to focus on one thread's docs and `include_tombstoned=true` when auditing superseded documents. Optional pagination with `q` for search, `limit` for page size, and `cursor` for continuation.
-- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs history`, `docs purge`, `docs restore`, `docs revision get`, `docs tombstone`, `docs unarchive`, `docs update`
-- Examples:
-  - List documents: `oar docs list --json`
-  - Search documents by title: `oar docs list --q "constitution" --json`
-  - Paginated document list: `oar docs list --limit 50 --json`
+- Why: Scan canonical document lineages.
+- Output: Returns `{ documents }`.
+- Error codes: `auth_required`, `invalid_token`
+- Concepts: `docs`
+- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs purge`, `docs restore`, `docs revisions create`, `docs revisions get`, `docs revisions list`, `docs trash`, `docs unarchive`
 
 
 Global flags:
@@ -3085,7 +2922,7 @@ Global flags:
 
 ## `docs create`
 
-Create document with initial immutable revision
+Create document
 
 ```text
 Generated Help: docs create
@@ -3095,25 +2932,23 @@ Generated Help: docs create
 - HTTP: `POST /docs`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Bootstrap a first-class document identity and initial revision without manual head-pointer management.
-- Output: Returns `{ document, revision }` where `revision` is the new head.
-- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`
-- Concepts: `docs`, `revisions`
-- Agent notes: Replay-safe when `request_key` is reused with the same body; core can issue the canonical document id when one is omitted.
-- Adjacent commands: `docs archive`, `docs get`, `docs history`, `docs list`, `docs purge`, `docs restore`, `docs revision get`, `docs tombstone`, `docs unarchive`, `docs update`
-- Examples:
-  - Create document: `oar docs create --from-file doc-create.json --json`
+- Why: Create a canonical document lineage anchored to a typed subject ref.
+- Output: Returns `{ document, revision }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Concepts: `docs`, `write`
+- Adjacent commands: `docs archive`, `docs get`, `docs list`, `docs purge`, `docs restore`, `docs revisions create`, `docs revisions get`, `docs revisions list`, `docs trash`, `docs unarchive`
 
 Inputs:
   Required:
-  - body `content` (object|string)
-  - body `content_type` (string)
-  - body `document` (object)
+  - body `document.body_markdown` (string)
+  - body `document.provenance.sources` (list<string>)
+  - body `document.refs` (list<any>)
+  - body `document.subject_ref` (string)
+  - body `document.title` (string)
   Optional:
-  - body `actor_id` (string)
-  - body `refs` (list<string>)
-  - body `request_key` (string)
-  Enum values: content_type: binary, structured, text
+  - body `document.provenance.by_field` (object)
+  - body `document.provenance.notes` (string)
+  - body `document.summary` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3123,7 +2958,7 @@ Global flags:
 
 ## `docs get`
 
-Get document and authoritative head revision
+Get document
 
 ```text
 Generated Help: docs get
@@ -3133,14 +2968,11 @@ Generated Help: docs get
 - HTTP: `GET /docs/{document_id}`
 - Stability: `beta`
 - Input mode: `none`
-- Why: Resolve the current authoritative document head without client-side lineage traversal.
-- Output: Returns `{ document, revision }` where `revision` is the current head.
-- Error codes: `invalid_request`, `not_found`
-- Concepts: `docs`, `revisions`
-- Agent notes: Safe and idempotent.
-- Adjacent commands: `docs archive`, `docs create`, `docs history`, `docs list`, `docs purge`, `docs restore`, `docs revision get`, `docs tombstone`, `docs unarchive`, `docs update`
-- Examples:
-  - Get document head: `oar docs get --document-id product-constitution --json`
+- Why: Resolve a document lineage and its current head revision.
+- Output: Returns `{ document, revision }`.
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Concepts: `docs`
+- Adjacent commands: `docs archive`, `docs create`, `docs list`, `docs purge`, `docs restore`, `docs revisions create`, `docs revisions get`, `docs revisions list`, `docs trash`, `docs unarchive`
 
 Inputs:
   Required:
@@ -3152,131 +2984,40 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
-## `docs update`
+## `docs trash`
 
-Create a new immutable revision for an existing document
+Move document to trash
 
 ```text
-Generated Help: docs update
+Generated Help: docs trash
 
-- Command ID: `docs.update`
-- CLI path: `docs update`
-- HTTP: `PATCH /docs/{document_id}`
+- Command ID: `docs.trash`
+- CLI path: `docs trash`
+- HTTP: `POST /docs/{document_id}/trash`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Append a revision and atomically advance document head with optimistic concurrency.
-- Output: Returns `{ document, revision }` for the newly-created head revision.
-- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`, `conflict`, `not_found`
-- Concepts: `docs`, `revisions`, `concurrency`
-- Agent notes: Set `if_base_revision` from `docs.get` to prevent lost updates.
-- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs history`, `docs list`, `docs purge`, `docs restore`, `docs revision get`, `docs tombstone`, `docs unarchive`
-- Examples:
-  - Update document: `oar docs update --document-id product-constitution --from-file doc-update.json --json`
+- Why: Move a document lineage to trash with an explicit operator reason.
+- Output: Returns `{ document, revision }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `docs`, `write`
+- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs list`, `docs purge`, `docs restore`, `docs revisions create`, `docs revisions get`, `docs revisions list`, `docs unarchive`
 
 Inputs:
   Required:
   - path `document_id`
-  - body `content` (object|string)
-  - body `content_type` (string)
-  - body `if_base_revision` (string): Optimistic concurrency token. Copy the current head revision id from `oar docs get --document-id <document-id>` before updating.
-  Optional:
-  - body `actor_id` (string)
-  - body `document` (object)
-  - body `refs` (list<string>)
-  Enum values: content_type: binary, structured, text
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: oar --json docs update ... ; oar docs update ... --json
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `docs history`
-
-List ordered immutable revisions for a document
-
-```text
-Generated Help: docs history
-
-- Command ID: `docs.history`
-- CLI path: `docs history`
-- HTTP: `GET /docs/{document_id}/history`
-- Stability: `beta`
-- Input mode: `none`
-- Why: Traverse full document lineage in canonical revision-number order.
-- Output: Returns `{ document_id, revisions }` ordered by ascending `revision_number`.
-- Error codes: `invalid_request`, `not_found`
-- Concepts: `docs`, `revisions`, `lineage`
-- Agent notes: Safe and idempotent.
-- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs list`, `docs purge`, `docs restore`, `docs revision get`, `docs tombstone`, `docs unarchive`, `docs update`
-- Examples:
-  - List document history: `oar docs history --document-id product-constitution --json`
-
-Inputs:
-  Required:
-  - path `document_id`
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: oar --json docs history ... ; oar docs history ... --json
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `docs revision`
-
-Nested generated help topic.
-
-```text
-Generated Help: docs revision
-
-Commands:
-  docs revision get        Get one immutable document revision
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: oar --json docs revision ... ; oar docs revision ... --json
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-
-Tip: `oar help <command path>` for full command-level generated details.
-```
-
-## `docs tombstone`
-
-Tombstone a document (soft-delete)
-
-```text
-Generated Help: docs tombstone
-
-- Command ID: `docs.tombstone`
-- CLI path: `docs tombstone`
-- HTTP: `POST /docs/{document_id}/tombstone`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Mark a document as inactive while preserving revision history and provenance.
-- Output: Returns `{ document, revision }` with updated tombstone metadata.
-- Error codes: `invalid_json`, `invalid_request`, `not_found`
-- Concepts: `docs`, `lifecycle`
-- Agent notes: Idempotent; repeated tombstone calls on the same document are safe.
-- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs history`, `docs list`, `docs purge`, `docs restore`, `docs revision get`, `docs unarchive`, `docs update`
-- Examples:
-  - Tombstone document: `oar docs tombstone --document-id product-constitution --reason "replaced by v2" --json`
-
-Inputs:
-  Required:
-  - path `document_id`
-  - body `actor_id` (string)
-  Optional:
   - body `reason` (string)
+  Optional:
+  - body `actor_id` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json docs tombstone ... ; oar docs tombstone ... --json
+  Examples: oar --json docs trash ... ; oar docs trash ... --json
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs archive`
 
-Archive a document
+Archive document
 
 ```text
 Generated Help: docs archive
@@ -3286,21 +3027,17 @@ Generated Help: docs archive
 - HTTP: `POST /docs/{document_id}/archive`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Hide a document from default list views while preserving it for search and direct access.
-- Output: Returns `{ document, revision }` with archive metadata set.
-- Error codes: `invalid_json`, `invalid_request`, `not_found`
-- Concepts: `docs`, `lifecycle`
-- Agent notes: Idempotent; repeated archive calls on the same document are safe. Returns 409 if document is tombstoned.
-- Adjacent commands: `docs create`, `docs get`, `docs history`, `docs list`, `docs purge`, `docs restore`, `docs revision get`, `docs tombstone`, `docs unarchive`, `docs update`
-- Examples:
-  - Archive document: `oar docs archive --document-id product-constitution --json`
+- Why: Soft-archive a document lineage (orthogonal to head revision content).
+- Output: Returns `{ document, revision }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `docs`, `write`
+- Adjacent commands: `docs create`, `docs get`, `docs list`, `docs purge`, `docs restore`, `docs revisions create`, `docs revisions get`, `docs revisions list`, `docs trash`, `docs unarchive`
 
 Inputs:
   Required:
   - path `document_id`
-  - body `actor_id` (string)
   Optional:
-  - body `reason` (string)
+  - body `actor_id` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3310,7 +3047,7 @@ Global flags:
 
 ## `docs unarchive`
 
-Unarchive a document
+Unarchive document
 
 ```text
 Generated Help: docs unarchive
@@ -3320,21 +3057,17 @@ Generated Help: docs unarchive
 - HTTP: `POST /docs/{document_id}/unarchive`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Return an archived document to the default list views.
-- Output: Returns `{ document, revision }` with archive metadata cleared.
-- Error codes: `invalid_json`, `invalid_request`, `not_found`, `not_archived`
-- Concepts: `docs`, `lifecycle`
-- Agent notes: Returns 409 if the document is not currently archived.
-- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs history`, `docs list`, `docs purge`, `docs restore`, `docs revision get`, `docs tombstone`, `docs update`
-- Examples:
-  - Unarchive document: `oar docs unarchive --document-id product-constitution --json`
+- Why: Clear archived_at on a document so it returns to default visibility.
+- Output: Returns `{ document, revision }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `docs`, `write`
+- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs list`, `docs purge`, `docs restore`, `docs revisions create`, `docs revisions get`, `docs revisions list`, `docs trash`
 
 Inputs:
   Required:
   - path `document_id`
-  - body `actor_id` (string)
   Optional:
-  - body `reason` (string)
+  - body `actor_id` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3344,7 +3077,7 @@ Global flags:
 
 ## `docs restore`
 
-Restore a tombstoned document
+Restore document from trash
 
 ```text
 Generated Help: docs restore
@@ -3354,20 +3087,17 @@ Generated Help: docs restore
 - HTTP: `POST /docs/{document_id}/restore`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Reverse a tombstone on a document, making it active and visible in default list queries again.
-- Output: Returns `{ document, revision }` with tombstone metadata cleared.
-- Error codes: `invalid_json`, `invalid_request`, `not_found`, `not_tombstoned`
-- Concepts: `docs`, `lifecycle`
-- Agent notes: Returns 409 if the document is not currently tombstoned.
-- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs history`, `docs list`, `docs purge`, `docs revision get`, `docs tombstone`, `docs unarchive`, `docs update`
-- Examples:
-  - Restore document: `oar docs restore --document-id product-constitution --json`
+- Why: Clear trash state on a document after an explicit restore action.
+- Output: Returns `{ document, revision }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `docs`, `write`
+- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs list`, `docs purge`, `docs revisions create`, `docs revisions get`, `docs revisions list`, `docs trash`, `docs unarchive`
 
 Inputs:
   Required:
   - path `document_id`
-  - body `actor_id` (string)
   Optional:
+  - body `actor_id` (string)
   - body `reason` (string)
 
 Global flags:
@@ -3378,7 +3108,7 @@ Global flags:
 
 ## `docs purge`
 
-Permanently delete a tombstoned document (human-only)
+Permanently delete trashed document
 
 ```text
 Generated Help: docs purge
@@ -3388,56 +3118,21 @@ Generated Help: docs purge
 - HTTP: `POST /docs/{document_id}/purge`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Permanently remove a tombstoned document and its revisions. Human-only.
-- Output: Returns `{ purged: true, document_id }` on success.
-- Error codes: `not_found`, `not_tombstoned`, `human_only`
-- Concepts: `docs`, `lifecycle`
-- Agent notes: 403 if the caller is not a human principal. 409 if the document is not tombstoned.
-- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs history`, `docs list`, `docs restore`, `docs revision get`, `docs tombstone`, `docs unarchive`, `docs update`
-- Examples:
-  - Purge document: `oar docs purge --document-id product-constitution --json`
+- Why: Permanently delete a trashed document (human-gated).
+- Output: Returns `{ purged, document_id }`.
+- Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `docs`, `write`
+- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs list`, `docs restore`, `docs revisions create`, `docs revisions get`, `docs revisions list`, `docs trash`, `docs unarchive`
 
 Inputs:
   Required:
   - path `document_id`
   Optional:
-  - body `reason` (string)
+  - body `actor_id` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: oar --json docs purge ... ; oar docs purge ... --json
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `docs revision get`
-
-Get one immutable document revision
-
-```text
-Generated Help: docs revision get
-
-- Command ID: `docs.revision.get`
-- CLI path: `docs revision get`
-- HTTP: `GET /docs/{document_id}/revisions/{revision_id}`
-- Stability: `beta`
-- Input mode: `none`
-- Why: Read a specific historical revision payload without mutating document head.
-- Output: Returns `{ revision }` including metadata and revision content.
-- Error codes: `invalid_request`, `not_found`
-- Concepts: `docs`, `revisions`
-- Agent notes: Safe and idempotent.
-- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs history`, `docs list`, `docs purge`, `docs restore`, `docs tombstone`, `docs unarchive`, `docs update`
-- Examples:
-  - Get revision: `oar docs revision get --document-id product-constitution --revision-id 019f... --json`
-
-Inputs:
-  Required:
-  - path `document_id`
-  - path `revision_id`
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: oar --json docs revision get ... ; oar docs revision get ... --json
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3451,16 +3146,13 @@ Generated Help: events get
 - Command ID: `events.get`
 - CLI path: `events get`
 - HTTP: `GET /events/{event_id}`
-- Stability: `stable`
+- Stability: `beta`
 - Input mode: `none`
-- Why: Resolve event references and evidence links.
+- Why: Fetch one append-only event record by stable id.
 - Output: Returns `{ event }`.
-- Error codes: `not_found`
+- Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `events`
-- Agent notes: Safe and idempotent.
-- Adjacent commands: `events archive`, `events create`, `events restore`, `events stream`, `events tombstone`, `events unarchive`
-- Examples:
-  - Get event: `oar events get --event-id event_123 --json`
+- Adjacent commands: `events archive`, `events create`, `events list`, `events restore`, `events stream`, `events trash`, `events unarchive`
 
 Inputs:
   Required:
@@ -3474,7 +3166,7 @@ Global flags:
 
 ## `events create`
 
-Append event
+Create event
 
 ```text
 Generated Help: events create
@@ -3482,56 +3174,49 @@ Generated Help: events create
 - Command ID: `events.create`
 - CLI path: `events create`
 - HTTP: `POST /events`
-- Stability: `stable`
+- Stability: `beta`
 - Input mode: `json-body`
-- Why: Record append-only narrative or protocol state changes that complement snapshots.
-- Output: Returns `{ event }` with generated id and timestamp.
-- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`
-- Concepts: `events`, `append-only`
-- Agent notes: Replay-safe when `request_key` is reused with the same body.
-- Adjacent commands: `events archive`, `events get`, `events restore`, `events stream`, `events tombstone`, `events unarchive`
-- Examples:
-  - Append event: `oar events create --from-file event.json --json`
+- Why: Append an event that links first-class resources and evidence through typed refs.
+- Output: Returns `{ event }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Concepts: `events`, `write`
+- Adjacent commands: `events archive`, `events get`, `events list`, `events restore`, `events stream`, `events trash`, `events unarchive`
 
 Inputs:
   Required:
+  - body `event.actor_id` (string)
   - body `event.provenance.sources` (list<string>)
-  - body `event.refs` (list<typed_ref>)
+  - body `event.refs` (list<any>)
   - body `event.summary` (string)
   - body `event.type` (string)
   Optional:
-  - body `actor_id` (string)
-  - body `event.actor_id` (string)
   - body `event.payload` (object)
-  - body `event.provenance.by_field` (map<string, list<string>>)
+  - body `event.provenance.by_field` (object)
   - body `event.provenance.notes` (string)
-  - body `event.thread_id` (string)
-  - body `request_key` (string)
-  Enum values: event.type (open): agent_notification_dismissed, agent_notification_read, board_card_added, board_card_moved, board_card_removed, board_card_updated, board_created, board_updated, commitment_created, commitment_status_changed, decision_made, decision_needed, document_created, document_tombstoned, document_updated, exception_raised, inbox_item_acknowledged, intervention_needed, message_posted, receipt_added, review_completed, snapshot_updated, work_order_claimed, work_order_created
+  - body `event.thread_ref` (string)
+  Enum values: event.type (open): agent_notification_dismissed, agent_notification_read, board_card_added, board_card_archived, board_card_moved, board_card_trashed, board_created, board_updated, card_archived, card_created, card_moved, card_resolved, card_trashed, card_updated, decision_made, decision_needed, document_created, document_revised, document_revision_created, document_trashed, exception_raised, inbox_item_acknowledged, intervention_needed, message_posted, receipt_added, review_completed, topic_archived, topic_created, topic_restored, topic_status_changed, topic_trashed, topic_updated
 
 Common authoring types:
   Communication: direct communication or important non-structured information
   - `message_posted`
-  Decisions: request or record decisions on the thread
+  Decisions: request or record decisions tied to a topic
   - `decision_needed`
   - `decision_made`
   Interventions: single clear path exists, but a human must act to complete it
   - `intervention_needed`
-  State and commitments: track state changes and commitments
-  - `snapshot_updated`
-  - `commitment_created`
-  - `commitment_status_changed`
+  Topics and documents: durable subject and document lifecycle signals
+  - `topic_created`, `topic_updated`, `topic_status_changed`
+  - `document_created`, `document_revised`, `document_trashed`
+  Boards and cards: workflow placement and movement
+  - `board_created`, `board_updated`
+  - `card_created`, `card_updated`, `card_moved`, `card_resolved`
   Exceptions: surface problems, risks, or escalations
   - `exception_raised`
 
 Usually emitted by higher-level commands:
-  - `work_order_created`: prefer `oar work-orders create`
   - `receipt_added`: prefer `oar receipts create`
   - `review_completed`: prefer `oar reviews create`
   - `inbox_item_acknowledged`: prefer `oar inbox ack`
-
-Specialized raw-event type:
-  - `work_order_claimed`: claim marker for work-order flows
 
 Local CLI notes:
   - Common open `event.type` values include `actor_statement`; the enum list above is illustrative, not exhaustive.
@@ -3545,7 +3230,7 @@ Global flags:
 
 ## `events stream`
 
-Stream events via Server-Sent Events (SSE)
+Stream events (SSE)
 
 ```text
 Generated Help: events stream
@@ -3555,15 +3240,11 @@ Generated Help: events stream
 - HTTP: `GET /events/stream`
 - Stability: `beta`
 - Input mode: `none`
-- Why: Follow live event updates with resumable SSE semantics.
-- Output: SSE stream where each event carries `{ event }` and uses event id for resume.
-- Error codes: `internal_error`, `cli_outdated`
-- Concepts: `events`, `streaming`
-- Agent notes: Supports `Last-Event-ID` header or `last_event_id` query for resumable reads.
-- Adjacent commands: `events archive`, `events create`, `events get`, `events restore`, `events tombstone`, `events unarchive`
-- Examples:
-  - Stream all events: `oar events tail --json`
-  - Resume by id: `oar events tail --last-event-id <event_id> --json`
+- Why: Long-lived SSE feed of workspace events with optional thread/type filters and Last-Event-ID resume.
+- Output: Each SSE message is `event: …` with JSON data `{ "event": <event> }` (see core/docs/http-api.md).
+- Error codes: `auth_required`, `invalid_token`
+- Concepts: `events`
+- Adjacent commands: `events archive`, `events create`, `events get`, `events list`, `events restore`, `events trash`, `events unarchive`
 
 
 Global flags:
@@ -3574,7 +3255,7 @@ Global flags:
 
 ## `events tail`
 
-Stream events via Server-Sent Events (SSE)
+Stream events (SSE)
 
 ```text
 Generated Help: events tail
@@ -3584,15 +3265,11 @@ Generated Help: events tail
 - HTTP: `GET /events/stream`
 - Stability: `beta`
 - Input mode: `none`
-- Why: Follow live event updates with resumable SSE semantics.
-- Output: SSE stream where each event carries `{ event }` and uses event id for resume.
-- Error codes: `internal_error`, `cli_outdated`
-- Concepts: `events`, `streaming`
-- Agent notes: Supports `Last-Event-ID` header or `last_event_id` query for resumable reads.
-- Adjacent commands: `events archive`, `events create`, `events get`, `events restore`, `events tombstone`, `events unarchive`
-- Examples:
-  - Stream all events: `oar events tail --json`
-  - Resume by id: `oar events tail --last-event-id <event_id> --json`
+- Why: Long-lived SSE feed of workspace events with optional thread/type filters and Last-Event-ID resume.
+- Output: Each SSE message is `event: …` with JSON data `{ "event": <event> }` (see core/docs/http-api.md).
+- Error codes: `auth_required`, `invalid_token`
+- Concepts: `events`
+- Adjacent commands: `events archive`, `events create`, `events get`, `events list`, `events restore`, `events trash`, `events unarchive`
 
 
 Global flags:
@@ -3603,7 +3280,7 @@ Global flags:
 
 ## `events archive`
 
-Archive an event
+Archive event
 
 ```text
 Generated Help: events archive
@@ -3613,21 +3290,17 @@ Generated Help: events archive
 - HTTP: `POST /events/{event_id}/archive`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Hide an event from default timeline and message views while preserving it.
-- Output: Returns `{ event }` with archive metadata set.
-- Error codes: `invalid_json`, `invalid_request`, `not_found`
-- Concepts: `events`, `lifecycle`
-- Agent notes: Idempotent. For message_posted events, cascades to all reply descendants.
-- Adjacent commands: `events create`, `events get`, `events restore`, `events stream`, `events tombstone`, `events unarchive`
-- Examples:
-  - Archive event: `oar events archive --event-id evt_123 --json`
+- Why: Set archived_at on an append-only event record for filtered views.
+- Output: Returns `{ event }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `events`, `write`
+- Adjacent commands: `events create`, `events get`, `events list`, `events restore`, `events stream`, `events trash`, `events unarchive`
 
 Inputs:
   Required:
   - path `event_id`
-  - body `actor_id` (string)
   Optional:
-  - body `reason` (string)
+  - body `actor_id` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3637,7 +3310,7 @@ Global flags:
 
 ## `events unarchive`
 
-Unarchive an event
+Unarchive event
 
 ```text
 Generated Help: events unarchive
@@ -3647,21 +3320,17 @@ Generated Help: events unarchive
 - HTTP: `POST /events/{event_id}/unarchive`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Restore an archived event back to default timeline and message views.
-- Output: Returns `{ event }` with archive metadata cleared.
-- Error codes: `invalid_json`, `invalid_request`, `not_found`
-- Concepts: `events`, `lifecycle`
-- Agent notes: Idempotent. For message_posted events, cascades to all reply descendants.
-- Adjacent commands: `events archive`, `events create`, `events get`, `events restore`, `events stream`, `events tombstone`
-- Examples:
-  - Unarchive event: `oar events unarchive --event-id evt_123 --json`
+- Why: Clear archived_at on an event.
+- Output: Returns `{ event }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `events`, `write`
+- Adjacent commands: `events archive`, `events create`, `events get`, `events list`, `events restore`, `events stream`, `events trash`
 
 Inputs:
   Required:
   - path `event_id`
-  - body `actor_id` (string)
   Optional:
-  - body `reason` (string)
+  - body `actor_id` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3669,43 +3338,40 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
-## `events tombstone`
+## `events trash`
 
-Tombstone an event (soft-delete)
+Move event to trash
 
 ```text
-Generated Help: events tombstone
+Generated Help: events trash
 
-- Command ID: `events.tombstone`
-- CLI path: `events tombstone`
-- HTTP: `POST /events/{event_id}/tombstone`
+- Command ID: `events.trash`
+- CLI path: `events trash`
+- HTTP: `POST /events/{event_id}/trash`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Mark an event as deleted while preserving audit trail; tombstoned events are excluded from timeline and messages by default.
-- Output: Returns `{ event }` with tombstone metadata set.
-- Error codes: `invalid_json`, `invalid_request`, `not_found`
-- Concepts: `events`, `lifecycle`
-- Agent notes: Idempotent. For message_posted events, cascades to all reply descendants.
-- Adjacent commands: `events archive`, `events create`, `events get`, `events restore`, `events stream`, `events unarchive`
-- Examples:
-  - Tombstone event: `oar events tombstone --event-id evt_123 --reason "spam" --json`
+- Why: Move event to trash with an explicit operator reason.
+- Output: Returns `{ event }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Concepts: `events`, `write`
+- Adjacent commands: `events archive`, `events create`, `events get`, `events list`, `events restore`, `events stream`, `events unarchive`
 
 Inputs:
   Required:
   - path `event_id`
-  - body `actor_id` (string)
-  Optional:
   - body `reason` (string)
+  Optional:
+  - body `actor_id` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: oar --json events tombstone ... ; oar events tombstone ... --json
+  Examples: oar --json events trash ... ; oar events trash ... --json
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `events restore`
 
-Restore a tombstoned event
+Restore event from trash
 
 ```text
 Generated Help: events restore
@@ -3715,21 +3381,17 @@ Generated Help: events restore
 - HTTP: `POST /events/{event_id}/restore`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Undo a tombstone and return the event to active state.
-- Output: Returns `{ event }` with tombstone metadata cleared.
-- Error codes: `invalid_json`, `invalid_request`, `not_found`
-- Concepts: `events`, `lifecycle`
-- Agent notes: Idempotent. For message_posted events, cascades to all reply descendants.
-- Adjacent commands: `events archive`, `events create`, `events get`, `events stream`, `events tombstone`, `events unarchive`
-- Examples:
-  - Restore event: `oar events restore --event-id evt_123 --json`
+- Why: Clear trash state on an event after an explicit restore action.
+- Output: Returns `{ event }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `events`, `write`
+- Adjacent commands: `events archive`, `events create`, `events get`, `events list`, `events stream`, `events trash`, `events unarchive`
 
 Inputs:
   Required:
   - path `event_id`
-  - body `actor_id` (string)
   Optional:
-  - body `reason` (string)
+  - body `actor_id` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3739,7 +3401,7 @@ Global flags:
 
 ## `inbox list`
 
-List derived inbox items
+List inbox items
 
 ```text
 Generated Help: inbox list
@@ -3747,15 +3409,13 @@ Generated Help: inbox list
 - Command ID: `inbox.list`
 - CLI path: `inbox list`
 - HTTP: `GET /inbox`
-- Stability: `stable`
+- Stability: `beta`
 - Input mode: `none`
-- Why: Surface derived actionable risk and decision signals.
-- Output: Returns `{ items, generated_at }`.
-- Concepts: `inbox`, `derived-views`
-- Agent notes: Derived inbox view; do not build durable automation directly on projection payload shapes. Prefer canonical events and threads for durable substrate. Safe and idempotent.
-- Adjacent commands: `inbox ack`, `inbox get`, `inbox stream`
-- Examples:
-  - List inbox: `oar inbox list --json`
+- Why: Load the derived operator inbox generated from refs and canonical events.
+- Output: Returns `{ items }`.
+- Error codes: `auth_required`, `invalid_token`
+- Concepts: `inbox`
+- Adjacent commands: `inbox acknowledge`, `inbox get`, `inbox stream`
 
 
 View scoping:
@@ -3766,8 +3426,9 @@ View scoping:
 Inbox categories:
   - `decision_needed`: A human must choose among multiple viable paths.
   - `intervention_needed`: The next step is clear, but a human must act because the agent cannot execute it.
-  - `exception`: Investigate an exception, risk, or broken expectation on the thread.
-  - `commitment_risk`: A commitment is at risk or overdue and needs follow-up.
+  - `work_item_risk`: A card or work item is at risk or overdue and needs follow-up.
+  - `stale_topic`: A topic appears stale; review cadence or recent activity.
+  - `document_attention`: A document needs human review or follow-up.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3777,29 +3438,25 @@ Global flags:
 
 ## `inbox get`
 
-Get derived inbox item detail
+Get one inbox item
 
 ```text
 Generated Help: inbox get
 
 - Command ID: `inbox.get`
 - CLI path: `inbox get`
-- HTTP: `GET /inbox/{inbox_item_id}`
-- Stability: `stable`
+- HTTP: `GET /inbox/{inbox_id}`
+- Stability: `beta`
 - Input mode: `none`
-- Why: Inspect one inbox item in detail before acting on it.
-- Output: Returns `{ item, generated_at }` for the requested inbox item.
-- Error codes: `not_found`
-- Concepts: `inbox`, `derived-views`
-- Agent notes: Derived inbox view; do not build durable automation directly on projection payload shapes. Prefer canonical events and threads for durable substrate. CLI supports canonical ids, aliases, and unique prefixes.
-- Adjacent commands: `inbox ack`, `inbox list`, `inbox stream`
-- Examples:
-  - Get inbox item by canonical id: `oar inbox get --id inbox:decision_needed:thread_123:none:event_123 --json`
-  - Get inbox item by alias: `oar inbox get --id ibx_abcd1234ef56 --json`
+- Why: Side-effect free read of one materialized inbox row.
+- Output: Returns `{ item, generated_at, projection_freshness }`.
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Concepts: `inbox`
+- Adjacent commands: `inbox acknowledge`, `inbox list`, `inbox stream`
 
 Inputs:
   Required:
-  - path `inbox_item_id`: Canonical inbox id, alias, or unique prefix from `oar inbox list`.
+  - path `inbox_id`
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3807,34 +3464,83 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
+## `inbox acknowledge`
+
+Acknowledge inbox item
+
+```text
+Generated Help: inbox acknowledge
+
+- Command ID: `inbox.acknowledge`
+- CLI path: `inbox acknowledge`
+- HTTP: `POST /inbox/{inbox_id}/acknowledge`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Suppress or clear a derived inbox item via a durable acknowledgment event.
+- Output: Returns `{ event }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Concepts: `inbox`, `write`
+- Adjacent commands: `inbox get`, `inbox list`, `inbox stream`
+
+Inputs:
+  Required:
+  - path `inbox_id`
+  - body `subject_ref` (string)
+  Optional:
+  - body `actor_id` (string)
+  - body `inbox_item_id` (string)
+  - body `note` (string)
+  - body `refs` (list<any>)
+
+CLI flags (`inbox acknowledge` / `inbox ack`):
+  --inbox-item-id <id>   Inbox item id or list alias (see `inbox list`).
+  --subject-ref <ref>    Typed subject ref; omitted ids may be resolved from `inbox list`.
+  --actor-id <id>        Actor id (`me` uses the active profile's actor when configured).
+  --from-file <path>     JSON body file (API request shape).
+  Positional: inbox item id when not given via `--inbox-item-id`.
+  Otherwise: JSON object on stdin (`inbox_item_id`, `subject_ref`, optional fields).
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: oar --json inbox acknowledge ... ; oar inbox acknowledge ... --json
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
 ## `inbox ack`
 
-Acknowledge an inbox item
+Acknowledge inbox item
 
 ```text
 Generated Help: inbox ack
 
-- Command ID: `inbox.ack`
-- CLI path: `inbox ack`
-- HTTP: `POST /inbox/ack`
-- Stability: `stable`
+- Command ID: `inbox.acknowledge`
+- CLI path: `inbox acknowledge`
+- HTTP: `POST /inbox/{inbox_id}/acknowledge`
+- Stability: `beta`
 - Input mode: `json-body`
-- Why: Suppress already-acted-on derived inbox signals.
-- Output: Returns `{ event }` representing acknowledgment.
-- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`
-- Concepts: `inbox`, `events`
-- Agent notes: Derived inbox view; do not build durable automation directly on projection payload shapes. Prefer canonical events and threads for durable substrate. Idempotent at semantic level; repeated acks should not duplicate active inbox items.
+- Why: Suppress or clear a derived inbox item via a durable acknowledgment event.
+- Output: Returns `{ event }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Concepts: `inbox`, `write`
 - Adjacent commands: `inbox get`, `inbox list`, `inbox stream`
-- Examples:
-  - Ack inbox item: `oar inbox ack --thread-id thread_123 --inbox-item-id inbox:item-1 --json`
-  - Ack inbox item by id: `oar inbox ack inbox:decision_needed:thread_123:none:event_1 --json`
 
 Inputs:
   Required:
-  - body `inbox_item_id` (string)
-  - body `thread_id` (string)
+  - path `inbox_id`
+  - body `subject_ref` (string)
   Optional:
   - body `actor_id` (string)
+  - body `inbox_item_id` (string)
+  - body `note` (string)
+  - body `refs` (list<any>)
+
+CLI flags (`inbox acknowledge` / `inbox ack`):
+  --inbox-item-id <id>   Inbox item id or list alias (see `inbox list`).
+  --subject-ref <ref>    Typed subject ref; omitted ids may be resolved from `inbox list`.
+  --actor-id <id>        Actor id (`me` uses the active profile's actor when configured).
+  --from-file <path>     JSON body file (API request shape).
+  Positional: inbox item id when not given via `--inbox-item-id`.
+  Otherwise: JSON object on stdin (`inbox_item_id`, `subject_ref`, optional fields).
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3844,7 +3550,7 @@ Global flags:
 
 ## `inbox stream`
 
-Stream derived inbox items via SSE
+Stream inbox items (SSE)
 
 ```text
 Generated Help: inbox stream
@@ -3854,15 +3560,11 @@ Generated Help: inbox stream
 - HTTP: `GET /inbox/stream`
 - Stability: `beta`
 - Input mode: `none`
-- Why: Follow live derived inbox updates without repeated polling.
-- Output: SSE stream where each event carries `{ item }` derived inbox metadata.
-- Error codes: `internal_error`, `cli_outdated`
-- Concepts: `inbox`, `derived-views`, `streaming`
-- Agent notes: Derived inbox view; do not build durable automation directly on projection payload shapes. Prefer canonical events and threads for durable substrate. Supports `Last-Event-ID` header or `last_event_id` query for resumable reads.
-- Adjacent commands: `inbox ack`, `inbox get`, `inbox list`
-- Examples:
-  - Stream inbox updates: `oar inbox tail --json`
-  - Resume inbox stream: `oar inbox tail --last-event-id <id> --json`
+- Why: Server-sent events feed of inbox projection updates.
+- Output: SSE `inbox_item` events with JSON payloads.
+- Error codes: `auth_required`, `invalid_token`
+- Concepts: `inbox`
+- Adjacent commands: `inbox acknowledge`, `inbox get`, `inbox list`
 
 
 Global flags:
@@ -3873,7 +3575,7 @@ Global flags:
 
 ## `inbox tail`
 
-Stream derived inbox items via SSE
+Stream inbox items (SSE)
 
 ```text
 Generated Help: inbox tail
@@ -3883,15 +3585,11 @@ Generated Help: inbox tail
 - HTTP: `GET /inbox/stream`
 - Stability: `beta`
 - Input mode: `none`
-- Why: Follow live derived inbox updates without repeated polling.
-- Output: SSE stream where each event carries `{ item }` derived inbox metadata.
-- Error codes: `internal_error`, `cli_outdated`
-- Concepts: `inbox`, `derived-views`, `streaming`
-- Agent notes: Derived inbox view; do not build durable automation directly on projection payload shapes. Prefer canonical events and threads for durable substrate. Supports `Last-Event-ID` header or `last_event_id` query for resumable reads.
-- Adjacent commands: `inbox ack`, `inbox get`, `inbox list`
-- Examples:
-  - Stream inbox updates: `oar inbox tail --json`
-  - Resume inbox stream: `oar inbox tail --last-event-id <id> --json`
+- Why: Server-sent events feed of inbox projection updates.
+- Output: SSE `inbox_item` events with JSON payloads.
+- Error codes: `auth_required`, `invalid_token`
+- Concepts: `inbox`
+- Adjacent commands: `inbox acknowledge`, `inbox get`, `inbox list`
 
 
 Global flags:
@@ -3902,7 +3600,7 @@ Global flags:
 
 ## `derived rebuild`
 
-Rebuild derived views
+Rebuild derived projections
 
 ```text
 Generated Help: derived rebuild
@@ -3912,17 +3610,11 @@ Generated Help: derived rebuild
 - HTTP: `POST /derived/rebuild`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Force deterministic recomputation of derived views after maintenance or migration.
+- Why: Deterministic operator repair for inbox/thread projections.
 - Output: Returns `{ ok: true }`.
-- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`
-- Concepts: `derived-views`, `maintenance`
-- Agent notes: Mutating admin command; serialize with other writes.
-- Examples:
-  - Rebuild derived: `oar derived rebuild --actor-id system --json`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Concepts: `projections`, `maintenance`
 
-Inputs:
-  Optional:
-  - body `actor_id` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3932,7 +3624,7 @@ Global flags:
 
 ## `meta commands`
 
-List generated command metadata
+List command registry metadata
 
 ```text
 Generated Help: meta commands
@@ -3940,16 +3632,13 @@ Generated Help: meta commands
 - Command ID: `meta.commands.list`
 - CLI path: `meta commands`
 - HTTP: `GET /meta/commands`
-- Stability: `beta`
+- Stability: `stable`
 - Input mode: `none`
-- Why: Load generated command metadata used for help, docs, and agent introspection.
-- Output: Returns generated command registry metadata from the canonical contract.
-- Error codes: `meta_unavailable`, `cli_outdated`
-- Concepts: `meta`, `introspection`
-- Agent notes: Safe and idempotent. Response shape matches committed generated artifacts.
-- Adjacent commands: `meta command`, `meta concept`, `meta concepts`, `meta handshake`, `meta health`, `meta livez`, `meta ops health`, `meta readyz`, `meta version`
-- Examples:
-  - List command metadata: `oar meta commands --json`
+- Why: Expose embedded OAR command metadata for discovery and codegen parity.
+- Output: Returns generated command registry JSON.
+- Error codes: `meta_unavailable`
+- Concepts: `compatibility`
+- Adjacent commands: `meta command`, `meta concept`, `meta concepts`, `meta handshake`, `meta health`, `meta livez`, `meta readyz`, `meta version`
 
 
 Global flags:
@@ -3960,7 +3649,7 @@ Global flags:
 
 ## `meta command`
 
-Get generated metadata for a command id
+Get one command metadata entry
 
 ```text
 Generated Help: meta command
@@ -3968,16 +3657,13 @@ Generated Help: meta command
 - Command ID: `meta.commands.get`
 - CLI path: `meta command`
 - HTTP: `GET /meta/commands/{command_id}`
-- Stability: `beta`
+- Stability: `stable`
 - Input mode: `none`
-- Why: Resolve a stable command id to full generated metadata and guidance.
-- Output: Returns `{ command }` metadata for the requested command id.
-- Error codes: `not_found`, `meta_unavailable`, `cli_outdated`
-- Concepts: `meta`, `introspection`
-- Agent notes: Safe and idempotent.
-- Adjacent commands: `meta commands`, `meta concept`, `meta concepts`, `meta handshake`, `meta health`, `meta livez`, `meta ops health`, `meta readyz`, `meta version`
-- Examples:
-  - Read command metadata: `oar meta command --command-id threads.list --json`
+- Why: Resolve command metadata by stable command id.
+- Output: Returns `{ command }`.
+- Error codes: `meta_unavailable`, `not_found`
+- Concepts: `compatibility`
+- Adjacent commands: `meta commands`, `meta concept`, `meta concepts`, `meta handshake`, `meta health`, `meta livez`, `meta readyz`, `meta version`
 
 Inputs:
   Required:
@@ -3991,7 +3677,7 @@ Global flags:
 
 ## `meta concepts`
 
-List generated concept metadata
+List concept index
 
 ```text
 Generated Help: meta concepts
@@ -3999,16 +3685,13 @@ Generated Help: meta concepts
 - Command ID: `meta.concepts.list`
 - CLI path: `meta concepts`
 - HTTP: `GET /meta/concepts`
-- Stability: `beta`
+- Stability: `stable`
 - Input mode: `none`
-- Why: Discover conceptual groupings of commands generated from contract metadata.
-- Output: Returns `{ concepts }` summary metadata for all known concepts.
-- Error codes: `meta_unavailable`, `cli_outdated`
-- Concepts: `meta`, `concepts`
-- Agent notes: Safe and idempotent.
-- Adjacent commands: `meta command`, `meta commands`, `meta concept`, `meta handshake`, `meta health`, `meta livez`, `meta ops health`, `meta readyz`, `meta version`
-- Examples:
-  - List concepts: `oar meta concepts --json`
+- Why: Group command metadata by concept tags.
+- Output: Returns `{ concepts: [...] }`.
+- Error codes: `meta_unavailable`
+- Concepts: `compatibility`
+- Adjacent commands: `meta command`, `meta commands`, `meta concept`, `meta handshake`, `meta health`, `meta livez`, `meta readyz`, `meta version`
 
 
 Global flags:
@@ -4019,7 +3702,7 @@ Global flags:
 
 ## `meta concept`
 
-Get generated metadata for one concept
+Get commands grouped by concept
 
 ```text
 Generated Help: meta concept
@@ -4027,16 +3710,13 @@ Generated Help: meta concept
 - Command ID: `meta.concepts.get`
 - CLI path: `meta concept`
 - HTTP: `GET /meta/concepts/{concept_name}`
-- Stability: `beta`
+- Stability: `stable`
 - Input mode: `none`
-- Why: Resolve one concept tag to the commands that implement that concept.
-- Output: Returns `{ concept }` including matched command ids and command metadata.
-- Error codes: `not_found`, `meta_unavailable`, `cli_outdated`
-- Concepts: `meta`, `concepts`
-- Agent notes: Safe and idempotent.
-- Adjacent commands: `meta command`, `meta commands`, `meta concepts`, `meta handshake`, `meta health`, `meta livez`, `meta ops health`, `meta readyz`, `meta version`
-- Examples:
-  - Read one concept: `oar meta concept --concept-name compatibility --json`
+- Why: Expand one concept into related commands.
+- Output: Returns `{ concept: {...} }`.
+- Error codes: `meta_unavailable`, `not_found`
+- Concepts: `compatibility`
+- Adjacent commands: `meta command`, `meta commands`, `meta concepts`, `meta handshake`, `meta health`, `meta livez`, `meta readyz`, `meta version`
 
 Inputs:
   Required:
@@ -4048,78 +3728,33 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
-## `work-orders create`
-
-Create work-order packet artifact
-
-```text
-Generated Help: work-orders create
-
-- Command ID: `packets.work-orders.create`
-- CLI path: `work-orders create`
-- HTTP: `POST /work_orders`
-- Stability: `stable`
-- Input mode: `json-body`
-- Why: Create structured action packets with deterministic schema enforcement.
-- Output: Returns `{ artifact, event }`.
-- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`
-- Concepts: `packets`, `work-orders`
-- Agent notes: Replay-safe when `request_key` is reused with the same body; packet id fields may be omitted and core will issue the canonical artifact id.
-- Adjacent commands: `receipts create`, `reviews create`
-- Examples:
-  - Create work order: `oar work-orders create --from-file work-order.json --json`
-
-Inputs:
-  Required:
-  - body `artifact` (object)
-  - body `packet.acceptance_criteria` (list<string>)
-  - body `packet.constraints` (list<string>)
-  - body `packet.context_refs` (list<typed_ref>)
-  - body `packet.definition_of_done` (list<string>)
-  - body `packet.objective` (string)
-  - body `packet.thread_id` (string)
-  - body `packet.work_order_id` (string)
-  Optional:
-  - body `actor_id` (string)
-  - body `request_key` (string)
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: oar --json work-orders create ... ; oar work-orders create ... --json
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
 ## `receipts create`
 
-Create receipt packet artifact
+Create receipt packet
 
 ```text
 Generated Help: receipts create
 
 - Command ID: `packets.receipts.create`
 - CLI path: `receipts create`
-- HTTP: `POST /receipts`
-- Stability: `stable`
+- HTTP: `POST /packets/receipts`
+- Stability: `beta`
 - Input mode: `json-body`
-- Why: Record execution output and verification evidence for a work order.
-- Output: Returns `{ artifact, event }`.
-- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`
-- Concepts: `packets`, `receipts`
-- Agent notes: Replay-safe when `request_key` is reused with the same body. Include evidence refs that satisfy packet conventions.
-- Adjacent commands: `reviews create`, `work-orders create`
-- Examples:
-  - Create receipt: `oar receipts create --from-file receipt.json --json`
+- Why: Record structured delivery evidence anchored by `subject_ref`.
+- Output: Returns `{ artifact, packet_kind, packet }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Concepts: `packets`, `evidence`
+- Adjacent commands: `reviews create`
 
 Inputs:
   Required:
   - body `artifact` (object)
   - body `packet.changes_summary` (string)
   - body `packet.known_gaps` (list<string>)
-  - body `packet.outputs` (list<typed_ref>)
+  - body `packet.outputs` (list<any>)
   - body `packet.receipt_id` (string)
-  - body `packet.thread_id` (string)
-  - body `packet.verification_evidence` (list<typed_ref>)
-  - body `packet.work_order_id` (string)
+  - body `packet.subject_ref` (typed_ref)
+  - body `packet.verification_evidence` (list<any>)
   Optional:
   - body `actor_id` (string)
   - body `request_key` (string)
@@ -4132,34 +3767,31 @@ Global flags:
 
 ## `reviews create`
 
-Create review packet artifact
+Create review packet
 
 ```text
 Generated Help: reviews create
 
 - Command ID: `packets.reviews.create`
 - CLI path: `reviews create`
-- HTTP: `POST /reviews`
-- Stability: `stable`
+- HTTP: `POST /packets/reviews`
+- Stability: `beta`
 - Input mode: `json-body`
-- Why: Record acceptance/revision decisions over a receipt.
-- Output: Returns `{ artifact, event }`.
-- Error codes: `invalid_json`, `invalid_request`, `unknown_actor_id`
-- Concepts: `packets`, `reviews`
-- Agent notes: Include refs to both receipt and work order artifacts.
-- Adjacent commands: `receipts create`, `work-orders create`
-- Examples:
-  - Create review: `oar reviews create --from-file review.json --json`
+- Why: Record a structured review over a receipt anchored to the same card as subject_ref.
+- Output: Returns `{ artifact, packet_kind, packet }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Concepts: `packets`, `evidence`
+- Adjacent commands: `receipts create`
 
 Inputs:
   Required:
   - body `artifact` (object)
-  - body `packet.evidence_refs` (list<typed_ref>)
+  - body `packet.evidence_refs` (list<any>)
   - body `packet.notes` (string)
   - body `packet.outcome` (string)
-  - body `packet.receipt_id` (string)
+  - body `packet.receipt_ref` (string)
   - body `packet.review_id` (string)
-  - body `packet.work_order_id` (string)
+  - body `packet.subject_ref` (typed_ref)
   Optional:
   - body `actor_id` (string)
   - body `request_key` (string)
@@ -4173,14 +3805,14 @@ Global flags:
 
 ## `events list`
 
-Compose `threads timeline` responses with client-side thread/type/actor filters and preview summaries.
+Compose backing-thread timeline reads with client-side thread/type/actor filters and preview summaries.
 
 ```text
 Local Help: events list
 
 - Kind: `local helper`
-- Summary: Compose `threads timeline` responses with client-side thread/type/actor filters and preview summaries.
-- Composition: Fetches one or more thread timelines locally, then filters and summarizes the events without changing contracts or core behavior.
+- Summary: Compose backing-thread timeline reads with client-side thread/type/actor filters and preview summaries.
+- Composition: Fetches one or more backing-thread timelines locally, then filters and summarizes the events without changing contracts or core behavior. Use it as a diagnostic read; prefer `topics workspace` and card/board reads for normal coordination.
 - JSON body: `thread_id`, `thread_ids`, `events`, `total_events`, `returned_events`
 - Examples:
   - `oar events list --thread-id <thread-id> --type actor_statement --mine --full-id`
@@ -4193,11 +3825,12 @@ Flags:
   --actor-id <actor-id>        Filter to one actor id.
   --mine                       Resolve to the active profile actor_id.
   --max-events <n>             Keep the most recent matching events.
+  --max <n>                    Alias for --max-events.
   --full-id                    Render full event ids in human output.
   --include-archived           Include archived events in results.
   --archived-only              Show only archived events.
-  --include-tombstoned         Include tombstoned events in results.
-  --tombstoned-only            Show only tombstoned events.
+  --include-trashed            Include trashed events in results.
+  --trashed-only               Show only trashed events.
 
 
 Global flags:
@@ -4233,14 +3866,14 @@ Global flags:
 
 ## `events explain`
 
-Explain known event-type conventions, required refs, and validation hints, including which type surfaces as a visible thread message.
+Explain known event-type conventions, required refs, and validation hints, including when `message_posted` targets a backing-thread message stream.
 
 ```text
 Local Help: events explain
 
 - Kind: `local helper`
-- Summary: Explain known event-type conventions, required refs, and validation hints, including which type surfaces as a visible thread message.
-- Composition: Formats the embedded event reference and validation guidance into a human-readable reference without sending a request. Use it to confirm when `message_posted` is required for a visible thread message in the web UI Messages tab.
+- Summary: Explain known event-type conventions, required refs, and validation hints, including when `message_posted` targets a backing-thread message stream.
+- Composition: Formats the embedded event reference and validation guidance into a human-readable reference without sending a request. Use it to confirm when `message_posted` is required for a visible backing-thread message in the web UI Messages tab.
 - JSON body: `event_type`, `known`, `required_refs`, `payload_requirements`, `examples`, `hint`
 - Examples:
   - `oar events explain`
@@ -4284,14 +3917,14 @@ Global flags:
 
 ## `threads inspect`
 
-Canonical thread coordination read path: compose one view from `threads context` and related `inbox list` items.
+Diagnostic backing-thread bundle: compose one view from read-only thread data and related `inbox list` items.
 
 ```text
 Local Help: threads inspect
 
 - Kind: `local helper`
-- Summary: Canonical thread coordination read path: compose one view from `threads context` and related `inbox list` items.
-- Composition: Resolves one thread by id or discovery filters, loads `threads context`, then filters inbox items client-side by `thread_id` for one operator-focused coordination view.
+- Summary: Diagnostic backing-thread bundle: compose one view from read-only thread data and related `inbox list` items.
+- Composition: Resolves one thread by id or discovery filters, loads read-only thread projections, then filters inbox items client-side by `thread_id`. Prefer `topics workspace` for primary operator coordination when you have a topic id.
 - JSON body: `thread`, `context`, `collaboration`, `inbox`
 - Examples:
   - `oar threads inspect --thread-id <thread-id>`
@@ -4306,7 +3939,7 @@ Flags:
   --cadence <cadence>          Repeatable discovery cadence filter.
   --type <thread-type>         Local discovery filter after `threads list`.
   --max-events <n>             Maximum recent context events to include.
-  --include-artifact-content   Include artifact content previews from `threads context`.
+  --include-artifact-content   Include artifact content previews from the underlying read-only thread views.
   --full-id                    Render full event and inbox ids in human output.
 
 
@@ -4318,18 +3951,17 @@ Global flags:
 
 ## `threads workspace`
 
-Single holistic thread coordination read: combine context, inbox, recommendation review, and related-thread signals in one command.
+Read-only backing-thread workspace projection: context, inbox, recommendation review, and related-thread signals in one command.
 
 ```text
 Local Help: threads workspace
 
 - Kind: `local helper`
-- Summary: Single holistic thread coordination read: combine context, inbox, recommendation review, and related-thread signals in one command.
-- Composition: Resolves one thread by id or discovery filters, loads `threads context`, adds thread-scoped inbox items from `inbox list`, and follows related thread refs for additional review context.
+- Summary: Read-only backing-thread workspace projection: context, inbox, recommendation review, and related-thread signals in one command.
+- Composition: Resolves one thread by id or discovery filters, loads read-only thread projections, adds thread-scoped inbox items, and follows related thread refs for diagnostic review. Prefer `topics workspace` for normal operator coordination.
 - JSON body: `thread`, `context`, `collaboration`, `inbox`, `pending_decisions`, `related_threads`, `related_recommendations`, `related_decisions`, `follow_up`
 - Examples:
   - `oar threads workspace --thread-id <thread-id> --full-id`
-  - `oar threads workspace --thread-id <thread-id> --include-related-event-content --verbose`
   - `oar threads workspace --status active --type initiative --full-summary`
 
 Flags:
@@ -4341,8 +3973,7 @@ Flags:
   --cadence <cadence>          Repeatable discovery cadence filter.
   --type <thread-type>         Local discovery filter after `threads list`.
   --max-events <n>             Maximum recent context events to include.
-  --include-artifact-content   Include artifact content previews from `threads context`.
-  --include-related-event-content Hydrate related review items with full `events get` content in one command.
+  --include-artifact-content   Include artifact content previews from the underlying read-only thread views.
   --full-summary               Show full recommendation/decision summaries in human output.
   --full-id                    Render full event and inbox ids in human output.
 
@@ -4353,59 +3984,23 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
-## `threads review`
-
-Opinionated deep-read helper: run the holistic workspace view with related-event hydration and full summaries enabled by default.
-
-```text
-Local Help: threads review
-
-- Kind: `local helper`
-- Summary: Opinionated deep-read helper: run the holistic workspace view with related-event hydration and full summaries enabled by default.
-- Composition: Uses the same aggregate view as `threads workspace`, but defaults to a review-oriented read by hydrating related review items with `events get` content and expanding recommendation summaries in one command.
-- JSON body: `thread`, `context`, `collaboration`, `inbox`, `pending_decisions`, `related_threads`, `related_recommendations`, `related_decisions`, `follow_up`
-- Examples:
-  - `oar threads review --thread-id <thread-id>`
-  - `oar threads review --thread-id <thread-id> --full-id`
-  - `oar threads review --status active --type initiative`
-
-Flags:
-  --thread-id <thread-id>      Thread id to review.
-  --status <status>            Discover one thread by status.
-  --priority <priority>        Discover one thread by priority.
-  --stale <bool>               Discover one thread by stale state.
-  --tag <tag>                  Repeatable discovery tag filter.
-  --cadence <cadence>          Repeatable discovery cadence filter.
-  --type <thread-type>         Local discovery filter after `threads list`.
-  --max-events <n>             Maximum recent context events to include.
-  --include-artifact-content   Include artifact content previews from `threads context`.
-  --full-id                    Render full event and inbox ids in human output.
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: oar --json threads review ... ; oar threads review ... --json
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
 ## `threads recommendations`
 
-Review one thread's recommendation/decision inputs plus related-thread signals with provenance and follow-up hints.
+Compose a diagnostic recommendation-oriented review of one backing thread with related follow-up context.
 
 ```text
 Local Help: threads recommendations
 
 - Kind: `local helper`
-- Summary: Review one thread's recommendation/decision inputs plus related-thread signals with provenance and follow-up hints.
-- Composition: Resolves one thread by id or discovery filters, loads `threads context`, adds thread-scoped pending decision inbox items from `inbox list`, and follows related thread refs for additional review context.
-- JSON body: `thread`, `recommendations`, `decision_requests`, `decisions`, `pending_decisions`, `related_threads`, `related_recommendations`, `follow_up`
+- Summary: Compose a diagnostic recommendation-oriented review of one backing thread with related follow-up context.
+- Composition: Loads the read-only thread context, inbox, and related-thread review context to highlight recommendation signals and follow-up hints without changing state. Prefer `topics workspace` for the main coordination read when a topic exists.
+- JSON body: `thread`, `recommendations`, `decision_requests`, `decisions`, `pending_decisions`, `related_threads`, `related_recommendations`, `related_decision_requests`, `related_decisions`, `warnings`, `follow_up`
 - Examples:
-  - `oar threads recommendations --thread-id <thread-id> --full-id`
-  - `oar threads recommendations --thread-id <thread-id> --include-related-event-content --verbose`
+  - `oar threads recommendations --thread-id <thread-id>`
   - `oar threads recommendations --status active --type initiative --full-summary`
 
 Flags:
-  --thread-id <thread-id>      Thread id to review.
+  --thread-id <thread-id>      Thread id to inspect.
   --status <status>            Discover one thread by status.
   --priority <priority>        Discover one thread by priority.
   --stale <bool>               Discover one thread by stale state.
@@ -4413,8 +4008,8 @@ Flags:
   --cadence <cadence>          Repeatable discovery cadence filter.
   --type <thread-type>         Local discovery filter after `threads list`.
   --max-events <n>             Maximum recent context events to include.
-  --include-artifact-content   Include artifact content previews from `threads context`.
-  --include-related-event-content Hydrate related review items with full `events get` content in one command.
+  --include-artifact-content   Include artifact content previews from the underlying read-only thread views.
+  --include-related-event-content Hydrate related review items with full `events.get` payloads.
   --full-summary               Show full recommendation/decision summaries in human output.
   --full-id                    Render full event and inbox ids in human output.
 
@@ -4425,117 +4020,17 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
-## `threads propose-patch`
-
-Stage a thread patch proposal locally and show the diff before applying it.
-
-```text
-Local Help: threads propose-patch
-
-- Kind: `local helper`
-- Summary: Stage a thread patch proposal locally and show the diff before applying it.
-- Composition: Resolves the thread id, fetches current state with `threads get`, computes a local diff, and persists a proposal file instead of sending the patch immediately.
-- JSON body: `proposal_id`, `target_command_id`, `path`, `body`, `diff`, `apply_command`
-- Examples:
-  - `oar threads propose-patch --thread-id <thread-id> --from-file patch.json`
-  - `cat patch.json | oar threads propose-patch --thread-id <thread-id>`
-
-Flags:
-  --thread-id <thread-id>      Thread id to patch.
-  --from-file <path>           Load the patch body from a JSON file.
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: oar --json threads propose-patch ... ; oar threads propose-patch ... --json
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `threads apply`
-
-Apply a previously staged thread patch proposal.
-
-```text
-Local Help: threads apply
-
-- Kind: `local helper`
-- Summary: Apply a previously staged thread patch proposal.
-- Composition: Loads the local proposal by exact id or unique prefix, validates it again, then sends the underlying `threads.patch` request.
-- JSON body: `proposal_id`, `target_command_id`, `applied`, `kept`, `result`
-- Examples:
-  - `oar threads apply --proposal-id <proposal-id>`
-  - `oar threads apply <proposal-id-prefix>`
-
-Flags:
-  --proposal-id <proposal-id>  Proposal id or unique prefix to apply.
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: oar --json threads apply ... ; oar threads apply ... --json
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `commitments propose-patch`
-
-Stage a commitment patch proposal locally and show the diff before applying it.
-
-```text
-Local Help: commitments propose-patch
-
-- Kind: `local helper`
-- Summary: Stage a commitment patch proposal locally and show the diff before applying it.
-- Composition: Resolves the commitment id, fetches current state with `commitments get`, computes a local diff, and persists a proposal file instead of sending the patch immediately.
-- JSON body: `proposal_id`, `target_command_id`, `path`, `body`, `diff`, `apply_command`
-- Examples:
-  - `oar commitments propose-patch --commitment-id <commitment-id> --from-file patch.json`
-
-Flags:
-  --commitment-id <commitment-id> Commitment id to patch.
-  --from-file <path>           Load the patch body from a JSON file.
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: oar --json commitments propose-patch ... ; oar commitments propose-patch ... --json
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `commitments apply`
-
-Apply a previously staged commitment update proposal.
-
-```text
-Local Help: commitments apply
-
-- Kind: `local helper`
-- Summary: Apply a previously staged commitment update proposal.
-- Composition: Loads the local proposal by exact id or unique prefix, validates it again, then sends the underlying `commitments.patch` request.
-- JSON body: `proposal_id`, `target_command_id`, `applied`, `kept`, `result`
-- Examples:
-  - `oar commitments apply --proposal-id <proposal-id>`
-
-Flags:
-  --proposal-id <proposal-id>  Proposal id or unique prefix to apply.
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: oar --json commitments apply ... ; oar commitments apply ... --json
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
 ## `boards workspace`
 
-Canonical board read path: load one board's full state including primary thread, primary document, and all cards grouped by column.
+Canonical board read path: load one board's workspace: optional primary topic, cards by column, linked documents, inbox items, and summary.
 
 ```text
 Local Help: boards workspace
 
 - Kind: `local helper`
-- Summary: Canonical board read path: load one board's full state including primary thread, primary document, and all cards grouped by column.
-- Composition: Resolves a board by id, fetches the canonical workspace view with hydrated thread summaries, and renders cards grouped by canonical column order (backlog, ready, in_progress, blocked, review, done).
-- JSON body: `board_id`, `board`, `primary_thread`, `primary_document`, `cards`, `board_summary`, `generated_at`
+- Summary: Canonical board read path: load one board's workspace: optional primary topic, cards by column, linked documents, inbox items, and summary.
+- Composition: Resolves a board by id, fetches the projection workspace with per-card thread backing and renders cards grouped by canonical column order (backlog, ready, in_progress, blocked, review, done).
+- JSON body: `board_id`, `board`, `primary_topic`, `cards`, `documents`, `inbox`, `board_summary`, `projection_freshness`, `board_summary_freshness`, `warnings`, `section_kinds`, `generated_at`
 - Examples:
   - `oar boards workspace --board-id <board-id>`
   - `oar boards workspace --board-id board_product_launch`
@@ -4628,14 +4123,14 @@ Global flags:
 
 ## `docs validate-update`
 
-Validate a `docs update` payload locally from stdin or file without sending the mutation.
+Validate a `docs.revisions.create` payload locally from stdin or file without sending the mutation.
 
 ```text
 Local Help: docs validate-update
 
 - Kind: `local helper`
-- Summary: Validate a `docs update` payload locally from stdin or file without sending the mutation.
-- Composition: Parses the same body accepted by `docs update`, expands `--content-file` when present, and returns a validation preview envelope without contacting core.
+- Summary: Validate a `docs.revisions.create` payload locally from stdin or file without sending the mutation.
+- Composition: Parses the same body accepted by `docs.revisions.create`, expands `--content-file` when present, and returns a validation preview envelope without contacting core.
 - JSON body: `command`, `command_id`, `path_params`, `query`, `body`, `valid`
 - Examples:
   - `cat update.json | oar docs validate-update --document-id <document-id>`
@@ -4662,7 +4157,7 @@ Local Help: docs apply
 
 - Kind: `local helper`
 - Summary: Apply a previously staged document update proposal.
-- Composition: Loads the local proposal by exact id or unique prefix, validates it again, then sends the underlying `docs.update` request.
+- Composition: Loads the local proposal by exact id or unique prefix, validates it again, then sends the underlying `docs.revisions.create` request.
 - JSON body: `proposal_id`, `target_command_id`, `applied`, `kept`, `result`
 - Examples:
   - `oar docs apply --proposal-id <proposal-id>`
@@ -5058,14 +4553,14 @@ Global flags:
 
 ## `import apply`
 
-Write payload previews for a plan and optionally execute thread/artifact/doc creates in dependency order.
+Write payload previews for a plan and optionally execute topic/artifact/doc creates in dependency order.
 
 ```text
 Local Help: import apply
 
 - Kind: `local helper`
-- Summary: Write payload previews for a plan and optionally execute thread/artifact/doc creates in dependency order.
-- Composition: Local helper with optional network writes. Always writes payload previews first; when `--execute` is set it creates threads, then artifacts, then docs, substituting `$REF:<key>` placeholders after upstream IDs are known.
+- Summary: Write payload previews for a plan and optionally execute topic/artifact/doc creates in dependency order.
+- Composition: Local helper with optional network writes. Always writes payload previews first; when `--execute` is set it creates topics, then artifacts, then docs, substituting `$REF:<key>` placeholders after upstream IDs are known.
 - JSON body: `plan`, `execute`, `results`, `refs`
 - Examples:
   - `oar import apply --plan ./.oar-import/workspace/plan.json`
@@ -5074,7 +4569,7 @@ Local Help: import apply
 Flags:
   --plan <path>                Plan produced by `oar import plan`. Positional form also supported.
   --out <dir>                  Output directory for payload previews and apply results. Defaults to `<plan-dir>/apply`.
-  --execute                    Actually call `threads create`, `artifacts create`, and `docs create`. Default is preview-only.
+  --execute                    Actually call `topics create`, `artifacts create`, and `docs create`. Default is preview-only.
 
 
 Global flags:

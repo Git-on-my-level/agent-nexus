@@ -97,8 +97,9 @@ type RevokeAgentResult struct {
 }
 
 type RegisterAgentInput struct {
-	Username  string
-	PublicKey string
+	Username        string
+	PublicKey       string
+	ExistingActorID string
 }
 
 type AssertionInput struct {
@@ -109,11 +110,12 @@ type AssertionInput struct {
 }
 
 type Store struct {
-	db                 *sql.DB
-	accessTokenTTL     time.Duration
-	refreshTokenTTL    time.Duration
-	maxAssertionSkew   time.Duration
-	bootstrapTokenHash string
+	db                          *sql.DB
+	accessTokenTTL              time.Duration
+	refreshTokenTTL             time.Duration
+	maxAssertionSkew            time.Duration
+	bootstrapTokenHash          string
+	allowDevRegisterLinkedActor bool
 }
 
 func NewStore(db *sql.DB, options ...Option) *Store {
@@ -164,6 +166,14 @@ func WithBootstrapToken(token string) Option {
 	}
 }
 
+// WithAllowDevRegisterLinkedActor allows POST /auth/agents/register to accept
+// existing_actor_id linking a new agent row to a pre-seeded actors row (local/dev only).
+func WithAllowDevRegisterLinkedActor(allow bool) Option {
+	return func(store *Store) {
+		store.allowDevRegisterLinkedActor = allow
+	}
+}
+
 func BuildAssertionMessage(agentID string, keyID string, signedAt string) string {
 	return "oar-auth-token|" + strings.TrimSpace(agentID) + "|" + strings.TrimSpace(keyID) + "|" + strings.TrimSpace(signedAt)
 }
@@ -182,10 +192,15 @@ func (s *Store) RegisterAgent(ctx context.Context, input RegisterAgentInput, cla
 		return Agent{}, AgentKey{}, TokenBundle{}, fmt.Errorf("%w: public_key must be a base64-encoded ed25519 public key: %v", ErrInvalidRequest, err)
 	}
 
+	existingActorID := strings.TrimSpace(input.ExistingActorID)
+	if existingActorID != "" && !s.allowDevRegisterLinkedActor {
+		return Agent{}, AgentKey{}, TokenBundle{}, fmt.Errorf("%w: existing_actor_id is not enabled for this core instance", ErrInvalidRequest)
+	}
+
 	publicKey := strings.TrimSpace(input.PublicKey)
 	var lastErr error
 	for attempt := 0; attempt < registerAgentMaxRetries; attempt++ {
-		agent, key, tokens, err := s.registerAgentOnce(ctx, username, publicKey, claim)
+		agent, key, tokens, err := s.registerAgentOnce(ctx, username, publicKey, claim, existingActorID)
 		if err == nil {
 			return agent, key, tokens, nil
 		}
@@ -203,11 +218,49 @@ func (s *Store) RegisterAgent(ctx context.Context, input RegisterAgentInput, cla
 	return Agent{}, AgentKey{}, TokenBundle{}, lastErr
 }
 
-func (s *Store) registerAgentOnce(ctx context.Context, username string, publicKey string, claim OnboardingClaim) (Agent, AgentKey, TokenBundle, error) {
+func (s *Store) ensureExistingActorReadyForAgentLinkTx(ctx context.Context, tx *sql.Tx, actorID string) error {
+	actorID = strings.TrimSpace(actorID)
+	if actorID == "" {
+		return fmt.Errorf("%w: existing actor not found", ErrInvalidRequest)
+	}
+	var placeholder int
+	err := tx.QueryRowContext(
+		ctx,
+		`SELECT 1 FROM actors WHERE id = ? LIMIT 1`,
+		actorID,
+	).Scan(&placeholder)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("%w: existing actor not found", ErrInvalidRequest)
+	}
+	if err != nil {
+		return fmt.Errorf("lookup existing actor: %w", err)
+	}
+	var occupyingAgent string
+	err = tx.QueryRowContext(
+		ctx,
+		`SELECT id FROM agents WHERE actor_id = ? AND revoked_at IS NULL LIMIT 1`,
+		actorID,
+	).Scan(&occupyingAgent)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = nil
+	}
+	if err != nil {
+		return fmt.Errorf("check actor link: %w", err)
+	}
+	if occupyingAgent != "" {
+		return fmt.Errorf("%w: actor already linked to an agent", ErrInvalidRequest)
+	}
+	return nil
+}
+
+func (s *Store) registerAgentOnce(ctx context.Context, username string, publicKey string, claim OnboardingClaim, existingActorID string) (Agent, AgentKey, TokenBundle, error) {
 	now := time.Now().UTC()
 	nowText := now.Format(time.RFC3339Nano)
 	agentID := "agent_" + uuid.NewString()
 	actorID := agentID
+	if strings.TrimSpace(existingActorID) != "" {
+		actorID = strings.TrimSpace(existingActorID)
+	}
 	keyID := "key_" + uuid.NewString()
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -218,6 +271,13 @@ func (s *Store) registerAgentOnce(ctx context.Context, username string, publicKe
 	if err := s.consumeOnboardingClaimTx(ctx, tx, claim, agentID, actorID, now); err != nil {
 		_ = tx.Rollback()
 		return Agent{}, AgentKey{}, TokenBundle{}, err
+	}
+
+	if strings.TrimSpace(existingActorID) != "" {
+		if err := s.ensureExistingActorReadyForAgentLinkTx(ctx, tx, actorID); err != nil {
+			_ = tx.Rollback()
+			return Agent{}, AgentKey{}, TokenBundle{}, err
+		}
 	}
 
 	agentMetadataJSON, err := principalMetadataJSON(PrincipalKindAgent, AuthMethodPublicKey, nil)
@@ -244,24 +304,26 @@ func (s *Store) registerAgentOnce(ctx context.Context, username string, publicKe
 		return Agent{}, AgentKey{}, TokenBundle{}, fmt.Errorf("insert agent: %w", err)
 	}
 
-	actorMetadataValue, err := actorMetadataJSON(PrincipalKindAgent, AuthMethodPublicKey, nil)
-	if err != nil {
-		_ = tx.Rollback()
-		return Agent{}, AgentKey{}, TokenBundle{}, fmt.Errorf("encode agent actor metadata: %w", err)
-	}
-	_, err = tx.ExecContext(
-		ctx,
-		`INSERT INTO actors(id, display_name, tags_json, created_at, metadata_json)
-		 VALUES (?, ?, ?, ?, ?)`,
-		actorID,
-		username,
-		`["agent"]`,
-		nowText,
-		actorMetadataValue,
-	)
-	if err != nil {
-		_ = tx.Rollback()
-		return Agent{}, AgentKey{}, TokenBundle{}, fmt.Errorf("insert mapped actor: %w", err)
+	if strings.TrimSpace(existingActorID) == "" {
+		actorMetadataValue, err := actorMetadataJSON(PrincipalKindAgent, AuthMethodPublicKey, nil)
+		if err != nil {
+			_ = tx.Rollback()
+			return Agent{}, AgentKey{}, TokenBundle{}, fmt.Errorf("encode agent actor metadata: %w", err)
+		}
+		_, err = tx.ExecContext(
+			ctx,
+			`INSERT INTO actors(id, display_name, tags_json, created_at, metadata_json)
+			 VALUES (?, ?, ?, ?, ?)`,
+			actorID,
+			username,
+			`["agent"]`,
+			nowText,
+			actorMetadataValue,
+		)
+		if err != nil {
+			_ = tx.Rollback()
+			return Agent{}, AgentKey{}, TokenBundle{}, fmt.Errorf("insert mapped actor: %w", err)
+		}
 	}
 
 	_, err = tx.ExecContext(

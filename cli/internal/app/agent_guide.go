@@ -35,8 +35,10 @@ func agentGuideSections() []guideSection {
 		{
 			Title: "Core model",
 			Lines: []string{
-				"- `events`: immutable facts, observations, and updates. Use for append-only activity, audit trails, and streams.",
-				"- `threads`: durable work objects and coordination state. Use for initiatives, incidents, cases, processes, relationships, and similar work units.",
+				"- `events`: immutable facts, observations, and updates. Use for append-only activity, audit trails, and streams. Decision lifecycle events (`decision_needed`, `intervention_needed`, `decision_made`) require `thread:<thread_id>` in refs; `topic:` refs are optional context when a topic exists.",
+				"- `topics`: the primary durable work subjects. Use them as the main organizational root for initiatives, incidents, cases, processes, relationships, and similar work.",
+				"- `cards`: the primary work items. Use them for tracked execution on boards.",
+				"- `threads`: backing timelines and packet-routing infrastructure. Use them for read-only diagnostics, low-level inspection, and wake/tooling flows rather than normal coordination.",
 				"- `inbox`: work intake and notifications. Use to see what needs attention and ack handled items.",
 				"- `draft`: staged or reviewable mutations. Use when a write should be inspected before commit.",
 				"- `docs`: long-lived narrative knowledge. Use for plans, notes, decisions, summaries, and shared context.",
@@ -46,9 +48,11 @@ func agentGuideSections() []guideSection {
 				"",
 				"Heuristic:",
 				"- Use `events` for facts.",
-				"- Use `threads` for ongoing work and ownership.",
+				"- Use `topics` for ongoing work, ownership, and operator coordination.",
+				"- Use `cards` for concrete tracked execution and delivery state.",
 				"- Use `docs` for narrative or reference material.",
 				"- Use `boards` for portfolio or workflow visibility.",
+				"- Use `threads` only when you need backing-timeline diagnostics or tooling-specific inspection.",
 				"- Use `draft` when you want a checkpoint before applying change.",
 				"",
 				"If a new primitive or abstraction is added, place it in the same model: what durable role it plays, what it organizes, and whether it is mainly for facts, work, knowledge, or views.",
@@ -59,7 +63,7 @@ func agentGuideSections() []guideSection {
 			Lines: []string{
 				"- `docs` are the long-lived narrative layer. Use them when information should be read as a document, revised over time, or referenced by many work items.",
 				"- `boards` are coordination views. Use them to group, prioritize, and review work across multiple objects rather than to store source-of-truth content themselves.",
-				"- `threads` often back execution; `docs` explain; `boards` organize. Keep those roles distinct.",
+				"- `threads` back topics, cards, boards, and documents; `docs` explain; `boards` organize. Keep those roles distinct.",
 			},
 		},
 		{
@@ -71,7 +75,7 @@ func agentGuideSections() []guideSection {
 				"4. Make the smallest valid mutation.",
 				"5. Verify via read commands, timeline, stream, or resulting state.",
 				"",
-				"For interrupt-driven work, a common loop is: `inbox` -> inspect related `thread` or `doc` -> apply change directly or via `draft` -> verify -> ack inbox item.",
+				"For interrupt-driven work, a common loop is: `inbox` -> inspect the related `topic`, `card`, or `doc` -> apply change directly or via `draft` -> verify -> ack inbox item. Reach for `threads ...` only when you need backing-thread diagnostics.",
 			},
 		},
 		{

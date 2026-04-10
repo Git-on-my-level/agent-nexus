@@ -26,21 +26,21 @@ test("registers actor, unlocks shell, and performs a write", async ({
     page.getByRole("link", { name: "Inbox", exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "Threads", exact: true }),
+    page.getByRole("link", { name: "Topics", exact: true }),
   ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Artifacts", exact: true }),
   ).toBeVisible();
 
-  await page.getByRole("link", { name: "Threads", exact: true }).click();
+  await page.getByRole("link", { name: "Topics", exact: true }).click();
 
-  await expect(page).toHaveURL(/\/threads$/);
-  await expect(page.getByRole("heading", { name: "Threads" })).toBeVisible();
+  await expect(page).toHaveURL(/\/topics$/);
+  await expect(page.getByRole("heading", { name: "Topics" })).toBeVisible();
 
-  await page.getByRole("button", { name: "New thread" }).click();
+  await page.getByRole("button", { name: "New topic" }).click();
   await page.getByLabel("Title").fill(threadTitle);
   await page.getByLabel("Summary").fill("Created from shell flow e2e test.");
-  await page.getByRole("button", { name: "Create thread" }).click();
+  await page.getByRole("button", { name: "Create topic" }).click();
 
   await expect(page.getByRole("link", { name: threadTitle })).toBeVisible();
 });
@@ -55,13 +55,13 @@ test("renders a dashboard on / and routes into inbox", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Thread health" }),
+    page.getByRole("heading", { name: "Topic health" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Recent artifacts" }),
+    page.getByRole("heading", { name: "Recent Docs" }),
   ).toBeVisible();
 
-  await page.getByRole("link", { name: "Review Inbox" }).click();
+  await page.getByRole("link", { name: "Review inbox" }).click();
   await expect(page).toHaveURL(/\/inbox$/);
   await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
 });
@@ -73,7 +73,7 @@ test("shows partial-failure messaging when one dashboard source is unavailable",
     window.localStorage.setItem("oar_ui_actor_id", "actor-ops-ai");
   });
 
-  await page.route(/\/threads(\?.*)?$/, async (route) => {
+  await page.route(/\/topics(\?.*)?$/, async (route) => {
     if (route.request().method() !== "GET") {
       await route.continue();
       return;
@@ -90,11 +90,11 @@ test("shows partial-failure messaging when one dashboard source is unavailable",
 
   await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
   await expect(
-    page.getByText("Failed to load threads:", { exact: false }),
+    page.getByText("Failed to load topics:", { exact: false }),
   ).toBeVisible();
   await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Recent artifacts" }),
+    page.getByRole("heading", { name: "Recent Docs" }),
   ).toBeVisible();
 });
 

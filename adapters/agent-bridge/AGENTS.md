@@ -40,6 +40,9 @@ It does not own canonical OAR state. The durable truth still lives in OAR primit
   - `make cli-check`
   - relevant `web-ui` tests when wakeability summaries change
 
+## Adapters
+- `deterministic_ack` is a **dev-forward** adapter: fixed rotation of short replies, no external model. Use for local wake QA; default examples must not imply it runs in production.
+
 ## Editing Guidance
 - Keep install/setup discoverable for two audiences:
   - repo contributors working from this checkout

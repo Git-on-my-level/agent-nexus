@@ -28,11 +28,11 @@ describe("timeline utils", () => {
     });
   });
 
-  it("extracts changed_fields for snapshot_updated and resolves refs", () => {
+  it("extracts changed_fields for thread_updated and resolves refs", () => {
     const view = toTimelineViewEvent(
       {
         id: "evt-y",
-        type: "snapshot_updated",
+        type: "thread_updated",
         refs: ["event:evt-z", "thread:thread-1", "document:doc-1"],
         payload: {
           changed_fields: ["status", "current_summary"],
@@ -94,10 +94,7 @@ describe("timeline utils", () => {
   it("builds label hints from timeline expansions", () => {
     const hints = buildTimelineRefLabelHints(
       {
-        snapshot_1: { kind: "thread", title: "Incident thread" },
-      },
-      {
-        artifact_1: { kind: "work_order", summary: "Reproduce issue" },
+        artifact_1: { kind: "receipt", summary: "Reproduce issue" },
       },
       {
         doc_1: { title: "Product Constitution" },
@@ -107,7 +104,6 @@ describe("timeline utils", () => {
       },
     );
 
-    expect(hints["snapshot:snapshot_1"]).toBe("Incident thread");
     expect(hints["artifact:artifact_1"]).toBe("Reproduce issue");
     expect(hints["document:doc_1"]).toBe("Product Constitution");
     expect(hints["document_revision:rev_1"]).toBe(

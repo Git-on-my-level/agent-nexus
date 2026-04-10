@@ -17,9 +17,9 @@ describe("RefLink model", () => {
       isLink: true,
     });
 
-    expect(resolveRefLink("snapshot:snap-1")).toMatchObject({
-      kind: "snapshot",
-      href: "/snapshots/snap-1",
+    expect(resolveRefLink("topic:topic-1")).toMatchObject({
+      kind: "topic",
+      href: "/topics/topic-1",
       isLink: true,
     });
 
@@ -122,6 +122,32 @@ describe("RefLink model", () => {
       isLink: true,
     });
 
+    const topicRef = resolveRefLink("topic:topic-1", {
+      humanize: true,
+    });
+
+    expect(topicRef).toMatchObject({
+      kind: "topic",
+      label: "Topic topic-1",
+      primaryLabel: "Topic topic-1",
+      secondaryLabel: "topic:topic-1",
+      href: "/topics/topic-1",
+      isLink: true,
+    });
+
+    const threadRef = resolveRefLink("thread:thread-1", {
+      humanize: true,
+    });
+
+    expect(threadRef).toMatchObject({
+      kind: "thread",
+      label: "Thread thread-1",
+      primaryLabel: "Thread thread-1",
+      secondaryLabel: "thread:thread-1",
+      href: "/threads/thread-1",
+      isLink: true,
+    });
+
     const documentRef = resolveRefLink("document:doc-1", {
       labelHints: {
         "document:doc-1": "Product Constitution",
@@ -135,6 +161,32 @@ describe("RefLink model", () => {
       secondaryLabel: "document:doc-1",
       href: "/docs/doc-1",
       isLink: true,
+    });
+  });
+
+  it("truncates UUID values in humanized labels to 8 chars", () => {
+    const threadRef = resolveRefLink(
+      "thread:be0ef636-4ec0-4284-b65c-a868acf124be",
+      { humanize: true },
+    );
+    expect(threadRef).toMatchObject({
+      primaryLabel: "Thread be0ef636",
+      secondaryLabel: "thread:be0ef636-4ec0-4284-b65c-a868acf124be",
+    });
+
+    const topicRef = resolveRefLink(
+      "topic:a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      { humanize: true },
+    );
+    expect(topicRef).toMatchObject({
+      primaryLabel: "Topic a1b2c3d4",
+    });
+
+    const nonUuidRef = resolveRefLink("thread:thread-onboarding", {
+      humanize: true,
+    });
+    expect(nonUuidRef).toMatchObject({
+      primaryLabel: "Thread thread-onboarding",
     });
   });
 });

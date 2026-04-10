@@ -28,7 +28,7 @@ Non-goals:
 | Concern | Current functions | Notes |
 |---|---|---|
 | Typed-resource router | `runTypedResource` | Already a clean dispatch seam; keep as the stable entrypoint from `commands.go`. |
-| Domain command handlers | `runThreadsCommand`, `runCommitmentsCommand`, `runArtifactsCommand`, `runEventsCommand`, `runInboxCommand`, `runPacketsCreateCommand`, `runDerivedCommand` | These are the lowest-risk first moves because they mostly depend on helpers by method call, not shared local state. |
+| Domain command handlers | `runThreadsCommand`, `runTopicsCommand` / `runCardsCommand`, `runArtifactsCommand`, `runEventsCommand`, `runInboxCommand`, `runPacketsCreateCommand`, `runDerivedCommand` | These are the lowest-risk first moves because they mostly depend on helpers by method call, not shared local state. |
 | Stream-specific parsing/behavior | `runEventsStream`, `runInboxStream`, `runTailStream`, `writeStreamEvent`, `isStreamReadTimeout` | Events and inbox share one reconnect loop; this should stay centralized after the split. |
 | Transport/output helpers | `invokeTypedJSON`, `invokeArtifactContent`, `cfgWithResolvedAuthToken`, `generatedHeaders`, `normalizedHeaders`, `resolveCommandMethod`, `resolveCommandPath`, `commandSpecByID` | `invokeTypedJSON` and `commandSpecByID` are also used by `draft_commands.go`; `invokeArtifactContent` is artifact-specific and should stay with artifact command ownership. |
 | Input/query helpers | `parseJSONBodyInput`, `parseIDAndBodyInput`, `parseIDArg`, `validateID`, `parseAckBodyInput`, `readBodyInput`, `decodeJSONPayload`, `addSingleQuery`, `addMultiQuery`, `firstNonEmpty` | Shared validation behavior and usage error codes live here today. |
@@ -38,7 +38,7 @@ Non-goals:
 `cli/internal/app/resource_commands_test.go` already pins the highest-risk compatibility points:
 
 - `TestTypedThreadCommandsGolden`: JSON envelope shape, command names, thread list/create/update request wiring.
-- `TestTypedWorkflowCommands`: cross-resource smoke for threads, commitments, packet creation, inbox list/ack.
+- `TestTypedWorkflowCommands`: cross-resource smoke for threads, packet creation, inbox list/ack.
 - `TestArtifactContentRaw`: raw artifact content behavior.
 - `TestEventsTailReconnect`, `TestInboxTailReconnect`, `TestEventsStreamDefaultNoFollow`: stream reconnect and default follow semantics.
 - `TestTypedCommandUsageFailures`: local validation failure returns exit code `2`.
@@ -61,7 +61,7 @@ Do not introduce a new subpackage for resource commands. The split is purely fil
 |---|---|---|
 | `cli/internal/app/resource_commands.go` | Typed-resource router only | `runTypedResource` |
 | `cli/internal/app/resource_threads.go` | Thread CLI behavior | `runThreadsCommand` |
-| `cli/internal/app/resource_commitments.go` | Commitment CLI behavior | `runCommitmentsCommand` |
+| `cli/internal/app/resource_topics_cards.go` | Topics/cards CLI behavior | `runTopicsCommand`, `runCardsCommand` |
 | `cli/internal/app/resource_artifacts.go` | Artifact CLI behavior | `runArtifactsCommand`, `invokeArtifactContent` |
 | `cli/internal/app/resource_events.go` | Event command entrypoints and event-specific flag parsing | `runEventsCommand`, `runEventsStream` |
 | `cli/internal/app/resource_inbox.go` | Inbox command entrypoints and inbox-specific flag parsing | `runInboxCommand`, `runInboxStream` |
@@ -93,7 +93,7 @@ Do not rewrite or reorganize the test file yet.
 Move these functions into new files without moving helpers yet:
 
 - `runThreadsCommand` -> `resource_threads.go`
-- `runCommitmentsCommand` -> `resource_commitments.go`
+- `runTopicsCommand` / `runCardsCommand` -> `resource_topics_cards.go` (already split in this checkout)
 - `runArtifactsCommand` and `invokeArtifactContent` -> `resource_artifacts.go`
 - `runPacketsCreateCommand` and `runDerivedCommand` -> `resource_packets.go`
 
@@ -142,21 +142,21 @@ At the end of the move series, `resource_commands.go` should contain only `runTy
 
 - Preserve the resource list handled by `runTypedResource` exactly:
   - `threads`
-  - `commitments`
+  - `topics`
+  - `cards`
   - `artifacts`
   - `events`
   - `inbox`
-  - `work-orders`
   - `receipts`
   - `reviews`
   - `derived`
 - Preserve every returned command name string (`"threads list"`, `"events tail"`, etc.) because JSON envelopes and errors include it.
 - Preserve every command ID passed to generated invocation:
-  - examples: `threads.patch`, `commitments.list`, `packets.work-orders.create`, `derived.rebuild`.
+  - examples: `topics.patch`, `cards.list`, `packets.receipts.create`, `derived.rebuild`.
 
 ### Input/local validation
 
-- Preserve positional-ID fallback alongside `--thread-id` / `--commitment-id` / `--artifact-id` / `--event-id`.
+- Preserve positional-ID fallback alongside `--thread-id` / `--topic-id` / `--card-id` / `--artifact-id` / `--event-id`.
 - Preserve current local error codes/messages from `errnorm.Usage(...)`, especially:
   - `subcommand_required`
   - `unknown_subcommand`
@@ -202,7 +202,7 @@ Must touch:
 
 - `cli/internal/app/resource_commands.go`
 - `cli/internal/app/resource_threads.go` (new)
-- `cli/internal/app/resource_commitments.go` (new)
+- `cli/internal/app/resource_topics_cards.go` (topics/cards; may already exist)
 - `cli/internal/app/resource_artifacts.go` (new)
 - `cli/internal/app/resource_events.go` (new)
 - `cli/internal/app/resource_inbox.go` (new)

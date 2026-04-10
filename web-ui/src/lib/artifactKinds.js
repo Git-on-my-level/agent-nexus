@@ -1,5 +1,4 @@
 export const KIND_LABELS = {
-  work_order: "Work Order",
   receipt: "Receipt",
   review: "Review",
   doc: "Document",
@@ -8,7 +7,6 @@ export const KIND_LABELS = {
 };
 
 const KIND_DESCRIPTIONS = {
-  work_order: "Execution plan and acceptance criteria",
   receipt: "Work completion evidence and verification",
   review: "Human decision on receipt quality",
   doc: "Readable document artifact",
@@ -17,7 +15,6 @@ const KIND_DESCRIPTIONS = {
 };
 
 const KIND_COLORS = {
-  work_order: "text-blue-400 bg-blue-500/10",
   receipt: "text-emerald-400 bg-emerald-500/10",
   review: "text-amber-400 bg-amber-500/10",
   doc: "text-fuchsia-400 bg-fuchsia-500/10",

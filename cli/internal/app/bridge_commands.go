@@ -7,15 +7,18 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"net/url"
 
 	"organization-autorunner-cli/internal/config"
 	"organization-autorunner-cli/internal/errnorm"
+	"organization-autorunner-cli/internal/httpclient"
 	"organization-autorunner-cli/internal/profile"
 )
 
@@ -684,17 +687,29 @@ func (a *App) runBridgeWorkspaceID(ctx context.Context, args []string, cfg confi
 func (a *App) lookupPrincipalByHandle(ctx context.Context, cfg config.Resolved, handle string) (map[string]any, error) {
 	cursor := ""
 	seenCursors := map[string]struct{}{}
+	client, err := httpclient.New(cfg)
+	if err != nil {
+		return nil, errnorm.Wrap(errnorm.KindLocal, "http_client_init_failed", "failed to initialize HTTP client", err)
+	}
 	for {
-		query := []queryParam{{name: "limit", values: []string{"200"}}}
+		requestPath := "/auth/principals?limit=200"
 		if cursor != "" {
-			query = append(query, queryParam{name: "cursor", values: []string{cursor}})
+			requestPath += "&cursor=" + url.QueryEscape(cursor)
 		}
-		result, err := a.invokeTypedJSON(ctx, cfg, "auth principals list", "auth.principals.list", nil, query, nil)
-		if err != nil {
+		callCtx, cancel := httpclient.WithTimeout(ctx, cfg.Timeout)
+		resp, callErr := client.RawCall(callCtx, httpclient.RawRequest{Method: http.MethodGet, Path: requestPath, Headers: generatedHeaders(cfg)})
+		cancel()
+		if callErr != nil {
+			return nil, errnorm.Wrap(errnorm.KindNetwork, "request_failed", "auth principals list request failed", callErr)
+		}
+		if resp.StatusCode >= 400 {
+			return nil, errnorm.FromHTTPFailure(resp.StatusCode, resp.Body)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(resp.Body, &payload); err != nil {
 			return nil, err
 		}
-		data, _ := result.Data.(map[string]any)
-		body := extractNestedMap(data, "body")
+		body := payload
 		principalsRaw, _ := body["principals"].([]any)
 		for _, item := range principalsRaw {
 			candidate, ok := item.(map[string]any)

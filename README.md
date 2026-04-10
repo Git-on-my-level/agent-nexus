@@ -77,7 +77,7 @@ make contract-gen
 - core: `http://127.0.0.1:8000`
 - embedded wake-routing sidecar: starts inside `oar-core` by default
 - web-ui: `http://127.0.0.1:5173`
-- before UI startup, `web-ui/scripts/seed-core-from-mock.mjs` populates core using the mock dataset
+- before UI startup, `web-ui/scripts/seed-core-from-mock.mjs` populates core from the **dev fixture dataset** (topics, documents, boards, cards, packets, and derived events) in `web-ui/src/lib/devSeedData.js`
 
 For SaaS-v-next control-plane work, start the shared control plane in a second
 terminal:
@@ -129,7 +129,8 @@ See `runbooks/release.md` for version-pinning and custom install directory optio
 
 - `make check`: run repo, core, cli, and web-ui checks
 - `make workflow-check`: lint GitHub Actions workflows with the pinned repo-local `actionlint`
-- `make contract-check`: verify generated contract artifacts are up to date
+- `make contract-check`: regenerate contracts and validate the working tree (no Git drift step)
+- `make contract-check-committed`: same, plus assert generated outputs match Git (CI behavior)
 - `make cli-check`: run CLI tests
 - `make hosted-smoke`: run hosted-v1 production smoke suite (auth gate, onboarding, workspace access, staleness)
 - `make hosted-ops-test`: run hosted provisioning/backup/restore verification tests

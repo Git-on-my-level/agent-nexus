@@ -20,7 +20,7 @@ This repo currently includes:
 ## Workspace Layout
 
 By default, the server initializes storage under `.oar-workspace/`:
-- `state.sqlite`: SQLite database (events, snapshots, artifacts metadata, actors, derived views)
+- `state.sqlite`: SQLite database (events, topics, cards, boards, documents, artifacts metadata, actors, backing threads, derived views)
 - `artifacts/content/`: immutable artifact content files
 - `logs/` and `tmp/`: reserved operational directories
 - `router/`: local sidecar state for the embedded wake router

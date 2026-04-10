@@ -39,7 +39,9 @@
     devActorMode,
     devActorModeReady,
   } from "$lib/workspaceContext";
+  import { handleModEnterFormSubmit } from "$lib/formSubmitShortcut.js";
   import {
+    appPath,
     workspacePath,
     stripBasePath,
     stripWorkspacePath,
@@ -53,6 +55,7 @@
       "M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4",
     threads:
       "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z",
+    topics: "M4.5 6.75h15M4.5 12h15M4.5 17.25h9.5",
     boards: "M3 6h4v12H3V6zm7 0h4v12h-4V6zm7 0h4v12h-4V6z",
     artifacts:
       "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
@@ -71,6 +74,8 @@
   let hydratedWorkspaceSlug = $state("");
   let workspacePickerOpen = $state(false);
   let commandPaletteOpen = $state(false);
+  let devFixturePersonas = $state([]);
+  let devPersonaBusy = $state(false);
 
   let activeWorkspace = $derived($page.data.workspace ?? null);
   let activeWorkspaceSlug = $derived(activeWorkspace?.slug ?? "");
@@ -195,6 +200,55 @@
     const seedPrincipal = $authenticatedAgent ? [$authenticatedAgent] : [];
     void refreshPrincipals(workspaceSlug, seedPrincipal);
   });
+
+  $effect(() => {
+    if (
+      !browser ||
+      !$devActorMode ||
+      !$devActorModeReady ||
+      !activeWorkspaceSlug
+    ) {
+      return;
+    }
+    void loadDevFixturePersonas();
+  });
+
+  async function loadDevFixturePersonas() {
+    try {
+      const response = await fetch(appPath("/auth/dev/identities"));
+      if (!response.ok) {
+        devFixturePersonas = [];
+        return;
+      }
+      const payload = await response.json();
+      devFixturePersonas = Array.isArray(payload.personas)
+        ? payload.personas
+        : [];
+    } catch {
+      devFixturePersonas = [];
+    }
+  }
+
+  async function switchDevFixturePersona(personaId) {
+    const trimmed = String(personaId ?? "").trim();
+    if (!activeWorkspaceSlug || devPersonaBusy || !trimmed) {
+      return;
+    }
+    devPersonaBusy = true;
+    try {
+      const response = await fetch(appPath("/auth/dev/session"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ persona_id: trimmed }),
+      });
+      if (!response.ok) {
+        return;
+      }
+      await hydrateWorkspace(activeWorkspaceSlug);
+    } finally {
+      devPersonaBusy = false;
+    }
+  }
 
   async function hydrateWorkspace(workspaceSlug) {
     setDevActorModeReady(false);
@@ -412,6 +466,7 @@
       }
       return;
     }
+    handleModEnterFormSubmit(event, { commandPaletteOpen });
     if (event.key === "Escape") {
       if (workspacePickerOpen) closeWorkspacePicker();
       if (mobileNavOpen) closeMobileNav();
@@ -682,6 +737,32 @@
             class="shell-actor-panel"
             aria-label="Identity and workspace links"
           >
+            {#if $devActorMode && devFixturePersonas.length > 0}
+              <div class="shell-dev-personas">
+                <p class="shell-actor-label">Fixture persona</p>
+                <select
+                  class="shell-dev-persona-select"
+                  aria-label="Switch fixture persona"
+                  disabled={devPersonaBusy}
+                  onchange={(event) => {
+                    const value = String(
+                      event.currentTarget.value ?? "",
+                    ).trim();
+                    if (value) {
+                      void switchDevFixturePersona(value);
+                    }
+                    event.currentTarget.value = "";
+                  }}
+                >
+                  <option value="">Switch session…</option>
+                  {#each devFixturePersonas as persona}
+                    <option value={persona.persona_id}
+                      >{persona.display_label}</option
+                    >
+                  {/each}
+                </select>
+              </div>
+            {/if}
             <nav class="shell-secondary-nav" aria-label="Workspace">
               <div class="shell-settings-links">
                 {#each settingsNavItems as item}

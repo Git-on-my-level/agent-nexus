@@ -21,13 +21,13 @@
       "key_artifacts": [
         {
           "id": "artifact_ctx_1",
-          "kind": "work_order"
+          "kind": "receipt"
         }
       ],
-      "open_commitment_count": 1,
-      "open_commitments": [
+      "open_card_count": 1,
+      "open_cards": [
         {
-          "id": "commitment_ctx_1",
+          "id": "card_ctx_1",
           "status": "open"
         }
       ],
@@ -62,12 +62,12 @@
     "key_artifacts": [
       {
         "id": "artifact_ctx_1",
-        "kind": "work_order"
+        "kind": "receipt"
       }
     ],
-    "open_commitments": [
+    "open_cards": [
       {
-        "id": "commitment_ctx_1",
+        "id": "card_ctx_1",
         "status": "open"
       }
     ],

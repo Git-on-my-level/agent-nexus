@@ -25,8 +25,12 @@ func emitStaleThreadExceptions(ctx context.Context, opts handlerOptions, now tim
 	if err != nil {
 		return nil, err
 	}
+	cards, err := opts.primitiveStore.ListCards(ctx, primitives.CardListFilter{})
+	if err != nil {
+		return nil, err
+	}
 
-	latestActivity := latestThreadActivityFromEvents(events)
+	latestActivity := mergeThreadActivity(latestThreadActivityFromEvents(events), latestThreadActivityFromCards(cards))
 	latestStaleException := latestStaleExceptionByThread(events)
 
 	actor := strings.TrimSpace(actorID)
@@ -53,10 +57,10 @@ func emitStaleThreadExceptions(ctx context.Context, opts handlerOptions, now tim
 		_, err := opts.primitiveStore.AppendEvent(ctx, actor, map[string]any{
 			"type":      "exception_raised",
 			"thread_id": threadID,
-			"refs":      []string{"snapshot:" + threadID},
+			"refs":      []string{"thread:" + threadID},
 			"summary":   "thread is stale",
 			"payload": map[string]any{
-				"subtype": "stale_thread",
+				"subtype": "stale_topic",
 			},
 			"provenance": map[string]any{"sources": []string{"inferred"}},
 		})
@@ -90,6 +94,39 @@ func latestThreadActivityFromEvents(events []map[string]any) map[string]time.Tim
 	return out
 }
 
+func latestThreadActivityFromCards(cards []map[string]any) map[string]time.Time {
+	out := make(map[string]time.Time)
+	for _, card := range cards {
+		threadID := strings.TrimSpace(primaryRelatedThreadID(card))
+		if threadID == "" {
+			threadID = strings.TrimSpace(anyString(card["thread_id"]))
+		}
+		if threadID == "" {
+			continue
+		}
+		updatedAt, ok := parseTimestamp(card["updated_at"])
+		if !ok {
+			continue
+		}
+		if current, exists := out[threadID]; !exists || updatedAt.After(current) {
+			out[threadID] = updatedAt
+		}
+	}
+	return out
+}
+
+func mergeThreadActivity(activitySets ...map[string]time.Time) map[string]time.Time {
+	out := map[string]time.Time{}
+	for _, activitySet := range activitySets {
+		for threadID, ts := range activitySet {
+			if current, exists := out[threadID]; !exists || ts.After(current) {
+				out[threadID] = ts
+			}
+		}
+	}
+	return out
+}
+
 func isMeaningfulThreadActivityEvent(event map[string]any) bool {
 	eventType, _ := event["type"].(string)
 	eventType = strings.TrimSpace(eventType)
@@ -102,25 +139,28 @@ func isMeaningfulThreadActivityEvent(event map[string]any) bool {
 		"decision_needed",
 		"intervention_needed",
 		"decision_made",
-		"work_order_created",
+		"card_created",
+		"card_updated",
+		"card_moved",
+		"card_archived",
 		"receipt_added",
 		"review_completed",
 		"document_created",
 		"document_updated",
-		"document_tombstoned",
-		"document_restored",
-		"commitment_created",
-		"commitment_status_changed":
+		"document_trashed",
+		"document_restored":
 		return true
 	case "inbox_item_acknowledged", "exception_raised":
 		return false
-	case "snapshot_updated":
+	case "thread_created":
+		return false
+	case "thread_updated":
 		payload, _ := event["payload"].(map[string]any)
 		changedFields, err := extractStringSlice(payload["changed_fields"])
-		if err == nil && len(changedFields) == 1 && strings.TrimSpace(changedFields[0]) == "open_commitments" {
+		if err == nil && len(changedFields) == 1 && strings.TrimSpace(changedFields[0]) == "open_cards" {
 			return false
 		}
-		return strings.TrimSpace(anyString(event["summary"])) != "thread snapshot created"
+		return true
 	default:
 		return false
 	}
@@ -135,7 +175,7 @@ func latestStaleExceptionByThread(events []map[string]any) map[string]time.Time 
 		}
 		payload, _ := event["payload"].(map[string]any)
 		subtype, _ := payload["subtype"].(string)
-		if subtype != "stale_thread" {
+		if subtype != "stale_topic" {
 			continue
 		}
 		threadID, _ := event["thread_id"].(string)

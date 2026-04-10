@@ -49,13 +49,13 @@ describe("artifact list URL state", () => {
 
     expect(
       buildArtifactListSearchString({
-        kind: "work_order",
+        kind: "receipt",
         thread_id: "thread-onboarding",
         created_after: createdAfterLocal,
         created_before: "",
       }),
     ).toBe(
-      `kind=work_order&thread_id=thread-onboarding&created_after=${encodeURIComponent(createdAfterIso)}`,
+      `kind=receipt&thread_id=thread-onboarding&created_after=${encodeURIComponent(createdAfterIso)}`,
     );
   });
 

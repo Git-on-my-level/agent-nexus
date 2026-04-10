@@ -3,9 +3,9 @@ import { parseListInput, validateTypedRefs } from "./typedRefs.js";
 const ALLOWED_REVIEW_OUTCOMES = new Set(["accept", "revise", "escalate"]);
 
 export function validateReviewDraft(draft, options = {}) {
-  const threadId = String(options.threadId ?? "").trim();
+  const subjectRef = String(options.subjectRef ?? "").trim();
   const receiptId = String(options.receiptId ?? "").trim();
-  const workOrderId = String(options.workOrderId ?? "").trim();
+  const receiptRefOpt = String(options.receiptRef ?? "").trim();
   const reviewId = String(options.reviewId ?? "").trim();
 
   const errors = [];
@@ -21,20 +21,17 @@ export function validateReviewDraft(draft, options = {}) {
   const notes = String(draft?.notes ?? "").trim();
   const evidenceRefs = parseListInput(draft?.evidenceRefsInput);
 
-  if (!threadId) {
-    addError("thread_id", "thread_id is required.");
+  const receiptRef =
+    receiptRefOpt || (receiptId ? `artifact:${receiptId}` : "");
+
+  if (!subjectRef) {
+    addError("subject_ref", "subject_ref is required.");
+  } else if (!subjectRef.startsWith("card:")) {
+    addError("subject_ref", "subject_ref must be a card ref (card:...).");
   }
 
-  if (!receiptId) {
-    addError("receipt_id", "receipt_id is required.");
-  }
-
-  if (!workOrderId) {
-    addError("work_order_id", "work_order_id is required.");
-  }
-
-  if (!reviewId) {
-    addError("review_id", "review_id is required.");
+  if (!receiptRef) {
+    addError("receipt_id", "receipt_ref or receipt_id is required.");
   }
 
   if (!ALLOWED_REVIEW_OUTCOMES.has(outcome)) {
@@ -45,6 +42,13 @@ export function validateReviewDraft(draft, options = {}) {
     addError("notes", "notes is required.");
   }
 
+  if (evidenceRefs.length === 0) {
+    addError(
+      "evidence_refs",
+      "evidence_refs must include at least one typed ref.",
+    );
+  }
+
   const evidenceValidation = validateTypedRefs(evidenceRefs);
   if (!evidenceValidation.valid) {
     addError(
@@ -53,15 +57,19 @@ export function validateReviewDraft(draft, options = {}) {
     );
   }
 
+  const resolvedReceiptId = receiptRef.startsWith("artifact:")
+    ? receiptRef.slice("artifact:".length).trim()
+    : receiptId;
+
   return {
     valid: errors.length === 0,
     errors,
     fieldErrors,
     normalized: {
       review_id: reviewId,
-      receipt_id: receiptId,
-      work_order_id: workOrderId,
-      thread_id: threadId,
+      receipt_id: resolvedReceiptId,
+      receipt_ref: receiptRef,
+      subject_ref: subjectRef,
       outcome,
       notes,
       evidence_refs: evidenceRefs,
@@ -70,7 +78,10 @@ export function validateReviewDraft(draft, options = {}) {
 }
 
 export function buildReviewPayload(draft, options = {}) {
-  const validation = validateReviewDraft(draft, options);
+  const reviewId =
+    String(options.reviewId ?? "").trim() ||
+    `artifact-review-${Math.random().toString(36).slice(2, 10)}`;
+  const validation = validateReviewDraft(draft, { ...options, reviewId });
   if (!validation.valid) {
     return {
       ...validation,
@@ -80,9 +91,9 @@ export function buildReviewPayload(draft, options = {}) {
   }
 
   const packet = {
-    review_id: validation.normalized.review_id,
-    work_order_id: validation.normalized.work_order_id,
-    receipt_id: validation.normalized.receipt_id,
+    review_id: reviewId,
+    subject_ref: validation.normalized.subject_ref,
+    receipt_ref: validation.normalized.receipt_ref,
     outcome: validation.normalized.outcome,
     notes: validation.normalized.notes,
     evidence_refs: validation.normalized.evidence_refs,
@@ -95,14 +106,12 @@ export function buildReviewPayload(draft, options = {}) {
     normalized: validation.normalized,
     packet,
     artifact: {
-      id: validation.normalized.review_id,
+      id: reviewId,
       kind: "review",
-      thread_id: validation.normalized.thread_id,
       summary: `Review (${validation.normalized.outcome}) for ${validation.normalized.receipt_id}`,
       refs: [
-        `thread:${validation.normalized.thread_id}`,
-        `artifact:${validation.normalized.receipt_id}`,
-        `artifact:${validation.normalized.work_order_id}`,
+        validation.normalized.subject_ref,
+        validation.normalized.receipt_ref,
       ],
     },
   };

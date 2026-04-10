@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+import { buildMockTopicWorkspaceFromThreadWorkspace } from "../../src/lib/devSeedData.js";
+
 test("thread detail separates messages from timeline and nests replies", async ({
   page,
 }) => {
@@ -207,7 +209,7 @@ test("thread detail separates messages from timeline and nests replies", async (
           tags: ["ops", "customer"],
           current_summary: "Thread detail summary.",
           next_actions: ["Collect legal signoff"],
-          open_commitments: ["commitment-onboard-1"],
+          open_cards: ["card-onboard-1"],
           next_check_in_at: "2026-03-05T00:00:00.000Z",
           updated_at: "2026-03-04T00:00:00.000Z",
           updated_by: actorId,
@@ -217,90 +219,106 @@ test("thread detail separates messages from timeline and nests replies", async (
     });
   });
 
+  function buildOnboardingThreadWorkspace() {
+    return {
+      thread_id: "thread-onboarding",
+      thread: {
+        id: "thread-onboarding",
+        type: "process",
+        title: "Customer Onboarding Workflow",
+        status: "active",
+        priority: "p1",
+        cadence: "weekly",
+        tags: ["ops", "customer"],
+        current_summary: "Thread detail summary.",
+        next_actions: ["Collect legal signoff"],
+        open_cards: ["card-onboard-1"],
+        next_check_in_at: "2026-03-05T00:00:00.000Z",
+        updated_at: "2026-03-04T00:00:00.000Z",
+        updated_by: actorId,
+        provenance: { sources: ["actor_statement:event-1001"] },
+      },
+      context: {
+        recent_events: recentEvents,
+        key_artifacts: [],
+        open_cards: [],
+        documents: [
+          {
+            id: "doc-onboarding-runbook",
+            title: "Onboarding Runbook",
+            status: "active",
+            updated_at: "2026-03-04T00:30:00.000Z",
+            updated_by: actorId,
+            labels: ["ops"],
+            head_revision_id: "rev-onboarding-runbook-2",
+            head_revision_number: 2,
+            head_revision: {
+              revision_id: "rev-onboarding-runbook-2",
+              revision_number: 2,
+              content_type: "text",
+              created_at: "2026-03-04T00:30:00.000Z",
+            },
+          },
+        ],
+      },
+      board_memberships: {
+        items: [
+          {
+            board: {
+              id: "board-q2-launch",
+              title: "Q2 Launch Board",
+              status: "active",
+            },
+            card: {
+              board_id: "board-q2-launch",
+              thread_id: "thread-onboarding",
+              column_key: "backlog",
+              document_ref: "document:doc-onboarding-runbook",
+            },
+          },
+        ],
+        count: 1,
+      },
+    };
+  }
+
   await page.route(
-    /\/threads\/thread-onboarding\/workspace(\?.*)?$/,
+    (url) => url.pathname.includes("thread-onboarding/workspace"),
     async (route) => {
+      const threadWs = buildOnboardingThreadWorkspace();
+      const requestUrl = new URL(route.request().url());
+      const isTopic = requestUrl.pathname.includes("/topics/");
+      const payload = isTopic
+        ? buildMockTopicWorkspaceFromThreadWorkspace(
+            threadWs,
+            "thread-onboarding",
+          )
+        : threadWs;
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({
-          thread_id: "thread-onboarding",
-          thread: {
-            id: "thread-onboarding",
-            type: "process",
-            title: "Customer Onboarding Workflow",
-            status: "active",
-            priority: "p1",
-            cadence: "weekly",
-            tags: ["ops", "customer"],
-            current_summary: "Thread detail summary.",
-            next_actions: ["Collect legal signoff"],
-            open_commitments: ["commitment-onboard-1"],
-            next_check_in_at: "2026-03-05T00:00:00.000Z",
-            updated_at: "2026-03-04T00:00:00.000Z",
-            updated_by: actorId,
-            provenance: { sources: ["actor_statement:event-1001"] },
-          },
-          context: {
-            recent_events: recentEvents,
-            key_artifacts: [],
-            open_commitments: [],
-            documents: [
-              {
-                id: "doc-onboarding-runbook",
-                title: "Onboarding Runbook",
-                status: "active",
-                updated_at: "2026-03-04T00:30:00.000Z",
-                updated_by: actorId,
-                labels: ["ops"],
-                head_revision_id: "rev-onboarding-runbook-2",
-                head_revision_number: 2,
-                head_revision: {
-                  revision_id: "rev-onboarding-runbook-2",
-                  revision_number: 2,
-                  content_type: "text",
-                  created_at: "2026-03-04T00:30:00.000Z",
-                },
-              },
-            ],
-          },
-          board_memberships: {
-            items: [
-              {
-                board: {
-                  id: "board-q2-launch",
-                  title: "Q2 Launch Board",
-                  status: "active",
-                },
-                card: {
-                  board_id: "board-q2-launch",
-                  thread_id: "thread-onboarding",
-                  column_key: "backlog",
-                  pinned_document_id: "doc-onboarding-runbook",
-                },
-              },
-            ],
-            count: 1,
-          },
-        }),
+        body: JSON.stringify(payload),
       });
     },
   );
 
-  await page.route(/\/threads\/thread-onboarding\/timeline$/, async (route) => {
-    timelineRequests += 1;
-    if (timelineRequests === 1) {
-      await firstTimelineResponseGate;
-    }
-    if (timelineRequests === 2) {
-      await secondTimelineResponseGate;
-    }
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ events: timeline }),
-    });
-  });
+  await page.route(
+    (url) => url.pathname.includes("thread-onboarding/timeline"),
+    async (route) => {
+      timelineRequests += 1;
+      if (timelineRequests === 1) {
+        await firstTimelineResponseGate;
+      }
+      if (timelineRequests === 2) {
+        await secondTimelineResponseGate;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ events: timeline }),
+      });
+    },
+  );
 
   await page.route(/\/events\/stream(\?.*)?$/, async (route) => {
     streamLastEventId =
@@ -360,11 +378,16 @@ test("thread detail separates messages from timeline and nests replies", async (
   });
 
   await page.goto("/threads/thread-onboarding");
-  await expect.poll(() => principalRequestCount).toBe(2);
+  await expect.poll(() => principalRequestCount >= 2).toBe(true);
+  // Topic detail awaits listTopicTimeline before starting SSE; release the first
+  // timeline response so onMount can finish (thread workspace used to seed
+  // recent_events without that round-trip).
+  await expect.poll(() => timelineRequests >= 1).toBe(true);
+  allowFirstTimelineResponse();
   await expect.poll(() => streamLastEventId).toBe("evt-1002");
 
   await expect(
-    page.getByText("Thread-linked docs and current head revisions."),
+    page.getByText("Topic-linked docs and current head revisions."),
   ).toBeVisible();
   await expect(
     page.getByRole("link", { name: /Q2 Launch Board/ }),
@@ -382,7 +405,7 @@ test("thread detail separates messages from timeline and nests replies", async (
   );
   await page.getByRole("tab", { name: "Messages" }).click();
   await expect(page).toHaveURL(
-    /\/local\/threads\/thread-onboarding\?tab=messages$/,
+    /\/local\/topics\/thread-onboarding\?tab=messages$/,
   );
   await expect(
     page.getByText("Latest workspace message", { exact: true }),
@@ -391,7 +414,6 @@ test("thread detail separates messages from timeline and nests replies", async (
   await expect(
     page.getByText("Loading messages...", { exact: true }),
   ).toHaveCount(0);
-  allowFirstTimelineResponse();
 
   await expect(
     page.getByRole("heading", { name: "Customer Onboarding Workflow" }),
@@ -426,6 +448,8 @@ test("thread detail separates messages from timeline and nests replies", async (
   await page.getByRole("button", { name: "Post message" }).click();
 
   await expect.poll(() => postedEvents).toBe(1);
+  expect(recentEvents[0]?.thread_ref).toBe("thread:thread-onboarding");
+  expect(recentEvents[0]?.thread_id).toBe("thread-onboarding");
   await expect(
     page.getByText("Earlier timeline-only message", { exact: true }),
   ).toBeVisible();
@@ -445,7 +469,7 @@ test("thread detail separates messages from timeline and nests replies", async (
 
   await page.getByRole("tab", { name: "Timeline" }).click();
   await expect(page).toHaveURL(
-    /\/local\/threads\/thread-onboarding\?tab=timeline$/,
+    /\/local\/topics\/thread-onboarding\?tab=timeline$/,
   );
   await expect(page.locator("#message-text")).toHaveCount(0);
   await expect(
@@ -457,7 +481,7 @@ test("thread detail separates messages from timeline and nests replies", async (
   await page.reload();
 
   await expect(page).toHaveURL(
-    /\/local\/threads\/thread-onboarding\?tab=timeline$/,
+    /\/local\/topics\/thread-onboarding\?tab=timeline$/,
   );
   await expect(page.locator("#message-text")).toHaveCount(0);
   await expect(
@@ -476,6 +500,7 @@ test("thread detail handles snapshot update conflict and retries after reload", 
   let patchAttempt = 0;
   let threadSnapshot = {
     id: "thread-onboarding",
+    topic_ref: "topic:onboarding",
     type: "process",
     title: "Customer Onboarding Workflow",
     status: "active",
@@ -485,7 +510,7 @@ test("thread detail handles snapshot update conflict and retries after reload", 
     key_artifacts: ["artifact-policy-draft"],
     current_summary: "Thread detail summary.",
     next_actions: ["Collect legal signoff"],
-    open_commitments: ["commitment-onboard-1"],
+    open_cards: ["card-onboard-1"],
     next_check_in_at: "2026-03-05T00:00:00.000Z",
     updated_at: "2026-03-04T00:00:00.000Z",
     updated_by: actorId,
@@ -522,72 +547,106 @@ test("thread detail handles snapshot update conflict and retries after reload", 
       return;
     }
 
-    if (request.method() === "PATCH") {
-      const payload = JSON.parse(request.postData() ?? "{}");
-      patchRequests.push(payload);
-      patchAttempt += 1;
+    await route.continue();
+  });
 
-      if (patchAttempt === 1) {
-        threadSnapshot = {
-          ...threadSnapshot,
-          title: "Server updated title",
-          updated_at: "2026-03-04T02:00:00.000Z",
-        };
-        await route.fulfill({
-          status: 409,
-          contentType: "application/json",
-          body: JSON.stringify({
-            error: "Thread has been updated by another actor.",
-            current: threadSnapshot,
-          }),
-        });
-        return;
-      }
+  function topicPayloadFromThreadSnapshot() {
+    return {
+      id: "thread-onboarding",
+      type: "other",
+      status: "active",
+      title: threadSnapshot.title,
+      summary: threadSnapshot.current_summary ?? "",
+      owner_refs: [],
+      thread_id: "thread-onboarding",
+      document_refs: [],
+      board_refs: [],
+      related_refs: [],
+      created_at: threadSnapshot.updated_at,
+      created_by: threadSnapshot.updated_by,
+      updated_at: threadSnapshot.updated_at,
+      updated_by: threadSnapshot.updated_by,
+      provenance: threadSnapshot.provenance ?? { sources: [] },
+    };
+  }
 
+  await page.route(/\/topics\/thread-onboarding$/, async (route) => {
+    if (route.request().method() !== "PATCH") {
+      await route.continue();
+      return;
+    }
+    const payload = JSON.parse(route.request().postData() ?? "{}");
+    patchRequests.push(payload);
+    patchAttempt += 1;
+
+    if (patchAttempt === 1) {
       threadSnapshot = {
         ...threadSnapshot,
-        ...payload.patch,
-        updated_at: "2026-03-04T03:00:00.000Z",
-        updated_by: payload.actor_id,
+        title: "Server updated title",
+        updated_at: "2026-03-04T02:00:00.000Z",
       };
       await route.fulfill({
-        status: 200,
+        status: 409,
         contentType: "application/json",
-        body: JSON.stringify({ thread: threadSnapshot }),
+        body: JSON.stringify({
+          error: "Topic has been updated; refresh and retry.",
+          current: { topic: topicPayloadFromThreadSnapshot() },
+        }),
       });
       return;
     }
 
-    await route.continue();
+    threadSnapshot = {
+      ...threadSnapshot,
+      title: payload.patch?.title ?? threadSnapshot.title,
+      current_summary: payload.patch?.summary ?? threadSnapshot.current_summary,
+      updated_at: "2026-03-04T03:00:00.000Z",
+      updated_by: payload.actor_id,
+    };
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ topic: topicPayloadFromThreadSnapshot() }),
+    });
   });
 
   await page.route(
-    /\/threads\/thread-onboarding\/workspace(\?.*)?$/,
+    /\/(threads|topics)\/thread-onboarding\/workspace(\?.*)?$/,
     async (route) => {
+      const threadWs = {
+        thread_id: "thread-onboarding",
+        thread: threadSnapshot,
+        context: {
+          recent_events: [],
+          key_artifacts: [],
+          open_cards: [],
+          documents: [],
+        },
+      };
+      const payload = route.request().url().includes("/topics/")
+        ? buildMockTopicWorkspaceFromThreadWorkspace(
+            threadWs,
+            "thread-onboarding",
+          )
+        : threadWs;
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({
-          thread_id: "thread-onboarding",
-          thread: threadSnapshot,
-          context: {
-            recent_events: [],
-            key_artifacts: [],
-            open_commitments: [],
-            documents: [],
-          },
-        }),
+        body: JSON.stringify(payload),
       });
     },
   );
 
-  await page.route(/\/threads\/thread-onboarding\/timeline$/, async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ events: [] }),
-    });
-  });
+  await page.route(
+    /\/(threads|topics)\/thread-onboarding\/timeline$/,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ events: [] }),
+      });
+    },
+  );
 
   await page.route(/\/events\/stream(\?.*)?$/, async (route) => {
     await route.fulfill({
@@ -616,7 +675,7 @@ test("thread detail handles snapshot update conflict and retries after reload", 
   await page.getByRole("button", { name: "Save" }).click();
 
   await expect(
-    page.getByText("Thread was updated elsewhere.", { exact: false }),
+    page.getByText("Topic was updated elsewhere.", { exact: false }),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Server updated title" }),
@@ -624,27 +683,32 @@ test("thread detail handles snapshot update conflict and retries after reload", 
 
   await page.getByRole("button", { name: "Edit" }).click();
   await page.getByLabel("Title", { exact: true }).fill("Final merged title");
+  await page.getByLabel("Summary", { exact: true }).fill("Final summary body");
   await page.getByRole("button", { name: "Save" }).click();
 
   await expect(page.getByText("Changes saved.", { exact: true })).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Final merged title" }),
   ).toBeVisible();
+  await expect(
+    page.getByText("Final summary body", { exact: true }),
+  ).toBeVisible();
 
   expect(patchRequests).toHaveLength(2);
   expect(patchRequests[0]).toEqual({
     actor_id: actorId,
     patch: {
-      cadence: "0 9 * * 1",
       title: "Edited after conflict",
+      provenance: { sources: ["actor_statement:ui"] },
     },
     if_updated_at: "2026-03-04T00:00:00.000Z",
   });
   expect(patchRequests[1]).toEqual({
     actor_id: actorId,
     patch: {
-      cadence: "0 9 * * 1",
       title: "Final merged title",
+      summary: "Final summary body",
+      provenance: { sources: ["actor_statement:ui"] },
     },
     if_updated_at: "2026-03-04T02:00:00.000Z",
   });
@@ -666,15 +730,6 @@ test("thread detail updates workspace panels from another actor via event stream
       payload: { text: "Initial activity" },
     },
   ];
-  let workOrders = [
-    {
-      id: "artifact-work-order-1",
-      kind: "work_order",
-      thread_id: "thread-onboarding",
-      summary: "Initial work order",
-      refs: ["thread:thread-onboarding"],
-    },
-  ];
   let threadSnapshot = {
     id: "thread-onboarding",
     type: "process",
@@ -685,7 +740,7 @@ test("thread detail updates workspace panels from another actor via event stream
     tags: ["ops", "customer"],
     current_summary: "Initial thread summary.",
     next_actions: ["Collect legal signoff"],
-    open_commitments: ["commitment-open-1"],
+    open_cards: ["card-open-1"],
     next_check_in_at: "2026-03-05T00:00:00.000Z",
     updated_at: "2026-03-04T00:00:00.000Z",
     updated_by: actorId,
@@ -704,9 +759,9 @@ test("thread detail updates workspace panels from another actor via event stream
       },
     },
   ];
-  let contextCommitments = [
+  let contextOpenCards = [
     {
-      id: "commitment-open-1",
+      id: "card-open-1",
       title: "Collect onboarding requirements",
       owner: actorId,
       due_at: "2026-03-07T00:00:00.000Z",
@@ -750,44 +805,44 @@ test("thread detail updates workspace panels from another actor via event stream
   });
 
   await page.route(
-    /\/threads\/thread-onboarding\/workspace(\?.*)?$/,
+    /\/(threads|topics)\/thread-onboarding\/workspace(\?.*)?$/,
     async (route) => {
+      const threadWs = {
+        thread_id: "thread-onboarding",
+        thread: threadSnapshot,
+        context: {
+          recent_events: timeline,
+          key_artifacts: [],
+          open_cards: contextOpenCards,
+          documents: contextDocuments,
+        },
+      };
+      const payload = route.request().url().includes("/topics/")
+        ? buildMockTopicWorkspaceFromThreadWorkspace(
+            threadWs,
+            "thread-onboarding",
+          )
+        : threadWs;
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({
-          thread_id: "thread-onboarding",
-          thread: threadSnapshot,
-          context: {
-            recent_events: timeline,
-            key_artifacts: [],
-            open_commitments: contextCommitments,
-            documents: contextDocuments,
-          },
-        }),
+        body: JSON.stringify(payload),
       });
     },
   );
 
-  await page.route(/\/threads\/thread-onboarding\/timeline$/, async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ events: timeline }),
-    });
-  });
-
-  await page.route(/\/artifacts(\?.*)?$/, async (route) => {
-    const url = new URL(route.request().url());
-    if (url.searchParams.get("kind") === "work_order") {
+  await page.route(
+    /\/(threads|topics)\/thread-onboarding\/timeline$/,
+    async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ artifacts: workOrders }),
+        body: JSON.stringify({ events: timeline }),
       });
-      return;
-    }
+    },
+  );
 
+  await page.route(/\/artifacts(\?.*)?$/, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -809,7 +864,7 @@ test("thread detail updates workspace panels from another actor via event stream
   await page.goto("/threads/thread-onboarding");
 
   await expect(
-    page.getByText("Collect onboarding requirements", { exact: true }),
+    page.getByText("Initial thread summary.", { exact: true }),
   ).toBeVisible();
   await expect(
     page.getByText("Onboarding Runbook", { exact: true }),
@@ -836,9 +891,9 @@ test("thread detail updates workspace panels from another actor via event stream
       },
     },
   ];
-  contextCommitments = [
+  contextOpenCards = [
     {
-      id: "commitment-blocked-1",
+      id: "card-blocked-1",
       title: "Wait for legal approval",
       owner: actorId,
       due_at: "2026-03-04T01:00:00.000Z",
@@ -846,17 +901,7 @@ test("thread detail updates workspace panels from another actor via event stream
       definition_of_done: [],
       links: ["thread:thread-onboarding"],
     },
-    ...contextCommitments,
-  ];
-  workOrders = [
-    ...workOrders,
-    {
-      id: "artifact-work-order-2",
-      kind: "work_order",
-      thread_id: "thread-onboarding",
-      summary: "Remote follow-up work order",
-      refs: ["thread:thread-onboarding"],
-    },
+    ...contextOpenCards,
   ];
   timeline = [
     {
@@ -877,17 +922,15 @@ test("thread detail updates workspace panels from another actor via event stream
     page.getByText("Updated remotely by another actor.", { exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByText("Wait for legal approval", { exact: true }),
-  ).toBeVisible();
-  await expect(page.getByText("Blocked", { exact: true })).toBeVisible();
-  await expect(
     page.getByText("Remote Coordination Checklist", { exact: true }),
   ).toBeVisible();
 
   await page.getByRole("tab", { name: "Work" }).click();
   await expect(
-    page.getByRole("combobox", { name: "Work order" }),
-  ).toContainText("Remote follow-up work order");
+    page.getByText("Create receipts and reviews from card detail pages.", {
+      exact: true,
+    }),
+  ).toBeVisible();
 
   await page.getByRole("tab", { name: "Timeline" }).click();
   await expect(

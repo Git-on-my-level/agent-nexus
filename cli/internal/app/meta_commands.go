@@ -8,6 +8,7 @@ import (
 
 	"organization-autorunner-cli/internal/config"
 	"organization-autorunner-cli/internal/errnorm"
+	"organization-autorunner-cli/internal/httpclient"
 	"organization-autorunner-cli/internal/registry"
 )
 
@@ -24,7 +25,7 @@ func (a *App) runMeta(ctx context.Context, args []string, cfg config.Resolved) (
 		result, err := a.runMetaUtility(ctx, cfg, "meta health", "meta.health")
 		return result, "meta health", err
 	case "livez":
-		result, err := a.runMetaUtility(ctx, cfg, "meta livez", "meta.livez")
+		result, err := a.runMetaRawUtility(ctx, cfg, "meta livez", "/livez")
 		return result, "meta livez", err
 	case "readyz":
 		result, err := a.runMetaUtility(ctx, cfg, "meta readyz", "meta.readyz")
@@ -68,6 +69,27 @@ func (a *App) runMetaUtility(ctx context.Context, cfg config.Resolved, commandNa
 	return a.invokeTypedJSON(ctx, cfg, commandName, commandID, nil, nil, nil)
 }
 
+func (a *App) runMetaRawUtility(ctx context.Context, cfg config.Resolved, commandName string, path string) (*commandResult, error) {
+	client, err := httpclient.New(cfg)
+	if err != nil {
+		return nil, errnorm.Wrap(errnorm.KindLocal, "http_client_init_failed", "failed to initialize HTTP client", err)
+	}
+	callCtx, cancel := httpclient.WithTimeout(ctx, cfg.Timeout)
+	defer cancel()
+	resp, callErr := client.RawCall(callCtx, httpclient.RawRequest{Method: "GET", Path: path})
+	if callErr != nil {
+		return nil, errnorm.Wrap(errnorm.KindNetwork, "request_failed", commandName+" request failed", callErr)
+	}
+	parsedBody := parseResponseBody(resp.Body)
+	data := map[string]any{
+		"status_code": resp.StatusCode,
+		"headers":     normalizedHeaders(resp.Headers),
+		"body":        parsedBody,
+	}
+	text := fmt.Sprintf("%s status: %d", commandName, resp.StatusCode)
+	return &commandResult{Text: text, Data: data}, nil
+}
+
 func (a *App) runMetaOps(ctx context.Context, cfg config.Resolved, args []string) (*commandResult, string, error) {
 	if len(args) == 0 {
 		return nil, "meta ops", metaOpsSubcommandSpec.requiredError()
@@ -77,7 +99,7 @@ func (a *App) runMetaOps(ctx context.Context, cfg config.Resolved, args []string
 		if len(args) > 1 {
 			return nil, "meta ops health", errnorm.Usage("invalid_args", "unexpected positional arguments for `oar meta ops health`")
 		}
-		result, err := a.runMetaUtility(ctx, cfg, "meta ops health", "meta.ops.health")
+		result, err := a.runMetaRawUtility(ctx, cfg, "meta ops health", "/ops/health")
 		return result, "meta ops health", err
 	default:
 		return nil, "meta ops", metaOpsSubcommandSpec.unknownError(args[0])
@@ -161,8 +183,8 @@ func (a *App) runMetaCommand(args []string) (*commandResult, error) {
 	if !ok {
 		return nil, errnorm.Local("not_found", "command metadata not found")
 	}
-	if strings.TrimSpace(cmd.Why) == "" || len(cmd.Examples) == 0 {
-		return nil, errnorm.Internal("registry_invalid", "generated command metadata is missing required why/examples fields")
+	if strings.TrimSpace(cmd.Why) == "" {
+		return nil, errnorm.Internal("registry_invalid", "generated command metadata is missing required why field")
 	}
 
 	text := formatGeneratedCommandHelp(runtimePathFromRegistryPath(cmd.CLIPath), cmd)
@@ -398,7 +420,7 @@ Print one bundled Markdown topic from the runtime help catalog.
 
 Examples:
   oar meta doc agent-guide
-  oar meta doc "docs tombstone"
+  oar meta doc "docs trash"
   oar --json meta doc --topic "threads workspace"`)
 }
 

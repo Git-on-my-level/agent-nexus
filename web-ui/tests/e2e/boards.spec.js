@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+import { mockTopicRefFromThreadId } from "../../src/lib/devSeedData.js";
+
 const actorId = "actor-board-e2e";
 const columns = [
   { key: "backlog", title: "Backlog", wip_limit: null },
@@ -10,13 +12,36 @@ const columns = [
   { key: "done", title: "Done", wip_limit: null },
 ];
 
+function backingThreadId(board) {
+  return String(board?.thread_id ?? "").trim();
+}
+
+function firstDocumentIdFromBoard(board) {
+  for (const ref of board?.document_refs ?? []) {
+    const s = String(ref ?? "").trim();
+    if (s.startsWith("document:")) {
+      return s.slice("document:".length).trim();
+    }
+    if (s && !s.includes(":")) {
+      return s;
+    }
+  }
+  for (const ref of board?.refs ?? []) {
+    const s = String(ref ?? "").trim();
+    if (s.startsWith("document:")) {
+      return s.slice("document:".length).trim();
+    }
+  }
+  return "";
+}
+
 function buildSummary(board, cards, threads, documents) {
   const cardsByColumn = Object.fromEntries(
     columns.map((column) => [column.key, 0]),
   );
-  const threadIds = new Set([board.primary_thread_id]);
+  const threadIds = new Set([backingThreadId(board)].filter(Boolean));
   let latestActivityAt = board.updated_at;
-  let openCommitmentCount = 0;
+  let openCardCount = 0;
   let documentCount = 0;
 
   cards.forEach((card) => {
@@ -33,8 +58,8 @@ function buildSummary(board, cards, threads, documents) {
     ) {
       latestActivityAt = thread.updated_at;
     }
-    openCommitmentCount += Array.isArray(thread?.open_commitments)
-      ? thread.open_commitments.length
+    openCardCount += Array.isArray(thread?.open_cards)
+      ? thread.open_cards.length
       : 0;
     documentCount += documents.filter(
       (document) => document.thread_id === threadId,
@@ -44,10 +69,10 @@ function buildSummary(board, cards, threads, documents) {
   return {
     card_count: cards.length,
     cards_by_column: cardsByColumn,
-    open_commitment_count: openCommitmentCount,
+    open_card_count: openCardCount,
     document_count: documentCount,
     latest_activity_at: latestActivityAt,
-    has_primary_document: Boolean(board.primary_document_id),
+    has_document_ref: Boolean(firstDocumentIdFromBoard(board)),
   };
 }
 
@@ -75,21 +100,17 @@ function buildWorkspace(
   cards,
   threads,
   documents,
-  commitments,
   inboxItems,
   options = {},
 ) {
   const sortedCards = sortCards(cards);
-  const threadIds = new Set([board.primary_thread_id]);
+  const threadIds = new Set([backingThreadId(board)].filter(Boolean));
   for (const card of cards) {
     const tid = String(card.thread_id ?? "").trim();
     if (tid) threadIds.add(tid);
   }
   const workspaceDocuments = documents.filter((document) =>
     threadIds.has(document.thread_id),
-  );
-  const workspaceCommitments = commitments.filter((commitment) =>
-    threadIds.has(commitment.thread_id),
   );
   const workspaceInbox = inboxItems.filter((item) =>
     threadIds.has(item.thread_id),
@@ -113,31 +134,33 @@ function buildWorkspace(
   return {
     board_id: board.id,
     board,
-    primary_thread: threads.find(
-      (thread) => thread.id === board.primary_thread_id,
-    ),
-    primary_document:
-      documents.find((document) => document.id === board.primary_document_id) ??
-      null,
+    backing_thread:
+      threads.find((thread) => thread.id === backingThreadId(board)) ?? null,
     cards: {
       items: sortedCards.map((card) => ({
         membership: card,
         backing: {
-          thread_ref: `thread:${card.thread_id}`,
+          thread_id: card.thread_id,
           thread: threads.find((thread) => thread.id === card.thread_id),
-          pinned_document_ref: card.pinned_document_id
-            ? `document:${card.pinned_document_id}`
-            : null,
+          pinned_document_ref: (() => {
+            const docId = String(card.document_ref ?? "")
+              .replace(/^document:/, "")
+              .trim();
+            return docId ? `document:${docId}` : null;
+          })(),
           pinned_document:
-            documents.find(
-              (document) => document.id === card.pinned_document_id,
-            ) ?? null,
+            documents.find((document) => {
+              const docId = String(card.document_ref ?? "")
+                .replace(/^document:/, "")
+                .trim();
+              return document.id === docId;
+            }) ?? null,
         },
         derived: {
           summary: {
-            open_commitment_count:
-              threads.find((thread) => thread.id === card.thread_id)
-                ?.open_commitments?.length ?? 0,
+            open_card_count:
+              threads.find((thread) => thread.id === card.thread_id)?.open_cards
+                ?.length ?? 0,
             decision_request_count: workspaceInbox.filter(
               (item) =>
                 item.thread_id === card.thread_id &&
@@ -171,10 +194,6 @@ function buildWorkspace(
       items: workspaceDocuments,
       count: workspaceDocuments.length,
     },
-    commitments: {
-      items: workspaceCommitments,
-      count: workspaceCommitments.length,
-    },
     inbox: {
       items: workspaceInbox,
       count: workspaceInbox.length,
@@ -202,11 +221,8 @@ function buildWorkspace(
     },
     section_kinds: {
       board: "canonical",
-      primary_thread: "canonical",
-      primary_document: "canonical",
       cards: "convenience",
       documents: "derived",
-      commitments: "derived",
       inbox: "derived",
       board_summary: "derived",
     },
@@ -234,7 +250,7 @@ test("board UI supports create/edit and card mutation flows", async ({
       priority: "p1",
       updated_at: "2026-03-06T08:00:00.000Z",
       updated_by: actorId,
-      open_commitments: ["commitment-primary"],
+      open_cards: ["card-primary"],
     },
     {
       id: "thread-execution",
@@ -244,7 +260,7 @@ test("board UI supports create/edit and card mutation flows", async ({
       priority: "p2",
       updated_at: "2026-03-05T06:00:00.000Z",
       updated_by: actorId,
-      open_commitments: ["commitment-execution"],
+      open_cards: ["card-execution"],
     },
     {
       id: "thread-review",
@@ -254,10 +270,23 @@ test("board UI supports create/edit and card mutation flows", async ({
       priority: "p2",
       updated_at: "2026-03-05T07:00:00.000Z",
       updated_by: actorId,
-      open_commitments: [],
+      open_cards: [],
       staleness: "stale",
     },
   ];
+  const topicSearchRecords = threads.map((th) => ({
+    id: th.id,
+    thread_id: th.id,
+    title: th.title,
+    type: th.type,
+    status: th.status,
+    summary: "",
+    owner_refs: [],
+    document_refs: [],
+    board_refs: [],
+    related_refs: [],
+    provenance: { sources: ["inferred"] },
+  }));
   const documents = [
     {
       id: "doc-runbook",
@@ -280,24 +309,6 @@ test("board UI supports create/edit and card mutation flows", async ({
       labels: [],
       head_revision_id: "rev-doc-playbook-1",
       head_revision_number: 1,
-    },
-  ];
-  const commitments = [
-    {
-      id: "commitment-primary",
-      thread_id: "thread-primary",
-      title: "Primary thread follow-up",
-      owner: actorId,
-      due_at: "2026-03-07T12:00:00.000Z",
-      status: "open",
-    },
-    {
-      id: "commitment-execution",
-      thread_id: "thread-execution",
-      title: "Execution commitment",
-      owner: actorId,
-      due_at: "2026-03-06T12:00:00.000Z",
-      status: "open",
     },
   ];
   const inboxItems = [
@@ -348,6 +359,30 @@ test("board UI supports create/edit and card mutation flows", async ({
     });
   });
 
+  await page.route(
+    (url) => url.pathname.endsWith("/topics"),
+    async (route) => {
+      const request = route.request();
+      if (request.method() !== "GET") {
+        await route.continue();
+        return;
+      }
+      const url = new URL(request.url());
+      const q = (url.searchParams.get("q") || "").trim().toLowerCase();
+      const filtered = topicSearchRecords.filter((topic) => {
+        if (!q) return true;
+        const hay =
+          `${topic.id} ${topic.title || ""} ${topic.summary || ""}`.toLowerCase();
+        return hay.includes(q);
+      });
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ topics: filtered }),
+      });
+    },
+  );
+
   await page.route(/\/docs(\?.*)?$/, async (route) => {
     await route.fulfill({
       status: 200,
@@ -383,14 +418,27 @@ test("board UI supports create/edit and card mutation flows", async ({
 
     const payload = JSON.parse(request.postData() ?? "{}");
     boardCreatePayloads.push(payload);
+    const threadId = String(payload.board.thread_id ?? "").trim();
+    const docRefs = Array.isArray(payload.board.document_refs)
+      ? payload.board.document_refs.map((r) => String(r ?? "").trim())
+      : [];
     board = {
       id: "board-created",
       title: payload.board.title,
       status: payload.board.status,
       labels: payload.board.labels ?? [],
       owners: payload.board.owners ?? [actorId],
-      primary_thread_id: payload.board.primary_thread_id,
-      primary_document_id: payload.board.primary_document_id ?? null,
+      thread_id: threadId,
+      refs: [
+        ...new Set([
+          ...(threadId
+            ? [`thread:${threadId}`, mockTopicRefFromThreadId(threadId)]
+            : []),
+          ...docRefs,
+          ...(payload.board.pinned_refs ?? []),
+        ]),
+      ].sort(),
+      document_refs: docRefs,
       column_schema: columns,
       pinned_refs: payload.board.pinned_refs ?? [],
       created_at: "2026-03-05T00:00:00.000Z",
@@ -411,14 +459,7 @@ test("board UI supports create/edit and card mutation flows", async ({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify(
-        buildWorkspace(
-          board,
-          cards,
-          threads,
-          documents,
-          commitments,
-          inboxItems,
-        ),
+        buildWorkspace(board, cards, threads, documents, inboxItems),
       ),
     });
   });
@@ -450,16 +491,31 @@ test("board UI supports create/edit and card mutation flows", async ({
     const payload = JSON.parse(route.request().postData() ?? "{}");
     addCardPayloads.push(payload);
     const now = nextTimestamp();
+    const threadToken = (payload.related_refs ?? []).find((ref) =>
+      String(ref ?? "").startsWith("thread:"),
+    );
+    const threadId = String(threadToken ?? "")
+      .replace(/^thread:/, "")
+      .trim();
+    const title = String(payload.title ?? "").trim();
     const targetColumnCards = cards.filter(
       (card) => card.column_key === payload.column_key,
     );
+    const docFromPayload = String(payload.document_ref ?? "")
+      .replace(/^document:/, "")
+      .trim();
     const newCard = {
-      id: payload.thread_id,
+      id: threadId,
       board_id: "board-created",
-      thread_id: payload.thread_id,
+      thread_id: threadId,
+      title,
+      summary: String(payload.summary ?? "").trim() || title,
+      related_refs: Array.isArray(payload.related_refs)
+        ? payload.related_refs
+        : [],
       column_key: payload.column_key,
       rank: String(targetColumnCards.length + 1).padStart(4, "0"),
-      pinned_document_id: payload.pinned_document_id ?? null,
+      document_ref: docFromPayload ? `document:${docFromPayload}` : null,
       created_at: now,
       created_by: actorId,
       updated_at: now,
@@ -511,6 +567,13 @@ test("board UI supports create/edit and card mutation flows", async ({
       }
 
       movingCard.column_key = payload.column_key;
+      if (payload.column_key === "done") {
+        movingCard.resolution =
+          payload.resolution === "canceled" ? "canceled" : "done";
+        movingCard.resolution_refs = Array.isArray(payload.resolution_refs)
+          ? payload.resolution_refs
+          : [];
+      }
       const targetCards = groupedCards[payload.column_key];
       let insertIndex = targetCards.length;
       if (payload.before_card_id) {
@@ -524,15 +587,6 @@ test("board UI supports create/edit and card mutation flows", async ({
           (card) =>
             card.id === payload.after_card_id ||
             card.thread_id === payload.after_card_id,
-        );
-        insertIndex = afterIndex >= 0 ? afterIndex + 1 : targetCards.length;
-      } else if (payload.before_thread_id) {
-        insertIndex = targetCards.findIndex(
-          (card) => card.thread_id === payload.before_thread_id,
-        );
-      } else if (payload.after_thread_id) {
-        const afterIndex = targetCards.findIndex(
-          (card) => card.thread_id === payload.after_thread_id,
         );
         insertIndex = afterIndex >= 0 ? afterIndex + 1 : targetCards.length;
       }
@@ -568,7 +622,19 @@ test("board UI supports create/edit and card mutation flows", async ({
     const payload = JSON.parse(route.request().postData() ?? "{}");
     updateCardPayloads.push(payload);
     const card = cards.find((item) => item.thread_id === "thread-execution");
-    card.pinned_document_id = payload.patch.pinned_document_id;
+    const docId = String(payload.patch?.document_ref ?? "")
+      .replace(/^document:/, "")
+      .trim();
+    card.document_ref = docId ? `document:${docId}` : null;
+    if (typeof payload.patch?.title === "string") {
+      card.title = String(payload.patch.title).trim();
+    }
+    if (typeof payload.patch?.summary === "string") {
+      card.summary = String(payload.patch.summary).trim();
+    }
+    if (Array.isArray(payload.patch?.related_refs)) {
+      card.related_refs = payload.patch.related_refs;
+    }
     card.updated_at = nextTimestamp();
     card.updated_by = actorId;
     board = {
@@ -613,11 +679,11 @@ test("board UI supports create/edit and card mutation flows", async ({
   ).toBeVisible();
   await page.getByLabel("Board title").fill("Launch Control");
   await page.getByLabel("Status").selectOption("paused");
-  await page.getByLabel("Primary thread search").fill("Primary Coordination");
+  await page.getByLabel("Board timeline search").fill("Primary Coordination");
   await page
     .getByRole("button", { name: /Primary Coordination Thread/ })
     .click();
-  await page.getByLabel("Primary document search").fill("Launch Runbook");
+  await page.getByLabel("Board document search").fill("Launch Runbook");
   await page.getByRole("button", { name: /Launch Runbook/ }).click();
   await page.getByRole("button", { name: "Create board", exact: true }).click();
 
@@ -627,9 +693,11 @@ test("board UI supports create/edit and card mutation flows", async ({
   ).toBeVisible();
   await expect(page.getByText("Paused", { exact: true })).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Workspace documents" }),
+    page.getByRole("heading", { name: "Workspace docs" }),
   ).toBeVisible();
-  await expect(page.getByText("Commitments", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Resolved cards" }),
+  ).toBeVisible();
   await expect(page.getByText("Review inbox", { exact: true })).toBeVisible();
   await expect(page.getByText("Warnings", { exact: true })).toBeVisible();
   expect(boardCreatePayloads).toEqual([
@@ -638,8 +706,8 @@ test("board UI supports create/edit and card mutation flows", async ({
       board: {
         title: "Launch Control",
         status: "paused",
-        primary_thread_id: "thread-primary",
-        primary_document_id: "doc-runbook",
+        thread_id: "thread-primary",
+        document_refs: ["document:doc-runbook"],
       },
     },
   ]);
@@ -647,7 +715,7 @@ test("board UI supports create/edit and card mutation flows", async ({
   await page.getByRole("button", { name: "Edit" }).click();
   await page.getByLabel("Board title").fill("Launch Control v2");
   await page.getByLabel("Status").selectOption("closed");
-  await page.getByLabel("Primary document search").fill("Incident Playbook");
+  await page.getByLabel("Board document search").fill("Incident Playbook");
   await page.getByRole("button", { name: /Incident Playbook/ }).click();
   await page.getByRole("button", { name: "Save board" }).click();
 
@@ -662,7 +730,7 @@ test("board UI supports create/edit and card mutation flows", async ({
       patch: {
         title: "Launch Control v2",
         status: "closed",
-        primary_document_id: "doc-playbook",
+        document_refs: ["document:doc-playbook"],
         labels: [],
         owners: [actorId],
         pinned_refs: [],
@@ -671,23 +739,33 @@ test("board UI supports create/edit and card mutation flows", async ({
   ]);
 
   await page.getByRole("button", { name: "Add card", exact: true }).click();
-  await page.getByLabel("Card thread search").fill("Execution Track");
+  await page
+    .getByRole("textbox", { name: "Board timeline search" })
+    .fill("Execution Track");
   await page.getByRole("button", { name: /Execution Track/ }).click();
   await page.getByLabel("Target column").selectOption("ready");
-  await page.getByLabel("Pinned document search").fill("Incident Playbook");
+  await page
+    .getByRole("textbox", { name: "Document search" })
+    .fill("Incident Playbook");
   await page.getByRole("button", { name: /Incident Playbook/ }).click();
   await page.getByRole("button", { name: "Add card", exact: true }).click();
   await expect(
-    page.getByRole("link", { name: "Execution Track" }),
+    page.getByRole("button", { name: "Manage Execution Track" }),
   ).toBeVisible();
 
   await page.getByRole("button", { name: "Add card", exact: true }).click();
-  await page.getByLabel("Card thread search").fill("Review Prep");
+  await page
+    .getByRole("textbox", { name: "Board timeline search" })
+    .fill("Review Prep");
   await page.getByRole("button", { name: /Review Prep/ }).click();
   await page.getByLabel("Target column").selectOption("ready");
   await page.getByRole("button", { name: "Add card", exact: true }).click();
-  await expect(page.getByRole("link", { name: "Review Prep" })).toBeVisible();
-  await expect(page.getByText("Thread stale", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Manage Review Prep" }),
+  ).toBeVisible();
+  await expect(
+    page.locator("#card-thread-review").locator(".text-orange-400"),
+  ).toBeVisible();
   await expect(page.getByText("Need sign-off on review prep")).toBeVisible();
 
   await page.getByRole("button", { name: "Manage Review Prep" }).click();
@@ -696,49 +774,69 @@ test("board UI supports create/edit and card mutation flows", async ({
   const readySection = page
     .locator("section")
     .filter({ has: page.getByRole("heading", { name: "Ready" }) });
-  await expect(
-    readySection.locator('a[href*="/threads/"]').nth(0),
-  ).toContainText("Review Prep");
-  await expect(
-    readySection.locator('a[href*="/threads/"]').nth(1),
-  ).toContainText("Execution Track");
+  await expect(readySection.locator("#card-thread-execution")).toContainText(
+    "Execution Track",
+  );
+  await expect(readySection.locator("#card-thread-review")).toContainText(
+    "Review Prep",
+  );
 
-  await page.getByLabel("Move to column").selectOption("review");
-  await page.getByRole("button", { name: "Move to column" }).click();
+  await page.getByLabel("Column").selectOption("done");
+  await page.getByRole("button", { name: "Move", exact: true }).click();
 
-  const reviewSection = page
-    .locator("section")
-    .filter({ has: page.getByRole("heading", { name: "Review" }) });
+  await page
+    .getByRole("dialog", { name: "Card details" })
+    .getByRole("button", { name: "Close" })
+    .click();
+
+  await page.getByRole("button", { name: "Done 1" }).click();
   await expect(
-    reviewSection.getByRole("link", { name: "Review Prep" }),
+    page.getByRole("button", { name: "Manage Review Prep" }),
   ).toBeVisible();
 
   await page.getByRole("button", { name: "Manage Execution Track" }).click();
-  await page.getByLabel("Pinned document search").fill("Incident Playbook");
-  await page.getByRole("button", { name: /Incident Playbook/ }).click();
-  await page.getByRole("button", { name: "Save pinned doc" }).click();
-  await expect(
-    readySection.getByRole("link", { name: "Pinned doc Incident Playbook" }),
-  ).toBeVisible();
+  const executionDialog = page.getByRole("dialog", { name: "Card details" });
+  await executionDialog.getByRole("button", { name: "Edit card" }).click();
+  await executionDialog.getByLabel("Document ID").fill("doc-playbook");
+  await executionDialog
+    .getByRole("button", { name: "Save card details" })
+    .click();
 
-  await page.getByRole("button", { name: "Remove card" }).click();
+  await executionDialog.getByRole("button", { name: "Remove card" }).click();
   await expect(
-    readySection.getByRole("link", { name: "Execution Track" }),
+    readySection.getByRole("button", { name: "Manage Execution Track" }),
   ).toHaveCount(0);
 
   expect(addCardPayloads).toEqual([
     {
       actor_id: actorId,
       if_board_updated_at: "2026-03-05T01:00:00.000Z",
-      thread_id: "thread-execution",
+      title: "Execution Track",
+      summary: "Execution Track",
       column_key: "ready",
-      pinned_document_id: "doc-playbook",
+      document_ref: "document:doc-playbook",
+      assignee_refs: [],
+      risk: "medium",
+      resolution: null,
+      resolution_refs: [],
+      related_refs: ["thread:thread-execution"],
+      due_at: null,
+      definition_of_done: [],
     },
     {
       actor_id: actorId,
       if_board_updated_at: "2026-03-05T02:00:00.000Z",
-      thread_id: "thread-review",
+      title: "Review Prep",
+      summary: "Review Prep",
       column_key: "ready",
+      document_ref: null,
+      assignee_refs: [],
+      risk: "medium",
+      resolution: null,
+      resolution_refs: [],
+      related_refs: ["thread:thread-review"],
+      due_at: null,
+      definition_of_done: [],
     },
   ]);
   expect(movePayloads).toEqual([
@@ -756,7 +854,8 @@ test("board UI supports create/edit and card mutation flows", async ({
       payload: {
         actor_id: actorId,
         if_board_updated_at: "2026-03-05T04:00:00.000Z",
-        column_key: "review",
+        column_key: "done",
+        resolution: "done",
       },
     },
   ]);
@@ -765,7 +864,16 @@ test("board UI supports create/edit and card mutation flows", async ({
       actor_id: actorId,
       if_board_updated_at: "2026-03-05T05:00:00.000Z",
       patch: {
-        pinned_document_id: "doc-playbook",
+        title: "Execution Track",
+        summary: "Execution Track",
+        document_ref: "document:doc-playbook",
+        assignee_refs: [],
+        risk: "medium",
+        resolution: null,
+        resolution_refs: [],
+        related_refs: ["thread:thread-execution"],
+        due_at: null,
+        definition_of_done: [],
       },
     },
   ]);
@@ -789,7 +897,7 @@ test("board detail shows pending freshness and hides derived card counts until r
       priority: "p1",
       updated_at: "2026-03-04T00:00:00.000Z",
       updated_by: actorId,
-      open_commitments: ["commitment-primary"],
+      open_cards: ["card-primary"],
     },
     {
       id: "thread-execution",
@@ -799,7 +907,7 @@ test("board detail shows pending freshness and hides derived card counts until r
       priority: "p2",
       updated_at: "2026-03-04T01:00:00.000Z",
       updated_by: actorId,
-      open_commitments: ["commitment-execution"],
+      open_cards: ["card-execution"],
     },
   ];
   const documents = [
@@ -815,24 +923,19 @@ test("board detail shows pending freshness and hides derived card counts until r
       head_revision_number: 1,
     },
   ];
-  const commitments = [
-    {
-      id: "commitment-primary",
-      thread_id: "thread-primary",
-      title: "Primary thread follow-up",
-      owner: actorId,
-      due_at: "2026-03-07T12:00:00.000Z",
-      status: "open",
-    },
-  ];
   const board = {
     id: "board-pending",
     title: "Pending Board",
     status: "active",
     labels: [],
     owners: [actorId],
-    primary_thread_id: "thread-primary",
-    primary_document_id: "doc-runbook",
+    thread_id: "thread-primary",
+    refs: [
+      "document:doc-runbook",
+      "thread:thread-primary",
+      mockTopicRefFromThreadId("thread-primary"),
+    ],
+    document_refs: ["document:doc-runbook"],
     column_schema: columns,
     pinned_refs: [],
     created_at: "2026-03-04T00:00:00.000Z",
@@ -847,7 +950,7 @@ test("board detail shows pending freshness and hides derived card counts until r
       thread_id: "thread-execution",
       column_key: "ready",
       rank: "0001",
-      pinned_document_id: null,
+      document_ref: null,
       created_at: "2026-03-04T00:00:00.000Z",
       created_by: actorId,
       updated_at: "2026-03-04T00:00:00.000Z",
@@ -890,7 +993,7 @@ test("board detail shows pending freshness and hides derived card counts until r
       status: 200,
       contentType: "application/json",
       body: JSON.stringify(
-        buildWorkspace(board, cards, threads, documents, commitments, [], {
+        buildWorkspace(board, cards, threads, documents, [], {
           projectionStatus: "pending",
         }),
       ),
@@ -906,9 +1009,7 @@ test("board detail shows pending freshness and hides derived card counts until r
     2,
   );
   await expect(
-    page.getByText("Derived counts hidden until refresh completes", {
-      exact: true,
-    }),
+    page.locator('[title*="Derived summaries are being refreshed"]'),
   ).toBeVisible();
   await expect(page.getByText("1 inbox", { exact: true })).toHaveCount(0);
 });
@@ -925,7 +1026,7 @@ test("board edit conflict reloads latest state and allows retry", async ({
       priority: "p1",
       updated_at: "2026-03-04T00:00:00.000Z",
       updated_by: actorId,
-      open_commitments: [],
+      open_cards: [],
     },
   ];
   const documents = [
@@ -947,8 +1048,13 @@ test("board edit conflict reloads latest state and allows retry", async ({
     status: "active",
     labels: [],
     owners: [actorId],
-    primary_thread_id: "thread-primary",
-    primary_document_id: "doc-runbook",
+    thread_id: "thread-primary",
+    refs: [
+      "document:doc-runbook",
+      "thread:thread-primary",
+      mockTopicRefFromThreadId("thread-primary"),
+    ],
+    document_refs: ["document:doc-runbook"],
     column_schema: columns,
     pinned_refs: [],
     created_at: "2026-03-04T00:00:00.000Z",
@@ -993,9 +1099,7 @@ test("board edit conflict reloads latest state and allows retry", async ({
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(
-        buildWorkspace(board, [], threads, documents, [], []),
-      ),
+      body: JSON.stringify(buildWorkspace(board, [], threads, documents, [])),
     });
   });
 
@@ -1072,7 +1176,7 @@ test("board edit conflict reloads latest state and allows retry", async ({
       patch: {
         title: "Conflict Board Edited",
         status: "active",
-        primary_document_id: "doc-runbook",
+        document_refs: ["document:doc-runbook"],
         labels: [],
         owners: [actorId],
         pinned_refs: [],
@@ -1084,7 +1188,7 @@ test("board edit conflict reloads latest state and allows retry", async ({
       patch: {
         title: "Recovered Board Title",
         status: "active",
-        primary_document_id: "doc-runbook",
+        document_refs: ["document:doc-runbook"],
         labels: [],
         owners: [actorId],
         pinned_refs: [],

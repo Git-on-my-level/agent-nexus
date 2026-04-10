@@ -54,7 +54,7 @@ test("security headers are set on all document responses", async ({ page }) => {
     window.localStorage.setItem("oar_ui_actor_id", "actor-ops-ai");
   });
 
-  const routes = ["/", "/inbox", "/threads"];
+  const routes = ["/", "/inbox", "/topics"];
 
   for (const route of routes) {
     const response = await page.goto(route);

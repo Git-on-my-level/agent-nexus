@@ -7,30 +7,32 @@ import {
   isProxyableCommand,
 } from "../../src/lib/coreRouteCatalog.js";
 import {
-  mockSupportedCommands,
+  catalogCommandIds,
   proxyOnlyCommands,
-} from "../../src/lib/mockParityProfile.js";
+} from "../../src/lib/catalogParityProfile.js";
 
 describe("proxyContractParity", () => {
   describe("isProxyableCommand", () => {
-    it("matches GET /threads", () => {
-      expect(isProxyableCommand("GET", "/threads")).toBe(true);
+    it("matches GET /topics", () => {
+      expect(isProxyableCommand("GET", "/topics")).toBe(true);
     });
 
-    it("matches GET /threads/{id}", () => {
-      expect(isProxyableCommand("GET", "/threads/thread-123")).toBe(true);
+    it("matches POST /topics", () => {
+      expect(isProxyableCommand("POST", "/topics")).toBe(true);
     });
 
-    it("matches POST /threads", () => {
-      expect(isProxyableCommand("POST", "/threads")).toBe(true);
+    it("matches GET /boards/{board_id}/workspace", () => {
+      expect(isProxyableCommand("GET", "/boards/board-123/workspace")).toBe(
+        true,
+      );
     });
 
-    it("matches GET /commitments", () => {
-      expect(isProxyableCommand("GET", "/commitments")).toBe(true);
+    it("matches GET /cards", () => {
+      expect(isProxyableCommand("GET", "/cards")).toBe(true);
     });
 
-    it("matches GET /artifacts", () => {
-      expect(isProxyableCommand("GET", "/artifacts")).toBe(true);
+    it("matches POST /cards/{card_id}/move", () => {
+      expect(isProxyableCommand("POST", "/cards/card-123/move")).toBe(true);
     });
 
     it("matches GET /docs", () => {
@@ -41,8 +43,10 @@ describe("proxyContractParity", () => {
       expect(isProxyableCommand("GET", "/inbox")).toBe(true);
     });
 
-    it("matches POST /inbox/ack", () => {
-      expect(isProxyableCommand("POST", "/inbox/ack")).toBe(true);
+    it("matches POST /inbox/{inbox_id}/acknowledge", () => {
+      expect(isProxyableCommand("POST", "/inbox/inbox-123/acknowledge")).toBe(
+        true,
+      );
     });
 
     it("matches GET /health", () => {
@@ -51,6 +55,10 @@ describe("proxyContractParity", () => {
 
     it("matches GET /meta/version", () => {
       expect(isProxyableCommand("GET", "/version")).toBe(true);
+    });
+
+    it("matches GET /events/stream (SSE; registered contract path)", () => {
+      expect(isProxyableCommand("GET", "/events/stream")).toBe(true);
     });
 
     it("returns false for non-contract paths", () => {
@@ -86,29 +94,30 @@ describe("proxyContractParity", () => {
       const paths = getAllProxyablePaths();
       const pathStrings = paths.map((p) => `${p.method}:${p.path}`);
 
-      expect(pathStrings).toContain("GET:/threads");
-      expect(pathStrings).toContain("POST:/threads");
-      expect(pathStrings).toContain("GET:/commitments");
-      expect(pathStrings).toContain("GET:/artifacts");
+      expect(pathStrings).toContain("GET:/topics");
+      expect(pathStrings).toContain("POST:/topics");
+      expect(pathStrings).toContain("GET:/boards");
+      expect(pathStrings).toContain("POST:/boards");
+      expect(pathStrings).toContain("GET:/boards/{board_id}/workspace");
+      expect(pathStrings).toContain("GET:/cards");
+      expect(pathStrings).toContain("POST:/cards/{card_id}/move");
+      expect(pathStrings).toContain("POST:/events");
       expect(pathStrings).toContain("GET:/docs");
       expect(pathStrings).toContain("GET:/inbox");
-      expect(pathStrings).toContain("POST:/inbox/ack");
+      expect(pathStrings).toContain("POST:/inbox/{inbox_id}/acknowledge");
     });
   });
 
-  describe("mockParityProfile", () => {
-    it("classifies every command id as mock-supported or proxy-only", () => {
+  describe("catalogParityProfile", () => {
+    it("classifies every command id as catalog-routed or proxy-only", () => {
       const catalogIds = new Set(
         Array.from(getCatalogEntries().values()).map((e) => e.commandId),
       );
-      const classified = new Set([
-        ...mockSupportedCommands,
-        ...proxyOnlyCommands,
-      ]);
+      const classified = new Set([...catalogCommandIds, ...proxyOnlyCommands]);
       expect(classified.size).toBe(catalogIds.size);
       for (const id of catalogIds) {
         expect(
-          mockSupportedCommands.includes(id) !== proxyOnlyCommands.includes(id),
+          catalogCommandIds.includes(id) !== proxyOnlyCommands.includes(id),
         ).toBe(true);
       }
     });
