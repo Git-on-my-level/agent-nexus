@@ -29,6 +29,7 @@
   import { coreClient } from "$lib/coreClient";
   import {
     getShellContentConfig,
+    isMoreHubActivePath,
     navigationItems,
     settingsNavItems,
   } from "$lib/navigation";
@@ -143,6 +144,7 @@
       : "?",
   );
   let shellContentConfig = $derived(getShellContentConfig(currentAppPath));
+  let moreBottomNavActive = $derived(isMoreHubActivePath(currentAppPath));
   const shellNavForTitle = [...navigationItems, ...settingsNavItems];
 
   let pageTitle = $derived(() => {
@@ -853,11 +855,11 @@
         </a>
       {/each}
       <a
-        class="shell-bottom-nav-item {currentAppPath.startsWith('/more')
+        class="shell-bottom-nav-item {moreBottomNavActive
           ? 'shell-bottom-nav-item--active'
           : ''}"
         href={workspaceHref("/more")}
-        aria-current={currentAppPath.startsWith("/more") ? "page" : undefined}
+        aria-current={moreBottomNavActive ? "page" : undefined}
       >
         <svg fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
           <circle cx="5" cy="12" r="1.5" />

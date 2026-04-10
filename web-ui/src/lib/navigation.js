@@ -136,6 +136,17 @@ export function isKnownSection(pathname) {
   );
 }
 
+/** When true, the mobile bottom "More" tab should read as active (hub + settings destinations). */
+export function isMoreHubActivePath(pathname) {
+  const p = normalizePathname(pathname);
+  if (p === "/more" || p.startsWith("/more/")) {
+    return true;
+  }
+  return settingsNavItems.some(
+    (item) => p === item.href || p.startsWith(`${item.href}/`),
+  );
+}
+
 export function getShellContentConfig(pathname) {
   const normalizedPathname = normalizePathname(pathname);
 
