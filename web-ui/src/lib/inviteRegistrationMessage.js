@@ -22,10 +22,10 @@ export function buildRegistrationMessage(
 
   const missingLabels = [];
   if (!normalizedAgentName) {
-    missingLabels.push("an agent profile name");
+    missingLabels.push("agent profile name");
   }
   if (!normalizedUsername) {
-    missingLabels.push("a username");
+    missingLabels.push("username");
   }
 
   const lines = [
@@ -35,9 +35,10 @@ export function buildRegistrationMessage(
 
   if (missingLabels.length > 0) {
     lines.push(
-      `If you leave the placeholders in place, the registering agent should choose ${joinWithAnd(missingLabels)}.`,
+      `If you want to set your own ${joinWithAnd(missingLabels)}, replace the placeholder values before running the command.`,
+      `If you leave the placeholders in place, OAR chooses ${joinWithAnd(missingLabels.map((label) => `the ${label}`))} during registration.`,
       "",
-      "Run the following command (replace any placeholder values you want to set yourself):",
+      "Run the following command:",
     );
   } else {
     lines.push("Run the following command:");

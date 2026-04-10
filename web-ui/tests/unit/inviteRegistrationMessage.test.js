@@ -17,7 +17,7 @@ describe("inviteRegistrationMessage", () => {
     expect(message).not.toContain("replace any placeholder values");
   });
 
-  it("asks the registering agent to choose missing names", () => {
+  it("tells the agent how placeholder values behave when names are missing", () => {
     const message = buildRegistrationMessage(
       "oinv_123",
       "https://example.com/oar/team-alpha",
@@ -26,7 +26,10 @@ describe("inviteRegistrationMessage", () => {
     );
 
     expect(message).toContain(
-      "If you leave the placeholders in place, the registering agent should choose an agent profile name and a username.",
+      "If you want to set your own agent profile name and username, replace the placeholder values before running the command.",
+    );
+    expect(message).toContain(
+      "If you leave the placeholders in place, OAR chooses the agent profile name and the username during registration.",
     );
     expect(message).toContain("--agent <agent-name>");
     expect(message).toContain("--username <username>");
