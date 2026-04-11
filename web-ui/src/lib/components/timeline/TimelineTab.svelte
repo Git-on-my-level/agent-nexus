@@ -30,7 +30,12 @@
   let hasAnyTimelineEvents = $derived(timelineView.length > 0);
 
   let showArchived = $state(false);
-  let confirmModal = $state({ open: false, action: "", eventId: "" });
+  let confirmModal = $state({
+    open: false,
+    action: "",
+    eventId: "",
+    eventRawType: "",
+  });
   let lifecycleBusy = $state(false);
   let lifecycleError = $state("");
 
@@ -52,9 +57,14 @@
 
   function handleConfirm() {
     const { action, eventId } = confirmModal;
-    confirmModal = { open: false, action: "", eventId: "" };
-    if (action === "archive") archiveEvent(eventId);
-    else if (action === "trash") trashEvent(eventId);
+    confirmModal = {
+      open: false,
+      action: "",
+      eventId: "",
+      eventRawType: "",
+    };
+    if (action === "archive") void archiveEvent(eventId);
+    else if (action === "trash") void trashEvent(eventId);
   }
 
   async function archiveEvent(eventId) {
@@ -184,6 +194,7 @@
                     open: true,
                     action: "archive",
                     eventId: event.id,
+                    eventRawType: event.rawType,
                   })}
                 onunarchive={() => unarchiveEvent(event.id)}
               />
@@ -194,6 +205,7 @@
                     open: true,
                     action: "trash",
                     eventId: event.id,
+                    eventRawType: event.rawType,
                   })}
               />
             </div>
@@ -242,14 +254,28 @@
 <ConfirmModal
   open={confirmModal.open}
   title={confirmModal.action === "trash"
-    ? "Move event to trash"
-    : "Archive event"}
+    ? confirmModal.eventRawType === "message_posted"
+      ? "Move message to trash"
+      : "Move event to trash"
+    : confirmModal.eventRawType === "message_posted"
+      ? "Archive message"
+      : "Archive event"}
   message={confirmModal.action === "trash"
-    ? "This event will be moved to trash. You can restore it later."
-    : "This event will be hidden from the timeline. You can show archived events to see it again."}
+    ? confirmModal.eventRawType === "message_posted"
+      ? "This message and all its replies will be moved to trash. You can restore them later."
+      : "This event will be moved to trash. You can restore it later."
+    : confirmModal.eventRawType === "message_posted"
+      ? "This message and all its replies will be archived. Toggle 'Show archived' to see them again."
+      : "This event will be hidden from the timeline. You can show archived events to see it again."}
   confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
   variant={confirmModal.action === "trash" ? "danger" : "warning"}
   busy={lifecycleBusy}
   onconfirm={handleConfirm}
-  oncancel={() => (confirmModal = { open: false, action: "", eventId: "" })}
+  oncancel={() =>
+    (confirmModal = {
+      open: false,
+      action: "",
+      eventId: "",
+      eventRawType: "",
+    })}
 />
