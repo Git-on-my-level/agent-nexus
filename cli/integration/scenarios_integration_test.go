@@ -30,6 +30,10 @@ type binarySet struct {
 var (
 	buildOnce sync.Once
 	binaries  binarySet
+	// coreBindMu serializes ephemeral port reservation + oar-core bind + readyz.
+	// Parallel tests otherwise risk reusing the same port between listener close
+	// and core Listen (TOCTOU), which can mis-route CLI calls or fail binds.
+	coreBindMu sync.Mutex
 )
 
 type liveCoreHarness struct {
@@ -432,6 +436,8 @@ func newLiveCoreHarness(t *testing.T) *liveCoreHarness {
 	}
 
 	bootstrapToken := "it-bs-" + runToken()
+	coreBindMu.Lock()
+	defer coreBindMu.Unlock()
 	port := allocatePort(t)
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 	cmd := exec.Command(coreBin,
