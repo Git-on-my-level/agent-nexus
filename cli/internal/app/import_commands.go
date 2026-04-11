@@ -401,10 +401,12 @@ func (a *App) runImportApply(ctx context.Context, args []string, cfg config.Reso
 			var err error
 			switch kind {
 			case "thread":
+				ensureEmptyListDefaults(payload, "topic", []string{"owner_refs", "document_refs", "board_refs", "related_refs"})
 				result, err = a.invokeTypedJSON(ctx, cfg, "topics create", "topics.create", nil, nil, payload)
 			case "artifact":
 				result, err = a.invokeTypedJSON(ctx, cfg, "artifacts create", "artifacts.create", nil, nil, payload)
 			case "doc":
+				ensureEmptyListDefaults(payload, "document", []string{"refs"})
 				result, err = a.invokeTypedJSON(ctx, cfg, "docs create", "docs.create", nil, nil, payload)
 			default:
 				return nil, errnorm.Usage("invalid_request", fmt.Sprintf("unsupported import object kind %q", kind))
