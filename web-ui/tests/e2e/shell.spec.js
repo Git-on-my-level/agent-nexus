@@ -61,9 +61,11 @@ test("renders a dashboard on / and routes into inbox", async ({ page }) => {
     page.getByRole("heading", { name: "Recent Docs" }),
   ).toBeVisible();
 
-  await page.getByRole("link", { name: "Review inbox" }).click();
+  await page.getByRole("link", { name: "Inbox", exact: true }).click();
   await expect(page).toHaveURL(/\/inbox$/);
-  await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Inbox", exact: true }),
+  ).toBeVisible();
 });
 
 test("shows partial-failure messaging when one dashboard source is unavailable", async ({

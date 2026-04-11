@@ -254,12 +254,6 @@
       >
         Refresh
       </button>
-      <a
-        class="rounded-md bg-[var(--ui-panel)] px-3 py-1.5 text-[13px] font-medium text-[var(--ui-text)] transition-colors hover:bg-[var(--ui-border)]"
-        href={workspaceHref("/inbox")}
-      >
-        Review inbox
-      </a>
     </div>
   </div>
 
